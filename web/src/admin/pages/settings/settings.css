@@ -1,0 +1,263 @@
+.settings-search {
+  width: min(100%, 22rem);
+}
+.nb-settings {
+  display: grid;
+  grid-template-columns: 13.5rem minmax(0, 1fr);
+  gap: var(--nb-space-5);
+  align-items: start;
+}
+.nb-settings__nav {
+  position: sticky;
+  top: var(--nb-space-5);
+  display: grid;
+  gap: var(--nb-space-4);
+  min-width: 0;
+}
+.settings-nav-group {
+  display: grid;
+  gap: var(--nb-space-1);
+}
+.nb-settings__nav h2 {
+  font-size: 0.75rem;
+  color: var(--nb-color-text-muted);
+  margin: 0 0 var(--nb-space-2);
+}
+.nb-settings__nav button,
+.settings-other a {
+  border: 0;
+  background: transparent;
+  text-align: left;
+  color: var(--nb-color-text);
+  padding: var(--nb-space-3);
+  border-radius: var(--nb-radius-sm);
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: var(--nb-space-2);
+}
+.nb-settings__nav .is-dirty::after {
+  content: none;
+}
+.nb-settings__nav button[aria-current] {
+  background: var(--nb-color-accent-soft);
+  color: var(--nb-color-accent);
+  font-weight: 600;
+}
+.settings-dirty-dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  flex-shrink: 0;
+  background: var(--nb-color-warning);
+  border-radius: 50%;
+}
+.settings-content {
+  display: grid;
+  min-width: 0;
+  gap: var(--nb-space-5);
+}
+.settings-content .nb-setting {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(15rem, 0.8fr);
+  gap: var(--nb-space-4);
+  padding: var(--nb-space-2) 0;
+  border-top: 0;
+  border-bottom: 1px solid var(--nb-color-border);
+  min-width: 0;
+}
+.settings-content .nb-setting:last-child {
+  border-bottom: 0;
+}
+.settings-content .nb-setting.is-dirty {
+  border-left: 3px solid var(--nb-color-accent);
+  padding-left: var(--nb-space-3);
+}
+.settings-content .nb-setting__text h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+.settings-content .nb-setting__text p,
+.settings-content .nb-setting__meta {
+  font-size: 0.8rem;
+  color: var(--nb-color-text-muted);
+  margin: var(--nb-space-2) 0 0;
+}
+.settings-content .nb-setting__control {
+  display: grid;
+  gap: var(--nb-space-1);
+  min-width: 0;
+  align-content: start;
+}
+.settings-content
+  .nb-setting__control
+  :is(input:not([type='checkbox']):not([type='radio']), textarea, select) {
+  width: 100%;
+  min-width: 0;
+}
+.settings-content .nb-setting__control details {
+  font-size: 0.75rem;
+  color: var(--nb-color-text-muted);
+}
+.settings-content .nb-setting__control details summary {
+  cursor: pointer;
+}
+.setting-toggle .nb-toggle {
+  justify-content: flex-end;
+  padding: 0;
+}
+.setting-toggle .nb-toggle__text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.settings-paired {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--nb-space-3);
+}
+.settings-level-names {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--nb-space-3);
+}
+.settings-composite > :is(.settings-paired, .settings-level-names) > .nb-setting {
+  display: block;
+  border: 0;
+  padding: 0;
+}
+.settings-composite .nb-setting__text h3 {
+  font-size: 0.75rem;
+  color: var(--nb-color-text-muted);
+  margin-bottom: var(--nb-space-2);
+}
+.settings-composite > :is(.settings-paired, .settings-level-names) .nb-setting__text p {
+  display: none;
+}
+.settings-level-names .nb-setting__control > .muted {
+  display: none;
+}
+.settings-save-warning {
+  display: block;
+  margin-top: var(--nb-space-1);
+}
+.settings-feedback:empty {
+  display: none;
+}
+@media (max-width: 64rem) {
+  .nb-settings {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .nb-settings__nav {
+    position: static;
+    display: flex;
+    overflow-x: auto;
+    gap: var(--nb-space-3);
+    padding-bottom: var(--nb-space-2);
+  }
+  .settings-nav-group {
+    display: contents;
+  }
+  .nb-settings__nav h2 {
+    display: none;
+  }
+  .nb-settings__nav button {
+    white-space: nowrap;
+    flex-shrink: 0;
+    border: 1px solid var(--nb-color-border);
+  }
+  .settings-other {
+    display: flex;
+    white-space: nowrap;
+  }
+}
+@media (max-width: 48rem) {
+  .settings-content .nb-setting {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .settings-level-names {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .setting-toggle .nb-toggle {
+    justify-content: flex-start;
+  }
+}
+
+.settings-content .nb-panel__body {
+  gap: 0;
+  padding: var(--nb-space-4);
+}
+.settings-content .nb-setting__text {
+  align-content: start;
+  gap: var(--nb-space-1);
+}
+.settings-content .nb-setting__text p {
+  margin: 0;
+}
+.setting-meta-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--nb-space-2);
+}
+.settings-content .setting-meta-line > .nb-setting__meta {
+  flex: 1;
+  margin: 0;
+}
+.settings-content .setting-info {
+  min-width: 2rem;
+}
+.settings-content .setting-info[open] {
+  flex-basis: 100%;
+}
+.settings-content .setting-info summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2rem;
+  min-width: 2rem;
+  cursor: pointer;
+}
+.settings-content .setting-info p {
+  margin: var(--nb-space-2) 0;
+}
+@media (max-width: 48rem), (pointer: coarse) {
+  .settings-content .setting-info summary {
+    min-height: 2.5rem;
+    min-width: 2.5rem;
+  }
+}
+
+@media (min-width: 48.01rem) {
+  .settings-content .nb-setting {
+    padding-block: var(--nb-space-1);
+  }
+  .settings-composite .nb-setting__text h3 {
+    margin-bottom: var(--nb-space-1);
+  }
+  .settings-content .settings-composite {
+    grid-template-columns: minmax(0, 0.5fr) minmax(0, 1fr);
+  }
+  .settings-content
+    .nb-setting__control
+    :is(input:not([type='checkbox']):not([type='radio']), select) {
+    min-height: 2rem;
+    padding: 0.25rem 0.625rem;
+  }
+  .settings-content .nb-setting__control .nb-affix__input {
+    padding: 0.25rem 0.625rem;
+  }
+  .settings-content .nb-setting__control .nb-seg span {
+    padding: 0.25rem 0.625rem;
+    font-size: 0.8125rem;
+  }
+}
+@media (pointer: coarse) {
+  .settings-content
+    .nb-setting__control
+    :is(input:not([type='checkbox']):not([type='radio']), select),
+  .setting-toggle .nb-toggle {
+    min-height: 2.5rem;
+  }
+}

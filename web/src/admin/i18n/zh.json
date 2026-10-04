@@ -24,11 +24,9 @@
       "endpointsTitle": "端点概览",
       "requests": "请求数",
       "unknownUsage": "用量未知的请求",
-      "viewEndpoints": "打开端点",
       "promptTokens": "提示词 token",
       "activityTitle": "产品活动",
       "activityDisabled": "活动聚合已停用",
-      "activityDisabledBody": "活动聚合停用期间不会保留活动记录。",
       "latestDay": "最新日期",
       "productActive": "产品活跃",
       "gameActive": "游戏活跃",
@@ -36,7 +34,6 @@
       "inactiveValue": "无活动",
       "noActivity": "暂无活动记录",
       "noActivityBody": "暂时没有活动记录。",
-      "endpointGroups": "共有 {{groupCount}} 个端点组，可打开端点页查看详情。",
       "reportsTitle": "凭据举报",
       "nonTerminalReports": "未终态总数",
       "pendingIndexing": "正在索引",
@@ -78,7 +75,6 @@
       "description": "查看运行告警并处理需要关注的问题。",
       "kind": "类型",
       "message": "消息",
-      "reference": "引用",
       "subject": "关联用户",
       "created": "创建时间",
       "resolved": "状态",
@@ -100,7 +96,6 @@
         "reportRetryExhausted": "举报重试已耗尽",
         "fishingRetryExhausted": "钓鱼恢复重试已耗尽",
         "rpsTerminalRetrying": "猜拳终局恢复正在重试",
-        "workerCheckpointFailed": "Worker 检查点失败",
         "invariantViolation": "数据不变量异常",
         "accountDeleted": "用户主动删号"
       },
@@ -114,7 +109,16 @@
       "generalBalance": "通用悠哉积分余额",
       "gameBalance": "游戏悠哉积分余额",
       "donationCredit": "捐赠额度",
-      "sketchAssets": "画纸 / 画笔"
+      "sketchAssets": "画纸 / 画笔",
+      "presentation": {
+        "running": "运行",
+        "security": "安全",
+        "games": "游戏",
+        "accounts": "账号",
+        "worker": "后台任务检查点失败",
+        "actions": "告警操作",
+        "deletionSnapshot": "删除前余额"
+      }
     },
     "settings": {
       "nav": "站点参数",
@@ -131,14 +135,10 @@
       "catalogIndependentGate": "相关设置与限制",
       "charityModelPricing": "公益模型计价（公益板块）",
       "catalogDurationPreview": "人类可读时长：{{value}}",
-      "catalogMilliPreview": "{{credits}} 积分",
       "restoreFallback": "移除覆盖值",
       "legalBytes": "UTF-8 字节：{{count}} / {{max}}",
       "timezonePreview": "预览：{{value}}",
       "dangerousDescription": "访问、滥用控制和法律文本变更可能影响准入或已发布政策；保存前请核对服务端说明。",
-      "dangerousEmpty": "没有危险设置",
-      "dangerousEmptyBody": "没有危险目录项符合当前搜索。",
-      "dangerousTitle": "危险与法律设置",
       "enumValue": "枚举参数",
       "enumValues": {
         "disabled": "已停用",
@@ -157,7 +157,7 @@
         "alerts": "告警",
         "announcements": "公告",
         "charity": "公益",
-        "connector": "连接器",
+        "connector": "接口格式",
         "economy": "经济",
         "games": "游戏",
         "identity": "标识与外观",
@@ -168,7 +168,6 @@
       },
       "ordinaryEmpty": "没有普通设置",
       "ordinaryEmptyBody": "没有普通目录项符合当前搜索。",
-      "ordinaryTitle": "普通设置",
       "remoteLogoWarning": "远程站点标志会让浏览器公开请求第三方地址，并可能独立失败；切勿在该 URL 中放置秘密。",
       "restoreAuthorityValue": "撤销此项修改",
       "unknownCatalogGate": "其他限制（{{key}}）",
@@ -197,15 +196,28 @@
         "levels": "已启用的等级门槛必须按 2 至 4 级依次递增。",
         "timezoneLocked": "已有每日活动记录，站点时区已锁定，无法修改。"
       },
-      "customizedCount": "{{count}} 项已调整",
-      "groupDefaults": "使用默认设置",
-      "searchHelp": "按名称或用途查找设置"
+      "searchHelp": "按名称或用途查找设置",
+      "modified": "已修改",
+      "original": "原来 {{value}}",
+      "gatewayGroup": "Gateway 模型能力",
+      "legalHoldGroup": "法律保全",
+      "maintenanceGroup": "维护模式",
+      "gameRewardRange": "游戏积分签到奖励",
+      "rewardRange": "通用积分签到奖励",
+      "rewardRangeHelp": "每次签到在这个范围内随机发放。",
+      "levelNames": "等级显示名",
+      "levelNamesHelp": "留空使用内置名称。",
+      "navigation": "参数分组",
+      "cautious": "需谨慎",
+      "regular": "常规",
+      "otherConfiguration": "其他配置",
+      "confirmationHint": "包含需谨慎的设置，保存前会再确认一次。",
+      "confirmTitle": "保存需谨慎的设置？"
     },
     "games": {
       "nav": "游戏",
       "title": "游戏配置",
       "masterEnabled": "游戏总开关",
-      "fishingEnabled": "启用池塘垂钓",
       "fishingRake": "{{pump}}费用（%）",
       "worm": "蚯蚓鱼饵",
       "lure": "拟饵",
@@ -218,15 +230,12 @@
       "saved": "游戏设置已保存。",
       "save": "保存游戏配置",
       "controls": {
-        "globalGate": "小游戏总开关",
         "settings": "游戏设置",
-        "priceCredits": "{{field}}价格（积分）",
         "revisionTerms": "可同时调整多项，保存后生效；已经开始的游戏继续使用开始时的设置。"
       },
       "counts": {
         "active": "进行中",
         "empty": "没有进行中的游戏",
-        "emptyBody": "当前没有上报活动对局或等待队列。",
         "games": "对局",
         "mode": "模式：{{value}}",
         "phase": "阶段：{{value}}",
@@ -237,8 +246,6 @@
         "unknown": "未知值（{{value}}）"
       },
       "linklink": {
-        "enabled": "启用连连看",
-        "entryPrice": "{{spec}}入场价格（积分）",
         "specEnabled": "启用 {{spec}}",
         "specs": {
           "10x10": "10×10",
@@ -246,7 +253,6 @@
           "8x8": "8×8"
         }
       },
-      "operationsDescription": "配置后续游戏准入，同时监控独立的进行中对局与排队数量。",
       "restoreAuthorityValues": "恢复已保存设置",
       "rps": {
         "base": "{{mode}}基础金额（积分）",
@@ -258,7 +264,6 @@
           "gesture": "出拳时限",
           "queue": "排队时限"
         },
-        "enabled": "启用三人猜拳",
         "modeEnabled": "启用{{mode}}模式",
         "modes": {
           "deathmatch": "生死斗",
@@ -316,13 +321,12 @@
       },
       "config": {
         "masterEnabled": "启用活动总开关",
-        "revisionHint": "统一保存活动开关与领取规则。启用星期四活动前，请先在下方配置活动。已经开放的活动保留原有规则。",
         "save": "保存活动设置",
         "thursdayEnabled": "启用星期四活动",
         "title": "活动配置",
-        "welfareCap": "公益上限（积分）",
-        "welfareEnabled": "启用公益活动",
-        "welfareThreshold": "公益门槛（积分）",
+        "welfareCap": "低保上限（积分）",
+        "welfareEnabled": "启用低保活动",
+        "welfareThreshold": "低保门槛（积分）",
         "masterRequired": "请开启活动总开关，或同时关闭低保和疯狂星期四。",
         "periodRequired": "请先在下方填写疯狂星期四的文案和参与规则并保存，再开启活动。",
         "changedElsewhere": "活动设置已更新。请取消当前修改，再基于最新设置编辑。"
@@ -342,7 +346,6 @@
         "windowBeijing": "活动时间（北京时间）",
         "perUserLimit": "每位用户上限",
         "platformBp": "平台费用（%）",
-        "save": "保存下一活动周期",
         "updateTitle": "更新已配置的下一周期",
         "welfareBp": "低保池费用（%）",
         "literatureInvalid": "文案过长或含特殊控制字符，请修改后再试；可使用换行和制表符。"
@@ -388,8 +391,7 @@
         "payoutRollover": "发放 / 结转",
         "periodRevision": "期次",
         "processed": "已处理",
-        "resume": "恢复现有结算检查点",
-        "title": "星期四活动状态"
+        "resume": "恢复现有结算检查点"
       },
       "title": "活动与共享池",
       "units": {
@@ -398,7 +400,7 @@
     },
     "mainstreamChannels": {
       "nav": "主流渠道",
-      "title": "主流渠道管理",
+      "title": "主流渠道",
       "description": "维护用户添加服务时可选的渠道。修改或停用渠道不会改变已添加的服务。",
       "category": {
         "subscription": "主流订阅",
@@ -419,7 +421,7 @@
       "table": {
         "name": "名称",
         "category": "类别",
-        "connector": "API 类型",
+        "connector": "接口格式",
         "baseUrl": "API 基础地址",
         "enabled": "可用于添加服务",
         "updated": "更新时间",
@@ -429,12 +431,13 @@
         "create": "创建渠道",
         "view": "查看",
         "save": "保存修改",
-        "retire": "归档渠道"
+        "retire": "归档渠道",
+        "new": "新建渠道"
       },
       "form": {
         "name": "渠道名称",
         "category": "类别",
-        "connector": "API 类型",
+        "connector": "接口格式",
         "baseUrl": "API 基础地址",
         "enabled": "可用于添加服务",
         "baseUrlHelp": "填写服务的 API 基础地址，例如 https://api.example.com/v1。"
@@ -473,7 +476,8 @@
       "empty": {
         "title": "没有主流渠道",
         "body": "当前状态筛选下没有渠道。"
-      }
+      },
+      "available": "可用于添加服务"
     },
     "reports": {
       "nav": "举报",
@@ -503,7 +507,7 @@
         "confirmApproveTitle": "批准删除受保护密钥？",
         "confirmRejectBody": "此操作将解除所有目标的保护，并记录审核原因。",
         "confirmRejectTitle": "驳回此举报？",
-        "connector": "连接器",
+        "connector": "接口格式",
         "continuationBody": "此状态不能重新裁决或解除保护；恢复操作只会使用同一目标版本重启现有检查点。",
         "continuationTitle": "继续处理",
         "deadline": "截止时间",
@@ -635,13 +639,13 @@
       "donationsTitle": "捐赠审核队列",
       "modelsTitle": "公益模型与绑定",
       "nav": "公益",
-      "title": "公益与捐赠管理",
+      "title": "公益",
       "description": "审核捐赠、管理公益模型及连接，调整使用限制。",
       "group": {
         "custom": "自定义捐赠密钥",
         "mainstreamSubscription": "【主流订阅】{{name}}",
         "mainstreamApiPlatform": "【主流 API 平台】{{name}}",
-        "connector": "连接器",
+        "connector": "接口格式",
         "baseUrl": "API 基础地址",
         "channelRevision": "添加时的渠道版本",
         "keyHeading": "密钥 {{id}} · {{head}}…{{tail}}",
@@ -1060,6 +1064,17 @@
     },
     "picturebook": {
       "saveSelectedModels": "保存选中模型"
+    },
+    "economyAudit": {
+      "presentation": {
+        "negativeZero": "负余额：全部为 0",
+        "negative": "负余额",
+        "reconciliation": "对账说明",
+        "matched": "一致",
+        "mismatch": "不一致",
+        "incomplete": "覆盖不完整",
+        "periods": "分时明细（{{count}} 个时段）"
+      }
     }
   },
   "user": {

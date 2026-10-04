@@ -112,7 +112,7 @@ describe('administrator economy audit', () => {
     await waitFor(() =>
       expect(container.querySelector('.time-context-notice')).toHaveTextContent('UTC+05:30'),
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Ledger' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Ledger' }));
     const text = await screen.findByText(hostile);
     expect(text.tagName).toBe('CODE');
     expect(container.querySelector('img')).toBeNull();

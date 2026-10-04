@@ -1,10 +1,33 @@
 import { act, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, afterAll, describe, expect, it, vi } from 'vitest';
 import { useLocation, useNavigate } from 'react-router';
 import { installJsonFetchFixtures, renderWithProviders } from '../../../../test/unit/support';
 import { adminKeys } from '../../data';
 import { MainstreamChannelsPanel } from './MainstreamChannels';
 import type { AdminMainstreamChannel } from './channels';
+
+const modal = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'showModal');
+const close = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'close');
+beforeAll(() => {
+  Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
+    configurable: true,
+    value() {
+      this.setAttribute('open', '');
+    },
+  });
+  Object.defineProperty(HTMLDialogElement.prototype, 'close', {
+    configurable: true,
+    value() {
+      this.removeAttribute('open');
+    },
+  });
+});
+afterAll(() => {
+  if (modal) Object.defineProperty(HTMLDialogElement.prototype, 'showModal', modal);
+  else Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal');
+  if (close) Object.defineProperty(HTMLDialogElement.prototype, 'close', close);
+  else Reflect.deleteProperty(HTMLDialogElement.prototype, 'close');
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -108,8 +131,21 @@ describe('administrator mainstream channels page', () => {
       },
       {
         method: 'GET',
-        path: '/admin/api/mainstream-channels?state=retired&page=1&page_size=20',
-        body: page([channel(retiredID, 'Retired one', 'retired')]),
+        path: '/admin/api/mainstream-channels?state=active&page=1&page_size=50',
+        body: page(
+          [
+            channel(activeID, 'Active second'),
+            ...Array.from({ length: 20 }, (_, index) =>
+              channel(generatedID(index + 1), `Active other ${index + 1}`),
+            ),
+          ],
+          {
+            page: '1',
+            page_size: 50,
+            total_items: '21',
+            total_pages: '1',
+          },
+        ),
       },
       {
         method: 'GET',
@@ -133,24 +169,17 @@ describe('administrator mainstream channels page', () => {
 
     expect(await screen.findByText('Active first')).toBeVisible();
     expect(screen.getByRole('combobox', { name: 'Items per page' })).toHaveValue('20');
-    expect(screen.getByText('Page 1 of 2 · Total: 21')).toBeVisible();
+    expect(screen.getByText('21 items')).toBeVisible();
+    expect(screen.getByRole('button', { name: '1' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
     await waitFor(() => {
       const params = new URLSearchParams(screen.getByTestId('location-search').textContent ?? '');
       expect(params.get('state')).toBe('active');
     });
     await rendered.user.click(screen.getByRole('button', { name: 'Next' }));
     expect(await screen.findByText('Active second')).toBeVisible();
-
-    await rendered.user.selectOptions(
-      screen.getByRole('combobox', { name: 'Channel state' }),
-      'retired',
-    );
-    expect(await screen.findByText('Retired one')).toBeVisible();
-    await waitFor(() => expect(screen.queryByText('Active second')).not.toBeInTheDocument());
-    let params = new URLSearchParams(screen.getByTestId('location-search').textContent ?? '');
-    expect(params.get('state')).toBe('retired');
-    expect(params.get('page')).toBe('1');
-    expect(params.get('page_size')).toBe('20');
 
     await rendered.user.selectOptions(
       screen.getByRole('combobox', { name: 'Items per page' }),
@@ -162,10 +191,23 @@ describe('administrator mainstream channels page', () => {
     expect(window.localStorage.getItem('nonbiri:admin:mainstream-channels-page-size:v1')).toBe(
       '50',
     );
-    params = new URLSearchParams(screen.getByTestId('location-search').textContent ?? '');
+    const sizeParams = new URLSearchParams(screen.getByTestId('location-search').textContent ?? '');
+    expect(sizeParams.get('state')).toBe('active');
+    expect(sizeParams.get('page')).toBe('1');
+    expect(sizeParams.get('page_size')).toBe('50');
+    await rendered.user.selectOptions(
+      screen.getByRole('combobox', { name: 'Channel state' }),
+      'retired',
+    );
+    expect(await screen.findByText('Retired one')).toBeVisible();
+    await waitFor(() => expect(screen.queryByText('Active second')).not.toBeInTheDocument());
+    const params = new URLSearchParams(screen.getByTestId('location-search').textContent ?? '');
     expect(params.get('state')).toBe('retired');
     expect(params.get('page')).toBe('1');
     expect(params.get('page_size')).toBe('50');
+
+    expect(screen.getByText('1 items')).toBeVisible();
+    expect(screen.queryByRole('combobox', { name: 'Items per page' })).not.toBeInTheDocument();
     expect(fetchMock.mock.calls.map(([input]) => String(input))).not.toContain(
       '/admin/api/mainstream-channels?state=active&cursor=',
     );
@@ -268,8 +310,8 @@ describe('administrator mainstream channels page', () => {
     expect(screen.getByText(`${activeID} / 3`)).toBeVisible();
 
     const nameInputs = screen.getAllByLabelText('Channel name');
-    await rendered.user.clear(nameInputs[1]);
-    await rendered.user.type(nameInputs[1], 'Updated channel');
+    await rendered.user.clear(nameInputs[0]);
+    await rendered.user.type(nameInputs[0], 'Updated channel');
     await rendered.user.click(screen.getByRole('button', { name: 'Save changes' }));
     await waitFor(() => expect(requests).toHaveLength(1));
     expect(JSON.parse(requests[0]?.body ?? 'null')).toEqual({
@@ -320,8 +362,8 @@ describe('administrator mainstream channels page', () => {
       role: 'admin',
     });
 
-    expect(screen.getByLabelText('Channel name')).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Create channel' })).toBeDisabled();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /New channel/ })).toBeDisabled();
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
     await act(async () => {
@@ -329,6 +371,7 @@ describe('administrator mainstream channels page', () => {
       await sessionResponse;
     });
     expect(await screen.findByText('Authorized channel')).toBeVisible();
+    await rendered.user.click(screen.getByRole('button', { name: /New channel/ }));
     expect(screen.getByLabelText('Channel name')).not.toBeDisabled();
     expect(screen.getByRole('button', { name: 'Create channel' })).not.toBeDisabled();
     expect(rendered.queryClient.getQueryData(adminKeys.session)).toEqual(session());
@@ -352,8 +395,8 @@ describe('administrator mainstream channels page', () => {
         name: status === 401 ? 'Sign-in required' : 'Something went wrong',
       }),
     ).toBeVisible();
-    expect(screen.getByLabelText('Channel name')).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Create channel' })).toBeDisabled();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /New channel/ })).toBeDisabled();
     expect(screen.queryByText('Loading…')).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
@@ -390,7 +433,7 @@ describe('administrator mainstream channels page', () => {
     expect(await screen.findByText('Mutation authority')).toBeVisible();
     await rendered.user.click(screen.getByRole('button', { name: 'View' }));
     expect(await screen.findByRole('heading', { name: 'Channel details' })).toBeVisible();
-    const editName = screen.getAllByLabelText('Channel name')[1];
+    const editName = screen.getByLabelText('Channel name');
     await rendered.user.clear(editName);
     await rendered.user.type(editName, 'Mutation failure');
     await rendered.user.click(screen.getByRole('button', { name: 'Save changes' }));
@@ -417,8 +460,8 @@ describe('administrator mainstream channels page', () => {
     await waitFor(() =>
       expect(screen.queryByRole('heading', { name: 'Channel details' })).not.toBeInTheDocument(),
     );
-    expect(screen.getByLabelText('Channel name')).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Create channel' })).toBeDisabled();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /New channel/ })).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'Retire' })).not.toBeInTheDocument();
   });
 
@@ -461,11 +504,13 @@ describe('administrator mainstream channels page', () => {
     });
 
     expect(await screen.findByText('Account one')).toBeVisible();
+    await rendered.user.click(screen.getByRole('button', { name: /New channel/ }));
     const createName = screen.getByLabelText('Channel name');
     await rendered.user.type(createName, 'Account one draft');
+    await rendered.user.click(screen.getByRole('button', { name: 'Close' }));
     await rendered.user.click(screen.getByRole('button', { name: 'View' }));
     expect(await screen.findByRole('heading', { name: 'Channel details' })).toBeVisible();
-    expect(screen.getAllByLabelText('Channel name')).toHaveLength(2);
+    expect(screen.getAllByLabelText('Channel name')).toHaveLength(1);
 
     holdLateDetail = true;
     void rendered.queryClient.invalidateQueries({
@@ -484,7 +529,7 @@ describe('administrator mainstream channels page', () => {
     expect(await screen.findByText('Account two')).toBeVisible();
     await waitFor(() => {
       expect(screen.queryByRole('heading', { name: 'Channel details' })).not.toBeInTheDocument();
-      expect(screen.getByLabelText('Channel name')).toHaveValue('');
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
     expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Retire' })).not.toBeInTheDocument();
@@ -493,6 +538,9 @@ describe('administrator mainstream channels page', () => {
       resolveLateDetail(jsonResponse({ ...accountOne, name: 'Late account one' }));
       await lateDetail;
     });
+    await rendered.user.click(screen.getByRole('button', { name: /New channel/ }));
+    expect(screen.getByLabelText('Channel name')).toHaveValue('');
+    await rendered.user.click(screen.getByRole('button', { name: 'Close' }));
     expect(screen.queryByText('Late account one')).not.toBeInTheDocument();
     expect(screen.getByText('Account two')).toBeVisible();
   });
@@ -534,7 +582,7 @@ describe('administrator mainstream channels page', () => {
     expect(await screen.findByText('Before invalidation')).toBeVisible();
     await rendered.user.click(screen.getByRole('button', { name: 'View' }));
     expect(await screen.findByRole('heading', { name: 'Channel details' })).toBeVisible();
-    const editName = screen.getAllByLabelText('Channel name')[1];
+    const editName = screen.getByLabelText('Channel name');
     await rendered.user.clear(editName);
     await rendered.user.type(editName, 'Late edit');
     await rendered.user.click(screen.getByRole('button', { name: 'Save changes' }));
@@ -556,8 +604,8 @@ describe('administrator mainstream channels page', () => {
     rendered.queryClient.setQueryData(adminKeys.session, null);
     await waitFor(() => {
       expect(screen.queryByRole('heading', { name: 'Channel details' })).not.toBeInTheDocument();
-      expect(screen.getByLabelText('Channel name')).toBeDisabled();
-      expect(screen.getByRole('button', { name: 'Create channel' })).toBeDisabled();
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /New channel/ })).toBeDisabled();
     });
 
     await act(async () => {
@@ -565,7 +613,7 @@ describe('administrator mainstream channels page', () => {
       await patchResponse;
     });
     expect(screen.queryByText('Late edit')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Create channel' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /New channel/ })).toBeDisabled();
   });
 
   it('keeps the old page visible and disables row controls while a new page is busy', async () => {

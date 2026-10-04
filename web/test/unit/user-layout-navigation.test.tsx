@@ -1,6 +1,7 @@
 import { screen, waitFor } from '@testing-library/react';
 import { describe, expect, test } from 'vitest';
 import { Route, Routes } from 'react-router';
+import { RecordsHeader } from '../../src/user/components/RecordsHeader';
 import { UserLayout } from '../../src/user/layouts/UserLayout';
 import { installJsonFetchFixtures, renderWithProviders } from './support';
 
@@ -96,3 +97,29 @@ describe('level-five user shell navigation', () => {
     expect(screen.getAllByRole('link', { name: 'Steward' })).toHaveLength(1);
   });
 });
+
+test.each(['/logs', '/credits', '/debug', '/issues'])(
+  'uses one records navigation and keeps the primary entry active on %s',
+  async (route) => {
+    installJsonFetchFixtures([
+      { method: 'GET', path: '/api/session', body: levelFiveSession },
+      { method: 'GET', path: '/api/config', body: publicConfig },
+    ]);
+    const rendered = await renderWithProviders(
+      <Routes>
+        <Route element={<UserLayout />}>
+          <Route path={route} element={<RecordsHeader />} />
+        </Route>
+      </Routes>,
+      { station: 'user', role: 'level5', route },
+    );
+    await screen.findByRole('button', { name: 'fixture-user' });
+    expect(rendered.container.querySelector('#user-navigation a[href="/logs"]')).toHaveAttribute(
+      'data-active',
+      'true',
+    );
+    expect(screen.getAllByRole('navigation', { name: 'Records' })).toHaveLength(1);
+    expect(rendered.container.querySelector('.diagnostics-nav')).toBeNull();
+    expect(rendered.container.querySelectorAll('.records-tabs a')).toHaveLength(4);
+  },
+);

@@ -104,17 +104,17 @@ describe('user endpoint list page', () => {
     });
     expect(await screen.findByText('endpoint-1')).toBeVisible();
     expect(requests).toContain('/api/endpoints?page=1&page_size=20');
-    expect(screen.getByText('Page 1 of 2 · Total: 21')).toBeVisible();
-    expect(document.querySelector('section.core-card[aria-busy="false"]')).not.toBeNull();
+    expect(screen.getByText('Page 1 of 2')).toBeVisible();
+    expect(document.querySelector('section.nb-panel[aria-busy="false"]')).not.toBeNull();
 
     await rendered.user.click(screen.getByRole('button', { name: 'Next' }));
     expect(screen.getByText('endpoint-1')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
-    expect(screen.getByText('Page 1 of 2 · Total: 21')).toBeVisible();
-    expect(document.querySelector('section.core-card[aria-busy="true"]')).not.toBeNull();
+    expect(screen.getByText('Page 1 of 2')).toBeVisible();
+    expect(document.querySelector('section.nb-panel[aria-busy="true"]')).not.toBeNull();
     resolveSecond(jsonResponse(endpointPage(secondPage, '2', 20, 21)));
     expect(await screen.findByText('endpoint-21')).toBeVisible();
-    expect(screen.getByText('Page 2 of 2 · Total: 21')).toBeVisible();
+    expect(screen.getByText('Page 2 of 2')).toBeVisible();
 
     fireEvent.change(screen.getByRole('combobox', { name: 'Items per page' }), {
       target: { value: '50' },
@@ -127,7 +127,7 @@ describe('user endpoint list page', () => {
     expect(window.localStorage.getItem('nonbiri:user:endpoints-page-size:v1')).toBe('50');
   });
 
-  it('keeps pagination controls and the server total for an empty page', async () => {
+  it('shows setup actions without unnecessary pagination for an empty list', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((input: string | URL | Request) => {
@@ -145,11 +145,13 @@ describe('user endpoint list page', () => {
       role: 'user',
       route: '/endpoints',
     });
-    expect(await screen.findByText('No endpoints yet')).toBeVisible();
-    expect(screen.getByText('Page 1 of 1 · Total: 0')).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
-    expect(screen.getByRole('combobox', { name: 'Items per page' })).toHaveValue('20');
+    expect(await screen.findByText('No services added yet')).toBeVisible();
+    expect(screen.queryByRole('navigation', { name: 'Pagination' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /Add service/ })).toHaveLength(2);
+    expect(screen.getByRole('link', { name: 'Browse charity models' })).toHaveAttribute(
+      'href',
+      '/charity',
+    );
   });
 
   it('returns through a real detail route with the clamped page and refreshes from that URL', async () => {
@@ -194,10 +196,10 @@ describe('user endpoint list page', () => {
     expect(screen.getByTestId('location')).toHaveTextContent('/endpoints?page=999&page_size=20');
     expect(requests).toContain('/api/endpoints?page=999&page_size=20');
 
-    await rendered.user.click(screen.getByRole('link', { name: 'Manage endpoint' }));
-    expect(await screen.findByRole('heading', { name: 'Endpoint details' })).toBeVisible();
+    await rendered.user.click(screen.getByRole('link', { name: /endpoint-11.*Manage/ }));
+    expect(await screen.findByRole('heading', { name: 'endpoint note' })).toBeVisible();
     expect(screen.getByTestId('location')).toHaveTextContent('/endpoints/11');
-    await rendered.user.click(screen.getByRole('link', { name: 'Back' }));
+    await rendered.user.click(screen.getByRole('link', { name: /My services/ }));
     expect(await screen.findByText('endpoint-11')).toBeVisible();
     expect(screen.getByTestId('location')).toHaveTextContent('/endpoints?page=2&page_size=20');
 

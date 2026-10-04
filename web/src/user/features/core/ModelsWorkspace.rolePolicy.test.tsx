@@ -44,6 +44,8 @@ function fixture(save?: (body: Record<string, unknown>) => Promise<Response>) {
         if (url.pathname === '/api/models/' + original.id) return json(current);
         if (url.pathname.endsWith('/bindings'))
           return json({ bindings: [], binding_revision: '1' });
+        if (url.pathname.endsWith('/binding-candidates'))
+          return json({ ...page, pagination: { ...page.pagination, page_size: 10 } });
         if (url.pathname === '/api/models' || url.pathname === '/api/endpoints') return json(page);
       }
       if ((method === 'PATCH' || method === 'POST') && url.pathname.startsWith('/api/models')) {
@@ -74,10 +76,13 @@ async function renderEditor(create = false) {
   view.queryClient.setQueryData(coreKeys.session, { user });
   await view.user.click(
     await screen.findByRole('button', {
-      name: create ? 'Create platform model' : 'Edit platform model',
+      name: create ? 'Create model' : 'Edit model',
     }),
   );
-  await view.user.click(screen.getByText(/Default:.*role rules/));
+  if (!create) {
+    await view.user.click(screen.getByText('Advanced behavior', { selector: 'strong' }));
+    await view.user.click(screen.getByText(/Default:.*role rules/));
+  }
   return view;
 }
 async function addRule(
@@ -101,17 +106,16 @@ describe('personal model role editor', () => {
     const f = fixture();
     const view = await renderEditor(true);
     const form = screen.getByRole('button', { name: 'Save' }).closest('form')!;
-    await view.user.type(
-      within(form).getByRole('textbox', { name: 'Service provider' }),
-      'personal',
-    );
+    await view.user.type(within(form).getByRole('textbox', { name: 'Prefix' }), 'personal');
     await view.user.type(screen.getByRole('textbox', { name: 'Model name' }), 'primary');
-    expect(screen.getByRole('combobox', { name: 'Default action for unlisted roles' })).toHaveValue(
-      'native',
-    );
+    expect(screen.queryByRole('radiogroup', { name: 'Streaming' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Advanced behavior')).not.toBeInTheDocument();
     await view.user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(f.writes).toHaveLength(1));
     expect(f.writes[0].role_policy).toEqual({ default_action: 'native', rules: {} });
+    await waitFor(() =>
+      expect(screen.getByRole('searchbox', { name: 'Add sources' })).toHaveFocus(),
+    );
   });
 
   it('saves custom roles and fallback using the current model revision', async () => {
@@ -121,10 +125,7 @@ describe('personal model role editor', () => {
       screen.getByRole('combobox', { name: 'Default action for unlisted roles' }),
       'reject',
     );
-    await view.user.selectOptions(
-      screen.getByRole('combobox', { name: 'Transport rule' }),
-      'force_stream',
-    );
+    await view.user.click(screen.getByRole('radio', { name: 'Always fetch as a stream' }));
     await addRule(view, 'developer', 'system');
     await addRule(view, 'critic', 'user');
     await view.user.click(screen.getByRole('button', { name: 'Save' }));
@@ -215,5 +216,45 @@ describe('personal model role editor', () => {
     expect(view.queryClient.getQueryData(coreKeys.model(user.id, original.id))).not.toMatchObject({
       revision: '2',
     });
+  });
+  it('saves name, strategy and advanced changes in one PATCH and discards a later draft', async () => {
+    const f = fixture();
+    const view = await renderEditor();
+    await view.user.clear(screen.getByRole('textbox', { name: 'Prefix' }));
+    await view.user.type(screen.getByRole('textbox', { name: 'Prefix' }), 'changed');
+    await view.user.click(screen.getByRole('radio', { name: 'Spread randomly' }));
+    await view.user.click(screen.getByRole('switch', { name: 'Try the next source on error' }));
+    await view.user.click(
+      screen.getByRole('switch', { name: 'Turn tool calls into plain text (chat only)' }),
+    );
+    await view.user.click(screen.getByRole('radio', { name: 'Always fetch as a stream' }));
+    const bar = screen.getByRole('region', { name: '5 changes' });
+    await view.user.click(within(bar).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(f.writes).toHaveLength(1));
+    expect(f.writes[0]).toMatchObject({
+      expected_revision: '1',
+      provider: 'changed',
+      route_strategy: 'random',
+      silent_retry: !original.silent_retry,
+      flatten_tool_calls: true,
+      transport_rule: 'force_stream',
+    });
+    await view.user.click(screen.getByRole('button', { name: 'Edit model' }));
+    await view.user.click(screen.getByText('Advanced behavior', { selector: 'strong' }));
+    await view.user.clear(screen.getByRole('textbox', { name: 'Prefix' }));
+    await view.user.type(screen.getByRole('textbox', { name: 'Prefix' }), 'discard-me');
+    await view.user.click(screen.getByRole('radio', { name: 'In order' }));
+    await view.user.click(screen.getByRole('switch', { name: 'Try the next source on error' }));
+    await view.user.click(
+      screen.getByRole('switch', { name: 'Turn tool calls into plain text (chat only)' }),
+    );
+    await view.user.click(screen.getByRole('button', { name: 'Discard changes' }));
+    expect(screen.getByRole('textbox', { name: 'Prefix' })).toHaveValue('changed');
+    expect(screen.getByRole('radio', { name: 'Spread randomly' })).toBeChecked();
+    expect(screen.getByRole('switch', { name: 'Try the next source on error' })).not.toBeChecked();
+    expect(
+      screen.getByRole('switch', { name: 'Turn tool calls into plain text (chat only)' }),
+    ).toBeChecked();
+    expect(f.writes).toHaveLength(1);
   });
 });

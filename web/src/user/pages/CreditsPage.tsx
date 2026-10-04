@@ -1,7 +1,13 @@
+import { useTranslation } from 'react-i18next';
+import { Segmented, Fold } from '@shared/components/ui';
+import { RecordsHeader } from '../components/RecordsHeader';
+import { getWallet } from '@shared/limitedactivities/api';
+import { limitedActivityKeys } from '../features/limitedactivities/queries';
+import { economySessionRequest } from '../features/economy/queries';
 import { useEffect, useState, type FormEvent } from 'react';
 import { CancelledError, keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router';
-import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import { Card, EmptyState, ErrorState, LoadingState } from '@shared/components/States';
 import { TimeInput } from '@shared/components/TimeInput';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { createTimeDraft, timeDraftValue, type TimeDraft } from '@shared/time';
@@ -29,6 +35,7 @@ function CreditHistory({
   scopeReset?: boolean;
 }) {
   const { copy, reason } = useCreditCopy();
+  const { t } = useTranslation();
   const client = useQueryClient();
   const url = useCreditHistoryUrl(scopeReset);
   const [draft, setDraft] = useState({
@@ -79,6 +86,12 @@ function CreditHistory({
     placeholderData: keepPreviousData,
     retry: false,
   });
+  const wallet = useQuery({
+    queryKey: limitedActivityKeys.wallet(accountID),
+    queryFn: () => economySessionRequest(client, getWallet, accountID),
+    enabled: Boolean(accountID),
+    retry: false,
+  });
   const data = history.data;
   const busy = history.isFetching;
   const fromValue = timeDraftValue(fromTimeDraft);
@@ -120,8 +133,7 @@ function CreditHistory({
   };
   return (
     <div className="page credit-history">
-      <PageHeader
-        title={copy.title}
+      <RecordsHeader
         description={copy.description}
         actions={
           <button type="button" className="btn btn-secondary" disabled={busy} onClick={url.refresh}>
@@ -130,70 +142,81 @@ function CreditHistory({
         }
       />
       <Card>
-        <div className="credit-history__overview">
-          <span>{copy.balance}</span>
-          <strong>{history.error ? '—' : (data?.current_balance ?? '—')}</strong>
-          <span>{copy.game}</span>
-          <strong>{history.error ? '—' : (data?.game_balance ?? '—')}</strong>
-          <small>{copy.note}</small>
+        <div className="nb-stats credit-history__overview" aria-label={copy.asset}>
+          {[
+            [copy.balance, history.isError ? '—' : (data?.current_balance ?? '—')],
+            [copy.game, history.isError ? '—' : (data?.game_balance ?? '—')],
+            [copy.sketch_paper, wallet.isError ? '—' : (wallet.data?.sketch_paper ?? '—')],
+            [copy.sketch_brush, wallet.isError ? '—' : (wallet.data?.sketch_brush ?? '—')],
+          ].map(([label, value]) => (
+            <div
+              className={`nb-stat${value.length > 12 ? ' credit-history__balance--long' : ''}`}
+              key={label}
+            >
+              <span>{label}</span>
+              <strong>{value}</strong>
+            </div>
+          ))}
         </div>
+        {wallet.isError ? (
+          <ErrorState error={wallet.error} onRetry={() => void wallet.refetch()} />
+        ) : null}
+        <p className="credit-history__time-note">{copy.note}</p>
         <form className="credit-history__filters" onSubmit={apply}>
-          <label>
-            {copy.asset}
-            <select
-              value={draft.asset_type}
-              onChange={(e) =>
-                setDraft({
-                  ...draft,
-                  asset_type: e.target.value as NonNullable<HistoryFilter['asset_type']>,
-                })
-              }
-            >
-              {HISTORY_ASSET_FILTERS.map((asset) => (
-                <option key={asset} value={asset}>
-                  {copy[asset]}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            {copy.category}
-            <select
-              value={draft.category}
-              onChange={(e) => setDraft({ ...draft, category: e.target.value })}
-            >
-              <option value="">{copy.all}</option>
-              {HISTORY_CATEGORIES.map((key) => (
-                <option key={key} value={key}>
-                  {copy[key]}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            {copy.direction}
-            <select
-              value={draft.direction}
-              onChange={(e) => setDraft({ ...draft, direction: e.target.value })}
-            >
-              <option value="">{copy.all}</option>
-              <option value="income">{copy.income}</option>
-              <option value="expense">{copy.expense}</option>
-            </select>
-          </label>
-          <TimeInput
-            station="user"
-            label={copy.from}
-            draft={fromTimeDraft}
-            onChange={setFromTimeDraft}
+          <Segmented
+            label={copy.asset}
+            value={draft.asset_type}
+            options={['all', ...HISTORY_ASSET_FILTERS.filter((asset) => asset !== 'all')].map(
+              (value) => ({
+                value: value as (typeof HISTORY_ASSET_FILTERS)[number],
+                label: copy[value as (typeof HISTORY_ASSET_FILTERS)[number]],
+              }),
+            )}
+            onChange={(asset_type) => setDraft({ ...draft, asset_type })}
           />
-          <TimeInput
-            station="user"
-            label={copy.to}
-            draft={toTimeDraft}
-            onChange={setToTimeDraft}
-            showZoneHint={false}
-          />
+          <Fold title={t('user.records.moreConditions')} plain>
+            <div className="credit-history__advanced">
+              <label>
+                {copy.category}
+                <select
+                  value={draft.category}
+                  onChange={(e) => setDraft({ ...draft, category: e.target.value })}
+                >
+                  <option value="">{copy.all}</option>
+                  {HISTORY_CATEGORIES.map((key) => (
+                    <option key={key} value={key}>
+                      {copy[key]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                {copy.direction}
+                <select
+                  value={draft.direction}
+                  onChange={(e) => setDraft({ ...draft, direction: e.target.value })}
+                >
+                  <option value="">{copy.all}</option>
+                  <option value="income">{copy.income}</option>
+                  <option value="expense">{copy.expense}</option>
+                </select>
+              </label>
+              <TimeInput
+                station="user"
+                label={copy.from}
+                showZoneHint={false}
+                draft={fromTimeDraft}
+                onChange={setFromTimeDraft}
+              />
+              <TimeInput
+                station="user"
+                label={copy.to}
+                draft={toTimeDraft}
+                onChange={setToTimeDraft}
+                showZoneHint={false}
+              />
+            </div>
+          </Fold>
           <div className="credit-history__filter-actions">
             <button className="btn btn-primary" disabled={busy || !timeReady}>
               {copy.apply}
@@ -227,7 +250,9 @@ function CreditHistory({
                         <th>{copy.asset}</th>
                         <th>{copy.change}</th>
                         <th>{copy.category}</th>
-                        <th>{copy.request}</th>
+                        {data.data.some((entry) => entry.request_id !== null) ? (
+                          <th>{copy.request}</th>
+                        ) : null}
                       </tr>
                     </thead>
                     <tbody>
@@ -246,15 +271,19 @@ function CreditHistory({
                             {entry.delta.startsWith('-') ? entry.delta : `+${entry.delta}`}
                           </td>
                           <td data-label={copy.category}>{reason(entry)}</td>
-                          <td data-label={copy.request}>
-                            {entry.request_id ? (
-                              <Link to={`/logs?request_id=${encodeURIComponent(entry.request_id)}`}>
-                                {copy.openRequest}
-                              </Link>
-                            ) : (
-                              copy.noRequest
-                            )}
-                          </td>
+                          {data.data.some((row) => row.request_id !== null) ? (
+                            <td data-label={copy.request}>
+                              {entry.request_id ? (
+                                <Link
+                                  to={`/logs?request_id=${encodeURIComponent(entry.request_id)}`}
+                                >
+                                  {copy.openRequest}
+                                </Link>
+                              ) : (
+                                copy.noRequest
+                              )}
+                            </td>
+                          ) : null}
                         </tr>
                       ))}
                     </tbody>

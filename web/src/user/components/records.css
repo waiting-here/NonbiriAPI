@@ -1,0 +1,105 @@
+.records-header {
+  display: grid;
+  gap: var(--nb-space-4);
+  min-width: 0;
+}
+.records-tabs {
+  display: flex;
+  gap: var(--nb-space-5);
+  overflow-x: auto;
+}
+.records-tabs a {
+  display: flex;
+  align-items: center;
+  gap: var(--nb-space-2);
+  min-height: 44px;
+  padding: var(--nb-space-2) 0;
+  text-decoration: none;
+  white-space: nowrap;
+  color: var(--nb-color-text-muted);
+  border-bottom: 2px solid transparent;
+}
+.records-tabs a[aria-current='page'] {
+  color: var(--nb-color-accent);
+  border-bottom-color: var(--nb-color-accent);
+}
+.records-issue {
+  padding: var(--nb-space-4) 0;
+  border-bottom: 1px solid var(--nb-color-border);
+}
+.records-issue:last-child {
+  border-bottom: 0;
+}
+.records-issue__heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--nb-space-3);
+}
+.records-issue__heading h2 {
+  margin: 0;
+  font-size: var(--nb-font-size-md);
+}
+.records-issue .nb-facts {
+  margin: var(--nb-space-3) 0;
+}
+.records-debug-results {
+  overflow-wrap: anywhere;
+}
+.records-debug-results table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.records-debug-results th,
+.records-debug-results td {
+  text-align: left;
+  padding: var(--nb-space-3);
+  border-bottom: 1px solid var(--nb-color-border);
+}
+@media (max-width: 48rem) {
+  .records-tabs {
+    gap: var(--nb-space-4);
+  }
+  .records-debug-results thead {
+    display: none;
+  }
+  .records-debug-results tr,
+  .records-debug-results td {
+    display: block;
+  }
+  .records-debug-results tr {
+    padding: var(--nb-space-3) 0;
+    border-bottom: 1px solid var(--nb-color-border);
+  }
+  .records-debug-results td {
+    border: 0;
+    padding: var(--nb-space-1) 0;
+  }
+}
+
+.records-debug-results {
+  min-width: 0;
+}
+.records-debug-results table {
+  table-layout: fixed;
+}
+.records-debug-results code {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 48rem) {
+  .records-debug-results table,
+  .records-debug-results tbody {
+    display: block;
+    max-width: 100%;
+  }
+}
+
+.records-debug-results table {
+  min-width: 0;
+}
+
+.records-issue.nb-row {
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+}

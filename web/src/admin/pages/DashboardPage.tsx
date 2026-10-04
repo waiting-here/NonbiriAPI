@@ -1,8 +1,7 @@
-import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import { EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import {
   adminCoreKeys,
   getAdminActivity,
@@ -13,29 +12,8 @@ import { adminPageKeys, getAdminEndpointsPage } from '../features/operations/adm
 import { adminReportKeys, getReportBadge } from '../features/operations/reports';
 import { useAdminSession } from '../data';
 import '@shared/operations/operations.css';
-
-function QueryCard({
-  title,
-  query,
-  children,
-}: {
-  title: string;
-  query: { isPending: boolean; error: unknown; refetch: () => unknown };
-  children: ReactNode;
-}) {
-  return (
-    <Card>
-      <h2>{title}</h2>
-      {query.isPending ? (
-        <LoadingState />
-      ) : query.error ? (
-        <ErrorState error={query.error} onRetry={() => void query.refetch()} />
-      ) : (
-        children
-      )}
-    </Card>
-  );
-}
+import { Fold } from '@shared/components/ui';
+import './dashboard.css';
 
 function formatSiteDay(day: number | undefined, offsetMinutes: number | undefined): string {
   if (day === undefined || offsetMinutes === undefined) return '—';
@@ -71,35 +49,63 @@ export function DashboardPage() {
     queryFn: ({ signal }) => getReportBadge(signal),
     retry: false,
   });
+  const endpointError = session.error ?? endpoints.error;
+  const stats = [
+    { label: t('admin.dashboard.requests'), value: usage.data?.total_requests },
+    { label: t('admin.dashboard.promptTokens'), value: usage.data?.total_prompt_tokens },
+    { label: t('common.tokens.output'), value: usage.data?.total_output_tokens },
+    {
+      label: t('admin.dashboard.endpointsTitle'),
+      value: endpoints.data?.pagination.total_items,
+      to: '/endpoints',
+    },
+    { label: t('admin.dashboard.nonTerminalReports'), value: reports.data?.total, to: '/reports' },
+  ];
   return (
-    <div className="page ops-page">
+    <div className="page ops-page admin-overview">
       <PageHeader
         title={t('admin.dashboard.title')}
         description={t('admin.dashboard.description')}
       />
-      <div className="ops-grid">
-        <QueryCard title={t('admin.dashboard.usageTitle')} query={usage}>
-          {usage.data ? (
-            <dl className="ops-kv">
-              <dt>{t('admin.dashboard.requests')}</dt>
-              <dd>{usage.data.total_requests}</dd>
-              <dt>{t('admin.dashboard.promptTokens')}</dt>
-              <dd>{usage.data.total_prompt_tokens}</dd>
-              <dt>{t('common.tokens.output')}</dt>
-              <dd>{usage.data.total_output_tokens}</dd>
-              <dt>{t('admin.dashboard.unknownUsage')}</dt>
-              <dd>{usage.data.total_unknown_usage_requests}</dd>
-            </dl>
-          ) : null}
-        </QueryCard>
-        <QueryCard title={t('admin.dashboard.activityTitle')} query={activity}>
-          {activity.data?.enabled === false ? (
-            <EmptyState
-              title={t('admin.dashboard.activityDisabled')}
-              body={t('admin.dashboard.activityDisabledBody')}
-            />
-          ) : activity.data?.data.length ? (
-            <dl className="ops-kv">
+      <section aria-label={t('admin.dashboard.usageTitle')}>
+        <div className="nb-stats">
+          {stats.map((stat) => (
+            <div className="nb-stat" key={stat.label}>
+              <div className="nb-stat__label">
+                {stat.to ? <Link to={stat.to}>{stat.label}</Link> : stat.label}
+              </div>
+              <div className="nb-stat__value">{stat.value ?? '—'}</div>
+            </div>
+          ))}
+        </div>
+        <p className="overview-usage-note">
+          {t('admin.dashboard.usageTitle')} · {t('admin.dashboard.unknownUsage')}:{' '}
+          {usage.data?.total_unknown_usage_requests ?? '—'}
+        </p>
+        {usage.isPending || endpoints.isPending || reports.isPending ? <LoadingState /> : null}
+        {usage.error ? (
+          <ErrorState error={usage.error} onRetry={() => void usage.refetch()} />
+        ) : null}
+        {endpointError ? (
+          <ErrorState
+            error={endpointError}
+            onRetry={() => void (session.error ? session.refetch() : endpoints.refetch())}
+          />
+        ) : null}
+        {reports.error ? (
+          <ErrorState error={reports.error} onRetry={() => void reports.refetch()} />
+        ) : null}
+      </section>
+      {activity.isPending ? (
+        <LoadingState />
+      ) : activity.error ? (
+        <ErrorState error={activity.error} onRetry={() => void activity.refetch()} />
+      ) : activity.data?.enabled === false ? (
+        <p className="overview-activity-disabled">{t('admin.dashboard.activityDisabled')}</p>
+      ) : (
+        <Fold title={t('admin.dashboard.activityTitle')}>
+          {activity.data?.data.length ? (
+            <dl className="nb-facts nb-facts--inline">
               <dt>{t('admin.dashboard.latestDay')}</dt>
               <dd>{formatSiteDay(activity.data.data[0]?.day, siteTimezone.data)}</dd>
               <dt>{t('admin.dashboard.productActive')}</dt>
@@ -129,51 +135,23 @@ export function DashboardPage() {
               body={t('admin.dashboard.noActivityBody')}
             />
           )}
-        </QueryCard>
-        <QueryCard
-          title={t('admin.dashboard.endpointsTitle')}
-          query={{
-            ...endpoints,
-            isPending: !session.error && endpoints.isPending,
-            error: session.error ?? endpoints.error,
-            refetch: session.error ? session.refetch : endpoints.refetch,
-          }}
-        >
-          {endpoints.data?.data.length ? (
-            <>
-              <p>
-                {t('admin.dashboard.endpointGroups', {
-                  groupCount: endpoints.data.pagination.total_items,
-                })}
-              </p>
-              <Link className="btn btn-secondary" to="/endpoints">
-                {t('admin.dashboard.viewEndpoints')}
-              </Link>
-            </>
-          ) : (
-            <EmptyState title={t('admin.endpoints.empty')} body={t('admin.endpoints.emptyBody')} />
-          )}
-        </QueryCard>
-        <QueryCard title={t('admin.dashboard.reportsTitle')} query={reports}>
-          {reports.data ? (
-            <>
-              <dl className="ops-kv">
-                <dt>{t('admin.dashboard.nonTerminalReports')}</dt>
-                <dd>{reports.data.total}</dd>
-                <dt>{t('admin.dashboard.pendingIndexing')}</dt>
-                <dd>{reports.data.by_status.pending_indexing}</dd>
-                <dt>{t('admin.dashboard.pendingReview')}</dt>
-                <dd>{reports.data.by_status.pending_review}</dd>
-                <dt>{t('admin.dashboard.approvedProcessing')}</dt>
-                <dd>{reports.data.by_status.approved_processing}</dd>
-              </dl>
-              <Link className="btn btn-secondary" to="/reports">
-                {t('admin.dashboard.openReportInbox')}
-              </Link>
-            </>
-          ) : null}
-        </QueryCard>
-      </div>
+        </Fold>
+      )}
+      {reports.data ? (
+        <Fold title={t('admin.dashboard.reportsTitle')}>
+          <dl className="nb-facts nb-facts--inline">
+            <dt>{t('admin.dashboard.pendingIndexing')}</dt>
+            <dd>{reports.data.by_status.pending_indexing}</dd>
+            <dt>{t('admin.dashboard.pendingReview')}</dt>
+            <dd>{reports.data.by_status.pending_review}</dd>
+            <dt>{t('admin.dashboard.approvedProcessing')}</dt>
+            <dd>{reports.data.by_status.approved_processing}</dd>
+          </dl>
+          <Link className="nb-btn nb-btn--secondary" to="/reports">
+            {t('admin.dashboard.openReportInbox')}
+          </Link>
+        </Fold>
+      ) : null}
     </div>
   );
 }

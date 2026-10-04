@@ -1,0 +1,31 @@
+.charity-prices-compact dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr));
+  gap: var(--nb-space-2) var(--nb-space-4);
+  margin: 0;
+}
+.charity-prices-compact dt {
+  font-size: var(--nb-font-size-xs);
+  color: var(--nb-color-text-muted);
+}
+.charity-prices-compact dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--nb-space-2);
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.charity-prices-compact s {
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-xs);
+}
+.charity-prices-compact .nb-sub {
+  margin-top: var(--nb-space-2);
+  white-space: normal;
+}
+.charity-prices-compact .charity-amount {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

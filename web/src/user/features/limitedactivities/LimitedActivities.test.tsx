@@ -117,7 +117,7 @@ it('shows the scheduled opening window and the next step without offering premat
     screen.getByText('You can enter when it opens. Check the start time.'),
   ).toBeInTheDocument();
   expect(screen.getByText(/Schedule:/)).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: 'View activity: Picture book' })).toHaveAttribute(
+  expect(screen.getByRole('link', { name: /View activity: Picture book/ })).toHaveAttribute(
     'href',
     '/activities/picture-book',
   );

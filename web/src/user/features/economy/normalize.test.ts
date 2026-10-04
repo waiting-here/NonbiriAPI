@@ -689,6 +689,87 @@ describe('economy closed-wire normalizers', () => {
     ).toEqual({ kind: 'mainstream', channelId: 'mch_abcdefghijklmnopqrstuA', name: 'Main' });
   });
 
+  it.each([
+    { limit: 'tokens', used: 'tokens_used', normalized: 'tokensUsed', cap: '100', actual: '100' },
+    { limit: 'tokens', used: 'tokens_used', normalized: 'tokensUsed', cap: '100', actual: '107' },
+    {
+      limit: 'input_tokens',
+      used: 'input_tokens_used',
+      normalized: 'inputTokensUsed',
+      cap: '100',
+      actual: '101',
+    },
+    {
+      limit: 'output_tokens',
+      used: 'output_tokens_used',
+      normalized: 'outputTokensUsed',
+      cap: '10',
+      actual: '12',
+    },
+    { limit: 'price', used: 'price_used', normalized: 'priceUsed', cap: '1', actual: '1.125' },
+    { limit: 'calls', used: 'calls_used', normalized: 'callsUsed', cap: '1', actual: '2' },
+  ])(
+    'preserves authoritative exhaustion and actual $used',
+    ({ limit, used, normalized, cap, actual }) => {
+      const donation = normalizeDonation({
+        ...DONATION_FIXTURE,
+        keys: [
+          {
+            ...DONATION_FIXTURE.keys[0],
+            charity_state: 'exhausted',
+            limits: { price: null, calls: null, tokens: null, [limit]: cap },
+            usage: { ...DONATION_FIXTURE.keys[0].usage, [used]: actual },
+          },
+        ],
+      });
+      expect(donation.keys[0].charityState).toBe('exhausted');
+      expect(donation.keys[0].usage).toMatchObject({ [normalized]: actual });
+    },
+  );
+
+  it('accepts usage plus in-flight amounts beyond a cap without changing the server state', () => {
+    const key = normalizeDonationKey({
+      ...DONATION_FIXTURE.keys[0],
+      charity_state: 'exhausted',
+      limits: { price: '1', calls: null, tokens: '100', input_tokens: '80', output_tokens: '20' },
+      usage: {
+        ...DONATION_FIXTURE.keys[0].usage,
+        price_used: '0.9',
+        price_inflight: '0.2',
+        tokens_used: '95',
+        tokens_inflight: '10',
+        input_tokens_used: '75',
+        input_tokens_inflight: '8',
+        output_tokens_used: '20',
+        output_tokens_inflight: '2',
+      },
+    });
+    expect(key.charityState).toBe('exhausted');
+    expect(key.usage).toMatchObject({
+      priceUsed: '0.9',
+      priceInflight: '0.2',
+      tokensUsed: '95',
+      tokensInflight: '10',
+      inputTokensUsed: '75',
+      inputTokensInflight: '8',
+      outputTokensUsed: '20',
+      outputTokensInflight: '2',
+    });
+  });
+
+  it.each(['-1', '340282366920938463463374607431768211456', 10, null])(
+    'still rejects malformed token usage %s',
+    (tokensUsed) => {
+      expect(() =>
+        normalizeDonationKey({
+          ...DONATION_FIXTURE.keys[0],
+          charity_state: 'exhausted',
+          usage: { ...DONATION_FIXTURE.keys[0].usage, tokens_used: tokensUsed },
+        }),
+      ).toThrow();
+    },
+  );
+
   it('rejects duplicate identities, impossible state matrices, and values beyond U128', () => {
     expect(() =>
       normalizeCharityCapability({
@@ -713,7 +794,7 @@ describe('economy closed-wire normalizers', () => {
     expect(() =>
       normalizeDonation({
         ...DONATION_FIXTURE,
-        keys: [{ ...DONATION_FIXTURE.keys[0], physical_enabled: false }],
+        keys: [{ ...DONATION_FIXTURE.keys[0], physical_enabled: 'false' }],
       }),
     ).toThrow();
     expect(() =>
@@ -781,19 +862,7 @@ describe('economy closed-wire normalizers', () => {
     ).toThrow();
   });
 
-  it('rejects impossible quota totals, zero Thursday entry, and invalid site dates', () => {
-    expect(() =>
-      normalizeDonation({
-        ...DONATION_FIXTURE,
-        keys: [
-          {
-            ...DONATION_FIXTURE.keys[0],
-            limits: { ...DONATION_FIXTURE.keys[0].limits, calls: '1' },
-            usage: { ...DONATION_FIXTURE.keys[0].usage, calls_used: '2' },
-          },
-        ],
-      }),
-    ).toThrow();
+  it('rejects zero Thursday entry and invalid site dates', () => {
     expect(() =>
       normalizeActivitiesSnapshot({
         ...ACTIVITY_FIXTURE,

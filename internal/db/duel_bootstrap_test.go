@@ -110,6 +110,9 @@ func TestDuelFreshAndUpgradeSchemaIdentity(t *testing.T) {
 	if err := applyTransportExtension(ctx, tx); err != nil {
 		t.Fatal(err)
 	}
+	if err := applyEconomyAuditChannelsExtension(ctx, tx); err != nil {
+		t.Fatal(err)
+	}
 	got, err := readGenerationManifest(ctx, tx)
 	if err != nil || generationManifestDigest(got) != generationManifestDigest(want) {
 		t.Fatal("fresh and upgraded structures differ", generationManifestDigest(got), err)

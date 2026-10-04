@@ -341,13 +341,14 @@ describe('beta.1 game pages', () => {
       route: '/games',
       role: 'user',
     });
-    expect(await screen.findByRole('heading', { name: 'Choose your pace' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Games' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Pond fishing' })).toBeInTheDocument();
     expect(screen.getAllByText('Open')).toHaveLength(2);
-    expect(screen.getAllByRole('button', { name: 'Closed' })).toHaveLength(4);
+    expect(rendered.container.querySelectorAll('.game-center-card.is-closed')).toHaveLength(4);
     expect(screen.getByText('0 of 2 modes open')).toBeInTheDocument();
-    expect(screen.getAllByRole('link', { name: 'Enter game' })).toHaveLength(2);
-    expect(screen.getAllByRole('link')).toHaveLength(6);
+    expect(rendered.container.querySelectorAll('a.game-center-card')).toHaveLength(6);
+    expect(rendered.container.querySelector('a.game-center-card button')).toBeNull();
+    expect(screen.getAllByRole('link')).toHaveLength(7);
     const heroes = Array.from(
       rendered.container.querySelectorAll<HTMLImageElement>(
         '.game-center-card__hero img.game-hero',
@@ -376,7 +377,7 @@ describe('beta.1 game pages', () => {
     expect(rendered.container.querySelector('.game-center-card__hero svg')).not.toBeInTheDocument();
   });
 
-  it('shows maintenance as a state and exposes no game entry links', async () => {
+  it('keeps all closed game cards accessible for rules during maintenance', async () => {
     installJsonFetchFixtures([
       {
         method: 'GET',
@@ -386,11 +387,9 @@ describe('beta.1 game pages', () => {
       },
     ]);
     await renderWithProviders(<GameCenter />, { station: 'user', route: '/games', role: 'user' });
-    expect(await screen.findAllByText('Maintenance')).toHaveLength(12);
+    expect(await screen.findAllByText('Not open')).toHaveLength(6);
     expect(screen.queryByRole('link', { name: 'Enter game' })).not.toBeInTheDocument();
-    expect(screen.getAllByRole('link', { name: 'Learn, history and ongoing games' })).toHaveLength(
-      6,
-    );
+    expect(screen.getAllByRole('link', { name: /View rules and records/ })).toHaveLength(6);
   });
 
   it('keeps each game’s rules entry available during maintenance', async () => {
@@ -500,9 +499,7 @@ describe('beta.1 game pages', () => {
       role: 'level5',
     });
     expect(await screen.findByRole('button', { name: /Ten-catch batch/i })).toBeInTheDocument();
-    expect(
-      screen.getByRole('heading', { name: 'A quiet cast, a surprise catch' }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Pond fishing', level: 1 })).toBeInTheDocument();
     act(() => {
       rendered.queryClient.setQueryData(userKeys.session, { user: { effective_level: 5 } });
     });
@@ -1182,6 +1179,7 @@ describe('beta.1 game pages', () => {
     });
     const cells = await screen.findAllByRole('gridcell');
     expect(cells).toHaveLength(48);
+    expect(rendered.container.querySelector('a[href="#game-rankings"]')).toBeNull();
     expect(screen.getByRole('heading', { level: 1, name: 'LinkLink' })).toBeInTheDocument();
     expect(within(cells[0]).getByRole('img', { name: 'Apple' })).toBeInTheDocument();
     expect(cells[0]).toHaveTextContent('');
@@ -1655,6 +1653,7 @@ describe('beta.1 game pages', () => {
     ]);
     await renderWithProviders(<RPSGame />, { station: 'user', route: '/games/rps', role: 'user' });
     expect(await screen.findByRole('heading', { name: 'Quick' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Leaderboards' })).not.toBeInTheDocument();
     expect(screen.getByText('Identity-hidden seat')).toBeInTheDocument();
     expect(
       fetchMock.mock.calls.some(([input]) => String(input).endsWith('/pending-result/ack')),

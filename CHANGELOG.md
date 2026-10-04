@@ -6,7 +6,11 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ## [Unreleased]
 
-Changes in development.
+No unreleased changes.
+
+## [1.0.0-rc.5] - 2026-10-03
+
+This entry describes the rc.5 Linux/amd64 source prerelease. Build from the tagged source; no official prebuilt binaries are provided. Supported upgrade sources are the complete rc.4 database at `8a46c72d911a914eabcb7ef17c537e7ac12d6969` and the exact preceding deployed source at `77e7f41646d6c720b6ae4ddc6dbb4dd9e0b31604`. SQLite remains Generation 2 and account exports use schema 12. Instance publication, legal text and deployment remain separate operator actions.
 
 ### Added
 
@@ -30,11 +34,13 @@ Changes in development.
 
 ### Changed
 
+- Both stations use consistent navigation, compact tables and mobile cards, grouped forms, detail drawers, secondary-action menus and clear save feedback. Home and API access show setup progress and client examples; personal services/models, charity, games, records and account preferences use the shared presentation. Legal documents gain a directory without changing instance text.
+
 - Ordinary startup retains database ownership, identity/schema/credential checks and unfinished-work recovery while avoiding full copies and repeated historical scans. Application composition and lifecycle reside in `internal/app`; the root entrypoint and `go build .` remain supported.
 - Charity accounting uses validated upstream generation and actual or existing conservative unknown usage even when a buffered JSON response is not delivered; caller disconnect still immediately cancels upstream.
 
 - Administrator and steward forms group optional controls, explain defaults and units, use percentages for fees, and clear old save notices when edited. Consequential actions use one confirmation.
-- Caller-key hints now explain that calls require the full key.
+- API access presents a newly issued full CallerKey once, with copy/save actions and a client setup guide. Normal key views show masked metadata.
 
 - New battles use 100/500 starting coins, 2.5× rounded-up token/energy speed costs, 2× skill likes, one/two-turn overload, Thunder self-overload and deliberate image-shortage submission. Harness changes include Claude Code's independent successful-debuff likes, Antigravity's +2 normal attack and Copilot's conditional +2. Saved older games/replays retain their exact rules.
 - Account export schema 12 adds safe Lake Notes progress/receipts, model-role policies, private preset names and retained automation outcomes, keeping existing whole-file limits and secret exclusions. Instance legal overrides remain an operator publication action.
@@ -43,6 +49,11 @@ Changes in development.
 - Risk-based checks retain full final-candidate coverage while browser integration reuses one compiled backend fixture and race selection follows actual concurrency boundaries.
 
 ### Fixed
+
+- Donation details accept exhausted usage totals that exceed a configured cap, including output-heavy calls.
+- Credit auditing recognizes Fat Fish and Lake Notes ledger channels and resumes historical projection without discarding existing totals.
+- OpenAI-compatible SSE normalizes an invalid first string completion ID into one stable ID per attempt, preserving valid IDs, reasoning, tools, usage and terminal checks. Credential reflection is checked before normalization.
+- The model request-body boundary accepts the configured maximum, including 64 MiB, and rejects larger known-length or chunked requests before upstream dispatch or credit reservation.
 
 - Exact-target Gateway `anthropic_explicit` caching lowers root controls onto the final eligible prompt block, preserves caller markers and supports tool-result text arrays, with explicit rejection of conflicting TTLs, invalid TTL order, excess breakpoints or unrepresentable positions.
 - Gateway accepts valid empty content-filter/refusal termination in JSON and SSE while retaining actual usage.

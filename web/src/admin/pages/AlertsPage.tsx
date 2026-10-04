@@ -12,6 +12,8 @@ import {
   PageHeader,
   StatusBadge,
 } from '@shared/components/States';
+import { DataTable, Fold, MoreMenu } from '@shared/components/ui';
+import './alerts.css';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
@@ -307,17 +309,40 @@ export function AlertsPage() {
     report_retry_exhausted: t('admin.alerts.kindValue.reportRetryExhausted'),
     fishing_retry_exhausted: t('admin.alerts.kindValue.fishingRetryExhausted'),
     rps_terminal_retrying: t('admin.alerts.kindValue.rpsTerminalRetrying'),
-    worker_checkpoint_failed: t('admin.alerts.kindValue.workerCheckpointFailed'),
+    worker_checkpoint_failed: t('admin.alerts.presentation.worker'),
     invariant_violation: t('admin.alerts.kindValue.invariantViolation'),
     account_deleted: t('admin.alerts.kindValue.accountDeleted'),
   };
+  const kindGroups = [
+    {
+      label: t('admin.alerts.presentation.running'),
+      kinds: [
+        'fetch_failed',
+        'forward_error',
+        'maintenance_enabled',
+        'donation_failure_disabled',
+        'issue_projection_incomplete',
+        'report_retry_exhausted',
+        'worker_checkpoint_failed',
+      ],
+    },
+    { label: t('admin.alerts.presentation.security'), kinds: ['invariant_violation'] },
+    {
+      label: t('admin.alerts.presentation.games'),
+      kinds: ['fishing_retry_exhausted', 'rps_terminal_retrying'],
+    },
+    {
+      label: t('admin.alerts.presentation.accounts'),
+      kinds: ['registration_rejected', 'account_deleted'],
+    },
+  ] satisfies { label: string; kinds: AdminAlert['kind'][] }[];
   const pageData = result.data;
   const busy = session.isFetching || result.isFetching;
   const actionDisabled = busy || result.isPlaceholderData || mutation.isPending || bulk.isPending;
   const sessionError = session.error ?? (!session.data ? authorityError : null);
 
   return (
-    <div className="page ops-page">
+    <div className="page ops-page alerts-page">
       <PageHeader title={t('admin.alerts.title')} description={t('admin.alerts.description')} />
       <p className="field-help time-context-notice" role="status">
         {timeContext.mode === 'site' && timeContext.offset_minutes !== null
@@ -534,10 +559,14 @@ export function AlertsPage() {
             <span>{t('admin.alerts.filterKind')}</span>
             <select value={kind} onChange={(event) => selectKind(event.target.value)}>
               <option value="all">{t('common.all')}</option>
-              {ALERT_KINDS.map((value) => (
-                <option key={value} value={value}>
-                  {kindLabels[value]}
-                </option>
+              {kindGroups.map((group) => (
+                <optgroup key={group.label} label={group.label}>
+                  {group.kinds.map((value) => (
+                    <option key={value} value={value}>
+                      {kindLabels[value]}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </label>
@@ -558,14 +587,16 @@ export function AlertsPage() {
             />
             <span>{t('admin.alerts.selectPage')}</span>
           </label>
-          <button
-            className="btn btn-secondary"
-            type="button"
-            disabled={actionDisabled || selected.length === 0}
-            onClick={() => bulk.mutate(selected)}
-          >
-            {t('admin.alerts.resolveSelected', { count: selected.length })}
-          </button>
+          {selected.length > 0 ? (
+            <button
+              className="btn btn-secondary"
+              type="button"
+              disabled={actionDisabled}
+              onClick={() => bulk.mutate(selected)}
+            >
+              {t('admin.alerts.resolveSelected', { count: selected.length })}
+            </button>
+          ) : null}
         </div>
         {bulk.error && !isAuthorityError(bulk.error) ? <ErrorState error={bulk.error} /> : null}
         {mutation.error && !isAuthorityError(mutation.error) ? (
@@ -585,103 +616,123 @@ export function AlertsPage() {
             {pageData.data.length === 0 ? (
               <EmptyState title={t('admin.alerts.empty')} body={t('admin.alerts.emptyBody')} />
             ) : (
-              <div className="ops-table-scroll">
-                <table className="ops-table ops-table--responsive">
-                  <thead>
-                    <tr>
-                      <th>{t('admin.alerts.select')}</th>
-                      <th>{t('admin.alerts.kind')}</th>
-                      <th>{t('admin.alerts.message')}</th>
-                      <th>{t('admin.alerts.reference')}</th>
-                      <th>{t('admin.alerts.subject')}</th>
-                      <th>{t('admin.alerts.created')}</th>
-                      <th>{t('admin.alerts.resolved')}</th>
-                      <th>{t('admin.alerts.action')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pageData.data.map((alert) => (
-                      <tr key={alert.id}>
-                        <td data-label={t('admin.alerts.select')}>
-                          <input
-                            type="checkbox"
-                            aria-label={t('admin.alerts.selectAlert', { id: alert.id })}
-                            checked={selected.includes(alert.id)}
-                            disabled={actionDisabled || alert.resolved}
-                            onChange={() => toggleSelection(alert.id)}
-                          />
-                        </td>
-                        <td data-label={t('admin.alerts.kind')}>{kindLabels[alert.kind]}</td>
-                        <td
-                          className="ops-cell-wide ops-wrap"
-                          data-label={t('admin.alerts.message')}
+              <DataTable
+                caption={t('admin.alerts.title')}
+                rows={pageData.data}
+                rowKey={(alert) => alert.id}
+                columns={[
+                  {
+                    key: 'select',
+                    header: t('admin.alerts.select'),
+                    cell: 'meta',
+                    render: (alert) => (
+                      <input
+                        type="checkbox"
+                        aria-label={t('admin.alerts.selectAlert', { id: alert.id })}
+                        checked={selected.includes(alert.id)}
+                        disabled={actionDisabled || alert.resolved}
+                        onChange={() => toggleSelection(alert.id)}
+                      />
+                    ),
+                  },
+                  {
+                    key: 'kind',
+                    header: t('admin.alerts.kind'),
+                    cell: 'title',
+                    render: (alert) => kindLabels[alert.kind],
+                  },
+                  {
+                    key: 'message',
+                    header: t('admin.alerts.message'),
+                    mobileLabel: t('admin.alerts.message'),
+                    cell: 'meta',
+                    render: (alert) =>
+                      alert.account_deletion ? (
+                        <Fold plain title={t('admin.alerts.presentation.deletionSnapshot')}>
+                          <p>{t('admin.alerts.deletionSnapshot')}</p>
+                          <dl className="ops-kv alert-deletion-facts">
+                            <dt>Discord ID</dt>
+                            <dd>{alert.account_deletion.discord_id || '—'}</dd>
+                            <dt>{t('admin.alerts.deletedUser')}</dt>
+                            <dd>{alert.account_deletion.user_id}</dd>
+                            <dt>{t('admin.alerts.generalBalance')}</dt>
+                            <dd>{alert.account_deletion.general_balance}</dd>
+                            <dt>{t('admin.alerts.gameBalance')}</dt>
+                            <dd>{alert.account_deletion.game_balance}</dd>
+                            <dt>{t('admin.alerts.donationCredit')}</dt>
+                            <dd>{alert.account_deletion.donation_credit}</dd>
+                            <dt>{t('admin.alerts.sketchAssets')}</dt>
+                            <dd>
+                              {alert.account_deletion.sketch_paper} /{' '}
+                              {alert.account_deletion.sketch_brush}
+                            </dd>
+                          </dl>
+                        </Fold>
+                      ) : (
+                        alert.message
+                      ),
+                  },
+                  {
+                    key: 'subject',
+                    header: t('admin.alerts.subject'),
+                    mobileLabel: t('admin.alerts.subject'),
+                    cell: 'meta',
+                    render: (alert) => alert.subject_user_id ?? '—',
+                  },
+                  {
+                    key: 'created',
+                    header: t('admin.alerts.created'),
+                    mobileLabel: t('admin.alerts.created'),
+                    cell: 'meta',
+                    render: (alert) => formatDateTime(alert.created_at),
+                  },
+                  {
+                    key: 'resolved',
+                    header: t('admin.alerts.resolved'),
+                    cell: 'status',
+                    render: (alert) => (
+                      <StatusBadge
+                        active={alert.resolved}
+                        label={
+                          alert.resolved
+                            ? `${t('admin.alerts.resolvedValue')} ${alert.resolved_at !== null ? formatDateTime(alert.resolved_at) : ''}`
+                            : t('admin.alerts.open')
+                        }
+                      />
+                    ),
+                  },
+                  {
+                    key: 'action',
+                    header: t('admin.alerts.action'),
+                    cell: 'action',
+                    align: 'action',
+                    render: (alert) => (
+                      <div className="alert-actions">
+                        <button
+                          className="btn btn-secondary"
+                          type="button"
+                          onClick={() => focusAlert(alert.id)}
                         >
-                          {alert.account_deletion ? (
-                            <>
-                              <p>{t('admin.alerts.deletionSnapshot')}</p>
-                              <dl className="ops-kv" style={{ gridTemplateColumns: 'minmax(0, 1fr)' }}>
-                                <dt>Discord ID</dt>
-                                <dd>{alert.account_deletion.discord_id || '—'}</dd>
-                                <dt>{t('admin.alerts.deletedUser')}</dt>
-                                <dd>{alert.account_deletion.user_id}</dd>
-                                <dt>{t('admin.alerts.generalBalance')}</dt>
-                                <dd>{alert.account_deletion.general_balance}</dd>
-                                <dt>{t('admin.alerts.gameBalance')}</dt>
-                                <dd>{alert.account_deletion.game_balance}</dd>
-                                <dt>{t('admin.alerts.donationCredit')}</dt>
-                                <dd>{alert.account_deletion.donation_credit}</dd>
-                                <dt>{t('admin.alerts.sketchAssets')}</dt>
-                                <dd>
-                                  {alert.account_deletion.sketch_paper} /{' '}
-                                  {alert.account_deletion.sketch_brush}
-                                </dd>
-                              </dl>
-                            </>
-                          ) : (
-                            alert.message
-                          )}
-                        </td>
-                        <td data-label={t('admin.alerts.reference')}>{alert.ref ?? '—'}</td>
-                        <td data-label={t('admin.alerts.subject')}>
-                          {alert.subject_user_id ?? '—'}
-                        </td>
-                        <td data-label={t('admin.alerts.created')}>
-                          {formatDateTime(alert.created_at)}
-                        </td>
-                        <td data-label={t('admin.alerts.resolved')}>
-                          <StatusBadge
-                            active={alert.resolved}
-                            label={
-                              alert.resolved
-                                ? `${t('admin.alerts.resolvedValue')} ${alert.resolved_at !== null ? formatDateTime(alert.resolved_at) : ''}`
-                                : t('admin.alerts.open')
-                            }
-                          />
-                        </td>
-                        <td className="ops-cell-wide" data-label={t('admin.alerts.action')}>
-                          <button
-                            className="btn btn-secondary ops-action-button"
-                            type="button"
-                            onClick={() => focusAlert(alert.id)}
-                          >
-                            {copy.open}
-                          </button>
-                          <button
-                            className="btn btn-secondary ops-action-button"
-                            type="button"
-                            disabled={actionDisabled}
-                            onClick={() =>
-                              mutation.mutate({ id: alert.id, value: !alert.resolved })
-                            }
-                          >
-                            {alert.resolved ? t('admin.alerts.reopen') : t('admin.alerts.resolve')}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                          {copy.open}
+                        </button>
+                        <MoreMenu
+                          label={t('admin.alerts.presentation.actions')}
+                          items={[
+                            {
+                              label: alert.resolved
+                                ? t('admin.alerts.reopen')
+                                : t('admin.alerts.resolve'),
+                              disabled: actionDisabled,
+                              onSelect: () =>
+                                mutation.mutate({ id: alert.id, value: !alert.resolved }),
+                            },
+                          ]}
+                        />
+                      </div>
+                    ),
+                  },
+                ]}
+              />
             )}
             <PagePagination
               metadata={pageData.pagination}

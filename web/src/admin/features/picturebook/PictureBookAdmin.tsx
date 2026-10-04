@@ -24,6 +24,7 @@ import { RecoveryPanel } from './RecoveryPanel';
 import { DiscoveryFailureDiagnostics } from './DiscoveryFailureDiagnostics';
 import { discoveryError } from './discoveryError';
 import '@shared/picturebook/picturebook.css';
+import type { PictureBookSection } from '../../pages/LimitedActivitiesPage';
 
 interface CatalogDraftHandle {
   saveDrafts: () => Promise<boolean>;
@@ -605,7 +606,13 @@ const Catalog = forwardRef<
     </div>
   );
 });
-export function AdminContent({ account }: { readonly account: string }) {
+export function AdminContent({
+  account,
+  section,
+}: {
+  readonly account: string;
+  readonly section?: PictureBookSection;
+}) {
   const client = useQueryClient(),
     key = ['admin', 'picture-book', account, 'upstream'] as const;
   const t = usePictureBookText();
@@ -699,52 +706,87 @@ export function AdminContent({ account }: { readonly account: string }) {
           </div>
         </Card>
       ) : null}
-      {upstream.isPending ? (
-        <LoadingState />
-      ) : upstream.error ? (
-        <ErrorState error={upstream.error} onRetry={() => void upstream.refetch()} />
-      ) : null}
-      {upstream.data ? (
-        <UpstreamForm
-          ref={upstreamRef}
-          key={upstream.data.revision}
-          value={upstream.data}
-          onDirty={setUpstreamDirty}
-          onLocked={setUpstreamLocked}
-          disabled={modelDirty || modelLocked || upstream.isFetching || upstream.isError}
-          onSaved={() => {
-            void client.invalidateQueries({ queryKey: key });
-            void client.invalidateQueries({
-              queryKey: ['admin', 'picture-book', account, 'controls'],
-            });
-            void client.invalidateQueries({
-              queryKey: ['admin', 'picture-book', account, 'models'],
-            });
-          }}
-          onReload={() => void upstream.refetch()}
-        />
-      ) : null}
-      {upstream.data?.configured ? (
-        <>
-          <Catalog
-            ref={catalogRef}
-            key={upstream.data.control?.id}
-            account={account}
-            onDirty={setModelDirty}
-            onLocked={setModelLocked}
-            upstreamDirty={upstreamDirty}
-            upstreamLocked={upstreamLocked || upstream.isFetching || upstream.isError}
-            onRefreshed={onRefreshed}
+      <div
+        id="picture-book-panel-service"
+        role="tabpanel"
+        aria-labelledby="picture-book-tab-service"
+        hidden={section !== undefined && section !== 'service'}
+      >
+        {upstream.isPending ? (
+          <LoadingState />
+        ) : upstream.error ? (
+          <ErrorState error={upstream.error} onRetry={() => void upstream.refetch()} />
+        ) : null}
+        {upstream.data ? (
+          <UpstreamForm
+            ref={upstreamRef}
+            key={upstream.data.revision}
+            value={upstream.data}
+            onDirty={setUpstreamDirty}
+            onLocked={setUpstreamLocked}
+            disabled={modelDirty || modelLocked || upstream.isFetching || upstream.isError}
+            onSaved={() => {
+              void client.invalidateQueries({ queryKey: key });
+              void client.invalidateQueries({
+                queryKey: ['admin', 'picture-book', account, 'controls'],
+              });
+              void client.invalidateQueries({
+                queryKey: ['admin', 'picture-book', account, 'models'],
+              });
+            }}
+            onReload={() => void upstream.refetch()}
           />
-        </>
-      ) : null}
-      <RecoveryPanel account={account} />
+        ) : null}
+      </div>
+      <div
+        id="picture-book-panel-models"
+        role="tabpanel"
+        aria-labelledby="picture-book-tab-models"
+        hidden={section !== undefined && section !== 'models'}
+      >
+        {upstream.isPending ? (
+          <LoadingState />
+        ) : upstream.error ? (
+          <ErrorState error={upstream.error} onRetry={() => void upstream.refetch()} />
+        ) : !upstream.data?.configured ? (
+          <p className="table-note">
+            {t(
+              '请先在“图片生成服务”中配置服务，再读取模型目录。',
+              'Configure the Image generation service first, then load its model catalog.',
+            )}
+          </p>
+        ) : null}
+        {upstream.data?.configured ? (
+          <>
+            <Catalog
+              ref={catalogRef}
+              key={upstream.data.control?.id}
+              account={account}
+              onDirty={setModelDirty}
+              onLocked={setModelLocked}
+              upstreamDirty={upstreamDirty}
+              upstreamLocked={upstreamLocked || upstream.isFetching || upstream.isError}
+              onRefreshed={onRefreshed}
+            />
+          </>
+        ) : null}
+      </div>
+      <div
+        id="picture-book-panel-recovery"
+        role="tabpanel"
+        aria-labelledby="picture-book-tab-recovery"
+        hidden={section !== undefined && section !== 'recovery'}
+      >
+        <RecoveryPanel account={account} />
+      </div>
     </div>
   );
 }
 /** Compose inside the administrator LimitedActivitiesPage. */
-export function PictureBookAdmin() {
+export function PictureBookAdmin({ section }: { readonly section?: PictureBookSection }) {
   const session = useAdminSession(),
     account = session.data?.admin.username;
-  return account && !session.error ? <AdminContent key={account} account={account} /> : null;
+  return account && !session.error ? (
+    <AdminContent key={account} account={account} section={section} />
+  ) : null;
 }

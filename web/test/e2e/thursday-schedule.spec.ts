@@ -30,7 +30,10 @@ for (const scenario of [
       body: {
         revision: '5',
         master_enabled: false,
-        loan_enabled: false, loan_tiers: ['10000', '100000', '1000000'], loan_a: '0.9', loan_b: '1.3',
+        loan_enabled: false,
+        loan_tiers: ['10000', '100000', '1000000'],
+        loan_a: '0.9',
+        loan_b: '1.3',
         welfare: { enabled: false, threshold: '1', cap: '2' },
         thursday: { enabled: false },
       },
@@ -80,9 +83,9 @@ for (const scenario of [
     const updateTitle = zh ? '更新已配置的下一周期' : 'Update configured next period';
     const entryLabel = zh ? '参与金额（积分）' : 'Entry (credits)';
     const literatureLabel = zh ? '活动文案' : 'Literature';
-    const saveLabel = zh ? '保存下一活动周期' : 'Save next period';
+    const saveLabel = zh ? '保存并排期' : 'Save and schedule';
     const form = page
-      .locator('.card')
+      .locator('.nb-panel')
       .filter({ has: page.getByRole('heading', { name: title, exact: true }) });
     await page.goto(`${ADMIN_ORIGIN}/activities`);
     await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();

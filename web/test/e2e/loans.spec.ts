@@ -56,15 +56,26 @@ for (const scenario of [
     await page.goto(`${USER_ORIGIN}/activities`);
     const zh = scenario.locale === 'zh';
     await expect(page.locator('.loan-promo__slogan')).toBeVisible();
+    for (const summary of await page.locator('.activity-slot:not(.is-available) > summary').all())
+      await summary.click();
     for (const width of [320, 390, 768, 1440, 2560, 3766]) {
       await page.setViewportSize({ width, height: 1000 });
       const loan = (await page.locator('.loan-card').boundingBox())!;
       const welfare = (await page.locator('.economy-welfare-card').boundingBox())!;
       const thursday = (await page.locator('.economy-thursday-card').boundingBox())!;
-      expect(welfare.y).toBeGreaterThanOrEqual(loan.y + loan.height);
-      if (width > 720) {
-        expect(Math.abs(welfare.y - thursday.y)).toBeLessThan(2);
-        expect(thursday.x).toBeGreaterThan(welfare.x + welfare.width);
+      if (width < 768) {
+        expect(welfare.y).toBeGreaterThanOrEqual(loan.y + loan.height);
+        expect(thursday.y).toBeGreaterThanOrEqual(welfare.y + welfare.height);
+      } else {
+        expect(Math.abs(welfare.y - loan.y)).toBeLessThan(2);
+        expect(welfare.x).toBeGreaterThanOrEqual(loan.x + loan.width);
+        if (thursday.y < welfare.y + welfare.height) {
+          expect(Math.abs(thursday.y - loan.y)).toBeLessThan(2);
+          expect(thursday.x).toBeGreaterThanOrEqual(welfare.x + welfare.width);
+        } else
+          expect(thursday.y).toBeGreaterThanOrEqual(
+            Math.max(loan.y + loan.height, welfare.y + welfare.height),
+          );
       }
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,
@@ -90,9 +101,9 @@ for (const scenario of [
     });
     const box = await star.boundingBox();
     expect(box!.width).toBeGreaterThanOrEqual(24);
-    expect(box!.height).toBeGreaterThanOrEqual(24);
+    expect(box!.height).toBeGreaterThanOrEqual(40);
     expect(box!.width).toBeLessThanOrEqual(28);
-    expect(box!.height).toBeLessThanOrEqual(28);
+    expect(box!.height).toBeLessThanOrEqual(40);
     if (process.env.NONBIRI_VISUAL_DIR) {
       await dialog.screenshot({
         path: `${process.env.NONBIRI_VISUAL_DIR}/loan-confirm-${scenario.locale}.png`,
@@ -127,9 +138,9 @@ for (const scenario of [
     const history = page.getByRole('dialog');
     await expect(history.locator('.loan-facts dt')).toHaveCount(5);
     await expect(history.locator('.loan-facts')).not.toContainText(/系数|coefficient|→/);
-    await history.locator('select').selectOption('100');
-    await expect.poll(() => pages.length).toBe(2);
-    expect(pages[1]).toBe('?page=1&page_size=100');
+    await expect(history.locator('select')).toHaveCount(0);
+    await expect(history.getByText(zh ? '共 1 项' : '1 items', { exact: true })).toBeVisible();
+    expect(pages).toEqual(['?page=1&page_size=20']);
     expect(await history.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
     await history.getByRole('button', { name: zh ? '关闭' : 'Close', exact: true }).click();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(

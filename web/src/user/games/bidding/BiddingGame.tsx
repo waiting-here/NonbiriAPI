@@ -1,3 +1,6 @@
+import { GameHeaderTool } from '../common/GameHeader';
+import { Link } from 'react-router';
+import { GameActionBar } from '../common/GameActionBar';
 import { useCallback, useState } from 'react';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { GameWallets } from '../common/GameWallets';
@@ -86,21 +89,37 @@ export function BiddingGame({
     <div className="bidding-game">
       <header className="bid-heading">
         <div>
-          <span className="bid-eyebrow">A — K · 13</span>
+          <Link className="game-back-link" to="/games">
+            {text('blackjack.gameCenter')}
+          </Link>
           <h1>{text('bidding.biddingDuel')}</h1>
           <p>{text('bidding.holdYourNerveTakeTheWholePool')}</p>
         </div>
         <div className="duel-actions">
-          <ArcadeAudioControls sound={audio.sound} unavailable={audio.unavailable} />
-          <button type="button" className="btn btn-secondary" onClick={() => setRules(true)}>
-            {text('bidding.rules')}
-          </button>
-          <button type="button" className="btn btn-secondary" onClick={() => setHistory(true)}>
-            {text('bidding.gameHistory')}
-          </button>
+          <GameWallets wallets={wallets} />
+          <ArcadeAudioControls compact sound={audio.sound} unavailable={audio.unavailable} />
+          <GameHeaderTool
+            icon="?"
+            label={text('bidding.rules')}
+            type="button"
+            onClick={() => setRules(true)}
+          />
+          <GameHeaderTool
+            icon="◷"
+            label={text('bidding.gameHistory')}
+            type="button"
+            onClick={() => setHistory(true)}
+          />
+          <a
+            className="btn btn-secondary game-header-tool"
+            href="#game-rankings"
+            aria-label={text('ranking.leaderboards')}
+            title={text('ranking.leaderboards')}
+          >
+            <span aria-hidden="true">▥</span>
+          </a>
         </div>
       </header>
-      <GameWallets wallets={wallets} />
       {onboarding && <OnboardingCard game="bidding" progress={onboarding} />}
       <RandomnessProof
         game="bidding"
@@ -277,36 +296,40 @@ export function BiddingGame({
               ))}
             </div>
             {selected && <DuelTerms mode={selected} />}
-            <button
-              type="button"
-              className="btn btn-primary"
-              disabled={duel.blocked || !!unavailable || !enough}
-              onClick={() => duel.run({ kind: 'queue', mode, termsHash: selected.termsHash })}
-            >
-              {unavailable
-                ? entryMessage(unavailable, text)
-                : !enough
-                  ? text('bidding.insufficientCredits')
-                  : text('bidding.payEntryAndFindAMatch')}
-            </button>
+            <GameActionBar cost={formatCredits(selected?.ticket ?? '0')}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={duel.blocked || !!unavailable || !enough}
+                onClick={() => duel.run({ kind: 'queue', mode, termsHash: selected.termsHash })}
+              >
+                {unavailable
+                  ? entryMessage(unavailable, text)
+                  : !enough
+                    ? text('bidding.insufficientCredits')
+                    : text('bidding.payEntryAndFindAMatch')}
+              </button>
+            </GameActionBar>
           </section>
         </>
       )}
       {rules && <BiddingRules onClose={closeRules} />}
-      <LeaderboardTabs
-        items={[
-          {
-            id: 'net-profit',
-            label: text('bidding.biddingMasters'),
-            content: <Leaderboard board="bidding_net_profit" />,
-          },
-          {
-            id: 'profit',
-            label: text('bidding.biddingProfits'),
-            content: <Leaderboard board="bidding" />,
-          },
-        ]}
-      />
+      <div id="game-rankings">
+        <LeaderboardTabs
+          items={[
+            {
+              id: 'net-profit',
+              label: text('bidding.biddingMasters'),
+              content: <Leaderboard board="bidding_net_profit" />,
+            },
+            {
+              id: 'profit',
+              label: text('bidding.biddingProfits'),
+              content: <Leaderboard board="bidding" />,
+            },
+          ]}
+        />
+      </div>
       {history && (
         <DuelHistory
           codec={biddingCodec}

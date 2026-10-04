@@ -93,8 +93,11 @@ test('owner reads donation keys and details from current API responses', async (
     expect(donations.data).toHaveLength(3);
     for (const { id } of donations.data as { id: string }[]) {
       const detail = page.locator('a[href="/charity/donations/' + id + '"]');
-      const card = panel.locator('.economy-donation-card').filter({ has: detail });
-      await card.getByRole('button', { name: copy.ownerPages.keys, exact: true }).click();
+      const card = panel.locator('.economy-donation-summary').filter({ has: detail });
+      await card
+        .getByRole('button', { name: copy.presentation.donationActions, exact: true })
+        .click();
+      await card.getByRole('menuitem', { name: copy.ownerPages.keys, exact: true }).click();
       const keys = panel.getByRole('region', { name: copy.ownerPages.keys, exact: true });
       const response = await read(context, state.user_url, '/api/donations/' + id);
       const key = response.keys[0];
@@ -298,7 +301,7 @@ test('administrator saves, edits and deletes Gateway capabilities in narrow Engl
     baseURL = 'https://gateway.example.test/ai';
   try {
     const page = await context.newPage();
-    await page.goto(state.admin_url + '/settings');
+    await page.goto(state.admin_url + '/settings?group=gateway');
     const panel = page
       .locator('section.card')
       .filter({ has: page.getByRole('heading', { name: copy.title, exact: true }) });
@@ -402,7 +405,7 @@ test('administrator creates and releases a legal hold with one confirmation in w
     const donation = await read(context, state.admin_url, '/admin/api/donations/' + target);
     expect(donation.id).toBe(target);
     const page = await context.newPage();
-    await page.goto(state.admin_url + '/settings');
+    await page.goto(state.admin_url + '/settings?group=legal-hold');
     await expect(page.getByRole('heading', { name: copy.title, exact: true })).toBeVisible();
     const list = page
       .locator('section.card')
@@ -536,7 +539,7 @@ test('level 6 can enable maintenance but only the administrator can restore serv
     expect(forbidden.status()).toBe(404);
     expect(await read(admin, state.admin_url, '/admin/api/maintenance')).toEqual(enabled);
     const adminPage = await admin.newPage();
-    await adminPage.goto(state.admin_url + '/settings');
+    await adminPage.goto(state.admin_url + '/settings?group=maintenance');
     const panel = adminPage
       .locator('section.card')
       .filter({ has: adminPage.getByRole('heading', { name: copy.adminTitle, exact: true }) });
@@ -658,6 +661,7 @@ test('administrator saves automatic Gateway cache defaults and level 6 reads the
     );
     await expect(row).toContainText(commonEn.gatewayCapabilities.cacheOptions.anthropic);
     await row.getByRole('button', { name: 'Request headers and body', exact: true }).click();
+    await page.getByText('Request adaptation', { exact: true }).last().click();
     const editor = page.locator('section.core-card').last();
     const defaults = editor.getByRole('group', {
       name: 'Body defaults (only when absent)',
@@ -696,6 +700,7 @@ test('administrator saves automatic Gateway cache defaults and level 6 reads the
     );
     await expect(stewardRow).toContainText(commonEn.gatewayCapabilities.cacheOptions.anthropic);
     await stewardRow.getByRole('button', { name: 'Request headers and body', exact: true }).click();
+    await stewardPage.getByText('Request adaptation', { exact: true }).last().click();
     const readOnly = stewardPage.locator('section.core-card').last();
     await expect(
       readOnly.getByText('This setting is read-only for your role.', { exact: true }),
@@ -759,7 +764,7 @@ test('saved Gateway capabilities keep target actions inside the narrow card', as
       },
     });
     const page = await context.newPage();
-    await page.goto(state.admin_url + '/settings');
+    await page.goto(state.admin_url + '/settings?group=gateway');
     const panel = page
       .locator('section.card')
       .filter({ has: page.getByRole('heading', { name: copy.title, exact: true }) });

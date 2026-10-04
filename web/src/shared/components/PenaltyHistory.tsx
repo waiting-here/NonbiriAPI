@@ -494,9 +494,11 @@ function PenaltyList({ scope }: { scope: Scope }) {
     </>
   );
 }
-export function PenaltyHistory(scope: Scope) {
+export function PenaltyHistory({ inline = false, ...scope }: Scope & { inline?: boolean }) {
   const [open, setOpen] = useState(false),
     text = useLoanText();
+  if (inline)
+    return <PenaltyList key={`${scope.role}:${scope.account}:${scope.userID}`} scope={scope} />;
   return (
     <>
       <button className="btn btn-secondary" onClick={() => setOpen(true)}>

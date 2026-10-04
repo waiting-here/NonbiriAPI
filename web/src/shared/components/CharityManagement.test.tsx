@@ -944,7 +944,7 @@ describe('CharityManagement corrective controls', () => {
       prefix: '/api/steward',
       sessionPath: '/api/session',
       session: stewardSession,
-      modelsTab: '公益模型与服务连接',
+      modelsTab: '公益模型与来源',
       reserveLabel: '调用前预留积分',
       reserveHelp: '留空继承全局配置。',
       pricingLabel: '计价模式',
@@ -1041,6 +1041,11 @@ describe('CharityManagement corrective controls', () => {
       if (fixture.frame === 'steward') {
         expect(editor.queryByLabelText('关联有效时长（秒）')).not.toBeInTheDocument();
       }
+      await view.user.click(
+        editor.getByText(fixture.locale === 'zh' ? '额度与预留' : 'Quota and reserve', {
+          selector: 'strong',
+        }),
+      );
       const reserve = editor.getByLabelText(fixture.reserveLabel);
       expect(reserve).toHaveValue('1.234');
       expect(editor.getByText(fixture.reserveHelp)).toBeVisible();
@@ -1233,10 +1238,7 @@ describe('CharityManagement corrective controls', () => {
     if (!(card instanceof HTMLElement)) throw new Error('Expected model editor card.');
     const editor = within(card);
     const textarea = editor.getByLabelText('Public description (plain text, optional)');
-    await view.user.selectOptions(
-      editor.getByRole('combobox', { name: 'Transport rule' }),
-      'force_non_stream',
-    );
+    await view.user.click(editor.getByRole('radio', { name: 'Always wait for the full reply' }));
     fireEvent.change(textarea, { target: { value: 'submitted' } });
     await view.user.click(editor.getByRole('button', { name: 'Save model' }));
     await waitFor(() => expect(patchBodies).toHaveLength(1));
@@ -1395,9 +1397,7 @@ describe('CharityManagement corrective controls', () => {
       role: 'user',
     });
 
-    await view.user.click(
-      await screen.findByRole('tab', { name: 'Charity models and service connections' }),
-    );
+    await view.user.click(await screen.findByRole('tab', { name: 'Charity models and sources' }));
     await view.user.click(await screen.findByRole('button', { name: 'Manage' }));
     const heading = await screen.findByRole('heading', { name: '[公益]provider/model' });
     const editorCard = heading.closest('.card');

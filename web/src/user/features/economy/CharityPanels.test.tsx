@@ -3,6 +3,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@shared/query/http';
 import { installJsonFetchFixtures, renderWithProviders } from '../../../../test/unit/support';
+import { installNativeDialog } from '../../../../test/unit/nativeDialog';
 import userEn from '../../i18n/en.json';
 import { CharityPage } from '../../pages/CharityPage';
 import {
@@ -16,6 +17,8 @@ import {
 import * as economyQueries from './queries';
 import * as catalogModule from './catalog';
 import type { CharityCapability, Donation, DonationKey, EndpointKeyChoice } from './types';
+
+installNativeDialog();
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -341,13 +344,44 @@ describe('public charity pricing', () => {
   });
 });
 
+type TestUser = Awaited<ReturnType<typeof renderWithProviders>>['user'];
+
+function donationCheckboxes() {
+  return [
+    ...screen.getAllByLabelText(/Select resource key/),
+    screen.getByLabelText(charityCopy.ownershipAuthorization),
+  ];
+}
+
+async function clickDonationCheckbox(user: TestUser, checkbox: HTMLElement) {
+  const picker = checkbox.closest('dialog');
+  if (picker && !picker.open) {
+    await user.click(screen.getByRole('button', { name: charityCopy.presentation.openPicker }));
+  } else if (!picker && screen.queryByRole('dialog')) {
+    await user.click(screen.getByRole('button', { name: charityCopy.presentation.selectionDone }));
+  }
+  await user.click(checkbox);
+}
+
+async function declinePublicThanks(user: TestUser) {
+  if (screen.queryByRole('dialog')) {
+    await user.click(screen.getByRole('button', { name: charityCopy.presentation.selectionDone }));
+  }
+  await user.click(
+    within(screen.getByRole('radiogroup', { name: 'Accept a public Discord thank-you' })).getByRole(
+      'radio',
+      { name: 'No' },
+    ),
+  );
+}
+
 describe('donation composer recovery', () => {
   beforeEach(() => {
     sessionStorage.clear();
     pickerHarness.choices = [...choices];
     pickerHarness.readBlocked = false;
     pageMocks.useUserSession.mockReturnValue({
-      data: { user: { id: '7', username: 'owner', effective_level: 1 } },
+      data: { user: { id: '7', username: 'owner', effective_level: 1, donation_credit: '0' } },
       error: null,
       isPending: false,
       refetch: vi.fn(),
@@ -380,6 +414,7 @@ describe('donation composer recovery', () => {
       ),
       { station: 'user', role: 'user' },
     );
+    await rendered.user.click(screen.getByText(charityCopy.disclosureTitle));
     expect(screen.getByRole('heading', { name: charityCopy.donationNoticeTitle })).toBeVisible();
     expect(screen.getByText(/Operator guidance/)).toHaveTextContent(
       'Operator guidance Check costs before sharing.',
@@ -404,15 +439,12 @@ describe('donation composer recovery', () => {
       station: 'user',
       role: 'user',
     });
-    await rendered.user.click(screen.getByRole('tab', { name: 'Donate resources' }));
-    const checkboxes = screen.getAllByRole('checkbox');
+    await rendered.user.click(screen.getByRole('tab', { name: 'Donate my keys' }));
+    const checkboxes = donationCheckboxes();
     await rendered.user.type(screen.getByRole('textbox'), 'account-scoped draft');
-    await rendered.user.click(checkboxes[0]);
-    await rendered.user.click(checkboxes[1]);
-    await rendered.user.selectOptions(
-      screen.getByRole('combobox', { name: 'Accept a public Discord thank-you' }),
-      'no',
-    );
+    await clickDonationCheckbox(rendered.user, checkboxes[0]);
+    await clickDonationCheckbox(rendered.user, checkboxes[1]);
+    await declinePublicThanks(rendered.user);
     await rendered.user.click(screen.getByRole('button', { name: /submit for review/i }));
     expect(screen.getByRole('button', { name: /submit for review/i })).toBeDisabled();
     expect(sessionStorage.getItem('nonbiri:charity-donation-draft:v1:7')).toBe(
@@ -428,7 +460,7 @@ describe('donation composer recovery', () => {
     expect(unknown.mutateAsync).toHaveBeenCalledTimes(1);
 
     await rendered.user.click(screen.getByRole('tab', { name: 'Shared models' }));
-    await rendered.user.click(screen.getByRole('tab', { name: 'Donate resources' }));
+    await rendered.user.click(screen.getByRole('tab', { name: 'Donate my keys' }));
     expect(screen.getByRole('textbox')).toHaveValue('account-scoped draft');
     expect(screen.getByRole('button', { name: /submit for review/i })).toBeDisabled();
 
@@ -436,13 +468,10 @@ describe('donation composer recovery', () => {
     rendered.rerender(<CharityPage />);
     expect(screen.getByText(charityCopy.mutationReconciled)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /submit for review/i })).toBeDisabled();
-    const recoveredCheckboxes = screen.getAllByRole('checkbox');
-    await rendered.user.click(recoveredCheckboxes[0]);
-    await rendered.user.click(recoveredCheckboxes[1]);
-    await rendered.user.selectOptions(
-      screen.getByRole('combobox', { name: 'Accept a public Discord thank-you' }),
-      'no',
-    );
+    const recoveredCheckboxes = donationCheckboxes();
+    await clickDonationCheckbox(rendered.user, recoveredCheckboxes[0]);
+    await clickDonationCheckbox(rendered.user, recoveredCheckboxes[1]);
+    await declinePublicThanks(rendered.user);
     expect(screen.getByRole('button', { name: /submit for review/i })).toBeEnabled();
   });
 
@@ -455,15 +484,12 @@ describe('donation composer recovery', () => {
     );
     const user = rendered.user;
     const description = screen.getByRole('textbox');
-    const checkboxes = screen.getAllByRole('checkbox');
+    const checkboxes = donationCheckboxes();
     await user.type(description, 'safe description');
-    await user.click(checkboxes[0]);
-    await user.click(checkboxes[1]);
-    await user.selectOptions(
-      screen.getByRole('combobox', { name: 'Accept a public Discord thank-you' }),
-      'no',
-    );
-    await user.click(screen.getByRole('button'));
+    await clickDonationCheckbox(user, checkboxes[0]);
+    await clickDonationCheckbox(user, checkboxes[1]);
+    await declinePublicThanks(user);
+    await user.click(screen.getByRole('button', { name: /submit for review/i }));
     expect(conflict.mutateAsync).toHaveBeenCalledTimes(1);
     expect(description).toHaveValue('safe description');
     expect(checkboxes[0]).not.toBeChecked();
@@ -487,15 +513,12 @@ describe('donation composer recovery', () => {
       role: 'user',
     });
     const user = rendered.user;
-    const checkboxes = screen.getAllByRole('checkbox');
+    const checkboxes = donationCheckboxes();
     await user.type(screen.getByRole('textbox'), 'one intent');
-    await user.click(checkboxes[0]);
-    await user.click(checkboxes[1]);
-    await user.selectOptions(
-      screen.getByRole('combobox', { name: 'Accept a public Discord thank-you' }),
-      'no',
-    );
-    const submit = screen.getByRole('button');
+    await clickDonationCheckbox(user, checkboxes[0]);
+    await clickDonationCheckbox(user, checkboxes[1]);
+    await declinePublicThanks(user);
+    const submit = screen.getByRole('button', { name: /submit for review/i });
     await user.click(submit);
     expect(submit).toBeDisabled();
     rendered.rerender(<Host announcementEpoch="announcement-2" />);
@@ -507,15 +530,12 @@ describe('donation composer recovery', () => {
     rendered.rerender(<Host announcementEpoch="announcement-2" />);
     expect(screen.getByText(charityCopy.mutationReconciled)).toBeInTheDocument();
     expect(submit).toBeDisabled();
-    const refreshedCheckboxes = screen.getAllByRole('checkbox');
-    await user.click(refreshedCheckboxes[0]);
-    await user.click(refreshedCheckboxes[1]);
-    await user.selectOptions(
-      screen.getByRole('combobox', { name: 'Accept a public Discord thank-you' }),
-      'no',
-    );
+    const refreshedCheckboxes = donationCheckboxes();
+    await clickDonationCheckbox(user, refreshedCheckboxes[0]);
+    await clickDonationCheckbox(user, refreshedCheckboxes[1]);
+    await declinePublicThanks(user);
     expect(submit).toBeEnabled();
-    await user.click(screen.getByRole('button'));
+    await user.click(screen.getByRole('button', { name: /submit for review/i }));
     expect(unknown.mutateAsync).toHaveBeenCalledTimes(2);
   });
 
@@ -527,14 +547,11 @@ describe('donation composer recovery', () => {
       withPickerChoices(<DonationComposer draftNamespace="account-8b" />),
       { station: 'user', role: 'user' },
     );
-    const checkboxes = screen.getAllByRole('checkbox');
+    const checkboxes = donationCheckboxes();
     await rendered.user.type(screen.getByRole('textbox'), 'one intent');
-    await rendered.user.click(checkboxes[0]);
-    await rendered.user.click(checkboxes[1]);
-    await rendered.user.selectOptions(
-      screen.getByRole('combobox', { name: 'Accept a public Discord thank-you' }),
-      'no',
-    );
+    await clickDonationCheckbox(rendered.user, checkboxes[0]);
+    await clickDonationCheckbox(rendered.user, checkboxes[1]);
+    await declinePublicThanks(rendered.user);
     await rendered.user.click(screen.getByRole('button', { name: /submit for review/i }));
     expect(screen.getByRole('button', { name: /submit for review/i })).toBeDisabled();
     await rendered.user.click(screen.getByRole('button', { name: /retry/i }));
@@ -546,13 +563,10 @@ describe('donation composer recovery', () => {
     rendered.rerender(withPickerChoices(<DonationComposer draftNamespace="account-8b" />));
     expect(screen.getByText(charityCopy.mutationReconciled)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /submit for review/i })).toBeDisabled();
-    const recoveredCheckboxes = screen.getAllByRole('checkbox');
-    await rendered.user.click(recoveredCheckboxes[0]);
-    await rendered.user.click(recoveredCheckboxes[1]);
-    await rendered.user.selectOptions(
-      screen.getByRole('combobox', { name: 'Accept a public Discord thank-you' }),
-      'no',
-    );
+    const recoveredCheckboxes = donationCheckboxes();
+    await clickDonationCheckbox(rendered.user, recoveredCheckboxes[0]);
+    await clickDonationCheckbox(rendered.user, recoveredCheckboxes[1]);
+    await declinePublicThanks(rendered.user);
     expect(screen.getByRole('button', { name: /submit for review/i })).toBeEnabled();
   });
 
@@ -569,12 +583,9 @@ describe('donation composer recovery', () => {
       screen.getByRole('textbox', { name: /donation description/i }),
       'Shared resource',
     );
-    await user.click(screen.getByRole('checkbox', { name: 'Select resource key 61' }));
-    await user.click(screen.getAllByRole('checkbox')[1]);
-    await user.selectOptions(
-      screen.getByRole('combobox', { name: 'Accept a public Discord thank-you' }),
-      'no',
-    );
+    await clickDonationCheckbox(user, screen.getByLabelText('Select resource key 61'));
+    await clickDonationCheckbox(user, donationCheckboxes()[1]);
+    await declinePublicThanks(user);
     const submit = screen.getByRole('button', { name: /submit for review/i });
     expect(submit).toBeDisabled();
     await user.click(submit);
@@ -604,16 +615,13 @@ describe('donation composer recovery', () => {
       role: 'user',
     });
     const user = rendered.user;
-    await user.click(screen.getByRole('tab', { name: 'Donate resources' }));
+    await user.click(screen.getByRole('tab', { name: 'Donate my keys' }));
     const description = screen.getByRole('textbox');
     await user.type(description, 'draft kept while hidden');
-    const keyCheckbox = screen.getByRole('checkbox', { name: 'Select resource key 61' });
-    await user.click(keyCheckbox);
-    await user.click(screen.getAllByRole('checkbox')[1]);
-    await user.selectOptions(
-      screen.getByRole('combobox', { name: 'Accept a public Discord thank-you' }),
-      'no',
-    );
+    const keyCheckbox = screen.getByLabelText('Select resource key 61');
+    await clickDonationCheckbox(user, keyCheckbox);
+    await clickDonationCheckbox(user, donationCheckboxes()[1]);
+    await declinePublicThanks(user);
     const submit = screen.getByRole('button', { name: /submit for review/i });
     expect(submit).toBeEnabled();
 
@@ -627,7 +635,7 @@ describe('donation composer recovery', () => {
       JSON.stringify({ description: 'draft kept while hidden' }),
     );
 
-    await user.click(screen.getByRole('tab', { name: 'Donate resources' }));
+    await user.click(screen.getByRole('tab', { name: 'Donate my keys' }));
     await waitFor(() => expect(description).toBeEnabled());
     expect(description).toHaveValue('draft kept while hidden');
     expect(screen.getByRole('button', { name: /submit for review/i })).toBeEnabled();
@@ -646,13 +654,10 @@ describe('donation composer recovery', () => {
       screen.getByRole('textbox', { name: /donation description/i }),
       'Shared resource',
     );
-    const keyCheckbox = screen.getByRole('checkbox', { name: 'Select resource key 61' });
-    await user.click(keyCheckbox);
-    await user.click(screen.getAllByRole('checkbox')[1]);
-    await user.selectOptions(
-      screen.getByRole('combobox', { name: 'Accept a public Discord thank-you' }),
-      'no',
-    );
+    const keyCheckbox = screen.getByLabelText('Select resource key 61');
+    await clickDonationCheckbox(user, keyCheckbox);
+    await clickDonationCheckbox(user, donationCheckboxes()[1]);
+    await declinePublicThanks(user);
     const submit = screen.getByRole('button', { name: /submit for review/i });
     await user.click(submit);
 
@@ -670,16 +675,11 @@ describe('donation composer recovery', () => {
 
     rendered.rerender(withPickerChoices(<DonationComposer draftNamespace="account-8c" />));
     expect(screen.getByText(charityCopy.submitted)).toBeInTheDocument();
-    const refreshedKeyCheckbox = screen.getByRole('checkbox', {
-      name: 'Select resource key 61',
-    });
+    const refreshedKeyCheckbox = screen.getByLabelText('Select resource key 61');
     expect(refreshedKeyCheckbox).toBeEnabled();
-    await user.click(refreshedKeyCheckbox);
-    await user.click(screen.getAllByRole('checkbox')[1]);
-    await user.selectOptions(
-      screen.getByRole('combobox', { name: 'Accept a public Discord thank-you' }),
-      'no',
-    );
+    await clickDonationCheckbox(user, refreshedKeyCheckbox);
+    await clickDonationCheckbox(user, donationCheckboxes()[1]);
+    await declinePublicThanks(user);
     expect(screen.getByRole('button', { name: /submit for review/i })).toBeEnabled();
     expect(mutation.mutateAsync).toHaveBeenCalledTimes(1);
   });
@@ -691,18 +691,15 @@ describe('donation composer recovery', () => {
       withPickerChoices(<DonationComposer draftNamespace="account-9" />),
       { station: 'user', role: 'user' },
     );
-    const checkboxes = screen.getAllByRole('checkbox');
-    await rendered.user.click(checkboxes[0]);
-    await rendered.user.click(checkboxes[1]);
-    await rendered.user.selectOptions(
-      screen.getByRole('combobox', { name: 'Accept a public Discord thank-you' }),
-      'no',
-    );
-    await rendered.user.click(screen.getByRole('button'));
+    const checkboxes = donationCheckboxes();
+    await clickDonationCheckbox(rendered.user, checkboxes[0]);
+    await clickDonationCheckbox(rendered.user, checkboxes[1]);
+    await declinePublicThanks(rendered.user);
+    await rendered.user.click(screen.getByRole('button', { name: /submit for review/i }));
     expect(mutation.mutateAsync).not.toHaveBeenCalled();
     expect(screen.getByRole('alert')).toHaveTextContent(/description is required/i);
     await rendered.user.type(screen.getByRole('textbox', { name: /donation description/i }), '   ');
-    await rendered.user.click(screen.getByRole('button'));
+    await rendered.user.click(screen.getByRole('button', { name: /submit for review/i }));
     expect(mutation.mutateAsync).not.toHaveBeenCalled();
     expect(checkboxes[0]).toBeChecked();
     expect(checkboxes[1]).toBeChecked();
@@ -711,7 +708,7 @@ describe('donation composer recovery', () => {
       screen.getByRole('textbox', { name: /donation description/i }),
       'A shared endpoint',
     );
-    await rendered.user.click(screen.getByRole('button'));
+    await rendered.user.click(screen.getByRole('button', { name: /submit for review/i }));
     await waitFor(() =>
       expect(mutation.mutateAsync).toHaveBeenCalledWith({
         description: 'A shared endpoint',
@@ -753,14 +750,11 @@ describe('donation composer recovery', () => {
       ]),
       { station: 'user', role: 'user' },
     );
-    const checkboxes = screen.getAllByRole('checkbox');
-    await rendered.user.click(checkboxes[0]);
-    await rendered.user.click(checkboxes[1]);
-    await rendered.user.selectOptions(
-      screen.getByRole('combobox', { name: 'Accept a public Discord thank-you' }),
-      'no',
-    );
-    await rendered.user.click(checkboxes[2]);
+    const checkboxes = donationCheckboxes();
+    await clickDonationCheckbox(rendered.user, checkboxes[0]);
+    await clickDonationCheckbox(rendered.user, checkboxes[1]);
+    await declinePublicThanks(rendered.user);
+    await clickDonationCheckbox(rendered.user, checkboxes[2]);
     await rendered.user.click(screen.getByRole('button', { name: /submit for review/i }));
     expect(mutation.mutateAsync).not.toHaveBeenCalled();
     expect(screen.getByRole('alert')).toBeInTheDocument();
@@ -776,14 +770,11 @@ describe('donation composer recovery', () => {
       ]),
       { station: 'user', role: 'user' },
     );
-    const checkboxes = screen.getAllByRole('checkbox');
-    await rendered.user.click(checkboxes[0]);
-    await rendered.user.click(checkboxes[1]);
-    await rendered.user.selectOptions(
-      screen.getByRole('combobox', { name: 'Accept a public Discord thank-you' }),
-      'no',
-    );
-    await rendered.user.click(checkboxes[2]);
+    const checkboxes = donationCheckboxes();
+    await clickDonationCheckbox(rendered.user, checkboxes[0]);
+    await clickDonationCheckbox(rendered.user, checkboxes[1]);
+    await declinePublicThanks(rendered.user);
+    await clickDonationCheckbox(rendered.user, checkboxes[2]);
     await rendered.user.click(screen.getByRole('button', { name: /submit for review/i }));
     expect(mutation.mutateAsync).not.toHaveBeenCalled();
     expect(screen.getByRole('alert')).toBeInTheDocument();
@@ -821,17 +812,14 @@ describe('donation composer recovery', () => {
       screen.getByRole('textbox', { name: /donation description/i }),
       'Shared resource',
     );
-    const checkboxes = screen.getAllByRole('checkbox');
-    await rendered.user.click(checkboxes[0]);
+    const checkboxes = donationCheckboxes();
+    await clickDonationCheckbox(rendered.user, checkboxes[0]);
     const expiry = rendered.container.querySelector('input[type="datetime-local"]');
     if (!expiry) throw new Error('expiry control not rendered');
     await rendered.user.type(expiry, '2030-01-01T00:00');
     expect(checkboxes[0]).toBeChecked();
-    await rendered.user.click(checkboxes[1]);
-    await rendered.user.selectOptions(
-      screen.getByRole('combobox', { name: 'Accept a public Discord thank-you' }),
-      'no',
-    );
+    await clickDonationCheckbox(rendered.user, checkboxes[1]);
+    await declinePublicThanks(rendered.user);
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /submit for review/i })).toBeEnabled(),
     );

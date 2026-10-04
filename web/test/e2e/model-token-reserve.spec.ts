@@ -94,7 +94,7 @@ const scenarios: readonly Scenario[] = [
     locale: 'zh',
     theme: 'dark',
     pagePath: '/steward?tab=charity&charity_section=models',
-    modelsTab: '公益模型与服务连接',
+    modelsTab: '公益模型与来源',
     pricingLabel: '计价模式',
     perRequest: '按次',
     perToken: '按 token',
@@ -328,6 +328,10 @@ async function exerciseScenario(
   await expect(pricing.locator('option[value="per_request"]')).toHaveText(scenario.perRequest);
   await expect(pricing.locator('option[value="per_token"]')).toHaveText(scenario.perToken);
   await expect(pricing).toHaveValue('per_token');
+  await editor
+    .locator('.nb-fold > summary')
+    .filter({ hasText: /Quota and reserve|额度与预留/ })
+    .click();
   await expect(reserve).toHaveValue('1.234');
   await expect(editor.getByText(scenario.reserveHelp)).toBeVisible();
   await saveScreenshot(page, `${scenario.name}-initial`);
@@ -350,6 +354,10 @@ async function exerciseScenario(
 
   await page.reload();
   await expect(page.getByRole('tab', { name: scenario.modelsTab })).toBeVisible();
+  await editor
+    .locator('.nb-fold > summary')
+    .filter({ hasText: /Quota and reserve|额度与预留/ })
+    .click();
   reserve = editor.getByRole('textbox', { name: scenario.reserveLabel });
   await expect(reserve).toHaveValue('1.111');
 
@@ -378,6 +386,10 @@ async function exerciseScenario(
 
   consoleGuard.beforeConflict();
   await pricing.selectOption('per_token');
+  await editor
+    .locator('.nb-fold > summary')
+    .filter({ hasText: /Quota and reserve|额度与预留/ })
+    .click();
   reserve = editor.getByRole('textbox', { name: scenario.reserveLabel });
   await expect(reserve).toHaveValue('0');
   await expect(save).toBeDisabled();
@@ -407,6 +419,10 @@ async function exerciseScenario(
   expect(state.model.token_reserve_credits).toBe('9.876');
 
   await reloadedPricing.selectOption('per_token');
+  await reloadedEditor
+    .locator('.nb-fold > summary')
+    .filter({ hasText: /Quota and reserve|额度与预留/ })
+    .click();
   const reloadedReserve = reloadedEditor.getByRole('textbox', { name: scenario.reserveLabel });
   await expect(reloadedReserve).toHaveValue('9.876');
   const clear = reloadedEditor.getByRole('button', { name: /Save model|保存模型/ });
@@ -432,6 +448,10 @@ async function exerciseScenario(
   await expect(clearedEditor.getByRole('combobox', { name: scenario.pricingLabel })).toHaveValue(
     'per_token',
   );
+  await clearedEditor
+    .locator('.nb-fold > summary')
+    .filter({ hasText: /Quota and reserve|额度与预留/ })
+    .click();
   await expect(clearedEditor.getByRole('textbox', { name: scenario.reserveLabel })).toHaveValue('');
   await saveScreenshot(page, `${scenario.name}-cleared`);
   await assertPresentation(page, scenario, consoleGuard);
@@ -489,13 +509,13 @@ for (const scenario of scenarios) {
 
     const chinese = scenario.locale === 'zh';
     const rule = chinese ? 'force_stream' : 'force_non_stream';
-    const ruleLabel = chinese ? '传输规则' : 'Transport rule';
+    const ruleLabel = chinese ? '流式输出' : 'Streaming';
     const options = chinese
-      ? ['透传（默认）', '假流式（强制非流）', '假非流（强制流式）']
+      ? ['跟随客户端（默认）', '总是等完整结果', '总是用流式取回']
       : [
-          'Pass through (default)',
-          'Simulated streaming (force non-stream)',
-          'Buffered non-streaming (force stream)',
+          'Follow the client (default)',
+          'Always wait for the full reply',
+          'Always fetch as a stream',
         ];
     await page.goto(scenario.origin + scenario.pagePath);
     const row = page.locator('.ops-table tbody tr').filter({ hasText: MODEL_NAME });
@@ -503,14 +523,17 @@ for (const scenario of scenarios) {
     const editor = page.locator('.card').filter({
       has: page.getByRole('heading', { name: MODEL_NAME }),
     });
-    const transport = editor.getByRole('combobox', { name: ruleLabel });
-    await expect(transport).toHaveValue('passthrough');
-    await expect(transport.locator('option')).toHaveText(options);
-    await transport.selectOption(rule);
+    const transport = editor.getByRole('radiogroup', { name: ruleLabel });
+    await expect(transport.getByRole('radio', { name: options[0], exact: true })).toBeChecked();
+    await expect(transport.locator('label > span')).toHaveText(options);
+    await transport
+      .getByRole('radio', { name: options[chinese ? 2 : 1], exact: true })
+      .locator('..')
+      .click();
     await expect(transport).toHaveAccessibleDescription(
       chinese
-        ? '收齐上游流后，向非流式调用方返回 JSON；非流请求仍受代理等待时限。'
-        : 'Streaming callers receive keepalives while waiting, then the complete upstream result.',
+        ? '以流式读取服务商回复。客户端选择流式时边读边返回；选择非流式时收齐后返回完整结果，仍有等待时限。'
+        : 'Wait for the provider’s full reply, then return it at once. Keep the connection active while waiting when the client uses streaming.',
     );
     const saved = page.waitForResponse(
       (response) =>
@@ -522,13 +545,16 @@ for (const scenario of scenarios) {
     await expect.poll(() => state.patchBodies).toHaveLength(1);
     expect(state.patchBodies[0]).toMatchObject({ expected_revision: '1', transport_rule: rule });
     await page.reload();
-    await expect(transport).toHaveValue(rule);
+    await expect(
+      transport.getByRole('radio', { name: options[chinese ? 2 : 1], exact: true }),
+    ).toBeChecked();
     expect(state.patchBodies).toHaveLength(1);
     await saveScreenshot(page, `${scenario.name}-transport-saved`);
     await assertPresentation(page, scenario, consoleGuard);
 
     await page.goto(scenario.origin + (scenario.frame === 'admin' ? '/logs' : '/steward?tab=logs'));
     const filters = page.getByTestId('log-filters');
+    await filters.locator('summary').click();
     const charity = filters.getByRole('textbox', {
       name: chinese ? '调用的公益模型' : 'Called charity model',
     });
@@ -559,11 +585,13 @@ for (const scenario of scenarios) {
       .toBe(nameFragment);
     expect(new URL(page.url()).searchParams.get('page')).toBe('1');
 
+    await page.locator('.log-export summary').click();
     for (const format of ['csv', 'json'] as const) {
       const link = page.getByRole('link', {
-        name: `${chinese ? '导出' : 'Export'} ${format.toUpperCase()}`,
+        name: `${chinese ? '导出' : 'Export'} ${format.toUpperCase()}${chinese ? (format === 'csv' ? '（表格软件）' : '（程序处理）') : format === 'csv' ? ' (spreadsheets)' : ' (programs)'}`,
         exact: true,
       });
+      await expect(link).toBeVisible();
       const href = await link.getAttribute('href');
       expect(href).not.toBeNull();
       const exportURL = new URL(href!, scenario.origin);
@@ -593,6 +621,7 @@ for (const scenario of scenarios) {
       nameFragment,
     ]);
     await page.reload();
+    await filters.locator('summary').click();
     await expect(charity).toHaveValue(nameFragment);
     expect(logReads.at(-1)?.searchParams.get('charity_model')).toBe(nameFragment);
     await saveScreenshot(page, `${scenario.name}-charity-log-filter`);

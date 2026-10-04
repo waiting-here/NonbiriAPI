@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { apiFetch } from '@shared/query/http';
+import { Fold } from '@shared/components/ui/Fold';
 import type { DiagnosticRole } from './api';
 
 interface Capacity {
@@ -11,8 +12,7 @@ interface Capacity {
 }
 
 export function RawStorageSummary({ role }: { role: DiagnosticRole }) {
-  const { i18n } = useTranslation();
-  const zh = i18n.resolvedLanguage?.startsWith('zh');
+  const { t } = useTranslation();
   const [value, setValue] = useState<Capacity>();
   useEffect(() => {
     const controller = new AbortController();
@@ -26,12 +26,25 @@ export function RawStorageSummary({ role }: { role: DiagnosticRole }) {
   }, [role]);
   if (!value) return null;
   return (
-    <small>
-      {zh ? '错误正文载荷' : 'Error body payload'}: {(value.used_bytes / 1_048_576).toFixed(2)} /{' '}
-      {(value.budget_bytes / 1_048_576).toFixed(0)} MiB ·{' '}
-      {zh ? '容量不足未保存' : 'Omitted for capacity'} {value.capacity_omissions} ·{' '}
-      {zh ? '读取或保存失败' : 'Read or storage failures'} {value.unavailable}.{' '}
-      {zh ? '此容量不包含数据库页、索引和 WAL。' : 'This excludes database pages, indices and WAL.'}
-    </small>
+    <div
+      className={
+        value.capacity_omissions || value.unavailable
+          ? 'log-storage log-storage--warn'
+          : 'log-storage'
+      }
+    >
+      <Fold
+        title={t('common.operations.logs.presentation.storage')}
+        summary={t('common.operations.logs.presentation.storageSummary', {
+          used: (value.used_bytes / 1_048_576).toFixed(2),
+          budget: (value.budget_bytes / 1_048_576).toFixed(0),
+          count: value.capacity_omissions + value.unavailable,
+        })}
+      >
+        <small>
+          {t('common.operations.logs.presentation.storageFailures', { count: value.unavailable })}
+        </small>
+      </Fold>
+    </div>
   );
 }

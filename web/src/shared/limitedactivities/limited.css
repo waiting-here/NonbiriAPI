@@ -64,7 +64,7 @@
   display: grid;
   gap: 1rem;
 }
-.limited-form label {
+.limited-form label:not(.nb-toggle) {
   display: grid;
   gap: 0.35rem;
 }

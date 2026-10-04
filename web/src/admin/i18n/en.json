@@ -24,11 +24,9 @@
       "endpointsTitle": "Endpoint overview",
       "requests": "Requests",
       "unknownUsage": "Unknown-usage requests",
-      "viewEndpoints": "Open endpoints",
       "promptTokens": "Prompt tokens",
       "activityTitle": "Product activity",
       "activityDisabled": "Activity aggregation disabled",
-      "activityDisabledBody": "No activity rows are retained while aggregation is disabled.",
       "latestDay": "Latest day",
       "productActive": "Product active",
       "gameActive": "Game active",
@@ -36,7 +34,6 @@
       "inactiveValue": "No activity",
       "noActivity": "No activity rows",
       "noActivityBody": "No activity has been recorded yet.",
-      "endpointGroups": "There are {{groupCount}} endpoint groups. Open the endpoints page for details.",
       "reportsTitle": "Credential reports",
       "nonTerminalReports": "Non-terminal total",
       "pendingIndexing": "Indexing",
@@ -78,7 +75,6 @@
       "description": "Review operational alerts and resolve issues.",
       "kind": "Kind",
       "message": "Message",
-      "reference": "Reference",
       "subject": "Subject user",
       "created": "Created",
       "resolved": "Resolved",
@@ -100,7 +96,6 @@
         "reportRetryExhausted": "Report retries exhausted",
         "fishingRetryExhausted": "Fishing recovery retries exhausted",
         "rpsTerminalRetrying": "RPS terminal recovery retrying",
-        "workerCheckpointFailed": "Worker checkpoint failed",
         "invariantViolation": "Invariant violation",
         "accountDeleted": "Account deleted by user"
       },
@@ -114,7 +109,16 @@
       "generalBalance": "General credits",
       "gameBalance": "Game credits",
       "donationCredit": "Donation credit",
-      "sketchAssets": "Paper / brushes"
+      "sketchAssets": "Paper / brushes",
+      "presentation": {
+        "running": "Operations",
+        "security": "Security",
+        "games": "Games",
+        "accounts": "Accounts",
+        "worker": "Background task checkpoint failed",
+        "actions": "Alert actions",
+        "deletionSnapshot": "Balances before deletion"
+      }
     },
     "settings": {
       "nav": "Site settings",
@@ -131,14 +135,10 @@
       "catalogIndependentGate": "Related settings and limits",
       "charityModelPricing": "Charity model pricing (Charity page)",
       "catalogDurationPreview": "Human-readable duration: {{value}}",
-      "catalogMilliPreview": "{{credits}} credits",
       "restoreFallback": "Remove override",
       "legalBytes": "{{count}} / {{max}} UTF-8 bytes",
       "timezonePreview": "Preview: {{value}}",
       "dangerousDescription": "Access, abuse, and legal changes can affect admission or published policy. Review each server description before saving.",
-      "dangerousEmpty": "No dangerous settings",
-      "dangerousEmptyBody": "No dangerous catalog entry matches the search.",
-      "dangerousTitle": "Dangerous and legal settings",
       "enumValue": "Enumerated setting",
       "enumValues": {
         "disabled": "Disabled",
@@ -157,7 +157,7 @@
         "alerts": "Alerts",
         "announcements": "Announcements",
         "charity": "Charity",
-        "connector": "Connectors",
+        "connector": "API format",
         "economy": "Economy",
         "games": "Games",
         "identity": "Identity and appearance",
@@ -168,7 +168,6 @@
       },
       "ordinaryEmpty": "No ordinary settings",
       "ordinaryEmptyBody": "No ordinary catalog entry matches the search.",
-      "ordinaryTitle": "Ordinary settings",
       "remoteLogoWarning": "A remote logo makes a public third-party browser request and may fail independently. Never place a secret in this URL.",
       "restoreAuthorityValue": "Undo this change",
       "unknownCatalogGate": "Other limit ({{key}})",
@@ -197,15 +196,28 @@
         "levels": "Enabled level thresholds must increase from level 2 to level 4.",
         "timezoneLocked": "Daily activity records already exist, so the site timezone can no longer be changed."
       },
-      "customizedCount": "{{count}} customized",
-      "groupDefaults": "Using defaults",
-      "searchHelp": "Find a setting by name or purpose"
+      "searchHelp": "Find a setting by name or purpose",
+      "modified": "Modified",
+      "original": "Previously {{value}}",
+      "gatewayGroup": "Gateway model capabilities",
+      "legalHoldGroup": "Legal holds",
+      "maintenanceGroup": "Maintenance mode",
+      "gameRewardRange": "Game check-in reward",
+      "rewardRange": "Check-in reward",
+      "rewardRangeHelp": "Each check-in awards an amount within this range.",
+      "levelNames": "Level display names",
+      "levelNamesHelp": "Leave a name empty to use its default.",
+      "navigation": "Setting groups",
+      "cautious": "Use with care",
+      "regular": "General",
+      "otherConfiguration": "Other configuration",
+      "confirmationHint": "Settings requiring care will be confirmed before saving.",
+      "confirmTitle": "Save settings requiring care?"
     },
     "games": {
       "nav": "Games",
       "title": "Game configuration",
       "masterEnabled": "Games master switch",
-      "fishingEnabled": "Fishing enabled",
       "fishingRake": "{{pump}} fee (%)",
       "worm": "Worm bait",
       "lure": "Lure bait",
@@ -218,15 +230,12 @@
       "saved": "Game settings saved.",
       "save": "Save game configuration",
       "controls": {
-        "globalGate": "Games master switch",
         "settings": "Game settings",
-        "priceCredits": "{{field}} price (credits)",
         "revisionTerms": "Edit multiple settings and save them together. Games already in progress keep their starting settings."
       },
       "counts": {
         "active": "Active",
         "empty": "No in-flight games",
-        "emptyBody": "No active session or waiting queue is currently reported.",
         "games": "Games",
         "mode": "Mode: {{value}}",
         "phase": "Phase: {{value}}",
@@ -237,8 +246,6 @@
         "unknown": "Unknown value ({{value}})"
       },
       "linklink": {
-        "enabled": "LinkLink enabled",
-        "entryPrice": "{{spec}} entry price (credits)",
         "specEnabled": "{{spec}} enabled",
         "specs": {
           "10x10": "10×10",
@@ -246,7 +253,6 @@
           "8x8": "8×8"
         }
       },
-      "operationsDescription": "Configure future game acceptance while monitoring independent in-flight and queue counts.",
       "restoreAuthorityValues": "Restore saved settings",
       "rps": {
         "base": "{{mode}} base (credits)",
@@ -258,7 +264,6 @@
           "gesture": "Gesture deadline",
           "queue": "Queue deadline"
         },
-        "enabled": "Three-player RPS enabled",
         "modeEnabled": "{{mode}} mode enabled",
         "modes": {
           "deathmatch": "Deathmatch",
@@ -316,7 +321,6 @@
       },
       "config": {
         "masterEnabled": "Master enabled",
-        "revisionHint": "Save activity switches and claim rules together. Configure the Thursday activity below before enabling it. Open activities keep their existing rules.",
         "save": "Save activity settings",
         "thursdayEnabled": "Thursday enabled",
         "title": "Activity configuration",
@@ -342,7 +346,6 @@
         "windowBeijing": "Activity time (Beijing, UTC+8)",
         "perUserLimit": "Per-user limit",
         "platformBp": "Platform fee (%)",
-        "save": "Save next period",
         "updateTitle": "Update configured next period",
         "welfareBp": "Welfare pool fee (%)",
         "literatureInvalid": "Shorten the literature or remove special control characters. Newlines and tabs are allowed."
@@ -388,8 +391,7 @@
         "payoutRollover": "Payout / rollover",
         "periodRevision": "Period",
         "processed": "Processed",
-        "resume": "Resume existing settlement checkpoint",
-        "title": "Thursday activity status"
+        "resume": "Resume existing settlement checkpoint"
       },
       "title": "Activities and pools",
       "units": {
@@ -398,7 +400,7 @@
     },
     "mainstreamChannels": {
       "nav": "Mainstream channels",
-      "title": "Mainstream channel management",
+      "title": "Mainstream channels",
       "description": "Manage channels users can choose when adding services. Channel changes leave existing services intact.",
       "category": {
         "subscription": "Mainstream subscription",
@@ -419,7 +421,7 @@
       "table": {
         "name": "Name",
         "category": "Category",
-        "connector": "API type",
+        "connector": "API format",
         "baseUrl": "API base URL",
         "enabled": "Available for adding services",
         "updated": "Updated",
@@ -429,12 +431,13 @@
         "create": "Create channel",
         "view": "View",
         "save": "Save changes",
-        "retire": "Archive channel"
+        "retire": "Archive channel",
+        "new": "New channel"
       },
       "form": {
         "name": "Channel name",
         "category": "Category",
-        "connector": "API type",
+        "connector": "API format",
         "baseUrl": "API base URL",
         "enabled": "Available for adding services",
         "baseUrlHelp": "Enter the service API base URL, for example https://api.example.com/v1."
@@ -473,7 +476,8 @@
       "empty": {
         "title": "No mainstream channels",
         "body": "No channel matches the selected state."
-      }
+      },
+      "available": "Available for adding services"
     },
     "reports": {
       "nav": "Reports",
@@ -503,7 +507,7 @@
         "confirmApproveTitle": "Approve protected-key deletion?",
         "confirmRejectBody": "This releases all protected targets and records the review reason.",
         "confirmRejectTitle": "Reject this report?",
-        "connector": "Connector",
+        "connector": "API format",
         "continuationBody": "This state cannot be re-decided or released. Resume only restarts the existing checkpoint with the same target version.",
         "continuationTitle": "Processing continuation",
         "deadline": "Deadline",
@@ -635,13 +639,13 @@
       "nav": "Charity",
       "donationsTitle": "Donation review queue",
       "modelsTitle": "Charity models and bindings",
-      "title": "Charity and donation management",
+      "title": "Charity",
       "description": "Review donations, manage shared models and connections, and adjust usage limits.",
       "group": {
         "custom": "Custom donation key",
         "mainstreamSubscription": "【Mainstream subscription】{{name}}",
         "mainstreamApiPlatform": "【Mainstream API platform】{{name}}",
-        "connector": "Connector",
+        "connector": "API format",
         "baseUrl": "API base URL",
         "channelRevision": "Channel version when added",
         "keyHeading": "Key {{id}} · {{head}}…{{tail}}",
@@ -1060,6 +1064,17 @@
     },
     "picturebook": {
       "saveSelectedModels": "Save selected models"
+    },
+    "economyAudit": {
+      "presentation": {
+        "negativeZero": "Negative balances: all zero",
+        "negative": "Negative balances",
+        "reconciliation": "Reconciliation details",
+        "matched": "Matched",
+        "mismatch": "Mismatch",
+        "incomplete": "Incomplete coverage",
+        "periods": "Time details ({{count}} periods)"
+      }
     }
   },
   "user": {

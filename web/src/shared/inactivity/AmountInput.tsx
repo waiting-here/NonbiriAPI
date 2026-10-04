@@ -1,3 +1,4 @@
+import { Affix } from '@shared/components/ui';
 import { useState } from 'react';
 import { decimalAmount, scaledAmount } from './amounts';
 
@@ -19,7 +20,9 @@ export function AmountInput({
   return (
     <label>
       {label}
-      <input
+      <Affix
+        aria-label={label}
+        unit={percent ? '%' : zh ? '积分' : 'credits'}
         inputMode="decimal"
         value={draft}
         required

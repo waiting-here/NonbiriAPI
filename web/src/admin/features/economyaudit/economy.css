@@ -1,6 +1,6 @@
 .economy-audit {
   display: grid;
-  gap: 1rem;
+  gap: var(--nb-space-5);
 }
 .economy-audit .audit-filters {
   display: flex;
@@ -19,23 +19,9 @@
   margin-block: 0.75rem;
 }
 .economy-audit .audit-metrics {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
-  gap: 0.75rem;
+  margin-block: var(--nb-space-4);
 }
-.economy-audit .audit-metrics > div {
-  border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
-  padding: 0.8rem;
-  border-radius: 0.6rem;
-}
-.economy-audit .audit-metrics dt {
-  font-size: 0.9rem;
-  opacity: 0.8;
-}
-.economy-audit .audit-metrics dd {
-  margin: 0.5rem 0 0;
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
+.economy-audit .audit-metrics .nb-stat__value {
   overflow-wrap: anywhere;
 }
 .economy-audit .audit-coverage {
@@ -103,7 +89,7 @@
   overflow-wrap: anywhere;
 }
 .economy-audit .audit-warning {
-  color: #b54135;
+  color: var(--nb-color-warning);
   font-weight: 650;
 }
 @media (max-width: 600px) {
@@ -114,5 +100,35 @@
   .economy-audit .audit-filters select {
     min-width: 0;
     width: 100%;
+  }
+}
+
+.economy-audit .nb-table {
+  min-width: 0;
+}
+.economy-audit .nb-fold {
+  margin-block: var(--nb-space-4);
+  min-width: 0;
+}
+.economy-audit .card {
+  min-width: 0;
+}
+.economy-audit .nb-table .is-num {
+  text-align: right;
+}
+.economy-audit button,
+.economy-audit summary {
+  min-height: 2.5rem;
+}
+@media (width < 48rem) {
+  .economy-audit .nb-table td {
+    padding: 0;
+  }
+  .economy-audit .nb-table .is-num {
+    text-align: left;
+    white-space: normal;
+  }
+  .economy-audit .nb-table-wrap {
+    overflow: visible;
   }
 }

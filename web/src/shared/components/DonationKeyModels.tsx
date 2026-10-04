@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useIsFetching, useQuery } from '@tanstack/react-query';
 import { useLocation } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { charityKeys, type CharityRole } from '@shared/operations/charity';
@@ -82,6 +82,7 @@ function KeyModelPages({
   const location = useLocation();
   const [params, setParams] = useSearchState();
   const expanded = params.get(`${prefix}_expanded`) ?? '';
+  const pendingQueries = useIsFetching({ queryKey: charityKeys.root(role) });
   const pager = useUrlPagePager({
     station: role === 'admin' ? 'admin' : 'user',
     listType: 'donation-key-models',
@@ -121,19 +122,29 @@ function KeyModelPages({
       restoreDonationKey?: string;
       donationKeyScroll?: number;
     } | null;
-    if (state?.restoreDonationKey !== keyId || !query.data || query.isFetching || query.error)
+    if (state?.restoreDonationKey !== keyId || !query.data || pendingQueries > 0 || query.error)
       return;
     const scroll = state.donationKeyScroll;
-    const frame = requestAnimationFrame(() => {
+    const scroller = document.documentElement;
+    const previousAnchor = scroller.style.overflowAnchor;
+    // Keep browser anchoring from shifting the explicit restoration during layout.
+    scroller.style.overflowAnchor = 'none';
+    let frame = requestAnimationFrame(() => {
       if (typeof scroll === 'number' && Number.isFinite(scroll))
         window.scrollTo({ top: scroll, behavior: 'instant' });
-      setParams((previous) => previous, {
-        replace: true,
-        state: { ...state, restoreDonationKey: undefined, donationKeyScroll: undefined },
+      frame = requestAnimationFrame(() => {
+        scroller.style.overflowAnchor = previousAnchor;
+        setParams((previous) => previous, {
+          replace: true,
+          state: { ...state, restoreDonationKey: undefined, donationKeyScroll: undefined },
+        });
       });
     });
-    return () => cancelAnimationFrame(frame);
-  }, [keyId, location.state, query.data, query.isFetching, query.error, setParams]);
+    return () => {
+      cancelAnimationFrame(frame);
+      scroller.style.overflowAnchor = previousAnchor;
+    };
+  }, [keyId, location.state, pendingQueries, query.data, query.error, setParams]);
   if (lost) return <p role="alert">{t('common.operations.charity.accessLost')}</p>;
   if (query.isPending) return <LoadingState />;
   if (query.error) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;

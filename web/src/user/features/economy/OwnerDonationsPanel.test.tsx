@@ -169,7 +169,8 @@ describe('owner donation pages', () => {
     await view.user.click(screen.getByRole('button', { name: 'Next' }));
     await screen.findByText('needle submission');
     expect(screen.queryByText('Submission 1')).not.toBeInTheDocument();
-    await view.user.click(screen.getByRole('button', { name: 'View donated keys' }));
+    await view.user.click(screen.getByRole('button', { name: 'Donation actions' }));
+    await view.user.click(screen.getByRole('menuitem', { name: 'View donated keys' }));
     let region = screen.getByRole('region', { name: 'View donated keys' });
     await within(region).findByText(/head1…tail/);
     await view.user.click(within(region).getByRole('button', { name: 'Next' }));
@@ -250,11 +251,13 @@ describe('owner donation pages', () => {
     await view.queryClient.invalidateQueries({ queryKey: economyKeys.donations });
     expect(await screen.findByRole('button', { name: 'Retry' })).toBeVisible();
     expect(screen.getByText('Submission 1')).toBeVisible();
-    expect(screen.getByRole('button', { name: 'View donated keys' })).toBeDisabled();
+    await view.user.click(screen.getByRole('button', { name: 'Donation actions' }));
+    expect(screen.getByRole('menuitem', { name: 'View donated keys' })).toBeDisabled();
     status = 200;
     await view.user.click(screen.getByRole('button', { name: 'Retry' }));
+    await view.user.click(screen.getByRole('button', { name: 'Donation actions' }));
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'View donated keys' })).toBeEnabled(),
+      expect(screen.getByRole('menuitem', { name: 'View donated keys' })).toBeEnabled(),
     );
     status = 403;
     await view.queryClient.invalidateQueries({ queryKey: economyKeys.donations });

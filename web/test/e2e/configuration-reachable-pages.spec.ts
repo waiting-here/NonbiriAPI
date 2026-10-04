@@ -341,6 +341,28 @@ test('reachable user home keeps level state but removes the implementation hint'
     body: { data: [], next_cursor: null },
   });
 
+  await page.route(`${USER_ORIGIN}/api/caller-key`, (route) =>
+    route.fulfill({ json: null, headers: { 'X-Nonbiri-CallerKey-Generation': '0' } }),
+  );
+  await page.route(`${USER_ORIGIN}/api/models?**`, (route) =>
+    route.fulfill({
+      json: {
+        data: [],
+        next_cursor: null,
+        pagination: { page: '1', page_size: 10, total_items: '0', total_pages: '1' },
+      },
+    }),
+  );
+  await page.route(`${USER_ORIGIN}/api/charity/models?**`, (route) =>
+    route.fulfill({
+      json: {
+        data: [],
+        pagination: { page: '1', page_size: 10, total_items: '0', total_pages: '1' },
+        donation_intake: 'closed',
+        server_now: 1800000000,
+      },
+    }),
+  );
   await page.goto(`${USER_ORIGIN}/`);
   await expect(page.getByText('Level', { exact: true })).toBeVisible();
   await expect(page.getByText('Lv2', { exact: true })).toBeVisible();
@@ -362,7 +384,7 @@ test('reachable user home keeps level state but removes the implementation hint'
     expect(layout.width).toBeGreaterThanOrEqual(layout.available - 2);
   }
   await page.setViewportSize({ width: 390, height: 844 });
-  const endpointLink = page.getByRole('link', { name: 'Manage resources' });
+  const endpointLink = page.getByRole('link', { name: 'Add my service', exact: true });
   await tabTo(page, endpointLink);
   await expect(endpointLink).toBeFocused();
   await assertResponsiveAndClean(page, guard);
@@ -403,7 +425,10 @@ test('reachable user charity shows the neutral upstream warning without the stat
   });
 
   await page.goto(`${USER_ORIGIN}/charity`);
-  await expect(page.getByRole('note')).toContainText('第三方服务隐私提示');
+  await page.locator('.nb-fold > summary').filter({ hasText: '使用前请了解' }).click();
+  await expect(
+    page.locator('.nb-fold > summary').filter({ hasText: '使用前请了解' }),
+  ).toBeVisible();
   await expect(page.getByRole('note')).toContainText('第三方 AI 服务');
   await expect(page.getByRole('note')).toContainText('账户日志可能看到完整请求内容');
   await expect(page.getByText('调用状态说明')).toHaveCount(0);
@@ -489,11 +514,18 @@ test('reachable user endpoint keys expose the owner-only upstream prompt storage
   });
 
   await page.goto(`${USER_ORIGIN}/endpoints`);
-  await expect(page.getByRole('heading', { name: 'Resources' })).toBeVisible();
-  await page.getByRole('link', { name: 'Manage endpoint' }).click();
-  await expect(page.getByRole('heading', { name: 'Endpoint details' })).toBeVisible();
-  await expect(page.getByText('Do not save chat requests (store=false)')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Stop requiring store=false' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'My services' })).toBeVisible();
+  await page.getByRole('link', { name: 'Manage' }).click();
+  await expect(page.getByRole('heading', { name: 'primary', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'More actions · key note', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Edit note and limits', exact: true }).click();
+  const editor = page.getByRole('dialog', { name: 'Edit note and limits', exact: true });
+  await expect(editor.getByText('Ask the provider not to store chats')).toBeVisible();
+  await editor.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByRole('button', { name: 'More actions · key note', exact: true }).click();
+  await expect(
+    page.getByRole('menuitem', { name: 'Stop asking the provider not to store chats' }),
+  ).toBeVisible();
   await assertResponsiveAndClean(page, guard);
 });
 
@@ -563,20 +595,24 @@ test('reachable admin settings consumes the bilingual catalog and rejects a 345-
     },
   });
   await page.goto(`${ADMIN_ORIGIN}/settings`);
-  await expect(page.getByRole('button', { name: /Identity and appearance/ })).toHaveAttribute(
-    'aria-expanded',
-    'true',
-  );
+  await page.getByRole('searchbox').fill('default');
   await expect(page.getByLabel('Default Anthropic max output tokens')).toBeVisible();
+  await page.getByRole('searchbox').fill('Site timezone offset');
   const timezoneInput = page.getByLabel('Site timezone offset');
   await timezoneInput.fill('345');
-  const timezoneForm = page.locator('.ops-setting').filter({ has: timezoneInput });
+  const timezoneForm = page.locator('.nb-setting').filter({ has: timezoneInput });
   await expect(timezoneForm.getByRole('alert')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Save all changes' })).toBeDisabled();
   await timezoneForm.locator('summary').click();
   await expect(page.getByText(/Hard range -720–840 · step 30/)).toBeVisible();
+  await page.getByRole('searchbox').fill('');
+  await page
+    .locator('.nb-setting')
+    .filter({ has: page.getByLabel('RPM auto-ban duration') })
+    .locator('summary')
+    .click();
   await expect(page.getByText('Human-readable duration: 1h 1m 1s')).toBeVisible();
-  await expect(page.getByText('9,000,000,000,000 credits', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Check-in credit threshold')).toHaveValue('9000000000000');
   for (const width of [900, 1280, 1920]) {
     await page.setViewportSize({ width, height: 1080 });
     await assertResponsiveAndClean(page, guard);
@@ -587,6 +623,7 @@ test('reachable admin settings consumes the bilingual catalog and rejects a 345-
   await page.evaluate(() => {
     document.documentElement.style.zoom = '200%';
   });
+  await page.getByRole('button', { name: /^Identity and appearance/ }).click();
   await expect(page.getByLabel('Site name')).toBeVisible();
   await assertResponsiveAndClean(page, guard);
 });
@@ -653,19 +690,21 @@ test('reachable admin settings saves legacy legal text with LF line endings', as
   await page.getByText('Legal text', { exact: true }).click();
   const textarea = page.getByLabel('Terms override (English)');
   const save = page.getByRole('button', { name: 'Save all changes' });
-  await expect(save).toBeDisabled();
+  await expect(save).toHaveCount(0);
   expect(patches).toHaveLength(0);
   await textarea.fill('alpha\nbeta\n!');
   await expect(textarea).toHaveValue('alpha\nbeta\n!');
   await save.click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Save all changes' }).click();
   await expect.poll(() => patches.length).toBe(1);
   expect(patches[0]).toBe('alpha\nbeta\n!');
   expect(patches[0]).not.toContain('\r');
-  await expect(save).toBeDisabled();
+  await expect(save).toHaveCount(0);
   await textarea.fill(original.replaceAll('\r\n', '\n'));
   await save.click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Save all changes' }).click();
   await expect.poll(() => patches.length).toBe(2);
-  await expect(save).toBeDisabled();
+  await expect(save).toHaveCount(0);
   expect(state).toBe(original.replaceAll('\r\n', '\n'));
   await assertResponsiveAndClean(page, guard);
 });
@@ -721,7 +760,7 @@ test('reachable admin charity opens the corrected pending review query without i
   });
 
   await page.goto(`${ADMIN_ORIGIN}/charity`);
-  await expect(page.getByRole('heading', { name: '公益与捐赠管理' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '公益', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '审核' }).click();
   await expect(page).toHaveURL(/donation_id=9(?:&|$)/);
   await expect(page.getByRole('heading', { name: '捐赠审核', exact: true })).toBeVisible();

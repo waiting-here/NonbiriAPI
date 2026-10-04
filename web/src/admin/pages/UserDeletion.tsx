@@ -64,7 +64,7 @@ export function UserDeletion({
   };
   return (
     <>
-      <button className="btn btn-danger" type="button" onClick={() => setOpen(true)}>
+      <button className="nb-btn nb-btn--danger-outline" type="button" onClick={() => setOpen(true)}>
         {t('management.users.delete')}
       </button>
       {open ? (

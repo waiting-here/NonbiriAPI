@@ -404,7 +404,7 @@ test('admin pending badge opens the shared queue and processing survives refresh
     page.locator('.status-badge').filter({ hasText: 'Pending follow-up' }).first(),
   ).toBeVisible();
   await expect(
-    page.locator('.ops-table tbody').getByText('Synthetic pending donation', { exact: true }),
+    page.locator('.nb-table tbody').getByText('Synthetic pending donation', { exact: true }),
   ).toBeVisible();
   expect(listReads).toContain('?page=1&page_size=20');
   expect(listReads).toContain('?handling=pending&page=1&page_size=20');
@@ -455,6 +455,7 @@ test('admin pending badge opens the shared queue and processing survives refresh
   await saveScreenshot(page, 'admin-processed-320-light-en');
   await page.reload();
   await expect(page).toHaveURL(`${ADMIN_ORIGIN}/charity?handling=pending&donation_id=7`);
+  await page.locator('.charity-donations .nb-filter__more summary').click();
   await expect(page.getByRole('combobox', { name: 'Follow-up status', exact: true })).toHaveValue(
     'pending',
   );
@@ -473,7 +474,7 @@ test('admin pending badge opens the shared queue and processing survives refresh
   await expect(page.getByRole('heading', { name: 'Donation review', exact: true })).toHaveCount(0);
   await page.getByRole('combobox', { name: 'Follow-up status', exact: true }).selectOption('');
   await expect(
-    page.locator('.ops-table tbody').getByText('Synthetic pending donation', { exact: true }),
+    page.locator('.nb-table tbody').getByText('Synthetic pending donation', { exact: true }),
   ).toBeVisible();
   await page.getByRole('button', { name: 'Review', exact: true }).click();
   await expect(page.getByText(/Processed by an administrator/)).toBeVisible();
@@ -561,37 +562,48 @@ test('user catalog searches, filters levels, paginates, and expands plain descri
       await fulfillJSON(route, catalogPage([catalogModel('21', 'page-two')], 2, pageSize, 21));
       return;
     }
-    await fulfillJSON(route, catalogPage(firstModels, 1, pageSize, 21));
+    await fulfillJSON(
+      route,
+      catalogPage(
+        pageSize >= 21 ? [...firstModels, catalogModel('21', 'page-two')] : firstModels,
+        1,
+        pageSize,
+        21,
+      ),
+    );
   });
 
   await page.goto(`${USER_ORIGIN}/charity`);
   await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  const firstCard = page.locator('.economy-catalog-item').first();
+  const firstCard = page.locator('.economy-catalog-card .nb-table > tbody > tr').first();
   await expect(firstCard).toBeVisible();
   await expect(firstCard).toContainText('<b>plain</b>');
   expect(await firstCard.locator('b').count()).toBe(0);
-  await expect(firstCard.getByText('L1, L3, L5', { exact: true })).toBeVisible();
-  await expect(firstCard.getByText('当前等级可访问', { exact: true })).toBeVisible();
+  await expect(firstCard.getByText('L1、L3、L5', { exact: true })).toBeVisible();
   await expect(firstCard.getByText('当前可用', { exact: true })).toBeVisible();
-  const priceTable = firstCard.getByRole('table', { name: '公益模型价格', exact: true });
-  await expect(priceTable).toBeVisible();
-  await expect(priceTable.locator('[aria-label="原价: 3"]')).toBeVisible();
-  await expect(priceTable.locator('[aria-label="优惠价: 2.4"]')).toBeVisible();
-  const toggle = firstCard.locator('.economy-catalog-item__description-toggle');
-  await expect(toggle).toHaveAccessibleName('展开完整说明');
+  const toggle = firstCard.locator('.charity-model-name');
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-  await expect(toggle).toHaveAccessibleName('收起说明');
+  const detail = page.locator('.charity-model-detail').first();
+  await expect(detail).toContainText('当前等级可访问');
+  const priceTable = detail.getByRole('table', { name: '公益模型价格', exact: true });
+  await expect(priceTable).toBeVisible();
+  await expect(priceTable.locator('[aria-label="原价: 3"]')).toBeVisible();
+  await expect(priceTable.locator('[aria-label="优惠价: 2.4"]')).toBeVisible();
   await expect(firstCard.getByRole('button', { name: '复制模型名称', exact: true })).toBeVisible();
-  await saveScreenshot(page, 'catalog-expanded-320-dark-zh', '.economy-catalog-item');
+  await saveScreenshot(page, 'catalog-expanded-320-dark-zh');
 
   await page
     .getByRole('navigation', { name: '分页', exact: true })
     .getByRole('button', { name: '下一页', exact: true })
     .click();
   await expect(page.getByText('[公益]provider/page-two', { exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 1_280, height: 900 });
+  await page.getByRole('combobox', { name: '每页条数', exact: true }).selectOption('50');
+  await expect(page.getByRole('combobox', { name: '每页条数', exact: true })).toHaveValue('50');
+  await page.setViewportSize({ width: 320, height: 900 });
   const search = page.getByRole('searchbox');
   const requestCountBeforeTyping = catalogRequests.length;
   await search.fill('needle');
@@ -602,21 +614,20 @@ test('user catalog searches, filters levels, paginates, and expands plain descri
     '/api/charity/models?view=catalog&page=2&page_size=20&allowed_for_me=true&currently_available=true',
   );
   expect(catalogRequests).toContain(
-    '/api/charity/models?view=catalog&page=1&page_size=20&q=needle&allowed_for_me=true&currently_available=true',
+    '/api/charity/models?view=catalog&page=1&page_size=50&q=needle&allowed_for_me=true&currently_available=true',
   );
 
+  await page.locator('.economy-catalog-filters summary').click();
   await page.getByRole('combobox', { name: '本人访问权限', exact: true }).selectOption('false');
   await expect(page.getByText('[公益]provider/denied', { exact: true })).toBeVisible();
-  await expect(page.locator('.economy-catalog-item').first().locator('dd').nth(1)).toHaveText(
-    '当前等级不可访问',
-  );
+  await page.getByRole('button', { name: '[公益]provider/denied', exact: true }).click();
+  await expect(page.locator('.charity-model-detail')).toContainText('当前等级不可访问');
   await expect(page.getByText('本人等级不允许', { exact: true })).toBeVisible();
   expect(catalogRequests).toContain(
-    '/api/charity/models?view=catalog&page=1&page_size=20&q=needle&allowed_for_me=false&currently_available=true',
+    '/api/charity/models?view=catalog&page=1&page_size=50&q=needle&allowed_for_me=false&currently_available=true',
   );
 
-  await page.getByRole('combobox', { name: '每页条数', exact: true }).selectOption('50');
-  await expect(page.getByRole('combobox', { name: '每页条数', exact: true })).toHaveValue('50');
+  await expect(page.getByRole('combobox', { name: '每页条数', exact: true })).toHaveCount(0);
   await expect.poll(() => catalogRequests.length).toBeGreaterThanOrEqual(4);
   expect(catalogRequests).toContain(
     '/api/charity/models?view=catalog&page=1&page_size=50&q=needle&allowed_for_me=false&currently_available=true',
@@ -769,13 +780,13 @@ test('level-six stewardship shows the shared owner projection and caller identit
 
   await page.getByRole('tab', { name: 'Request logs', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Request logs', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Details', exact: true }).click();
   await expect(page.getByText(CALLER_NICKNAME, { exact: true })).toBeVisible();
   await expect(page.getByText(DISCORD_ID, { exact: true })).toBeVisible();
   expect(logListReads).toContain('?page=1&page_size=20');
   const copyButton = page.getByRole('button', { name: 'Copy Discord ID', exact: true }).first();
   await copyButton.click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(DISCORD_ID);
-  await page.getByRole('button', { name: 'Details', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   await expect(dialog.getByText(CALLER_NICKNAME, { exact: true })).toBeVisible();

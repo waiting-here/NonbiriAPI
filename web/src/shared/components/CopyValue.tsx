@@ -2,12 +2,20 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { copyText } from '@shared/utils/clipboard';
 
-export function CopyValue({ value, label }: { value: string; label: string }) {
+export function CopyValue({
+  value,
+  label,
+  showValue = true,
+}: {
+  value: string;
+  label: string;
+  showValue?: boolean;
+}) {
   const { t } = useTranslation();
   const [result, setResult] = useState<{ value: string; ok: boolean }>();
   return (
     <span className="nb-copy-value">
-      <code>{value}</code>
+      {showValue ? <code>{value}</code> : null}
       <button
         type="button"
         className="btn btn-quiet"

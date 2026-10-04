@@ -11,7 +11,7 @@ const endpoints = Array.from({ length: 23 }, (_, index) => ({
   note: `Needle resource ${index + 1}`,
   enabled: true,
   revision: '1',
-  key_count: '0',
+  key_count: '12',
   created_at: 1_700_000_000,
   updated_at: 1_700_000_001,
 }));
@@ -64,6 +64,7 @@ for (const locale of ['en', 'zh'] as const) {
       .click();
     await expect.poll(() => new URL(page.url()).searchParams.get('page')).toBe('1');
     await expect.poll(() => new URL(page.url()).searchParams.get('q')).toBe('Needle');
+    await form.locator('summary').click();
     await form
       .getByRole('combobox', { name: locale === 'en' ? 'Source' : '来源', exact: true })
       .selectOption('custom');
@@ -77,11 +78,12 @@ for (const locale of ['en', 'zh'] as const) {
     await page.locator('a[href="/endpoints/19"]').click();
     await expect(
       page.getByRole('heading', {
-        name: locale === 'en' ? 'Endpoint details' : '端点详情',
+        name: 'Needle resource 19',
         exact: true,
       }),
     ).toBeVisible();
     await form.getByRole('searchbox').fill('masked-tail');
+    await form.locator('summary').click();
     await form
       .getByRole('button', { name: locale === 'en' ? 'Search' : '搜索', exact: true })
       .click();
@@ -106,8 +108,9 @@ for (const locale of ['en', 'zh'] as const) {
         ),
       )
       .toBe(true);
-    await page.getByRole('link', { name: locale === 'en' ? 'Back' : '返回', exact: true }).click();
+    await page.getByRole('link', { name: locale === 'en' ? /My services/ : /我的服务/ }).click();
     await expect.poll(() => new URL(page.url()).searchParams.get('page')).toBe('2');
+    await expect(form.locator('details')).toHaveAttribute('open', '');
     expect(new URL(page.url()).searchParams.get('q')).toBe('Needle');
     expect(new URL(page.url()).searchParams.get('source')).toBe('custom');
     await expect
@@ -192,12 +195,10 @@ test('personal models send all filters before pagination and preserve them throu
   await page.goto(`${USER_ORIGIN}/models`);
   const form = page.getByRole('form', { name: 'Resource filters' });
   await form.getByRole('searchbox').fill('upstream-identifier');
-  await form.getByRole('textbox', { name: 'Service provider', exact: true }).fill('Vendor');
+  await form.getByRole('textbox', { name: 'Prefix', exact: true }).fill('Vendor');
   await form.getByRole('button', { name: 'Search', exact: true }).click();
-  await form.getByRole('combobox', { name: 'Connection strategy' }).selectOption('ordered');
-  await form
-    .getByRole('combobox', { name: 'Connections', exact: true })
-    .selectOption('unconfigured');
+  await form.getByRole('combobox', { name: 'Order' }).selectOption('ordered');
+  await form.getByRole('combobox', { name: 'Sources', exact: true }).selectOption('unconfigured');
   await expect
     .poll(() =>
       requests.some(
@@ -209,12 +210,10 @@ test('personal models send all filters before pagination and preserve them throu
       ),
     )
     .toBe(true);
-  await page.locator('.core-endpoint-card').getByRole('button').click();
+  await page.getByRole('button', { name: 'Edit model', exact: true }).click();
   await expect.poll(() => new URL(page.url()).searchParams.get('model_id')).toBe('7');
   await page.getByRole('button', { name: 'Back', exact: true }).click();
   await expect(form.getByRole('searchbox')).toHaveValue('upstream-identifier');
-  await expect(form.getByRole('textbox', { name: 'Service provider', exact: true })).toHaveValue(
-    'Vendor',
-  );
+  await expect(form.getByRole('textbox', { name: 'Prefix', exact: true })).toHaveValue('Vendor');
   guard.assertNone();
 });

@@ -898,12 +898,29 @@ test('a local season publishes explicitly and the original user tab resumes, set
     });
     await capture(page, '09-user-map-and-unlock');
     await page.getByRole('button', { name: 'Unlock node', exact: true }).click();
+    const unlock = page.getByRole('alertdialog', { name: 'Unlock node', exact: true });
+    await expect(unlock).toContainText('general credits');
+    const unlocking = page.waitForResponse(
+      (response) =>
+        response.url().endsWith('/nodes/' + nodes[0].id + '/unlock') &&
+        response.request().method() === 'POST',
+    );
+    await unlock.getByRole('button', { name: 'Unlock node', exact: true }).click();
+    expect((await unlocking).status()).toBe(200);
     await page.getByRole('button', { name: 'Prepare challenge (free)', exact: true }).click();
     await expect(
       page.getByRole('button', { name: 'Confirm ticket and start', exact: true }),
     ).toBeVisible();
     await capture(page, '10-prepared-challenge');
     await page.getByRole('button', { name: 'Confirm ticket and start', exact: true }).click();
+    const starting = page.waitForResponse(
+      (response) => response.url().endsWith('/start') && response.request().method() === 'POST',
+    );
+    await page
+      .getByRole('alertdialog', { name: 'Confirm ticket and start', exact: true })
+      .getByRole('button', { name: 'Confirm ticket and start', exact: true })
+      .click();
+    expect((await starting).status()).toBe(200);
     let player = page.getByRole('region', { name: 'Fat fish play', exact: true });
     await returnPreplacedTool(player, 100);
     await verifyLocalMusic(page, player);

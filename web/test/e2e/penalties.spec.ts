@@ -80,15 +80,12 @@ for (const scenario of [
       return route.fallback();
     });
     await page.goto(origin + (station === 'admin' ? '/users?user=7' : '/steward?tab=users&user=7'));
-    const opener = page.getByRole('button', {
-      name: zh ? '自动处罚记录' : 'Automatic penalties',
+    const opener = page.getByRole('tab', {
+      name: zh ? '处罚记录' : 'Penalties',
       exact: true,
     });
     await opener.click();
-    const dialog = page.getByRole('dialog', {
-      name: zh ? '自动处罚记录' : 'Automatic penalties',
-      exact: true,
-    });
+    const dialog = page.getByRole('tabpanel', { name: zh ? '处罚记录' : 'Penalties', exact: true });
     await expect(dialog.getByRole('status')).toContainText(
       zh ? '没有保存统计依据' : 'no saved statistical evidence',
     );
@@ -122,9 +119,11 @@ for (const scenario of [
       mkdirSync(folder, { recursive: true });
       await page.screenshot({ path: join(folder, `penalty-${scenario.role}.png`) });
     }
-    await page.keyboard.press('Escape');
-    await expect(dialog).toHaveCount(0);
-    await expect(opener).toBeFocused();
+    await page.getByRole('tab', { name: zh ? '概览' : 'Overview', exact: true }).click();
+    await expect(dialog).toBeHidden();
+    await opener.click();
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator('.loan-record')).toHaveCount(1);
     guard.assertNone();
   });
 }
@@ -200,16 +199,29 @@ for (const role of ['user', 'admin', 'steward'] as const) {
             };
       return route.fulfill({ json: detail });
     });
-    await page.goto(origin + (role === 'steward' ? '/steward' : '/logs'));
+    await page.goto(origin + (role === 'steward' ? '/steward?tab=logs' : '/logs'));
+    await page.getByTestId('log-filters').locator('summary').click();
     await page
       .getByRole('combobox', { name: 'Request stage', exact: true })
       .selectOption('pre_handler');
     await page.getByRole('button', { name: 'Apply filter', exact: true }).click();
     await expect.poll(() => filters.some((q) => q.includes('phase=pre_handler'))).toBe(true);
-    await expect(page.getByRole('link', { name: 'Export JSON' })).toHaveAttribute(
+    await page.locator('.log-export > summary').click();
+    await expect(page.getByRole('link', { name: 'Export JSON (programs)' })).toHaveAttribute(
       'href',
       path + '/export.json?phase=pre_handler',
     );
+    const exportLink = page.getByRole('link', { name: 'Export JSON (programs)' });
+    await exportLink.click({ trial: true });
+    const exportBounds = (await exportLink.boundingBox())!;
+    expect(exportBounds.x).toBeGreaterThanOrEqual(0);
+    expect(exportBounds.x + exportBounds.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+    if (process.env.NONBIRI_VISUAL_DIR) {
+      mkdirSync(process.env.NONBIRI_VISUAL_DIR, { recursive: true });
+      await page.screenshot({
+        path: join(process.env.NONBIRI_VISUAL_DIR, `log-export-${role}.png`),
+      });
+    }
     await page.getByRole('button', { name: 'Details', exact: true }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByText('Rejected before a call', { exact: true })).toBeVisible();

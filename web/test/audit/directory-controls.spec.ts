@@ -87,18 +87,19 @@ test('administrator submits endpoint search, resets it and pages actual shared m
         )
       ).data,
     ).toMatchObject([{ base_url: baseURL, user_count: '2' }]);
+    const memberRead = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === '/admin/api/overview/endpoints/users' &&
+        new URL(response.url()).searchParams.get('page_size') === '20',
+    );
     await page
       .getByRole('button', { name: adminEn.admin.endpoints.showUsers, exact: true })
       .click();
     const members = page.locator('.ops-table .ops-table');
     await expect(members.locator('tbody tr')).toHaveCount(2);
     const memberPager = page.getByRole('navigation', { name: 'Pagination', exact: true }).first();
-    const memberRead = page.waitForResponse(
-      (response) =>
-        new URL(response.url()).pathname === '/admin/api/overview/endpoints/users' &&
-        new URL(response.url()).searchParams.get('page_size') === '10',
-    );
-    await memberPager.getByLabel(commonEn.common.pageControls.size).selectOption('10');
+    await expect(memberPager).toHaveText('2 items');
+    await expect(memberPager.getByLabel(commonEn.common.pageControls.size)).toHaveCount(0);
     const result = await memberRead;
     expect(result.ok()).toBe(true);
     expect(
@@ -153,7 +154,7 @@ test('administrator submits user, blacklist and announcement list filters', asyn
     await page.getByLabel(commonEn.management.users.searchAria).fill(member.username);
     await page.getByRole('button', { name: commonEn.common.applyFilter, exact: true }).click();
     await expect(
-      page.locator('.ops-table tbody').getByText(member.username, { exact: true }),
+      page.locator('.nb-table tbody').getByText(member.username, { exact: true }),
     ).toBeVisible();
     const userQuery = new URL(page.url()).searchParams.get('q');
     expect(userQuery).toBe(member.username);
@@ -168,12 +169,13 @@ test('administrator submits user, blacklist and announcement list filters', asyn
     ).toBe(true);
     await page.goto(state.admin_url + '/blacklist');
     await page.getByLabel(commonEn.common.blacklist.search).fill('Synthetic directory filter');
+    await page.getByText(commonEn.management.users.exactFilters, { exact: true }).click();
     await page.getByLabel(commonEn.common.blacklist.actorKind).selectOption('admin');
     await page
       .getByRole('button', { name: commonEn.common.blacklist.applySearch, exact: true })
       .click();
     await expect(
-      page.locator('.ops-table tbody').getByText(discordID, { exact: true }),
+      page.locator('.nb-table tbody').getByText(discordID, { exact: true }),
     ).toBeVisible();
     expect(
       (
@@ -221,9 +223,11 @@ test('administrator filters donations and manages manual candidates', async ({ b
     await page
       .getByRole('button', { name: copy.donationHandling.applySearch, exact: true })
       .click();
+    const filterDisclosure = page.locator('.charity-donations .nb-filter__more summary');
+    if (await filterDisclosure.isVisible()) await filterDisclosure.click();
     await page.getByLabel(copy.donationHandling.filter).selectOption('pending');
     await expect(
-      page.locator('.ops-table tbody').getByText(donation.description, { exact: true }),
+      page.locator('.nb-table tbody').getByText(donation.description, { exact: true }),
     ).toBeVisible();
     expect(
       (
@@ -391,6 +395,7 @@ test('administrator applies log filters, exports them and downloads retained ori
     const page = await admin.newPage();
     await page.goto(state.admin_url + '/logs');
     const filters = page.getByTestId('log-filters');
+    await filters.locator('.nb-filter__more > summary').click();
     await filters.getByLabel(commonEn.common.status, { exact: true }).fill('503');
     await filters.getByRole('button', { name: commonEn.common.applyFilter, exact: true }).click();
     await expect(page).toHaveURL(/status=503/);
@@ -403,9 +408,13 @@ test('administrator applies log filters, exports them and downloads retained ori
     expect(logs.data.every((row: { caller_status: number }) => row.caller_status === 503)).toBe(
       true,
     );
+    await page.locator('.log-export > summary').click();
     const exportDownload = page.waitForEvent('download');
     await page
-      .getByRole('link', { name: commonEn.common.operations.logs.exportCsv, exact: true })
+      .getByRole('link', {
+        name: commonEn.common.operations.logs.presentation.exportCsv,
+        exact: true,
+      })
       .click();
     const csv = await exportDownload;
     expect(readFileSync((await csv.path())!, 'utf8')).toContain('caller_status');
@@ -413,10 +422,11 @@ test('administrator applies log filters, exports them and downloads retained ori
     await expect(filters.getByLabel(commonEn.common.status, { exact: true })).toHaveValue('');
     await page.goto(state.admin_url + '/logs?request_id=' + state.request_ids[0]);
     const detail = page.getByRole('dialog');
+    await detail.locator('summary').filter({ hasText: 'Service call attempts' }).click();
     await detail.getByRole('button', { name: 'Upstream error details', exact: true }).click();
     const event = detail
       .locator('details')
-      .filter({ has: page.locator('summary', { hasText: 'Error event 1' }) })
+      .filter({ has: page.locator(':scope > summary', { hasText: 'Error event 1' }) })
       .first();
     await event.locator('summary').first().click();
     await event.getByRole('button', { name: 'Load original body', exact: true }).click();

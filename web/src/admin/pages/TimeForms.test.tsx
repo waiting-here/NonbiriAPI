@@ -207,7 +207,10 @@ describe('administrator time forms', () => {
         return {
           revision: '4',
           master_enabled: true,
-          loan_enabled: false, loan_tiers: ['10000', '100000', '1000000'], loan_a: '0.9', loan_b: '1.3',
+          loan_enabled: false,
+          loan_tiers: ['10000', '100000', '1000000'],
+          loan_a: '0.9',
+          loan_b: '1.3',
           welfare: { enabled: false, threshold: '1', cap: '2' },
           thursday: { enabled: true },
         };
@@ -240,7 +243,7 @@ describe('administrator time forms', () => {
     expect(document.querySelector('input[type="datetime-local"]')).toBeNull();
     await view.user.clear(literature);
     await view.user.type(literature, 'Updated announcement');
-    await view.user.click(screen.getByRole('button', { name: 'Save next period' }));
+    await view.user.click(screen.getByRole('button', { name: 'Save and schedule' }));
 
     await waitFor(() =>
       expect(saved).toEqual(

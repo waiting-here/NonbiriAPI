@@ -211,9 +211,21 @@ async function assertViewportContract(page: Page) {
   expect(await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches)).toBe(
     true,
   );
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
-    true,
+  const overflow = await page.locator('body *').evaluateAll((nodes) =>
+    nodes
+      .map((node) => ({
+        tag: node.tagName,
+        className: node.className,
+        right: node.getBoundingClientRect().right,
+        width: node.getBoundingClientRect().width,
+      }))
+      .filter((node) => node.width > 0 && node.right > innerWidth + 1)
+      .slice(0, 16),
   );
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    JSON.stringify(overflow),
+  ).toBe(true);
 }
 
 async function confirmSessionAction(page: Page, trigger: string, confirm: string) {
@@ -244,7 +256,15 @@ for (const locale of ['en', 'zh'] as const)
         const guard = await prepareDebug(context, page, locale, theme, fixture);
         await page.setViewportSize({ width, height: 900 });
         await page.goto(`${USER_ORIGIN}/debug`);
-        await expect(page.locator('p').filter({ hasText: 'debug_live_cancelled' })).toContainText(
+        await page
+          .getByText(
+            locale === 'zh'
+              ? '调试时客户端会收到什么？'
+              : 'What does the client receive during debugging?',
+            { exact: true },
+          )
+          .click();
+        await expect(page.locator('td').filter({ hasText: 'debug_live_cancelled' })).toContainText(
           '(409)',
         );
         const label =
@@ -313,7 +333,7 @@ test('Debug route starts dry, replaces, confirms live, and stops without retaini
   const consoleGuard = await prepareDebug(context, page, 'en', 'light', fixture);
 
   await page.goto(`${USER_ORIGIN}/debug`);
-  await expect(page.getByRole('heading', { name: 'Debug', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Records', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'No active Debug session' })).toBeVisible();
   const start = page.getByRole('button', { name: 'Start Debug' }).first();
   await tabTo(page, start);
@@ -381,7 +401,7 @@ test('Debug reconnect accepts a fresh bounded snapshot after stream closure', as
   const consoleGuard = await prepareDebug(context, page, 'en', 'dark', fixture);
 
   await page.goto(`${USER_ORIGIN}/debug`);
-  await expect(page.getByRole('heading', { name: 'Debug', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Records', exact: true })).toBeVisible();
   const connection = page.locator('.card').filter({
     has: page.getByRole('heading', { name: 'Connection and mode' }),
   });
@@ -412,7 +432,7 @@ test('Debug gap and truncated-event recovery stays visibly safe in Chinese dark 
   const consoleGuard = await prepareDebug(context, page, 'zh', 'dark', fixture);
 
   await page.goto(`${USER_ORIGIN}/debug`);
-  await expect(page.getByRole('heading', { name: '调试', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '记录', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '开始调试' }).first().click();
   const connection = page.locator('.card').filter({
     has: page.getByRole('heading', { name: '连接与模式' }),
@@ -430,7 +450,7 @@ test('Debug gap and truncated-event recovery stays visibly safe in Chinese dark 
   await page.evaluate(() => {
     document.documentElement.style.zoom = '200%';
   });
-  await expect(page.getByRole('heading', { name: '调试', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '记录', exact: true })).toBeVisible();
   expect(fixture.eventConnections).toBe(1);
   expect(
     fixture.requestURLs.every(

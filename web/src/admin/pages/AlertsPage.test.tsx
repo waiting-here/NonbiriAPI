@@ -204,7 +204,7 @@ describe('administrator alerts page', () => {
     expect(await screen.findByText('<plain alert>')).toBeVisible();
     expect(screen.getByRole('combobox', { name: 'Resolution status' })).toHaveValue('true');
     expect(screen.getByRole('combobox', { name: 'Items per page' })).toHaveValue('50');
-    expect(screen.getByText('Page 2 of 2 · Total: 51')).toBeVisible();
+    expect(screen.getByText('51 items')).toBeVisible();
     expect(screen.getByTestId('location-search')).toHaveTextContent(
       '?resolved=true&page=2&page_size=50',
     );
@@ -283,7 +283,7 @@ describe('administrator alerts page', () => {
     );
 
     expect(await screen.findByText('Alert 21')).toBeVisible();
-    expect(screen.getByText('Page 2 of 2 · Total: 21')).toBeVisible();
+    expect(screen.getByText('21 items')).toBeVisible();
     expect(screen.getByText('That page is no longer available. Showing page 2.')).toBeVisible();
     const search = new URLSearchParams(screen.getByTestId('location-search').textContent ?? '');
     expect(search.get('resolved')).toBe('false');
@@ -331,7 +331,8 @@ describe('administrator alerts page', () => {
     });
 
     expect(await screen.findByText('Alert 41')).toBeVisible();
-    await rendered.user.click(screen.getByRole('button', { name: 'Resolve' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Alert actions' }));
+    await rendered.user.click(screen.getByRole('menuitem', { name: 'Resolve' }));
     await waitFor(() => expect(resolvedOnServer).toBe(true));
     await waitFor(() => expect(listCalls).toBeGreaterThanOrEqual(2));
 
@@ -350,7 +351,7 @@ describe('administrator alerts page', () => {
 
     expect(await screen.findByText('Alert 20')).toBeVisible();
     await waitFor(() => expect(screen.queryByText('Alert 41')).not.toBeInTheDocument());
-    expect(screen.getByText('Page 2 of 2 · Total: 40')).toBeVisible();
+    expect(screen.getByText('40 items')).toBeVisible();
     expect(screen.getByText('That page is no longer available. Showing page 2.')).toBeVisible();
     const listRequests = fetchMock.mock.calls
       .filter(([input, init]) => {
@@ -397,7 +398,8 @@ describe('administrator alerts page', () => {
       });
 
       expect(await screen.findByText('Alert 1')).toBeVisible();
-      await rendered.user.click(screen.getByRole('button', { name: 'Resolve' }));
+      await rendered.user.click(screen.getByRole('button', { name: 'Alert actions' }));
+      await rendered.user.click(screen.getByRole('menuitem', { name: 'Resolve' }));
       await waitFor(() => expect(screen.queryByText('Alert 1')).not.toBeInTheDocument());
       expect(screen.queryByRole('button', { name: 'Resolve' })).not.toBeInTheDocument();
       expect(
@@ -454,7 +456,8 @@ describe('administrator alerts page', () => {
     );
     expect(screen.getByText('Alert 1')).toBeVisible();
     expect(document.querySelector('[aria-busy="true"]')).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: 'Resolve' })[0]).toBeDisabled();
+    await rendered.user.click(screen.getAllByRole('button', { name: 'Alert actions' })[0]);
+    expect(screen.getAllByRole('menuitem', { name: 'Resolve' })[0]).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();
     expect(screen.getByRole('combobox', { name: 'Items per page' })).toBeDisabled();
 
@@ -818,6 +821,11 @@ it('filters deletion alerts and resolves only selected unresolved rows', async (
     role: 'admin',
     route: '/alerts?resolved=false&kind=account_deleted',
   });
+  await rendered.user.click(
+    await screen.findByText(rendered.i18n.t('admin.alerts.presentation.deletionSnapshot'), {
+      selector: 'strong',
+    }),
+  );
   expect(await screen.findByText('123456789012345678')).toBeVisible();
   expect(screen.getByText('-2.5')).toBeVisible();
   await waitFor(() =>
@@ -836,44 +844,89 @@ it('renders current deletion snapshots with all filters and opens both retained 
     alert('7', false, { kind: 'account_deleted', account_deletion: deletionSnapshots.v1 }),
   ];
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-    const target = new URL(input instanceof Request ? input.url : String(input), window.location.origin);
+    const target = new URL(
+      input instanceof Request ? input.url : String(input),
+      window.location.origin,
+    );
     if (target.pathname === '/admin/api/session') return jsonResponse(session());
     if (target.pathname === '/admin/api/alerts') {
       const resolved = target.searchParams.get('resolved');
       const kind = target.searchParams.get('kind');
-      return jsonResponse(page(rows.filter((row) =>
-        (resolved === null || row.resolved === (resolved === 'true')) &&
-        (kind === null || row.kind === kind),
-      )));
+      return jsonResponse(
+        page(
+          rows.filter(
+            (row) =>
+              (resolved === null || row.resolved === (resolved === 'true')) &&
+              (kind === null || row.kind === kind),
+          ),
+        ),
+      );
     }
     const selected = rows.find((row) => target.pathname === `/admin/api/alerts/${row.id}`);
-    if (selected) return jsonResponse({
-      alert: selected, context_version: 0, occurred_facts: [],
-      targets: [{ kind: 'deleted_account', id: selected.id, available: true, status: 'retained' }],
-      current_state: [], related_logs: null, resolution_kind: 'legacy',
-    });
+    if (selected)
+      return jsonResponse({
+        alert: selected,
+        context_version: 0,
+        occurred_facts: [],
+        targets: [
+          { kind: 'deleted_account', id: selected.id, available: true, status: 'retained' },
+        ],
+        current_state: [],
+        related_logs: null,
+        resolution_kind: 'legacy',
+      });
     throw new Error(`Unexpected request: ${target.pathname}`);
   });
   vi.stubGlobal('fetch', fetchMock);
   const rendered = await renderWithProviders(<AlertsPage />, {
-    station: 'admin', role: 'admin', route: '/alerts?resolved=all',
+    station: 'admin',
+    role: 'admin',
+    route: '/alerts?resolved=all',
   });
+  for (const summary of await screen.findAllByText(
+    rendered.i18n.t('admin.alerts.presentation.deletionSnapshot'),
+    { selector: 'strong' },
+  ))
+    await rendered.user.click(summary);
   expect(await screen.findByText(deletionSnapshots.v1.discord_id)).toBeVisible();
   expect(screen.getByText(deletionSnapshots.v2.discord_id)).toBeVisible();
   expect(screen.getByText('Alert 9')).toBeVisible();
-  expect(fetchMock.mock.calls.map(([input]) => String(input))).toContain('/admin/api/alerts?page=1&page_size=20');
-  await rendered.user.selectOptions(screen.getByRole('combobox', { name: 'Alert type' }), 'account_deleted');
+  expect(fetchMock.mock.calls.map(([input]) => String(input))).toContain(
+    '/admin/api/alerts?page=1&page_size=20',
+  );
+  await rendered.user.selectOptions(
+    screen.getByRole('combobox', { name: 'Alert type' }),
+    'account_deleted',
+  );
   await waitFor(() => expect(screen.queryByText('Alert 9')).not.toBeInTheDocument());
-  for (const [id, snapshot] of [['7', deletionSnapshots.v1], ['8', deletionSnapshots.v2]] as const) {
+  for (const [id, snapshot] of [
+    ['7', deletionSnapshots.v1],
+    ['8', deletionSnapshots.v2],
+  ] as const) {
     const row = screen.getByText(snapshot.discord_id).closest('tr');
     await rendered.user.click(within(row!).getByRole('button', { name: 'Details' }));
     expect(await screen.findByRole('heading', { name: `Alert details #${id}` })).toBeVisible();
     await rendered.user.click(screen.getByRole('button', { name: 'Close details' }));
   }
-  await rendered.user.selectOptions(screen.getByRole('combobox', { name: 'Resolution status' }), 'true');
-  await waitFor(() => expect(screen.queryByText(deletionSnapshots.v1.discord_id)).not.toBeInTheDocument());
+  await rendered.user.selectOptions(
+    screen.getByRole('combobox', { name: 'Resolution status' }),
+    'true',
+  );
+  await waitFor(() =>
+    expect(screen.queryByText(deletionSnapshots.v1.discord_id)).not.toBeInTheDocument(),
+  );
   expect(screen.getByText(deletionSnapshots.v2.discord_id)).toBeVisible();
-  await rendered.user.selectOptions(screen.getByRole('combobox', { name: 'Resolution status' }), 'false');
+  await rendered.user.selectOptions(
+    screen.getByRole('combobox', { name: 'Resolution status' }),
+    'false',
+  );
+  for (const summary of await screen.findAllByText(
+    rendered.i18n.t('admin.alerts.presentation.deletionSnapshot'),
+    { selector: 'strong' },
+  ))
+    await rendered.user.click(summary);
   expect(await screen.findByText(deletionSnapshots.v1.discord_id)).toBeVisible();
-  await waitFor(() => expect(screen.queryByText(deletionSnapshots.v2.discord_id)).not.toBeInTheDocument());
+  await waitFor(() =>
+    expect(screen.queryByText(deletionSnapshots.v2.discord_id)).not.toBeInTheDocument(),
+  );
 });

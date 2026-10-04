@@ -286,16 +286,18 @@ for (const [timezoneId, expectedTime] of [
         body: catalogPage([model], 'closed', endAt - 120),
       });
       await page.goto(`${USER_ORIGIN}/charity`);
-      const deadline = page.locator(`time[datetime="2026-09-07T12:30:00.000Z"]`);
+      await page.locator('.charity-model-name').click();
+      const detail = page.locator('.charity-model-detail');
+      const deadline = detail.locator(`time[datetime="2026-09-07T12:30:00.000Z"]`);
       await expect(deadline).toHaveText(`Ends 09/07/2026, ${expectedTime} (your local time)`);
       await expect(page.getByText('Upcoming offer', { exact: true })).toBeVisible();
-      await expect(page.locator('.charity-original')).toHaveCount(0);
+      await expect(detail.locator('.charity-original')).toHaveCount(0);
       await page.clock.fastForward(60_000);
-      await expect(page.locator('.charity-original')).toHaveCount(1);
+      await expect(detail.locator('.charity-original')).toHaveCount(1);
       await expect(deadline).toBeVisible();
       await page.clock.fastForward(60_000);
-      await expect(page.locator('.charity-original')).toHaveCount(0);
-      await expect(page.locator('.charity-discount')).toHaveCount(0);
+      await expect(detail.locator('.charity-original')).toHaveCount(0);
+      await expect(detail.locator('.charity-discount')).toHaveCount(0);
       await expect(page.getByLabel('Price: 123,456,789.012', { exact: true })).toBeVisible();
       guard.assertNone();
     });
@@ -315,6 +317,7 @@ test('mainstream resources retain their channel name and protocol in the list', 
         {
           ...endpoint(1),
           key_count: '0',
+          note: '',
           origin: {
             kind: 'mainstream',
             channel_id: 'mch_abcdefghijklmnopqrstuA',
@@ -330,9 +333,10 @@ test('mainstream resources retain their channel name and protocol in the list', 
   await page.goto(`${USER_ORIGIN}/endpoints`);
   const cards = page.locator('.core-endpoint-card');
   await expect(cards).toHaveCount(2);
-  await expect(cards.first().locator('strong')).toHaveText('Mainstream channel: Example Gateway');
+  await expect(cards.first().locator('strong')).toHaveText('Example Gateway');
   await expect(cards.first()).toContainText('OpenAI-compatible');
-  await expect(cards.nth(1).locator('strong')).toHaveText('OpenAI-compatible');
+  await expect(cards.nth(1).locator('strong')).toHaveText(endpoint(2).note);
+  await expect(cards.nth(1)).toContainText('OpenAI-compatible');
   for (const width of [320, 390, 1935]) {
     await page.setViewportSize({ width, height: 1000 });
     await fitsPage(page);
@@ -377,6 +381,11 @@ test('donation guidance renders Markdown without overflowing mobile or desktop p
       body: numberedResponse([], '1', 20),
     });
   await page.goto(`${USER_ORIGIN}/charity?tab=donate`);
+  await page
+    .locator('details')
+    .filter({ has: page.locator('.economy-donation-notice') })
+    .locator(':scope > summary')
+    .click();
   await expect(page.getByRole('heading', { name: 'Donation guide', exact: true })).toBeVisible();
   await expect(page.locator('.economy-donation-notice strong')).toHaveText('Read first');
   for (const width of [320, 390, 1935]) {
@@ -505,27 +514,34 @@ for (const locale of ['en', 'zh'] as const) {
     });
     await page.setViewportSize({ width: 1935, height: 1000 });
     await page.goto(`${USER_ORIGIN}/charity?allowed_for_me=all&currently_available=all`);
-    const cards = page.locator('.economy-catalog-list > li');
+    const cards = page.locator(
+      '.economy-catalog-results .nb-table > tbody > tr:not(.nb-table__detail)',
+    );
     await expect(cards).toHaveCount(12);
-    await expect(cards.first().locator('.charity-discount')).toHaveText(
+    await cards.first().locator('.charity-model-name').click();
+    const detail = page.locator('.charity-model-detail').first();
+    await expect(cards).toHaveCount(12);
+    await expect(detail.locator('.charity-discount')).toHaveText(
       locale === 'zh' ? '立减 20%' : '20% off',
     );
-    await expect(cards.first().locator('time')).toHaveCount(0);
+    await expect(detail.locator('time')).toHaveCount(0);
     await screenshot(page, `prices-${locale}-desktop`);
     expect((await cards.first().boundingBox())!.height).toBeLessThan(400);
-    const heading = (await cards.first().locator('.economy-catalog-item__heading').boundingBox())!;
-    const prices = (await cards.first().locator('.charity-price-wrap').boundingBox())!;
-    expect(prices.y - heading.y - heading.height).toBeLessThanOrEqual(20);
-    const firstRow = cards.first().locator('tbody tr');
+    const priceCell = cards.first().locator('td').nth(2);
+    const compactPrices = priceCell.locator('.charity-prices-compact');
+    const cellBounds = (await priceCell.boundingBox())!;
+    const priceBounds = (await compactPrices.boundingBox())!;
+    expect(priceBounds.y - cellBounds.y).toBeLessThanOrEqual(20);
+    const firstRow = detail.locator('tbody tr');
     expect((await firstRow.boundingBox())!.height).toBeLessThan(80);
     for (const width of [320, 390, 768, 1119, 1120, 1121, 1935]) {
       await page.setViewportSize({ width, height: 1000 });
       await fitsPage(page);
-      await expect(cards.first().locator('.charity-original .charity-amount')).toHaveCSS(
+      await expect(detail.locator('.charity-original .charity-amount')).toHaveCSS(
         'text-decoration-line',
         'line-through',
       );
-      await expect(cards.first().locator('.charity-current')).toHaveCSS('font-weight', '750');
+      await expect(detail.locator('.charity-current')).toHaveCSS('font-weight', '750');
       const clipped = await page.locator('.charity-price-table').evaluateAll((tables) =>
         tables.some((table) => {
           const wrapper = table.parentElement!;
@@ -545,6 +561,31 @@ for (const locale of ['en', 'zh'] as const) {
         }),
       );
       expect(clipped).toBe(false);
+      const compactOverflow = await page.locator('.charity-prices-compact').evaluateAll((prices) =>
+        prices.flatMap((price) => {
+          const bounds = price.getBoundingClientRect();
+          return [...price.querySelectorAll('.charity-amount')]
+            .filter((amount) => {
+              const rect = amount.getBoundingClientRect();
+              return (
+                rect.left < bounds.left - 1 ||
+                rect.right > bounds.right + 1 ||
+                amount.scrollWidth > amount.clientWidth + 1
+              );
+            })
+            .map((amount) => ({
+              price: amount.textContent,
+              left: amount.getBoundingClientRect().left,
+              right: amount.getBoundingClientRect().right,
+              containerLeft: bounds.left,
+              containerRight: bounds.right,
+              clientWidth: amount.clientWidth,
+              scrollWidth: amount.scrollWidth,
+            }));
+        }),
+      );
+      if (compactOverflow.length) await screenshot(page, `prices-${locale}-overflow-${width}`);
+      expect(compactOverflow, `compact prices at ${width}px`).toEqual([]);
       if (width === 390) await screenshot(page, `prices-${locale}-mobile`);
     }
     const search = page.getByRole('searchbox', {
@@ -566,6 +607,7 @@ for (const locale of ['en', 'zh'] as const) {
       .getByRole('button', { name: locale === 'zh' ? '搜索' : 'Search', exact: true })
       .click();
     await expect(cards).toHaveCount(12);
+    await page.locator('.economy-catalog-filters summary').click();
     await page
       .getByRole('combobox', {
         name: locale === 'zh' ? '本人访问权限' : 'Your access',
@@ -573,7 +615,8 @@ for (const locale of ['en', 'zh'] as const) {
       })
       .selectOption('true');
     await expect(cards).toHaveCount(6);
-    await expect(cards.first().locator('tbody tr')).toHaveCount(4);
+    await cards.first().locator('.charity-model-name').click();
+    await expect(page.locator('.charity-model-detail tbody tr')).toHaveCount(4);
     guard.assertNone();
   });
 }
@@ -673,12 +716,15 @@ test('many personal endpoints, keys and models preserve cross-page selections wi
         json: { bindings: savedBindings, binding_revision: '1' },
       });
     } else if (url.pathname.endsWith('/binding-candidates')) {
-      const keyId = url.searchParams.get('key_id')!;
-      const endpointId = String(Math.floor(Number(keyId) / 1000));
-      let items =
-        url.searchParams.get('source') === 'manual'
-          ? []
-          : Array.from({ length: 61 }, (_, i) => candidate(endpointId, keyId, i + 1));
+      expect(url.searchParams.has('key_id')).toBe(false);
+      const endpointId = url.searchParams.get('endpoint_id');
+      let items = ['50', '61']
+        .filter((id) => !endpointId || endpointId === id)
+        .flatMap((id) =>
+          Array.from({ length: 61 }, (_, i) =>
+            candidate(id, id === '50' ? '50061' : '61001', i + 1),
+          ),
+        );
       const query = url.searchParams.get('q');
       if (query) items = items.filter((item) => item.upstream_model_id.includes(query));
       await route.fulfill({ json: numberedFixturePage(items, url) });
@@ -727,39 +773,37 @@ test('many personal endpoints, keys and models preserve cross-page selections wi
   });
   await page.setViewportSize({ width: 1935, height: 1000 });
   await page.goto(`${USER_ORIGIN}/models`);
-  await page.getByRole('button', { name: 'Manage connections', exact: true }).click();
-  const level = page.locator('.core-selector > section:visible');
-  await expect(level.locator('.core-choice')).toHaveCount(50);
+  await page.getByRole('button', { name: 'Edit model', exact: true }).click();
+  const results = page.locator('.model-source-results');
+  await expect(results.locator('.model-source-result')).toHaveCount(10);
+  const services = page.locator('.model-service-filter');
+  await services.locator(':scope > summary').click();
+  const serviceSearch = services.getByRole('searchbox', { name: 'Find a service' });
+  const service = services.getByRole('combobox', { name: 'Service', exact: true });
+  await expect(service.locator('option')).toHaveCount(51);
   await screenshot(page, 'personal-endpoints-desktop');
-  expect((await level.locator('.nb-choice-list__items').boundingBox())!.height).toBeLessThanOrEqual(
-    514,
-  );
+  expect((await service.boundingBox())!.height).toBeLessThanOrEqual(514);
   for (const width of [320, 390, 768, 1935]) {
     await page.setViewportSize({ width, height: 1000 });
     await fitsPage(page);
   }
-  await level.getByRole('searchbox', { name: 'Find a service' }).fill('Endpoint 50 —');
-  await expect(level.locator('.core-choice')).toHaveCount(1);
-  await level.getByRole('button', { name: /Endpoint 50 —/ }).click();
-  await level.getByRole('button', { name: 'Next', exact: true }).click();
-  await level.getByRole('button', { name: /^Key 61 / }).click();
-  const automatic = page.locator('.core-selector__sources > section').first();
-  await expect(automatic.locator('.core-choice')).toHaveCount(50);
-  await automatic.getByRole('button', { name: /^model-1-/ }).click();
-  await automatic.getByRole('button', { name: 'Next', exact: true }).click();
-  await automatic.getByRole('button', { name: /^model-61-/ }).click();
-  await page.locator('.core-selector-path button').first().click();
-  await level.getByRole('searchbox', { name: 'Find a service' }).clear();
-  await expect(level.locator('.core-choice')).toHaveCount(50);
-  await level.getByRole('button', { name: 'Next', exact: true }).click();
-  await expect(level.locator('.core-choice')).toHaveCount(11);
-  await level.getByRole('searchbox', { name: 'Find a service' }).fill('Endpoint 61 —');
-  await expect(level.locator('.core-choice')).toHaveCount(1);
-  await level.getByRole('button', { name: /Endpoint 61 —/ }).click();
-  await level.getByRole('searchbox', { name: 'Find a service key' }).fill('Key 1');
-  await expect(level.locator('.core-choice')).toHaveCount(11);
-  await level.getByRole('button', { name: /^Key 1 head/ }).click();
-  await automatic.getByRole('button', { name: /^model-2-/ }).click();
+  await serviceSearch.fill('Endpoint 50 —');
+  await expect(service.locator('option')).toHaveCount(2);
+  await service.selectOption('50');
+  await expect(results.locator('.model-source-result')).toHaveCount(10);
+  await results.getByRole('button', { name: /^model-1-/ }).click();
+  await results.getByRole('button', { name: '7', exact: true }).click();
+  await expect(results.locator('.model-source-result')).toHaveCount(1);
+  await results.getByRole('button', { name: /^model-61-/ }).click();
+  await serviceSearch.clear();
+  await expect(service.locator('option')).toHaveCount(51);
+  await services.getByRole('button', { name: 'Next', exact: true }).click();
+  await expect(service.locator('option')).toHaveCount(13);
+  await serviceSearch.fill('Endpoint 61 —');
+  await expect(service.locator('option')).toHaveCount(3);
+  await service.selectOption('61');
+  await expect(results.getByRole('button', { name: 'Previous', exact: true })).toBeDisabled();
+  await results.getByRole('button', { name: /^model-2-/ }).click();
   await expect(page.locator('.core-selection-list > li')).toHaveCount(3);
   await page.setViewportSize({ width: 390, height: 1000 });
   await screenshot(page, 'personal-models-mobile');
@@ -770,7 +814,7 @@ test('many personal endpoints, keys and models preserve cross-page selections wi
     .getByRole('button', { name: 'Remove', exact: true })
     .click();
   await expect(page.locator('.core-selection-list > li')).toHaveCount(2);
-  await page.getByRole('button', { name: 'Add 2 selected connection(s)', exact: true }).click();
+  await page.getByRole('button', { name: 'Add 2 selected sources', exact: true }).click();
   await expect
     .poll(() => submitted)
     .toEqual({
@@ -1048,24 +1092,33 @@ for (const role of ['admin', 'steward'] as const)
     await page.goto(`${origin}/${role === 'admin' ? 'charity' : 'steward'}`);
     if (role === 'steward') await page.getByRole('tab', { name: 'Charity management' }).click();
     const reviewRow = page
-      .locator('.ops-table tbody tr')
+      .locator('.nb-table tbody tr')
       .filter({ has: page.getByText(donation.description, { exact: true }) });
     await expect(reviewRow).toBeVisible();
-    const descriptionCell = reviewRow.locator('td[data-label="Donation description"]');
-    const identifier = descriptionCell.locator('details');
-    await identifier.getByText('Item ID', { exact: true }).click();
-    await expect(identifier).toHaveAttribute('open', '');
-    await expect(identifier).toHaveText('Item ID9');
+    const reviewOverflows: { width: number; cells: unknown[] }[] = [];
+    const descriptionCell = reviewRow.locator('td[data-cell="title"]');
+    const identifier = descriptionCell.locator('.charity-donation-meta');
+    await expect(identifier).toContainText('Item ID · 9');
+    await expect(identifier).toHaveAttribute('title', /9.*https:\/\/example\.test\/v1/);
     await expect(descriptionCell.getByText(donation.description, { exact: true })).toBeVisible();
-    await expect(descriptionCell).toContainText('https://example.test/v1');
+    await expect(identifier).toHaveAttribute('title', '9 · https://example.test/v1');
+    await expect(descriptionCell).toContainText('Custom endpoint');
     for (const width of [320, 390, 768, 959, 960, 961, 1935]) {
       await page.setViewportSize({ width, height: 1000 });
       await fitsPage(page);
-      expect(
-        await reviewRow.evaluate((row) =>
-          [...row.querySelectorAll('td')].every((cell) => cell.scrollWidth <= cell.clientWidth + 1),
-        ),
-      ).toBe(true);
+      const overflow = await reviewRow.evaluate((row) =>
+        [...row.querySelectorAll('td')]
+          .filter((cell) => cell.scrollWidth > cell.clientWidth + 1)
+          .map((cell) => ({
+            label: cell.dataset.label,
+            cell: cell.dataset.cell,
+            clientWidth: cell.clientWidth,
+            scrollWidth: cell.scrollWidth,
+            text: cell.textContent,
+          })),
+      );
+      if (overflow.length) await screenshot(page, `${role}-review-overflow-${width}`);
+      if (overflow.length) reviewOverflows.push({ width, cells: overflow });
     }
     await page.setViewportSize({ width: 390, height: 1000 });
     await screenshot(page, `${role}-review-mobile`);
@@ -1113,6 +1166,7 @@ for (const role of ['admin', 'steward'] as const)
     expect(Object.keys(submitted!)).toEqual(['expected_binding_revision', 'selections']);
     await expect(page.locator('.ops-picker-selection li')).toHaveCount(0);
     guard.assertNone();
+    expect(reviewOverflows, 'review cells must fit at every tested width').toEqual([]);
   });
 
 test.describe('donation selection expiry in UTC', () => {
@@ -1240,12 +1294,13 @@ test.describe('donation selection expiry in UTC', () => {
     });
     await page.setViewportSize({ width: 1935, height: 1000 });
     await page.goto(`${USER_ORIGIN}/charity?tab=donate`);
+    await page.getByRole('button', { name: 'Choose keys…', exact: true }).click();
     const picker = page.locator('.donation-resource-picker');
     const sources = picker.locator('.donation-resource-picker__section').first();
     const groups = picker.locator('.donation-resource-picker__endpoint-list > li');
     await expect(groups).toHaveCount(20);
     await expect(picker.getByRole('checkbox')).toHaveCount(0);
-    const filter = sources.getByRole('searchbox', { name: 'Search endpoints', exact: true });
+    const filter = sources.getByRole('searchbox', { name: 'Search services', exact: true });
     await filter.fill('Endpoint 20 —');
     await filter.press('Enter');
     await expect(groups).toHaveCount(1);
@@ -1282,13 +1337,16 @@ test.describe('donation selection expiry in UTC', () => {
     }
     await page.setViewportSize({ width: 390, height: 1000 });
     await screenshot(page, 'donation-resources-mobile');
+    await page.getByRole('button', { name: 'Done', exact: true }).click();
     await page
       .getByRole('textbox', { name: 'Donation description', exact: true })
       .fill('A helpful description for the shared resources');
     await page.locator('.economy-authorization input').check();
     await page
-      .getByRole('combobox', { name: 'Accept a public Discord thank-you' })
-      .selectOption('no');
+      .getByRole('radiogroup', { name: 'Accept a public Discord thank-you' })
+      .getByText('No', { exact: true })
+      .click();
+    await expect(page.getByRole('radio', { name: 'No', exact: true })).toBeChecked();
     await page.getByRole('button', { name: 'Submit for review', exact: true }).click();
     await expect
       .poll(() => submitted)
@@ -1386,8 +1444,22 @@ for (const locale of ['en', 'zh'] as const)
       ),
     });
     await page.goto(`${ADMIN_ORIGIN}/alerts`);
-    await expect(page.locator('.ops-table tbody tr')).toHaveCount(1);
-    await assertResponsiveOperationTables(page);
+    await expect(page.locator('.nb-table tbody tr')).toHaveCount(1);
+    for (const width of [320, 390, 768, 959, 960, 961, 1935]) {
+      await page.setViewportSize({ width, height: 1000 });
+      await fitsPage(page);
+      expect(
+        await page
+          .locator('.nb-table')
+          .evaluate(
+            (table) =>
+              table.scrollWidth <= table.clientWidth + 1 &&
+              [...table.querySelectorAll('td')].every(
+                (cell) => cell.scrollWidth <= cell.clientWidth + 1,
+              ),
+          ),
+      ).toBe(true);
+    }
     await mockJson(page, {
       origin: ADMIN_ORIGIN,
       method: 'GET',
@@ -1423,6 +1495,9 @@ for (const locale of ['en', 'zh'] as const)
       ),
     });
     await page.goto(`${ADMIN_ORIGIN}/settings`);
+    await page
+      .getByRole('button', { name: locale === 'zh' ? '法律保全' : 'Legal holds', exact: true })
+      .click();
     await expect(page.locator('td').filter({ hasText: objectRef })).toHaveText(objectRef);
     await assertResponsiveOperationTables(page);
     guard.assertNone();

@@ -2,15 +2,15 @@
 
 NonbiriAPI 是一个自托管的 API 端点管理与 OpenAI-compatible 入站网关。用户可以管理自己持有的上游端点和凭据，拉取上游模型，创建用户自己的平台模型名称，并通过一个 `CallerKey` 调用这些模型。
 
-> **当前版本：** [v1.0.0-rc.4](https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-rc.4)，2026-09-28 UTC 发布的 Linux/amd64 源码预发行版。请从标签源码构建；不提供官方预编译二进制。向用户开放前，请阅读部署、隐私和安全文档。
+> **当前版本：** [v1.0.0-rc.5](https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-rc.5)，2026-10-03 UTC 发布的 Linux/amd64 源码预发行版。请从标签源码构建；不提供官方预编译二进制。向用户开放前，请阅读部署、隐私和安全文档。
 >
-> **rc.4 更新：** 本源码版新增绘本模型能力与尺寸定价、审计和账号保护、饲养大肥鱼编辑器及本地玩法、游戏榜单、实时展示与战斗自定义预设、公益调度和请求适配，以及 schema 11 类型化账号导出。完整范围见[更新日志](CHANGELOG.md)。实例实际提供的功能取决于当前部署的构建；发布源码本身不会升级实例。
+> **rc.5 更新：** 双站导航、表单、列表与手机布局全面整理，新增自用模型来源选择、记录与账户偏好界面、垂钓手记、在线 Gateway 控制和 schema 12 账号导出，并修复捐赠详情、积分审计与流式兼容问题。完整范围见[更新日志](CHANGELOG.md#100-rc5---2026-10-03)。实例实际功能取决于当前部署的构建。
 >
-> **兼容性：** rc.4 的正式升级来源为 rc.3 修复提交 `37e060ab0d0f29d632fe6b8036839b413388812a` 的完整数据库，保留现有数据、凭据、配置和实例法律正文。另有一条单独验证的兼容路径，支持紧邻的已部署源码 `4e06025c6bf23fbb0f34db96673b45ed01c42e97`（tree `6af9d8349d9049197366f29984e2e413090b7814`）；其他中间结构均不受支持。继续采用 Generation 2（`application_id=0x4E425249`、`user_version=2`），生产目标为 Linux/amd64。Alpha/Generation 1 仍须全新切换。详见[部署指南](docs/deployment.md#database-compatibility-and-version-changes)。
+> **兼容性：** rc.5 支持完整的 rc.4 数据库 `8a46c72d911a914eabcb7ef17c537e7ac12d6969`，以及单独验证的紧邻部署来源 `77e7f41646d6c720b6ae4ddc6dbb4dd9e0b31604`；保留账号、凭据、资产、游戏、配置和实例法律正文。继续采用 Generation 2（`application_id=0x4E425249`、`user_version=2`），生产目标为 Linux/amd64。不支持未登记的中间结构，Alpha/Generation 1 仍须全新切换。详见[部署指南](docs/deployment.md#database-compatibility-and-version-changes)。
 >
 > 源码仓库：[github.com/waiting-here/NonbiriAPI](https://github.com/waiting-here/NonbiriAPI)
 
-开发中的更新见[未发布变更](CHANGELOG.md#unreleased)，功能是否可用以实例部署的构建为准。《垂钓手记》与四向兑换默认关闭。
+本版完整更新见[rc.5 更新日志](CHANGELOG.md#100-rc5---2026-10-03)，功能是否可用以实例部署的构建为准。《垂钓手记》与四向兑换默认关闭。
 
 ## 主要功能
 
@@ -132,7 +132,7 @@ set +a
 - [环境变量示例](admin.env.example)
 - [systemd 单元示例](deploy/nonbiriapi.service.example)
 
-rc.4 保持 Generation 2。正式升级来源为完整的 rc.3 修复版 `37e060ab0d0f29d632fe6b8036839b413388812a`；紧邻的已部署源码树 `4e06025c6bf23fbb0f34db96673b45ed01c42e97`（`6af9d8349d9049197366f29984e2e413090b7814`）是另一个单独验证的兼容来源，其他中间结构不受支持。账号、余额、捐赠、模型绑定、游戏、凭据、运营配置与实例法律正文保持，新增活动资产独立建账。降级须恢复相匹配的完整停服快照。新库仍默认维护开启，注册、活动、公益、捐赠入口和游戏关闭。
+rc.5 保持 Generation 2，支持来源以本页兼容性说明及部署指南为准。账号、余额、捐赠、模型绑定、游戏、凭据、运营配置与实例法律正文保持，新增活动资产独立建账。降级须恢复相匹配的完整停服快照。新库仍默认维护开启，注册、活动、公益、捐赠入口和游戏关闭。
 
 普通启动会在监听前检查数据库身份、结构和凭据，并恢复未完成工作。全面历史审计改由 `./nonbiriapi maintenance verify` 单独执行：加载正常私有环境，检查已停服数据库或可信一致副本，不修复、不迁移、不启动后台任务或监听；SQLite 可能生成读锁协调文件。详见[恢复契约](docs/api-contract.md#10-maintenance-recovery-and-retention)。
 
@@ -140,7 +140,7 @@ rc.4 保持 Generation 2。正式升级来源为完整的 rc.3 修复版 `37e060
 
 ## GitHub 自动化
 
-仓库包含只读 CI 流程。GitHub Actions 在 Pull Request 和手动触发时运行 Go 与前端门禁，不会部署应用。受保护的 `master` 正常合并后，手动对 `master` 运行同一工作流，并核对最终合并提交。发布产物自动化会等支持平台和签名策略确定后再单独添加。
+仓库包含只读 CI 流程。GitHub Actions 在 Pull Request 和手动触发时运行 Go 与前端门禁，不会部署应用。最终候选须有完整门禁证据；正常合入受保护的 `master` 后，核对最终提交及其 tree，相关输入相同时复用有效证据，有变化时重验对应层。CodeQL 保持独立触发。发布产物自动化会等支持平台和签名策略确定后再单独添加。
 
 ## API
 

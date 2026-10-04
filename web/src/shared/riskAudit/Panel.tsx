@@ -11,6 +11,7 @@ import { createTimeDraft, timeDraftValue } from '@shared/time';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { sourceFlagLabel, sourceQualityLabel } from '@shared/observability/sourceLabels';
 import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import { Tabs, Fold, Note } from '@shared/components/ui';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { PagePagination } from '@shared/operations/PagePagination';
@@ -1677,116 +1678,133 @@ function RiskBody({ role, scopeKey }: { role: RiskRole; scopeKey: string }) {
     <div className="page ops-page audit-page">
       <PageHeader title={c.title} description={c.description} />
       <Card>
-        <p>{c.caveat}</p>
-        <div className="ops-tabs audit-tabs" role="group" aria-label={c.title}>
-          {(['users', 'ips', 'user_ips', 'clients', 'rules', 'config', 'access'] as Tab[]).map(
-            (v) => (
-              <button
-                className={tab === v && !selectedUser ? 'btn btn-primary' : 'btn btn-secondary'}
-                key={v}
-                aria-pressed={tab === v && !selectedUser}
-                onClick={() => {
-                  setParams((previous) => {
-                    const next = new URLSearchParams(previous);
-                    next.set('audit_tab', v);
-                    next.delete('audit_user');
-                    next.delete('audit_user_from');
-                    next.delete('audit_user_to');
-                    next.delete('audit_user_watermark');
-                    next.delete('audit_user_total');
-                    next.set('audit_user_page', '1');
-                    return next;
-                  });
-                }}
-              >
-                {v === 'user_ips' ? t('common.audit.userIPsTab') : c[v]}
-              </button>
-            ),
+        <Note>{t('common.audit.presentation.note')}</Note>
+        <Fold plain title={t('common.audit.presentation.basis')}>
+          <p>{c.caveat}</p>
+          <p>{c.autoBanHelp}</p>
+        </Fold>
+        <Tabs<Tab>
+          label={c.title}
+          value={tab}
+          tabs={(['users', 'ips', 'user_ips', 'clients', 'rules', 'config', 'access'] as Tab[]).map(
+            (value) => ({
+              value,
+              label: value === 'user_ips' ? t('common.audit.userIPsTab') : c[value],
+            }),
           )}
-        </div>
+          onChange={(v) => {
+            setParams((previous) => {
+              const next = new URLSearchParams(previous);
+              next.set('audit_tab', v);
+              next.delete('audit_user');
+              next.delete('audit_user_from');
+              next.delete('audit_user_to');
+              next.delete('audit_user_watermark');
+              next.delete('audit_user_total');
+              next.set('audit_user_page', '1');
+              return next;
+            });
+          }}
+        />
         {tab !== 'rules' && tab !== 'config' ? (
-          <form className="ops-stack" onSubmit={apply}>
-            {range === 'custom' && <TimeContextNotice station={role} />}
-            <div className="ops-field-grid">
-              <label>
-                {c.range}
-                <select
-                  value={range}
-                  onChange={(e) => {
-                    setRange(e.target.value);
-                    setRangeError(false);
-                  }}
-                >
-                  <option value="default">{c.defaultRange}</option>
-                  <option value="1">{c.lastHour}</option>
-                  <option value="24">{c.lastDay}</option>
-                  <option value="168">{c.lastWeek}</option>
-                  <option value="custom">{c.custom}</option>
-                </select>
-              </label>
-              {range === 'custom' && (
-                <>
-                  <label>
-                    {c.from}
-                    <TimeInput
-                      station={role}
-                      showZoneHint={false}
-                      required
-                      draft={draft.from}
-                      onChange={(update) => setDraft((v) => ({ ...v, from: update(v.from) }))}
-                    />
-                  </label>
-                  <label>
-                    {c.to}
-                    <TimeInput
-                      station={role}
-                      showZoneHint={false}
-                      required
-                      draft={draft.to}
-                      onChange={(update) => setDraft((v) => ({ ...v, to: update(v.to) }))}
-                    />
-                  </label>
-                </>
-              )}
-              {tab !== 'access' && (
+          <Fold
+            plain
+            title={t('common.operations.logs.presentation.more')}
+            summary={
+              range === 'default'
+                ? c.defaultRange
+                : range === 'custom'
+                  ? c.custom
+                  : range === '1'
+                    ? c.lastHour
+                    : range === '24'
+                      ? c.lastDay
+                      : c.lastWeek
+            }
+          >
+            <form className="ops-stack" onSubmit={apply}>
+              {range === 'custom' && <TimeContextNotice station={role} />}
+              <div className="ops-field-grid">
                 <label>
-                  {c.kind}
+                  {c.range}
                   <select
-                    value={draft.kind}
-                    onChange={(e) => setDraft((v) => ({ ...v, kind: e.target.value }))}
+                    value={range}
+                    onChange={(e) => {
+                      setRange(e.target.value);
+                      setRangeError(false);
+                    }}
                   >
-                    {(['total', 'self', 'charity', 'unclassified'] as const).map((v) => (
-                      <option key={v} value={v}>
-                        {c[v]}
-                      </option>
-                    ))}
+                    <option value="default">{c.defaultRange}</option>
+                    <option value="1">{c.lastHour}</option>
+                    <option value="24">{c.lastDay}</option>
+                    <option value="168">{c.lastWeek}</option>
+                    <option value="custom">{c.custom}</option>
                   </select>
                 </label>
-              )}
-            </div>
-            <div className="ops-actions">
-              <button
-                className="btn btn-primary"
-                disabled={
-                  range === 'custom' &&
-                  (timeDraftValue(draft.from) == null || timeDraftValue(draft.to) == null)
-                }
-              >
-                {c.apply}
-              </button>
-              <button
-                className="btn btn-secondary"
-                type="button"
-                onClick={() =>
-                  void client.invalidateQueries({ queryKey: ['risk', role, scopeKey] })
-                }
-              >
-                {c.refresh}
-              </button>
-            </div>
-            {rangeError && <p role="alert">{c.invalidRange}</p>}
-            <small className="audit-muted">{c.rangeHelp}</small>
-          </form>
+                {range === 'custom' && (
+                  <>
+                    <label>
+                      {c.from}
+                      <TimeInput
+                        station={role}
+                        showZoneHint={false}
+                        required
+                        draft={draft.from}
+                        onChange={(update) => setDraft((v) => ({ ...v, from: update(v.from) }))}
+                      />
+                    </label>
+                    <label>
+                      {c.to}
+                      <TimeInput
+                        station={role}
+                        showZoneHint={false}
+                        required
+                        draft={draft.to}
+                        onChange={(update) => setDraft((v) => ({ ...v, to: update(v.to) }))}
+                      />
+                    </label>
+                  </>
+                )}
+                {tab !== 'access' && (
+                  <label>
+                    {c.kind}
+                    <select
+                      value={draft.kind}
+                      onChange={(e) => setDraft((v) => ({ ...v, kind: e.target.value }))}
+                    >
+                      {(['total', 'self', 'charity', 'unclassified'] as const).map((v) => (
+                        <option key={v} value={v}>
+                          {c[v]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </div>
+              <div className="ops-actions">
+                <button
+                  className="btn btn-primary"
+                  disabled={
+                    range === 'custom' &&
+                    (timeDraftValue(draft.from) == null || timeDraftValue(draft.to) == null)
+                  }
+                >
+                  {c.apply}
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  type="button"
+                  onClick={() =>
+                    void client.invalidateQueries({ queryKey: ['risk', role, scopeKey] })
+                  }
+                >
+                  {c.refresh}
+                </button>
+              </div>
+              {rangeError && <p role="alert">{c.invalidRange}</p>}
+              <small className="audit-muted">{c.rangeHelp}</small>
+            </form>
+          </Fold>
         ) : null}
       </Card>
       <div>

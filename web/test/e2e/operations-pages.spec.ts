@@ -489,7 +489,11 @@ test('administrator dashboard accepts the runtime activity day contract', async 
   });
 
   await page.goto(`${ADMIN_ORIGIN}/`);
-  await expect(page.getByRole('heading', { name: '产品活动' })).toBeVisible();
+  const activity = page
+    .locator('.nb-fold')
+    .filter({ has: page.locator('summary').filter({ hasText: '产品活动' }) });
+  await activity.locator('summary').click();
+  await expect(activity).toBeVisible();
   await expect(page.getByText('2026-09-04')).toBeVisible();
   await expect(page.getByText('有活动')).toBeVisible();
   await expect(page.getByText('无活动')).toBeVisible();
@@ -516,7 +520,10 @@ test('administrator activities route reads the singleton and unbound Thursday po
     body: {
       revision: '5',
       master_enabled: true,
-      loan_enabled: false, loan_tiers: ['10000', '100000', '1000000'], loan_a: '0.9', loan_b: '1.3',
+      loan_enabled: false,
+      loan_tiers: ['10000', '100000', '1000000'],
+      loan_a: '0.9',
+      loan_b: '1.3',
       welfare: { enabled: true, threshold: '12345678901234567890', cap: '22345678901234567890' },
       thursday: { enabled: true },
     },
@@ -551,9 +558,11 @@ test('administrator activities route reads the singleton and unbound Thursday po
 
   await page.goto(`${ADMIN_ORIGIN}/activities`);
   await expect(page.locator('input[value="12345678901234567890"]')).toBeVisible();
-  await expect(page.getByText('星期四活动池 / 已开放')).toBeVisible();
+  await expect(page.getByRole('row').filter({ hasText: '星期四活动池' })).toContainText('已开放');
   await expect(page.getByText('尚未绑定周期')).toBeVisible();
-  await expect(page.locator('.empty-state')).toHaveCount(1);
+  await expect(
+    page.getByRole('status').filter({ hasText: '没有已配置或可恢复的周期' }),
+  ).toBeVisible();
   await assertRouteClean(page, setup, scenario);
 });
 

@@ -66,7 +66,13 @@ function row(role: Role, index: number, charity = false) {
         : usage,
   };
   if (role === 'admin')
-    return { ...common, user_id: '7', caller_identity: null, attempt_count: '23', usage_total_mismatch: false };
+    return {
+      ...common,
+      user_id: '7',
+      caller_identity: null,
+      attempt_count: '23',
+      usage_total_mismatch: false,
+    };
   if (role === 'steward')
     return {
       ...common,
@@ -213,6 +219,10 @@ for (const scenario of [
     await page.goto(`${origin}${screenPath}?page=3&page_size=10&status=200`);
     await page.getByRole('button', { name: labels.details, exact: true }).click();
     const dialog = page.getByRole('dialog');
+    await dialog
+      .locator('summary')
+      .filter({ hasText: locale === 'zh' ? '服务调用记录' : 'Service call attempts' })
+      .click();
     await expect(dialog.locator('.log-attempt')).toHaveCount(20);
     const embeddingLabel =
       locale === 'zh'
@@ -223,14 +233,26 @@ for (const scenario of [
           ? 'Charity embedding'
           : 'Personal embedding';
     await expect(page.getByText(embeddingLabel, { exact: true }).first()).toBeVisible();
+    if (scenario.width < 640) {
+      await expect(dialog.getByLabel(labels.size)).toBeHidden();
+      await page.setViewportSize({ width: 1280, height: 900 });
+    }
     await dialog.getByLabel(labels.size).selectOption('10');
+    await page.setViewportSize({ width: scenario.width, height: 900 });
     await expect(dialog.locator('.log-attempt')).toHaveCount(10);
-    await dialog.getByLabel(labels.jump).fill('3');
-    await dialog.getByRole('button', { name: labels.go, exact: true }).click();
+    for (let step = 0; step < 2; step++) {
+      await dialog
+        .getByRole('button', { name: locale === 'zh' ? '下一页' : 'Next', exact: true })
+        .click();
+    }
     await expect(dialog.locator('.log-attempt')).toHaveCount(3);
     expect(new URL(page.url()).searchParams.get('page')).toBe('3');
     expect(new URL(page.url()).searchParams.get('attempt_page')).toBe('3');
     await page.reload();
+    await dialog
+      .locator('summary')
+      .filter({ hasText: locale === 'zh' ? '服务调用记录' : 'Service call attempts' })
+      .click();
     await expect(dialog.locator('.log-attempt')).toHaveCount(3);
     await expect(dialog.getByText('upstream-23', { exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
@@ -252,11 +274,23 @@ for (const scenario of [
     expect(restored.get('status')).toBe('200');
     expect(restored.has('attempt_page')).toBe(false);
     if (role !== 'user') {
+      await page.evaluate(() => scrollTo(0, 0));
+      await page.locator('.log-export summary').click();
       for (const format of ['csv', 'json']) {
         const link = page.getByRole('link', {
           name: `${locale === 'zh' ? '导出' : 'Export'} ${format.toUpperCase()}`,
         });
+        await expect(link).toBeVisible();
         await expect(link).toHaveAttribute('href', `${path}/export.${format}?status=200`);
+        await expect(link).toHaveAttribute('download', '');
+        await link.click({ trial: true });
+        const bounds = await link.boundingBox();
+        expect(bounds!.x).toBeGreaterThanOrEqual(0);
+        expect(bounds!.x + bounds!.width).toBeLessThanOrEqual((await page.viewportSize())!.width);
+        expect(bounds!.y + bounds!.height).toBeLessThanOrEqual((await page.viewportSize())!.height);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+          true,
+        );
       }
     }
     await page.getByRole('button', { name: labels.previous, exact: true }).click();
@@ -266,8 +300,11 @@ for (const scenario of [
     total = 5;
     await page.reload();
     await expect(page.getByRole('button', { name: labels.details, exact: true })).toHaveCount(5);
-    await expect(page.getByLabel(labels.jump)).toHaveValue('1');
-    await expect(page.getByLabel(labels.size)).toHaveValue('10');
+    await expect(page.getByLabel(labels.jump)).toHaveCount(0);
+    await expect(page.getByLabel(labels.size)).toHaveCount(0);
+    await expect(page.locator('.page-pagination [role="status"]')).toContainText(
+      locale === 'zh' ? '1' : 'page 1',
+    );
     expect(requests.some((url) => url.searchParams.get('attempt_page') === '3')).toBe(true);
     guard.assertNone();
   });
@@ -292,9 +329,117 @@ test('ordinary charity log detail exposes no attempt list or attempt pagination'
   await page.getByRole('button', { name: 'Details', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByText('Success', { exact: true })).toBeVisible();
+  await expect(dialog.getByText('Success', { exact: true }).first()).toBeVisible();
   await expect(dialog.locator('.log-attempts')).toHaveCount(0);
   await expect(dialog.getByLabel('Items per page')).toHaveCount(0);
   await expect(dialog.getByText('Personal key', { exact: true })).toHaveCount(0);
   guard.assertNone();
 });
+
+for (const role of ['admin', 'steward', 'user'] as const)
+  test(`${role} responsive log presentation preserves results and touch controls`, async ({
+    page,
+  }) => {
+    const { origin, guard } = await prepare(page, role, 'en', 1440);
+    const path =
+      role === 'admin' ? '/admin/api/logs' : role === 'steward' ? '/api/steward/logs' : '/api/logs';
+    const rows = [1, 2, 3].map((index) => ({
+      ...row(role, index, role === 'steward'),
+      ...(role === 'user'
+        ? {}
+        : {
+            origin_user_id: '7',
+            origin_discord_id: '111111111111111111',
+            origin_unknown: false,
+            origin_deleted: index === 3,
+            history_record_id: index === 3 ? '9' : null,
+            charity_model: role === 'steward' ? 'shared-model' : null,
+          }),
+      ...(index === 2
+        ? { caller_result_class: 'failed', caller_status: 503, caller_error_code: 'upstream' }
+        : {}),
+      usage: {
+        ...usage,
+        uncached_input_tokens: '1204',
+        output_tokens: '388',
+        total_tokens: '1592',
+        usage_unknown: index === 3,
+      },
+    }));
+    await page.route(`**${path}**`, async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname === path)
+        return route.fulfill({
+          json: { data: rows, next_cursor: null, pagination: windowFor(3, 1, 20) },
+        });
+      if (url.pathname === `${path}/${requestID(1)}`)
+        return route.fulfill({
+          json: {
+            request: rows[0],
+            attempts: { data: [attempt(role, 1)], next_cursor: null },
+            attempt_pagination: windowFor(1, 1, 20),
+          },
+        });
+      return route.fallback();
+    });
+    for (const theme of ['light', 'dark']) {
+      await page.goto(origin + (role === 'steward' ? '/steward?tab=logs' : '/logs'));
+      await page.evaluate((value) => {
+        localStorage.setItem('nb.theme', value);
+        document.documentElement.dataset.theme = value;
+      }, theme);
+      await expect(page.locator('.log-table tbody tr')).toHaveCount(3);
+      await expect(
+        page.locator('.log-table .nb-badge').filter({ hasText: 'Provider error 503' }),
+      ).toHaveCount(1);
+      for (const width of [1440, 768, 390]) {
+        await page.setViewportSize({ width, height: 900 });
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+          true,
+        );
+        await expect(page.locator('.log-filters summary')).toBeVisible();
+        await expect(page.locator('.log-filters .nb-filter__fields')).toBeHidden();
+        if (width === 390) {
+          expect(
+            await page
+              .locator('.log-table tbody button')
+              .evaluateAll((nodes) =>
+                nodes.every((node) => node.getBoundingClientRect().height >= 40),
+              ),
+          ).toBe(true);
+          expect(
+            await page
+              .locator('.log-table tbody tr')
+              .first()
+              .evaluate((node) => getComputedStyle(node).display),
+          ).toBe('grid');
+        }
+        if (process.env.NONBIRI_VISUAL_DIR)
+          await page.screenshot({
+            path: resolve(process.env.NONBIRI_VISUAL_DIR, `logs-${role}-${theme}-${width}.png`),
+            fullPage: true,
+          });
+      }
+      for (const width of [1440, 390]) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.locator('.log-table tbody button').first().click();
+        const drawer = page.getByRole('dialog');
+        await expect(
+          drawer.locator('summary').filter({ hasText: 'Technical information' }),
+        ).toBeVisible();
+        expect(await drawer.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(
+          true,
+        );
+        if (process.env.NONBIRI_VISUAL_DIR)
+          await page.screenshot({
+            path: resolve(
+              process.env.NONBIRI_VISUAL_DIR,
+              `logs-${role}-drawer-${theme}-${width}.png`,
+            ),
+          });
+        await page.keyboard.press('Escape');
+        await expect(drawer).toHaveCount(0);
+      }
+    }
+    guard.assertNone();
+  });

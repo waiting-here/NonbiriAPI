@@ -32,20 +32,20 @@
     "operation": {
       "pending": "Processing this action…",
       "confirmed": "Completed.",
-      "unknown": "The result could not be confirmed. Check the latest status before trying again.",
-      "conflict": "This item changed. Read its latest state and review your changes.",
+      "unknown": "Could not confirm the result. Select \"Check again\" to check; nothing is automatically resubmitted.",
+      "conflict": "This was changed elsewhere. Load the latest version before saving again.",
       "failed": "This action could not be completed. Review the details and try again.",
       "refreshFailed": "Completed successfully. The latest data could not be read yet; refresh it without repeating the action.",
       "details": "Details",
-      "check": "Check latest status"
+      "check": "Check again"
     },
     "help": {
-      "service": "A service is the source you connect to. Enter its API address, such as https://api.example.com/v1, using the provider's instructions.",
-      "serviceKey": "A service key is issued by your provider and lets this site connect to that service. Use a key you own and are allowed to use.",
-      "callerKey": "A site API key lets your app call this site. It is separate from a service key issued by your provider.",
+      "service": "Use the API address from your provider, such as https://api.example.com/v1.",
+      "serviceKey": "Use an API key supplied by the provider that you have permission to use.",
+      "callerKey": "Enter your site API key in the client to call models on this site.",
       "upstreamModel": "Use the model name supplied by the service. Checking the service can help you find available names.",
-      "callName": "This is the name your app uses when calling your own model through this site. It can differ from the service's model name.",
-      "storeFalse": "Requests ask the provider not to store them with store=false. Whether the provider follows this request depends on its policy.",
+      "callName": "Use this name to call the model through this site; it can differ from the provider model name.",
+      "storeFalse": "Ask the provider not to store chats; whether it honors the request depends on its policy.",
       "harness": "The running tool gives the model a way to carry out its tasks. Choose it together with the model and skills."
     },
     "messages": {
@@ -78,7 +78,11 @@
       "sourceSnapshot": "Source snapshot upper bound",
       "lastSource": "Latest examined source identifier",
       "distinctDiscord": "Distinct Discord identities",
-      "openLogs": "View original requests in this window"
+      "openLogs": "View original requests in this window",
+      "presentation": {
+        "note": "Matches are clues, not proof of misuse. Automatic bans apply to new charity calls.",
+        "basis": "Audit basis"
+      }
     },
     "donationDiscovery": {
       "title": "Donation model discovery",
@@ -106,10 +110,10 @@
         "superseded": "Replaced by a newer check"
       },
       "reasons": {
-        "auth": "Upstream rejected authentication",
-        "rate_limit": "Upstream rate limited the check",
-        "timeout": "Upstream timed out",
-        "protocol": "Upstream response could not be used",
+        "auth": "The provider rejected the key",
+        "rate_limit": "The provider limited request frequency",
+        "timeout": "The provider timed out",
+        "protocol": "The provider response is unavailable",
         "transport": "Network request failed",
         "interrupted": "Check interrupted"
       }
@@ -175,11 +179,13 @@
     },
     "pageControls": {
       "size": "Items per page",
-      "summary": "Page {{page}} of {{pages}} · Total: {{total}}",
       "jump": "Go to page",
-      "go": "Go",
       "invalid": "Enter a whole page number from 1 to 2147483647.",
-      "clamped": "That page is no longer available. Showing page {{page}}."
+      "clamped": "That page is no longer available. Showing page {{page}}.",
+      "totalOnly": "{{total}} items",
+      "pageOf": "Page {{page}} of {{pages}}",
+      "sizeShort": "Per page",
+      "jumpShort": "Page"
     },
     "time": {
       "zone": "Time zone: {{zone}}",
@@ -226,7 +232,7 @@
     "creditsUnit": "credits",
     "authRequiredTitle": "Sign-in required",
     "authRequired": "Your session is not active. Sign in to continue.",
-    "userSignInBody": "Sign in with Discord to manage your own endpoints and models.",
+    "userSignInBody": "Sign in with Discord to manage your services and models.",
     "adminSignInBody": "Use the administrator account configured by the service operator.",
     "forbidden": "This action is not allowed for the current account.",
     "elevationRequired": "Verify your identity again to continue.",
@@ -341,8 +347,6 @@
         "keyFilterNotice": "Showing personal and charity requests with a recorded attempt using physical key #{{id}}, including retries.",
         "viewKeyLogs": "View this key's request logs",
         "keyLogsUnavailable": "The physical key ID is no longer available, so its request logs cannot be linked.",
-        "exportCsv": "Export CSV",
-        "exportJson": "Export JSON",
         "attemptNumber": "Attempt {{number}}",
         "platformRecord": "Platform record",
         "requestUnavailable": "This request log is no longer available, or does not belong to this account. Credit history remains available after request logs expire.",
@@ -352,7 +356,46 @@
         "recordedStatus": "Recorded status",
         "upstreamStatus": "Upstream HTTP status",
         "charityModelFilter": "Called charity model",
-        "charityModelFilterHint": "Search by part of the name; English letter case ignored"
+        "charityModelFilterHint": "Search by part of the name; English letter case ignored",
+        "presentation": {
+          "more": "More filters",
+          "customTime": "Custom…",
+          "technical": "Technical information",
+          "copyForAdmin": "Copy for administrator",
+          "export": "Export",
+          "exportCsv": "Export CSV (spreadsheets)",
+          "exportJson": "Export JSON (programs)",
+          "personal": "Personal",
+          "charity": "Charity",
+          "chat": "Chat",
+          "embeddings": "Embeddings",
+          "models": "Model listing",
+          "usage": "In {{input}} · Out {{output}}",
+          "cacheRead": "Cache read {{tokens}}",
+          "cacheWrite": "Cache write {{tokens}}",
+          "duration": "Duration",
+          "seconds": "{{seconds}} seconds",
+          "storage": "Error text storage",
+          "storageSummary": "Used {{used}} / {{budget}} MiB · {{count}} not saved",
+          "storageFailures": "Read or storage failures: {{count}}. Excludes database pages, indexes and WAL.",
+          "retryHint": "Retry later, or add a second source to the model.",
+          "keyHint": "Check that this service key is valid.",
+          "rateHint": "The provider limited the rate. Try again later.",
+          "creditsHint": "Get credits through check-in or activities.",
+          "result": {
+            "success": "Success",
+            "pending": "In progress",
+            "upstream": "Provider error {{status}}",
+            "keyRejected": "Provider rejected the key",
+            "rateLimited": "Provider rate limited",
+            "timeout": "Request timed out",
+            "credits": "Insufficient credits",
+            "missingModel": "Model not found",
+            "rejected": "Rejected before dispatch",
+            "cancelled": "Cancelled",
+            "failed": "Failed ({{status}})"
+          }
+        }
       },
       "charity": {
         "selectedKeyMissing": "The selected key is no longer in this donation.",
@@ -599,7 +642,13 @@
           "discountPercent": "Discount percent must be an integer from 0 through 100.",
           "discountDates": "Discount dates must be valid and the end must be later than the start."
         },
-        "discountSummary": "Enabled at {{percent}}% of the regular price"
+        "discountSummary": "Enabled at {{percent}}% of the regular price",
+        "batchActions": "Batch actions",
+        "batchDiscovery": "Discover all donations",
+        "batchFailureReset": "Reset failure streaks",
+        "failureStrategy": "Failure strategy",
+        "quotaReserve": "Quota and reserve",
+        "adaptationSettings": "Request adaptation"
       },
       "management": {
         "details": "Technical details",
@@ -608,8 +657,7 @@
         "loanTier": "Loan amount (credits)",
         "feeHelp": "The three fees must total less than 100%; 0 means no fee for that item.",
         "periodActions": "Change period status",
-        "periodActionHelp": "Confirm “{{action}}” for this period. This changes whether users can start or continue participating.",
-        "loanExample": "For example, an amount of 10,000 with A = 0.9 and B = 1.3 gives 9,000 game credits and costs 13,000 general credits to repay."
+        "periodActionHelp": "Confirm “{{action}}” for this period. This changes whether users can start or continue participating."
       }
     },
     "failureReset": {
@@ -689,7 +737,7 @@
       "addRule": "Add a role rule",
       "removeRule": "Remove rule {{number}}",
       "nativeHelp": "The default follows the selected protocol: OpenAI keeps the role, Anthropic adds developer text to system messages, and Gateway rejects developer.",
-      "conversionHelp": "Converting a role changes how the model interprets the message. Keeping the original role requires upstream support; unsupported messages fail.",
+      "conversionHelp": "Changing roles affects how the model reads messages; requests fail if the provider cannot handle them.",
       "toolsHelp": "Tool messages and results use the tool-handling settings.",
       "action": {
         "native": "Use original protocol handling",
@@ -1290,17 +1338,33 @@
     },
     "remove": "Remove",
     "transportRule": {
-      "label": "Transport rule",
+      "label": "Streaming",
       "options": {
-        "passthrough": "Pass through (default)",
-        "force_non_stream": "Simulated streaming (force non-stream)",
-        "force_stream": "Buffered non-streaming (force stream)"
+        "passthrough": "Follow the client (default)",
+        "force_non_stream": "Always wait for the full reply",
+        "force_stream": "Always fetch as a stream"
       },
       "help": {
-        "passthrough": "Follow the caller’s streaming choice.",
-        "force_non_stream": "Streaming callers receive keepalives while waiting, then the complete upstream result.",
-        "force_stream": "Collect the upstream stream before returning JSON to non-streaming callers. Non-streaming requests still face proxy wait limits."
+        "passthrough": "Follow the client’s choice of a stream or full reply.",
+        "force_non_stream": "Wait for the provider’s full reply, then return it at once. Keep the connection active while waiting when the client uses streaming.",
+        "force_stream": "Read the provider reply as a stream. Streaming clients receive it as it arrives; non-streaming clients receive the complete reply after it is collected. Wait limits still apply."
       }
+    },
+    "outcome": {
+      "saved": "Saved.",
+      "savedRefreshFailed": "Saved, but the latest version could not be loaded.",
+      "unknownTitle": "Couldn't confirm the save",
+      "unknownBody": "Could not confirm the result. Select \"Check again\" to check; nothing is automatically resubmitted.",
+      "recheck": "Check again",
+      "conflictTitle": "This was changed elsewhere",
+      "conflictBody": "Your input is kept. Load the latest version, then save again.",
+      "reload": "Load latest",
+      "oneTimeMissedTitle": "The new key wasn't received",
+      "oneTimeMissedBody": "Creating again issues a new key; the previous one may no longer work.",
+      "languageConflictBody": "The current language was loaded. Choose your language again."
+    },
+    "inactivity": {
+      "activityRules": "Which actions count as activity?"
     }
   },
   "logs": {
@@ -1328,7 +1392,6 @@
     "endpointBaseUrl": "Endpoint URL",
     "upstreamModel": "Model used",
     "tokens": "Token usage",
-    "error": "Error",
     "errorCode": "Error code",
     "diag": "Diagnostic",
     "usageUnknown": "Usage unknown",
@@ -1336,7 +1399,6 @@
     "bucketCacheWriteShort": "CW",
     "bucketCacheReadShort": "CR",
     "bucketOutputShort": "Out",
-    "copyDiagnostics": "Copy diagnostics",
     "quickRanges": "Quick time ranges",
     "range1h": "Last hour",
     "range24h": "Last 24 hours",
@@ -1351,7 +1413,6 @@
       "username": "Username",
       "status": "Status",
       "created": "Created",
-      "actions": "Actions",
       "active": "Active",
       "banned": "Banned",
       "filterStatus": "Ban status",
@@ -1374,12 +1435,10 @@
       "endpointLimit": "Endpoint limit",
       "rpmLimit": "RPM limit",
       "concurrencyLimit": "In-flight concurrency limit",
-      "saveLimits": "Save limits",
       "limitHint": "Leave a limit blank to use the default. The default per-user concurrency is 5. Site, endpoint and key limits also apply to requests.",
       "deletePasswordRequired": "Enter the administrator password to continue.",
       "empty": "No users returned",
       "emptyBody": "No users match the current filters.",
-      "manage": "Manage",
       "manageLimitsTitle": "Count limits",
       "level": "Level",
       "levelAutoTag": "auto",
@@ -1394,7 +1453,6 @@
       "levelSectionTitle": "Level",
       "levelManualNone": "None (automatic)",
       "levelControl": "Set level",
-      "levelApply": "Apply level",
       "banSectionTitle": "Ban",
       "banUntilShort": "until {{time}}",
       "banPermanent": "Permanent ban",
@@ -1419,7 +1477,26 @@
       "languageDefault": "Site default",
       "limitInvalid": "Use whole numbers: endpoints 0–10000, RPM 1–4096, concurrency 1–100000. Leave blank to use the default.",
       "readOnly": "Your account and other stewards can be viewed here. Their settings cannot be changed.",
-      "view": "View"
+      "view": "View",
+      "backToList": "Back to list",
+      "selectUser": "Select a user",
+      "selectUserBody": "View account details or change account settings.",
+      "detailTabs": "User details",
+      "tabOverview": "Overview",
+      "tabLimits": "Limits and level",
+      "tabEconomy": "Credit adjustment",
+      "tabPenalties": "Penalties",
+      "exactFilters": "Exact filters",
+      "saveProfile": "Save settings",
+      "profileResult": "Limits and language",
+      "levelResult": "Manual level",
+      "viewLogs": "View logs",
+      "dangerTitle": "Dangerous actions",
+      "banAction": "Ban…",
+      "unbanAction": "Unban…",
+      "banConsequence": "Banning stops this user from using the platform.",
+      "deleteConsequence": "Delete the account and user data. Your administrator password is required again.",
+      "reasonRequired": "Required. Explain the adjustment; the user can see this reason."
     },
     "announcements": {
       "nav": "Announcements",

@@ -14,17 +14,28 @@ import { RoleLogPanel } from '@shared/components/log';
 import { IndependentDiagnostics } from '@shared/observability/IndependentDiagnostics';
 import { RiskAuditPanel } from '@shared/riskAudit/Panel';
 import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import { Tabs, Panel } from '@shared/components/ui';
 import { MaintenancePanel } from '@shared/operations/MaintenancePanel';
 import { TimeContextProvider } from '@shared/components/TimeContext';
 import { operationsKeys, useUserAuthority } from '../features/operations/data';
 import '@shared/operations/operations.css';
+
+const sectionKeys = {
+  risk: 'common.audit.risk',
+  logs: 'user.steward.logsTab',
+  charity: 'user.steward.charityTab',
+  users: 'user.steward.usersTab',
+  blacklist: 'user.steward.blacklistTab',
+  announcements: 'user.steward.announcementsTab',
+  maintenance: 'user.steward.maintenanceTab',
+} as const;
 
 export function StewardPage() {
   return <StewardPageContent />;
 }
 
 function StewardPageContent() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const client = useQueryClient();
   const authority = useUserAuthority();
   const refetchAuthority = authority.refetch;
@@ -44,7 +55,9 @@ function StewardPageContent() {
       : 'logs';
   const announcement = searchParams.get('announcement') ?? '';
   const setSection = useCallback(
-    (value: 'logs' | 'charity' | 'maintenance' | 'users' | 'blacklist' | 'announcements' | 'risk') => {
+    (
+      value: 'logs' | 'charity' | 'maintenance' | 'users' | 'blacklist' | 'announcements' | 'risk',
+    ) => {
       setSearchParams({ tab: value }, { replace: true });
     },
     [setSearchParams],
@@ -91,62 +104,32 @@ function StewardPageContent() {
   return (
     <TimeContextProvider station="steward">
       <div className="page ops-page">
-        <PageHeader
-          title={t('user.steward.title')}
-          description={t('user.steward.operationsDescription')}
-        />
-        {!trainee ? (
-          <div className="ops-tabs" role="tablist" aria-label={t('user.steward.sectionsLabel')}>
-            <button
-              className={section === 'risk' ? 'btn btn-primary' : 'btn btn-secondary'}
-              type="button"
-              role="tab"
-              aria-selected={section === 'risk'}
-              onClick={() => setSection('risk')}
-            >
-              {t('common.audit.risk')}
-            </button>
-            <button
-              className={section === 'logs' ? 'btn btn-primary' : 'btn btn-secondary'}
-              type="button"
-              role="tab"
-              aria-selected={section === 'logs'}
-              onClick={() => setSection('logs')}
-            >
-              {t('user.steward.logsTab')}
-            </button>
-            <button
-              className={section === 'charity' ? 'btn btn-primary' : 'btn btn-secondary'}
-              type="button"
-              role="tab"
-              aria-selected={section === 'charity'}
-              onClick={() => setSection('charity')}
-            >
-              {t('user.steward.charityTab')}
-            </button>
-            {(['users', 'blacklist', 'announcements'] as const).map((tab) => (
-              <button
-                key={tab}
-                className={section === tab ? 'btn btn-primary' : 'btn btn-secondary'}
-                type="button"
-                role="tab"
-                aria-selected={section === tab}
-                onClick={() => setSection(tab)}
-              >
-                {tab === 'users' ? t('user.steward.usersTab') : tab === 'blacklist' ? (i18n.language.startsWith('zh') ? '黑名单' : 'Blacklist') : t('user.steward.announcementsTab')}
-              </button>
-            ))}
-            <button
-              className={section === 'maintenance' ? 'btn btn-danger' : 'btn btn-secondary'}
-              type="button"
-              role="tab"
-              aria-selected={section === 'maintenance'}
-              onClick={() => setSection('maintenance')}
-            >
-              {t('user.steward.maintenanceTab')}
-            </button>
-          </div>
+        {section !== 'users' && section !== 'blacklist' ? (
+          <PageHeader
+            title={t('user.steward.title')}
+            description={t('user.steward.presentation.description')}
+          />
         ) : null}
+        <Tabs
+          label={t('user.steward.sectionsLabel')}
+          value={section}
+          onChange={setSection}
+          tabs={(trainee
+            ? (['charity'] as const)
+            : ([
+                'risk',
+                'logs',
+                'charity',
+                'users',
+                'blacklist',
+                'announcements',
+                'maintenance',
+              ] as const)
+          ).map((value) => ({
+            value,
+            label: t(sectionKeys[value]),
+          }))}
+        />
         {!trainee && section === 'logs' ? (
           <>
             <RoleLogPanel
@@ -222,11 +205,13 @@ function StewardPageContent() {
           )
         ) : null}
         {section === 'maintenance' ? (
-          <MaintenancePanel
-            key={`maintenance:${authority.data.id}`}
-            role="steward"
-            onAuthorityLoss={authorityLoss}
-          />
+          <Panel tone="danger">
+            <MaintenancePanel
+              key={`maintenance:${authority.data.id}`}
+              role="steward"
+              onAuthorityLoss={authorityLoss}
+            />
+          </Panel>
         ) : null}
       </div>
     </TimeContextProvider>

@@ -1,8 +1,9 @@
+import { Panel, PanelHead, PanelBody } from '@shared/components/ui';
 import { GameWallets } from './common/GameWallets';
 import { Link } from 'react-router';
 import { GamePrivacyControl } from './common/GamePrivacyControl';
 import { Leaderboard } from './ranking/Leaderboard';
-import { Card, ErrorState, LoadingState, PageHeader, StatusBadge } from '@shared/components/States';
+import { ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { GameHero, type GameHeroKind } from './assets/GameHero';
 import { useGameCopy, type GameCopyKey } from './copy';
 import { isMaintenance } from './common/request';
@@ -66,7 +67,12 @@ function cardState(
 
 function GameCard({ card }: { card: CenterCard }) {
   const { text } = useGameCopy();
-  const stateLabel = text(`common.${card.state}` as GameCopyKey);
+  const stateLabel =
+    card.state === 'open'
+      ? card.id === 'likes'
+        ? text('presentation.test')
+        : text('common.open')
+      : text('presentation.unavailable');
   const detail =
     card.id === 'fishing' || card.id === 'blackjack'
       ? text('center.from', { amount: card.detail })
@@ -74,39 +80,25 @@ function GameCard({ card }: { card: CenterCard }) {
         ? text('center.specs', { count: card.detail })
         : text('center.modes', { count: card.detail, total: card.total ?? 0 });
   return (
-    <Card className={`game-center-card game-center-card--${card.id}`}>
+    <Link
+      className={`card game-center-card game-center-card--${card.id}${card.state !== 'open' ? ' is-closed' : ''}`}
+      to={card.path}
+    >
       <div className="game-center-card__hero">
         <GameHero kind={card.id} />
+        <span className={`nb-badge nb-badge--${card.state === 'open' ? 'ok' : 'plain'}`}>
+          {stateLabel}
+        </span>
       </div>
       <div className="game-center-card__body">
-        <div className="game-card-heading">
-          <h2>{text(card.title)}</h2>
-          <StatusBadge
-            active={card.state === 'open'}
-            danger={card.state === 'closed' || card.state === 'maintenance'}
-            label={stateLabel}
-          />
-        </div>
+        <h2>{text(card.title)}</h2>
         <p>{text(card.body)}</p>
-        {card.state !== 'maintenance' ? (
-          <strong className="game-card-detail">{detail}</strong>
-        ) : null}
-        {card.state !== 'open' ? (
-          <button className="btn btn-secondary" type="button" disabled>
-            {stateLabel}
-          </button>
-        ) : (
-          <Link className="btn btn-primary" to={card.path}>
-            {text('center.enter')}
-          </Link>
-        )}
-        {card.state !== 'open' && (
-          <Link className="game-card-learn" to={card.path}>
-            {text('center.learn')}
-          </Link>
-        )}
+        <div className="game-card-foot">
+          <span>{card.state !== 'maintenance' ? detail : ''}</span>
+          <span>{text(card.state === 'open' ? 'presentation.enter' : 'presentation.learn')}</span>
+        </div>
       </div>
-    </Card>
+    </Link>
   );
 }
 
@@ -135,20 +127,32 @@ export function GameCenter() {
   return (
     <main className="game-page game-center">
       <PageHeader
-        eyebrow={text('center.eyebrow')}
         title={text('center.title')}
-        description={text('center.description')}
+        description={text('presentation.description')}
+        actions={
+          snapshot.data ? (
+            <div className="game-center-wallet">
+              <GameWallets wallets={snapshot.data} />
+              <Link to="/activities">{text('presentation.activityWallet')}</Link>
+            </div>
+          ) : undefined
+        }
       />
-      {snapshot.data ? <GameWallets wallets={snapshot.data} /> : null}
       <div className="game-center-grid">
         {cards.map((card) => (
           <GameCard key={card.id} card={card} />
         ))}
       </div>
-      <GamePrivacyControl />
-      <div className="game-leaderboards">
-        <Leaderboard board="game_charity" />
-        <Leaderboard board="game_net_profit" />
+      <div id="game-rankings">
+        <Panel className="game-center-rankings">
+          <PanelHead title={text('presentation.rankings')} actions={<GamePrivacyControl />} />
+          <PanelBody>
+            <div className="game-leaderboards">
+              <Leaderboard board="game_charity" foldHelp />
+              <Leaderboard board="game_net_profit" foldHelp />
+            </div>
+          </PanelBody>
+        </Panel>
       </div>
     </main>
   );

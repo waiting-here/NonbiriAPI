@@ -122,7 +122,7 @@ function AnnouncementCard({
   const { t } = useCoreCopy();
   const title = `/announcements/${encodeURIComponent(summary.id)}`;
   return (
-    <li className={`home-announcement-card home-announcement-card--${summary.severity}`}>
+    <li className={`nb-row home-announcement-card home-announcement-card--${summary.severity}`}>
       <div className="home-announcement-card__top">
         <div
           className={`home-announcement-severity home-announcement-severity--${summary.severity}`}
@@ -301,11 +301,11 @@ export function HomeAnnouncements({
 
   return (
     <section
-      className="core-card home-announcements"
+      className="nb-panel home-announcements"
       aria-labelledby="home-announcements-title"
       aria-busy={announcementQuery.isFetching}
     >
-      <div className="core-card__header">
+      <div className="nb-panel__head">
         <h2 id="home-announcements-title">{t('home.announcementsTitle')}</h2>
         <Link to="/announcements">{t('home.announcement.viewAll')}</Link>
       </div>
@@ -320,7 +320,7 @@ export function HomeAnnouncements({
           onRetry={() => void announcementQuery.refetch()}
         />
       ) : (
-        <ul className="home-announcement-list">
+        <ul className="nb-list home-announcement-list">
           {summaries.map((summary, index) => (
             <AnnouncementCard
               key={`${summary.epoch}:${summary.id}:${summary.revision}`}

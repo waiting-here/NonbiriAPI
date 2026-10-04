@@ -2,15 +2,18 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Amount, formatAmount } from '@shared/components/Amount';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
+import './CharityPriceTable.css';
 
 export interface CharityPriceRow {
   label: string;
+  compactLabel?: string;
   userMilli: string;
   discountedUserMilli: string;
   rewardMilli?: string;
 }
 
 export interface CharityPriceTableProps {
+  compact?: boolean;
   mode: 'per_request' | 'per_token';
   rows: CharityPriceRow[];
   serverNow: number;
@@ -61,7 +64,13 @@ function timestampISO(value: number): string | undefined {
  * server clock keeps offer boundaries independent of the device clock.
  * Donor rewards, when a management view supplies them, are never discounted.
  */
-export function CharityPriceTable({ mode, rows, serverNow, discount }: CharityPriceTableProps) {
+export function CharityPriceTable({
+  mode,
+  rows,
+  serverNow,
+  discount,
+  compact = false,
+}: CharityPriceTableProps) {
   const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
   const [now, setNow] = useState(serverNow);
@@ -92,6 +101,33 @@ export function CharityPriceTable({ mode, rows, serverNow, discount }: CharityPr
         </time>
       </span>
     ) : null;
+
+  if (compact)
+    return (
+      <div className="charity-prices-compact">
+        <dl>
+          {rows.map((row) => (
+            <div key={row.label}>
+              <dt>{row.compactLabel ?? row.label}</dt>
+              <dd>
+                <ExactAmount
+                  value={active ? row.discountedUserMilli : row.userMilli}
+                  label={t('user.charity.currentPrice')}
+                />
+                {active && row.discountedUserMilli !== row.userMilli ? (
+                  <s>
+                    <ExactAmount value={row.userMilli} label={t('user.charity.originalPrice')} />
+                  </s>
+                ) : null}
+              </dd>
+            </div>
+          ))}
+        </dl>
+        <span className="nb-sub">
+          {t(mode === 'per_token' ? 'user.charity.tokenUnit' : 'user.charity.requestUnit')}
+        </span>
+      </div>
+    );
 
   return (
     <div className="charity-price-wrap">

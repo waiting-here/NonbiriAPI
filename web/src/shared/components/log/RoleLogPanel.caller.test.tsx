@@ -1,3 +1,4 @@
+import { installNativeDialog } from '../../../../test/unit/nativeDialog';
 import { screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -6,6 +7,8 @@ import {
   type JsonFetchFixture,
 } from '../../../../test/unit/support';
 import { RoleLogPanel } from './RoleLogPanel';
+
+installNativeDialog();
 
 const usage = {
   uncached_input_tokens: '0',
@@ -63,7 +66,8 @@ function installFixtures(
       body: pageBody,
     },
   ];
-  if (detail !== undefined) {
+  {
+    detail ??= { request: row, attempts: { data: [], next_cursor: null } };
     fixtures.push({
       method: 'GET',
       path: `${logPath}/${encodeURIComponent(requestID)}?attempt_page=1&attempt_page_size=20`,
@@ -122,17 +126,22 @@ it.each(['admin', 'steward'] as const)(
         `${root}?charity_model=Model%25_Case&page=1&page_size=20`,
       ),
     );
+    await view.user.click(screen.getByText('Export ▾'));
     expect(
-      screen.getByRole('link', { name: view.i18n.t('common.operations.logs.exportCsv') }),
+      screen.getByRole('link', {
+        name: view.i18n.t('common.operations.logs.presentation.exportCsv'),
+      }),
     ).toHaveAttribute('href', `${root}/export.csv?charity_model=Model%25_Case`);
     expect(
-      screen.getByRole('link', { name: view.i18n.t('common.operations.logs.exportJson') }),
+      screen.getByRole('link', {
+        name: view.i18n.t('common.operations.logs.presentation.exportJson'),
+      }),
     ).toHaveAttribute('href', `${root}/export.json?charity_model=Model%25_Case`);
   },
 );
 
 describe('steward caller identity', () => {
-  it('shows the complete identity in the list and detail and copies the full ID', async () => {
+  it('shows the complete identity in the detail and copies the full ID', async () => {
     const discordID = '1'.repeat(18);
     const row = stewardRow({ discord_nickname: 'Ada Example', discord_id: discordID });
     const fetchMock = installFixtures('steward', row, {
@@ -151,6 +160,7 @@ describe('steward caller identity', () => {
         '/api/steward/logs?page=1&page_size=20',
       ),
     );
+    await view.user.click(await screen.findByRole('button', { name: 'Details' }));
     await waitFor(() => expect(screen.getByText('Ada Example', { exact: true })).toBeVisible());
     expect(screen.getByText(discordID, { exact: true })).toBeVisible();
     const copy = screen.getByRole('button', { name: 'Copy Discord ID' });
@@ -159,7 +169,6 @@ describe('steward caller identity', () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(discordID));
     await waitFor(() => expect(copy).toHaveTextContent('Copied'));
 
-    await view.user.click(screen.getByRole('button', { name: 'Details' }));
     const dialog = await screen.findByRole('dialog');
     await waitFor(() =>
       expect(within(dialog).getByText('Ada Example', { exact: true })).toBeVisible(),
@@ -176,11 +185,12 @@ describe('steward caller identity', () => {
       'steward',
       stewardRow({ discord_nickname: null, discord_id: discordID }),
     );
-    await renderWithProviders(<RoleLogPanel accountId="viewer" role="steward" />, {
+    const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role="steward" />, {
       station: 'user',
       role: 'level5',
     });
     await waitFor(() => expect(partialFetch.mock.calls.length).toBeGreaterThan(0));
+    await view.user.click(await screen.findByRole('button', { name: 'Details' }));
     await waitFor(() =>
       expect(screen.getByText('Profile unavailable', { exact: true })).toBeVisible(),
     );
@@ -190,11 +200,12 @@ describe('steward caller identity', () => {
 
   it('shows detached identities as unavailable without a copy button', async () => {
     const detachedFetch = installFixtures('steward', stewardRow(null));
-    await renderWithProviders(<RoleLogPanel accountId="viewer" role="steward" />, {
+    const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role="steward" />, {
       station: 'user',
       role: 'level5',
     });
     await waitFor(() => expect(detachedFetch.mock.calls.length).toBeGreaterThan(0));
+    await view.user.click(await screen.findByRole('button', { name: 'Details' }));
     await waitFor(() =>
       expect(screen.getByText('Profile unavailable', { exact: true })).toBeVisible(),
     );
@@ -218,6 +229,7 @@ describe('steward caller identity', () => {
       value: vi.fn().mockReturnValue(false),
     });
     await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(0));
+    await view.user.click(await screen.findByRole('button', { name: 'Details' }));
     const copy = await screen.findByRole('button', { name: 'Copy Discord ID' });
     await view.user.click(copy);
     await waitFor(() =>
@@ -233,11 +245,12 @@ describe('steward caller identity', () => {
       'steward',
       stewardRow({ discord_nickname: nickname, discord_id: discordID }),
     );
-    await renderWithProviders(<RoleLogPanel accountId="viewer" role="steward" />, {
+    const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role="steward" />, {
       station: 'user',
       role: 'level5',
     });
     await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(0));
+    await view.user.click(await screen.findByRole('button', { name: 'Details' }));
     await waitFor(() => expect(screen.getByText(nickname, { exact: true })).toBeVisible());
     expect(screen.getByText(discordID, { exact: true })).toBeVisible();
     expect(
@@ -296,12 +309,14 @@ describe('steward caller identity', () => {
     'renders the management caller field and keeps it off the user station',
     async ({ role, station, testRole, row }) => {
       const fetchMock = installFixtures(role, row);
-      await renderWithProviders(<RoleLogPanel accountId="viewer" role={role} />, {
+      const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role={role} />, {
         station,
         role: testRole,
       });
       await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(0));
       await waitFor(() => expect(screen.getByRole('button', { name: 'Details' })).toBeVisible());
+      await view.user.click(screen.getByRole('button', { name: 'Details' }));
+      await screen.findByRole('dialog');
       if (role === 'admin') {
         expect(screen.getByText('Caller identity', { exact: true })).toBeVisible();
       } else {
@@ -321,11 +336,11 @@ for (const role of ['admin', 'steward'] as const) {
       station: role === 'admin' ? 'admin' : 'user',
       role: role === 'admin' ? 'admin' : 'level5',
     });
-    expect(await screen.findByRole('cell', { name: model })).toBeVisible();
+    expect(await screen.findByText(model, { exact: true })).toBeVisible();
     await view.user.click(screen.getByRole('button', { name: 'Details' }));
     const drawer = await screen.findByRole('dialog');
     expect(within(drawer).getByText('Called charity model')).toBeVisible();
-    expect(within(drawer).getByText(model)).toBeVisible();
+    expect(within(drawer).getAllByText(model)[0]).toBeVisible();
     expect(drawer.querySelector('example')).toBeNull();
   });
 }

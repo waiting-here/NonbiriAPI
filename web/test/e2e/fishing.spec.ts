@@ -27,8 +27,20 @@ const RESULT = {
   entry_total: '2.5',
   rules_version: 1,
   payment: { general: '2.5', game: '0' },
-  outcomes: [{ ordinal: 0, species_key: 'koi', tier: 'legend', size_cm: 180, reward: '12', net_reward: '12', rake: { platform: '0', welfare: '0', thursday: '0' } }],
-  payout_total: '12', net_payout_total: '12', rake: { platform: '0', welfare: '0', thursday: '0' },
+  outcomes: [
+    {
+      ordinal: 0,
+      species_key: 'koi',
+      tier: 'legend',
+      size_cm: 180,
+      reward: '12',
+      net_reward: '12',
+      rake: { platform: '0', welfare: '0', thursday: '0' },
+    },
+  ],
+  payout_total: '12',
+  net_payout_total: '12',
+  rake: { platform: '0', welfare: '0', thursday: '0' },
   balance: '14.5',
   game_balance: '0',
   settled_at: 1_787_450_010,
@@ -274,7 +286,7 @@ test('fishing uses desktop space, fits mobile results, and retains the anonymity
     expect(await table.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
   }
   await expect(page.getByRole('link', { name: 'API access', exact: true })).toBeVisible();
-  const anonymity = page.getByRole('checkbox', { name: 'Stay anonymous on leaderboards' });
+  const anonymity = page.getByRole('switch', { name: 'Stay anonymous on leaderboards' });
   await expect(anonymity).toHaveCount(0);
   await page.getByRole('link', { name: 'Manage game anonymity' }).click();
   await expect(page).toHaveURL(`${USER_ORIGIN}/games#game-privacy`);
@@ -337,21 +349,49 @@ const ARTWORK_RESULTS = [
           species_key: art.key,
           tier: spec.tier,
           size_cm: spec.size,
-          reward: '0', net_reward: '0', rake: { platform: '0', welfare: '0', thursday: '0' },
+          reward: '0',
+          net_reward: '0',
+          rake: { platform: '0', welfare: '0', thursday: '0' },
         },
       ],
-      payout_total: '0', net_payout_total: '0', rake: { platform: '0', welfare: '0', thursday: '0' },
+      payout_total: '0',
+      net_payout_total: '0',
+      rake: { platform: '0', welfare: '0', thursday: '0' },
     };
   }),
   ...junkArtwork.map((art) => ({
     ...RESULT,
-    outcomes: [{ ordinal: 0, species_key: art.key, tier: 'junk', size_cm: 0, reward: '0', net_reward: '0', rake: { platform: '0', welfare: '0', thursday: '0' } }],
-    payout_total: '0', net_payout_total: '0', rake: { platform: '0', welfare: '0', thursday: '0' },
+    outcomes: [
+      {
+        ordinal: 0,
+        species_key: art.key,
+        tier: 'junk',
+        size_cm: 0,
+        reward: '0',
+        net_reward: '0',
+        rake: { platform: '0', welfare: '0', thursday: '0' },
+      },
+    ],
+    payout_total: '0',
+    net_payout_total: '0',
+    rake: { platform: '0', welfare: '0', thursday: '0' },
   })),
   ...treasureArtwork.map((art) => ({
     ...RESULT,
-    outcomes: [{ ordinal: 0, species_key: art.key, tier: 'treasure', size_cm: 0, reward: '0', net_reward: '0', rake: { platform: '0', welfare: '0', thursday: '0' } }],
-    payout_total: '0', net_payout_total: '0', rake: { platform: '0', welfare: '0', thursday: '0' },
+    outcomes: [
+      {
+        ordinal: 0,
+        species_key: art.key,
+        tier: 'treasure',
+        size_cm: 0,
+        reward: '0',
+        net_reward: '0',
+        rake: { platform: '0', welfare: '0', thursday: '0' },
+      },
+    ],
+    payout_total: '0',
+    net_payout_total: '0',
+    rake: { platform: '0', welfare: '0', thursday: '0' },
   })),
 ];
 
@@ -368,7 +408,7 @@ test('Fishing pending survives reload, settles from authority, auto-ACKs, and pe
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.goto(`${USER_ORIGIN}/games/fishing`);
 
-  await expect(page.getByRole('heading', { name: 'A quiet cast, a surprise catch' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Pond fishing' })).toBeVisible();
   await page.getByRole('button', { name: 'Start fishing' }).click();
   await expect(page.locator('[data-phase="pending"]')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Your catch is on its way' })).toBeVisible();
@@ -416,9 +456,7 @@ test('Fishing renders every frozen outcome with non-zero local artwork on the re
       has_more_unrevealed: false,
     };
     await page.goto(`${USER_ORIGIN}/games/fishing`);
-    await expect(
-      page.getByRole('heading', { name: 'A quiet cast, a surprise catch' }),
-    ).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Pond fishing' })).toBeVisible();
     const artwork = page.locator('.fishing-result .fishing-art');
     await expect(artwork).toHaveAttribute('data-art-key', result.outcomes[0].species_key);
     const box = await artwork.boundingBox();
@@ -506,7 +544,7 @@ test('Fishing remains keyboard usable in Chinese at 390px, 200% zoom, both theme
   const fixture = fixtureWith();
   await installFishingRoutes(page, fixture);
   await page.goto(`${USER_ORIGIN}/games/fishing`);
-  await expect(page.getByRole('heading', { name: '悠闲抛竿，看看收获' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '池塘垂钓' })).toBeVisible();
   await expect(page.getByRole('button', { name: /高级鱼饵/ })).toBeVisible();
   expect(await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches)).toBe(
     true,

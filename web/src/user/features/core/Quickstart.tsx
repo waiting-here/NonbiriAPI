@@ -1,3 +1,5 @@
+import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
+import { Fold, Note, OptionCards, Segmented } from '@shared/components/ui';
 import { TransportRuleField } from '@shared/components/TransportRuleField';
 import type { TransportRule } from '@shared/transportRule';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
@@ -21,13 +23,7 @@ import {
   validateLogicalName,
   validatePersonalProviderName,
 } from './normalizers';
-import {
-  ConnectorLabel,
-  CoreErrorPanel,
-  CoreLoading,
-  DiscoveryStatus,
-  SafeCopyValue,
-} from './components';
+import { ConnectorLabel, CoreErrorPanel, CoreLoading, SafeCopyValue } from './components';
 import { useCoreCopy } from './copy';
 import { useQuickstartCopy } from './quickstartCopy';
 import {
@@ -40,6 +36,31 @@ import {
 } from './resourceOperation';
 import type { CatalogEntry, ConnectorType, Endpoint, Model } from './types';
 import './quickstart.css';
+
+const pageCopyKeys = {
+  'user.services.addModels': 'user.services.addModels',
+  'user.services.apiKeyLink': 'user.services.apiKeyLink',
+  'user.services.back': 'user.services.back',
+  'user.services.commonService': 'user.services.commonService',
+  'user.services.commonServiceHelp': 'user.services.commonServiceHelp',
+  'user.services.connectorHelp': 'user.services.connectorHelp',
+  'user.services.done': 'user.services.done',
+  'user.services.existingService': 'user.services.existingService',
+  'user.services.existingServiceHelp': 'user.services.existingServiceHelp',
+  'user.services.foundModels': 'user.services.foundModels',
+  'user.services.manualLink': 'user.services.manualLink',
+  'user.services.manualModels': 'user.services.manualModels',
+  'user.services.manualName': 'user.services.manualName',
+  'user.services.modelSearch': 'user.services.modelSearch',
+  'user.services.otherService': 'user.services.otherService',
+  'user.services.otherServiceHelp': 'user.services.otherServiceHelp',
+  'user.services.prefix': 'user.services.prefix',
+  'user.services.quickTitle': 'user.services.quickTitle',
+  'user.services.retryDiscovery': 'user.services.retryDiscovery',
+  'user.services.retryModels': 'user.services.retryModels',
+  'user.services.skip': 'user.services.skip',
+  'user.services.sourceQuestion': 'user.services.sourceQuestion',
+} as const;
 
 interface ModelChoice {
   transportRule?: TransportRule;
@@ -56,7 +77,17 @@ interface ModelChoice {
   error?: unknown;
 }
 
-export function Quickstart({ accountId, onClose }: { accountId: string; onClose: () => void }) {
+export function Quickstart({
+  accountId,
+  onClose,
+  onManual,
+}: {
+  accountId: string;
+  onClose: () => void;
+  onManual?: () => void;
+}) {
+  const { t: ui } = useRegisteredCopy(pageCopyKeys);
+  const [modelQuery, setModelQuery] = useState('');
   const client = useQueryClient(),
     { t: core } = useCoreCopy(),
     { t: text } = useQuickstartCopy();
@@ -132,9 +163,10 @@ export function Quickstart({ accountId, onClose }: { accountId: string; onClose:
     stage === 2 && !stopped,
   );
 
+  const recoveredKey = useRef<Extract<ResourceResult, { kind: 'key' }> | null>(null);
   const clearSecrets = () => {
+    recoveredKey.current = null;
     setSecret('');
-    setOwnership(false);
     setKeyNote('');
     setStore(false);
   };
@@ -182,7 +214,7 @@ export function Quickstart({ accountId, onClose }: { accountId: string; onClose:
       return result;
     },
     reconcile: async (intent, failure, context) => {
-      let confirmed = false;
+      let confirmed: ResourceResult | null = null;
       if (failure && isOutcomeUnknown(failure)) {
         if (!context.operationKey) return;
         const status = await resourceStatus(context.operationKey, context.signal);
@@ -191,7 +223,7 @@ export function Quickstart({ accountId, onClose }: { accountId: string; onClose:
         context.assertCurrent();
         if (result) {
           context.commit(() => applyResult(result));
-          confirmed = true;
+          confirmed = result;
         } else return;
       }
       await invalidateResourceDependents(client, accountId);
@@ -201,7 +233,14 @@ export function Quickstart({ accountId, onClose }: { accountId: string; onClose:
           queryKey: coreKeys.catalogRoot(accountId, intent.endpointId, intent.keyId),
         });
       context.assertCurrent();
-      if (confirmed) return { operationConfirmed: true };
+      if (confirmed) {
+        const result = confirmed;
+        if (result.kind === 'key')
+          context.commit(() => {
+            recoveredKey.current = result;
+          });
+        return { operationConfirmed: true };
+      }
     },
   });
   const locked = operation.isPending || operation.outcome === 'unknown' || connecting || reading;
@@ -218,6 +257,7 @@ export function Quickstart({ accountId, onClose }: { accountId: string; onClose:
   const run = async (intent: ResourceIntent, secretValue?: string) => {
     const controller = flow.current;
     if (controller.signal.aborted) return null;
+    if (intent.kind === 'key') recoveredKey.current = null;
     setError(null);
     saveReceipt(null);
     try {
@@ -227,12 +267,27 @@ export function Quickstart({ accountId, onClose }: { accountId: string; onClose:
       if (
         !controller.signal.aborted &&
         mounted.current &&
+        intent.kind === 'key' &&
+        recoveredKey.current
+      )
+        return recoveredKey.current;
+      if (
+        !controller.signal.aborted &&
+        mounted.current &&
         !isOutcomeUnknown(failure) &&
         !isConflict(failure)
       )
         setError(failure);
       return null;
     }
+  };
+  const checkAndLoad = async (load: boolean) => {
+    const controller = flow.current;
+    recoveredKey.current = null;
+    await operation.check();
+    const saved = recoveredKey.current as Extract<ResourceResult, { kind: 'key' }> | null;
+    if (load && !controller.signal.aborted && saved)
+      await run({ kind: 'refresh', endpointId: saved.endpointId, keyId: saved.keyId });
   };
   const stop = () => {
     flow.current.abort();
@@ -250,7 +305,7 @@ export function Quickstart({ accountId, onClose }: { accountId: string; onClose:
     flow.current = new AbortController();
     setStopped(false);
     setError(null);
-    if (operation.outcome === 'unknown') await operation.check();
+    if (operation.outcome === 'unknown') await checkAndLoad(true);
   };
   const createService = async (event: FormEvent) => {
     event.preventDefault();
@@ -291,7 +346,7 @@ export function Quickstart({ accountId, onClose }: { accountId: string; onClose:
     if (!endpoint || !ownership) return;
     try {
       validateEndpointSecret(secret);
-      await run(
+      const saved = await run(
         {
           kind: 'key',
           endpointId: endpoint.id,
@@ -304,6 +359,8 @@ export function Quickstart({ accountId, onClose }: { accountId: string; onClose:
         },
         secret,
       );
+      if (saved?.kind === 'key')
+        await run({ kind: 'refresh', endpointId: saved.endpointId, keyId: saved.keyId });
     } catch {
       setError(new Error(text('invalid')));
     }
@@ -319,7 +376,7 @@ export function Quickstart({ accountId, onClose }: { accountId: string; onClose:
             {
               id,
               upstream: entry.upstream_model_id,
-              provider: entry.provider || 'my-service',
+              provider: manualProvider,
               name: entry.upstream_model_id,
               selected: true,
               checked: false,
@@ -440,13 +497,15 @@ export function Quickstart({ accountId, onClose }: { accountId: string; onClose:
     setReading(true);
     setError(null);
     try {
-      await operation.check();
+      await checkAndLoad(!stopped);
       if (controller.signal.aborted) return;
       const status = receiptRef.current,
         intent = operation.variables;
       if (!stopped && status?.status === 'not_recorded' && intent) {
         if (intent.kind === 'key' && (!secret || !ownership)) return;
-        await run(intent, intent.kind === 'key' ? secret : undefined);
+        const result = await run(intent, intent.kind === 'key' ? secret : undefined);
+        if (result?.kind === 'key')
+          await run({ kind: 'refresh', endpointId: result.endpointId, keyId: result.keyId });
       }
     } finally {
       if (mounted.current && flow.current === controller) setReading(false);
@@ -455,6 +514,13 @@ export function Quickstart({ accountId, onClose }: { accountId: string; onClose:
   const confirmedRows = rows.filter((row) => row.complete),
     selectedRows = rows.filter((row) => row.selected);
   const finished = selectedRows.length > 0 && selectedRows.every((row) => row.complete);
+  const displayStage =
+    stage === 2 &&
+    catalog.data?.evidence.state === 'failed' &&
+    !catalog.data.automatic_entries.length &&
+    !catalog.data.manual_entries.length
+      ? 1
+      : stage;
   const showRecovery =
     operation.outcome === 'unknown' ||
     receipt?.status === 'not_recorded' ||
@@ -462,32 +528,39 @@ export function Quickstart({ accountId, onClose }: { accountId: string; onClose:
 
   return (
     <section className="core-card quickstart" aria-labelledby="quickstart-title">
-      <div className="core-card__header">
-        <div>
-          <h2 id="quickstart-title">{text('title')}</h2>
-          <p className="core-muted">{text('body')}</p>
-        </div>
-        <button type="button" className="btn btn-secondary" onClick={leave}>
-          {text('leave')}
+      <div className="quickstart-top">
+        <button type="button" className="nb-btn nb-btn--ghost" onClick={locked ? stop : leave}>
+          ← {ui('user.services.back')}
         </button>
+        {!locked && stage === 0 ? (
+          <button type="button" className="nb-btn nb-btn--ghost" onClick={leave}>
+            {ui('user.services.skip')}
+          </button>
+        ) : null}
       </div>
-      <ol className="quickstart-steps">
+      <h1 id="quickstart-title">{ui('user.services.quickTitle')}</h1>
+      <ol className="nb-steps quickstart-steps">
         {(['serviceStage', 'keyStage', 'modelsStage'] as const).map((key, index) => (
-          <li key={key} aria-current={stage === index ? 'step' : undefined}>
+          <li
+            key={key}
+            data-state={
+              displayStage > index || finished
+                ? 'done'
+                : displayStage === index
+                  ? 'current'
+                  : undefined
+            }
+            aria-current={displayStage === index ? 'step' : undefined}
+          >
             {text(key)}
           </li>
         ))}
       </ol>
-      {endpoint ? (
-        <p className="quickstart-fact">
+      {endpoint && stage === 1 ? (
+        <Note tone="ok">
           {text('serviceSaved')}{' '}
           <Link to={`/endpoints/${endpoint.id}`}>{endpoint.note || endpoint.base_url}</Link>
-        </p>
-      ) : null}
-      {keyId && !finished ? (
-        <p className="quickstart-fact">
-          {text('keySaved')} {keyNote}
-        </p>
+        </Note>
       ) : null}
       {stopped ? (
         <div className="quickstart-notice" role="status">
@@ -573,26 +646,35 @@ export function Quickstart({ accountId, onClose }: { accountId: string; onClose:
         <>
           {stage === 0 ? (
             <>
-              <div className="core-row-actions">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  aria-pressed={source === 'new'}
-                  disabled={locked}
-                  onClick={() => setSource('new')}
-                >
-                  {text('newService')}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  aria-pressed={source === 'existing'}
-                  disabled={locked}
-                  onClick={() => setSource('existing')}
-                >
-                  {text('existingService')}
-                </button>
-              </div>
+              <OptionCards
+                legend={ui('user.services.sourceQuestion')}
+                value={source === 'existing' ? 'existing' : channel ? 'common' : 'custom'}
+                options={[
+                  {
+                    value: 'common',
+                    title: ui('user.services.commonService'),
+                    body: ui('user.services.commonServiceHelp'),
+                    disabled: locked || !options.data?.mainstream_channels.length,
+                  },
+                  {
+                    value: 'custom',
+                    title: ui('user.services.otherService'),
+                    body: ui('user.services.otherServiceHelp'),
+                    disabled: locked,
+                  },
+                  {
+                    value: 'existing',
+                    title: ui('user.services.existingService'),
+                    body: ui('user.services.existingServiceHelp'),
+                    disabled: locked,
+                  },
+                ]}
+                onChange={(kind) => {
+                  setSource(kind === 'existing' ? 'existing' : 'new');
+                  if (kind === 'common') setChannel(options.data?.mainstream_channels[0]?.id ?? '');
+                  if (kind === 'custom') setChannel('');
+                }}
+              />
               {source === 'new' ? (
                 options.isPending ? (
                   <CoreLoading compact />
@@ -604,43 +686,24 @@ export function Quickstart({ accountId, onClose }: { accountId: string; onClose:
                   />
                 ) : (
                   <form className="quickstart-form" onSubmit={(e) => void createService(e)}>
-                    <label>
-                      {text('channel')}
-                      <select
-                        aria-label={text('channel')}
-                        disabled={locked}
-                        value={channel}
-                        onChange={(e) => setChannel(e.target.value)}
-                      >
-                        <option value="">{text('custom')}</option>
-                        {options.data?.mainstream_channels.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    {!channel ? (
+                    {channel ? (
+                      <label>
+                        {text('channel')}
+                        <select
+                          aria-label={text('channel')}
+                          disabled={locked}
+                          value={channel}
+                          onChange={(e) => setChannel(e.target.value)}
+                        >
+                          {options.data?.mainstream_channels.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : (
                       <>
-                        <label>
-                          {text('connector')}
-                          <select
-                            aria-label={text('connector')}
-                            disabled={locked}
-                            value={connector}
-                            onChange={(e) => setConnector(e.target.value as ConnectorType)}
-                          >
-                            {options.data?.base_connector_types.map((type) => (
-                              <option key={type} value={type}>
-                                {type === 'openai-compatible'
-                                  ? core('connector.openai')
-                                  : type === 'anthropic-compatible'
-                                    ? core('connector.anthropic')
-                                    : core('connector.gateway')}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
                         <label>
                           {text('address')}
                           <input
@@ -654,8 +717,19 @@ export function Quickstart({ accountId, onClose }: { accountId: string; onClose:
                           />
                           <small>{text('addressHelp')}</small>
                         </label>
+                        <Segmented
+                          label={text('connector')}
+                          value={connector}
+                          disabled={locked}
+                          options={(options.data?.base_connector_types ?? []).map((value) => ({
+                            value,
+                            label: <ConnectorLabel value={value} />,
+                          }))}
+                          onChange={setConnector}
+                        />
+                        <small>{ui('user.services.connectorHelp')}</small>
                       </>
-                    ) : null}
+                    )}
                     <label>
                       {text('serviceNote')}
                       <input
@@ -667,9 +741,21 @@ export function Quickstart({ accountId, onClose }: { accountId: string; onClose:
                       />
                       <small>{text('noteHelp')}</small>
                     </label>
-                    <button type="submit" className="btn btn-primary" disabled={locked}>
-                      {operation.isPending ? core('common.working') : text('createService')}
-                    </button>
+                    <div className="nb-panel__foot nb-actionbar">
+                      {onManual ? (
+                        <button
+                          type="button"
+                          className="nb-btn nb-btn--ghost"
+                          disabled={locked}
+                          onClick={onManual}
+                        >
+                          {ui('user.services.manualLink')}
+                        </button>
+                      ) : null}
+                      <button type="submit" className="nb-btn nb-btn--primary" disabled={locked}>
+                        {operation.isPending ? core('common.working') : text('createService')}
+                      </button>
+                    </div>
                   </form>
                 )
               ) : (
@@ -696,15 +782,15 @@ export function Quickstart({ accountId, onClose }: { accountId: string; onClose:
                     />
                   ) : (
                     <>
-                      <ul className="quickstart-choice-list">
+                      <ul className="quickstart-choice-list nb-list">
                         {endpoints.data.data.map((item) => (
                           <li key={item.id}>
                             <strong>{item.note || item.base_url}</strong>
-                            <span>{item.base_url}</span>
+                            <span className="nb-mono">{item.base_url}</span>
                             <ConnectorLabel value={item.connector_type} />
                             <button
                               type="button"
-                              className="btn btn-secondary"
+                              className="nb-btn nb-btn--secondary"
                               disabled={locked || reading || !item.enabled}
                               onClick={() => void chooseService(item.id)}
                             >
@@ -723,6 +809,16 @@ export function Quickstart({ accountId, onClose }: { accountId: string; onClose:
                       />
                     </>
                   )}
+                  {onManual ? (
+                    <button
+                      type="button"
+                      className="nb-btn nb-btn--ghost"
+                      disabled={locked}
+                      onClick={onManual}
+                    >
+                      {ui('user.services.manualLink')}
+                    </button>
+                  ) : null}
                 </>
               )}
             </>
@@ -786,7 +882,7 @@ export function Quickstart({ accountId, onClose }: { accountId: string; onClose:
                     {text('ownership')}
                   </label>
                   {endpoint.connector_type === 'openai-compatible' ? (
-                    <>
+                    <Fold title={core('models.configurationTitle')}>
                       <label className="core-check">
                         <input
                           type="checkbox"
@@ -797,7 +893,7 @@ export function Quickstart({ accountId, onClose }: { accountId: string; onClose:
                         {core('endpoints.storePolicy')}
                       </label>
                       <p className="core-muted">{text('storeHelp')}</p>
-                    </>
+                    </Fold>
                   ) : null}
                   <button
                     type="submit"
@@ -867,45 +963,43 @@ export function Quickstart({ accountId, onClose }: { accountId: string; onClose:
           {stage === 2 && endpoint && keyId ? (
             <>
               {finished ? (
-                <div className="quickstart-complete" role="status">
-                  <h3>{text('finished')}</h3>
-                  <p>{text('summary')}</p>
-                  {confirmedRows.map((row) => (
-                    <SafeCopyValue
-                      key={row.id}
-                      value={row.model!.full_name}
-                      label={text('callName')}
-                    />
-                  ))}
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => {
-                      setRows([]);
-                      operation.reset();
-                    }}
-                  >
-                    {text('moreModels')}
-                  </button>
-                  <Link className="btn btn-primary" to="/keys">
-                    {text('apiUse')}
-                  </Link>
-                </div>
-              ) : (
-                <>
-                  <div className="core-row-actions">
+                <div className="quickstart-complete">
+                  <Note tone="ok" title={text('finished')}>
+                    {text('summary')}
+                  </Note>
+                  <dl className="nb-facts">
+                    <div>
+                      <dt>{text('address')}</dt>
+                      <dd>
+                        <SafeCopyValue
+                          value={`${window.location.origin}/v1`}
+                          label={text('address')}
+                        />
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>{text('callName')}</dt>
+                      <dd>
+                        {confirmedRows.map((row) => (
+                          <SafeCopyValue
+                            key={row.id}
+                            value={row.model!.full_name}
+                            label={text('callName')}
+                          />
+                        ))}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>{core('keys.metadataTitle')}</dt>
+                      <dd>
+                        <Link to="/keys">{ui('user.services.apiKeyLink')}</Link>
+                      </dd>
+                    </div>
+                  </dl>
+                  <div className="nb-panel__foot">
                     <button
                       type="button"
-                      className="btn btn-secondary"
-                      disabled={locked || catalog.data?.evidence.state === 'checking'}
-                      onClick={() => void run({ kind: 'refresh', endpointId: endpoint.id, keyId })}
-                    >
-                      {text('check')}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      disabled={locked}
+                      className="nb-btn nb-btn--secondary"
                       onClick={() => {
                         setKeyId('');
                         setKeyNote('');
@@ -913,68 +1007,239 @@ export function Quickstart({ accountId, onClose }: { accountId: string; onClose:
                         setRows([]);
                         setStage(1);
                         setSecret('');
+                        operation.reset();
                       }}
                     >
                       {text('another')}
                     </button>
+                    <Link className="nb-btn nb-btn--secondary" to="/models">
+                      {text('viewModels')}
+                    </Link>
+                    <button type="button" className="nb-btn nb-btn--primary" onClick={leave}>
+                      {ui('user.services.done')}
+                    </button>
                   </div>
-                  <p className="core-muted">{text('checkHelp')}</p>
-                  {catalog.data ? <DiscoveryStatus evidence={catalog.data.evidence} /> : null}
-                  {catalog.data?.evidence.state === 'checking' ? (
-                    <p role="status">{text('checking')}</p>
-                  ) : null}
-                  {catalog.data?.evidence.state === 'failed' ? <p>{text('checkFailed')}</p> : null}
-                  {catalog.isPending ? (
-                    <CoreLoading compact />
-                  ) : catalog.error ? (
-                    <CoreErrorPanel
-                      compact
-                      error={catalog.error}
-                      onRetry={() => void catalog.refetch()}
+                </div>
+              ) : (
+                <>
+                  {catalog.data?.evidence.state === 'failed' ? (
+                    <Note
+                      tone="bad"
+                      title={text('checkFailed')}
+                      action={
+                        <button
+                          type="button"
+                          className="nb-btn nb-btn--secondary"
+                          disabled={locked}
+                          onClick={() =>
+                            void run({ kind: 'refresh', endpointId: endpoint.id, keyId })
+                          }
+                        >
+                          {ui('user.services.retryDiscovery')}
+                        </button>
+                      }
                     />
-                  ) : catalog.data ? (
+                  ) : null}
+                  {displayStage === 2 ? (
                     <>
-                      <p>{text('selectHelp')}</p>
-                      <ul className="quickstart-catalog">
-                        {[...catalog.data.automatic_entries, ...catalog.data.manual_entries].map(
-                          (entry) => (
-                            <li key={entry.id}>
-                              <label className="core-check">
-                                <input
-                                  type="checkbox"
-                                  checked={rows.some(
-                                    (row) =>
-                                      row.id === `${keyId}\u0000${entry.upstream_model_id}` &&
-                                      row.selected,
-                                  )}
-                                  disabled={locked}
-                                  onChange={() => selectEntry(entry)}
-                                />
-                                <span>{entry.upstream_model_id}</span>
-                              </label>
-                              <small>
-                                {core(
-                                  entry.source_type === 'manual'
-                                    ? 'models.manual'
-                                    : 'models.automatic',
-                                )}
-                              </small>
-                            </li>
-                          ),
-                        )}
-                      </ul>
-                      {catalog.data.pagination.total_items === '0' ? <p>{text('empty')}</p> : null}
-                      <PagePagination
-                        metadata={catalog.data.pagination}
-                        requestedPage={catalogPager.page}
-                        busy={catalog.isFetching}
-                        onPageChange={catalogPager.setPage}
-                        onPageSizeChange={catalogPager.setPageSize}
-                      />
+                      <div className="nb-between">
+                        <h2>
+                          {ui('user.services.foundModels', {
+                            count: catalog.data?.pagination.total_items ?? '0',
+                          })}
+                        </h2>
+                        <label>
+                          <span className="nb-sr">{ui('user.services.modelSearch')}</span>
+                          <input
+                            type="search"
+                            className="nb-input"
+                            value={modelQuery}
+                            onChange={(event) => setModelQuery(event.target.value)}
+                          />
+                        </label>
+                      </div>
+                      {catalog.data?.evidence.state === 'checking' ? (
+                        <Note tone="info">{text('checking')}</Note>
+                      ) : null}
+                      <label>
+                        {ui('user.services.prefix')}
+                        <input
+                          aria-label={ui('user.services.prefix')}
+                          value={manualProvider}
+                          maxLength={64}
+                          disabled={locked}
+                          onChange={(event) => {
+                            setManualProvider(event.target.value);
+                            setRows((previous) =>
+                              previous.map((row) =>
+                                row.model || row.complete
+                                  ? row
+                                  : {
+                                      ...row,
+                                      provider: event.target.value,
+                                      checked: false,
+                                      existing: undefined,
+                                      decision: '',
+                                    },
+                              ),
+                            );
+                          }}
+                        />
+                        <small>{text('providerHelp')}</small>
+                      </label>
+                      {catalog.isPending ? (
+                        <CoreLoading compact />
+                      ) : catalog.error ? (
+                        <CoreErrorPanel
+                          compact
+                          error={catalog.error}
+                          onRetry={() => void catalog.refetch()}
+                        />
+                      ) : catalog.data ? (
+                        <>
+                          <div className="quickstart-models">
+                            {[
+                              ...catalog.data.automatic_entries,
+                              ...catalog.data.manual_entries,
+                              ...selectedRows
+                                .filter(
+                                  (row) =>
+                                    ![
+                                      ...catalog.data.automatic_entries,
+                                      ...catalog.data.manual_entries,
+                                    ].some((entry) => entry.upstream_model_id === row.upstream),
+                                )
+                                .map((row) => ({
+                                  id: row.id,
+                                  upstream_model_id: row.upstream,
+                                  provider: row.provider,
+                                })),
+                            ]
+                              .filter(
+                                (entry) =>
+                                  !modelQuery ||
+                                  entry.upstream_model_id
+                                    .toLowerCase()
+                                    .includes(modelQuery.toLowerCase()),
+                              )
+                              .map((entry, index) => {
+                                const row = rows.find(
+                                  (item) => item.id === `${keyId}\u0000${entry.upstream_model_id}`,
+                                );
+                                return (
+                                  <section className="quickstart-model" key={entry.id}>
+                                    <label className="core-check">
+                                      <input
+                                        type="checkbox"
+                                        checked={Boolean(row?.selected)}
+                                        disabled={locked || Boolean(row?.complete)}
+                                        onChange={() => selectEntry(entry as CatalogEntry)}
+                                      />
+                                      <span className="nb-mono">{entry.upstream_model_id}</span>
+                                    </label>
+                                    {row?.selected ? (
+                                      <div className="quickstart-model__name">
+                                        <label>
+                                          <span className="nb-sr">{text('callName')}</span>
+                                          <span className="nb-affix">
+                                            <span className="nb-affix__unit">{row.provider}/</span>
+                                            <input
+                                              aria-label={text('callName')}
+                                              className="nb-input"
+                                              ref={(input) => {
+                                                callNames.current[row.id] = input;
+                                              }}
+                                              value={row.name}
+                                              maxLength={64}
+                                              disabled={locked || Boolean(row.model)}
+                                              onChange={(event) =>
+                                                updateRow(row.id, {
+                                                  name: event.target.value,
+                                                  checked: false,
+                                                  existing: undefined,
+                                                  decision: '',
+                                                })
+                                              }
+                                            />
+                                          </span>
+                                        </label>
+                                        {row.complete ? (
+                                          <span className="nb-badge nb-badge--ok" role="status">
+                                            {text('connected')}
+                                          </span>
+                                        ) : row.error ||
+                                          (operation.outcome === 'failed' &&
+                                            'row' in (operation.variables ?? {}) &&
+                                            (operation.variables as { row: string }).row ===
+                                              row.id) ? (
+                                          <span className="field-error" role="alert">
+                                            {text('modelFailed')}
+                                          </span>
+                                        ) : row.model ? (
+                                          <small>{text('modelSaved')}</small>
+                                        ) : null}
+                                        {row.checked && row.existing && !row.complete ? (
+                                          <fieldset className="quickstart-conflict">
+                                            <legend>{text('sameName')}</legend>
+                                            <label>
+                                              <input
+                                                type="radio"
+                                                name={`call-choice-${index}`}
+                                                checked={row.decision === 'append'}
+                                                disabled={locked}
+                                                onChange={() =>
+                                                  updateRow(row.id, { decision: 'append' })
+                                                }
+                                              />
+                                              {text('append')}
+                                            </label>
+                                            <label>
+                                              <input
+                                                type="radio"
+                                                name={`call-choice-${index}`}
+                                                checked={row.decision === 'rename'}
+                                                disabled={locked}
+                                                onChange={() => {
+                                                  updateRow(row.id, { decision: 'rename' });
+                                                  callNames.current[row.id]?.focus();
+                                                }}
+                                              />
+                                              {text('rename')}
+                                            </label>
+                                          </fieldset>
+                                        ) : null}
+                                      </div>
+                                    ) : (
+                                      <span className="nb-sub">
+                                        {manualProvider}/{entry.upstream_model_id}
+                                      </span>
+                                    )}
+                                  </section>
+                                );
+                              })}
+                          </div>
+                          {catalog.data.pagination.total_items === '0' ? (
+                            <p>{text('empty')}</p>
+                          ) : null}
+                          <PagePagination
+                            metadata={catalog.data.pagination}
+                            requestedPage={catalogPager.page}
+                            busy={catalog.isFetching}
+                            onPageChange={catalogPager.setPage}
+                            onPageSizeChange={catalogPager.setPageSize}
+                          />
+                        </>
+                      ) : null}
                     </>
                   ) : null}
-                  <details>
-                    <summary>{text('manual')}</summary>
+                  <Fold
+                    title={ui(
+                      displayStage === 1
+                        ? 'user.services.manualName'
+                        : 'user.services.manualModels',
+                    )}
+                    plain
+                  >
                     <form
                       className="quickstart-form"
                       onSubmit={(event) => {
@@ -995,166 +1260,60 @@ export function Quickstart({ accountId, onClose }: { accountId: string; onClose:
                           maxLength={512}
                           value={manualName}
                           disabled={locked}
-                          onChange={(e) => setManualName(e.target.value)}
+                          onChange={(event) => setManualName(event.target.value)}
                         />
                       </label>
-                      <label>
-                        {text('provider')}
-                        <input
-                          aria-label={text('provider')}
-                          required
-                          maxLength={128}
-                          value={manualProvider}
-                          disabled={locked}
-                          onChange={(e) => setManualProvider(e.target.value)}
-                        />
-                      </label>
-                      <button type="submit" className="btn btn-secondary" disabled={locked}>
+                      <button type="submit" className="nb-btn nb-btn--secondary" disabled={locked}>
                         {text('manual')}
                       </button>
                     </form>
-                  </details>
-                  <h3>{text('selected', { count: selectedRows.length })}</h3>
-                  <div className="quickstart-models">
-                    {selectedRows.map((row, index) => (
-                      <section className="quickstart-model" key={row.id}>
-                        <h4>{row.upstream}</h4>
-                        {row.complete ? (
-                          <p role="status">
-                            {text('connected')}{' '}
-                            <SafeCopyValue
-                              value={row.model?.full_name ?? `${row.provider}/${row.name}`}
-                              label={text('callName')}
-                            />
-                          </p>
-                        ) : (
-                          <>
-                            <label>
-                              {text('provider')}
-                              <input
-                                aria-label={text('provider')}
-                                value={row.provider}
-                                maxLength={64}
-                                disabled={locked || Boolean(row.model)}
-                                onChange={(e) =>
-                                  updateRow(row.id, {
-                                    provider: e.target.value,
-                                    checked: false,
-                                    existing: undefined,
-                                    decision: '',
-                                  })
-                                }
-                              />
-                              <small>{text('providerHelp')}</small>
-                            </label>
-                            <label>
-                              {text('callName')}
-                              <input
-                                aria-label={text('callName')}
-                                ref={(input) => {
-                                  callNames.current[row.id] = input;
-                                }}
-                                value={row.name}
-                                maxLength={64}
-                                disabled={locked || Boolean(row.model)}
-                                onChange={(e) =>
-                                  updateRow(row.id, {
-                                    name: e.target.value,
-                                    checked: false,
-                                    existing: undefined,
-                                    decision: '',
-                                  })
-                                }
-                              />
-                              <small>{text('nameHelp')}</small>
-                            </label>
-                            {!row.existing ? (
-                              <TransportRuleField
-                                value={row.transportRule ?? 'passthrough'}
-                                onChange={(transportRule) => updateRow(row.id, { transportRule })}
-                                disabled={locked || Boolean(row.model)}
-                              />
-                            ) : null}
-                            <code>
-                              {row.provider}/{row.name}
-                            </code>
-                            {row.model ? <p>{text('modelSaved')}</p> : null}
-                            {row.checked && row.existing ? (
-                              <fieldset>
-                                <legend>{text('sameName')}</legend>
-                                <label className="core-check">
-                                  <input
-                                    type="radio"
-                                    name={`call-choice-${index}`}
-                                    checked={row.decision === 'append'}
-                                    disabled={locked}
-                                    onChange={() => updateRow(row.id, { decision: 'append' })}
-                                  />
-                                  {text('append')}
-                                </label>
-                                <label className="core-check">
-                                  <input
-                                    type="radio"
-                                    name={`call-choice-${index}`}
-                                    checked={row.decision === 'rename'}
-                                    disabled={locked}
-                                    onChange={() => {
-                                      updateRow(row.id, { decision: 'rename' });
-                                      callNames.current[row.id]?.focus();
-                                    }}
-                                  />
-                                  {text('rename')}
-                                </label>
-                              </fieldset>
-                            ) : row.checked ? (
-                              <p>{text('ready')}</p>
-                            ) : null}
-                            {row.error ? (
-                              <p className="field-error" role="alert">
-                                {text('modelFailed')}
-                              </p>
-                            ) : null}
-                            <button
-                              type="button"
-                              className="btn btn-secondary"
-                              disabled={locked || Boolean(row.model)}
-                              onClick={() => updateRow(row.id, { selected: false })}
-                            >
-                              {core('common.cancel')}
-                            </button>
-                          </>
-                        )}
-                      </section>
-                    ))}
+                  </Fold>
+                  <Fold title={core('models.configurationTitle')} plain>
+                    <p>{text('checkHelp')}</p>
+                    <button
+                      type="button"
+                      className="nb-btn nb-btn--secondary"
+                      disabled={locked || catalog.data?.evidence.state === 'checking'}
+                      onClick={() => void run({ kind: 'refresh', endpointId: endpoint.id, keyId })}
+                    >
+                      {text('check')}
+                    </button>
+                    {selectedRows
+                      .filter((row) => !row.existing && !row.complete)
+                      .map((row) => (
+                        <fieldset key={row.id}>
+                          <legend>{row.upstream}</legend>
+                          <TransportRuleField
+                            value={row.transportRule ?? 'passthrough'}
+                            onChange={(transportRule) => updateRow(row.id, { transportRule })}
+                            disabled={locked || Boolean(row.model)}
+                          />
+                        </fieldset>
+                      ))}
+                  </Fold>
+                  {confirmedRows.length > 0 ? <Note tone="warn">{text('partial')}</Note> : null}
+                  <div className="nb-panel__foot nb-actionbar" hidden={displayStage !== 2}>
+                    <span>{text('selected', { count: selectedRows.length })}</span>
+                    <button
+                      type="button"
+                      className="nb-btn nb-btn--primary"
+                      disabled={locked || selectedRows.length === 0}
+                      onClick={() => void connect()}
+                    >
+                      {ui(
+                        confirmedRows.length > 0
+                          ? 'user.services.retryModels'
+                          : 'user.services.addModels',
+                        { count: selectedRows.filter((row) => !row.complete).length },
+                      )}
+                    </button>
                   </div>
-                  {confirmedRows.length > 0 && !finished ? (
-                    <p role="status">{text('partial')}</p>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    disabled={locked || selectedRows.length === 0}
-                    onClick={() => void connect()}
-                  >
-                    {text('saveModels')}
-                  </button>
                 </>
               )}
             </>
           ) : null}
-          {!finished ? (
-            <button type="button" className="btn btn-secondary" onClick={stop}>
-              {text('stop')}
-            </button>
-          ) : null}
         </>
       ) : null}
-      <nav className="quickstart-links">
-        <Link to="/charity">{text('community')}</Link>
-        <Link to="/endpoints">{text('viewResources')}</Link>
-        <Link to="/models">{text('viewModels')}</Link>
-        <Link to={endpoint ? `/endpoints/${endpoint.id}` : '/endpoints'}>{text('advanced')}</Link>
-      </nav>
     </section>
   );
 }

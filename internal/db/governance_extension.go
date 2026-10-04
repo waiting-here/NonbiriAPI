@@ -236,7 +236,7 @@ func applyGovernanceExtension(ctx context.Context, tx *sql.Tx) error {
 }
 
 func governanceAdditiveSchema() string {
-	return imageActivitySchema + governanceTablesSchema + riskAuditSchema + economyAuditSchema + governanceGuardsSchema() + charityControlSchema + limitedActivitySchema + inactivitySchema + gameplayGovernanceSchema + imageActivityGuardsSchema() + tokenDimensionsSchema()
+	return imageActivitySchema + governanceTablesSchema + riskAuditSchema + strings.Replace(economyAuditSchema, economyAuditChannelsAfter, economyAuditChannelsBefore, 1) + governanceGuardsSchema() + charityControlSchema + limitedActivitySchema + inactivitySchema + gameplayGovernanceSchema + imageActivityGuardsSchema() + tokenDimensionsSchema()
 }
 
 // The modulo expression operates directly on all 128 bits; SQLite integer

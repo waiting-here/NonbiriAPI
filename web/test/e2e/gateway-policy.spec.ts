@@ -190,25 +190,39 @@ for (const role of ['owner', 'admin', 'steward'] as const) {
             ? '/charity'
             : '/steward?tab=charity'),
     );
-    const donationList = role === 'owner' ? page : page.locator('.ops-table tbody');
+    const donationList = role === 'owner' ? page : page.locator('.nb-table tbody');
     await expect(donationList.getByText('Gateway policy fixture', { exact: true })).toBeVisible();
-    await page
-      .getByRole('button', {
-        name: role === 'owner' ? userEn.user.charity.ownerPages.keys : 'Review',
-        exact: true,
-      })
-      .click();
+    if (role === 'owner') {
+      await page
+        .getByRole('button', {
+          name: userEn.user.charity.presentation.donationActions,
+          exact: true,
+        })
+        .click();
+      await page
+        .getByRole('menuitem', { name: userEn.user.charity.ownerPages.keys, exact: true })
+        .click();
+    } else await page.getByRole('button', { name: 'Review', exact: true }).click();
+    if (role !== 'owner') await page.getByText('Failure strategy', { exact: true }).click();
     const control = page.locator('.failure-policy-control').first();
     await expect(control).toBeVisible();
     await control.getByLabel(copy.label).fill('0');
     await expect(control.locator('.failure-policy-warning')).toBeVisible();
     await control.getByRole('button', { name: copy.save, exact: true }).click();
     await expect.poll(() => writes.length).toBe(1);
+    if (role !== 'owner') {
+      const disclosure = page.getByText('Failure strategy', { exact: true });
+      await expect(
+        control.getByText(copy.saved.replace('{{value}}', '0'), { exact: true }),
+      ).toBeAttached();
+      if (!(await control.isVisible())) await disclosure.click();
+    }
     await expect(
       control.getByText(copy.saved.replace('{{value}}', '0'), { exact: true }),
     ).toBeVisible();
     expect(dialogs).toEqual([]);
     await page.reload();
+    if (role !== 'owner') await page.getByText('Failure strategy', { exact: true }).click();
     await expect(control).toBeVisible();
     await expect(control.getByLabel(copy.label)).toHaveValue('0');
     await expect(control.locator('.failure-policy-warning').first()).toBeVisible();
@@ -289,16 +303,19 @@ test('Gateway attribution defaults off and uses the normal administrator save fl
     return route.fulfill({ json: { revision, changed_keys: [key] } });
   });
   await page.goto(ADMIN_ORIGIN + '/settings');
-  const input = page.getByLabel(label, { exact: true });
-  if (!(await input.isVisible())) await page.getByText('Connectors', { exact: true }).click();
-  await expect(input).toHaveValue('false');
+  const input = page.getByRole('switch', { name: label, exact: true });
+  if (!(await input.isVisible()))
+    await page.getByRole('button', { name: 'API format', exact: true }).click();
+  await expect(input).not.toBeChecked();
   for (const value of ['true', 'false']) {
-    await input.selectOption(value);
+    await input.setChecked(value === 'true');
     await page.getByRole('button', { name: 'Save all changes' }).click();
     await expect.poll(() => enabled).toBe(value === 'true');
     await page.reload();
-    if (!(await input.isVisible())) await page.getByText('Connectors', { exact: true }).click();
-    await expect(input).toHaveValue(value);
+    if (!(await input.isVisible()))
+      await page.getByRole('button', { name: 'API format', exact: true }).click();
+    if (value === 'true') await expect(input).toBeChecked();
+    else await expect(input).not.toBeChecked();
   }
   expect(patches).toHaveLength(2);
 });

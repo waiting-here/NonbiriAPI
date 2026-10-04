@@ -85,14 +85,46 @@ const copy = {
   readOnly: ['This setting is read-only for your role.', '当前角色只能查看此配置。'],
 } as const;
 
-export type RequestAdaptationCopyKey = keyof typeof copy;
+const endpointCopy = {
+  title: ['Request rewriting', '请求改写'],
+  description: [
+    'Add headers and parameters for this service. Saved values remain hidden.',
+    '给这个服务添加请求头和参数。保存后配置值仍会隐藏。',
+  ],
+  forwardHeaders: ['Allowed client headers', '允许客户端传过来的请求头'],
+  fixedHeaders: ['Headers added to requests', '固定添加的请求头'],
+  bodyDefaults: ['Default parameters (when absent)', '请求参数默认值（客户端没填时补上）'],
+  bodyForced: ['Fixed parameters (always override)', '请求参数固定值（总是覆盖）'],
+  nativePaths: ['Extra parameters to keep', '允许保留的额外参数'],
+  listHelp: ['One header name or /parameter path per line.', '每行一个请求头名称或 /参数路径。'],
+  bodyHelp: [
+    'Use /parameter, such as /temperature. Enter JSON values; quote text, such as "auto".',
+    '用 /参数名 表示参数位置，例如 /temperature；值按 JSON 填写，文字要加引号，如 "auto"。',
+  ],
+  fixedHelp: [
+    'These values override client values. Saved values stay hidden.',
+    '这些值会覆盖客户端传来的值。已保存的值仍会隐藏。',
+  ],
+  save: ['Save request rewriting', '保存请求改写'],
+  saved: ['Request rewriting saved.', '请求改写已保存。'],
+  loading: ['Loading request rewriting…', '正在加载请求改写…'],
+  loadError: ['Could not load request rewriting.', '无法加载请求改写。'],
+  example: ['Try this example', '填入示例'],
+} as const;
 
-export function useRequestAdaptationCopy() {
+export type RequestAdaptationCopyKey = keyof typeof copy | 'example';
+
+export function useRequestAdaptationCopy(endpoint = false) {
   const { i18n } = useTranslation();
   const chinese = (i18n.resolvedLanguage ?? i18n.language).toLowerCase().startsWith('zh');
   const copyForLanguage = useCallback(
-    (key: RequestAdaptationCopyKey) => copy[key][chinese ? 1 : 0],
-    [chinese],
+    (key: RequestAdaptationCopyKey) => {
+      const override = endpointCopy[key as keyof typeof endpointCopy];
+      const value =
+        endpoint && override ? override : key === 'example' ? endpointCopy.example : copy[key];
+      return value[chinese ? 1 : 0];
+    },
+    [chinese, endpoint],
   );
   return copyForLanguage;
 }

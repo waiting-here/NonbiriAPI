@@ -18,6 +18,7 @@ import { PolicySummary } from './InactivityStatus';
 import { PolicyAuditHistory } from './PolicyAuditHistory';
 import './inactivity.css';
 import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import { Affix, DataTable, Fold, Toggle, PanelFoot } from '@shared/components/ui';
 import { AmountInput } from './AmountInput';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import '@shared/operations/operations.css';
@@ -36,16 +37,13 @@ function AssetEditor({
   return (
     <fieldset>
       <legend>{name}</legend>
-      <label>
-        <input
-          type="checkbox"
-          checked={rule !== null}
-          onChange={(e) =>
-            onChange(e.target.checked ? { mode: 'percent', value: '100', floor: '0' } : null)
-          }
-        />
-        {zh ? '对此积分启用衰减' : 'Decay this currency'}
-      </label>
+      <Toggle
+        label={zh ? '对此积分启用衰减' : 'Decay this currency'}
+        checked={rule !== null}
+        onChange={(enabled) =>
+          onChange(enabled ? { mode: 'percent', value: '100', floor: '0' } : null)
+        }
+      />
       {rule && (
         <>
           <label>
@@ -68,21 +66,13 @@ function AssetEditor({
             key={rule.mode}
             zh={zh}
             percent={rule.mode === 'percent'}
-            label={
-              rule.mode === 'percent'
-                ? zh
-                  ? '每次扣减（%）'
-                  : 'Decay per period (%)'
-                : zh
-                  ? '每次扣减（积分）'
-                  : 'Decay per period (credits)'
-            }
+            label={zh ? '每次扣减' : 'Decay per period'}
             value={rule.value}
             onChange={(value) => onChange({ ...rule, value })}
           />
           <AmountInput
             zh={zh}
-            label={zh ? '保留余额（积分）' : 'Balance floor (credits)'}
+            label={zh ? '保留余额' : 'Balance floor'}
             value={rule.floor}
             onChange={(floor) => onChange({ ...rule, floor })}
           />
@@ -95,7 +85,9 @@ function Days({
   name,
   value,
   onChange,
+  zh,
 }: {
+  zh: boolean;
   name: string;
   value: number | null;
   onChange: (value: number | null) => void;
@@ -103,7 +95,9 @@ function Days({
   return (
     <label>
       {name}
-      <input
+      <Affix
+        aria-label={name}
+        unit={zh ? '天' : 'days'}
         type="number"
         min={1}
         max={36500}
@@ -226,7 +220,23 @@ function Editor({
   };
   return (
     <div className="inactivity-panel">
-      <p>
+      <PageHeader
+        title={zh ? '低活跃政策' : 'Inactivity policy'}
+        description={
+          zh
+            ? '配置长期未活跃账号的积分衰减和保护性封禁。保存前可预览影响。'
+            : 'Configure credit decay and protective bans for inactive accounts. Preview the impact before saving.'
+        }
+        actions={
+          <Toggle
+            label={zh ? '启用低活跃政策' : 'Enable inactivity policy'}
+            checked={policy.enabled}
+            disabled={pending}
+            onChange={(enabled) => change({ ...policy, enabled })}
+          />
+        }
+      />
+      <p className="inactivity-intro">
         {zh
           ? '政策默认关闭。启用后系统定期执行；首次启用、重新启用或收紧规则至少给予 7 天宽限。'
           : 'Policies are disabled by default. Enabled policies run automatically. First enablement, re-enablement, and tighter rules grant at least seven days of grace.'}
@@ -240,30 +250,18 @@ function Editor({
       >
         <fieldset disabled={pending}>
           <legend>{zh ? '政策配置' : 'Policy configuration'}</legend>
-          <label>
-            <input
-              type="checkbox"
-              checked={policy.enabled}
-              onChange={(e) => change({ ...policy, enabled: e.target.checked })}
-            />
-            {zh ? '启用低活跃政策' : 'Enable inactivity policy'}
-          </label>
           <fieldset className="inactivity-section">
             <legend>{zh ? '积分衰减' : 'Credit decay'}</legend>
-            <label>
-              <input
-                type="checkbox"
-                checked={policy.decay.enabled}
-                onChange={(e) =>
-                  change({ ...policy, decay: { ...policy.decay, enabled: e.target.checked } })
-                }
-              />
-              {zh ? '启用积分衰减' : 'Enable credit decay'}
-            </label>
+            <Toggle
+              label={zh ? '启用积分衰减' : 'Enable credit decay'}
+              checked={policy.decay.enabled}
+              onChange={(enabled) => change({ ...policy, decay: { ...policy.decay, enabled } })}
+            />
             {policy.decay.enabled && (
               <>
                 <div className="ops-field-grid">
                   <Days
+                    zh={zh}
                     name={zh ? '未活跃天数' : 'Inactive days'}
                     value={policy.decay.inactive_days}
                     onChange={(value) =>
@@ -271,7 +269,8 @@ function Editor({
                     }
                   />
                   <Days
-                    name={zh ? '执行周期（天）' : 'Interval (days)'}
+                    zh={zh}
+                    name={zh ? '执行周期' : 'Interval'}
                     value={policy.decay.interval_days}
                     onChange={(value) =>
                       change({ ...policy, decay: { ...policy.decay, interval_days: value } })
@@ -310,21 +309,16 @@ function Editor({
           </fieldset>
           <fieldset>
             <legend>{zh ? '保护性永久封禁' : 'Permanent protective ban'}</legend>
-            <label>
-              <input
-                type="checkbox"
-                checked={policy.protection.enabled}
-                onChange={(e) =>
-                  change({
-                    ...policy,
-                    protection: { ...policy.protection, enabled: e.target.checked },
-                  })
-                }
-              />
-              {zh ? '启用保护性封禁' : 'Enable protective bans'}
-            </label>
+            <Toggle
+              label={zh ? '启用保护性封禁' : 'Enable protective bans'}
+              checked={policy.protection.enabled}
+              onChange={(enabled) =>
+                change({ ...policy, protection: { ...policy.protection, enabled } })
+              }
+            />
             {policy.protection.enabled && (
               <Days
+                zh={zh}
                 name={zh ? '封禁前未活跃天数' : 'Inactive days before ban'}
                 value={policy.protection.inactive_days}
                 onChange={(value) =>
@@ -333,9 +327,9 @@ function Editor({
               />
             )}
           </fieldset>
-          <div className="inactivity-actions">
+          <PanelFoot>
             <button
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               type="button"
               onClick={() =>
                 validate() &&
@@ -346,11 +340,11 @@ function Editor({
             >
               {zh ? '预览匹配账号' : 'Preview accounts'}
             </button>
-            <button className="btn btn-primary" type="submit">
+            <button className="nb-btn nb-btn--primary" type="submit">
               {retry ? (zh ? '重试保存' : 'Retry save') : zh ? '保存政策' : 'Save policy'}
             </button>
             <button
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               type="button"
               onClick={() =>
                 void perform(async () => {
@@ -361,7 +355,7 @@ function Editor({
             >
               {zh ? '重新读取' : 'Reload'}
             </button>
-          </div>
+          </PanelFoot>
         </fieldset>
       </form>
       {error && <p role="alert">{error}</p>}
@@ -375,10 +369,9 @@ function Editor({
           {date(configuration.protection_grace_until)}
         </p>
       </Card>
-      <details>
-        <summary>
-          {zh ? '适用范围、活跃判定与执行规则' : 'Eligibility, activity and execution rules'}
-        </summary>
+      <Fold
+        title={zh ? '适用范围、活跃判定与执行规则' : 'Eligibility, activity and execution rules'}
+      >
         <p>
           {zh
             ? '成功本人登录、成功 API 调用、签到／福利领取及有效游戏或活动操作计入活跃；页面刷新、轮询和被动捐赠回馈不计入。'
@@ -389,7 +382,7 @@ function Editor({
             ? '管理员、5 级和 6 级协管豁免，捐赠者不豁免。只衰减正的可用通用和游戏积分；冻结余额和活动币不受影响。封禁优先于衰减，错过多个周期最多补执行一次。保护封禁保留账号和余额，停止本人登录与 API 调用；既有公益捐赠仍可用并获得回馈。管理员解封后重新开始观察。'
             : 'Administrators and level 5/6 stewards are exempt; donors are not. Decay affects only positive available general and game credits. Frozen funds and activity currencies are excluded. Bans take priority and missed periods produce at most one charge. Protective bans retain the account and balances and block its login and API use; existing donations remain usable and receive rewards. Administrator restoration restarts observation.'}
         </p>
-      </details>
+      </Fold>
       {preview && (
         <section>
           <h2>{zh ? '候选政策预览' : 'Candidate policy preview'}</h2>
@@ -403,33 +396,42 @@ function Editor({
             {date(preview.configuration.decay_grace_until)} /{' '}
             {date(preview.configuration.protection_grace_until)}
           </p>
-          <div className="inactivity-table">
-            <table>
-              <thead>
-                <tr>
-                  <th>{zh ? '账号' : 'Account'}</th>
-                  <th>{zh ? '动作／豁免' : 'Action / exemption'}</th>
-                  <th>{zh ? '预计日期' : 'Projected date'}</th>
-                  <th>{zh ? '通用／游戏积分' : 'General / game credits'}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {preview.data.map((item) => (
-                  <tr key={item.user_id}>
-                    <td>{item.user_id}</td>
-                    <td>{actionLabel(item.exempt_reason || item.action)}</td>
-                    <td>{date(item.scheduled_at)}</td>
-                    <td>
-                      {credits(item.general_milli)} / {credits(item.game_milli)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            caption={zh ? '候选政策预览' : 'Candidate policy preview'}
+            rows={preview.data}
+            rowKey={(item) => item.user_id}
+            columns={[
+              {
+                key: 'account',
+                header: zh ? '账号' : 'Account',
+                cell: 'title',
+                render: (item) => item.user_id,
+              },
+              {
+                key: 'action',
+                header: zh ? '动作／豁免' : 'Action / exemption',
+                cell: 'status',
+                render: (item) => actionLabel(item.exempt_reason || item.action),
+              },
+              {
+                key: 'date',
+                header: zh ? '预计日期' : 'Projected date',
+                cell: 'meta',
+                mobileLabel: zh ? '预计日期' : 'Projected date',
+                render: (item) => date(item.scheduled_at),
+              },
+              {
+                key: 'credits',
+                header: zh ? '通用／游戏积分' : 'General / game credits',
+                cell: 'meta',
+                mobileLabel: zh ? '通用／游戏积分' : 'General / game credits',
+                render: (item) => `${credits(item.general_milli)} / ${credits(item.game_milli)}`,
+              },
+            ]}
+          />
           {preview.next_cursor && (
             <button
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               disabled={pending}
               onClick={() =>
                 void perform(async () => {
@@ -448,61 +450,74 @@ function Editor({
           )}
         </section>
       )}
-      <section>
-        <h2>{zh ? '执行记录' : 'Execution records'}</h2>
-        <button
-          className="btn btn-secondary"
-          disabled={pending}
-          onClick={() =>
+      <details
+        className="nb-fold"
+        onToggle={(event) => {
+          if (event.currentTarget.open && !runs && !pending)
             void perform(async () => {
               setRuns(await getRuns());
-            })
-          }
-        >
-          {zh ? '读取最近记录' : 'Load recent records'}
-        </button>
-        {runs && (
-          <>
-            <div className="inactivity-table">
-              <table>
-                <thead>
-                  <tr>
-                    <th>{zh ? '时间' : 'Time'}</th>
-                    <th>{zh ? '账号' : 'Account'}</th>
-                    <th>{zh ? '动作' : 'Action'}</th>
-                    <th>{zh ? '通用／游戏积分' : 'General / game credits'}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {runs.data.map((item) => (
-                    <tr key={item.id}>
-                      <td>{date(item.created_at)}</td>
-                      <td>{item.user_id ?? (zh ? '已去标识' : 'Deidentified')}</td>
-                      <td>{actionLabel(item.action)}</td>
-                      <td>
-                        {credits(item.general_milli)} / {credits(item.game_milli)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {runs.next_cursor && (
-              <button
-                className="btn btn-secondary"
-                disabled={pending}
-                onClick={() =>
-                  void perform(async () => {
-                    setRuns(await getRuns(runs.next_cursor ?? undefined));
-                  })
-                }
-              >
-                {zh ? '下一页记录' : 'Next records page'}
-              </button>
-            )}
-          </>
-        )}
-      </section>
+            });
+        }}
+      >
+        <summary>
+          <span className="nb-fold__title">
+            <strong>{zh ? '执行记录' : 'Execution records'}</strong>
+          </span>
+        </summary>
+        <div className="nb-fold__body">
+          {runs && (
+            <>
+              <DataTable
+                caption={zh ? '执行记录' : 'Execution records'}
+                rows={runs.data}
+                rowKey={(item) => item.id}
+                columns={[
+                  {
+                    key: 'account',
+                    header: zh ? '账号' : 'Account',
+                    cell: 'title',
+                    render: (item) => item.user_id ?? (zh ? '已去标识' : 'Deidentified'),
+                  },
+                  {
+                    key: 'action',
+                    header: zh ? '动作' : 'Action',
+                    cell: 'status',
+                    render: (item) => actionLabel(item.action),
+                  },
+                  {
+                    key: 'date',
+                    header: zh ? '时间' : 'Time',
+                    cell: 'meta',
+                    mobileLabel: zh ? '时间' : 'Time',
+                    render: (item) => date(item.created_at),
+                  },
+                  {
+                    key: 'credits',
+                    header: zh ? '通用／游戏积分' : 'General / game credits',
+                    cell: 'meta',
+                    mobileLabel: zh ? '通用／游戏积分' : 'General / game credits',
+                    render: (item) =>
+                      `${credits(item.general_milli)} / ${credits(item.game_milli)}`,
+                  },
+                ]}
+              />
+              {runs.next_cursor && (
+                <button
+                  className="nb-btn nb-btn--secondary"
+                  disabled={pending}
+                  onClick={() =>
+                    void perform(async () => {
+                      setRuns(await getRuns(runs.next_cursor ?? undefined));
+                    })
+                  }
+                >
+                  {zh ? '下一页记录' : 'Next records page'}
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      </details>
       <PolicyAuditHistory zh={zh} locale={locale} />
     </div>
   );
@@ -521,14 +536,16 @@ export function InactivityPolicyPage() {
   });
   return (
     <div className="page ops-page inactivity-panel inactivity-editor">
-      <PageHeader
-        title={zh ? '低活跃政策' : 'Inactivity policy'}
-        description={
-          zh
-            ? '配置长期未活跃账号的积分衰减和保护性封禁。保存前可预览影响。'
-            : 'Configure credit decay and protective bans for inactive accounts. Preview the impact before saving.'
-        }
-      />
+      {query.isPending || query.isError ? (
+        <PageHeader
+          title={zh ? '低活跃政策' : 'Inactivity policy'}
+          description={
+            zh
+              ? '配置长期未活跃账号的积分衰减和保护性封禁。保存前可预览影响。'
+              : 'Configure credit decay and protective bans for inactive accounts. Preview the impact before saving.'
+          }
+        />
+      ) : null}
       {saved && <p role="status">{zh ? '政策已保存。' : 'Policy saved.'}</p>}
       {query.isPending ? (
         <LoadingState />

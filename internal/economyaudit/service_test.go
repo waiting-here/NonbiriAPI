@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -19,6 +20,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
@@ -39,6 +41,7 @@ func (a testFinalAuthorizer) AuthorizeAdmin(ctx context.Context, tx *sql.Tx, id 
 }
 
 type auditFixture struct {
+	reopen                        func(*testing.T)
 	database                      *sql.DB
 	service                       *Service
 	admin, user, steward, trainee int64
@@ -49,14 +52,35 @@ type auditFixture struct {
 }
 
 func newAuditFixture(t *testing.T) *auditFixture {
+	return newAuditFixtureFromSource(t, "")
+}
+
+func newAuditFixtureFromSource(t *testing.T, source string) *auditFixture {
 	t.Helper()
-	vault, err := secret.New(make([]byte, secret.MasterKeyBytes))
+	key := make([]byte, secret.MasterKeyBytes)
+	if source != "" {
+		for i := range key {
+			key[i] = 0x42
+		}
+	}
+	vault, err := secret.New(key)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = vault.Close() })
 	path := filepath.Join(t.TempDir(), "audit.db")
-	dbfixture.Materialize(t, path)
+	if source == "" {
+		dbfixture.Materialize(t, path)
+	} else {
+		dbtest.EnsureOwnerOnlyParent(t, path)
+		image, err := os.ReadFile(source)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, image, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	store, err := db.Open(path, vault)
 	if err != nil {
 		t.Fatal(err)
@@ -68,13 +92,20 @@ func newAuditFixture(t *testing.T) *auditFixture {
 	}
 	seed := func(label string, admin, level int) int64 {
 		zero := make([]byte, 16)
-		result, err := f.database.Exec(`INSERT INTO users(discord_id,username,is_admin,level,donation_credit_mag,total_requests,total_uncached_input_tokens,total_cache_write_input_tokens,total_cache_read_input_tokens,total_output_tokens,total_unknown_usage_requests,revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, "audit-"+label, label, admin, level, zero, zero, zero, zero, zero, zero, zero, zero, auditNow-1000000, auditNow-1000000)
-		if err != nil {
-			t.Fatal(err)
-		}
-		id, err := result.LastInsertId()
-		if err != nil {
-			t.Fatal(err)
+		var id int64
+		if source != "" && admin == 1 {
+			if err := f.database.QueryRow("SELECT id FROM users WHERE is_admin=1").Scan(&id); err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			result, err := f.database.Exec(`INSERT INTO users(discord_id,username,is_admin,level,donation_credit_mag,total_requests,total_uncached_input_tokens,total_cache_write_input_tokens,total_cache_read_input_tokens,total_output_tokens,total_unknown_usage_requests,revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, "audit-"+label, label, admin, level, zero, zero, zero, zero, zero, zero, zero, zero, auditNow-1000000, auditNow-1000000)
+			if err != nil {
+				t.Fatal(err)
+			}
+			id, err = result.LastInsertId()
+			if err != nil {
+				t.Fatal(err)
+			}
 		}
 		token, generation := "audit-session-"+label, "g1"
 		if _, err := f.database.Exec(`INSERT INTO sessions(token_hash,user_id,last_seen_at,expires_at,absolute_expires_at,created_at,cred_gen) VALUES(?,?,?,?,?,?,?)`, token, id, auditNow, auditNow+3600, auditNow+7200, auditNow-10, generation); err != nil {
@@ -110,6 +141,18 @@ func newAuditFixture(t *testing.T) *auditFixture {
 			f.external[asset] = external.ID
 		}
 	})
+	f.reopen = func(t *testing.T) {
+		t.Helper()
+		if err := store.Close(); err != nil {
+			t.Fatal(err)
+		}
+		store, err = db.Open(path, vault)
+		if err != nil {
+			t.Fatal(err)
+		}
+		f.database = store.DB()
+		f.service.database = f.database
+	}
 	return f
 }
 

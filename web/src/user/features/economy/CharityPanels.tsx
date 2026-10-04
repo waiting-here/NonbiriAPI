@@ -1,6 +1,9 @@
 import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
+import { Fold, Note, PanelFoot, Segmented } from '@shared/components/ui';
+import { Drawer } from '@shared/components/ui/Drawer';
+import { DonationConnectorLabel } from './DonationConnectorLabel';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { CopyValue } from '@shared/components/CopyValue';
 import { MarkdownText } from '@shared/components/MarkdownText';
@@ -214,19 +217,9 @@ export function CharityCapabilityPanel({ capability }: { capability: CharityCapa
 export function DonationIntakePanel({ state }: { state: DonationIntakeState }) {
   const { t } = useTranslation();
   return (
-    <Card className="economy-capability-card">
-      <div className="card-title-row">
-        <div>
-          <h2>{t('user.charity.intakeTitle')}</h2>
-        </div>
-        <StatusBadge
-          active={state === 'open'}
-          danger={state === 'closed'}
-          label={t(`user.charity.intakeState.${state}`)}
-        />
-      </div>
-      <p>{t(`user.charity.intakeBody.${state}`)}</p>
-    </Card>
+    <Note title={t(`user.charity.intakeState.${state}`)}>
+      {t(`user.charity.intakeBody.${state}`)}
+    </Note>
   );
 }
 
@@ -274,6 +267,7 @@ export function DonationComposer({
   const mutation = useCreateDonation();
   const [description, setDescription] = useState(() => parseDraft(draftNamespace));
   const [publicThanks, setPublicThanks] = useState<'' | 'yes' | 'no'>('');
+  const [pickerOpen, setPickerOpen] = useState(false);
   const controlCopy = charityControlCopy(useTranslation().i18n.language);
   const [selectedChoices, setSelectedChoices] = useState<readonly EndpointKeyChoice[]>([]);
   const [expiryByKey, setExpiryByKey] = useState<Record<string, TimeDraft>>({});
@@ -385,100 +379,166 @@ export function DonationComposer({
   return (
     <Card className="economy-donation-composer">
       <div className="card-title-row">
-        <div>
-          <p className="eyebrow">{t('user.charity.existingResourcesOnly')}</p>
-          <h2>{t('user.charity.submitDonation')}</h2>
-        </div>
+        <h2>{t('user.charity.submitDonation')}</h2>
+        <StatusBadge active label={t('user.charity.intakeState.open')} />
       </div>
-      <section className="economy-donation-notice" aria-labelledby="donation-notice-title">
-        <h3 id="donation-notice-title">{t('user.charity.donationNoticeTitle')}</h3>
-        <MarkdownText>{donationNotice}</MarkdownText>
-      </section>
       <div className="economy-donation-form">
-        <form id={formID} onSubmit={submit} noValidate>
-          <label className="full-width">
-            <span>{controlCopy.thanks}</span>
-            <select
-              aria-label={controlCopy.thanks}
-              value={publicThanks}
-              required
+        <section className="donate-step" aria-labelledby={formID + '-keys'}>
+          <span className="donate-step__number" aria-hidden="true">
+            1
+          </span>
+          <div>
+            <h3 id={formID + '-keys'}>{t('user.charity.presentation.chooseKeys')}</h3>
+            <p>{t('user.charity.presentation.chooseKeysHelp')}</p>
+            <button
+              type="button"
+              className="btn btn-secondary"
               disabled={locked}
-              onChange={(event) => setPublicThanks(event.target.value as '' | 'yes' | 'no')}
+              onClick={() => setPickerOpen(true)}
             >
-              <option value="">{controlCopy.choose}</option>
-              <option value="yes">{controlCopy.yes}</option>
-              <option value="no">{controlCopy.no}</option>
-            </select>
-            <small>{controlCopy.thanksHint}</small>
-          </label>
-          <label className="full-width">
-            <span>{t('user.charity.donationDescription')}</span>
-            <textarea
-              value={description}
-              disabled={locked}
-              onChange={(event) => setDescription(event.target.value)}
-              required
-              aria-invalid={Boolean(validation) && !validDonationDescription(description)}
-              aria-describedby={
-                validation && !validDonationDescription(description)
-                  ? formID + '-description-error'
-                  : undefined
-              }
-            />
-            {validation && !validDonationDescription(description) ? (
-              <p id={formID + '-description-error'} className="field-error" role="alert">
-                {validation}
+              {t('user.charity.presentation.openPicker')}
+            </button>
+            {selectedChoices.length > 0 ? (
+              <div className="nb-chips donation-selected-chips">
+                {selectedChoices.map((choice) => (
+                  <span className="nb-chip" key={choice.key.id}>
+                    {choice.endpoint.note || choice.endpoint.baseUrl} ·{' '}
+                    {choice.key.note || maskedKey(choice.key.displayHead, choice.key.displayTail)}
+                    <button
+                      type="button"
+                      disabled={locked || readBlocked}
+                      aria-label={t('user.charity.presentation.removeKey', {
+                        name:
+                          choice.key.note ||
+                          maskedKey(choice.key.displayHead, choice.key.displayTail),
+                      })}
+                      onClick={() =>
+                        setSelectedChoices((current) =>
+                          current.filter((item) => item.key.id !== choice.key.id),
+                        )
+                      }
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            {selectedChoices.length > 0 ? (
+              <p className="inline-notice" role="status">
+                {selectionMode.kind === 'mainstream'
+                  ? t('user.charity.selectedMainstreamChannel', { name: selectionMode.channelName })
+                  : selectionMode.kind === 'custom'
+                    ? t('user.charity.selectedCustomSources')
+                    : t('user.charity.splitDonationSources')}
               </p>
             ) : null}
-          </label>
-        </form>
-        <DonationResourcePicker
-          accountId={draftNamespace}
-          selected={selectedChoices}
-          onChange={setSelectedChoices}
-          disabled={locked}
-          enabled={enabled}
-          onReadStateChange={setReadBlocked}
-          renderSelected={(choice) => (
-            <div className="economy-key-expiry">
-              <span>{t('user.charity.keyExpiry')}</span>
-              <TimeInput
-                station="user"
+          </div>
+        </section>
+        <Drawer
+          open={pickerOpen}
+          onClose={() => setPickerOpen(false)}
+          title={t('user.charity.presentation.chooseKeys')}
+          closeLabel={t('common.close')}
+          busy={mutation.isPending}
+          footer={
+            <button type="button" className="btn btn-primary" onClick={() => setPickerOpen(false)}>
+              {t('user.charity.presentation.selectionDone')}
+            </button>
+          }
+        >
+          <DonationResourcePicker
+            accountId={draftNamespace}
+            selected={selectedChoices}
+            onChange={setSelectedChoices}
+            disabled={locked}
+            enabled={enabled}
+            onReadStateChange={setReadBlocked}
+            renderSelected={(choice) => (
+              <div className="economy-key-expiry">
+                <span>{t('user.charity.keyExpiry')}</span>
+                <TimeInput
+                  station="user"
+                  disabled={locked}
+                  draft={expiryByKey[choice.key.id] ?? createTimeDraft()}
+                  onChange={(update) =>
+                    setExpiryByKey((current) => ({
+                      ...current,
+                      [choice.key.id]: update(current[choice.key.id] ?? createTimeDraft()),
+                    }))
+                  }
+                  onClick={(event) => event.stopPropagation()}
+                  aria-label={t('user.charity.keyExpiryFor', {
+                    key: maskedKey(choice.key.displayHead, choice.key.displayTail),
+                  })}
+                />
+                <small className="muted">{t('user.charity.expiryHint')}</small>
+                <FailureThresholdInput
+                  value={thresholdByKey[choice.key.id] ?? '10'}
+                  disabled={locked}
+                  onChange={(value) =>
+                    setThresholdByKey((current) => ({ ...current, [choice.key.id]: value }))
+                  }
+                />
+              </div>
+            )}
+          />
+        </Drawer>
+        <form id={formID} onSubmit={submit} noValidate>
+          <section className="donate-step">
+            <span className="donate-step__number" aria-hidden="true">
+              2
+            </span>
+            <label>
+              <span>{t('user.charity.donationDescription')}</span>
+              <textarea
+                aria-label={t('user.charity.donationDescription')}
+                value={description}
                 disabled={locked}
-                draft={expiryByKey[choice.key.id] ?? createTimeDraft()}
-                onChange={(update) =>
-                  setExpiryByKey((current) => ({
-                    ...current,
-                    [choice.key.id]: update(current[choice.key.id] ?? createTimeDraft()),
-                  }))
+                onChange={(event) => setDescription(event.target.value)}
+                required
+                aria-invalid={Boolean(validation) && !validDonationDescription(description)}
+                aria-describedby={
+                  validation && !validDonationDescription(description)
+                    ? formID + '-description-error'
+                    : formID + '-description-help'
                 }
-                onClick={(event) => event.stopPropagation()}
-                aria-label={t('user.charity.keyExpiryFor', {
-                  key: maskedKey(choice.key.displayHead, choice.key.displayTail),
-                })}
               />
-              <small className="muted">{t('user.charity.expiryHint')}</small>
-              <FailureThresholdInput
-                value={thresholdByKey[choice.key.id] ?? '10'}
+              <small id={formID + '-description-help'}>
+                {t('user.charity.presentation.descriptionHelp')}
+              </small>
+              {validation && !validDonationDescription(description) ? (
+                <p id={formID + '-description-error'} className="field-error" role="alert">
+                  {validation}
+                </p>
+              ) : null}
+            </label>
+          </section>
+          <section className="donate-step" aria-labelledby={formID + '-thanks'}>
+            <span className="donate-step__number" aria-hidden="true">
+              3
+            </span>
+            <div>
+              <h3 id={formID + '-thanks'}>{controlCopy.thanks}</h3>
+              <Segmented
+                label={controlCopy.thanks}
+                value={publicThanks}
+                onChange={setPublicThanks}
                 disabled={locked}
-                onChange={(value) =>
-                  setThresholdByKey((current) => ({ ...current, [choice.key.id]: value }))
-                }
+                options={[
+                  { value: 'yes', label: controlCopy.yes },
+                  { value: 'no', label: controlCopy.no },
+                ]}
               />
+              <small>{controlCopy.thanksHint}</small>
             </div>
-          )}
-        />
-        {selectedChoices.length > 0 ? (
-          <p className="inline-notice" role="status">
-            {selectionMode.kind === 'mainstream'
-              ? t('user.charity.selectedMainstreamChannel', { name: selectionMode.channelName })
-              : selectionMode.kind === 'custom'
-                ? t('user.charity.selectedCustomSources')
-                : t('user.charity.splitDonationSources')}
-          </p>
-        ) : null}
-        <section className="economy-disclosure" aria-labelledby="donation-disclosure-title">
-          <h3 id="donation-disclosure-title">{t('user.charity.disclosureTitle')}</h3>
+          </section>
+        </form>
+        <Fold plain title={t('user.charity.disclosureTitle')}>
+          <section className="economy-donation-notice">
+            <h3>{t('user.charity.donationNoticeTitle')}</h3>
+            <MarkdownText>{donationNotice}</MarkdownText>
+          </section>
           <ul>
             <li>{t('user.charity.disclosureMasked')}</li>
             <li>{t('user.charity.disclosureThirdParty')}</li>
@@ -488,7 +548,7 @@ export function DonationComposer({
             <li>{t('user.charity.disclosureResponsibility')}</li>
             <li>{t('user.charity.disclosureDeletion')}</li>
           </ul>
-        </section>
+        </Fold>
         <label className="checkbox-label economy-authorization">
           <input
             type="checkbox"
@@ -520,18 +580,23 @@ export function DonationComposer({
             onRetry={() => void mutation.retryReconcile()}
           />
         ) : null}
-        <div className="form-actions">
+        <PanelFoot>
+          <span>
+            {t('user.charity.presentation.selectedCount', { count: selectedChoices.length })}
+          </span>
           <button
             className="btn btn-primary"
             type="submit"
             form={formID}
-            disabled={locked || readBlocked || invalidSelection || invalidExpiry}
+            disabled={
+              locked || readBlocked || invalidSelection || invalidExpiry || publicThanks === ''
+            }
           >
             {mutation.isPending || mutation.isReconciling
               ? t('common.working')
               : t('user.charity.submit')}
           </button>
-        </div>
+        </PanelFoot>
       </div>
     </Card>
   );
@@ -641,8 +706,10 @@ export function DonationKeyPanel({
           <h4 className="mono">{maskedKey(donationKey.displayHead, donationKey.displayTail)}</h4>
           <p className="item-meta">
             {donationKey.source.kind === 'mainstream'
-              ? `${donationKey.source.name} · ${donationKey.source.baseUrl} · ${donationKey.source.connectorType}`
-              : `${t('user.charity.customSource')} · ${donationKey.source.baseUrl} · ${donationKey.source.connectorType}`}
+              ? donationKey.source.name
+              : t('user.charity.customSource')}{' '}
+            · {donationKey.source.baseUrl} ·{' '}
+            <DonationConnectorLabel value={donationKey.source.connectorType} />
           </p>
         </div>
         <div className="economy-status-stack">
@@ -1232,13 +1299,16 @@ export function DonationOverviewPartialError({ onRetry }: { onRetry: () => void 
 export function CharitySafetyNotice() {
   const { t } = useTranslation();
   return (
-    <div role="note">
-      <Card className="economy-safety-card">
-        <h2>{t('user.charity.upstreamPrivacyTitle')}</h2>
+    <Fold
+      title={t('user.charity.presentation.beforeUse')}
+      summary={t('user.charity.presentation.beforeUseSummary')}
+    >
+      <div role="note" className="economy-safety-card">
         <p>{t('user.charity.upstreamPrivacyWarning')}</p>
         <p>{t('user.charity.upstreamQualityWarning')}</p>
-        <p className="inline-notice">{t('user.charity.dispatchedFailureWarning')}</p>
-      </Card>
-    </div>
+        <p>{t('common.operations.charity.embeddingBillingHelp')}</p>
+        <p>{t('user.charity.dispatchedFailureWarning')}</p>
+      </div>
+    </Fold>
   );
 }

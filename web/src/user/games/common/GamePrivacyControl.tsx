@@ -1,3 +1,4 @@
+import { Toggle } from '@shared/components/ui/Toggle';
 import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation } from 'react-router';
@@ -35,16 +36,13 @@ export function GamePrivacyControl() {
   if (!session.data?.user || session.error) return null;
   return (
     <div className="game-privacy-control" id="game-privacy" ref={control} tabIndex={-1}>
-      <label className="checkbox-label">
-        <input
-          type="checkbox"
-          checked={!session.data.user.game_profile_public}
-          disabled={save.isPending}
-          onChange={(event) => save.mutate(!event.target.checked)}
-        />
-        <span>{text('common.anonymous')}</span>
-      </label>
-      <p className="table-note">{text('common.anonymousHelp')}</p>
+      <Toggle
+        label={text('common.anonymous')}
+        description={text('common.anonymousHelp')}
+        checked={!session.data.user.game_profile_public}
+        disabled={save.isPending}
+        onChange={(checked) => save.mutate(!checked)}
+      />
       {save.error ? <ErrorState error={save.error} /> : null}
     </div>
   );

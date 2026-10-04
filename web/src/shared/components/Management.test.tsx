@@ -141,8 +141,13 @@ describe('shared account management', () => {
         role === 'admin' ? ['admin', 'session'] : ['user', 'session'],
         role === 'admin' ? { admin: { username: 'fixture-admin' } } : session(),
       );
+      await view.user.click(await screen.findByRole('tab', { name: 'Credit adjustment' }));
       const amount = await screen.findByLabelText('Positive amount');
-      await view.user.selectOptions(screen.getByLabelText('Direction'), 'decrease');
+      await view.user.click(
+        within(screen.getByRole('radiogroup', { name: 'Direction' })).getByRole('radio', {
+          name: 'Decrease',
+        }),
+      );
       await view.user.type(amount, '1.5');
       await view.user.type(screen.getByLabelText('Reason (required)'), 'Correct duplicate reward');
       await view.user.click(screen.getByRole('button', { name: 'Apply adjustment' }));
@@ -202,10 +207,11 @@ describe('shared account management', () => {
         role === 'admin' ? ['admin', 'session'] : ['user', 'session'],
         role === 'admin' ? { admin: { username: 'fixture-admin' } } : session(),
       );
+      await view.user.click(await screen.findByRole('tab', { name: 'Limits and level' }));
       const endpoint = await screen.findByLabelText('Endpoint limit');
       const rpm = screen.getByLabelText('RPM limit');
       const concurrency = screen.getByLabelText('In-flight concurrency limit');
-      const save = screen.getByRole('button', { name: 'Save limits' });
+      const save = screen.getByRole('button', { name: 'Save settings' });
       fireEvent.change(endpoint, { target: { value: '99' } });
       fireEvent.change(concurrency, { target: { value: '999' } });
       for (const value of ['0', '4097', '1.5', '01']) {
@@ -233,7 +239,10 @@ describe('shared account management', () => {
           within(screen.getByLabelText('Set level')).queryByRole('option', { name: '6' }),
         ).toBeNull();
         expect(
-          within(screen.getByLabelText('Target')).queryByRole('option', { name: 'Donor reward' }),
+          within(screen.getByRole('radiogroup', { name: 'Target', hidden: true })).queryByRole(
+            'radio',
+            { name: 'Donor reward', hidden: true },
+          ),
         ).toBeNull();
         expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
         expect(calls.every((call) => !call.path.startsWith('/admin/'))).toBe(true);
@@ -252,16 +261,174 @@ describe('shared account management', () => {
       if (call.path === '/api/steward/users/' + id) return target;
       throw new Error('Unexpected request ' + call.path);
     });
-    await renderWithProviders(<StewardPage />, {
+    const view = await renderWithProviders(<StewardPage />, {
       station: 'user',
       role: 'user',
       route: '/steward?tab=users&user=' + id,
     });
+    await view.user.click(await screen.findByRole('tab', { name: 'Limits and level' }));
     expect(
-      await screen.findByText(/Your account and other stewards can be viewed here/),
+      await within(screen.getByRole('tabpanel', { name: 'Limits and level' })).findByText(
+        /Your account and other stewards can be viewed here/,
+      ),
     ).toBeVisible();
-    expect(screen.queryByRole('button', { name: 'Save limits' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Save settings' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Ban' })).toBeNull();
+  });
+
+  it.each(['admin', 'steward'] as const)(
+    'keeps separate save results and retries only the failed level request for %s',
+    async (role) => {
+      const base = role === 'admin' ? '/admin/api/users' : '/api/steward/users';
+      let target = userFixture();
+      let levelAttempts = 0;
+      const calls = install((call) => {
+        if (call.path === '/admin/api/session') return { admin: { username: 'fixture-admin' } };
+        if (call.path === '/api/session') return session();
+        if (call.path.startsWith(base + '?')) return page([target]);
+        if (call.path === base + '/7' && call.method === 'GET') return target;
+        if (call.path === base + '/7' && call.method === 'PATCH') {
+          if ('level' in call.body) {
+            levelAttempts++;
+            if (levelAttempts === 1)
+              return json({ error: { code: 'unavailable', message: 'Try again' } }, 503);
+            target = {
+              ...target,
+              revision: '3',
+              level: { ...target.level, manual: 3, effective: 3 },
+            };
+          } else target = { ...target, endpoint_limit: '99', revision: '2' };
+          return target;
+        }
+        throw new Error('Unexpected request ' + call.path);
+      });
+      const view = await renderWithProviders(role === 'admin' ? <UsersPage /> : <StewardPage />, {
+        station: role === 'admin' ? 'admin' : 'user',
+        role: role === 'admin' ? 'admin' : 'user',
+        route: role === 'admin' ? '/users?user=7' : '/steward?tab=users&user=7',
+      });
+      view.queryClient.setQueryData(
+        role === 'admin' ? ['admin', 'session'] : ['user', 'session'],
+        role === 'admin' ? { admin: { username: 'fixture-admin' } } : session(),
+      );
+      await view.user.click(await screen.findByRole('tab', { name: 'Limits and level' }));
+      fireEvent.change(screen.getByLabelText('Endpoint limit'), { target: { value: '99' } });
+      await view.user.selectOptions(screen.getByLabelText('Set level'), '3');
+      await view.user.click(screen.getByRole('button', { name: 'Save settings' }));
+      await waitFor(() => expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(2));
+      const writes = calls.filter((call) => call.method === 'PATCH');
+      expect(writes[0].body).toMatchObject({
+        mode: 'profile',
+        expected_revision: '1',
+        endpoint_limit: '99',
+      });
+      expect(writes[1].body).toEqual({ mode: 'profile', expected_revision: '2', level: 3 });
+      expect(writes[0].headers.get('Idempotency-Key')).not.toBe(
+        writes[1].headers.get('Idempotency-Key'),
+      );
+      expect(
+        await within(screen.getByRole('region', { name: 'Limits and language' })).findByText(
+          'Saved.',
+        ),
+      ).toBeVisible();
+      expect(
+        await within(screen.getByRole('region', { name: 'Manual level' })).findByText(
+          /Couldn't confirm the save/,
+        ),
+      ).toBeVisible();
+      await view.user.click(screen.getByRole('button', { name: 'Save settings' }));
+      await waitFor(() => expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(3));
+      const retry = calls.filter((call) => call.method === 'PATCH')[2];
+      expect(retry.body).toEqual(writes[1].body);
+      expect(retry.headers.get('Idempotency-Key')).toBe(writes[1].headers.get('Idempotency-Key'));
+      expect(
+        calls.filter((call) => call.method === 'PATCH' && 'endpoint_limit' in call.body),
+      ).toHaveLength(1);
+      await waitFor(() =>
+        expect(
+          within(screen.getByRole('region', { name: 'Manual level' })).getByText('Saved.'),
+        ).toBeVisible(),
+      );
+    },
+  );
+
+  it('keeps both confirmed changes when refreshing the directory fails and retries reads only', async () => {
+    let target = userFixture();
+    let refreshFails = false;
+    let readsCurrent = false;
+    const calls = install((call) => {
+      if (call.path === '/admin/api/session') return { admin: { username: 'fixture-admin' } };
+      if (call.path.startsWith('/admin/api/users?'))
+        return refreshFails
+          ? json({ error: { code: 'unavailable', message: 'Directory unavailable' } }, 503)
+          : page([target]);
+      if (call.path === '/admin/api/users/7' && call.method === 'GET')
+        return readsCurrent ? target : userFixture();
+      if (call.path === '/admin/api/users/7' && call.method === 'PATCH') {
+        refreshFails = true;
+        target =
+          'level' in call.body
+            ? { ...target, revision: '3', level: { ...target.level, manual: 3, effective: 3 } }
+            : { ...target, endpoint_limit: '99', revision: '2' };
+        return target;
+      }
+      throw new Error('Unexpected request ' + call.path);
+    });
+    const view = await renderWithProviders(<UsersPage />, {
+      station: 'admin',
+      role: 'admin',
+      route: '/users?user=7',
+    });
+    view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'fixture-admin' } });
+    await view.user.click(await screen.findByRole('tab', { name: 'Limits and level' }));
+    fireEvent.change(screen.getByLabelText('Endpoint limit'), { target: { value: '99' } });
+    await view.user.selectOptions(screen.getByLabelText('Set level'), '3');
+    const save = screen.getByRole('button', { name: 'Save settings' });
+    await view.user.click(save);
+    await waitFor(() => expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(2));
+    await waitFor(() => expect(save).toBeDisabled());
+    for (const name of ['Limits and language', 'Manual level'])
+      expect(within(screen.getByRole('region', { name })).getByText(/Saved, but/)).toBeVisible();
+    refreshFails = false;
+    readsCurrent = true;
+    const level = screen.getByRole('region', { name: 'Manual level' });
+    await view.user.click(within(level).getAllByRole('button')[0]);
+    await waitFor(() => expect(within(level).getByText('Saved.')).toBeVisible());
+    expect(save).toBeDisabled();
+    expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(2);
+  });
+
+  it('stops the coordinated save before level mutation when the administrator account changes', async () => {
+    let resolveProfile!: (value: AdminUser) => void;
+    const calls = install(async (call) => {
+      if (call.path === '/admin/api/session') return { admin: { username: 'fixture-admin' } };
+      if (call.path.startsWith('/admin/api/users?')) return page([userFixture()]);
+      if (call.path === '/admin/api/users/7' && call.method === 'GET') return userFixture();
+      if (call.method === 'PATCH')
+        return new Promise<AdminUser>((resolve) => {
+          resolveProfile = resolve;
+        });
+      throw new Error('Unexpected request ' + call.path);
+    });
+    const view = await renderWithProviders(<UsersPage />, {
+      station: 'admin',
+      role: 'admin',
+      route: '/users?user=7',
+    });
+    view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'fixture-admin' } });
+    await view.user.click(await screen.findByRole('tab', { name: 'Limits and level' }));
+    fireEvent.change(screen.getByLabelText('Endpoint limit'), { target: { value: '99' } });
+    await view.user.selectOptions(screen.getByLabelText('Set level'), '3');
+    await view.user.click(screen.getByRole('button', { name: 'Save settings' }));
+    await waitFor(() => expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(1));
+    await act(async () => {
+      view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'second-admin' } });
+    });
+    await act(async () =>
+      resolveProfile({ ...userFixture(), endpoint_limit: '99', revision: '2' }),
+    );
+    expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(1);
+    expect(screen.queryByRole('region', { name: 'Limits and language' })).toBeNull();
   });
 
   it('resets page and selection when effective level changes', async () => {
@@ -313,9 +480,10 @@ describe('shared account management', () => {
       route: '/steward?tab=users&user=7',
     });
     view.queryClient.setQueryData(['user', 'session'], session());
+    await view.user.click(await screen.findByRole('tab', { name: 'Limits and level' }));
     fireEvent.change(await screen.findByLabelText('Endpoint limit'), { target: { value: '99' } });
-    await view.user.click(screen.getByRole('button', { name: 'Save limits' }));
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Save limits' })).toBeNull());
+    await view.user.click(screen.getByRole('button', { name: 'Save settings' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Save settings' })).toBeNull());
     expect(screen.queryByDisplayValue('99')).toBeNull();
     expect(view.queryClient.getQueryData(['user', 'session'])).toBeNull();
   });

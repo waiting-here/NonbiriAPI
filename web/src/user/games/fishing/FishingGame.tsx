@@ -1,3 +1,4 @@
+import { GameActionBar } from '../common/GameActionBar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useOptionalToast } from '@shared/components/Toast';
@@ -810,6 +811,9 @@ export function FishingGame() {
     <GameHeader
       wallets={snapshot.data}
       game="fishing"
+      rankingsAvailable={
+        Boolean(snapshot.data) && !snapshot.isPending && !snapshot.error && !runtimeMaintenance
+      }
       sound={sound}
       onRules={() => setRulesOpen(true)}
     />
@@ -1036,36 +1040,40 @@ export function FishingGame() {
               {text('fishing.insufficient')}
             </p>
           ) : null}
-          <button
-            type="button"
-            className="btn btn-primary fishing-start"
-            disabled={!startsOpen || locked || !affordable}
-            onClick={start}
-          >
-            {text(effectiveActionState === 'sending' ? 'fishing.starting' : 'fishing.start')}
-          </button>
+          <GameActionBar cost={<GameMoney value={frozenTotal} />}>
+            <button
+              type="button"
+              className="btn btn-primary fishing-start"
+              disabled={!startsOpen || locked || !affordable}
+              onClick={start}
+            >
+              {text(effectiveActionState === 'sending' ? 'fishing.starting' : 'fishing.start')}
+            </button>
+          </GameActionBar>
         </Card>
       </div>
       <GamePrivacyLink />
-      <LeaderboardTabs
-        items={[
-          {
-            id: 'catch',
-            label: text('fishing.leaderboard.single'),
-            content: <FishingSingleBoards historical={single} recent={recentSingle} />,
-          },
-          {
-            id: 'total',
-            label: text('fishing.leaderboard.total'),
-            content: <LeaderboardCard board="total" query={total} />,
-          },
-          {
-            id: 'profit',
-            label: language === 'zh' ? '锦鲤榜' : 'Lucky catch leaderboard',
-            content: <NetProfitLeaderboard board="fishing_net_profit" />,
-          },
-        ]}
-      />
+      <div id="game-rankings">
+        <LeaderboardTabs
+          items={[
+            {
+              id: 'catch',
+              label: text('fishing.leaderboard.single'),
+              content: <FishingSingleBoards historical={single} recent={recentSingle} />,
+            },
+            {
+              id: 'total',
+              label: text('fishing.leaderboard.total'),
+              content: <LeaderboardCard board="total" query={total} />,
+            },
+            {
+              id: 'profit',
+              label: language === 'zh' ? '锦鲤榜' : 'Lucky catch leaderboard',
+              content: <NetProfitLeaderboard board="fishing_net_profit" />,
+            },
+          ]}
+        />
+      </div>
       {rulesDialog}
     </main>
   );

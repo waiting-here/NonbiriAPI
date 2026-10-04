@@ -136,3 +136,55 @@
     width: 100%;
   }
 }
+
+.credit-history__overview.nb-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: 0;
+}
+.credit-history__overview .nb-stat {
+  display: grid;
+  gap: var(--nb-space-2);
+  min-width: 0;
+}
+.credit-history__overview .nb-stat > span {
+  font-size: var(--nb-font-size-sm);
+  color: var(--nb-color-text-muted);
+}
+.credit-history__filters {
+  grid-template-columns: minmax(0, 1fr);
+}
+.credit-history__advanced {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--nb-space-4);
+}
+.credit-history__filters > .nb-seg {
+  justify-self: start;
+  flex-wrap: wrap;
+}
+.credit-history__filter-actions {
+  align-items: center;
+}
+@media (max-width: 48rem) {
+  .credit-history__overview.nb-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .credit-history__advanced {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 30rem) {
+  .credit-history__advanced {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.credit-history__balance--long strong {
+  font-size: 1.125rem;
+}
+@media (max-width: 48rem) {
+  .credit-history__balance--long {
+    grid-column: 1 / -1;
+  }
+}

@@ -1,3 +1,5 @@
+import { Fold } from '@shared/components/ui/Fold';
+import { GameActionBar } from '../common/GameActionBar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
@@ -583,7 +585,7 @@ export function LinkLinkGame() {
         game="linklink"
         sound={sound}
         onRules={() => setRulesOpen(true)}
-        compact={Boolean(state)}
+        rankingsAvailable={current.isSuccess && !state && !maintenance}
       />
       <RandomnessProof
         game="linklink"
@@ -756,18 +758,24 @@ export function LinkLinkGame() {
               {text('fishing.insufficient')}
             </p>
           ) : null}
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={!canStart || mutationState !== 'idle'}
-            onClick={() => setReview(true)}
-          >
-            {text('linklink.start', { spec: selectedSpec })}
-          </button>
+          <GameActionBar cost={<GameMoney value={spec?.price ?? '0'} />}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={!canStart || mutationState !== 'idle'}
+              onClick={() => setReview(true)}
+            >
+              {text('linklink.start', { spec: selectedSpec })}
+            </button>
+          </GameActionBar>
         </Card>
       ) : null}
       {current.isSuccess && !state && !maintenance ? (
-        <LinkLinkLeaderboard spec={selectedSpec} onSpecChange={setSelectedSpec} />
+        <div id="game-rankings">
+          <Fold title={text('linklink.leaderboard.title', { days: 7 })}>
+            <LinkLinkLeaderboard spec={selectedSpec} onSpecChange={setSelectedSpec} />
+          </Fold>
+        </div>
       ) : null}
       <ConfirmDialog
         open={review}

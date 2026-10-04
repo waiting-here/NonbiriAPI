@@ -140,14 +140,15 @@ async function prepare(
   context: BrowserContext,
   page: Page,
   config: { current: GamesConfig; patches: Record<string, unknown>[] },
+  preferences = { locale: 'en', theme: 'dark' },
 ) {
   const consoleGuard = collectConsoleViolations(page);
   await installURLPersistenceObserver(context, [EPHEMERAL_MARKER]);
   await configureNarrowReducedMotion(page);
-  await page.addInitScript(() => {
-    localStorage.setItem('nb.lang', 'en');
-    localStorage.setItem('nb.theme', 'dark');
-  });
+  await page.addInitScript(({ locale, theme }) => {
+    localStorage.setItem('nb.lang', locale);
+    localStorage.setItem('nb.theme', theme);
+  }, preferences);
   await mockPublicConfig(page, 'admin');
   await mockRoleSession(page, 'admin', 'admin');
   await mockJson(page, {
@@ -203,7 +204,7 @@ test('admin games route performs authoritative PATCH with keyboard input at 390p
   await expect(page.getByRole('heading', { name: 'Game configuration' })).toBeVisible();
   expect(await page.locator('html').getAttribute('data-theme')).toBe('dark');
   await expect(page.getByLabel('Games master switch')).toBeChecked();
-  await expect(page.getByLabel('Fishing enabled')).toBeChecked();
+  await expect(page.getByRole('switch', { name: 'Enable Fishing', exact: true })).toBeChecked();
 
   const master = page.getByLabel('Games master switch');
   await master.focus();
@@ -213,14 +214,15 @@ test('admin games route performs authoritative PATCH with keyboard input at 390p
   await master.press('Space');
   await expect(master).toBeChecked();
 
-  const worm = page.getByLabel('Worm bait price (credits)');
+  await page.getByRole('button', { name: 'Fishing Game settings', exact: true }).click();
+  const worm = page.getByLabel('Worm bait', { exact: true });
   await worm.focus();
   await page.keyboard.press('ControlOrMeta+A');
   await page.keyboard.type('3');
-  const chance = page.getByLabel('Blue-fish probability after a legendary catch (%)');
+  const chance = page.getByLabel('Blue-fish probability', { exact: true });
   await expect(chance).toHaveValue('10');
   await chance.fill('37.5');
-  const save = page.getByRole('button', { name: 'Save game configuration' });
+  const save = page.getByRole('button', { name: 'Save Fishing settings', exact: true });
   await save.focus();
   await page.keyboard.press('Enter');
   await expect.poll(() => config.patches.length).toBe(1);
@@ -270,18 +272,19 @@ test('admin games route performs authoritative PATCH with keyboard input at 390p
     },
   });
   expect(JSON.stringify(config.patches[0])).not.toContain('queue_capacity');
-  await expect(page.getByRole('status')).toContainText('Game settings saved');
+  await expect(page.getByRole('status').filter({ hasText: 'Game settings saved' })).toBeVisible();
 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
+  await page.getByRole('button', { name: 'Fishing Game settings', exact: true }).click();
   await expect(save).toBeVisible();
   await page.setViewportSize({ width: 780, height: 844 });
   await page.evaluate(() => {
     document.documentElement.style.zoom = '200%';
   });
   await expect(save).toBeVisible();
-  await expect(page.getByLabel('Worm bait price (credits)')).toBeVisible();
+  await expect(page.getByLabel('Worm bait', { exact: true })).toBeVisible();
   expect(await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches)).toBe(
     true,
   );
@@ -300,13 +303,9 @@ test('admin validates quick amount count, duplicates and limits before saving th
   };
   const errors = await prepare(context, page, config);
   await page.goto(`${ADMIN_ORIGIN}/games`);
-  await page
-    .getByRole('heading', { name: 'Blackjack', exact: true })
-    .locator('..')
-    .getByText('Game settings', { exact: true })
-    .click();
+  await page.getByRole('button', { name: 'Blackjack Game settings', exact: true }).click();
   const group = page.getByRole('group', { name: 'Quick stake amounts (0–8)' });
-  const save = page.getByRole('button', { name: 'Save game configuration' });
+  const save = page.getByRole('button', { name: 'Save Blackjack settings', exact: true });
   await expect(group.getByRole('textbox')).toHaveCount(4);
   for (let i = 0; i < 4; i++)
     await group
@@ -340,6 +339,7 @@ test('admin validates quick amount count, duplicates and limits before saving th
     '7000',
     '8000',
   ]);
+  await page.getByRole('button', { name: 'Blackjack Game settings', exact: true }).click();
   for (let i = 0; i < 7; i++)
     await group
       .getByRole('button', { name: /^Remove quick amount/ })
@@ -350,3 +350,71 @@ test('admin validates quick amount count, duplicates and limits before saving th
   expect(config.current.blackjack.quick_stakes).toEqual([]);
   errors.assertNone();
 });
+
+for (const scenario of [
+  { width: 1440, height: 900, locale: 'en', theme: 'light' },
+  { width: 768, height: 1024, locale: 'en', theme: 'dark' },
+  { width: 390, height: 844, locale: 'zh', theme: 'dark' },
+]) {
+  test(`game drawers retain labels, keyboard focus and cancelled drafts at ${scenario.width}`, async ({
+    context,
+    page,
+  }) => {
+    const config = {
+      current: structuredClone(INITIAL_CONFIG),
+      patches: [] as Record<string, unknown>[],
+    };
+    const guard = await prepare(context, page, config, scenario);
+    await page.setViewportSize(scenario);
+    await page.goto(`${ADMIN_ORIGIN}/games`);
+    const rows = page.locator('.admin-game-row');
+    await expect(rows).toHaveCount(6);
+    const capture = async (name: string) => {
+      if (process.env.NONBIRI_VISUAL_DIR)
+        await page.screenshot({
+          path: `${process.env.NONBIRI_VISUAL_DIR}/games-${scenario.locale}-${scenario.width}-${name}.png`,
+          fullPage: true,
+        });
+    };
+    await capture('overview');
+    for (let index = 0; index < 6; index++) {
+      const trigger = rows.nth(index).getByRole('button');
+      await trigger.click();
+      const dialog = page.getByRole('dialog');
+      await expect(dialog).toBeVisible();
+      for (const disclosure of await dialog.locator('details:not([open]) > summary').all())
+        await disclosure.click();
+      const unnamed = await dialog
+        .locator('input:not([type="checkbox"])')
+        .evaluateAll(
+          (inputs) =>
+            inputs.filter(
+              (node) =>
+                !(node as HTMLInputElement).labels?.length ||
+                !Array.from((node as HTMLInputElement).labels!).some(
+                  (label) => label.textContent?.trim() && label.getBoundingClientRect().width > 0,
+                ),
+            ).length,
+        );
+      expect(unnamed).toBe(0);
+      expect(await dialog.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      await capture(`drawer-${index}`);
+      if (index === 0) {
+        const amount = dialog.locator('input[name="fishing.bait_prices.worm"]');
+        await amount.fill('3.25');
+        await page.keyboard.press('Escape');
+        await expect(trigger).toBeFocused();
+        await trigger.click();
+        await expect(amount).toHaveValue('2.5');
+      }
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await expect(trigger).toBeFocused();
+    }
+    expect(config.patches).toEqual([]);
+    guard.assertNone();
+  });
+}

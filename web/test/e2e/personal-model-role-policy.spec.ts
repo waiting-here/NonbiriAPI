@@ -58,6 +58,8 @@ for (const locale of ['en', 'zh'] as const) {
             body = model;
           } else if (url.pathname.endsWith('/bindings')) {
             body = { bindings: [], binding_revision: '1' };
+          } else if (url.pathname.endsWith('/binding-candidates')) {
+            body = numberedPage([], url.searchParams);
           } else if (url.pathname === '/api/models') {
             body = numberedPage([model], url.searchParams);
           } else if (url.pathname === '/api/endpoints') {
@@ -72,6 +74,7 @@ for (const locale of ['en', 'zh'] as const) {
         await page
           .getByRole('button', { name: copy.core['models.editModel'], exact: true })
           .click();
+        await page.locator('summary').filter({ hasText: copy.models.advanced }).click();
         await page.locator('summary').filter({ hasText: roles.title }).click();
         const editor = page.getByRole('group', { name: roles.title });
         await editor.getByRole('combobox', { name: roles.defaultAction }).selectOption('reject');
@@ -88,9 +91,10 @@ for (const locale of ['en', 'zh'] as const) {
           expected_revision: original.revision,
           role_policy: { default_action: 'reject', rules: { developer: 'system' } },
         });
+        await page.locator('summary').filter({ hasText: copy.models.advanced }).click();
         await expect(page.getByText('developer', { exact: true })).toBeVisible();
         await page.goto(USER_ORIGIN + '/keys');
-        const guide = page.locator('.personal-automation-guide');
+        const guide = page.locator('.personal-automation-guide > .nb-fold');
         await expect(guide).not.toHaveAttribute('open');
         await guide.locator('summary').focus();
         await page.keyboard.press('Enter');

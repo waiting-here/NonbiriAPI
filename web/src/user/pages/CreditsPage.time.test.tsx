@@ -1,5 +1,6 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import { useLayoutEffect, useState, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installJsonFetchFixtures, renderWithProviders } from '../../../test/unit/support';
 import { CreditsPage } from './CreditsPage';
@@ -8,11 +9,32 @@ vi.mock('../components/UserPageGate', () => ({
   UserPageGate: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 vi.mock('../data', () => ({
-  useUserSession: () => ({ data: { user: { id: 'account-1' } }, isPending: false, error: null }),
+  useUserSession: () => ({ data: { user: { id: '1' } }, isPending: false, error: null }),
+}));
+vi.mock('@shared/limitedactivities/api', () => ({
+  getWallet: async () => ({ general: '1', sketch_paper: '0', sketch_brush: '0' }),
 }));
 vi.mock('../features/core/queries', () => ({
   coreSessionMatchesAccount: () => true,
 }));
+
+function SessionCredits() {
+  const client = useQueryClient();
+  const [ready, setReady] = useState(false);
+  useLayoutEffect(() => {
+    client.setQueryData(['user', 'session'], {
+      user: { id: '1', username: 'fixture-user', effective_level: 1, lang: 'en' },
+    });
+    let active = true;
+    queueMicrotask(() => {
+      if (active) setReady(true);
+    });
+    return () => {
+      active = false;
+    };
+  }, [client]);
+  return ready ? <CreditsPage /> : null;
+}
 
 const nativeOptions = Intl.DateTimeFormat.prototype.resolvedOptions;
 let currentZone = 'UTC';
@@ -70,7 +92,7 @@ describe('credit history time filters', () => {
         body: page,
       },
     ]);
-    await renderWithProviders(<CreditsPage />, { station: 'user', role: 'user' });
+    await renderWithProviders(<SessionCredits />, { station: 'user', role: 'user' });
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Apply filters' })).toBeEnabled(),
     );
@@ -121,11 +143,10 @@ describe('credit history time filters', () => {
         body: page,
       },
     ]);
-    const view = await renderWithProviders(<CreditsPage />, { station: 'user', role: 'user' });
-    await waitFor(() =>
-      expect(screen.getByRole('heading', { name: 'Nonbiri credit history' })).toBeVisible(),
-    );
+    const view = await renderWithProviders(<SessionCredits />, { station: 'user', role: 'user' });
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Records' })).toBeVisible());
 
+    await view.user.click(screen.getByText('More filters', { exact: true }));
     const fromInput = screen.getByLabelText('From');
     const toInput = screen.getByLabelText('Before');
     fireEvent.change(fromInput, { target: { value: localFrom.slice(0, 16) } });

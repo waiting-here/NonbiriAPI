@@ -1,5 +1,13 @@
 import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
 const keys = {
+  'presentation.description': 'user.games.presentation.description',
+  'presentation.activityWallet': 'user.games.presentation.activityWallet',
+  'presentation.unavailable': 'user.games.presentation.unavailable',
+  'presentation.test': 'user.games.presentation.test',
+  'presentation.learn': 'user.games.presentation.learn',
+  'presentation.enter': 'user.games.presentation.enter',
+  'presentation.rankings': 'user.games.presentation.rankings',
+  'presentation.creditHistory': 'user.games.presentation.creditHistory',
   'linklink.leaderboard.anonymous': 'user.games.copy.linklink.leaderboard.anonymous',
   'onboarding.title': 'user.games.copy.onboarding.title',
   'onboarding.biddingHelp': 'user.games.copy.onboarding.biddingHelp',

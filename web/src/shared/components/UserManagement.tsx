@@ -1,4 +1,15 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
+import { Link } from 'react-router';
+import {
+  Affix,
+  DataTable,
+  Fold,
+  OutcomeNote,
+  Segmented,
+  Tabs,
+  type OutcomePresentation,
+} from '@shared/components/ui';
+import { useDetailNavigation } from '@shared/operations/useDetailNavigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { useTranslation } from 'react-i18next';
@@ -34,8 +45,12 @@ import {
   type AccountState,
   type ManagementRole,
 } from '@shared/operations/managedUsers';
-import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
+import {
+  type OperationOutcome,
+  useRetainedOperation,
+} from '@shared/operations/useRetainedOperation';
 import '@shared/operations/operations.css';
+import './userManagement.css';
 
 interface UserDraft {
   endpointLimit: string;
@@ -88,6 +103,14 @@ function nullableLimit(value: string, min: number, max: number): string | null |
   return Number.isSafeInteger(parsed) && parsed >= min && parsed <= max ? value : undefined;
 }
 
+function profileOutcome(outcome: OperationOutcome, recheck: () => void): OutcomePresentation {
+  if (outcome === 'confirmed') return { kind: 'saved' };
+  if (outcome === 'refresh-failed') return { kind: 'savedRefreshFailed', recheck };
+  if (outcome === 'unknown') return { kind: 'unknown', recheck };
+  if (outcome === 'conflict') return { kind: 'conflict', reload: recheck };
+  return { kind: 'idle' };
+}
+
 function UserAuthority({
   user,
   refresh,
@@ -108,6 +131,11 @@ function UserAuthority({
   const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
   const [draft, setDraft] = useState<UserDraft>(() => draftFor(user));
+  const tabID = useId();
+  const [tab, setTab] = useState<'overview' | 'limits' | 'economy' | 'penalties'>('overview');
+  const [penaltiesVisited, setPenaltiesVisited] = useState(false);
+  const [coordinating, setCoordinating] = useState(false);
+  const [confirmedUser, setConfirmedUser] = useState<AdminUser | null>(null);
   const [confirm, setConfirm] = useState<'ban' | 'unban' | null>(null);
   const [economyConfirm, setEconomyConfirm] = useState<EconomyIntent | null>(null);
   const editable = role === 'admin' || (user.id !== account && user.level.effective < 6);
@@ -116,6 +144,18 @@ function UserAuthority({
     await refresh();
   };
   const patch = useRetainedOperation(
+    (input: { revision: string; body: Record<string, unknown> }, key) =>
+      mutateManagedUser(role, user.id, { ...input.body, expected_revision: input.revision }, key),
+    reconcile,
+    root,
+  );
+  const profile = useRetainedOperation(
+    (input: { revision: string; body: Record<string, unknown> }, key) =>
+      mutateManagedUser(role, user.id, { ...input.body, expected_revision: input.revision }, key),
+    reconcile,
+    root,
+  );
+  const manualLevel = useRetainedOperation(
     (input: { revision: string; body: Record<string, unknown> }, key) =>
       mutateManagedUser(role, user.id, { ...input.body, expected_revision: input.revision }, key),
     reconcile,
@@ -151,38 +191,63 @@ function UserAuthority({
   const concurrency = nullableLimit(draft.concurrencyLimit, 1, 100_000);
   const invalidLimits = endpoint === undefined || rpm === undefined || concurrency === undefined;
 
-  const saveLimits = () => {
-    if (!editable || invalidLimits) return;
-    patch.mutate({
-      revision: user.revision,
-      body: {
-        mode: 'profile',
-        endpoint_limit: endpoint,
-        rpm_limit: rpm,
-        concurrency_limit: concurrency,
-        ...(draft.lang ? { lang: draft.lang } : {}),
-      },
-    });
+  const baseline =
+    confirmedUser && BigInt(confirmedUser.revision) > BigInt(user.revision) ? confirmedUser : user;
+  const profileChanged =
+    endpoint !== baseline.endpoint_limit ||
+    rpm !== baseline.rpm_limit ||
+    concurrency !== baseline.concurrency_limit ||
+    draft.lang !== baseline.lang;
+  const levelChanged = (draft.level ? Number(draft.level) : null) !== baseline.level.manual;
+  const profileBusy = coordinating || profile.isPending || manualLevel.isPending;
+  const saveLimits = async () => {
+    if (!editable || invalidLimits || profileBusy) return;
+    const profileBody = {
+      mode: 'profile',
+      endpoint_limit: endpoint,
+      rpm_limit: rpm,
+      concurrency_limit: concurrency,
+      ...(draft.lang ? { lang: draft.lang } : {}),
+    };
+    const levelBody = { mode: 'profile', level: draft.level ? Number(draft.level) : null };
+    let revision = baseline.revision;
+    setCoordinating(true);
+    try {
+      if (profileChanged) {
+        const saved = await profile.mutateAsync({ revision, body: profileBody });
+        setConfirmedUser(saved);
+        revision = saved.revision;
+      }
+      if (levelChanged) {
+        const saved = await manualLevel.mutateAsync({ revision, body: levelBody });
+        setConfirmedUser(saved);
+      }
+    } catch {
+      // Each operation retains its own outcome and retry identity.
+    } finally {
+      setCoordinating(false);
+    }
   };
   const banSeconds = draft.banDuration.trim() ? Number(draft.banDuration) * 86_400 : undefined;
   const banDurationLabel = draft.banDuration.trim()
     ? t('management.users.banPresetLabel', { days: draft.banDuration.trim() })
     : t('management.users.banPermanent');
-  const mutationError = patch.error ?? ban.error ?? unban.error;
+  const mutationError =
+    patch.error ?? profile.error ?? manualLevel.error ?? ban.error ?? unban.error;
   useEffect(() => {
     if (isUnauthorized(mutationError) || isForbidden(mutationError)) onAuthorityLoss?.();
   }, [mutationError, onAuthorityLoss]);
 
   return (
-    <div className="ops-stack">
+    <div className="ops-stack user-authority">
       <Card>
         <div className="ops-actions">
           <h2>{user.username}</h2>
-          <button className="btn btn-quiet" type="button" onClick={onClose}>
-            {t('common.close')}
+          <button className="nb-btn nb-btn--quiet" type="button" onClick={onClose}>
+            {t('management.users.backToList')}
           </button>
         </div>
-        <dl className="ops-kv">
+        <dl className="nb-facts nb-facts--inline user-identity">
           <dt>{t('management.users.userId')}</dt>
           <dd>{user.id}</dd>
           <dt>{t('management.users.discordId')}</dt>
@@ -201,278 +266,408 @@ function UserAuthority({
               label={t(user.is_banned ? 'management.users.banned' : 'management.users.active')}
             />
           </dd>
-          <dt>{t('management.users.level')}</dt>
-          <dd>
-            {user.level.display_name} · {t('management.users.levelAutoTag')} {user.level.automatic}{' '}
-            · {t('management.users.levelEffectiveTag')} {user.level.effective}
-          </dd>
-          <dt>{t('management.users.balances')}</dt>
-          <dd>
-            {user.balance} {t('management.users.creditsBalance')} · {user.game_balance}{' '}
-            {t('management.users.gameBalance')} · {user.donation_credit}{' '}
-            {t('management.users.donationBalance')}
-          </dd>
-          <dt>
-            {t('management.users.created')} / {t('management.users.updated')}
-          </dt>
-          <dd>
-            {formatDateTime(user.created_at)} / {formatDateTime(user.updated_at)}
-          </dd>
-          {user.is_banned ? (
-            <>
-              <dt>{t('management.users.banSectionTitle')}</dt>
-              <dd>
-                {user.banned_until === null
-                  ? t('management.users.banPermanent')
-                  : t('management.users.banUntilShort', {
-                      time: formatDateTime(user.banned_until),
-                    })}{' '}
-                <ReasonText reason={user.banned_reason} automatic={user.automatic_reason} />
-              </dd>
-            </>
-          ) : null}
         </dl>
       </Card>
-      <LoanHistory role={role} account={account} userID={user.id} />
-      <PenaltyHistory role={role} account={account} userID={user.id} />
+      <Tabs
+        label={t('management.users.detailTabs')}
+        value={tab}
+        tabs={[
+          { value: 'overview', label: t('management.users.tabOverview') },
+          { value: 'limits', label: t('management.users.tabLimits') },
+          { value: 'economy', label: t('management.users.tabEconomy') },
+          { value: 'penalties', label: t('management.users.tabPenalties') },
+        ].map(({ value, label }) => ({
+          value: value as typeof tab,
+          label,
+          id: `${tabID}-${value}`,
+          panelId: `${tabID}-${value}-panel`,
+        }))}
+        onChange={(next) => {
+          setTab(next);
+          if (next === 'penalties') setPenaltiesVisited(true);
+        }}
+      />
+      <section
+        role="tabpanel"
+        id={`${tabID}-overview-panel`}
+        aria-labelledby={`${tabID}-overview`}
+        hidden={tab !== 'overview'}
+      >
+        <Card>
+          <dl className="nb-facts nb-facts--inline">
+            <dt>{t('management.users.level')}</dt>
+            <dd>
+              {user.level.display_name} · {t('management.users.levelAutoTag')}{' '}
+              {user.level.automatic} · {t('management.users.levelEffectiveTag')}{' '}
+              {user.level.effective}
+            </dd>
+            <dt>{t('management.users.balances')}</dt>
+            <dd>
+              {user.balance} {t('management.users.creditsBalance')} · {user.game_balance}{' '}
+              {t('management.users.gameBalance')} · {user.donation_credit}{' '}
+              {t('management.users.donationBalance')}
+            </dd>
+            <dt>
+              {t('management.users.created')} / {t('management.users.updated')}
+            </dt>
+            <dd>
+              {formatDateTime(user.created_at)} / {formatDateTime(user.updated_at)}
+            </dd>
+            {user.is_banned ? (
+              <>
+                <dt>{t('management.users.banSectionTitle')}</dt>
+                <dd>
+                  {user.banned_until === null
+                    ? t('management.users.banPermanent')
+                    : t('management.users.banUntilShort', {
+                        time: formatDateTime(user.banned_until),
+                      })}{' '}
+                  <ReasonText reason={user.banned_reason} automatic={user.automatic_reason} />
+                </dd>
+              </>
+            ) : null}
+            <dt>{t('management.users.levelControl')}</dt>
+            <dd>{user.level.manual ?? t('management.users.levelManualNone')}</dd>
+          </dl>
+          <div className="nb-actions">
+            <Link
+              className="nb-btn nb-btn--secondary"
+              to={
+                role === 'admin'
+                  ? `/logs?user_id=${user.id}`
+                  : `/steward?tab=logs&user_id=${user.id}`
+              }
+            >
+              {t('management.users.viewLogs')}
+            </Link>
+            <LoanHistory role={role} account={account} userID={user.id} />
+          </div>
+        </Card>
+      </section>
       {editable ? (
         <>
-          <Card>
-            <h2>
-              {t('management.users.manageLimitsTitle')} / {t('management.users.levelSectionTitle')}
-            </h2>
-            <p>{t('management.users.limitHint')}</p>
-            <details>
-              <summary>{t('common.operations.management.details')}</summary>
-              <p>{t('management.users.revisionGuard', { revision: user.revision })}</p>
-            </details>
-            <div className="ops-field-grid">
-              <label>
-                <span>{t('management.users.endpointLimit')}</span>
-                <input
-                  inputMode="numeric"
-                  value={draft.endpointLimit}
-                  onChange={(event) => setDraft({ ...draft, endpointLimit: event.target.value })}
-                />
-              </label>
-              <label>
-                <span>{t('management.users.rpmLimit')}</span>
-                <input
-                  inputMode="numeric"
-                  value={draft.rpmLimit}
-                  onChange={(event) => setDraft({ ...draft, rpmLimit: event.target.value })}
-                />
-              </label>
-              <label>
-                <span>{t('management.users.concurrencyLimit')}</span>
-                <input
-                  inputMode="numeric"
-                  value={draft.concurrencyLimit}
-                  onChange={(event) => setDraft({ ...draft, concurrencyLimit: event.target.value })}
-                />
-              </label>
-              <label>
-                <span>{t('management.users.levelControl')}</span>
+          <section
+            role="tabpanel"
+            id={`${tabID}-limits-panel`}
+            aria-labelledby={`${tabID}-limits`}
+            hidden={tab !== 'limits'}
+          >
+            <Card>
+              <h2>
+                {t('management.users.manageLimitsTitle')} /{' '}
+                {t('management.users.levelSectionTitle')}
+              </h2>
+              <p>{t('management.users.limitHint')}</p>
+              <Fold title={t('common.operations.management.details')}>
+                <p>{t('management.users.revisionGuard', { revision: user.revision })}</p>
+              </Fold>
+              <div className="ops-field-grid">
+                <label>
+                  <span>{t('management.users.endpointLimit')}</span>
+                  <input
+                    inputMode="numeric"
+                    value={draft.endpointLimit}
+                    onChange={(event) => setDraft({ ...draft, endpointLimit: event.target.value })}
+                  />
+                </label>
+                <label>
+                  <span>{t('management.users.rpmLimit')}</span>
+                  <input
+                    inputMode="numeric"
+                    value={draft.rpmLimit}
+                    onChange={(event) => setDraft({ ...draft, rpmLimit: event.target.value })}
+                  />
+                </label>
+                <label>
+                  <span>{t('management.users.concurrencyLimit')}</span>
+                  <input
+                    inputMode="numeric"
+                    value={draft.concurrencyLimit}
+                    onChange={(event) =>
+                      setDraft({ ...draft, concurrencyLimit: event.target.value })
+                    }
+                  />
+                </label>
+                <label>
+                  <span>{t('management.users.levelControl')}</span>
+                  <select
+                    value={draft.level}
+                    onChange={(event) => setDraft({ ...draft, level: event.target.value })}
+                  >
+                    <option value="">{t('management.users.levelManualNone')}</option>
+                    {(role === 'admin' ? [1, 2, 3, 4, 5, 6] : [1, 2, 3, 4, 5]).map((level) => (
+                      <option key={level} value={level}>
+                        {level}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <label className="ops-form-field">
+                <span>{t('management.users.language')}</span>
                 <select
-                  value={draft.level}
-                  onChange={(event) => setDraft({ ...draft, level: event.target.value })}
+                  value={draft.lang}
+                  onChange={(event) =>
+                    setDraft({ ...draft, lang: event.target.value as UserDraft['lang'] })
+                  }
                 >
-                  <option value="">{t('management.users.levelManualNone')}</option>
-                  {(role === 'admin' ? [1, 2, 3, 4, 5, 6] : [1, 2, 3, 4, 5]).map((level) => (
-                    <option key={level} value={level}>
-                      {level}
-                    </option>
-                  ))}
+                  <option value="" disabled>
+                    {t('management.users.languageDefault')}
+                  </option>
+                  <option value="zh">中文</option>
+                  <option value="en">English</option>
                 </select>
               </label>
-            </div>
-            <label className="ops-form-field">
-              <span>{t('management.users.language')}</span>
-              <select
-                value={draft.lang}
-                onChange={(event) =>
-                  setDraft({ ...draft, lang: event.target.value as UserDraft['lang'] })
+              {invalidLimits ? (
+                <p className="field-error" role="alert">
+                  {t('management.users.limitInvalid')}
+                </p>
+              ) : null}
+              <div className="nb-actions user-save-actions">
+                <button
+                  className="nb-btn nb-btn--primary"
+                  type="button"
+                  disabled={profileBusy || invalidLimits || (!profileChanged && !levelChanged)}
+                  onClick={() => void saveLimits()}
+                >
+                  {t('management.users.saveProfile')}
+                </button>
+              </div>
+              {[
+                { label: 'management.users.profileResult', operation: profile },
+                { label: 'management.users.levelResult', operation: manualLevel },
+              ].map(({ label, operation }) =>
+                operation.outcome !== 'idle' && operation.outcome !== 'pending' ? (
+                  <section className="user-save-result" aria-label={t(label)} key={label}>
+                    <h3>{t(label)}</h3>
+                    <OutcomeNote
+                      outcome={profileOutcome(
+                        operation.outcome,
+                        () => void (operation.isSuccess ? operation.refresh() : operation.check()),
+                      )}
+                    />
+                    {operation.error ? <ErrorState error={operation.error} /> : null}
+                    {operation.refreshError ? (
+                      <ErrorState
+                        error={operation.refreshError}
+                        onRetry={() =>
+                          void (operation.isSuccess ? operation.refresh() : operation.check())
+                        }
+                      />
+                    ) : null}
+                  </section>
+                ) : null,
+              )}
+            </Card>
+          </section>
+          <section
+            role="tabpanel"
+            id={`${tabID}-economy-panel`}
+            aria-labelledby={`${tabID}-economy`}
+            hidden={tab !== 'economy'}
+          >
+            <Card>
+              <h2>{t('management.users.economyTitle')}</h2>
+              <p>{t('management.users.economyPositiveHint')}</p>
+              <div className="ops-field-grid">
+                <Segmented
+                  label={t('management.users.economyTarget')}
+                  value={draft.economyTarget}
+                  options={(role === 'admin'
+                    ? (['balance', 'game_balance', 'donation_credit'] as const)
+                    : (['balance', 'game_balance'] as const)
+                  ).map((value) => ({ value, label: t(economyTargetLabels[value]) }))}
+                  onChange={(economyTarget) => setDraft({ ...draft, economyTarget })}
+                />
+                <Segmented
+                  label={t('management.users.economyDirection')}
+                  value={draft.economyDirection}
+                  options={[
+                    { value: 'increase', label: t('management.users.economyIncrease') },
+                    { value: 'decrease', label: t('management.users.economyDecrease') },
+                  ]}
+                  onChange={(economyDirection) => setDraft({ ...draft, economyDirection })}
+                />
+                <label>
+                  <span>{t('management.users.economyPositiveAmount')}</span>
+                  <Affix
+                    aria-label={t('management.users.economyPositiveAmount')}
+                    unit={t('management.users.creditsBalance')}
+                    inputMode="decimal"
+                    value={draft.economyAmount}
+                    placeholder="1.5"
+                    onChange={(event) => setDraft({ ...draft, economyAmount: event.target.value })}
+                  />
+                </label>
+                <label>
+                  <span>{t('management.users.economyReason')}</span>
+                  <input
+                    aria-label={t('management.users.economyReason')}
+                    required
+                    maxLength={1024}
+                    value={draft.economyReason}
+                    onChange={(event) => setDraft({ ...draft, economyReason: event.target.value })}
+                  />
+                  <small className="user-field-hint">{t('management.users.reasonRequired')}</small>
+                </label>
+              </div>
+              <button
+                className="nb-btn nb-btn--primary"
+                type="button"
+                disabled={
+                  patch.isPending ||
+                  !draft.economyAmount ||
+                  draft.economyAmount.startsWith('-') ||
+                  !draft.economyReason.trim()
                 }
-              >
-                <option value="" disabled>
-                  {t('management.users.languageDefault')}
-                </option>
-                <option value="zh">中文</option>
-                <option value="en">English</option>
-              </select>
-            </label>
-            {invalidLimits ? (
-              <p className="field-error" role="alert">
-                {t('management.users.limitInvalid')}
-              </p>
-            ) : null}
-            <div className="ops-actions">
-              <button
-                className="btn btn-primary"
-                type="button"
-                disabled={patch.isPending || invalidLimits}
-                onClick={saveLimits}
-              >
-                {t('management.users.saveLimits')}
-              </button>
-              <button
-                className="btn btn-secondary"
-                type="button"
-                disabled={patch.isPending}
                 onClick={() =>
-                  patch.mutate({
+                  setEconomyConfirm({
                     revision: user.revision,
-                    body: { mode: 'profile', level: draft.level ? Number(draft.level) : null },
+                    body: {
+                      mode: 'economy',
+                      target: draft.economyTarget,
+                      direction: draft.economyDirection,
+                      amount: draft.economyAmount,
+                      reason: draft.economyReason.trim(),
+                    },
                   })
                 }
               >
-                {t('management.users.levelApply')}
+                {t('management.users.economySubmit')}
+              </button>
+            </Card>
+          </section>
+          <section
+            role="tabpanel"
+            id={`${tabID}-penalties-panel`}
+            aria-labelledby={`${tabID}-penalties`}
+            hidden={tab !== 'penalties'}
+          >
+            {penaltiesVisited ? (
+              <Card>
+                <PenaltyHistory inline role={role} account={account} userID={user.id} />
+              </Card>
+            ) : null}
+            <Card>
+              <h2>{t('management.users.banSectionTitle')}</h2>
+              <div className="ops-field-grid">
+                <label>
+                  <span>{t('management.users.banReason')}</span>
+                  <input
+                    maxLength={1024}
+                    value={draft.banReason}
+                    onChange={(event) => setDraft({ ...draft, banReason: event.target.value })}
+                  />
+                </label>
+                <label>
+                  <span>{t('management.users.banDurationDays')}</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="3660"
+                    value={draft.banDuration}
+                    onChange={(event) => setDraft({ ...draft, banDuration: event.target.value })}
+                  />
+                </label>
+              </div>
+              <div className="ops-actions">
+                {user.is_banned ? (
+                  <button
+                    className="nb-btn nb-btn--danger-outline"
+                    type="button"
+                    onClick={() => setConfirm('unban')}
+                  >
+                    {t('management.users.unban')}
+                  </button>
+                ) : (
+                  <button
+                    className="nb-btn nb-btn--danger-outline"
+                    type="button"
+                    disabled={
+                      !draft.banReason.trim() ||
+                      (draft.banDuration !== '' &&
+                        (!Number.isSafeInteger(banSeconds) || (banSeconds ?? 0) < 1))
+                    }
+                    onClick={() => setConfirm('ban')}
+                  >
+                    {t('management.users.ban')}
+                  </button>
+                )}
+              </div>
+              {mutationError && !economyConfirm ? <ErrorState error={mutationError} /> : null}
+            </Card>
+          </section>
+          <Card className="user-danger">
+            <h2>{t('management.users.dangerTitle')}</h2>
+            <div className="user-danger-row">
+              <p>{t('management.users.banConsequence')}</p>
+              <button
+                className="nb-btn nb-btn--danger-outline"
+                type="button"
+                onClick={() => {
+                  if (user.is_banned) setConfirm('unban');
+                  else {
+                    setTab('penalties');
+                    setPenaltiesVisited(true);
+                  }
+                }}
+              >
+                {t(user.is_banned ? 'management.users.unbanAction' : 'management.users.banAction')}
               </button>
             </div>
-          </Card>
-          <Card>
-            <h2>{t('management.users.economyTitle')}</h2>
-            <p>{t('management.users.economyPositiveHint')}</p>
-            <div className="ops-field-grid">
-              <label>
-                <span>{t('management.users.economyTarget')}</span>
-                <select
-                  value={draft.economyTarget}
-                  onChange={(event) =>
-                    setDraft({
-                      ...draft,
-                      economyTarget: event.target.value as UserDraft['economyTarget'],
-                    })
-                  }
-                >
-                  <option value="balance">{t('management.users.creditsBalance')}</option>
-                  <option value="game_balance">{t('management.users.gameBalance')}</option>
-                  {role === 'admin' ? (
-                    <option value="donation_credit">{t('management.users.donationBalance')}</option>
-                  ) : null}
-                </select>
-              </label>
-              <label>
-                <span>{t('management.users.economyDirection')}</span>
-                <select
-                  value={draft.economyDirection}
-                  onChange={(event) =>
-                    setDraft({
-                      ...draft,
-                      economyDirection: event.target.value as UserDraft['economyDirection'],
-                    })
-                  }
-                >
-                  <option value="increase">{t('management.users.economyIncrease')}</option>
-                  <option value="decrease">{t('management.users.economyDecrease')}</option>
-                </select>
-              </label>
-              <label>
-                <span>{t('management.users.economyPositiveAmount')}</span>
-                <input
-                  value={draft.economyAmount}
-                  placeholder="1.5"
-                  onChange={(event) => setDraft({ ...draft, economyAmount: event.target.value })}
-                />
-              </label>
-              <label>
-                <span>{t('management.users.economyReason')}</span>
-                <input
-                  maxLength={1024}
-                  value={draft.economyReason}
-                  onChange={(event) => setDraft({ ...draft, economyReason: event.target.value })}
-                />
-              </label>
-            </div>
-            <button
-              className="btn btn-primary"
-              type="button"
-              disabled={
-                patch.isPending ||
-                !draft.economyAmount ||
-                draft.economyAmount.startsWith('-') ||
-                !draft.economyReason.trim()
-              }
-              onClick={() =>
-                setEconomyConfirm({
-                  revision: user.revision,
-                  body: {
-                    mode: 'economy',
-                    target: draft.economyTarget,
-                    direction: draft.economyDirection,
-                    amount: draft.economyAmount,
-                    reason: draft.economyReason.trim(),
-                  },
-                })
-              }
-            >
-              {t('management.users.economySubmit')}
-            </button>
-          </Card>
-          <Card className="ops-danger">
-            <h2>{t('management.users.banSectionTitle')}</h2>
-            <div className="ops-field-grid">
-              <label>
-                <span>{t('management.users.banReason')}</span>
-                <input
-                  maxLength={1024}
-                  value={draft.banReason}
-                  onChange={(event) => setDraft({ ...draft, banReason: event.target.value })}
-                />
-              </label>
-              <label>
-                <span>{t('management.users.banDurationDays')}</span>
-                <input
-                  type="number"
-                  min="1"
-                  max="3660"
-                  value={draft.banDuration}
-                  onChange={(event) => setDraft({ ...draft, banDuration: event.target.value })}
-                />
-              </label>
-            </div>
-            <div className="ops-actions">
-              {user.is_banned ? (
-                <button
-                  className="btn btn-danger"
-                  type="button"
-                  onClick={() => setConfirm('unban')}
-                >
-                  {t('management.users.unban')}
-                </button>
-              ) : (
-                <button
-                  className="btn btn-danger"
-                  type="button"
-                  disabled={
-                    !draft.banReason.trim() ||
-                    (draft.banDuration !== '' &&
-                      (!Number.isSafeInteger(banSeconds) || (banSeconds ?? 0) < 1))
-                  }
-                  onClick={() => setConfirm('ban')}
-                >
-                  {t('management.users.ban')}
-                </button>
-              )}
-              {renderDeletion?.(user, refresh)}
-            </div>
-            {mutationError && !economyConfirm ? <ErrorState error={mutationError} /> : null}
+            {renderDeletion ? (
+              <div className="user-danger-row">
+                <p>{t('management.users.deleteConsequence')}</p>
+                {renderDeletion(user, refresh)}
+              </div>
+            ) : null}
           </Card>
         </>
       ) : (
-        <Card>
-          <p>{t('management.users.readOnly')}</p>
-          <dl className="ops-kv">
-            <dt>{t('management.users.endpointLimit')}</dt>
-            <dd>{user.effective_endpoint_limit}</dd>
-            <dt>{t('management.users.rpmLimit')}</dt>
-            <dd>{user.effective_rpm_limit}</dd>
-            <dt>{t('management.users.concurrencyLimit')}</dt>
-            <dd>{user.effective_concurrency_limit}</dd>
-            <dt>{t('management.users.language')}</dt>
-            <dd>{user.lang || t('management.users.languageDefault')}</dd>
-          </dl>
-        </Card>
+        <>
+          <section
+            role="tabpanel"
+            id={`${tabID}-limits-panel`}
+            aria-labelledby={`${tabID}-limits`}
+            hidden={tab !== 'limits'}
+          >
+            <Card>
+              <p>{t('management.users.readOnly')}</p>
+              <dl className="ops-kv">
+                <dt>{t('management.users.endpointLimit')}</dt>
+                <dd>{user.effective_endpoint_limit}</dd>
+                <dt>{t('management.users.rpmLimit')}</dt>
+                <dd>{user.effective_rpm_limit}</dd>
+                <dt>{t('management.users.concurrencyLimit')}</dt>
+                <dd>{user.effective_concurrency_limit}</dd>
+                <dt>{t('management.users.language')}</dt>
+                <dd>{user.lang || t('management.users.languageDefault')}</dd>
+              </dl>
+            </Card>
+          </section>
+          <section
+            role="tabpanel"
+            id={`${tabID}-economy-panel`}
+            aria-labelledby={`${tabID}-economy`}
+            hidden={tab !== 'economy'}
+          >
+            <Card>
+              <p>{t('management.users.readOnly')}</p>
+            </Card>
+          </section>
+          <section
+            role="tabpanel"
+            id={`${tabID}-penalties-panel`}
+            aria-labelledby={`${tabID}-penalties`}
+            hidden={tab !== 'penalties'}
+          >
+            {penaltiesVisited ? (
+              <Card>
+                <PenaltyHistory inline role={role} account={account} userID={user.id} />
+              </Card>
+            ) : null}
+          </section>
+        </>
       )}
       {confirm ? (
         <ConfirmDialog
@@ -732,7 +927,21 @@ export function UserManagement({
       return next;
     });
   };
+  const selection = selected
+    ? `user:${selected}`
+    : selectedDeleted
+      ? `deleted:${selectedDeleted}`
+      : '';
+  const navigationReady =
+    !users.isPending &&
+    !users.isFetching &&
+    (!selection ||
+      (selected
+        ? !detail.isPending && !detail.isFetching
+        : !deletedDetail.isPending && !deletedDetail.isFetching));
+  const { listRef, detailRef, remember } = useDetailNavigation(selection, navigationReady);
   const selectUser = (id: string) => {
+    remember();
     setSearchParams((previous) => {
       const next = new URLSearchParams(previous);
       next.set('user', id);
@@ -742,6 +951,7 @@ export function UserManagement({
     });
   };
   const selectDeleted = (id: string) => {
+    remember();
     setSearchParams((previous) => {
       const next = new URLSearchParams(previous);
       next.set('deleted', id);
@@ -760,316 +970,327 @@ export function UserManagement({
     });
   };
   return (
-    <div className="page ops-page">
+    <div className="page ops-page user-management">
       <PageHeader
-        title={t('management.users.title')}
+        title={role === 'admin' ? t('admin.navigation.users') : t('management.users.title')}
         description={t('management.users.description')}
       />
-      <Card>
-        <form
-          className="ops-toolbar"
-          onSubmit={(event) => {
-            event.preventDefault();
-            commitListState(
-              queryDraft.trim(),
-              banned,
-              level,
-              userIDDraft,
-              accountState,
-              discordIDDraft,
-            );
-          }}
-        >
-          <label>
-            <span>{t('management.users.userId')}</span>
-            <input
-              aria-label={t('management.users.userId')}
-              aria-invalid={invalidUserIDDraft}
-              inputMode="numeric"
-              maxLength={64}
-              value={userIDDraft}
-              onChange={(event) => setUserIDDraft(event.target.value)}
-            />
-          </label>
-          <label>
-            <span>{t('common.search')}</span>
-            <input
-              aria-label={t('management.users.searchAria')}
-              placeholder={t('management.users.searchPlaceholder')}
-              value={queryDraft}
-              onChange={(event) => setQueryDraft(event.target.value)}
-            />
-          </label>
-          <label>
-            <span>{t('management.users.discordId')}</span>
-            <input
-              aria-label={t('management.users.discordId')}
-              aria-invalid={invalidDiscordIDDraft}
-              inputMode="numeric"
-              maxLength={20}
-              value={discordIDDraft}
-              onChange={(event) => setDiscordIDDraft(event.target.value)}
-            />
-          </label>
-          <label>
-            <span>{t('management.users.filterStatus')}</span>
-            <select
-              value={banned}
-              onChange={(event) =>
-                commitListState(query, event.target.value as typeof banned, level, userIDDraft)
-              }
-            >
-              <option value="">{t('common.all')}</option>
-              <option value="false">{t('management.users.active')}</option>
-              <option value="true">{t('management.users.banned')}</option>
-            </select>
-          </label>
-          <label>
-            <span>{accountLabels.allAccounts}</span>
-            <select
-              value={accountState}
-              onChange={(event) =>
+      <div className={`nb-md${selection ? ' has-selection' : ''}`}>
+        <div className="nb-md__list ops-stack" ref={listRef} tabIndex={-1}>
+          <Card>
+            <form
+              className="ops-toolbar"
+              onSubmit={(event) => {
+                event.preventDefault();
                 commitListState(
-                  query,
+                  queryDraft.trim(),
                   banned,
                   level,
                   userIDDraft,
-                  event.target.value as AccountState,
-                )
-              }
+                  accountState,
+                  discordIDDraft,
+                );
+              }}
             >
-              <option value="all">{accountLabels.allAccounts}</option>
-              <option value="active">{accountLabels.activeAccounts}</option>
-              <option value="deleted">{accountLabels.deletedAccounts}</option>
-            </select>
-          </label>
-          <label>
-            <span>{t('management.users.level')}</span>
-            <select
-              value={level}
-              onChange={(event) => commitListState(query, banned, event.target.value, userIDDraft)}
-            >
-              <option value="">{t('common.all')}</option>
-              {[1, 2, 3, 4, 5, 6].map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </label>
-          {invalidUserIDDraft ? (
-            <p className="field-error" role="alert">
-              {t('management.users.userIdInvalid')}
-            </p>
-          ) : null}
-          {invalidDiscordIDDraft ? (
-            <p className="field-error" role="alert">
-              {accountLabels.discordInvalid}
-            </p>
-          ) : null}
-          <button
-            className="btn btn-secondary"
-            type="submit"
-            disabled={invalidUserIDDraft || invalidDiscordIDDraft}
-          >
-            {t('common.applyFilter')}
-          </button>
-        </form>
-      </Card>
-      <Card>
-        <h2>{t('management.users.listTitle')}</h2>
-        {accountState !== 'active' ? <p>{accountHistoryCopy(t).coverage}</p> : null}
-        {invalidCommittedUserID || invalidCommittedDiscordID ? (
-          <p role="status">
-            {invalidCommittedUserID
-              ? t('management.users.userIdInvalid')
-              : accountLabels.discordInvalid}
-          </p>
-        ) : sessionError ? (
-          <ErrorState error={sessionError} />
-        ) : users.isPending ? (
-          <LoadingState />
-        ) : users.error ? (
-          <ErrorState error={users.error} onRetry={() => void users.refetch()} />
-        ) : users.data.data.length === 0 ? (
-          <EmptyState title={t('management.users.empty')} body={t('management.users.emptyBody')} />
-        ) : (
-          <div aria-busy={users.isFetching}>
-            {users.isFetching ? <LoadingState /> : null}
-            <div className="ops-table-scroll">
-              <table className="ops-table ops-users-table">
-                <thead>
-                  <tr>
-                    <th>{t('management.users.userId')}</th>
-                    <th>{t('management.users.username')}</th>
-                    <th>{t('management.users.discordId')}</th>
-                    <th>{t('management.users.status')}</th>
-                    <th>{t('management.users.level')}</th>
-                    <th>{t('management.users.balances')}</th>
-                    <th>{t('management.users.actions')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.data.data.map((entry) => {
-                    if (entry.account_state === 'deleted') {
-                      const history = entry.deleted;
-                      return (
-                        <tr key={`deleted:${history.record_id}`}>
-                          <td data-label={t('management.users.userId')}>
-                            {history.former_user_id ?? accountLabels.unknown}
-                          </td>
-                          <td data-label={t('management.users.username')}>
-                            {accountLabels.deleted}
-                          </td>
-                          <td data-label={t('management.users.discordId')}>
-                            {history.discord_id ?? accountLabels.unknown}
-                          </td>
-                          <td data-label={t('management.users.status')}>{accountLabels.deleted}</td>
-                          <td data-label={t('management.users.level')}>
-                            {history.effective_level ?? accountLabels.unknown}
-                          </td>
-                          <td data-label={t('management.users.balances')}>
-                            {history.general_balance ?? accountLabels.unknown} ·{' '}
-                            {history.game_balance ?? accountLabels.unknown}
-                          </td>
-                          <td
-                            data-label={t('management.users.actions')}
-                            style={{ whiteSpace: 'nowrap' }}
+              <label>
+                <span>{t('common.search')}</span>
+                <input
+                  aria-label={t('management.users.searchAria')}
+                  placeholder={t('management.users.searchPlaceholder')}
+                  value={queryDraft}
+                  onChange={(event) => setQueryDraft(event.target.value)}
+                />
+              </label>
+              <Fold title={t('management.users.exactFilters')}>
+                <div className="ops-field-grid">
+                  <label>
+                    <span>{t('management.users.userId')}</span>
+                    <input
+                      aria-label={t('management.users.userId')}
+                      aria-invalid={invalidUserIDDraft}
+                      inputMode="numeric"
+                      maxLength={64}
+                      value={userIDDraft}
+                      onChange={(event) => setUserIDDraft(event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    <span>{t('management.users.discordId')}</span>
+                    <input
+                      aria-label={t('management.users.discordId')}
+                      aria-invalid={invalidDiscordIDDraft}
+                      inputMode="numeric"
+                      maxLength={20}
+                      value={discordIDDraft}
+                      onChange={(event) => setDiscordIDDraft(event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    <span>{accountLabels.allAccounts}</span>
+                    <select
+                      value={accountState}
+                      onChange={(event) =>
+                        commitListState(
+                          query,
+                          banned,
+                          level,
+                          userIDDraft,
+                          event.target.value as AccountState,
+                        )
+                      }
+                    >
+                      <option value="all">{accountLabels.allAccounts}</option>
+                      <option value="active">{accountLabels.activeAccounts}</option>
+                      <option value="deleted">{accountLabels.deletedAccounts}</option>
+                    </select>
+                  </label>
+                </div>
+              </Fold>
+              <label>
+                <span>{t('management.users.filterStatus')}</span>
+                <select
+                  value={banned}
+                  onChange={(event) =>
+                    commitListState(query, event.target.value as typeof banned, level, userIDDraft)
+                  }
+                >
+                  <option value="">{t('common.all')}</option>
+                  <option value="false">{t('management.users.active')}</option>
+                  <option value="true">{t('management.users.banned')}</option>
+                </select>
+              </label>
+              <label>
+                <span>{t('management.users.level')}</span>
+                <select
+                  value={level}
+                  onChange={(event) =>
+                    commitListState(query, banned, event.target.value, userIDDraft)
+                  }
+                >
+                  <option value="">{t('common.all')}</option>
+                  {[1, 2, 3, 4, 5, 6].map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {invalidUserIDDraft ? (
+                <p className="field-error" role="alert">
+                  {t('management.users.userIdInvalid')}
+                </p>
+              ) : null}
+              {invalidDiscordIDDraft ? (
+                <p className="field-error" role="alert">
+                  {accountLabels.discordInvalid}
+                </p>
+              ) : null}
+              <button
+                className="btn btn-secondary"
+                type="submit"
+                disabled={invalidUserIDDraft || invalidDiscordIDDraft}
+              >
+                {t('common.applyFilter')}
+              </button>
+            </form>
+          </Card>
+          <Card>
+            <h2>{t('management.users.listTitle')}</h2>
+            {accountState !== 'active' ? <p>{accountHistoryCopy(t).coverage}</p> : null}
+            {invalidCommittedUserID || invalidCommittedDiscordID ? (
+              <p role="status">
+                {invalidCommittedUserID
+                  ? t('management.users.userIdInvalid')
+                  : accountLabels.discordInvalid}
+              </p>
+            ) : sessionError ? (
+              <ErrorState error={sessionError} />
+            ) : users.isPending ? (
+              <LoadingState />
+            ) : users.error ? (
+              <ErrorState error={users.error} onRetry={() => void users.refetch()} />
+            ) : users.data.data.length === 0 ? (
+              <EmptyState
+                title={t('management.users.empty')}
+                body={t('management.users.emptyBody')}
+              />
+            ) : (
+              <div aria-busy={users.isFetching}>
+                {users.isFetching ? <LoadingState /> : null}
+                <DataTable
+                  dense
+                  caption={t('management.users.listTitle')}
+                  rows={users.data.data}
+                  rowKey={(entry) =>
+                    entry.account_state === 'deleted'
+                      ? `deleted:${entry.deleted.record_id}`
+                      : `user:${entry.user.id}`
+                  }
+                  selectedKey={selection}
+                  columns={[
+                    {
+                      key: 'user',
+                      header: t('management.users.username'),
+                      cell: 'title',
+                      render: (entry) => {
+                        const deleted = entry.account_state === 'deleted';
+                        const id = deleted ? entry.deleted.former_user_id : entry.user.id;
+                        const discord = deleted ? entry.deleted.discord_id : entry.user.discord_id;
+                        return (
+                          <div
+                            className={
+                              deleted ? 'user-list-identity is-deleted' : 'user-list-identity'
+                            }
                           >
                             <button
-                              className="btn btn-secondary"
+                              className="user-list-name"
                               type="button"
                               disabled={!scopeReady || users.isFetching}
-                              style={{ whiteSpace: 'nowrap' }}
-                              onClick={() => selectDeleted(history.record_id)}
+                              aria-label={deleted ? t('management.users.view') : undefined}
+                              onClick={() =>
+                                deleted
+                                  ? selectDeleted(entry.deleted.record_id)
+                                  : selectUser(entry.user.id)
+                              }
                             >
-                              {t('management.users.view')}
+                              {deleted ? accountLabels.deleted : entry.user.username}
                             </button>
-                          </td>
-                        </tr>
-                      );
-                    }
-                    const user = entry.user;
-                    return (
-                      <tr key={user.id}>
-                        <td data-label={t('management.users.userId')}>{user.id}</td>
-                        <td data-label={t('management.users.username')}>{user.username}</td>
-                        <td
-                          data-label={t('management.users.discordId')}
-                          className="ops-users-discord"
-                        >
-                          {user.discord_id ? (
-                            <CopyValue
-                              value={user.discord_id}
-                              label={t('management.users.discordId')}
-                            />
-                          ) : (
-                            t('management.users.discordUnlinked')
-                          )}
-                        </td>
-                        <td data-label={t('management.users.status')}>
+                            <span>
+                              #{id ?? accountLabels.unknown} ·{' '}
+                              {discord
+                                ? `${discord.slice(0, 4)}…${discord.slice(-4)}`
+                                : t('management.users.discordUnlinked')}
+                            </span>
+                          </div>
+                        );
+                      },
+                    },
+                    {
+                      key: 'level',
+                      header: t('management.users.level'),
+                      cell: 'meta',
+                      mobileLabel: t('management.users.level'),
+                      render: (entry) =>
+                        entry.account_state === 'deleted'
+                          ? (entry.deleted.effective_level ?? accountLabels.unknown)
+                          : entry.user.level.effective,
+                    },
+                    {
+                      key: 'status',
+                      header: t('management.users.status'),
+                      cell: 'status',
+                      render: (entry) =>
+                        entry.account_state === 'deleted' ? (
+                          <StatusBadge active={false} label={accountLabels.deleted} />
+                        ) : (
                           <StatusBadge
-                            active={!user.is_banned}
-                            danger={user.is_banned}
+                            active={!entry.user.is_banned}
+                            danger={entry.user.is_banned}
                             label={t(
-                              user.is_banned
+                              entry.user.is_banned
                                 ? 'management.users.banned'
                                 : 'management.users.active',
                             )}
                           />
-                        </td>
-                        <td data-label={t('management.users.level')}>{user.level.effective}</td>
-                        <td data-label={t('management.users.balances')}>
-                          {user.balance} {t('management.users.creditsBalance')} ·{' '}
-                          {user.game_balance} {t('management.users.gameBalance')}
-                        </td>
-                        <td
-                          data-label={t('management.users.actions')}
-                          style={{ whiteSpace: 'nowrap' }}
-                        >
-                          <button
-                            className="btn btn-secondary"
-                            type="button"
-                            disabled={!scopeReady || users.isFetching}
-                            style={{ whiteSpace: 'nowrap' }}
-                            onClick={() => selectUser(user.id)}
-                          >
-                            {t(
-                              role === 'steward' &&
-                                (user.id === account || user.level.effective === 6)
-                                ? 'management.users.view'
-                                : 'management.users.manage',
-                            )}
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-        {scopeReady && !sessionError && !users.error && users.data ? (
-          <PagePagination
-            metadata={users.data.pagination}
-            requestedPage={pager.page}
-            busy={users.isFetching}
-            onPageChange={pager.setPage}
-            onPageSizeChange={pager.setPageSize}
-          />
-        ) : null}
-      </Card>
-      {scopeReady &&
-      !sessionError &&
-      !invalidCommittedUserID &&
-      !invalidCommittedDiscordID &&
-      selected &&
-      !detailUnavailable ? (
-        detail.isPending ? (
-          <LoadingState />
-        ) : detail.error ? (
-          <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
-        ) : (
-          <UserAuthority
-            key={detail.data.id}
-            user={detail.data}
-            role={role}
-            account={account}
-            renderDeletion={renderDeletion}
-            onAuthorityLoss={onAuthorityLoss}
-            onClose={closeUser}
-            refresh={async () => {
-              await Promise.all([detail.refetch(), users.refetch()]);
-            }}
-          />
-        )
-      ) : null}
-      {selected && detailUnavailable ? (
-        <ErrorState error={detail.error ?? users.error} onRetry={closeUser} />
-      ) : null}
-      {scopeReady &&
-      !sessionError &&
-      !invalidCommittedUserID &&
-      !invalidCommittedDiscordID &&
-      selectedDeleted &&
-      !detailUnavailable ? (
-        deletedDetail.isPending ? (
-          <LoadingState />
-        ) : deletedDetail.error ? (
-          <ErrorState error={deletedDetail.error} onRetry={() => void deletedDetail.refetch()} />
-        ) : (
-          <DeletedAccountCard
-            key={deletedDetail.data.record_id}
-            account={deletedDetail.data}
-            role={role}
-            onClose={closeUser}
-          />
-        )
-      ) : null}
-      {selectedDeleted && detailUnavailable ? (
-        <ErrorState error={deletedDetail.error ?? users.error} onRetry={closeUser} />
-      ) : null}
+                        ),
+                    },
+                    {
+                      key: 'balance',
+                      header: t('management.users.creditsBalance'),
+                      cell: 'meta',
+                      align: 'num',
+                      mobileLabel: t('management.users.creditsBalance'),
+                      render: (entry) =>
+                        entry.account_state === 'deleted'
+                          ? (entry.deleted.general_balance ?? accountLabels.unknown)
+                          : entry.user.balance,
+                    },
+                  ]}
+                />
+              </div>
+            )}
+            {scopeReady && !sessionError && !users.error && users.data ? (
+              <PagePagination
+                metadata={users.data.pagination}
+                requestedPage={pager.page}
+                busy={users.isFetching}
+                onPageChange={pager.setPage}
+                onPageSizeChange={pager.setPageSize}
+              />
+            ) : null}
+          </Card>
+        </div>
+        <div className="nb-md__detail" ref={detailRef} tabIndex={-1}>
+          {!selection ? (
+            <EmptyState
+              title={t('management.users.selectUser')}
+              body={t('management.users.selectUserBody')}
+            />
+          ) : !selected || detailUnavailable || detail.isPending || detail.error ? (
+            <button
+              className="nb-btn nb-btn--quiet user-detail-back"
+              type="button"
+              onClick={closeUser}
+            >
+              {t('management.users.backToList')}
+            </button>
+          ) : null}
+          {scopeReady &&
+          !sessionError &&
+          !invalidCommittedUserID &&
+          !invalidCommittedDiscordID &&
+          selected &&
+          !detailUnavailable ? (
+            detail.isPending ? (
+              <LoadingState />
+            ) : detail.error ? (
+              <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
+            ) : (
+              <UserAuthority
+                key={detail.data.id}
+                user={detail.data}
+                role={role}
+                account={account}
+                renderDeletion={renderDeletion}
+                onAuthorityLoss={onAuthorityLoss}
+                onClose={closeUser}
+                refresh={async () => {
+                  const results = await Promise.all([detail.refetch(), users.refetch()]);
+                  for (const result of results) if (result.error) throw result.error;
+                }}
+              />
+            )
+          ) : null}
+          {selected && detailUnavailable ? (
+            <ErrorState error={detail.error ?? users.error} onRetry={closeUser} />
+          ) : null}
+          {scopeReady &&
+          !sessionError &&
+          !invalidCommittedUserID &&
+          !invalidCommittedDiscordID &&
+          selectedDeleted &&
+          !detailUnavailable ? (
+            deletedDetail.isPending ? (
+              <LoadingState />
+            ) : deletedDetail.error ? (
+              <ErrorState
+                error={deletedDetail.error}
+                onRetry={() => void deletedDetail.refetch()}
+              />
+            ) : (
+              <DeletedAccountCard
+                key={deletedDetail.data.record_id}
+                account={deletedDetail.data}
+                role={role}
+                onClose={closeUser}
+              />
+            )
+          ) : null}
+          {selectedDeleted && detailUnavailable ? (
+            <ErrorState error={deletedDetail.error ?? users.error} onRetry={closeUser} />
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }

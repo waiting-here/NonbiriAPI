@@ -8,6 +8,9 @@ import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
+import { DataTable, Fold, MoreMenu } from '@shared/components/ui';
+import { Drawer } from '@shared/components/ui/Drawer';
+import './blacklist.css';
 import { ReasonText } from '@shared/components/ReasonText';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
 import { clearStationSession } from '@shared/charityManagement';
@@ -129,6 +132,7 @@ export function BlacklistManagement({
     enabled: Boolean(accountID) && !sessionFetching,
     retry: false,
   });
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [discordID, setDiscordID] = useState('');
   const [reason, setReason] = useState('');
   const [search, setSearch] = useState(q);
@@ -156,6 +160,7 @@ export function BlacklistManagement({
         if (input.add) {
           setDiscordID('');
           setReason('');
+          setDrawerOpen(false);
         } else if (selected === input.id) setSelected('');
       });
     },
@@ -224,11 +229,47 @@ export function BlacklistManagement({
       return next;
     });
   };
+  const feedback = (
+    <>
+      {validation ? <p role="alert">{validation}</p> : null}
+      {notice ? <p role="status">{notice}</p> : null}
+      {mutation.error ? (
+        <ErrorState
+          error={mutation.error}
+          onRetry={() => {
+            if (mutation.variables) mutation.mutate(mutation.variables);
+          }}
+        />
+      ) : null}
+      {mutation.refreshError ? (
+        <ErrorState error={mutation.refreshError} onRetry={() => void mutation.refresh()} />
+      ) : null}
+    </>
+  );
   return (
-    <div className="page ops-page">
-      <PageHeader title={label.title} description={label.description} />
-      <Card>
-        <h2>{label.addTitle}</h2>
+    <div className="page ops-page blacklist-management">
+      <PageHeader
+        title={label.title}
+        description={label.description}
+        actions={
+          <button
+            className="nb-btn nb-btn--primary"
+            type="button"
+            disabled={!accountID || Boolean(sessionError)}
+            onClick={() => setDrawerOpen(true)}
+          >
+            {label.addTitle}
+          </button>
+        }
+      />
+      <Drawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        title={label.addTitle}
+        closeLabel={t('common.close')}
+        busy={mutation.isPending}
+      >
+        <p className="blacklist-consequence">{label.description}</p>
         <form
           onSubmit={submit}
           className="ops-toolbar"
@@ -260,25 +301,42 @@ export function BlacklistManagement({
             />
           </label>
           <div className="ops-actions">
-            <button type="submit" className="btn btn-primary" disabled={busy}>
+            <button type="submit" className="nb-btn nb-btn--danger" disabled={busy}>
               {label.add}
             </button>
           </div>
         </form>
-        {validation ? <p role="alert">{validation}</p> : null}
-        {notice ? <p role="status">{notice}</p> : null}
-        {mutation.error ? (
-          <ErrorState
-            error={mutation.error}
-            onRetry={() => {
-              if (mutation.variables) mutation.mutate(mutation.variables);
-            }}
-          />
-        ) : null}
-        {mutation.refreshError ? (
-          <ErrorState error={mutation.refreshError} onRetry={() => void mutation.refresh()} />
-        ) : null}
-      </Card>
+        {drawerOpen ? feedback : null}
+        <ConfirmDialog
+          open={
+            confirmation !== null &&
+            Boolean(accountID) &&
+            !isForbidden(mutation.error) &&
+            !isUnauthorized(mutation.error)
+          }
+          title={label.addTitle}
+          description={
+            <>
+              <p>Discord ID: {confirmation?.id}</p>
+              <p>{label.description}</p>
+              <p>
+                {label.reason}: {confirmation?.reason}
+              </p>
+            </>
+          }
+          confirmLabel={label.add}
+          danger
+          busy={mutation.isPending}
+          onCancel={() => setConfirmation(null)}
+          onConfirm={() => {
+            if (confirmation) {
+              mutation.mutate(confirmation);
+              setConfirmation(null);
+            }
+          }}
+        />
+      </Drawer>
+      {!drawerOpen ? feedback : null}
       <Card>
         <form onSubmit={applySearch} className="ops-field-grid">
           <label className="ops-form-field">
@@ -289,35 +347,39 @@ export function BlacklistManagement({
               maxLength={512}
             />
           </label>
-          <label className="ops-form-field">
-            <span>{label.exactDiscord}</span>
-            <input
-              value={discordDraft}
-              onChange={(event) => setDiscordDraft(event.target.value)}
-              inputMode="numeric"
-              maxLength={20}
-            />
-          </label>
-          <label className="ops-form-field">
-            <span>{label.actorKind}</span>
-            <select value={kindDraft} onChange={(event) => setKindDraft(event.target.value)}>
-              <option value="">{t('common.blacklist.all')}</option>
-              <option value="admin">{actorLabels.admin}</option>
-              <option value="steward6">{actorLabels.steward6}</option>
-              <option value="automatic">{actorLabels.automatic}</option>
-              <option value="unknown">{actorLabels.unknown}</option>
-            </select>
-          </label>
-          <label className="ops-form-field">
-            <span>{label.actorUserID}</span>
-            <input
-              value={actorDraft}
-              onChange={(event) => setActorDraft(event.target.value)}
-              inputMode="numeric"
-              maxLength={19}
-            />
-          </label>
-          <button className="btn btn-secondary" disabled={busy} type="submit">
+          <Fold title={t('management.users.exactFilters')}>
+            <div className="ops-field-grid">
+              <label className="ops-form-field">
+                <span>{label.exactDiscord}</span>
+                <input
+                  value={discordDraft}
+                  onChange={(event) => setDiscordDraft(event.target.value)}
+                  inputMode="numeric"
+                  maxLength={20}
+                />
+              </label>
+              <label className="ops-form-field">
+                <span>{label.actorKind}</span>
+                <select value={kindDraft} onChange={(event) => setKindDraft(event.target.value)}>
+                  <option value="">{t('common.blacklist.all')}</option>
+                  <option value="admin">{actorLabels.admin}</option>
+                  <option value="steward6">{actorLabels.steward6}</option>
+                  <option value="automatic">{actorLabels.automatic}</option>
+                  <option value="unknown">{actorLabels.unknown}</option>
+                </select>
+              </label>
+              <label className="ops-form-field">
+                <span>{label.actorUserID}</span>
+                <input
+                  value={actorDraft}
+                  onChange={(event) => setActorDraft(event.target.value)}
+                  inputMode="numeric"
+                  maxLength={19}
+                />
+              </label>
+            </div>
+          </Fold>
+          <button className="nb-btn nb-btn--secondary" disabled={busy} type="submit">
             {label.applySearch}
           </button>
         </form>
@@ -332,80 +394,102 @@ export function BlacklistManagement({
             {result.data.data.length === 0 ? (
               <EmptyState title={label.empty} body={label.emptyBody} />
             ) : (
-              <div className="ops-table-scroll">
-                <table className="ops-table ops-table--responsive">
-                  <thead>
-                    <tr>
-                      <th>Discord ID</th>
-                      <th>{label.reason}</th>
-                      <th>{label.firstActor}</th>
-                      <th>{label.account}</th>
-                      <th>{label.created}</th>
-                      <th>{label.action}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {result.data.data.map((item) => (
-                      <tr key={item.discord_id}>
-                        <td data-label="Discord ID">{item.discord_id}</td>
-                        <td data-label={label.reason}>
-                          <span className="ops-blacklist-note">{item.reason}</span>
-                        </td>
-                        <td data-label={label.firstActor}>
-                          {actorLabels[item.first_actor_kind]}
-                          {item.first_actor_user_id ? ` #${item.first_actor_user_id}` : ''}
-                        </td>
-                        <td data-label={label.account}>
-                          {item.user_id ? (
-                            <Link
-                              to={
-                                role === 'admin'
-                                  ? `/users?account_state=all&discord_id=${encodeURIComponent(item.discord_id)}`
-                                  : `/steward?tab=users&account_state=all&discord_id=${encodeURIComponent(item.discord_id)}`
-                              }
-                            >
-                              {item.user_id}
-                            </Link>
-                          ) : (
-                            label.noAccount
-                          )}
-                        </td>
-                        <td data-label={label.created}>{formatDateTime(item.created_at)}</td>
-                        <td className="ops-cell-wide" data-label={label.action}>
-                          <button
-                            type="button"
-                            className="btn btn-secondary ops-action-button"
-                            disabled={busy}
-                            onClick={() => {
+              <DataTable
+                caption={label.title}
+                rows={result.data.data}
+                rowKey={(item) => item.discord_id}
+                columns={[
+                  {
+                    key: 'discord',
+                    header: 'Discord ID',
+                    cell: 'title',
+                    render: (item) => (
+                      <div className="blacklist-identity">
+                        <code>{item.discord_id}</code>
+                        {item.user_id ? (
+                          <Link
+                            to={
+                              role === 'admin'
+                                ? `/users?account_state=all&discord_id=${encodeURIComponent(item.discord_id)}`
+                                : `/steward?tab=users&account_state=all&discord_id=${encodeURIComponent(item.discord_id)}`
+                            }
+                          >
+                            {label.account} #{item.user_id}
+                          </Link>
+                        ) : (
+                          <small>{label.noAccount}</small>
+                        )}
+                      </div>
+                    ),
+                  },
+                  {
+                    key: 'reason',
+                    header: label.reason,
+                    cell: 'meta',
+                    mobileLabel: label.reason,
+                    render: (item) => (
+                      <span className="blacklist-first-reason" title={item.reason}>
+                        {item.reason}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: 'actor',
+                    header: label.firstActor,
+                    cell: 'meta',
+                    mobileLabel: label.firstActor,
+                    render: (item) => (
+                      <>
+                        {actorLabels[item.first_actor_kind]}
+                        {item.first_actor_user_id ? ` #${item.first_actor_user_id}` : ''}
+                      </>
+                    ),
+                  },
+                  {
+                    key: 'time',
+                    header: label.created,
+                    cell: 'hide-m',
+                    render: (item) => formatDateTime(item.created_at),
+                  },
+                  {
+                    key: 'action',
+                    header: label.action,
+                    cell: 'action',
+                    render: (item) => (
+                      <MoreMenu
+                        label={`${label.action}: ${item.discord_id}`}
+                        items={[
+                          {
+                            label: label.events,
+                            disabled: busy,
+                            onSelect: () => {
                               setSelected(item.discord_id);
                               setEventsPage(1);
-                            }}
-                          >
-                            {label.events}
-                          </button>
-                          {role === 'admin' ? (
-                            <button
-                              type="button"
-                              className="btn btn-secondary ops-action-button"
-                              disabled={busy}
-                              onClick={() => {
-                                setNotice('');
-                                mutation.mutate({
-                                  id: item.discord_id,
-                                  reason: '',
-                                  add: false,
-                                });
-                              }}
-                            >
-                              {label.remove}
-                            </button>
-                          ) : null}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                            },
+                          },
+                          ...(role === 'admin'
+                            ? [
+                                {
+                                  label: label.remove,
+                                  danger: true,
+                                  disabled: busy,
+                                  onSelect: () => {
+                                    setNotice('');
+                                    mutation.mutate({
+                                      id: item.discord_id,
+                                      reason: '',
+                                      add: false,
+                                    });
+                                  },
+                                },
+                              ]
+                            : []),
+                        ]}
+                      />
+                    ),
+                  },
+                ]}
+              />
             )}
             <PagePagination
               metadata={result.data.pagination}
@@ -423,7 +507,7 @@ export function BlacklistManagement({
             <h2>
               {label.events}: {selected}
             </h2>
-            <button type="button" className="btn btn-quiet" onClick={() => setSelected('')}>
+            <button type="button" className="nb-btn nb-btn--quiet" onClick={() => setSelected('')}>
               {t('common.blacklist.close')}
             </button>
           </div>
@@ -447,7 +531,7 @@ export function BlacklistManagement({
           <div className="ops-actions">
             <button
               type="button"
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               disabled={eventsPage <= 1 || events.isFetching}
               onClick={() => setEventsPage(eventsPage - 1)}
             >
@@ -455,7 +539,7 @@ export function BlacklistManagement({
             </button>
             <button
               type="button"
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               disabled={
                 !events.data ||
                 BigInt(events.data.pagination.page) >= BigInt(events.data.pagination.total_pages) ||
@@ -468,34 +552,6 @@ export function BlacklistManagement({
           </div>
         </Card>
       ) : null}
-      <ConfirmDialog
-        open={
-          confirmation !== null &&
-          Boolean(accountID) &&
-          !isForbidden(mutation.error) &&
-          !isUnauthorized(mutation.error)
-        }
-        title={label.addTitle}
-        description={
-          <>
-            <p>Discord ID: {confirmation?.id}</p>
-            <p>{label.description}</p>
-            <p>
-              {label.reason}: {confirmation?.reason}
-            </p>
-          </>
-        }
-        confirmLabel={label.add}
-        danger
-        busy={mutation.isPending}
-        onCancel={() => setConfirmation(null)}
-        onConfirm={() => {
-          if (confirmation) {
-            mutation.mutate(confirmation);
-            setConfirmation(null);
-          }
-        }}
-      />
     </div>
   );
 }

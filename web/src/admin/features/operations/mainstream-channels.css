@@ -1,0 +1,15 @@
+.channel-base-url {
+  display: block;
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--nb-font-mono);
+}
+@media (max-width: 48rem) {
+  .channel-base-url {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
