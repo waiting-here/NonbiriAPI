@@ -492,9 +492,7 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 			return a.streamProtocolFailure(writer, controller, committed, usage, "upstream stream chunk exceeded protocol bounds")
 		}
 		hasChoices := chunkHasChoices(compact)
-		frame := make([]byte, 0, len(compact)+8)
-		frame = append(frame, "data: "...)
-		frame = append(frame, compact...)
+		frame := append([]byte("data: "), compact...)
 		frame = append(frame, '\n', '\n')
 		rejected := guard.ContainsJSON(frame, compact)
 		clear(compact)
