@@ -4,12 +4,27 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { credits, getStatus, type Policy } from './api';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
+import { fixedOffsetZone } from '@shared/time';
 import './inactivity.css';
 
-export function PolicySummary({ policy, zh }: { policy: Policy; zh: boolean }) {
+export function PolicySummary({
+  policy,
+  zh,
+  siteOffset,
+}: {
+  policy: Policy;
+  zh: boolean;
+  siteOffset?: number | null;
+}) {
   return (
     <div className="inactivity-summary">
       {!policy.enabled && <p>{zh ? '低活跃政策未启用。' : 'The inactivity policy is disabled.'}</p>}
+      {policy.execution_time && (
+        <p>
+          {zh ? '执行时刻（站点时区）' : 'Execution time (site timezone)'}: {policy.execution_time}
+          {siteOffset != null ? ` · ${fixedOffsetZone(siteOffset)}` : ''}
+        </p>
+      )}
       {policy.decay.enabled && (
         <p>
           {zh
@@ -103,7 +118,11 @@ export function InactivityStatus({ accountId }: { readonly accountId: string }) 
         <dd>{date(value.protection_at)}</dd>
       </dl>
       <Fold plain title={t('common.inactivity.activityRules')}>
-        <PolicySummary policy={value.configuration} zh={zh} />
+        <PolicySummary
+          policy={value.configuration}
+          zh={zh}
+          siteOffset={value.configuration.site_timezone_offset_minutes}
+        />
         <dl className="nb-facts nb-facts--inline">
           <dt>{zh ? '观察开始' : 'Observation started'}</dt>
           <dd>{date(value.activity.observation_started_at)}</dd>

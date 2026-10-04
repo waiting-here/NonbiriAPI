@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
+	"net/url"
 	"strconv"
 )
 
@@ -37,6 +39,7 @@ func (s *Service) UserStatus(ctx context.Context) (Status, error) {
 
 type PreviewInput struct {
 	Update
+	Page   string `json:"page,omitempty"`
 	Cursor string `json:"cursor"`
 	Limit  int    `json:"page_size"`
 }
@@ -49,10 +52,11 @@ type PreviewEntry struct {
 	GameMilli    string `json:"game_milli"`
 }
 type PreviewPage struct {
-	Data          []PreviewEntry `json:"data"`
-	NextCursor    *string        `json:"next_cursor"`
-	AsOf          int64          `json:"as_of"`
-	Configuration Configuration  `json:"configuration"`
+	Data          []PreviewEntry       `json:"data"`
+	NextCursor    *string              `json:"next_cursor"`
+	AsOf          int64                `json:"as_of"`
+	Configuration Configuration        `json:"configuration"`
+	Pagination    *pagination.Metadata `json:"pagination,omitempty"`
 }
 
 func decodePosition(value string) (int64, error) {
@@ -79,6 +83,9 @@ func (s *Service) Preview(ctx context.Context, input PreviewInput) (PreviewPage,
 	out := PreviewPage{Data: make([]PreviewEntry, 0), AsOf: s.now().Unix()}
 	if input.Limit == 0 {
 		input.Limit = 100
+		if input.Page != "" {
+			input.Limit = 20
+		}
 	}
 	if input.Limit < 1 || input.Limit > 100 || input.ExpectedRevision < 1 || !validTime(out.AsOf) || Validate(input.Policy) != nil {
 		return out, ErrInvalid
@@ -86,6 +93,16 @@ func (s *Service) Preview(ctx context.Context, input PreviewInput) (PreviewPage,
 	after, err := decodePosition(input.Cursor)
 	if err != nil {
 		return out, err
+	}
+	var page pagination.Request
+	if input.Page != "" {
+		if input.Cursor != "" {
+			return out, ErrInvalid
+		}
+		page, _, err = pagination.Parse(url.Values{"page": {input.Page}, "page_size": {strconv.Itoa(input.Limit)}})
+		if err != nil {
+			return out, ErrInvalid
+		}
 	}
 	tx, actor, err := s.beginAdmin(ctx, true)
 	if err != nil {
@@ -101,9 +118,27 @@ func (s *Service) Preview(ctx context.Context, input PreviewInput) (PreviewPage,
 	}
 	c := old
 	c.Policy = input.Policy
+	if err = resolveExecutionTimezone(ctx, tx, &c); err != nil {
+		return out, err
+	}
 	c.DecayGraceUntil, c.ProtectionGraceUntil = grace(old, input.Policy, out.AsOf)
 	out.Configuration = c
-	rows, err := tx.QueryContext(ctx, `SELECT user_id FROM user_activity_state WHERE user_id>? ORDER BY user_id LIMIT ?`, after, input.Limit+1)
+	query := `SELECT user_id FROM user_activity_state WHERE user_id>? ORDER BY user_id LIMIT ?`
+	args := []any{after, input.Limit + 1}
+	if input.Page != "" {
+		var total int64
+		if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM user_activity_state`).Scan(&total); err != nil {
+			return out, err
+		}
+		metadata, offset, err := page.Window(total)
+		if err != nil {
+			return out, ErrInvalid
+		}
+		out.Pagination = &metadata
+		query = `SELECT user_id FROM user_activity_state ORDER BY user_id LIMIT ? OFFSET ?`
+		args = []any{input.Limit, offset}
+	}
+	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		return out, err
 	}

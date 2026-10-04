@@ -14,6 +14,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -135,6 +136,56 @@ func TestHTTPFinalSessionAuthorityRevisionAndReplay(t *testing.T) {
 	}
 	if scalar(t, e.store.DB(), `SELECT count(*) FROM inactivity_runs`) != 0 {
 		t.Fatal("preview executed policy")
+	}
+	for n := range 21 {
+		e.user(t, "page-"+strconv.Itoa(n), 1, 1000, 0)
+	}
+	total := scalar(t, e.store.DB(), `SELECT count(*) FROM user_activity_state`)
+	for _, test := range []struct {
+		page     string
+		size     int
+		wantPage string
+		wantRows int
+	}{
+		{"1", 10, "1", 10}, {"2", 10, "2", 10}, {"999", 10, "3", int(total) - 20}, {"1", 50, "1", int(total)},
+	} {
+		raw, _ := json.Marshal(PreviewInput{Update: input, Page: test.page, Limit: test.size})
+		response := call("POST", "/admin/api/inactivity-policy/preview", string(raw), "")
+		var result PreviewPage
+		if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &result) != nil {
+			t.Fatal("numbered preview", response.Code, response.Body.String())
+		}
+		if result.Pagination == nil || result.Pagination.Page != test.wantPage || result.Pagination.TotalItems != strconv.FormatInt(total, 10) || len(result.Data) != test.wantRows || result.NextCursor != nil {
+			t.Fatalf("incorrect preview page %+v", result)
+		}
+	}
+	for _, page := range []PreviewInput{{Update: input, Page: "0", Limit: 10}, {Update: input, Page: "1", Limit: 11}, {Update: input, Page: "1", Cursor: position(user), Limit: 10}} {
+		raw, _ := json.Marshal(page)
+		if response := call("POST", "/admin/api/inactivity-policy/preview", string(raw), ""); response.Code != 400 {
+			t.Fatal("invalid page accepted", response.Code)
+		}
+	}
+	input.Policy.ExecutionTime = "12:00"
+	if _, err := e.store.DB().Exec(`DELETE FROM site_config WHERE key='site_timezone_offset_minutes'`); err != nil {
+		t.Fatal(err)
+	}
+	timed, _ := json.Marshal(input)
+	if response := call("PUT", "/admin/api/inactivity-policy", string(timed), key+"-clock"); response.Code != 400 {
+		t.Fatal("clock accepted without site timezone", response.Code)
+	}
+	if _, err := e.store.DB().Exec(`INSERT INTO site_config(key,value,updated_at) VALUES('site_timezone_offset_minutes','480',?)`, testNow); err != nil {
+		t.Fatal(err)
+	}
+	scheduledResponse := call("PUT", "/admin/api/inactivity-policy", string(timed), key+"-clock")
+	var scheduled Configuration
+	if scheduledResponse.Code != 200 || json.Unmarshal(scheduledResponse.Body.Bytes(), &scheduled) != nil || scheduled.ExecutionTime != "12:00" || scheduled.SiteTimezoneOffsetMinutes == nil || *scheduled.SiteTimezoneOffsetMinutes != 480 {
+		t.Fatal("clock not persisted", scheduledResponse.Code, scheduledResponse.Body.String())
+	}
+	if scalar(t, e.store.DB(), `SELECT count(*) FROM site_config WHERE key='site_timezone_offset_locked' AND value='1'`) != 1 {
+		t.Fatal("scheduled policy did not pin the site timezone")
+	}
+	if scalar(t, e.store.DB(), `SELECT count(*) FROM inactivity_runs`) != 0 {
+		t.Fatal("configuration or pagination executed policy")
 	}
 	auditPage := call("GET", "/admin/api/inactivity-policy/audits?page_size=1", "", "")
 	if auditPage.Code != 200 || !strings.Contains(auditPage.Body.String(), `"next_cursor":"`) {

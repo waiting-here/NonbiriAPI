@@ -7,6 +7,8 @@ import adminZh from '../../src/admin/i18n/zh.json' with { type: 'json' };
 interface Fixture {
   admin_url: string;
   admin_cookie: { Name: string; Value: string };
+  user_url: string;
+  users: { id: string; cookie: { Name: string; Value: string } }[];
 }
 function fixture(): Fixture {
   return JSON.parse(readFileSync(process.env.NONBIRI_AUDIT_BROWSER_STATE!, 'utf8')) as Fixture;
@@ -60,11 +62,27 @@ test('administrator loads inactivity execution records and opens the persisted c
     });
     expect(preview.ok()).toBe(true);
     const runs = await read(context, '/admin/api/inactivity-policy/runs');
-    const audits = await read(context, '/admin/api/inactivity-policy/audits');
-    const audit = audits.data.find((entry: { action: string }) => entry.action === 'preview');
-    expect(audit).toBeDefined();
     const page = await context.newPage();
     await page.goto(origin + '/inactivity-policy');
+    await page.getByLabel('Execution time (optional)', { exact: true }).fill('12:00');
+    await page.getByRole('button', { name: 'Preview accounts', exact: true }).click();
+    await expect(
+      page.getByRole('table', { name: 'Candidate policy preview', exact: true }),
+    ).toBeVisible();
+    const saved = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'PUT' &&
+        new URL(response.url()).pathname === '/admin/api/inactivity-policy',
+    );
+    await page.getByRole('button', { name: 'Save policy', exact: true }).click();
+    expect((await saved).ok()).toBe(true);
+    const clock = await read(context, '/admin/api/inactivity-policy');
+    expect(clock.execution_time).toBe('12:00');
+    expect(clock.site_timezone_offset_minutes).toBe(0);
+    await page.reload();
+    await expect(page.getByLabel('Execution time (optional)', { exact: true })).toHaveValue(
+      '12:00',
+    );
     const loaded = page.waitForResponse((response) =>
       new URL(response.url()).pathname.endsWith('/inactivity-policy/runs'),
     );
@@ -79,6 +97,9 @@ test('administrator loads inactivity execution records and opens the persisted c
       .locator('summary')
       .filter({ hasText: /^Configuration and preview audit$/ })
       .click();
+    const audits = await read(context, '/admin/api/inactivity-policy/audits');
+    const audit = audits.data.find((entry: { action: string }) => entry.action === 'preview');
+    expect(audit).toBeDefined();
     const entry = page
       .locator('details')
       .filter({
@@ -95,6 +116,49 @@ test('administrator loads inactivity execution records and opens the persisted c
     });
   } finally {
     await context.close();
+  }
+});
+
+test('charity ranking stays visible beside desktop models and below mobile models', async ({
+  browser,
+}, info) => {
+  const state = fixture();
+  for (const width of [1440, 390]) {
+    const context = await browser.newContext({ viewport: { width, height: 900 } });
+    try {
+      await context.addCookies([
+        {
+          name: state.users[0].cookie.Name,
+          value: state.users[0].cookie.Value,
+          domain: new URL(state.user_url).hostname,
+          path: '/api',
+          httpOnly: true,
+          sameSite: 'Lax',
+        },
+      ]);
+      await context.addInitScript(() => localStorage.setItem('nb.lang', 'en'));
+      const page = await context.newPage();
+      await page.goto(state.user_url + '/charity');
+      const ranking = page.getByRole('complementary');
+      await expect(
+        ranking.getByRole('heading', { name: 'True Charity', exact: true }),
+      ).toBeVisible();
+      const board = await ranking.boundingBox();
+      const catalog = await page.locator('.economy-catalog-card').boundingBox();
+      expect(board).not.toBeNull();
+      expect(catalog).not.toBeNull();
+      if (width === 1440) expect(board!.x).toBeGreaterThan(catalog!.x + catalog!.width - 1);
+      else expect(board!.y).toBeGreaterThanOrEqual(catalog!.y + catalog!.height - 1);
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+      ).toBe(true);
+      await page.screenshot({
+        path: info.outputPath(`charity-ranking-${width}.png`),
+        fullPage: true,
+      });
+    } finally {
+      await context.close();
+    }
   }
 });
 

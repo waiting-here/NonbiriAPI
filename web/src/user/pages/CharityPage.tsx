@@ -152,11 +152,14 @@ function CharityContent() {
       />
       <section
         hidden={tab !== 'models'}
-        className="charity-catalog-workspace"
+        className="charity-catalog-workspace economy-model-workspace"
         aria-label={t('user.charity.catalog.modelsList')}
       >
-        <CharitySafetyNotice />
         <CharityCatalogPanel key={accountID ?? 'no-account'} accountID={accountID} />
+        <aside className="economy-charity-sidebar">
+          <Leaderboard board="charity" enabled={tab === 'models'} foldHelp />
+          <CharitySafetyNotice />
+        </aside>
       </section>
       <section hidden={tab !== 'donations'} aria-label={t('user.charity.donationsTitle')}>
         {session.data ? (
@@ -174,7 +177,6 @@ function CharityContent() {
         ) : (
           <LoadingState />
         )}
-        <Leaderboard board="charity" enabled={tab === 'donations'} />
       </section>
       <section
         hidden={tab !== 'donate'}
