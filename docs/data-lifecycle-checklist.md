@@ -1,6 +1,6 @@
 # Data Lifecycle Checklist (Generation 2 export / delete / retention / privacy)
 
-> Status: **current source with Unreleased rc.5 changes** — this checklist describes the
+> Status: **current source with Unreleased rc.6 changes** — this checklist describes the
 > release's export, deletion, retention, and privacy boundary. Source publication does
 > not itself upgrade an instance; deployment status is specific to each operator.
 >
@@ -197,17 +197,11 @@ manifest, and checksums. Snapshot retention/deletion is operator-controlled and 
 be disclosed by the instance policy; the service does not promise per-user erasure inside
 historical snapshots.
 
-Generation 2 accepts a fresh database only when main/WAL/SHM are all absent; an
-existing 0-byte main, alpha.3/unknown generation, bad header/identity/manifest/secret
-envelope/config, or an unsafe path fails closed. The Unreleased rc.5 source boundary is the exact rc.4 database at commit `8a46c72d911a914eabcb7ef17c537e7ac12d6969`, tree `cfb3b4bf2be82aca5b14336c8295491c4719ab87`; final target/source acceptance remains required. Historical rc.4 sources are identified below. The exact preceding deployed source at commit `4e06025c6bf23fbb0f34db96673b45ed01c42e97` (tree `6af9d8349d9049197366f29984e2e413090b7814`) is a separately verified compatibility case; other intermediate schemas are outside the guarantee. Existing economic facts, accounts, donations, model bindings, saved games, configuration and instance legal text are preserved. The role migration already present in that source is preserved, historical audit roles keep their meaning, and split Token counters never reconstruct old totals. New activity assets are separate, and existing inactivity-observation timestamps are preserved. Schema, asset ledgers and capacity are validated before commit. Arbitrary schema repair and old-generation
-data import are unsupported. Current and supported predecessor databases are validated
-before any source write and before writable open. Destructive fresh starts with
-maintenance on and registration/game/activity off, and does not merge a source
-snapshot. Re-activating an old copy is an operator event that must disclose its data
-cutoff and repeat any needed revocation/configuration; it is not an online deletion
-guarantee.
+rc.6 accepts fresh databases, final rc.5 and registered rc.6 schemas. Unknown or partial sources are rejected before writes. Fresh creation requires the main database and sidecars to be absent. Supported upgrades preserve accounts, economic facts, credentials, saved games, configuration and instance legal text; scheduled ledger compaction follows the retention rules above. Full historical audits run through offline `maintenance verify`. The [deployment guide](deployment.md#database-compatibility-and-version-changes) identifies the exact source and restore requirements.
 
-The historical formal rc.4 upgrade source is rc.3 repair commit `37e060ab0d0f29d632fe6b8036839b413388812a` at tree `4b44e6fb11ab6d72cea7fecf1ea45ea615594274`. Its upgrade validation compares every original table projection and the fresh schema, decrypts retained credentials, and checks repeated startup. The exact preceding deployed source at commit `4e06025c6bf23fbb0f34db96673b45ed01c42e97` (tree `6af9d8349d9049197366f29984e2e413090b7814`) is a separately verified compatibility case; other intermediate schemas are unsupported. Operators must use a consistent source backup from their own instance before deploying.
+Starting fresh from an unsupported version uses a separate empty path and resets active application state. A complete old recovery set remains sensitive until its retention purpose ends. Never combine an old binary with a newer database or restore a stale snapshot over newly accepted data automatically.
+
+Reactivating an old snapshot requires disclosure of its data cutoff and repeating any needed revocation or configuration changes. Account deletion does not erase historical operator snapshots.
 
 ## Change discipline
 

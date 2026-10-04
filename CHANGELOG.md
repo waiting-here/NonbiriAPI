@@ -4,9 +4,13 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
-## [Unreleased]
+## [1.0.0-rc.6] - Unreleased
 
 ### Changed
+
+- Database startup accepts fresh databases, final rc.5 and registered rc.6 schemas. Earlier migration chains are removed; supported additive upgrades retain offline full-audit tooling without replaying all history at startup.
+- Covering indexes and bounded detail loading speed up credit history. Request-log totals avoid display-only account joins and use an index that also covers unfinished requests.
+- Bilingual READMEs focus on setup and development, and release documentation specifies source-only distribution.
 
 - Credit transaction details and account exports retain the last 30 days. Six-hour maintenance replaces expired entries with opening balances and non-personal audit totals, preserving current balances, pending settlement, held evidence and minimal receipts needed to prevent duplicate rewards. Historical audit ranges use complete site hours after detail compaction.
 
