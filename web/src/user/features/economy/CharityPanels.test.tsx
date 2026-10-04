@@ -439,6 +439,11 @@ describe('donation composer recovery', () => {
       station: 'user',
       role: 'user',
     });
+    expect(
+      within(screen.getByRole('complementary')).getByRole('heading', {
+        name: 'True Charity',
+      }),
+    ).toBeVisible();
     await rendered.user.click(screen.getByRole('tab', { name: 'Donate my keys' }));
     const checkboxes = donationCheckboxes();
     await rendered.user.type(screen.getByRole('textbox'), 'account-scoped draft');

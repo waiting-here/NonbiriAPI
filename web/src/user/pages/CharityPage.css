@@ -5,9 +5,6 @@
 .economy-charity-page > .nb-tabs {
   margin-bottom: var(--nb-space-5);
 }
-.economy-charity-page > section > .progression-ranking {
-  margin-top: var(--nb-space-5);
-}
 .charity-donation-stats {
   margin-bottom: var(--nb-space-4);
 }

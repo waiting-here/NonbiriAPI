@@ -87,6 +87,20 @@ describe('economy audit exact monetary values', () => {
     expect(page.anchor_seq).toBe('150');
     expect(page.metadata.ledger_seq).toBe('200');
   });
+
+  it('reports retained detail and the effective historical range', () => {
+    const decoded = decodeSummary({
+      ...summary,
+      metadata: { ...meta, from: 3600, to: 7200, detail_retained_from: 5400, range_adjusted: true },
+    });
+    expect(decoded.metadata).toMatchObject({
+      from: 3600,
+      to: 7200,
+      detail_retained_from: 5400,
+      range_adjusted: true,
+    });
+    expect(decodeSummary(summary).metadata.range_adjusted).toBe(false);
+  });
 });
 
 describe('fixed business time zone', () => {

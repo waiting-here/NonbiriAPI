@@ -68,7 +68,7 @@ func TestHistoryAndExportKeepBothAssetsWithinOneOperation(t *testing.T) {
 	if _, err := UserHistory(ctx, tx, user, ledgerTestNow, HistoryFilter{Page: 1, PageSize: 10, Asset: "game", Anchor: generalID}); !errors.Is(err, ErrInvalidHistory) {
 		t.Fatalf("foreign-asset anchor: %v", err)
 	}
-	entries, err := ExportUserEntries(ctx, tx, user, 4)
+	entries, err := ExportUserEntries(ctx, tx, user, ledgerTestNow+10, 4)
 	if err != nil || len(entries) != 4 {
 		t.Fatalf("export: %+v %v", entries, err)
 	}
@@ -79,7 +79,7 @@ func TestHistoryAndExportKeepBothAssetsWithinOneOperation(t *testing.T) {
 	if counts[General] != 2 || counts[Game] != 2 {
 		t.Fatalf("export asset counts: %v", counts)
 	}
-	if _, err := ExportUserEntries(ctx, tx, user, 3); !errors.Is(err, ErrExportTooLarge) {
+	if _, err := ExportUserEntries(ctx, tx, user, ledgerTestNow+10, 3); !errors.Is(err, ErrExportTooLarge) {
 		t.Fatalf("combined export limit: %v", err)
 	}
 }

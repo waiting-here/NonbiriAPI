@@ -123,8 +123,8 @@ WHERE ` + walletWhere + ` AND e.account_kind_snapshot='user' AND e.delta_sign<>0
 	}
 	page.Anchor = &anchor
 	where := ` FROM credit_entries e JOIN credit_operations o ON o.id=e.operation_id
-WHERE ` + walletWhere + ` AND e.account_kind_snapshot='user' AND e.delta_sign<>0 AND o.ledger_seq<=?`
-	args := append(append([]any{}, walletArgs...), sequence)
+WHERE ` + walletWhere + ` AND e.account_kind_snapshot='user' AND e.delta_sign<>0 AND o.ledger_seq<=? AND o.created_at>?`
+	args := append(append([]any{}, walletArgs...), sequence, now-DetailRetentionSeconds)
 	if filter.From != nil {
 		where += ` AND o.created_at>=?`
 		args = append(args, *filter.From)

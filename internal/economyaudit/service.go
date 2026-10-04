@@ -116,6 +116,7 @@ func (s *Service) Summary(ctx context.Context, admin int64, f Filter) (Summary, 
 		return out, ErrInvalid
 	}
 	err := s.read(ctx, admin, f, func(ctx context.Context, tx *sql.Tx, c checkpoint, now int64) error {
+		f = historicalRange(c, f)
 		out.Metadata = metadata(c, f, now)
 		if c.last != c.head {
 			return nil
@@ -201,6 +202,7 @@ func (s *Service) Series(ctx context.Context, admin int64, f Filter) (Series, er
 		return out, ErrInvalid
 	}
 	err := s.read(ctx, admin, f, func(ctx context.Context, tx *sql.Tx, c checkpoint, now int64) error {
+		f = historicalRange(c, f)
 		out.Metadata = metadata(c, f, now)
 		step, limit := int64(3600), int64(744)
 		if f.Bucket == "day" {
@@ -239,6 +241,7 @@ func (s *Service) Channels(ctx context.Context, admin int64, f Filter) (Channels
 		return out, ErrInvalid
 	}
 	err := s.read(ctx, admin, f, func(ctx context.Context, tx *sql.Tx, c checkpoint, now int64) error {
+		f = historicalRange(c, f)
 		out.Metadata = metadata(c, f, now)
 		if c.last != c.head {
 			return nil
@@ -269,7 +272,9 @@ func (s *Service) Operations(ctx context.Context, admin int64, f Filter) (Operat
 			}
 		}
 		out.AnchorSeq = strconv.FormatInt(head, 10)
-		query, args := operationPageQuery(f, head, before)
+		detailFilter := f
+		detailFilter.From = max(f.From, now-ledger.DetailRetentionSeconds+1)
+		query, args := operationPageQuery(detailFilter, head, before)
 		rows, err := tx.QueryContext(ctx, query, args...)
 		if err != nil {
 			return err

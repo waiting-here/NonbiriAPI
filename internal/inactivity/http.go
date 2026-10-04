@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
@@ -90,6 +91,8 @@ func reply(w http.ResponseWriter, result any, err error) {
 	}
 	code, message := httperr.CodeServiceUnavailable, "The inactivity policy is temporarily unavailable."
 	switch {
+	case errors.Is(err, db.ErrTimezoneUnavailable):
+		code, message = httperr.CodeInvalidRequest, "Set the site timezone before choosing an execution time."
 	case errors.Is(err, ErrInvalid):
 		code, message = httperr.CodeInvalidRequest, "Check the policy fields and request format."
 	case errors.Is(err, ErrForbidden):

@@ -124,6 +124,9 @@ func edgeMeasures(ctx context.Context, tx *sql.Tx, c checkpoint, f Filter, from,
 	if from >= to {
 		return nil
 	}
+	if to <= aggregateBoundary(c) {
+		return aggregateMeasures(ctx, tx, c, f, "hour", bucketStart(from, c.offset, 3600), bucketStart(to-1, c.offset, 3600)+3600, out)
+	}
 	afterAt, after := from, int64(0)
 	for {
 		query := `SELECT id,ledger_seq,kind,source_type,source_id,created_at FROM credit_operations WHERE created_at>=? AND created_at<? AND (created_at,ledger_seq)>(?,?) AND ledger_seq<=?`

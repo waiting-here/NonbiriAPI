@@ -20,7 +20,23 @@ func readPolicy(ctx context.Context, tx *sql.Tx) (Configuration, error) {
 		return out, err
 	}
 	out.Policy, err = decodePolicy([]byte(raw))
+	if err == nil {
+		err = resolveExecutionTimezone(ctx, tx, &out)
+	}
 	return out, err
+}
+
+func resolveExecutionTimezone(ctx context.Context, tx *sql.Tx, c *Configuration) error {
+	c.SiteTimezoneOffsetMinutes = nil
+	if c.ExecutionTime == "" {
+		return nil
+	}
+	offset, err := db.ResolveSiteTimezoneTx(ctx, tx)
+	if err != nil {
+		return err
+	}
+	c.SiteTimezoneOffsetMinutes = &offset
+	return nil
 }
 func (s *Service) beginAdmin(ctx context.Context, write bool) (*sql.Tx, int64, error) {
 	actor, ok := auth.ActorFromContext(ctx)
@@ -102,6 +118,15 @@ func (s *Service) Put(ctx context.Context, input Update, key string) (Configurat
 		return out, ErrConflict
 	}
 	d, b := grace(old, input.Policy, at)
+	out = Configuration{Policy: input.Policy, Revision: old.Revision + 1, DecayGraceUntil: d, ProtectionGraceUntil: b, UpdatedAt: at}
+	if err = resolveExecutionTimezone(ctx, tx, &out); err != nil {
+		return out, err
+	}
+	if out.Enabled && out.ExecutionTime != "" {
+		if err = db.FreezeSiteTimezoneTx(ctx, tx, at); err != nil {
+			return out, err
+		}
+	}
 	raw, err := json.Marshal(input.Policy)
 	if err != nil || len(raw) > 4096 {
 		return out, ErrInvalid
@@ -110,7 +135,6 @@ func (s *Service) Put(ctx context.Context, input Update, key string) (Configurat
 	if err != nil {
 		return out, err
 	}
-	out = Configuration{Policy: input.Policy, Revision: old.Revision + 1, DecayGraceUntil: d, ProtectionGraceUntil: b, UpdatedAt: at}
 	audit, _ := json.Marshal(struct {
 		Before Policy `json:"before"`
 		After  Policy `json:"after"`

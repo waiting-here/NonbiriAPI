@@ -12,6 +12,7 @@ import (
 
 type checkpoint struct {
 	last, head, unknown int64
+	detailsBefore       int64
 	first, started      sql.NullInt64
 	offset              int
 	opening             bool
@@ -44,6 +45,14 @@ func readCheckpoint(ctx context.Context, tx *sql.Tx) (checkpoint, error) {
 	if c.last < 0 || c.last > c.head || c.unknown < 0 || c.unknown > c.last {
 		return c, ErrInvariant
 	}
+	through, before, _, err := db.LedgerCompactionState(ctx, tx)
+	if err != nil {
+		return c, err
+	}
+	if through > c.last {
+		return c, ErrInvariant
+	}
+	c.detailsBefore = before
 	return c, nil
 }
 
@@ -205,5 +214,27 @@ func metadata(c checkpoint, f Filter, now int64) Metadata {
 	} else if !c.opening {
 		coverage.Status = "opening_unknown"
 	}
-	return Metadata{Asset: f.Asset, From: f.From, To: f.To, Unit: "milliunits", Scale: "1000", OffsetMinutes: c.offset, LedgerSeq: strconv.FormatInt(c.head, 10), ProjectedSeq: strconv.FormatInt(c.last, 10), SnapshotAt: now, Coverage: coverage}
+	return Metadata{DetailRetainedFrom: max(0, now-ledger.DetailRetentionSeconds+1), RangeAdjusted: f.rangeAdjusted, Asset: f.Asset, From: f.From, To: f.To, Unit: "milliunits", Scale: "1000", OffsetMinutes: c.offset, LedgerSeq: strconv.FormatInt(c.head, 10), ProjectedSeq: strconv.FormatInt(c.last, 10), SnapshotAt: now, Coverage: coverage}
+}
+
+func aggregateBoundary(c checkpoint) int64 {
+	if c.detailsBefore == 0 {
+		return 0
+	}
+	return bucketStart(c.detailsBefore-1, c.offset, 3600) + 3600
+}
+
+func historicalRange(c checkpoint, f Filter) Filter {
+	before := aggregateBoundary(c)
+	if f.From < before {
+		from := max(0, bucketStart(f.From, c.offset, 3600))
+		f.rangeAdjusted = from != f.From
+		f.From = from
+	}
+	if f.To < before {
+		to := bucketStart(f.To-1, c.offset, 3600) + 3600
+		f.rangeAdjusted = f.rangeAdjusted || to != f.To
+		f.To = to
+	}
+	return f
 }
