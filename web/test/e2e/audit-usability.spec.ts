@@ -27,7 +27,7 @@ async function layout(page: import('@playwright/test').Page, name: string) {
     ).toBe(0);
     expect(
       await page
-        .locator('main form input, main form select, main form button')
+        .locator('main form input, main form select, main form textarea, main form button')
         .evaluateAll((nodes) =>
           nodes
             .filter((n) => {
@@ -51,8 +51,8 @@ test('audit quick ranges, healthy capture and rule patterns work without reloadi
   await page.route('**/admin/api/abuse-audit/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname.split('/').at(-1);
-    if (path === 'client-rules') {
-      if (route.request().method() === 'POST') {
+    if (url.pathname.includes('/client-rules')) {
+      if (['POST', 'PATCH'].includes(route.request().method())) {
         saved = {
           ...route.request().postDataJSON(),
           id: 'rsk_example',
@@ -165,6 +165,34 @@ test('audit quick ranges, healthy capture and rule patterns work without reloadi
       { field: 'openrouter_title', operator: 'equals', value: 'Example application' },
     ],
   });
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  await page
+    .getByLabel(/^Field/)
+    .nth(0)
+    .selectOption('effective_ip');
+  await expect(page.getByLabel(/^Operator/).nth(0)).toHaveValue('ip_in');
+  await page
+    .getByRole('textbox', { name: 'IP addresses', exact: true })
+    .fill('192.0.2.1, 192.0.2.2\n2001:db8::1');
+  await layout(page, 'audit-ip-rule');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Example relay', exact: true })).toBeVisible();
+  expect(saved).toMatchObject({
+    conditions: [
+      {
+        field: 'effective_ip',
+        operator: 'ip_in',
+        value: '',
+        values: ['192.0.2.1', '192.0.2.2', '2001:db8::1'],
+      },
+      { field: 'openrouter_title', operator: 'equals', value: 'Example application' },
+    ],
+  });
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'IP addresses', exact: true })).toHaveValue(
+    '192.0.2.1\n192.0.2.2\n2001:db8::1',
+  );
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.evaluate(() => {
     localStorage.setItem('nb.lang', 'zh');
     localStorage.setItem('nb.theme', 'dark');

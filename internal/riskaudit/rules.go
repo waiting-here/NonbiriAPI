@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/netip"
 	"net/url"
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -74,10 +75,40 @@ func normalizeIP(raw string) (string, bool) {
 }
 
 type Condition struct {
-	Field         string `json:"field"`
-	Operator      string `json:"operator"`
-	Value         string `json:"value"`
-	CaseSensitive bool   `json:"case_sensitive"`
+	Field         string   `json:"field"`
+	Operator      string   `json:"operator"`
+	Value         string   `json:"value"`
+	Values        []string `json:"values,omitempty"`
+	CaseSensitive bool     `json:"case_sensitive"`
+}
+
+const MaxConditionIPs = 64
+
+// Normalize once when saving; persisted rules and frozen scans use exact IPs.
+func normalizeConditions(conditions []Condition) ([]Condition, error) {
+	conditions = slices.Clone(conditions)
+	for i, c := range conditions {
+		if c.Operator != "ip_in" {
+			continue
+		}
+		if len(c.Values) < 1 || len(c.Values) > MaxConditionIPs {
+			return nil, ErrInvalid
+		}
+		values := make([]string, 0, len(c.Values))
+		seen := make(map[string]bool, len(c.Values))
+		for _, raw := range c.Values {
+			ip, ok := normalizeIP(strings.TrimSpace(raw))
+			if !ok {
+				return nil, ErrInvalid
+			}
+			if !seen[ip] {
+				values = append(values, ip)
+				seen[ip] = true
+			}
+		}
+		conditions[i].Values = values
+	}
+	return conditions, nil
 }
 
 // AutoBan is a privileged binding. A nil DurationSeconds means a permanent ban.
@@ -132,6 +163,20 @@ func validateRule(r Rule) error {
 	}
 	for _, c := range r.Conditions {
 		if _, ok := (Source{}).field(c.Field); !ok {
+			return ErrInvalid
+		}
+		if c.Operator == "ip_in" {
+			if c.Field != "effective_ip" || c.Value != "" || c.CaseSensitive || len(c.Values) < 1 || len(c.Values) > MaxConditionIPs {
+				return ErrInvalid
+			}
+			for _, value := range c.Values {
+				if ip, ok := normalizeIP(value); !ok || ip != value {
+					return ErrInvalid
+				}
+			}
+			continue
+		}
+		if len(c.Values) != 0 {
 			return ErrInvalid
 		}
 		if c.Operator != "equals" && c.Operator != "contains" && c.Operator != "prefix" {
@@ -194,7 +239,7 @@ func matchRules(source Source, rules []Rule, validate bool) []Match {
 				quality = "multiple_values"
 			}
 			needle := c.Value
-			if !c.CaseSensitive {
+			if !c.CaseSensitive && c.Operator != "ip_in" {
 				folded, exists := lower[c.Field]
 				if !exists {
 					folded = strings.ToLower(value)
@@ -204,6 +249,8 @@ func matchRules(source Source, rules []Rule, validate bool) []Match {
 				needle = strings.ToLower(needle)
 			}
 			switch c.Operator {
+			case "ip_in":
+				matched = slices.Contains(c.Values, value)
 			case "equals":
 				matched = value == needle
 			case "contains":
