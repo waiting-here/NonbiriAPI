@@ -47,7 +47,7 @@ function selectionFor(f: Filter, offsetMinutes: number | null): Selection {
     selection.rules_version = n;
   }
   if (f.outcome) selection.outcome = f.outcome;
-  if (f.dataset === 'recent') {
+  if (f.from || f.to) {
     if ((f.from || f.to) && offsetMinutes === null) throw new Error('site time unavailable');
     if (f.from)
       selection.from = resolveFixedLocalTime(
@@ -263,7 +263,7 @@ export function DuelHistoryPage() {
               <span>{t('数据集', 'Dataset')}</span>
               <select
                 value={draft.dataset}
-                onChange={(e) => edit({ dataset: e.target.value as Dataset, from: '', to: '' })}
+                onChange={(e) => edit({ dataset: e.target.value as Dataset })}
               >
                 <option value="recent">{t('近30天完整历史', 'Recent 30 days')}</option>
                 <option value="anonymous">{t('长期匿名资料', 'Anonymous archive')}</option>
@@ -299,30 +299,28 @@ export function DuelHistoryPage() {
                 <option value="system_cancelled">{t('系统取消', 'System cancelled')}</option>
               </select>
             </label>
-            {draft.dataset === 'recent' && (
-              <>
-                <label>
-                  <span>{t('结束时间从', 'Ended from')}</span>
-                  <input
-                    type="datetime-local"
-                    disabled={siteOffset === null}
-                    value={draft.from}
-                    onChange={(e) => edit({ from: e.target.value })}
-                  />
-                </label>
-                <label>
-                  <span>{t('结束时间至', 'Ended through')}</span>
-                  <input
-                    type="datetime-local"
-                    disabled={siteOffset === null}
-                    value={draft.to}
-                    onChange={(e) => edit({ to: e.target.value })}
-                  />
-                </label>
-              </>
-            )}
+            <>
+              <label>
+                <span>{t('结束时间从', 'Ended from')}</span>
+                <input
+                  type="datetime-local"
+                  disabled={siteOffset === null}
+                  value={draft.from}
+                  onChange={(e) => edit({ from: e.target.value })}
+                />
+              </label>
+              <label>
+                <span>{t('结束时间至', 'Ended through')}</span>
+                <input
+                  type="datetime-local"
+                  disabled={siteOffset === null}
+                  value={draft.to}
+                  onChange={(e) => edit({ to: e.target.value })}
+                />
+              </label>
+            </>
           </div>
-          {draft.dataset === 'recent' && <TimeContextNotice station="admin" />}
+          <TimeContextNotice station="admin" />
           {error && (
             <p className="field-error" role="alert">
               {t('请检查版本号和时间范围。', 'Check the version and time range.')}
@@ -333,7 +331,10 @@ export function DuelHistoryPage() {
           </button>
         </form>
       </Card>
-      <HistoryResults key={JSON.stringify(applied)} {...applied} />
+      {applied.dataset === 'anonymous' &&
+      (applied.selection.from !== undefined || applied.selection.to !== undefined) ? null : (
+        <HistoryResults key={JSON.stringify(applied)} {...applied} />
+      )}
       <Card>
         <ExportPanel {...applied} />
       </Card>

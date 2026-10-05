@@ -1,133 +1,43 @@
-import { useEffect, useRef, useState } from 'react';
-import { ErrorState } from '@shared/components/States';
-import { useDateTimeFormatter } from '@shared/utils/datetime';
-import { gameLabel, modeLabel, useGameAdminText, type GameID } from './copy';
-import { HistoryExport, downloadPart, type ExportProgress } from './export';
+import { useGameAdminText, type GameID } from './copy';
+import { historyDownloadURL } from './export';
 import type { Dataset, Selection } from './history';
 
 export function ExportPanel({
   game,
   dataset,
-  selection,
+  selection = {},
 }: {
-  game: GameID;
+  game: GameID | 'blackjack';
   dataset: Dataset;
-  selection: Selection;
+  selection?: Selection;
 }) {
-  const formatDateTime = useDateTimeFormatter();
-  const t = useGameAdminText(),
-    job = useRef<HistoryExport | null>(null),
-    controller = useRef<AbortController | null>(null);
-  const [progress, setProgress] = useState<ExportProgress | null>(null),
-    [running, setRunning] = useState(false),
-    [error, setError] = useState<unknown>(null);
-  const [scope, setScope] = useState<{
-    game: GameID;
-    dataset: Dataset;
-    selection: Selection;
-  } | null>(null);
-  useEffect(() => () => controller.current?.abort(), []);
-  const run = async (fresh: boolean) => {
-    if (controller.current) return;
-    if (fresh || !job.current) {
-      job.current = new HistoryExport(game, dataset, selection);
-      setProgress(job.current.progress);
-      setScope({ game, dataset, selection: { ...selection } });
-    }
-    const current = job.current,
-      abort = new AbortController();
-    controller.current = abort;
-    setError(null);
-    setRunning(true);
-    try {
-      while (!current.progress.complete)
-        setProgress(await current.step(abort.signal, downloadPart));
-    } catch (failure) {
-      if (!abort.signal.aborted) setError(failure);
-    } finally {
-      controller.current = null;
-      setRunning(false);
-    }
-  };
+  const t = useGameAdminText();
+  const dated = selection.from !== undefined || selection.to !== undefined;
   return (
     <section className="admin-duel-export" aria-label={t('历史导出', 'History export')}>
-      <h3>{t('按页下载完整过程', 'Download complete records in pages')}</h3>
+      <h3>{t('下载历史数据', 'Download history')}</h3>
       <p>
         {t(
-          '下载为UTF-8 NDJSON分片，每片最多16MiB。请允许本站下载多个文件；只有读取到最后一页才会显示完成。取消或失败时，已下载分片保留，可继续未完成的分页。',
-          'Downloads use UTF-8 NDJSON parts, up to 16 MiB each. Allow multiple downloads from this site. Completion appears only after the last page. Cancelled or failed exports keep downloaded parts and can resume at the saved page.',
+          '下载一个 ZIP，内含 UTF-8 NDJSON 数据和完整性清单。可在浏览器中查看进度或取消下载。',
+          'Download one ZIP containing UTF-8 NDJSON records and a completion manifest. Your browser manages download progress and cancellation.',
         )}
       </p>
-      {progress && scope && (
+      {dataset === 'anonymous' && (
         <p>
-          {gameLabel(scope.game, t)} ·{' '}
-          {scope.dataset === 'recent'
-            ? t('近30天', 'Recent 30 days')
-            : t('匿名资料', 'Anonymous records')}{' '}
-          · {scope.selection.mode ? modeLabel(scope.selection.mode, t) : t('全部模式', 'All modes')}
-          {' · '}
-          {t('规则版本', 'Rules version')}: {scope.selection.rules_version ?? t('全部', 'All')}
-          {' · '}
-          {{
-            normal: t('分出胜负', 'Decided'),
-            draw: t('平局', 'Draw'),
-            system_cancelled: t('系统取消', 'System cancelled'),
-          }[scope.selection.outcome ?? ''] ?? t('全部结果', 'All outcomes')}
-          {scope.selection.from !== undefined && (
-            <>
-              {' '}
-              · {t('从', 'From')} {formatDateTime(scope.selection.from)}
-            </>
-          )}
-          {scope.selection.to !== undefined && (
-            <>
-              {' '}
-              · {t('至', 'Through')} {formatDateTime(scope.selection.to)}
-            </>
-          )}
+          {dated
+            ? t(
+                '按所选时间范围导出仍保留日期的资料，下载内容会匿名化。长期档案已无日期，不包含在本次下载中。',
+                'Records with retained dates in the selected range are anonymized for download. Older undated archives are excluded.',
+              )
+            : t(
+                '下载包含全部长期档案及近期资料的匿名版本，不含账号、原局编号、绝对时间和付款来源。',
+                'Includes all archived and recent records in anonymous form, without accounts, original match IDs, absolute times or payment sources.',
+              )}
         </p>
       )}
-      <div role="status" aria-live="polite">
-        {progress && (
-          <>
-            <strong>
-              {progress.complete
-                ? t('导出完成', 'Export complete')
-                : running
-                  ? t('正在导出', 'Exporting')
-                  : t('导出尚未完成', 'Export incomplete')}
-            </strong>
-            <p>
-              {t('已提供下载分片', 'Download parts provided')}: {progress.parts} ·{' '}
-              {t('对局', 'Matches')}: {progress.matches} · {t('轮次', 'Rounds')}: {progress.rounds}{' '}
-              · {t('跳过已到期对局', 'Expired matches skipped')}: {progress.expired}
-            </p>
-          </>
-        )}
-      </div>
-      {error ? <ErrorState error={error} /> : null}
-      <div className="ops-actions">
-        {!running && (
-          <button className="btn btn-primary" type="button" onClick={() => void run(true)}>
-            {progress
-              ? t('重新开始导出', 'Start a new export')
-              : t('导出筛选结果', 'Export filtered results')}
-          </button>
-        )}
-        {running ? (
-          <button
-            className="btn btn-secondary"
-            type="button"
-            onClick={() => controller.current?.abort()}
-          >
-            {t('取消导出', 'Cancel export')}
-          </button>
-        ) : progress && !progress.complete ? (
-          <button className="btn btn-secondary" type="button" onClick={() => void run(false)}>
-            {t('继续未完成导出', 'Resume incomplete export')}
-          </button>
-        ) : null}
-      </div>
+      <a className="btn btn-primary" href={historyDownloadURL(game, dataset, selection)} download>
+        {t('下载 ZIP', 'Download ZIP')}
+      </a>
     </section>
   );
 }

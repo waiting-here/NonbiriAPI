@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
@@ -6,12 +6,11 @@ import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { useAdminSession } from '../data';
 import { useGameAdminText } from '../features/games/copy';
 import {
-  exportBlackjack,
   getBlackjackDetail,
   getBlackjackHistory,
   type BlackjackDataset,
 } from '../features/games/blackjack';
-import { downloadPart } from '../features/games/export';
+import { ExportPanel } from '../features/games/ExportPanel';
 import { BlackjackBoard, BlackjackSettlement } from '../../user/games/blackjack/Table';
 import '../../user/games/bidding/bidding.css';
 import '../../user/games/blackjack/blackjack.css';
@@ -97,81 +96,6 @@ function Detail({
           )}
         </>
       )}
-    </Card>
-  );
-}
-function Export({ dataset }: { readonly dataset: BlackjackDataset }) {
-  const t = useGameAdminText();
-  const [position, setPosition] = useState<{
-    cursor: string | null;
-    part: number;
-    records: number;
-    done: boolean;
-  }>({ cursor: null, part: 1, records: 0, done: false });
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<unknown>(null);
-  const controller = useRef<AbortController | null>(null);
-  useEffect(() => () => controller.current?.abort(), []);
-  const run = async () => {
-    if (controller.current || position.done) return;
-    const abort = new AbortController();
-    controller.current = abort;
-    setBusy(true);
-    setError(null);
-    try {
-      const page = await exportBlackjack(dataset, position.cursor, abort.signal);
-      abort.signal.throwIfAborted();
-      if (page.items.length)
-        downloadPart(
-          new TextEncoder().encode(
-            page.items.map((item) => JSON.stringify(item)).join('\n') + '\n',
-          ),
-          `blackjack-${dataset}-${position.part}.ndjson`,
-        );
-      setPosition({
-        cursor: page.next_cursor,
-        part: position.part + 1,
-        records: position.records + page.items.length,
-        done: page.next_cursor === null,
-      });
-    } catch (failure) {
-      if (!abort.signal.aborted) setError(failure);
-    } finally {
-      controller.current = null;
-      setBusy(false);
-    }
-  };
-  return (
-    <Card>
-      <h2>{t('分段导出', 'Export in parts')}</h2>
-      <p>
-        {t(
-          '每次下载最多10局的UTF-8 NDJSON。后续页固定使用首请求的范围，失败时保留当前页，可继续重试。',
-          'Each download contains up to ten tables in UTF-8 NDJSON. Later pages keep the first request’s range. A failed download keeps its page for retry.',
-        )}
-      </p>
-      <button
-        className="btn btn-secondary"
-        disabled={busy || position.done}
-        onClick={() => void run()}
-      >
-        {position.done
-          ? t('导出完成', 'Export complete')
-          : busy
-            ? t('正在读取…', 'Reading…')
-            : position.part === 1
-              ? t('开始导出', 'Start export')
-              : t('下载下一部分', 'Download next part')}
-      </button>
-      {busy && (
-        <button className="btn btn-secondary" onClick={() => controller.current?.abort()}>
-          {t('取消', 'Cancel')}
-        </button>
-      )}
-      <p aria-live="polite">
-        {t('已导出', 'Exported')} {position.records} {t('局', 'tables')}
-      </p>
-      {!!error && <ErrorState error={error} />}
     </Card>
   );
 }
@@ -266,7 +190,9 @@ export function BlackjackHistoryPage() {
           </div>
         </Card>
       )}
-      <Export key={dataset} dataset={dataset} />
+      <Card>
+        <ExportPanel game="blackjack" dataset={dataset} />
+      </Card>
     </main>
   );
 }

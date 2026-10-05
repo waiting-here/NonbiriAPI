@@ -175,12 +175,21 @@ rules, equipment, rounds, random draws and results, but removes users, original
 match and operation IDs, timestamps, payment sources and cross-match identity
 links. Account deletion removes or de-identifies associated data immediately.
 
-The administration page downloads complete UTF-8 NDJSON parts of at most
-16 MiB. Its server pages have a stable boundary, at most 100 records, 8 MiB and
-a five-second read budget. A match can span pages. Keep the selected dataset
-and filters while continuing; expired recent records are counted as skipped.
-Completion is reported only after the final page. Cancelled or failed downloads
-can resume from the last completed page, while the signed cursor is valid.
+The administration page downloads one ZIP containing UTF-8 `records.ndjson`
+and a final `manifest.json`. Anonymous downloads include recent records with
+identities, original IDs, timestamps and payment sources removed. Without a
+time range they also include all undated archives; with a time range, only
+records that still retain dates can be selected. Other selected filters apply
+to both sources. Archive previews show the stored long-term records.
+
+`GET /admin/api/games/{bidding|likes}/history/download` accepts the dataset and
+history filters, excluding `cursor` and `limit`. The server streams bounded
+pages (100 records, 8 MiB, five seconds per read), with one active ZIP per game,
+a one-hour overall limit and a 30-second stalled-write limit. The manifest
+counts exported records and expired records skipped during reading. An
+interrupted download must be restarted; it does not contain a completion
+manifest. Existing paged JSON export endpoints retain their dataset and signed
+cursor semantics.
 
 Current presets have optional private names, included only in the owner's export and deleted with the account. Current changes are Unreleased source behavior; availability depends on the deployed build.
 
