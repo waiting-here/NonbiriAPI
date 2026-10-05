@@ -114,7 +114,8 @@ func (f *fixture) aiMatch(bot string) duel.State {
 // against the rule fallback, independent of reward deck and seat order.
 func (f *fixture) completeAI() *duel.ResultSummary {
 	f.t.Helper()
-	deadline := time.Now().Add(8 * time.Second)
+	// A complete match crosses many asynchronous SQL commits under race.
+	deadline := time.Now().Add(time.Minute)
 	for time.Now().Before(deadline) {
 		f.tick()
 		home := f.read(0)
@@ -126,7 +127,7 @@ func (f *fixture) completeAI() *duel.ResultSummary {
 			f.t.Fatal("lost AI match")
 		}
 		if v.Locked[v.You] {
-			time.Sleep(time.Millisecond)
+			time.Sleep(10 * time.Millisecond)
 			continue
 		}
 		var view engine.View
@@ -402,6 +403,19 @@ func TestAIInsufficientAdmissionAndSharedUserSlot(t *testing.T) {
 
 func TestAIAdmissionCapacityFIFOAndExpiry(t *testing.T) {
 	f, bot := aiFixture(t, false)
+	drain := func() {
+		ctx, cancel := context.WithTimeout(f.ctx, time.Minute)
+		defer cancel()
+		for {
+			result, err := f.s.Tick(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !result.More {
+				return
+			}
+		}
+	}
 	users := addAIUsers(t, f, duel.AIQueueCapacity+1)
 	for _, user := range users[:duel.AIQueueCapacity] {
 		f.users[0] = user
@@ -416,7 +430,7 @@ func TestAIAdmissionCapacityFIFOAndExpiry(t *testing.T) {
 	if _, err := f.s.Enqueue(f.ctx, in); !errors.Is(err, duel.ErrResourceLimit) {
 		t.Fatal("queue capacity", err)
 	}
-	f.tick()
+	drain()
 	if got := countAI(t, f, "SELECT count(*) FROM game_duel_sessions WHERE state='active' AND economy='ai_challenge'"); got != duel.AIActiveCapacity {
 		t.Fatal("active capacity", got)
 	}
@@ -427,7 +441,7 @@ func TestAIAdmissionCapacityFIFOAndExpiry(t *testing.T) {
 		}
 	}
 	f.clock.Add(121)
-	f.tick()
+	drain()
 	if n := countAI(t, f, "SELECT count(*) FROM game_ai_queue WHERE state='waiting'"); n != 0 {
 		t.Fatal("expired queue", n)
 	}
