@@ -458,3 +458,42 @@ func TestAIFreeAdmissionCanIssueFirstClearReward(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestAIQueuedPolicyRemainsFrozenAndRespectsDisabling(t *testing.T) {
+	for _, disable := range []bool{false, true} {
+		t.Run(fmt.Sprint(disable), func(t *testing.T) {
+			f, bot := aiFixture(t, false)
+			original := bot.PolicyID
+			f.enqueueAI(bot.ID)
+			state, err := f.s.AdminAI(adminContext())
+			if err != nil {
+				t.Fatal(err)
+			}
+			var accepted duel.AIPolicy
+			for _, p := range state.Policies {
+				if p.ID == original {
+					accepted = p
+				} else {
+					bot.PolicyID = p.ID
+					bot.PolicyVersion = p.Version
+				}
+			}
+			bot = f.saveBot(bot, false)
+			if disable {
+				_, err = f.s.SaveAIPolicy(adminContext(), f.key(), duel.SaveAIPolicy{ID: accepted.ID, ExpectedRevision: accepted.Revision, Name: accepted.Name, Description: accepted.Description, Enabled: false, Definition: accepted.Definition})
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			f.tick()
+			home := f.read(0)
+			if disable {
+				if home.Current != nil || home.Queue != nil || home.AIQueueError != "closed" {
+					t.Fatalf("disabled accepted policy %+v", home)
+				}
+			} else if home.Current == nil || home.Current.AI.Terms.PolicyID != original || home.Current.AI.Terms.PolicyVersion != accepted.Version {
+				t.Fatalf("queue policy changed %+v", home)
+			}
+		})
+	}
+}

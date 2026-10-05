@@ -240,7 +240,7 @@ func (s *Service) workAIQueue(ctx context.Context, tx *sql.Tx, now int64, recove
 	}
 	cleaned := count+memories > 0
 	var id string
-	err = tx.QueryRowContext(ctx, `SELECT q.id FROM game_ai_queue q WHERE q.game_key=? AND q.state='waiting' ORDER BY (q.deadline>? AND EXISTS(SELECT 1 FROM game_ai_bots b JOIN game_ai_policies p ON p.id=b.policy_id WHERE b.id=q.bot_id AND b.enabled=1 AND p.enabled=1) AND EXISTS(SELECT 1 FROM users u WHERE u.id=q.user_id AND (u.is_banned=0 OR u.banned_until<=?))),q.ordinal LIMIT 1`, s.rules.ID(), now, now).Scan(&id)
+	err = tx.QueryRowContext(ctx, `SELECT q.id FROM game_ai_queue q WHERE q.game_key=? AND q.state='waiting' ORDER BY (q.deadline>? AND EXISTS(SELECT 1 FROM game_ai_bots b JOIN game_ai_policies p ON p.id=b.policy_id WHERE b.id=q.bot_id AND b.enabled=1 AND p.enabled=1) AND EXISTS(SELECT 1 FROM game_ai_policies accepted WHERE accepted.id=json_extract(q.snapshot_json,'$.terms.ai.policy_id') AND accepted.enabled=1) AND EXISTS(SELECT 1 FROM users u WHERE u.id=q.user_id AND (u.is_banned=0 OR u.banned_until<=?))),q.ordinal LIMIT 1`, s.rules.ID(), now, now).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return cleaned, nil
 	}
@@ -273,13 +273,17 @@ func (s *Service) workAIQueue(ctx context.Context, tx *sql.Tx, now int64, recove
 		if err != nil {
 			return false, err
 		}
+		var acceptedPolicyEnabled bool
+		if err := tx.QueryRowContext(ctx, `SELECT enabled FROM game_ai_policies WHERE id=? AND game_key=?`, q.Snapshot.Terms.AI.PolicyID, s.rules.ID()).Scan(&acceptedPolicyEnabled); err != nil {
+			return false, err
+		}
 		allowed, err := eligible(ctx, tx, q.User, now)
 		if err != nil {
 			return false, err
 		}
 		if !allowed {
 			reason = "account_unavailable"
-		} else if !settings.Enabled || !cfg.Enabled || maintenance || !enabled {
+		} else if !settings.Enabled || !cfg.Enabled || maintenance || !enabled || !acceptedPolicyEnabled {
 			reason = "closed"
 		}
 	}
