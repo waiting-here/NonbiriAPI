@@ -305,7 +305,7 @@ describe('Risk audit access and evidence presentation', () => {
   });
 
   it('retains all saved IP alternatives when reopening and editing a rule', async () => {
-    api.numberedRules.mockResolvedValue({
+    const savedRules = {
       items: [
         {
           id: 'rsk_example',
@@ -335,7 +335,12 @@ describe('Risk audit access and evidence presentation', () => {
       total_pages: '1',
       revision: 'r2',
       changed: false,
+    };
+    let completeRefresh!: (value: typeof savedRules) => void;
+    const refreshedRules = new Promise<typeof savedRules>((resolve) => {
+      completeRefresh = resolve;
     });
+    api.numberedRules.mockResolvedValueOnce(savedRules).mockReturnValue(refreshedRules);
     const view = await renderWithProviders(<RiskAuditPanel role="admin" scopeKey="operator" />, {
       station: 'admin',
       role: 'admin',
@@ -343,8 +348,11 @@ describe('Risk audit access and evidence presentation', () => {
     view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'operator' } });
     await view.user.click(screen.getByRole('tab', { name: 'Client rules' }));
     await waitFor(() =>
-      expect(screen.getByText('Observed IP Matches any IP 192.0.2.1, 2001:db8::1')).toBeVisible(),
+      expect(api.numberedRules).toHaveBeenCalledWith('1', 20, 'r2', expect.any(AbortSignal)),
     );
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+    await act(async () => completeRefresh(savedRules));
+    expect(await screen.findByText('Observed IP Matches any IP 192.0.2.1, 2001:db8::1')).toBeVisible();
     await view.user.click(screen.getByRole('button', { name: 'Edit' }));
     const addresses = screen.getByRole('textbox', { name: 'IP addresses' });
     expect(addresses).toHaveValue('192.0.2.1\n2001:db8::1');
