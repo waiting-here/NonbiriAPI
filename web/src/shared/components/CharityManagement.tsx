@@ -85,6 +85,7 @@ import '@shared/operations/operations.css';
 
 type ManagedDonation = AdminDonation | StewardDonation;
 const approvalOriginCopy = {
+  none: 'common.donationReview.origin.none',
   auto: 'common.donationReview.origin.auto',
   manual: 'common.donationReview.origin.manual',
   unknown: 'common.donationReview.origin.unknown',
