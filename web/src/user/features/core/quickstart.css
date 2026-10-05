@@ -125,6 +125,11 @@
 .quickstart .nb-actionbar {
   display: flex;
 }
+.quickstart .nb-actionbar > .nb-btn {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 .quickstart .nb-actionbar[hidden] {
   display: none;
 }

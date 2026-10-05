@@ -81,6 +81,9 @@
   text-align: left;
   overflow-wrap: anywhere;
 }
+.ai-preview th:last-child {
+  width: 44%;
+}
 .ai-preview progress {
   max-width: 6rem;
   height: 0.65rem;
