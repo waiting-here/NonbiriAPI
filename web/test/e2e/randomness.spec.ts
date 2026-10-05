@@ -7,7 +7,7 @@ import { blackjackWire, tableID } from '../../src/user/games/blackjack/testFixtu
 import { biddingHomeWire, biddingID } from '../../src/user/games/bidding/testFixtures';
 import { rpsStateWire, rpsTestSessionID } from '../../src/user/games/rps/testFixtures';
 import { gamesSnapshotWire } from '../../src/user/games/common/testFixtures';
-import rawCatalog from '../../../internal/game/likes/catalog/quick.json' with { type: 'json' };
+import { catalogWire } from '../../src/user/games/likes/testCatalog';
 import likes from '../../src/user/games/likes/testdata/authority.json' with { type: 'json' };
 
 const seed = '2a'.repeat(32),
@@ -32,29 +32,6 @@ function opening(game: string, id: string) {
     commitment: createHash('sha256').update(domain).update(Buffer.from(seed, 'hex')).digest('hex'),
   };
 }
-function catalog() {
-  const config = structuredClone(rawCatalog) as unknown as Record<string, unknown>;
-  delete (config.parameters as Record<string, number>).POINT_TICKET;
-  delete (config.parameters as Record<string, number>).FOLLOWUP_CAP;
-  config.paramMeta = (config.paramMeta as { id: string }[]).filter(
-    (p) => !['POINT_TICKET', 'FOLLOWUP_CAP'].includes(p.id),
-  );
-  const mode = {
-    rules_version: 1,
-    design_version: '0.18.1',
-    schema_version: 16,
-    content_hash: 'a'.repeat(64),
-    config,
-  };
-  return {
-    rules_version: mode.rules_version,
-    design_version: mode.design_version,
-    schema_version: mode.schema_version,
-    content_hash: mode.content_hash,
-    modes: { quick: mode, standard: { ...mode, config: { ...config, mode: 'standard' } } },
-  };
-}
-
 for (const game of ['blackjack', 'bidding', 'likes', 'rps', 'linklink', 'fishing']) {
   test(`${game} exposes the appropriate random proof from its actual page`, async ({ page }) => {
     const errors = collectConsoleViolations(page);
@@ -162,7 +139,7 @@ for (const game of ['blackjack', 'bidding', 'likes', 'rps', 'linklink', 'fishing
           entries: [],
           me: null,
         };
-      } else if (path === '/api/games/likes/catalog') body = catalog();
+      } else if (path === '/api/games/likes/catalog') body = catalogWire();
       else if (game === 'blackjack' && path.endsWith('/state')) body = blackjackWire();
       else if (game === 'bidding' && path.endsWith('/state')) body = bid;
       else if (game === 'likes' && path.endsWith('/state')) body = likeState;
