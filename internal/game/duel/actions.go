@@ -2,6 +2,7 @@ package duel
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 
 	"github.com/waiting-here/NonbiriAPI/internal/activities"
@@ -110,13 +111,7 @@ func (s *Service) act(ctx context.Context, in ActionInput, surrender bool) (Muta
 		}
 		facts, err = s.terminal(ctx, tx, &v, expected, now, &winner, "surrender", false)
 	} else {
-		v.Seats[seat].Action = action
-		v.Seats[seat].Locked = true
-		if v.Seats[0].Locked && v.Seats[1].Locked {
-			facts, err = s.resolve(ctx, tx, &v, expected, now)
-		} else {
-			err = s.saveSession(ctx, tx, &v, expected)
-		}
+		facts, err = s.commitAcceptedAction(ctx, tx, &v, expected, seat, action, "human", "", now)
 	}
 	if err != nil {
 		return MutationResult{}, classify(err)
@@ -134,5 +129,26 @@ func (s *Service) act(ctx context.Context, in ActionInput, surrender bool) (Muta
 	}
 	committed = true
 	s.publish(ctx, facts)
+	s.wakeAI()
 	return result, nil
+}
+
+// Both human and source decisions arrive here only after Rules.Accept and the
+// authoritative actor/window/deadline checks in their transaction.
+func (s *Service) commitAcceptedAction(ctx context.Context, tx *sql.Tx, v *sessionRecord, expected db.U128, seat int, action json.RawMessage, origin, failure string, now int64) (activities.PublishFacts, error) {
+	v.Seats[seat].Action = action
+	v.Seats[seat].Locked = true
+	recordActionSource(v, seat, action, origin, failure, now)
+	if v.Seats[0].Locked && v.Seats[1].Locked {
+		return s.resolve(ctx, tx, v, expected, now)
+	}
+	return activities.PublishFacts{}, s.saveSession(ctx, tx, v, expected)
+}
+
+func recordActionSource(v *sessionRecord, seat int, action json.RawMessage, origin, failure string, now int64) {
+	v.Payload.FormatVersion = 1
+	v.Payload.Sources[seat] = origin
+	if v.Economy == AIEconomy {
+		v.Payload.Actions = append(v.Payload.Actions, ActionSource{PhaseSeq: v.PhaseSeq.Decimal(), Round: v.Round, Phase: v.Phase, Seat: seat, Action: action, Origin: origin, Failure: failure, AcceptedAt: now})
+	}
 }

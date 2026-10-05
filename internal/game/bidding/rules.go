@@ -18,7 +18,7 @@ var _ duel.Rules = Rules{}
 
 func (Rules) ID() string { return config.ID }
 func (Rules) Catalog(mode string) (duel.Catalog, error) {
-	if !slices.Contains(config.Modes(), mode) {
+	if mode != "ai" && !slices.Contains(config.Modes(), mode) {
 		return duel.Catalog{}, duel.ErrInvalidRequest
 	}
 	body := json.RawMessage(`{"rules_version":1,"rounds":13,"joker_seconds":10,"bid_seconds":20,"reward_ranks":[1,2,3,4,5,6,7,8,9,10,11,12,13],"joker_multiplier":2,"ties":"carry_then_discard"}`)

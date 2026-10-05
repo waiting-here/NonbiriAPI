@@ -12,11 +12,13 @@ const ProtocolVersion = 1
 const ChoiceSchema = "choice/v1"
 
 var (
-	ErrUnsupported   = errors.New("ai: unsupported capability")
-	ErrInvalidResult = errors.New("ai: invalid result")
-	ErrCapacity      = errors.New("ai: decision capacity reached")
-	ErrClosed        = errors.New("ai: closed")
-	ErrSourceFailure = errors.New("ai: source failed")
+	ErrUnsupported    = errors.New("ai: unsupported capability")
+	ErrInvalidResult  = errors.New("ai: invalid result")
+	ErrCapacity       = errors.New("ai: decision capacity reached")
+	ErrClosed         = errors.New("ai: closed")
+	ErrSourceFailure  = errors.New("ai: source failed")
+	ErrQueueTimeout   = errors.New("ai: queue timeout")
+	ErrComputeTimeout = errors.New("ai: compute timeout")
 )
 
 type Capability struct {

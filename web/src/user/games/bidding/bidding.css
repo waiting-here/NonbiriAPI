@@ -806,3 +806,57 @@
     opacity: 1;
   }
 }
+
+.bid-ai-lobby {
+  margin: 1.5rem 0;
+}
+.bid-ai-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 1rem;
+}
+.bid-ai-card {
+  padding: 1.25rem;
+  border: 1px solid var(--border, #d1d5db);
+  border-radius: 1rem;
+  background: var(--surface, #fff);
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+.bid-ai-card h3,
+.bid-ai-card p {
+  margin: 0;
+}
+.bid-ai-card dl {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0;
+}
+.bid-ai-card dd {
+  margin: 0;
+  font-weight: 700;
+}
+.bid-ai-card .btn {
+  margin-top: auto;
+}
+.bid-ai-mark {
+  color: #497361;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+}
+.bid-ai-card small {
+  line-height: 1.6;
+  color: var(--text-muted, #64748b);
+}
+.bid-ai-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.6rem;
+  background: color-mix(in srgb, #60a58a 12%, transparent);
+  margin-block: 1rem;
+}

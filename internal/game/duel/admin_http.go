@@ -15,6 +15,9 @@ func (s *Service) RegisterAdminRoutes(admin host.AdminRegistrar) error {
 	if admin == nil || s.adminAuthorizer == nil {
 		return ErrInvariant
 	}
+	if err := s.registerAIAdminRoutes(admin); err != nil {
+		return err
+	}
 	base := "/admin/api/games/" + s.rules.ID() + "/history"
 	routes := []struct{ method, path string }{{"GET", base}, {"GET", base + "/{id}"}, {"GET", base + "/{id}/rounds"}, {"POST", base + "/export"}}
 	for _, route := range routes {

@@ -13,7 +13,7 @@ import {
   unixSecond,
 } from '@shared/operations/wire';
 import { gameRequest } from '../../../user/games/common/request';
-import { modesFor, type GameID } from './copy';
+import { historyModesFor, type GameID } from './copy';
 
 export type Dataset = 'recent' | 'anonymous';
 export interface Selection {
@@ -31,6 +31,7 @@ export interface Recent {
   operation_id: string;
   ledger_seq: string;
   participants: {
+    kind?: string;
     user_id: string | null;
     display_name: string;
     general_paid: string;
@@ -38,6 +39,8 @@ export interface Recent {
   }[];
 }
 export interface Summary {
+  economy?: string;
+  ai?: JSONValue;
   match_ref: string;
   game: GameID;
   mode: string;
@@ -53,6 +56,7 @@ export interface Summary {
   recent?: Recent;
 }
 export interface Facts extends Omit<Summary, 'match_ref' | 'recent'> {
+  action_sources?: JSONValue;
   initial: JSONValue;
   final: JSONValue;
   terminal_actions: JSONValue[];
@@ -66,6 +70,7 @@ export interface Match {
   recent?: Recent;
 }
 export interface Round {
+  sources?: JSONValue;
   round: number;
   before: JSONValue;
   after: JSONValue;
@@ -88,8 +93,7 @@ export interface ExportPage {
   expired_skipped: number;
 }
 const encoder = new TextEncoder();
-const cursor = (value: unknown) =>
-  nullableString(value, 'history cursor', { min: 1, ascii: true });
+const cursor = (value: unknown) => nullableString(value, 'history cursor', { min: 1, ascii: true });
 const ref = (value: unknown, game: GameID, dataset: Dataset) =>
   opaqueID(
     value,
@@ -131,8 +135,7 @@ function jsonValue(value: unknown, anonymous = false): JSONValue {
     if (++nodes > 200_000 || depth > 32) invalidResponse('game record depth');
     if (v === null || typeof v === 'boolean') return v;
     if (typeof v === 'number') return integer(v, 'game number', -Number.MAX_SAFE_INTEGER);
-    if (typeof v === 'string')
-      return string(v, 'game text', { multiline: true });
+    if (typeof v === 'string') return string(v, 'game text', { multiline: true });
     if (Array.isArray(v))
       return array(v, 'game array', 4096).map((entry) => visit(entry, depth + 1));
     if (typeof v !== 'object') invalidResponse('game value');
@@ -143,10 +146,7 @@ function jsonValue(value: unknown, anonymous = false): JSONValue {
     )
       invalidResponse('game record fields');
     return Object.fromEntries(
-      entries.map(([key, entry]) => [
-        string(key, 'game field'),
-        visit(entry, depth + 1),
-      ]),
+      entries.map(([key, entry]) => [string(key, 'game field'), visit(entry, depth + 1)]),
     );
   };
   return visit(value, 0);
@@ -160,15 +160,18 @@ function recent(value: unknown): Recent {
   return {
     started_at: unixSecond(r.started_at, 'match start'),
     terminal_at: unixSecond(r.terminal_at, 'match end'),
-    operation_id: opaqueID(r.operation_id, 'op_', 'terminal operation'),
-    ledger_seq: decimal(r.ledger_seq, 'terminal order', { positive: true }),
+    operation_id:
+      r.operation_id === '' ? '' : opaqueID(r.operation_id, 'op_', 'terminal operation'),
+    ledger_seq: decimal(r.ledger_seq, 'terminal order'),
     participants: pair(r.participants, 'participants').map((value) => {
       const p = record(
         value,
-        ['user_id', 'display_name', 'general_paid', 'game_paid'],
+        ['kind', 'user_id', 'display_name', 'general_paid', 'game_paid'],
         'participant',
+        ['user_id', 'display_name', 'general_paid', 'game_paid'],
       );
       return {
+        kind: p.kind as string | undefined,
         user_id: p.user_id === null ? null : decimal(p.user_id, 'participant', { positive: true }),
         display_name: string(p.display_name, 'participant name'),
         general_paid: amount(p.general_paid, 'general payment', false),
@@ -197,7 +200,9 @@ function summaryFields(
   const cuts = record(r.cuts, ['platform', 'welfare', 'thursday'], 'match cuts');
   return {
     game: oneOf(r.game, [game], 'game'),
-    mode: oneOf(r.mode, modesFor(game), 'mode'),
+    ...(r.economy === undefined ? {} : { economy: string(r.economy, 'economy') }),
+    ...(r.ai === undefined ? {} : { ai: jsonValue(r.ai) }),
+    mode: oneOf(r.mode, historyModesFor(game), 'mode'),
     rules_version: integer(r.rules_version, 'rules version', 1, 2147483647),
     content_hash: hash(r.content_hash),
     outcome: oneOf(r.outcome, ['normal', 'draw', 'system_cancelled'], 'outcome'),
@@ -215,7 +220,7 @@ function summaryFields(
 }
 export function normalizeSummary(value: unknown, game: GameID, dataset: Dataset): Summary {
   const keys = [...summaryKeys, 'match_ref', ...(dataset === 'recent' ? ['recent'] : [])];
-  const r = record(value, keys, 'history summary');
+  const r = record(value, [...keys, 'economy', 'ai'], 'history summary', keys);
   return {
     ...summaryFields(r, game),
     match_ref: ref(r.match_ref, game, dataset),
@@ -230,8 +235,19 @@ export function normalizeMatch(value: unknown, game: GameID, dataset: Dataset): 
   );
   const f = record(
     r.facts,
-    [...summaryKeys, 'initial', 'final', 'terminal_actions', 'round_start_events', 'rake_bp'],
+    [
+      ...summaryKeys,
+      'initial',
+      'final',
+      'terminal_actions',
+      'round_start_events',
+      'rake_bp',
+      'economy',
+      'ai',
+      'action_sources',
+    ],
     'match facts',
+    [...summaryKeys, 'initial', 'final', 'terminal_actions', 'round_start_events', 'rake_bp'],
   );
   const bp = record(f.rake_bp, ['platform', 'welfare', 'thursday'], 'rake');
   const rates = {
@@ -246,6 +262,9 @@ export function normalizeMatch(value: unknown, game: GameID, dataset: Dataset): 
     match_ref: ref(r.match_ref, game, dataset),
     facts: {
       ...summaryFields(f, game),
+      ...(f.action_sources === undefined
+        ? {}
+        : { action_sources: jsonValue(f.action_sources, anonymous) }),
       initial: jsonValue(f.initial, anonymous),
       final: jsonValue(f.final, anonymous),
       terminal_actions: pair(f.terminal_actions, 'terminal actions').map((a) =>
@@ -260,11 +279,13 @@ export function normalizeMatch(value: unknown, game: GameID, dataset: Dataset): 
 export function normalizeRound(value: unknown, dataset: Dataset): Round {
   const r = record(
     value,
-    ['round', 'before', 'after', 'facts', 'start_events', 'timeouts'],
+    ['round', 'before', 'after', 'facts', 'start_events', 'timeouts', 'sources'],
     'round record',
+    ['round', 'before', 'after', 'facts', 'start_events', 'timeouts'],
   );
   return {
     round: integer(r.round, 'round', 1, 75),
+    ...(r.sources === undefined ? {} : { sources: jsonValue(r.sources, dataset === 'anonymous') }),
     before: jsonValue(r.before, dataset === 'anonymous'),
     after: jsonValue(r.after, dataset === 'anonymous'),
     facts: jsonValue(r.facts, dataset === 'anonymous'),

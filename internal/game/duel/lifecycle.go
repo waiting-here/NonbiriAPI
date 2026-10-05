@@ -51,8 +51,8 @@ func (s *Service) CancelUserTx(ctx context.Context, tx *sql.Tx, user, now int64)
 	return &finalizer{commit: func() { s.publish(ctx, facts) }}, nil
 }
 func (s *Service) cancelUser(ctx context.Context, tx *sql.Tx, user, now int64) (activities.PublishFacts, error) {
-	var qid, sid sql.NullString
-	err := tx.QueryRowContext(ctx, `SELECT queue_id,session_id FROM game_duel_user_slots WHERE user_id=? AND game_key=?`, user, s.rules.ID()).Scan(&qid, &sid)
+	var qid, sid, aid sql.NullString
+	err := tx.QueryRowContext(ctx, `SELECT queue_id,session_id,ai_queue_id FROM game_duel_user_slots WHERE user_id=? AND game_key=?`, user, s.rules.ID()).Scan(&qid, &sid, &aid)
 	if errors.Is(err, sql.ErrNoRows) {
 		return activities.PublishFacts{}, nil
 	}
@@ -66,6 +66,9 @@ func (s *Service) cancelUser(ctx context.Context, tx *sql.Tx, user, now int64) (
 		}
 		err = s.releaseQueue(ctx, tx, q, 0, now)
 		return activities.PublishFacts{AccountIDs: []int64{user}}, err
+	}
+	if aid.Valid {
+		return activities.PublishFacts{}, s.releaseAIQueue(ctx, tx, aid.String, "account_unavailable", now)
 	}
 	if !sid.Valid {
 		return activities.PublishFacts{}, ErrInvariant
@@ -154,6 +157,9 @@ func (s *Service) cancellationNow(ctx context.Context, tx *sql.Tx, provided int6
 }
 
 type anonymousHeader struct {
+	Economy          string             `json:"economy,omitempty"`
+	AI               *AIArchive         `json:"ai,omitempty"`
+	Sources          []ActionSource     `json:"action_sources,omitempty"`
 	Game             string             `json:"game"`
 	Mode             string             `json:"mode"`
 	RulesVersion     int                `json:"rules_version"`
@@ -185,7 +191,7 @@ func (s *Service) anonymousHeader(v sessionRecord) (anonymousHeader, error) {
 	if outcome == "decided" {
 		outcome = "normal"
 	}
-	return anonymousHeader{Game: s.rules.ID(), Mode: v.Mode, RulesVersion: 1, ContentHash: v.Terms.ContentHash, Initial: initial, Final: final, TerminalActions: v.Payload.TerminalActions, RoundStartEvents: v.Payload.RoundStartEvents, Outcome: outcome, Reason: v.Reason, Winner: v.Winner, Scores: v.Scores, Ticket: v.Terms.Ticket, Rake: v.Terms.Rake, Prize: game.FormatAmount(v.Prize), Cuts: RakeAmounts{Platform: game.FormatAmount(v.Platform), Welfare: game.FormatAmount(v.Welfare), Thursday: game.FormatAmount(v.Thursday)}}, nil
+	return anonymousHeader{Economy: v.Economy, AI: archiveAI(v), Sources: publicActionSources(v, true), Game: s.rules.ID(), Mode: v.Mode, RulesVersion: 1, ContentHash: v.Terms.ContentHash, Initial: initial, Final: final, TerminalActions: v.Payload.TerminalActions, RoundStartEvents: v.Payload.RoundStartEvents, Outcome: outcome, Reason: v.Reason, Winner: v.Winner, Scores: v.Scores, Ticket: v.Terms.Ticket, Rake: v.Terms.Rake, Prize: game.FormatAmount(v.Prize), Cuts: RakeAmounts{Platform: game.FormatAmount(v.Platform), Welfare: game.FormatAmount(v.Welfare), Thursday: game.FormatAmount(v.Thursday)}}, nil
 }
 func (s *Service) anonymize(ctx context.Context, tx *sql.Tx, v sessionRecord) error {
 	if v.State != "terminal" {
@@ -203,7 +209,7 @@ func (s *Service) anonymize(ctx context.Context, tx *sql.Tx, v sessionRecord) er
 	if err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO game_duel_anonymous(archive_id,game_key,mode,content_hash,header_json) VALUES(?,?,?,?,?)`, archive, s.rules.ID(), v.Mode, v.Terms.ContentHash, string(body)); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO game_duel_anonymous(archive_id,game_key,mode,content_hash,header_json,economy) VALUES(?,?,?,?,?,?)`, archive, s.rules.ID(), v.Mode, v.Terms.ContentHash, string(body), v.Economy); err != nil {
 		return err
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT round_no,record_json FROM game_duel_rounds WHERE session_id=? ORDER BY round_no`, v.ID)
@@ -320,6 +326,7 @@ func (s *Service) Retain(ctx context.Context, now int64, limit int, deadline tim
 }
 
 type Export struct {
+	AI            *AIExport     `json:"ai,omitempty"`
 	Queue         *Queue        `json:"queue"`
 	Current       *State        `json:"current"`
 	CurrentRounds []RoundView   `json:"current_rounds"`
@@ -361,8 +368,8 @@ func (s *Service) ExportTx(ctx context.Context, tx *sql.Tx, user, now int64, lim
 			}
 		}
 	}
-	var qid, sid sql.NullString
-	err := tx.QueryRowContext(ctx, `SELECT queue_id,session_id FROM game_duel_user_slots WHERE user_id=? AND game_key=?`, user, s.rules.ID()).Scan(&qid, &sid)
+	var qid, sid, aid sql.NullString
+	err := tx.QueryRowContext(ctx, `SELECT queue_id,session_id,ai_queue_id FROM game_duel_user_slots WHERE user_id=? AND game_key=?`, user, s.rules.ID()).Scan(&qid, &sid, &aid)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, nil, err
 	}
@@ -376,6 +383,21 @@ func (s *Service) ExportTx(ctx context.Context, tx *sql.Tx, user, now int64, lim
 			if err := charge(result.Queue); err != nil {
 				return nil, nil, err
 			}
+		}
+	}
+	if aid.Valid {
+		result.Queue, err = s.projectAIQueue(ctx, tx, aid.String)
+		if err != nil {
+			return nil, nil, err
+		}
+		if err := charge(result.Queue); err != nil {
+			return nil, nil, err
+		}
+	}
+	if s.rules.ID() == "bidding" {
+		result.AI, err = s.exportAI(ctx, tx, user, now, remaining, charge)
+		if err != nil {
+			return nil, nil, err
 		}
 	}
 	roundList := func(v sessionRecord, seat int) ([]RoundView, error) {

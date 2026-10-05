@@ -199,7 +199,11 @@ func newFixture(t *testing.T, kind string, override ...duel.Rules) *fixture {
 			f.audit(a)
 		}
 	}, Continuation: registryAuthorizer{registry}, Limiter: limiter, Pools: deps{}, Publisher: deps{}, Keys: deps{}, Now: func() time.Time { return time.Unix(f.clock.Load(), 0) }}
-	f.s, err = duel.New(f.options)
+	if kind == "bidding" {
+		f.s, err = bidding.New(f.options)
+	} else {
+		f.s, err = duel.New(f.options)
+	}
 	if err != nil {
 		t.Fatal(err)
 	}

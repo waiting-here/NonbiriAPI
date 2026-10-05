@@ -281,35 +281,38 @@ describe('production account lifecycle adapter', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
-  it('downloads a v12 attachment and rejects a version mismatch in its filename', async () => {
-    const document = {
-      ...exportDocument(),
-      schema_version: 12,
-      lake_notes: { server_projection: true },
-    };
-    const fetchMock = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(
-        exportResponse(document, {
-          'Content-Disposition': 'attachment; filename="nonbiriapi-account-export-v12.json"',
-        }),
-      )
-      .mockResolvedValueOnce(exportResponse(document));
-    vi.stubGlobal('fetch', fetchMock);
-    const result = await productionAccountLifecycleAdapter.exportAccount({
-      accountId: '1',
-      elevatedToken: 'elevated_token',
-    });
-    expect(result.schemaVersion).toBe(12);
-    expect(JSON.parse(await result.blob.text())).toEqual(document);
-    await expect(
-      productionAccountLifecycleAdapter.exportAccount({
+  it.each([12, 13])(
+    'downloads a v%s attachment and rejects a version mismatch in its filename',
+    async (version) => {
+      const document = {
+        ...exportDocument(),
+        schema_version: version,
+        lake_notes: { server_projection: true },
+      };
+      const fetchMock = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(
+          exportResponse(document, {
+            'Content-Disposition': `attachment; filename="nonbiriapi-account-export-v${version}.json"`,
+          }),
+        )
+        .mockResolvedValueOnce(exportResponse(document));
+      vi.stubGlobal('fetch', fetchMock);
+      const result = await productionAccountLifecycleAdapter.exportAccount({
         accountId: '1',
         elevatedToken: 'elevated_token',
-      }),
-    ).rejects.toMatchObject({ code: 'invalid_response' });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-  });
+      });
+      expect(result.schemaVersion).toBe(version);
+      expect(JSON.parse(await result.blob.text())).toEqual(document);
+      await expect(
+        productionAccountLifecycleAdapter.exportAccount({
+          accountId: '1',
+          elevatedToken: 'elevated_token',
+        }),
+      ).rejects.toMatchObject({ code: 'invalid_response' });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    },
+  );
 
   it('rejects the previous export schema and filename without retrying', async () => {
     const previousDocument = exportDocument();

@@ -67,6 +67,8 @@ export const HISTORY_KINDS = [
   'duel_queue_release',
   'duel_session_start',
   'duel_terminal',
+  'ai_ticket',
+  'ai_terminal',
   'blackjack_reserve',
   'blackjack_settle',
   'blackjack_release',

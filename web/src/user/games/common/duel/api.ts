@@ -28,6 +28,7 @@ export type DuelIntent =
       readonly kind: 'queue';
       readonly mode: string;
       readonly termsHash: string;
+      readonly botID?: string;
       readonly loadout?: unknown;
     }
   | { readonly kind: 'cancel'; readonly id: string; readonly revision: string }
@@ -78,7 +79,7 @@ export async function sendDuelIntent(game: DuelGame, intent: DuelIntent, key: st
       ? {
           mode: intent.mode,
           expected_terms_hash: intent.termsHash,
-          device_token: duelDeviceToken(game),
+          ...(intent.botID ? { bot_id: intent.botID } : { device_token: duelDeviceToken(game) }),
           ...(intent.loadout === undefined ? {} : { loadout: intent.loadout }),
         }
       : intent.kind === 'cancel'
@@ -98,7 +99,7 @@ export async function sendDuelIntent(game: DuelGame, intent: DuelIntent, key: st
   }
   if (intent.kind === 'queue') {
     const r = exactRecord(response.data, ['queue_id', 'revision', 'deadline']);
-    opaqueID(r.queue_id, prefix(game, true), 'queue receipt');
+    opaqueID(r.queue_id, intent.botID ? 'aiq_' : prefix(game, true), 'queue receipt');
     revisionValue(r.revision);
     unixTime(r.deadline, 'queue receipt');
   } else {

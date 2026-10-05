@@ -64,3 +64,11 @@ Keep only the historical execution paths still needed by retained work. Before
 removing one, prove that no supported source or retained record needs it, or add
 an explicit migration. Database rollback always restores a complete matching
 stopped snapshot; an older binary alone is not a downgrade procedure.
+
+The AI-player revision adds explicit human/bot participants, challenge economics,
+and a history order independent of payment operations. During referenced-table
+rebuilds, the startup-owned connection temporarily disables foreign-key actions,
+checks the complete target before commit, and restores the connection setting.
+Ordinary restarts at the current revision do not repeat that full reference scan.
+Duel payload format 1 adds action provenance; retained format 0 remains readable
+with unknown provenance instead of invented human/AI classifications.

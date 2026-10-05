@@ -85,7 +85,12 @@ func New(options Options) (*Runtime, error) {
 			if err != nil {
 				return nil, err
 			}
+			var aiAdapter duel.AIAdapter
+			if descriptor.ID == game.BiddingID {
+				aiAdapter = bidding.AIAdapter{}
+			}
 			service, err := duel.New(duel.Options{
+				AI:       aiAdapter,
 				Database: shared.Database, Descriptor: descriptor, Rules: rules, Finance: financial.Duel,
 				UserAuthorizer: shared.UserAuthorizer, AdminAuthorizer: shared.AdminAuthorizer,
 				AdminAudit: options.DuelAdminAudit, Continuation: options.Continuation,

@@ -70,6 +70,10 @@ export function TermsPage() {
               <p>{t('user.legal.terms.fatFishBody')}</p>
             </section>
             <section>
+              <h2>{t('user.legal.terms.aiPlayersTitle')}</h2>
+              <p>{t('user.legal.terms.aiPlayersBody')}</p>
+            </section>
+            <section>
               <h2>{t('user.legal.terms.inactivityTitle')}</h2>
               <p>{t('user.legal.terms.inactivityBody')}</p>
             </section>

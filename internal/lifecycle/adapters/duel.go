@@ -42,7 +42,7 @@ func (a *DuelAdapter) PrepareDelete(ctx context.Context, tx *sql.Tx, request lif
 		if request.Before == nil || request.Before.UserID != request.UserID || request.DecisionNow > 253394524799 {
 			return nil, lifecycle.ErrInvalid
 		}
-		err := tx.QueryRowContext(ctx, `SELECT g.id FROM game_duel_user_slots p JOIN game_duel_sessions g ON g.id=p.session_id WHERE p.user_id=? AND p.game_key=? AND g.state='active'`, request.UserID, a.id).Scan(&active)
+		err := tx.QueryRowContext(ctx, `SELECT g.id FROM game_duel_user_slots p JOIN game_duel_sessions g ON g.id=p.session_id WHERE p.user_id=? AND p.game_key=? AND g.state='active' AND g.economy='pvp'`, request.UserID, a.id).Scan(&active)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
 		}
@@ -81,29 +81,29 @@ func mapDuelResolution(v *duel.Resolution) *lifecycle.DuelResolutionExport {
 func mapDuelRounds(values []duel.RoundView) []lifecycle.DuelRoundExport {
 	out := make([]lifecycle.DuelRoundExport, len(values))
 	for i, v := range values {
-		out[i] = lifecycle.DuelRoundExport{Round: v.Round, Before: v.Before, After: v.After, Facts: v.Facts, StartEvents: v.StartEvents, Timeouts: v.Timeouts}
+		out[i] = lifecycle.DuelRoundExport{Sources: v.Sources, Round: v.Round, Before: v.Before, After: v.After, Facts: v.Facts, StartEvents: v.StartEvents, Timeouts: v.Timeouts}
 	}
 	return out
 }
 func mapDuelExport(v duel.Export) lifecycle.DuelExport {
-	out := lifecycle.DuelExport{CurrentRounds: mapDuelRounds(v.CurrentRounds), History: make([]lifecycle.DuelMatchExport, len(v.History))}
+	out := lifecycle.DuelExport{AI: mapAIExport(v.AI), CurrentRounds: mapDuelRounds(v.CurrentRounds), History: make([]lifecycle.DuelMatchExport, len(v.History))}
 	for _, item := range v.Loadouts {
 		out.Loadouts = append(out.Loadouts, lifecycle.DuelLoadoutExport{Slot: item.Slot, Revision: item.Revision, Mode: item.Mode, Loadout: append([]byte(nil), item.Loadout...), UpdatedAt: item.UpdatedAt})
 	}
 	if q := v.Queue; q != nil {
-		out.Queue = &lifecycle.DuelQueueExport{ID: q.ID, Revision: q.Revision, Mode: q.Mode, Deadline: q.Deadline, Ticket: q.Ticket, Payment: lifecycle.GamePaymentExport(q.Payment), TermsHash: q.TermsHash, RulesVersion: q.RulesVersion, Loadout: q.Loadout}
+		out.Queue = &lifecycle.DuelQueueExport{Economy: q.Economy, AI: mapAITerms(q.AI), Position: q.Position, ID: q.ID, Revision: q.Revision, Mode: q.Mode, Deadline: q.Deadline, Ticket: q.Ticket, Payment: lifecycle.GamePaymentExport(q.Payment), TermsHash: q.TermsHash, RulesVersion: q.RulesVersion, Loadout: q.Loadout}
 	}
 	if s := v.Current; s != nil {
-		out.Current = &lifecycle.DuelStateExport{ID: s.ID, Game: s.Game, Mode: s.Mode, RulesVersion: s.RulesVersion, ContentHash: s.ContentHash, Revision: s.Revision, PhaseSeq: s.PhaseSeq, Phase: s.Phase, Round: s.Round, Deadline: s.Deadline, ServerNow: s.ServerNow, You: s.You, Locked: s.Locked, Ticket: s.Ticket, Rake: lifecycle.DuelRatesExport(s.Rake), OwnPayment: lifecycle.GamePaymentExport(s.OwnPayment), View: s.View, Resolution: mapDuelResolution(s.Resolution)}
+		out.Current = &lifecycle.DuelStateExport{Economy: s.Economy, AI: mapAIView(s.AI), Sources: mapAISources(s.Sources), ID: s.ID, Game: s.Game, Mode: s.Mode, RulesVersion: s.RulesVersion, ContentHash: s.ContentHash, Revision: s.Revision, PhaseSeq: s.PhaseSeq, Phase: s.Phase, Round: s.Round, Deadline: s.Deadline, ServerNow: s.ServerNow, You: s.You, Locked: s.Locked, Ticket: s.Ticket, Rake: lifecycle.DuelRatesExport(s.Rake), OwnPayment: lifecycle.GamePaymentExport(s.OwnPayment), View: s.View, Resolution: mapDuelResolution(s.Resolution)}
 		if r := s.RoundStart; r != nil {
 			out.Current.RoundStart = &lifecycle.DuelRoundStartExport{Round: r.Round, StartedAt: r.StartedAt, Events: r.Events}
 		}
 	}
 	for i, m := range v.History {
 		d := m.Detail
-		out.History[i] = lifecycle.DuelMatchExport{Detail: lifecycle.DuelDetailExport{RulesVersion: d.RulesVersion, ContentHash: d.ContentHash, Ticket: d.Ticket, Rake: lifecycle.DuelRatesExport(d.Rake), Initial: d.Initial, TerminalActions: d.TerminalActions, RoundStartEvents: d.RoundStartEvents}, Rounds: mapDuelRounds(m.Rounds)}
+		out.History[i] = lifecycle.DuelMatchExport{Detail: lifecycle.DuelDetailExport{Sources: mapAISources(d.Sources), RulesVersion: d.RulesVersion, ContentHash: d.ContentHash, Ticket: d.Ticket, Rake: lifecycle.DuelRatesExport(d.Rake), Initial: d.Initial, TerminalActions: d.TerminalActions, RoundStartEvents: d.RoundStartEvents}, Rounds: mapDuelRounds(m.Rounds)}
 		if r := d.Result; r != nil {
-			out.History[i].Detail.Result = &lifecycle.DuelResultExport{ID: r.ID, Game: r.Game, Mode: r.Mode, TerminalAt: r.TerminalAt, Outcome: r.Outcome, Reason: r.Reason, Scores: r.Scores, OwnPayment: lifecycle.GamePaymentExport(r.OwnPayment), OwnRefund: lifecycle.GamePaymentExport(r.OwnRefund), PrizeGeneral: r.PrizeGeneral, Rake: lifecycle.DuelAmountsExport(r.Rake), Resolution: mapDuelResolution(r.Resolution), You: r.You, View: r.View}
+			out.History[i].Detail.Result = &lifecycle.DuelResultExport{Economy: r.Economy, AI: mapAIView(r.AI), ID: r.ID, Game: r.Game, Mode: r.Mode, TerminalAt: r.TerminalAt, Outcome: r.Outcome, Reason: r.Reason, Scores: r.Scores, OwnPayment: lifecycle.GamePaymentExport(r.OwnPayment), OwnRefund: lifecycle.GamePaymentExport(r.OwnRefund), PrizeGeneral: r.PrizeGeneral, Rake: lifecycle.DuelAmountsExport(r.Rake), Resolution: mapDuelResolution(r.Resolution), You: r.You, View: r.View}
 		}
 	}
 	return out

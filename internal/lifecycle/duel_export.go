@@ -9,6 +9,7 @@ import (
 // These fields pin the personal projection independently of live response DTOs.
 // Rule JSON has already passed the game's participant-specific visibility filter.
 type DuelExport struct {
+	AI            *DuelAIExport       `json:"ai,omitempty"`
 	Queue         *DuelQueueExport    `json:"queue"`
 	Current       *DuelStateExport    `json:"current"`
 	CurrentRounds []DuelRoundExport   `json:"current_rounds"`
@@ -23,6 +24,9 @@ type DuelLoadoutExport struct {
 	UpdatedAt int64           `json:"updated_at"`
 }
 type DuelQueueExport struct {
+	Economy      string            `json:"economy,omitempty"`
+	AI           *DuelAITerms      `json:"ai,omitempty"`
+	Position     int               `json:"position,omitempty"`
 	ID           string            `json:"id"`
 	Revision     string            `json:"revision"`
 	Mode         string            `json:"mode"`
@@ -34,6 +38,9 @@ type DuelQueueExport struct {
 	Loadout      json.RawMessage   `json:"loadout,omitempty"`
 }
 type DuelStateExport struct {
+	Economy      string                `json:"economy,omitempty"`
+	AI           *DuelAIView           `json:"ai,omitempty"`
+	Sources      []DuelActionSource    `json:"action_sources,omitempty"`
 	ID           string                `json:"id"`
 	Game         string                `json:"game"`
 	Mode         string                `json:"mode"`
@@ -55,6 +62,8 @@ type DuelStateExport struct {
 	RoundStart   *DuelRoundStartExport `json:"round_start"`
 }
 type DuelResultExport struct {
+	Economy      string                `json:"economy,omitempty"`
+	AI           *DuelAIView           `json:"ai,omitempty"`
 	ID           string                `json:"id"`
 	Game         string                `json:"game"`
 	Mode         string                `json:"mode"`
@@ -71,6 +80,7 @@ type DuelResultExport struct {
 	View         json.RawMessage       `json:"view"`
 }
 type DuelDetailExport struct {
+	Sources          []DuelActionSource `json:"action_sources,omitempty"`
 	Result           *DuelResultExport  `json:"result"`
 	RulesVersion     int                `json:"rules_version"`
 	ContentHash      string             `json:"content_hash"`
@@ -85,6 +95,7 @@ type DuelMatchExport struct {
 	Rounds []DuelRoundExport `json:"rounds"`
 }
 type DuelRoundExport struct {
+	Sources     [2]string       `json:"sources,omitempty"`
 	Round       int             `json:"round"`
 	Before      json.RawMessage `json:"before"`
 	After       json.RawMessage `json:"after"`
@@ -115,4 +126,71 @@ type DuelAmountsExport struct {
 }
 type DuelExporter interface {
 	ExportDuel(context.Context, *sql.Tx, ExportRequest) (DuelExport, ExportFinalizer, error)
+}
+
+type DuelAIExport struct {
+	Preferences []DuelAIPreferenceExport     `json:"preferences"`
+	Memories    []DuelAIMemoryExport         `json:"memories"`
+	Snapshots   []DuelAIMemorySnapshotExport `json:"snapshots"`
+	Clears      []DuelAIClearExport          `json:"clears"`
+}
+type DuelAIPreferenceExport struct {
+	BotID         string `json:"bot_id"`
+	MemoryEnabled bool   `json:"memory_enabled"`
+	UpdatedAt     int64  `json:"updated_at"`
+}
+type DuelAIMemoryExport struct {
+	SessionID   string          `json:"session_id"`
+	BotID       string          `json:"bot_id"`
+	Version     int             `json:"feature_version"`
+	CompletedAt int64           `json:"completed_at"`
+	ExpiresAt   int64           `json:"expires_at"`
+	Features    json.RawMessage `json:"features"`
+}
+type DuelAIMemorySnapshotExport struct {
+	SessionID     string          `json:"session_id"`
+	MemoryEnabled bool            `json:"memory_enabled"`
+	Samples       int             `json:"samples"`
+	Summary       json.RawMessage `json:"summary,omitempty"`
+}
+type DuelAIClearExport struct {
+	BotID       string `json:"bot_id"`
+	ChallengeID string `json:"challenge_id"`
+	CompletedAt int64  `json:"completed_at"`
+	Reward      string `json:"reward"`
+}
+
+type DuelAITerms struct {
+	BotID         string `json:"bot_id"`
+	BotName       string `json:"bot_name"`
+	Description   string `json:"description"`
+	Revision      int64  `json:"revision,string"`
+	ChallengeID   string `json:"challenge_id"`
+	RulesKey      string `json:"rules_key"`
+	PolicyID      string `json:"policy_id"`
+	PolicyVersion int    `json:"policy_version"`
+	SourceID      string `json:"source_id"`
+	PolicySchema  string `json:"policy_schema"`
+	FirstReward   string `json:"first_reward"`
+	MemoryDays    int    `json:"memory_days"`
+	MemoryGames   int    `json:"memory_games"`
+}
+
+type DuelAIView struct {
+	Terms         DuelAITerms `json:"terms"`
+	MemoryEnabled bool        `json:"memory_enabled"`
+	MemorySamples int         `json:"memory_samples"`
+	FirstClear    bool        `json:"first_clear"`
+	Reward        string      `json:"reward"`
+}
+
+type DuelActionSource struct {
+	PhaseSeq   string          `json:"phase_seq,omitempty"`
+	Round      int             `json:"round"`
+	Phase      string          `json:"phase"`
+	Seat       int             `json:"seat"`
+	Action     json.RawMessage `json:"action"`
+	Origin     string          `json:"origin"`
+	Failure    string          `json:"failure,omitempty"`
+	AcceptedAt int64           `json:"accepted_at,omitempty"`
 }

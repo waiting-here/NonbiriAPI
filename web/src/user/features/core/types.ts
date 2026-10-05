@@ -477,7 +477,7 @@ export type LifecycleIntent = 'export' | 'delete';
 
 export interface AccountExportAttachment {
   blob: Blob;
-  schemaVersion: 11 | 12;
+  schemaVersion: 11 | 12 | 13;
 }
 
 export type AccountAuthority = 'active' | 'deleted';

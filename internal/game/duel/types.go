@@ -18,12 +18,14 @@ type Rates struct {
 	Thursday int `json:"thursday"`
 }
 type Terms struct {
-	Game         string `json:"game"`
-	Mode         string `json:"mode"`
-	Ticket       string `json:"ticket"`
-	Rake         Rates  `json:"rake_bp"`
-	RulesVersion int    `json:"rules_version"`
-	ContentHash  string `json:"content_hash"`
+	Economy      string   `json:"economy,omitempty"`
+	AI           *AITerms `json:"ai,omitempty"`
+	Game         string   `json:"game"`
+	Mode         string   `json:"mode"`
+	Ticket       string   `json:"ticket"`
+	Rake         Rates    `json:"rake_bp"`
+	RulesVersion int      `json:"rules_version"`
+	ContentHash  string   `json:"content_hash"`
 }
 type Resolution struct {
 	Round     int             `json:"round"`
@@ -37,6 +39,9 @@ type RoundStart struct {
 	Events    json.RawMessage `json:"events"`
 }
 type Queue struct {
+	Economy      string          `json:"economy,omitempty"`
+	AI           *AITerms        `json:"ai,omitempty"`
+	Position     int             `json:"position,omitempty"`
 	ID           string          `json:"id"`
 	Revision     string          `json:"revision"`
 	Mode         string          `json:"mode"`
@@ -48,6 +53,9 @@ type Queue struct {
 	Loadout      json.RawMessage `json:"loadout,omitempty"`
 }
 type State struct {
+	Sources      []ActionSource  `json:"action_sources,omitempty"`
+	Economy      string          `json:"economy,omitempty"`
+	AI           *AIView         `json:"ai,omitempty"`
 	Profiles     *[2]Profile     `json:"profiles,omitempty"`
 	ID           string          `json:"id"`
 	Game         string          `json:"game"`
@@ -70,6 +78,8 @@ type State struct {
 	RoundStart   *RoundStart     `json:"round_start"`
 }
 type ResultSummary struct {
+	Economy      string          `json:"economy,omitempty"`
+	AI           *AIView         `json:"ai,omitempty"`
 	ContentHash  string          `json:"content_hash"`
 	Profiles     *[2]Profile     `json:"profiles,omitempty"`
 	ID           string          `json:"id"`
@@ -93,6 +103,7 @@ type RakeAmounts struct {
 	Thursday string `json:"thursday"`
 }
 type Home struct {
+	AIQueueError string         `json:"ai_queue_error,omitempty"`
 	ServerNow    int64          `json:"server_now"`
 	Queue        *Queue         `json:"queue"`
 	Current      *State         `json:"current"`
@@ -122,6 +133,7 @@ type EnqueueInput struct {
 	Identity
 	IdempotencyKey    string
 	Mode              string
+	BotID             string
 	ExpectedTermsHash string
 	DeviceToken       string
 	CanonicalSourceIP [16]byte
@@ -142,6 +154,9 @@ type ActionInput struct {
 }
 
 type storedPayload struct {
+	FormatVersion    int                `json:"format_version,omitempty"`
+	Sources          [2]string          `json:"sources,omitempty"`
+	Actions          []ActionSource     `json:"actions,omitempty"`
 	Rules            json.RawMessage    `json:"rules"`
 	Resolution       *Resolution        `json:"resolution"`
 	RoundStartEvents json.RawMessage    `json:"round_start_events"`
@@ -150,12 +165,14 @@ type storedPayload struct {
 	TerminalActions  [2]json.RawMessage `json:"terminal_actions"`
 }
 type roundRecord struct {
-	Round       int             `json:"round"`
-	Before      json.RawMessage `json:"before"`
-	After       json.RawMessage `json:"after"`
-	Facts       json.RawMessage `json:"facts"`
-	StartEvents json.RawMessage `json:"start_events"`
-	Timeouts    [2]bool         `json:"timeouts"`
+	Actions     [2]json.RawMessage `json:"actions,omitempty"`
+	Sources     [2]string          `json:"sources,omitempty"`
+	Round       int                `json:"round"`
+	Before      json.RawMessage    `json:"before"`
+	After       json.RawMessage    `json:"after"`
+	Facts       json.RawMessage    `json:"facts"`
+	StartEvents json.RawMessage    `json:"start_events"`
+	Timeouts    [2]bool            `json:"timeouts"`
 }
 type queueRecord struct {
 	rules                       Rules
@@ -172,6 +189,7 @@ type queueRecord struct {
 	Loadout                     json.RawMessage
 }
 type seatRecord struct {
+	Kind, BotID           string
 	User                  *int64
 	GeneralPaid, GamePaid int64
 	Loadout, Action       json.RawMessage
@@ -179,6 +197,9 @@ type seatRecord struct {
 	TimeoutCount          int
 }
 type sessionRecord struct {
+	Economy                            string
+	AI                                 *aiSession
+	Remaining                          db.U128
 	rules                              Rules
 	ID, Mode, State, Phase             string
 	Terms                              Terms

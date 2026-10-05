@@ -20,6 +20,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/activities"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
+	"github.com/waiting-here/NonbiriAPI/internal/game/ai"
 	"github.com/waiting-here/NonbiriAPI/internal/game/finance"
 	"github.com/waiting-here/NonbiriAPI/internal/game/host"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
@@ -41,6 +42,7 @@ type Publisher interface {
 	Publish(context.Context, activities.PublishFacts) error
 }
 type Options struct {
+	AI              AIAdapter
 	Database        *sql.DB
 	Descriptor      game.ModuleDescriptor
 	Rules           Rules
@@ -58,6 +60,10 @@ type Options struct {
 	ReportError     func(error)
 }
 type Service struct {
+	aiAdapter                   AIAdapter
+	aiPool                      *ai.Pool
+	aiCompiled                  sync.Map
+	aiWake                      chan struct{}
 	database                    *sql.DB
 	descriptor                  game.ModuleDescriptor
 	rules                       Rules
@@ -90,6 +96,18 @@ func New(o Options) (*Service, error) {
 	}
 	s := &Service{database: o.Database, descriptor: o.Descriptor, rules: o.Rules, finance: o.Finance, authorizer: o.UserAuthorizer, continuation: o.Continuation, limiter: o.Limiter, pools: o.Pools, publisher: o.Publisher, now: o.Now, generateID: o.GenerateID, reportError: o.ReportError, actions: map[int64][]time.Time{}}
 	s.adminAuthorizer, s.adminAudit, s.exporting = o.AdminAuthorizer, o.AdminAudit, map[int64]bool{}
+	s.aiAdapter = o.AI
+	if o.AI != nil {
+		if _, ok := o.Finance.(finance.AIDuel); !ok {
+			return nil, ErrInvariant
+		}
+		var err error
+		s.aiPool, err = ai.NewPool(2, AIActiveCapacity*2)
+		if err != nil {
+			return nil, err
+		}
+		s.aiWake = make(chan struct{}, 1)
+	}
 	if err := s.initializeReader(); err != nil {
 		return nil, err
 	}

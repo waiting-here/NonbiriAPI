@@ -97,7 +97,7 @@ export function HistoryDetails({
                 {detail.data.recent.participants
                   .map(
                     (p, i) =>
-                      `${t('席位', 'Seat')} ${i}: ${p.user_id === null ? t('账号已删除', 'Deleted account') : `${p.display_name} (${p.user_id})`} · ${t('通用／游戏投入', 'General/game paid')} ${p.general_paid}/${p.game_paid}`,
+                      `${t('席位', 'Seat')} ${i}: ${p.kind === 'bot' ? `${p.display_name} · AI` : p.user_id === null ? t('账号已删除', 'Deleted account') : `${p.display_name} (${p.user_id})`} · ${t('通用／游戏投入', 'General/game paid')} ${p.general_paid}/${p.game_paid}`,
                   )
                   .join(' · ')}
               </p>
@@ -106,6 +106,15 @@ export function HistoryDetails({
               label={t('初始配置与资源', 'Initial configuration and resources')}
               value={detail.data.facts.initial}
             />
+            {detail.data.facts.ai && (
+              <FactDisclosure label={t('AI 玩家', 'AI player')} value={detail.data.facts.ai} />
+            )}
+            {detail.data.facts.action_sources && (
+              <FactDisclosure
+                label={t('操作来源', 'Action sources')}
+                value={detail.data.facts.action_sources}
+              />
+            )}
             <FactDisclosure label={t('最终状态', 'Final state')} value={detail.data.facts.final} />
             <FactDisclosure
               label={t('终止时已锁定的方案', 'Plans locked at termination')}
@@ -137,6 +146,12 @@ export function HistoryDetails({
                         label={t('轮初变化', 'Round-start changes')}
                         value={round.start_events}
                       />
+                      {round.sources && (
+                        <FactDisclosure
+                          label={t('操作来源', 'Action sources')}
+                          value={round.sources}
+                        />
+                      )}
                       <FactDisclosure
                         label={t('结算前状态', 'Before settlement')}
                         value={round.before}

@@ -71,7 +71,7 @@ func (s *Service) insertQueue(ctx context.Context, tx *sql.Tx, q queueRecord) er
 	return err
 }
 
-const sessionColumns = `id,mode,state,phase,terms_json,terms_hash,content_hash,ticket_milli,platform_bp,welfare_bp,thursday_bp,revision,phase_seq,round,started_at,phase_deadline,general_account_id,game_account_id,ledger_rows_remaining,server_state_json,initial_state_json,terminal_at,delete_at,outcome,reason,winner_seat,score0,score1,prize_milli,platform_milli,welfare_milli,thursday_milli,terminal_operation_id`
+const sessionColumns = `id,mode,state,phase,terms_json,terms_hash,content_hash,ticket_milli,platform_bp,welfare_bp,thursday_bp,revision,phase_seq,round,started_at,phase_deadline,general_account_id,game_account_id,ledger_rows_remaining,server_state_json,initial_state_json,terminal_at,delete_at,outcome,reason,winner_seat,score0,score1,prize_milli,platform_milli,welfare_milli,thursday_milli,terminal_operation_id,economy`
 
 func (s *Service) scanSession(row scanner) (sessionRecord, error) {
 	var v sessionRecord
@@ -80,7 +80,7 @@ func (s *Service) scanSession(row scanner) (sessionRecord, error) {
 	var rates Rates
 	var deadline, terminal, expiry, winner, score0, score1, prize, platform, welfare, thursday sql.NullInt64
 	var outcome, reason, operation sql.NullString
-	err := row.Scan(&v.ID, &v.Mode, &v.State, &v.Phase, &terms, &v.TermsHash, &content, &v.Ticket, &rates.Platform, &rates.Welfare, &rates.Thursday, &revision, &phaseSeq, &v.Round, &v.Started, &deadline, &v.GeneralAccount, &v.GameAccount, &remaining, &payload, &initial, &terminal, &expiry, &outcome, &reason, &winner, &score0, &score1, &prize, &platform, &welfare, &thursday, &operation)
+	err := row.Scan(&v.ID, &v.Mode, &v.State, &v.Phase, &terms, &v.TermsHash, &content, &v.Ticket, &rates.Platform, &rates.Welfare, &rates.Thursday, &revision, &phaseSeq, &v.Round, &v.Started, &deadline, &v.GeneralAccount, &v.GameAccount, &remaining, &payload, &initial, &terminal, &expiry, &outcome, &reason, &winner, &score0, &score1, &prize, &platform, &welfare, &thursday, &operation, &v.Economy)
 	if err != nil {
 		return v, err
 	}
@@ -95,7 +95,18 @@ func (s *Service) scanSession(row scanner) (sessionRecord, error) {
 	if Decode([]byte(terms), &v.Terms) != nil || digest([]byte(terms)) != v.TermsHash || v.Terms.Game != s.rules.ID() || v.Terms.Mode != v.Mode || v.Terms.ContentHash != content || v.Terms.RulesVersion != 1 || v.Terms.Ticket != game.FormatAmount(v.Ticket) || v.Terms.Rake != rates || Decode([]byte(payload), &v.Payload) != nil {
 		return v, ErrInvariant
 	}
+	// Version zero is the original payload without action provenance.
+	if v.Payload.FormatVersion < 0 || v.Payload.FormatVersion > 1 {
+		return v, ErrInvariant
+	}
 	v.Initial = json.RawMessage(initial)
+	if v.Economy == AIEconomy {
+		if v.Terms.Economy != AIEconomy || v.Terms.AI == nil || v.Mode != "ai" {
+			return v, ErrInvariant
+		}
+	} else if v.Terms.AI != nil || v.Terms.Economy != "" && v.Terms.Economy != "pvp" {
+		return v, ErrInvariant
+	}
 	if !db.ValidateOpaqueID(v.ID, s.sessionPrefix) || !validRates(rates) {
 		return v, ErrInvariant
 	}
@@ -121,13 +132,14 @@ func (s *Service) scanSession(row scanner) (sessionRecord, error) {
 	if err != nil {
 		return v, ErrInvariant
 	}
+	v.Remaining = hold
 	if v.State == "active" {
-		if info.Phase != v.Phase || info.Result != nil || !deadline.Valid || hold != one() || terminal.Valid {
+		if info.Phase != v.Phase || info.Result != nil || !deadline.Valid || (hold != one() && !(v.Economy == AIEconomy && hold == (db.U128{}))) || terminal.Valid {
 			return v, ErrInvariant
 		}
 		v.Deadline = &deadline.Int64
 	} else if v.State == "terminal" {
-		if v.Phase != "terminal" || deadline.Valid || hold != (db.U128{}) || !terminal.Valid || !expiry.Valid || expiry.Int64 != terminal.Int64+RetentionSeconds || !outcome.Valid || !reason.Valid || !operation.Valid || !score0.Valid || !score1.Valid || !prize.Valid || !platform.Valid || !welfare.Valid || !thursday.Valid {
+		if v.Phase != "terminal" || deadline.Valid || hold != (db.U128{}) || !terminal.Valid || !expiry.Valid || expiry.Int64 != terminal.Int64+RetentionSeconds || !outcome.Valid || !reason.Valid || (!operation.Valid && (v.Economy != AIEconomy || v.Ticket > 0)) || !score0.Valid || !score1.Valid || !prize.Valid || !platform.Valid || !welfare.Valid || !thursday.Valid {
 			return v, ErrInvariant
 		}
 		v.TerminalAt = &terminal.Int64
@@ -176,7 +188,7 @@ type sessionQueryer interface {
 }
 
 func (s *Service) sessionSeats(ctx context.Context, reader sessionQueryer, v sessionRecord) (sessionRecord, error) {
-	rows, err := reader.QueryContext(ctx, `SELECT seat_no,user_id,general_paid_milli,game_paid_milli,loadout_json,current_plan_json,locked,timeout_count FROM game_duel_seats WHERE session_id=? ORDER BY seat_no`, v.ID)
+	rows, err := reader.QueryContext(ctx, `SELECT seat_no,user_id,general_paid_milli,game_paid_milli,loadout_json,current_plan_json,locked,timeout_count,participant_kind,bot_id FROM game_duel_seats WHERE session_id=? ORDER BY seat_no`, v.ID)
 	if err != nil {
 		return v, err
 	}
@@ -185,17 +197,22 @@ func (s *Service) sessionSeats(ctx context.Context, reader sessionQueryer, v ses
 	for rows.Next() {
 		var seat, locked int
 		var user sql.NullInt64
-		var loadout, action sql.NullString
+		var loadout, action, bot sql.NullString
 		var p seatRecord
-		if err := rows.Scan(&seat, &user, &p.GeneralPaid, &p.GamePaid, &loadout, &action, &locked, &p.TimeoutCount); err != nil {
+		if err := rows.Scan(&seat, &user, &p.GeneralPaid, &p.GamePaid, &loadout, &action, &locked, &p.TimeoutCount, &p.Kind, &bot); err != nil {
 			return v, err
 		}
-		if seat != count || count >= 2 || p.GeneralPaid+p.GamePaid != v.Ticket || p.GeneralPaid < 0 || p.GamePaid < 0 || (locked == 1) != action.Valid || locked < 0 || locked > 1 || p.TimeoutCount < 0 || p.TimeoutCount > 150 {
+		payment := v.Ticket
+		if p.Kind == "bot" {
+			payment = 0
+			p.BotID = bot.String
+		}
+		if seat != count || count >= 2 || p.GeneralPaid+p.GamePaid != payment || p.GeneralPaid < 0 || p.GamePaid < 0 || (locked == 1) != action.Valid || locked < 0 || locked > 1 || p.TimeoutCount < 0 || p.TimeoutCount > 150 {
 			return v, ErrInvariant
 		}
 		if user.Valid {
 			p.User = &user.Int64
-		} else if v.State == "active" {
+		} else if v.State == "active" && p.Kind != "bot" {
 			return v, ErrInvariant
 		}
 		if loadout.Valid {
@@ -214,9 +231,41 @@ func (s *Service) sessionSeats(ctx context.Context, reader sessionQueryer, v ses
 	if count != 2 {
 		return v, ErrInvariant
 	}
+	if err := rows.Close(); err != nil {
+		return v, err
+	}
+	if v.Economy == AIEconomy {
+		var raw string
+		var botID, challengeID string
+		data := &aiSession{}
+		rows, err := reader.QueryContext(ctx, `SELECT bot_id,challenge_id,bot_seat,snapshot_json,first_clear,reward_milli FROM game_ai_sessions WHERE session_id=?`, v.ID)
+		if err != nil {
+			return v, err
+		}
+		defer rows.Close()
+		if !rows.Next() {
+			if rows.Err() != nil {
+				return v, rows.Err()
+			}
+			return v, ErrInvariant
+		}
+		if err := rows.Scan(&botID, &challengeID, &data.BotSeat, &raw, &data.FirstClear, &data.Reward); err != nil {
+			return v, err
+		}
+		if Decode([]byte(raw), &data.Snapshot) != nil || data.BotSeat < 0 || data.BotSeat > 1 || v.Seats[data.BotSeat].Kind != "bot" || v.Seats[data.BotSeat].BotID != botID || v.Seats[1-data.BotSeat].Kind != "human" || data.Snapshot.Terms.AI == nil || data.Snapshot.Terms.AI.ChallengeID != challengeID {
+			return v, ErrInvariant
+		}
+		v.AI = data
+	}
 	return v, nil
 }
 func (s *Service) insertSession(ctx context.Context, tx *sql.Tx, v sessionRecord) error {
+	if v.Economy == "" {
+		v.Economy = "pvp"
+	}
+	if v.Economy == "pvp" {
+		v.Remaining = one()
+	}
 	terms, err := Encode(v.Terms)
 	if err != nil {
 		return err
@@ -225,12 +274,31 @@ func (s *Service) insertSession(ctx context.Context, tx *sql.Tx, v sessionRecord
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO game_duel_sessions(id,game_key,mode,content_hash,terms_json,terms_hash,ticket_milli,platform_bp,welfare_bp,thursday_bp,state,phase,round,revision,phase_seq,started_at,phase_deadline,general_account_id,game_account_id,ledger_rows_remaining,server_state_json,initial_state_json) VALUES(?,?,?,?,?,?,?,?,?,?,'active',?,?,?,?,?,?,?,?,?,?,?)`, v.ID, s.rules.ID(), v.Mode, v.Terms.ContentHash, string(terms), v.TermsHash, v.Ticket, v.Terms.Rake.Platform, v.Terms.Rake.Welfare, v.Terms.Rake.Thursday, v.Phase, v.Round, db.EncodeU128(v.Revision), db.EncodeU128(v.PhaseSeq), v.Started, nullable(v.Deadline), v.GeneralAccount, v.GameAccount, db.EncodeU128(one()), string(payload), string(v.Initial))
+	_, err = tx.ExecContext(ctx, `INSERT INTO game_duel_sessions(id,game_key,mode,content_hash,terms_json,terms_hash,ticket_milli,platform_bp,welfare_bp,thursday_bp,state,phase,round,revision,phase_seq,started_at,phase_deadline,general_account_id,game_account_id,ledger_rows_remaining,server_state_json,initial_state_json,economy) VALUES(?,?,?,?,?,?,?,?,?,?,'active',?,?,?,?,?,?,?,?,?,?,?,?)`, v.ID, s.rules.ID(), v.Mode, v.Terms.ContentHash, string(terms), v.TermsHash, v.Ticket, v.Terms.Rake.Platform, v.Terms.Rake.Welfare, v.Terms.Rake.Thursday, v.Phase, v.Round, db.EncodeU128(v.Revision), db.EncodeU128(v.PhaseSeq), v.Started, nullable(v.Deadline), v.GeneralAccount, v.GameAccount, db.EncodeU128(v.Remaining), string(payload), string(v.Initial), v.Economy)
 	if err != nil {
 		return err
 	}
+	if v.Economy == AIEconomy {
+		if v.AI == nil || v.Terms.AI == nil {
+			return ErrInvariant
+		}
+		raw, err := Encode(v.AI.Snapshot)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO game_ai_sessions(session_id,bot_id,challenge_id,bot_seat,snapshot_json) VALUES(?,?,?,?,?)`, v.ID, v.Terms.AI.BotID, v.Terms.AI.ChallengeID, v.AI.BotSeat, string(raw)); err != nil {
+			return err
+		}
+	}
 	for seat, p := range v.Seats {
-		_, err = tx.ExecContext(ctx, `INSERT INTO game_duel_seats(session_id,seat_no,user_id,general_paid_milli,game_paid_milli,loadout_json,current_plan_json,locked,timeout_count) VALUES(?,?,?,?,?,?,?,?,?)`, v.ID, seat, nullable(p.User), p.GeneralPaid, p.GamePaid, nullableJSON(p.Loadout), nullableJSON(p.Action), p.Locked, p.TimeoutCount)
+		if p.Kind == "" {
+			p.Kind = "human"
+		}
+		var bot any
+		if p.BotID != "" {
+			bot = p.BotID
+		}
+		_, err = tx.ExecContext(ctx, `INSERT INTO game_duel_seats(session_id,seat_no,user_id,general_paid_milli,game_paid_milli,loadout_json,current_plan_json,locked,timeout_count,participant_kind,bot_id) VALUES(?,?,?,?,?,?,?,?,?,?,?)`, v.ID, seat, nullable(p.User), p.GeneralPaid, p.GamePaid, nullableJSON(p.Loadout), nullableJSON(p.Action), p.Locked, p.TimeoutCount, p.Kind, bot)
 		if err != nil {
 			return err
 		}
@@ -244,14 +312,19 @@ func (s *Service) saveSession(ctx context.Context, tx *sql.Tx, v *sessionRecord,
 	}
 	var hold db.U128
 	if v.State == "active" {
-		hold = one()
+		hold = v.Remaining
+		if v.Economy != AIEconomy {
+			hold = one()
+		}
 	}
 	var outcome, reason, operation any
 	var score0, score1, prize, platform, welfare, thursday any
 	if v.State == "terminal" {
 		outcome = v.Outcome
 		reason = v.Reason
-		operation = v.Operation
+		if v.Operation != "" {
+			operation = v.Operation
+		}
 		score0 = v.Scores[0]
 		score1 = v.Scores[1]
 		prize = v.Prize

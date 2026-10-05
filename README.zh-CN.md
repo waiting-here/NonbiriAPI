@@ -91,7 +91,7 @@ race 检查需要可用的 C 编译器。CI 还覆盖真实浏览器、许可证
 | 主题 | 文档 |
 | --- | --- |
 | Gateway 模型与缓存控制 | [Gateway 设置](docs/gateway-model-controls.md) |
-| 游戏和随机结果验证 | [对战游戏](docs/duel-games.md)、[二十一点](docs/blackjack.md)、[随机性](docs/game-randomness.md) |
+| 游戏和随机结果验证 | [对战游戏](docs/duel-games.md)、[AI 玩家](docs/ai-players.md)、[二十一点](docs/blackjack.md)、[随机性](docs/game-randomness.md) |
 | 绘本活动 | [活动指南](docs/image-activity.md) |
 | 导出、删号与记录留存 | [数据生命周期](docs/data-lifecycle-checklist.md) |
 | 离线完整性与账务审计 | [维护验证](docs/api-contract.md#10-maintenance-recovery-and-retention) |

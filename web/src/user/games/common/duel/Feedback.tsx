@@ -64,7 +64,7 @@ export function DuelProfile({
       <span>
         {you
           ? text('bidding.you')
-          : profile.kind === 'public'
+          : profile.kind === 'public' || profile.kind === 'ai'
             ? profile.displayName
             : profile.kind === 'deleted'
               ? text('common.deletedAccount')

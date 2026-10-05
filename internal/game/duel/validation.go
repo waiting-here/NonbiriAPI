@@ -23,9 +23,10 @@ func (s *Service) ValidatePersistedState(ctx context.Context) error {
 		return err
 	}
 	for _, check := range []string{
+		`SELECT COUNT(*) FROM game_ai_queue q WHERE q.game_key=? AND q.state='waiting' AND NOT EXISTS(SELECT 1 FROM game_duel_user_slots u WHERE u.ai_queue_id=q.id AND u.user_id=q.user_id AND u.game_key=q.game_key)`,
 		`SELECT COUNT(*) FROM game_duel_queue q WHERE q.game_key=? AND NOT EXISTS(SELECT 1 FROM game_duel_user_slots u WHERE u.queue_id=q.id AND u.user_id=q.user_id AND u.game_key=q.game_key)`,
-		`SELECT COUNT(*) FROM game_duel_user_slots u WHERE u.game_key=? AND ((u.queue_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM game_duel_queue q WHERE q.id=u.queue_id AND q.user_id=u.user_id AND q.game_key=u.game_key)) OR (u.session_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM game_duel_sessions g JOIN game_duel_seats p ON p.session_id=g.id WHERE g.id=u.session_id AND p.user_id=u.user_id AND g.game_key=u.game_key AND g.state='active')))`,
-		`SELECT COUNT(*) FROM game_duel_sessions g WHERE g.game_key=? AND ((SELECT COUNT(*) FROM game_duel_seats p WHERE p.session_id=g.id)<>2 OR (g.state='active' AND (SELECT COUNT(*) FROM game_duel_user_slots u WHERE u.session_id=g.id AND u.game_key=g.game_key)<>2) OR (g.state='terminal' AND EXISTS(SELECT 1 FROM game_duel_user_slots u WHERE u.session_id=g.id)))`,
+		`SELECT COUNT(*) FROM game_duel_user_slots u WHERE u.game_key=? AND ((u.queue_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM game_duel_queue q WHERE q.id=u.queue_id AND q.user_id=u.user_id AND q.game_key=u.game_key)) OR (u.ai_queue_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM game_ai_queue q WHERE q.id=u.ai_queue_id AND q.user_id=u.user_id AND q.game_key=u.game_key AND q.state='waiting')) OR (u.session_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM game_duel_sessions g JOIN game_duel_seats p ON p.session_id=g.id WHERE g.id=u.session_id AND p.user_id=u.user_id AND g.game_key=u.game_key AND g.state='active')))`,
+		`SELECT COUNT(*) FROM game_duel_sessions g WHERE g.game_key=? AND ((SELECT COUNT(*) FROM game_duel_seats p WHERE p.session_id=g.id)<>2 OR (g.state='active' AND (SELECT COUNT(*) FROM game_duel_user_slots u WHERE u.session_id=g.id AND u.game_key=g.game_key)<>CASE WHEN g.economy='ai_challenge' THEN 1 ELSE 2 END) OR (g.state='terminal' AND EXISTS(SELECT 1 FROM game_duel_user_slots u WHERE u.session_id=g.id)))`,
 	} {
 		var n int
 		if db.IsActiveRecovery(ctx) && strings.Contains(check, "FROM game_duel_sessions g WHERE") {
@@ -198,8 +199,16 @@ func (s *Service) validateSession(ctx context.Context, tx *sql.Tx, v sessionReco
 		return err
 	}
 	if v.State == "terminal" {
-		if err := operation(ctx, tx, v.Operation, v.ID, "duel_terminal", "duel_session", 0); err != nil {
-			return err
+		kind := "duel_terminal"
+		if v.Economy == AIEconomy {
+			kind = "ai_terminal"
+		}
+		if v.Operation != "" {
+			if err := operation(ctx, tx, v.Operation, v.ID, kind, "duel_session", 0); err != nil {
+				return err
+			}
+		} else if v.AI == nil || v.Ticket != 0 || v.AI.Reward != 0 {
+			return ErrInvariant
 		}
 		if v.Reason != "surrender" && v.Reason != "server_restart" && v.Reason != "account_unavailable" {
 			if info.Result == nil || info.Result.Reason != v.Reason || (info.Result.Winner == nil) != (v.Winner == nil) || v.Winner != nil && *v.Winner != *info.Result.Winner {

@@ -15,6 +15,7 @@ import {
 } from '../features/operations/economy';
 import { useRetainedOperation } from '../features/operations/useRetainedOperation';
 import { DuelConfiguration } from '../features/games/Configuration';
+import { AIPlayersAdmin } from '../features/games/AIPlayers';
 import { FishingFields, LinklinkFields, RPSFields } from '../features/games/GameFields';
 import { Drawer } from '@shared/components/ui/Drawer';
 import { Note, Panel, PanelBody, SaveBar, Toggle } from '@shared/components/ui';
@@ -539,6 +540,7 @@ function GamesEditor({
   );
 }
 export function GamesPage() {
+  const [aiOpen, setAIOpen] = useState(false);
   const { t } = useTranslation();
   const duelText = useGameAdminText();
   const config = useQuery({
@@ -564,6 +566,13 @@ export function GamesPage() {
         )}
         actions={
           <>
+            <button
+              type="button"
+              className="nb-btn nb-btn--secondary"
+              onClick={() => setAIOpen(true)}
+            >
+              {duelText('AI 玩家与策略', 'AI players and strategies')}
+            </button>
             {config.data?.bidding && config.data.likes ? (
               <Link className="nb-btn nb-btn--secondary" to="/games/history">
                 {duelText('对战历史与导出', 'Match history and exports')}
@@ -575,6 +584,7 @@ export function GamesPage() {
           </>
         }
       />
+      {aiOpen && <AIPlayersAdmin onClose={() => setAIOpen(false)} />}
       {counts.data &&
       !counts.error &&
       counts.data.games.length === 0 &&

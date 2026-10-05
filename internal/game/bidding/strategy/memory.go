@@ -148,6 +148,50 @@ func opponentDistribution(o Observation, m *Summary, p Parameters) ([]float64, f
 		bin := bucket(i, count)
 		prior[i] = (1-alpha)*prior[i]/total + alpha*(counts[bin]+1)/historyTotal/float64(sizes[bin])
 	}
+	// Revealed bids in this match remain visible when cross-match memory is
+	// disabled. Reconstruct their remaining-hand quantiles and discount older
+	// bids so a change of style can replace the early evidence.
+	public, evidence := publicBidDistribution(o)
+	if evidence > 0 {
+		weight := min(.85, evidence/(evidence+2))
+		for i := range prior {
+			prior[i] = (1-weight)*prior[i] + weight*public[i]
+		}
+	}
 	return prior, alpha
+}
+
+func publicBidDistribution(o Observation) ([]float64, float64) {
+	remaining := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}
+	played := o.View.Played[1-o.Seat]
+	n := len(o.View.HandRemaining[1-o.Seat])
+	result := make([]float64, n)
+	evidence := 0.0
+	for turn, card := range played {
+		index := slices.Index(remaining, card)
+		if index < 0 || len(remaining) < 2 {
+			continue
+		}
+		quantile := float64(index) / float64(len(remaining)-1)
+		remaining = slices.Delete(remaining, index, index+1)
+		weight := math.Exp2(-float64(len(played)-1-turn) / 4)
+		evidence += weight
+		total := 0.0
+		kernel := make([]float64, n)
+		for i := range kernel {
+			distance := float64(i)/float64(max(1, n-1)) - quantile
+			kernel[i] = math.Exp(-distance * distance / (2 * .12 * .12))
+			total += kernel[i]
+		}
+		for i := range result {
+			result[i] += weight * kernel[i] / total
+		}
+	}
+	if evidence > 0 {
+		for i := range result {
+			result[i] /= evidence
+		}
+	}
+	return result, evidence
 }
 func clamp(v, lo, hi float64) float64 { return min(hi, max(lo, v)) }

@@ -8,5 +8,8 @@ import (
 func New(options duel.Options) (*duel.Service, error) {
 	options.Descriptor = config.Descriptor()
 	options.Rules = Rules{}
+	if options.AI == nil {
+		options.AI = AIAdapter{}
+	}
 	return duel.New(options)
 }

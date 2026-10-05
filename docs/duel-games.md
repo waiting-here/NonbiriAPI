@@ -2,7 +2,7 @@
 
 [简体中文](#双人游戏)
 
-Bidding Duel and Turn-based Battle Minigame (Test) use separate two-player queues. The game, mode,
+PvP matches in Bidding Duel and Turn-based Battle Minigame (Test) use separate two-player queues. The game, mode,
 entry price and three fee rates shown before joining are fixed for that entry.
 You can play one of each game at the same time, but cannot join two modes of the
 same game. Fresh installations start both games disabled. Once-only newcomer tasks award 10,000 General Credits across four Bidding tasks and 18,000 across four battle tasks; completion and victory awards can stack. System cancellation gives no award. The game page shows each task and its authoritative completion state.
@@ -41,6 +41,14 @@ allows participants to reconstruct the full draw order.
 Reward draws, both bid reveals and collection of the whole pool play in order.
 The presentation stays in view while scrolling; reduced motion keeps the cards
 and outcome visible without movement. It never exposes unrevealed cards.
+
+## AI challenges
+
+Bidding Duel also supports AI opponents. The administrator can enable the four supplied players—Balanced, Pot-first, Patient and Comeback—or create more players with independently assigned strategies and prices. The strategy editor supports templates, parameters, ordered conditions and situation previews; [AI players](ai-players.md) describes configuration and the API.
+
+Bidding Duel AI challenges start under the terms shown when you queue. Waiting is unpaid; when the match starts, game credits pay first and general credits cover the remainder. A normally completed win earns the challenge's one-time first-clear reward in game credits. A zero reward still records completion; later reward changes do not grant a supplement. Ordinary matches have no prize and do not count toward PvP rankings or the original newcomer tasks. Normal wins, losses, draws, surrender and AI technical fallback do not refund tickets; fallback does not disqualify an otherwise valid first-clear win. System cancellation refunds the original funding assets. Price, name and strategy changes preserve first-clear status; an explicitly created new challenge has separate eligibility.
+
+Bidding Duel AI players make decisions locally on the Site server; match data is not sent to an external model. The service stores the AI opponent, policy version, action sources, ticket, first-clear record and personalized summary used for decisions. Each AI player defaults to eligible manual bids from at most 30 matches within 30 days; administrators may set 1–30 days and 1–100 matches. Eligible samples continue to be collected and expire within that window regardless of the preference. Turning off match memory excludes cross-match samples from decisions starting with the next match; public information from the current match remains available. Shrinking the window discards samples outside it, and later expansion does not restore them. Your export includes preferences, eligible samples, summaries used in retained matches and first-clear records. Frozen match summaries follow the 30-day match retention. Account deletion removes personal memory and links; long-term anonymous matches contain no personalized summary or account linkage. Minimal first-clear eligibility survives separately so recreating an account with the same Discord identity cannot claim it again.
 
 ## Turn-based Battle Minigame (Test)
 
@@ -119,7 +127,7 @@ Subscription Squeeze applies two layers (one/two for Distillation I/II). Each lo
 
 Every character has one always-active passive, separate from equipped skills. ChatGPT retains its image quota and DeepSeek its subscription-free resources. Claude's successful main skill with positive original base likes gains base likes equal to the opponent's pre-cast debuff layers, doubled when Claude is strictly ahead before casting. Extra skills and follow-ups do not trigger it. Gemini gains one base like on executed normal attacks, including Flash follow-ups; distilled PUB41 remains a special skill. Existing decay and subsequent modifiers still apply.
 
-GLM has 25% resistance, rising to 50% while strictly behind. DeepSeek has 25% effect hit, rising to 50% while strictly ahead. Each main step, paired extra-skill slot and Flash batch uses a shared score snapshot. Each attempted enemy debuff layer succeeds with probability `min(1,(100+hit)/(100+resistance))`. Overload, speed mode and self-inflicted effects are outside this check. Partial resistance applies only successful layers; full resistance adds nothing and does not refresh duration. SOTA's additional debuff follows successful application and has its own resistance check, without recursion. Saved older matches retain their original catalog and rules.
+GLM has 25% resistance, rising to 50% while strictly behind. DeepSeek has 25% effect hit, rising to 50% while strictly ahead. Each main step, paired extra-skill slot and Flash batch uses a shared score snapshot. Each attempted enemy debuff layer succeeds with probability `min(1,(100+hit)/(100+resistance))`. Overload, speed mode and self-inflicted effects are outside this check. Partial resistance applies only successful layers; full resistance adds nothing and does not refresh duration. Claude Code's additional SOTA debuff follows successful application and has its own resistance check, without recursion. Saved older matches retain their original catalog and rules.
 
 Normal application, partial resistance and full resistance have distinct feedback. Follow-up effects grow through three capped levels within a round. All six games synchronize sound with server events, coalesce batch results and avoid replay after reconnect. Music ducks and resumes at its original position. Muting and reduced motion preserve the same result and values.
 
@@ -219,3 +227,11 @@ GLM 常驻抵抗 25%，严格落后时为 50%；DeepSeek 常驻效果命中 25%�
 过载按失败付款时记录的事实高亮共享电能、混合支付的瞬发与 API、仅 API 或实际不足的订阅额度；总量构成瓶颈时也标出总量。API 保持数值显示，提示随结算时间轴出现并保留到本次演出结束。旧记录缺少细分信息时只显示通用说明；金币不足仍是非法方案。图像不足与 Token 不足一样提示风险，允许确认后故意释放；失败动作不付款、不得赞、不施加效果，并按原规则过载／取消后续动作，图像余额不会为负。
 
 本人和管理员可查看近 30 天完整结果；回合制对战小游戏（测试）局中对手未用配装保持隐藏，终局开放。到期后仅管理员可访问去身份的长期存档，保留完整规则与过程，移除用户、原始局／账务标识、绝对时间、付款来源和跨局身份关联。协管没有该管理权限。管理员下载可跨页继续，页面到期记录会计入跳过数，只有完整结束才显示成功。
+
+### AI 人机挑战
+
+《竞标对决》人机挑战按入队时显示的条款开局，排队不扣费，开局时先扣游戏积分、不足再扣通用积分。正常完成并获胜可获得该挑战一次性的游戏积分首通奖励；奖励为0也记为已完成，之后调高金额不补发。普通对局不发奖，不计入玩家对战排行和原新人任务。正常胜负、平局、认输或 AI 技术回退均不退门票；技术回退不影响合法获胜的首通资格。系统中止按原支付资产退还。价格、名称或策略变化不重置首通，管理员显式建立的新挑战有独立资格。
+
+管理员在小游戏配置的“AI 玩家与策略”中配置对手；预置均衡、争池、蓄势、追分四组策略，可以复制、调节参数和条件并预览。四个对手默认关闭，门票及首通奖励均为0。策略保存为新版本，需明确绑定给 AI 玩家；进行中的对局保持原配置。详见 [AI 玩家接口与扩展](ai-players.md)。
+
+《竞标对决》的 AI 玩家在本站服务器本地决策，不向外部模型发送对局资料。服务保存 AI 对手、策略版本、动作来源、门票、首通及用于决策的个性化摘要。每个 AI 玩家默认使用最近30天、最多30局的合格手动出价样本；管理员可调整为1至30天、1至100局。无论开关状态如何，合格样本都会继续提取并按窗口淘汰；关闭“使用对战记忆”后，从下一局起不将跨局样本用于决策，当局公开信息仍可使用。缩小窗口会淘汰范围外样本，之后扩大不会恢复。偏好、仍有效的样本、对局所用摘要及首通记录包含在本人导出中；对局摘要随30天对局记录清理。删号会清除个人记忆和关联，匿名长期对局不含个性化摘要或账号回连信息。最小首通资格凭据独立保留，同一 Discord 身份重新注册不能重复领取。

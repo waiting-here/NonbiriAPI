@@ -53,6 +53,8 @@ const (
 	KindDuelQueueRelease     Kind = "duel_queue_release"
 	KindDuelSessionStart     Kind = "duel_session_start"
 	KindDuelTerminal         Kind = "duel_terminal"
+	KindAITicket             Kind = "ai_ticket"
+	KindAITerminal           Kind = "ai_terminal"
 	KindBlackjackReserve     Kind = "blackjack_reserve"
 	KindBlackjackSettle      Kind = "blackjack_settle"
 	KindBlackjackRelease     Kind = "blackjack_release"

@@ -154,7 +154,7 @@ export const biddingCodec: DuelCodec<
   BiddingAction
 > = {
   game: 'bidding',
-  modes: BIDDING_MODES,
+  modes: [...BIDDING_MODES, 'ai'],
   view: biddingView,
   facts: biddingRound,
   action: biddingAction,

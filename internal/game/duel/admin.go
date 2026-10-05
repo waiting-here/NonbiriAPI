@@ -52,6 +52,7 @@ type AdminExportPage struct {
 	ExpiredSkipped int               `json:"expired_skipped"`
 }
 type AdminParticipant struct {
+	Kind        string  `json:"kind"`
 	UserID      *string `json:"user_id"`
 	DisplayName string  `json:"display_name"`
 	GeneralPaid string  `json:"general_paid"`
@@ -77,6 +78,8 @@ type AdminRound struct {
 	Record   RoundView `json:"record"`
 }
 type AdminSummary struct {
+	Economy      string       `json:"economy,omitempty"`
+	AI           *AIArchive   `json:"ai,omitempty"`
 	MatchRef     string       `json:"match_ref"`
 	Game         string       `json:"game"`
 	Mode         string       `json:"mode"`
@@ -98,6 +101,7 @@ type AdminHistoryPage struct {
 }
 
 type adminCursor struct {
+	Version       int            `json:"version"`
 	Kind          string         `json:"kind"`
 	Game          string         `json:"game"`
 	Admin         int64          `json:"admin"`
@@ -161,10 +165,10 @@ func (s *Service) sealAdminCursor(c adminCursor) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(body) + "." + base64.RawURLEncoding.EncodeToString(mac[:]), nil
 }
 func (s *Service) adminCursor(ctx context.Context, tx *sql.Tx, admin, now int64, kind, session string, in AdminPageInput) (adminCursor, error) {
-	c := adminCursor{Kind: kind, Game: s.rules.ID(), Admin: admin, Dataset: in.Dataset, Selection: in.Selection, AsOf: now, Expires: now + 3600, AfterRecord: 76, Session: session}
+	c := adminCursor{Version: 2, Kind: kind, Game: s.rules.ID(), Admin: admin, Dataset: in.Dataset, Selection: in.Selection, AsOf: now, Expires: now + 3600, AfterRecord: 76, Session: session}
 	if in.Cursor == "" {
-		query := `SELECT COALESCE(MAX(o.ledger_seq),0) FROM credit_operations o CROSS JOIN game_duel_sessions g ON g.terminal_operation_id=o.id WHERE o.kind='duel_terminal' AND o.source_type='duel_session' AND substr(o.source_id,1,4)=? AND g.game_key=? AND g.state='terminal'`
-		args := []any{s.sessionPrefix, s.rules.ID()}
+		query := `SELECT COALESCE(MAX(h.sequence),0) FROM game_duel_history h WHERE h.game_key=?`
+		args := []any{s.rules.ID()}
 		if in.Dataset == "anonymous" {
 			query = `SELECT COALESCE(MAX(export_seq),0) FROM game_duel_anonymous WHERE game_key=?`
 			args = []any{s.rules.ID()}
@@ -191,7 +195,7 @@ func (s *Service) adminCursor(ctx context.Context, tx *sql.Tx, admin, now int64,
 	}
 	a, _ := json.Marshal(in.Selection)
 	b, _ := json.Marshal(c.Selection)
-	if c.Kind != kind || c.Game != s.rules.ID() || c.Admin != admin || c.Dataset != in.Dataset || c.Session != session || string(a) != string(b) || c.AsOf > now || c.AsOf < 0 || c.Expires != c.AsOf+3600 || c.Expires <= now || c.High < 0 || c.AfterSeq < 0 || c.AfterSeq > c.High || c.AfterRecord < 0 || c.AfterRecord > 76 {
+	if c.Version != 2 || c.Kind != kind || c.Game != s.rules.ID() || c.Admin != admin || c.Dataset != in.Dataset || c.Session != session || string(a) != string(b) || c.AsOf > now || c.AsOf < 0 || c.Expires != c.AsOf+3600 || c.Expires <= now || c.High < 0 || c.AfterSeq < 0 || c.AfterSeq > c.High || c.AfterRecord < 0 || c.AfterRecord > 76 {
 		return c, ErrInvalidRequest
 	}
 	return c, nil
@@ -206,9 +210,9 @@ type adminMatchPosition struct {
 func (s *Service) nextAdminMatch(ctx context.Context, reader *adminRead, c adminCursor) (adminMatchPosition, error) {
 	var p adminMatchPosition
 	args := []any{s.rules.ID(), c.High}
-	query := `SELECT g.id,g.mode,o.ledger_seq,g.delete_at FROM credit_operations o CROSS JOIN game_duel_sessions g ON g.terminal_operation_id=o.id WHERE g.game_key=? AND o.ledger_seq<=? AND o.kind='duel_terminal' AND o.source_type='duel_session' AND substr(o.source_id,1,4)=? AND g.state='terminal' AND g.terminal_at<=? AND g.delete_at>? AND o.ledger_seq>=? AND (o.ledger_seq>? OR (o.ledger_seq=? AND g.id>?))`
+	query := `SELECT g.id,g.mode,h.sequence,g.delete_at FROM game_duel_history h CROSS JOIN game_duel_sessions g ON g.id=h.session_id WHERE h.game_key=? AND h.sequence<=? AND g.state='terminal' AND g.terminal_at<=? AND g.delete_at>? AND h.sequence>=? AND (h.sequence>? OR (h.sequence=? AND g.id>?))`
 	if c.Dataset == "recent" {
-		args = append(args, s.sessionPrefix, c.AsOf, c.AsOf, c.AfterSeq, c.AfterSeq, c.AfterSeq, c.AfterID)
+		args = append(args, c.AsOf, c.AsOf, c.AfterSeq, c.AfterSeq, c.AfterSeq, c.AfterID)
 	} else {
 		query = `SELECT g.archive_id,g.mode,g.export_seq,0 FROM game_duel_anonymous g WHERE g.game_key=? AND g.export_seq<=? AND g.archive_id>?`
 		args = append(args, c.AfterID)
@@ -242,7 +246,7 @@ func (s *Service) nextAdminMatch(ctx context.Context, reader *adminRead, c admin
 		args = append(args, *c.Selection.To)
 	}
 	if c.Dataset == "recent" {
-		query += ` ORDER BY o.ledger_seq,g.id LIMIT 1`
+		query += ` ORDER BY h.sequence,g.id LIMIT 1`
 	} else {
 		query += ` ORDER BY g.archive_id LIMIT 1`
 	}
@@ -305,12 +309,17 @@ func (s *Service) adminMatch(ctx context.Context, reader *adminRead, dataset, id
 	}
 	r := &AdminRecent{StartedAt: v.Started, TerminalAt: *v.TerminalAt, OperationID: v.Operation}
 	var seq int64
-	if err := reader.row(ctx, `SELECT ledger_seq FROM credit_operations WHERE id=?`, v.Operation).Scan(&seq); err != nil {
-		return item, err
+	if v.Operation != "" {
+		if err := reader.row(ctx, `SELECT ledger_seq FROM credit_operations WHERE id=?`, v.Operation).Scan(&seq); err != nil {
+			return item, err
+		}
 	}
 	r.LedgerSeq = strconv.FormatInt(seq, 10)
 	for i, p := range v.Seats {
-		r.Participants[i] = AdminParticipant{GeneralPaid: game.FormatAmount(p.GeneralPaid), GamePaid: game.FormatAmount(p.GamePaid)}
+		r.Participants[i] = AdminParticipant{Kind: p.Kind, GeneralPaid: game.FormatAmount(p.GeneralPaid), GamePaid: game.FormatAmount(p.GamePaid)}
+		if p.Kind == "bot" {
+			r.Participants[i].DisplayName = v.Terms.AI.BotName
+		}
 		if p.User == nil {
 			continue
 		}
@@ -560,7 +569,7 @@ func (s *Service) AdminHistory(ctx context.Context, in AdminPageInput) (AdminHis
 			return page, err
 		}
 		f := match.Facts
-		page.Items = append(page.Items, AdminSummary{MatchRef: p.id, Game: f.Game, Mode: f.Mode, RulesVersion: f.RulesVersion, ContentHash: f.ContentHash, Outcome: f.Outcome, Reason: f.Reason, Winner: f.Winner, Scores: f.Scores, Ticket: f.Ticket, Prize: f.Prize, Cuts: f.Cuts, Recent: match.Recent})
+		page.Items = append(page.Items, AdminSummary{Economy: f.Economy, AI: f.AI, MatchRef: p.id, Game: f.Game, Mode: f.Mode, RulesVersion: f.RulesVersion, ContentHash: f.ContentHash, Outcome: f.Outcome, Reason: f.Reason, Winner: f.Winner, Scores: f.Scores, Ticket: f.Ticket, Prize: f.Prize, Cuts: f.Cuts, Recent: match.Recent})
 	}
 	value, err := s.sealAdminCursor(c)
 	page.NextCursor = &value

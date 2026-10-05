@@ -88,7 +88,7 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`). rc.6 accepts fresh databases, final rc.5 and registered rc.6 schemas; unknown or partial structures are rejected before source writes. Supported additive upgrades preserve identities, balances, settled charges, saved games, configuration and legal overrides. Startup checks identity, schema, configuration and credentials and recovers unfinished work. Full historical audits use `maintenance verify`. See [deployment compatibility](deployment.md#database-compatibility-and-version-changes) for the exact source and complete-snapshot rollback requirements.
 
-Current account export `schema_version=12` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v12.json`. SQLite remains Generation 2. See §9 for current and historical safe projections.
+Current account export `schema_version=13` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v13.json`. SQLite remains Generation 2. See §9 for current and historical safe projections.
 
 ### 1.5 Display time context
 
@@ -1089,7 +1089,7 @@ Deletion keeps a separate minimum security projection for administrator and curr
 
 ### Current export schema 12
 
-The current attachment is `nonbiriapi-account-export-v12.json`, with `schema_version:12`. The schema-11 section above describes retained historical fields. Current personal models add their `role_policy` and `transport_rule`; private `likes.loadouts` add `name` (empty for unnamed slots). `lake_notes` contains `rules_id,profile_revision,profile,casts,entries,exchanges`, excluding private encounter/reward randomness and internal checkpoints. Safe cast entries include identity, source period, rules/generation/revision, acknowledged tick, phase/pause and public motion state. Entry/exchange receipts retain exact amounts and financial references.
+The current attachment is `nonbiriapi-account-export-v13.json`, with `schema_version:13`. The schema-11 section above describes retained historical fields. Current personal models add their `role_policy` and `transport_rule`; private `likes.loadouts` add `name` (empty for unnamed slots). `lake_notes` contains `rules_id,profile_revision,profile,casts,entries,exchanges`, excluding private encounter/reward randomness and internal checkpoints. Safe cast entries include identity, source period, rules/generation/revision, acknowledged tick, phase/pause and public motion state. Entry/exchange receipts retain exact amounts and financial references.
 
 `personal_automation` is a top-level array (empty when there are no retained records). Each batch has `id,kind,target_id,item_count,created_at,expires_at,results`; results contain `index,status` and applicable safe `outcome,endpoint_key_id,binding_id,code,message`. Batches and their results share one combined 10,000-entry limit. It exports only retained safe batch identity/type/target/times and item outcomes; no input secrets/notes, request digests, original idempotency keys or private discovery snapshots are included. All existing 10,000-row collection and 16 MiB whole-file limits remain; over-limit export fails without truncation. Account deletion removes personal batches, their exact receipt associations, profile/current cast and resource policy, and cannot be undone by late work.
 
@@ -1314,3 +1314,7 @@ Registration and ban changes recheck the blacklist within the identity transacti
 
 
 Model-discovery status (`GET /admin/api/limited-activities/picture-book/models/refresh/{operationID}`) may include `http_status`, an integer from 100 through 599, on failed operations when retained diagnostic metadata is available. The field is omitted otherwise. This administrator-only projection does not return response bodies, provider messages, headers or credentials.
+
+### AI challenge extensions
+
+Bidding Duel adds session-authenticated AI offers, preferences and unpaid admission, plus administrator-only player/strategy configuration and previews. Exact routes, DTOs, bounds and errors are specified in [AI players](ai-players.md). Existing duel state and history add optional `economy`, `ai` and `action_sources`; round records add `sources`. `mode=ai` uses `economy=ai_challenge`. Bot profiles have `kind=ai`; administrative participants have `kind=bot`. Free terminal records have an empty operation ID and ledger sequence `0`; pagination uses a separate persistent history order. Old signed history cursors must be restarted after this upgrade. Export v13 adds the AI families under the player's `bidding.ai`, with no private strategy or AI seed.

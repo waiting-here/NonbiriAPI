@@ -7,6 +7,8 @@ export function useGameAdminText() {
 export type GameID = 'bidding' | 'likes';
 export const modesFor = (game: GameID) =>
   game === 'bidding' ? ['tier1', 'tier2', 'tier3'] : ['quick', 'standard'];
+export const historyModesFor = (game: GameID) =>
+  game === 'bidding' ? [...modesFor(game), 'ai'] : modesFor(game);
 export function gameLabel(game: GameID | 'blackjack', t: (zh: string, en: string) => string) {
   if (game === 'blackjack') return t('二十一点', 'Blackjack');
   return game === 'bidding'
@@ -16,6 +18,7 @@ export function gameLabel(game: GameID | 'blackjack', t: (zh: string, en: string
 export function modeLabel(mode: string, t: (zh: string, en: string) => string) {
   return (
     {
+      ai: t('人机挑战', 'AI challenge'),
       table: t('单桌', 'Single table'),
       tier1: t('初级场', 'Tier 1'),
       tier2: t('中级场', 'Tier 2'),

@@ -305,7 +305,7 @@ async function boundedAccountExport(response: Response): Promise<Uint8Array> {
   return bytes;
 }
 
-function validateAccountExport(bytes: Uint8Array, accountId: string): 11 | 12 {
+function validateAccountExport(bytes: Uint8Array, accountId: string): 11 | 12 | 13 {
   let value: unknown;
   try {
     value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) as unknown;
@@ -315,7 +315,7 @@ function validateAccountExport(bytes: Uint8Array, accountId: string): 11 | 12 {
   if (value === null || typeof value !== 'object' || Array.isArray(value))
     throw new ApiError('invalid_response', 'The server returned an invalid account export.', 200);
   const record = value as Record<string, unknown>;
-  if (record.schema_version !== 11 && record.schema_version !== 12)
+  if (record.schema_version !== 11 && record.schema_version !== 12 && record.schema_version !== 13)
     throw new ApiError('invalid_response', 'The server returned an invalid account export.', 200);
   validateAccountExportIdentity(record, accountId);
   return record.schema_version;
@@ -340,7 +340,9 @@ export async function exportAccount(
       ? 11
       : disposition === 'attachment; filename="nonbiriapi-account-export-v12.json"'
         ? 12
-        : null;
+        : disposition === 'attachment; filename="nonbiriapi-account-export-v13.json"'
+          ? 13
+          : null;
   if (!contentType.startsWith('application/json') || fileVersion === null) {
     throw new ApiError('invalid_response', 'The server returned invalid export metadata.', 200);
   }

@@ -175,3 +175,21 @@ func TestPolicyBoundsAndCompilationSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestPublicBidsInformDecisionsWithoutCrossMatchMemory(t *testing.T) {
+	o := Scenarios()[1].Observation
+	o.View.HandRemaining[1-o.Seat] = []int{5, 6, 7, 8, 9, 10, 11, 12, 13}
+	without, alpha := opponentDistribution(o, nil, Defaults().Parameters)
+	o.View.Played[1-o.Seat] = []int{1, 2, 3, 4}
+	with, after := opponentDistribution(o, nil, Defaults().Parameters)
+	if alpha != 0 || after != 0 || with[0] <= without[0] {
+		t.Fatal("visible low bids were ignored, or fabricated cross-match memory", without, with)
+	}
+	total := 0.0
+	for _, weight := range with {
+		total += weight
+	}
+	if math.Abs(total-1) > 1e-10 {
+		t.Fatal("unnormalized distribution", total)
+	}
+}

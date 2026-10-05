@@ -119,3 +119,25 @@ type Duel interface {
 	SessionStart(context.Context, *sql.Tx, DuelStart, DuelAccountMutation) error
 	Terminal(context.Context, *sql.Tx, DuelFinish, DuelTerminalMutation) error
 }
+
+type AIStart struct {
+	Meta      ledger.Meta
+	SessionID string
+	UserID    int64
+	Ticket    ledger.Amount
+	MayReward bool
+}
+type AIFinish struct {
+	Meta      ledger.Meta
+	SessionID string
+	Reward    ledger.Amount
+	Cancelled bool
+}
+type AIStartMutation func(context.Context, *sql.Tx, ledger.AccountPair, ledger.Payment, db.U128) error
+type AITerminalMutation func(context.Context, *sql.Tx, string) error
+
+// AIDuel has one paying human and no AI wallet or PvP reward hooks.
+type AIDuel interface {
+	AIStart(context.Context, *sql.Tx, AIStart, AIStartMutation) error
+	AITerminal(context.Context, *sql.Tx, AIFinish, AITerminalMutation) error
+}

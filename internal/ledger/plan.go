@@ -156,7 +156,7 @@ func sourceTypeForKind(kind Kind) (sourceType, bool) {
 		return sourceRPSSession, true
 	case KindDuelQueueReserve, KindDuelQueueRelease:
 		return sourceDuelQueue, true
-	case KindDuelSessionStart, KindDuelTerminal:
+	case KindDuelSessionStart, KindDuelTerminal, KindAITicket, KindAITerminal:
 		return sourceDuelSession, true
 	case KindBlackjackReserve, KindBlackjackSettle, KindBlackjackRelease:
 		return sourceBlackjackPayment, true

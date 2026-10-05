@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"sync"
 	"time"
@@ -23,6 +24,7 @@ type decision struct {
 	cancel     context.CancelFunc
 	stop       func() bool
 	delivering bool
+	started    bool
 }
 
 // Pool bounds computation and queued/committing windows separately. A source
@@ -85,6 +87,7 @@ func (p *Pool) kickLocked() {
 			continue
 		}
 		p.running++
+		d.started = true
 		go p.run(d)
 	}
 }
@@ -122,6 +125,13 @@ func (p *Pool) deliver(d *decision, result Result, err error) {
 		return
 	}
 	d.delivering = true
+	if errors.Is(err, context.DeadlineExceeded) {
+		stage := ErrQueueTimeout
+		if d.started {
+			stage = ErrComputeTimeout
+		}
+		err = errors.Join(stage, err)
+	}
 	d.stop()
 	d.cancel()
 	p.pending = slices.DeleteFunc(p.pending, func(item *decision) bool { return item == d })

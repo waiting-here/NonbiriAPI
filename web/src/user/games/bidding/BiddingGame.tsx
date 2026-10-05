@@ -1,3 +1,5 @@
+import { AIPlayers, AIMatchInfo, AIActionLog } from './AIPlayers';
+import { useAIText } from '@shared/aiPlayers';
 import { GameHeaderTool } from '../common/GameHeader';
 import { Link } from 'react-router';
 import { GameActionBar } from '../common/GameActionBar';
@@ -54,6 +56,7 @@ export function BiddingGame({
   refreshWallets,
 }: DuelLobbyContext) {
   const text = useDuelText();
+  const aiText = useAIText();
   const duel = useDuel(biddingCodec, refreshWallets);
   const [mode, setMode] = useState<string>(
     BIDDING_MODES.find((key) => !entryProblem({ config, accepting }, key)) ?? 'tier1',
@@ -134,6 +137,20 @@ export function BiddingGame({
         uncertain={duel.uncertain}
         onRetry={duel.uncertain ? duel.retry : duel.refresh}
       />
+      {home?.aiQueueError && (
+        <p role="status" className="duel-feedback">
+          {home.aiQueueError === 'insufficient_credits'
+            ? aiText(
+                '入场时余额不足，排队已结束，未扣除门票。',
+                'Insufficient balance at admission. The queue ended without charging a ticket.',
+              )
+            : aiText(
+                '人机排队已结束，未扣除门票。请重新选择对手。',
+                'The AI queue ended without charging a ticket. Please choose an opponent again.',
+              )}
+        </p>
+      )}
+      {current?.ai && <AIMatchInfo ai={current.ai} sources={current.sources} />}
       <BiddingPresentation home={home} onCue={audio.sound.play} />
       {current ? (
         <>
@@ -237,12 +254,25 @@ export function BiddingGame({
         </>
       ) : queue ? (
         <section className="bid-lobby">
-          <span className="bid-eyebrow">{text('bidding.fINDINGAMATCH')}</span>
-          <h2>{text('bidding.yourSeatIsReady')}</h2>
+          <span className="bid-eyebrow">
+            {queue.ai
+              ? aiText('等待人机对局', 'WAITING FOR AI MATCH')
+              : text('bidding.fINDINGAMATCH')}
+          </span>
+          <h2>{queue.ai?.bot_name ?? text('bidding.yourSeatIsReady')}</h2>
           <p>
             {text('bidding.queueTimeLeft')}: <strong>{remaining ?? '—'}s</strong>
           </p>
-          <GamePayment payment={queue.payment} />
+          {queue.ai ? (
+            <p>
+              {aiText(
+                `前方包含自己共 ${queue.position ?? 1} 位。入场前不扣门票。`,
+                `Queue position: ${queue.position ?? 1}. No ticket is charged before admission.`,
+              )}
+            </p>
+          ) : (
+            <GamePayment payment={queue.payment} />
+          )}
           <div className="duel-actions">
             <button
               type="button"
@@ -250,7 +280,7 @@ export function BiddingGame({
               disabled={duel.blocked}
               onClick={() => duel.run({ kind: 'cancel', id: queue.id, revision: queue.revision })}
             >
-              {text('bidding.cancelQueueAndRefund')}
+              {queue.ai ? aiText('取消排队', 'Leave queue') : text('bidding.cancelQueueAndRefund')}
             </button>
           </div>
         </section>
@@ -269,6 +299,7 @@ export function BiddingGame({
               )}
             </section>
           )}
+          <AIPlayers blocked={duel.blocked} onStart={duel.run} lastMatch={home?.latestResult?.id} />
           <section className="bid-lobby">
             <span className="bid-eyebrow">{text('bidding.cHOOSEYOURTABLE')}</span>
             <h2>{text('bidding.thirteenCardsOneDuel')}</h2>
@@ -334,6 +365,7 @@ export function BiddingGame({
         <DuelHistory
           codec={biddingCodec}
           onClose={closeHistory}
+          renderDetail={(detail) => <AIActionLog sources={detail.sources} />}
           renderRound={(round, you) => <BiddingRoundView round={round} you={you} />}
         />
       )}
