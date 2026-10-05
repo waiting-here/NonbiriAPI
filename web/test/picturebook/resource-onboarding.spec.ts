@@ -211,7 +211,7 @@ test('optional setup connects selected models in one action and shows real relat
     await expect(
       page
         .getByRole('table', { name: en.user.core['endpoints.key'], exact: true })
-        .locator('tbody > tr'),
+        .locator('tbody > tr.core-key-card'),
     ).toHaveCount(1);
     await screenshot(page, 'resources-relationship-en-wide.png');
 
