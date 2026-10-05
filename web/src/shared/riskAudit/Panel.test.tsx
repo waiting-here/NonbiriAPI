@@ -265,6 +265,101 @@ beforeEach(() => {
   }));
 });
 describe('Risk audit access and evidence presentation', () => {
+  it('submits pasted IP addresses as one alternative condition alongside other conditions', async () => {
+    const view = await renderWithProviders(<RiskAuditPanel role="steward" scopeKey="6" />, {
+      station: 'user',
+      role: 'level6',
+    });
+    view.queryClient.setQueryData(['user', 'session'], {
+      user: { id: '6', username: 'Steward', level: 6, effective_level: 6 },
+    });
+    await view.user.click(screen.getByRole('tab', { name: 'Client rules' }));
+    await view.user.click(await screen.findByRole('button', { name: 'New rule' }));
+    await view.user.type(screen.getByLabelText('Rule name'), 'Example relay');
+    await view.user.selectOptions(screen.getByLabelText('Field'), 'effective_ip');
+    expect(screen.getByLabelText('Operator')).toHaveValue('ip_in');
+    const addresses = screen.getByRole('textbox', { name: 'IP addresses' });
+    await view.user.click(addresses);
+    await view.user.paste('192.0.2.1, 192.0.2.2\n2001:db8::1，::ffff:192.0.2.1\n');
+    await view.user.click(screen.getByRole('button', { name: 'Add AND condition' }));
+    await view.user.type(screen.getByLabelText('Match value'), 'Example/');
+    await view.user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(api.saveRule).toHaveBeenCalledWith(
+        expect.objectContaining({
+          conditions: [
+            {
+              field: 'effective_ip',
+              operator: 'ip_in',
+              value: '',
+              values: ['192.0.2.1', '192.0.2.2', '2001:db8::1', '::ffff:192.0.2.1'],
+              case_sensitive: false,
+            },
+            { field: 'user_agent', operator: 'prefix', value: 'Example/', case_sensitive: false },
+          ],
+        }),
+        undefined,
+        expect.any(AbortSignal),
+      ),
+    );
+  });
+
+  it('retains all saved IP alternatives when reopening and editing a rule', async () => {
+    api.numberedRules.mockResolvedValue({
+      items: [
+        {
+          id: 'rsk_example',
+          name: 'Example relay',
+          status: 'suspected',
+          enabled: true,
+          revision: 2,
+          conditions: [
+            {
+              field: 'effective_ip',
+              operator: 'ip_in',
+              value: '',
+              values: ['192.0.2.1', '2001:db8::1'],
+              case_sensitive: false,
+            },
+          ],
+          evidence_note: '',
+          evidence_url: '',
+          auto_ban: null,
+          updated_at: 1800000000,
+          updated_by_role: 'admin',
+        },
+      ],
+      page: '1',
+      page_size: 20,
+      total_items: '1',
+      total_pages: '1',
+      revision: 'r2',
+      changed: false,
+    });
+    const view = await renderWithProviders(<RiskAuditPanel role="admin" scopeKey="operator" />, {
+      station: 'admin',
+      role: 'admin',
+    });
+    view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'operator' } });
+    await view.user.click(screen.getByRole('tab', { name: 'Client rules' }));
+    expect(
+      await screen.findByText('Observed IP Matches any IP 192.0.2.1, 2001:db8::1'),
+    ).toBeVisible();
+    await view.user.click(screen.getByRole('button', { name: 'Edit' }));
+    const addresses = screen.getByRole('textbox', { name: 'IP addresses' });
+    expect(addresses).toHaveValue('192.0.2.1\n2001:db8::1');
+    await view.user.type(addresses, '\n192.0.2.3');
+    await view.user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(api.saveRule.mock.lastCall?.[0]).toMatchObject({
+        revision: 2,
+        conditions: [
+          { operator: 'ip_in', value: '', values: ['192.0.2.1', '2001:db8::1', '192.0.2.3'] },
+        ],
+      }),
+    );
+  });
+
   it.each([
     ['Tavo', 'user_agent', 'prefix', 'Tavo/'],
     ['New API', 'openrouter_title', 'equals', 'New API'],

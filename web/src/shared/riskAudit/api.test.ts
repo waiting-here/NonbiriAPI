@@ -246,7 +246,9 @@ it.each(['admin', 'steward'] as const)(
     fetcher.mockResolvedValue(result);
     await expect(riskAPI(role).scanResults(completedScan.id, '1', 20)).resolves.toEqual(result);
     fetcher.mockResolvedValue({ ...result, total_items: '1' });
-    await expect(riskAPI(role).scanResults(completedScan.id, '1', 20)).resolves.toMatchObject({ total_items: '1' });
+    await expect(riskAPI(role).scanResults(completedScan.id, '1', 20)).resolves.toMatchObject({
+      total_items: '1',
+    });
     fetcher.mockResolvedValue({
       ...result,
       scan: { ...completedScan, id: 'scn_BBBBBBBBBBBBBBBBBBBBBQ' },
@@ -279,6 +281,41 @@ it('sends only mutable rule fields and retains the revision', async () => {
   expect(path).toBe('/api/steward/abuse-audit/client-rules/rsk_example');
   expect(options.json.revision).toBe(7);
   expect(options.json).not.toHaveProperty('created_by_role');
+});
+
+it('preserves multiple IP addresses through the rule API', async () => {
+  const input = {
+    name: 'Example relay',
+    status: 'suspected' as const,
+    revision: 0,
+    enabled: true,
+    conditions: [
+      {
+        field: 'effective_ip' as const,
+        operator: 'ip_in' as const,
+        value: '',
+        values: ['192.0.2.1', '2001:db8::1'],
+        case_sensitive: false,
+      },
+    ],
+    evidence_note: '',
+    evidence_url: '',
+  };
+  fetcher.mockResolvedValue({
+    ...input,
+    id: 'rsk_example',
+    revision: 1,
+    auto_ban: null,
+    created_at: 1800000000,
+    updated_at: 1800000000,
+    created_by_role: 'admin',
+    updated_by_role: 'admin',
+    created_by_user_id: null,
+    updated_by_user_id: null,
+  });
+  const saved = await riskAPI('admin').saveRule(input);
+  expect(saved.conditions).toEqual(input.conditions);
+  expect(fetcher.mock.calls[0][1].json.conditions).toEqual(input.conditions);
 });
 
 it('sends an explicit unbind only when requested', async () => {

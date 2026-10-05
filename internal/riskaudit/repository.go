@@ -304,6 +304,11 @@ func (r *Repository) PutRule(ctx context.Context, actor Actor, rule Rule, create
 // PutRuleWithAction applies the rule and optional privileged binding in one
 // final-authorized transaction. The rule revision is the sole CAS version.
 func (r *Repository) PutRuleWithAction(ctx context.Context, actor Actor, rule Rule, create bool, action ActionMutation) (Rule, error) {
+	conditions, err := normalizeConditions(rule.Conditions)
+	if err != nil {
+		return Rule{}, err
+	}
+	rule.Conditions = conditions
 	if validateRule(rule) != nil {
 		return Rule{}, ErrInvalid
 	}
@@ -323,8 +328,8 @@ func (r *Repository) PutRuleWithAction(ctx context.Context, actor Actor, rule Ru
 	defer tx.Rollback()
 	now := r.now().Unix()
 	role, user := actorFields(actor)
-	conditions, _ := json.Marshal(rule.Conditions)
-	if len(conditions) > 16384 {
+	conditionsJSON, _ := json.Marshal(rule.Conditions)
+	if len(conditionsJSON) > 16384 {
 		return Rule{}, ErrInvalid
 	}
 	if create {
@@ -343,7 +348,7 @@ func (r *Repository) PutRuleWithAction(ctx context.Context, actor Actor, rule Ru
 			return Rule{}, ErrUnavailable
 		}
 		rule.Revision = 1
-		_, err = tx.ExecContext(ctx, `INSERT INTO risk_client_rules(`+ruleColumns+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, rule.ID, rule.Name, rule.Status, rule.Enabled, rule.Revision, string(conditions), rule.EvidenceNote, rule.EvidenceURL, role, user, role, user, now, now)
+		_, err = tx.ExecContext(ctx, `INSERT INTO risk_client_rules(`+ruleColumns+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, rule.ID, rule.Name, rule.Status, rule.Enabled, rule.Revision, string(conditionsJSON), rule.EvidenceNote, rule.EvidenceURL, role, user, role, user, now, now)
 		if err == nil && action.Present {
 			var count int
 			if tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM client_rule_auto_bans`).Scan(&count) != nil {
@@ -369,7 +374,7 @@ func (r *Repository) PutRuleWithAction(ctx context.Context, actor Actor, rule Ru
 			return Rule{}, ErrConflict
 		}
 		var result sql.Result
-		result, err = tx.ExecContext(ctx, `UPDATE risk_client_rules SET name=?,status=?,enabled=?,revision=revision+1,conditions_json=?,evidence_note=?,evidence_url=?,updated_by_role=?,updated_by_user_id=?,updated_at=? WHERE id=? AND revision=?`, rule.Name, rule.Status, rule.Enabled, string(conditions), rule.EvidenceNote, rule.EvidenceURL, role, user, now, rule.ID, rule.Revision)
+		result, err = tx.ExecContext(ctx, `UPDATE risk_client_rules SET name=?,status=?,enabled=?,revision=revision+1,conditions_json=?,evidence_note=?,evidence_url=?,updated_by_role=?,updated_by_user_id=?,updated_at=? WHERE id=? AND revision=?`, rule.Name, rule.Status, rule.Enabled, string(conditionsJSON), rule.EvidenceNote, rule.EvidenceURL, role, user, now, rule.ID, rule.Revision)
 		if err == nil {
 			n, _ := result.RowsAffected()
 			if n != 1 {

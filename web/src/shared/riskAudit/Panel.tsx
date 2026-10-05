@@ -684,7 +684,15 @@ function RuleEditor({
 }) {
   const { t } = useTranslation();
   const [confirmation, setConfirmation] = useState<RuleInput | null>(null);
-  const [value, setValue] = useState<RuleInput>(() => rule ?? emptyRule());
+  const [value, setValue] = useState<RuleInput>(() => {
+    const initial = rule ?? emptyRule();
+    return {
+      ...initial,
+      conditions: initial.conditions.map((item) =>
+        item.operator === 'ip_in' ? { ...item, value: (item.values ?? []).join('\n') } : item,
+      ),
+    };
+  });
   const originalSeconds = rule?.auto_ban?.duration_seconds;
   const initialUnit =
     originalSeconds == null
@@ -733,7 +741,15 @@ function RuleEditor({
                   enabled: banEnabled,
                   duration_seconds: banMode === 'permanent' ? null : duration,
                 };
-        const input = { ...value, auto_ban };
+        const input = {
+          ...value,
+          conditions: value.conditions.map((item) =>
+            item.operator === 'ip_in'
+              ? { ...item, value: '', values: item.value.split(/[\s,，]+/u).filter(Boolean) }
+              : item,
+          ),
+          auto_ban,
+        };
         if (input.enabled && auto_ban?.enabled) setConfirmation(input);
         else save(input);
       }}
@@ -873,7 +889,20 @@ function RuleEditor({
             {c.field}
             <select
               value={item.field}
-              onChange={(e) => condition(i, { field: e.target.value as Condition['field'] })}
+              onChange={(e) => {
+                const field = e.target.value as Condition['field'];
+                condition(i, {
+                  field,
+                  ...(field === 'effective_ip' || item.operator === 'ip_in'
+                    ? {
+                        operator: field === 'effective_ip' ? 'ip_in' : 'equals',
+                        value: '',
+                        values: undefined,
+                        case_sensitive: false,
+                      }
+                    : {}),
+                });
+              }}
             >
               {sourceFields.map((f) => (
                 <option key={f} value={f}>
@@ -886,32 +915,56 @@ function RuleEditor({
             {c.operator}
             <select
               value={item.operator}
-              onChange={(e) => condition(i, { operator: e.target.value as Condition['operator'] })}
+              onChange={(e) =>
+                condition(i, {
+                  operator: e.target.value as Condition['operator'],
+                  values: undefined,
+                  ...(e.target.value === 'ip_in' ? { case_sensitive: false } : {}),
+                })
+              }
             >
               {(['equals', 'contains', 'prefix'] as const).map((o) => (
                 <option key={o} value={o}>
                   {c[o]}
                 </option>
               ))}
+              {item.field === 'effective_ip' && <option value="ip_in">{c.ip_in}</option>}
             </select>
           </label>
-          <label>
-            {c.value}
-            <input
-              required
-              maxLength={256}
-              value={item.value}
-              onChange={(e) => condition(i, { value: e.target.value })}
-            />
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={item.case_sensitive}
-              onChange={(e) => condition(i, { case_sensitive: e.target.checked })}
-            />
-            {c.sensitive}
-          </label>
+          {item.operator === 'ip_in' ? (
+            <label className="audit-ip-values">
+              {c.ipValues}
+              <textarea
+                required
+                rows={4}
+                aria-label={c.ipValues}
+                aria-describedby={`rule-ip-help-${i}`}
+                value={item.value}
+                onChange={(e) => condition(i, { value: e.target.value })}
+              />
+              <small id={`rule-ip-help-${i}`}>{c.ipValuesHelp}</small>
+            </label>
+          ) : (
+            <>
+              <label>
+                {c.value}
+                <input
+                  required
+                  maxLength={256}
+                  value={item.value}
+                  onChange={(e) => condition(i, { value: e.target.value })}
+                />
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={item.case_sensitive}
+                  onChange={(e) => condition(i, { case_sensitive: e.target.checked })}
+                />
+                {c.sensitive}
+              </label>
+            </>
+          )}
           <button
             className="btn btn-secondary"
             type="button"
@@ -1119,7 +1172,10 @@ function Rules({ role, scopeKey, c }: Scope) {
                   )}
                   <p>
                     {rule.conditions
-                      .map((v) => `${fieldLabel(v.field, c)} ${c[v.operator]} ${v.value}`)
+                      .map(
+                        (v) =>
+                          `${fieldLabel(v.field, c)} ${c[v.operator]} ${v.operator === 'ip_in' ? (v.values ?? []).join(', ') : v.value}`,
+                      )
                       .join(' · ')}
                   </p>
                   <p>{rule.evidence_note}</p>

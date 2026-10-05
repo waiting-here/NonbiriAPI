@@ -191,6 +191,30 @@ func TestFreshCharityMatchIsAtomicZeroCostAndIdempotent(t *testing.T) {
 	}
 }
 
+func TestIPListBindingUsesAnyTrustedAddress(t *testing.T) {
+	f := newGuardFixture(t)
+	id := f.rule("Example relay", "Example/", true, nil)
+	f.exec(`UPDATE risk_client_rules SET conditions_json=? WHERE id=?`, `[{"field":"effective_ip","operator":"ip_in","value":"","values":["192.0.2.1","2001:db8::2"],"case_sensitive":false}]`, id)
+	for _, source := range []observability.Source{
+		{EffectiveIP: "192.0.2.3", IPQuality: "direct_peer"},
+		{EffectiveIP: "2001:db8::2", IPQuality: "peer_fallback"},
+	} {
+		ctx := observability.WithSource(f.context("charity", ""), source)
+		decision, err := f.service.CheckCharityCall(ctx, f.user, "[公益]provider/model", testNow)
+		if err != nil || decision.Banned || f.gameCalls != 0 {
+			t.Fatalf("unmatched source: %+v %v", decision, err)
+		}
+	}
+	ctx := observability.WithSource(f.context("charity", ""), observability.Source{EffectiveIP: "2001:db8::2", IPQuality: "trusted_forwarded"})
+	decision, err := f.service.CheckCharityCall(ctx, f.user, "[公益]provider/model", testNow)
+	if err != nil || !decision.Banned || f.gameCalls != 1 || f.committed != 1 {
+		t.Fatalf("second address did not trigger binding: %+v %v", decision, err)
+	}
+	if f.scalar(`SELECT count(*) FROM client_rule_ban_receipts WHERE request_id=?`, requestattempt.CurrentID(ctx)) != 1 || f.scalar(`SELECT count(*) FROM dispatch_claims`) != 0 {
+		t.Fatal("missing pre-dispatch receipt")
+	}
+}
+
 func TestRulesRecheckedAfterGateAndNoMatchDoesNotRetire(t *testing.T) {
 	f := newGuardFixture(t)
 	id := f.rule("race", "Client/", true, nil)

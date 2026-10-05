@@ -191,8 +191,9 @@ export type Source = Record<SourceField, string> & {
 };
 export interface Condition {
   field: SourceField;
-  operator: 'equals' | 'contains' | 'prefix';
+  operator: 'equals' | 'contains' | 'prefix' | 'ip_in';
   value: string;
+  values?: string[];
   case_sensitive: boolean;
 }
 export interface AutoBan {
@@ -607,13 +608,14 @@ function rule(v: unknown): Rule {
           operator = text(c.operator, 16);
         if (
           !sourceFields.includes(field as SourceField) ||
-          !['equals', 'contains', 'prefix'].includes(operator)
+          !['equals', 'contains', 'prefix', 'ip_in'].includes(operator)
         )
           return invalid();
         return {
           field: field as SourceField,
           operator: operator as Condition['operator'],
           value: text(c.value, 1024),
+          ...(c.values == null ? {} : { values: list(c.values, (value) => text(value)) }),
           case_sensitive: bool(c.case_sensitive),
         };
       },
