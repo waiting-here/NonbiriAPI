@@ -29,6 +29,8 @@ func New(mode string) (*Engine, error) {
 	return newEngine(mode, catalog.Load)
 }
 
+func NewBalanceV3(mode string) (*Engine, error) { return newEngine(mode, catalog.LoadBalanceV3) }
+
 func NewPriorBalance(mode string) (*Engine, error) { return newEngine(mode, catalog.LoadPriorBalance) }
 
 func NewHistorical(mode string) (*Engine, error) {
@@ -45,7 +47,7 @@ func newEngine(mode string, load func(string) (catalog.Config, string, error)) (
 		return nil, err
 	}
 	e := &Engine{c: c, hash: hash, skills: map[string]catalog.Skill{}, buffs: map[string]catalog.Buff{}, roles: map[string]catalog.Role{}, harnesses: map[string]catalog.Harness{}, passives: map[string]catalog.Passive{}}
-	e.characterPassives = c.SchemaVersion == catalog.SchemaVersion
+	e.characterPassives = c.SchemaVersion >= 16
 	for _, sk := range c.Skills {
 		e.skills[sk.ID] = sk
 	}
@@ -323,20 +325,24 @@ func (e *Engine) learning(s *State, seat int) Learning {
 func frame(s *State, stage string, end int) Frame {
 	f := Frame{Stage: stage, Energy: s.Energy, EventEnd: end}
 	for seat, p := range s.Players {
-		f.Players[seat] = ResourceView{Gold: p.Gold, Likes: p.Likes, Burst: p.Burst, BurstCap: p.BurstCap, Sub: p.Sub, SubCap: p.Subscription.TotalCap, API: p.API, Trial: optional(p.Trial, int64(0)), Resources: maps.Clone(p.Resources), ResourceCaps: maps.Clone(p.ResourceCaps), Subscription: clone(p.Subscription), Effects: clone(p.Effects)}
+		f.Players[seat] = ResourceView{Gold: p.Gold, Likes: p.Likes, Burst: p.Burst, BurstCap: p.BurstCap, BurstLocked: p.BurstLocked, BurstLockedCap: p.BurstLockedCap, Sub: p.Sub, SubCap: p.Subscription.TotalCap, API: p.API, Trial: optional(p.Trial, int64(0)), Resources: maps.Clone(p.Resources), ResourceCaps: maps.Clone(p.ResourceCaps), Subscription: clone(p.Subscription), Effects: clone(p.Effects)}
 	}
 	return f
 }
 
+func (e *Engine) lockedBalance() bool  { return e.c.SchemaVersion >= 17 }
 func (e *Engine) currentBalance() bool { return e.c.Rules.ImageShortage == "shortage" }
 func (e *Engine) behaviorVersion() int {
-	if e.currentBalance() {
+	if e.lockedBalance() {
 		return catalog.BehaviorVersion
+	}
+	if e.currentBalance() {
+		return 3
 	}
 	return 2
 }
 func (e *Engine) speedCost(n int64, speed *Status) int64 {
-	if e.currentBalance() {
+	if e.currentBalance() && !e.lockedBalance() {
 		return (n/2)*5 + (n%2*5+1)/2
 	}
 	return n * speed.P

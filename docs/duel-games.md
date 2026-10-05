@@ -109,13 +109,15 @@ appears after the last round's remaining presentation time.
 
 ## Current battle rules
 
-New quick/standard matches start with 100/500 in-match coins; entry-credit prices are unchanged. Speed mode rounds token and energy costs up after multiplying by 5/2 (1→3, 3→8, 0→0), doubles final skill likes and changes a one-turn overload into two turns. Image and coin costs do not gain that multiplier. Every Thunder rank and distilled version self-inflicts overload; its 24/20/12-like values stay unchanged. Stun remains a separate buff.
+New quick/standard matches start with 100/500 in-match coins; entry-credit prices are unchanged. Speed mode triples base token, energy and image costs, doubles final skill likes and changes a one-turn overload into two turns. Coin costs stay unchanged. Every Thunder rank and distilled version self-inflicts overload; its 24/20/12-like values stay unchanged. Stun remains a separate buff.
 
 Claude Code gains an independent +1 like for each distinct enemy negative buff actually applied by a main/extra/Flash cast, alongside its original SOTA attempt. Multiple layers or a repeated buff count once per application; a fully resisted effect does not count, and a derived SOTA effect cannot recurse. This like is not doubled as a skill like. Antigravity adds +2 to normal attacks. Copilot adds +2 only when strictly behind at round start and the skill's original base likes are positive. The field guide and server preview apply all existing ordering and limits. Saved previous matches and replays retain their saved catalog and algorithms.
 
+Subscription Squeeze applies two layers (one/two for Distillation I/II). Each locks 90 K burst capacity until the next total subscription refresh, with no stack limit. Displaced balance remains locked and cannot pay for skills; cleansing restores it. Burst refreshes still respect the lock. The burst bar distinguishes usable capacity, locked capacity and its preserved balance.
+
 ## Character passives and resistance
 
-Every character has one always-active passive, separate from equipped skills. ChatGPT retains its image quota and DeepSeek its subscription-free resources. Claude gains one base like on an executed main skill with a positive nominal base when strictly ahead at the start of that step. Extra skills and follow-ups do not trigger it. Gemini gains one base like on executed normal attacks, including Flash follow-ups; distilled PUB41 remains a special skill. Existing decay and subsequent modifiers still apply.
+Every character has one always-active passive, separate from equipped skills. ChatGPT retains its image quota and DeepSeek its subscription-free resources. Claude's successful main skill with positive original base likes gains base likes equal to the opponent's pre-cast debuff layers, doubled when Claude is strictly ahead before casting. Extra skills and follow-ups do not trigger it. Gemini gains one base like on executed normal attacks, including Flash follow-ups; distilled PUB41 remains a special skill. Existing decay and subsequent modifiers still apply.
 
 GLM has 25% resistance, rising to 50% while strictly behind. DeepSeek has 25% effect hit, rising to 50% while strictly ahead. Each main step, paired extra-skill slot and Flash batch uses a shared score snapshot. Each attempted enemy debuff layer succeeds with probability `min(1,(100+hit)/(100+resistance))`. Overload, speed mode and self-inflicted effects are outside this check. Partial resistance applies only successful layers; full resistance adds nothing and does not refresh duration. SOTA's additional debuff follows successful application and has its own resistance check, without recursion. Saved older matches retain their original catalog and rules.
 
@@ -134,8 +136,7 @@ quotes apart from mechanics. Desktop readers can see related explanations side b
 side; phone readers can follow links and return to the previous entry.
 
 An optional local tutorial equips ChatGPT with Codex, Usage reset, Hello, world!,
-Regenerate, Pedal faster and Words and pictures. A scripted Claude opponent with
-Codex plays ten quick-mode rounds ending 66–61. Teaching waits for your actions,
+Regenerate, Pedal faster and Words and pictures. A scripted Claude opponent plays ten quick-mode rounds ending 66–60. Teaching waits for your actions,
 can be skipped at any time, and never queues, spends credits, awards prizes or
 creates a real match. The browser remembers completion or skipping; replay starts
 from the beginning. Applying the loadout only fills the normal form. A real queue
@@ -177,11 +178,13 @@ Current presets have optional private names, included only in the owner's export
 
 ## 双人游戏
 
-当前新局快速／标准模式初始金币为100／500，站内门票价格不变。倍速的Token与电能费用乘5/2后向上取整，技能最终得赞翻倍，1轮过载变2轮；图像与金币不乘倍速费用。各档雷霆及蒸馏版改为自身过载，24／20／12赞保持，眩晕仍是独立状态。Claude Code每次成功施加一种敌方负面Buff独立得1赞，同Buff多层／重复不多计，完全抵抗不计，衍生SOTA不递归且此赞不按技能翻倍。Antigravity普攻加2；Copilot仅在轮初严格落后且技能原始基础赞为正时加2。旧局与回放保留原规则。
+订阅挤兑施加两层（蒸馏 I／II 为一／两层），每层锁定 90 K 瞬发上限，层数无上限，持续到下次订阅总量刷新。被挤出的余额保留，不能用于付款，提前净化可恢复。瞬发刷新仍受锁定限制；瞬发条分别显示可用额度、锁定额度及其中余额。
+
+当前新局快速／标准模式初始金币为100／500，站内门票价格不变。倍速的基础Token、电能与图像费用乘3，技能最终得赞翻倍，1轮过载变2轮；金币费用不变。各档雷霆及蒸馏版改为自身过载，24／20／12赞保持，眩晕仍是独立状态。Claude Code每次成功施加一种敌方负面Buff独立得1赞，同Buff多层／重复不多计，完全抵抗不计，衍生SOTA不递归且此赞不按技能翻倍。Antigravity普攻加2；Copilot仅在轮初严格落后且技能原始基础赞为正时加2。旧局与回放保留原规则。
 
 自定义预设可填写最长20个Unicode码点的私人名称，可重名、可清空；改名不加载或修改配装／模式。名称随本人预设导出并在删号时移除。以上为未发布源码变更，实例是否可用取决于实际部署。
 
-每个角色的固有被动持续生效，不占配装。ChatGPT 保留图像额度，DeepSeek 保留无订阅资源。Claude 在步骤开始严格领先、主技能自身标称基础得赞大于零且实际施放时，基础得赞加 1；额外技能和连答不触发。Gemini 的普攻类技能基础加 1，包含 Flash 连答，蒸馏 PUB41 仍属特殊技能。原有衰减及后续增减、倍率继续生效。
+每个角色的固有被动持续生效，不占配装。ChatGPT 保留图像额度，DeepSeek 保留无订阅资源。Claude 成功施放原始基础得赞大于零的主技能时，按释放前敌方 debuff 总层数增加基础赞；若己方得赞严格领先，增加两倍层数；额外技能和连答不触发。Gemini 的普攻类技能基础加 1，包含 Flash 连答，蒸馏 PUB41 仍属特殊技能。原有衰减及后续增减、倍率继续生效。
 
 GLM 常驻抵抗 25%，严格落后时为 50%；DeepSeek 常驻效果命中 25%，严格领先时为 50%。主技能、各额外槽位与每批连答分别取双方共同的步骤得赞快照。向敌方施加的每层减益独立按 `min(1,(100+命中)/(100+抵抗))` 判定；过载、倍速等状态和自身副作用不参与。部分抵抗只施加成功层，全部抵抗不加层也不刷新。SOTA 追加减益须由成功施加触发，自身另行抵抗，不递归。旧局沿用保存的旧图鉴与规则。
 
@@ -209,7 +212,7 @@ GLM 常驻抵抗 25%，严格落后时为 50%；DeepSeek 常驻效果命中 25%�
 
 配装、选招和状态卡片直接显示效果摘要。词条详情区分原版／蒸馏版本，相关术语可以点击，桌面并排阅读关联解释，手机支持跳转与返回；玩梗独立作为引用展示。
 
-新手引导在浏览器本地运行，可随时跳过并重看，浏览器记住完成或跳过状态。引导配装为 ChatGPT＋Codex＋用量重置＋Hello, world!＋重新生成＋加速猛蹬＋图文并茂，对手为携带 Codex 的 Claude，完整十轮快速对战以 66∶61 险胜结束。讲解及操作等待玩家，不真实匹配、不扣积分、不发奖励、不创建真实记录。“使用教学配装”只填写大厅表单，中途刷新后从头开始；其他标签页出现真实排队或对局时立即恢复真实状态。
+新手引导在浏览器本地运行，可随时跳过并重看，浏览器记住完成或跳过状态。引导配装为 ChatGPT＋Codex＋用量重置＋Hello, world!＋重新生成＋加速猛蹬＋图文并茂，对手为 Claude，完整十轮快速对战以 66∶60 险胜结束。讲解及操作等待玩家，不真实匹配、不扣积分、不发奖励、不创建真实记录。“使用教学配装”只填写大厅表单，中途刷新后从头开始；其他标签页出现真实排队或对局时立即恢复真实状态。
 
 正式对局本人仍需确认时，不足五秒会强调倒计时和操作区；开启音效后每秒最多一次短提示。提交、锁定、超时或自动过载跳过后停止；后台不播放，返回不补播，减少动态模式保留静态强调。
 

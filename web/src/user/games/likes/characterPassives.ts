@@ -15,7 +15,11 @@ export function characterPassive(role: Role, text: Translate) {
     },
     SOTA_PRESSURE: {
       name: text('likes.sOTAPressure'),
-      description: text('likes.aMainSkillWithPositiveOriginalBase'),
+      description: text(
+        role.pressurePerDebuff
+          ? 'likes.debuffPressure'
+          : 'likes.aMainSkillWithPositiveOriginalBase',
+      ),
     },
     WORLD_KNOWLEDGE: {
       name: text('likes.worldKnowledge'),
@@ -39,6 +43,7 @@ export function effectCategory(buff: Buff, text: Translate) {
       'STUN',
       'STOP',
       'SUBSCRIPTION_BAN',
+      'SUBSCRIPTION_SQUEEZE',
       'SUPPRESS',
       'TOKEN_TAX',
       'NONBASIC_TAX',

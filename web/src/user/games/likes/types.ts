@@ -76,6 +76,8 @@ export interface Player {
   gold: number;
   likes: number;
   burstCap: number;
+  burstLocked?: number;
+  burstLockedCap?: number;
   burst: number;
   sub: number;
   api: number;
@@ -117,6 +119,8 @@ export interface Resources {
   likes: number;
   burst: number;
   burst_cap: number;
+  burst_locked?: number;
+  burst_locked_cap?: number;
   sub: number;
   sub_cap: number;
   api: number;

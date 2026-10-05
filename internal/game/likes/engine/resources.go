@@ -1,5 +1,7 @@
 package engine
 
+import "slices"
+
 func (e *Engine) startClocks(p *Player, subPayment int64, resources map[string]int64) {
 	if subPayment > 0 {
 		if p.Subscription.BurstResetAt == nil {
@@ -17,10 +19,12 @@ func (e *Engine) startClocks(p *Player, subPayment int64, resources map[string]i
 }
 func (e *Engine) resetSubscription(p *Player) {
 	if due := p.Subscription.BurstResetAt; due != nil && p.NormalTurns >= *due {
-		p.Burst = p.BurstCap
+		p.Burst, p.BurstLocked = p.BurstCap-p.BurstLockedCap, p.BurstLockedCap
 		p.Subscription.BurstResetAt = nil
 	}
 	if due := p.Subscription.TotalResetAt; due != nil && p.NormalTurns >= *due {
+		p.Effects = slices.DeleteFunc(p.Effects, func(st Status) bool { return st.Kind == "SUBSCRIPTION_SQUEEZE" })
+		syncBurstLock(p)
 		p.Sub = p.Subscription.TotalCap
 		p.Subscription.TotalResetAt = nil
 		for _, r := range e.c.Resources {
@@ -33,6 +37,7 @@ func (e *Engine) resetSubscription(p *Player) {
 func (e *Engine) upgradeSubscription(p *Player) {
 	p.Burst += e.param("SUB_BURST_UPGRADE")
 	p.BurstCap += e.param("SUB_BURST_UPGRADE")
+	syncBurstLock(p)
 	p.Sub += e.param("SUB_TOTAL_UPGRADE")
 	p.Subscription.TotalCap += e.param("SUB_TOTAL_UPGRADE")
 	for _, r := range e.c.Resources {
@@ -43,6 +48,8 @@ func (e *Engine) upgradeSubscription(p *Player) {
 	}
 }
 func (e *Engine) resetAllUsage(p *Player) {
+	p.Effects = slices.DeleteFunc(p.Effects, func(st Status) bool { return st.Kind == "SUBSCRIPTION_SQUEEZE" })
+	p.BurstLocked, p.BurstLockedCap = 0, 0
 	p.Burst, p.Sub = p.BurstCap, p.Subscription.TotalCap
 	p.Subscription.BurstResetAt, p.Subscription.TotalResetAt = nil, nil
 	for _, r := range e.c.Resources {
@@ -67,4 +74,25 @@ func (e *Engine) pay(s *State, seat int, a Action) {
 		p.Used[a.Choice.SkillID]++
 	}
 	e.startClocks(p, v.SubPayment, v.ResourceCosts)
+}
+
+// syncBurstLock transfers only the balance displaced or released by a capacity
+// change. Spending accessible tokens never releases an existing locked balance.
+func syncBurstLock(p *Player) {
+	cap := int64(0)
+	for _, st := range p.Effects {
+		if st.Kind == "SUBSCRIPTION_SQUEEZE" {
+			cap = min(p.BurstCap, cap+st.P*st.Layers)
+		}
+	}
+	if cap < p.BurstLockedCap {
+		released := min(p.BurstLocked, p.BurstLockedCap-cap)
+		p.Burst += released
+		p.BurstLocked -= released
+	} else if cap > p.BurstLockedCap {
+		displaced := max(0, p.Burst-(p.BurstCap-cap))
+		p.Burst -= displaced
+		p.BurstLocked += displaced
+	}
+	p.BurstLockedCap = cap
 }

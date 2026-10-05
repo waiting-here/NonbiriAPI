@@ -27,10 +27,22 @@ func (e *Engine) Validate(s State) error {
 		if p.ActiveSlots != e.slots(p.Harness) || p.NormalTurns != s.Round || len(p.Effects) > len(e.c.Buffs) || p.Used == nil || p.Resources == nil || p.ResourceCaps == nil {
 			return ErrState
 		}
-		for _, value := range []int64{p.Gold, p.Likes, p.Burst, p.BurstCap, p.Sub, p.API, p.Images, p.APIPack, s.LikesAtStart[seat], p.Subscription.BurstInitial, p.Subscription.TotalInitial, p.Subscription.TotalCap} {
+		for _, value := range []int64{p.Gold, p.Likes, p.Burst, p.BurstCap, p.BurstLocked, p.BurstLockedCap, p.Sub, p.API, p.Images, p.APIPack, s.LikesAtStart[seat], p.Subscription.BurstInitial, p.Subscription.TotalInitial, p.Subscription.TotalCap} {
 			if !safe(value) {
 				return ErrState
 			}
+		}
+		if p.BurstLocked > p.BurstLockedCap || p.BurstLockedCap > p.BurstCap || p.Burst > p.BurstCap-p.BurstLockedCap || (!e.lockedBalance() && (p.BurstLocked != 0 || p.BurstLockedCap != 0)) {
+			return ErrState
+		}
+		lockedCap := int64(0)
+		for _, st := range p.Effects {
+			if st.Kind == "SUBSCRIPTION_SQUEEZE" {
+				lockedCap = min(p.BurstCap, lockedCap+st.P*st.Layers)
+			}
+		}
+		if lockedCap != p.BurstLockedCap {
+			return ErrState
 		}
 		if p.Burst > p.BurstCap || p.Sub > p.Subscription.TotalCap || p.Subscription.TotalCap != p.BurstCap*2 || p.Subscription.TotalInitial != p.Subscription.BurstInitial*2 || p.Subscription.BurstInitial != e.initialBurst(e.roles[p.Role]) {
 			return ErrState
@@ -128,6 +140,9 @@ func (e *Engine) Validate(s State) error {
 				return ErrState
 			}
 			if slices.Contains([]string{"ENERGY_STACK", "SOTA_FANATICISM", "BASE_SUPPRESS", "MODEL_DEGRADATION"}, st.Kind) && (st.Layers < 1 || st.Layers > b.Cap) {
+				return ErrState
+			}
+			if st.Kind == "SUBSCRIPTION_SQUEEZE" && (st.Layers < 1 || st.Expires != nil || st.Remaining != 0) {
 				return ErrState
 			}
 			if st.Kind == "COMBO" && (st.Layers < 1 || st.Layers >= b.P) {

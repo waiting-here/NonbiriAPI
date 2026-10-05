@@ -28,7 +28,7 @@ func (r *roundRun) expire(plans [2]Plan, successful [2][]Action, newOverload [2]
 			case slices.Contains(timedKinds, st.Kind), st.Kind == "OVERLOAD":
 				st.Remaining = max(0, optional(st.Expires, s.Round)-s.Round)
 				keep = st.Remaining > 0
-			case st.Kind == "BASE_SUPPRESS", st.Kind == "MODEL_DEGRADATION":
+			case st.Kind == "BASE_SUPPRESS", st.Kind == "MODEL_DEGRADATION", st.Kind == "SUBSCRIPTION_SQUEEZE":
 				keep = st.Layers > 0
 			case st.Kind == "COMBO":
 				keep = plans[seat].Main != nil && !newOverload[seat] && st.Layers > 0

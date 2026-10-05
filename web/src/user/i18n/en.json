@@ -1086,6 +1086,15 @@
           "harnessLike": "Harness bonus like",
           "tutorialSpeed": "Enable speed next round: twice the likes; base tokens and energy are multiplied by 2.5 and rounded up.",
           "tutorialToggle": "Toggling speed scores no likes this round, so the opponent will lead again. From next round likes are doubled, while base tokens and energy are multiplied by 2.5 and rounded up. Check that you can afford the next casts."
+        },
+        "lockedBalance": {
+          "debuffPressure": "A main skill with positive original base likes gains base likes equal to the opponent's debuff layers before casting, doubled if you are strictly ahead in likes.",
+          "tripleSpeedCosts": "Base token, energy and image costs ×3 before cache, taxes, discounts and minimums; likes ×2. Gold costs stay unchanged.",
+          "tripleSpeedBrief": "Base energy, token and image costs ×3; likes ×2.",
+          "tripleSpeedToggle": "Toggle speed next round: base energy, token and image costs ×3; likes ×2.",
+          "squeezeSkill": "Apply {{p}} Subscription Squeeze layers to the opponent. Each locks 90 K burst capacity until the total subscription refresh; cleansing restores locked balance.",
+          "squeezeDetails": "Each layer locks 90 K burst capacity, with no stack limit and a minimum usable capacity of 0. Displaced balance is kept locked until cleansing. Burst refreshes still respect the lock; total subscription refresh removes all layers.",
+          "lockedBurst": "Usable capacity {{available}} K · Locked capacity {{cap}} K (balance {{balance}} K)"
         }
       },
       "copy": {

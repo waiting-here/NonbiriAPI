@@ -12,6 +12,7 @@ type Rules struct {
 	engines      map[string]*engine.Engine
 	legacy       bool
 	historical   bool
+	balanceV3    bool
 	priorBalance bool
 	supported    map[string]*Rules
 }
@@ -27,6 +28,11 @@ func NewRules() (*Rules, error) {
 		}
 		r.engines[mode] = e
 		r.supported[e.ContentHash()] = r
+		v3, err := engine.NewBalanceV3(mode)
+		if err != nil {
+			return nil, err
+		}
+		r.supported[v3.ContentHash()] = &Rules{engines: map[string]*engine.Engine{mode: v3}, balanceV3: true}
 		prior, err := engine.NewPriorBalance(mode)
 		if err != nil {
 			return nil, err
@@ -50,7 +56,7 @@ func (*Rules) ID() string { return "likes" }
 func (r *Rules) CompatibleCatalogs() ([]duel.Catalog, error) {
 	result := []duel.Catalog{}
 	for _, mode := range []string{"quick", "standard"} {
-		for _, public := range []func(string) (catalog.Snapshot, error){catalog.PublicPriorBalance, catalog.PublicHistorical, catalog.PublicLegacy} {
+		for _, public := range []func(string) (catalog.Snapshot, error){catalog.PublicBalanceV3, catalog.PublicPriorBalance, catalog.PublicHistorical, catalog.PublicLegacy} {
 			old, err := public(mode)
 			if err != nil {
 				return nil, err
@@ -84,6 +90,8 @@ func (r *Rules) Catalog(mode string) (duel.Catalog, error) {
 	public := catalog.Public
 	if r.legacy {
 		public = catalog.PublicLegacy
+	} else if r.balanceV3 {
+		public = catalog.PublicBalanceV3
 	} else if r.priorBalance {
 		public = catalog.PublicPriorBalance
 	} else if r.historical {

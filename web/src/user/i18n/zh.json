@@ -1086,6 +1086,15 @@
           "harnessLike": "Harness 额外得赞",
           "tutorialSpeed": "下轮开启倍速，得赞翻倍；基础 Token 和耗电乘以 2.5 后向上取整。",
           "tutorialToggle": "开启倍速这轮不拿赞，对手会再次领先。模式从下轮生效：得赞 ×2，基础 Token 和电能 ×2.5 后向上取整。确认前先看之后是否付得起。"
+        },
+        "lockedBalance": {
+          "debuffPressure": "原始基础得赞大于零的主技能，按释放前敌方 debuff 总层数增加基础赞；己方得赞严格领先时增加两倍层数。",
+          "tripleSpeedCosts": "基础 Token、电能和图像费用 ×3，再计算缓存、税费、折扣和下限；得赞 ×2，金币费用不变。",
+          "tripleSpeedBrief": "基础电能、Token 和图像费用 ×3；得赞 ×2。",
+          "tripleSpeedToggle": "下轮切换倍速：基础电能、Token 和图像费用 ×3，得赞 ×2。",
+          "squeezeSkill": "对手挂 {{p}} 层订阅挤兑，每层锁定 90 K 瞬发上限，至订阅总量刷新；提前驱散恢复锁定余额。",
+          "squeezeDetails": "每层锁定 90 K 瞬发上限，层数无上限，最低可用上限为 0。被锁住的余额保留且不能消费，提前驱散时恢复。瞬发刷新仍受锁定限制；订阅总量刷新解除全部层数。",
+          "lockedBurst": "可用上限 {{available}} K · 锁定额度 {{cap}} K（含余额 {{balance}} K）"
         }
       },
       "copy": {

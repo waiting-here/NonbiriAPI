@@ -104,7 +104,10 @@ func (e *Engine) usage(s *State, seat int, choice Choice, derived bool) Preview 
 		v.Errors = append(v.Errors, "targets")
 	}
 	banned := hasStatus(p, "SUBSCRIPTION_BAN")
-	for key, n := range sk.ResourceCosts {
+	if e.lockedBalance() && e.speed(s, seat) != nil && v.ResourceCosts["R_IMAGE"] > 0 {
+		v.ResourceCosts["R_IMAGE"] *= 3
+	}
+	for key, n := range v.ResourceCosts {
 		if n > 0 {
 			if p.Resources[key] < n {
 				if e.currentBalance() && key == "R_IMAGE" {

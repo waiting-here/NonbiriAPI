@@ -2,6 +2,22 @@ package catalog
 
 import "testing"
 
+func TestBalanceV3KeepsPublishedIdentity(t *testing.T) {
+	for mode, expected := range map[string]string{
+		"quick":    "8ac284bb30358464fa7dd6f811e56ac30d46efb47daeb72bd2bc056855cee4f0",
+		"standard": "32bb27079e1d075cbc2921519c3830b1b06d70e5687bd75b31263cbedee3f10c",
+	} {
+		c, hash, err := LoadBalanceV3(mode)
+		if err != nil || hash != expected || c.SchemaVersion != 16 {
+			t.Fatal(mode, hash, err)
+		}
+		current, currentHash, err := Load(mode)
+		if err != nil || currentHash == hash || current.SchemaVersion != 17 {
+			t.Fatal(mode, currentHash, err)
+		}
+	}
+}
+
 func TestSupportedLegacyIdentitiesAndExplicitCategories(t *testing.T) {
 	for mode, expected := range map[string]string{
 		"quick":    "65512e407ece9c31486cc808100780607b524cc6a95d1e2a9b6ef0424c6f7333",

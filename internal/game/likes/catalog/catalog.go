@@ -12,12 +12,12 @@ import (
 	"slices"
 )
 
-const DesignVersion = "0.19.0"
-const SchemaVersion = 16
+const DesignVersion = "0.20.0"
+const SchemaVersion = 17
 const RulesVersion = 1
-const BehaviorVersion = 3
+const BehaviorVersion = 4
 
-//go:embed quick.json standard.json previous/quick.json previous/standard.json legacy/quick.json legacy/standard.json prior-balance/quick.json prior-balance/standard.json
+//go:embed balance-v3/quick.json balance-v3/standard.json quick.json standard.json previous/quick.json previous/standard.json legacy/quick.json legacy/standard.json prior-balance/quick.json prior-balance/standard.json
 var presets embed.FS
 
 var ErrCatalog = errors.New("likes: invalid catalog")
@@ -183,6 +183,9 @@ func Load(mode string) (Config, string, error) {
 	return load(mode, "")
 }
 
+// LoadBalanceV3 preserves the previous balance and its persisted identity.
+func LoadBalanceV3(mode string) (Config, string, error) { return load(mode, "balance-v3") }
+
 // LoadHistorical preserves the previous character-passive catalog and its
 // content identity for active games and history created before the time change.
 func LoadHistorical(mode string) (Config, string, error) {
@@ -232,8 +235,11 @@ func load(mode, version string) (Config, string, error) {
 	if version != "legacy" {
 		prefix = "likes@2;step-likes;role-passives;layer-resistance;stable-sota\n"
 	}
-	if version == "" {
+	if version == "" || version == "balance-v3" {
 		prefix = "likes@3;ceil-speed-cost;image-shortage;hostile-harness-likes;self-overload\n"
+	}
+	if version == "" {
+		prefix = "likes@4;triple-speed;locked-burst;debuff-pressure\n"
 	}
 	hash.Write([]byte(prefix))
 	hash.Write(body)
@@ -245,7 +251,7 @@ var timedKinds = []string{"AMPLIFY", "SUPPRESS", "TOKEN_TAX", "NONBASIC_TAX", "S
 // Validate checks the fixed content's references and the termination assumptions
 // that keep a complete round and its event history within the service bounds.
 func (c Config) Validate() error {
-	if (c.SchemaVersion != SchemaVersion && c.SchemaVersion != 15) || len(c.Roles) != 5 || len(c.Skills) != 48 || len(c.Buffs) != 46 || len(c.Resources) != 1 || len(c.Harnesses) != 8 || len(c.Passives) != 8 {
+	if (c.SchemaVersion < 15 || c.SchemaVersion > SchemaVersion) || len(c.Roles) != 5 || len(c.Skills) != 48 || len(c.Buffs) != 46+max(0, c.SchemaVersion-16) || len(c.Resources) != 1 || len(c.Harnesses) != 8 || len(c.Passives) != 8 {
 		return ErrCatalog
 	}
 	if c.Mode != "quick" && c.Mode != "standard" || c.Rules != (Rules{CacheWindow: "round", UniqueSamples: true, StrictSamples: true, ImageShortage: c.Rules.ImageShortage}) || (c.Rules.ImageShortage != "illegal" && c.Rules.ImageShortage != "shortage") {
@@ -271,7 +277,7 @@ func (c Config) Validate() error {
 			return ErrCatalog
 		}
 		roles[role.ID] = role
-		if c.SchemaVersion == SchemaVersion {
+		if c.SchemaVersion >= 16 {
 			expected := map[string]string{"ChatGPT": "MULTIMODAL", "Claude": "SOTA_PRESSURE", "Gemini": "WORLD_KNOWLEDGE", "GLM": "SECURITY_SHIELD", "DeepSeek": "BLUE_FISH"}
 			if role.Passive == nil || role.Passive.ID != expected[role.ID] || role.Passive.Name == "" || role.Passive.Description == "" {
 				return ErrCatalog
@@ -286,9 +292,9 @@ func (c Config) Validate() error {
 			return ErrCatalog
 		}
 		buffs[buff.ID] = buff
-		if c.SchemaVersion == SchemaVersion {
+		if c.SchemaVersion >= 16 {
 			category := "buff"
-			if slices.Contains([]string{"STUN", "STOP", "SUBSCRIPTION_BAN", "SUPPRESS", "TOKEN_TAX", "NONBASIC_TAX", "SOTA_FANATICISM", "BASE_SUPPRESS", "MODEL_DEGRADATION"}, buff.Kind) {
+			if slices.Contains([]string{"STUN", "STOP", "SUBSCRIPTION_BAN", "SUBSCRIPTION_SQUEEZE", "SUPPRESS", "TOKEN_TAX", "NONBASIC_TAX", "SOTA_FANATICISM", "BASE_SUPPRESS", "MODEL_DEGRADATION"}, buff.Kind) {
 				category = "debuff"
 			} else if buff.Kind == "OVERLOAD" || buff.Kind == "SPEED_MODE" {
 				category = "state"
@@ -355,7 +361,7 @@ func (c Config) Validate() error {
 			variants += 2
 		}
 		for _, effect := range []Effect{sk.Effects.Base, sk.Effects.I, sk.Effects.II} {
-			if c.SchemaVersion == SchemaVersion && (effect.Kind == "DEGRADE" && effect.P+effect.Q > 4 || effect.Kind == "APOLOGY" && max(effect.P, effect.Q) > 4 || effect.RandomTargets && effect.P > 4) {
+			if c.SchemaVersion >= 16 && (effect.Kind == "DEGRADE" && effect.P+effect.Q > 4 || effect.Kind == "APOLOGY" && max(effect.P, effect.Q) > 4 || effect.RandomTargets && effect.P > 4) {
 				return ErrCatalog
 			}
 			for _, value := range []int64{effect.Likes, effect.P, effect.Q, effect.N, effect.Combo} {
@@ -405,7 +411,7 @@ func (c Config) Validate() error {
 		}
 	}
 	for _, item := range c.Passives {
-		if c.SchemaVersion == SchemaVersion && item.Kind == "SOTA_ONLY" && (item.P < 1 || item.P > 4 || buffs[item.BuffID].Kind != "SOTA_FANATICISM") {
+		if c.SchemaVersion >= 16 && item.Kind == "SOTA_ONLY" && (item.P < 1 || item.P > 4 || buffs[item.BuffID].Kind != "SOTA_FANATICISM") {
 			return ErrCatalog
 		}
 		if _, exists := passives[item.ID]; exists {

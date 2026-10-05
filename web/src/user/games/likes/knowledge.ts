@@ -10,7 +10,8 @@ export interface GuideEntry {
   meme: string;
   refs: string[];
 }
-const currentBalance = (c: ModeCatalog) => c.designVersion === '0.19.0';
+const currentBalance = (c: ModeCatalog) => ['0.19.0', '0.20.0'].includes(c.designVersion);
+const lockedBalance = (c: ModeCatalog) => c.designVersion === '0.20.0';
 const link = (id: string) => `[[${id}]]`;
 const references = (text: string) =>
   [...text.matchAll(/\[\[([^\]]+)\]\]/g)].map((match) => match[1]);
@@ -124,11 +125,15 @@ function buffText(c: ModeCatalog, b: Buff, text: Translate): string[] {
       ];
     case 'SPEED_MODE':
       return [
-        currentBalance(c)
-          ? text('likes.baseTokenAndEnergyCostsAreMultiplied')
-          : text('likes.baseTokenAndEnergyCostsAreMultiplied2', { p: p, q: q }),
+        lockedBalance(c)
+          ? text('likes.tripleSpeedCosts')
+          : currentBalance(c)
+            ? text('likes.baseTokenAndEnergyCostsAreMultiplied')
+            : text('likes.baseTokenAndEnergyCostsAreMultiplied2', { p: p, q: q }),
         text('likes.appliesToMainSkillsDistillationExtraSkills', { link: link('GPT44'), n: n }),
       ];
+    case 'SUBSCRIPTION_SQUEEZE':
+      return [text('likes.squeezeDetails')];
     case 'SUBSCRIPTION_BAN':
       return [
         text('likes.fromNextRoundSubscriptionBurstTotalAnd'),
@@ -299,6 +304,9 @@ function effectText(c: ModeCatalog, s: Skill, level: GuideLevel, text: Translate
       break;
     case 'LOW_POWER':
       out.push(text('likes.gainExtraLikesWhenSharedEnergyAfter', { p: f.p, q: f.q }));
+      break;
+    case 'SUBSCRIPTION_SQUEEZE':
+      out.push(text('likes.squeezeSkill', { p: f.p }));
       break;
     case 'BURST_DRAIN':
       out.push(text('likes.afterSkillPaymentDrainKOfThe', { p: f.p }));
@@ -471,9 +479,11 @@ function buffBrief(c: ModeCatalog, b: Buff, text: Translate): string {
   if (b.kind === 'OVERLOAD')
     return text('likes.automaticallySkipShoppingAndCastingWhileRecovering');
   if (b.kind === 'SPEED_MODE')
-    return currentBalance(c)
-      ? text('likes.baseEnergyAndTokens25Rounded')
-      : text('likes.baseEnergyAndTokensLikes', { p: b.p, q: b.q });
+    return lockedBalance(c)
+      ? text('likes.tripleSpeedBrief')
+      : currentBalance(c)
+        ? text('likes.baseEnergyAndTokens25Rounded')
+        : text('likes.baseEnergyAndTokensLikes', { p: b.p, q: b.q });
   if (b.kind === 'API_DISCOUNT') return text('likes.qualifyingAPICastsSaveKTokens', { p: b.p });
   return '';
 }
@@ -513,6 +523,7 @@ function skillBrief(c: ModeCatalog, s: Skill, level: GuideLevel, text: Translate
     }),
     DUAL_AUDIT: text('likes.yourOpponentSSuccessfulNonBasicCasts', { p: f.p, q: f.q }),
     LOW_POWER: text('likes.gainMoreWhenPrePaymentEnergyIs', { p: f.p, q: f.q }),
+    SUBSCRIPTION_SQUEEZE: text('likes.squeezeSkill', { p: f.p }),
     BURST_DRAIN: text('likes.drainKOpponentBurst', { p: f.p }),
     SELF_OVERLOAD: text('likes.overloadYourselfNextRoundFor1Round'),
     SELF_STUN: text('likes.stunYourselfForRoundStartingNextRound', { n: f.n }),
@@ -525,10 +536,12 @@ function skillBrief(c: ModeCatalog, s: Skill, level: GuideLevel, text: Translate
     RESOURCE_GAIN: text('likes.afterPaymentGainGoldAndKAPI', { p: f.p, q: f.q }),
     CACHE_CONVERT: text('likes.convertProCacheToFlashGainingAPI'),
     USAGE_RESET: text('likes.refillBothSubscriptionsAndImagesDoesNot'),
-    TOGGLE_SPEED: text('likes.toggleSpeedNextRoundBaseCostsLikes', {
-      p: String(b?.p),
-      q: String(b?.q),
-    }),
+    TOGGLE_SPEED: lockedBalance(c)
+      ? text('likes.tripleSpeedToggle')
+      : text('likes.toggleSpeedNextRoundBaseCostsLikes', {
+          p: String(c.designVersion === '0.19.0' ? 2.5 : b?.p),
+          q: String(b?.q),
+        }),
     SUBSCRIPTION_BAN: text('likes.banOpponentSubscriptionAndImagesFromNext'),
   };
   return `${text('likes.baseLikes', { likes: f.likes })} ${extra[f.kind] ?? ''}${f.combo ? text('likes.alsoGainFollowUpProgress', { combo: f.combo }) : ''}`.trim();

@@ -232,6 +232,7 @@ func (r *roundRun) settle(plans [2]Plan) error {
 		}
 	}
 	r.snapshot(r.stage)
+	r.mainDebuffs = debuffCounts(s)
 	r.stage = "cleansing"
 	type removal struct {
 		owner int
@@ -275,6 +276,7 @@ func (r *roundRun) settle(plans [2]Plan) error {
 		p := &s.Players[item.owner]
 		if slices.ContainsFunc(p.Effects, func(st Status) bool { return st.Key == item.key && st.Category != "state" }) {
 			p.Effects = slices.DeleteFunc(p.Effects, func(st Status) bool { return st.Key == item.key })
+			syncBurstLock(p)
 			r.log("cleanse", ptr(item.by), map[string]any{"owner": item.owner, "key": item.key})
 		}
 	}

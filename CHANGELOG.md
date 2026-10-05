@@ -8,6 +8,8 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Changed
 
+- New battle matches use triple base speed costs including images, stackable Subscription Squeeze with recoverable locked burst balance, and SOTA Pressure based on pre-cast enemy debuff layers. Historical matches retain their original rules; the field guide, quota display and tutorial follow the new balance.
+
 - Database startup accepts fresh databases, final rc.5 and registered rc.6 schemas. Earlier migration chains are removed; supported additive upgrades retain offline full-audit tooling without replaying all history at startup.
 - Fresh databases use consolidated schema definitions. Explicit schema/data revisions apply forward migrations atomically, with target configuration validated before commit; stable v1.x releases will retain direct upgrades from v1.0.0 onward.
 - Lake Notes versions saved profiles and cast formats independently of catalog identity, while unfinished casts retain exact simulation rules. Obsolete bootstrap backfills and repeated checks for historical table availability are removed.

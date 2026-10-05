@@ -218,6 +218,8 @@ function ResourcePanel({
       unit={m.unit}
       shortage={shortages.find((shortage) => shortage.resource === m.key)}
       shortagePulse={shortagePulse}
+      lockedCap={m.key === 'burst' ? to.burst_locked_cap : undefined}
+      lockedBalance={m.key === 'burst' ? to.burst_locked : undefined}
     />
   );
   return (
