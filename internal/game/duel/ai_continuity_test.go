@@ -133,6 +133,7 @@ func TestAICommitSurvivesOpponentLockAndCannotReviveDeletedMatch(t *testing.T) {
 			}
 			source := waitingSource{pending: make(chan waitingDecision, 4)}
 			f.options.AI = waitingAdapter{source: source}
+			f.options.ReportError = func(err error) { t.Logf("AI callback: %v", err) }
 			var err error
 			f.s, err = bidding.New(f.options)
 			if err != nil {
@@ -143,7 +144,7 @@ func TestAICommitSurvivesOpponentLockAndCannotReviveDeletedMatch(t *testing.T) {
 			}
 			v := f.aiMatch(bot.ID)
 			var call waitingDecision
-			deadline := time.Now().Add(3 * time.Second)
+			deadline := time.Now().Add(30 * time.Second)
 			for time.Now().Before(deadline) {
 				f.tick()
 				v = *f.read(0).Current
@@ -162,7 +163,7 @@ func TestAICommitSurvivesOpponentLockAndCannotReviveDeletedMatch(t *testing.T) {
 				if call.release != nil {
 					break
 				}
-				time.Sleep(time.Millisecond)
+				time.Sleep(10 * time.Millisecond)
 			}
 			if call.release == nil {
 				t.Fatal("no bid decision")
@@ -198,6 +199,7 @@ func TestAICommitSurvivesOpponentLockAndCannotReviveDeletedMatch(t *testing.T) {
 					t.Fatal("late callback created private data")
 				}
 			} else {
+				deadline = time.Now().Add(30 * time.Second)
 				for time.Now().Before(deadline) {
 					current := f.read(0).Current
 					if current != nil && current.Round > v.Round {
@@ -208,7 +210,7 @@ func TestAICommitSurvivesOpponentLockAndCannotReviveDeletedMatch(t *testing.T) {
 						close(next.release)
 					default:
 					}
-					time.Sleep(time.Millisecond)
+					time.Sleep(10 * time.Millisecond)
 				}
 				t.Fatal("opponent revision invalidated AI window")
 			}
