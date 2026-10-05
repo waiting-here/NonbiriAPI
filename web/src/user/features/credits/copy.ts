@@ -147,6 +147,8 @@ const reasons: Record<Exclude<HistoryKind, 'lake_entry' | 'lake_exchange'>, [str
   duel_queue_reserve: ['对决：入场资金预留', 'Duel: entry funds reserved'],
   duel_queue_release: ['对决：排队资金退还', 'Duel: queue funds returned'],
   duel_session_start: ['对决：对局资金调整', 'Duel: match funds adjusted'],
+  ai_ticket: ['AI 对局：门票', 'AI match: ticket'],
+  ai_terminal: ['AI 对局：结算', 'AI match: settlement'],
   duel_terminal: ['对决：对局结算', 'Duel: match settlement'],
   blackjack_reserve: ['二十一点：资金预留', 'Blackjack: funds reserved'],
   blackjack_settle: ['二十一点：对局结算', 'Blackjack: match settlement'],

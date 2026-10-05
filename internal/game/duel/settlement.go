@@ -32,6 +32,7 @@ func (s *Service) enterPhase(v *sessionRecord, now int64, advance bool) error {
 		v.Seats[seat].Action = nil
 		v.Seats[seat].Locked = false
 	}
+	v.Payload.Sources = [2]string{}
 	if info.Phase == "terminal" {
 		v.Deadline = nil
 		return nil
@@ -64,6 +65,7 @@ func (s *Service) enterPhase(v *sessionRecord, now int64, advance bool) error {
 		}
 		v.Seats[seat].Action = action
 		v.Seats[seat].Locked = true
+		recordActionSource(v, seat, action, "rule", "", now)
 	}
 	return nil
 }
@@ -110,7 +112,7 @@ func (s *Service) resolve(ctx context.Context, tx *sql.Tx, v *sessionRecord, exp
 		return activities.PublishFacts{}, err
 	}
 	if len(next.Record) > 0 {
-		record := roundRecord{Round: next.Round, Before: v.Payload.Rules, After: next.State, Facts: next.Record, StartEvents: v.Payload.RoundStartEvents, Timeouts: v.Payload.RoundTimeouts}
+		record := roundRecord{Round: next.Round, Before: v.Payload.Rules, After: next.State, Facts: next.Record, StartEvents: v.Payload.RoundStartEvents, Timeouts: v.Payload.RoundTimeouts, Actions: actions, Sources: v.Payload.Sources}
 		body, err := Encode(record)
 		if err != nil {
 			return activities.PublishFacts{}, err
@@ -191,6 +193,11 @@ func (s *Service) advance(ctx context.Context, tx *sql.Tx, v *sessionRecord, now
 		v.Seats[seat].Locked = true
 		v.Seats[seat].TimeoutCount++
 		v.Payload.RoundTimeouts[seat] = true
+		origin, failure := "timeout", ""
+		if v.Seats[seat].Kind == "bot" {
+			origin, failure = "fallback", "deadline"
+		}
+		recordActionSource(v, seat, action, origin, failure, now)
 	}
 	facts, err := s.resolve(ctx, tx, v, expected, now)
 	return facts, true, err
@@ -232,6 +239,9 @@ func (s *Service) terminal(ctx context.Context, tx *sql.Tx, v *sessionRecord, ex
 	// not turn an already persisted cast into a new terminal action animation.
 	if cancelled {
 		v.Payload.Resolution = nil
+	}
+	if v.Economy == AIEconomy {
+		return s.finishAI(ctx, tx, v, expected, meta, cancelled)
 	}
 	var destinations []activities.PoolDestination
 	var welfare, thursday int64

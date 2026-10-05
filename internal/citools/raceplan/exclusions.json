@@ -257,7 +257,7 @@
       "TestOnlyPositiveSharedEnergyQuoteOverloads",
       "TestExactEnergyZeroQuotesAndDoubleOverload",
       "TestManualPlanRequiresCastAfterShoppingUnlessStillStunned",
-      "TestCharacterMainUsesSharedSnapshotAndNominalBase",
+      "TestHistoricalCharacterMainUsesSharedSnapshotAndNominalBase",
       "TestExtraAndFlashSnapshotsAdvanceWithoutChangingRoundStart",
       "TestCharacterBonusBeforeSuppressionAndMultiplierButDistillStaysSpecial",
       "TestLayerResistanceBoundariesAndSOTASuccessChain",

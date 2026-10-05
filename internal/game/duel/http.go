@@ -48,12 +48,15 @@ func (s *Service) RegisterRoutes(user resources.UserRouteRegistrar, continuation
 			writeError(w, ErrInvalidRequest)
 			return
 		}
-		result, err := s.Enqueue(r.Context(), EnqueueInput{Identity: Identity{UserID: p.UserID}, IdempotencyKey: key, Mode: body.Mode, ExpectedTermsHash: body.ExpectedTermsHash, DeviceToken: body.DeviceToken, CanonicalSourceIP: ip.As16(), Loadout: body.Loadout})
+		result, err := s.Enqueue(r.Context(), EnqueueInput{Identity: Identity{UserID: p.UserID}, IdempotencyKey: key, Mode: body.Mode, BotID: body.BotID, ExpectedTermsHash: body.ExpectedTermsHash, DeviceToken: body.DeviceToken, CanonicalSourceIP: ip.As16(), Loadout: body.Loadout})
 		writeMutation(w, result, err)
 	}); err != nil {
 		return err
 	}
 	if err := s.registerLoadoutRoutes(user); err != nil {
+		return err
+	}
+	if err := s.registerAIRoutes(user); err != nil {
 		return err
 	}
 	for _, route := range s.descriptor.Routes {

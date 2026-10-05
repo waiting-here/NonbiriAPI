@@ -27,15 +27,15 @@ config.paramMeta = (config.paramMeta as { id: string }[]).filter(
 );
 const mode = {
   rules_version: 1,
-  design_version: '0.19.0',
-  schema_version: 16,
+  design_version: '0.20.0',
+  schema_version: 17,
   content_hash: 'a'.repeat(64),
   config,
 };
 const catalog = likesCatalog({
   rules_version: 1,
-  design_version: '0.19.0',
-  schema_version: 16,
+  design_version: '0.20.0',
+  schema_version: 17,
   content_hash: 'a'.repeat(64),
   modes: { quick: mode, standard: { ...mode, config: { ...config, mode: 'standard' } } },
 }).modes.quick;
@@ -77,6 +77,27 @@ function stun(key: string): Status {
   };
 }
 describe('resource and casting controls', () => {
+  it('shows inaccessible capacity and preserved balance inside the burst bar', () => {
+    const { container } = render(
+      <ResourceMeter
+        label="Burst"
+        from={300}
+        to={220}
+        cap={400}
+        lockedCap={180}
+        lockedBalance={80}
+        reduced
+      />,
+    );
+    expect(
+      screen.getByText('Usable capacity 220 K · Locked capacity 180 K (balance 80 K)'),
+    ).toBeInTheDocument();
+    expect(container.querySelector('.likes-meter-locked')).toHaveStyle({ width: '45%' });
+    const locked = container.querySelector<HTMLElement>('.likes-meter-locked-balance')!;
+    expect(locked).toHaveStyle({ width: '20%' });
+    expect(Number.parseFloat(locked.style.left)).toBeCloseTo(55);
+    expect(screen.getByRole('meter')).toHaveAttribute('aria-valuenow', '220');
+  });
   it('groups subscription and image quota while keeping uncapped balances outside', () => {
     const state = stateFixture();
     render(

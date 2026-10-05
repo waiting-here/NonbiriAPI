@@ -418,3 +418,65 @@ for (const scenario of [
     guard.assertNone();
   });
 }
+
+import { aiAdminFixture } from '../fixtures/aiPlayers';
+
+for (const width of [390, 1440]) {
+  test('AI strategy editor previews and publishes at ' + width, async ({ context, page }) => {
+    const errors = await prepare(context, page, {
+      current: structuredClone(INITIAL_CONFIG),
+      patches: [],
+    });
+    await page.setViewportSize({ width, height: 900 });
+    const data = aiAdminFixture(),
+      writes: Record<string, unknown>[] = [];
+    await page.route('**/admin/api/games/bidding/ai**', async (route) => {
+      const req = route.request(),
+        path = new URL(req.url()).pathname;
+      if (path.endsWith('/preview'))
+        return route.fulfill({
+          json: {
+            candidates: [{ id: 'bid-2', score: 0.2, probability: 1, guaranteed_win: false }],
+            matched_rule: 0,
+            filter_empty: false,
+            memory_weight: 0,
+          },
+        });
+      if (path.endsWith('/policies')) {
+        const body = req.postDataJSON();
+        writes.push(body);
+        return route.fulfill({
+          json: {
+            ...data.policies[0],
+            ...body,
+            id: 'aip_BBBBBBBBBBBBBBBBBBBBBQ',
+            revision: '1',
+            version: 1,
+          },
+        });
+      }
+      return route.fulfill({ json: data });
+    });
+    await page.goto(ADMIN_ORIGIN + '/games');
+    await page.getByRole('button', { name: 'AI players and strategies' }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('heading', { name: 'Bidding Duel · AI players' })).toBeVisible();
+    await dialog.getByRole('button', { name: 'Duplicate', exact: true }).click();
+    await dialog
+      .getByRole('spinbutton', { name: 'Preserve strong cards', exact: true })
+      .fill('0.95');
+    await dialog.getByRole('button', { name: 'Add rule', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Preview choices', exact: true }).click();
+    await expect(dialog.getByText('Matched rule 1')).toBeVisible();
+    await expect(dialog.getByText('100.0%')).toBeVisible();
+    expect(await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+    await dialog.getByRole('button', { name: 'Save strategy version', exact: true }).click();
+    await expect(dialog.getByRole('status').filter({ hasText: /^Saved$/ })).toBeVisible();
+    expect(writes).toHaveLength(1);
+    expect(
+      (writes[0].definition as { parameters: { hand_value: number } }).parameters.hand_value,
+    ).toBe(0.95);
+    await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+    errors.assertNone();
+  });
+}

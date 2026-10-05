@@ -6,13 +6,13 @@ import (
 	"testing"
 )
 
-func TestBalanceSpeedCeilAndModifierOrder(t *testing.T) {
+func TestBalanceSpeedAndModifierOrder(t *testing.T) {
 	e, s := fixture(t, "standard", Selection{Role: "ChatGPT", Harness: ptr("H08"), Skills: []string{"PUB01", "GPT44"}})
 	initialBuff(e, &s, 0, "B34:状态", 1)
 	speed := e.speed(&s, 0)
 	for _, n := range []int64{0, 1, 2, 3, 15, 100, 1_000_001} {
-		if got := e.speedCost(n, speed); got != (5*n+1)/2 {
-			t.Fatalf("ceil %d: %d", n, got)
+		if got := e.speedCost(n, speed); got != 3*n {
+			t.Fatalf("triple %d: %d", n, got)
 		}
 	}
 	initialBuff(e, &s, 0, "B01:原版", 1)
@@ -230,7 +230,7 @@ func TestPriorBalanceRetainsFeesGoldImageRejectionAndDS23(t *testing.T) {
 			t.Fatal("historical image shortage became legal")
 		}
 		current, _ := New(mode)
-		if current.ContentHash() == old.ContentHash() || current.behaviorVersion() != 3 {
+		if current.ContentHash() == old.ContentHash() || current.behaviorVersion() != 4 {
 			t.Fatal("new behavior shares old identity")
 		}
 	}

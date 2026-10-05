@@ -12,6 +12,8 @@ export function ResourceMeter({
   unit = '',
   shortage,
   shortagePulse = false,
+  lockedCap = 0,
+  lockedBalance = 0,
 }: {
   readonly label: string;
   readonly from: number;
@@ -23,6 +25,8 @@ export function ResourceMeter({
   readonly unit?: string;
   readonly shortage?: ResourceShortage;
   readonly shortagePulse?: boolean;
+  readonly lockedCap?: number;
+  readonly lockedBalance?: number;
 }) {
   const text = useDuelText();
   const value = reduced ? to : interpolate(from, to, progress),
@@ -58,7 +62,31 @@ export function ResourceMeter({
         >
           <span className="likes-meter-trail" style={{ width: `${(from / extent) * 100}%` }} />
           <span className="likes-meter-fill" style={{ width: `${(value / extent) * 100}%` }} />
+          {lockedCap > 0 && (
+            <>
+              <span
+                className="likes-meter-locked"
+                style={{ width: `${(lockedCap / extent) * 100}%` }}
+              />
+              <span
+                className="likes-meter-locked-balance"
+                style={{
+                  left: `${((extent - lockedCap) / extent) * 100}%`,
+                  width: `${(lockedBalance / extent) * 100}%`,
+                }}
+              />
+            </>
+          )}
         </div>
+      )}
+      {lockedCap > 0 && (
+        <small className="likes-lock-note">
+          {text('likes.lockedBurst', {
+            cap: lockedCap,
+            balance: lockedBalance,
+            available: Math.max(0, (cap ?? 0) - lockedCap),
+          })}
+        </small>
       )}
       {delta !== 0 && (
         <div className="likes-meter-change">

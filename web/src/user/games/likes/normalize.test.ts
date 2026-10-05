@@ -28,10 +28,10 @@ export function catalogFixture() {
         mode,
         {
           rules_version: 1,
-          design_version: '0.19.0',
-          schema_version: 16,
+          design_version: '0.20.0',
+          schema_version: 17,
           content_hash: createHash('sha256')
-            .update('likes@2;step-likes;role-passives;layer-resistance;stable-sota\n' + source)
+            .update('likes@4;triple-speed;locked-burst;debuff-pressure\n' + source)
             .digest('hex'),
           config,
         },
@@ -40,8 +40,8 @@ export function catalogFixture() {
   );
   return {
     rules_version: 1,
-    design_version: '0.19.0',
-    schema_version: 16,
+    design_version: '0.20.0',
+    schema_version: 17,
     content_hash: 'a'.repeat(64),
     modes,
   };
@@ -50,7 +50,7 @@ describe('likes catalog, art and projections', () => {
   it('loads both complete catalogs without legacy operating settings', () => {
     const c = likesCatalog(catalogFixture());
     expect(c.modes.quick.skills).toHaveLength(48);
-    expect(c.modes.standard.buffs).toHaveLength(46);
+    expect(c.modes.standard.buffs).toHaveLength(47);
     expect(c.modes.quick.parameters).not.toHaveProperty('POINT_TICKET');
     assertArtCoverage(c.modes.quick);
     assertArtCoverage(c.modes.standard);

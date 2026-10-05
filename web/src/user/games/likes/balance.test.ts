@@ -12,9 +12,11 @@ const text = testDuelText(duelCopyKeys);
 it('explains the new rules while preserving the prior balance explanations', () => {
   const wire = catalogWire();
   wire.design_version = '0.18.1';
+  wire.schema_version = 16;
   for (const [mode, raw] of Object.entries({ quick: oldQuick, standard: oldStandard })) {
     const value = wire.modes[mode];
     value.design_version = '0.18.1';
+    value.schema_version = 16;
     const config = structuredClone(raw);
     delete (config.parameters as Record<string, number>).POINT_TICKET;
     delete (config.parameters as Record<string, number>).FOLLOWUP_CAP;
@@ -27,7 +29,15 @@ it('explains the new rules while preserving the prior balance explanations', () 
   const current = testCatalog.modes.quick;
   expect(knowledge(current, 'DS23', 'base', text).summary).toContain('Overload');
   expect(knowledge(prior, 'DS23', 'base', text).summary).toContain('Stun');
-  expect(knowledge(current, 'B34:状态', 'base', text).paragraphs.join(' ')).toContain('rounded up');
+  expect(knowledge(current, 'B34:状态', 'base', text).paragraphs.join(' ')).toContain(
+    'image costs ×3',
+  );
+  expect(knowledge(current, 'GPT44', 'base', text).summary).toContain('costs ×3');
+  expect(knowledge(current, 'DS41', 'base', text).summary).toContain('2 Subscription Squeeze');
+  expect(knowledge(current, 'DS41', 'I', text).summary).toContain('1 Subscription Squeeze');
+  expect(knowledge(current, 'SOTA_PRESSURE', 'base', text).paragraphs.join(' ')).toContain(
+    'debuff layers',
+  );
   expect(knowledge(prior, 'B34:状态', 'base', text).summary).toContain('×3');
   expect(knowledge(current, 'HP02', 'base', text).summary).toContain('1 like');
   expect(knowledge(prior, 'HP02', 'base', text).summary).not.toContain('1 like');

@@ -677,7 +677,7 @@
     {
       "cap": 1,
       "category": "state",
-      "description": "基础 Token 和电能费用乘以 5/2 后向上取整，再计算缓存、税费、折扣和下限；得赞最终乘以 2，金币和图像费用不变。",
+      "description": "基础 Token、电能和图像费用乘以 3，再计算缓存、税费、折扣和下限；得赞乘以 2。金币费用不变。",
       "expiry": "持续有效，直到再次释放加速猛蹬并在轮末关闭；过载不会关闭",
       "id": "B34:状态",
       "kind": "SPEED_MODE",
@@ -685,7 +685,7 @@
       "n": 2,
       "name": "倍速模式",
       "overwrite": "不叠加。不可净化或驱散，只能由加速猛蹬主动关闭",
-      "p": 5,
+      "p": 3,
       "q": 2,
       "target": "持有者释放的所有技能，包括蒸馏、额外技能及触发的 Flash 连答",
       "trigger": "加速猛蹬在轮末开启，下一轮起生效"
@@ -753,6 +753,22 @@
       "q": 0,
       "target": "所有技能，含追加 Flash",
       "trigger": "次轮起每次成功技能都触发，含零获赞技能和追加 Flash；先按当前层数减赞，再消耗 1 层。"
+    },
+    {
+      "cap": 0,
+      "category": "debuff",
+      "description": "每层锁定 90 K 瞬发上限，最低可用上限为 0。锁定余额不能消费，提前驱散时恢复；瞬发刷新仍受锁定限制，订阅总量刷新解除全部层数。",
+      "expiry": "下一次订阅总量刷新",
+      "id": "B38:订阅挤兑",
+      "kind": "SUBSCRIPTION_SQUEEZE",
+      "n": 0,
+      "name": "订阅挤兑",
+      "overwrite": "层数相加，无上限",
+      "p": 90,
+      "q": 0,
+      "reapply": "add",
+      "target": "对手瞬发额度",
+      "trigger": "限制瞬发可用上限"
     }
   ],
   "harnesses": [
@@ -1361,7 +1377,7 @@
       "note": "订阅封禁可净化；API 技能仍可使用。",
       "overrides": {},
       "passive": {
-        "description": "主技能自身基础得赞大于零，且步骤开始时得赞严格领先敌方，基础得赞加1。",
+        "description": "成功释放原始基础得赞大于零的主技能时，按释放前敌方 debuff 总层数增加基础赞；若释放前己方得赞严格领先，则增加两倍层数。",
         "id": "SOTA_PRESSURE",
         "name": "SOTA 压制"
       },
@@ -1423,7 +1439,7 @@
     "strictSamples": true,
     "uniqueSamples": true
   },
-  "schemaVersion": 16,
+  "schemaVersion": 17,
   "skills": [
     {
       "copyable": true,
@@ -3524,33 +3540,33 @@
       "copyable": true,
       "effects": {
         "I": {
-          "buffId": "",
+          "buffId": "B38:订阅挤兑",
           "extraBuffId": "",
-          "kind": "BURST_DRAIN",
+          "kind": "SUBSCRIPTION_SQUEEZE",
           "likes": 2,
           "meme": "你可以等重置……",
           "n": 0,
-          "p": 90,
+          "p": 1,
           "q": 0
         },
         "II": {
-          "buffId": "",
+          "buffId": "B38:订阅挤兑",
           "extraBuffId": "",
-          "kind": "BURST_DRAIN",
+          "kind": "SUBSCRIPTION_SQUEEZE",
           "likes": 4,
           "meme": "……但我们可是高贵的 API 用户哦。",
           "n": 0,
-          "p": 180,
+          "p": 2,
           "q": 0
         },
         "base": {
-          "buffId": "",
+          "buffId": "B38:订阅挤兑",
           "extraBuffId": "",
-          "kind": "BURST_DRAIN",
+          "kind": "SUBSCRIPTION_SQUEEZE",
           "likes": 4,
           "meme": "你的套餐还在，只是暂时用不出来。",
           "n": 0,
-          "p": 180,
+          "p": 2,
           "q": 0
         }
       },
@@ -3562,7 +3578,7 @@
       "maxUses": 2,
       "meme": "你的套餐还在，只是暂时用不出来。",
       "name": "订阅挤兑",
-      "note": "只削瞬发，不削总量；对DeepSeek保留基础点赞",
+      "note": "对手挂两层订阅挤兑，每层锁定 90 K 瞬发上限，层数无上限；至下次订阅总量刷新消失。锁定余额保留，提前驱散可恢复。蒸馏 I / II 分别挂一层 / 两层。",
       "owner": "DeepSeek",
       "payment": "api",
       "resourceCosts": {},

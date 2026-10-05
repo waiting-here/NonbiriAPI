@@ -24,17 +24,19 @@ type effectCue struct {
 	PersistentLayers *int64 `json:"persistent_layers,omitempty"`
 }
 type resourceCue struct {
-	Gold         int64            `json:"gold"`
-	Likes        int64            `json:"likes"`
-	Burst        int64            `json:"burst"`
-	BurstCap     int64            `json:"burst_cap"`
-	Sub          int64            `json:"sub"`
-	SubCap       int64            `json:"sub_cap"`
-	API          int64            `json:"api"`
-	Trial        int64            `json:"trial"`
-	Resources    map[string]int64 `json:"resources"`
-	ResourceCaps map[string]int64 `json:"resource_caps"`
-	Effects      []effectCue      `json:"effects"`
+	Gold           int64            `json:"gold"`
+	Likes          int64            `json:"likes"`
+	Burst          int64            `json:"burst"`
+	BurstCap       int64            `json:"burst_cap"`
+	BurstLocked    int64            `json:"burst_locked,omitempty"`
+	BurstLockedCap int64            `json:"burst_locked_cap,omitempty"`
+	Sub            int64            `json:"sub"`
+	SubCap         int64            `json:"sub_cap"`
+	API            int64            `json:"api"`
+	Trial          int64            `json:"trial"`
+	Resources      map[string]int64 `json:"resources"`
+	ResourceCaps   map[string]int64 `json:"resource_caps"`
+	Effects        []effectCue      `json:"effects"`
 }
 type frameCue struct {
 	Stage   string         `json:"stage"`
@@ -53,7 +55,7 @@ type presentation struct {
 func compactFrame(f engine.Frame) frameCue {
 	c := frameCue{Stage: f.Stage, Energy: f.Energy}
 	for seat, p := range f.Players {
-		v := resourceCue{Gold: p.Gold, Likes: p.Likes, Burst: p.Burst, BurstCap: p.BurstCap, Sub: p.Sub, SubCap: p.SubCap, API: p.API, Trial: p.Trial, Resources: p.Resources, ResourceCaps: p.ResourceCaps, Effects: []effectCue{}}
+		v := resourceCue{Gold: p.Gold, Likes: p.Likes, Burst: p.Burst, BurstCap: p.BurstCap, BurstLocked: p.BurstLocked, BurstLockedCap: p.BurstLockedCap, Sub: p.Sub, SubCap: p.SubCap, API: p.API, Trial: p.Trial, Resources: p.Resources, ResourceCaps: p.ResourceCaps, Effects: []effectCue{}}
 		for _, effect := range p.Effects {
 			v.Effects = append(v.Effects, effectCue{Key: effect.Key, Kind: effect.Kind, BuffID: effect.BuffID, Layers: effect.Layers, Remaining: effect.Remaining, ActiveFrom: effect.ActiveFrom, PersistentLayers: effect.PersistentLayers})
 		}

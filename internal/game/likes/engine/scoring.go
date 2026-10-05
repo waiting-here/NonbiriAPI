@@ -6,7 +6,7 @@ import (
 )
 
 var timedKinds = []string{"AMPLIFY", "SUPPRESS", "TOKEN_TAX", "NONBASIC_TAX", "SAVE_ENERGY", "API_DISCOUNT", "REGULATOR"}
-var negativeKinds = []string{"STUN", "STOP", "SUBSCRIPTION_BAN", "SUPPRESS", "TOKEN_TAX", "NONBASIC_TAX", "OVERLOAD", "SOTA_FANATICISM", "BASE_SUPPRESS", "MODEL_DEGRADATION"}
+var negativeKinds = []string{"STUN", "STOP", "SUBSCRIPTION_BAN", "SUBSCRIPTION_SQUEEZE", "SUPPRESS", "TOKEN_TAX", "NONBASIC_TAX", "OVERLOAD", "SOTA_FANATICISM", "BASE_SUPPRESS", "MODEL_DEGRADATION"}
 
 func decayKey(id, template string) string {
 	if id == template {

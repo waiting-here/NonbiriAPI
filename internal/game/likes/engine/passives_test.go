@@ -25,10 +25,11 @@ func characterPart(event Event) int64 {
 	return 0
 }
 
-func TestCharacterMainUsesSharedSnapshotAndNominalBase(t *testing.T) {
+func TestHistoricalCharacterMainUsesSharedSnapshotAndNominalBase(t *testing.T) {
 	for _, mode := range []string{"quick", "standard"} {
 		for leader := range 2 {
 			e, s := fixture(t, mode, Selection{Role: "Claude", Harness: ptr("H01"), Skills: []string{"CLA01", "CLA23"}}, Selection{Role: "Claude", Harness: ptr("H01"), Skills: []string{"CLA01", "CLA23"}})
+			e, _ = NewBalanceV3(mode)
 			s.Players[leader].Likes = 1
 			s.LikesAtStart = [2]int64{s.Players[0].Likes, s.Players[1].Likes}
 			next, record, err := e.Resolve(s, [2]Plan{plan("CLA01"), plan("CLA01")}, nil)

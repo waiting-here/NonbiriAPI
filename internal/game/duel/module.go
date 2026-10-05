@@ -82,7 +82,7 @@ func (s *Service) UserSnapshotTx(_ context.Context, _ *sql.Tx, _ int64, _ int64,
 func (s *Service) HomeSummaryTx(ctx context.Context, tx *sql.Tx, user int64) (game.HomeSummary, error) {
 	result := game.HomeSummary{Continue: []game.ContinueItem{}, PendingResults: []game.PendingResult{}}
 	var queue, session sql.NullString
-	err := tx.QueryRowContext(ctx, `SELECT queue_id,session_id FROM game_duel_user_slots WHERE user_id=? AND game_key=?`, user, s.rules.ID()).Scan(&queue, &session)
+	err := tx.QueryRowContext(ctx, `SELECT COALESCE(queue_id,ai_queue_id),session_id FROM game_duel_user_slots WHERE user_id=? AND game_key=?`, user, s.rules.ID()).Scan(&queue, &session)
 	if errors.Is(err, sql.ErrNoRows) {
 		return result, nil
 	}
@@ -117,7 +117,7 @@ func (s *Service) ActiveCountsTx(ctx context.Context, tx *sql.Tx) (game.ActiveCo
 	if err != nil {
 		return result, err
 	}
-	rows, err = tx.QueryContext(ctx, `SELECT mode,COUNT(*) FROM game_duel_queue WHERE game_key=? GROUP BY mode ORDER BY mode`, s.rules.ID())
+	rows, err = tx.QueryContext(ctx, `SELECT mode,COUNT(*) FROM game_duel_queue WHERE game_key=? GROUP BY mode UNION ALL SELECT 'ai',count(*) FROM game_ai_queue WHERE game_key=? AND state='waiting' HAVING count(*)>0 ORDER BY mode`, s.rules.ID(), s.rules.ID())
 	if err != nil {
 		return result, err
 	}

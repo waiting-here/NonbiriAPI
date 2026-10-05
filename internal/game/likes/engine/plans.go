@@ -71,6 +71,7 @@ func (e *Engine) shop(s *State, seat int, purchase Purchase, used *[]string) (sh
 		s.Energy = min(e.param("ENERGY_CAP"), s.Energy+charge)
 	case "cleanse":
 		p.Effects = slices.DeleteFunc(p.Effects, func(st Status) bool { return st.Key == purchase.Target })
+		syncBurstLock(p)
 		_, p.Stunned = restriction(s, seat)
 	case "regulator":
 		s.Grants = append(s.Grants, Grant{BuffID: e.buffKind("REGULATOR").ID, Owner: seat})

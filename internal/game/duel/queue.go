@@ -16,9 +16,10 @@ import (
 )
 
 type enqueueBody struct {
+	BotID             string          `json:"bot_id,omitempty"`
 	Mode              string          `json:"mode"`
 	ExpectedTermsHash string          `json:"expected_terms_hash"`
-	DeviceToken       string          `json:"device_token"`
+	DeviceToken       string          `json:"device_token,omitempty"`
 	Loadout           json.RawMessage `json:"loadout,omitempty"`
 }
 type cancelBody struct {
@@ -26,6 +27,12 @@ type cancelBody struct {
 }
 
 func (s *Service) Enqueue(ctx context.Context, in EnqueueInput) (MutationResult, error) {
+	if in.Mode == "ai" {
+		return s.enqueueAI(ctx, in)
+	}
+	if in.BotID != "" {
+		return MutationResult{}, ErrInvalidRequest
+	}
 	if s.descriptor.ResolveMode(in.Mode) != nil || len(in.ExpectedTermsHash) != 64 {
 		return MutationResult{}, ErrInvalidRequest
 	}
@@ -192,6 +199,9 @@ func (s *Service) releaseQueue(ctx context.Context, tx *sql.Tx, q queueRecord, a
 	}))
 }
 func (s *Service) CancelQueue(ctx context.Context, in CancelInput) (MutationResult, error) {
+	if db.ValidateOpaqueID(in.QueueID, "aiq_") {
+		return s.cancelAIQueue(ctx, in)
+	}
 	expected, err := db.ParseU128Decimal(in.ExpectedRevision)
 	if err != nil || expected.Big().Sign() <= 0 || !db.ValidateOpaqueID(in.QueueID, s.queuePrefix) {
 		return MutationResult{}, ErrInvalidRequest

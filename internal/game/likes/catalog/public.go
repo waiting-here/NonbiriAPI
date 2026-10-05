@@ -22,6 +22,8 @@ func PublicHistorical(mode string) (Snapshot, error) {
 
 func PublicPriorBalance(mode string) (Snapshot, error) { return public(mode, "prior-balance") }
 
+func PublicBalanceV3(mode string) (Snapshot, error) { return public(mode, "balance-v3") }
+
 func PublicLegacy(mode string) (Snapshot, error) {
 	return public(mode, "legacy")
 }
@@ -36,6 +38,9 @@ func public(mode, version string) (Snapshot, error) {
 	}
 	if version == "prior-balance" {
 		load, design = LoadPriorBalance, "0.18.1"
+	}
+	if version == "balance-v3" {
+		load, design = LoadBalanceV3, "0.19.0"
 	}
 	c, hash, err := load(mode)
 	if err != nil {

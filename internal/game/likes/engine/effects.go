@@ -3,12 +3,13 @@ package engine
 import "slices"
 
 type roundRun struct {
-	e      *Engine
-	s      *State
-	record *RoundRecord
-	stage  string
-	pick   func(int) (int, error)
-	step   StepLikesSnapshot
+	e           *Engine
+	s           *State
+	record      *RoundRecord
+	stage       string
+	pick        func(int) (int, error)
+	step        StepLikesSnapshot
+	mainDebuffs [2]int64
 }
 
 func (r *roundRun) log(kind string, seat *int, data map[string]any) *Event {
@@ -70,6 +71,9 @@ func (r *roundRun) materialize(g Grant, starts int64) {
 	case "BASE_SUPPRESS", "MODEL_DEGRADATION", "ENERGY_STACK":
 		st.Layers = min(b.Cap, previous.Layers+optional(g.Amount, int64(1)))
 		st.Remaining = 0
+	case "SUBSCRIPTION_SQUEEZE":
+		st.Layers = previous.Layers + optional(g.Amount, int64(1))
+		st.Remaining = 0
 	case "SOTA_FANATICISM":
 		st.Layers = min(b.Cap, previous.Layers+optional(g.Amount, int64(1)))
 		st.Remaining = 0
@@ -85,6 +89,7 @@ func (r *roundRun) materialize(g Grant, starts int64) {
 	}
 	p.Effects = slices.DeleteFunc(p.Effects, func(item Status) bool { return item.Key == st.Key })
 	p.Effects = append(p.Effects, st)
+	syncBurstLock(p)
 	r.log("effect", ptr(g.Owner), map[string]any{"owner": g.Owner, "status": clone(st)})
 }
 func (r *roundRun) overload(seat int) {
@@ -118,6 +123,9 @@ func (r *roundRun) actionEffect(seat int, a Action) ([]Application, error) {
 		grant(Grant{BuffID: effect.BuffID, Owner: seat, TargetSkill: target})
 	} else if slices.Contains([]string{"AMPLIFY", "SUPPRESS", "TOKEN_TAX", "NONBASIC_TAX", "SAVE_ENERGY", "API_DISCOUNT", "COUNTER", "STUN"}, effect.Kind) && effect.BuffID != "" {
 		grant(Grant{BuffID: effect.BuffID, Owner: recipient})
+	}
+	if effect.Kind == "SUBSCRIPTION_SQUEEZE" {
+		grant(Grant{BuffID: effect.BuffID, Owner: other(seat), Amount: ptr(effect.P)})
 	}
 	if effect.Kind == "SUBSCRIPTION_BAN" && effect.BuffID != "" {
 		grant(Grant{BuffID: effect.BuffID, Owner: other(seat), Duration: ptr(effect.N)})

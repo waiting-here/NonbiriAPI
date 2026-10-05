@@ -10,9 +10,7 @@ import {
 } from './support';
 
 for (const locale of ['en', 'zh'] as const) {
-  test(`account export downloads v12 on verified return in ${locale}`, async ({
-    page,
-  }) => {
+  test(`account export downloads v13 on verified return in ${locale}`, async ({ page }) => {
     const guard = collectConsoleViolations(page);
     await page.setViewportSize({ width: locale === 'zh' ? 390 : 1440, height: 900 });
     await mockRoleSession(page, 'user', 'user');
@@ -30,7 +28,7 @@ for (const locale of ['en', 'zh'] as const) {
       document.cookie = 'nb_elevated=synthetic_export_capability; Path=/; SameSite=Lax';
     }, locale);
     const exportedDocument = {
-      schema_version: 12,
+      schema_version: 13,
       generated_at: 1_700_000_000,
       user: { id: '1' },
     };
@@ -42,7 +40,7 @@ for (const locale of ['en', 'zh'] as const) {
       await route.fulfill({
         headers: {
           'content-type': 'application/json',
-          'content-disposition': 'attachment; filename="nonbiriapi-account-export-v12.json"',
+          'content-disposition': 'attachment; filename="nonbiriapi-account-export-v13.json"',
           'cache-control': 'no-store',
         },
         body: JSON.stringify(exportedDocument),
@@ -51,7 +49,7 @@ for (const locale of ['en', 'zh'] as const) {
     const pending = page.waitForEvent('download');
     await page.goto(`${USER_ORIGIN}/account`);
     const download = await pending;
-    expect(download.suggestedFilename()).toBe('nonbiriapi-account-export-v12.json');
+    expect(download.suggestedFilename()).toBe('nonbiriapi-account-export-v13.json');
     expect(JSON.parse(await readFile((await download.path())!, 'utf8'))).toEqual(exportedDocument);
     expect(requests).toBe(1);
     await expect(page.getByRole('alertdialog')).toHaveCount(0);

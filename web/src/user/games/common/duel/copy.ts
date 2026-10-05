@@ -408,6 +408,13 @@ export const duelCopyKeys = {
   'likes.subscriptionsIncludeImageQuotaThatReplenishesWith':
     'user.games.duel.likes.subscriptionsIncludeImageQuotaThatReplenishesWith',
   'likes.sOTAPressure': 'user.games.duel.likes.sOTAPressure',
+  'likes.debuffPressure': 'user.games.likes.lockedBalance.debuffPressure',
+  'likes.tripleSpeedCosts': 'user.games.likes.lockedBalance.tripleSpeedCosts',
+  'likes.tripleSpeedBrief': 'user.games.likes.lockedBalance.tripleSpeedBrief',
+  'likes.tripleSpeedToggle': 'user.games.likes.lockedBalance.tripleSpeedToggle',
+  'likes.squeezeSkill': 'user.games.likes.lockedBalance.squeezeSkill',
+  'likes.squeezeDetails': 'user.games.likes.lockedBalance.squeezeDetails',
+  'likes.lockedBurst': 'user.games.likes.lockedBalance.lockedBurst',
   'likes.aMainSkillWithPositiveOriginalBase':
     'user.games.duel.likes.aMainSkillWithPositiveOriginalBase',
   'likes.worldKnowledge': 'user.games.duel.likes.worldKnowledge',

@@ -6,13 +6,14 @@ import "github.com/waiting-here/NonbiriAPI/internal/game/likes/catalog"
 // degradation keep using State.LikesAtStart. Neither seat observes a partial
 // score commit from its opponent within this step.
 type StepLikesSnapshot struct {
-	Kind  string   `json:"kind"`
-	Index int      `json:"index"`
-	Likes [2]int64 `json:"likes"`
+	Kind    string   `json:"kind"`
+	Index   int      `json:"index"`
+	Likes   [2]int64 `json:"likes"`
+	Debuffs [2]int64 `json:"-"`
 }
 
 func stepLikes(s *State, kind string, index int) StepLikesSnapshot {
-	return StepLikesSnapshot{kind, index, [2]int64{s.Players[0].Likes, s.Players[1].Likes}}
+	return StepLikesSnapshot{Kind: kind, Index: index, Likes: [2]int64{s.Players[0].Likes, s.Players[1].Likes}, Debuffs: debuffCounts(s)}
 }
 
 func (e *Engine) characterBonus(s *State, seat int, skill catalog.Skill, effect catalog.Effect, main bool, step StepLikesSnapshot) int64 {
@@ -21,7 +22,14 @@ func (e *Engine) characterBonus(s *State, seat int, skill catalog.Skill, effect 
 	}
 	switch s.Players[seat].Role {
 	case "Claude":
-		if main && effect.Likes > 0 && step.Likes[seat] > step.Likes[other(seat)] {
+		if e.lockedBalance() && main && effect.Likes > 0 {
+			n := step.Debuffs[other(seat)]
+			if step.Likes[seat] > step.Likes[other(seat)] {
+				n *= 2
+			}
+			return n
+		}
+		if !e.lockedBalance() && main && effect.Likes > 0 && step.Likes[seat] > step.Likes[other(seat)] {
 			return 1
 		}
 	case "Gemini":
@@ -41,6 +49,9 @@ func (r *roundRun) scoreSteps(actions [2][]Action, reductions, rewards [2]int64)
 			kind, index = "extra", slot-1
 		}
 		r.step = stepLikes(s, kind, index)
+		if slot == 0 && e.lockedBalance() {
+			r.step.Debuffs = r.mainDebuffs
+		}
 		gains := [2]int64{}
 		if slot == 0 {
 			gains = rewards
@@ -112,7 +123,7 @@ func (r *roundRun) attempt(source int, g Grant, derived bool) (Grant, Applicatio
 	outcome := Application{BuffID: g.BuffID, Target: g.Owner, Derived: derived}
 	count := int64(1)
 	switch b.Kind {
-	case "BASE_SUPPRESS", "MODEL_DEGRADATION", "SOTA_FANATICISM":
+	case "BASE_SUPPRESS", "MODEL_DEGRADATION", "SOTA_FANATICISM", "SUBSCRIPTION_SQUEEZE":
 		count = optional(g.Amount, int64(1))
 	}
 	if count < 1 || count > MaxAttemptLayers {
@@ -194,3 +205,14 @@ func (r *roundRun) applyGrants(source int, skill string, grants []Grant) ([]Appl
 const MaxAttemptLayers int64 = 4
 const MaxRoundDraws = 96
 const MaxRoundEvents = 512
+
+func debuffCounts(s *State) (counts [2]int64) {
+	for seat, p := range s.Players {
+		for _, st := range p.Effects {
+			if st.Category == "debuff" && active(s, st) {
+				counts[seat] += max(1, st.Layers)
+			}
+		}
+	}
+	return
+}

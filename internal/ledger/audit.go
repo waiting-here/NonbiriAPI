@@ -52,6 +52,10 @@ func ClassifyForAudit(kind Kind, sourceID string) AuditClassification {
 		behavior = movementBehavior(kind)
 	case KindBlackjackReserve, KindBlackjackSettle, KindBlackjackRelease:
 		channel, behavior = "blackjack", movementBehavior(kind)
+	case KindAITicket:
+		channel, behavior = "bidding", "reserve"
+	case KindAITerminal:
+		channel, behavior = "bidding", "settlement"
 	case KindGameOnboardingReward:
 		channel, behavior = "onboarding", "reward"
 	case KindActivityLoan:

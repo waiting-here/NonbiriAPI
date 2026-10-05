@@ -26,6 +26,23 @@ func TestUpgradeFromReleasedBinary(t *testing.T) {
 	verifyReleasedStorageUpgrade(t, source, preLedgerRetentionManifestHash)
 }
 
+// A consistent versioned source exercises the populated upgrade directly.
+func TestUpgradeFromVersionedSource(t *testing.T) {
+	source := os.Getenv("NONBIRI_VERSIONED_FIXTURE")
+	if source == "" {
+		t.Skip("consistent versioned fixture not supplied")
+	}
+	expected := terminalReservationIndexesManifestHash
+	switch os.Getenv("NONBIRI_FIXTURE_SCHEMA_VERSION") {
+	case "1":
+		expected = baselineManifestHash
+	case "2":
+	default:
+		t.Fatal("exact source schema version must be supplied")
+	}
+	verifyReleasedStorageUpgrade(t, source, expected)
+}
+
 func verifyReleasedStorageUpgrade(t *testing.T, source, expectedSourceManifest string) {
 	t.Helper()
 	key := bytes.Repeat([]byte{0x42}, secret.MasterKeyBytes)
@@ -104,6 +121,9 @@ func verifyReleasedStorageUpgrade(t *testing.T, source, expectedSourceManifest s
 		if attempt == 0 {
 			after := interactionTableDigests(t, database, sourceManifest)
 			for table, want := range before {
+				if table == "schema_state" {
+					continue
+				} // The migration advances only this metadata row.
 				if after[table] != want {
 					t.Errorf("retained source columns changed in %s (rows %d -> %d)", table, want.Rows, after[table].Rows)
 				}

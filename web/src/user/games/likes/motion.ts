@@ -61,6 +61,8 @@ export function viewFrame(view: LikesView): Frame {
       likes: p.likes,
       burst: p.burst,
       burst_cap: p.burstCap,
+      burst_locked: p.burstLocked,
+      burst_locked_cap: p.burstLockedCap,
       sub: p.sub,
       sub_cap: p.subscription.totalCap,
       api: p.api,

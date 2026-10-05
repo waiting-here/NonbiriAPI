@@ -21,7 +21,7 @@ func (s *Service) projectState(v sessionRecord, seat int, now int64) (*State, er
 	if v.Payload.RoundStartedAt != nil {
 		start = &RoundStart{Round: v.Round, StartedAt: *v.Payload.RoundStartedAt, Events: v.Payload.RoundStartEvents}
 	}
-	return &State{ID: v.ID, Game: s.rules.ID(), Mode: v.Mode, RulesVersion: 1, ContentHash: v.Terms.ContentHash, Revision: v.Revision.Decimal(), PhaseSeq: v.PhaseSeq.Decimal(), Phase: v.Phase, Round: v.Round, Deadline: v.Deadline, ServerNow: now, You: seat, Locked: [2]bool{v.Seats[0].Locked, v.Seats[1].Locked}, Ticket: v.Terms.Ticket, Rake: v.Terms.Rake, OwnPayment: game.PaymentFromMilli(v.Ticket, v.Seats[seat].GamePaid), View: view, Resolution: v.Payload.Resolution, RoundStart: start}, nil
+	return &State{Sources: visibleActionSources(v, seat), Economy: v.Economy, AI: projectAI(v), ID: v.ID, Game: s.rules.ID(), Mode: v.Mode, RulesVersion: 1, ContentHash: v.Terms.ContentHash, Revision: v.Revision.Decimal(), PhaseSeq: v.PhaseSeq.Decimal(), Phase: v.Phase, Round: v.Round, Deadline: v.Deadline, ServerNow: now, You: seat, Locked: [2]bool{v.Seats[0].Locked, v.Seats[1].Locked}, Ticket: v.Terms.Ticket, Rake: v.Terms.Rake, OwnPayment: game.PaymentFromMilli(v.Ticket, v.Seats[seat].GamePaid), View: view, Resolution: v.Payload.Resolution, RoundStart: start}, nil
 }
 func (s *Service) projectResult(v sessionRecord, seat int) (*ResultSummary, error) {
 	if v.State != "terminal" || v.TerminalAt == nil {
@@ -40,11 +40,15 @@ func (s *Service) projectResult(v sessionRecord, seat int) (*ResultSummary, erro
 	} else {
 		refund = game.PaymentFromMilli(v.Ticket, v.Seats[seat].GamePaid)
 	}
+	if v.Economy == AIEconomy && v.Outcome != "system_cancelled" {
+		refund = game.PaymentFromMilli(0, 0)
+		prize = "0"
+	}
 	view, err := v.rules.View(v.Mode, v.Payload.Rules, seat, true, nil)
 	if err != nil {
 		return nil, err
 	}
-	return &ResultSummary{ContentHash: v.Terms.ContentHash, ID: v.ID, Game: s.rules.ID(), Mode: v.Mode, TerminalAt: *v.TerminalAt, Outcome: outcome, Reason: v.Reason, Scores: v.Scores, OwnPayment: game.PaymentFromMilli(v.Ticket, v.Seats[seat].GamePaid), OwnRefund: refund, PrizeGeneral: prize, Rake: RakeAmounts{Platform: game.FormatAmount(v.Platform), Welfare: game.FormatAmount(v.Welfare), Thursday: game.FormatAmount(v.Thursday)}, Resolution: v.Payload.Resolution, You: seat, View: view}, nil
+	return &ResultSummary{Economy: v.Economy, AI: projectAI(v), ContentHash: v.Terms.ContentHash, ID: v.ID, Game: s.rules.ID(), Mode: v.Mode, TerminalAt: *v.TerminalAt, Outcome: outcome, Reason: v.Reason, Scores: v.Scores, OwnPayment: game.PaymentFromMilli(v.Ticket, v.Seats[seat].GamePaid), OwnRefund: refund, PrizeGeneral: prize, Rake: RakeAmounts{Platform: game.FormatAmount(v.Platform), Welfare: game.FormatAmount(v.Welfare), Thursday: game.FormatAmount(v.Thursday)}, Resolution: v.Payload.Resolution, You: seat, View: view}, nil
 }
 func (s *Service) Read(ctx context.Context, identity Identity) (Home, error) {
 	tx, now, err := s.begin(ctx)
@@ -55,13 +59,19 @@ func (s *Service) Read(ctx context.Context, identity Identity) (Home, error) {
 	if err := s.authorize(ctx, tx, identity); err != nil {
 		return Home{}, err
 	}
-	var qid, sid sql.NullString
-	err = tx.QueryRowContext(ctx, `SELECT queue_id,session_id FROM game_duel_user_slots WHERE user_id=? AND game_key=?`, identity.UserID, s.rules.ID()).Scan(&qid, &sid)
+	var qid, sid, aid sql.NullString
+	err = tx.QueryRowContext(ctx, `SELECT queue_id,session_id,ai_queue_id FROM game_duel_user_slots WHERE user_id=? AND game_key=?`, identity.UserID, s.rules.ID()).Scan(&qid, &sid, &aid)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return Home{}, err
 	}
 	home := Home{ServerNow: now}
 	facts := activities.PublishFacts{}
+	if aid.Valid {
+		home.Queue, err = s.projectAIQueue(ctx, tx, aid.String)
+		if err != nil {
+			return Home{}, err
+		}
+	}
 	if qid.Valid {
 		q, err := s.queue(ctx, tx, qid.String)
 		if err != nil {
@@ -136,9 +146,17 @@ func (s *Service) Read(ctx context.Context, identity Identity) (Home, error) {
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return Home{}, err
 	}
+	if s.aiAdapter != nil && !qid.Valid && !sid.Valid && !aid.Valid {
+		var failure sql.NullString
+		if err := tx.QueryRowContext(ctx, `SELECT (SELECT failure FROM game_ai_queue WHERE user_id=? AND game_key=? AND state='failed' AND resolved_at>?)`, identity.UserID, s.rules.ID(), now-QueueSeconds).Scan(&failure); err != nil {
+			return Home{}, err
+		}
+		home.AIQueueError = failure.String
+	}
 	if err := tx.Commit(); err != nil {
 		return Home{}, classify(err)
 	}
 	s.publish(ctx, facts)
+	s.wakeAI()
 	return home, nil
 }

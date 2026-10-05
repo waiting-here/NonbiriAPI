@@ -21,6 +21,7 @@ type HistoryPage struct {
 	NextCursor *string          `json:"next_cursor"`
 }
 type HistoryDetail struct {
+	Sources          []ActionSource     `json:"action_sources,omitempty"`
 	Result           *ResultSummary     `json:"result"`
 	RulesVersion     int                `json:"rules_version"`
 	ContentHash      string             `json:"content_hash"`
@@ -31,6 +32,7 @@ type HistoryDetail struct {
 	RoundStartEvents json.RawMessage    `json:"round_start_events"`
 }
 type RoundView struct {
+	Sources     [2]string       `json:"sources,omitempty"`
 	Round       int             `json:"round"`
 	Before      json.RawMessage `json:"before"`
 	After       json.RawMessage `json:"after"`
@@ -208,7 +210,7 @@ func (s *Service) detail(v sessionRecord, seat int) (HistoryDetail, error) {
 	if err != nil {
 		return HistoryDetail{}, err
 	}
-	return HistoryDetail{Result: summary, RulesVersion: 1, ContentHash: v.Terms.ContentHash, Ticket: v.Terms.Ticket, Rake: v.Terms.Rake, Initial: initial, TerminalActions: v.Payload.TerminalActions, RoundStartEvents: v.Payload.RoundStartEvents}, nil
+	return HistoryDetail{Sources: publicActionSources(v, false), Result: summary, RulesVersion: 1, ContentHash: v.Terms.ContentHash, Ticket: v.Terms.Ticket, Rake: v.Terms.Rake, Initial: initial, TerminalActions: v.Payload.TerminalActions, RoundStartEvents: v.Payload.RoundStartEvents}, nil
 }
 func (s *Service) HistoryDetail(ctx context.Context, identity Identity, id string) (HistoryDetail, error) {
 	tx, now, err := s.beginRead(ctx)
@@ -250,7 +252,7 @@ func (s *Service) roundView(rules Rules, mode string, raw []byte, seat int, term
 	if err != nil {
 		return RoundView{}, err
 	}
-	return RoundView{Round: record.Round, Before: before, After: after, Facts: facts, StartEvents: record.StartEvents, Timeouts: record.Timeouts}, nil
+	return RoundView{Sources: knownSources(record.Sources), Round: record.Round, Before: before, After: after, Facts: facts, StartEvents: record.StartEvents, Timeouts: record.Timeouts}, nil
 }
 func (s *Service) Rounds(ctx context.Context, identity Identity, id string, in PageInput, allowActive bool) (RoundPage, error) {
 	limit, err := pageLimit(in.Limit, 5, 10)

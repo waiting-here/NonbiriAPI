@@ -153,7 +153,7 @@ function player(value: unknown): Player {
       'skillDecay',
       'distill',
     ],
-    ['trial', 'loadout'],
+    ['trial', 'loadout', 'burstLocked', 'burstLockedCap'],
   );
   const fog = bool(r.fog),
     slots = list(r.slots, 6, (v) => nullable(v, label));
@@ -187,6 +187,8 @@ function player(value: unknown): Player {
     gold: amount(r.gold),
     likes: amount(r.likes),
     burstCap: amount(r.burstCap),
+    burstLocked: optionalNumber(r, 'burstLocked'),
+    burstLockedCap: optionalNumber(r, 'burstLockedCap'),
     burst: amount(r.burst),
     sub: amount(r.sub),
     api: amount(r.api),
@@ -265,26 +267,32 @@ function effectCue(value: unknown): EffectCue {
   };
 }
 function resources(value: unknown, full: boolean): Resources {
-  const r = exactRecord(value, [
-    'gold',
-    'likes',
-    'burst',
-    'burst_cap',
-    'sub',
-    'sub_cap',
-    'api',
-    'trial',
-    'resources',
-    'resource_caps',
-    'effects',
-    ...(full ? ['subscription'] : []),
-  ]);
+  const r = exactRecord(
+    value,
+    [
+      'gold',
+      'likes',
+      'burst',
+      'burst_cap',
+      'sub',
+      'sub_cap',
+      'api',
+      'trial',
+      'resources',
+      'resource_caps',
+      'effects',
+      ...(full ? ['subscription'] : []),
+    ],
+    ['burst_locked', 'burst_locked_cap'],
+  );
   if (full) subscription(r.subscription);
   return {
     gold: amount(r.gold),
     likes: amount(r.likes),
     burst: amount(r.burst),
     burst_cap: amount(r.burst_cap),
+    burst_locked: optionalNumber(r, 'burst_locked'),
+    burst_locked_cap: optionalNumber(r, 'burst_locked_cap'),
     sub: amount(r.sub),
     sub_cap: amount(r.sub_cap),
     api: amount(r.api),
@@ -381,7 +389,7 @@ function validateAttempt(value: unknown) {
     'draw',
     'derived',
   ]);
-  safeInteger(r.rules_version, 2, 3, 'application rules');
+  safeInteger(r.rules_version, 2, 4, 'application rules');
   stepValue(r.step);
   if (seatValue(r.source) === seatValue(r.target)) invalidResponse('hostile effect target');
   label(r.skill_id);

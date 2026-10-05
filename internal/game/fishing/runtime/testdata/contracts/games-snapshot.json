@@ -254,8 +254,8 @@
           "thursday": 100
         },
         "available": true,
-        "terms_hash": "f987f6948498001a8b8e9f641462124fa44e5838291af27d206e9e55eb8e9fb1",
-        "content_hash": "8ac284bb30358464fa7dd6f811e56ac30d46efb47daeb72bd2bc056855cee4f0"
+        "terms_hash": "797057a2448ccd05e73fa7afa44f17b884c782b61b3410ad83940b221917cf4d",
+        "content_hash": "ddad058478de20d8cb6e3676dfb2a83516182e99782b5c5ea2d0760b451d51c6"
       },
       "standard": {
         "enabled": false,
@@ -266,8 +266,8 @@
           "thursday": 100
         },
         "available": true,
-        "terms_hash": "5dc346b60cb22536b9f5a63c7599337f8607da0ae12c5314f4a815a89bac6e8a",
-        "content_hash": "32bb27079e1d075cbc2921519c3830b1b06d70e5687bd75b31263cbedee3f10c"
+        "terms_hash": "6b0bc0b6f17d80e04f0d1719d2d4d96d91bcb04426f23b3107d771f8ea7017de",
+        "content_hash": "effe624f282f62ff5085c4cd177df089d41a83922d41ed0a3ca6356ae84b80d9"
       }
     },
     "available": true,

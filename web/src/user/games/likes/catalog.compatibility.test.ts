@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import priorQuick from '../../../../../internal/game/likes/catalog/prior-balance/quick.json';
 import priorStandard from '../../../../../internal/game/likes/catalog/prior-balance/standard.json';
+import balanceQuick from '../../../../../internal/game/likes/catalog/balance-v3/quick.json';
+import balanceStandard from '../../../../../internal/game/likes/catalog/balance-v3/standard.json';
 import previousQuick from '../../../../../internal/game/likes/catalog/previous/quick.json';
 import previousStandard from '../../../../../internal/game/likes/catalog/previous/standard.json';
 import { catalogWire, legacyCatalogWire } from './testCatalog';
@@ -8,6 +10,8 @@ import { likesCatalog, matchingCatalog } from './catalog';
 
 function compatibleCatalogs() {
   const versions = [
+    ['0.19.0', balanceQuick],
+    ['0.19.0', balanceStandard],
     ['0.18.1', priorQuick],
     ['0.18.1', priorStandard],
     ['0.18.0', previousQuick],
@@ -35,10 +39,10 @@ function compatibleCatalogs() {
 }
 
 describe('supported historical Likes catalogs', () => {
-  it('loads all three retained versions for both modes and selects the exact saved rules', () => {
+  it('loads all retained versions for both modes and selects the exact saved rules', () => {
     const compatible_modes = compatibleCatalogs();
     const decoded = likesCatalog({ ...catalogWire(), compatible_modes });
-    expect(decoded.compatibleModes).toHaveLength(6);
+    expect(decoded.compatibleModes).toHaveLength(8);
     for (const snapshot of compatible_modes) {
       expect(
         matchingCatalog(decoded, snapshot.config.mode, snapshot.content_hash)?.designVersion,

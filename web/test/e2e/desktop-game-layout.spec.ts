@@ -1,11 +1,9 @@
-import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { expect, test } from './test';
 import { collectConsoleViolations, mockPublicConfig, mockRoleSession } from './support';
 import { USER_ORIGIN } from './ports';
 import { gamesSnapshotWire } from '../../src/user/games/common/testFixtures';
 import wire from '../../src/user/games/likes/testdata/authority.json' with { type: 'json' };
+import { catalogWire } from '../../src/user/games/likes/testCatalog';
 import timings from '../../src/user/games/likes/testdata/timelines.json' with { type: 'json' };
 import { biddingHomeWire } from '../../src/user/games/bidding/testFixtures';
 import { blackjackWire } from '../../src/user/games/blackjack/testFixtures';
@@ -51,53 +49,13 @@ test('nine-seat blackjack presents the other eight players as two complete deskt
   errors.assertNone();
 });
 
-function catalogFixture() {
-  const modes = Object.fromEntries(
-    ['quick', 'standard'].map((mode) => {
-      const source = readFileSync(
-        resolve('../internal/game/likes/catalog', `${mode}.json`),
-        'utf8',
-      );
-      const config = JSON.parse(source);
-      delete config.parameters.POINT_TICKET;
-      delete config.parameters.FOLLOWUP_CAP;
-      config.paramMeta = config.paramMeta.filter(
-        (item: { id: string }) => !['POINT_TICKET', 'FOLLOWUP_CAP'].includes(item.id),
-      );
-      for (const buff of config.buffs) {
-        if (buff.kind === 'OVERLOAD')
-          buff.target = '自身；共享电能不足时仅本轮报价大于零的席位过载';
-      }
-      return [
-        mode,
-        {
-          rules_version: 1,
-          design_version: '0.18.1',
-          schema_version: 16,
-          content_hash: createHash('sha256')
-            .update('likes@2;step-likes;role-passives;layer-resistance;stable-sota\n' + source)
-            .digest('hex'),
-          config,
-        },
-      ];
-    }),
-  );
-  return {
-    rules_version: 1,
-    design_version: '0.18.1',
-    schema_version: 16,
-    content_hash: 'a'.repeat(64),
-    modes,
-  };
-}
-
 test('desktop battle uses both screen halves while narrow screens retain compact art', async ({
   page,
 }) => {
   const errors = collectConsoleViolations(page);
   await mockRoleSession(page, 'user', 'user');
   await mockPublicConfig(page, 'user');
-  const catalog = catalogFixture();
+  const catalog = catalogWire();
   const start = 1_800_000_000;
   const summary = {
     ...wire.rounds[0].summary,

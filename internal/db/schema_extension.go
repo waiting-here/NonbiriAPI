@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -43,6 +44,7 @@ var storageSchema = schemaRegistry{
 	versions: []schemaMigration{
 		{version: 1, manifest: baselineManifestHash},
 		{version: 2, manifest: terminalReservationIndexesManifestHash, sql: terminalReservationIndexesSQL},
+		{version: 3, manifest: PinnedGenerationTwoManifestHash, sql: aiPlayersSQL},
 	},
 	bridges: preReleaseSchemaBridges(),
 }
@@ -218,6 +220,10 @@ func extendGenerationTwoTransaction(ctx context.Context, tx *sql.Tx) error {
 }
 
 func upgradeStartupSchema(ctx context.Context, database *sql.DB, secrets secret.GenerationTwoContextCodec) error {
+	needed, err := generationTwoExtensionNeeded(ctx, database)
+	if err != nil || !needed {
+		return err
+	}
 	return runGenerationTwoExtension(ctx, database, func(ctx context.Context, tx *sql.Tx) error {
 		plan, err := currentSchemaPlan(ctx, tx)
 		if err != nil || !plan.needed() {
@@ -248,6 +254,22 @@ func runGenerationTwoExtension(ctx context.Context, database *sql.DB, extend fun
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	// Rebuilding a referenced table must not run ON DELETE actions. This
+	// startup-owned connection restores its setting after commit or rollback;
+	// the complete target's references are checked before committing.
+	var foreignKeys int
+	if err := conn.QueryRowContext(ctx, "PRAGMA foreign_keys").Scan(&foreignKeys); err != nil {
+		return err
+	}
+	if _, err := conn.ExecContext(ctx, "PRAGMA foreign_keys=OFF"); err != nil {
+		return err
+	}
+	defer func() {
+		if _, err := conn.ExecContext(context.Background(), fmt.Sprintf("PRAGMA foreign_keys=%d", foreignKeys)); err != nil {
+			_ = conn.Raw(func(any) error { return driver.ErrBadConn })
+			result = errors.Join(result, err)
+		}
+	}()
 	// Statements retain ctx; the detached transaction lifetime prevents an
 	// asynchronous database/sql rollback from outliving the startup result.
 	tx, err := conn.BeginTx(context.WithoutCancel(ctx), nil)
@@ -261,6 +283,21 @@ func runGenerationTwoExtension(ctx context.Context, database *sql.DB, extend fun
 	}()
 	if err := extend(ctx, tx); err != nil {
 		return err
+	}
+	rows, err := tx.QueryContext(ctx, "PRAGMA foreign_key_check")
+	if err != nil {
+		return err
+	}
+	invalid := rows.Next()
+	err = rows.Err()
+	if closeErr := rows.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return err
+	}
+	if invalid {
+		return errors.New("schema migration left invalid references")
 	}
 	if err := ctx.Err(); err != nil {
 		return err

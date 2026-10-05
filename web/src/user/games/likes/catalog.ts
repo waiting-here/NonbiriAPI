@@ -67,6 +67,7 @@ export interface Buff {
   refreshOnCombo?: boolean;
 }
 export interface Role {
+  pressurePerDebuff?: boolean;
   id: RoleID;
   name: string;
   focus: string;
@@ -256,12 +257,12 @@ function modeCatalog(value: unknown, mode: 'quick' | 'standard'): ModeCatalog {
     'config',
   ]);
   safeInteger(outer.rules_version, 1, 1, 'rules');
-  enumValue(outer.design_version, ['0.17.0', '0.18.0', '0.18.1', '0.19.0'], 'design');
-  const schema = safeInteger(outer.schema_version, 15, 16, 'schema');
+  enumValue(outer.design_version, ['0.17.0', '0.18.0', '0.18.1', '0.19.0', '0.20.0'], 'design');
+  const schema = safeInteger(outer.schema_version, 15, 17, 'schema');
   if (
     schema === 15
       ? outer.design_version !== '0.17.0'
-      : !['0.18.0', '0.18.1', '0.19.0'].includes(outer.design_version as string)
+      : !['0.18.0', '0.18.1', '0.19.0', '0.20.0'].includes(outer.design_version as string)
   )
     invalidResponse('catalog identity');
   const r = exactRecord(outer.config, [
@@ -331,7 +332,7 @@ function modeCatalog(value: unknown, mode: 'quick' | 'standard'): ModeCatalog {
     !parameters.TARGET_LIKES ||
     !parameters.ENERGY_CAP ||
     parameters.TURN_SECONDS !==
-      (['0.18.1', '0.19.0'].includes(outer.design_version as string) ? 30 : 20) ||
+      (['0.18.1', '0.19.0', '0.20.0'].includes(outer.design_version as string) ? 30 : 20) ||
     parameters.PREP_MAX !== 2 ||
     parameters.INSERT_CAP !== 1
   )
@@ -354,10 +355,11 @@ function modeCatalog(value: unknown, mode: 'quick' | 'standard'): ModeCatalog {
         GLM: 'SECURITY_SHIELD',
         DeepSeek: 'BLUE_FISH',
       };
-      if (schema === 16 ? !passive || passive.id !== ids[roleID(q.id)] : !!passive)
+      if (schema >= 16 ? !passive || passive.id !== ids[roleID(q.id)] : !!passive)
         invalidResponse('character passive');
       return {
         id: roleID(q.id),
+        pressurePerDebuff: schema >= 17,
         name: label(q.name),
         focus: prose(q.focus),
         difficulty: label(q.difficulty),
@@ -380,8 +382,8 @@ function modeCatalog(value: unknown, mode: 'quick' | 'standard'): ModeCatalog {
     byID,
   );
   const skills = unique(r.skills, 48, skill, byID),
-    buffs = unique(r.buffs, 46, buff, byID);
-  if (schema === 16 && buffs.some((b) => !b.category)) invalidResponse('effect classification');
+    buffs = unique(r.buffs, 47, buff, byID);
+  if (schema >= 16 && buffs.some((b) => !b.category)) invalidResponse('effect classification');
   const harnesses = unique(
     r.harnesses,
     8,
@@ -465,7 +467,7 @@ function modeCatalog(value: unknown, mode: 'quick' | 'standard'): ModeCatalog {
   if (
     roles.length !== 5 ||
     skills.length !== 48 ||
-    buffs.length !== 46 ||
+    buffs.length !== (schema >= 17 ? 47 : 46) ||
     harnesses.length !== 8 ||
     passives.length !== 8 ||
     resources.length !== 1
@@ -522,8 +524,8 @@ export function likesCatalog(value: unknown): LikesCatalog {
     ['compatible_modes'],
   );
   safeInteger(r.rules_version, 1, 1, 'catalog rules');
-  enumValue(r.design_version, ['0.17.0', '0.18.0', '0.18.1', '0.19.0'], 'catalog design');
-  safeInteger(r.schema_version, 15, 16, 'catalog schema');
+  enumValue(r.design_version, ['0.17.0', '0.18.0', '0.18.1', '0.19.0', '0.20.0'], 'catalog design');
+  safeInteger(r.schema_version, 15, 17, 'catalog schema');
   const modes = exactRecord(r.modes, ['quick', 'standard']);
   return {
     contentHash: hashValue(r.content_hash),

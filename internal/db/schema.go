@@ -13,3 +13,6 @@ var generationTwoSchema string
 
 //go:embed migrations/0002_terminal_reservation_indexes.sql
 var terminalReservationIndexesSQL string
+
+//go:embed migrations/0003_ai_players.sql
+var aiPlayersSQL string

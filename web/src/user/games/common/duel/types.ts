@@ -1,3 +1,4 @@
+import type { AITerms, AIView, AIActionSource } from '@shared/aiPlayers';
 import type { GamePayment, OnboardingProgress } from '../types';
 
 export type DuelGame = 'bidding' | 'likes';
@@ -9,7 +10,7 @@ export interface Rates {
   readonly thursday: number;
 }
 export interface Profile {
-  readonly kind: 'anonymous' | 'public' | 'deleted';
+  readonly kind: 'anonymous' | 'public' | 'deleted' | 'ai';
   readonly displayName?: string;
   readonly avatarURL?: string | null;
 }
@@ -45,6 +46,8 @@ export interface RoundStart<S> {
   readonly events: S;
 }
 export interface DuelQueue<L> {
+  readonly ai?: AITerms;
+  readonly position?: number;
   readonly id: string;
   readonly revision: string;
   readonly mode: string;
@@ -55,6 +58,8 @@ export interface DuelQueue<L> {
   readonly loadout: L | null;
 }
 export interface DuelState<V, P, S> {
+  readonly ai?: AIView;
+  readonly sources?: readonly AIActionSource[];
   readonly id: string;
   readonly game: DuelGame;
   readonly mode: string;
@@ -76,6 +81,7 @@ export interface DuelState<V, P, S> {
   readonly roundStart: RoundStart<S> | null;
 }
 export interface DuelResult<V, P> {
+  readonly ai?: AIView;
   readonly contentHash?: string;
   readonly id: string;
   readonly game: DuelGame;
@@ -101,6 +107,7 @@ export interface DuelResult<V, P> {
   readonly resolution: Resolution<P> | null;
 }
 export interface DuelHome<V, P, S, L> {
+  readonly aiQueueError?: string;
   readonly serverNow: number;
   readonly queue: DuelQueue<L> | null;
   readonly current: DuelState<V, P, S> | null;
@@ -119,6 +126,7 @@ export interface Page<T> {
   readonly nextCursor: string | null;
 }
 export interface DuelDetail<V, P, S, A> {
+  readonly sources?: readonly AIActionSource[];
   readonly result: DuelResult<V, P>;
   readonly contentHash: string;
   readonly ticket: string;

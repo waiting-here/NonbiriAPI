@@ -85,29 +85,31 @@ type Subscription struct {
 	TotalResetAt *int64 `json:"totalResetAt"`
 }
 type Player struct {
-	Role         string           `json:"role"`
-	Harness      *string          `json:"harness"`
-	ActiveSlots  int              `json:"activeSlots"`
-	Loadout      []string         `json:"loadout"`
-	Gold         int64            `json:"gold"`
-	Likes        int64            `json:"likes"`
-	BurstCap     int64            `json:"burstCap"`
-	Burst        int64            `json:"burst"`
-	Sub          int64            `json:"sub"`
-	API          int64            `json:"api"`
-	Images       int64            `json:"images"`
-	APIPack      int64            `json:"apiPack"`
-	Trial        *int64           `json:"trial,omitempty"`
-	SkillDecay   map[string]int64 `json:"skillDecay,omitempty"`
-	NormalTurns  int64            `json:"normalTurns"`
-	Stunned      bool             `json:"stunned"`
-	Effects      []Status         `json:"effects"`
-	Used         map[string]int64 `json:"used"`
-	Revealed     []string         `json:"revealed"`
-	Distill      Distill          `json:"distill"`
-	Resources    map[string]int64 `json:"resources"`
-	ResourceCaps map[string]int64 `json:"resourceCaps"`
-	Subscription Subscription     `json:"subscription"`
+	Role           string           `json:"role"`
+	Harness        *string          `json:"harness"`
+	ActiveSlots    int              `json:"activeSlots"`
+	Loadout        []string         `json:"loadout"`
+	Gold           int64            `json:"gold"`
+	Likes          int64            `json:"likes"`
+	BurstCap       int64            `json:"burstCap"`
+	BurstLocked    int64            `json:"burstLocked,omitempty"`
+	BurstLockedCap int64            `json:"burstLockedCap,omitempty"`
+	Burst          int64            `json:"burst"`
+	Sub            int64            `json:"sub"`
+	API            int64            `json:"api"`
+	Images         int64            `json:"images"`
+	APIPack        int64            `json:"apiPack"`
+	Trial          *int64           `json:"trial,omitempty"`
+	SkillDecay     map[string]int64 `json:"skillDecay,omitempty"`
+	NormalTurns    int64            `json:"normalTurns"`
+	Stunned        bool             `json:"stunned"`
+	Effects        []Status         `json:"effects"`
+	Used           map[string]int64 `json:"used"`
+	Revealed       []string         `json:"revealed"`
+	Distill        Distill          `json:"distill"`
+	Resources      map[string]int64 `json:"resources"`
+	ResourceCaps   map[string]int64 `json:"resourceCaps"`
+	Subscription   Subscription     `json:"subscription"`
 }
 type Grant struct {
 	BuffID           string `json:"buffId"`
@@ -203,18 +205,20 @@ type ScoreBreakdown struct {
 	Final            int64       `json:"final"`
 }
 type ResourceView struct {
-	Gold         int64            `json:"gold"`
-	Likes        int64            `json:"likes"`
-	Burst        int64            `json:"burst"`
-	BurstCap     int64            `json:"burst_cap"`
-	Sub          int64            `json:"sub"`
-	SubCap       int64            `json:"sub_cap"`
-	API          int64            `json:"api"`
-	Trial        int64            `json:"trial"`
-	Resources    map[string]int64 `json:"resources"`
-	ResourceCaps map[string]int64 `json:"resource_caps"`
-	Subscription Subscription     `json:"subscription"`
-	Effects      []Status         `json:"effects"`
+	Gold           int64            `json:"gold"`
+	Likes          int64            `json:"likes"`
+	Burst          int64            `json:"burst"`
+	BurstCap       int64            `json:"burst_cap"`
+	BurstLocked    int64            `json:"burst_locked,omitempty"`
+	BurstLockedCap int64            `json:"burst_locked_cap,omitempty"`
+	Sub            int64            `json:"sub"`
+	SubCap         int64            `json:"sub_cap"`
+	API            int64            `json:"api"`
+	Trial          int64            `json:"trial"`
+	Resources      map[string]int64 `json:"resources"`
+	ResourceCaps   map[string]int64 `json:"resource_caps"`
+	Subscription   Subscription     `json:"subscription"`
+	Effects        []Status         `json:"effects"`
 }
 type Frame struct {
 	Stage    string          `json:"stage"`

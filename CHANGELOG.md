@@ -6,7 +6,14 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ## [1.0.0-rc.6] - Unreleased
 
+### Added
+
+- Bidding Duel AI challenges with four editable local strategies, multiple configurable opponents, situation previews, optional use of bounded personal match memory and one-time game-credit rewards. AI entry is disabled with zero prices by default; waiting is unpaid and running matches retain their accepted settings.
+- A versioned, game-independent decision interface with bounded scheduling and authoritative action submission. Account export v13 includes personal AI preferences, samples, used summaries and first-clear records; anonymous archives omit personal memory and identity links.
+
 ### Changed
+
+- New battle matches use triple base speed costs including images, stackable Subscription Squeeze with recoverable locked burst balance, and SOTA Pressure based on pre-cast enemy debuff layers. Historical matches retain their original rules; the field guide, quota display and tutorial follow the new balance.
 
 - Database startup accepts fresh databases, final rc.5 and registered rc.6 schemas. Earlier migration chains are removed; supported additive upgrades retain offline full-audit tooling without replaying all history at startup.
 - Fresh databases use consolidated schema definitions. Explicit schema/data revisions apply forward migrations atomically, with target configuration validated before commit; stable v1.x releases will retain direct upgrades from v1.0.0 onward.

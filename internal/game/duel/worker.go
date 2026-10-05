@@ -22,9 +22,26 @@ func (s *Service) Available(mode, spec string) bool {
 	return s != nil && !s.closed.Load() && s.recovered.Load() && spec == "" && s.descriptor.ResolveMode(mode) == nil
 }
 func (s *Service) Tick(ctx context.Context) (WorkResult, error) {
-	return s.work(ctx, false, 100, time.Now().Add(2*time.Second))
+	result, err := s.work(ctx, false, 100, time.Now().Add(2*time.Second))
+	if err == nil {
+		err = s.driveAI(ctx)
+	}
+	return result, err
 }
 func (s *Service) RecoverBeforeListenAt(ctx context.Context, _ int64, limit int, deadline time.Time) (WorkResult, error) {
+	if s.aiAdapter != nil {
+		tx, now, err := s.begin(ctx)
+		if err != nil {
+			return WorkResult{}, err
+		}
+		if err = s.seedAI(ctx, tx, now); err != nil {
+			_ = tx.Rollback()
+			return WorkResult{}, err
+		}
+		if err = tx.Commit(); err != nil {
+			return WorkResult{}, err
+		}
+	}
 	result, err := s.work(ctx, true, limit, deadline)
 	if err == nil && !result.More {
 		s.recovered.Store(true)
@@ -137,15 +154,23 @@ func (s *Service) workOne(ctx context.Context, recovery bool) (bool, error) {
 			}
 		} else if !errors.Is(err, sql.ErrNoRows) {
 			return false, err
-		} else if recovery {
-			return false, nil
 		} else {
-			matched, err := s.match(ctx, tx, now)
+			matched := false
+			var err error
+			if !recovery {
+				matched, err = s.match(ctx, tx, now)
+			}
 			if err != nil {
 				return false, err
 			}
 			if !matched {
-				return false, nil
+				matched, err = s.workAIQueue(ctx, tx, now, recovery)
+				if err != nil {
+					return false, err
+				}
+				if !matched {
+					return false, nil
+				}
 			}
 		}
 	}
@@ -180,9 +205,10 @@ func (s *Service) StartWorker(ctx context.Context) error {
 			case <-worker.Done():
 				return
 			case <-ticker.C:
-				if _, err := s.Tick(worker); err != nil && !errors.Is(err, context.Canceled) && s.reportError != nil {
-					s.reportError(err)
-				}
+			case <-s.aiWake:
+			}
+			if _, err := s.Tick(worker); err != nil && !errors.Is(err, context.Canceled) && s.reportError != nil {
+				s.reportError(err)
 			}
 		}
 	}()
@@ -202,6 +228,13 @@ func (s *Service) Close() error {
 	}
 	if done != nil {
 		<-done
+	}
+	if s.aiPool != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := s.aiPool.Close(ctx); err != nil {
+			return err
+		}
 	}
 	s.actionMu.Lock()
 	clear(s.actions)

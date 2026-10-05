@@ -20,6 +20,10 @@ type Profile struct {
 func profiles(ctx context.Context, tx *sql.Tx, v sessionRecord) (*[2]Profile, error) {
 	result := &[2]Profile{{Kind: "deleted"}, {Kind: "deleted"}}
 	for seat, participant := range v.Seats {
+		if participant.Kind == "bot" && v.Terms.AI != nil {
+			result[seat] = Profile{Kind: "ai", DisplayName: v.Terms.AI.BotName}
+			continue
+		}
 		if participant.User == nil {
 			continue
 		}

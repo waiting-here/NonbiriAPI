@@ -1,3 +1,4 @@
+import type { AITerms, AIView, AIActionSource } from '@shared/aiPlayers';
 import {
   booleanValue,
   creditsToMilli,
@@ -68,6 +69,7 @@ export function ratesValue(value: unknown): Rates {
   return v;
 }
 export function configValue(value: unknown, game: DuelGame, modes: readonly string[]): DuelConfig {
+  modes = modes.filter((mode) => mode !== 'ai');
   const timers =
     game === 'bidding' ? ['joker_seconds', 'bid_seconds'] : ['plan_seconds', 'settlement_seconds'];
   const r = exactRecord(value, [
@@ -115,8 +117,8 @@ export function configValue(value: unknown, game: DuelGame, modes: readonly stri
 }
 function profileValue(value: unknown): Profile {
   const r = exactRecord(value, ['kind'], ['display_name', 'avatar_url']);
-  const kind = enumValue(r.kind, ['public', 'anonymous', 'deleted'], 'profile kind');
-  if (kind !== 'public') {
+  const kind = enumValue(r.kind, ['public', 'anonymous', 'deleted', 'ai'], 'profile kind');
+  if (kind !== 'public' && kind !== 'ai') {
     exactRecord(value, ['kind']);
     return { kind };
   }
@@ -184,11 +186,12 @@ export function resultValue<V, F, P, S, L, A>(
       'view',
       'profiles',
     ],
-    ['content_hash'],
+    ['content_hash', 'economy', 'ai'],
   );
   enumValue(r.game, [c.game], 'game');
   const rake = exactRecord(r.rake, ['platform', 'welfare', 'thursday']);
   return {
+    ai: r.ai as AIView | undefined,
     id: opaqueID(r.id, prefix(c.game), 'result'),
     contentHash: r.content_hash === undefined ? undefined : hashValue(r.content_hash),
     game: c.game,
@@ -227,31 +230,37 @@ function stateValue<V, F, P, S, L, A>(
   value: unknown,
   c: DuelCodec<V, F, P, S, L, A>,
 ): DuelState<V, P, S> {
-  const r = exactRecord(value, [
-    'id',
-    'game',
-    'mode',
-    'rules_version',
-    'content_hash',
-    'revision',
-    'phase_seq',
-    'phase',
-    'round',
-    'deadline',
-    'server_now',
-    'you',
-    'locked',
-    'ticket',
-    'rake_bp',
-    'own_payment',
-    'view',
-    'resolution',
-    'round_start',
-    'profiles',
-  ]);
+  const r = exactRecord(
+    value,
+    [
+      'id',
+      'game',
+      'mode',
+      'rules_version',
+      'content_hash',
+      'revision',
+      'phase_seq',
+      'phase',
+      'round',
+      'deadline',
+      'server_now',
+      'you',
+      'locked',
+      'ticket',
+      'rake_bp',
+      'own_payment',
+      'view',
+      'resolution',
+      'round_start',
+      'profiles',
+    ],
+    ['economy', 'ai', 'action_sources'],
+  );
   enumValue(r.game, [c.game], 'game');
   safeInteger(r.rules_version, 1, 1, 'rules version');
   return {
+    ai: r.ai as AIView | undefined,
+    sources: r.action_sources as AIActionSource[] | undefined,
     id: opaqueID(r.id, prefix(c.game), 'session'),
     game: c.game,
     mode: enumValue(r.mode, c.modes, 'mode'),
@@ -273,7 +282,7 @@ function stateValue<V, F, P, S, L, A>(
     serverNow: unixTime(r.server_now, 'server time'),
     you: seatValue(r.you),
     locked: pair(r.locked, (v) => booleanValue(v, 'locked')),
-    ticket: creditsValue(r.ticket, { positive: true }),
+    ticket: creditsValue(r.ticket),
     rates: ratesValue(r.rake_bp),
     payment: gamePayment(r.own_payment, 'payment'),
     profiles: pair(r.profiles, profileValue),
@@ -286,30 +295,37 @@ export function homeValue<V, F, P, S, L, A>(
   value: unknown,
   c: DuelCodec<V, F, P, S, L, A>,
 ): DuelHome<V, P, S, L> {
-  const r = exactRecord(value, ['server_now', 'queue', 'current', 'latest_result']);
+  const r = exactRecord(
+    value,
+    ['server_now', 'queue', 'current', 'latest_result'],
+    ['ai_queue_error'],
+  );
   if (r.queue !== null && r.current !== null) invalidResponse('occupied slot');
   const queue = nullable(r.queue, (value) => {
     const q = exactRecord(
       value,
       ['id', 'revision', 'mode', 'deadline', 'ticket', 'payment', 'terms_hash', 'rules_version'],
-      ['loadout'],
+      ['loadout', 'economy', 'ai', 'position'],
     );
     safeInteger(q.rules_version, 1, 1, 'queue rules');
     if (c.game === 'bidding' && q.loadout !== undefined) invalidResponse('bidding loadout');
     if (c.game === 'likes' && (q.loadout === undefined || q.loadout === null))
       invalidResponse('likes loadout');
     return {
-      id: opaqueID(q.id, prefix(c.game, true), 'queue'),
+      ai: q.ai as AITerms | undefined,
+      position: q.position as number | undefined,
+      id: opaqueID(q.id, q.mode === 'ai' ? 'aiq_' : prefix(c.game, true), 'queue'),
       revision: revisionValue(q.revision),
       mode: enumValue(q.mode, c.modes, 'queue mode'),
       deadline: unixTime(q.deadline, 'queue deadline'),
-      ticket: creditsValue(q.ticket, { positive: true }),
+      ticket: creditsValue(q.ticket),
       payment: gamePayment(q.payment, 'queue payment'),
       termsHash: hashValue(q.terms_hash),
       loadout: optionalDecode(q.loadout ?? null, c.loadout),
     };
   });
   return {
+    aiQueueError: r.ai_queue_error as string | undefined,
     serverNow: unixTime(r.server_now, 'server time'),
     queue,
     current: nullable(r.current, (v) => stateValue(v, c)),
@@ -320,7 +336,11 @@ export function roundValue<V, F, P, S, L, A>(
   value: unknown,
   c: DuelCodec<V, F, P, S, L, A>,
 ): DuelRound<V, F, S> {
-  const r = exactRecord(value, ['round', 'before', 'after', 'facts', 'start_events', 'timeouts']);
+  const r = exactRecord(
+    value,
+    ['round', 'before', 'after', 'facts', 'start_events', 'timeouts'],
+    ['sources'],
+  );
   return {
     round: safeInteger(r.round, 1, c.game === 'bidding' ? 13 : 75, 'round'),
     before: c.view(r.before),
@@ -334,21 +354,26 @@ export function detailValue<V, F, P, S, L, A>(
   value: unknown,
   c: DuelCodec<V, F, P, S, L, A>,
 ): DuelDetail<V, P, S, A> {
-  const r = exactRecord(value, [
-    'result',
-    'rules_version',
-    'content_hash',
-    'ticket',
-    'rake_bp',
-    'initial',
-    'terminal_actions',
-    'round_start_events',
-  ]);
+  const r = exactRecord(
+    value,
+    [
+      'result',
+      'rules_version',
+      'content_hash',
+      'ticket',
+      'rake_bp',
+      'initial',
+      'terminal_actions',
+      'round_start_events',
+    ],
+    ['action_sources'],
+  );
   safeInteger(r.rules_version, 1, 1, 'history rules');
   return {
+    sources: r.action_sources as AIActionSource[] | undefined,
     result: resultValue(r.result, c),
     contentHash: hashValue(r.content_hash),
-    ticket: creditsValue(r.ticket, { positive: true }),
+    ticket: creditsValue(r.ticket),
     rates: ratesValue(r.rake_bp),
     initial: c.view(r.initial),
     terminalActions: pair(r.terminal_actions, (v) => optionalDecode(v, c.action)),
