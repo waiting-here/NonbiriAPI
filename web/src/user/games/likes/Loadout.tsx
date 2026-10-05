@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Drawer } from '@shared/components/ui/Drawer';
+import { ExpandablePanel } from '@shared/components/ui/ExpandablePanel';
 
 export type LoadoutStepID = 'mode' | 'role' | 'harness' | 'skills';
 export type LoadoutDisclosure = {
@@ -253,7 +253,7 @@ export function LoadoutEditor({
             : text('likes.selectAtLeastOneSustainableStableScoring')}
         </p>
       )}
-      <Drawer
+      <ExpandablePanel
         open={!!detailRole}
         title={detailRole?.name ?? ''}
         closeLabel={t('common.close')}
@@ -277,7 +277,7 @@ export function LoadoutEditor({
             />
           </>
         )}
-      </Drawer>
+      </ExpandablePanel>
     </div>
   );
 }

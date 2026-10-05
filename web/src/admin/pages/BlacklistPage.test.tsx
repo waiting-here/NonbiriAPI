@@ -92,7 +92,7 @@ it.each([false, true])(
     if (loseRemoveResponse) {
       const retry = await screen.findByRole('button', { name: 'Retry' });
       expect(retry).toBeVisible();
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(document.querySelector('.nb-expandable-panel:not([hidden])')).not.toBeInTheDocument();
       await rendered.user.click(retry);
     }
     expect(await screen.findByText(/Removed from the blacklist/)).toBeVisible();

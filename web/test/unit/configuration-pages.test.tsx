@@ -1110,7 +1110,7 @@ describe('standalone Admin Games feature', () => {
     expect(screen.queryByLabelText('Worm bait')).not.toBeInTheDocument();
     expect(screen.queryByText('1024')).not.toBeInTheDocument();
     await rendered.user.click(screen.getByRole('button', { name: 'Fishing Game settings' }));
-    const fishing = screen.getByRole('dialog', { name: 'Fishing' });
+    const fishing = screen.getByRole('region', { name: 'Fishing' });
     const worm = within(fishing).getByLabelText('Worm bait');
     expect(worm).toBeVisible();
     const treasures = within(fishing)
@@ -1129,9 +1129,9 @@ describe('standalone Admin Games feature', () => {
     expect(treasures).toHaveAttribute('open');
     expect(worm).toBeVisible();
     await rendered.user.click(within(fishing).getByRole('button', { name: 'Cancel' }));
-    expect(screen.queryByRole('dialog', { name: 'Fishing' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Fishing' })).not.toBeInTheDocument();
     await rendered.user.click(screen.getByRole('switch', { name: 'Enable Fishing' }));
-    expect(screen.queryByRole('dialog', { name: 'Fishing' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Fishing' })).not.toBeInTheDocument();
   });
 
   test('validates the combined fishing deductions and submits one revision', async () => {
@@ -1143,7 +1143,7 @@ describe('standalone Admin Games feature', () => {
       { station: 'admin', locale: 'en', role: 'admin' },
     );
     await rendered.user.click(await screen.findByRole('button', { name: 'Fishing Game settings' }));
-    const fishing = screen.getByRole('dialog', { name: 'Fishing' });
+    const fishing = screen.getByRole('region', { name: 'Fishing' });
     const save = within(fishing).getByRole('button', { name: 'Save Fishing settings' });
     const platform = within(fishing).getByLabelText('Platform');
     fireEvent.change(platform, { target: { value: '98' } });
@@ -1233,7 +1233,7 @@ describe('standalone Admin Games feature', () => {
     });
     expect(JSON.stringify(server.patches[0])).not.toContain('queue_capacity');
     await waitFor(() =>
-      expect(screen.queryByRole('dialog', { name: 'Fishing' })).not.toBeInTheDocument(),
+      expect(screen.queryByRole('region', { name: 'Fishing' })).not.toBeInTheDocument(),
     );
     expect(
       screen.queryByRole('button', { name: 'Save game configuration' }),
@@ -1258,7 +1258,7 @@ describe('standalone Admin Games feature', () => {
     await rendered.user.click(
       await screen.findByRole('button', { name: 'Three-player RPS Game settings' }),
     );
-    const rps = screen.getByRole('dialog', { name: 'Three-player RPS' });
+    const rps = screen.getByRole('region', { name: 'Three-player RPS' });
     const quick = within(rps).getByRole('group', { name: 'Quick' });
     const quickPlatform = within(quick).getByLabelText('Platform');
     fireEvent.change(quickPlatform, { target: { value: '99' } });
@@ -1270,7 +1270,7 @@ describe('standalone Admin Games feature', () => {
     fireEvent.change(quickPlatform, { target: { value: '1' } });
     await rendered.user.click(within(rps).getByRole('button', { name: 'Cancel' }));
     await rendered.user.click(screen.getByRole('button', { name: 'Fishing Game settings' }));
-    const fishing = screen.getByRole('dialog', { name: 'Fishing' });
+    const fishing = screen.getByRole('region', { name: 'Fishing' });
     const save = within(fishing).getByRole('button', { name: 'Save Fishing settings' });
     const input = within(fishing).getByLabelText('Standard bait RTP');
     fireEvent.change(input, { target: { value: '100' } });
@@ -1324,7 +1324,7 @@ describe('standalone Admin Games feature', () => {
       },
     );
     await rendered.user.click(await screen.findByRole('button', { name: 'Fishing Game settings' }));
-    const fishing = screen.getByRole('dialog', { name: 'Fishing' });
+    const fishing = screen.getByRole('region', { name: 'Fishing' });
     const worm = within(fishing).getByLabelText('Worm bait');
     fireEvent.change(worm, { target: { value: '3' } });
     await rendered.user.click(
@@ -1353,7 +1353,7 @@ describe('standalone Admin Games feature', () => {
     };
     resolvePatch?.(jsonResponse(state));
     await waitFor(() =>
-      expect(screen.queryByRole('dialog', { name: 'Fishing' })).not.toBeInTheDocument(),
+      expect(screen.queryByRole('region', { name: 'Fishing' })).not.toBeInTheDocument(),
     );
     expect(screen.getByRole('button', { name: 'Fishing Game settings' })).toBeEnabled();
     await rendered.user.click(screen.getByRole('button', { name: 'Fishing Game settings' }));

@@ -320,7 +320,7 @@ describe('numbered role log panel', () => {
     expect(await screen.findByText('#21', { exact: true })).toBeVisible();
 
     await view.user.click(screen.getByRole('button', { name: 'Details' }));
-    const dialog = await screen.findByRole('dialog');
+    const dialog = await screen.findByRole('region', { name: /Log details/ });
     await waitFor(() =>
       expect(fetchMock.mock.calls.map(([path]) => String(path))).toContain(
         `/admin/api/logs/${requestID(20)}?attempt_page=1&attempt_page_size=20`,
@@ -350,7 +350,7 @@ describe('numbered role log panel', () => {
     expect(dialog.querySelector('[aria-busy]')?.getAttribute('aria-busy')).toBe('false');
 
     await view.user.click(within(dialog).getByRole('button', { name: 'Close' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('region', { name: /Log details/ })).toBeNull());
     const returnedQuery = queryFromProbe(view.container);
     expect(returnedQuery.get('request_id')).toBeNull();
     expect(returnedQuery.get('attempt_page')).toBeNull();
@@ -502,7 +502,7 @@ describe('numbered role log panel', () => {
       route: '/logs?page=1&page_size=20',
     });
     await view.user.click(await screen.findByRole('button', { name: 'Details' }));
-    const drawer = await screen.findByRole('dialog');
+    const drawer = await screen.findByRole('region', { name: /Log details/ });
     await view.user.click(
       within(drawer).getByText('Service call attempts', { selector: 'strong' }),
     );
@@ -591,7 +591,7 @@ describe('numbered role log panel', () => {
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Details' })).toBeVisible());
     await view.user.click(screen.getByRole('button', { name: 'Details' }));
-    const dialog = await screen.findByRole('dialog');
+    const dialog = await screen.findByRole('region', { name: /Log details/ });
     await waitFor(() =>
       expect(within(dialog).getAllByText('Success', { exact: true })[0]).toBeVisible(),
     );

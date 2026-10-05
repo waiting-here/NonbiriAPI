@@ -9,7 +9,7 @@ import {
   stationSessionMatches,
 } from '@shared/charityManagement';
 import { DataTable, Segmented, Toggle } from '@shared/components/ui';
-import { Drawer } from '@shared/components/ui/Drawer';
+import { ExpandablePanel } from '@shared/components/ui/ExpandablePanel';
 import './mainstream-channels.css';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import {
@@ -302,7 +302,7 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
   }, [searchParams, setSearchParams]);
   const [selected, setSelected] = useState('');
   const [creating, setCreating] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
   const [retireTarget, setRetireTarget] = useState<AdminMainstreamChannel | null>(null);
   const [authorityLoss, setAuthorityLoss] = useState<unknown>(null);
   const [accountScope, setAccountScope] = useState(accountID);
@@ -413,7 +413,7 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setAccountScope(accountID);
     setSelected('');
-    setDrawerOpen(false);
+    setPanelOpen(false);
     setCreating(false);
     setRetireTarget(null);
     if (previousAccountID && accountID && previousAccountID !== accountID) {
@@ -445,7 +445,7 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
     if (isAuthorityLoss(authorityError)) {
       setAuthorityLoss(authorityError);
       setSelected('');
-      setDrawerOpen(false);
+      setPanelOpen(false);
       setCreating(false);
       setRetireTarget(null);
       create.reset();
@@ -456,7 +456,7 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
       setAuthorityLoss(null);
     } else if (isNotFoundError(detail.error)) {
       setSelected('');
-      setDrawerOpen(false);
+      setPanelOpen(false);
       setCreating(false);
       setRetireTarget(null);
     }
@@ -486,7 +486,7 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
       disabled={!canWrite}
       onClick={() => {
         setCreating(true);
-        setDrawerOpen(true);
+        setPanelOpen(true);
       }}
     >
       <span aria-hidden="true">＋</span>{' '}
@@ -632,7 +632,7 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
                           onClick={() => {
                             setCreating(false);
                             setSelected(channel.id);
-                            setDrawerOpen(true);
+                            setPanelOpen(true);
                           }}
                         >
                           {t('admin.mainstreamChannels.actions.view')}
@@ -665,9 +665,9 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
         )}
       </Card>
 
-      <Drawer
-        open={drawerOpen && scopeReady && accountScope === accountID && !authorityRevoked}
-        onClose={() => setDrawerOpen(false)}
+      <ExpandablePanel
+        open={panelOpen && scopeReady && accountScope === accountID && !authorityRevoked}
+        onClose={() => setPanelOpen(false)}
         busy={create.isPending || patch.isPending || retire.isPending}
         title={t(
           creating
@@ -723,7 +723,7 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
                       busy={patch.isPending}
                       error={patchError}
                       canWrite={canWrite}
-                      onCancel={() => setDrawerOpen(false)}
+                      onCancel={() => setPanelOpen(false)}
                       onSubmit={(draft) => {
                         if (!canWrite || !accountID) return;
                         const input = changedPatch(selectedChannel, draft);
@@ -777,7 +777,7 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
             }}
           />
         ) : null}
-      </Drawer>
+      </ExpandablePanel>
 
       {mutationError && conflictNotice ? (
         <p className="inline-notice" role="status">

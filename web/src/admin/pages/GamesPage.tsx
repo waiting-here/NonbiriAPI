@@ -15,9 +15,8 @@ import {
 } from '../features/operations/economy';
 import { useRetainedOperation } from '../features/operations/useRetainedOperation';
 import { DuelConfiguration } from '../features/games/Configuration';
-import { AIPlayersAdmin } from '../features/games/AIPlayers';
 import { FishingFields, LinklinkFields, RPSFields } from '../features/games/GameFields';
-import { Drawer } from '@shared/components/ui/Drawer';
+import { ExpandablePanel } from '@shared/components/ui/ExpandablePanel';
 import { Note, Panel, PanelBody, SaveBar, Toggle } from '@shared/components/ui';
 import '../features/games/configuration.css';
 import {
@@ -377,7 +376,7 @@ function GamesEditor({
     setActive(game);
     if (formError?.game === game)
       requestAnimationFrame(() => {
-        const drawer = document.querySelector('.nb-form-drawer');
+        const drawer = document.querySelector('.nb-expandable-panel');
         const field =
           (formError.field
             ? drawer?.querySelector<HTMLElement>(`[name="${CSS.escape(formError.field)}"]`)
@@ -479,7 +478,7 @@ function GamesEditor({
         discardLabel={t('admin.games.restoreAuthorityValues')}
         dirtyLabel={(count) => text(`${count} 项未保存`, `${count} unsaved changes`)}
       />
-      <Drawer
+      <ExpandablePanel
         open={active !== null}
         title={active ? label(active) : ''}
         closeLabel={t('common.close')}
@@ -535,12 +534,11 @@ function GamesEditor({
             onChange={(value) => edit((current) => ({ ...current, blackjack: value }))}
           />
         ) : null}
-      </Drawer>
+      </ExpandablePanel>
     </form>
   );
 }
 export function GamesPage() {
-  const [aiOpen, setAIOpen] = useState(false);
   const { t } = useTranslation();
   const duelText = useGameAdminText();
   const config = useQuery({
@@ -566,13 +564,9 @@ export function GamesPage() {
         )}
         actions={
           <>
-            <button
-              type="button"
-              className="nb-btn nb-btn--secondary"
-              onClick={() => setAIOpen(true)}
-            >
+            <Link className="nb-btn nb-btn--secondary" to="/games/ai">
               {duelText('AI 玩家与策略', 'AI players and strategies')}
-            </button>
+            </Link>
             {config.data?.bidding && config.data.likes ? (
               <Link className="nb-btn nb-btn--secondary" to="/games/history">
                 {duelText('对战历史与导出', 'Match history and exports')}
@@ -584,7 +578,6 @@ export function GamesPage() {
           </>
         }
       />
-      {aiOpen && <AIPlayersAdmin onClose={() => setAIOpen(false)} />}
       {counts.data &&
       !counts.error &&
       counts.data.games.length === 0 &&

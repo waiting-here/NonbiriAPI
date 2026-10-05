@@ -156,7 +156,7 @@ for (const width of [1440, 768, 390])
           await steps.nth(1).locator('summary').click();
           await expect(page.locator('.likes-loadout-step[open]')).toHaveCount(1);
           await steps.nth(1).locator('[data-guide^="role:"]').nth(1).click();
-          const detail = page.getByRole('dialog');
+          const detail = page.locator('.nb-expandable-panel:not([hidden])');
           await expect(detail).toBeVisible();
           await detail
             .getByRole('button', { name: locale === 'zh' ? '关闭' : 'Close', exact: true })

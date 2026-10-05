@@ -1,4 +1,4 @@
-import { AIPlayers, AIMatchInfo, AIActionLog } from './AIPlayers';
+import { BiddingLobby, AIMatchInfo, AIActionLog } from './AIPlayers';
 import { useAIText } from '@shared/aiPlayers';
 import { GameHeaderTool } from '../common/GameHeader';
 import { Link } from 'react-router';
@@ -299,49 +299,54 @@ export function BiddingGame({
               )}
             </section>
           )}
-          <AIPlayers blocked={duel.blocked} onStart={duel.run} lastMatch={home?.latestResult?.id} />
-          <section className="bid-lobby">
-            <span className="bid-eyebrow">{text('bidding.cHOOSEYOURTABLE')}</span>
-            <h2>{text('bidding.thirteenCardsOneDuel')}</h2>
-            <div className="bid-modes" role="group" aria-label={text('bidding.entryTier')}>
-              {BIDDING_MODES.map((key, index) => (
+          <BiddingLobby
+            blocked={duel.blocked}
+            onStart={duel.run}
+            lastMatch={home?.latestResult?.id}
+          >
+            <section className="bid-lobby">
+              <span className="bid-eyebrow">{text('bidding.cHOOSEYOURTABLE')}</span>
+              <h2>{text('bidding.thirteenCardsOneDuel')}</h2>
+              <div className="bid-modes" role="group" aria-label={text('bidding.entryTier')}>
+                {BIDDING_MODES.map((key, index) => (
+                  <button
+                    key={key}
+                    type="button"
+                    aria-pressed={mode === key}
+                    disabled={
+                      duel.pending || duel.uncertain || !!entryProblem({ config, accepting }, key)
+                    }
+                    onClick={() => setMode(key)}
+                  >
+                    <span>
+                      {text('bidding.tier')} {index + 1} {text('bidding.message2')}
+                    </span>
+                    <strong>{formatCredits(config.modes[key]?.ticket ?? '0')}</strong>
+                    <small>
+                      {!entryProblem({ config, accepting }, key)
+                        ? text('bidding.open')
+                        : text('bidding.unavailable')}
+                    </small>
+                  </button>
+                ))}
+              </div>
+              {selected && <DuelTerms mode={selected} />}
+              <GameActionBar cost={formatCredits(selected?.ticket ?? '0')}>
                 <button
-                  key={key}
                   type="button"
-                  aria-pressed={mode === key}
-                  disabled={
-                    duel.pending || duel.uncertain || !!entryProblem({ config, accepting }, key)
-                  }
-                  onClick={() => setMode(key)}
+                  className="btn btn-primary"
+                  disabled={duel.blocked || !!unavailable || !enough}
+                  onClick={() => duel.run({ kind: 'queue', mode, termsHash: selected.termsHash })}
                 >
-                  <span>
-                    {text('bidding.tier')} {index + 1} {text('bidding.message2')}
-                  </span>
-                  <strong>{formatCredits(config.modes[key]?.ticket ?? '0')}</strong>
-                  <small>
-                    {!entryProblem({ config, accepting }, key)
-                      ? text('bidding.open')
-                      : text('bidding.unavailable')}
-                  </small>
+                  {unavailable
+                    ? entryMessage(unavailable, text)
+                    : !enough
+                      ? text('bidding.insufficientCredits')
+                      : text('bidding.payEntryAndFindAMatch')}
                 </button>
-              ))}
-            </div>
-            {selected && <DuelTerms mode={selected} />}
-            <GameActionBar cost={formatCredits(selected?.ticket ?? '0')}>
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={duel.blocked || !!unavailable || !enough}
-                onClick={() => duel.run({ kind: 'queue', mode, termsHash: selected.termsHash })}
-              >
-                {unavailable
-                  ? entryMessage(unavailable, text)
-                  : !enough
-                    ? text('bidding.insufficientCredits')
-                    : text('bidding.payEntryAndFindAMatch')}
-              </button>
-            </GameActionBar>
-          </section>
+              </GameActionBar>
+            </section>
+          </BiddingLobby>
         </>
       )}
       {rules && <BiddingRules onClose={closeRules} />}

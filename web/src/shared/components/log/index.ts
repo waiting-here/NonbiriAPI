@@ -3,7 +3,7 @@
 // components only own structure, URL state, and accessibility.
 export { LogFilters, type LogFilterField } from './LogFilters';
 export { LogTable, type LogColumn } from './LogTable';
-export { LogDetailDrawer, type LogDetailField } from './LogDetailDrawer';
+export { LogDetailPanel, type LogDetailField } from './LogDetailPanel';
 export { TokenBuckets, type TokenBucketValues } from './TokenBuckets';
 export { useLogUrlState, type LogUrlState } from './useLogUrlState';
 export { RoleLogPanel } from './RoleLogPanel';

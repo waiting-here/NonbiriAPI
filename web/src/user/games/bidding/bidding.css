@@ -810,16 +810,50 @@
 .bid-ai-lobby {
   margin: 1.5rem 0;
 }
+.bid-opponent-tabs,
+.bid-ai-select {
+  display: flex;
+  gap: 0.5rem;
+  padding-block: 0.5rem;
+}
+.bid-opponent-tabs button,
+.bid-ai-select button {
+  border: 1px solid var(--bid-line);
+  border-radius: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: var(--bid-paper);
+  color: var(--bid-ink);
+}
+.bid-opponent-tabs button[aria-pressed='true'],
+.bid-ai-select button[aria-pressed='true'] {
+  background: var(--bid-ink);
+  color: var(--bid-paper);
+  border-color: var(--bid-ink);
+}
+.bid-opponent-tabs button {
+  flex: 1;
+}
+.bid-ai-select {
+  overflow-x: auto;
+  scrollbar-width: thin;
+  margin-bottom: 0.5rem;
+}
+.bid-ai-select button {
+  flex: 1 0 9rem;
+  display: grid;
+  gap: 0.25rem;
+  text-align: start;
+}
 .bid-ai-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
   gap: 1rem;
 }
 .bid-ai-card {
   padding: 1.25rem;
-  border: 1px solid var(--border, #d1d5db);
+  border: 1px solid var(--bid-line);
   border-radius: 1rem;
-  background: var(--surface, #fff);
+  background: var(--bid-paper);
+  color: var(--bid-ink);
   display: flex;
   flex-direction: column;
   gap: 0.8rem;
@@ -843,13 +877,12 @@
   margin-top: auto;
 }
 .bid-ai-mark {
-  color: #497361;
+  color: var(--bid-muted);
   font-weight: 800;
-  letter-spacing: 0.15em;
 }
 .bid-ai-card small {
   line-height: 1.6;
-  color: var(--text-muted, #64748b);
+  color: var(--bid-muted);
 }
 .bid-ai-info {
   display: flex;

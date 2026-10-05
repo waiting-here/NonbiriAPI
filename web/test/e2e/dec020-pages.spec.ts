@@ -486,9 +486,11 @@ test('user endpoint source wizard submits an immutable mainstream channel select
   await page
     .getByRole('button', { name: 'Need advanced options? Set up manually', exact: true })
     .click();
-  const wizard = page.getByRole('dialog', { name: 'Add service manually', exact: true });
+  const wizard = page.getByRole('region', { name: 'Add service manually', exact: true });
   await expect(
-    wizard.locator('.nb-drawer__head').getByRole('heading', { name: 'Add service manually' }),
+    wizard
+      .locator('.nb-expandable-panel__head')
+      .getByRole('heading', { name: 'Add service manually' }),
   ).toBeVisible();
   await expect(wizard.getByRole('button', { name: 'Common services' })).toHaveAttribute(
     'aria-pressed',
@@ -753,7 +755,7 @@ test.describe('donation expiry in UTC', () => {
       composer.getByRole('heading', { name: 'Submit a charity donation' }),
     ).toBeVisible();
     await composer.getByRole('button', { name: 'Choose keys…', exact: true }).click();
-    const picker = page.getByRole('dialog', { name: 'Choose keys to donate', exact: true });
+    const picker = page.getByRole('region', { name: 'Choose keys to donate', exact: true });
     const resources = picker.locator('.donation-resource-picker');
     await resources.getByRole('button', { name: /^Fixture endpoint / }).click();
     const keyChoices = resources.locator('.donation-resource-picker__section').nth(1);

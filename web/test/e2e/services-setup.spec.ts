@@ -326,14 +326,14 @@ for (const locale of ['en', 'zh'] as const) {
       .getByRole('button', { name: copy('View models', '查看模型'), exact: true })
       .first()
       .click();
-    await expect(page.getByRole('dialog')).toBeVisible();
-    await shot('models-drawer');
+    await expect(page.locator('.nb-expandable-panel:not([hidden])')).toBeVisible();
+    await shot('models-panel');
     const manual = page
-      .getByRole('dialog')
+      .locator('.nb-expandable-panel:not([hidden])')
       .getByLabel(copy('Provider model name', '服务商的模型名'), { exact: true });
     await manual.fill('draft-model');
     await page
-      .getByRole('dialog')
+      .locator('.nb-expandable-panel:not([hidden])')
       .getByRole('button', { name: copy('Close', '关闭'), exact: true })
       .click();
     await page
@@ -342,7 +342,7 @@ for (const locale of ['en', 'zh'] as const) {
       .click();
     await expect(manual).toHaveValue('draft-model');
     await page
-      .getByRole('dialog')
+      .locator('.nb-expandable-panel:not([hidden])')
       .getByRole('button', { name: copy('Close', '关闭'), exact: true })
       .click();
     await page
@@ -362,7 +362,7 @@ for (const locale of ['en', 'zh'] as const) {
       .click();
     await shot('manual-wizard');
     await page
-      .getByRole('dialog')
+      .locator('.nb-expandable-panel:not([hidden])')
       .getByRole('button', { name: copy('Close', '关闭'), exact: true })
       .click();
     await page.getByLabel(copy('Service URL', '服务地址'), { exact: true }).fill(endpoint.base_url);

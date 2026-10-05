@@ -2,7 +2,7 @@ import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'reac
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { Fold, Note, PanelFoot, Segmented } from '@shared/components/ui';
-import { Drawer } from '@shared/components/ui/Drawer';
+import { ExpandablePanel } from '@shared/components/ui/ExpandablePanel';
 import { DonationConnectorLabel } from './DonationConnectorLabel';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { CopyValue } from '@shared/components/CopyValue';
@@ -435,7 +435,7 @@ export function DonationComposer({
             ) : null}
           </div>
         </section>
-        <Drawer
+        <ExpandablePanel
           open={pickerOpen}
           onClose={() => setPickerOpen(false)}
           title={t('user.charity.presentation.chooseKeys')}
@@ -483,7 +483,7 @@ export function DonationComposer({
               </div>
             )}
           />
-        </Drawer>
+        </ExpandablePanel>
         <form id={formID} onSubmit={submit} noValidate>
           <section className="donate-step">
             <span className="donate-step__number" aria-hidden="true">

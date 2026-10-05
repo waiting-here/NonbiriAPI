@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Drawer } from '@shared/components/ui/Drawer';
 import { Field, Note, Toggle } from '@shared/components/ui';
 import { ErrorState, LoadingState } from '@shared/components/States';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
@@ -288,7 +287,7 @@ function RuleEditor({
 type PolicyDraft = { kind: 'policy'; value: AIPolicy };
 type BotDraft = { kind: 'bot'; value: AIBot; newChallenge: boolean };
 type Editor = PolicyDraft | BotDraft | null;
-export function AIPlayersAdmin({ onClose }: { onClose: () => void }) {
+export function AIPlayersAdmin() {
   const t = useAIText();
   const query = useQuery({
     queryKey: ['admin', 'games', 'ai'],
@@ -324,12 +323,10 @@ export function AIPlayersAdmin({ onClose }: { onClose: () => void }) {
       },
     });
   return (
-    <Drawer
-      open
-      title={t('竞标对决 · AI 玩家', 'Bidding Duel · AI players')}
-      onClose={onClose}
-      closeLabel={t('关闭', 'Close')}
-      busy={busy}
+    <section
+      className="nb-panel"
+      aria-label={t('AI 玩家与策略', 'AI players and strategies')}
+      aria-busy={busy}
     >
       <div className="ai-admin">
         {query.isPending ? (
@@ -545,7 +542,7 @@ export function AIPlayersAdmin({ onClose }: { onClose: () => void }) {
         )}
         {save.isSuccess && !editor && <p role="status">{t('已保存', 'Saved')}</p>}
       </div>
-    </Drawer>
+    </section>
   );
 }
 function newPolicy(definition: AIPolicyDefinition): AIPolicy {

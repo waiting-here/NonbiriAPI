@@ -13,6 +13,9 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Changed
 
+- Game history downloads use one streaming ZIP. Anonymous exports include recent records after anonymization; date filters exclude older archives whose dates were removed.
+- AI strategies have a dedicated administration page, and shared side forms expand within their pages. Bidding Duel separates player matches from a compact opponent selector and labels local strategies as first-generation AI players.
+
 - New battle matches use triple base speed costs including images, stackable Subscription Squeeze with recoverable locked burst balance, and SOTA Pressure based on pre-cast enemy debuff layers. Historical matches retain their original rules; the field guide, quota display and tutorial follow the new balance.
 
 - Database startup accepts fresh databases, final rc.5 and registered rc.6 schemas. Earlier migration chains are removed; supported additive upgrades retain offline full-audit tooling without replaying all history at startup.
@@ -26,6 +29,9 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Credit transaction details and account exports retain the last 30 days. Six-hour maintenance replaces expired entries with opening balances and non-personal audit totals, preserving current balances, pending settlement, held evidence and minimal receipts needed to prevent duplicate rewards. Historical audit ranges use complete site hours after detail compaction.
 
 ### Fixed
+
+- Dark-mode AI cards use the game's theme colors.
+- Donations rejected before any approval show that they were never approved.
 
 - Terminal charity reservation cleanup uses end-time indexes, and Lake Notes cleanup reads active and expired casts through separate indexes, avoiding scans of retained history within each maintenance batch.
 - Completed image tasks publish their downloadable results before a status reader can observe success, preventing a brief missing-image response.

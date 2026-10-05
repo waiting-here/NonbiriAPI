@@ -198,7 +198,7 @@ async function requestDiagnostics(page: Page, admin: boolean, keyboard = false) 
   const f = fixture();
   const path = admin ? '/logs?' : '/steward?tab=logs&';
   await page.goto((admin ? f.admin_url : f.user_url) + path + 'request_id=' + f.request_ids[0]);
-  const dialog = page.getByRole('dialog');
+  const dialog = page.locator('.nb-expandable-panel:not([hidden])');
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole('region', { name: 'Request source' })).toContainText(f.source_ip);
   await expect(dialog.getByRole('region', { name: 'Request source' })).toContainText(
@@ -622,7 +622,7 @@ for (const level of [5, 1] as const) {
         for (const key of ['effective_ip', 'user_agent', 'bytes_saved', 'source_json'])
           expect(wire).not.toContain('"' + key + '"');
         await page.goto(f.user_url + '/logs?request_id=' + f.request_ids[index]);
-        await expect(page.getByRole('dialog')).toBeVisible();
+        await expect(page.locator('.nb-expandable-panel:not([hidden])')).toBeVisible();
         await expect(page.getByRole('button', { name: 'Upstream error details' })).toHaveCount(0);
         await expect(page.getByRole('region', { name: 'Request source' })).toHaveCount(0);
         await page.goto(f.user_url + '/steward?tab=logs');

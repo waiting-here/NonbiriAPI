@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { copyText } from '@shared/utils/clipboard';
-import { Drawer } from '@shared/components/ui/Drawer';
+import { ExpandablePanel } from '@shared/components/ui/ExpandablePanel';
 import { Fold } from '@shared/components/ui/Fold';
 import './logs.css';
 
@@ -11,7 +11,7 @@ export interface LogDetailField {
   wide?: boolean;
   technical?: boolean;
 }
-interface LogDetailDrawerProps {
+interface LogDetailPanelProps {
   open: boolean;
   onClose: () => void;
   title: string;
@@ -19,14 +19,14 @@ interface LogDetailDrawerProps {
   diagnostics?: { label: string; text: string };
   result?: ReactNode;
 }
-export function LogDetailDrawer({
+export function LogDetailPanel({
   open,
   onClose,
   title,
   fields,
   diagnostics,
   result,
-}: LogDetailDrawerProps) {
+}: LogDetailPanelProps) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const feedbackSeed = `${open}:${diagnostics?.text ?? ''}`;
@@ -48,7 +48,7 @@ export function LogDetailDrawer({
   );
   const technical = fields.filter((field) => field.technical);
   return (
-    <Drawer open={open} onClose={onClose} title={title} closeLabel={t('common.close')}>
+    <ExpandablePanel open={open} onClose={onClose} title={title} closeLabel={t('common.close')}>
       <div className="log-detail-content">
         {result}
         {renderFields(fields.filter((field) => !field.technical))}
@@ -56,7 +56,7 @@ export function LogDetailDrawer({
           <Fold plain title={t('common.operations.logs.presentation.technical')}>
             {renderFields(technical)}
             {diagnostics ? (
-              <div className="log-drawer-diagnostics">
+              <div className="log-detail-diagnostics">
                 <h3>{diagnostics.label}</h3>
                 <pre>{diagnostics.text || t('common.notAvailable')}</pre>
                 <button
@@ -76,6 +76,6 @@ export function LogDetailDrawer({
           </Fold>
         ) : null}
       </div>
-    </Drawer>
+    </ExpandablePanel>
   );
 }

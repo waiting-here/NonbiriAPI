@@ -169,7 +169,7 @@ describe('steward caller identity', () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(discordID));
     await waitFor(() => expect(copy).toHaveTextContent('Copied'));
 
-    const dialog = await screen.findByRole('dialog');
+    const dialog = await screen.findByRole('region', { name: /Log details/ });
     await waitFor(() =>
       expect(within(dialog).getByText('Ada Example', { exact: true })).toBeVisible(),
     );
@@ -316,7 +316,7 @@ describe('steward caller identity', () => {
       await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(0));
       await waitFor(() => expect(screen.getByRole('button', { name: 'Details' })).toBeVisible());
       await view.user.click(screen.getByRole('button', { name: 'Details' }));
-      await screen.findByRole('dialog');
+      await screen.findByRole('region', { name: /Log details/ });
       if (role === 'admin') {
         expect(screen.getByText('Caller identity', { exact: true })).toBeVisible();
       } else {
@@ -338,7 +338,7 @@ for (const role of ['admin', 'steward'] as const) {
     });
     expect(await screen.findByText(model, { exact: true })).toBeVisible();
     await view.user.click(screen.getByRole('button', { name: 'Details' }));
-    const drawer = await screen.findByRole('dialog');
+    const drawer = await screen.findByRole('region', { name: /Log details/ });
     expect(within(drawer).getByText('Called charity model')).toBeVisible();
     expect(within(drawer).getAllByText(model)[0]).toBeVisible();
     expect(drawer.querySelector('example')).toBeNull();

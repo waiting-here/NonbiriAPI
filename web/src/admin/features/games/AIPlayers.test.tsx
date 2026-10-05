@@ -82,7 +82,7 @@ it('duplicates a strategy, edits ordered conditions and previews through the bac
       });
     }),
   );
-  const { user } = await renderWithProviders(<AIPlayersAdmin onClose={() => undefined} />, {
+  const { user } = await renderWithProviders(<AIPlayersAdmin />, {
     station: 'admin',
   });
   await user.click(await screen.findByRole('button', { name: 'Duplicate' }));

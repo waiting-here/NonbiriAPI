@@ -1,12 +1,20 @@
 .ai-admin {
+  padding: var(--nb-space-5);
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
+}
+.ai-admin input,
+.ai-admin select {
+  min-width: 0;
+  max-width: 100%;
 }
 .ai-editor {
   min-width: 0;
   border: 0;
   padding: 0;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
 }
 .ai-parameters {
@@ -41,7 +49,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  border-bottom: 1px solid var(--nb-border, #e2e8f0);
+  border-bottom: 1px solid var(--nb-color-border);
   padding: 1rem 0;
 }
 .ai-list-row p {
@@ -50,9 +58,10 @@
 .ai-rule,
 .ai-preview {
   padding: 1rem;
-  border: 1px solid var(--nb-border, #e2e8f0);
+  border: 1px solid var(--nb-color-border);
   border-radius: 0.75rem;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
 }
 .ai-condition {
@@ -62,12 +71,15 @@
 }
 .ai-preview table {
   width: 100%;
+  min-width: 0;
+  table-layout: fixed;
   border-collapse: collapse;
 }
 .ai-preview th,
 .ai-preview td {
   padding: 0.45rem;
   text-align: left;
+  overflow-wrap: anywhere;
 }
 .ai-preview progress {
   max-width: 6rem;
@@ -75,7 +87,7 @@
 }
 @media (max-width: 560px) {
   .ai-condition {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .ai-list-row {
     align-items: flex-start;

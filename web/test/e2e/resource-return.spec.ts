@@ -207,8 +207,8 @@ test('endpoint detail keeps list return state through nested paging, refresh, an
   await page.reload();
   await expect(page.getByRole('heading', { name: 'resource return fixture' })).toBeVisible();
   await page
-    .getByRole('dialog')
-    .locator('.nb-drawer__head')
+    .locator('.nb-expandable-panel:not([hidden])')
+    .locator('.nb-expandable-panel__head')
     .getByRole('button', { name: 'Close', exact: true })
     .click();
   await page.getByRole('link', { name: '← My services', exact: true }).click();
@@ -218,8 +218,8 @@ test('endpoint detail keeps list return state through nested paging, refresh, an
   await page.goto(`${USER_ORIGIN}/endpoints/11?routes_2_page=1&routes_2_page_size=10`);
   await expect(page.getByRole('heading', { name: 'resource return fixture' })).toBeVisible();
   await page
-    .getByRole('dialog')
-    .locator('.nb-drawer__head')
+    .locator('.nb-expandable-panel:not([hidden])')
+    .locator('.nb-expandable-panel__head')
     .getByRole('button', { name: 'Close', exact: true })
     .click();
   await page.getByRole('link', { name: '← My services', exact: true }).click();

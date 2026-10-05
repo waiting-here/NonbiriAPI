@@ -9,7 +9,7 @@ import { useSearchState } from '@shared/operations/useSearchState';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { DataTable, Fold, MoreMenu } from '@shared/components/ui';
-import { Drawer } from '@shared/components/ui/Drawer';
+import { ExpandablePanel } from '@shared/components/ui/ExpandablePanel';
 import './blacklist.css';
 import { ReasonText } from '@shared/components/ReasonText';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
@@ -132,7 +132,7 @@ export function BlacklistManagement({
     enabled: Boolean(accountID) && !sessionFetching,
     retry: false,
   });
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
   const [discordID, setDiscordID] = useState('');
   const [reason, setReason] = useState('');
   const [search, setSearch] = useState(q);
@@ -160,7 +160,7 @@ export function BlacklistManagement({
         if (input.add) {
           setDiscordID('');
           setReason('');
-          setDrawerOpen(false);
+          setPanelOpen(false);
         } else if (selected === input.id) setSelected('');
       });
     },
@@ -256,15 +256,15 @@ export function BlacklistManagement({
             className="nb-btn nb-btn--primary"
             type="button"
             disabled={!accountID || Boolean(sessionError)}
-            onClick={() => setDrawerOpen(true)}
+            onClick={() => setPanelOpen(true)}
           >
             {label.addTitle}
           </button>
         }
       />
-      <Drawer
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
+      <ExpandablePanel
+        open={panelOpen}
+        onClose={() => setPanelOpen(false)}
         title={label.addTitle}
         closeLabel={t('common.close')}
         busy={mutation.isPending}
@@ -306,7 +306,7 @@ export function BlacklistManagement({
             </button>
           </div>
         </form>
-        {drawerOpen ? feedback : null}
+        {panelOpen ? feedback : null}
         <ConfirmDialog
           open={
             confirmation !== null &&
@@ -335,8 +335,8 @@ export function BlacklistManagement({
             }
           }}
         />
-      </Drawer>
-      {!drawerOpen ? feedback : null}
+      </ExpandablePanel>
+      {!panelOpen ? feedback : null}
       <Card>
         <form onSubmit={applySearch} className="ops-field-grid">
           <label className="ops-form-field">

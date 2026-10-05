@@ -448,6 +448,13 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
     labelKey: 'admin.games.nav',
   }),
   admin({
+    id: 'admin-game-ai',
+    path: '/games/ai',
+    access: 'admin',
+    layout: 'wide',
+    registered: true,
+  }),
+  admin({
     id: 'admin-game-history',
     path: '/games/history',
     access: 'admin',

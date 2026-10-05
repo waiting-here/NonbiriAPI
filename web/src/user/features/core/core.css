@@ -834,15 +834,19 @@
 .services-key-table .nb-inline {
   justify-content: flex-end;
 }
-.services-key-table .nb-drawer {
+.services-key-table .core-key-panels[hidden] {
+  display: none;
+}
+.services-key-table .core-key-panels > td {
+  display: table-cell;
   text-align: left;
   white-space: normal;
 }
-.services-key-table td[data-cell='action'] .nb-drawer .nb-btn {
-  width: auto;
+.services-key-table .core-key-panels > td::before {
+  display: none;
 }
-.services-key-table .nb-drawer__head > button {
-  flex: 0 0 auto;
+.services-key-table .core-key-panels .nb-inline {
+  justify-content: flex-start;
 }
 .services-model-list {
   list-style: none;
