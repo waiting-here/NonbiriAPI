@@ -1153,7 +1153,7 @@
     },
     "github.com/waiting-here/NonbiriAPI/internal/game/likes/engine": {
       "TestCharacterBonusBeforeSuppressionAndMultiplierButDistillStaysSpecial": 0.05,
-      "TestCharacterMainUsesSharedSnapshotAndNominalBase": 0.19,
+      "TestHistoricalCharacterMainUsesSharedSnapshotAndNominalBase": 0.19,
       "TestDeepSeekHitsGLMWithoutDrawAndFailureLeavesInputIntact": 0.14,
       "TestDenseRoundAndFullHistoryFitWithoutTruncation": 1.11,
       "TestDifferentialCatalogVariantsAndRounds": 31.33,
