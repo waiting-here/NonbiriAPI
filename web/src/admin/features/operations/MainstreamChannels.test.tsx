@@ -170,10 +170,7 @@ describe('administrator mainstream channels page', () => {
     expect(await screen.findByText('Active first')).toBeVisible();
     expect(screen.getByRole('combobox', { name: 'Items per page' })).toHaveValue('20');
     expect(screen.getByText('21 items')).toBeVisible();
-    expect(screen.getByRole('button', { name: '1' })).toHaveAttribute(
-      'aria-current',
-      'page',
-    );
+    expect(screen.getByRole('button', { name: '1' })).toHaveAttribute('aria-current', 'page');
     await waitFor(() => {
       const params = new URLSearchParams(screen.getByTestId('location-search').textContent ?? '');
       expect(params.get('state')).toBe('active');
@@ -362,7 +359,7 @@ describe('administrator mainstream channels page', () => {
       role: 'admin',
     });
 
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(document.querySelector('.nb-expandable-panel:not([hidden])')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /New channel/ })).toBeDisabled();
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
@@ -395,7 +392,7 @@ describe('administrator mainstream channels page', () => {
         name: status === 401 ? 'Sign-in required' : 'Something went wrong',
       }),
     ).toBeVisible();
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(document.querySelector('.nb-expandable-panel:not([hidden])')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /New channel/ })).toBeDisabled();
     expect(screen.queryByText('Loading…')).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -460,7 +457,7 @@ describe('administrator mainstream channels page', () => {
     await waitFor(() =>
       expect(screen.queryByRole('heading', { name: 'Channel details' })).not.toBeInTheDocument(),
     );
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(document.querySelector('.nb-expandable-panel:not([hidden])')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /New channel/ })).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'Retire' })).not.toBeInTheDocument();
   });
@@ -529,7 +526,7 @@ describe('administrator mainstream channels page', () => {
     expect(await screen.findByText('Account two')).toBeVisible();
     await waitFor(() => {
       expect(screen.queryByRole('heading', { name: 'Channel details' })).not.toBeInTheDocument();
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(document.querySelector('.nb-expandable-panel:not([hidden])')).not.toBeInTheDocument();
     });
     expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Retire' })).not.toBeInTheDocument();
@@ -604,7 +601,7 @@ describe('administrator mainstream channels page', () => {
     rendered.queryClient.setQueryData(adminKeys.session, null);
     await waitFor(() => {
       expect(screen.queryByRole('heading', { name: 'Channel details' })).not.toBeInTheDocument();
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(document.querySelector('.nb-expandable-panel:not([hidden])')).not.toBeInTheDocument();
       expect(screen.getByRole('button', { name: /New channel/ })).toBeDisabled();
     });
 

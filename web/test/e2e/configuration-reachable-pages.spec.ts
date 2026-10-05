@@ -519,7 +519,7 @@ test('reachable user endpoint keys expose the owner-only upstream prompt storage
   await expect(page.getByRole('heading', { name: 'primary', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'More actions · key note', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Edit note and limits', exact: true }).click();
-  const editor = page.getByRole('dialog', { name: 'Edit note and limits', exact: true });
+  const editor = page.getByRole('region', { name: 'Edit note and limits', exact: true });
   await expect(editor.getByText('Ask the provider not to store chats')).toBeVisible();
   await editor.getByRole('button', { name: 'Close', exact: true }).click();
   await page.getByRole('button', { name: 'More actions · key note', exact: true }).click();

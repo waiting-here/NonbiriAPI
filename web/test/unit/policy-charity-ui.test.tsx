@@ -655,29 +655,29 @@ describe('experimental policy and charity controls', () => {
 
     await rendered.user.click(screen.getByRole('menuitem', { name: 'Edit note and limits' }));
     await rendered.user.clear(
-      within(screen.getByRole('dialog', { name: 'Edit note and limits' })).getByLabelText(
+      within(screen.getByRole('region', { name: 'Edit note and limits' })).getByLabelText(
         'Maximum concurrency',
       ),
     );
     await rendered.user.type(
-      within(screen.getByRole('dialog', { name: 'Edit note and limits' })).getByLabelText(
+      within(screen.getByRole('region', { name: 'Edit note and limits' })).getByLabelText(
         'Maximum concurrency',
       ),
       '3',
     );
     await rendered.user.clear(
-      within(screen.getByRole('dialog', { name: 'Edit note and limits' })).getByLabelText(
+      within(screen.getByRole('region', { name: 'Edit note and limits' })).getByLabelText(
         'Maximum RPM',
       ),
     );
     await rendered.user.type(
-      within(screen.getByRole('dialog', { name: 'Edit note and limits' })).getByLabelText(
+      within(screen.getByRole('region', { name: 'Edit note and limits' })).getByLabelText(
         'Maximum RPM',
       ),
       '50',
     );
     await rendered.user.click(
-      within(screen.getByRole('dialog', { name: 'Edit note and limits' })).getByRole('button', {
+      within(screen.getByRole('region', { name: 'Edit note and limits' })).getByRole('button', {
         name: 'Save',
       }),
     );
@@ -690,7 +690,7 @@ describe('experimental policy and charity controls', () => {
       }),
     );
     await waitFor(() =>
-      expect(screen.queryByRole('dialog', { name: 'Edit note and limits' })).toBeNull(),
+      expect(screen.queryByRole('region', { name: 'Edit note and limits' })).toBeNull(),
     );
     await within(keyCard).findByText(/RPM: 50/);
 

@@ -1,9 +1,11 @@
 # AI players
 
-Bidding Duel supports four local strategy templates: Balanced (均衡), Pot-first
+Bidding Duel labels local scoring opponents as **First-generation AI players**.
+It supports four strategy templates: Balanced (均衡), Pot-first
 (争池), Patient (蓄势) and Comeback (追分). They describe styles, not difficulty
 levels or promised win rates. Each has a disabled, zero-price player ready for
-configuration in **Games → AI players and strategies**.
+configuration on the **Games → AI players and strategies** page. The player
+lobby opens on PvP; its AI tab lets players select one opponent at a time.
 
 Enable the games master switch, Bidding Duel, AI challenges and the desired
 players. PvP tier switches do not control AI challenges. Waiting costs nothing;

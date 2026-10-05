@@ -21,6 +21,7 @@ func Descriptor() game.ModuleDescriptor {
 			{Station: "admin", Method: "GET", Pattern: "/admin/api/games/bidding/history/{id}"},
 			{Station: "admin", Method: "GET", Pattern: "/admin/api/games/bidding/history/{id}/rounds"},
 			{Station: "admin", Method: "POST", Pattern: "/admin/api/games/bidding/history/export"},
+			{Station: "admin", Method: "GET", Pattern: "/admin/api/games/bidding/history/download"},
 			{Station: "user", Method: "GET", Pattern: "/api/games/bidding/state", Continuation: true},
 			{Station: "user", Method: "POST", Pattern: "/api/games/bidding/queue"},
 			{Station: "user", Method: "DELETE", Pattern: "/api/games/bidding/queue/{id}", Continuation: true},

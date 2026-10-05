@@ -208,7 +208,9 @@ describe('endpoint detail numbered resource panels', () => {
     );
 
     await rendered.user.click(
-      within(screen.getByRole('dialog')).getByRole('button', { name: 'Close' }),
+      within(screen.getByRole('region', { name: /^View models/ })).getByRole('button', {
+        name: 'Close',
+      }),
     );
     expect(screen.getByRole('heading', { name: 'Key' }).closest('section')).toHaveAttribute(
       'aria-busy',
@@ -317,7 +319,9 @@ describe('endpoint detail numbered resource panels', () => {
 
     const requestsBeforeCollapse = requests.filter((path) => path.includes('/keys/21/models'));
     await rendered.user.click(
-      within(screen.getByRole('dialog')).getByRole('button', { name: 'Close' }),
+      within(screen.getByRole('region', { name: /^View models/ })).getByRole('button', {
+        name: 'Close',
+      }),
     );
     await new Promise((resolve) => setTimeout(resolve, 1_100));
     expect(requests.filter((path) => path.includes('/keys/21/models'))).toEqual(

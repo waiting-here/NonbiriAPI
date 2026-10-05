@@ -385,6 +385,10 @@ FROM donations d LEFT JOIN users u ON u.id=d.user_id WHERE d.id=?`, donationID).
 		return AdminDonation{}, fmt.Errorf("donation: read projection: %w", err)
 	}
 	out.ID = strconv.FormatInt(id, 10)
+	// A normal rejection is only reachable from pending; it has no first approval.
+	if out.Status == "pending" || lastAction == "reject" {
+		out.FirstApprovalOrigin = "none"
+	}
 	out.CanForceReject = out.Status == "approved" && out.FirstApprovalOrigin == "auto" && !unknown
 	if !out.CanForceReject {
 		reason := "not_automatically_approved"

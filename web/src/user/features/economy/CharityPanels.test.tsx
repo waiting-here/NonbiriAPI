@@ -354,19 +354,14 @@ function donationCheckboxes() {
 }
 
 async function clickDonationCheckbox(user: TestUser, checkbox: HTMLElement) {
-  const picker = checkbox.closest('dialog');
-  if (picker && !picker.open) {
+  const picker = checkbox.closest<HTMLElement>('.nb-expandable-panel');
+  if (picker?.hidden) {
     await user.click(screen.getByRole('button', { name: charityCopy.presentation.openPicker }));
-  } else if (!picker && screen.queryByRole('dialog')) {
-    await user.click(screen.getByRole('button', { name: charityCopy.presentation.selectionDone }));
   }
   await user.click(checkbox);
 }
 
 async function declinePublicThanks(user: TestUser) {
-  if (screen.queryByRole('dialog')) {
-    await user.click(screen.getByRole('button', { name: charityCopy.presentation.selectionDone }));
-  }
   await user.click(
     within(screen.getByRole('radiogroup', { name: 'Accept a public Discord thank-you' })).getByRole(
       'radio',

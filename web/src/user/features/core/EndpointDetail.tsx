@@ -1,5 +1,5 @@
 import { Fold, MoreMenu, OutcomeNote } from '@shared/components/ui';
-import { Drawer } from '@shared/components/ui/Drawer';
+import { ExpandablePanel } from '@shared/components/ui/ExpandablePanel';
 import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
 import { useResourceFilters, useResourceListScroll } from './useResourceFilters';
 import { ResourceFilterBar, FilteredResourceEmpty } from './ResourceFilterControls';
@@ -913,11 +913,11 @@ function EndpointKeyCard({
   endpoint,
   keyData,
   onRefresh,
-  suppressRouteDrawer = false,
+  suppressRoutePanel = false,
 }: {
   accountId: string;
   endpoint: Endpoint;
-  suppressRouteDrawer?: boolean;
+  suppressRoutePanel?: boolean;
   keyData: EndpointKey;
   onRefresh: () => void;
 }) {
@@ -936,7 +936,7 @@ function EndpointKeyCard({
   const [modelsOpen, setModelsOpen] = useState(false);
   const [modelsVisited, setModelsVisited] = useState(false);
   const routesOpen = new URLSearchParams(location.search).has(`routes_${keyData.id}_page`);
-  const showModels = modelsOpen || (routesOpen && !suppressRouteDrawer);
+  const showModels = modelsOpen || (routesOpen && !suppressRoutePanel);
   const modelPager = usePagePager({
     station: 'user',
     listType: 'key-available-models',
@@ -1103,332 +1103,340 @@ function EndpointKeyCard({
   const blockTitle =
     keyData.suspension_state !== 'none' ? ui('user.services.blockedAction') : undefined;
   return (
-    <tr className="core-key-card">
-      <td data-cell="title">
-        <strong>{keyData.note || t('endpoints.key')}</strong>
-        <span className="nb-sub nb-mono">{display}</span>
-      </td>
-      <td data-cell="status">
-        <span
-          className={`nb-badge nb-badge--${keyData.suspension_state !== 'none' ? 'bad' : physicalAvailable ? 'ok' : 'warn'}`}
-        >
-          {!endpoint.enabled
-            ? t('browse.state.endpoint_disabled')
-            : keyData.suspension_state !== 'none'
-              ? t('endpoints.securityProcessing')
-              : keyData.enabled
-                ? t('common.enabled')
-                : t('common.disabled')}
-        </span>
-        {keyData.browse?.donation_eligibility === 'already_donated' ? (
-          <span className="nb-sub">
-            <span className="nb-badge">{ui('user.services.donated')}</span>
+    <>
+      <tr className="core-key-card">
+        <td data-cell="title">
+          <strong>{keyData.note || t('endpoints.key')}</strong>
+          <span className="nb-sub nb-mono">{display}</span>
+        </td>
+        <td data-cell="status">
+          <span
+            className={`nb-badge nb-badge--${keyData.suspension_state !== 'none' ? 'bad' : physicalAvailable ? 'ok' : 'warn'}`}
+          >
+            {!endpoint.enabled
+              ? t('browse.state.endpoint_disabled')
+              : keyData.suspension_state !== 'none'
+                ? t('endpoints.securityProcessing')
+                : keyData.enabled
+                  ? t('common.enabled')
+                  : t('common.disabled')}
           </span>
-        ) : null}
-      </td>
-      <td data-cell="meta" data-label={t('endpoints.discovery')}>
-        {evidence?.count !== null && evidence?.count !== undefined ? (
-          <span className="nb-num">{evidence.count}</span>
-        ) : (
-          <span>{evidence?.state === 'checking' ? t('common.working') : t('common.notSet')}</span>
-        )}
-        <button
-          type="button"
-          className="nb-btn nb-btn--ghost nb-btn--sm"
-          aria-label={t('endpoints.refreshDiscovery')}
-          title={t('endpoints.refreshDiscovery')}
-          disabled={
-            busy ||
-            !evidence ||
-            evidence.state === 'checking' ||
-            reconciliationRequired ||
-            !physicalAvailable ||
-            Boolean(replayAttempt)
-          }
-          onClick={() => void run({ kind: 'refresh', evidenceRevision: evidence?.revision ?? '0' })}
-        >
-          {evidence?.count != null ? '↻' : t('endpoints.refreshDiscovery')}
-        </button>
-      </td>
-      <td data-cell="meta" data-label={ui('user.services.keyLimits')}>
-        {keyData.max_concurrency === 0 && keyData.max_rpm === 0 ? (
-          ui('common.keyLimits.unlimited')
-        ) : (
-          <KeyLimitSummary concurrency={keyData.max_concurrency} rpm={keyData.max_rpm} />
-        )}
-      </td>
-      <td data-cell="meta" data-label={ui('user.services.inUse')}>
-        <button
-          type="button"
-          className="nb-btn nb-btn--ghost nb-btn--sm"
-          onClick={openRoutes}
-          aria-label={t('browse.modelCount', { count: keyData.browse?.model_count ?? '—' })}
-        >
-          {keyData.browse?.model_count ?? '—'}
-        </button>
-      </td>
-      <td data-cell="action" className="is-action">
-        <div className="nb-inline">
-          <button
-            type="button"
-            className="nb-btn nb-btn--secondary nb-btn--sm"
-            onClick={openModels}
-          >
-            {ui('user.services.viewModels')}
-          </button>
-          <MoreMenu
-            label={`${ui('user.services.more')} · ${keyData.note || display}`}
-            items={[
-              {
-                label: <span title={blockTitle}>{ui('user.services.editKey')}</span>,
-                disabled: actionBlocked,
-                onSelect: () => {
-                  setNote(keyData.note);
-                  setEditRevision(keyData.revision);
-                  setMaxConcurrency(String(keyData.max_concurrency));
-                  setMaxRPM(String(keyData.max_rpm));
-                  setEditing(true);
-                },
-              },
-              {
-                label: <span title={blockTitle}>{t('endpoints.manualTitle')}</span>,
-                disabled: actionBlocked,
-                onSelect: openModels,
-              },
-              ...(endpoint.connector_type === 'openai-compatible'
-                ? [
-                    {
-                      label: (
-                        <span title={blockTitle}>
-                          {keyData.force_store_false
-                            ? t('endpoints.storePolicyOff')
-                            : t('endpoints.storePolicyOn')}
-                        </span>
-                      ),
-                      disabled: actionBlocked,
-                      onSelect: () =>
-                        void run({
-                          kind: 'patch',
-                          input: {
-                            force_store_false: !keyData.force_store_false,
-                            expected_revision: keyData.revision,
-                          },
-                        }),
-                    },
-                  ]
-                : []),
-              {
-                label: (
-                  <span title={blockTitle}>
-                    {keyData.enabled ? t('endpoints.keyToggleOff') : t('endpoints.keyToggleOn')}
-                  </span>
-                ),
-                disabled: actionBlocked,
-                onSelect: () =>
-                  void run({
-                    kind: 'patch',
-                    input: { enabled: !keyData.enabled, expected_revision: keyData.revision },
-                  }),
-              },
-              'separator',
-              {
-                label: <span title={blockTitle}>{t('endpoints.deleteKey')}…</span>,
-                disabled: actionBlocked,
-                danger: true,
-                onSelect: () => setDeleteOpen(true),
-              },
-            ]}
-          />
-        </div>
-        <OutcomeNotice
-          outcome={outcome}
-          savedRefreshFailed={reconciliationRequired}
-          onCheck={() => void (operation.isSuccess ? operation.refresh() : operation.check())}
-          busy={busy}
-        />
-        {reconciliationRequired ? (
-          <button
-            type="button"
-            className="nb-btn nb-btn--secondary"
-            disabled={busy}
-            onClick={() => void reconcile()}
-          >
-            {t('common.reconcile')}
-          </button>
-        ) : null}
-        {replayAttempt && (replayAttempt.kind !== 'delete' || !deleteOpen) ? (
-          <button
-            type="button"
-            className="nb-btn nb-btn--secondary"
-            disabled={busy || reconciliationRequired}
-            onClick={() => void run(replayAttempt)}
-          >
-            {t('common.reconcile')}
-          </button>
-        ) : null}
-        <Drawer
-          open={showModels}
-          onClose={closeModels}
-          title={`${ui('user.services.viewModels')} · ${keyData.note || display}`}
-          closeLabel={t('common.close')}
-        >
-          {modelsVisited || routesOpen ? (
-            <>
-              {automatic.isPending ? (
-                <CoreLoading compact />
-              ) : automatic.error ? (
-                <CoreErrorPanel
-                  compact
-                  error={automatic.error}
-                  onRetry={() => void automatic.refetch()}
-                />
-              ) : automatic.data ? (
-                <section className="core-card">
-                  <h3>{t('endpoints.discovery')}</h3>
-                  <DiscoveryStatus evidence={automatic.data.evidence} />
-                  <ul className="services-model-list">
-                    {automatic.data.automatic_entries.map((entry) => (
-                      <li className="nb-mono" key={entry.id}>
-                        {entry.upstream_model_id}
-                      </li>
-                    ))}
-                  </ul>
-                  <PagePagination
-                    metadata={automatic.data.pagination}
-                    requestedPage={modelPager.page}
-                    busy={automatic.isFetching}
-                    onPageChange={modelPager.setPage}
-                    onPageSizeChange={modelPager.setPageSize}
-                  />
-                </section>
-              ) : null}
-              <KeyBrowseSummary
-                accountId={accountId}
-                endpointId={endpoint.id}
-                keyData={keyData}
-                onRefresh={onRefresh}
-              />
-              <ManualCatalog
-                accountId={accountId}
-                endpointId={endpoint.id}
-                keyId={keyData.id}
-                visible={showModels}
-              />
-            </>
+          {keyData.browse?.donation_eligibility === 'already_donated' ? (
+            <span className="nb-sub">
+              <span className="nb-badge">{ui('user.services.donated')}</span>
+            </span>
           ) : null}
-        </Drawer>
-        <Drawer
-          open={editing}
-          onClose={() => {
-            if (!busy && !replayAttempt) {
-              setNote(keyData.note);
-              setEditing(false);
+        </td>
+        <td data-cell="meta" data-label={t('endpoints.discovery')}>
+          {evidence?.count !== null && evidence?.count !== undefined ? (
+            <span className="nb-num">{evidence.count}</span>
+          ) : (
+            <span>{evidence?.state === 'checking' ? t('common.working') : t('common.notSet')}</span>
+          )}
+          <button
+            type="button"
+            className="nb-btn nb-btn--ghost nb-btn--sm"
+            aria-label={t('endpoints.refreshDiscovery')}
+            title={t('endpoints.refreshDiscovery')}
+            disabled={
+              busy ||
+              !evidence ||
+              evidence.state === 'checking' ||
+              reconciliationRequired ||
+              !physicalAvailable ||
+              Boolean(replayAttempt)
             }
-          }}
-          title={ui('user.services.editKey')}
-          closeLabel={t('common.close')}
-          busy={busy || Boolean(replayAttempt)}
-        >
-          <p className="nb-muted">{t('browse.personalLimits')}</p>
-          <dl className="nb-facts">
-            <div>
-              <dt>{t('endpoints.storePolicy')}</dt>
-              <dd>{keyData.force_store_false ? t('common.yes') : t('common.no')}</dd>
-            </div>
-            <div>
-              <dt>{t('common.updated')}</dt>
-              <dd>
-                <CoreTime value={keyData.updated_at} />
-              </dd>
-            </div>
-          </dl>
-          <form
-            className="core-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void run({
-                kind: 'patch',
-                input: {
-                  note,
-                  max_concurrency: Number(maxConcurrency),
-                  max_rpm: Number(maxRPM),
-                  expected_revision: editRevision,
-                },
-              });
-            }}
+            onClick={() =>
+              void run({ kind: 'refresh', evidenceRevision: evidence?.revision ?? '0' })
+            }
           >
-            <div className="core-field-grid">
-              <label>
-                <span>{t('endpoints.keyNote')}</span>
-                <input
-                  value={note}
-                  maxLength={2048}
-                  disabled={Boolean(replayAttempt)}
-                  onChange={(event) => setNote(event.target.value)}
-                />
-              </label>
-            </div>
-            <KeyLimitFields
-              concurrency={maxConcurrency}
-              rpm={maxRPM}
-              onConcurrency={setMaxConcurrency}
-              onRPM={setMaxRPM}
-              disabled={busy || Boolean(replayAttempt)}
-            />
-            <div className="core-form-actions">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                disabled={busy || Boolean(replayAttempt)}
-                onClick={() => {
-                  setNote(keyData.note);
-                  setEditing(false);
-                }}
-              >
-                {t('common.cancel')}
-              </button>
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={
-                  busy ||
-                  reconciliationRequired ||
-                  Boolean(replayAttempt) ||
-                  (note === keyData.note &&
-                    Number(maxConcurrency) === keyData.max_concurrency &&
-                    Number(maxRPM) === keyData.max_rpm)
-                }
-              >
-                {t('common.save')}
-              </button>
-            </div>
-          </form>
-        </Drawer>
-        <ConfirmDialog
-          open={deleteOpen}
-          title={t('endpoints.deleteKeyTitle')}
-          description={t('endpoints.deleteKeyBody')}
-          confirmLabel={
-            replayAttempt?.kind === 'delete' ? t('common.retrySame') : t('endpoints.deleteKey')
-          }
-          danger
-          busy={busy}
-          onCancel={() => {
-            if (!busy) setDeleteOpen(false);
-          }}
-          onConfirm={() =>
-            void run(
-              replayAttempt?.kind === 'delete'
-                ? replayAttempt
-                : {
-                    kind: 'delete',
-                    expectedRevision: keyData.revision,
+            {evidence?.count != null ? '↻' : t('endpoints.refreshDiscovery')}
+          </button>
+        </td>
+        <td data-cell="meta" data-label={ui('user.services.keyLimits')}>
+          {keyData.max_concurrency === 0 && keyData.max_rpm === 0 ? (
+            ui('common.keyLimits.unlimited')
+          ) : (
+            <KeyLimitSummary concurrency={keyData.max_concurrency} rpm={keyData.max_rpm} />
+          )}
+        </td>
+        <td data-cell="meta" data-label={ui('user.services.inUse')}>
+          <button
+            type="button"
+            className="nb-btn nb-btn--ghost nb-btn--sm"
+            onClick={openRoutes}
+            aria-label={t('browse.modelCount', { count: keyData.browse?.model_count ?? '—' })}
+          >
+            {keyData.browse?.model_count ?? '—'}
+          </button>
+        </td>
+        <td data-cell="action" className="is-action">
+          <div className="nb-inline">
+            <button
+              type="button"
+              className="nb-btn nb-btn--secondary nb-btn--sm"
+              onClick={openModels}
+            >
+              {ui('user.services.viewModels')}
+            </button>
+            <MoreMenu
+              label={`${ui('user.services.more')} · ${keyData.note || display}`}
+              items={[
+                {
+                  label: <span title={blockTitle}>{ui('user.services.editKey')}</span>,
+                  disabled: actionBlocked,
+                  onSelect: () => {
+                    setNote(keyData.note);
+                    setEditRevision(keyData.revision);
+                    setMaxConcurrency(String(keyData.max_concurrency));
+                    setMaxRPM(String(keyData.max_rpm));
+                    setEditing(true);
                   },
-            )
-          }
-        />
-      </td>
-    </tr>
+                },
+                {
+                  label: <span title={blockTitle}>{t('endpoints.manualTitle')}</span>,
+                  disabled: actionBlocked,
+                  onSelect: openModels,
+                },
+                ...(endpoint.connector_type === 'openai-compatible'
+                  ? [
+                      {
+                        label: (
+                          <span title={blockTitle}>
+                            {keyData.force_store_false
+                              ? t('endpoints.storePolicyOff')
+                              : t('endpoints.storePolicyOn')}
+                          </span>
+                        ),
+                        disabled: actionBlocked,
+                        onSelect: () =>
+                          void run({
+                            kind: 'patch',
+                            input: {
+                              force_store_false: !keyData.force_store_false,
+                              expected_revision: keyData.revision,
+                            },
+                          }),
+                      },
+                    ]
+                  : []),
+                {
+                  label: (
+                    <span title={blockTitle}>
+                      {keyData.enabled ? t('endpoints.keyToggleOff') : t('endpoints.keyToggleOn')}
+                    </span>
+                  ),
+                  disabled: actionBlocked,
+                  onSelect: () =>
+                    void run({
+                      kind: 'patch',
+                      input: { enabled: !keyData.enabled, expected_revision: keyData.revision },
+                    }),
+                },
+                'separator',
+                {
+                  label: <span title={blockTitle}>{t('endpoints.deleteKey')}…</span>,
+                  disabled: actionBlocked,
+                  danger: true,
+                  onSelect: () => setDeleteOpen(true),
+                },
+              ]}
+            />
+          </div>
+          <OutcomeNotice
+            outcome={outcome}
+            savedRefreshFailed={reconciliationRequired}
+            onCheck={() => void (operation.isSuccess ? operation.refresh() : operation.check())}
+            busy={busy}
+          />
+          {reconciliationRequired ? (
+            <button
+              type="button"
+              className="nb-btn nb-btn--secondary"
+              disabled={busy}
+              onClick={() => void reconcile()}
+            >
+              {t('common.reconcile')}
+            </button>
+          ) : null}
+          {replayAttempt && (replayAttempt.kind !== 'delete' || !deleteOpen) ? (
+            <button
+              type="button"
+              className="nb-btn nb-btn--secondary"
+              disabled={busy || reconciliationRequired}
+              onClick={() => void run(replayAttempt)}
+            >
+              {t('common.reconcile')}
+            </button>
+          ) : null}
+          <ConfirmDialog
+            open={deleteOpen}
+            title={t('endpoints.deleteKeyTitle')}
+            description={t('endpoints.deleteKeyBody')}
+            confirmLabel={
+              replayAttempt?.kind === 'delete' ? t('common.retrySame') : t('endpoints.deleteKey')
+            }
+            danger
+            busy={busy}
+            onCancel={() => {
+              if (!busy) setDeleteOpen(false);
+            }}
+            onConfirm={() =>
+              void run(
+                replayAttempt?.kind === 'delete'
+                  ? replayAttempt
+                  : {
+                      kind: 'delete',
+                      expectedRevision: keyData.revision,
+                    },
+              )
+            }
+          />
+        </td>
+      </tr>
+      <tr className="core-key-panels" hidden={!showModels && !editing}>
+        <td colSpan={6}>
+          <ExpandablePanel
+            open={showModels}
+            onClose={closeModels}
+            title={`${ui('user.services.viewModels')} · ${keyData.note || display}`}
+            closeLabel={t('common.close')}
+          >
+            {modelsVisited || routesOpen ? (
+              <>
+                {automatic.isPending ? (
+                  <CoreLoading compact />
+                ) : automatic.error ? (
+                  <CoreErrorPanel
+                    compact
+                    error={automatic.error}
+                    onRetry={() => void automatic.refetch()}
+                  />
+                ) : automatic.data ? (
+                  <section className="core-card">
+                    <h3>{t('endpoints.discovery')}</h3>
+                    <DiscoveryStatus evidence={automatic.data.evidence} />
+                    <ul className="services-model-list">
+                      {automatic.data.automatic_entries.map((entry) => (
+                        <li className="nb-mono" key={entry.id}>
+                          {entry.upstream_model_id}
+                        </li>
+                      ))}
+                    </ul>
+                    <PagePagination
+                      metadata={automatic.data.pagination}
+                      requestedPage={modelPager.page}
+                      busy={automatic.isFetching}
+                      onPageChange={modelPager.setPage}
+                      onPageSizeChange={modelPager.setPageSize}
+                    />
+                  </section>
+                ) : null}
+                <KeyBrowseSummary
+                  accountId={accountId}
+                  endpointId={endpoint.id}
+                  keyData={keyData}
+                  onRefresh={onRefresh}
+                />
+                <ManualCatalog
+                  accountId={accountId}
+                  endpointId={endpoint.id}
+                  keyId={keyData.id}
+                  visible={showModels}
+                />
+              </>
+            ) : null}
+          </ExpandablePanel>
+          <ExpandablePanel
+            open={editing}
+            onClose={() => {
+              if (!busy && !replayAttempt) {
+                setNote(keyData.note);
+                setEditing(false);
+              }
+            }}
+            title={ui('user.services.editKey')}
+            closeLabel={t('common.close')}
+            busy={busy || Boolean(replayAttempt)}
+          >
+            <p className="nb-muted">{t('browse.personalLimits')}</p>
+            <dl className="nb-facts">
+              <div>
+                <dt>{t('endpoints.storePolicy')}</dt>
+                <dd>{keyData.force_store_false ? t('common.yes') : t('common.no')}</dd>
+              </div>
+              <div>
+                <dt>{t('common.updated')}</dt>
+                <dd>
+                  <CoreTime value={keyData.updated_at} />
+                </dd>
+              </div>
+            </dl>
+            <form
+              className="core-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void run({
+                  kind: 'patch',
+                  input: {
+                    note,
+                    max_concurrency: Number(maxConcurrency),
+                    max_rpm: Number(maxRPM),
+                    expected_revision: editRevision,
+                  },
+                });
+              }}
+            >
+              <div className="core-field-grid">
+                <label>
+                  <span>{t('endpoints.keyNote')}</span>
+                  <input
+                    value={note}
+                    maxLength={2048}
+                    disabled={Boolean(replayAttempt)}
+                    onChange={(event) => setNote(event.target.value)}
+                  />
+                </label>
+              </div>
+              <KeyLimitFields
+                concurrency={maxConcurrency}
+                rpm={maxRPM}
+                onConcurrency={setMaxConcurrency}
+                onRPM={setMaxRPM}
+                disabled={busy || Boolean(replayAttempt)}
+              />
+              <div className="core-form-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={busy || Boolean(replayAttempt)}
+                  onClick={() => {
+                    setNote(keyData.note);
+                    setEditing(false);
+                  }}
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={
+                    busy ||
+                    reconciliationRequired ||
+                    Boolean(replayAttempt) ||
+                    (note === keyData.note &&
+                      Number(maxConcurrency) === keyData.max_concurrency &&
+                      Number(maxRPM) === keyData.max_rpm)
+                  }
+                >
+                  {t('common.save')}
+                </button>
+              </div>
+            </form>
+          </ExpandablePanel>
+        </td>
+      </tr>
+    </>
   );
 }
 
@@ -1778,7 +1786,7 @@ export function EndpointDetail({
           ) : null}
         </div>
       </section>
-      <Drawer
+      <ExpandablePanel
         open={usingModels}
         onClose={() => {
           setUsingModels(false);
@@ -1805,7 +1813,7 @@ export function EndpointDetail({
               </section>
             ))
           : null}
-      </Drawer>
+      </ExpandablePanel>
 
       <section className="core-card" aria-busy={keys.isFetching}>
         <div className="core-card__header">
@@ -1859,7 +1867,7 @@ export function EndpointDetail({
                     endpoint={endpoint.data}
                     keyData={keyData}
                     onRefresh={() => void keys.refetch()}
-                    suppressRouteDrawer={usingModels}
+                    suppressRoutePanel={usingModels}
                   />
                 ))}
               </tbody>

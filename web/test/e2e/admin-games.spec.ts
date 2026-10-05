@@ -356,7 +356,7 @@ for (const scenario of [
   { width: 768, height: 1024, locale: 'en', theme: 'dark' },
   { width: 390, height: 844, locale: 'zh', theme: 'dark' },
 ]) {
-  test(`game drawers retain labels, keyboard focus and cancelled drafts at ${scenario.width}`, async ({
+  test(`game panels retain labels, focus and drafts until explicitly closed at ${scenario.width}`, async ({
     context,
     page,
   }) => {
@@ -380,7 +380,7 @@ for (const scenario of [
     for (let index = 0; index < 6; index++) {
       const trigger = rows.nth(index).getByRole('button');
       await trigger.click();
-      const dialog = page.getByRole('dialog');
+      const dialog = page.locator('.nb-expandable-panel:not([hidden])');
       await expect(dialog).toBeVisible();
       for (const disclosure of await dialog.locator('details:not([open]) > summary').all())
         await disclosure.click();
@@ -401,17 +401,24 @@ for (const scenario of [
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,
       );
-      await capture(`drawer-${index}`);
+      await capture(`panel-${index}`);
       if (index === 0) {
         const amount = dialog.locator('input[name="fishing.bait_prices.worm"]');
         await amount.fill('3.25');
         await page.keyboard.press('Escape');
+        await expect(amount).toHaveValue('3.25');
+        await expect(dialog).toBeVisible();
+        await dialog
+          .getByRole('button', { name: scenario.locale === 'zh' ? '关闭' : 'Close', exact: true })
+          .click();
         await expect(trigger).toBeFocused();
         await trigger.click();
         await expect(amount).toHaveValue('2.5');
       }
-      await page.keyboard.press('Escape');
-      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await dialog
+        .getByRole('button', { name: scenario.locale === 'zh' ? '关闭' : 'Close', exact: true })
+        .click();
+      await expect(dialog).toHaveCount(0);
       await expect(trigger).toBeFocused();
     }
     expect(config.patches).toEqual([]);
@@ -458,9 +465,11 @@ for (const width of [390, 1440]) {
       return route.fulfill({ json: data });
     });
     await page.goto(ADMIN_ORIGIN + '/games');
-    await page.getByRole('button', { name: 'AI players and strategies' }).click();
-    const dialog = page.getByRole('dialog');
-    await expect(dialog.getByRole('heading', { name: 'Bidding Duel · AI players' })).toBeVisible();
+    await page.getByRole('link', { name: 'AI players and strategies' }).click();
+    const dialog = page.getByRole('region', { name: 'AI players and strategies', exact: true });
+    await expect(
+      page.getByRole('heading', { name: 'Bidding Duel · AI players and strategies' }),
+    ).toBeVisible();
     await dialog.getByRole('button', { name: 'Duplicate', exact: true }).click();
     await dialog
       .getByRole('spinbutton', { name: 'Preserve strong cards', exact: true })
@@ -469,14 +478,30 @@ for (const width of [390, 1440]) {
     await dialog.getByRole('button', { name: 'Preview choices', exact: true }).click();
     await expect(dialog.getByText('Matched rule 1')).toBeVisible();
     await expect(dialog.getByText('100.0%')).toBeVisible();
-    expect(await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+    if (process.env.NONBIRI_VISUAL_DIR)
+      await page.screenshot({
+        path: process.env.NONBIRI_VISUAL_DIR + '/ai-editor-' + width + '.png',
+        fullPage: true,
+      });
+    const overflow = await dialog.evaluate((root) =>
+      [root, ...root.querySelectorAll<HTMLElement>('*')]
+        .filter((el) => el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 1)
+        .map((el) => ({
+          tag: el.tagName,
+          class: el.className,
+          width: el.clientWidth,
+          content: el.scrollWidth,
+          columns: getComputedStyle(el).gridTemplateColumns,
+        })),
+    );
+    expect(overflow).toEqual([]);
     await dialog.getByRole('button', { name: 'Save strategy version', exact: true }).click();
     await expect(dialog.getByRole('status').filter({ hasText: /^Saved$/ })).toBeVisible();
     expect(writes).toHaveLength(1);
     expect(
       (writes[0].definition as { parameters: { hand_value: number } }).parameters.hand_value,
     ).toBe(0.95);
-    await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+    await page.getByRole('link', { name: 'Back to game configuration', exact: true }).click();
     errors.assertNone();
   });
 }

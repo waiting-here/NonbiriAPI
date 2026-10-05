@@ -12,6 +12,7 @@ func Descriptor() game.ModuleDescriptor {
 			{Station: "admin", Method: "GET", Pattern: "/admin/api/games/blackjack/history"},
 			{Station: "admin", Method: "GET", Pattern: "/admin/api/games/blackjack/history/{id}"},
 			{Station: "admin", Method: "POST", Pattern: "/admin/api/games/blackjack/history/export"},
+			{Station: "admin", Method: "GET", Pattern: "/admin/api/games/blackjack/history/download"},
 			{Station: "user", Method: "GET", Pattern: "/api/games/blackjack/state", Continuation: true},
 			{Station: "user", Method: "POST", Pattern: "/api/games/blackjack/queue"},
 			{Station: "user", Method: "DELETE", Pattern: "/api/games/blackjack/queue/{id}", Continuation: true},

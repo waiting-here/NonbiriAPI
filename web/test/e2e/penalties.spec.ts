@@ -223,9 +223,9 @@ for (const role of ['user', 'admin', 'steward'] as const) {
       });
     }
     await page.getByRole('button', { name: 'Details', exact: true }).click();
-    const dialog = page.getByRole('dialog');
-    await expect(dialog.getByText('Rejected before a call', { exact: true })).toBeVisible();
-    await expect(dialog.getByText('POST /v1/chat/completions', { exact: true })).toBeVisible();
+    const detail = page.getByRole('region', { name: `Log details ${base.id}`, exact: true });
+    await expect(detail.getByText('Rejected before a call', { exact: true })).toBeVisible();
+    await expect(detail.getByText('POST /v1/chat/completions', { exact: true })).toBeVisible();
     guard.assertNone();
   });
 }

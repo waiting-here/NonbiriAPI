@@ -86,6 +86,10 @@ export const router = createBrowserRouter([
         lazy: async () => ({ Component: (await import('./pages/GamesPage')).GamesPage }),
       },
       {
+        path: pathFor('admin-game-ai'),
+        lazy: async () => ({ Component: (await import('./pages/AIPlayersPage')).AIPlayersPage }),
+      },
+      {
         path: pathFor('admin-game-history'),
         lazy: async () => ({
           Component: (await import('./pages/DuelHistoryPage')).DuelHistoryPage,

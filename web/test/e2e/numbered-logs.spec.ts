@@ -218,7 +218,7 @@ for (const scenario of [
     });
     await page.goto(`${origin}${screenPath}?page=3&page_size=10&status=200`);
     await page.getByRole('button', { name: labels.details, exact: true }).click();
-    const dialog = page.getByRole('dialog');
+    const dialog = page.locator('.nb-expandable-panel:not([hidden])');
     await dialog
       .locator('summary')
       .filter({ hasText: locale === 'zh' ? '服务调用记录' : 'Service call attempts' })
@@ -327,7 +327,7 @@ test('ordinary charity log detail exposes no attempt list or attempt pagination'
   });
   await page.goto(`${origin}/logs`);
   await page.getByRole('button', { name: 'Details', exact: true }).click();
-  const dialog = page.getByRole('dialog');
+  const dialog = page.locator('.nb-expandable-panel:not([hidden])');
   await expect(dialog).toBeVisible();
   await expect(dialog.getByText('Success', { exact: true }).first()).toBeVisible();
   await expect(dialog.locator('.log-attempts')).toHaveCount(0);
@@ -423,7 +423,7 @@ for (const role of ['admin', 'steward', 'user'] as const)
       for (const width of [1440, 390]) {
         await page.setViewportSize({ width, height: 900 });
         await page.locator('.log-table tbody button').first().click();
-        const drawer = page.getByRole('dialog');
+        const drawer = page.locator('.nb-expandable-panel:not([hidden])');
         await expect(
           drawer.locator('summary').filter({ hasText: 'Technical information' }),
         ).toBeVisible();
@@ -434,10 +434,10 @@ for (const role of ['admin', 'steward', 'user'] as const)
           await page.screenshot({
             path: resolve(
               process.env.NONBIRI_VISUAL_DIR,
-              `logs-${role}-drawer-${theme}-${width}.png`,
+              `logs-${role}-panel-${theme}-${width}.png`,
             ),
           });
-        await page.keyboard.press('Escape');
+        await drawer.getByRole('button', { name: 'Close', exact: true }).click();
         await expect(drawer).toHaveCount(0);
       }
     }

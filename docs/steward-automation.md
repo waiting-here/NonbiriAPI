@@ -182,3 +182,8 @@ GETs have no body or idempotency key. Single objects have no query; lists accept
 Only current L6 CallerKeys can query their existing charity-management scope. Necessary sources, addresses, safe notes, limits/failure state, catalog source/verification, model `role_policy` and connections are included; private donor profiles/notes, non-donated resources, secrets, fingerprints/review hashes, fixed auth headers and raw diagnostics are excluded. L5 has no charity CallerKey read/write permission; downgrading stops even replay. Existing L5 browser scope stays intact.
 
 Ordinary users, L5 and L6 can separately query/import/append **their own** resources through [personal automation](api-contract.md#34-personal-callerkey-automation). Its fixed 24-hour per-item recovery differs from the older charity model-bindings operation above. It neither creates nor approves a donation. All these controls use one shared four-global/one-per-user admission budget.
+
+Donation projections use `first_approval_origin: "none"` for pending requests
+and requests directly rejected before approval. `unknown` remains reserved
+for historical approvals whose origin cannot be established. This display
+field does not grant review or forced-rejection permission.

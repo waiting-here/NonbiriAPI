@@ -1,5 +1,5 @@
 import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
-import { Drawer } from '@shared/components/ui/Drawer';
+import { ExpandablePanel } from '@shared/components/ui/ExpandablePanel';
 import { useResourceFilters, useResourceListScroll } from '../features/core/useResourceFilters';
 import { ResourceFilterBar, FilteredResourceEmpty } from '../features/core/ResourceFilterControls';
 import { useState } from 'react';
@@ -82,7 +82,7 @@ function EndpointList({ user }: { user: UserProfile }) {
       return next;
     });
   const manualWizard = creating ? (
-    <Drawer
+    <ExpandablePanel
       open
       onClose={() => setCreating(false)}
       title={t('endpoints.wizardTitle')}
@@ -93,7 +93,7 @@ function EndpointList({ user }: { user: UserProfile }) {
         onClose={() => setCreating(false)}
         onCreated={() => void endpoints.refetch()}
       />
-    </Drawer>
+    </ExpandablePanel>
   ) : null;
   if (quickstart)
     return (

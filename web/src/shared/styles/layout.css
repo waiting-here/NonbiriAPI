@@ -977,7 +977,7 @@ tr:first-child td {
   }
 }
 
-/* Log screens: detail drawer, token buckets, quick ranges. */
+/* Log screens: detail panel, token buckets, quick ranges. */
 
 .quick-ranges {
   display: flex;
@@ -1004,57 +1004,6 @@ tr:first-child td {
 
 .token-bucket-label {
   color: var(--nb-color-text-muted);
-}
-
-.log-drawer-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  background: rgb(8 14 25 / 0.58);
-}
-
-.log-drawer {
-  position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 61;
-  width: min(56rem, 96vw);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: 1.2rem;
-  border-left: 1px solid var(--nb-color-border);
-  background: var(--nb-color-surface);
-  box-shadow: var(--nb-shadow-2);
-}
-
-.log-drawer-header {
-  position: sticky;
-  top: -1.2rem;
-  z-index: 2;
-  padding-block: 0.9rem;
-  background: var(--nb-color-surface);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.6rem;
-}
-
-.log-drawer-header h2 {
-  min-width: 0;
-  margin: 0;
-  font-size: 1.05rem;
-  overflow-wrap: anywhere;
-}
-
-.log-drawer-header > button {
-  flex: 0 0 auto;
-}
-
-.log-drawer-fields {
-  display: grid;
-  gap: 0.55rem;
-  margin: 1rem 0;
 }
 
 .log-detail-row {
@@ -1164,7 +1113,7 @@ tr:first-child td {
   }
 }
 
-.log-drawer-diagnostics {
+.log-detail-diagnostics {
   display: grid;
   gap: 0.5rem;
   justify-items: start;
@@ -1174,12 +1123,12 @@ tr:first-child td {
   background: var(--nb-color-surface-alt);
 }
 
-.log-drawer-diagnostics h3 {
+.log-detail-diagnostics h3 {
   margin: 0;
   font-size: 0.9rem;
 }
 
-.log-drawer-diagnostics p {
+.log-detail-diagnostics p {
   margin: 0;
   font-size: 0.8rem;
   white-space: pre-wrap;
@@ -1199,11 +1148,6 @@ tr:first-child td {
 }
 
 @media (max-width: 38rem) {
-  .log-drawer {
-    width: 100%;
-    border-left: 0;
-  }
-
   .log-detail-row {
     grid-template-columns: 1fr;
   }

@@ -1,7 +1,14 @@
+import { useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { ErrorState } from '@shared/components/States';
-import { useAIText, type AIHome, type AIView, type AIActionSource } from '@shared/aiPlayers';
+import {
+  aiPlayerLabel,
+  useAIText,
+  type AIHome,
+  type AIView,
+  type AIActionSource,
+} from '@shared/aiPlayers';
 import { gameRequest } from '../common/request';
 import { GameMoney } from '../common/GameMoney';
 import { Toggle } from '@shared/components/ui';
@@ -9,6 +16,26 @@ import type { DuelIntent } from '../common/duel/api';
 import { useGameVisibility } from '../common/visibility';
 
 const root = '/api/games/bidding/ai';
+export function BiddingLobby({
+  children,
+  ...props
+}: Parameters<typeof AIPlayers>[0] & { children: ReactNode }) {
+  const t = useAIText();
+  const [kind, setKind] = useState<'human' | 'ai'>('human');
+  return (
+    <>
+      <div className="bid-opponent-tabs" role="group" aria-label={t('对战类型', 'Opponent type')}>
+        <button type="button" aria-pressed={kind === 'human'} onClick={() => setKind('human')}>
+          {t('真人对战', 'Player matches')}
+        </button>
+        <button type="button" aria-pressed={kind === 'ai'} onClick={() => setKind('ai')}>
+          {t('AI 玩家', 'AI players')}
+        </button>
+      </div>
+      {kind === 'human' ? children : <AIPlayers {...props} />}
+    </>
+  );
+}
 export function AIPlayers({
   blocked,
   onStart,
@@ -19,6 +46,7 @@ export function AIPlayers({
   lastMatch?: string;
 }) {
   const t = useAIText();
+  const [selectedID, setSelectedID] = useState('');
   const visible = useGameVisibility();
   const query = useQuery({
     queryKey: ['user', 'games', 'bidding', 'ai', lastMatch],
@@ -43,7 +71,10 @@ export function AIPlayers({
   );
   if (query.isPending) return null;
   if (query.error) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
-  if (!query.data?.bots.length) return null;
+  if (!query.data?.bots.length)
+    return <p role="status">{t('暂无开放的 AI 玩家。', 'No AI players are available.')}</p>;
+  const selected =
+    query.data.bots.find((offer) => offer.terms.ai.bot_id === selectedID) ?? query.data.bots[0]!;
   return (
     <section className="bid-ai-lobby" aria-label={t('AI 玩家', 'AI players')}>
       <div>
@@ -56,14 +87,29 @@ export function AIPlayers({
           )}
         </p>
       </div>
+      <div
+        className="bid-ai-select"
+        role="group"
+        aria-label={t('选择 AI 对手', 'Choose an AI opponent')}
+      >
+        {query.data.bots.map(({ terms: { ai: bot } }) => (
+          <button
+            type="button"
+            key={bot.bot_id}
+            aria-pressed={bot.bot_id === selected.terms.ai.bot_id}
+            onClick={() => setSelectedID(bot.bot_id)}
+          >
+            <strong>{bot.bot_name}</strong>
+            <small>{aiPlayerLabel(bot.source_id, t)}</small>
+          </button>
+        ))}
+      </div>
       <div className="bid-ai-cards">
-        {query.data.bots.map((offer) => {
+        {[selected].map((offer) => {
           const bot = offer.terms.ai;
           return (
             <article key={bot.bot_id} className="bid-ai-card">
-              <span className="bid-ai-mark" aria-hidden="true">
-                AI
-              </span>
+              <span className="bid-ai-mark">{aiPlayerLabel(bot.source_id, t)}</span>
               <h3>{bot.bot_name}</h3>
               <p>{bot.description}</p>
               <dl>
@@ -139,7 +185,9 @@ export function AIMatchInfo({ ai, sources }: { ai: AIView; sources?: readonly AI
   const fallback = sources?.some((s) => s.origin === 'fallback');
   return (
     <aside className="bid-ai-info">
-      <strong>AI · {ai.terms.bot_name}</strong>
+      <strong>
+        {aiPlayerLabel(ai.terms.source_id, t)} · {ai.terms.bot_name}
+      </strong>
       <span>
         {ai.memory_enabled
           ? t('已启用对战记忆', 'Match memory on')

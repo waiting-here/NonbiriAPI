@@ -765,6 +765,7 @@
       "retrySame": "Retry the original action",
       "unknown": "The result is unconfirmed. Retry the original action.",
       "origin": {
+        "none": "Never approved",
         "auto": "First approved automatically",
         "manual": "First approved manually",
         "unknown": "First approval origin is unknown"

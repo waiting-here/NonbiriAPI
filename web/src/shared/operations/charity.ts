@@ -118,7 +118,7 @@ export interface ManagedDonationKey {
 }
 
 interface DonationCommon {
-  first_approval_origin?: 'auto' | 'manual' | 'unknown';
+  first_approval_origin?: 'auto' | 'manual' | 'unknown' | 'none';
   can_force_reject?: boolean;
   force_reject_unavailable_reason?: string | null;
   discord_public_thanks?: boolean | null;
@@ -525,7 +525,7 @@ function normalizeDonationCommon(root: ReturnType<typeof record>, label: string)
         ? 'unknown'
         : oneOf(
             root.first_approval_origin,
-            ['auto', 'manual', 'unknown'] as const,
+            ['auto', 'manual', 'unknown', 'none'] as const,
             `${label} first approval origin`,
           ),
     can_force_reject:
@@ -597,7 +597,9 @@ export function normalizeAdminDonation(value: unknown): AdminDonation {
     );
     owner = {
       user_id: decimalID(item.user_id, 'administrator donation owner id'),
-      discord_id: nullableString(item.discord_id, 'administrator donation Discord id', { ascii: true }),
+      discord_id: nullableString(item.discord_id, 'administrator donation Discord id', {
+        ascii: true,
+      }),
       display_name: string(item.display_name, 'administrator donation owner display', { min: 1 }),
     };
   }

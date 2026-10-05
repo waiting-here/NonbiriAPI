@@ -61,7 +61,7 @@ for (const station of ['user', 'admin'] as const) {
       `${origin}/logs${station === 'user' ? `?request_id=${detail.request.id}` : ''}`,
     );
     if (station === 'admin') await page.locator('.log-table tbody button').first().click();
-    const drawer = page.getByRole('dialog');
+    const drawer = page.locator('.nb-expandable-panel:not([hidden])');
     await expect(drawer).toBeVisible();
     await drawer.locator('summary').filter({ hasText: 'Service call attempts' }).click();
     await expect(drawer.locator('.log-attempt')).toHaveCount(2);
@@ -100,14 +100,12 @@ for (const station of ['user', 'admin'] as const) {
           ),
         )
         .toEqual([]);
-      await expect.poll(() => page.evaluate(() => document.body.style.overflow)).toBe('hidden');
-      await drawer.evaluate((node) => {
-        node.scrollTop = node.scrollHeight;
-      });
+      await expect.poll(() => page.evaluate(() => document.body.style.overflow)).not.toBe('hidden');
+      await drawer.getByRole('button', { name: 'Close', exact: true }).scrollIntoViewIfNeeded();
       await expect(drawer.getByRole('button', { name: 'Close', exact: true })).toBeInViewport();
       await page.screenshot({ path: `../tmp/${station}-request-detail-mobile-${width}.png` });
     }
-    await page.keyboard.press('Escape');
+    await drawer.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(drawer).toHaveCount(0);
     await expect.poll(() => page.evaluate(() => document.body.style.overflow)).not.toBe('hidden');
     if (station === 'user') expect(new URL(page.url()).searchParams.has('request_id')).toBe(false);
@@ -133,7 +131,9 @@ test('an expired or foreign request link stays unavailable in the current accoun
         }),
   );
   await page.goto(`${USER_ORIGIN}/logs?request_id=${id}`);
-  await expect(page.getByRole('dialog')).toContainText(/no longer available|unavailable|expired/i);
+  await expect(page.locator('.nb-expandable-panel:not([hidden])')).toContainText(
+    /no longer available|unavailable|expired/i,
+  );
   await expect(page.locator('.log-attempt')).toHaveCount(0);
 });
 

@@ -36,6 +36,8 @@
 
 本人近期 30 天历史可在页面查阅。之后仅管理员保留去身份的牌局事实；个人导出第九版包含本人安全的排队、付款和牌局记录。导出不含其他人的付款来源、身份或未揭示底牌。游戏使用专属入口插画和发牌、翻牌、加倍、分牌、自然二十一点及爆牌音效；音效默认关闭，在当前浏览器记住选择，进入后台暂停。
 
+管理员历史页可下载单个 ZIP，内含 NDJSON 数据及完成清单。匿名下载同时包含长期档案和近期资料的匿名版本，移除账号、原桌号、绝对时间及付款来源。
+
 ## English
 
 One shared table seats up to nine players and starts with one. Each server :00 and :30 starts a round with 5 seconds for seating, 20 seconds for simultaneous decisions and 5 seconds for results. An early finish extends the result display without changing the next scheduled start. Empty rounds are not saved.
@@ -59,3 +61,11 @@ Spectators see public cards. Seated players can send rate-limited preset emotes;
 Disconnecting does not pause play. Restart cancels an unsettled table and refunds all original assets without fees, preserves waiting entries and never rolls back committed results. Maintenance or closure refunds waiters and undealt seats while dealt tables finish. Banned seats stand automatically; deleted identities are detached without cancelling others, and unavailable payouts go to the appropriate external asset account.
 
 Personal history remains available for 30 days, followed by administrator-only anonymous game facts. Account export version 9 includes the user's safe queue, payment and game records without other players' identities, funding sources or hidden dealer cards. The game has a dedicated cover and dealing, reveal, double, split, natural and bust effects. Sound starts off, remembers this browser's choice and pauses in the background.
+
+Administrators download one ZIP containing NDJSON records and a completion
+manifest. Anonymous downloads combine archived facts with recent records
+stripped of accounts, original table IDs, absolute times and payment sources.
+`GET /admin/api/games/blackjack/history/download?dataset=recent|anonymous`
+uses the administrator session and streams ten tables per read. One download
+per game may run at a time, for at most one hour, with a 30-second stalled-write
+limit. Restart interrupted downloads. Existing paged JSON exports are unchanged.

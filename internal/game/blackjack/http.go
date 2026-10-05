@@ -123,6 +123,7 @@ func (s *Service) RegisterRoutes(r host.Registrars) error {
 		}
 	}
 	adminBase := "/admin/api/games/blackjack/history"
+	downloads := make(chan struct{}, 1)
 	for _, route := range config.Descriptor().Routes {
 		if route.Station != "admin" {
 			continue
@@ -158,6 +159,17 @@ func (s *Service) RegisterRoutes(r host.Registrars) error {
 			in, err := parsePage(r.URL.RawQuery, true)
 			if err != nil {
 				writeError(w, err)
+				return
+			}
+			if route.Pattern == adminBase+"/download" {
+				select {
+				case downloads <- struct{}{}:
+					defer func() { <-downloads }()
+				default:
+					writeError(w, ErrRateLimited)
+					return
+				}
+				s.AdminDownload(w, r, in)
 				return
 			}
 			if route.Pattern == adminBase {

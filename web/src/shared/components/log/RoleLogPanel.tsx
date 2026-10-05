@@ -22,7 +22,7 @@ import { LogResultBadge, logResult, logResultCopyKey } from './LogResult';
 import { useDisplayTimeContext } from '@shared/components/timeContextValue';
 import { CallerIdentity } from './CallerIdentity';
 import { LogOriginIdentity } from './LogOriginIdentity';
-import { LogDetailDrawer } from './LogDetailDrawer';
+import { LogDetailPanel } from './LogDetailPanel';
 import { LogFilters, type LogFilterField } from './LogFilters';
 import { LogTable, type LogColumn } from './LogTable';
 import { TokenBuckets } from './TokenBuckets';
@@ -400,7 +400,7 @@ function ScopedRoleLogPanel({
     station: pageStation,
     listType: 'log-attempts',
     // Opening a request clears its nested URL window below. Deep links and
-    // browser history already carry that request's window; closing the drawer
+    // browser history already carry that request's window; closing the panel
     // must not enqueue a new page reset after those parameters were removed.
     scopeKey: accountID,
     scopeReady,
@@ -968,7 +968,7 @@ function ScopedRoleLogPanel({
         <LoadingState />
       )}
       {role !== 'user' ? <RawStorageSummary key={`${role}:${accountID}`} role={role} /> : null}
-      <LogDetailDrawer
+      <LogDetailPanel
         open={Boolean(selectedID) && !invalidKeyFilter}
         onClose={closeDetail}
         title={selectedID ? `${t('logs.drawerTitle')} ${selectedID}` : t('logs.drawerTitle')}

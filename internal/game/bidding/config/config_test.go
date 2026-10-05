@@ -143,7 +143,7 @@ func TestDescriptorIsIndependentAndClosed(t *testing.T) {
 	if err := registry.Seal(); err != nil {
 		t.Fatal(err)
 	}
-	if descriptor.ID != "bidding" || descriptor.Version != 1 || descriptor.StableOrder != 3 || len(descriptor.Onboarding) != 4 || len(descriptor.Routes) != 20 {
+	if descriptor.ID != "bidding" || descriptor.Version != 1 || descriptor.StableOrder != 3 || len(descriptor.Onboarding) != 4 || len(descriptor.Routes) != 21 {
 		t.Fatal("incorrect module contract")
 	}
 	for _, id := range []string{"bid_AAAAAAAAAAAAAAAAAAAAAA", "bidq_AAAAAAAAAAAAAAAAAAAAAA", "aiq_AAAAAAAAAAAAAAAAAAAAAA"} {

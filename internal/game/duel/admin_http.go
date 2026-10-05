@@ -19,7 +19,8 @@ func (s *Service) RegisterAdminRoutes(admin host.AdminRegistrar) error {
 		return err
 	}
 	base := "/admin/api/games/" + s.rules.ID() + "/history"
-	routes := []struct{ method, path string }{{"GET", base}, {"GET", base + "/{id}"}, {"GET", base + "/{id}/rounds"}, {"POST", base + "/export"}}
+	downloads := make(chan struct{}, 1)
+	routes := []struct{ method, path string }{{"GET", base}, {"GET", base + "/{id}"}, {"GET", base + "/{id}/rounds"}, {"POST", base + "/export"}, {"GET", base + "/download"}}
 	for _, route := range routes {
 		if err := admin.RegisterAdminRoute(route.method, route.path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if route.method == "POST" {
@@ -73,6 +74,17 @@ func (s *Service) RegisterAdminRoutes(admin host.AdminRegistrar) error {
 			in, err := parseAdminPage(r.URL.RawQuery, kind)
 			if err != nil {
 				writeError(w, err)
+				return
+			}
+			if route.path == base+"/download" {
+				select {
+				case downloads <- struct{}{}:
+					defer func() { <-downloads }()
+				default:
+					writeError(w, ErrRateLimited)
+					return
+				}
+				s.downloadHistory(w, r, in)
 				return
 			}
 			switch kind {

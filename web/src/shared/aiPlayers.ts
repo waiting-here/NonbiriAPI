@@ -4,6 +4,11 @@ export function useAIText() {
   const { i18n } = useTranslation();
   return (zh: string, en: string) => (i18n.resolvedLanguage?.startsWith('zh') ? zh : en);
 }
+export function aiPlayerLabel(sourceID: string, t: ReturnType<typeof useAIText>) {
+  return sourceID === 'bidding-local'
+    ? t('第一代 AI 玩家', 'First-generation AI player')
+    : t('AI 玩家', 'AI player');
+}
 export interface AITerms {
   bot_id: string;
   bot_name: string;

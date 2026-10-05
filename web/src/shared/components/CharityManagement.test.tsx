@@ -1412,3 +1412,20 @@ describe('CharityManagement corrective controls', () => {
     );
   });
 });
+
+it('shows a directly rejected donation as never approved', async () => {
+  installDonationFetch({
+    ...approvedDonation(),
+    status: 'rejected',
+    first_approval_origin: 'none',
+    can_force_reject: false,
+    review_result: { decision: 'reject', reason: 'Unsupported source', reviewed_at: 10 },
+  });
+  const view = await renderWithProviders(<SessionBackedManagement frame="admin" />, {
+    station: 'admin',
+    role: 'admin',
+  });
+  await view.user.click(await screen.findByRole('button', { name: 'Review' }));
+  expect(await screen.findByText('Never approved')).toBeVisible();
+  expect(screen.queryByText('First approval source is unknown')).not.toBeInTheDocument();
+});
