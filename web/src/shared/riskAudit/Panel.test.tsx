@@ -342,9 +342,9 @@ describe('Risk audit access and evidence presentation', () => {
     });
     view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'operator' } });
     await view.user.click(screen.getByRole('tab', { name: 'Client rules' }));
-    expect(
-      await screen.findByText('Observed IP Matches any IP 192.0.2.1, 2001:db8::1'),
-    ).toBeVisible();
+    await waitFor(() =>
+      expect(screen.getByText('Observed IP Matches any IP 192.0.2.1, 2001:db8::1')).toBeVisible(),
+    );
     await view.user.click(screen.getByRole('button', { name: 'Edit' }));
     const addresses = screen.getByRole('textbox', { name: 'IP addresses' });
     expect(addresses).toHaveValue('192.0.2.1\n2001:db8::1');
