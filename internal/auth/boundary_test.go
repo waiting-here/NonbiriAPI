@@ -17,7 +17,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
-func TestOAuthRouteAllowlistExactQueryAndLiveThrottle(t *testing.T) {
+func TestOAuthRouteAllowlistCallbackExtensionsAndLiveThrottle(t *testing.T) {
 	f := newRuntimeFixture(t, nil)
 	handler := f.runtime.UserHandler()
 	forceQuery := request(t, handler, host.StationUser, http.MethodGet, "https://user.example/api/auth/discord/start?", "", nil, nil)
@@ -57,12 +57,12 @@ func TestOAuthRouteAllowlistExactQueryAndLiveThrottle(t *testing.T) {
 	state := location.Query().Get("state")
 	addLogin(f.provider, "exact", "discord-exact")
 	extra := request(t, handler, host.StationUser, http.MethodGet, "https://user.example/api/auth/discord/callback?code=exact&state="+url.QueryEscape(state)+"&extra=1", "", []*http.Cookie{stateCookie}, nil)
-	if extra.Code != http.StatusBadRequest {
+	if extra.Code != http.StatusFound {
 		t.Fatalf("callback extra=%d %s", extra.Code, extra.Body.String())
 	}
 	cleared := responseCookie(t, extra, OAuthStateCookieName)
 	if cleared.Value != "" || cleared.MaxAge != -1 {
-		t.Fatalf("malformed callback did not clear state cookie: %+v", cleared)
+		t.Fatalf("callback did not clear state cookie: %+v", cleared)
 	}
 }
 

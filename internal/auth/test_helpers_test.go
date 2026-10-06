@@ -46,6 +46,7 @@ type fakeProvider struct {
 	authorizationURL string
 	authorizationErr error
 	exchangeErr      error
+	exchangeCalls    int
 }
 
 func (p *fakeProvider) AuthorizationURL(_ context.Context, r DiscordAuthorizeRequest) (string, error) {
@@ -64,6 +65,7 @@ func (p *fakeProvider) AuthorizationURL(_ context.Context, r DiscordAuthorizeReq
 func (p *fakeProvider) Exchange(_ context.Context, code, _ string) (DiscordLogin, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.exchangeCalls++
 	if p.exchangeErr != nil {
 		return DiscordLogin{}, p.exchangeErr
 	}
