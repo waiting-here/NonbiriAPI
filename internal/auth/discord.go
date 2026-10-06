@@ -13,6 +13,7 @@ import (
 
 const (
 	DefaultDiscordOAuthScopes = "identify guilds.members.read"
+	discordOAuthIssuer        = "https://discord.com"
 	defaultDiscordAPIBase     = "https://discord.com/api"
 	defaultDiscordAuthorize   = "https://discord.com/oauth2/authorize"
 	maxDiscordResponseBytes   = 64 * 1024

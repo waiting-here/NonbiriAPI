@@ -93,7 +93,7 @@ func returnPath(routeID, resourceID string) (string, error) {
 	return spec.path, nil
 }
 
-func exactCallbackQuery(req *http.Request) (string, string, bool) {
+func parseCallbackQuery(req *http.Request) (string, string, bool) {
 	if req == nil || req.URL == nil || len(req.URL.RawQuery) > maxCallbackQueryBytes {
 		return "", "", false
 	}
@@ -101,9 +101,19 @@ func exactCallbackQuery(req *http.Request) (string, string, bool) {
 	if err != nil {
 		return "", "", false
 	}
-	if len(q) != 2 {
-		return "", "", false
+	if issuers, present := q["iss"]; present {
+		// RFC 9207 requires an exact match after query decoding.
+		if len(issuers) != 1 || issuers[0] != discordOAuthIssuer {
+			return "", "", false
+		}
 	}
+	// Error responses cannot authorize a session, even when mixed with a code.
+	for _, key := range []string{"error", "error_description", "error_uri"} {
+		if _, present := q[key]; present {
+			return "", "", false
+		}
+	}
+	// RFC 6749 section 4.1.2 requires ignoring unrecognized response parameters.
 	codes, okCode := q["code"]
 	states, okState := q["state"]
 	if !okCode || !okState || len(codes) != 1 || len(states) != 1 || !validateOAuthCode(codes[0]) || !validateOAuthStateText(states[0]) {
@@ -143,7 +153,7 @@ func (r *Runtime) oauthCallback(w http.ResponseWriter, req *http.Request) {
 	if !requireEmptyBody(w, req) {
 		return
 	}
-	code, state, ok := exactCallbackQuery(req)
+	code, state, ok := parseCallbackQuery(req)
 	if !ok {
 		writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
 		return
