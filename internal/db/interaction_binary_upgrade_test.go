@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
@@ -47,6 +48,14 @@ func TestUpgradeFromVersionedSource(t *testing.T) {
 
 func verifyReleasedStorageUpgrade(t *testing.T, source, expectedSourceManifest string) {
 	t.Helper()
+	startupBudget := DefaultStartupTimeout
+	if configured := os.Getenv("NONBIRI_UPGRADE_STARTUP_TIMEOUT"); configured != "" {
+		var err error
+		startupBudget, err = time.ParseDuration(configured)
+		if err != nil || startupBudget <= 0 {
+			t.Fatal("invalid isolated upgrade startup timeout")
+		}
+	}
 	key := bytes.Repeat([]byte{0x42}, secret.MasterKeyBytes)
 	if file := os.Getenv("NONBIRI_UPGRADE_MASTER_KEY_FILE"); file != "" {
 		encoded, err := os.ReadFile(file)
@@ -130,9 +139,14 @@ func verifyReleasedStorageUpgrade(t *testing.T, source, expectedSourceManifest s
 		t.Fatal(err)
 	}
 	for attempt := 0; attempt < 2; attempt++ {
-		store, err := Open(path, vault)
+		trace := NewStartupTrace(time.Now(), func(progress StartupProgress) {
+			t.Logf("open=%d stage=%s elapsed_ms=%d", attempt+1, progress.Stage, progress.ElapsedMS)
+		})
+		startup, cancel := context.WithTimeout(ctx, startupBudget)
+		store, err := OpenContext(trace.Context(startup), path, vault)
+		cancel()
 		if err != nil {
-			t.Fatal("released upgrade/open failed", err)
+			t.Fatalf("released upgrade/open failed (budget=%s stage=%s): %v", startupBudget, trace.Snapshot().Stage, err)
 		}
 		t.Cleanup(func() { _ = store.Close() })
 		database := store.DB()
