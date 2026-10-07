@@ -2688,7 +2688,9 @@
       "accountPresentation.deleteAction": "删除账户…"
     },
     "lakeNotes": {
-      "back": "返回小游戏",
+      "exchangeAvailable": "垂钓免费入场。金币兑换已开放，可查看下方兑换。",
+      "exchangeUnavailable": "垂钓免费入场。当前金币兑换关闭，收获留在游戏内。",
+      "back": "返回游戏中心",
       "intro": "按住空格或钓鱼按钮上浮，松开下落，让鱼儿留在捕捉条中。",
       "entryHeading": "本期参与资格",
       "entryFee": "本期入场费：{{amount}} 通用积分",

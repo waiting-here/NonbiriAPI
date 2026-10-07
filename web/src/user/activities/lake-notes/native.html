@@ -1,0 +1,118 @@
+<main class="shell" id="gameRoot" data-state="idle">
+  <section class="scenery" id="scenery" aria-label="钓鱼场景">
+    <div class="sky"></div><div class="sun"></div><div class="cloud one"></div><div class="cloud two"></div>
+        <div class="hill one"></div><div class="hill two"></div><div class="treeline"></div><div class="water"></div>
+        <div class="shore"></div><div class="pier"></div><div class="reeds"></div><div class="weather-rain" id="weatherRain" aria-hidden="true"></div>
+        <div class="fishing-water" id="fishingWater" aria-hidden="true">
+        <svg class="fishing-rig" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+          <g id="rodBody">
+            <path class="rod-outline" d="M 26.00 100.00 C 31.95 87.05 39.68 67.24 48.00 52.00"/>
+            <path class="rod-highlight" d="M 26.00 100.00 C 31.95 87.05 39.68 67.24 48.00 52.00"/>
+            <path class="rod-light" d="M 27.19 97.71 C 33.73 83.24 40.86 64.19 48.00 52.00"/>
+            <path class="rod-grip" d="M 26.00 100.00 Q 28.38 94.67 30.16 90.86"/>
+            <path class="rod-guide" d="M 34.32 80.95 l 1.19 1.30 M 40.86 64.19 l 1.19 0.99 M 47.41 52.00 l 1.07 0.69"/>
+            <circle class="rod-reel" cx="30.76" cy="90.10" r="1.3"/>
+            <circle class="rod-reel-core" cx="30.76" cy="90.10" r=".55"/>
+          </g>
+          <image id="rodTexture" x="0" y="0" opacity="0" preserveAspectRatio="none"/>
+          <path class="fishing-line" id="fishingLine" d="M48 52 Q52 58 55 66"/>
+        </svg>
+        <div class="ripple"></div><div class="ripple two"></div><div class="bobber" id="bobber"></div>
+        </div>
+
+    <div class="vignette" aria-hidden="true"></div>
+
+    <header class="hud hud-left">
+      <div class="brand"><span class="brand-seal">垂钓</span><span class="brand-name">手记</span></div>
+      <div class="scene-card">
+        <small id="sceneTime">第 1 天 · 06:00 · 晴</small>
+        <strong id="sceneMessage">湖面很安静，适合钓鱼。</strong>
+        <div class="scene-actions">
+          <span class="ico-slot"><svg class="ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3Z"/><path d="M9 3v15M15 6v15"/></svg><button class="chip" id="locationButton" type="button">钓点 · 湖泊</button></span>
+          <span class="ico-slot"><svg class="ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 13A9 9 0 0 1 11 3.2 9 9 0 1 0 20.8 13Z"/></svg><button class="chip" id="restButton" type="button">休息到下一时段</button></span>
+          <button class="chip" id="settingsButton" type="button" aria-label="音效与存档设置">设置</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="hud hud-right">
+      <div class="purse" title="金币"><svg class="ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="14" r="6"/><path d="M9 11v6m-2-5h3m-3 4h3"/><circle cx="16" cy="7" r="5"/><path d="M16 5v4"/></svg><b id="coinCount">0</b></div>
+      <div class="level-card">
+        <div class="xp-heading"><strong id="levelLabel">钓鱼 Lv.0</strong><span id="xpLabel">0 / 50 XP</span></div>
+        <div class="xp-track" role="progressbar" aria-label="钓鱼经验" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="xpTrack"><div class="xp-fill" id="xpFill"></div></div>
+        <div class="tallies"><span>已捕获 <b id="caughtCount">0</b></span><span>连续 <b id="streakCount">0</b></span></div>
+      </div>
+    </div>
+
+    <div class="bite-banner" aria-live="polite">
+      <span class="phase-badge" id="phaseBadge">等待开竿</span>
+      <h2 class="fish-name" id="fishName">准备好，等待下一位湖中访客。</h2>
+      <div class="rarity-info">稀有度 <b id="rarityValue">尚未上钩</b></div>
+    </div>
+
+    <div class="arena" id="arena">
+      <div class="track" id="track" tabindex="0" role="button" aria-label="钓鱼轨道，按住上浮，松开下落">
+        <div class="catch-bar" id="catchBar"></div>
+        <div class="treasure-marker" id="treasureMarker" hidden aria-hidden="true"><img src="/assets/lake-notes/item-treasure.webp" alt=""></div>
+        <div class="fish" id="fish" data-kind="gold" aria-hidden="true">
+          <svg viewBox="0 0 50 34"><path class="fish-fin" d="M15 12 8 4l-1 12-5 8 15-3M25 10l5-8 5 11"/><path class="fish-body" d="M47 17c-6-9-15-12-24-10-8 1-14 6-17 10 3 5 9 9 17 10 9 2 18-1 24-10Z"/><circle class="fish-eye" cx="36" cy="14" r="2.3"/></svg>
+        </div>
+      </div>
+      <div class="progress-wrap"><span class="progress-label">收线</span><div class="progress-track" id="progressTrack" role="progressbar" aria-label="捕获进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="30"><div class="progress-fill" id="progressFill"></div></div><span class="progress-value" id="progressValue">30%</span></div>
+      <div class="treasure-status" id="treasureStatus" hidden><span id="treasureLabel"></span><span class="treasure-meter"><i id="treasureFill"></i></span><span id="treasureValue"></span></div>
+    </div>
+
+    <footer class="deck">
+      <p class="hint-line" id="hintLine">点击开始钓鱼，等待鱼儿咬钩。</p>
+      <div class="controls" id="controls">
+        <button class="primary cast" id="startButton" type="button">开始钓鱼</button>
+        <button class="hold" id="holdButton" type="button" disabled>按住收线</button>
+      </div>
+      <p class="keys">空格 · 鼠标 · 触屏 都能按住</p>
+    </footer>
+
+    <p class="loadout" id="loadoutLabel"></p>
+
+    <nav class="dock" aria-label="手记本">
+      <span class="dock-label">手记本</span>
+      <span class="ico-slot"><svg class="ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 3-4 8m14-8 4 8M2 11h20l-3 10H5ZM8 11l1 10m7-10-1 10M3 16h18"/></svg><button class="dock-btn" id="basketButton" type="button">鱼篓</button><span class="dock-count" id="basketBadge" aria-hidden="true" hidden></span></span>
+      <span class="ico-slot"><svg class="ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5C8 2 4 3 2 4v15c3-1 6-1 10 2 4-3 7-3 10-2V4c-3-1-6-1-10 1ZM12 5v16"/></svg><button class="dock-btn" id="catalogButton" type="button">图鉴</button></span>
+      <span class="ico-slot"><svg class="ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v12h16V9M3 9l2-6h14l2 6c0 4-5 4-6 1-1 3-5 3-6 0-1 3-6 3-6-1ZM9 21v-7h6v7"/></svg><button class="dock-btn" id="shopButton" type="button">渔具铺</button></span>
+      <span class="ico-slot"><svg class="ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5ZM21 2v4m-2-2h4M3 19v4m-2-2h4"/></svg><button class="dock-btn" id="skillButton" type="button">技能树</button></span>
+      <span class="ico-slot"><svg class="ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4h13v15a2 2 0 0 1-2 2H7V6a2 2 0 0 0-4 0v3h4m4 0h5m-5 4h5m-5 4h5M7 21a2 2 0 0 1-2-2v-2h12"/></svg><button class="dock-btn" id="contractsButton" type="button">委托告示</button><span class="dock-count" id="contractBadge" aria-hidden="true" hidden></span></span>
+    </nav>
+
+    <div class="overlay" id="overlay" hidden>
+          <div class="overlay-card"><div class="overlay-icon" id="overlayIcon">🎣</div><div class="catch-showcase"><span class="catch-splash" aria-hidden="true"></span><img class="catch-art" id="catchArt" alt="" hidden></div><h3 id="overlayTitle">暂停中</h3><div class="catch-badges" id="catchBadges" aria-live="polite" hidden></div><p id="overlayText">准备好后继续。</p><div class="catch-growth" id="catchGrowth" hidden><div class="catch-growth-head"><strong id="catchXp"></strong><span id="catchLevel"></span></div><div class="catch-growth-track" id="catchXpTrack" role="progressbar" aria-label="本次收获经验" aria-valuemin="0" aria-valuemax="100"><div class="catch-growth-fill" id="catchXpFill"></div></div><small id="catchCoins"></small><small id="catchUnlocks"></small></div><div class="treasure-reward" id="treasureReward" hidden><img src="/assets/lake-notes/item-treasure.webp" alt="宝箱"><span>宝箱已带回</span></div><div class="overlay-actions"><button class="resume" id="overlayButton" type="button">继续钓鱼</button><button class="secondary" id="overlayBasket" type="button" hidden>查看鱼篓</button><button class="secondary" id="overlaySecondary" type="button" hidden>返回钓点</button></div></div>
+        </div>
+        <div class="skill-modal feedback-settings" id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" hidden>
+          <div class="skill-card"><div class="drawer-header"><div class="skill-head"><h3 id="settingsTitle">音效与存档</h3><button class="skill-close" id="settingsClose" type="button" aria-label="关闭设置">×</button></div></div><div class="drawer-body">
+            <label class="settings-row">收获音效<input id="soundEnabled" type="checkbox" checked></label>
+            <label class="settings-row">音量<span><input id="soundVolume" type="range" min="0" max="100" value="28" aria-label="音量"><output id="soundVolumeValue">28%</output></span></label>
+            <label class="settings-row">减少收获动效<input id="reduceFeedback" type="checkbox"></label>
+            <p class="skill-intro">收获动画可随时跳过，经验和鱼篓会即时保存。系统开启减少动态效果时也会自动简化。</p>
+            <h4>存档备份</h4><p class="skill-intro">进度随账号保存。换设备时，登录同一账号即可继续。</p>
+            <div class="save-tools"><a class="save-file-label" href="/account">导出账号数据</a></div><p class="save-status" role="status">账号数据导出包含垂钓进度，可用于查看和备份。</p>
+          </div></div>
+        </div>
+        <div class="skill-modal" id="skillModal" role="dialog" aria-modal="true" aria-labelledby="skillTitle" hidden>
+          <div class="skill-card"><div class="drawer-header"><nav class="journal-tabs" aria-label="手记分类"><button type="button" data-journal-target="basket" data-journal-current="skill">鱼篓</button><button type="button" data-journal-target="catalog" data-journal-current="skill">图鉴</button><button type="button" data-journal-target="shop" data-journal-current="skill">渔具铺</button><button type="button" data-journal-target="skill" data-journal-current="skill" aria-current="page">技能</button><button type="button" data-journal-target="contracts" data-journal-current="skill">委托</button></nav><div class="skill-head"><h3 id="skillTitle">钓鱼技能树</h3><button class="skill-close" id="skillClose" type="button" aria-label="关闭技能树">×</button></div></div><div class="drawer-body"><p class="skill-intro" id="skillIntro"></p><div class="skill-choices" id="skillChoices"></div><p class="skill-summary" id="skillSummary"></p><div class="utility-row"><button class="utility-button" id="respecButton" type="button">重置技能</button><p id="respecNotice">消耗金币后重新选择技能，等级与经验保留。</p></div></div></div>
+        </div>
+        <div class="skill-modal" id="shopModal" role="dialog" aria-modal="true" aria-labelledby="shopTitle" hidden>
+          <div class="skill-card"><div class="drawer-header"><nav class="journal-tabs" aria-label="手记分类"><button type="button" data-journal-target="basket" data-journal-current="shop">鱼篓</button><button type="button" data-journal-target="catalog" data-journal-current="shop">图鉴</button><button type="button" data-journal-target="shop" data-journal-current="shop" aria-current="page">渔具铺</button><button type="button" data-journal-target="skill" data-journal-current="shop">技能</button><button type="button" data-journal-target="contracts" data-journal-current="shop">委托</button></nav><div class="skill-head"><h3 id="shopTitle">渔具铺</h3><button class="skill-close" id="shopClose" type="button" aria-label="关闭渔具铺">×</button></div></div><div class="drawer-body"><p class="skill-intro" id="shopIntro"></p><p class="skill-summary" id="shopSummary"></p><div class="shop-list" id="shopItems"></div></div></div>
+        </div>
+        <div class="skill-modal" id="basketModal" role="dialog" aria-modal="true" aria-labelledby="basketTitle" hidden>
+          <div class="skill-card"><div class="drawer-header"><nav class="journal-tabs" aria-label="手记分类"><button type="button" data-journal-target="basket" data-journal-current="basket" aria-current="page">鱼篓</button><button type="button" data-journal-target="catalog" data-journal-current="basket">图鉴</button><button type="button" data-journal-target="shop" data-journal-current="basket">渔具铺</button><button type="button" data-journal-target="skill" data-journal-current="basket">技能</button><button type="button" data-journal-target="contracts" data-journal-current="basket">委托</button></nav><div class="skill-head"><h3 id="basketTitle">我的鱼篓</h3><button class="skill-close" id="basketClose" type="button" aria-label="关闭鱼篓">×</button></div></div><div class="drawer-body"><p class="skill-intro" id="basketIntro"></p><div class="collection-tools"><span id="basketTotal"></span><button id="sellAllButton" type="button">卖出未锁定鱼</button></div><div class="shop-list" id="basketItems"></div><div class="utility-row"><p id="debrisSummary"></p><button class="utility-button" id="recycleButton" type="button">回收杂物</button></div></div></div>
+        </div>
+        <div class="skill-modal" id="catalogModal" role="dialog" aria-modal="true" aria-labelledby="catalogTitle" hidden>
+          <div class="skill-card"><div class="drawer-header"><nav class="journal-tabs" aria-label="手记分类"><button type="button" data-journal-target="basket" data-journal-current="catalog">鱼篓</button><button type="button" data-journal-target="catalog" data-journal-current="catalog" aria-current="page">图鉴</button><button type="button" data-journal-target="shop" data-journal-current="catalog">渔具铺</button><button type="button" data-journal-target="skill" data-journal-current="catalog">技能</button><button type="button" data-journal-target="contracts" data-journal-current="catalog">委托</button></nav><div class="skill-head"><h3 id="catalogTitle">鱼类图鉴</h3><button class="skill-close" id="catalogClose" type="button" aria-label="关闭图鉴">×</button></div></div><div class="drawer-body"><p class="skill-intro" id="catalogIntro"></p><div class="catalog-tabs" id="catalogTabs"></div><div class="shop-list" id="catalogItems"></div><p class="skill-summary">成功钓获后解锁鱼的插画；鱼的体型决定基础品质，完美捕获可再提升一档。</p></div></div>
+        </div>
+        <div class="skill-modal" id="locationModal" role="dialog" aria-modal="true" aria-labelledby="locationTitle" hidden>
+          <div class="skill-card"><div class="drawer-header"><div class="skill-head"><h3 id="locationTitle">选择钓点</h3><button class="skill-close" id="locationClose" type="button" aria-label="关闭钓点选择">×</button></div></div><div class="drawer-body"><p class="skill-intro">在不同水域寻找各自的鱼。切换钓点不消耗金币，正在垂钓时不能离开。</p><div class="location-grid" id="locationItems"></div></div></div>
+        </div>
+        <div class="skill-modal" id="contractsModal" role="dialog" aria-modal="true" aria-labelledby="contractsTitle" hidden>
+          <div class="skill-card"><div class="drawer-header"><nav class="journal-tabs" aria-label="手记分类"><button type="button" data-journal-target="basket" data-journal-current="contracts">鱼篓</button><button type="button" data-journal-target="catalog" data-journal-current="contracts">图鉴</button><button type="button" data-journal-target="shop" data-journal-current="contracts">渔具铺</button><button type="button" data-journal-target="skill" data-journal-current="contracts">技能</button><button type="button" data-journal-target="contracts" data-journal-current="contracts" aria-current="page">委托</button></nav><div class="skill-head"><h3 id="contractsTitle">委托告示</h3><button class="skill-close" id="contractsClose" type="button" aria-label="关闭委托告示">×</button></div></div><div class="drawer-body"><p class="skill-intro" id="contractsIntro"></p><p class="skill-summary" id="contractsNotice">委托没有期限，可随时取消；最多同时接取 3 份。交付委托会消耗未锁定的鱼，其余委托从接取后开始计数。</p><div class="shop-list" id="contractsItems"></div></div></div>
+        </div>
+
+  </section>
+</main>
