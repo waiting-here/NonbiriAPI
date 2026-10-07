@@ -535,12 +535,12 @@ func prepareModelPolicy(request *validatedRequest, admission logicalAdmission) (
 		restored = request.chat.CloneForAttempt()
 	}
 	if err != nil || restored == nil {
-		return admission, request, nil, openai.ErrInvalidRequest
+		return admission, request, nil, &openai.ValidationError{Detail: requestattempt.NewDetail("messages", "messages could not be restored from flattened tool calls")}
 	}
 	transformed, err := restored.ApplyRolePolicy(admission.rolePolicy)
 	restored.Clear()
 	if err != nil || transformed == nil {
-		return admission, request, nil, openai.ErrInvalidRequest
+		return admission, request, nil, &openai.ValidationError{Detail: requestattempt.NewDetail("messages", "messages do not match the configured role policy")}
 	}
 	copy := chatRequest(transformed)
 	copy.policyModelID, copy.policyDecisionNow = request.policyModelID, request.policyDecisionNow
@@ -570,7 +570,7 @@ func (service *Service) snapshot(
 		connectorTypes := service.supportedCharityConnectorTypes(physical, admission.flatten)
 		physical.Clear()
 		if len(connectorTypes) == 0 {
-			return executionPlan{}, openai.ErrInvalidRequest
+			return executionPlan{}, &openai.ValidationError{Detail: requestattempt.NewDetail("request", "no connector supports the required request features")}
 		}
 		value, err := service.charity.Snapshot(ctx, userID, admission.modelID, admission.decisionNow, connectorTypes)
 		if err != nil {
@@ -1196,6 +1196,7 @@ func (service *Service) writePreAcceptanceFailure(
 		return
 	}
 	failure := failureForError(err, charity)
+	requestattempt.Detail(parent, failure.detail)
 	var rejected *charityrouting.ContentTooShortError
 	if errors.As(err, &rejected) && db.ValidateOpaqueID(rejected.RequestID, "req_") {
 		writer.Header().Set("X-Request-ID", rejected.RequestID)
@@ -1403,6 +1404,13 @@ func failureForError(err error, charity bool) wireFailure {
 	if errors.As(err, &rejected) {
 		failure := platformFailure(httperr.CodeInvalidRequest, rejected.Field+": "+rejected.Reason)
 		failure.diagnostic = rejected.Error()
+		failure.detail = requestattempt.NewDetail(rejected.Field, rejected.Reason)
+		return failure
+	}
+	var validation *openai.ValidationError
+	if errors.As(err, &validation) {
+		failure := platformFailure(httperr.CodeInvalidRequest, "invalid request")
+		failure.detail = validation.Detail
 		return failure
 	}
 	var banned *accountBannedError
@@ -1416,7 +1424,7 @@ func failureForError(err error, charity bool) wireFailure {
 	case errors.Is(err, maintenance.ErrMaintenanceOn):
 		return platformFailure(httperr.CodeMaintenance, "maintenance mode is active")
 	case errors.Is(err, requestadaptation.ErrInvalid):
-		return platformFailure(httperr.CodeInvalidRequest, "request adaptation contains an unsupported field or value")
+		return rejectionFailure(httperr.CodeInvalidRequest, "request adaptation contains an unsupported field or value", "request", "request adaptation contains an unsupported field or value")
 	case errors.Is(err, requestadaptation.ErrConflict):
 		return platformFailure(httperr.CodeConflict, "request adaptation conflicts with the current model configuration")
 	case errors.Is(err, requestadaptation.ErrUnavailable):
@@ -1428,11 +1436,12 @@ func failureForError(err error, charity bool) wireFailure {
 		}
 		return platformFailure(httperr.CodeForbidden, message)
 	case errors.Is(err, routing.ErrNotFound), errors.Is(err, charityrouting.ErrNotFound), errors.Is(err, claim.ErrModelUnavailable):
-		return platformFailure(httperr.CodeNotFound, "model not found")
+		return rejectionFailure(httperr.CodeNotFound, "model not found", "model", "model was not found or is unavailable")
 	case errors.Is(err, charityrouting.ErrForbidden), errors.Is(err, claim.ErrForbidden):
-		return platformFailure(httperr.CodeForbidden, "your account level is not allowed to call this model")
-	case errors.Is(err, routing.ErrAmbiguousIdentity), errors.Is(err, routing.ErrInvalidIdentity),
-		errors.Is(err, openai.ErrInvalidRequest), errors.Is(err, charityrouting.ErrInvalidRequest):
+		return rejectionFailure(httperr.CodeForbidden, "your account level is not allowed to call this model", "model", "account level does not allow this model")
+	case errors.Is(err, routing.ErrAmbiguousIdentity), errors.Is(err, routing.ErrInvalidIdentity):
+		return rejectionFailure(httperr.CodeInvalidRequest, "invalid request", "model", "model identity is invalid or ambiguous")
+	case errors.Is(err, openai.ErrInvalidRequest), errors.Is(err, charityrouting.ErrInvalidRequest):
 		return platformFailure(httperr.CodeInvalidRequest, "invalid request")
 	case errors.Is(err, openai.ErrPayloadTooLarge):
 		return platformFailure(httperr.CodePayloadTooLarge, "request body too large")

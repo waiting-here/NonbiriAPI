@@ -101,7 +101,7 @@ func newLogFixture(t *testing.T) *logFixture {
  usage_total_mismatch INTEGER NOT NULL DEFAULT 0 CHECK(usage_total_mismatch IN (0,1)),
  attempt_count INTEGER NOT NULL,
  raw_body TEXT, authorization TEXT, cookie TEXT, discord_id TEXT, private_note TEXT, ciphertext TEXT,
- rejection_stage TEXT,rejection_reason TEXT,request_method TEXT,request_path TEXT,origin_user_id INTEGER,origin_discord_id TEXT)`,
+ error_diag TEXT,rejection_stage TEXT,rejection_reason TEXT,request_method TEXT,request_path TEXT,origin_user_id INTEGER,origin_discord_id TEXT)`,
 		`CREATE TABLE request_attempts(
  claim_id TEXT PRIMARY KEY, request_log_id INTEGER NOT NULL, attempt_seq INTEGER NOT NULL,
  endpoint_id_snapshot INTEGER, endpoint_key_id_snapshot INTEGER, canonical_base_url TEXT NOT NULL,

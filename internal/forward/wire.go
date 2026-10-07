@@ -5,9 +5,11 @@ import (
 	"net/http"
 
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 )
 
 type wireFailure struct {
+	detail          *requestattempt.RejectionDetail
 	code            string
 	message         string
 	status          int
@@ -98,4 +100,10 @@ func writeModelList(writer http.ResponseWriter, value ModelList) {
 	writer.Header().Set("Cache-Control", "no-store")
 	writer.WriteHeader(http.StatusOK)
 	_, _ = writer.Write(encoded)
+}
+
+func rejectionFailure(code, message, field, reason string) wireFailure {
+	failure := platformFailure(code, message)
+	failure.detail = requestattempt.NewDetail(field, reason)
+	return failure
 }

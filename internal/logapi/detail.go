@@ -136,6 +136,7 @@ func (repository *Repository) GetAdmin(ctx context.Context, requestID string, fi
 		return AdminLogDetail{}, err
 	}
 	row := AdminLogRow{
+		RejectionDetail: record.rejectionDetail,
 		OriginIdentity:  record.origin,
 		RejectionFields: rejectionFields(record), ID: record.id, RouteKind: RouteKind(record.routeKind),
 		CallerResultClass: resultClassPointer(record.callerResultClass),
@@ -210,6 +211,7 @@ func (repository *Repository) GetSteward(
 		return StewardLogDetail{}, err
 	}
 	row := StewardLogRow{
+		RejectionDetail: record.rejectionDetail,
 		OriginIdentity:  record.origin,
 		RejectionFields: rejectionFields(record), ID: record.id, RouteKind: RouteKind(record.routeKind),
 		CallerResultClass: resultClassPointer(record.callerResultClass),

@@ -57,30 +57,46 @@ func prepareIngress(r *http.Request) *preparedIngress {
 		p.failure = &f
 		return p
 	}
-	if exactIngressFailure(r.Method, r.URL.Path, r.URL.EscapedPath()) != nil || r.URL.RawQuery != "" || r.URL.ForceQuery {
+	failDetail := func(code, message, field, reason string) *preparedIngress {
+		fail(code, message)
+		p.failure.detail = requestattempt.NewDetail(field, reason)
+		return p
+	}
+	if exactIngressFailure(r.Method, r.URL.Path, r.URL.EscapedPath()) != nil {
 		return fail(httperr.CodeInvalidRequest, "invalid request")
+	}
+	if r.URL.RawQuery != "" || r.URL.ForceQuery {
+		return failDetail(httperr.CodeInvalidRequest, "invalid request", "query", "query parameters are not supported")
 	}
 	var ok bool
 	p.mediaType, ok = validateChatMedia(r)
 	if !ok {
-		return fail(httperr.CodeInvalidRequest, "invalid request")
+		if len(r.Header.Values("Content-Encoding")) != 0 {
+			return failDetail(httperr.CodeInvalidRequest, "invalid request", "Content-Encoding", "content encoding is not supported")
+		}
+		return failDetail(httperr.CodeInvalidRequest, "invalid request", "Content-Type", "expected application/json with optional UTF-8 charset")
 	}
 	limit, err := requestbody.Limit(r.Context())
 	if err != nil {
 		return fail(httperr.CodeServiceUnavailable, "request configuration unavailable")
 	}
 	if r.ContentLength > limit {
-		return fail(httperr.CodePayloadTooLarge, "request body too large")
+		return failDetail(httperr.CodePayloadTooLarge, "request body too large", "body", "request body exceeds the configured limit")
 	}
 	p.body, err = readBoundedBody(r.Body, limit)
+	if err != nil && !errors.Is(err, openai.ErrPayloadTooLarge) {
+		return failDetail(httperr.CodeInvalidRequest, "invalid request", "body", "request body could not be read")
+	}
 	if err == nil {
 		p.envelope, err = openai.DecodeRequestEnvelope(bytes.NewReader(p.body), limit, requestkind.OperationForPath(r.URL.Path))
 	}
 	if err != nil {
 		if errors.Is(err, openai.ErrPayloadTooLarge) {
-			return fail(httperr.CodePayloadTooLarge, "request body too large")
+			return failDetail(httperr.CodePayloadTooLarge, "request body too large", "body", "request body exceeds the configured limit")
 		}
-		return fail(httperr.CodeInvalidRequest, "invalid request")
+		p.failure = new(wireFailure)
+		*p.failure = failureForError(err, false)
+		return p
 	}
 	return p
 }
