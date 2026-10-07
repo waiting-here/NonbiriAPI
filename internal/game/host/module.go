@@ -50,6 +50,8 @@ type Registrars struct {
 // Module contains mandatory narrow capabilities. A factory returns no active
 // worker: all modules validate and recover before the host starts any worker.
 type Module struct {
+	// ConfigurationChangedTx applies module-owned effects in the same configuration transaction.
+	ConfigurationChangedTx func(context.Context, *sql.Tx, game.ConfigValue, game.ConfigValue) error
 	ValidatePersistedState func(context.Context) error
 	RecoverBeforeListen    func(context.Context, int64, int, time.Time) (WorkResult, error)
 	RegisterRoutes         func(Registrars) error

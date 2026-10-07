@@ -13,7 +13,7 @@ type LakeNotesExport struct {
 }
 type LakeCastExport struct {
 	ID             string     `json:"id"`
-	SourcePeriodID string     `json:"source_period_id"`
+	SourcePeriodID string     `json:"source_period_id,omitempty"`
 	RulesID        string     `json:"rules_id"`
 	Generation     string     `json:"generation"`
 	Revision       string     `json:"revision"`
@@ -23,24 +23,25 @@ type LakeCastExport struct {
 	State          rules.Cast `json:"state"`
 }
 type LakeEntryExport struct {
-	PeriodID       string `json:"period_id"`
-	PeriodRevision string `json:"period_revision"`
+	PeriodID       string `json:"period_id,omitempty"`
+	PeriodRevision string `json:"period_revision,omitempty"`
 	FeeMilli       string `json:"fee_milli"`
 	OperationID    string `json:"operation_id,omitempty"`
 	LedgerSeq      string `json:"ledger_seq,omitempty"`
 	CreatedAt      int64  `json:"created_at"`
 }
 type LakeExchangeExport struct {
-	ID             string `json:"id"`
-	Direction      string `json:"direction"`
-	Quantity       string `json:"quantity"`
-	PeriodID       string `json:"period_id"`
-	PeriodRevision string `json:"period_revision"`
-	SourceAmount   string `json:"source_amount"`
-	TargetAmount   string `json:"target_amount"`
-	SourceLot      string `json:"source_lot"`
-	TargetLot      string `json:"target_lot"`
-	OperationID    string `json:"operation_id"`
-	LedgerSeq      string `json:"ledger_seq"`
-	CreatedAt      int64  `json:"created_at"`
+	SettingsRevision string `json:"settings_revision,omitempty"`
+	ID               string `json:"id"`
+	Direction        string `json:"direction"`
+	Quantity         string `json:"quantity"`
+	PeriodID         string `json:"period_id,omitempty"`
+	PeriodRevision   string `json:"period_revision,omitempty"`
+	SourceAmount     string `json:"source_amount"`
+	TargetAmount     string `json:"target_amount"`
+	SourceLot        string `json:"source_lot"`
+	TargetLot        string `json:"target_lot"`
+	OperationID      string `json:"operation_id"`
+	LedgerSeq        string `json:"ledger_seq"`
+	CreatedAt        int64  `json:"created_at"`
 }

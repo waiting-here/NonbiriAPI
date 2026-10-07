@@ -18,8 +18,8 @@ func checkpoint(v CastView, n uint64) CheckpointInput {
 }
 func TestSingleCastReplayGenerationAndCumulativeBudget(t *testing.T) {
 	f := newFixture(t)
-	p := f.period(t, "0")
-	v := f.enter(t, p)
+	f.enable(t)
+	v := f.profile(t)
 	start, e := f.service.Start(f.ctx(f.user), f.user, testKey(60), StartInput{v.Revision})
 	if e != nil {
 		t.Fatal(e)
@@ -78,8 +78,8 @@ func TestSingleCastReplayGenerationAndCumulativeBudget(t *testing.T) {
 }
 func TestLeasePauseRestartAndClosingTime(t *testing.T) {
 	f := newFixture(t)
-	p := f.period(t, "0")
-	v := f.enter(t, p)
+	f.enable(t)
+	v := f.profile(t)
 	start, e := f.service.Start(f.ctx(f.user), f.user, testKey(100), StartInput{v.Revision})
 	if e != nil {
 		t.Fatal(e)
@@ -114,8 +114,8 @@ func TestLeasePauseRestartAndClosingTime(t *testing.T) {
 func TestTerminalExactlyOnceAndExportDeletion(t *testing.T) {
 	f := newFixture(t)
 	f.random.value = 0.0
-	p := f.period(t, "0")
-	v := f.enter(t, p)
+	f.enable(t)
+	v := f.profile(t)
 	start, e := f.service.Start(f.ctx(f.user), f.user, testKey(120), StartInput{v.Revision})
 	if e != nil {
 		t.Fatal(e)
@@ -166,7 +166,7 @@ func TestTerminalExactlyOnceAndExportDeletion(t *testing.T) {
 	}
 	f.tx(t, func(tx *sql.Tx) {
 		export, e := f.service.ExportUserTx(f.ctx(f.user), tx, f.user, 100)
-		if e != nil || len(export.Casts) != 1 || len(export.Entries) != 1 {
+		if e != nil || len(export.Casts) != 1 || len(export.Entries) != 0 {
 			t.Fatal(export, e)
 		}
 		raw, _ := json.Marshal(export)

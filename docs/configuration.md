@@ -8,7 +8,7 @@ Model APIs configure `role_policy` separately for each model. Native/empty rules
 
 Administrator risk-audit configuration adds `user_ip_window_hours` (integer 1–720, default 24) and `user_ip_min_ips` (2–1000, default 3), alongside existing thresholds/revision. It flags one Discord identity using at least that many trusted API addresses in a rolling window across old/current accounts. Shared-IP counts deduplicate Discord identities. Full stewards can read the settings; only administrators change them. Scans never impose a penalty.
 
-Lake Notes uses the existing limited-activity configuration envelope with empty `module_config:{}`. Separate finite period APIs set an explicit fee before publication and four exact exchange directions. Fresh and upgraded instances start the new activity hidden without an open schedule and every exchange disabled. [Activity configuration](limited-activities.md#lake-notes) describes units and fields. Role policies, periods and UI preferences do not introduce environment variables.
+Lake Notes is a permanent free minigame with four independently configured exchanges. Fresh installations start closed; an open legacy activity stays available after upgrade, with all exchanges initially disabled. See [game settings and API](lake-notes.md).
 
 Preserve the database's stable encrypted renewed-review matching material with the master key. Resetting it would bypass cross-account secret-text review requirements and is not a supported repair or configuration edit.
 

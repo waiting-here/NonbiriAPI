@@ -240,6 +240,8 @@ func buildGenerationTwoConfigCatalog() map[string]generationTwoConfigSpec {
 		catalog["game_rps_"+mode+"_dealer_seconds"] = uintSpec("15", 5, 15)
 		catalog["game_rps_"+mode+"_follower_seconds"] = uintSpec("15", 5, 15)
 	}
+	catalog["game_lakenotes_enabled"] = boolSpec("0")
+	catalog["game_lakenotes_exchanges"] = textSpec(`{"coins_to_game":{"enabled":false,"source_amount":"","target_amount":""},"coins_to_general":{"enabled":false,"source_amount":"","target_amount":""},"game_to_coins":{"enabled":false,"source_amount":"","target_amount":""},"general_to_coins":{"enabled":false,"source_amount":"","target_amount":""}}`, 4096, false)
 	catalog["game_steadycatch_enabled"] = boolSpec("0")
 	catalog["game_steadycatch_price_milli"] = amountSpec("0", 0)
 	catalog["game_steadycatch_first_reward_milli"] = amountSpec("0", 0)

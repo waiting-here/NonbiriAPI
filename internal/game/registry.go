@@ -17,6 +17,7 @@ const (
 	LikesVersion    = 1
 	GwentID         = "gwent"
 	SteadyCatchID   = "steadycatch"
+	LakeNotesID     = "lakenotes"
 
 	LinkLinkSpec6x8   = "6x8"
 	LinkLinkSpec8x8   = "8x8"

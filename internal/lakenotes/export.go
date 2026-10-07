@@ -83,20 +83,26 @@ func (s *Service) ExportUserTx(ctx context.Context, tx *sql.Tx, user int64, limi
 	if e != nil {
 		return out, e
 	}
-	rows, e = tx.QueryContext(ctx, "SELECT r.id,r.period_id,r.period_revision,r.direction,r.quantity_mag,r.source_lot,r.target_lot,r.source_amount_mag,r.target_amount_mag,r.ledger_operation_id,o.ledger_seq,r.created_at FROM lake_notes_exchange_receipts r JOIN credit_operations o ON o.id=r.ledger_operation_id WHERE r.user_id=? ORDER BY r.created_at,r.id LIMIT ?", user, limit+1)
+	rows, e = tx.QueryContext(ctx, "SELECT r.id,coalesce(r.period_id,''),coalesce(r.period_revision,0),coalesce(r.config_revision,0),r.direction,r.quantity_mag,r.source_lot,r.target_lot,r.source_amount_mag,r.target_amount_mag,r.ledger_operation_id,o.ledger_seq,r.created_at FROM lake_notes_exchange_receipts r JOIN credit_operations o ON o.id=r.ledger_operation_id WHERE r.user_id=? ORDER BY r.created_at,r.id LIMIT ?", user, limit+1)
 	if e != nil {
 		return out, e
 	}
 	for rows.Next() {
 		var r ExchangeReceipt
-		var pr, seq int64
+		var pr, cr, seq int64
 		var direction string
 		var quantity, a, b, sa, ta []byte
-		if e = rows.Scan(&r.ID, &r.PeriodID, &pr, &direction, &quantity, &a, &b, &sa, &ta, &r.OperationID, &seq, &r.CreatedAt); e != nil {
+		if e = rows.Scan(&r.ID, &r.PeriodID, &pr, &cr, &direction, &quantity, &a, &b, &sa, &ta, &r.OperationID, &seq, &r.CreatedAt); e != nil {
 			rows.Close()
 			return out, e
 		}
-		r.PeriodRevision, r.LedgerSeq, r.Direction = rev(pr), rev(seq), directionFromStored(direction)
+		r.LedgerSeq, r.Direction = rev(seq), directionFromStored(direction)
+		if pr > 0 {
+			r.PeriodRevision = rev(pr)
+		}
+		if cr > 0 {
+			r.SettingsRevision = rev(cr)
+		}
 		for _, field := range []struct {
 			raw    []byte
 			target *string

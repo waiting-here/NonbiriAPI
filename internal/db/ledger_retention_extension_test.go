@@ -24,7 +24,7 @@ func TestLedgerRetentionUpgradePreservesCurrentLedgerAndRollsBack(t *testing.T) 
 	if err = seedGenerationTwo(ctx, tx, hostileOID("b1e_")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = tx.Exec(`DELETE FROM site_config WHERE key='global_rpm_per_user' OR key LIKE 'game_gwent_%' OR key LIKE 'game_steadycatch_%'`); err != nil {
+	if _, err = tx.Exec(`DELETE FROM site_config WHERE key='global_rpm_per_user' OR key LIKE 'game_gwent_%' OR key LIKE 'game_steadycatch_%' OR key LIKE 'game_lakenotes_%'`); err != nil {
 		t.Fatal(err)
 	}
 	if err = tx.Commit(); err != nil {

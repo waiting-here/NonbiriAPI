@@ -333,6 +333,298 @@
       "file": "cover.png",
       "bytes": 2593610,
       "sha256": "755fbe01f7ef724d40166ba88e662681d36d54c5615a1a86219b7cb2bdded07a"
+    },
+    {
+      "file": "fish-coast_blackseabream.webp",
+      "bytes": 83378,
+      "sha256": "11860fc3182cb059bb8170b92471a50a225f095cabdcbc3d1f15062244491c1c"
+    },
+    {
+      "file": "fish-coast_garfish.webp",
+      "bytes": 31764,
+      "sha256": "55a64d72371d7b43f016628dd76e43e32739a4a1a18d0d0d2de4a56b0af7387a"
+    },
+    {
+      "file": "fish-coast_humpheadwrasse.webp",
+      "bytes": 84538,
+      "sha256": "751eaf6c486dfc96eed8c4b578f577e22997182ab8537c98222a9b18fdcbe10b"
+    },
+    {
+      "file": "fish-coast_mahimahi.webp",
+      "bytes": 75654,
+      "sha256": "2faa7957c3853caaa30b1e640da63ae8348fc074f892daa348b044d6887c3b25"
+    },
+    {
+      "file": "fish-coast_mullet.webp",
+      "bytes": 48872,
+      "sha256": "80e5c268ea5a36a3ff73c0bfb603e39b7f637f999df2d5699669bba0b1535ef6"
+    },
+    {
+      "file": "fish-coast_whiting.webp",
+      "bytes": 49098,
+      "sha256": "b46a88059265cd716f6ec9b15554c5c4cba585adea552797e6082c392b3278f5"
+    },
+    {
+      "file": "fish-jungle_asianarowana.webp",
+      "bytes": 57878,
+      "sha256": "761ed7bbb3c4e147fdbd61c60ee1696d1bc81d9a44635864abd1c0eed7f9abb9"
+    },
+    {
+      "file": "fish-jungle_beardlessbarb.webp",
+      "bytes": 72424,
+      "sha256": "020d35c999c2497750c6a55e8782abbb6fcd2b20509ed463570b4fa03a742124"
+    },
+    {
+      "file": "fish-jungle_bigheadcatfish.webp",
+      "bytes": 60320,
+      "sha256": "567bda16b55d524f00be85bb23ad1f44c9845cb3c76ae85f1c5a9b0a6ce3bac6"
+    },
+    {
+      "file": "fish-jungle_bronzefeatherback.webp",
+      "bytes": 55974,
+      "sha256": "7bcc3eb097d54a4c38894b9702c89ffd3f575934512b87a94a449412d414ed7c"
+    },
+    {
+      "file": "fish-jungle_climbingperch.webp",
+      "bytes": 80672,
+      "sha256": "33b1ac7731c086323ae4e346066430c48b10fd55f78c43432b9d6db1bd24bfb4"
+    },
+    {
+      "file": "fish-jungle_clownfeatherback.webp",
+      "bytes": 75636,
+      "sha256": "34cc540ef7d9c37a6ef6363025bd2df944a53c261814a9802be554efbe8ae5a5"
+    },
+    {
+      "file": "fish-jungle_croakinggourami.webp",
+      "bytes": 78732,
+      "sha256": "dc468ed8e1ae3ac6c9ea163bfa4dd363ff69fe45bee0854ca19fa0bdfabd5c8a"
+    },
+    {
+      "file": "fish-jungle_giantgourami.webp",
+      "bytes": 74850,
+      "sha256": "2e27fa96e97e60e604e05eb05e4ad647976cf8f09141f57fcef888c9bfefd378"
+    },
+    {
+      "file": "fish-jungle_giantsnakehead.webp",
+      "bytes": 59818,
+      "sha256": "349aa661ba5778dca69e4920f816b151d3f889fe124336d8974c307c32beab5f"
+    },
+    {
+      "file": "fish-jungle_hampalabarb.webp",
+      "bytes": 55304,
+      "sha256": "dc911b21dc1e96af1ad480f83b84bcc9797cfdf939cd1e32b5702195b7f92b7f"
+    },
+    {
+      "file": "fish-jungle_mekonggiantcatfish.webp",
+      "bytes": 47354,
+      "sha256": "cbfa9784d4474a7c6dd56ed5bbe1726914a837d62d5420a4b0a5f1cf7f65b460"
+    },
+    {
+      "file": "fish-jungle_moonlightgourami.webp",
+      "bytes": 80500,
+      "sha256": "3476631c460a006dd1509f48bf8eb6bb6abbff2a872c85fdbf76efcb9ad8ef12"
+    },
+    {
+      "file": "fish-jungle_peacockeel.webp",
+      "bytes": 47672,
+      "sha256": "fa8e52044097bd316ed59d614a8534325838371b1bcf8532304bf0e0968c7413"
+    },
+    {
+      "file": "fish-jungle_redtailrasbora.webp",
+      "bytes": 57782,
+      "sha256": "3377026ef229525aeedeb36ddc658421b881bf729691c7bbfdd38952136ff5b8"
+    },
+    {
+      "file": "fish-jungle_siamesegiantcarp.webp",
+      "bytes": 71450,
+      "sha256": "936e1c388bb43c6ad62e7a30f5d1f1a0c18ca475da7feb2fe5153bf20d75b2ea"
+    },
+    {
+      "file": "fish-jungle_silverbarb.webp",
+      "bytes": 71850,
+      "sha256": "a6251a78cd5b8bb2cf79a6ba366769872941a9154af6f9e1e340f26c76755ac9"
+    },
+    {
+      "file": "fish-jungle_silverflyingbarb.webp",
+      "bytes": 59530,
+      "sha256": "30f1201a05082ecb64fc943edf0bb249b96cc42fb5b73f0ac602974142c587ac"
+    },
+    {
+      "file": "fish-jungle_smallscalearcherfish.webp",
+      "bytes": 66790,
+      "sha256": "3183109d5506fac6871213d4fb45d2b8054310b3daa100e7b8f3b880a82a0760"
+    },
+    {
+      "file": "fish-jungle_snakeskingourami.webp",
+      "bytes": 88722,
+      "sha256": "7785268f9a9881924d519b57f32bc8519a551537cfc66cdf4a60a722115735ac"
+    },
+    {
+      "file": "fish-jungle_stripedpangasius.webp",
+      "bytes": 48538,
+      "sha256": "60c6ce9158624d700c4f5c05872efd4b680d621369765e0242ed38b8948d70ed"
+    },
+    {
+      "file": "fish-jungle_stripedsnakehead.webp",
+      "bytes": 62462,
+      "sha256": "b6bb293e2446afc666ed4dee3930c308fd414e5d93f14f52db9e779be3622885"
+    },
+    {
+      "file": "fish-jungle_threespotgourami.webp",
+      "bytes": 85832,
+      "sha256": "71c9a15f2a2c1a362951f5cb0eb9f6bea4cbd0544ff8abaf64b007e581a48b12"
+    },
+    {
+      "file": "fish-jungle_tinfoilbarb.webp",
+      "bytes": 65764,
+      "sha256": "03697803c7ffe5841b9d486dcb6adb38e8740cb0fc5570544893e31b7869a27a"
+    },
+    {
+      "file": "fish-jungle_yellowcatfish.webp",
+      "bytes": 53130,
+      "sha256": "d2f4fa421dcd87379e557837ead42bdea2804a5f538d75b452824b7dee32ff17"
+    },
+    {
+      "file": "fish-lake_bluegill.webp",
+      "bytes": 77054,
+      "sha256": "4cf0c6f11ad89c8f32233cf5fce14de28884cb50a32b2d5e54ce7fe18da8c521"
+    },
+    {
+      "file": "fish-lake_paddlefish.webp",
+      "bytes": 38584,
+      "sha256": "a2e71fddf84d84e0c735e264f40fa528e792fd9c60c5f93403dc95e7d4144aab"
+    },
+    {
+      "file": "fish-lake_pumpkinseed.webp",
+      "bytes": 84758,
+      "sha256": "6fb5f67f09953e6474c7bcbb61abe97bae50cc3846d5eddee4334fc74e33073b"
+    },
+    {
+      "file": "fish-lake_roach.webp",
+      "bytes": 61184,
+      "sha256": "5eca6049e9bd4324f72152d0173a17c7bf09bbce3a8d2c11b10bd1626bf67074"
+    },
+    {
+      "file": "fish-lake_rudd.webp",
+      "bytes": 64108,
+      "sha256": "9b9c34691f4ea660df2db9dce9c96983795778598e90c9a0e00011f83c785364"
+    },
+    {
+      "file": "fish-lake_yellowperch.webp",
+      "bytes": 64364,
+      "sha256": "dcb94198d46a400292c86db5d3431378a56fae0027101d19391c787283f90812"
+    },
+    {
+      "file": "fish-river_bleak.webp",
+      "bytes": 51222,
+      "sha256": "de8bc00cccf16b54e0371b6b38736bef475dcf304a74eeb2b4dfb0dbe41a9a49"
+    },
+    {
+      "file": "fish-river_chub.webp",
+      "bytes": 62140,
+      "sha256": "534ec8c05ce74550ba362291b065a7b504ce3b7926fae4a00395033bfd5da8f7"
+    },
+    {
+      "file": "fish-river_europeansturgeon.webp",
+      "bytes": 43854,
+      "sha256": "18233c550a3fa507f30effbe58f94c83aabf7508d0ab6a4a1607f9fd4e6d83e9"
+    },
+    {
+      "file": "fish-river_minnow.webp",
+      "bytes": 50700,
+      "sha256": "064d25c802ecc63081b24c50ad070f304633410cb028a97da2b1cef08c2cb85e"
+    },
+    {
+      "file": "fish-river_smallmouth.webp",
+      "bytes": 67494,
+      "sha256": "0e66cceed173d705f5b4e77d1a07df11291209807069aa22cf3bd45579f504b5"
+    },
+    {
+      "file": "fish-river_stoneloach.webp",
+      "bytes": 48426,
+      "sha256": "cada29f4a8983d103b1ae6e973b29cd2305bafd9c9aedcccf157f3b5e1ea8d08"
+    },
+    {
+      "file": "rod-advancedRod.webp",
+      "bytes": 19192,
+      "sha256": "d4f9ab7dc13cbb3cab9ffe3165190a32a1e1e11da88cd0cecceb1dd520c1bd4f"
+    },
+    {
+      "file": "rod-bambooPole.webp",
+      "bytes": 14210,
+      "sha256": "5d7108e69bca43596782ad013d2731574e3521adfbb5a4e6245e552c9fada379"
+    },
+    {
+      "file": "rod-fiberglassRod.webp",
+      "bytes": 18812,
+      "sha256": "df9260bd71759b73f8840c3725721c550a04915bfa68f20ab99e2d4b5fb4e185"
+    },
+    {
+      "file": "rod-iridiumRod.webp",
+      "bytes": 19068,
+      "sha256": "10618b660e23a339577d2275f71a78eca9af2935801305f189ad3cfd1c06e4ce"
+    },
+    {
+      "file": "rod-legendRod.webp",
+      "bytes": 20308,
+      "sha256": "7ccdda936794fe990506330d76a1e58932f256172bac92d3f7cd7bf7181a94b7"
+    },
+    {
+      "file": "rod-trainingRod.webp",
+      "bytes": 15648,
+      "sha256": "8126148700f49acce29ecabc965bd0bb713f29c97f7becf9e873202754dab6d2"
+    },
+    {
+      "file": "scene-coast-cloudy-night.webp",
+      "bytes": 100382,
+      "sha256": "984ef06c0aefd5807de68fef65d4a3a91372ba2839fd22f1c1f0be8c417aaaf8"
+    },
+    {
+      "file": "scene-coast-cloudy.webp",
+      "bytes": 140162,
+      "sha256": "4e4eaaddadaf244d56e8e8122ab7fdf2caf895f514bd6cffe4e8d6e37cd350e0"
+    },
+    {
+      "file": "scene-jungle-cloudy-night.webp",
+      "bytes": 102528,
+      "sha256": "26c5fa29bfb8d49b7731e5170051a4999de7506c69a1407bc33c6c2e5cc6d651"
+    },
+    {
+      "file": "scene-jungle-cloudy.webp",
+      "bytes": 166364,
+      "sha256": "205f3fdd514bad954fef5a466e3fd1a9ef2757956cc0bf745f06e31f002a60c2"
+    },
+    {
+      "file": "scene-jungle-night.webp",
+      "bytes": 133426,
+      "sha256": "b553fe02d46faf51438543497272303918950c73590635099aba78b4172cb1e2"
+    },
+    {
+      "file": "scene-jungle.webp",
+      "bytes": 188516,
+      "sha256": "c4491231a20c35c73fdb86694813ea7413b6443ec8b2837b9dd60a4d77bde96c"
+    },
+    {
+      "file": "scene-lake-cloudy-night.webp",
+      "bytes": 86334,
+      "sha256": "9478efbbb34dc42a30e3c7a1709f99eeb25988ccfc8a0f8df65ec403e842a31d"
+    },
+    {
+      "file": "scene-lake-cloudy.webp",
+      "bytes": 121446,
+      "sha256": "0cfbfdd5cc42d15a0d490e8fb8f2b23fbc3c022e165f4b89ab607911c42420a8"
+    },
+    {
+      "file": "scene-river-cloudy-night.webp",
+      "bytes": 123400,
+      "sha256": "e5a547f0ad93b6a7d952ef5893a1a3afe5ecf8da64ba2c969aa1495fbcaedaa1"
+    },
+    {
+      "file": "scene-river-cloudy.webp",
+      "bytes": 170882,
+      "sha256": "d9091bc021b1f1322bbcd636f76b19dcad71e9e47d1c55d3ba4c2ce62bfe88f3"
     }
-  ]
+  ],
+  "additional_artwork": "Final Lake Notes game; four waters, expanded fish catalog, rods and weather scenes.",
+  "final_source_sha256": "c1962f3f7278493b3af025488bd866fde8aae45fc69ed3a3ee92cf0acde83d0c"
 }

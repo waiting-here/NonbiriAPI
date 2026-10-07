@@ -1263,6 +1263,11 @@
           "steadycatch": {
             "title": "稳稳地接住你",
             "body": "接住热梗，躲过故障。和 ChatGPT 一起挑战 90 秒。"
+          },
+          "free": "免费游玩",
+          "lakenotes": {
+            "title": "垂钓手记",
+            "body": "在四处水域收集渔获、升级装备，写下你的垂钓故事。"
           }
         },
         "fishing": {
@@ -2679,14 +2684,14 @@
       "accountPresentation.deleteAction": "删除账户…"
     },
     "lakeNotes": {
-      "back": "返回活动",
+      "back": "返回小游戏",
       "intro": "按住空格或钓鱼按钮上浮，松开下落，让鱼儿留在捕捉条中。",
       "entryHeading": "本期参与资格",
       "entryFee": "本期入场费：{{amount}} 通用积分",
       "entryScope": "入场费覆盖整个期次。新一期需重新入场，档案与金币保留。",
       "paid": "已取得本期资格",
       "enter": "确认费用并参与",
-      "closed": "当前未开放。已有金币、鱼篓和进度已保留；开放后可继续。",
+      "closed": "游戏暂未开放，已有存档保留。",
       "entryUnknown": "入场结果尚未确认，请重试入场。",
       "retry": "重试同一次操作",
       "saved": "已保存",
@@ -2794,7 +2799,7 @@
       "treasureReward": "宝箱奖励：{{coins}} 金币 · {{bait}} ×{{count}}",
       "debrisReward": "捞起{{item}}",
       "exchangeHeading": "金币与站内积分兑换",
-      "exchangeHelp": "填写兑换份数，预览所需金额和可获得的数量。",
+      "exchangeHelp": "按管理员设置兑换金币和积分，确认前请核对数量。",
       "direction": "兑换方向",
       "batches": "兑换份数",
       "quote": "预览兑换",
@@ -3023,6 +3028,174 @@
           "coast_anglerfish": {
             "name": "鮟鱇",
             "description": "头顶的发光诱饵在黑暗里晃动，暴雨夜才接近海岸。"
+          },
+          "lake_bluegill": {
+            "name": "蓝鳃太阳鱼",
+            "description": "扁圆的身体带着暗色横纹，鳃盖后缘有醒目的蓝黑斑，常在岸边浅水活动。"
+          },
+          "lake_pumpkinseed": {
+            "name": "南瓜籽太阳鱼",
+            "description": "脸颊上的蓝绿纹路与橙色斑点像一幅小画，圆短的身形在水草间缓缓游动。"
+          },
+          "lake_rudd": {
+            "name": "欧洲红眼鱼",
+            "description": "金铜色鳞片和鲜红的腹鳍很显眼，上翘的小嘴适合在水面附近觅食。"
+          },
+          "lake_roach": {
+            "name": "拟鲤",
+            "description": "银亮的鳞片下映着暖红色鱼鳍，外形修长，喜欢在湖湾里成群缓游。"
+          },
+          "lake_yellowperch": {
+            "name": "黄鲈",
+            "description": "金黄色体侧有多道黑色横带，背上两枚独立的背鳍让它格外好认。"
+          },
+          "lake_paddlefish": {
+            "name": "匙吻鲟",
+            "description": "现实中的匙吻鲟因栖息地变化等因素而减少，长而扁的匙状吻部格外醒目；游戏中它被放大为湖泊巨鱼。"
+          },
+          "river_minnow": {
+            "name": "欧洲鱥",
+            "description": "小巧的纺锤形身体带着深色侧纹，常成群穿过清浅的河段。"
+          },
+          "river_bleak": {
+            "name": "欧鲌",
+            "description": "薄薄的银色身躯像一片闪光，上翘的小嘴贴着水面寻找食物。"
+          },
+          "river_stoneloach": {
+            "name": "石鳅",
+            "description": "砂褐色斑纹能藏进河床，嘴边的短须帮助它在石缝间搜寻食物。"
+          },
+          "river_smallmouth": {
+            "name": "小口黑鲈",
+            "description": "铜褐色体侧带着深色竖纹，嘴角不过眼后缘，常守在石滩附近。"
+          },
+          "river_chub": {
+            "name": "欧鲦",
+            "description": "宽阔的头部和大鳞片很有辨识度，常在河湾的急缓交界处徘徊。"
+          },
+          "river_europeansturgeon": {
+            "name": "欧洲鲟",
+            "description": "现实中的欧洲鲟野生种群非常稀少，身上排列着硬质骨板；游戏中它沿雨夜上涨的河水洄游。"
+          },
+          "coast_mullet": {
+            "name": "鲻鱼",
+            "description": "银灰色身体有细细的纵纹，小嘴与两枚分离的背鳍是它的特点。"
+          },
+          "coast_whiting": {
+            "name": "牙鳕",
+            "description": "体侧泛着银白光泽，连续排列的三枚背鳍像一串小旗，偏爱昏暗海水。"
+          },
+          "coast_garfish": {
+            "name": "欧洲颌针鱼",
+            "description": "细长的上下颌像一把镊子，蓝绿色背部在水面附近一闪而过。"
+          },
+          "coast_blackseabream": {
+            "name": "黑鲷",
+            "description": "深灰色体侧带着不显眼的横带，厚实的嘴与高背鳍适合在礁石边活动。"
+          },
+          "coast_mahimahi": {
+            "name": "鲯鳅",
+            "description": "蓝绿背部与金黄色体侧像流动的宝石，高耸的额头后是一条延伸到尾部的长背鳍。"
+          },
+          "coast_humpheadwrasse": {
+            "name": "苏眉",
+            "description": "现实中的曲纹唇鱼又称苏眉，是受保护的稀少鱼类；厚唇、隆起的额头与细密蓝绿纹路让它像一位海中长者。"
+          },
+          "jungle_climbingperch": {
+            "name": "攀鲈",
+            "description": "厚实的橄榄色身体配着硬棘背鳍，常在树根旁的缓水里活动。"
+          },
+          "jungle_threespotgourami": {
+            "name": "三星丝足鲈",
+            "description": "银蓝色身体有两枚暗斑，细长腹鳍像触须，喜欢水草丰茂的浅湾。"
+          },
+          "jungle_snakeskingourami": {
+            "name": "蛇皮丝足鲈",
+            "description": "斜向暗纹像蛇皮，细长腹鳍轻探水面下的植物。"
+          },
+          "jungle_croakinggourami": {
+            "name": "鸣声丝足鲈",
+            "description": "小巧的褐色身躯带着横纹，安静时会藏在落叶与水草之间。"
+          },
+          "jungle_moonlightgourami": {
+            "name": "月光丝足鲈",
+            "description": "细密的银白鳞片柔和反光，橙红色的眼睛很醒目。"
+          },
+          "jungle_redtailrasbora": {
+            "name": "红尾波鱼",
+            "description": "修长身体上的黑色横带十分清晰，红尾一摆便钻入浅水阴影。"
+          },
+          "jungle_silverflyingbarb": {
+            "name": "银色飞鲃",
+            "description": "亮银色身体有一道深色横线，长须帮助它在缓水中寻找小食物。"
+          },
+          "jungle_silverbarb": {
+            "name": "爪哇鲃",
+            "description": "宽阔的银色鳞片与暖黄鱼鳍相衬，常沿着浅湾缓缓觅食。"
+          },
+          "jungle_bronzefeatherback": {
+            "name": "铜色弓背鱼",
+            "description": "弓起的背部呈铜灰色，绵长臀鳍像一条轻摆的丝带。"
+          },
+          "jungle_yellowcatfish": {
+            "name": "长须鲿",
+            "description": "扁平头部伸出长须，青褐色身体贴着河底与浸水树根游动。"
+          },
+          "jungle_bigheadcatfish": {
+            "name": "大头胡鲶",
+            "description": "宽头、长须与细密暗斑让它很容易辨认，偏爱泥底与缓流。"
+          },
+          "jungle_stripedsnakehead": {
+            "name": "条纹鳢",
+            "description": "长身躯带着斜纹，蛇形头部常从丛林浅湾的水草间探出。"
+          },
+          "jungle_peacockeel": {
+            "name": "暹罗刺鳅",
+            "description": "尖细吻部在泥沙里探寻食物，背部后段排列着眼状斑。"
+          },
+          "jungle_beardlessbarb": {
+            "name": "无须圆唇鲃",
+            "description": "银色鳞片间有点状暗纹，尾根黑斑在水中格外显眼。"
+          },
+          "jungle_clownfeatherback": {
+            "name": "眼斑弓背鱼",
+            "description": "银灰色弓背下排列着眼状黑斑，黄昏后在深潭边巡游。"
+          },
+          "jungle_smallscalearcherfish": {
+            "name": "小鳞射水鱼",
+            "description": "银黄身体带着深色条斑，上翘的嘴让它善于在水面附近捕食。"
+          },
+          "jungle_giantgourami": {
+            "name": "巨型丝足鲈",
+            "description": "宽厚身躯披着淡铜色鳞片，慢而有力地穿过浸水树根。"
+          },
+          "jungle_tinfoilbarb": {
+            "name": "红鳍锡箔鲃",
+            "description": "大片银鳞仿佛锡箔，红色鱼鳍与黑色尾缘构成醒目的标记。"
+          },
+          "jungle_hampalabarb": {
+            "name": "大鳞鲃",
+            "description": "体侧深色竖带像一道腰带，红尾有黑边，冲刺时充满力量。"
+          },
+          "jungle_asianarowana": {
+            "name": "亚洲龙鱼",
+            "description": "大片铜金色鳞片覆着修长身体，两根下颌须随水流轻摆。"
+          },
+          "jungle_giantsnakehead": {
+            "name": "小盾鳢",
+            "description": "宽大的蛇形头部与青黑斑纹显出掠食者的气势，突进后常停下蓄力。"
+          },
+          "jungle_stripedpangasius": {
+            "name": "低眼巨鲶",
+            "description": "低位的眼睛与银灰色无鳞身躯很有辨识度，宽阔深潭里能见到它的身影。"
+          },
+          "jungle_mekonggiantcatfish": {
+            "name": "湄公河巨型鲶",
+            "description": "青灰色巨躯像河湾中缓缓移动的阴影。原型是现实中稀少的大型淡水鱼，游戏体长有所放大。"
+          },
+          "jungle_siamesegiantcarp": {
+            "name": "暹罗巨鲤",
+            "description": "硕大的头部与银黑色大鳞片透出古老气息。原型是现实中稀少的巨鲤，游戏体长有所放大。"
           }
         },
         "locations": {
@@ -3040,6 +3213,11 @@
             "name": "海岸",
             "scene": "海风吹过栈桥，浪花轻拍岸边。",
             "description": "咸水栈桥与近海，既有成群的小鱼，也有远游的大鱼。"
+          },
+          "jungle": {
+            "name": "丛林河湾",
+            "scene": "树影落在河湾，热带鱼儿穿梭在浅滩与树根之间。",
+            "description": "密林环抱的热带河湾，小鱼聚在浅水，大型鱼藏在弯道深处。"
           }
         },
         "gear": {
@@ -3098,6 +3276,10 @@
           "sonarBobber": {
             "name": "声呐浮漂",
             "description": "上钩后显示鱼的种类。"
+          },
+          "legendRod": {
+            "name": "传说钓手竿",
+            "description": "累计钓获 10 条传说鱼后免费领取。可使用鱼饵和 3 件渔具，同一种最多装两件；鱼竿本身不增加条长或容错。"
           }
         },
         "skills": {
@@ -3201,7 +3383,9 @@
       },
       "catalogTitle": "图鉴",
       "ledgerEntry": "垂钓手记：期次入场",
-      "ledgerExchange": "垂钓手记：金币与积分兑换"
+      "ledgerExchange": "垂钓手记：金币与积分兑换",
+      "buyBatch": "购买 {{count}} 个 · {{cost}} 金币",
+      "bitePreparation": "鱼上钩了，准备控竿"
     },
     "quickstart": {
       "title": "接入自用服务",
@@ -3391,6 +3575,9 @@
     },
     "steadycatch": {
       "title": "稳稳地接住你"
+    },
+    "lakenotes": {
+      "title": "垂钓手记"
     }
   },
   "recurringLimits": {

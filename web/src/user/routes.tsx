@@ -92,7 +92,7 @@ export const router = createBrowserRouter([
         }),
       },
       {
-        path: pathFor('lake-notes'),
+        path: pathFor('game-lake-notes'),
         lazy: async () => ({
           Component: (await import('./activities/lake-notes/LakeNotesPage')).LakeNotesPage,
         }),

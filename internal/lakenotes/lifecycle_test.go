@@ -10,24 +10,15 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/lakenotes/rules"
-	"github.com/waiting-here/NonbiriAPI/internal/limitedactivities"
 )
 
-func TestAtomicCloseCheckpointAndCrossPeriodResume(t *testing.T) {
+func TestAtomicCloseCheckpointAndReopen(t *testing.T) {
 	f := newFixture(t)
-	p := f.period(t, "0")
-	v := f.enter(t, p)
-	start, e := f.service.Start(f.ctx(f.user), f.user, testKey(400), StartInput{v.Revision})
-	if e != nil {
-		t.Fatal(e)
-	}
-	directory, e := limitedactivities.New(limitedactivities.Config{Database: f.database, Users: f.service.users, Admins: f.service.admins, Gate: f.service.gate, Keys: f.service.keys, Registry: limitedactivities.NewRegistry(nil).WithLakeNotes(f.service), Now: f.service.now})
-	if e != nil {
-		t.Fatal(e)
-	}
-	detail, e := directory.Detail(f.ctx(f.user), f.user, Key)
-	if e != nil || detail.Status != "open" {
-		t.Fatal(detail, e)
+	settings := f.enable(t)
+	v := f.profile(t)
+	start, err := f.service.Start(f.ctx(f.user), f.user, testKey(400), StartInput{v.Revision})
+	if err != nil {
+		t.Fatal(err)
 	}
 	f.now.Add(2 * int64(time.Second))
 	var wg sync.WaitGroup
@@ -35,62 +26,46 @@ func TestAtomicCloseCheckpointAndCrossPeriodResume(t *testing.T) {
 	errs := make(chan error, 2)
 	go func() {
 		defer wg.Done()
-		_, e := f.service.Checkpoint(f.ctx(f.user), f.user, start.Value.Cast.ID, testKey(401), checkpoint(start.Value.Cast, 120))
-		if errors.Is(e, ErrConflict) {
-			e = nil
+		_, err := f.service.Checkpoint(f.ctx(f.user), f.user, start.Value.Cast.ID, testKey(401), checkpoint(start.Value.Cast, 120))
+		if errors.Is(err, ErrConflict) || errors.Is(err, ErrClosed) {
+			err = nil
 		}
-		errs <- e
+		errs <- err
 	}()
-	go func() {
-		defer wg.Done()
-		_, e := directory.UpdateConfig(f.ctx(f.admin), f.admin, Key, testKey(402), limitedactivities.ConfigInput{ExpectedRevision: "1", Visible: false, Paused: true, ModuleConfig: []byte("{}")})
-		errs <- e
-	}()
+	go func() { defer wg.Done(); settings.Enabled = false; _, err := f.configure(settings.Wire); errs <- err }()
 	wg.Wait()
 	close(errs)
-	for e := range errs {
-		if e != nil {
-			t.Fatal(e)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
 		}
 	}
-	saved, e := f.service.Cast(f.ctx(f.user), f.user, start.Value.Cast.ID)
-	if e != nil || !saved.Cast.Paused || saved.Cast.State.Held || !saved.Profile.Readonly || saved.Cast.RecoveryAction != "closed" {
-		t.Fatal(saved, e)
+	saved, err := f.service.Cast(f.ctx(f.user), f.user, start.Value.Cast.ID)
+	if err != nil || !saved.Cast.Paused || saved.Cast.State.Held || !saved.Profile.Readonly || saved.Cast.RecoveryAction != "closed" {
+		t.Fatal(saved, err)
 	}
 	if saved.Cast.AckTick != 0 && saved.Cast.AckTick != 120 {
 		t.Fatal(saved)
 	}
-	if _, e = f.service.Resume(f.ctx(f.user), f.user, saved.Cast.ID, testKey(403), control(saved.Cast)); !errors.Is(e, ErrClosed) {
-		t.Fatal(e)
+	if _, err = f.service.Resume(f.ctx(f.user), f.user, saved.Cast.ID, testKey(403), control(saved.Cast)); !errors.Is(err, ErrClosed) {
+		t.Fatal(err)
 	}
-	if _, e = directory.UpdateConfig(f.ctx(f.admin), f.admin, Key, testKey(404), limitedactivities.ConfigInput{ExpectedRevision: "2", Visible: true, ModuleConfig: []byte("{}")}); e != nil {
-		t.Fatal(e)
+	settings.Enabled = true
+	if _, err = f.configure(settings.Wire); err != nil {
+		t.Fatal(err)
 	}
-	// A new period requires a new entitlement before the old cast can continue.
-	in := PeriodInput{"0", "Next", "published", p.EndsAt, p.EndsAt + 100, ptr("0"), map[Direction]ExchangeSetting{}}
-	next, e := f.service.SavePeriod(f.ctx(f.admin), f.admin, "", testKey(405), in)
-	if e != nil {
-		t.Fatal(e)
+	resumed, err := f.service.Resume(f.ctx(f.user), f.user, saved.Cast.ID, testKey(408), control(saved.Cast))
+	if err != nil || resumed.Value.Cast.SourcePeriodID != "" || resumed.Value.Cast.AckTick != saved.Cast.AckTick {
+		t.Fatal(resumed, err)
 	}
-	f.now.Store(p.EndsAt * int64(time.Second))
-	if _, e = f.service.Resume(f.ctx(f.user), f.user, saved.Cast.ID, testKey(406), control(saved.Cast)); !errors.Is(e, ErrClosed) {
-		t.Fatal(e)
-	}
-	if _, e = f.service.Entry(f.ctx(f.user), f.user, testKey(407), EntryInput{next.Value.ID, next.Value.Revision}); e != nil {
-		t.Fatal(e)
-	}
-	resumed, e := f.service.Resume(f.ctx(f.user), f.user, saved.Cast.ID, testKey(408), control(saved.Cast))
-	if e != nil || resumed.Value.Cast.SourcePeriodID != p.ID || resumed.Value.Cast.AckTick != saved.Cast.AckTick {
-		t.Fatal(resumed, e)
-	}
-	if _, e = f.service.Checkpoint(f.ctx(f.user), f.user, saved.Cast.ID, testKey(409), checkpoint(saved.Cast, 1)); !errors.Is(e, ErrConflict) {
-		t.Fatal("old device advanced", e)
+	if _, err = f.service.Checkpoint(f.ctx(f.user), f.user, saved.Cast.ID, testKey(409), checkpoint(saved.Cast, 1)); !errors.Is(err, ErrConflict) {
+		t.Fatal("old controller advanced", err)
 	}
 }
 func TestBanAndPauseAreTransactional(t *testing.T) {
 	f := newFixture(t)
-	p := f.period(t, "0")
-	v := f.enter(t, p)
+	f.enable(t)
+	v := f.profile(t)
 	start, e := f.service.Start(f.ctx(f.user), f.user, testKey(420), StartInput{v.Revision})
 	if e != nil {
 		t.Fatal(e)
@@ -124,29 +99,25 @@ func TestBanAndPauseAreTransactional(t *testing.T) {
 		t.Fatal(paused, held, e)
 	}
 }
-func TestNaturalPeriodEndDoesNotAccrueClosedTime(t *testing.T) {
+func TestHistoricalPeriodDoesNotClosePermanentGame(t *testing.T) {
 	f := newFixture(t)
-	p := f.period(t, "0")
-	f.now.Store((p.EndsAt - 1) * int64(time.Second))
-	v := f.enter(t, p)
-	start, e := f.service.Start(f.ctx(f.user), f.user, testKey(430), StartInput{v.Revision})
-	if e != nil {
-		t.Fatal(e)
+	f.enable(t)
+	f.legacyPeriod(t)
+	v := f.profile(t)
+	start, err := f.service.Start(f.ctx(f.user), f.user, testKey(430), StartInput{v.Revision})
+	if err != nil {
+		t.Fatal(err)
 	}
-	f.now.Add(20 * int64(time.Second))
-	saved, e := f.service.Cast(f.ctx(f.user), f.user, start.Value.Cast.ID)
-	if e != nil || !saved.Cast.Paused || saved.Cast.AckTick != 0 {
-		t.Fatal(saved, e)
-	}
-	var elapsed int64
-	if e = f.database.QueryRow("SELECT active_elapsed_ns FROM lake_notes_casts WHERE id=?", saved.Cast.ID).Scan(&elapsed); e != nil || elapsed != int64(time.Second) {
-		t.Fatal("closed time accrued", elapsed, e)
+	f.now.Add(2 * int64(time.Second))
+	out, err := f.service.Checkpoint(f.ctx(f.user), f.user, start.Value.Cast.ID, testKey(431), checkpoint(start.Value.Cast, 120))
+	if err != nil || out.Value.Cast.Paused || out.Value.Cast.SourcePeriodID != "" {
+		t.Fatal("historical schedule still gates game", err)
 	}
 }
 func TestAllTypedActionsUseRulesAndBlockedPausedCast(t *testing.T) {
 	f := newFixture(t)
-	p := f.period(t, "0")
-	v := f.enter(t, p)
+	f.enable(t)
+	v := f.profile(t)
 	in := ActionInput{ExpectedProfileRevision: v.Revision, Action: rules.Action{Name: "rest"}}
 	out, e := f.service.Action(f.ctx(f.user), f.user, testKey(440), in)
 	if e != nil || out.Value.Profile.Profile.ClockMinutes != 540 {
@@ -176,52 +147,33 @@ func TestAllTypedActionsUseRulesAndBlockedPausedCast(t *testing.T) {
 	}
 }
 
-func TestScheduleShorteningClampsExistingLease(t *testing.T) {
-	for _, source := range []string{"period", "umbrella"} {
-		t.Run(source, func(t *testing.T) {
-			f := newFixture(t)
-			p := f.period(t, "0")
-			v := f.enter(t, p)
-			start, e := f.service.Start(f.ctx(f.user), f.user, testKey(450), StartInput{v.Revision})
-			if e != nil {
-				t.Fatal(e)
-			}
-			end := testNow + 1
-			if source == "period" {
-				_, e = f.service.SavePeriod(f.ctx(f.admin), f.admin, p.ID, testKey(451), PeriodInput{p.Revision, p.Name, p.Status, p.StartsAt, end, p.EntryFeeMilli, p.Exchanges})
-			} else {
-				var directory *limitedactivities.Service
-				directory, e = limitedactivities.New(limitedactivities.Config{Database: f.database, Users: f.service.users, Admins: f.service.admins, Gate: f.service.gate, Keys: f.service.keys, Registry: limitedactivities.NewRegistry(nil).WithLakeNotes(f.service), Now: f.service.now})
-				if e == nil {
-					starts := p.StartsAt
-					_, e = directory.UpdateConfig(f.ctx(f.admin), f.admin, Key, testKey(451), limitedactivities.ConfigInput{ExpectedRevision: "1", Visible: true, StartsAt: &starts, EndsAt: &end, ModuleConfig: []byte("{}")})
-				}
-			}
-			if e != nil {
-				t.Fatal(e)
-			}
-			// Still-open activity preserves control while the authoritative deadline changes.
-			current, e := f.service.Cast(f.ctx(f.user), f.user, start.Value.Cast.ID)
-			if e != nil || current.Cast.Paused || current.Cast.Generation != start.Value.Cast.Generation || current.Cast.Revision != start.Value.Cast.Revision {
-				t.Fatal(current, e)
-			}
-			f.now.Add(3 * int64(time.Second))
-			saved, e := f.service.Cast(f.ctx(f.user), f.user, start.Value.Cast.ID)
-			if e != nil || !saved.Cast.Paused || saved.Cast.AckTick != 0 || !saved.Profile.Readonly {
-				t.Fatal(saved, e)
-			}
-			var elapsed int64
-			if e = f.database.QueryRow("SELECT active_elapsed_ns FROM lake_notes_casts WHERE id=?", saved.Cast.ID).Scan(&elapsed); e != nil || elapsed != int64(time.Second) {
-				t.Fatal("time after revised closing accrued", elapsed, e)
-			}
-		})
+func TestDisableStopsAccruingTimeAtConfigurationChange(t *testing.T) {
+	f := newFixture(t)
+	settings := f.enable(t)
+	v := f.profile(t)
+	started, err := f.service.Start(f.ctx(f.user), f.user, testKey(450), StartInput{v.Revision})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.now.Add(int64(time.Second))
+	settings.Enabled = false
+	if _, err = f.configure(settings.Wire); err != nil {
+		t.Fatal(err)
+	}
+	f.now.Add(20 * int64(time.Second))
+	current, err := f.service.Cast(f.ctx(f.user), f.user, started.Value.Cast.ID)
+	if err != nil || !current.Cast.Paused {
+		t.Fatal(current, err)
+	}
+	var elapsed int64
+	if err = f.database.QueryRow("SELECT active_elapsed_ns FROM lake_notes_casts WHERE id=?", started.Value.Cast.ID).Scan(&elapsed); err != nil || elapsed != int64(time.Second) {
+		t.Fatal("disabled time accrued", elapsed, err)
 	}
 }
-
 func TestRetentionSharesLimitBetweenPauseAndTerminalCleanup(t *testing.T) {
 	f := newFixture(t)
-	p := f.period(t, "0")
-	v := f.enter(t, p)
+	f.enable(t)
+	v := f.profile(t)
 	start, e := f.service.Start(f.ctx(f.user), f.user, testKey(460), StartInput{v.Revision})
 	if e != nil {
 		t.Fatal(e)
@@ -259,11 +211,11 @@ func TestRetentionSharesLimitBetweenPauseAndTerminalCleanup(t *testing.T) {
 		}
 	})
 	for i, user := range []int64{f.user, f.other} {
-		entry, e := f.service.Entry(f.ctx(user), user, testKey(461+i*2), EntryInput{p.ID, p.Revision})
+		entry, e := f.service.Profile(f.ctx(user), user)
 		if e != nil {
 			t.Fatal(e)
 		}
-		if _, e = f.service.Start(f.ctx(user), user, testKey(462+i*2), StartInput{entry.Value.Profile.Revision}); e != nil {
+		if _, e = f.service.Start(f.ctx(user), user, testKey(462+i*2), StartInput{entry.Revision}); e != nil {
 			t.Fatal(e)
 		}
 	}

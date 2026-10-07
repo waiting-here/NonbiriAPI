@@ -1,5 +1,8 @@
 import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
 const keys = {
+  'center.free': 'user.games.copy.center.free',
+  'center.lakenotes.title': 'user.games.copy.center.lakenotes.title',
+  'center.lakenotes.body': 'user.games.copy.center.lakenotes.body',
   'presentation.description': 'user.games.presentation.description',
   'presentation.activityWallet': 'user.games.presentation.activityWallet',
   'presentation.unavailable': 'user.games.presentation.unavailable',

@@ -133,6 +133,16 @@ func (service *Service) PatchGamesConfig(ctx context.Context, body []byte, idemp
 			return game.WireConfiguration{}, ErrServiceUnavailable
 		}
 	}
+	for _, descriptor := range service.registry.Descriptors() {
+		module := service.modules[descriptor.ID]
+		if module.ConfigurationChangedTx != nil {
+			before, _ := snapshot.Value(descriptor.ID)
+			after, _ := compiled.Value(descriptor.ID)
+			if err = module.ConfigurationChangedTx(ctx, tx, before, after); err != nil {
+				return game.WireConfiguration{}, err
+			}
+		}
+	}
 	raw := compiled.Raw()
 	for key, value := range raw {
 		result, writeErr := tx.ExecContext(ctx, `UPDATE site_config SET value=?,updated_at=? WHERE key=?`, value, now, key)

@@ -25,6 +25,8 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/game/linklink"
 	"github.com/waiting-here/NonbiriAPI/internal/game/rps"
 	"github.com/waiting-here/NonbiriAPI/internal/game/steadycatch"
+	"github.com/waiting-here/NonbiriAPI/internal/inactivity"
+	"github.com/waiting-here/NonbiriAPI/internal/lakenotes"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
@@ -52,6 +54,7 @@ type Options struct {
 	Now               func() time.Time
 }
 type Runtime struct {
+	lake *lakenotes.Service
 	*host.Service
 	accountContinuation AccountContinuation
 	cancelUserDuelsTx   func(context.Context, *sql.Tx, int64, string, int64) (func(bool), error)
@@ -69,6 +72,17 @@ func (runtime *Runtime) AccountContinuation() AccountContinuation {
 		return nil
 	}
 	return runtime.accountContinuation
+}
+
+func (r *Runtime) LakeNotes() *lakenotes.Service { return r.lake }
+
+type lakeAdmission struct {
+	service *maintenance.Service
+	now     func() time.Time
+}
+
+func (a lakeAdmission) AuthorizeUserActivity(ctx context.Context, tx *sql.Tx, user int64) error {
+	return a.service.AuthorizeChatAcceptance(ctx, tx, user, a.now().Unix())
 }
 
 func New(options Options) (*Runtime, error) {
@@ -116,6 +130,18 @@ func New(options Options) (*Runtime, error) {
 		return nil, err
 	}
 	factories := map[string]host.Factory{
+		game.LakeNotesID: func(shared host.Services) (*host.Module, error) {
+			service, err := lakenotes.New(lakenotes.Config{Database: shared.Database, Users: shared.UserAuthorizer, Admins: shared.AdminAuthorizer, Gate: lakeAdmission{options.Continuation, shared.Now}, Keys: options.Vault, Now: shared.Now,
+				Activity: func(ctx context.Context, tx *sql.Tx, user, at int64) error {
+					return inactivity.RecordActiveTx(ctx, tx, inactivity.ActiveEvent{UserID: user, At: at, Kind: "game", Fresh: true})
+				},
+			})
+			if err != nil {
+				return nil, err
+			}
+			runtime.lake = service
+			return service.Module(), nil
+		},
 		game.BlackjackID: func(shared host.Services) (*host.Module, error) {
 			financial, err := builtinfinance.ForModule(game.BlackjackID)
 			if err != nil {

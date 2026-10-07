@@ -14,9 +14,10 @@ export const modesFor = (game: GameID) =>
 export const historyModesFor = (game: GameID) =>
   game === 'bidding' ? [...modesFor(game), 'ai'] : modesFor(game);
 export function gameLabel(
-  game: GameID | 'blackjack' | 'steadycatch',
+  game: GameID | 'blackjack' | 'steadycatch' | 'lakenotes',
   t: (zh: string, en: string) => string,
 ) {
+  if (game === 'lakenotes') return t('垂钓手记', 'Lake Notes');
   if (game === 'steadycatch') return t('稳稳地接住你', 'Catch You Steadily');
   if (game === 'gwent') return t('AI 昆特牌', 'AI Gwent');
   if (game === 'blackjack') return t('二十一点', 'Blackjack');

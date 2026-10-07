@@ -19,7 +19,22 @@ export function gamesSnapshotWire() {
     bidding: duelSnapshotWire('bidding'),
     likes: duelSnapshotWire('likes'),
     gwent: duelSnapshotWire('gwent'),
-    steadycatch: { enabled: false, available: true, price: '0', first_clear_reward: '0', first_cleared: false },
+    lakenotes: {
+      enabled: false,
+      exchanges: {
+        coins_to_general: { enabled: false, source_amount: '', target_amount: '' },
+        general_to_coins: { enabled: false, source_amount: '', target_amount: '' },
+        coins_to_game: { enabled: false, source_amount: '', target_amount: '' },
+        game_to_coins: { enabled: false, source_amount: '', target_amount: '' },
+      },
+    },
+    steadycatch: {
+      enabled: false,
+      available: true,
+      price: '0',
+      first_clear_reward: '0',
+      first_cleared: false,
+    },
     blackjack: blackjackSnapshotWire(),
     fishing: {
       enabled: true,
@@ -56,14 +71,18 @@ export function duelSnapshotWire(game: 'bidding' | 'likes' | 'gwent') {
     available: true,
     queue_seconds: 120,
     queue_capacity: 4096,
-    ...(game === 'gwent' ? { mulligan_seconds: 20, turn_seconds: 30, choice_seconds: 15 } : game === 'bidding'
-      ? { joker_seconds: 10, bid_seconds: 20 }
-      : { plan_seconds: 30, settlement_seconds: 5 }),
+    ...(game === 'gwent'
+      ? { mulligan_seconds: 20, turn_seconds: 30, choice_seconds: 15 }
+      : game === 'bidding'
+        ? { joker_seconds: 10, bid_seconds: 20 }
+        : { plan_seconds: 30, settlement_seconds: 5 }),
     modes: Object.fromEntries(
-      (game === 'gwent' ? ['standard'] : game === 'bidding' ? ['tier1', 'tier2', 'tier3'] : ['quick', 'standard']).map((key) => [
-        key,
-        { ...mode },
-      ]),
+      (game === 'gwent'
+        ? ['standard']
+        : game === 'bidding'
+          ? ['tier1', 'tier2', 'tier3']
+          : ['quick', 'standard']
+      ).map((key) => [key, { ...mode }]),
     ),
   };
 }

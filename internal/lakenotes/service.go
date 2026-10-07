@@ -14,20 +14,23 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/game"
+	"github.com/waiting-here/NonbiriAPI/internal/game/host"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
+	lakeconfig "github.com/waiting-here/NonbiriAPI/internal/lakenotes/config"
 	"github.com/waiting-here/NonbiriAPI/internal/lakenotes/rules"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
-	"github.com/waiting-here/NonbiriAPI/internal/limitedactivities"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
+	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
 type Service struct {
 	database     *sql.DB
-	users        limitedactivities.UserAuthorizer
-	admins       limitedactivities.AdminAuthorizer
-	gate         limitedactivities.AdmissionGate
-	keys         limitedactivities.KeyDeriver
-	activity     limitedactivities.ActivityRecorder
+	users        resources.FinalTxAuthorizer
+	admins       host.AdminAuthorizer
+	gate         AdmissionGate
+	keys         KeyDeriver
+	activity     func(context.Context, *sql.Tx, int64, int64) error
 	now          func() time.Time
 	random       rules.Random53
 	seed         func() (uint32, error)
@@ -72,42 +75,38 @@ func (s *Service) authorize(ctx context.Context, tx *sql.Tx, user int64, admin b
 		return authz.ErrUnauthorized
 	}
 	if admin {
-		return s.admins.AuthorizeAdmin(ctx, tx, user)
+		return s.admins.AuthorizeAdminMutation(ctx, tx)
 	}
 	return s.users.AuthorizeUserMutation(ctx, tx, user)
 }
-func (s *Service) openTx(ctx context.Context, tx *sql.Tx, user int64, now int64) (Period, error) {
-	if e := s.gate.AuthorizeUserActivity(ctx, tx, user); e != nil {
-		return Period{}, e
+func settingsTx(ctx context.Context, tx *sql.Tx) (Settings, error) {
+	raw := map[string]string{}
+	for _, key := range []string{game.GamesEnabledKey, lakeconfig.EnabledKey, lakeconfig.ExchangesKey} {
+		var value string
+		if err := tx.QueryRowContext(ctx, "SELECT value FROM site_config WHERE key=?", key).Scan(&value); err != nil {
+			return Settings{}, err
+		}
+		raw[key] = value
 	}
-	var visible, paused bool
-	var starts, ends sql.NullInt64
-	e := tx.QueryRowContext(ctx, "SELECT visible,paused,starts_at,ends_at FROM limited_activity_configs WHERE activity_key=?", Key).Scan(&visible, &paused, &starts, &ends)
-	if errors.Is(e, sql.ErrNoRows) {
-		return Period{}, ErrClosed
+	wire, err := lakeconfig.Compile(raw)
+	if err != nil {
+		return Settings{}, err
 	}
-	if e != nil {
-		return Period{}, e
+	var version int64
+	if err = tx.QueryRowContext(ctx, "SELECT revision FROM config_revisions WHERE domain='games'").Scan(&version); err != nil {
+		return Settings{}, err
 	}
-	if !visible || paused || starts.Valid && now < starts.Int64 || ends.Valid && now >= ends.Int64 {
-		return Period{}, ErrClosed
-	}
-	p, e := currentPeriodTx(ctx, tx, now)
-	if errors.Is(e, ErrNotFound) {
-		return Period{}, ErrClosed
-	}
-	return p, e
+	return Settings{Revision: rev(version), Wire: wire}, nil
 }
-func (s *Service) qualifiedTx(ctx context.Context, tx *sql.Tx, user int64, now int64) (Period, error) {
-	p, e := s.openTx(ctx, tx, user, now)
-	if e != nil {
-		return p, e
+func (s *Service) qualifiedTx(ctx context.Context, tx *sql.Tx, user int64, _ int64) (Settings, error) {
+	if err := s.gate.AuthorizeUserActivity(ctx, tx, user); err != nil {
+		return Settings{}, err
 	}
-	_, e = entryReceiptTx(ctx, tx, user, p.ID)
-	if errors.Is(e, ErrNotFound) {
-		return p, ErrClosed
+	settings, err := settingsTx(ctx, tx)
+	if err == nil && !settings.Enabled {
+		err = ErrClosed
 	}
-	return p, e
+	return settings, err
 }
 func (s *Service) begin(ctx context.Context, tx *sql.Tx, user int64, admin bool, key, method, route string, body any, now int64) (idempotency.Decision, error) {
 	actor := "user"
@@ -182,7 +181,7 @@ func mutate[T any](ctx context.Context, s *Service, user int64, admin bool, key,
 			return out, e
 		}
 		if !admin && s.activity != nil {
-			if e = s.activity.RecordLimitedActivityTx(ctx, tx, user, now.Unix()); e != nil {
+			if e = s.activity(ctx, tx, user, now.Unix()); e != nil {
 				return out, e
 			}
 		}
@@ -279,16 +278,8 @@ func (s *Service) profileViewTx(ctx context.Context, tx *sql.Tx, user int64, now
 		out.Readonly = true
 	}
 
-	p, e := currentPeriodTx(ctx, tx, now.Unix())
-	if e == nil {
-		out.Period = &p
-		r, e := entryReceiptTx(ctx, tx, user, p.ID)
-		if e == nil {
-			out.Entitlement = &r
-		} else if !errors.Is(e, ErrNotFound) {
-			return out, e
-		}
-	} else if !errors.Is(e, ErrNotFound) {
+	out.Settings, e = settingsTx(ctx, tx)
+	if e != nil {
 		return out, e
 	}
 	c, e := currentCastTx(ctx, tx, user)
@@ -361,5 +352,5 @@ func (s *Service) Action(ctx context.Context, user int64, key string, input Acti
 }
 
 func closedError(e error) bool {
-	return errors.Is(e, ErrClosed) || errors.Is(e, maintenance.ErrMaintenanceOn) || errors.Is(e, authz.ErrForbidden)
+	return errors.Is(e, ErrClosed) || errors.Is(e, maintenance.ErrMaintenanceOn) || errors.Is(e, authz.ErrForbidden) || errors.Is(e, resources.ErrForbidden) || errors.Is(e, resources.ErrMaintenance)
 }

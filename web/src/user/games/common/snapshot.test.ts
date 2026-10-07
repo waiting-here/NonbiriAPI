@@ -1,8 +1,24 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { normalizeGamesSnapshot } from './snapshot';
 import { gamesSnapshotWire } from './testFixtures';
 
 describe('games snapshot normalizer', () => {
+  it('accepts the current server projection with new game onboarding fields', () => {
+    const wire = JSON.parse(
+      readFileSync(
+        resolve(
+          process.cwd(),
+          '..',
+          'internal/game/fishing/runtime/testdata/contracts/games-snapshot.json',
+        ),
+        'utf8',
+      ),
+    );
+    wire.onboarding.future_game = { items: [], all_completed: true };
+    expect(normalizeGamesSnapshot(wire).lakenotes.enabled).toBe(false);
+  });
   it('accepts current and historical battle durations without accepting intermediate values', () => {
     const wire = gamesSnapshotWire();
     if (!('plan_seconds' in wire.likes) || !('bid_seconds' in wire.bidding))
@@ -23,7 +39,13 @@ describe('games snapshot normalizer', () => {
     const wire = gamesSnapshotWire();
     wire.blackjack.quick_stakes = [];
     expect(normalizeGamesSnapshot(wire).blackjack.quick_stakes).toEqual([]);
-    for (const stakes of [['1000', '1000'], ['5000', '1000'], ['1500'], ['51000'], Array(9).fill('1000')]) {
+    for (const stakes of [
+      ['1000', '1000'],
+      ['5000', '1000'],
+      ['1500'],
+      ['51000'],
+      Array(9).fill('1000'),
+    ]) {
       wire.blackjack.quick_stakes = stakes;
       expect(() => normalizeGamesSnapshot(wire)).toThrow(/quick stakes/i);
     }
@@ -79,8 +101,12 @@ describe('games snapshot normalizer', () => {
 
   it('requires every ordered reward fact and a consistent completion summary', () => {
     const wire = gamesSnapshotWire();
-    expect(normalizeGamesSnapshot(wire).onboarding.linklink.items.map((item) => item.reward)).toEqual(['1000', '2000', '3000']);
-    expect(normalizeGamesSnapshot(wire).onboarding.blackjack.items.map((item) => item.reward)).toEqual(['1000', '2000', '3000', '4000', '5000']);
+    expect(
+      normalizeGamesSnapshot(wire).onboarding.linklink.items.map((item) => item.reward),
+    ).toEqual(['1000', '2000', '3000']);
+    expect(
+      normalizeGamesSnapshot(wire).onboarding.blackjack.items.map((item) => item.reward),
+    ).toEqual(['1000', '2000', '3000', '4000', '5000']);
     wire.onboarding.rps.items[0].completed = true;
     expect(normalizeGamesSnapshot(wire).onboarding.rps.items[0].completed).toBe(true);
     const wrongReward = structuredClone(wire);

@@ -1,3 +1,4 @@
+import { LakeCover } from '../../activities/lake-notes/LakeCover';
 import fishingHero from '@shared/assets/game-heroes/fishing.webp';
 import linkLinkHero from '@shared/assets/game-heroes/linklink.webp';
 import rpsHero from '@shared/assets/game-heroes/rps.webp';
@@ -8,6 +9,7 @@ import likesHero from '@shared/assets/game-heroes/likes.webp';
 import catchHero from '@shared/assets/game-heroes/steadycatch.webp';
 
 const heroSources = {
+  lakenotes: '',
   steadycatch: catchHero,
   fishing: fishingHero,
   linklink: linkLinkHero,
@@ -21,6 +23,7 @@ const heroSources = {
 export type GameHeroKind = keyof typeof heroSources;
 
 export function GameHero({ kind }: { kind: GameHeroKind }) {
+  if (kind === 'lakenotes') return <LakeCover />;
   if (kind === 'gwent')
     return (
       <div className="game-gwent-hero" aria-hidden="true">

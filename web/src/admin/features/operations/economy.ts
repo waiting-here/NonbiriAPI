@@ -1,3 +1,5 @@
+import { lakeDraft, lakeWire } from '../lakenotes/LakeFields';
+import type { LakeSettings } from '@shared/lakenotes/api';
 import { isActivityLiterature } from '@shared/utils/activityLiterature';
 import { blackjackConfig, type BlackjackConfig } from '@shared/games/blackjack';
 import { normalizeDuelConfig, type DuelGameConfig } from '../games/config';
@@ -264,6 +266,7 @@ interface GamesConfig {
   bidding: DuelGameConfig;
   likes: DuelGameConfig;
   gwent: DuelGameConfig;
+  lakenotes: LakeSettings;
   steadycatch: { enabled: boolean; price: string; first_clear_reward: string };
   blackjack: BlackjackConfig;
 }
@@ -309,6 +312,7 @@ export function normalizeGamesConfig(value: unknown): GamesConfig {
       'blackjack',
       'gwent',
       'steadycatch',
+      'lakenotes',
     ],
     'games configuration',
   );
@@ -354,6 +358,7 @@ export function normalizeGamesConfig(value: unknown): GamesConfig {
     blackjack: blackjackConfig(root.blackjack),
     likes: normalizeDuelConfig(root.likes, 'likes'),
     gwent: normalizeDuelConfig(root.gwent, 'gwent'),
+    lakenotes: lakeDraft(root.lakenotes as LakeSettings),
     steadycatch: {
       enabled: boolean(catchGame.enabled, 'catch enabled'),
       price: amount(catchGame.price, 'catch price', false),
@@ -417,6 +422,7 @@ export function gamesConfigPatch(input: GamesConfig): Record<string, unknown> {
     master_enabled: input.master_enabled,
     fishing: input.fishing,
     linklink: input.linklink,
+    lakenotes: lakeWire(input.lakenotes),
     steadycatch: input.steadycatch,
     bidding: input.bidding,
     likes: input.likes,
@@ -444,7 +450,15 @@ export function thursdayMutationRevision(
 export interface ActiveCounts {
   games: {
     game:
-      'fishing' | 'linklink' | 'rps' | 'bidding' | 'likes' | 'blackjack' | 'gwent' | 'steadycatch';
+      | 'fishing'
+      | 'linklink'
+      | 'rps'
+      | 'bidding'
+      | 'likes'
+      | 'blackjack'
+      | 'gwent'
+      | 'steadycatch'
+      | 'lakenotes';
     mode: string | null;
     spec: string | null;
     phase: string | null;
@@ -473,6 +487,7 @@ export function normalizeActiveCounts(value: unknown): ActiveCounts {
             'blackjack',
             'gwent',
             'steadycatch',
+            'lakenotes',
           ] as const,
           'active game',
         ),

@@ -7,6 +7,12 @@ const Catch = lazy(async () => ({
 function CatchPage() {
   return createElement(Suspense, { fallback: createElement(LoadingState) }, createElement(Catch));
 }
+const Lake = lazy(async () => ({
+  default: (await import('../activities/lake-notes/LakeNotesPage')).LakeNotesPage,
+}));
+function LakePage() {
+  return createElement(Suspense, { fallback: createElement(LoadingState) }, createElement(Lake));
+}
 const Fishing = lazy(async () => ({
   default: (await import('./fishing/FishingGame')).FishingGame,
 }));
@@ -98,4 +104,11 @@ export const gameRegistry: readonly GameRegistration[] = Object.freeze([
     page: CatchPage,
   },
   { id: 'blackjack', version: 1, titleKey: 'games.blackjack.title', page: BlackjackPage },
+  {
+    id: 'lakenotes',
+    path: '/games/lake-notes',
+    version: 1,
+    titleKey: 'games.lakenotes.title',
+    page: LakePage,
+  },
 ]);

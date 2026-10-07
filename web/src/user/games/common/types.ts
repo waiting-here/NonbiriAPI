@@ -1,3 +1,4 @@
+import type { LakeSettings } from '@shared/lakenotes/api';
 import type { DuelConfig } from './duel/types';
 import type { BlackjackSnapshot } from '@shared/games/blackjack';
 
@@ -30,8 +31,16 @@ export interface GamePayment {
 }
 
 export type GameID =
-  'fishing' | 'linklink' | 'rps' | 'bidding' | 'likes' | 'blackjack' | 'gwent' | 'steadycatch';
-export type OnboardingGameID = Exclude<GameID, 'gwent' | 'steadycatch'>;
+  | 'fishing'
+  | 'linklink'
+  | 'rps'
+  | 'bidding'
+  | 'likes'
+  | 'blackjack'
+  | 'gwent'
+  | 'steadycatch'
+  | 'lakenotes';
+export type OnboardingGameID = Exclude<GameID, 'gwent' | 'steadycatch' | 'lakenotes'>;
 export type OnboardingTaskKey =
   | Bait
   | LinkLinkSpec
@@ -71,6 +80,7 @@ export interface GamesSnapshot {
   readonly bidding: DuelConfig;
   readonly likes: DuelConfig;
   readonly gwent: DuelConfig;
+  readonly lakenotes: LakeSettings;
   readonly steadycatch: {
     readonly enabled: boolean;
     readonly available: boolean;

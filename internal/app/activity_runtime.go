@@ -16,6 +16,8 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/fatfish"
+	gamebuiltin "github.com/waiting-here/NonbiriAPI/internal/game/builtin"
+	gamehost "github.com/waiting-here/NonbiriAPI/internal/game/host"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/imageactivity"
 	"github.com/waiting-here/NonbiriAPI/internal/inactivity"
@@ -31,6 +33,7 @@ type activityRuntime struct {
 	images      *imageactivity.Service
 	fish        *fatfish.Service
 	lake        *lakenotes.Service
+	lakeHost    *gamehost.Service
 	inactivity  *inactivity.Service
 	cancelGames inactivity.CancelUserTx
 	now         func() time.Time
@@ -73,11 +76,11 @@ func (g limitedAdmissionGate) AuthorizeUserActivity(ctx context.Context, tx *sql
 
 func newActivityRuntime(store *db.Store, vault *secret.Vault, sessions *auth.Runtime, roles *roleFinalTxAuthorizer,
 	gate *maintenance.Service, outbound *egress.Stack, audits *auditRuntime, invalidator inactivity.Invalidator,
-	cancelGames inactivity.CancelUserTx, now func() time.Time) (*activityRuntime, error) {
+	cancelGames inactivity.CancelUserTx, games *gamebuiltin.Runtime, now func() time.Time) (*activityRuntime, error) {
 	if now == nil {
 		now = time.Now
 	}
-	a := &activityRuntime{now: now, cancelGames: cancelGames}
+	a := &activityRuntime{now: now, cancelGames: cancelGames, lake: games.LakeNotes(), lakeHost: games.Service}
 	var reportMu sync.Mutex
 	var lastReport time.Time
 	reportImageFailure := func(error) {
@@ -114,17 +117,9 @@ func newActivityRuntime(store *db.Store, vault *secret.Vault, sessions *auth.Run
 		_ = a.Close()
 		return nil, err
 	}
-	a.lake, err = lakenotes.New(lakenotes.Config{
-		Database: store.DB(), Users: users, Admins: roles, Gate: admission,
-		Keys: vault, Activity: activeActivityRecorder{}, Now: now,
-	})
-	if err != nil {
-		_ = a.Close()
-		return nil, err
-	}
 	a.limited, err = limitedactivities.New(limitedactivities.Config{
 		Database: store.DB(), Users: users, Admins: roles, Gate: admission, Keys: vault,
-		Registry: limitedactivities.NewRegistry(a.images, a.fish.ActivityRuntime()).WithLakeNotes(a.lake.ActivityRuntime()), Activity: activeActivityRecorder{}, Now: now,
+		Registry: limitedactivities.NewRegistry(a.images, a.fish.ActivityRuntime()), Activity: activeActivityRecorder{}, Now: now,
 	})
 	if err == nil {
 		a.inactivity, err = inactivity.New(inactivity.Config{
@@ -149,6 +144,10 @@ func (a *activityRuntime) CancelUserTx(ctx context.Context, tx *sql.Tx, user int
 	if gameFinish == nil {
 		return nil, limitedactivities.ErrInvariant
 	}
+	if _, err = a.lake.PrepareBanTx(ctx, tx, user, at); err != nil {
+		gameFinish(false)
+		return nil, err
+	}
 	f, err := a.limited.PrepareBanTx(ctx, tx, user, at)
 	if err != nil {
 		gameFinish(false)
@@ -170,6 +169,9 @@ func (a *activityRuntime) CancelUserTx(ctx context.Context, tx *sql.Tx, user int
 func (a *activityRuntime) PrepareMaintenanceTx(ctx context.Context, tx *sql.Tx, at int64) (func(bool), error) {
 	if a == nil {
 		return nil, limitedactivities.ErrInvariant
+	}
+	if _, err := a.lake.PrepareMaintenanceTx(ctx, tx, at); err != nil {
+		return nil, err
 	}
 	f, err := a.limited.PrepareMaintenanceTx(ctx, tx, at)
 	if err != nil {
@@ -273,17 +275,6 @@ func (r limitedRoutes) RegisterAdminRoute(method, path string, handler limitedac
 	})
 }
 
-type lakeRoutes struct{ limitedRoutes }
-
-func (r lakeRoutes) RegisterUserRoute(method, path string, handler limitedactivities.AuthorizedUserHandler) error {
-	if method == http.MethodPost && path == "/api/limited-activities/lake-notes/casts/{id}/pause" {
-		return r.sessions.RegisterContinuationUserRoute(method, path, func(w http.ResponseWriter, req *http.Request, p resources.ContinuationUserPrincipal) {
-			handler(w, req, limitedactivities.UserPrincipal{UserID: p.UserID})
-		})
-	}
-	return r.limitedRoutes.RegisterUserRoute(method, path, handler)
-}
-
 type imageRoutes struct{ sessions *auth.Runtime }
 
 func (r imageRoutes) RegisterUserRoute(method, path string, handler imageactivity.AuthorizedUserHandler) error {
@@ -320,9 +311,6 @@ func (a *activityRuntime) RegisterRoutes(sessions *auth.Runtime) error {
 		return err
 	}
 	if err := fatfish.RegisterAdminRoutes(f, a.fish); err != nil {
-		return err
-	}
-	if err := lakenotes.RegisterRoutes(lakeRoutes{l}, l, a.lake); err != nil {
 		return err
 	}
 	if err := limitedactivities.RegisterRoutes(l, l, a.limited); err != nil {

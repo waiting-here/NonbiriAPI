@@ -3,7 +3,6 @@ package lakenotes
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"math/big"
 	"time"
 
@@ -13,98 +12,9 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 )
 
-func entryReceiptTx(ctx context.Context, tx *sql.Tx, user int64, period string) (EntryReceipt, error) {
-	var r EntryReceipt
-	var revision, fee int64
-	var op sql.NullString
-	e := tx.QueryRowContext(ctx, "SELECT period_id,period_revision,fee_milli,ledger_operation_id,created_at FROM lake_notes_entitlements WHERE user_id=? AND period_id=?", user, period).Scan(&r.PeriodID, &revision, &fee, &op, &r.CreatedAt)
-	if errors.Is(e, sql.ErrNoRows) {
-		return r, ErrNotFound
-	}
-	if e != nil {
-		return r, e
-	}
-	r.PeriodRevision, r.FeeMilli = rev(revision), rev(fee)
-	if op.Valid {
-		r.OperationID = op.String
-		var seq int64
-		if e = tx.QueryRowContext(ctx, "SELECT ledger_seq FROM credit_operations WHERE id=?", op.String).Scan(&seq); e != nil {
-			return r, e
-		}
-		r.LedgerSeq = rev(seq)
-	}
-	return r, nil
-}
-func (s *Service) Entry(ctx context.Context, user int64, key string, in EntryInput) (MutationResult[EntryResult], error) {
-	expected, e := revision(in.ExpectedPeriodRevision, false)
-	if e != nil || !db.ValidateOpaqueID(in.PeriodID, "lnp_") {
-		return MutationResult[EntryResult]{}, ErrInvalid
-	}
-	return mutate(ctx, s, user, false, key, "POST", baseRoute+"/entry", in, func(tx *sql.Tx, now time.Time) (EntryResult, error) {
-		p, e := s.openTx(ctx, tx, user, now.Unix())
-		if e != nil {
-			return EntryResult{}, e
-		}
-		if p.ID != in.PeriodID {
-			return EntryResult{}, ErrConflict
-		}
-		existing, e := entryReceiptTx(ctx, tx, user, p.ID)
-		if e == nil {
-			v, e := s.profileViewTx(ctx, tx, user, now)
-			return EntryResult{existing, v}, e
-		}
-		if !errors.Is(e, ErrNotFound) {
-			return EntryResult{}, e
-		}
-		if p.Revision != rev(expected) || p.EntryFeeMilli == nil {
-			return EntryResult{}, ErrConflict
-		}
-		fee, e := ledger.ParseAmount(*p.EntryFeeMilli)
-		if e != nil {
-			return EntryResult{}, ErrInvariant
-		}
-		var op any
-		if fee.Sign() > 0 {
-			wallet, e := ledger.UserAccount(ctx, tx, user)
-			if e != nil {
-				return EntryResult{}, e
-			}
-			external, e := ledger.CodedAssetAccount(ctx, tx, "external", ledger.General)
-			if e != nil {
-				return EntryResult{}, e
-			}
-			id, e := db.GenerateOpaqueID("op_")
-			if e != nil {
-				return EntryResult{}, e
-			}
-			plan, e := ledger.NewLakeEntry(ledger.Meta{OperationID: id, ActorUserID: user, CreatedAt: now.Unix()}, wallet.ID, external.ID, fee)
-			if e != nil {
-				return EntryResult{}, e
-			}
-			if _, e = ledger.Apply(ctx, tx, plan); e != nil {
-				return EntryResult{}, e
-			}
-			op = id
-		}
-		hash, _ := idempotency.KeyHash(key)
-		_, e = tx.ExecContext(ctx, "INSERT INTO lake_notes_entitlements(user_id,period_id,fee_milli,period_revision,operation_key_hash,ledger_operation_id,created_at) VALUES(?,?,?,?,?,?,?)", user, p.ID, fee.Big().Int64(), expected, hash[:], op, now.Unix())
-		if e != nil {
-			return EntryResult{}, e
-		}
-		if _, e = profileTx(ctx, tx, user, true, now.Unix()); e != nil {
-			return EntryResult{}, e
-		}
-		receipt, e := entryReceiptTx(ctx, tx, user, p.ID)
-		if e != nil {
-			return EntryResult{}, e
-		}
-		v, e := s.profileViewTx(ctx, tx, user, now)
-		return EntryResult{receipt, v}, e
-	})
-}
-func quoteAmounts(p Period, in QuoteInput) (Quote, error) {
+func quoteAmounts(p Settings, in QuoteInput) (Quote, error) {
 	var out Quote
-	if in.Direction.stored() == "" || in.PeriodID != p.ID {
+	if in.Direction.Stored() == "" {
 		return out, ErrInvalid
 	}
 	quantity, e := db.ParseU128Decimal(in.Quantity)
@@ -139,7 +49,7 @@ func quoteAmounts(p Period, in QuoteInput) (Quote, error) {
 		return out, ErrInvalid
 	}
 
-	return Quote{Direction: in.Direction, Quantity: in.Quantity, PeriodID: p.ID, PeriodRevision: p.Revision, SourceAmount: source.Decimal(), TargetAmount: target.Decimal(), SourceLot: a.Decimal(), TargetLot: b.Decimal()}, nil
+	return Quote{Direction: in.Direction, Quantity: in.Quantity, SettingsRevision: p.Revision, SourceAmount: source.Decimal(), TargetAmount: target.Decimal(), SourceLot: a.Decimal(), TargetLot: b.Decimal()}, nil
 }
 func (s *Service) Quote(ctx context.Context, user int64, in QuoteInput) (Quote, error) {
 	now, e := s.clock()
@@ -174,7 +84,7 @@ func (s *Service) Quote(ctx context.Context, user int64, in QuoteInput) (Quote, 
 	return q, tx.Commit()
 }
 func (s *Service) Exchange(ctx context.Context, user int64, key string, in ExchangeInput) (MutationResult[ExchangeResult], error) {
-	pr, e := revision(in.ExpectedPeriodRevision, false)
+	pr, e := revision(in.ExpectedSettingsRevision, false)
 	if e != nil {
 		return MutationResult[ExchangeResult]{}, e
 	}
@@ -187,7 +97,7 @@ func (s *Service) Exchange(ctx context.Context, user int64, key string, in Excha
 		if e != nil {
 			return ExchangeResult{}, e
 		}
-		if p.ID != in.PeriodID || p.Revision != rev(pr) {
+		if p.Revision != rev(pr) {
 			return ExchangeResult{}, ErrConflict
 		}
 		hash, _ := idempotency.KeyHash(key)
@@ -271,7 +181,7 @@ func (s *Service) Exchange(ctx context.Context, user int64, key string, in Excha
 		b, _ := db.ParseU128Decimal(q.TargetLot)
 		sa, _ := db.ParseU128Decimal(q.SourceAmount)
 		ta, _ := db.ParseU128Decimal(q.TargetAmount)
-		_, e = tx.ExecContext(ctx, "INSERT INTO lake_notes_exchange_receipts(id,user_id,period_id,period_revision,direction,quantity_mag,source_lot,target_lot,source_amount_mag,target_amount_mag,operation_key_hash,ledger_operation_id,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", id, user, p.ID, pr, in.Direction.stored(), db.EncodeU128(quantity), db.EncodeU128(a), db.EncodeU128(b), db.EncodeU128(sa), db.EncodeU128(ta), hash[:], op, now.Unix())
+		_, e = tx.ExecContext(ctx, "INSERT INTO lake_notes_exchange_receipts(id,user_id,config_revision,direction,quantity_mag,source_lot,target_lot,source_amount_mag,target_amount_mag,operation_key_hash,ledger_operation_id,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", id, user, pr, in.Direction.Stored(), db.EncodeU128(quantity), db.EncodeU128(a), db.EncodeU128(b), db.EncodeU128(sa), db.EncodeU128(ta), hash[:], op, now.Unix())
 		if e != nil {
 			return ExchangeResult{}, e
 		}

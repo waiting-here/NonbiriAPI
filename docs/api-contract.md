@@ -1279,7 +1279,7 @@ lasts 30 days; accounting follows ledger retention and account export schema 12.
 
 ### Lake Notes API
 
-The independent `lake-notes` activity starts hidden and closed, with four exchange directions disabled. It provides per-period once-only general-credit admission, a cross-period server profile, one recoverable cast, typed game actions and exact coin/general/game-credit lots. Cookie-session routes, full inputs/units, administrator period fields, replay and retention are documented in [the activity contract](limited-activities.md#lake-notes). Closing pauses play and every exchange while keeping saved progress. It does not alter Pond Fishing.
+Lake Notes is a permanent free minigame with four independently configured exchanges. Fresh installations start closed; an open legacy activity stays available after upgrade, with all exchanges initially disabled. See [game settings and API](lake-notes.md).
 
 ### Account protection and historical records
 

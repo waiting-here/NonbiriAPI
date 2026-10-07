@@ -13,9 +13,11 @@ import (
 	linklinkconfig "github.com/waiting-here/NonbiriAPI/internal/game/linklink/config"
 	rpsconfig "github.com/waiting-here/NonbiriAPI/internal/game/rps/config"
 	catchconfig "github.com/waiting-here/NonbiriAPI/internal/game/steadycatch/config"
+	lakeconfig "github.com/waiting-here/NonbiriAPI/internal/lakenotes/config"
 )
 
 type GamesConfig struct {
+	LakeNotes     lakeconfig.Wire                   `json:"lakenotes"`
 	SteadyCatch   catchconfig.Wire                  `json:"steadycatch"`
 	Gwent         gwentconfig.Wire                  `json:"gwent"`
 	Revision      string                            `json:"revision"`
@@ -30,6 +32,7 @@ type GamesConfig struct {
 
 // GamesSnapshot is the exact user-facing configuration/readiness projection.
 type GamesSnapshot struct {
+	LakeNotes       lakeconfig.Wire                    `json:"lakenotes"`
 	SteadyCatch     CatchSnapshotModule                `json:"steadycatch"`
 	Gwent           GwentSnapshotModule                `json:"gwent"`
 	Onboarding      map[string]game.OnboardingProgress `json:"onboarding"`
@@ -109,6 +112,7 @@ type RPSSnapshotModule struct {
 	Modes   map[string]rpsconfig.RPSWireMode `json:"modes"`
 }
 type GamesConfigPatch struct {
+	LakeNotes        *lakeconfig.Patch                   `json:"lakenotes,omitempty"`
 	SteadyCatch      *catchconfig.Patch                  `json:"steadycatch,omitempty"`
 	Gwent            *gwentconfig.Patch                  `json:"gwent,omitempty"`
 	ExpectedRevision string                              `json:"expected_revision"`

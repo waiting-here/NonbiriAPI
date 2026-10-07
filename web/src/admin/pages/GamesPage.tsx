@@ -1,3 +1,4 @@
+import { LakeFields, lakeWire } from '../features/lakenotes/LakeFields';
 import { useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
@@ -106,7 +107,8 @@ function amountMilli(value: string): bigint | null {
 const validInteger = (value: number, minimum: number, maximum: number) =>
   Number.isSafeInteger(value) && value >= minimum && value <= maximum;
 
-type ConfigGame = GameName | 'bidding' | 'likes' | 'blackjack' | 'gwent' | 'steadycatch';
+type ConfigGame =
+  GameName | 'bidding' | 'likes' | 'blackjack' | 'gwent' | 'steadycatch' | 'lakenotes';
 type GameProblem = { game: ConfigGame | null; message: string; field?: string };
 
 function validateGamesDraft(draft: GamesConfig, t: TFunction): GameProblem | null {
@@ -327,10 +329,27 @@ function GamesEditor({
     game === 'likes' ||
     game === 'blackjack' ||
     game === 'gwent' ||
-    game === 'steadycatch'
+    game === 'steadycatch' ||
+    game === 'lakenotes'
       ? gameLabel(game, text)
       : t(GAME_LABEL_KEYS[game]);
   const problem = (): GameProblem | null => {
+    if (draft.lakenotes.enabled && !draft.master_enabled)
+      return {
+        game: 'lakenotes',
+        message: text('请先开启小游戏总开关。', 'Enable the games master switch first.'),
+      };
+    try {
+      lakeWire(draft.lakenotes);
+    } catch {
+      return {
+        game: 'lakenotes',
+        message: text(
+          '请填写完整兑换比例，金币为正整数，积分最多三位小数。',
+          'Enter both exchange amounts. Use positive whole coins and credits with up to three decimals.',
+        ),
+      };
+    }
     if (draft.steadycatch.enabled && !draft.master_enabled)
       return {
         game: 'steadycatch',
@@ -425,6 +444,8 @@ function GamesEditor({
       `${values.length} modes · ${values.filter((value) => value.enabled).length} enabled`,
     );
   const summary = (game: ConfigGame) => {
+    if (game === 'lakenotes')
+      return text('免费常驻 · 四向兑换', 'Free play · four exchange directions');
     if (game === 'steadycatch')
       return text(
         '90 秒接物挑战 · 仅首通奖励',
@@ -467,6 +488,7 @@ function GamesEditor({
                 'blackjack',
                 'gwent',
                 'steadycatch',
+                'lakenotes',
               ] as const
             )
               .filter((game) => draft[game])
@@ -553,6 +575,9 @@ function GamesEditor({
         {formError ? <Note tone="bad">{formError.message}</Note> : null}
         {stale ? <Note tone="bad">{t('admin.games.validation.changedElsewhere')}</Note> : null}
         {save.error ? <ErrorState error={save.error} /> : null}
+        {active === 'lakenotes' && (
+          <LakeFields draft={draft} edit={edit} disabled={save.isPending} />
+        )}
         {active === 'steadycatch' && (
           <CatchFields draft={draft} edit={edit} disabled={save.isPending} />
         )}
@@ -652,7 +677,8 @@ export function GamesPage() {
                               row.game === 'likes' ||
                               row.game === 'blackjack' ||
                               row.game === 'gwent' ||
-                              row.game === 'steadycatch'
+                              row.game === 'steadycatch' ||
+                              row.game === 'lakenotes'
                                 ? modeLabel(row.mode, duelText)
                                 : enumLabel(t, RPS_MODE_LABEL_KEYS, row.mode),
                           })
@@ -669,7 +695,8 @@ export function GamesPage() {
                               row.game === 'likes' ||
                               row.game === 'blackjack' ||
                               row.game === 'gwent' ||
-                              row.game === 'steadycatch'
+                              row.game === 'steadycatch' ||
+                              row.game === 'lakenotes'
                                 ? ({
                                     plan: duelText('选招', 'Choosing skills'),
                                     settlement: duelText('结算展示', 'Settlement presentation'),
@@ -698,7 +725,8 @@ export function GamesPage() {
                           row.game === 'likes' ||
                           row.game === 'blackjack' ||
                           row.game === 'gwent' ||
-                          row.game === 'steadycatch'
+                          row.game === 'steadycatch' ||
+                          row.game === 'lakenotes'
                             ? gameLabel(row.game, duelText)
                             : enumLabel(t, GAME_LABEL_KEYS, row.game)
                         }

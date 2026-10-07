@@ -344,6 +344,142 @@ const keys = {
   general_to_coins: 'common.lakeNotes.general_to_coins',
   coins_to_game: 'common.lakeNotes.coins_to_game',
   game_to_coins: 'common.lakeNotes.game_to_coins',
+  catalog_fish_lake_bluegill_name: 'user.lakeNotes.catalog.fish.lake_bluegill.name',
+  catalog_fish_lake_bluegill_description: 'user.lakeNotes.catalog.fish.lake_bluegill.description',
+  catalog_fish_lake_pumpkinseed_name: 'user.lakeNotes.catalog.fish.lake_pumpkinseed.name',
+  catalog_fish_lake_pumpkinseed_description:
+    'user.lakeNotes.catalog.fish.lake_pumpkinseed.description',
+  catalog_fish_lake_rudd_name: 'user.lakeNotes.catalog.fish.lake_rudd.name',
+  catalog_fish_lake_rudd_description: 'user.lakeNotes.catalog.fish.lake_rudd.description',
+  catalog_fish_lake_roach_name: 'user.lakeNotes.catalog.fish.lake_roach.name',
+  catalog_fish_lake_roach_description: 'user.lakeNotes.catalog.fish.lake_roach.description',
+  catalog_fish_lake_yellowperch_name: 'user.lakeNotes.catalog.fish.lake_yellowperch.name',
+  catalog_fish_lake_yellowperch_description:
+    'user.lakeNotes.catalog.fish.lake_yellowperch.description',
+  catalog_fish_lake_paddlefish_name: 'user.lakeNotes.catalog.fish.lake_paddlefish.name',
+  catalog_fish_lake_paddlefish_description:
+    'user.lakeNotes.catalog.fish.lake_paddlefish.description',
+  catalog_fish_river_minnow_name: 'user.lakeNotes.catalog.fish.river_minnow.name',
+  catalog_fish_river_minnow_description: 'user.lakeNotes.catalog.fish.river_minnow.description',
+  catalog_fish_river_bleak_name: 'user.lakeNotes.catalog.fish.river_bleak.name',
+  catalog_fish_river_bleak_description: 'user.lakeNotes.catalog.fish.river_bleak.description',
+  catalog_fish_river_stoneloach_name: 'user.lakeNotes.catalog.fish.river_stoneloach.name',
+  catalog_fish_river_stoneloach_description:
+    'user.lakeNotes.catalog.fish.river_stoneloach.description',
+  catalog_fish_river_smallmouth_name: 'user.lakeNotes.catalog.fish.river_smallmouth.name',
+  catalog_fish_river_smallmouth_description:
+    'user.lakeNotes.catalog.fish.river_smallmouth.description',
+  catalog_fish_river_chub_name: 'user.lakeNotes.catalog.fish.river_chub.name',
+  catalog_fish_river_chub_description: 'user.lakeNotes.catalog.fish.river_chub.description',
+  catalog_fish_river_europeansturgeon_name:
+    'user.lakeNotes.catalog.fish.river_europeansturgeon.name',
+  catalog_fish_river_europeansturgeon_description:
+    'user.lakeNotes.catalog.fish.river_europeansturgeon.description',
+  catalog_fish_coast_mullet_name: 'user.lakeNotes.catalog.fish.coast_mullet.name',
+  catalog_fish_coast_mullet_description: 'user.lakeNotes.catalog.fish.coast_mullet.description',
+  catalog_fish_coast_whiting_name: 'user.lakeNotes.catalog.fish.coast_whiting.name',
+  catalog_fish_coast_whiting_description: 'user.lakeNotes.catalog.fish.coast_whiting.description',
+  catalog_fish_coast_garfish_name: 'user.lakeNotes.catalog.fish.coast_garfish.name',
+  catalog_fish_coast_garfish_description: 'user.lakeNotes.catalog.fish.coast_garfish.description',
+  catalog_fish_coast_blackseabream_name: 'user.lakeNotes.catalog.fish.coast_blackseabream.name',
+  catalog_fish_coast_blackseabream_description:
+    'user.lakeNotes.catalog.fish.coast_blackseabream.description',
+  catalog_fish_coast_mahimahi_name: 'user.lakeNotes.catalog.fish.coast_mahimahi.name',
+  catalog_fish_coast_mahimahi_description: 'user.lakeNotes.catalog.fish.coast_mahimahi.description',
+  catalog_fish_coast_humpheadwrasse_name: 'user.lakeNotes.catalog.fish.coast_humpheadwrasse.name',
+  catalog_fish_coast_humpheadwrasse_description:
+    'user.lakeNotes.catalog.fish.coast_humpheadwrasse.description',
+  catalog_fish_jungle_climbingperch_name: 'user.lakeNotes.catalog.fish.jungle_climbingperch.name',
+  catalog_fish_jungle_climbingperch_description:
+    'user.lakeNotes.catalog.fish.jungle_climbingperch.description',
+  catalog_fish_jungle_threespotgourami_name:
+    'user.lakeNotes.catalog.fish.jungle_threespotgourami.name',
+  catalog_fish_jungle_threespotgourami_description:
+    'user.lakeNotes.catalog.fish.jungle_threespotgourami.description',
+  catalog_fish_jungle_snakeskingourami_name:
+    'user.lakeNotes.catalog.fish.jungle_snakeskingourami.name',
+  catalog_fish_jungle_snakeskingourami_description:
+    'user.lakeNotes.catalog.fish.jungle_snakeskingourami.description',
+  catalog_fish_jungle_croakinggourami_name:
+    'user.lakeNotes.catalog.fish.jungle_croakinggourami.name',
+  catalog_fish_jungle_croakinggourami_description:
+    'user.lakeNotes.catalog.fish.jungle_croakinggourami.description',
+  catalog_fish_jungle_moonlightgourami_name:
+    'user.lakeNotes.catalog.fish.jungle_moonlightgourami.name',
+  catalog_fish_jungle_moonlightgourami_description:
+    'user.lakeNotes.catalog.fish.jungle_moonlightgourami.description',
+  catalog_fish_jungle_redtailrasbora_name: 'user.lakeNotes.catalog.fish.jungle_redtailrasbora.name',
+  catalog_fish_jungle_redtailrasbora_description:
+    'user.lakeNotes.catalog.fish.jungle_redtailrasbora.description',
+  catalog_fish_jungle_silverflyingbarb_name:
+    'user.lakeNotes.catalog.fish.jungle_silverflyingbarb.name',
+  catalog_fish_jungle_silverflyingbarb_description:
+    'user.lakeNotes.catalog.fish.jungle_silverflyingbarb.description',
+  catalog_fish_jungle_silverbarb_name: 'user.lakeNotes.catalog.fish.jungle_silverbarb.name',
+  catalog_fish_jungle_silverbarb_description:
+    'user.lakeNotes.catalog.fish.jungle_silverbarb.description',
+  catalog_fish_jungle_bronzefeatherback_name:
+    'user.lakeNotes.catalog.fish.jungle_bronzefeatherback.name',
+  catalog_fish_jungle_bronzefeatherback_description:
+    'user.lakeNotes.catalog.fish.jungle_bronzefeatherback.description',
+  catalog_fish_jungle_yellowcatfish_name: 'user.lakeNotes.catalog.fish.jungle_yellowcatfish.name',
+  catalog_fish_jungle_yellowcatfish_description:
+    'user.lakeNotes.catalog.fish.jungle_yellowcatfish.description',
+  catalog_fish_jungle_bigheadcatfish_name: 'user.lakeNotes.catalog.fish.jungle_bigheadcatfish.name',
+  catalog_fish_jungle_bigheadcatfish_description:
+    'user.lakeNotes.catalog.fish.jungle_bigheadcatfish.description',
+  catalog_fish_jungle_stripedsnakehead_name:
+    'user.lakeNotes.catalog.fish.jungle_stripedsnakehead.name',
+  catalog_fish_jungle_stripedsnakehead_description:
+    'user.lakeNotes.catalog.fish.jungle_stripedsnakehead.description',
+  catalog_fish_jungle_peacockeel_name: 'user.lakeNotes.catalog.fish.jungle_peacockeel.name',
+  catalog_fish_jungle_peacockeel_description:
+    'user.lakeNotes.catalog.fish.jungle_peacockeel.description',
+  catalog_fish_jungle_beardlessbarb_name: 'user.lakeNotes.catalog.fish.jungle_beardlessbarb.name',
+  catalog_fish_jungle_beardlessbarb_description:
+    'user.lakeNotes.catalog.fish.jungle_beardlessbarb.description',
+  catalog_fish_jungle_clownfeatherback_name:
+    'user.lakeNotes.catalog.fish.jungle_clownfeatherback.name',
+  catalog_fish_jungle_clownfeatherback_description:
+    'user.lakeNotes.catalog.fish.jungle_clownfeatherback.description',
+  catalog_fish_jungle_smallscalearcherfish_name:
+    'user.lakeNotes.catalog.fish.jungle_smallscalearcherfish.name',
+  catalog_fish_jungle_smallscalearcherfish_description:
+    'user.lakeNotes.catalog.fish.jungle_smallscalearcherfish.description',
+  catalog_fish_jungle_giantgourami_name: 'user.lakeNotes.catalog.fish.jungle_giantgourami.name',
+  catalog_fish_jungle_giantgourami_description:
+    'user.lakeNotes.catalog.fish.jungle_giantgourami.description',
+  catalog_fish_jungle_tinfoilbarb_name: 'user.lakeNotes.catalog.fish.jungle_tinfoilbarb.name',
+  catalog_fish_jungle_tinfoilbarb_description:
+    'user.lakeNotes.catalog.fish.jungle_tinfoilbarb.description',
+  catalog_fish_jungle_hampalabarb_name: 'user.lakeNotes.catalog.fish.jungle_hampalabarb.name',
+  catalog_fish_jungle_hampalabarb_description:
+    'user.lakeNotes.catalog.fish.jungle_hampalabarb.description',
+  catalog_fish_jungle_asianarowana_name: 'user.lakeNotes.catalog.fish.jungle_asianarowana.name',
+  catalog_fish_jungle_asianarowana_description:
+    'user.lakeNotes.catalog.fish.jungle_asianarowana.description',
+  catalog_fish_jungle_giantsnakehead_name: 'user.lakeNotes.catalog.fish.jungle_giantsnakehead.name',
+  catalog_fish_jungle_giantsnakehead_description:
+    'user.lakeNotes.catalog.fish.jungle_giantsnakehead.description',
+  catalog_fish_jungle_stripedpangasius_name:
+    'user.lakeNotes.catalog.fish.jungle_stripedpangasius.name',
+  catalog_fish_jungle_stripedpangasius_description:
+    'user.lakeNotes.catalog.fish.jungle_stripedpangasius.description',
+  catalog_fish_jungle_mekonggiantcatfish_name:
+    'user.lakeNotes.catalog.fish.jungle_mekonggiantcatfish.name',
+  catalog_fish_jungle_mekonggiantcatfish_description:
+    'user.lakeNotes.catalog.fish.jungle_mekonggiantcatfish.description',
+  catalog_fish_jungle_siamesegiantcarp_name:
+    'user.lakeNotes.catalog.fish.jungle_siamesegiantcarp.name',
+  catalog_fish_jungle_siamesegiantcarp_description:
+    'user.lakeNotes.catalog.fish.jungle_siamesegiantcarp.description',
+  catalog_locations_jungle_name: 'user.lakeNotes.catalog.locations.jungle.name',
+  catalog_locations_jungle_scene: 'user.lakeNotes.catalog.locations.jungle.scene',
+  catalog_locations_jungle_description: 'user.lakeNotes.catalog.locations.jungle.description',
+  catalog_gear_legendRod_name: 'user.lakeNotes.catalog.gear.legendRod.name',
+  catalog_gear_legendRod_description: 'user.lakeNotes.catalog.gear.legendRod.description',
+  buyBatch: 'user.lakeNotes.buyBatch',
+  bitePreparation: 'user.lakeNotes.bitePreparation',
 } as const;
 export const useLakeCopy = () => useRegisteredCopy(keys);
 export type LakeText = ReturnType<typeof useLakeCopy>['t'];

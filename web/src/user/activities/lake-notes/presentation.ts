@@ -14,7 +14,7 @@ export const art = (kind: string, item = false) =>
 export const label = (text: LakeText, group: string, id?: string) =>
   id ? catalogText(text, group, id) : text('none');
 export function loadoutLabel(text: LakeText, l: Loadout) {
-  return [l.rod, l.tackle1, l.tackle2]
+  return [l.rod, l.tackle1, l.tackle2, l.tackle3]
     .filter(Boolean)
     .map((id) => label(text, 'gear', id))
     .join(' / ');
@@ -26,7 +26,7 @@ export function loadoutStats(text: LakeText, p: Profile, loadout: Loadout) {
   const wait = biteWindow(p, loadout, selected);
   return text('previewStats', {
     height: Math.floor(barHeight(p, e, loadout.rod, selected) * 568 + 0.5),
-    loss: (18 * e.progressLoss).toFixed(1),
+    loss: (15 * e.progressLoss).toFixed(1),
     min: wait.min.toFixed(2),
     max: wait.max.toFixed(2),
   });

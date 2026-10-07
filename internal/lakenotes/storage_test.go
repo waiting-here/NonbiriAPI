@@ -10,7 +10,8 @@ import (
 
 func TestProfileStorageSurvivesCompatibleRuleIdentityChange(t *testing.T) {
 	f := newFixture(t)
-	profile := f.enter(t, f.period(t, "0"))
+	f.enable(t)
+	profile := f.profile(t)
 	const priorRules = "lake-notes-prior-compatible-catalog"
 	if _, err := f.database.Exec("UPDATE lake_notes_profiles SET rules_id=? WHERE user_id=?", priorRules, f.user); err != nil {
 		t.Fatal(err)
@@ -47,7 +48,8 @@ func TestProfileStorageSurvivesCompatibleRuleIdentityChange(t *testing.T) {
 
 func TestCastStorageRequiresKnownFormatAndExactRules(t *testing.T) {
 	f := newFixture(t)
-	profile := f.enter(t, f.period(t, "0"))
+	f.enable(t)
+	profile := f.profile(t)
 	started, err := f.service.Start(f.ctx(f.user), f.user, testKey(720), StartInput{profile.Revision})
 	if err != nil {
 		t.Fatal(err)

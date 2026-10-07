@@ -12,6 +12,7 @@ describe('user game registry', () => {
       'gwent',
       'steadycatch',
       'blackjack',
+      'lakenotes',
     ]);
     const registration = resolveGameRegistration(gameRegistry, 'fishing', 1);
     expect(registration).toBe(gameRegistry[0]);

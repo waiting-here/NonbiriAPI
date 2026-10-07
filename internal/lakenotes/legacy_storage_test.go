@@ -57,7 +57,8 @@ func TestLegacyCheckpointsPreserveEncounterAndResume(t *testing.T) {
 				return
 			}
 			f := newFixture(t)
-			view := f.enter(t, f.period(t, "0"))
+			f.enable(t)
+			view := f.profile(t)
 			started, err := f.service.Start(f.ctx(f.user), f.user, testKey(810), StartInput{view.Revision})
 			if err != nil {
 				t.Fatal(err)

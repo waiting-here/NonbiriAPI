@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/game"
 	"github.com/waiting-here/NonbiriAPI/internal/imageactivity"
 	"github.com/waiting-here/NonbiriAPI/internal/inactivity"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
@@ -76,7 +77,7 @@ func (a *activityRuntime) ExportGovernance(ctx context.Context, tx *sql.Tx, r li
 	for _, exchange := range lake.Exchanges {
 		out.LakeNotes.Exchanges = append(out.LakeNotes.Exchanges, lifecycle.LakeExchangeExport{
 			ID: exchange.ID, Direction: string(exchange.Direction), Quantity: exchange.Quantity,
-			PeriodID: exchange.PeriodID, PeriodRevision: exchange.PeriodRevision,
+			PeriodID: exchange.PeriodID, PeriodRevision: exchange.PeriodRevision, SettingsRevision: exchange.SettingsRevision,
 			SourceAmount: exchange.SourceAmount, TargetAmount: exchange.TargetAmount,
 			SourceLot: exchange.SourceLot, TargetLot: exchange.TargetLot,
 			OperationID: exchange.OperationID, LedgerSeq: exchange.LedgerSeq, CreatedAt: exchange.CreatedAt,
@@ -95,6 +96,10 @@ func activityExportError(err error) error {
 func (a *activityRuntime) PrepareDelete(ctx context.Context, tx *sql.Tx, r lifecycle.DeleteRequest) (lifecycle.DeleteFinalizer, error) {
 	f, err := a.limited.PrepareDeleteTx(ctx, tx, r.UserID, r.DecisionNow)
 	if err != nil {
+		return nil, err
+	}
+	if _, err = a.lake.PrepareDeleteTx(ctx, tx, r.UserID, r.DecisionNow); err != nil {
+		f.Abort()
 		return nil, err
 	}
 	if err = inactivity.DeleteTx(ctx, tx, r.UserID); err != nil {
@@ -123,7 +128,7 @@ func (a *activityRuntime) RecoverBeforeListener(ctx context.Context, _ int64, li
 		r.More = true
 		return r, nil
 	}
-	lake, err := a.lake.RecoverBeforeListener(ctx, a.now().Unix(), limit-r.Processed, budget)
+	lake, err := a.lakeHost.RecoverModule(ctx, game.LakeNotesID, a.now().Unix(), limit-r.Processed, deadline)
 	r.Processed += lake.Processed
 	r.More = r.More || lake.More
 	if err == nil && !r.More {
@@ -158,7 +163,7 @@ func (a *activityRuntime) Retain(ctx context.Context, _ int64, limit int, deadli
 		r.More = true
 		return r, nil
 	}
-	lake, err := a.lake.Retain(ctx, now, limit-r.Processed, budget)
+	lake, err := a.lakeHost.RetainModule(ctx, game.LakeNotesID, now, limit-r.Processed, deadline)
 	r.Processed += lake.Processed
 	r.More = r.More || lake.More
 	return r, err

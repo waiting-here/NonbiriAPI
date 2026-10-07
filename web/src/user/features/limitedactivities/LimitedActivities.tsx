@@ -23,8 +23,6 @@ import { UserPageGate } from '../../components/UserPageGate';
 import { economySessionRequest } from '../economy/queries';
 import '@shared/limitedactivities/limited.css';
 import pictureBookCover from '@shared/limitedactivities/picture-book-cover.webp';
-import { LakeCover } from '../../activities/lake-notes/LakeCover';
-import { useLakeCopy } from '../../activities/lake-notes/copy';
 import { limitedActivityKeys } from './queries';
 const nextStep = {
   scheduled: 'common.nextScheduled',
@@ -36,7 +34,6 @@ const nextStep = {
 } as const;
 export function LimitedActivitiesSection({ hideEmpty = false }: { hideEmpty?: boolean } = {}) {
   const text = useActivityText(),
-    { t: lakeText } = useLakeCopy(),
     session = useUserSession(),
     client = useQueryClient(),
     account = session.data?.user.id ?? '';
@@ -57,13 +54,8 @@ export function LimitedActivitiesSection({ hideEmpty = false }: { hideEmpty?: bo
       {query.data?.length === 0 ? <p>{text('common.noLimitedTimeActivitiesAreListed')}</p> : null}
       <div className="limited-grid">
         {query.data?.map((activity) => {
-          const isBook = activity.key === 'picture-book',
-            isLake = activity.key === 'lake-notes';
-          const name = isLake
-            ? lakeText('title')
-            : isBook
-              ? text('common.pictureBook')
-              : text('common.raiseABigFish');
+          const isBook = activity.key === 'picture-book';
+          const name = isBook ? text('common.pictureBook') : text('common.raiseABigFish');
           return (
             <Link
               key={activity.key}
@@ -71,9 +63,7 @@ export function LimitedActivitiesSection({ hideEmpty = false }: { hideEmpty?: bo
               to={'/activities/' + activity.key}
             >
               <div className={`limited-entry__cover limited-entry__cover--${activity.cover_key}`}>
-                {isLake ? (
-                  <LakeCover />
-                ) : isBook ? (
+                {isBook ? (
                   <img
                     src={pictureBookCover}
                     alt={text('common.rengeCarefullyDrawingASimplePictureOn')}
@@ -94,11 +84,9 @@ export function LimitedActivitiesSection({ hideEmpty = false }: { hideEmpty?: bo
                 <p className="limited-entry__eyebrow">{text('common.limitedTimeActivity')}</p>
                 <h3>{name}</h3>
                 <p>
-                  {isLake
-                    ? lakeText('description')
-                    : isBook
-                      ? text('common.openThePictureBookAndCollectSketch')
-                      : text('common.moveObstaclesAndGuideHungryFatFish')}
+                  {isBook
+                    ? text('common.openThePictureBookAndCollectSketch')
+                    : text('common.moveObstaclesAndGuideHungryFatFish')}
                 </p>
                 <p className="limited-entry__status">{statusLabel(activity.status, text)}</p>
                 {activity.starts_at !== null && activity.ends_at !== null && (

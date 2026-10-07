@@ -1,3 +1,4 @@
+import type { LakeSettings } from '@shared/lakenotes/api';
 import { useQuery } from '@tanstack/react-query';
 import { useGameVisibility } from './visibility';
 import { blackjackSnapshot } from '@shared/games/blackjack';
@@ -117,6 +118,7 @@ export function normalizeGamesSnapshot(value: unknown): GamesSnapshot {
       'blackjack',
       'gwent',
       'steadycatch',
+      'lakenotes',
     ],
     [],
     'games snapshot',
@@ -174,12 +176,7 @@ export function normalizeGamesSnapshot(value: unknown): GamesSnapshot {
     enumValue(mode, RPS_MODES, 'RPS mode key');
     normalizedModes[mode] = normalizeMode(modes[mode], `${mode} mode`);
   }
-  const onboarding = exactRecord(
-    record.onboarding,
-    ['fishing', 'linklink', 'rps', 'bidding', 'likes', 'blackjack'],
-    [],
-    'onboarding',
-  );
+  const onboarding = record.onboarding as Record<string, unknown>;
   const gamesEnabled = booleanValue(record.games_enabled, 'games enabled');
   const fishingEnabled = booleanValue(fishing.enabled, 'fishing enabled');
   const linkLinkEnabled = booleanValue(linklink.enabled, 'LinkLink enabled');
@@ -232,6 +229,7 @@ export function normalizeGamesSnapshot(value: unknown): GamesSnapshot {
     bidding: configValue(record.bidding, 'bidding', ['tier1', 'tier2', 'tier3']),
     likes: configValue(record.likes, 'likes', ['quick', 'standard']),
     gwent: configValue(record.gwent, 'gwent', ['standard']),
+    lakenotes: record.lakenotes as LakeSettings,
     steadycatch: {
       enabled: booleanValue(catchGame.enabled, 'catch enabled'),
       available: booleanValue(catchGame.available, 'catch availability'),

@@ -6156,7 +6156,7 @@ CREATE TABLE lake_notes_profiles (
 CREATE TABLE lake_notes_casts (
  id TEXT PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='lnc_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')),
  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
- source_period_id TEXT NOT NULL REFERENCES lake_notes_periods(id) ON DELETE RESTRICT,
+ source_period_id TEXT REFERENCES lake_notes_periods(id) ON DELETE RESTRICT,
  rules_id TEXT NOT NULL CHECK(length(CAST(rules_id AS BLOB)) BETWEEN 1 AND 128),
  phase TEXT NOT NULL CHECK(phase IN ('waiting','playing','success','failed')),
  paused INTEGER NOT NULL CHECK(paused IN (0,1)),
@@ -6191,8 +6191,9 @@ CREATE TABLE lake_notes_entitlements (
 CREATE TABLE lake_notes_exchange_receipts (
  id TEXT PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='lne_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')),
  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
- period_id TEXT NOT NULL REFERENCES lake_notes_periods(id) ON DELETE RESTRICT,
- period_revision INTEGER NOT NULL CHECK(period_revision>=1),
+ period_id TEXT REFERENCES lake_notes_periods(id) ON DELETE RESTRICT,
+ period_revision INTEGER CHECK(period_revision>=1),
+ config_revision INTEGER CHECK(config_revision>=1),
  direction TEXT NOT NULL CHECK(direction IN ('general_to_coin','coin_to_general','game_to_coin','coin_to_game')),
  quantity_mag BLOB NOT NULL CHECK(length(quantity_mag)=16 AND quantity_mag<>zeroblob(16)),
  source_lot BLOB NOT NULL CHECK(length(source_lot)=16 AND source_lot<>zeroblob(16)),
@@ -6202,6 +6203,7 @@ CREATE TABLE lake_notes_exchange_receipts (
  operation_key_hash BLOB NOT NULL CHECK(length(operation_key_hash)=32),
  ledger_operation_id TEXT NOT NULL REFERENCES credit_operations(id) ON DELETE RESTRICT,
  created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799),
+ CHECK((period_id IS NOT NULL AND period_revision IS NOT NULL AND config_revision IS NULL) OR (period_id IS NULL AND period_revision IS NULL AND config_revision IS NOT NULL)),
  UNIQUE(user_id,operation_key_hash)
 ) STRICT, WITHOUT ROWID;
 CREATE TABLE personal_automation_batches (
@@ -6665,7 +6667,7 @@ CREATE TABLE game_catch_sessions (
        (status NOT IN ('playing','paused') AND terminal_at>=created_at AND hex(ledger_rows_remaining)='00000000000000000000000000000000')),
  CHECK(first_clear=0 OR status='completed'),
  CHECK(reward_milli=0 OR first_clear=1)
-);
+) STRICT;
 CREATE UNIQUE INDEX idx_catch_active_user ON game_catch_sessions(user_id) WHERE status IN ('playing','paused');
 CREATE INDEX idx_catch_user_history ON game_catch_sessions(user_id,created_at DESC,id);
 CREATE INDEX idx_catch_expiry ON game_catch_sessions(expires_at,id) WHERE status IN ('playing','paused');

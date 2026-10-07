@@ -31,6 +31,15 @@ const INITIAL_CONFIG: GamesConfig = {
   bidding: duelConfigFixture('bidding'),
   likes: duelConfigFixture('likes'),
   gwent: duelConfigFixture('gwent'),
+  lakenotes: {
+    enabled: false,
+    exchanges: {
+      coins_to_general: { enabled: false, source_amount: '', target_amount: '' },
+      general_to_coins: { enabled: false, source_amount: '', target_amount: '' },
+      coins_to_game: { enabled: false, source_amount: '', target_amount: '' },
+      game_to_coins: { enabled: false, source_amount: '', target_amount: '' },
+    },
+  },
   steadycatch: { enabled: false, price: '0', first_clear_reward: '0' },
   revision: '7',
   master_enabled: true,
@@ -115,6 +124,7 @@ function applyPatch(config: GamesConfig, rawPatch: Record<string, unknown>): Gam
     bidding: structuredClone(config.bidding),
     likes: structuredClone(config.likes),
     gwent: structuredClone(config.gwent),
+    lakenotes: structuredClone(config.lakenotes),
     steadycatch: structuredClone(config.steadycatch),
     revision: String(BigInt(config.revision) + 1n),
     master_enabled: patch.master_enabled,
