@@ -145,12 +145,22 @@ export class PlatformBattle {
       current?.decisionID === expected.decisionID
     );
   }
+  sameDecision(expected) {
+    const current = this.snapshot.home?.current;
+    return (
+      !!expected &&
+      current?.id === expected.id &&
+      (current.decisionID
+        ? current.decisionID === expected.decisionID
+        : !expected.decisionID && current.phaseSeq === expected.phaseSeq)
+    );
+  }
   perform(action, expected = this.snapshot.home?.current) {
     if (
       action &&
       !this.replaying &&
       !this.blocked &&
-      this.sameWindow(expected) &&
+      this.sameDecision(expected) &&
       this.view.legal_actions.some(
         (a) => a.kind === action.kind && a.card === action.card && a.row === action.row,
       )
