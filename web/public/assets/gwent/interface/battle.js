@@ -417,7 +417,9 @@ export class PlatformBattle {
     this.host.send({ type: 'cancel-read' });
     this.infoOpen = false;
     this.choiceKey = null;
+    this.arena.view.modalOpen = false;
     document.getElementById('arena-dialog').close();
+    if (!this.view) this.arena.view.render();
     const current = this.snapshot?.home?.current;
     if (this.view && current && !this.replaying)
       this.choice(
