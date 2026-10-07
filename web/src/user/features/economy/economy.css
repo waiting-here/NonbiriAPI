@@ -281,12 +281,12 @@
 }
 
 .economy-limit-grid h5,
-.economy-stat-grid span,
-.economy-stat-grid strong {
+.economy-stat-grid > section > span,
+.economy-stat-grid > section > strong {
   display: block;
 }
 
-.economy-stat-grid span {
+.economy-stat-grid > section > span {
   color: var(--nb-color-text-muted);
   font-size: var(--nb-font-size-sm);
 }
@@ -298,6 +298,14 @@
 
 .economy-stat-grid .nb-amount {
   white-space: normal;
+}
+
+.economy-stat-grid .nb-amount__unit {
+  white-space: nowrap;
+}
+
+.economy-stat-grid .economy-count-ratio {
+  white-space: nowrap;
 }
 
 .economy-limit-values {
