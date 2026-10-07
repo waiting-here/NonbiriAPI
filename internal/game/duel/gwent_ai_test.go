@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -82,9 +83,25 @@ func gwentAIFixture(t *testing.T, adapter duel.AIAdapter, observeErrors ...func(
 	if _, err = f.s.SetAIEnabled(adminContext(), f.key(), duel.AISettings{Enabled: true, Revision: state.Settings.Revision}); err != nil {
 		t.Fatal(err)
 	}
-	bot := state.Bots[0]
-	bot.Enabled = true
-	return f, f.saveBot(bot, false)
+	// Generated IDs determine list order; pin the fixture's faction explicitly.
+	var policyID string
+	for _, policy := range state.Policies {
+		var definition gwent.Policy
+		if err := json.Unmarshal(policy.Definition, &definition); err != nil {
+			t.Fatal(err)
+		}
+		if definition.Faction == "openai" {
+			policyID = policy.ID
+		}
+	}
+	for _, bot := range state.Bots {
+		if bot.PolicyID == policyID && policyID != "" {
+			bot.Enabled = true
+			return f, f.saveBot(bot, false)
+		}
+	}
+	t.Fatal("missing OpenAI challenge")
+	return nil, duel.AIBot{}
 }
 func (f *fixture) enqueueGwentAI(bot duel.AIBot, deck gwentengine.Deck) duel.Queue {
 	f.t.Helper()
@@ -375,11 +392,51 @@ type waitingGwentAdapter struct {
 }
 
 func (a waitingGwentAdapter) Source() ai.Source { return a.source }
+
+// Before the bot commits its first mulligan action, human input and retries
+// must preserve its authoritative decision. A committed redraw may advance it.
+func gwentAIOpeningCommitted(t *testing.T, f *fixture, request ai.Request) bool {
+	t.Helper()
+	seat, err := strconv.Atoi(request.Window.Actor)
+	if err != nil || seat < 0 || seat > 1 || request.Window.Phase != "mulligan" {
+		t.Fatal("unexpected opening actor", request.Window)
+	}
+	var raw string
+	if err := f.db.QueryRow("SELECT server_state_json FROM game_duel_sessions WHERE id=?", request.Window.Match).Scan(&raw); err != nil {
+		t.Fatal(err)
+	}
+	var payload struct {
+		Rules   json.RawMessage     `json:"rules"`
+		Actions []duel.ActionSource `json:"actions"`
+	}
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		t.Fatal(err)
+	}
+	for _, action := range payload.Actions {
+		if action.Seat == seat && action.Phase == "mulligan" && (action.Origin == "ai" || action.Origin == "fallback") {
+			return true
+		}
+	}
+	ids, err := (gwent.Rules{}).Decisions("ai", payload.Rules)
+	if err != nil || ids[seat] != request.Window.Token {
+		t.Fatal("uncommitted AI decision changed", ids, request.Window, err)
+	}
+	return false
+}
+
 func TestGwentAIDecisionSurvivesHumanMulliganAndCannotReviveDeletion(t *testing.T) {
 	for _, deleting := range []bool{false, true} {
 		t.Run(map[bool]string{false: "independent_mulligan", true: "deleted"}[deleting], func(t *testing.T) {
 			source := waitingGwentSource{Source: gwent.AIAdapter{}.Source(), pending: make(chan waitingDecision, 8)}
-			f, bot := gwentAIFixture(t, waitingGwentAdapter{source: source})
+			retryNeeded := make(chan struct{}, 1)
+			f, bot := gwentAIFixture(t, waitingGwentAdapter{source: source}, func(err error) {
+				if errors.Is(err, context.DeadlineExceeded) {
+					select {
+					case retryNeeded <- struct{}{}:
+					default:
+					}
+				}
+			})
 			deck, _ := gwentengine.PresetDeck("gemini", "standard-balanced")
 			f.enqueueGwentAI(bot, deck)
 			f.tick()
@@ -422,6 +479,10 @@ func TestGwentAIDecisionSurvivesHumanMulliganAndCannotReviveDeletion(t *testing.
 				finish.Commit()
 			} else {
 				f.action(0, *v, `{"kind":"continue"}`)
+				if call.request.Window.Match != v.ID || call.request.Window.Actor != strconv.Itoa(1-v.You) {
+					t.Fatal("unexpected AI actor", call.request.Window)
+				}
+				gwentAIOpeningCommitted(t, f, call.request)
 			}
 			close(call.release)
 			deadline := time.Now().Add(15 * time.Second)
@@ -436,17 +497,39 @@ func TestGwentAIDecisionSurvivesHumanMulliganAndCannotReviveDeletion(t *testing.
 					t.Fatal("late reward")
 				}
 			} else {
+				retry := false
 				for time.Now().Before(deadline) {
-					select {
-					case next := <-source.pending:
-						close(next.release)
-					default:
-					}
+					committed := gwentAIOpeningCommitted(t, f, call.request)
 					current := f.read(0).Current
 					if current != nil && current.Phase == "turn" {
+						if !gwentAIOpeningCommitted(t, f, call.request) {
+							t.Fatal("opening advanced without the AI action")
+						}
 						return
 					}
-					time.Sleep(2 * time.Millisecond)
+					select {
+					case <-retryNeeded:
+						retry = true
+					default:
+					}
+					// No worker runs in this fixture. Retry a reported commit
+					// timeout or continue an already accepted redraw, but do not
+					// hide an incorrectly rejected initial callback with a new job.
+					if retry || committed {
+						f.tick()
+					}
+					select {
+					case next := <-source.pending:
+						if !gwentAIOpeningCommitted(t, f, call.request) &&
+							(next.request.Window != call.request.Window || next.request.DecisionID != call.request.DecisionID) {
+							t.Fatal("human mulligan replaced the independent AI decision", call.request.Window, next.request.Window)
+						}
+						if next.request.Window.Phase == "mulligan" {
+							close(next.release)
+						}
+					default:
+					}
+					time.Sleep(10 * time.Millisecond)
 				}
 				t.Fatal("human mulligan invalidated an independent AI window")
 			}
@@ -641,15 +724,17 @@ func TestGwentAICallbackDeadlinePreservesWindowForRetry(t *testing.T) {
 	}
 	close(retried.release)
 	deadline = time.After(5 * time.Second)
-	for {
-		var locked bool
-		if err := f.db.QueryRow("SELECT locked FROM game_duel_seats WHERE session_id=? AND participant_kind='bot'", current.ID).Scan(&locked); err != nil {
-			t.Fatal(err)
-		}
-		if locked {
-			break
-		}
+	for !gwentAIOpeningCommitted(t, f, first.request) {
+		f.tick()
 		select {
+		case next := <-source.pending:
+			if gwentAIOpeningCommitted(t, f, first.request) {
+				break
+			}
+			if next.request.DecisionID != first.request.DecisionID || next.request.Window != first.request.Window {
+				t.Fatal("callback retry replaced the authoritative decision", first.request.Window, next.request.Window)
+			}
+			close(next.release)
 		case <-deadline:
 			t.Fatal("retried callback did not commit its legal choice")
 		case <-time.After(10 * time.Millisecond):
