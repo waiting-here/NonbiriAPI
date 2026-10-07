@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { ApiError } from '@shared/query/http';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -573,6 +573,12 @@ function Group({
   );
 }
 
+function RetainedSettingsPanel({ active, children }: { active: boolean; children: ReactNode }) {
+  const [visited, setVisited] = useState(active);
+  if (active && !visited) setVisited(true);
+  return <div hidden={!active}>{active || visited ? children : null}</div>;
+}
+
 export function SettingsPage() {
   const authority = useQuery({
     queryKey: adminCoreKeys.settings,
@@ -761,14 +767,19 @@ export function SettingsPage() {
         title={t('admin.settings.title')}
         description={t('admin.settings.description')}
         actions={
-          <input
-            className="settings-search"
-            type="search"
-            aria-label={t('common.search')}
-            value={search}
-            placeholder={t('admin.settings.searchHelp')}
-            onChange={(event) => setSearch(event.target.value)}
-          />
+          <form role="search" autoComplete="off" onSubmit={(event) => event.preventDefault()}>
+            <input
+              id="site-config-search"
+              name="site-config-search"
+              autoComplete="off"
+              className="settings-search"
+              type="search"
+              aria-label={t('common.search')}
+              value={search}
+              placeholder={t('admin.settings.searchHelp')}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </form>
         }
       />
       {authority.isPending ? (
@@ -848,15 +859,15 @@ export function SettingsPage() {
               ) : !EXTRA_GROUP_LABELS[activeGroup] ? (
                 <Group name={activeGroup} entries={groups.get(activeGroup) ?? []} {...editor} />
               ) : null}
-              <div hidden={Boolean(search.trim()) || activeGroup !== 'gateway'}>
+              <RetainedSettingsPanel active={!search.trim() && activeGroup === 'gateway'}>
                 <GatewayCapabilitiesSection />
-              </div>
-              <div hidden={Boolean(search.trim()) || activeGroup !== 'legal-hold'}>
+              </RetainedSettingsPanel>
+              <RetainedSettingsPanel active={!search.trim() && activeGroup === 'legal-hold'}>
                 <LegalHoldPanel />
-              </div>
-              <div hidden={Boolean(search.trim()) || activeGroup !== 'maintenance'}>
+              </RetainedSettingsPanel>
+              <RetainedSettingsPanel active={!search.trim() && activeGroup === 'maintenance'}>
                 <MaintenancePanel role="admin" />
-              </div>
+              </RetainedSettingsPanel>
             </div>
           </div>
           <div className="settings-feedback">
