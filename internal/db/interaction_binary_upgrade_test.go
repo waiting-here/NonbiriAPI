@@ -37,6 +37,8 @@ func TestUpgradeFromVersionedSource(t *testing.T) {
 	case "1":
 		expected = baselineManifestHash
 	case "2":
+	case "3":
+		expected = aiPlayersManifestHash
 	default:
 		t.Fatal("exact source schema version must be supplied")
 	}
@@ -91,6 +93,27 @@ func verifyReleasedStorageUpgrade(t *testing.T, source, expectedSourceManifest s
 	}
 	assertRetainedManifest(t, prior, expectedSourceManifest)
 	before := interactionTableDigests(t, prior, sourceManifest)
+	wantConfig := upgradeSiteConfig(t, prior)
+	var lakeOpen bool
+	if err := prior.QueryRow(`SELECT EXISTS(SELECT 1 FROM limited_activity_configs WHERE activity_key='lake-notes' AND visible=1 AND paused=0)`).Scan(&lakeOpen); err != nil {
+		t.Fatal(err)
+	}
+	for key, value := range map[string]string{
+		"global_rpm_per_user":      "60",
+		"game_steadycatch_enabled": "0", "game_steadycatch_price_milli": "0", "game_steadycatch_first_reward_milli": "0",
+		"game_gwent_enabled": "0", "game_gwent_standard_enabled": "0", "game_gwent_standard_ticket_milli": "5000000",
+		"game_gwent_standard_rake_platform_bp": "100", "game_gwent_standard_rake_welfare_bp": "100", "game_gwent_standard_rake_thursday_bp": "100",
+		"game_lakenotes_enabled":   "0",
+		"game_lakenotes_exchanges": `{"coins_to_game":{"enabled":false,"source_amount":"","target_amount":""},"coins_to_general":{"enabled":false,"source_amount":"","target_amount":""},"game_to_coins":{"enabled":false,"source_amount":"","target_amount":""},"general_to_coins":{"enabled":false,"source_amount":"","target_amount":""}}`,
+	} {
+		wantConfig[key] = upgradeSetting{Value: value}
+	}
+	if lakeOpen {
+		wantConfig["game_lakenotes_enabled"] = upgradeSetting{Value: "1"}
+		master := wantConfig["games_enabled"]
+		master.Value = "1"
+		wantConfig["games_enabled"] = master
+	}
 	if err := prior.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -121,12 +144,15 @@ func verifyReleasedStorageUpgrade(t *testing.T, source, expectedSourceManifest s
 		if attempt == 0 {
 			after := interactionTableDigests(t, database, sourceManifest)
 			for table, want := range before {
-				if table == "schema_state" {
+				if table == "schema_state" || table == "site_config" {
 					continue
-				} // The migration advances only this metadata row.
+				} // Configuration has explicit migration expectations below.
 				if after[table] != want {
 					t.Errorf("retained source columns changed in %s (rows %d -> %d)", table, want.Rows, after[table].Rows)
 				}
+			}
+			if got := upgradeSiteConfig(t, database); !reflect.DeepEqual(got, wantConfig) {
+				t.Errorf("configuration differs from preserved source plus declared game defaults (rows %d, want %d)", len(got), len(wantConfig))
 			}
 		}
 		for _, table := range []string{"lake_notes_profiles", "lake_notes_casts"} {
@@ -171,6 +197,33 @@ func verifyReleasedStorageUpgrade(t *testing.T, source, expectedSourceManifest s
 		}
 	}
 	t.Logf("Preserved %d source table projections; fresh schema, credential decryption and reopen verified", len(before))
+}
+
+type upgradeSetting struct {
+	Value     string
+	UpdatedAt int64
+}
+
+func upgradeSiteConfig(t *testing.T, database *sql.DB) map[string]upgradeSetting {
+	t.Helper()
+	rows, err := database.Query(`SELECT key,value,updated_at FROM site_config`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	values := make(map[string]upgradeSetting)
+	for rows.Next() {
+		var key string
+		var value upgradeSetting
+		if err := rows.Scan(&key, &value.Value, &value.UpdatedAt); err != nil {
+			t.Fatal(err)
+		}
+		values[key] = value
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return values
 }
 
 type interactionTableDigest struct {
