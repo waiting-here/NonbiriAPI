@@ -205,3 +205,49 @@ func TestResponseBillingRetryIgnoresUnknownUsageBeforeResponse(t *testing.T) {
 		t.Fatalf("pre-response failure poisoned billable usage: %d %v", unknown, err)
 	}
 }
+
+func TestAcceptedEmptyStreamSettlesWalletAndResetsFailuresAfterRecovery(t *testing.T) {
+	for _, recovery := range []bool{false, true} {
+		t.Run(fmt.Sprintf("recovery=%t", recovery), func(t *testing.T) {
+			e := newCharityTestEnv(t)
+			rail := e.billingRail(t)
+			ctx := context.Background()
+			if _, err := e.store.DB().Exec("UPDATE donation_keys SET failure_streak=? WHERE id=?", u128Blob(t, 2), e.donationKey); err != nil {
+				t.Fatal(err)
+			}
+			request := e.billingRequest(t, rail, e.tokenModel, 5, 1)
+			handle := e.billingDispatch(t, rail, request.ID, 1)
+			if err := rail.MarkResponseStarted(ctx, handle, 200); err != nil {
+				t.Fatal(err)
+			}
+			for range 2 {
+				if recovery {
+					if _, err := rail.RecoverNonterminal(ctx, 100); err != nil {
+						t.Fatal(err)
+					}
+				} else {
+					if _, err := rail.CompleteAttempt(ctx, handle, claim.AttemptOutcome{Kind: claim.ResultResponse, UpstreamStatus: 200, StreakDisposition: connectorcontract.StreakSuccess, FailureOrigin: connectorcontract.OriginUpstreamProtocol}); err != nil {
+						t.Fatal(err)
+					}
+					if _, err := rail.CompleteRequest(ctx, claim.CompleteRequestInput{RequestID: request.ID, Caller: claim.CallerResult{Class: claim.ResultFailed, Status: 502, ErrorCode: "upstream"}, Disposition: claim.AccountingCommit, ActualChargeMilli: 5}); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			e.billingBalance(t, e.callerID, 9996)
+			e.billingBalance(t, e.donorID, 10000)
+			var streak, held, calls, tokens []byte
+			if err := e.store.DB().QueryRow("SELECT failure_streak,price_reserved_mag,calls_used,tokens_used FROM donation_keys WHERE id=?", e.donationKey).Scan(&streak, &held, &calls, &tokens); err != nil {
+				t.Fatal(err)
+			}
+			assertU128(t, streak, 0, "accepted stream resets failures")
+			assertU128(t, held, 0, "reservation released")
+			assertU128(t, calls, 1, "one accepted stream")
+			assertU128(t, tokens, 5, "unknown usage consumes reserved tokens")
+			var success bool
+			if err := e.store.DB().QueryRow("SELECT protocol_success FROM donation_usage_reservations WHERE claim_id=?", handle.ClaimID()).Scan(&success); err != nil || success {
+				t.Fatal("empty stream was reported as complete", success, err)
+			}
+		})
+	}
+}

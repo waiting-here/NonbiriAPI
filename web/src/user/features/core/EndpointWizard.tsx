@@ -1,3 +1,4 @@
+import { EndpointTransportNotice } from '@shared/components/EndpointTransportNotice';
 import { useEffect, useReducer, useRef, useState } from 'react';
 import { useOperation } from '@shared/operations/useOperation';
 import { useQueryClient } from '@tanstack/react-query';
@@ -456,6 +457,7 @@ export function EndpointWizard({
               />
             </label>
           </div>
+          <EndpointTransportNotice url={formBaseURL} />
           {formBaseURL ? (
             <div className={previewError ? 'core-inline-error' : 'core-inline-success'}>
               <strong>{t('endpoints.preview')}</strong>
@@ -496,6 +498,7 @@ export function EndpointWizard({
 
       {step >= 2 && endpoint ? (
         <div className="core-stack">
+          <EndpointTransportNotice url={endpoint.base_url} />
           <p>{t('endpoints.multipleKeysHint')}</p>
           {addedKeys.length > 0 ? (
             <ul className="core-added-keys">

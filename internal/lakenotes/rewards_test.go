@@ -14,8 +14,8 @@ import (
 func TestTreasurePrivateSamplingTerminalAtomicReplay(t *testing.T) {
 	f := newFixture(t)
 	f.random.value = 0.125
-	p := f.period(t, "0")
-	view := f.enter(t, p)
+	f.enable(t)
+	view := f.profile(t)
 	// Seed a prior authoritative catch so the original treasure branch is eligible.
 	f.tx(t, func(tx *sql.Tx) {
 		row, e := profileTx(f.ctx(f.user), tx, f.user, false, testNow)
@@ -110,8 +110,8 @@ func TestTreasurePrivateSamplingTerminalAtomicReplay(t *testing.T) {
 }
 func TestTerminalRetentionKeepsNewReplayIdentity(t *testing.T) {
 	f := newFixture(t)
-	p := f.period(t, "0")
-	v := f.enter(t, p)
+	f.enable(t)
+	v := f.profile(t)
 	start, e := f.service.Start(f.ctx(f.user), f.user, testKey(520), StartInput{v.Revision})
 	if e != nil {
 		t.Fatal(e)

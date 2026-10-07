@@ -109,20 +109,28 @@ WHERE state IN ('claimed','dispatched') ORDER BY claim_now,id LIMIT 1`).Scan(&cl
 			return "", err
 		}
 	case StateDispatched:
+		outcome := AttemptOutcome{
+			StreakDisposition: connectorcontract.StreakNeutral, FailureOrigin: connectorcontract.OriginRecoveryUnknown,
+			Kind: ResultSynthetic, UpstreamStatus: 502, Diagnostic: "dispatch outcome unavailable after restart",
+		}
+		if record.purpose == PurposeCharity {
+			var accepted bool
+			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM dispatch_response_starts WHERE claim_id=? AND http_status=200)`, record.claimID).Scan(&accepted); err != nil {
+				return "", err
+			}
+			if accepted {
+				outcome.Kind, outcome.UpstreamStatus = ResultResponse, 200
+				outcome.StreakDisposition = connectorcontract.StreakSuccess
+				outcome.Diagnostic = "upstream stream outcome unavailable after restart"
+			}
+		}
 		if _, err := s.completeAttemptTx(ctx, tx, record, candidateSnapshot{
 			endpointID:    record.currentEndpoint,
 			endpointKeyID: record.endpointKeyID,
 			connectorType: record.connectorType,
 			baseURL:       record.baseURL,
 			upstreamModel: record.upstreamModel,
-		}, AttemptOutcome{
-			StreakDisposition: connectorcontract.StreakNeutral, FailureOrigin: connectorcontract.OriginRecoveryUnknown,
-			Kind:            ResultSynthetic,
-			UpstreamStatus:  502,
-			Diagnostic:      "dispatch outcome unavailable after restart",
-			ProtocolSuccess: false,
-			ResponseStarted: false,
-		}, at); err != nil {
+		}, outcome, at); err != nil {
 			return "", err
 		}
 	default:

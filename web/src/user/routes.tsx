@@ -58,6 +58,14 @@ export const router = createBrowserRouter([
         lazy: async () => ({ Component: (await import('./pages/GamesPage')).GamesPage }),
       },
       {
+        path: pathFor('game-steady-catch'),
+        lazy: async () => ({ Component: (await import('./pages/GamesPage')).GamesPage }),
+      },
+      {
+        path: pathFor('game-gwent'),
+        lazy: async () => ({ Component: (await import('./pages/GamesPage')).GamesPage }),
+      },
+      {
         path: pathFor('game-blackjack'),
         lazy: async () => ({ Component: (await import('./pages/GamesPage')).GamesPage }),
       },
@@ -84,7 +92,7 @@ export const router = createBrowserRouter([
         }),
       },
       {
-        path: pathFor('lake-notes'),
+        path: pathFor('game-lake-notes'),
         lazy: async () => ({
           Component: (await import('./activities/lake-notes/LakeNotesPage')).LakeNotesPage,
         }),

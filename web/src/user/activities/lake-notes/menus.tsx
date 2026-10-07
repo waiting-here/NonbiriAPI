@@ -11,7 +11,8 @@ import {
   levelFromXp,
   pendingSkillTier,
   skillOptions,
-  applyAction,
+  unlockReady,
+  gear,
   type Action,
   type Profile,
 } from './rules';
@@ -83,11 +84,52 @@ export function LakeMenus({ menu, profile: p, blocked, text, onAction, close }: 
   const [catalogLocation, setCatalogLocation] = useState(p.location);
   const can = (action: Action) => {
     if (blocked) return false;
-    try {
-      applyAction(p, action);
-      return true;
-    } catch {
-      return false;
+    const id = action.id ?? '';
+    switch (action.action) {
+      case 'buy_gear': {
+        const item = gear(id);
+        return (
+          copies(p, id) < (item.slot === 'rod' ? 1 : 2) &&
+          BigInt(p.coins) >= BigInt(item.cost) &&
+          unlockReady(p, id, copies(p, id) + 1)
+        );
+      }
+      case 'equip_gear': {
+        if (action.slot === 'rod') return copies(p, id) > 0;
+        const rod = gear(p.equipped.rod);
+        if (!('tackleSlots' in rod) || Number(action.slot?.slice(-1)) > rod.tackleSlots)
+          return false;
+        const used = (['tackle1', 'tackle2', 'tackle3'] as const).filter(
+          (slot) => slot !== action.slot && p.equipped[slot] === id,
+        ).length;
+        return !id || used < Math.min(2, copies(p, id));
+      }
+      case 'buy_bait':
+        return (
+          p.baitStock[id] < 999 &&
+          BigInt(p.coins) >= BigInt(catalog.BAITS[id as keyof typeof catalog.BAITS].cost)
+        );
+      case 'select_bait': {
+        const rod = gear(p.equipped.rod);
+        return !id || (p.baitStock[id] > 0 && 'baitAllowed' in rod && rod.baitAllowed);
+      }
+      case 'load_gear_loadout':
+        return !!p.savedLoadouts[action.index!];
+      case 'respec':
+        return !!p.first && BigInt(p.coins) >= BigInt(1000 + levelFromXp(p.xp) * 50);
+      case 'accept_contract':
+        return (
+          board.contracts.find((q) => q.id === id)?.status === 'available' &&
+          board.contracts.filter((q) => q.status === 'active').length < 3
+        );
+      case 'cancel_contract':
+        return board.contracts.find((q) => q.id === id)?.status === 'active';
+      case 'claim_contract': {
+        const q = board.contracts.find((q) => q.id === id);
+        return !!q && q.status === 'active' && contractProgress(p, q) >= q.target;
+      }
+      default:
+        return true;
     }
   };
   const actionButton = (text: string, action: Action, extraDisabled = false, key?: string) => (
@@ -184,6 +226,12 @@ export function LakeMenus({ menu, profile: p, blocked, text, onAction, close }: 
                           : text('owned', { count: 1 })
                         : text('buy', { cost: g.cost })}
                     </strong>
+                    <img
+                      className="lake-rod-art"
+                      src={'/assets/lake-notes/rod-' + id + '.webp'}
+                      alt=""
+                      loading="lazy"
+                    />
                     <p>{catalogText(text, 'gear', id, 'description')}</p>
                     <p>{loadoutStats(text, p, fitLoadout({ ...p.equipped, rod: id }))}</p>
                     {actionButton(
@@ -213,16 +261,18 @@ export function LakeMenus({ menu, profile: p, blocked, text, onAction, close }: 
                       action: 'buy_gear',
                       id,
                     })}
-                    {(['tackle1', 'tackle2'] as const).map((slot, index) =>
-                      actionButton(
-                        p.equipped[slot] === id
-                          ? text('unequip') + ' · ' + text('tackleSlot', { slot: index + 1 })
-                          : text('equipSlot', { slot: index + 1 }),
-                        { action: 'equip_gear', slot, id: p.equipped[slot] === id ? '' : id },
-                        false,
-                        slot,
-                      ),
-                    )}
+                    {(['tackle1', 'tackle2', 'tackle3'] as const)
+                      .slice(0, 'tackleSlots' in rod ? rod.tackleSlots : 0)
+                      .map((slot, index) =>
+                        actionButton(
+                          p.equipped[slot] === id
+                            ? text('unequip') + ' · ' + text('tackleSlot', { slot: index + 1 })
+                            : text('equipSlot', { slot: index + 1 }),
+                          { action: 'equip_gear', slot, id: p.equipped[slot] === id ? '' : id },
+                          false,
+                          slot,
+                        ),
+                      )}
                   </div>
                 </article>
               ))}
@@ -251,7 +301,14 @@ export function LakeMenus({ menu, profile: p, blocked, text, onAction, close }: 
                 </strong>
                 <p>{catalogText(text, 'baits', id, 'description')}</p>
                 <div className="shop-actions">
-                  {actionButton(text('buy', { cost: b.cost }), { action: 'buy_bait', id })}
+                  {[1, 10, 50].map((quantity) =>
+                    actionButton(
+                      text('buyBatch', { count: quantity, cost: b.cost * quantity }),
+                      { action: 'buy_bait', id, quantity },
+                      false,
+                      String(quantity),
+                    ),
+                  )}
                   {actionButton(p.selectedBait === id ? text('disableBait') : text('useBait'), {
                     action: 'select_bait',
                     id: p.selectedBait === id ? '' : id,

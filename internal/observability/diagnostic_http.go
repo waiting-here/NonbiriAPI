@@ -62,6 +62,8 @@ func parseIndependentDiagnosticQuery(r *http.Request) (DiagnosticFilter, error) 
 		switch key {
 		case "kind":
 			out.Kind = value
+		case "storage":
+			out.Storage = value
 		case "subject_id":
 			out.SubjectID = value
 		case "before":

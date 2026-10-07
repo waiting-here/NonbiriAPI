@@ -10,7 +10,11 @@
     "maxLevel": 20,
     "initialProgress": 0.3,
     "progressGainPerSecond": 0.12,
-    "progressLossPerSecond": 0.18,
+    "progressLossPerSecond": 0.15,
+    "bitePreparationSeconds": 0.5,
+    "gentleDartReverseSeconds": 0.65,
+    "commonDartDistance": 120,
+    "uncommonDartDistance": 145,
     "perfectAccuracy": 0.85,
     "perfectMaxMissSeconds": 0.6,
     "perfectXpMultiplier": 2.4,
@@ -64,6 +68,11 @@
       "name": "海岸",
       "scene": "海风吹过栈桥，浪花轻拍岸边。",
       "description": "咸水栈桥与近海，既有成群的小鱼，也有远游的大鱼。"
+    },
+    "jungle": {
+      "name": "丛林河湾",
+      "scene": "树影落在河湾，热带鱼儿穿梭在浅滩与树根之间。",
+      "description": "密林环抱的热带河湾，小鱼聚在浅水，大型鱼藏在弯道深处。"
     }
   },
   "FISH_TYPES": [
@@ -75,10 +84,7 @@
       "weight": 24,
       "behavior": "smooth",
       "style": "平稳型",
-      "length": [
-        15,
-        35
-      ],
+      "length": [15, 35],
       "difficulty": 15,
       "basePrice": 22
     },
@@ -90,10 +96,7 @@
       "weight": 19,
       "behavior": "mixed",
       "style": "混合型",
-      "length": [
-        25,
-        75
-      ],
+      "length": [25, 75],
       "difficulty": 33,
       "basePrice": 32
     },
@@ -105,10 +108,7 @@
       "weight": 17,
       "behavior": "sinker",
       "style": "下沉型",
-      "length": [
-        14,
-        32
-      ],
+      "length": [14, 32],
       "difficulty": 25,
       "basePrice": 28
     },
@@ -120,10 +120,7 @@
       "weight": 12,
       "behavior": "floater",
       "style": "上浮型",
-      "length": [
-        22,
-        52
-      ],
+      "length": [22, 52],
       "difficulty": 55,
       "basePrice": 50
     },
@@ -135,10 +132,7 @@
       "weight": 11,
       "behavior": "smooth",
       "style": "平稳型",
-      "length": [
-        40,
-        100
-      ],
+      "length": [40, 100],
       "difficulty": 48,
       "basePrice": 55
     },
@@ -150,10 +144,7 @@
       "weight": 10,
       "behavior": "sinker",
       "style": "下沉型",
-      "length": [
-        35,
-        85
-      ],
+      "length": [35, 85],
       "difficulty": 50,
       "basePrice": 46
     },
@@ -165,10 +156,7 @@
       "weight": 8,
       "behavior": "mixed",
       "style": "混合型",
-      "length": [
-        28,
-        58
-      ],
+      "length": [28, 58],
       "difficulty": 62,
       "basePrice": 75
     },
@@ -180,10 +168,7 @@
       "weight": 6,
       "behavior": "dart",
       "style": "乱窜型",
-      "length": [
-        42,
-        92
-      ],
+      "length": [42, 92],
       "difficulty": 72,
       "basePrice": 90
     },
@@ -195,10 +180,7 @@
       "weight": 6,
       "behavior": "sinker",
       "style": "下沉型",
-      "length": [
-        35,
-        90
-      ],
+      "length": [35, 90],
       "difficulty": 69,
       "basePrice": 86
     },
@@ -210,10 +192,7 @@
       "weight": 3,
       "behavior": "floater",
       "style": "上浮型",
-      "length": [
-        60,
-        120
-      ],
+      "length": [60, 120],
       "difficulty": 77,
       "basePrice": 130
     },
@@ -225,10 +204,7 @@
       "weight": 3,
       "behavior": "mixed",
       "style": "混合型",
-      "length": [
-        65,
-        135
-      ],
+      "length": [65, 135],
       "difficulty": 83,
       "basePrice": 150
     },
@@ -240,10 +216,7 @@
       "weight": 1.5,
       "behavior": "smooth",
       "style": "平稳型",
-      "length": [
-        70,
-        140
-      ],
+      "length": [70, 140],
       "difficulty": 95,
       "basePrice": 320
     },
@@ -255,16 +228,10 @@
       "weight": 12,
       "behavior": "smooth",
       "style": "平稳型",
-      "length": [
-        5,
-        12
-      ],
+      "length": [5, 12],
       "difficulty": 18,
       "basePrice": 22,
-      "periods": [
-        "dawn",
-        "day"
-      ],
+      "periods": ["dawn", "day"],
       "description": "体侧泛着粉蓝光泽，喜欢在浅水的水草间穿梭。"
     },
     {
@@ -275,16 +242,10 @@
       "weight": 8,
       "behavior": "floater",
       "style": "上浮型",
-      "length": [
-        8,
-        20
-      ],
+      "length": [8, 20],
       "difficulty": 38,
       "basePrice": 45,
-      "periods": [
-        "dawn",
-        "dusk"
-      ],
+      "periods": ["dawn", "dusk"],
       "description": "半透明的小鱼成群游动，在斜照的天光下才容易看见。"
     },
     {
@@ -295,16 +256,10 @@
       "weight": 8,
       "behavior": "sinker",
       "style": "下沉型",
-      "length": [
-        20,
-        55
-      ],
+      "length": [20, 55],
       "difficulty": 43,
       "basePrice": 52,
-      "weathers": [
-        "cloudy",
-        "rain"
-      ],
+      "weathers": ["cloudy", "rain"],
       "description": "橄榄色的身体贴着湖底缓行，阴暗天气更愿意觅食。"
     },
     {
@@ -315,16 +270,10 @@
       "weight": 5,
       "behavior": "dart",
       "style": "乱窜型",
-      "length": [
-        35,
-        85
-      ],
+      "length": [35, 85],
       "difficulty": 67,
       "basePrice": 88,
-      "periods": [
-        "dawn",
-        "dusk"
-      ],
+      "periods": ["dawn", "dusk"],
       "description": "上翘的嘴适合追逐水面小鱼，出击时快得像一道银光。"
     },
     {
@@ -335,15 +284,10 @@
       "weight": 5,
       "behavior": "sinker",
       "style": "下沉型",
-      "length": [
-        35,
-        90
-      ],
+      "length": [35, 90],
       "difficulty": 57,
       "basePrice": 78,
-      "periods": [
-        "night"
-      ],
+      "periods": ["night"],
       "description": "夜色降临后离开泥洞，沿着水草边缘寻找猎物。"
     },
     {
@@ -354,19 +298,11 @@
       "weight": 2,
       "behavior": "mixed",
       "style": "混合型",
-      "length": [
-        80,
-        165
-      ],
+      "length": [80, 165],
       "difficulty": 84,
       "basePrice": 185,
-      "periods": [
-        "dawn",
-        "night"
-      ],
-      "weathers": [
-        "rain"
-      ],
+      "periods": ["dawn", "night"],
+      "weathers": ["rain"],
       "description": "古老的硬鳞鱼，雨水搅动湖底时才偶尔靠近岸边。"
     },
     {
@@ -377,10 +313,7 @@
       "weight": 23,
       "behavior": "mixed",
       "style": "混合型",
-      "length": [
-        10,
-        28
-      ],
+      "length": [10, 28],
       "difficulty": 28,
       "basePrice": 26
     },
@@ -392,10 +325,7 @@
       "weight": 19,
       "behavior": "dart",
       "style": "乱窜型",
-      "length": [
-        9,
-        22
-      ],
+      "length": [9, 22],
       "difficulty": 35,
       "basePrice": 30
     },
@@ -407,10 +337,7 @@
       "weight": 18,
       "behavior": "sinker",
       "style": "下沉型",
-      "length": [
-        10,
-        24
-      ],
+      "length": [10, 24],
       "difficulty": 20,
       "basePrice": 24
     },
@@ -422,10 +349,7 @@
       "weight": 15,
       "behavior": "smooth",
       "style": "平稳型",
-      "length": [
-        8,
-        18
-      ],
+      "length": [8, 18],
       "difficulty": 24,
       "basePrice": 25
     },
@@ -437,10 +361,7 @@
       "weight": 12,
       "behavior": "floater",
       "style": "上浮型",
-      "length": [
-        16,
-        34
-      ],
+      "length": [16, 34],
       "difficulty": 48,
       "basePrice": 48
     },
@@ -452,10 +373,7 @@
       "weight": 11,
       "behavior": "mixed",
       "style": "混合型",
-      "length": [
-        18,
-        48
-      ],
+      "length": [18, 48],
       "difficulty": 52,
       "basePrice": 51
     },
@@ -467,10 +385,7 @@
       "weight": 8,
       "behavior": "dart",
       "style": "乱窜型",
-      "length": [
-        26,
-        62
-      ],
+      "length": [26, 62],
       "difficulty": 60,
       "basePrice": 72
     },
@@ -482,10 +397,7 @@
       "weight": 7,
       "behavior": "mixed",
       "style": "混合型",
-      "length": [
-        30,
-        76
-      ],
+      "length": [30, 76],
       "difficulty": 68,
       "basePrice": 84
     },
@@ -497,10 +409,7 @@
       "weight": 5,
       "behavior": "dart",
       "style": "乱窜型",
-      "length": [
-        45,
-        110
-      ],
+      "length": [45, 110],
       "difficulty": 75,
       "basePrice": 100
     },
@@ -512,10 +421,7 @@
       "weight": 3,
       "behavior": "sinker",
       "style": "下沉型",
-      "length": [
-        65,
-        130
-      ],
+      "length": [65, 130],
       "difficulty": 75,
       "basePrice": 128
     },
@@ -527,10 +433,7 @@
       "weight": 3,
       "behavior": "mixed",
       "style": "混合型",
-      "length": [
-        55,
-        125
-      ],
+      "length": [55, 125],
       "difficulty": 82,
       "basePrice": 155
     },
@@ -542,10 +445,7 @@
       "weight": 1.5,
       "behavior": "dart",
       "style": "乱窜型",
-      "length": [
-        110,
-        180
-      ],
+      "length": [110, 180],
       "difficulty": 95,
       "basePrice": 320
     },
@@ -557,16 +457,10 @@
       "weight": 11,
       "behavior": "sinker",
       "style": "下沉型",
-      "length": [
-        8,
-        18
-      ],
+      "length": [8, 18],
       "difficulty": 24,
       "basePrice": 27,
-      "periods": [
-        "dusk",
-        "night"
-      ],
+      "periods": ["dusk", "night"],
       "description": "小巧的花纹鱼，贴着河床的石缝和砂砾穿行。"
     },
     {
@@ -577,16 +471,10 @@
       "weight": 8,
       "behavior": "floater",
       "style": "上浮型",
-      "length": [
-        22,
-        48
-      ],
+      "length": [22, 48],
       "difficulty": 49,
       "basePrice": 58,
-      "periods": [
-        "dawn",
-        "day"
-      ],
+      "periods": ["dawn", "day"],
       "description": "高耸的背鳍像一面小旗，爱在清凉急流中逆水游动。"
     },
     {
@@ -597,16 +485,10 @@
       "weight": 7,
       "behavior": "mixed",
       "style": "混合型",
-      "length": [
-        20,
-        55
-      ],
+      "length": [20, 55],
       "difficulty": 52,
       "basePrice": 61,
-      "periods": [
-        "day",
-        "dusk"
-      ],
+      "periods": ["day", "dusk"],
       "description": "红色眼圈很醒目，常在河湾的缓流边寻找食物。"
     },
     {
@@ -617,15 +499,10 @@
       "weight": 5,
       "behavior": "dart",
       "style": "乱窜型",
-      "length": [
-        20,
-        45
-      ],
+      "length": [20, 45],
       "difficulty": 64,
       "basePrice": 86,
-      "periods": [
-        "dawn"
-      ],
+      "periods": ["dawn"],
       "description": "带着椭圆斑纹的溪流鳟鱼，清晨在浅滩边迅速掠过。"
     },
     {
@@ -636,19 +513,11 @@
       "weight": 4,
       "behavior": "sinker",
       "style": "下沉型",
-      "length": [
-        35,
-        85
-      ],
+      "length": [35, 85],
       "difficulty": 65,
       "basePrice": 92,
-      "periods": [
-        "night"
-      ],
-      "weathers": [
-        "cloudy",
-        "rain"
-      ],
+      "periods": ["night"],
+      "weathers": ["cloudy", "rain"],
       "description": "有一根下颌须的河底猎手，偏爱昏暗寒冷的流水。"
     },
     {
@@ -659,19 +528,11 @@
       "weight": 2,
       "behavior": "mixed",
       "style": "混合型",
-      "length": [
-        35,
-        70
-      ],
+      "length": [35, 70],
       "difficulty": 78,
       "basePrice": 165,
-      "periods": [
-        "dusk",
-        "night"
-      ],
-      "weathers": [
-        "rain"
-      ],
+      "periods": ["dusk", "night"],
+      "weathers": ["rain"],
       "description": "银鳞洄游鱼，雨后水流上涨时偶尔进入这段河道。"
     },
     {
@@ -682,10 +543,7 @@
       "weight": 23,
       "behavior": "smooth",
       "style": "平稳型",
-      "length": [
-        10,
-        25
-      ],
+      "length": [10, 25],
       "difficulty": 16,
       "basePrice": 23
     },
@@ -697,10 +555,7 @@
       "weight": 19,
       "behavior": "dart",
       "style": "乱窜型",
-      "length": [
-        8,
-        20
-      ],
+      "length": [8, 20],
       "difficulty": 32,
       "basePrice": 27
     },
@@ -712,10 +567,7 @@
       "weight": 17,
       "behavior": "floater",
       "style": "上浮型",
-      "length": [
-        18,
-        36
-      ],
+      "length": [18, 36],
       "difficulty": 30,
       "basePrice": 29
     },
@@ -727,10 +579,7 @@
       "weight": 15,
       "behavior": "mixed",
       "style": "混合型",
-      "length": [
-        16,
-        40
-      ],
+      "length": [16, 40],
       "difficulty": 38,
       "basePrice": 34
     },
@@ -742,10 +591,7 @@
       "weight": 12,
       "behavior": "dart",
       "style": "乱窜型",
-      "length": [
-        22,
-        55
-      ],
+      "length": [22, 55],
       "difficulty": 55,
       "basePrice": 53
     },
@@ -757,10 +603,7 @@
       "weight": 11,
       "behavior": "mixed",
       "style": "混合型",
-      "length": [
-        30,
-        80
-      ],
+      "length": [30, 80],
       "difficulty": 52,
       "basePrice": 58
     },
@@ -772,10 +615,7 @@
       "weight": 10,
       "behavior": "sinker",
       "style": "下沉型",
-      "length": [
-        25,
-        65
-      ],
+      "length": [25, 65],
       "difficulty": 49,
       "basePrice": 56
     },
@@ -787,10 +627,7 @@
       "weight": 7,
       "behavior": "floater",
       "style": "上浮型",
-      "length": [
-        30,
-        75
-      ],
+      "length": [30, 75],
       "difficulty": 64,
       "basePrice": 82
     },
@@ -802,10 +639,7 @@
       "weight": 6,
       "behavior": "sinker",
       "style": "下沉型",
-      "length": [
-        35,
-        100
-      ],
+      "length": [35, 100],
       "difficulty": 70,
       "basePrice": 95
     },
@@ -817,10 +651,7 @@
       "weight": 5,
       "behavior": "dart",
       "style": "乱窜型",
-      "length": [
-        50,
-        125
-      ],
+      "length": [50, 125],
       "difficulty": 75,
       "basePrice": 105
     },
@@ -832,10 +663,7 @@
       "weight": 3,
       "behavior": "dart",
       "style": "乱窜型",
-      "length": [
-        90,
-        180
-      ],
+      "length": [90, 180],
       "difficulty": 86,
       "basePrice": 170
     },
@@ -847,10 +675,7 @@
       "weight": 1.5,
       "behavior": "mixed",
       "style": "混合型",
-      "length": [
-        110,
-        200
-      ],
+      "length": [110, 200],
       "difficulty": 98,
       "basePrice": 350
     },
@@ -862,16 +687,10 @@
       "weight": 11,
       "behavior": "smooth",
       "style": "平稳型",
-      "length": [
-        18,
-        40
-      ],
+      "length": [18, 40],
       "difficulty": 26,
       "basePrice": 33,
-      "periods": [
-        "day",
-        "dusk"
-      ],
+      "periods": ["day", "dusk"],
       "description": "银亮的扁平鱼，常随近岸潮流成群出现。"
     },
     {
@@ -882,19 +701,11 @@
       "weight": 7,
       "behavior": "floater",
       "style": "上浮型",
-      "length": [
-        18,
-        36
-      ],
+      "length": [18, 36],
       "difficulty": 53,
       "basePrice": 65,
-      "periods": [
-        "dawn",
-        "day"
-      ],
-      "weathers": [
-        "sunny"
-      ],
+      "periods": ["dawn", "day"],
+      "weathers": ["sunny"],
       "description": "宽大的胸鳍能托着它短暂滑翔，海面明亮时最容易发现。"
     },
     {
@@ -905,16 +716,10 @@
       "weight": 8,
       "behavior": "sinker",
       "style": "下沉型",
-      "length": [
-        50,
-        120
-      ],
+      "length": [50, 120],
       "difficulty": 55,
       "basePrice": 70,
-      "periods": [
-        "dusk",
-        "night"
-      ],
+      "periods": ["dusk", "night"],
       "description": "银白色的长带状身体，在昏暗海水里映出冷光。"
     },
     {
@@ -925,19 +730,11 @@
       "weight": 5,
       "behavior": "sinker",
       "style": "下沉型",
-      "length": [
-        60,
-        135
-      ],
+      "length": [60, 135],
       "difficulty": 68,
       "basePrice": 98,
-      "periods": [
-        "night"
-      ],
-      "weathers": [
-        "cloudy",
-        "rain"
-      ],
+      "periods": ["night"],
+      "weathers": ["cloudy", "rain"],
       "description": "白天藏在礁石缝里，阴雨夜晚才沿海底出来觅食。"
     },
     {
@@ -948,19 +745,11 @@
       "weight": 5,
       "behavior": "dart",
       "style": "乱窜型",
-      "length": [
-        45,
-        95
-      ],
+      "length": [45, 95],
       "difficulty": 72,
       "basePrice": 112,
-      "periods": [
-        "day"
-      ],
-      "weathers": [
-        "sunny",
-        "cloudy"
-      ],
+      "periods": ["day"],
+      "weathers": ["sunny", "cloudy"],
       "description": "游速极快的成群猎手，银腹上的深色条纹很有辨识度。"
     },
     {
@@ -971,19 +760,587 @@
       "weight": 2,
       "behavior": "sinker",
       "style": "下沉型",
-      "length": [
-        35,
-        90
-      ],
+      "length": [35, 90],
       "difficulty": 82,
       "basePrice": 190,
-      "periods": [
-        "night"
-      ],
-      "weathers": [
-        "rain"
-      ],
+      "periods": ["night"],
+      "weathers": ["rain"],
       "description": "头顶的发光诱饵在黑暗里晃动，暴雨夜才接近海岸。"
+    },
+    {
+      "name": "蓝鳃太阳鱼",
+      "kind": "lake_bluegill",
+      "location": "lake",
+      "rarity": "common",
+      "weight": 9,
+      "behavior": "mixed",
+      "style": "混合型",
+      "length": [12, 30],
+      "difficulty": 24,
+      "basePrice": 25,
+      "periods": ["day"],
+      "description": "扁圆的身体带着暗色横纹，鳃盖后缘有醒目的蓝黑斑，常在岸边浅水活动。"
+    },
+    {
+      "name": "南瓜籽太阳鱼",
+      "kind": "lake_pumpkinseed",
+      "location": "lake",
+      "rarity": "common",
+      "weight": 8,
+      "behavior": "smooth",
+      "style": "平稳型",
+      "length": [10, 28],
+      "difficulty": 22,
+      "basePrice": 25,
+      "description": "脸颊上的蓝绿纹路与橙色斑点像一幅小画，圆短的身形在水草间缓缓游动。"
+    },
+    {
+      "name": "欧洲红眼鱼",
+      "kind": "lake_rudd",
+      "location": "lake",
+      "rarity": "common",
+      "weight": 8,
+      "behavior": "floater",
+      "style": "上浮型",
+      "length": [12, 35],
+      "difficulty": 26,
+      "basePrice": 29,
+      "periods": ["dawn", "dusk"],
+      "description": "金铜色鳞片和鲜红的腹鳍很显眼，上翘的小嘴适合在水面附近觅食。"
+    },
+    {
+      "name": "拟鲤",
+      "kind": "lake_roach",
+      "location": "lake",
+      "rarity": "common",
+      "weight": 9,
+      "behavior": "smooth",
+      "style": "平稳型",
+      "length": [12, 40],
+      "difficulty": 28,
+      "basePrice": 30,
+      "description": "银亮的鳞片下映着暖红色鱼鳍，外形修长，喜欢在湖湾里成群缓游。"
+    },
+    {
+      "name": "黄鲈",
+      "kind": "lake_yellowperch",
+      "location": "lake",
+      "rarity": "uncommon",
+      "weight": 7,
+      "behavior": "mixed",
+      "style": "混合型",
+      "length": [18, 45],
+      "difficulty": 46,
+      "basePrice": 50,
+      "weathers": ["cloudy", "rain"],
+      "description": "金黄色体侧有多道黑色横带，背上两枚独立的背鳍让它格外好认。"
+    },
+    {
+      "name": "匙吻鲟",
+      "kind": "lake_paddlefish",
+      "location": "lake",
+      "rarity": "legendary",
+      "weight": 0.9,
+      "behavior": "smooth",
+      "style": "平稳型",
+      "length": [180, 360],
+      "difficulty": 98,
+      "basePrice": 340,
+      "periods": ["dawn", "dusk"],
+      "weathers": ["cloudy", "rain"],
+      "description": "现实中的匙吻鲟因栖息地变化等因素而减少，长而扁的匙状吻部格外醒目；游戏中它被放大为湖泊巨鱼。"
+    },
+    {
+      "name": "欧洲鱥",
+      "kind": "river_minnow",
+      "location": "river",
+      "rarity": "common",
+      "weight": 9,
+      "behavior": "mixed",
+      "style": "混合型",
+      "length": [6, 16],
+      "difficulty": 19,
+      "basePrice": 23,
+      "periods": ["dawn", "day"],
+      "description": "小巧的纺锤形身体带着深色侧纹，常成群穿过清浅的河段。"
+    },
+    {
+      "name": "欧鲌",
+      "kind": "river_bleak",
+      "location": "river",
+      "rarity": "common",
+      "weight": 9,
+      "behavior": "floater",
+      "style": "上浮型",
+      "length": [10, 25],
+      "difficulty": 26,
+      "basePrice": 26,
+      "description": "薄薄的银色身躯像一片闪光，上翘的小嘴贴着水面寻找食物。"
+    },
+    {
+      "name": "石鳅",
+      "kind": "river_stoneloach",
+      "location": "river",
+      "rarity": "common",
+      "weight": 8,
+      "behavior": "sinker",
+      "style": "下沉型",
+      "length": [8, 20],
+      "difficulty": 22,
+      "basePrice": 24,
+      "periods": ["dusk", "night"],
+      "description": "砂褐色斑纹能藏进河床，嘴边的短须帮助它在石缝间搜寻食物。"
+    },
+    {
+      "name": "小口黑鲈",
+      "kind": "river_smallmouth",
+      "location": "river",
+      "rarity": "uncommon",
+      "weight": 7,
+      "behavior": "mixed",
+      "style": "混合型",
+      "length": [25, 60],
+      "difficulty": 51,
+      "basePrice": 58,
+      "description": "铜褐色体侧带着深色竖纹，嘴角不过眼后缘，常守在石滩附近。"
+    },
+    {
+      "name": "欧鲦",
+      "kind": "river_chub",
+      "location": "river",
+      "rarity": "uncommon",
+      "weight": 7,
+      "behavior": "smooth",
+      "style": "平稳型",
+      "length": [25, 70],
+      "difficulty": 47,
+      "basePrice": 55,
+      "periods": ["day", "dusk"],
+      "description": "宽阔的头部和大鳞片很有辨识度，常在河湾的急缓交界处徘徊。"
+    },
+    {
+      "name": "欧洲鲟",
+      "kind": "river_europeansturgeon",
+      "location": "river",
+      "rarity": "legendary",
+      "weight": 0.9,
+      "behavior": "mixed",
+      "style": "混合型",
+      "length": [200, 420],
+      "difficulty": 103,
+      "basePrice": 360,
+      "periods": ["dusk", "night"],
+      "weathers": ["rain"],
+      "description": "现实中的欧洲鲟野生种群非常稀少，身上排列着硬质骨板；游戏中它沿雨夜上涨的河水洄游。"
+    },
+    {
+      "name": "鲻鱼",
+      "kind": "coast_mullet",
+      "location": "coast",
+      "rarity": "common",
+      "weight": 9,
+      "behavior": "smooth",
+      "style": "平稳型",
+      "length": [20, 65],
+      "difficulty": 29,
+      "basePrice": 34,
+      "description": "银灰色身体有细细的纵纹，小嘴与两枚分离的背鳍是它的特点。"
+    },
+    {
+      "name": "牙鳕",
+      "kind": "coast_whiting",
+      "location": "coast",
+      "rarity": "common",
+      "weight": 8,
+      "behavior": "sinker",
+      "style": "下沉型",
+      "length": [20, 55],
+      "difficulty": 31,
+      "basePrice": 35,
+      "periods": ["dusk", "night"],
+      "description": "体侧泛着银白光泽，连续排列的三枚背鳍像一串小旗，偏爱昏暗海水。"
+    },
+    {
+      "name": "欧洲颌针鱼",
+      "kind": "coast_garfish",
+      "location": "coast",
+      "rarity": "common",
+      "weight": 8,
+      "behavior": "floater",
+      "style": "上浮型",
+      "length": [35, 90],
+      "difficulty": 36,
+      "basePrice": 38,
+      "periods": ["day"],
+      "description": "细长的上下颌像一把镊子，蓝绿色背部在水面附近一闪而过。"
+    },
+    {
+      "name": "黑鲷",
+      "kind": "coast_blackseabream",
+      "location": "coast",
+      "rarity": "uncommon",
+      "weight": 7,
+      "behavior": "mixed",
+      "style": "混合型",
+      "length": [25, 65],
+      "difficulty": 56,
+      "basePrice": 68,
+      "weathers": ["cloudy", "rain"],
+      "description": "深灰色体侧带着不显眼的横带，厚实的嘴与高背鳍适合在礁石边活动。"
+    },
+    {
+      "name": "鲯鳅",
+      "kind": "coast_mahimahi",
+      "location": "coast",
+      "rarity": "epic",
+      "weight": 2,
+      "behavior": "dart",
+      "style": "乱窜型",
+      "length": [70, 170],
+      "difficulty": 84,
+      "basePrice": 180,
+      "periods": ["dawn", "day"],
+      "weathers": ["sunny", "cloudy"],
+      "description": "蓝绿背部与金黄色体侧像流动的宝石，高耸的额头后是一条延伸到尾部的长背鳍。"
+    },
+    {
+      "name": "苏眉",
+      "kind": "coast_humpheadwrasse",
+      "location": "coast",
+      "rarity": "legendary",
+      "weight": 0.9,
+      "behavior": "floater",
+      "style": "上浮型",
+      "length": [160, 340],
+      "difficulty": 101,
+      "basePrice": 360,
+      "periods": ["dawn", "day"],
+      "weathers": ["cloudy"],
+      "description": "现实中的曲纹唇鱼又称苏眉，是受保护的稀少鱼类；厚唇、隆起的额头与细密蓝绿纹路让它像一位海中长者。"
+    },
+    {
+      "name": "攀鲈",
+      "kind": "jungle_climbingperch",
+      "location": "jungle",
+      "rarity": "common",
+      "weight": 10,
+      "behavior": "smooth",
+      "style": "平稳型",
+      "length": [10, 26],
+      "difficulty": 15,
+      "basePrice": 24,
+      "description": "厚实的橄榄色身体配着硬棘背鳍，常在树根旁的缓水里活动。"
+    },
+    {
+      "name": "三星丝足鲈",
+      "kind": "jungle_threespotgourami",
+      "location": "jungle",
+      "rarity": "common",
+      "weight": 9,
+      "behavior": "smooth",
+      "style": "平稳型",
+      "length": [9, 22],
+      "difficulty": 20,
+      "basePrice": 26,
+      "description": "银蓝色身体有两枚暗斑，细长腹鳍像触须，喜欢水草丰茂的浅湾。"
+    },
+    {
+      "name": "蛇皮丝足鲈",
+      "kind": "jungle_snakeskingourami",
+      "location": "jungle",
+      "rarity": "common",
+      "weight": 8,
+      "behavior": "floater",
+      "style": "上浮型",
+      "length": [12, 30],
+      "difficulty": 25,
+      "basePrice": 28,
+      "description": "斜向暗纹像蛇皮，细长腹鳍轻探水面下的植物。"
+    },
+    {
+      "name": "鸣声丝足鲈",
+      "kind": "jungle_croakinggourami",
+      "location": "jungle",
+      "rarity": "common",
+      "weight": 8,
+      "behavior": "smooth",
+      "style": "平稳型",
+      "length": [4, 11],
+      "difficulty": 18,
+      "basePrice": 22,
+      "description": "小巧的褐色身躯带着横纹，安静时会藏在落叶与水草之间。"
+    },
+    {
+      "name": "月光丝足鲈",
+      "kind": "jungle_moonlightgourami",
+      "location": "jungle",
+      "rarity": "common",
+      "weight": 7,
+      "behavior": "floater",
+      "style": "上浮型",
+      "length": [10, 24],
+      "difficulty": 23,
+      "basePrice": 27,
+      "description": "细密的银白鳞片柔和反光，橙红色的眼睛很醒目。",
+      "periods": ["dusk", "night"]
+    },
+    {
+      "name": "红尾波鱼",
+      "kind": "jungle_redtailrasbora",
+      "location": "jungle",
+      "rarity": "common",
+      "weight": 7,
+      "behavior": "dart",
+      "style": "乱窜型",
+      "length": [7, 21],
+      "difficulty": 30,
+      "basePrice": 29,
+      "description": "修长身体上的黑色横带十分清晰，红尾一摆便钻入浅水阴影。",
+      "periods": ["dawn", "day"]
+    },
+    {
+      "name": "银色飞鲃",
+      "kind": "jungle_silverflyingbarb",
+      "location": "jungle",
+      "rarity": "common",
+      "weight": 6,
+      "behavior": "mixed",
+      "style": "混合型",
+      "length": [5, 13],
+      "difficulty": 27,
+      "basePrice": 25,
+      "description": "亮银色身体有一道深色横线，长须帮助它在缓水中寻找小食物。",
+      "weathers": ["cloudy", "rain"]
+    },
+    {
+      "name": "爪哇鲃",
+      "kind": "jungle_silverbarb",
+      "location": "jungle",
+      "rarity": "common",
+      "weight": 6,
+      "behavior": "sinker",
+      "style": "下沉型",
+      "length": [15, 46],
+      "difficulty": 33,
+      "basePrice": 34,
+      "description": "宽阔的银色鳞片与暖黄鱼鳍相衬，常沿着浅湾缓缓觅食。"
+    },
+    {
+      "name": "铜色弓背鱼",
+      "kind": "jungle_bronzefeatherback",
+      "location": "jungle",
+      "rarity": "uncommon",
+      "weight": 7,
+      "behavior": "smooth",
+      "style": "平稳型",
+      "length": [20, 62],
+      "difficulty": 36,
+      "basePrice": 48,
+      "description": "弓起的背部呈铜灰色，绵长臀鳍像一条轻摆的丝带。"
+    },
+    {
+      "name": "长须鲿",
+      "kind": "jungle_yellowcatfish",
+      "location": "jungle",
+      "rarity": "uncommon",
+      "weight": 6,
+      "behavior": "sinker",
+      "style": "下沉型",
+      "length": [24, 78],
+      "difficulty": 41,
+      "basePrice": 54,
+      "description": "扁平头部伸出长须，青褐色身体贴着河底与浸水树根游动。"
+    },
+    {
+      "name": "大头胡鲶",
+      "kind": "jungle_bigheadcatfish",
+      "location": "jungle",
+      "rarity": "uncommon",
+      "weight": 6,
+      "behavior": "sinker",
+      "style": "下沉型",
+      "length": [22, 65],
+      "difficulty": 43,
+      "basePrice": 52,
+      "description": "宽头、长须与细密暗斑让它很容易辨认，偏爱泥底与缓流。",
+      "periods": ["dusk", "night"]
+    },
+    {
+      "name": "条纹鳢",
+      "kind": "jungle_stripedsnakehead",
+      "location": "jungle",
+      "rarity": "uncommon",
+      "weight": 5,
+      "behavior": "mixed",
+      "style": "混合型",
+      "length": [28, 85],
+      "difficulty": 48,
+      "basePrice": 62,
+      "description": "长身躯带着斜纹，蛇形头部常从丛林浅湾的水草间探出。"
+    },
+    {
+      "name": "暹罗刺鳅",
+      "kind": "jungle_peacockeel",
+      "location": "jungle",
+      "rarity": "uncommon",
+      "weight": 5,
+      "behavior": "sinker",
+      "style": "下沉型",
+      "length": [20, 48],
+      "difficulty": 45,
+      "basePrice": 57,
+      "description": "尖细吻部在泥沙里探寻食物，背部后段排列着眼状斑。",
+      "periods": ["dusk", "night"]
+    },
+    {
+      "name": "无须圆唇鲃",
+      "kind": "jungle_beardlessbarb",
+      "location": "jungle",
+      "rarity": "uncommon",
+      "weight": 4,
+      "behavior": "mixed",
+      "style": "混合型",
+      "length": [16, 36],
+      "difficulty": 40,
+      "basePrice": 50,
+      "description": "银色鳞片间有点状暗纹，尾根黑斑在水中格外显眼。"
+    },
+    {
+      "name": "眼斑弓背鱼",
+      "kind": "jungle_clownfeatherback",
+      "location": "jungle",
+      "rarity": "rare",
+      "weight": 5,
+      "behavior": "sinker",
+      "style": "下沉型",
+      "length": [45, 120],
+      "difficulty": 64,
+      "basePrice": 105,
+      "description": "银灰色弓背下排列着眼状黑斑，黄昏后在深潭边巡游。",
+      "periods": ["dusk", "night"]
+    },
+    {
+      "name": "小鳞射水鱼",
+      "kind": "jungle_smallscalearcherfish",
+      "location": "jungle",
+      "rarity": "rare",
+      "weight": 4,
+      "behavior": "floater",
+      "style": "上浮型",
+      "length": [12, 32],
+      "difficulty": 55,
+      "basePrice": 90,
+      "description": "银黄身体带着深色条斑，上翘的嘴让它善于在水面附近捕食。",
+      "periods": ["dawn", "day"]
+    },
+    {
+      "name": "巨型丝足鲈",
+      "kind": "jungle_giantgourami",
+      "location": "jungle",
+      "rarity": "rare",
+      "weight": 4,
+      "behavior": "smooth",
+      "style": "平稳型",
+      "length": [35, 92],
+      "difficulty": 59,
+      "basePrice": 98,
+      "description": "宽厚身躯披着淡铜色鳞片，慢而有力地穿过浸水树根。"
+    },
+    {
+      "name": "红鳍锡箔鲃",
+      "kind": "jungle_tinfoilbarb",
+      "location": "jungle",
+      "rarity": "rare",
+      "weight": 3,
+      "behavior": "mixed",
+      "style": "混合型",
+      "length": [22, 52],
+      "difficulty": 62,
+      "basePrice": 100,
+      "description": "大片银鳞仿佛锡箔，红色鱼鳍与黑色尾缘构成醒目的标记。"
+    },
+    {
+      "name": "大鳞鲃",
+      "kind": "jungle_hampalabarb",
+      "location": "jungle",
+      "rarity": "rare",
+      "weight": 3,
+      "behavior": "dart",
+      "style": "乱窜型",
+      "length": [35, 90],
+      "difficulty": 72,
+      "basePrice": 120,
+      "description": "体侧深色竖带像一道腰带，红尾有黑边，冲刺时充满力量。",
+      "weathers": ["cloudy", "rain"]
+    },
+    {
+      "name": "亚洲龙鱼",
+      "kind": "jungle_asianarowana",
+      "location": "jungle",
+      "rarity": "epic",
+      "weight": 3,
+      "behavior": "floater",
+      "style": "上浮型",
+      "length": [55, 140],
+      "difficulty": 76,
+      "basePrice": 175,
+      "description": "大片铜金色鳞片覆着修长身体，两根下颌须随水流轻摆。",
+      "periods": ["dawn", "dusk"]
+    },
+    {
+      "name": "小盾鳢",
+      "kind": "jungle_giantsnakehead",
+      "location": "jungle",
+      "rarity": "epic",
+      "weight": 2.5,
+      "behavior": "dart",
+      "style": "乱窜型",
+      "length": [70, 170],
+      "difficulty": 86,
+      "basePrice": 195,
+      "description": "宽大的蛇形头部与青黑斑纹显出掠食者的气势，突进后常停下蓄力。",
+      "weathers": ["cloudy", "rain"]
+    },
+    {
+      "name": "低眼巨鲶",
+      "kind": "jungle_stripedpangasius",
+      "location": "jungle",
+      "rarity": "epic",
+      "weight": 2.5,
+      "behavior": "mixed",
+      "style": "混合型",
+      "length": [80, 180],
+      "difficulty": 81,
+      "basePrice": 185,
+      "description": "低位的眼睛与银灰色无鳞身躯很有辨识度，宽阔深潭里能见到它的身影。"
+    },
+    {
+      "name": "湄公河巨型鲶",
+      "kind": "jungle_mekonggiantcatfish",
+      "location": "jungle",
+      "rarity": "legendary",
+      "weight": 1.1,
+      "behavior": "smooth",
+      "style": "平稳型",
+      "length": [240, 520],
+      "difficulty": 98,
+      "basePrice": 380,
+      "description": "青灰色巨躯像河湾中缓缓移动的阴影。原型是现实中稀少的大型淡水鱼，游戏体长有所放大。"
+    },
+    {
+      "name": "暹罗巨鲤",
+      "kind": "jungle_siamesegiantcarp",
+      "location": "jungle",
+      "rarity": "legendary",
+      "weight": 0.9,
+      "behavior": "mixed",
+      "style": "混合型",
+      "length": [220, 480],
+      "difficulty": 103,
+      "basePrice": 390,
+      "description": "硕大的头部与银黑色大鳞片透出古老气息。原型是现实中稀少的巨鲤，游戏体长有所放大。",
+      "periods": ["dusk", "night"],
+      "weathers": ["cloudy", "rain"]
     }
   ],
   "PERIODS": {
@@ -997,14 +1354,7 @@
     "cloudy": "阴",
     "rain": "雨"
   },
-  "WEATHER_CYCLE": [
-    "sunny",
-    "cloudy",
-    "rain",
-    "sunny",
-    "sunny",
-    "rain"
-  ],
+  "WEATHER_CYCLE": ["sunny", "cloudy", "rain", "sunny", "sunny", "rain"],
   "FISH_DESCRIPTIONS": {
     "gold": "常见的湖鱼，游动温和，是许多钓手的第一条收获。",
     "lake_carp": "身形厚实，受惊时会突然往水底深处钻去。",
@@ -1126,6 +1476,15 @@
       "baitAllowed": true,
       "description": "可以使用鱼饵和 2 件渔具，允许相同渔具叠加。"
     },
+    "legendRod": {
+      "name": "传说钓手竿",
+      "slot": "rod",
+      "cost": 0,
+      "tackleSlots": 3,
+      "baitAllowed": true,
+      "legendaryRequired": 10,
+      "description": "累计钓获 10 条传说鱼后免费领取。可使用鱼饵和 3 件渔具，同一种最多装两件；鱼竿本身不增加条长或容错。"
+    },
     "corkBobber": {
       "name": "软木浮漂",
       "slot": "tackle",
@@ -1148,7 +1507,7 @@
       "name": "陷阱浮漂",
       "slot": "tackle",
       "cost": 500,
-      "description": "脱离捕捉条时，进度流失从每帧 0.003 降至 0.002；两件叠加降至 0.0015。"
+      "description": "脱离捕捉条时，进度流失降低 1/3；两件叠加降低 50%。"
     },
     "barbedHook": {
       "name": "倒刺鱼钩",
@@ -1278,10 +1637,12 @@
     "金星": 2,
     "铱星": 3
   },
-  "QUALITY_NAMES": [
-    "普通",
-    "银星",
-    "金星",
-    "铱星"
-  ]
+  "QUALITY_NAMES": ["普通", "银星", "金星", "铱星"],
+  "RARITY_WEIGHTS": {
+    "common": 56,
+    "uncommon": 27,
+    "rare": 12,
+    "epic": 3.5,
+    "legendary": 1.5
+  }
 }

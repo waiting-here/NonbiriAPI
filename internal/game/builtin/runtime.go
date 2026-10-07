@@ -17,11 +17,16 @@ import (
 	builtinfinance "github.com/waiting-here/NonbiriAPI/internal/game/builtin/finance"
 	"github.com/waiting-here/NonbiriAPI/internal/game/duel"
 	fishingruntime "github.com/waiting-here/NonbiriAPI/internal/game/fishing/runtime"
+	"github.com/waiting-here/NonbiriAPI/internal/game/gwent"
+	gwentconfig "github.com/waiting-here/NonbiriAPI/internal/game/gwent/config"
 	"github.com/waiting-here/NonbiriAPI/internal/game/host"
 	"github.com/waiting-here/NonbiriAPI/internal/game/likes"
 	likesconfig "github.com/waiting-here/NonbiriAPI/internal/game/likes/config"
 	"github.com/waiting-here/NonbiriAPI/internal/game/linklink"
 	"github.com/waiting-here/NonbiriAPI/internal/game/rps"
+	"github.com/waiting-here/NonbiriAPI/internal/game/steadycatch"
+	"github.com/waiting-here/NonbiriAPI/internal/inactivity"
+	"github.com/waiting-here/NonbiriAPI/internal/lakenotes"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
@@ -49,6 +54,7 @@ type Options struct {
 	Now               func() time.Time
 }
 type Runtime struct {
+	lake *lakenotes.Service
 	*host.Service
 	accountContinuation AccountContinuation
 	cancelUserDuelsTx   func(context.Context, *sql.Tx, int64, string, int64) (func(bool), error)
@@ -66,6 +72,17 @@ func (runtime *Runtime) AccountContinuation() AccountContinuation {
 		return nil
 	}
 	return runtime.accountContinuation
+}
+
+func (r *Runtime) LakeNotes() *lakenotes.Service { return r.lake }
+
+type lakeAdmission struct {
+	service *maintenance.Service
+	now     func() time.Time
+}
+
+func (a lakeAdmission) AuthorizeUserActivity(ctx context.Context, tx *sql.Tx, user int64) error {
+	return a.service.AuthorizeChatAcceptance(ctx, tx, user, a.now().Unix())
 }
 
 func New(options Options) (*Runtime, error) {
@@ -113,6 +130,18 @@ func New(options Options) (*Runtime, error) {
 		return nil, err
 	}
 	factories := map[string]host.Factory{
+		game.LakeNotesID: func(shared host.Services) (*host.Module, error) {
+			service, err := lakenotes.New(lakenotes.Config{Database: shared.Database, Users: shared.UserAuthorizer, Admins: shared.AdminAuthorizer, Gate: lakeAdmission{options.Continuation, shared.Now}, Keys: options.Vault, Now: shared.Now,
+				Activity: func(ctx context.Context, tx *sql.Tx, user, at int64) error {
+					return inactivity.RecordActiveTx(ctx, tx, inactivity.ActiveEvent{UserID: user, At: at, Kind: "game", Fresh: true})
+				},
+			})
+			if err != nil {
+				return nil, err
+			}
+			runtime.lake = service
+			return service.Module(), nil
+		},
 		game.BlackjackID: func(shared host.Services) (*host.Module, error) {
 			financial, err := builtinfinance.ForModule(game.BlackjackID)
 			if err != nil {
@@ -141,6 +170,7 @@ func New(options Options) (*Runtime, error) {
 		},
 		game.BiddingID: duelFactory(biddingconfig.Descriptor(), bidding.Rules{}),
 		game.LikesID:   duelFactory(likesconfig.Descriptor(), likesRules),
+		game.GwentID:   duelFactory(gwentconfig.Descriptor(), gwent.Rules{}),
 		game.FishingID: func(shared host.Services) (*host.Module, error) {
 			financial, err := builtinfinance.ForModule(game.FishingID)
 			if err != nil {
@@ -152,6 +182,21 @@ func New(options Options) (*Runtime, error) {
 			}
 			defer clear(key)
 			service, err := fishingruntime.New(fishingruntime.Options{Store: options.Store, Finance: financial.Fishing, Pools: options.Pools, ActivityEvents: options.ActivityEvents, UserAuthorizer: shared.UserAuthorizer, Limiter: shared.Limiter, LeaderboardTieKey: key, Now: shared.Now})
+			if err != nil {
+				return nil, err
+			}
+			return service.Module(), nil
+		},
+		game.SteadyCatchID: func(shared host.Services) (*host.Module, error) {
+			financial, err := builtinfinance.ForModule(game.SteadyCatchID)
+			if err != nil {
+				return nil, err
+			}
+			service, err := steadycatch.New(steadycatch.Options{Shared: shared, Finance: financial.Solo, Continuation: options.Continuation, ReportError: func(err error) {
+				if options.PublishErrors != nil {
+					options.PublishErrors.ReportRPSPublishError(err)
+				}
+			}})
 			if err != nil {
 				return nil, err
 			}
@@ -185,7 +230,7 @@ func New(options Options) (*Runtime, error) {
 	if err != nil {
 		return nil, err
 	}
-	cancelDuels, err := duel.Cancellation(duels[game.BiddingID], duels[game.LikesID])
+	cancelDuels, err := duel.Cancellation(duels[game.BiddingID], duels[game.LikesID], duels[game.GwentID])
 	if err != nil {
 		_ = runtime.Close()
 		return nil, err

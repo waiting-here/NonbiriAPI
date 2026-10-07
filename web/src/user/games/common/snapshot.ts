@@ -1,3 +1,4 @@
+import type { LakeSettings } from '@shared/lakenotes/api';
 import { useQuery } from '@tanstack/react-query';
 import { useGameVisibility } from './visibility';
 import { blackjackSnapshot } from '@shared/games/blackjack';
@@ -115,9 +116,18 @@ export function normalizeGamesSnapshot(value: unknown): GamesSnapshot {
       'bidding',
       'likes',
       'blackjack',
+      'gwent',
+      'steadycatch',
+      'lakenotes',
     ],
     [],
     'games snapshot',
+  );
+  const catchGame = exactRecord(
+    record.steadycatch,
+    ['enabled', 'available', 'price', 'first_clear_reward', 'first_cleared'],
+    [],
+    'catch game',
   );
   const fishing = exactRecord(
     record.fishing,
@@ -166,12 +176,7 @@ export function normalizeGamesSnapshot(value: unknown): GamesSnapshot {
     enumValue(mode, RPS_MODES, 'RPS mode key');
     normalizedModes[mode] = normalizeMode(modes[mode], `${mode} mode`);
   }
-  const onboarding = exactRecord(
-    record.onboarding,
-    ['fishing', 'linklink', 'rps', 'bidding', 'likes', 'blackjack'],
-    [],
-    'onboarding',
-  );
+  const onboarding = record.onboarding as Record<string, unknown>;
   const gamesEnabled = booleanValue(record.games_enabled, 'games enabled');
   const fishingEnabled = booleanValue(fishing.enabled, 'fishing enabled');
   const linkLinkEnabled = booleanValue(linklink.enabled, 'LinkLink enabled');
@@ -182,9 +187,24 @@ export function normalizeGamesSnapshot(value: unknown): GamesSnapshot {
     gameBalance: creditsValue(record.game_balance, { signed: true }, 'snapshot game balance'),
     tutorialRPSSeen: booleanValue(record.tutorial_rps_seen, 'tutorial flag'),
     onboarding: {
-      bidding: normalizeOnboarding(onboarding.bidding, ['complete_tier_1', 'complete_tier_2', 'complete_tier_3', 'first_win'], ['1000', '2000', '5000', '2000'], 'bidding onboarding'),
-      likes: normalizeOnboarding(onboarding.likes, ['quick_complete', 'quick_win', 'standard_complete', 'standard_win'], ['1000', '2000', '5000', '10000'], 'likes onboarding'),
-      blackjack: normalizeOnboarding(onboarding.blackjack, ['complete', 'first_win', 'first_bust', 'first_21', 'first_natural_21'], ['1000', '2000', '3000', '4000', '5000'], 'blackjack onboarding'),
+      bidding: normalizeOnboarding(
+        onboarding.bidding,
+        ['complete_tier_1', 'complete_tier_2', 'complete_tier_3', 'first_win'],
+        ['1000', '2000', '5000', '2000'],
+        'bidding onboarding',
+      ),
+      likes: normalizeOnboarding(
+        onboarding.likes,
+        ['quick_complete', 'quick_win', 'standard_complete', 'standard_win'],
+        ['1000', '2000', '5000', '10000'],
+        'likes onboarding',
+      ),
+      blackjack: normalizeOnboarding(
+        onboarding.blackjack,
+        ['complete', 'first_win', 'first_bust', 'first_21', 'first_natural_21'],
+        ['1000', '2000', '3000', '4000', '5000'],
+        'blackjack onboarding',
+      ),
       fishing: normalizeOnboarding(
         onboarding.fishing,
         BAITS,
@@ -208,10 +228,24 @@ export function normalizeGamesSnapshot(value: unknown): GamesSnapshot {
     blackjack: blackjackSnapshot(record.blackjack),
     bidding: configValue(record.bidding, 'bidding', ['tier1', 'tier2', 'tier3']),
     likes: configValue(record.likes, 'likes', ['quick', 'standard']),
+    gwent: configValue(record.gwent, 'gwent', ['standard']),
+    lakenotes: record.lakenotes as LakeSettings,
+    steadycatch: {
+      enabled: booleanValue(catchGame.enabled, 'catch enabled'),
+      available: booleanValue(catchGame.available, 'catch availability'),
+      price: creditsValue(catchGame.price, {}, 'catch entry'),
+      firstClearReward: creditsValue(catchGame.first_clear_reward, {}, 'catch reward'),
+      firstCleared: booleanValue(catchGame.first_cleared, 'catch first clear'),
+    },
     fishing: {
       enabled: fishingEnabled,
       available: booleanValue(fishing.available, 'fishing runtime availability'),
-      blueFishChanceBPS: safeInteger(fishing.blue_fish_chance_bps, 0, 10_000, 'blue fat fish chance'),
+      blueFishChanceBPS: safeInteger(
+        fishing.blue_fish_chance_bps,
+        0,
+        10_000,
+        'blue fat fish chance',
+      ),
       baitPrices: {
         worm: creditsValue(baits.worm, { positive: true }, 'worm price'),
         lure: creditsValue(baits.lure, { positive: true }, 'lure price'),

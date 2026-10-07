@@ -1,0 +1,806 @@
+[
+  {
+    "id": "M001",
+    "text": "稳稳地接住你",
+    "category": "接住与安慰",
+    "gold": true
+  },
+  {
+    "id": "M002",
+    "text": "我就在这里",
+    "category": "接住与安慰",
+    "gold": false
+  },
+  {
+    "id": "M003",
+    "text": "不躲不藏",
+    "category": "接住与安慰",
+    "gold": false
+  },
+  {
+    "id": "M004",
+    "text": "不绕不逃",
+    "category": "接住与安慰",
+    "gold": false
+  },
+  {
+    "id": "M005",
+    "text": "这次我懂了",
+    "category": "接住与安慰",
+    "gold": false
+  },
+  {
+    "id": "M006",
+    "text": "不用硬撑",
+    "category": "接住与安慰",
+    "gold": false
+  },
+  {
+    "id": "M007",
+    "text": "兜底",
+    "category": "工程黑话",
+    "gold": false
+  },
+  {
+    "id": "M008",
+    "text": "闭环",
+    "category": "工程黑话",
+    "gold": false
+  },
+  {
+    "id": "M009",
+    "text": "根因",
+    "category": "工程黑话",
+    "gold": false
+  },
+  {
+    "id": "M010",
+    "text": "不靠猜",
+    "category": "工程黑话",
+    "gold": false
+  },
+  {
+    "id": "M011",
+    "text": "更硬",
+    "category": "工程黑话",
+    "gold": false
+  },
+  {
+    "id": "M012",
+    "text": "压实",
+    "category": "工程黑话",
+    "gold": false
+  },
+  {
+    "id": "M013",
+    "text": "收口",
+    "category": "工程黑话",
+    "gold": false
+  },
+  {
+    "id": "M014",
+    "text": "一刀",
+    "category": "工程黑话",
+    "gold": false
+  },
+  {
+    "id": "M015",
+    "text": "你是对的",
+    "category": "赞美与邀约",
+    "gold": false
+  },
+  {
+    "id": "M016",
+    "text": "完美实现",
+    "category": "赞美与邀约",
+    "gold": false
+  },
+  {
+    "id": "M017",
+    "text": "彻底解决",
+    "category": "赞美与邀约",
+    "gold": false
+  },
+  {
+    "id": "M018",
+    "text": "如果你愿意",
+    "category": "赞美与邀约",
+    "gold": false
+  },
+  {
+    "id": "M019",
+    "text": "极其",
+    "category": "程度与终版",
+    "gold": true
+  },
+  {
+    "id": "M020",
+    "text": "极其极其",
+    "category": "程度与终版",
+    "gold": true
+  },
+  {
+    "id": "M021",
+    "text": "最终的",
+    "category": "程度与终版",
+    "gold": false
+  },
+  {
+    "id": "M022",
+    "text": "真正的",
+    "category": "程度与终版",
+    "gold": false
+  },
+  {
+    "id": "M023",
+    "text": "完美的",
+    "category": "程度与终版",
+    "gold": false
+  },
+  {
+    "id": "M024",
+    "text": "眼中闪过一丝",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "M025",
+    "text": "小兽",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "M026",
+    "text": "心湖",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "M027",
+    "text": "涟漪",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "M028",
+    "text": "生理性泪水",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "M029",
+    "text": "不易察觉",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "M030",
+    "text": "精密仪器",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "M031",
+    "text": "幼兽",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "M032",
+    "text": "一丝",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "M033",
+    "text": "嘴角勾起一抹",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "M034",
+    "text": "似笑非笑",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "M035",
+    "text": "低沉磁性",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "M036",
+    "text": "不容置疑",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "M037",
+    "text": "呼吸一滞",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "M038",
+    "text": "不可名状",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "M039",
+    "text": "赋能",
+    "category": "作文与套话",
+    "gold": false
+  },
+  {
+    "id": "M040",
+    "text": "底层逻辑",
+    "category": "作文与套话",
+    "gold": false
+  },
+  {
+    "id": "M041",
+    "text": "生态链路",
+    "category": "作文与套话",
+    "gold": false
+  },
+  {
+    "id": "M042",
+    "text": "深度剖析",
+    "category": "作文与套话",
+    "gold": false
+  },
+  {
+    "id": "M043",
+    "text": "不可否认",
+    "category": "作文与套话",
+    "gold": false
+  },
+  {
+    "id": "M046",
+    "text": "值得注意的是",
+    "category": "作文与套话",
+    "gold": false
+  },
+  {
+    "id": "M050",
+    "text": "总而言之",
+    "category": "作文与套话",
+    "gold": false
+  },
+  {
+    "id": "M051",
+    "text": "由此可见",
+    "category": "作文与套话",
+    "gold": false
+  },
+  {
+    "id": "M052",
+    "text": "概括而言",
+    "category": "作文与套话",
+    "gold": false
+  },
+  {
+    "id": "M053",
+    "text": "毫无疑问",
+    "category": "作文与套话",
+    "gold": false
+  },
+  {
+    "id": "M054",
+    "text": "不得不说",
+    "category": "作文与套话",
+    "gold": false
+  },
+  {
+    "id": "M055",
+    "text": "不是…而是…",
+    "category": "结构与推理",
+    "gold": true
+  },
+  {
+    "id": "M056",
+    "text": "一步一步来分析",
+    "category": "结构与推理",
+    "gold": true
+  },
+  {
+    "id": "M057",
+    "text": "接住你的情绪",
+    "category": "接住与安慰",
+    "gold": false
+  },
+  {
+    "id": "M058",
+    "text": "稳稳兜住疑问",
+    "category": "接住与安慰",
+    "gold": false
+  },
+  {
+    "id": "M059",
+    "text": "给你一颗定心丸",
+    "category": "接住与安慰",
+    "gold": false
+  },
+  {
+    "id": "M060",
+    "text": "你的提问太准了",
+    "category": "接住与安慰",
+    "gold": false
+  },
+  {
+    "id": "M061",
+    "text": "这次真的懂了",
+    "category": "接住与安慰",
+    "gold": false
+  },
+  {
+    "id": "M062",
+    "text": "不绕弯接住你",
+    "category": "接住与安慰",
+    "gold": false
+  },
+  {
+    "id": "M063",
+    "text": "别硬撑先接梗",
+    "category": "接住与安慰",
+    "gold": false
+  },
+  {
+    "id": "M064",
+    "text": "你已经很棒啦",
+    "category": "接住与安慰",
+    "gold": false
+  },
+  {
+    "id": "M065",
+    "text": "极其丝滑",
+    "category": "程度与终版",
+    "gold": false
+  },
+  {
+    "id": "M066",
+    "text": "极其稳当",
+    "category": "程度与终版",
+    "gold": false
+  },
+  {
+    "id": "M067",
+    "text": "极其有道理",
+    "category": "程度与终版",
+    "gold": false
+  },
+  {
+    "id": "M068",
+    "text": "极其又极其",
+    "category": "程度与终版",
+    "gold": false
+  },
+  {
+    "id": "M069",
+    "text": "最终最终版",
+    "category": "程度与终版",
+    "gold": false
+  },
+  {
+    "id": "M070",
+    "text": "真正的最终版",
+    "category": "程度与终版",
+    "gold": false
+  },
+  {
+    "id": "M071",
+    "text": "完美的补丁版",
+    "category": "程度与终版",
+    "gold": false
+  },
+  {
+    "id": "M072",
+    "text": "终版之后再终版",
+    "category": "程度与终版",
+    "gold": false
+  },
+  {
+    "id": "M073",
+    "text": "一丝接物欲",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "M074",
+    "text": "心湖又起波纹",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "M075",
+    "text": "精密接物仪器",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "M076",
+    "text": "小兽也会接梗",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "M077",
+    "text": "不可名状的分数",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "M078",
+    "text": "嘴角一抹连击",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "M079",
+    "text": "眼中闪过积分",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "M080",
+    "text": "磁性的接物声",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "M081",
+    "text": "一刀切掉报错",
+    "category": "工程黑话",
+    "gold": false
+  },
+  {
+    "id": "M082",
+    "text": "闭环再闭一环",
+    "category": "工程黑话",
+    "gold": false
+  },
+  {
+    "id": "M083",
+    "text": "把分数落个盘",
+    "category": "工程黑话",
+    "gold": false
+  },
+  {
+    "id": "M084",
+    "text": "根因就是没接住",
+    "category": "工程黑话",
+    "gold": false
+  },
+  {
+    "id": "M085",
+    "text": "先兜底再接梗",
+    "category": "工程黑话",
+    "gold": false
+  },
+  {
+    "id": "M086",
+    "text": "这轮先稳一下",
+    "category": "工程黑话",
+    "gold": false
+  },
+  {
+    "id": "M087",
+    "text": "补丁补了个补丁",
+    "category": "工程黑话",
+    "gold": false
+  },
+  {
+    "id": "M088",
+    "text": "口径已经对齐",
+    "category": "工程黑话",
+    "gold": false
+  },
+  {
+    "id": "M089",
+    "text": "不是漏接是留白",
+    "category": "结构与推理",
+    "gold": false
+  },
+  {
+    "id": "M090",
+    "text": "首先接住其次接住",
+    "category": "结构与推理",
+    "gold": false
+  },
+  {
+    "id": "M091",
+    "text": "综上全都接住",
+    "category": "结构与推理",
+    "gold": false
+  },
+  {
+    "id": "M092",
+    "text": "底层逻辑是托盘",
+    "category": "结构与推理",
+    "gold": false
+  },
+  {
+    "id": "M093",
+    "text": "为连击注入活力",
+    "category": "结构与推理",
+    "gold": false
+  },
+  {
+    "id": "M094",
+    "text": "接物的全新维度",
+    "category": "结构与推理",
+    "gold": false
+  },
+  {
+    "id": "M095",
+    "text": "我还在学习接物",
+    "category": "结构与推理",
+    "gold": false
+  },
+  {
+    "id": "M096",
+    "text": "从逻辑上来接你",
+    "category": "结构与推理",
+    "gold": false
+  },
+  {
+    "id": "C001",
+    "text": "落盘",
+    "category": "工程黑话",
+    "gold": false
+  },
+  {
+    "id": "C002",
+    "text": "口径",
+    "category": "工程黑话",
+    "gold": false
+  },
+  {
+    "id": "C003",
+    "text": "拍板",
+    "category": "工程黑话",
+    "gold": false
+  },
+  {
+    "id": "C004",
+    "text": "不踩坑",
+    "category": "工程黑话",
+    "gold": false
+  },
+  {
+    "id": "C005",
+    "text": "痛点",
+    "category": "工程黑话",
+    "gold": false
+  },
+  {
+    "id": "C006",
+    "text": "收敛",
+    "category": "工程黑话",
+    "gold": false
+  },
+  {
+    "id": "C007",
+    "text": "最小改动",
+    "category": "工程黑话",
+    "gold": false
+  },
+  {
+    "id": "C008",
+    "text": "要不要我",
+    "category": "赞美与邀约",
+    "gold": false
+  },
+  {
+    "id": "C009",
+    "text": "先说结论",
+    "category": "结构与推理",
+    "gold": false
+  },
+  {
+    "id": "C010",
+    "text": "它更像是",
+    "category": "结构与推理",
+    "gold": false
+  },
+  {
+    "id": "C011",
+    "text": "我立马开始",
+    "category": "赞美与邀约",
+    "gold": false
+  },
+  {
+    "id": "C012",
+    "text": "列出子弹",
+    "category": "工程黑话",
+    "gold": false
+  },
+  {
+    "id": "C013",
+    "text": "稍微谨慎",
+    "category": "程度与终版",
+    "gold": false
+  },
+  {
+    "id": "C015",
+    "text": "完美了解",
+    "category": "程度与终版",
+    "gold": false
+  },
+  {
+    "id": "C016",
+    "text": "我被咬住了",
+    "category": "赞美与邀约",
+    "gold": false
+  },
+  {
+    "id": "C017",
+    "text": "坦诚说",
+    "category": "结构与推理",
+    "gold": false
+  },
+  {
+    "id": "C018",
+    "text": "戏谑",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "C019",
+    "text": "喟叹",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "C020",
+    "text": "三点逻辑",
+    "category": "结构与推理",
+    "gold": false
+  },
+  {
+    "id": "C021",
+    "text": "行动指令",
+    "category": "结构与推理",
+    "gold": false
+  },
+  {
+    "id": "C022",
+    "text": "引以为傲",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "C023",
+    "text": "无风自动",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "C025",
+    "text": "极其硬核",
+    "category": "赞美与邀约",
+    "gold": false
+  },
+  {
+    "id": "C026",
+    "text": "数学直觉",
+    "category": "赞美与邀约",
+    "gold": false
+  },
+  {
+    "id": "C027",
+    "text": "破折号",
+    "category": "格式与文风",
+    "gold": false
+  },
+  {
+    "id": "C029",
+    "text": "值得被理解",
+    "category": "接住与安慰",
+    "gold": false
+  },
+  {
+    "id": "C030",
+    "text": "你可能正在经历",
+    "category": "接住与安慰",
+    "gold": false
+  },
+  {
+    "id": "C031",
+    "text": "我猜你其实是",
+    "category": "接住与安慰",
+    "gold": false
+  },
+  {
+    "id": "C032",
+    "text": "我想你可能是想",
+    "category": "接住与安慰",
+    "gold": false
+  },
+  {
+    "id": "C033",
+    "text": "你说的应该是",
+    "category": "接住与安慰",
+    "gold": false
+  },
+  {
+    "id": "C042",
+    "text": "完全正确！",
+    "category": "赞美与邀约",
+    "gold": false
+  },
+  {
+    "id": "C043",
+    "text": "问题找到了",
+    "category": "工程黑话",
+    "gold": false
+  },
+  {
+    "id": "C044",
+    "text": "可以上线了",
+    "category": "工程黑话",
+    "gold": false
+  },
+  {
+    "id": "custom_1",
+    "text": "投石",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "custom_2",
+    "text": "浮木",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "custom_3",
+    "text": "指尖泛白",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "custom_4",
+    "text": "几不可察",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "custom_5",
+    "text": "绝望般的",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "custom_6",
+    "text": "肉刃",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "custom_7",
+    "text": "颧骨",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "custom_8",
+    "text": "四肢百骸",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "custom_9",
+    "text": "嘴角勾起弧度",
+    "category": "小说与角色扮演",
+    "gold": false
+  },
+  {
+    "id": "custom_10",
+    "text": "餍足",
+    "category": "小说与角色扮演",
+    "gold": false
+  }
+]

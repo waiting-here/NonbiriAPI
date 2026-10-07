@@ -23,7 +23,7 @@ func Insert(ctx context.Context, tx *sql.Tx, secret *Secret) error {
 		linklink = secret.resource
 	case "rps":
 		rps = secret.resource
-	case "bidding", "likes":
+	case "bidding", "likes", "gwent":
 		duel = secret.resource
 	case "blackjack":
 		blackjack = secret.resource

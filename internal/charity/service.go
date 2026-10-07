@@ -1012,9 +1012,6 @@ WHERE donation_key_id=? AND streak_generation=? AND claim_seq=?`,
 				return claim.ErrInvariant
 			}
 			if disposition.String == "success" {
-				if success.Int64 != 1 {
-					return claim.ErrInvariant
-				}
 				streak = db.U128{}
 			} else {
 				if success.Int64 != 0 {
@@ -1310,7 +1307,7 @@ func normalizeAttemptInput(input claim.CharityAttemptInput) claim.CharityAttempt
 }
 func validAttemptInput(input claim.CharityAttemptInput) bool {
 	if !connectorcontract.ValidOutcome(input.StreakDisposition, input.FailureOrigin) ||
-		input.ProtocolSuccess != (input.StreakDisposition == connectorcontract.StreakSuccess) {
+		input.ProtocolSuccess != (input.StreakDisposition == connectorcontract.StreakSuccess && input.FailureOrigin == connectorcontract.OriginNone) {
 		return false
 	}
 	if !db.ValidateOpaqueID(input.RequestID, "req_") || !db.ValidateOpaqueID(input.ClaimID, "clm_") ||

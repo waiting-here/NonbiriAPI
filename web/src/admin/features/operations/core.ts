@@ -121,6 +121,7 @@ export interface EndpointOverviewUser {
 }
 
 export interface EndpointOverview {
+  tags: string[];
   base_url: string;
   user_count: string;
   endpoint_count: string;
@@ -131,8 +132,9 @@ export interface EndpointOverview {
 export function normalizeEndpointOverview(value: unknown): EndpointOverview {
   const root = record(
     value,
-    ['base_url', 'user_count', 'endpoint_count', 'key_count', 'users'],
+    ['base_url', 'user_count', 'endpoint_count', 'key_count', 'users', 'tags'],
     'endpoint overview',
+    ['base_url', 'user_count', 'endpoint_count', 'key_count', 'users'],
   );
   const users = array(root.users, 'endpoint overview users', 100).map((entry) => {
     const item = record(
@@ -149,6 +151,7 @@ export function normalizeEndpointOverview(value: unknown): EndpointOverview {
   });
   return {
     base_url: string(root.base_url, 'canonical endpoint URL', { min: 1 }),
+    tags: array(root.tags ?? [], 'endpoint tags').map((tag) => string(tag, 'endpoint tag')),
     user_count: decimal(root.user_count, 'endpoint user count'),
     endpoint_count: decimal(root.endpoint_count, 'endpoint count'),
     key_count: decimal(root.key_count, 'endpoint key count'),
@@ -194,8 +197,7 @@ type AccountDeletionMetadata = Pick<
   | 'blacklist_reason_codes'
 >;
 export type AccountDeletion =
-  | AccountDeletionBalances
-  | (AccountDeletionBalances & AccountDeletionMetadata);
+  AccountDeletionBalances | (AccountDeletionBalances & AccountDeletionMetadata);
 
 function normalizeAlertDeletionPenalty(value: unknown, label: string): DeletedAccount['ban'] {
   const root = record(value, ['state', 'active_at_deletion', 'reason', 'until'], label);
@@ -248,7 +250,9 @@ function normalizeAccountDeletion(value: unknown): AccountDeletion {
     registered_at: nullableUnixSecond(root.registered_at, 'deleted user registration time'),
     deleted_at: nullableUnixSecond(root.deleted_at, 'deletion time'),
     effective_level:
-      root.effective_level === null ? null : integer(root.effective_level, 'deleted user level', 1, 6),
+      root.effective_level === null
+        ? null
+        : integer(root.effective_level, 'deleted user level', 1, 6),
     ban: normalizeAlertDeletionPenalty(root.ban, 'deleted user ban'),
     charity_pause: normalizeAlertDeletionPenalty(root.charity_pause, 'deleted user charity pause'),
     source: oneOf(root.source, ['unknown', 'self', 'admin', 'system'] as const, 'deletion source'),
@@ -259,12 +263,14 @@ function normalizeAccountDeletion(value: unknown): AccountDeletion {
       ['unknown', 'none', 'added', 'appended'] as const,
       'deletion blacklist action',
     ),
-    blacklist_reason_codes: array(root.blacklist_reason_codes, 'deletion blacklist reasons', 2)
-      .map((code) => oneOf(
-        code,
-        ['deletion_penalty_evasion', 'deletion_debt_evasion'] as const,
-        'deletion blacklist reason',
-      )),
+    blacklist_reason_codes: array(root.blacklist_reason_codes, 'deletion blacklist reasons', 2).map(
+      (code) =>
+        oneOf(
+          code,
+          ['deletion_penalty_evasion', 'deletion_debt_evasion'] as const,
+          'deletion blacklist reason',
+        ),
+    ),
   };
 }
 export interface AdminAlert {
@@ -385,7 +391,9 @@ export function normalizeSiteConfigCatalogEntry(value: unknown): SiteConfigCatal
   const key = string(root.key, 'site configuration key', { min: 1, ascii: true });
   if (!/^[a-z0-9_]+$/.test(key) || key === 'default_locale')
     invalidResponse('site configuration key');
-  const writeEndpoint = string(root.write_endpoint, 'site configuration write endpoint', { ascii: true });
+  const writeEndpoint = string(root.write_endpoint, 'site configuration write endpoint', {
+    ascii: true,
+  });
   if (writeEndpoint !== '' && !writeEndpoint.startsWith('/admin/api/'))
     invalidResponse('site configuration write endpoint');
   return {
@@ -543,7 +551,10 @@ export function normalizeLegalHoldDetail(value: unknown): LegalHoldDetail {
       Object.entries(root).filter(([key]) => key !== 'basis' && key !== 'end_reason'),
     ),
   );
-  const endReason = nullableString(root.end_reason, 'legal hold end reason', { min: 1, multiline: true });
+  const endReason = nullableString(root.end_reason, 'legal hold end reason', {
+    min: 1,
+    multiline: true,
+  });
   if ((summary.state === 'active') !== (endReason === null))
     invalidResponse('legal hold end reason state');
   return {
@@ -615,7 +626,10 @@ export function patchSiteSetting(
     entry.write_endpoint,
     (payload) => {
       const root = record(payload, ['key', 'value', 'revision'], 'site configuration mutation');
-      const responseKey = string(root.key, 'site configuration result key', { min: 1, ascii: true });
+      const responseKey = string(root.key, 'site configuration result key', {
+        min: 1,
+        ascii: true,
+      });
       if (responseKey !== entry.key) invalidResponse('site configuration result key');
       return {
         key: responseKey,

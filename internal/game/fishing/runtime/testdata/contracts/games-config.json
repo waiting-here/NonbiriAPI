@@ -7,8 +7,17 @@
     "max_stake": "50000",
     "stake_step": "1000",
     "default_stake": "5000",
-    "rake_bp": {"platform": 100, "welfare": 100, "thursday": 100},
-    "quick_stakes": ["1000", "5000", "10000", "50000"]
+    "rake_bp": {
+      "platform": 100,
+      "welfare": 100,
+      "thursday": 100
+    },
+    "quick_stakes": [
+      "1000",
+      "5000",
+      "10000",
+      "50000"
+    ]
   },
   "fishing": {
     "enabled": false,
@@ -149,6 +158,50 @@
           "welfare": 100,
           "thursday": 100
         }
+      }
+    }
+  },
+  "gwent": {
+    "enabled": false,
+    "modes": {
+      "standard": {
+        "enabled": false,
+        "ticket": "5000",
+        "rake_bp": {
+          "platform": 100,
+          "welfare": 100,
+          "thursday": 100
+        }
+      }
+    }
+  },
+  "steadycatch": {
+    "enabled": false,
+    "price": "0",
+    "first_clear_reward": "0"
+  },
+  "lakenotes": {
+    "enabled": false,
+    "exchanges": {
+      "coins_to_general": {
+        "enabled": false,
+        "source_amount": "",
+        "target_amount": ""
+      },
+      "general_to_coins": {
+        "enabled": false,
+        "source_amount": "",
+        "target_amount": ""
+      },
+      "coins_to_game": {
+        "enabled": false,
+        "source_amount": "",
+        "target_amount": ""
+      },
+      "game_to_coins": {
+        "enabled": false,
+        "source_amount": "",
+        "target_amount": ""
       }
     }
   }

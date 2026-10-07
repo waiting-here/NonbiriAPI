@@ -1,13 +1,20 @@
-import { normalizeNumberedPage as normalizePage, validateWindow, validateText, invalidRequest, type NumberedPage } from '@shared/operations/numberedPage';
-import { getManagedUsersPage, getManagedUserDetail, managedUserKeys } from '@shared/operations/managedUsers';
-import { decoded, queryPath } from '@shared/operations/api';
+import { apiFetch } from '@shared/query/http';
+import {
+  normalizeNumberedPage as normalizePage,
+  validateWindow,
+  validateText,
+  invalidRequest,
+  type NumberedPage,
+} from '@shared/operations/numberedPage';
+import {
+  getManagedUsersPage,
+  getManagedUserDetail,
+  managedUserKeys,
+} from '@shared/operations/managedUsers';
+import { decoded, queryPath, idempotentOptions, operationKey } from '@shared/operations/api';
 import type { PageSize } from '@shared/operations/pageNumbers';
 import { decimal, decimalID, invalidResponse, record } from '@shared/operations/wire';
-import {
-  normalizeEndpointOverview,
-  type EndpointOverview,
-  type AdminUser,
-} from './core';
+import { normalizeEndpointOverview, type EndpointOverview, type AdminUser } from './core';
 import {
   normalizeActivitiesConfig,
   normalizePeriod,
@@ -82,11 +89,23 @@ function adminPagePath(
 }
 
 export const adminPageKeys = {
-  users: (account: string, banned: string, query: string, page: string, size: PageSize, level = '') =>
-    managedUserKeys.list('admin', account, banned, query, level, '', page, size),
+  users: (
+    account: string,
+    banned: string,
+    query: string,
+    page: string,
+    size: PageSize,
+    level = '',
+  ) => managedUserKeys.list('admin', account, banned, query, level, '', page, size),
   user: (account: string, id: string) => ['admin', 'operations', 'user', account, id] as const,
-  endpoints: (account: string, query: string, page: string, size: PageSize) =>
-    ['admin', 'operations', 'endpoints', account, query, page, size] as const,
+  endpoints: (
+    account: string,
+    query: string,
+    page: string,
+    size: PageSize,
+    tag = '',
+    userId = '',
+  ) => ['admin', 'operations', 'endpoints', account, query, page, size, tag, userId] as const,
   endpointUsers: (account: string, baseURL: string, page: string, size: PageSize) =>
     ['admin', 'operations', 'endpoint-users', account, baseURL, page, size] as const,
   activitiesConfig: (account: string) =>
@@ -117,11 +136,15 @@ export async function getAdminEndpointsPage(
   page: string,
   pageSize: PageSize,
   signal?: AbortSignal,
+  tag = '',
+  userId = '',
 ): Promise<AdminPage<EndpointOverview>> {
   validateWindow(page, pageSize);
   validateText(query, 512, true);
   const path = adminPagePath('/admin/api/overview/endpoints', {
     q: query || undefined,
+    tag: tag || undefined,
+    user_id: userId || undefined,
     page,
     page_size: pageSize,
   });
@@ -207,5 +230,19 @@ export function getAdminThursday(signal?: AbortSignal): Promise<{ period: Period
       return { period: root.period === null ? null : normalizePeriod(root.period) };
     },
     { signal },
+  );
+}
+
+export async function setAdminEndpointTags(
+  baseURLs: string[],
+  tag: string,
+  add: boolean,
+): Promise<void> {
+  await apiFetch(
+    '/admin/api/overview/endpoints/tags',
+    idempotentOptions(operationKey(), {
+      method: 'PATCH',
+      json: { base_urls: baseURLs, tag, add },
+    }),
   );
 }

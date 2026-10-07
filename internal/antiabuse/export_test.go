@@ -77,7 +77,7 @@ func TestLongWindowSurvivesPenaltyAndRequestRetention(t *testing.T) {
 	f.set(KeyRPMBanThreshold, "2")
 	f.set(KeyRPMBanDurationSeconds, "1")
 	f.set(KeyRPMBanWindowSeconds, "315360000")
-	if err := f.service.RPMDenied(context.Background(), user, ratelimit.RPMUserLimit); err != nil {
+	if err := f.service.RPMDenied(context.Background(), user, ratelimit.RPMCharityUserLimit); err != nil {
 		t.Fatal(err)
 	}
 	f.clock.Add(100 * 86400)
@@ -88,7 +88,7 @@ func TestLongWindowSurvivesPenaltyAndRequestRetention(t *testing.T) {
 	if f.service.events != 1 {
 		t.Fatal("long window followed log retention")
 	}
-	if err := f.service.RPMDenied(context.Background(), user, ratelimit.RPMUserLimit); err != nil {
+	if err := f.service.RPMDenied(context.Background(), user, ratelimit.RPMCharityUserLimit); err != nil {
 		t.Fatal(err)
 	}
 	if f.bans.Load() != 1 || f.scalar(`SELECT count(*) FROM abuse_evidence`) != 2 {

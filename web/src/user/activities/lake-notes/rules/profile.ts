@@ -90,6 +90,7 @@ export function fitLoadout(l: Loadout) {
   const result = { ...l };
   if (rod.tackleSlots < 1) delete result.tackle1;
   if (rod.tackleSlots < 2) delete result.tackle2;
+  if (rod.tackleSlots < 3) delete result.tackle3;
   return result;
 }
 export function validLoadout(p: Profile, l: Loadout) {
@@ -98,15 +99,15 @@ export function validLoadout(p: Profile, l: Loadout) {
     rod &&
     rod.slot === 'rod' &&
     copies(p, l.rod) &&
-    [l.tackle1, l.tackle2].every(
+    [l.tackle1, l.tackle2, l.tackle3].every(
       (id, i) =>
         !id ||
         (gear(id)?.slot === 'tackle' &&
-          copies(p, id) > 0 &&
+          [l.tackle1, l.tackle2, l.tackle3].filter((v) => v === id).length <=
+            Math.min(2, copies(p, id)) &&
           'tackleSlots' in rod &&
           i < rod.tackleSlots),
-    ) &&
-    (!l.tackle1 || l.tackle1 !== l.tackle2 || copies(p, l.tackle1) >= 2),
+    ),
   );
 }
 export function unlockReady(p: Profile, id: string, copy: number) {
@@ -115,7 +116,13 @@ export function unlockReady(p: Profile, id: string, copy: number) {
       Object.values(p.records).reduce((n, r) => n + BigInt(r.perfectCount), 0n) >=
       BigInt(copy === 1 ? 3 : 10)
     );
-  if (id === 'curiosityLure') return BigInt(p.records.abyss?.caught || '0') >= BigInt(copy);
+  if (id === 'curiosityLure' || id === 'legendRod')
+    return (
+      catalog.FISH_TYPES.filter((f) => f.rarity === 'legendary').reduce(
+        (n, f) => n + BigInt(p.records[f.kind]?.caught || '0'),
+        0n,
+      ) >= BigInt(id === 'legendRod' ? catalog.GEAR.legendRod.legendaryRequired : copy)
+    );
   return true;
 }
 export function ensureContractBoard(p: Profile) {
@@ -190,7 +197,7 @@ export function validateProfile(p: Profile) {
     invalid();
   if (
     p.ownedGear.length < 1 ||
-    p.ownedGear.length > 23 ||
+    p.ownedGear.length > 24 ||
     copies(p, 'bambooPole') !== 1 ||
     !validLoadout(p, p.equipped)
   )
@@ -215,7 +222,7 @@ export function validateProfile(p: Profile) {
     p.basket.length > 80 ||
     p.savedLoadouts.length !== 3 ||
     p.contracts.length > 8 ||
-    Object.keys(p.records).length > 54
+    Object.keys(p.records).length > catalog.FISH_TYPES.length
   )
     invalid();
   const ids = new Set<number>();

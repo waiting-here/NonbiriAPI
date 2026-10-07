@@ -9,16 +9,17 @@ import (
 	"strconv"
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/game/host"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/lakenotes/rules"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
-	"github.com/waiting-here/NonbiriAPI/internal/limitedactivities"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
+	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
 )
 
-const baseRoute = "/api/limited-activities/lake-notes"
-const adminBaseRoute = "/admin/api/limited-activities/lake-notes"
+const baseRoute = "/api/games/lake-notes"
+const adminBaseRoute = "/admin/api/games/lake-notes"
 
 func decode(r *http.Request, out any, required ...string) error {
 	if r.URL.RawQuery != "" || r.Body == nil {
@@ -46,7 +47,7 @@ func decode(r *http.Request, out any, required ...string) error {
 		}
 	}
 	for key, value := range fields {
-		if string(value) == "null" && key != "entry_fee_milli" && key != "id" {
+		if string(value) == "null" && key != "id" {
 			return ErrInvalid
 		}
 	}
@@ -72,6 +73,9 @@ func decode(r *http.Request, out any, required ...string) error {
 			return ErrInvalid
 		}
 		set := map[string]bool{"action": true, "expected_profile_revision": true}
+		if name == "buy_bait" {
+			set["quantity"] = true
+		}
 		for _, key := range keys {
 			set[key] = true
 			if _, ok := fields[key]; !ok {
@@ -113,33 +117,33 @@ func respond(w http.ResponseWriter, v any, e error) {
 	switch {
 	case errors.Is(e, ErrInvalid), errors.Is(e, rules.ErrInvalid), errors.Is(e, rules.ErrOverflow):
 		code, message = httperr.CodeInvalidRequest, "Check the selected action or amount."
-	case errors.Is(e, authz.ErrUnauthorized):
+	case errors.Is(e, authz.ErrUnauthorized), errors.Is(e, resources.ErrUnauthorized):
 		code, message = httperr.CodeUnauthorized, "Sign in to continue."
-	case errors.Is(e, authz.ErrForbidden):
-		code, message = httperr.CodeForbidden, "This account cannot use the activity."
+	case errors.Is(e, authz.ErrForbidden), errors.Is(e, resources.ErrForbidden):
+		code, message = httperr.CodeForbidden, "This account cannot play this game."
 	case errors.Is(e, ErrConflict), errors.Is(e, rules.ErrBusy):
 		code, message = httperr.CodeConflict, "The saved state changed. Reload it to continue."
 	case errors.Is(e, ErrNotFound):
 		code, message = httperr.CodeNotFound, "The saved game or period was not found."
 	case errors.Is(e, ErrClosed):
-		code, message = httperr.CodeFeatureDisabled, "This activity is closed. Your progress is saved."
+		code, message = httperr.CodeFeatureDisabled, "This game is closed. Your progress is saved."
 	case errors.Is(e, ErrCapacity):
 		code, message = httperr.CodeResourceLimitExceeded, "Please wait briefly and try again."
 	case errors.Is(e, ledger.ErrInsufficientBalance), errors.Is(e, rules.ErrFunds):
 		code, message = httperr.CodeInsufficientCredits, "There is not enough available balance."
-	case errors.Is(e, maintenance.ErrMaintenanceOn):
+	case errors.Is(e, maintenance.ErrMaintenanceOn), errors.Is(e, resources.ErrMaintenance):
 		code, message = httperr.CodeMaintenance, "The site is under maintenance."
 	}
 	httperr.WriteError(w, httperr.New(code, message))
 }
 
 // RegisterRoutes uses the existing session, CSRF and account-lifecycle bridges.
-func RegisterRoutes(users limitedactivities.UserRouteRegistrar, admins limitedactivities.AdminRouteRegistrar, s *Service) error {
+func RegisterRoutes(users resources.UserRouteRegistrar, continuation resources.ContinuationUserRouteRegistrar, admins host.AdminRegistrar, s *Service) error {
 	if users == nil || admins == nil || s == nil {
 		return ErrInvalid
 	}
-	get := func(fn func(*http.Request, int64) (any, error)) limitedactivities.AuthorizedUserHandler {
-		return func(w http.ResponseWriter, r *http.Request, p limitedactivities.UserPrincipal) {
+	get := func(fn func(*http.Request, int64) (any, error)) resources.AuthorizedUserHandler {
+		return func(w http.ResponseWriter, r *http.Request, p resources.UserPrincipal) {
 			if !empty(r) {
 				respond(w, nil, ErrInvalid)
 				return
@@ -172,7 +176,9 @@ func RegisterRoutes(users limitedactivities.UserRouteRegistrar, admins limitedac
 			}{rules.RulesID, rules.CatalogJSON()}, nil
 		}},
 	} {
-		if e := users.RegisterUserRoute("GET", route.path, get(route.fn)); e != nil {
+		if e := continuation.RegisterContinuationUserRoute("GET", route.path, func(w http.ResponseWriter, r *http.Request, p resources.ContinuationUserPrincipal) {
+			get(route.fn)(w, r, resources.UserPrincipal{UserID: p.UserID})
+		}); e != nil {
 			return e
 		}
 	}
@@ -181,17 +187,9 @@ func RegisterRoutes(users limitedactivities.UserRouteRegistrar, admins limitedac
 		path string
 		fn   postFn
 	}{
-		{"/entry", func(r *http.Request, user int64, k string) (any, error) {
-			var in EntryInput
-			if e := decode(r, &in, "period_id", "expected_period_revision"); e != nil {
-				return nil, e
-			}
-			out, e := s.Entry(r.Context(), user, k, in)
-			return out.Value, e
-		}},
 		{"/exchange", func(r *http.Request, user int64, k string) (any, error) {
 			var in ExchangeInput
-			if e := decode(r, &in, "direction", "quantity", "period_id", "expected_period_revision", "expected_profile_revision"); e != nil {
+			if e := decode(r, &in, "direction", "quantity", "expected_settings_revision", "expected_profile_revision"); e != nil {
 				return nil, e
 			}
 			out, e := s.Exchange(r.Context(), user, k, in)
@@ -239,21 +237,30 @@ func RegisterRoutes(users limitedactivities.UserRouteRegistrar, admins limitedac
 		}},
 	}
 	for _, route := range posts {
-		if e := users.RegisterUserRoute("POST", baseRoute+route.path, func(w http.ResponseWriter, r *http.Request, p limitedactivities.UserPrincipal) {
-			k, e := key(r)
-			if e != nil {
-				respond(w, nil, e)
+		handler := func(w http.ResponseWriter, r *http.Request, p resources.UserPrincipal) {
+			k, err := key(r)
+			if err != nil {
+				respond(w, nil, err)
 				return
 			}
-			v, e := route.fn(r, p.UserID, k)
-			respond(w, v, e)
-		}); e != nil {
-			return e
+			out, err := route.fn(r, p.UserID, k)
+			respond(w, out, err)
+		}
+		var err error
+		if route.path == "/casts/{id}/pause" {
+			err = continuation.RegisterContinuationUserRoute("POST", baseRoute+route.path, func(w http.ResponseWriter, r *http.Request, p resources.ContinuationUserPrincipal) {
+				handler(w, r, resources.UserPrincipal{UserID: p.UserID})
+			})
+		} else {
+			err = users.RegisterUserRoute("POST", baseRoute+route.path, handler)
+		}
+		if err != nil {
+			return err
 		}
 	}
-	if e := users.RegisterUserRoute("POST", baseRoute+"/exchange/quote", func(w http.ResponseWriter, r *http.Request, p limitedactivities.UserPrincipal) {
+	if e := users.RegisterUserRoute("POST", baseRoute+"/exchange/quote", func(w http.ResponseWriter, r *http.Request, p resources.UserPrincipal) {
 		var in QuoteInput
-		if e := decode(r, &in, "direction", "quantity", "period_id"); e != nil {
+		if e := decode(r, &in, "direction", "quantity"); e != nil {
 			respond(w, nil, e)
 			return
 		}
@@ -262,7 +269,7 @@ func RegisterRoutes(users limitedactivities.UserRouteRegistrar, admins limitedac
 	}); e != nil {
 		return e
 	}
-	if e := admins.RegisterAdminRoute("GET", adminBaseRoute+"/periods", func(w http.ResponseWriter, r *http.Request, p limitedactivities.AdminPrincipal) {
+	if e := admins.RegisterAdminRoute("GET", adminBaseRoute+"/periods", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		page, size := 1, 20
 		for name, values := range q {
@@ -293,28 +300,10 @@ func RegisterRoutes(users limitedactivities.UserRouteRegistrar, admins limitedac
 				return
 			}
 		}
-		out, e := s.Periods(r.Context(), p.UserID, page, size)
+		out, e := s.Periods(r.Context(), page, size)
 		respond(w, out, e)
-	}); e != nil {
+	})); e != nil {
 		return e
-	}
-	for _, route := range []struct{ method, path string }{{"POST", adminBaseRoute + "/periods"}, {"PUT", adminBaseRoute + "/periods/{id}"}} {
-		if e := admins.RegisterAdminRoute(route.method, route.path, func(w http.ResponseWriter, r *http.Request, p limitedactivities.AdminPrincipal) {
-			var in PeriodInput
-			if e := decode(r, &in, "expected_revision", "name", "status", "starts_at", "ends_at", "exchanges"); e != nil {
-				respond(w, nil, e)
-				return
-			}
-			k, e := key(r)
-			if e != nil {
-				respond(w, nil, e)
-				return
-			}
-			out, e := s.SavePeriod(r.Context(), p.UserID, r.PathValue("id"), k, in)
-			respond(w, out.Value, e)
-		}); e != nil {
-			return e
-		}
 	}
 	return nil
 }

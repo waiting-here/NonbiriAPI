@@ -252,7 +252,7 @@ export function DuelHistoryPage() {
                 value={draft.game}
                 onChange={(e) => edit({ game: e.target.value as GameID, mode: '' })}
               >
-                {(['bidding', 'likes'] as const).map((game) => (
+                {(['bidding', 'likes', 'gwent'] as const).map((game) => (
                   <option key={game} value={game}>
                     {gameLabel(game, t)}
                   </option>

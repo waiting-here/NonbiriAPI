@@ -16,3 +16,6 @@ var terminalReservationIndexesSQL string
 
 //go:embed migrations/0003_ai_players.sql
 var aiPlayersSQL string
+
+//go:embed migrations/0004_management_and_games.sql
+var managementAndGamesSQL string

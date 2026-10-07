@@ -1,3 +1,4 @@
+import type { LakeSettings } from '@shared/lakenotes/api';
 import type { DuelConfig } from './duel/types';
 import type { BlackjackSnapshot } from '@shared/games/blackjack';
 
@@ -29,12 +30,33 @@ export interface GamePayment {
   readonly game: string;
 }
 
-export type GameID = 'fishing' | 'linklink' | 'rps' | 'bidding' | 'likes' | 'blackjack';
-export type OnboardingGameID = GameID;
-export type OnboardingTaskKey = Bait | LinkLinkSpec | RPSMode |
-  'complete_tier_1' | 'complete_tier_2' | 'complete_tier_3' | 'first_win' |
-  'quick_complete' | 'quick_win' | 'standard_complete' | 'standard_win' |
-  'complete' | 'first_bust' | 'first_21' | 'first_natural_21';
+export type GameID =
+  | 'fishing'
+  | 'linklink'
+  | 'rps'
+  | 'bidding'
+  | 'likes'
+  | 'blackjack'
+  | 'gwent'
+  | 'steadycatch'
+  | 'lakenotes';
+export type OnboardingGameID = Exclude<GameID, 'gwent' | 'steadycatch' | 'lakenotes'>;
+export type OnboardingTaskKey =
+  | Bait
+  | LinkLinkSpec
+  | RPSMode
+  | 'complete_tier_1'
+  | 'complete_tier_2'
+  | 'complete_tier_3'
+  | 'first_win'
+  | 'quick_complete'
+  | 'quick_win'
+  | 'standard_complete'
+  | 'standard_win'
+  | 'complete'
+  | 'first_bust'
+  | 'first_21'
+  | 'first_natural_21';
 
 export interface OnboardingItem {
   readonly key: OnboardingTaskKey;
@@ -53,10 +75,19 @@ export interface GamesSnapshot {
   readonly balance: string;
   readonly gameBalance: string;
   readonly tutorialRPSSeen: boolean;
-  readonly onboarding: Readonly<Record<GameID, OnboardingProgress>>;
+  readonly onboarding: Readonly<Record<OnboardingGameID, OnboardingProgress>>;
   readonly gamesEnabled: boolean;
   readonly bidding: DuelConfig;
   readonly likes: DuelConfig;
+  readonly gwent: DuelConfig;
+  readonly lakenotes: LakeSettings;
+  readonly steadycatch: {
+    readonly enabled: boolean;
+    readonly available: boolean;
+    readonly price: string;
+    readonly firstClearReward: string;
+    readonly firstCleared: boolean;
+  };
   readonly blackjack: BlackjackSnapshot;
   readonly fishing: {
     readonly enabled: boolean;

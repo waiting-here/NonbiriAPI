@@ -36,7 +36,7 @@ func ValidateProfile(p Profile) error {
 			return ErrInvalid
 		}
 	}
-	if len(p.OwnedGear) < 1 || len(p.OwnedGear) > 23 || p.Copies("bambooPole") != 1 || !p.validLoadout(p.Equipped) || p.Equipped.Bait != "" {
+	if len(p.OwnedGear) < 1 || len(p.OwnedGear) > 24 || p.Copies("bambooPole") != 1 || !p.validLoadout(p.Equipped) || p.Equipped.Bait != "" {
 		return ErrInvalid
 	}
 	for _, id := range p.OwnedGear {
@@ -75,7 +75,7 @@ func ValidateProfile(p Profile) error {
 			if !ok || g.Slot != "rod" || p.Copies(l.Rod) < 1 {
 				return ErrInvalid
 			}
-			for _, id := range []string{l.Tackle1, l.Tackle2} {
+			for _, id := range []string{l.Tackle1, l.Tackle2, l.Tackle3} {
 				if id != "" {
 					item, ok := catalog.Gear[id]
 					if !ok || item.Slot != "tackle" || p.Copies(id) < 1 {
@@ -90,7 +90,7 @@ func ValidateProfile(p Profile) error {
 			}
 		}
 	}
-	if len(p.Basket) > 80 || len(p.Records) > 54 {
+	if len(p.Basket) > 80 || len(p.Records) > len(catalog.Fish) {
 		return ErrInvalid
 	}
 	ids := map[uint64]bool{}

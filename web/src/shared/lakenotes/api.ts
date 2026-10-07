@@ -1,4 +1,4 @@
-import { decoded, idempotentOptions, queryPath } from '@shared/operations/api';
+import { queryPath } from '@shared/operations/api';
 import { ApiError, apiFetch, type ApiRequestOptions } from '@shared/query/http';
 
 export const directions = [
@@ -15,8 +15,8 @@ export const directionUnits: Record<Direction, readonly [Unit, Unit]> = {
   coins_to_game: ['coins', 'game'],
   game_to_coins: ['game', 'coins'],
 };
-export const base = '/api/limited-activities/lake-notes';
-export const adminBase = '/admin/api/limited-activities/lake-notes';
+export const base = '/api/games/lake-notes';
+export const adminBase = '/admin/api/games/lake-notes';
 export interface ExchangeSetting {
   enabled: boolean;
   source_amount: string;
@@ -32,7 +32,10 @@ export interface Period {
   entry_fee_milli: string | null;
   exchanges: Record<Direction, ExchangeSetting>;
 }
-export type PeriodInput = Omit<Period, 'id' | 'revision'> & { expected_revision: string };
+export interface LakeSettings {
+  enabled: boolean;
+  exchanges: Record<Direction, ExchangeSetting>;
+}
 export function decodePeriod(value: unknown, publicProjection = false): Period {
   const period = value as Period;
   return {
@@ -46,49 +49,6 @@ export function decodePeriod(value: unknown, publicProjection = false): Period {
     ) as Period['exchanges'],
   };
 }
-export interface LakeDirectory {
-  key: 'lake-notes';
-  name: string;
-  cover_key: 'lake-notes';
-  visible: boolean;
-  paused: boolean;
-  starts_at: number | null;
-  ends_at: number | null;
-  revision: string;
-  status: 'unconfigured' | 'unavailable' | 'scheduled' | 'open' | 'paused' | 'ended';
-  module_config: { periods: Period[] };
-}
-export function decodeLakeDetail(value: unknown): LakeDirectory {
-  const detail = value as LakeDirectory;
-  return {
-    ...detail,
-    module_config: {
-      periods: (detail.module_config.periods ?? []).map((period) => decodePeriod(period, true)),
-    },
-  };
-}
-export const getLakeDetail = (options?: ApiRequestOptions) =>
-  decoded(base, decodeLakeDetail, options);
-export const getLakeConfig = (options?: ApiRequestOptions) =>
-  decoded(adminBase, decodeLakeDetail, options);
-export interface LakeConfigInput {
-  expected_revision: string;
-  visible: boolean;
-  paused: boolean;
-  starts_at: number | null;
-  ends_at: number | null;
-  module_config: Record<string, never>;
-}
-export const updateLakeConfig = (
-  input: LakeConfigInput,
-  key: string,
-  options?: ApiRequestOptions,
-) =>
-  decoded(
-    adminBase,
-    decodeLakeDetail,
-    idempotentOptions(key, { ...options, method: 'PUT', json: input }),
-  );
 export const getPeriods = async (page = 1, options?: ApiRequestOptions) => {
   const result = await apiFetch<{
     items: Period[];
@@ -98,18 +58,6 @@ export const getPeriods = async (page = 1, options?: ApiRequestOptions) => {
   }>(queryPath(adminBase + '/periods', { page, page_size: 20 }), options);
   return { ...result, items: result.items.map((period) => decodePeriod(period)) };
 };
-export const savePeriod = (
-  id: string | null,
-  input: PeriodInput,
-  key: string,
-  options?: ApiRequestOptions,
-) =>
-  decoded(
-    adminBase + '/periods' + (id ? '/' + encodeURIComponent(id) : ''),
-    decodePeriod,
-    idempotentOptions(key, { ...options, method: id ? 'PUT' : 'POST', json: input }),
-  );
-
 /** Natural credits are parsed as decimal text; coins never pass through Number. */
 export function naturalToUnits(text: string, unit: Unit, allowZero = false): string {
   if (!/^(0|[1-9][0-9]*)(?:\.[0-9]{1,3})?$/.test(text) || (unit === 'coins' && text.includes('.')))

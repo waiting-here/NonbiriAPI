@@ -621,7 +621,7 @@ FROM site_activity_daily WHERE day<?`, ` ORDER BY day DESC`, []any{upper}, query
 
 func (service *Service) EndpointOverview(ctx context.Context, adminID int64, query EndpointOverviewQuery) (Page[EndpointOverview], error) {
 	limit := normalizePageLimit(query.Page, query.Cursor, query.Limit)
-	if limit == 0 {
+	if limit == 0 || query.UserID < 0 || !validEndpointTagFilter(query.Tag) {
 		return Page[EndpointOverview]{}, ErrInvalidRequest
 	}
 	if query.Page != nil {
@@ -633,7 +633,10 @@ func (service *Service) EndpointOverview(ctx context.Context, adminID int64, que
 	if !validNow(now) {
 		return Page[EndpointOverview]{}, ErrUnavailable
 	}
-	owner := filterOwner("endpoints", query.Q)
+	owner := filterOwner("endpoints", query.Q, query.Tag)
+	if query.UserID != 0 {
+		owner = filterOwner("endpoints", query.Q, query.Tag, strconv.FormatInt(query.UserID, 10))
+	}
 	after, err := service.decodeTextCursor(query.Cursor, cursorScopeEndpoints, owner, now)
 	if err != nil {
 		return Page[EndpointOverview]{}, err
@@ -644,7 +647,7 @@ func (service *Service) EndpointOverview(ctx context.Context, adminID int64, que
 	}
 	done := false
 	defer rollbackUnlessDone(tx, &done)
-	selection, args, metadata, err := endpointOverviewPageQuery(ctx, tx, query.Q, after, query.Page, limit)
+	selection, args, metadata, err := endpointOverviewPageQuery(ctx, tx, query.Q, after, query.Page, limit, query)
 	if err != nil {
 		return Page[EndpointOverview]{}, err
 	}
@@ -656,11 +659,16 @@ func (service *Service) EndpointOverview(ctx context.Context, adminID int64, que
 	for rows.Next() {
 		var item EndpointOverview
 		var users, endpoints, keys int64
-		if err := rows.Scan(&item.BaseURL, &users, &endpoints, &keys); err != nil {
+		var tags string
+		if err := rows.Scan(&item.BaseURL, &users, &endpoints, &keys, &tags); err != nil {
 			_ = rows.Close()
 			return Page[EndpointOverview]{}, classifyDatabaseError("scan endpoint overview", err)
 		}
 		item.UserCount, item.EndpointCount, item.KeyCount = strconv.FormatInt(users, 10), strconv.FormatInt(endpoints, 10), strconv.FormatInt(keys, 10)
+		item.Tags = []string{}
+		if tags != "" {
+			item.Tags = strings.Split(tags, ",")
+		}
 		item.Users = []EndpointOverviewUser{}
 		page.Data = append(page.Data, item)
 	}

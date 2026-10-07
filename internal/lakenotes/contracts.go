@@ -1,13 +1,16 @@
-// Package lakenotes owns server-authoritative lake profiles, periods and casts.
+// Package lakenotes owns server-authoritative lake profiles, exchanges and casts.
 package lakenotes
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/game/host"
+	lakeconfig "github.com/waiting-here/NonbiriAPI/internal/lakenotes/config"
 	"github.com/waiting-here/NonbiriAPI/internal/lakenotes/rules"
-	"github.com/waiting-here/NonbiriAPI/internal/limitedactivities"
+	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
 const Key = "lake-notes"
@@ -19,7 +22,7 @@ const maxUnix = int64(253402300799)
 var (
 	ErrInvalid   = errors.New("lake notes: invalid request")
 	ErrConflict  = errors.New("lake notes: revision or controller conflict")
-	ErrClosed    = errors.New("lake notes: activity closed")
+	ErrClosed    = errors.New("lake notes: game closed")
 	ErrNotFound  = errors.New("lake notes: not found")
 	ErrCapacity  = errors.New("lake notes: capacity exceeded")
 	ErrInvariant = errors.New("lake notes: invalid stored state")
@@ -27,51 +30,44 @@ var (
 
 type Config struct {
 	Database   *sql.DB
-	Users      limitedactivities.UserAuthorizer
-	Admins     limitedactivities.AdminAuthorizer
-	Gate       limitedactivities.AdmissionGate
-	Keys       limitedactivities.KeyDeriver
-	Activity   limitedactivities.ActivityRecorder
+	Users      resources.FinalTxAuthorizer
+	Admins     host.AdminAuthorizer
+	Gate       AdmissionGate
+	Keys       KeyDeriver
+	Activity   func(context.Context, *sql.Tx, int64, int64) error
 	Now        func() time.Time
 	Random     rules.Random53
 	MotionSeed func() (uint32, error)
 }
-type Direction string
+type AdmissionGate interface {
+	AuthorizeUserActivity(context.Context, *sql.Tx, int64) error
+}
+type KeyDeriver interface{ DeriveGenerationTwoSubkey([]byte) ([]byte, error) }
+type Direction = lakeconfig.Direction
 
 const (
-	CoinsToGeneral Direction = "coins_to_general"
-	GeneralToCoins Direction = "general_to_coins"
-	CoinsToGame    Direction = "coins_to_game"
-	GameToCoins    Direction = "game_to_coins"
+	CoinsToGeneral = lakeconfig.CoinsToGeneral
+	GeneralToCoins = lakeconfig.GeneralToCoins
+	CoinsToGame    = lakeconfig.CoinsToGame
+	GameToCoins    = lakeconfig.GameToCoins
 )
 
-var directions = []Direction{CoinsToGeneral, GeneralToCoins, CoinsToGame, GameToCoins}
+var directions = lakeconfig.Directions
 
-func (d Direction) stored() string {
-	return map[Direction]string{CoinsToGeneral: "coin_to_general", GeneralToCoins: "general_to_coin", CoinsToGame: "coin_to_game", GameToCoins: "game_to_coin"}[d]
-}
-func directionFromStored(s string) Direction {
+type ExchangeSetting = lakeconfig.ExchangeSetting
+
+func directionFromStored(value string) Direction {
 	for _, d := range directions {
-		if d.stored() == s {
+		if d.Stored() == value {
 			return d
 		}
 	}
 	return ""
 }
 
-type ExchangeSetting struct {
-	Enabled      bool   `json:"enabled"`
-	SourceAmount string `json:"source_amount"`
-	TargetAmount string `json:"target_amount"`
-}
-type PeriodInput struct {
-	ExpectedRevision string                        `json:"expected_revision"`
-	Name             string                        `json:"name"`
-	Status           string                        `json:"status"`
-	StartsAt         int64                         `json:"starts_at"`
-	EndsAt           int64                         `json:"ends_at"`
-	EntryFeeMilli    *string                       `json:"entry_fee_milli"`
-	Exchanges        map[Direction]ExchangeSetting `json:"exchanges"`
+type Settings struct {
+	Revision string `json:"revision"`
+	lakeconfig.Wire
 }
 type Period struct {
 	ID            string                        `json:"id"`
@@ -88,18 +84,13 @@ type Wallet struct {
 	GameMilli    string `json:"game_milli"`
 }
 type ProfileView struct {
-	Readonly    bool          `json:"readonly"`
-	Revision    string        `json:"revision"`
-	RulesID     string        `json:"rules_id"`
-	Profile     rules.Profile `json:"profile"`
-	Wallet      Wallet        `json:"wallet"`
-	Period      *Period       `json:"period"`
-	Entitlement *EntryReceipt `json:"entitlement"`
-	Cast        *CastView     `json:"cast"`
-}
-type EntryInput struct {
-	PeriodID               string `json:"period_id"`
-	ExpectedPeriodRevision string `json:"expected_period_revision"`
+	Readonly bool          `json:"readonly"`
+	Revision string        `json:"revision"`
+	RulesID  string        `json:"rules_id"`
+	Profile  rules.Profile `json:"profile"`
+	Wallet   Wallet        `json:"wallet"`
+	Settings Settings      `json:"settings"`
+	Cast     *CastView     `json:"cast"`
 }
 type EntryReceipt struct {
 	PeriodID       string `json:"period_id"`
@@ -109,35 +100,31 @@ type EntryReceipt struct {
 	LedgerSeq      string `json:"ledger_seq,omitempty"`
 	CreatedAt      int64  `json:"created_at"`
 }
-type EntryResult struct {
-	Receipt EntryReceipt `json:"receipt"`
-	Profile ProfileView  `json:"profile"`
-}
 type QuoteInput struct {
 	Direction Direction `json:"direction"`
 	Quantity  string    `json:"quantity"`
-	PeriodID  string    `json:"period_id"`
 }
 type ExchangeInput struct {
 	QuoteInput
-	ExpectedPeriodRevision  string `json:"expected_period_revision"`
-	ExpectedProfileRevision string `json:"expected_profile_revision"`
+	ExpectedSettingsRevision string `json:"expected_settings_revision"`
+	ExpectedProfileRevision  string `json:"expected_profile_revision"`
 }
 type Quote struct {
-	Direction       Direction `json:"direction"`
-	Quantity        string    `json:"quantity"`
-	PeriodID        string    `json:"period_id"`
-	PeriodRevision  string    `json:"period_revision"`
-	ProfileRevision string    `json:"profile_revision"`
-	SourceAmount    string    `json:"source_amount"`
-	TargetAmount    string    `json:"target_amount"`
-	SourceLot       string    `json:"source_lot"`
-	TargetLot       string    `json:"target_lot"`
-	Coins           string    `json:"coins"`
-	Wallet          Wallet    `json:"wallet"`
+	Direction        Direction `json:"direction"`
+	Quantity         string    `json:"quantity"`
+	SettingsRevision string    `json:"settings_revision"`
+	ProfileRevision  string    `json:"profile_revision"`
+	SourceAmount     string    `json:"source_amount"`
+	TargetAmount     string    `json:"target_amount"`
+	SourceLot        string    `json:"source_lot"`
+	TargetLot        string    `json:"target_lot"`
+	Coins            string    `json:"coins"`
+	Wallet           Wallet    `json:"wallet"`
 }
 type ExchangeReceipt struct {
-	ID string `json:"id"`
+	PeriodID       string `json:"period_id,omitempty"`
+	PeriodRevision string `json:"period_revision,omitempty"`
+	ID             string `json:"id"`
 	Quote
 	OperationID string `json:"operation_id"`
 	LedgerSeq   string `json:"ledger_seq"`
@@ -175,7 +162,7 @@ type CheckpointInput struct {
 }
 type CastView struct {
 	ID              string     `json:"id"`
-	SourcePeriodID  string     `json:"source_period_id"`
+	SourcePeriodID  string     `json:"source_period_id,omitempty"`
 	RulesID         string     `json:"rules_id"`
 	Generation      string     `json:"generation"`
 	Revision        string     `json:"revision"`

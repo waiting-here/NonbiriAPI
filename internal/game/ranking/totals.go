@@ -40,7 +40,7 @@ func RecordTx(ctx context.Context, tx *sql.Tx, c Contribution) error {
 	}
 	profitBoard := c.Game == "bidding" || c.Game == "blackjack"
 	switch c.Game {
-	case "fishing", "linklink", "rps", "bidding", "likes", "blackjack":
+	case "fishing", "linklink", "rps", "bidding", "likes", "gwent", "steadycatch", "blackjack":
 	default:
 		return ErrInvalid
 	}

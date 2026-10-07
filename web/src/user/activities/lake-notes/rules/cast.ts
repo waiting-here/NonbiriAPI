@@ -64,18 +64,39 @@ export function makeChallenge(type: FishType, length: number): Challenge {
     loss: 1,
   };
 }
-export function initialFish(challenge: Challenge): FishState {
+export function initialFish(challenge: Challenge, type: FishType): FishState {
   const position = clamp((508 / 568) * 568, 0, 532);
-  return {
+  const f: FishState = {
     position,
     y: position / 568,
     speed: 0,
-    target: clamp(((100 - challenge.difficulty) / 100) * 548, 0, 548),
+    target: 0,
     drift: 0,
+    dartDirection: 0,
+    reverseRemaining: 0,
   };
+  setMovementTarget(f, clamp(((100 - challenge.difficulty) / 100) * 548, 0, 548), type);
+  return f;
 }
-export function updateFish(f: FishState, r: MotionRandom, behavior: string, challenge: Challenge) {
+function setMovementTarget(f: FishState, target: number, type: FishType) {
+  if (type.behavior === 'dart' && ['common', 'uncommon'].includes(type.rarity)) {
+    const delta = target - f.position,
+      direction = Math.sign(delta),
+      large = Math.abs(delta) > 50;
+    if (large && f.dartDirection && direction !== f.dartDirection && f.reverseRemaining > 0) return;
+    const distance = type.rarity === 'common' ? 120 : 145;
+    target = clamp(target, f.position - distance, f.position + distance);
+    if (large && direction !== f.dartDirection) {
+      f.dartDirection = direction;
+      f.reverseRemaining = 0.65;
+    }
+  }
+  f.target = clamp(target, 0, 548);
+}
+export function updateFish(f: FishState, r: MotionRandom, type: FishType, challenge: Challenge) {
   const steps = TICK_SECONDS * 60;
+  const behavior = type.behavior;
+  f.reverseRemaining = Math.max(0, f.reverseRemaining - TICK_SECONDS);
   const difficulty = challenge.difficulty;
   const tempo = challenge.tempo;
   if (
@@ -83,7 +104,11 @@ export function updateFish(f: FishState, r: MotionRandom, behavior: string, chal
     (behavior !== 'smooth' || f.target < 0)
   ) {
     const percent = Math.min(0.99, (difficulty + motionRange(r, 10, 45)) / 100);
-    f.target = clamp(f.position + motionRange(r, -f.position, 548 - f.position) * percent, 0, 548);
+    setMovementTarget(
+      f,
+      clamp(f.position + motionRange(r, -f.position, 548 - f.position) * percent, 0, 548),
+      type,
+    );
   }
   if (behavior === 'floater') f.drift = Math.max(-1.5, f.drift - 0.01 * steps);
   if (behavior === 'sinker') f.drift = Math.min(1.5, f.drift + 0.01 * steps);
@@ -92,13 +117,21 @@ export function updateFish(f: FishState, r: MotionRandom, behavior: string, chal
       (f.target - f.position) / (motionRange(r, 10, 30) + 100 - Math.min(100, difficulty));
     f.speed += ((acceleration - f.speed) / 5) * steps;
   } else if (behavior !== 'smooth' && motionNext(r) < (difficulty / 2000) * tempo * steps) {
-    f.target = clamp(f.position + (motionNext(r) < 0.5 ? -1 : 1) * motionRange(r, 50, 101), 0, 548);
+    setMovementTarget(
+      f,
+      clamp(f.position + (motionNext(r) < 0.5 ? -1 : 1) * motionRange(r, 50, 101), 0, 548),
+      type,
+    );
   } else f.target = -1;
   if (behavior === 'dart' && motionNext(r) < (difficulty / 1000) * tempo * steps)
-    f.target = clamp(
-      f.position + (motionNext(r) < 0.5 ? -1 : 1) * motionRange(r, 51, 101 + difficulty * 2),
-      0,
-      548,
+    setMovementTarget(
+      f,
+      clamp(
+        f.position + (motionNext(r) < 0.5 ? -1 : 1) * motionRange(r, 51, 101 + difficulty * 2),
+        0,
+        548,
+      ),
+      type,
     );
   f.position = clamp(f.position + (f.speed + f.drift) * challenge.fishSpeed * steps, 0, 532);
   f.y = f.position / 568;
@@ -122,16 +155,21 @@ function pickFish(p: Profile, s: Snapshot, r: Random53) {
   );
   const choices = s.rod === 'trainingRod' ? localFish.filter((f) => f.difficulty < 50) : localFish;
   const effects = bait(s.bait)?.effects as { rareWeight?: number; epicWeight?: number } | undefined;
+  const tierTotals: Record<string, number> = {};
+  for (const f of choices) tierTotals[f.rarity] = (tierTotals[f.rarity] || 0) + f.weight;
   const weighted = choices.map((f) => {
     const rank = catalog.RARITIES[f.rarity as keyof typeof catalog.RARITIES].rank;
-    let weight = f.weight;
+    const baseWeight =
+      (catalog.RARITY_WEIGHTS[f.rarity as keyof typeof catalog.RARITY_WEIGHTS] * f.weight) /
+      tierTotals[f.rarity];
+    let weight = baseWeight;
     if (p.first === 'tracker' && rank >= 3) weight *= 1.2;
     if (p.second === 'legendHunter' && rank >= 4) weight *= 1.25;
     if (p.fourth === 'deepSeeker' && rank >= 4) weight *= 1.2;
     if (rank >= 3) weight *= Math.min(1.2, s.effects.rareWeight || 1) * (effects?.rareWeight || 1);
     if (rank >= 4) weight *= effects?.epicWeight || 1;
     if (rank === 5) weight *= s.effects.legendWeight || 1;
-    return { fish: f, weight: Math.min(weight, f.weight * 4.5) };
+    return { fish: f, weight: Math.min(weight, baseWeight * 4.5) };
   });
   let roll = random(
     r,
@@ -225,6 +263,7 @@ export function start(p: Profile, r: Random53, seed: number): { profile: Profile
     tick: 0,
     held: false,
     waitRemaining: waitSeconds,
+    bitePreparationRemaining: 0,
     barY: 0.65,
     barVelocity: 0,
     progress: 0.3,
@@ -292,7 +331,8 @@ export function step(p: Profile, c: Cast, held: boolean) {
         c.phase = 'playing';
         c.barY = 1 - c.snapshot.barHeight / 2;
         c.barVelocity = 0;
-        c.fish = initialFish(c.plan.challenge);
+        c.fish = initialFish(c.plan.challenge, fish(c.plan.fishKind!)!);
+        c.bitePreparationRemaining = 0.5;
         if (c.plan.treasureY !== undefined)
           c.treasure = { y: c.plan.treasureY, progress: 0, secured: false };
       }
@@ -300,6 +340,12 @@ export function step(p: Profile, c: Cast, held: boolean) {
     return;
   }
   if (c.phase !== 'playing' || !c.fish) throw Error('invalid simulation phase');
+  if (c.bitePreparationRemaining > 0) {
+    const used = Math.min(TICK_SECONDS, c.bitePreparationRemaining);
+    c.bitePreparationRemaining = Math.max(0, c.bitePreparationRemaining - used);
+    if (c.bitePreparationRemaining < 1e-9) c.bitePreparationRemaining = 0;
+    if (TICK_SECONDS - used < 1e-9) return;
+  }
   const dt = TICK_SECONDS,
     s = c.snapshot,
     e = s.effects,
@@ -325,7 +371,7 @@ export function step(p: Profile, c: Cast, held: boolean) {
     c.barY = 1 - halfBar;
     c.barVelocity = -c.barVelocity * e.bottomBounce;
   }
-  updateFish(c.fish, c.motion, f.behavior, challenge);
+  updateFish(c.fish, c.motion, f, challenge);
   const hit = c.fish.y >= c.barY - halfBar && c.fish.y <= c.barY + halfBar;
   c.wasHit = hit;
   c.effectiveTime += dt;
@@ -352,7 +398,7 @@ export function step(p: Profile, c: Cast, held: boolean) {
   const progressRate = hit
     ? 0.12 * challenge.gain * rareBonus * e.progressGain
     : s.hadCaught
-      ? -0.18 * challenge.loss * calmBonus * e.progressLoss
+      ? -0.15 * challenge.loss * calmBonus * e.progressLoss
       : 0;
   c.progress = clamp(c.progress + progressRate * dt, 0, 1);
   if (c.progress >= 1) finish(p, c, true);

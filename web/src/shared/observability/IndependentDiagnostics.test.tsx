@@ -44,6 +44,26 @@ function page(data = [entry()], next_before: string | null = null) {
   return { data, next_before, from: 1799999999, to: 1800000001 };
 }
 describe('independent management diagnostics', () => {
+  it('filters missing API bodies and keeps failure reasons separate', async () => {
+    const missing = {
+      ...entry('3', ''),
+      kind: 'api_request',
+      subject_id: 'req_AAAAAAAAAAAAAAAAAAAAAA',
+      save_state: 'unavailable',
+      failure_reason: 'read_failure',
+    };
+    request.apiFetch.mockResolvedValueOnce(page([missing]));
+    render(<IndependentDiagnostics role="admin" accountId="a" scopeReady storage />);
+    fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'read_failure' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Search diagnostics' }));
+    expect(await screen.findByText('The upstream body could not be read.')).toBeInTheDocument();
+    const url = new URL(request.apiFetch.mock.calls[0][0], 'https://example.test');
+    expect(url.searchParams.get('storage')).toBe('read_failure');
+    expect(Number(url.searchParams.get('to')) - Number(url.searchParams.get('from'))).toBe(
+      30 * 86400,
+    );
+    expect(screen.getByText(/API requests.*req_AAAAA/)).toBeInTheDocument();
+  });
   it('loads bodies lazily, keeps external text inert and resets on account changes', async () => {
     const metadata = entry();
     request.apiFetch.mockResolvedValueOnce(page()).mockResolvedValueOnce({

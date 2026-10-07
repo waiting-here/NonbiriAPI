@@ -9,6 +9,7 @@ const Bidding = lazy(async () => ({
   default: (await import('../../bidding/BiddingGame')).BiddingGame,
 }));
 const Likes = lazy(async () => ({ default: (await import('../../likes/LikesGame')).LikesGame }));
+const Gwent = lazy(async () => ({ default: (await import('../../gwent/GwentGame')).GwentGame }));
 const unavailable: DuelConfig = { enabled: false, available: false, modes: {} };
 
 function DuelPage({ game }: { readonly game: DuelGame }) {
@@ -21,14 +22,14 @@ function DuelPage({ game }: { readonly game: DuelGame }) {
   const context: DuelLobbyContext = {
     config: snapshot.data?.[game] ?? unavailable,
     wallets: snapshot.data ?? { balance: '0', gameBalance: '0' },
-    onboarding: snapshot.data?.onboarding[game],
+    onboarding: game === 'gwent' ? undefined : snapshot.data?.onboarding[game],
     accepting: !!snapshot.data?.gamesEnabled && !snapshot.error,
     refreshWallets,
   };
   return (
     <main className="game-page">
       <Suspense fallback={<LoadingState />}>
-        {game === 'bidding' ? <Bidding {...context} /> : <Likes {...context} />}
+        {game === 'gwent' ? <Gwent {...context} /> : game === 'bidding' ? <Bidding {...context} /> : <Likes {...context} />}
       </Suspense>
     </main>
   );
@@ -39,3 +40,5 @@ export function BiddingPage() {
 export function LikesPage() {
   return <DuelPage game="likes" />;
 }
+
+export function GwentPage() { return <DuelPage game="gwent" />; }

@@ -48,10 +48,18 @@ func ClassifyForAudit(kind Kind, sourceID string) AuditClassification {
 			channel = "bidding"
 		} else if strings.HasPrefix(sourceID, "lik_") || strings.HasPrefix(sourceID, "likq_") {
 			channel = "likes"
+		} else if strings.HasPrefix(sourceID, "gwt_") || strings.HasPrefix(sourceID, "gwtq_") {
+			channel = "gwent"
 		}
 		behavior = movementBehavior(kind)
 	case KindBlackjackReserve, KindBlackjackSettle, KindBlackjackRelease:
 		channel, behavior = "blackjack", movementBehavior(kind)
+	case KindCatchTicket:
+		channel, behavior = "steadycatch", "fee"
+	case KindCatchRefund:
+		channel, behavior = "steadycatch", "refund"
+	case KindCatchReward:
+		channel, behavior = "steadycatch", "reward"
 	case KindAITicket:
 		channel, behavior = "bidding", "reserve"
 	case KindAITerminal:

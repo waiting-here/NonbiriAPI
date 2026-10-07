@@ -330,7 +330,7 @@ func TestDuelProductionCancellationEntrypointsAreAtomic(t *testing.T) {
 				if _, err := f.store.DB().Exec(`UPDATE site_config SET value='1' WHERE key=?`, antiabuse.KeyRPMBanThreshold); err != nil {
 					t.Fatal(err)
 				}
-				f.app.forward.abuse.RPMDenied(context.Background(), f.users[0], ratelimit.RPMUserLimit)
+				f.app.forward.abuse.RPMDenied(context.Background(), f.users[0], ratelimit.RPMCharityUserLimit)
 				var banned int
 				if err := f.store.DB().QueryRow(`SELECT is_banned FROM users WHERE id=?`, f.users[0]).Scan(&banned); err != nil || banned != 1 {
 					t.Fatal("automatic ban missing", err)

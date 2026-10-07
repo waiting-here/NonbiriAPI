@@ -29,6 +29,8 @@ func (s *Service) Tick(ctx context.Context) (WorkResult, error) {
 	return result, err
 }
 func (s *Service) RecoverBeforeListenAt(ctx context.Context, _ int64, limit int, deadline time.Time) (WorkResult, error) {
+	s.recoveryMu.Lock()
+	defer s.recoveryMu.Unlock()
 	if s.aiAdapter != nil {
 		tx, now, err := s.begin(ctx)
 		if err != nil {
@@ -105,6 +107,7 @@ func (s *Service) workOne(ctx context.Context, recovery bool) (bool, error) {
 		err = tx.QueryRowContext(ctx, `SELECT id FROM game_duel_queue q WHERE game_key=? AND (deadline<=? OR NOT EXISTS(SELECT 1 FROM users u WHERE u.id=q.user_id AND u.is_admin=0 AND u.discord_id IS NOT NULL AND u.discord_id<>'' AND (u.is_banned=0 OR u.banned_until<=?)) OR `+predicate+`) ORDER BY created_at,id LIMIT 1`, args...).Scan(&qid)
 	}
 	facts := activities.PublishFacts{}
+	recoveryAfter := ""
 	if err == nil {
 		q, err := s.queue(ctx, tx, qid)
 		if err != nil {
@@ -119,7 +122,7 @@ func (s *Service) workOne(ctx context.Context, recovery bool) (bool, error) {
 	} else {
 		var sid string
 		if recovery {
-			err = tx.QueryRowContext(ctx, `SELECT id FROM game_duel_sessions WHERE game_key=? AND state='active' ORDER BY started_at,id LIMIT 1`, s.rules.ID()).Scan(&sid)
+			err = tx.QueryRowContext(ctx, `SELECT id FROM game_duel_sessions WHERE game_key=? AND state='active' AND id>? ORDER BY id LIMIT 1`, s.rules.ID(), s.recoveryAfter).Scan(&sid)
 		} else {
 			err = tx.QueryRowContext(ctx, `SELECT id FROM game_duel_sessions WHERE game_key=? AND state='active' AND phase_deadline<=? ORDER BY phase_deadline,id LIMIT 1`, s.rules.ID(), now).Scan(&sid)
 		}
@@ -134,14 +137,24 @@ func (s *Service) workOne(ctx context.Context, recovery bool) (bool, error) {
 				if err != nil {
 					return false, err
 				}
-				v.PhaseSeq, err = increment(v.PhaseSeq)
+				if rules, ok := v.rules.(SequentialRules); ok {
+					v.Payload.Rules, err = rules.Resume(v.Mode, v.Payload.Rules)
+					if err == nil {
+						err = s.enterPhase(&v, now, true)
+					}
+					if err == nil {
+						err = s.saveSession(ctx, tx, &v, expected)
+					}
+				} else {
+					v.PhaseSeq, err = increment(v.PhaseSeq)
+					if err == nil {
+						facts, err = s.terminal(ctx, tx, &v, expected, now, nil, "server_restart", true)
+					}
+				}
 				if err != nil {
 					return false, err
 				}
-				facts, err = s.terminal(ctx, tx, &v, expected, now, nil, "server_restart", true)
-				if err != nil {
-					return false, err
-				}
+				recoveryAfter = sid
 			} else {
 				var changed bool
 				facts, changed, err = s.advance(ctx, tx, &v, now)
@@ -176,6 +189,9 @@ func (s *Service) workOne(ctx context.Context, recovery bool) (bool, error) {
 	}
 	if err := tx.Commit(); err != nil {
 		return false, classify(err)
+	}
+	if recoveryAfter != "" {
+		s.recoveryAfter = recoveryAfter
 	}
 	s.publish(ctx, facts)
 	return true, nil

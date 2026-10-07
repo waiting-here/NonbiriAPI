@@ -2,14 +2,15 @@ package rules
 
 import "strconv"
 
-// Action contains only selectors; all prices, rewards, and quantities come from compiled rules.
+// Action contains selections and requested purchase quantities; prices and rewards are compiled rules.
 type Action struct {
-	Name    string   `json:"action"`
-	ID      string   `json:"id,omitempty"`
-	Slot    string   `json:"slot,omitempty"`
-	Index   *int     `json:"index,omitempty"`
-	FishIDs []uint64 `json:"fish_ids,omitempty"`
-	Locked  *bool    `json:"locked,omitempty"`
+	Quantity *int     `json:"quantity,omitempty"`
+	Name     string   `json:"action"`
+	ID       string   `json:"id,omitempty"`
+	Slot     string   `json:"slot,omitempty"`
+	Index    *int     `json:"index,omitempty"`
+	FishIDs  []uint64 `json:"fish_ids,omitempty"`
+	Locked   *bool    `json:"locked,omitempty"`
 }
 type ActionResult struct {
 	Profile   Profile `json:"profile"`
@@ -23,9 +24,9 @@ func ApplyAction(p Profile, a Action) (ActionResult, error) {
 		return ActionResult{}, e
 	}
 	q := CloneProfile(p)
-	masks := map[string]string{"buy_gear": "i", "equip_gear": "is", "save_gear_loadout": "n", "load_gear_loadout": "n", "buy_bait": "i", "select_bait": "i", "sell_fish": "f", "sell_all_fish": "", "set_fish_lock": "fl", "sell_debris": "i", "sell_all_debris": "", "switch_location": "i", "rest": "", "choose_skill": "i", "respec": "", "accept_contract": "i", "cancel_contract": "i", "claim_contract": "i"}
+	masks := map[string]string{"buy_gear": "i", "equip_gear": "is", "save_gear_loadout": "n", "load_gear_loadout": "n", "buy_bait": "iq", "select_bait": "i", "sell_fish": "f", "sell_all_fish": "", "set_fish_lock": "fl", "sell_debris": "i", "sell_all_debris": "", "switch_location": "i", "rest": "", "choose_skill": "i", "respec": "", "accept_contract": "i", "cancel_contract": "i", "claim_contract": "i"}
 	mask, ok := masks[a.Name]
-	if !ok || a.ID != "" && !has(mask, 'i') || a.Slot != "" && !has(mask, 's') || a.Index != nil && !has(mask, 'n') || len(a.FishIDs) > 0 && !has(mask, 'f') || a.Locked != nil && !has(mask, 'l') {
+	if !ok || a.ID != "" && !has(mask, 'i') || a.Slot != "" && !has(mask, 's') || a.Index != nil && !has(mask, 'n') || len(a.FishIDs) > 0 && !has(mask, 'f') || a.Locked != nil && !has(mask, 'l') || a.Quantity != nil && (!has(mask, 'q') || *a.Quantity < 1 || *a.Quantity > MaxBait) {
 		return ActionResult{}, ErrInvalid
 	}
 	if has(mask, 'n') && (a.Index == nil || *a.Index < 0 || *a.Index > 2) {
@@ -86,6 +87,8 @@ func ApplyAction(p Profile, a Action) (ActionResult, error) {
 				q.Equipped.Tackle1 = a.ID
 			} else if slots >= 2 && q.Equipped.Tackle2 == "" {
 				q.Equipped.Tackle2 = a.ID
+			} else if slots >= 3 && q.Equipped.Tackle3 == "" {
+				q.Equipped.Tackle3 = a.ID
 			}
 		}
 	case "equip_gear":
@@ -99,15 +102,15 @@ func ApplyAction(p Profile, a Action) (ActionResult, error) {
 		} else {
 			slot := 0
 			var dest *string
-			other := ""
 			if a.Slot == "tackle1" {
 				slot = 1
 				dest = &q.Equipped.Tackle1
-				other = q.Equipped.Tackle2
 			} else if a.Slot == "tackle2" {
 				slot = 2
 				dest = &q.Equipped.Tackle2
-				other = q.Equipped.Tackle1
+			} else if a.Slot == "tackle3" {
+				slot = 3
+				dest = &q.Equipped.Tackle3
 			} else {
 				return ActionResult{}, ErrInvalid
 			}
@@ -115,8 +118,14 @@ func ApplyAction(p Profile, a Action) (ActionResult, error) {
 				return ActionResult{}, ErrInvalid
 			}
 			if a.ID != "" {
+				used := 0
+				for _, item := range []*string{&q.Equipped.Tackle1, &q.Equipped.Tackle2, &q.Equipped.Tackle3} {
+					if item != dest && *item == a.ID {
+						used++
+					}
+				}
 				g, ok := catalog.Gear[a.ID]
-				if !ok || g.Slot != "tackle" || q.Copies(a.ID) == 0 || other == a.ID && q.Copies(a.ID) < 2 {
+				if !ok || g.Slot != "tackle" || used >= min(2, q.Copies(a.ID)) {
 					return ActionResult{}, ErrInvalid
 				}
 			}
@@ -146,10 +155,21 @@ func ApplyAction(p Profile, a Action) (ActionResult, error) {
 		if !ok || q.BaitStock[a.ID] >= MaxBait {
 			return ActionResult{}, ErrInvalid
 		}
-		if e := spend(b.Cost); e != nil {
+		count := 1
+		if a.Quantity != nil {
+			count = *a.Quantity
+		}
+		count = min(count, MaxBait-q.BaitStock[a.ID])
+		if q.Coins.Cmp(NewAmount(uint64(count*b.Cost))) < 0 {
+			count = int(q.Coins.value().Uint64() / uint64(b.Cost))
+		}
+		if count == 0 {
+			return ActionResult{}, ErrInvalid
+		}
+		if e := spend(count * b.Cost); e != nil {
 			return ActionResult{}, e
 		}
-		q.BaitStock[a.ID]++
+		q.BaitStock[a.ID] += count
 	case "select_bait":
 		if a.ID != "" {
 			if _, ok := catalog.Baits[a.ID]; !ok || q.BaitStock[a.ID] < 1 || !catalog.Gear[q.Equipped.Rod].BaitAllowed {
@@ -337,6 +357,9 @@ func fitLoadout(l Loadout) Loadout {
 	if slots < 2 {
 		l.Tackle2 = ""
 	}
+	if slots < 3 {
+		l.Tackle3 = ""
+	}
 	return l
 }
 func (p Profile) validLoadout(l Loadout) bool {
@@ -344,17 +367,16 @@ func (p Profile) validLoadout(l Loadout) bool {
 	if !ok || g.Slot != "rod" || p.Copies(l.Rod) < 1 {
 		return false
 	}
-	for i, id := range []string{l.Tackle1, l.Tackle2} {
+	counts := map[string]int{}
+	for i, id := range []string{l.Tackle1, l.Tackle2, l.Tackle3} {
 		if id == "" {
 			continue
 		}
+		counts[id]++
 		item, ok := catalog.Gear[id]
-		if !ok || item.Slot != "tackle" || i >= g.TackleSlots || p.Copies(id) < 1 {
+		if !ok || item.Slot != "tackle" || i >= g.TackleSlots || counts[id] > min(2, p.Copies(id)) {
 			return false
 		}
-	}
-	if l.Tackle1 != "" && l.Tackle1 == l.Tackle2 && p.Copies(l.Tackle1) < 2 {
-		return false
 	}
 	return l.Bait == "" || catalog.Baits[l.Bait].Cost > 0
 }
@@ -374,9 +396,24 @@ func (p Profile) UnlockReady(id string, copy int) bool {
 		}
 		return n.Cmp(NewAmount(needed)) >= 0
 	}
-	if id == "curiosityLure" {
-		r, ok := p.Records["abyss"]
-		return ok && r.Caught.Cmp(NewAmount(uint64(copy))) >= 0
+	if id == "curiosityLure" || id == "legendRod" {
+		needed := uint64(copy)
+		if id == "legendRod" {
+			needed = uint64(catalog.Gear[id].LegendaryRequired)
+		}
+		remaining := NewAmount(needed)
+		for _, f := range catalog.Fish {
+			if f.Rarity != "legendary" {
+				continue
+			}
+			if record, ok := p.Records[f.Kind]; ok {
+				if record.Caught.Cmp(remaining) >= 0 {
+					return true
+				}
+				remaining, _ = remaining.Sub(record.Caught)
+			}
+		}
+		return false
 	}
 	return true
 }
@@ -405,14 +442,14 @@ func (p *Profile) EnsureContractBoard() {
 			pool = append(pool, f)
 		}
 	}
-	locations := []string{"lake", "river", "coast"}
+	locations := []string{"lake", "river", "coast", "jungle"}
 	current := 0
 	for i, l := range locations {
 		if l == p.Location {
 			current = i
 		}
 	}
-	destination := locations[(current+1+int(p.Day%2))%3]
+	destination := locations[(current+1+int(p.Day%2))%len(locations)]
 	for _, slot := range []string{"delivery1", "delivery2", "catch", "perfect", "cleanup"} {
 		id := strconv.FormatUint(p.Day, 10) + "-" + slot
 		found := false

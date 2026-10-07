@@ -1,5 +1,8 @@
 import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
 const keys = {
+  'center.free': 'user.games.copy.center.free',
+  'center.lakenotes.title': 'user.games.copy.center.lakenotes.title',
+  'center.lakenotes.body': 'user.games.copy.center.lakenotes.body',
   'presentation.description': 'user.games.presentation.description',
   'presentation.activityWallet': 'user.games.presentation.activityWallet',
   'presentation.unavailable': 'user.games.presentation.unavailable',
@@ -66,6 +69,10 @@ const keys = {
   'center.rps.title': 'user.games.copy.center.rps.title',
   'center.bidding.title': 'user.games.copy.center.bidding.title',
   'center.bidding.body': 'user.games.copy.center.bidding.body',
+  'center.steadycatch.title': 'user.games.copy.center.steadycatch.title',
+  'center.steadycatch.body': 'user.games.copy.center.steadycatch.body',
+  'center.gwent.title': 'user.games.copy.center.gwent.title',
+  'center.gwent.body': 'user.games.copy.center.gwent.body',
   'center.likes.title': 'user.games.copy.center.likes.title',
   'center.blackjack.title': 'user.games.copy.center.blackjack.title',
   'center.blackjack.body': 'user.games.copy.center.blackjack.body',

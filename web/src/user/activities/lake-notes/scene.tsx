@@ -7,17 +7,37 @@ export function LakeScene({
   controller,
   profile,
   controls,
+  result,
   keyboardEnabled,
 }: {
   controller: LakeController;
   profile: Profile;
   controls: ReactNode;
+  result: ReactNode;
   keyboardEnabled: boolean;
 }) {
   const { t: text } = useLakeCopy();
   const root = useRef<HTMLDivElement>(null),
     copyRef = useRef(text),
     fallback = useRef(profile);
+  useEffect(() => {
+    const stage = root.current;
+    if (!stage) return;
+    const resize = () => {
+      const top = stage.getBoundingClientRect().top + window.scrollY;
+      const height = Math.max(360, window.innerHeight - top - 24) + 'px';
+      if (stage.style.getPropertyValue('--lake-play-height') !== height)
+        stage.style.setProperty('--lake-play-height', height);
+    };
+    const observer = new ResizeObserver(resize);
+    observer.observe(stage.closest('.page') ?? stage);
+    window.addEventListener('resize', resize);
+    resize();
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', resize);
+    };
+  }, []);
   useEffect(() => {
     copyRef.current = text;
     fallback.current = profile;
@@ -188,7 +208,9 @@ export function LakeScene({
           : controllerState.status === 'paused' || controllerState.status === 'unknown'
             ? translate('paused')
             : c
-              ? translate(c.phase as 'waiting' | 'playing' | 'success' | 'failed')
+              ? c.bitePreparationRemaining > 0
+                ? translate('bitePreparation')
+                : translate(c.phase as 'waiting' | 'playing' | 'success' | 'failed')
               : translate('idle');
       const amount = Math.floor((c?.progress ?? 0.3) * 100 + 0.5);
       fill.style.height = amount + '%';
@@ -312,6 +334,7 @@ export function LakeScene({
           <small className="scene-time" />
           <strong className="scene-message" />
         </div>
+        {result}
       </section>
       <section className="panel" aria-label={text('title')}>
         <div className="panel-heading">
@@ -365,8 +388,8 @@ export function LakeScene({
             {text('hold')}
           </button>
         </div>
-        {controls}
       </section>
+      <section className="lake-dashboard">{controls}</section>
     </div>
   );
 }

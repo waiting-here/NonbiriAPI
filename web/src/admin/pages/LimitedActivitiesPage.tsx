@@ -13,7 +13,6 @@ import {
   Toggle,
 } from '@shared/components/ui';
 import { usePictureBookText } from '@shared/picturebook/copy';
-import { getLakeConfig } from '@shared/lakenotes/api';
 import { decoded } from '@shared/operations/api';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { responseOutcomeUnknown } from '@shared/operations/api';
@@ -29,7 +28,6 @@ import { ApiError } from '@shared/query/http';
 import { TimeInput } from '@shared/components/TimeInput';
 import { TimeContextNotice } from '@shared/components/TimeContext';
 import { createTimeDraft, timeDraftValue } from '@shared/time';
-import { useLakeAdminCopy } from '../features/lakenotes/copy';
 import { useAdminSession } from '../data';
 import '@shared/limitedactivities/limited.css';
 const configKey = ['admin', 'limited-activities', 'picture-book'] as const;
@@ -208,7 +206,6 @@ export function LimitedActivitiesPage({
   const pictureBook = params.get('activity') === 'picture-book';
   const [section, setSection] = useState<PictureBookSection>('exchange');
   const copy = usePictureBookText();
-  const { t: lakeText } = useLakeAdminCopy();
   const text = useActivityText(),
     session = useAdminSession();
   const query = useQuery({
@@ -218,12 +215,6 @@ export function LimitedActivitiesPage({
     refetchOnWindowFocus: false,
   });
   const enabled = !!session.data?.admin && !session.error && !session.isFetching && !pictureBook;
-  const lake = useQuery({
-    queryKey: ['admin', 'lake-notes', 'config'],
-    queryFn: () => getLakeConfig(),
-    enabled,
-    refetchOnWindowFocus: false,
-  });
   const fish = useQuery({
     queryKey: ['admin', 'limited-activities', 'fat-fish'],
     queryFn: () => decoded('/admin/api/limited-activities/fat-fish', decodeDetail),
@@ -240,7 +231,7 @@ export function LimitedActivitiesPage({
     id: `picture-book-tab-${tab.value}`,
     panelId: `picture-book-panel-${tab.value}`,
   }));
-  const status = (value: typeof query | typeof lake | typeof fish) =>
+  const status = (value: typeof query | typeof fish) =>
     value.isPending ? (
       <LoadingState />
     ) : value.error ? (
@@ -284,12 +275,6 @@ export function LimitedActivitiesPage({
               ),
               to: '/limited-activities?activity=picture-book',
               query,
-            },
-            {
-              title: lakeText('title'),
-              description: lakeText('description'),
-              to: '/limited-activities/lake-notes',
-              query: lake,
             },
             {
               title: text('common.fatFish'),

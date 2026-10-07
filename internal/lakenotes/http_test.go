@@ -8,7 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/waiting-here/NonbiriAPI/internal/limitedactivities"
+	lakeconfig "github.com/waiting-here/NonbiriAPI/internal/lakenotes/config"
+	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
 type userRoutes struct {
@@ -16,9 +17,16 @@ type userRoutes struct {
 	f   *fixture
 }
 
-func (r userRoutes) RegisterUserRoute(method, path string, handler limitedactivities.AuthorizedUserHandler) error {
+func (r userRoutes) RegisterUserRoute(method, path string, handler resources.AuthorizedUserHandler) error {
 	r.mux.HandleFunc(method+" "+path, func(w http.ResponseWriter, req *http.Request) {
-		handler(w, req.WithContext(r.f.ctx(r.f.user)), limitedactivities.UserPrincipal{UserID: r.f.user})
+		handler(w, req.WithContext(r.f.ctx(r.f.user)), resources.UserPrincipal{UserID: r.f.user})
+	})
+	return nil
+}
+
+func (r userRoutes) RegisterContinuationUserRoute(method, path string, handler resources.AuthenticatedContinuationHandler) error {
+	r.mux.HandleFunc(method+" "+path, func(w http.ResponseWriter, req *http.Request) {
+		handler(w, req.WithContext(r.f.ctx(r.f.user)), resources.ContinuationUserPrincipal{UserID: r.f.user})
 	})
 	return nil
 }
@@ -28,18 +36,18 @@ type adminRoutes struct {
 	f   *fixture
 }
 
-func (r adminRoutes) RegisterAdminRoute(method, path string, handler limitedactivities.AuthorizedAdminHandler) error {
+func (r adminRoutes) RegisterAdminRoute(method, path string, handler http.Handler) error {
 	r.mux.HandleFunc(method+" "+path, func(w http.ResponseWriter, req *http.Request) {
-		handler(w, req.WithContext(r.f.ctx(r.f.admin)), limitedactivities.AdminPrincipal{UserID: r.f.admin})
+		handler.ServeHTTP(w, req.WithContext(r.f.ctx(r.f.admin)))
 	})
 	return nil
 }
 func TestHTTPActualRoutesAndStrictActionPayloads(t *testing.T) {
 	f := newFixture(t)
-	p := f.period(t, "0")
-	f.enter(t, p)
+	f.enable(t)
+	f.profile(t)
 	mux := http.NewServeMux()
-	if e := RegisterRoutes(userRoutes{mux, f}, adminRoutes{mux, f}, f.service); e != nil {
+	if e := RegisterRoutes(userRoutes{mux, f}, userRoutes{mux, f}, adminRoutes{mux, f}, f.service); e != nil {
 		t.Fatal(e)
 	}
 	server := httptest.NewServer(mux)
@@ -75,12 +83,12 @@ func TestHTTPActualRoutesAndStrictActionPayloads(t *testing.T) {
 	if e := json.Unmarshal(raw, &view); e != nil {
 		t.Fatal(e)
 	}
-	status, raw = request("POST", baseRoute+"/exchange/quote", `{"direction":"general_to_coins","quantity":"2","period_id":"`+p.ID+`"}`, "")
+	status, raw = request("POST", baseRoute+"/exchange/quote", `{"direction":"general_to_coins","quantity":"2"}`, "")
 	if status != 200 {
 		t.Fatal(status, string(raw))
 	}
 	var rows int
-	if e := f.database.QueryRow("SELECT count(*) FROM idempotency_records WHERE scope='lake_notes'").Scan(&rows); e != nil || rows != 2 {
+	if e := f.database.QueryRow("SELECT count(*) FROM idempotency_records WHERE scope='lake_notes'").Scan(&rows); e != nil || rows != 0 {
 		t.Fatal("quote wrote receipt", rows, e)
 	}
 	for i, body := range []string{
@@ -150,21 +158,21 @@ func TestCheckpointEdgeValidationAndSharedBudget(t *testing.T) {
 }
 func TestQuoteBoundsCreditPrimitiveAndWideCoins(t *testing.T) {
 	maxCoin := "340282366920938463463374607431768211455"
-	p := Period{ID: "period", Revision: "1", Exchanges: map[Direction]ExchangeSetting{
-		GeneralToCoins: {true, "1", maxCoin},
-		CoinsToGeneral: {true, maxCoin, "1"},
-	}}
+	p := Settings{Revision: "1", Wire: lakeconfig.Wire{Exchanges: map[Direction]ExchangeSetting{
+		GeneralToCoins: {Enabled: true, SourceAmount: "1", TargetAmount: maxCoin},
+		CoinsToGeneral: {Enabled: true, SourceAmount: maxCoin, TargetAmount: "1"},
+	}}}
 	for _, d := range []Direction{GeneralToCoins, CoinsToGeneral} {
-		q, e := quoteAmounts(p, QuoteInput{d, "1", p.ID})
+		q, e := quoteAmounts(p, QuoteInput{d, "1"})
 		if e != nil {
 			t.Fatal(d, q, e)
 		}
 	}
-	if _, e := quoteAmounts(p, QuoteInput{GeneralToCoins, "2", p.ID}); e == nil {
+	if _, e := quoteAmounts(p, QuoteInput{GeneralToCoins, "2"}); e == nil {
 		t.Fatal("U128 output overflow accepted")
 	}
-	p.Exchanges[GeneralToCoins] = ExchangeSetting{true, "9000000000000001", "1"}
-	if _, e := quoteAmounts(p, QuoteInput{GeneralToCoins, "1", p.ID}); e == nil {
+	p.Exchanges[GeneralToCoins] = ExchangeSetting{Enabled: true, SourceAmount: "9000000000000001", TargetAmount: "1"}
+	if _, e := quoteAmounts(p, QuoteInput{GeneralToCoins, "1"}); e == nil {
 		t.Fatal("credit primitive overflow accepted")
 	}
 }

@@ -37,10 +37,10 @@ export function percentBP(value: string): number {
   return match ? Number(match[1]) * 100 + Number((match[2] ?? '').padEnd(2, '0')) : Number.NaN;
 }
 export function validateDuelConfigurations(
-  config: { master_enabled: boolean; bidding?: DuelGameConfig; likes?: DuelGameConfig },
+  config: { master_enabled: boolean; bidding?: DuelGameConfig; likes?: DuelGameConfig; gwent?: DuelGameConfig },
   t: (zh: string, en: string) => string,
 ): string | null {
-  for (const game of ['bidding', 'likes'] as const) {
+  for (const game of ['bidding', 'likes', 'gwent'] as const) {
     const value = config[game];
     if (!value) continue;
     if (value.enabled && !config.master_enabled)

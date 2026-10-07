@@ -1,7 +1,7 @@
 import type { AITerms, AIView, AIActionSource } from '@shared/aiPlayers';
 import type { GamePayment, OnboardingProgress } from '../types';
 
-export type DuelGame = 'bidding' | 'likes';
+export type DuelGame = 'bidding' | 'likes' | 'gwent';
 export type Seat = 0 | 1;
 export type Pair<T> = readonly [T, T];
 export interface Rates {
@@ -66,7 +66,8 @@ export interface DuelState<V, P, S> {
   readonly contentHash: string;
   readonly revision: string;
   readonly phaseSeq: string;
-  readonly phase: 'joker' | 'bid' | 'plan' | 'settlement';
+  readonly decisionID?: string;
+  readonly phase: 'joker' | 'bid' | 'plan' | 'settlement' | 'mulligan' | 'turn' | 'choice';
   readonly round: number;
   readonly deadline: number;
   readonly serverNow: number;
@@ -94,6 +95,7 @@ export interface DuelResult<V, P> {
     | 'double-overload'
     | 'limit'
     | 'surrender'
+    | 'afk'
     | 'server_restart'
     | 'account_unavailable';
   readonly scores: Pair<number>;

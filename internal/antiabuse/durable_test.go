@@ -32,7 +32,7 @@ func TestDurableWindowRestartDoneAndExactExpiry(t *testing.T) {
 	f.set(KeyRPMBanWindowSeconds, "100")
 	f.set(KeyRPMBanDurationSeconds, "1")
 	for range 2 {
-		if err := f.service.RPMDenied(context.Background(), user, ratelimit.RPMUserLimit); err != nil {
+		if err := f.service.RPMDenied(context.Background(), user, ratelimit.RPMCharityUserLimit); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -40,7 +40,7 @@ func TestDurableWindowRestartDoneAndExactExpiry(t *testing.T) {
 	if f.service.events != 2 || f.bans.Load() != 0 {
 		t.Fatal("restart lost events or replayed consequences")
 	}
-	if err := f.service.RPMDenied(context.Background(), user, ratelimit.RPMUserLimit); err != nil {
+	if err := f.service.RPMDenied(context.Background(), user, ratelimit.RPMCharityUserLimit); err != nil {
 		t.Fatal(err)
 	}
 	if f.scalar(`SELECT count(*) FROM abuse_cases WHERE kind='ban'`) != 1 || f.scalar(`SELECT count(*) FROM abuse_evidence`) != 3 {
@@ -48,7 +48,7 @@ func TestDurableWindowRestartDoneAndExactExpiry(t *testing.T) {
 	}
 	f.clock.Add(2)
 	f.restart()
-	if err := f.service.RPMDenied(context.Background(), user, ratelimit.RPMUserLimit); err != nil {
+	if err := f.service.RPMDenied(context.Background(), user, ratelimit.RPMCharityUserLimit); err != nil {
 		t.Fatal(err)
 	}
 	if f.bans.Load() != 1 || f.scalar(`SELECT count(*) FROM abuse_cases`) != 1 || f.scalar(`SELECT ended_at FROM abuse_cases`) != start+1 {
@@ -68,7 +68,7 @@ func TestDurableWindowRestartDoneAndExactExpiry(t *testing.T) {
 		t.Fatal("exact boundary did not expire the first three events")
 	}
 	f.set(KeyRPMBanThreshold, "2")
-	if err := f.service.RPMDenied(context.Background(), user, ratelimit.RPMUserLimit); err != nil {
+	if err := f.service.RPMDenied(context.Background(), user, ratelimit.RPMCharityUserLimit); err != nil {
 		t.Fatal(err)
 	}
 	if f.bans.Load() != 2 || f.scalar(`SELECT count(*) FROM abuse_cases`) != 2 {
@@ -160,7 +160,7 @@ func TestRuleShrinkIsDurableAndFailureDoesNotPublishPruning(t *testing.T) {
 	user := f.user()
 	f.set(KeyRPMBanThreshold, "4096")
 	f.set(KeyRPMBanWindowSeconds, "100")
-	if err := f.service.RPMDenied(context.Background(), user, ratelimit.RPMUserLimit); err != nil {
+	if err := f.service.RPMDenied(context.Background(), user, ratelimit.RPMCharityUserLimit); err != nil {
 		t.Fatal(err)
 	}
 	f.clock.Add(20)
@@ -168,7 +168,7 @@ func TestRuleShrinkIsDurableAndFailureDoesNotPublishPruning(t *testing.T) {
 	if _, err := f.store.DB().Exec(`CREATE TRIGGER fail_window BEFORE INSERT ON abuse_window_events BEGIN SELECT RAISE(ABORT,'injected'); END`); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.service.RPMDenied(context.Background(), user, ratelimit.RPMUserLimit); err == nil {
+	if err := f.service.RPMDenied(context.Background(), user, ratelimit.RPMCharityUserLimit); err == nil {
 		t.Fatal("missing injected failure")
 	}
 	if f.service.events != 1 || f.scalar(`SELECT count(*) FROM abuse_window_events`) != 1 || f.scalar(`SELECT count(*) FROM request_logs`) != 1 {
@@ -177,7 +177,7 @@ func TestRuleShrinkIsDurableAndFailureDoesNotPublishPruning(t *testing.T) {
 	if _, err := f.store.DB().Exec(`DROP TRIGGER fail_window`); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.service.RPMDenied(context.Background(), user, ratelimit.RPMUserLimit); err != nil {
+	if err := f.service.RPMDenied(context.Background(), user, ratelimit.RPMCharityUserLimit); err != nil {
 		t.Fatal(err)
 	}
 	f.set(KeyRPMBanWindowSeconds, "100")

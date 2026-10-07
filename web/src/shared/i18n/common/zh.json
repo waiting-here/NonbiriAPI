@@ -126,7 +126,7 @@
     },
     "failurePolicy": {
       "label": "连续失败下架阈值",
-      "help": "默认 10。设为 0 后，密钥不会因连续报错自动下架。",
+      "help": "默认 10，设为 0 可关闭报错自动下架。公益调用收到上游 HTTP 200 即清零并停止重试，后续错误仍会显示。",
       "zeroWarning": "永不因报错自动下架：这把密钥发生连续错误时仍可能被调用。手动禁用、到期、封禁及配额限制仍然有效。",
       "saved": "当前下架阈值：{{value}}",
       "recalculate": "保存后保留已有失败次数并立即重算报错下架状态。此操作不会启用密钥或重置失败次数。",
@@ -376,8 +376,8 @@
           "duration": "耗时",
           "seconds": "{{seconds}} 秒",
           "storage": "错误原文存储",
-          "storageSummary": "已用 {{used}} / {{budget}} MiB · {{count}} 条未保存",
-          "storageFailures": "读取或保存失败 {{count}} 条。容量不包含数据库页、索引和 WAL。",
+          "storageSummary": "已用 {{used}} / {{budget}} MiB · 历史累计 {{count}} 条未保存",
+          "storageFailures": "累计容量不足 {{capacity}} 条，读取或保存失败 {{count}} 条；当前可查 {{current}} 条。",
           "retryHint": "稍后重试，或在模型里添加第二个来源。",
           "keyHint": "检查这个服务的密钥是否有效。",
           "rateHint": "服务商限制了频率，稍后再试。",
@@ -394,7 +394,9 @@
             "rejected": "调用前被拒绝",
             "cancelled": "已取消",
             "failed": "失败（{{status}}）"
-          }
+          },
+          "storageHistoryHelp": "累计数不会随记录到期减少。未保存的原文无法补回；下方可查询最近30天内仍在保留期的记录。容量仅计原文，不含数据库页、索引和 WAL。",
+          "storageRecords": "查看未保存记录"
         }
       },
       "charity": {
@@ -883,7 +885,8 @@
       },
       "games": {
         "bidding": "竞标",
-        "likes": "点赞"
+        "likes": "点赞",
+        "gwent": "AI 昆特牌"
       }
     },
     "riskAudit": {
@@ -1153,7 +1156,6 @@
       "errorEvent": "错误事件",
       "truncated": "（已截断）",
       "rawBodyWasNotSavedBecauseThe": "原文因容量不足未保存。",
-      "rawBodyCouldNotBeSaved": "原文读取或保存失败。",
       "nextEvents": "后续事件",
       "loadOriginalBody": "加载原始正文",
       "couldNotLoadTheErrorBody": "无法加载错误正文。",
@@ -1173,7 +1175,10 @@
       "downloadDiagnosticSummary": "下载诊断摘要",
       "downloadOriginal": "下载原始正文",
       "bodyPreview": "正文预览",
-      "previewShowsTheFirst65536CharactersCopy": "预览仅展示前 65,536 个字符，可复制或下载完整正文。"
+      "previewShowsTheFirst65536CharactersCopy": "预览仅展示前 65,536 个字符，可复制或下载完整正文。",
+      "rawBodyReadFailed": "读取上游原文失败。",
+      "rawBodyStorageFailed": "原文已读取，但保存失败。",
+      "rawBodyUnspecifiedFailure": "此旧记录未区分读取失败或保存失败。"
     },
     "sourceQuality": {
       "direct": "直接连接地址",
@@ -1437,7 +1442,7 @@
       "elevatedPassword": "管理员密码",
       "elevatedPasswordHint": "验证身份后确认本次操作，页面不会保存密码。",
       "endpointLimit": "端点上限",
-      "rpmLimit": "RPM 上限",
+      "rpmLimit": "公益 RPM 上限",
       "concurrencyLimit": "在途并发上限",
       "limitHint": "限制留空时使用默认值，单用户并发默认为 5。请求还需满足全站、端点和密钥的限制。",
       "deletePasswordRequired": "请输入管理员密码后继续。",

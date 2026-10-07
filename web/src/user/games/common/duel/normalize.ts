@@ -57,7 +57,7 @@ export function hashValue(value: unknown): string {
 export const revisionValue = (value: unknown) =>
   decimalValue(value, { bits: 128, positive: true }, 'revision');
 export const prefix = (game: DuelGame, queue = false) =>
-  game === 'bidding' ? (queue ? 'bidq_' : 'bid_') : queue ? 'likq_' : 'lik_';
+  `${{ bidding: 'bid', likes: 'lik', gwent: 'gwt' }[game]}${queue ? 'q' : ''}_`;
 export function ratesValue(value: unknown): Rates {
   const r = exactRecord(value, ['platform', 'welfare', 'thursday']);
   const v = {
@@ -71,7 +71,7 @@ export function ratesValue(value: unknown): Rates {
 export function configValue(value: unknown, game: DuelGame, modes: readonly string[]): DuelConfig {
   modes = modes.filter((mode) => mode !== 'ai');
   const timers =
-    game === 'bidding' ? ['joker_seconds', 'bid_seconds'] : ['plan_seconds', 'settlement_seconds'];
+    game === 'gwent' ? ['mulligan_seconds', 'turn_seconds', 'choice_seconds'] : game === 'bidding' ? ['joker_seconds', 'bid_seconds'] : ['plan_seconds', 'settlement_seconds'];
   const r = exactRecord(value, [
     'enabled',
     'available',
@@ -83,9 +83,9 @@ export function configValue(value: unknown, game: DuelGame, modes: readonly stri
   safeInteger(r.queue_seconds, 120, 120, 'queue duration');
   safeInteger(r.queue_capacity, 4096, 4096, 'queue capacity');
   if (game === 'bidding') safeInteger(r.joker_seconds, 10, 10, 'phase duration');
-  else enumNumber(r.plan_seconds, [20, 30], 'phase duration');
+  else if (game === 'likes') enumNumber(r.plan_seconds, [20, 30], 'phase duration');
   if (game === 'bidding') safeInteger(r.bid_seconds, 20, 20, 'phase duration');
-  else if (r.settlement_seconds !== 0 && r.settlement_seconds !== 5)
+  else if (game === 'likes' && r.settlement_seconds !== 0 && r.settlement_seconds !== 5)
     invalidResponse('presentation duration');
   const raw = exactRecord(r.modes, modes);
   const normalized: Record<string, DuelConfig['modes'][string]> = {};
@@ -206,6 +206,7 @@ export function resultValue<V, F, P, S, L, A>(
         'double-overload',
         'limit',
         'surrender',
+        'afk',
         'server_restart',
         'account_unavailable',
       ],
@@ -254,7 +255,7 @@ function stateValue<V, F, P, S, L, A>(
       'round_start',
       'profiles',
     ],
-    ['economy', 'ai', 'action_sources'],
+    ['economy', 'ai', 'action_sources', 'decision_id'],
   );
   enumValue(r.game, [c.game], 'game');
   safeInteger(r.rules_version, 1, 1, 'rules version');
@@ -267,9 +268,10 @@ function stateValue<V, F, P, S, L, A>(
     contentHash: hashValue(r.content_hash),
     revision: revisionValue(r.revision),
     phaseSeq: revisionValue(r.phase_seq),
+    decisionID: r.decision_id as string | undefined,
     phase: enumValue(
       r.phase,
-      c.game === 'bidding' ? (['joker', 'bid'] as const) : (['plan', 'settlement'] as const),
+      c.game === 'gwent' ? (['mulligan', 'turn', 'choice'] as const) : c.game === 'bidding' ? (['joker', 'bid'] as const) : (['plan', 'settlement'] as const),
       'phase',
     ),
     round: safeInteger(

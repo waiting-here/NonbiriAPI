@@ -279,6 +279,9 @@ func (a *Adapter) attempt(ctx context.Context, writer http.ResponseWriter, targe
 	target.credential.clear()
 
 	response, err := client.Do(httpRequest)
+	if response != nil {
+		defer func() { result.UpstreamStatus = response.StatusCode }()
+	}
 	httpRequest.Header.Del("X-Api-Key")
 	clear(body)
 	if response != nil && response.Request != nil {
@@ -292,6 +295,9 @@ func (a *Adapter) attempt(ctx context.Context, writer http.ResponseWriter, targe
 		return connectorcontract.TransportFailed(failed, err, ctx)
 	}
 	defer func() { _ = response.Body.Close() }()
+	if err := connectorcontract.ObserveUpstreamResponse(writer, response.StatusCode, request.Stream); err != nil {
+		return connectorcontract.AttemptResult{Failure: connectorcontract.FailureInternal, Diagnostic: "upstream response checkpoint failed"}
+	}
 	if response.StatusCode < http.StatusOK || response.StatusCode > 299 || request.Stream && response.StatusCode != http.StatusOK {
 		result := connectorcontract.UpstreamFailed(upstreamFailure(statusDiagnostic(response.StatusCode), response.StatusCode), connectorcontract.OriginUpstreamResponse)
 		result.ErrorDetail = errorContext.ReadResponse(ctx, response, a.maxJSONResponseBytes)

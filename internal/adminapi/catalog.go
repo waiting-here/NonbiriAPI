@@ -77,8 +77,9 @@ var catalogMetadataByKey = map[string]catalogMetadata{
 	KeyDefaultEndpointKeyLimit:  {"limits", catalogText("默认端点密钥上限", "Default endpoint-key limit"), catalogText("每个端点可保存的物理密钥数量上限。", "Maximum physical keys stored for one endpoint."), unitCount, nil},
 	KeyDefaultModelLimit:        {"limits", catalogText("默认个人模型上限", "Default personal-model limit"), catalogText("每个用户可创建的个人逻辑模型数量上限。", "Maximum personal logical models a user may create."), unitCount, nil},
 	KeyDefaultBindingLimit:      {"limits", catalogText("默认模型绑定上限", "Default binding limit"), catalogText("每个个人逻辑模型可配置的上游绑定数量上限。", "Maximum upstream bindings for one personal logical model."), unitCount, nil},
-	KeyDefaultRPMPerUser:        {"limits", catalogText("默认单用户每分钟请求上限", "Default requests per minute per user"), catalogText("用户未单独设置时，每分钟可发起的模型请求数；全站请求上限也同时生效。", "Model requests allowed per minute when a user has no custom limit. The site-wide limit also applies."), unitRPM, []string{KeyGlobalRPM}},
-	KeyGlobalRPM:                {"limits", catalogText("全站每分钟请求上限", "Site-wide requests per minute"), catalogText("所有用户的模型调用共同使用此上限。", "Request limit shared by model calls from all users."), unitRPM, []string{KeyDefaultRPMPerUser}},
+	KeyDefaultRPMPerUser:        {"limits", catalogText("单用户每分钟公益请求上限", "Charity requests per minute per user"), catalogText("仅统计公益模型请求；用户单独设置的公益 RPM 优先。", "Counts charity model requests only. A user's charity RPM override takes precedence."), unitRPM, []string{KeyGlobalRPMPerUser, KeyGlobalRPM}},
+	KeyGlobalRPMPerUser:         {"limits", catalogText("单用户每分钟全局请求上限", "Global requests per minute per user"), catalogText("同一用户的个人与公益模型请求合计上限，默认 60。", "Combined limit for one user's personal and charity model requests, default 60."), unitRPM, []string{KeyDefaultRPMPerUser, KeyGlobalRPM}},
+	KeyGlobalRPM:                {"limits", catalogText("全站每分钟请求上限", "Site-wide requests per minute"), catalogText("所有用户的模型调用共同使用此上限。", "Request limit shared by model calls from all users."), unitRPM, []string{KeyDefaultRPMPerUser, KeyGlobalRPMPerUser}},
 	KeyModelRequestBodyLimitMiB: {"limits", catalogText("模型调用请求体上限", "Model request body limit"), catalogText("自用与公益聊天、向量请求的最大正文，默认 10 MiB。保存后对新请求生效；1 MiB = 1,048,576 字节。反向代理可能设置更低的上限。", "Maximum body for personal and charity chat and embedding calls, default 10 MiB. Changes apply to new requests; 1 MiB = 1,048,576 bytes. A reverse proxy may impose a lower limit."), catalogText("MiB", "MiB"), nil},
 	KeyDefaultPerEndpointConc:   {"limits", catalogText("默认端点并发", "Default endpoint concurrency"), catalogText("同一个上游地址同时处理的请求数；全站并发上限也同时生效。", "Requests that one upstream URL may handle at the same time. The site-wide concurrency limit also applies."), unitCount, []string{KeyEgressGlobalConc}},
 	KeyEgressGlobalConc:         {"limits", catalogText("全站出站并发", "Global egress concurrency"), catalogText("所有上游服务同时处理的请求总数。", "Total requests that all upstream services may handle at the same time."), unitCount, []string{KeyDefaultPerEndpointConc}},
@@ -145,6 +146,7 @@ var catalogMetadataByKey = map[string]catalogMetadata{
 func init() {
 	addDuelCatalogMetadata()
 	addBlackjackCatalogMetadata()
+	addPermanentGameCatalogMetadata()
 	addLoanCatalogMetadata()
 	add := func(key, group, titleZh, titleEn, descriptionZh, descriptionEn string, unit localizedCatalogText, gates ...string) {
 		catalogMetadataByKey[key] = catalogMetadata{

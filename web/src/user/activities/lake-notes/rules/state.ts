@@ -4,6 +4,7 @@ import { RULES_ID } from './catalog';
 export function stateBytes(p: Profile, c: Cast) {
   const floats = [
     p.clockMinutes,
+    c.bitePreparationRemaining,
     c.waitRemaining,
     c.barY,
     c.barVelocity,
@@ -14,8 +15,16 @@ export function stateBytes(p: Profile, c: Cast) {
     c.currentMissTime,
     c.longestMissTime,
     ...(c.fish
-      ? [c.fish.position, c.fish.y, c.fish.speed, c.fish.target, c.fish.drift]
-      : [0, 0, 0, 0, 0]),
+      ? [
+          c.fish.position,
+          c.fish.y,
+          c.fish.speed,
+          c.fish.target,
+          c.fish.drift,
+          c.fish.reverseRemaining,
+          c.fish.dartDirection,
+        ]
+      : [0, 0, 0, 0, 0, 0, 0]),
     c.treasure?.y || 0,
     c.treasure?.progress || 0,
   ];

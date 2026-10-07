@@ -464,7 +464,7 @@ export async function getDeletedAccountDetail(
 export interface DeletionDuelAbort {
   id: string;
   discord_id: string;
-  game_key: 'bidding' | 'likes';
+  game_key: 'bidding' | 'likes' | 'gwent';
   match_id: string;
   former_user_id: string;
   reason: 'self_deletion_cancelled_match';
@@ -498,7 +498,7 @@ export function getDeletionDuelAborts(
           const result: DeletionDuelAbort = {
             id: decimalID(row.id, 'duel abort id'),
             discord_id: string(row.discord_id, 'duel abort Discord id', { ascii: true }),
-            game_key: oneOf(row.game_key, ['bidding', 'likes'] as const, 'duel abort game'),
+            game_key: oneOf(row.game_key, ['bidding', 'likes', 'gwent'] as const, 'duel abort game'),
             match_id: string(row.match_id, 'duel abort match id', { min: 1 }),
             former_user_id: decimalID(row.former_user_id, 'duel abort former user id'),
             reason: oneOf(

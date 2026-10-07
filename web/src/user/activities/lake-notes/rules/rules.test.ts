@@ -25,7 +25,7 @@ import type { Action, Cast, Profile } from './types';
 
 describe('Lake Notes source conformance', () => {
   it('matches every original full-game tick and terminal profile', () => {
-    expect(games.vectors).toHaveLength(279);
+    expect(games.vectors).toHaveLength(426);
     for (const vector of games.vectors) {
       let at = 0;
       let { profile, cast } = start(
@@ -57,7 +57,7 @@ describe('Lake Notes source conformance', () => {
     }
   });
   it('matches original shop, skill, basket and contract actions', () => {
-    expect(actions.actions).toHaveLength(89);
+    expect(actions.actions).toHaveLength(94);
     for (const vector of actions.actions) {
       const r = applyAction(vector.profile as Profile, vector.action as Action);
       expect(JSON.parse(JSON.stringify(r.profile)), vector.name).toEqual(vector.finalProfile);
@@ -66,8 +66,8 @@ describe('Lake Notes source conformance', () => {
   });
   it('rejects nonfinite restoration, bad random and unsafe integer assets', () => {
     const profile = initialProfile();
-    expect(Object.keys(catalog.GEAR)).toHaveLength(14);
-    expect(catalog.FISH_TYPES).toHaveLength(54);
+    expect(Object.keys(catalog.GEAR)).toHaveLength(15);
+    expect(catalog.FISH_TYPES).toHaveLength(96);
     const { cast } = start(profile, () => 0, 1);
     expect(() => validateCast({ ...cast, barVelocity: Infinity })).toThrow();
     expect(() => start(profile, () => 1, 1)).toThrow();

@@ -231,6 +231,7 @@ func collectReservations(ctx context.Context, tx *sql.Tx, includeOutstanding boo
 	}
 	queries = append(queries,
 		reservationQuery{"duel_queue", `SELECT id,ledger_rows_remaining FROM game_duel_queue ORDER BY id`, reservationDuelQueue},
+		reservationQuery{"catch_session", `SELECT id,ledger_rows_remaining FROM game_catch_sessions ORDER BY id`, reservationCatchSession},
 		reservationQuery{"duel_session", `SELECT id,ledger_rows_remaining FROM game_duel_sessions ORDER BY id`, reservationDuelSession},
 		reservationQuery{"blackjack_payment", `SELECT id,ledger_rows_remaining FROM game_blackjack_payments ORDER BY id`, reservationBlackjackPayment},
 		reservationQuery{"image_task", `SELECT id,ledger_rows_remaining FROM image_activity_tasks ORDER BY id`, reservationImageTask},
@@ -246,8 +247,10 @@ func collectReservations(ctx context.Context, tx *sql.Tx, includeOutstanding boo
 				predicate = "state='reserved'"
 			case "thursday_period":
 				predicate = "state IN ('configured','open','settling','configuration_error')"
+			case "catch_session":
+				predicate = "status IN ('playing','paused')"
 			case "duel_session":
-				predicate = "game_key IN ('bidding','likes') AND state='active'"
+				predicate = "game_key IN ('bidding','likes','gwent') AND state='active'"
 			case "image_task":
 				predicate = "finance_state='reserved'"
 			}

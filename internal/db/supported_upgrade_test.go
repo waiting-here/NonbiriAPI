@@ -22,8 +22,13 @@ var preReleaseLedgerFixture string
 //go:embed testdata/pre_ai_players.sql
 var preAIPlayersFixture string
 
+//go:embed testdata/pre_management_and_games.sql
+var preManagementAndGamesFixture string
+
+func aiPlayersStorageSchema() string { return generationTwoSchema + preManagementAndGamesFixture }
+
 func baselineStorageSchema() string {
-	return generationTwoSchema + preAIPlayersFixture + `
+	return aiPlayersStorageSchema() + preAIPlayersFixture + `
 DROP INDEX idx_charity_reservations_retention;
 DROP INDEX idx_donation_usage_retention;
 UPDATE schema_state SET version=1 WHERE id=1;
@@ -60,6 +65,10 @@ func supportedSourceFixture(t *testing.T) *sql.DB {
 	if err := seedGenerationTwo(context.Background(), tx, hostileOID("b1e_")); err != nil {
 		t.Fatal(err)
 	}
+	// The historical source predates these configuration rows.
+	if _, err := tx.Exec(`DELETE FROM site_config WHERE key='global_rpm_per_user' OR key LIKE 'game_gwent_%' OR key LIKE 'game_steadycatch_%' OR key LIKE 'game_lakenotes_%'`); err != nil {
+		t.Fatal(err)
+	}
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
@@ -68,11 +77,12 @@ func supportedSourceFixture(t *testing.T) *sql.DB {
 
 func TestSupportedReleasedSchemaIdentity(t *testing.T) {
 	for _, source := range []struct{ schema, manifest string }{
+		{aiPlayersStorageSchema(), aiPlayersManifestHash},
 		{preLedgerRetentionSchema(), preLedgerRetentionManifestHash},
 		{preQueryIndexesSchema(), preQueryIndexesManifestHash},
 		{preStorageVersionSchema(), preStorageVersionManifestHash},
 		{baselineStorageSchema(), baselineManifestHash},
-		{generationTwoSchema + preAIPlayersFixture, terminalReservationIndexesManifestHash},
+		{aiPlayersStorageSchema() + preAIPlayersFixture, terminalReservationIndexesManifestHash},
 	} {
 		database, err := sql.Open("sqlite", ":memory:")
 		if err != nil {
@@ -87,7 +97,7 @@ func TestSupportedReleasedSchemaIdentity(t *testing.T) {
 			}
 			assertRetainedManifest(t, database, PinnedGenerationTwoManifestHash)
 			assertForeignKeyEnforcement(t, database)
-			if version, err := readSchemaVersion(context.Background(), database); err != nil || version != 3 {
+			if version, err := readSchemaVersion(context.Background(), database); err != nil || version != len(storageSchema.versions) {
 				t.Fatal("current schema not reached", version, err)
 			}
 		}

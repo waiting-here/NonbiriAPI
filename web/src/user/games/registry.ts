@@ -1,6 +1,18 @@
 import { createElement, lazy, Suspense, type ComponentType } from 'react';
 import { LoadingState } from '@shared/components/States';
-import { BiddingPage, LikesPage } from './common/duel/DuelPage';
+import { BiddingPage, LikesPage, GwentPage } from './common/duel/DuelPage';
+const Catch = lazy(async () => ({
+  default: (await import('./steady-catch/SteadyCatchGame')).SteadyCatchGame,
+}));
+function CatchPage() {
+  return createElement(Suspense, { fallback: createElement(LoadingState) }, createElement(Catch));
+}
+const Lake = lazy(async () => ({
+  default: (await import('../activities/lake-notes/LakeNotesPage')).LakeNotesPage,
+}));
+function LakePage() {
+  return createElement(Suspense, { fallback: createElement(LoadingState) }, createElement(Lake));
+}
 const Fishing = lazy(async () => ({
   default: (await import('./fishing/FishingGame')).FishingGame,
 }));
@@ -39,6 +51,7 @@ function BlackjackPage() {
  */
 export interface GameRegistration {
   readonly id: string;
+  readonly path?: string;
   readonly version: number;
   readonly titleKey: string;
   readonly page: ComponentType;
@@ -82,5 +95,20 @@ export const gameRegistry: readonly GameRegistration[] = Object.freeze([
   },
   { id: 'bidding', version: 1, titleKey: 'games.bidding.title', page: BiddingPage },
   { id: 'likes', version: 1, titleKey: 'games.likes.title', page: LikesPage },
+  { id: 'gwent', version: 1, titleKey: 'games.gwent.title', page: GwentPage },
+  {
+    id: 'steadycatch',
+    path: '/games/steady-catch',
+    version: 1,
+    titleKey: 'games.steadycatch.title',
+    page: CatchPage,
+  },
   { id: 'blackjack', version: 1, titleKey: 'games.blackjack.title', page: BlackjackPage },
+  {
+    id: 'lakenotes',
+    path: '/games/lake-notes',
+    version: 1,
+    titleKey: 'games.lakenotes.title',
+    page: LakePage,
+  },
 ]);

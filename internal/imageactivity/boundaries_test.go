@@ -260,6 +260,58 @@ func TestHTTPStrictInputsAndSafeBinaryPickup(t *testing.T) {
 		t.Fatal("nil public collections")
 	}
 }
+
+type deadlineImageWriter struct {
+	*httptest.ResponseRecorder
+	deadline time.Time
+	write    func([]byte) (int, error)
+}
+
+func (w *deadlineImageWriter) SetWriteDeadline(deadline time.Time) error {
+	w.deadline = deadline
+	return nil
+}
+
+func (w *deadlineImageWriter) Write(body []byte) (int, error) { return w.write(body) }
+
+func TestImageDownloadDeadlineReleasesRetiredMemory(t *testing.T) {
+	f := newFixture(t)
+	f.configure(t)
+	task := f.submit(t, f.user, 1)
+	f.wait(t, func() bool {
+		result, err := f.service.GetTask(f.ctx(f.user), f.user, task.ID)
+		return err == nil && result.Status == "succeeded"
+	})
+	ctx, cancel := context.WithDeadline(f.ctx(f.user), time.Now().Add(10*time.Second))
+	defer cancel()
+	limit, _ := ctx.Deadline()
+	request := httptest.NewRequest("GET", userPrefix+"/tasks/"+task.ID+"/images/0", nil).WithContext(ctx)
+	request.SetPathValue("id", task.ID)
+	request.SetPathValue("index", "0")
+	writer := &deadlineImageWriter{ResponseRecorder: httptest.NewRecorder()}
+	writer.write = func(body []byte) (int, error) {
+		if !writer.deadline.Equal(limit) || !bytes.Equal(body, f.upstream.png) {
+			t.Fatalf("unbounded image download: %v", writer.deadline)
+		}
+		f.service.memory.purge(task.ID)
+		f.service.memory.mu.Lock()
+		retained := f.service.memory.items[task.ID] != nil
+		f.service.memory.mu.Unlock()
+		if !retained {
+			t.Fatal("active response lost its memory reservation")
+		}
+		return 0, context.DeadlineExceeded
+	}
+	f.service.serveImage(writer, request, UserPrincipal{UserID: f.user})
+	if !writer.deadline.IsZero() {
+		t.Fatal("write deadline leaked into the next request")
+	}
+	f.service.memory.mu.Lock()
+	defer f.service.memory.mu.Unlock()
+	if f.service.memory.items[task.ID] != nil {
+		t.Fatal("failed download retained retired image memory")
+	}
+}
 func TestDiagnosticsRetentionReleasesBudgetAndPreservesLedger(t *testing.T) {
 	f := newFixture(t)
 	f.configure(t)

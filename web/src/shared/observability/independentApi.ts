@@ -6,7 +6,8 @@ import {
   type ErrorMetadata,
   type SourceFacts,
 } from './api';
-export type IndependentKind = 'all' | 'model_discovery' | 'image_task' | 'image_discovery';
+export type IndependentKind =
+  'all' | 'api_request' | 'model_discovery' | 'image_task' | 'image_discovery';
 export interface IndependentItem extends ErrorMetadata {
   id: string;
   kind: Exclude<IndependentKind, 'all'>;
@@ -36,6 +37,7 @@ export interface IndependentDetail {
 }
 export interface IndependentFilter {
   kind: IndependentKind;
+  storage?: string;
   user_id?: string;
   subject_id?: string;
   from?: number;
@@ -96,6 +98,9 @@ function metadata(value: unknown): ErrorMetadata {
     bytes_saved: bytes,
     truncated: v.truncated,
     save_state: v.save_state as ErrorMetadata['save_state'],
+    ...(typeof v.failure_reason === 'string'
+      ? { failure_reason: v.failure_reason as ErrorMetadata['failure_reason'] }
+      : {}),
     created_at: created,
     expires_at: expires,
   };
@@ -103,7 +108,7 @@ function metadata(value: unknown): ErrorMetadata {
 function item(value: unknown): IndependentItem {
   const v = object(value);
   const prefix =
-    v.kind === 'model_discovery'
+    v.kind === 'model_discovery' || v.kind === 'api_request'
       ? 'req_'
       : v.kind === 'image_task'
         ? 'img_'

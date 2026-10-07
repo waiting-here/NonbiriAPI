@@ -20,8 +20,7 @@ import (
 
 func TestLakeRootRecoveryMaintenanceExportAndDeletion(t *testing.T) {
 	f := newActivityWireFixture(t)
-	const base = "/api/limited-activities/lake-notes"
-	const adminBase = "/admin/api/limited-activities/lake-notes"
+	const base = "/api/games/lake-notes"
 	call := func(method, path string, body any, seat int, out any) {
 		t.Helper()
 		cookie := f.adminCookie
@@ -38,34 +37,25 @@ func TestLakeRootRecoveryMaintenanceExportAndDeletion(t *testing.T) {
 	}
 	var profile lakenotes.ProfileView
 	call("GET", base+"/profile", nil, 0, &profile)
-	if !profile.Readonly || profile.Period != nil || profile.Entitlement != nil || profile.Profile.Coins != "0" {
+	if !profile.Readonly || profile.Settings.Enabled || profile.Profile.Coins != "0" {
 		t.Fatalf("default activity is open or funded: %+v", profile)
 	}
-	fee := "1000"
-	var period lakenotes.Period
-	call("POST", adminBase+"/periods", lakenotes.PeriodInput{
-		ExpectedRevision: "0", Name: "Summer waters", Status: "published",
-		StartsAt: f.now().Unix() - 10, EndsAt: f.now().Unix() + 3600, EntryFeeMilli: &fee,
-		Exchanges: map[lakenotes.Direction]lakenotes.ExchangeSetting{
+	config := f.call("GET", "/admin/api/games/config", nil, f.adminCookie, true)
+	f.call("PATCH", "/admin/api/games/config", map[string]any{
+		"expected_revision": config["revision"], "master_enabled": true,
+		"lakenotes": map[string]any{"enabled": true, "exchanges": map[lakenotes.Direction]lakenotes.ExchangeSetting{
 			lakenotes.GeneralToCoins: {Enabled: true, SourceAmount: "1000", TargetAmount: "3"},
-		},
-	}, -1, &period)
-	config := f.call("GET", adminBase, nil, f.adminCookie, true)
-	f.call("PUT", adminBase, map[string]any{
-		"expected_revision": config["revision"], "visible": true, "paused": false,
-		"starts_at": nil, "ends_at": nil, "module_config": map[string]any{},
+			lakenotes.CoinsToGeneral: {}, lakenotes.CoinsToGame: {}, lakenotes.GameToCoins: {},
+		}},
 	}, f.adminCookie, true)
-	var entry lakenotes.EntryResult
-	call("POST", base+"/entry", lakenotes.EntryInput{PeriodID: period.ID, ExpectedPeriodRevision: period.Revision}, 0, &entry)
-	var repeatEntry lakenotes.EntryResult
-	call("POST", base+"/entry", lakenotes.EntryInput{PeriodID: period.ID, ExpectedPeriodRevision: period.Revision}, 0, &repeatEntry)
-	if repeatEntry.Receipt.OperationID != entry.Receipt.OperationID || repeatEntry.Profile.Wallet != entry.Profile.Wallet {
-		t.Fatal("re-entering charged another fee")
+	call("GET", base+"/profile", nil, 0, &profile)
+	if profile.Readonly {
+		t.Fatal("free permanent game remained closed")
 	}
 	var exchange lakenotes.ExchangeResult
 	call("POST", base+"/exchange", lakenotes.ExchangeInput{
-		QuoteInput:             lakenotes.QuoteInput{Direction: lakenotes.GeneralToCoins, Quantity: "2", PeriodID: period.ID},
-		ExpectedPeriodRevision: period.Revision, ExpectedProfileRevision: entry.Profile.Revision,
+		QuoteInput:               lakenotes.QuoteInput{Direction: lakenotes.GeneralToCoins, Quantity: "2"},
+		ExpectedSettingsRevision: profile.Settings.Revision, ExpectedProfileRevision: profile.Revision,
 	}, 0, &exchange)
 	if exchange.Profile.Profile.Coins != "6" || exchange.Receipt.SourceAmount != "2000" || exchange.Receipt.TargetAmount != "6" {
 		t.Fatalf("exchange did not use exact lots: %+v", exchange)
@@ -76,9 +66,9 @@ func TestLakeRootRecoveryMaintenanceExportAndDeletion(t *testing.T) {
 		ControlInput: lakenotes.ControlInput{Generation: started.Cast.Generation, ExpectedRevision: started.Cast.Revision},
 		FromTick:     1, ToTick: 1, Edges: []lakenotes.Edge{},
 	}, 0, &current)
-	call("POST", base+"/entry", lakenotes.EntryInput{PeriodID: period.ID, ExpectedPeriodRevision: period.Revision}, 1, &entry)
+	call("GET", base+"/profile", nil, 1, &profile)
 	var other lakenotes.CastResult
-	call("POST", base+"/casts", lakenotes.StartInput{ExpectedProfileRevision: entry.Profile.Revision}, 1, &other)
+	call("POST", base+"/casts", lakenotes.StartInput{ExpectedProfileRevision: profile.Revision}, 1, &other)
 	var paused int
 	var userRevision []byte
 	if err := f.store.DB().QueryRow("SELECT revision FROM users WHERE id=?", f.users[1].ID).Scan(&userRevision); err != nil {
@@ -114,8 +104,8 @@ func TestLakeRootRecoveryMaintenanceExportAndDeletion(t *testing.T) {
 		t.Fatalf("startup accrued offline time: %d -> %d, %v", elapsedBefore, elapsedAfter, err)
 	}
 	call("POST", base+"/casts/"+current.Cast.ID+"/resume", lakenotes.ControlInput{Generation: current.Cast.Generation, ExpectedRevision: current.Cast.Revision}, 0, &current)
-	call("POST", base+"/entry", lakenotes.EntryInput{PeriodID: period.ID, ExpectedPeriodRevision: period.Revision}, 2, &entry)
-	call("POST", base+"/casts", lakenotes.StartInput{ExpectedProfileRevision: entry.Profile.Revision}, 2, &other)
+	call("GET", base+"/profile", nil, 2, &profile)
+	call("POST", base+"/casts", lakenotes.StartInput{ExpectedProfileRevision: profile.Revision}, 2, &other)
 	f.offset.Add(10)
 	work, err := f.app.Load().activityRuntime.Retain(context.Background(), f.now().Unix(), 1, time.Now().Add(time.Second))
 	if err != nil || work.Processed != 1 || !work.More {
@@ -166,7 +156,7 @@ func TestLakeRootRecoveryMaintenanceExportAndDeletion(t *testing.T) {
 		t.Fatalf("export: %d %s", exported.Code, exported.Body.String())
 	}
 	lake := document.LakeNotes
-	if document.SchemaVersion != lifecycle.SchemaVersion || lake.Profile.Coins != "6" || len(lake.Casts) != 1 || lake.Casts[0].AckTick != 1 || len(lake.Entries) != 1 || len(lake.Exchanges) != 1 || lake.Exchanges[0].SourceAmount != "2000" || lake.Entries[0].OperationID != repeatEntry.Receipt.OperationID {
+	if document.SchemaVersion != lifecycle.SchemaVersion || lake.Profile.Coins != "6" || len(lake.Casts) != 1 || lake.Casts[0].AckTick != 1 || len(lake.Entries) != 0 || len(lake.Exchanges) != 1 || lake.Exchanges[0].SourceAmount != "2000" {
 		t.Fatalf("export omitted personal progress or receipts: %+v", lake)
 	}
 	for _, internal := range []string{"reward_plan", "request_hash", "active_elapsed_ns", "lease_until_ns"} {
@@ -197,7 +187,7 @@ func TestLakeRootRecoveryMaintenanceExportAndDeletion(t *testing.T) {
 	if err := f.store.DB().QueryRow("SELECT count(*) FROM idempotency_records WHERE scope=? AND actor_scope_hash=?", string(idempotency.ScopeLakeNotes), actor[:]).Scan(&receipts); err != nil || receipts != 0 {
 		t.Fatalf("delete left personal receipts: %d %v", receipts, err)
 	}
-	if err := f.store.DB().QueryRow("SELECT count(*) FROM credit_operations WHERE id IN (?,?)", repeatEntry.Receipt.OperationID, exchange.Receipt.OperationID).Scan(&operations); err != nil || operations != 2 {
+	if err := f.store.DB().QueryRow("SELECT count(*) FROM credit_operations WHERE id=?", exchange.Receipt.OperationID).Scan(&operations); err != nil || operations != 1 {
 		t.Fatalf("delete removed settled ledger operations: %d %v", operations, err)
 	}
 	if late := f.request("POST", base+"/casts/"+current.Cast.ID+"/resume", lakenotes.ControlInput{Generation: current.Cast.Generation, ExpectedRevision: current.Cast.Revision}, f.users[0].Cookie, false); late.Code != http.StatusUnauthorized {

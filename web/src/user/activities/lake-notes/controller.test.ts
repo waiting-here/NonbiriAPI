@@ -28,8 +28,18 @@ function fixture(ticks = 0): CastResult {
       rules_id: RULES_ID,
       profile: state.profile,
       wallet: { general_milli: '0', game_milli: '0' },
-      period: null,
-      entitlement: null,
+      settings: {
+        revision: '1',
+        ...{
+          enabled: false,
+          exchanges: {
+            coins_to_general: { enabled: false, source_amount: '', target_amount: '' },
+            general_to_coins: { enabled: false, source_amount: '', target_amount: '' },
+            coins_to_game: { enabled: false, source_amount: '', target_amount: '' },
+            game_to_coins: { enabled: false, source_amount: '', target_amount: '' },
+          },
+        },
+      },
       cast,
     },
   };

@@ -194,6 +194,9 @@ type testDuelExport struct {
 func (a testDuelExport) ExportDuel(_ context.Context, tx *sql.Tx, _ ExportRequest) (DuelExport, ExportFinalizer, error) {
 	return a.value, a.end, a.owner.record(a.name, tx)
 }
+func (a testDuelExport) ExportCatch(_ context.Context, tx *sql.Tx, _ ExportRequest) (CatchExport, ExportFinalizer, error) {
+	return CatchExport{}, a.end, a.owner.record(a.name, tx)
+}
 func (a testDuelExport) ExportBlackjack(_ context.Context, tx *sql.Tx, _ ExportRequest) (BlackjackExport, ExportFinalizer, error) {
 	return BlackjackExport{}, a.end, a.owner.record(a.name, tx)
 }
@@ -378,7 +381,7 @@ func newLifecycleTestFixture(t *testing.T, now int64) *lifecycleTestFixture {
 			RequestAdaptation:  exports, Continuity: exports, FatFish: exports,
 			Identity: exports, Resources: exports, Issues: exports, Ledger: exports, Activities: exports,
 			Donations: exports, Charity: exports, Fishing: exports, LinkLink: exports, RPS: exports,
-			Bidding: testDuelExport{owner: exports, name: "bidding"}, Likes: testDuelExport{owner: exports, name: "likes"},
+			Bidding: testDuelExport{owner: exports, name: "bidding"}, Likes: testDuelExport{owner: exports, name: "likes"}, SteadyCatch: testDuelExport{owner: exports, name: "steadycatch"}, Gwent: testDuelExport{owner: exports, name: "gwent"},
 			Blackjack:  testDuelExport{owner: exports, name: "blackjack"},
 			Randomness: testDuelExport{owner: exports, name: "randomness"},
 			Rankings:   exports, Penalties: exports, Governance: exports,
@@ -394,7 +397,7 @@ func newLifecycleTestFixture(t *testing.T, now int64) *lifecycleTestFixture {
 			IssuesAnnouncements: noopDelete("issues"), Donations: noopDelete("donations"), Activities: noopDelete("activities"),
 			Reports: noopDelete("reports"), Fishing: noopDelete("fishing"), LinkLink: noopDelete("linklink"),
 			RPS: noopDelete("rps"), DebugAccountStream: noopDelete("debug"),
-			Bidding: noopDelete("bidding"), Likes: noopDelete("likes"), Blackjack: noopDelete("blackjack"),
+			Bidding: noopDelete("bidding"), Likes: noopDelete("likes"), SteadyCatch: noopDelete("steadycatch"), Gwent: noopDelete("gwent"), Blackjack: noopDelete("blackjack"),
 		},
 		Recovery: RecoveryAdapters{
 			PersonalAutomation: noopRecovery("personal_automation"),
@@ -404,7 +407,7 @@ func newLifecycleTestFixture(t *testing.T, now int64) *lifecycleTestFixture {
 			Idempotency:        noopRecovery("idempotency"), Discovery: noopRecovery("discovery"), Claims: noopRecovery("claims"),
 			Thursday: noopRecovery("thursday"), Reports: noopRecovery("reports"), Fishing: noopRecovery("fishing"),
 			LinkLink: noopRecovery("linklink"), RPS: noopRecovery("rps"), Donations: noopRecovery("donations"), Secrets: noopRecovery("secrets"),
-			Bidding: noopRecovery("bidding"), Likes: noopRecovery("likes"), Blackjack: noopRecovery("blackjack"),
+			Bidding: noopRecovery("bidding"), Likes: noopRecovery("likes"), SteadyCatch: noopRecovery("steadycatch"), Gwent: noopRecovery("gwent"), Blackjack: noopRecovery("blackjack"),
 		},
 		Retention: RetentionAdapters{
 			Ledger:             noopRetention("ledger"),
@@ -418,7 +421,7 @@ func newLifecycleTestFixture(t *testing.T, now int64) *lifecycleTestFixture {
 			Observability: noopRetention("observability"), RiskAudit: noopRetention("risk_audit"),
 			Issues: noopRetention("issues"), Fishing: noopRetention("fishing"), LinkLink: noopRetention("linklink"),
 			RPS: noopRetention("rps"), Reports: noopRetention("reports"), Donations: noopRetention("donations"),
-			Bidding: noopRetention("bidding"), Likes: noopRetention("likes"), Blackjack: noopRetention("blackjack"),
+			Bidding: noopRetention("bidding"), Likes: noopRetention("likes"), SteadyCatch: noopRetention("steadycatch"), Gwent: noopRetention("gwent"), Blackjack: noopRetention("blackjack"),
 			Charity: noopRetention("charity"), Idempotency: noopRetention("idempotency"), Secrets: noopRetention("secrets"),
 		},
 		HeldObjects: HeldObjectAdapters{

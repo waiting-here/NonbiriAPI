@@ -131,7 +131,11 @@ function ScopedAttemptErrors({
             <p>
               {error.save_state === 'capacity_exhausted'
                 ? t('common.diagnostics.rawBodyWasNotSavedBecauseThe')
-                : t('common.diagnostics.rawBodyCouldNotBeSaved')}
+                : error.failure_reason === 'read_failure'
+                  ? t('common.diagnostics.rawBodyReadFailed')
+                  : error.failure_reason === 'storage_failure'
+                    ? t('common.diagnostics.rawBodyStorageFailed')
+                    : t('common.diagnostics.rawBodyUnspecifiedFailure')}
             </p>
           )}
         </details>

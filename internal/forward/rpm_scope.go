@@ -1,100 +1,86 @@
 package forward
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"net/http"
-	"sync"
-	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/modelname"
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/requestbody"
 	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
 )
 
-type deniedChatScopeKey struct{}
+type preparedIngressKey struct{}
 
-// Denied requests have already released their normal admission permits.
-// Keep their optional body classification bounded across all callers as well.
-const maxRPMDenialReads = 16
-
-type deniedChatScope struct {
-	request  *http.Request
-	writer   http.ResponseWriter
-	userID   int64
-	readGate chan struct{}
-	once     sync.Once
-	charity  bool
+type preparedIngress struct {
+	body      []byte
+	envelope  *openai.RequestEnvelope
+	mediaType string
+	failure   *wireFailure
 }
 
-// WithRPMDenialScope carries an authenticated request to the denial observer.
-// It never reads a body on admission: concurrency and RPM remain ahead of all
-// parsing. Only a user-RPM denial may consume the body via CharityRPMDenial.
-func WithRPMDenialScope(next http.Handler) http.Handler {
-	readGate := make(chan struct{}, maxRPMDenialReads)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		userID, err := CallerIdentity(r)
-		if err != nil || r.Method != http.MethodPost || r.URL == nil || !requestkind.OperationForPath(r.URL.Path).Valid() {
-			next.ServeHTTP(w, r)
-			return
-		}
-		scope := &deniedChatScope{request: r, writer: w, userID: userID, readGate: readGate}
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), deniedChatScopeKey{}, scope)))
-	})
+func (p *preparedIngress) clear() {
+	clear(p.body)
+	p.envelope.Clear()
 }
 
-// CharityRPMDenial resolves the same reserved model namespace as preflight,
-// using the same strict bounded JSON decoder. Input whose namespace cannot be
-// decoded never becomes a user violation. The request is not forwarded or replayed.
-// A transport that cannot enforce the short read deadline keeps the rate-limit
-// response but cannot safely attribute an automatic-ban event.
-func CharityRPMDenial(ctx context.Context, userID int64) bool {
-	if ctx == nil || ctx.Err() != nil {
-		return false
-	}
-	scope, ok := ctx.Value(deniedChatScopeKey{}).(*deniedChatScope)
-	if !ok || scope.userID != userID {
-		return false
-	}
-	scope.once.Do(func() {
-		r := scope.request
-		if r.URL.RawQuery != "" || r.URL.ForceQuery || r.Body == nil {
-			return
-		}
-		if _, ok := validateChatMedia(r); !ok {
-			return
-		}
+// RPMClassifier reads the same envelope that ingress will use. Concurrency
+// admission precedes this read; a shared gate also bounds simultaneous reads
+// across users. The HTTP server's body timeout bounds slow clients.
+func RPMClassifier() func(*http.Request) (*http.Request, bool, func(), error) {
+	gate := make(chan struct{}, 16)
+	return func(r *http.Request) (*http.Request, bool, func(), error) {
 		select {
-		case scope.readGate <- struct{}{}:
-			defer func() { <-scope.readGate }()
+		case gate <- struct{}{}:
+			defer func() { <-gate }()
 		default:
-			return
+			return r, false, nil, errors.New("forward: ingress reads busy")
 		}
-		deadline := time.Now().Add(2 * time.Second)
-		if until, ok := ctx.Deadline(); ok && until.Before(deadline) {
-			deadline = until
+		p := prepareIngress(r)
+		charity := false
+		if p.envelope != nil {
+			requestattempt.Model(r.Context(), p.envelope.Model)
+			charity = modelname.IsCharity(p.envelope.Model)
 		}
-		control := http.NewResponseController(scope.writer)
-		if err := control.SetReadDeadline(deadline); err != nil {
-			return
+		return r.WithContext(context.WithValue(r.Context(), preparedIngressKey{}, p)), charity, p.clear, nil
+	}
+}
+
+func prepareIngress(r *http.Request) *preparedIngress {
+	p := &preparedIngress{}
+	fail := func(code, message string) *preparedIngress {
+		f := platformFailure(code, message)
+		p.failure = &f
+		return p
+	}
+	if exactIngressFailure(r.Method, r.URL.Path, r.URL.EscapedPath()) != nil || r.URL.RawQuery != "" || r.URL.ForceQuery {
+		return fail(httperr.CodeInvalidRequest, "invalid request")
+	}
+	var ok bool
+	p.mediaType, ok = validateChatMedia(r)
+	if !ok {
+		return fail(httperr.CodeInvalidRequest, "invalid request")
+	}
+	limit, err := requestbody.Limit(r.Context())
+	if err != nil {
+		return fail(httperr.CodeServiceUnavailable, "request configuration unavailable")
+	}
+	if r.ContentLength > limit {
+		return fail(httperr.CodePayloadTooLarge, "request body too large")
+	}
+	p.body, err = readBoundedBody(r.Body, limit)
+	if err == nil {
+		p.envelope, err = openai.DecodeRequestEnvelope(bytes.NewReader(p.body), limit, requestkind.OperationForPath(r.URL.Path))
+	}
+	if err != nil {
+		if errors.Is(err, openai.ErrPayloadTooLarge) {
+			return fail(httperr.CodePayloadTooLarge, "request body too large")
 		}
-		defer func() { _ = control.SetReadDeadline(time.Time{}) }()
-		bounded, cancel := context.WithDeadline(ctx, deadline)
-		defer cancel()
-		limit, err := requestbody.Limit(bounded)
-		if err != nil || r.ContentLength > limit {
-			return
-		}
-		defer r.Body.Close()
-		request, err := decodeRequest(r.Body, requestkind.OperationForPath(r.URL.Path), limit)
-		if err != nil {
-			return
-		}
-		defer request.Clear()
-		if ctx.Err() == nil {
-			requestattempt.Model(ctx, request.Model)
-			scope.charity = modelname.IsCharity(request.Model)
-		}
-	})
-	return scope.charity && ctx.Err() == nil
+		return fail(httperr.CodeInvalidRequest, "invalid request")
+	}
+	return p
 }

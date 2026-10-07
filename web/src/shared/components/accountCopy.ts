@@ -58,6 +58,7 @@ export function accountHistoryCopy(t: TFunction) {
     games: {
       bidding: t('common.accountHistory.games.bidding'),
       likes: t('common.accountHistory.games.likes'),
+      gwent: t('common.accountHistory.games.gwent'),
     },
   };
 }

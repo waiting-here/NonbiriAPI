@@ -426,15 +426,18 @@ export function Arena({
                   {stunned && <span className="likes-state-warning">{text('likes.sTUNBUFF')}</span>}
                 </div>
               </div>
-              <CharacterPassive
-                role={catalog.roles.find((r) => r.id === player.role)!}
-                onInspect={onInspect}
-              />
-              {harness && (
-                <div className="likes-passive-summary">
-                  <EffectSummary catalog={catalog} id={harness.id} />
-                </div>
-              )}
+              <details className="likes-passives">
+                <summary>{text('likes.alwaysActiveCharacterPassives')}</summary>
+                <CharacterPassive
+                  role={catalog.roles.find((r) => r.id === player.role)!}
+                  onInspect={onInspect}
+                />
+                {harness && (
+                  <div className="likes-passive-summary">
+                    <EffectSummary catalog={catalog} id={harness.id} />
+                  </div>
+                )}
+              </details>
               <CastImpact
                 key={`${round}:${motion.stage}:${motion.stepIndex}`}
                 events={casts}

@@ -183,7 +183,9 @@ type embeddingMarkRail struct {
 	mark func() error
 }
 
-func (r embeddingMarkRail) MarkResponseStarted(context.Context, claim.Handle) error { return r.mark() }
+func (r embeddingMarkRail) MarkResponseStarted(context.Context, claim.Handle, ...int) error {
+	return r.mark()
+}
 
 func TestEmbeddingCheckpointPreservesUsageAndStopsRetries(t *testing.T) {
 	for _, state := range []string{"cancel-after-mark", "write-failure", "mark-failure"} {

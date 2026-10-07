@@ -98,6 +98,7 @@ type EndpointOverviewUser struct {
 
 type EndpointOverview struct {
 	BaseURL       string                 `json:"base_url"`
+	Tags          []string               `json:"tags"`
 	UserCount     string                 `json:"user_count"`
 	EndpointCount string                 `json:"endpoint_count"`
 	KeyCount      string                 `json:"key_count"`
@@ -124,6 +125,8 @@ type PageQuery struct {
 
 type EndpointOverviewQuery struct {
 	Q      string
+	Tag    string
+	UserID int64
 	Cursor string
 	Limit  int
 	Page   *pagination.Request

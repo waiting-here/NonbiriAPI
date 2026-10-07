@@ -24,7 +24,7 @@ func ReadForUser(ctx context.Context, tx *sql.Tx, game, resource string, user, n
 	case "rps":
 		query = `SELECT 0 FROM game_rps_sessions s JOIN game_rps_seats p ON p.session_id=s.id WHERE s.id=? AND p.user_id=? UNION ALL SELECT 1 FROM game_rps_summaries s JOIN game_rps_summary_seats p ON p.session_id=s.session_id WHERE s.session_id=? AND p.user_id=? AND s.terminal_at>?`
 		args = []any{resource, user, resource, user, cutoff}
-	case "bidding", "likes":
+	case "bidding", "likes", "gwent":
 		query = `SELECT s.state='terminal' FROM game_duel_sessions s JOIN game_duel_seats p ON p.session_id=s.id WHERE s.game_key=? AND s.id=? AND p.user_id=? AND (s.state='active' OR s.terminal_at>?)`
 		args = []any{game, resource, user, cutoff}
 	case "blackjack":

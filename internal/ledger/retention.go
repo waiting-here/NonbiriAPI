@@ -222,6 +222,8 @@ func retentionSource(ctx context.Context, tx *sql.Tx, operation retentionOperati
 		table, active = "game_rps_sessions", "1"
 	case sourceDuelQueue:
 		table, active = "game_duel_queue", "1"
+	case sourceCatchSession:
+		table, active = "game_catch_sessions", "status IN ('playing','paused')"
 	case sourceDuelSession:
 		table, active = "game_duel_sessions", "state='active'"
 	case sourceBlackjackPayment:

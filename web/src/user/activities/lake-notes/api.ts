@@ -1,24 +1,16 @@
 import { decoded, idempotentOptions } from '@shared/operations/api';
 import { invalidResponse } from '@shared/operations/wire';
 import { apiFetch, type ApiRequestOptions } from '@shared/query/http';
-import { base, decodePeriod, type Direction, type Period } from '@shared/lakenotes/api';
+import { base, type Direction, type LakeSettings } from '@shared/lakenotes/api';
 import { RULES_ID, type Profile, type Cast, type Action } from './rules';
 
 export interface Wallet {
   general_milli: string;
   game_milli: string;
 }
-export interface EntryReceipt {
-  period_id: string;
-  period_revision: string;
-  fee_milli: string;
-  operation_id?: string;
-  ledger_seq?: string;
-  created_at: number;
-}
 export interface CastView {
   id: string;
-  source_period_id: string;
+  source_period_id?: string;
   rules_id: string;
   generation: string;
   revision: string;
@@ -36,8 +28,7 @@ export interface ProfileView {
   rules_id: string;
   profile: Profile;
   wallet: Wallet;
-  period: Period | null;
-  entitlement: EntryReceipt | null;
+  settings: LakeSettings & { revision: string };
   cast: CastView | null;
 }
 export interface CastResult {
@@ -57,14 +48,13 @@ export interface CheckpointInput extends ControlInput {
 export interface QuoteInput {
   direction: Direction;
   quantity: string;
-  period_id: string;
 }
 export interface ExchangeInput extends QuoteInput {
-  expected_period_revision: string;
+  expected_settings_revision: string;
   expected_profile_revision: string;
 }
 export interface Quote extends QuoteInput {
-  period_revision: string;
+  settings_revision: string;
   profile_revision: string;
   source_amount: string;
   target_amount: string;
@@ -87,7 +77,6 @@ export function decodeProfile(value: unknown): ProfileView {
   if (profile.rules_id !== RULES_ID) invalidResponse('rules identity');
   return {
     ...profile,
-    period: profile.period === null ? null : decodePeriod(profile.period),
     cast: profile.cast === null ? null : decodeCast(profile.cast),
   };
 }
@@ -99,19 +88,6 @@ export const getProfile = (options?: ApiRequestOptions) =>
   decoded(base + '/profile', decodeProfile, options);
 export const getCast = (id: string, options?: ApiRequestOptions) =>
   decoded(base + '/casts/' + encodeURIComponent(id), decodeCastResult, options);
-export const enter = (
-  input: { period_id: string; expected_period_revision: string },
-  key: string,
-  options?: ApiRequestOptions,
-) =>
-  decoded(
-    base + '/entry',
-    (value) => {
-      const result = value as { receipt: EntryReceipt; profile: ProfileView };
-      return { ...result, profile: decodeProfile(result.profile) };
-    },
-    idempotentOptions(key, { ...options, method: 'POST', json: input }),
-  );
 export const act = (input: ActionInput, key: string, options?: ApiRequestOptions) =>
   decoded(
     base + '/actions',

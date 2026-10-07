@@ -131,6 +131,10 @@ substitute for choosing trusted upstreams and keeping key material private.
 
 The application accepts forwarding metadata only from configured trusted proxy addresses. An invalid or duplicate `X-Forwarded-For` falls back to the direct peer address, even if another IP header is valid. The application does not use `CF-Connecting-IP` or `True-Client-IP` as an alternative source.
 
+Review upstream operators as a trust boundary. Their reported usage determines actual charges and donation rewards and may exceed the admission reserve; the platform cannot independently verify a provider's token accounting. Public HTTP endpoints remain supported, but send credentials and content without transport encryption. Prefer HTTPS and review any HTTP exception before approving a donated source.
+
+Original-error diagnostics may retain a credential or other private content echoed by an upstream. Only administrators and currently authorized level-6 stewards can read them; protect the database and its backups accordingly. Silent retries before an accepted response can also duplicate provider work when delivery is uncertain. Personal routes default to retries off; charity routes stop retrying as soon as HTTP 200 is received. See the [API contract](api-contract.md) for billing and error behavior.
+
 Source auditing distinguishes a direct peer, a validated forwarded client and a fallback peer. Before using shared-IP findings, verify the complete direct/CDN → Nginx → application chain for both IPv4 and IPv6, including an untrusted client-supplied forwarding header and malformed or duplicate values. A proxy address incorrectly treated as a client can associate many unrelated users. Fallback-quality addresses are excluded from shared-IP findings, but configuration still determines whether a forwarded address is trustworthy. Client headers are self-reported clues and cannot establish the identity of a relay or application.
 
 ### Nginx and Cloudflare notes

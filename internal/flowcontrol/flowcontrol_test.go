@@ -119,7 +119,27 @@ func TestAdmitUserIsolation(t *testing.T) {
 
 func TestAdmitExplicitRPMIsIndependentFromDefault(t *testing.T) {
 	config := testRPMConfig() // PerUserLimit default = 2; MaxEvents = 8.
-	config.GlobalLimit = 8
+	config.GlobalLimit, config.PerUserLimit, config.CharityPerUserLimit = 8, 8, 2
+	admit := func(t *testing.T, c *Controller, user int64) {
+		t.Helper()
+		r, _, err := c.AdmitModel(context.Background(), user, true)
+		if err != nil || r == nil {
+			t.Fatalf("charity admission: %v", err)
+		}
+		r.Commit()
+	}
+	deny := func(t *testing.T, c *Controller, user int64) {
+		t.Helper()
+		r, _, err := c.AdmitModel(context.Background(), user, true)
+		if r != nil || !errors.Is(err, ErrRateLimited) {
+			t.Fatalf("charity denial: %v", err)
+		}
+		personal, _, err := c.AdmitModel(context.Background(), user, false)
+		if err != nil {
+			t.Fatalf("charity cap blocked personal: %v", err)
+		}
+		personal.Release()
+	}
 
 	t.Run("above default is honored", func(t *testing.T) {
 		controller := newTestController(t, config, func(_ context.Context, _ int64) (UserLimits, error) {

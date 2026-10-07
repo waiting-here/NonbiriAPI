@@ -25,6 +25,10 @@ test('nine-seat blackjack presents the other eight players as two complete deskt
   await page.goto(`${USER_ORIGIN}/games/blackjack`);
   await expect(page.getByRole('region', { name: 'Your hands' })).toBeVisible();
   await expect(page.locator('.bj-seats > .bj-seat')).toHaveCount(8);
+  expect((await page.locator('.bj-dealer').boundingBox())!.y).toBeCloseTo(
+    (await page.locator('.bj-mine').boundingBox())!.y,
+    0,
+  );
   const boxes = await page.locator('.bj-seats > .bj-seat').evaluateAll((nodes) =>
     nodes.map((node) => {
       const rect = node.getBoundingClientRect();
@@ -108,7 +112,8 @@ test('desktop battle uses both screen halves while narrow screens retain compact
     const cast = await page.locator('.likes-cast').first().boundingBox();
     expect(game!.width).toBeGreaterThan(width - 100);
     expect(cast!.width).toBeGreaterThan(width * 0.35);
-    expect(cast!.height).toBeGreaterThan(350);
+    expect(cast!.height).toBeGreaterThan(120);
+    expect(cast!.height).toBeLessThan(300);
     await expect(page.locator('.likes-compact-scores')).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
@@ -117,6 +122,20 @@ test('desktop battle uses both screen halves while narrow screens retain compact
   await page.setViewportSize({ width: 1920, height: 1080 });
   await page.locator('.likes-arena').scrollIntoViewIfNeeded();
   await page.screenshot({ path: '../tmp/battle-desktop.png' });
+  for (const height of [768, 900]) {
+    await page.setViewportSize({ width: 1366, height });
+    const character = page.locator('.likes-character').first();
+    const before = (await character.boundingBox())!.height;
+    await page
+      .locator('.likes-arena')
+      .evaluate((node) => node.setAttribute('data-presenting', 'false'));
+    expect((await character.boundingBox())!.height).toBeCloseTo(before, 0);
+    await page
+      .locator('.likes-arena')
+      .evaluate((node) => node.setAttribute('data-presenting', 'true'));
+    await page.locator('.likes-arena').scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `../tmp/battle-${height}.png` });
+  }
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 844 });
     expect((await page.locator('.likes-cast').first().boundingBox())!.height).toBeLessThan(150);
@@ -181,5 +200,14 @@ test('bidding keeps thirteen hand positions and reward decks usable at every wid
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.locator('.bid-table').scrollIntoViewIfNeeded();
   await page.screenshot({ path: '../tmp/bidding-desktop.png', fullPage: true });
+  for (const height of [768, 900]) {
+    await page.setViewportSize({ width: 1366, height });
+    const table = (await page.locator('.bid-table').boundingBox())!;
+    const hand = (await page.locator('.bid-decision').boundingBox())!;
+    expect(table.y).toBeCloseTo(hand.y, 0);
+    expect(Math.max(table.height, hand.height)).toBeLessThan(height - 200);
+    await page.locator('.bid-play').evaluate((node) => node.scrollIntoView({ block: 'start' }));
+    await page.screenshot({ path: `../tmp/bidding-${height}.png` });
+  }
   errors.assertNone();
 });

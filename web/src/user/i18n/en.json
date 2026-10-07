@@ -181,6 +181,7 @@
           "serverRestarted": "Server restarted",
           "accountUnavailable": "Account unavailable",
           "aPlayerSurrendered": "A player surrendered",
+          "timeoutForfeit": "A player forfeited after repeated timeouts",
           "targetReached": "Target reached",
           "bothPlayersOverloaded": "Both players overloaded",
           "gameCompleted": "Game completed",
@@ -1254,7 +1255,20 @@
           "from": "From {{amount}} credits",
           "specs": "{{count}} of 3 board sizes open",
           "modes": "{{count}} of {{total}} modes open",
-          "learn": "Learn, history and ongoing games"
+          "learn": "Learn, history and ongoing games",
+          "gwent": {
+            "title": "AI Gwent",
+            "body": "Four factions, three battle lines. Build a deck and outplay a human opponent."
+          },
+          "steadycatch": {
+            "title": "Catch You Steadily",
+            "body": "Catch memes and dodge hazards in a 90-second challenge with ChatGPT."
+          },
+          "free": "Free play",
+          "lakenotes": {
+            "title": "Lake Notes",
+            "body": "Collect fish across four waters, upgrade your gear, and fill your fishing journal."
+          }
         },
         "fishing": {
           "eyebrow": "Pond fishing",
@@ -1905,7 +1919,7 @@
         "changesTitle": "Changes and contact",
         "changesBody": "Material changes to the Privacy Policy or these Terms that affect data collected, its use or sharing will be posted with an effective date at least seven days in advance. We will seek express consent before the change takes effect where required by law. Other updates take effect when posted. Continued use after an effective date constitutes acceptance where legally valid; otherwise stop using the service and contact the operator. The operator must publish a contact channel and governing-law statement before production use.",
         "donationTitle": "Donations and shared resources",
-        "donationBody": "A new donation requires an explicit choice about allowing an administrator or level-6 steward to thank you manually in a Discord public channel. You cannot change that choice after submission; older unconfirmed records do not authorize public thanks. Charity calls cannot use your own donated keys unless you are currently a level-6 steward; personal models remain available under their normal rules. Exempt calls retain ordinary donor rewards. Donation limits may independently restrict total, input and output Tokens, and shared key changes affect all bindings. Charity-model forwarding can remove the configured optional top-level parameters. A recent success percentage describes the displayed observation window and sample, not a promise that your next request will succeed. Forced rejection stops new charity calls; dispatched calls settle under the existing rules, and personal use and settled rewards remain. Resubmitting the same key may require manual review and explicit enablement. Failure streaks count provider errors, connection failures and timeouts. User cancellation, downstream disconnection and platform rejection leave the streak unchanged; a provider error confirmed before cancellation still counts. Counting and charges are separate, and cancellation may still incur a charge. Charity automation reads and writes require level 6; level 5 retains personal automation and its existing browser permissions.",
+        "donationBody": "A new donation requires an explicit choice about allowing an administrator or level-6 steward to thank you manually in a Discord public channel. You cannot change that choice after submission; older unconfirmed records do not authorize public thanks. Charity calls cannot use your own donated keys unless you are currently a level-6 steward; personal models remain available under their normal rules. Exempt calls retain ordinary donor rewards. Donation limits may independently restrict total, input and output Tokens, and shared key changes affect all bindings. Charity-model forwarding can remove the configured optional top-level parameters. A recent success percentage describes the displayed observation window and sample, not a promise that your next request will succeed. Forced rejection stops new charity calls; dispatched calls settle under the existing rules, and personal use and settled rewards remain. Resubmitting the same key may require manual review and explicit enablement. For charity calls, an upstream HTTP 200 resets the key failure streak and stops retries. Later errors are still logged, sanitized and returned. Without a 200 response, provider errors, connection failures and timeouts count toward the streak. User cancellation, downstream disconnection and platform rejection leave it unchanged; a provider error confirmed before cancellation still counts. An upstream HTTP 200 stream consumes quota, including empty responses and later errors; missing usage uses the reserved amount. Nonstream billing still requires a valid response. Charity automation reads and writes require level 6; level 5 retains personal automation and its existing browser permissions.",
         "imageTitle": "Limited activities and image charges",
         "imageBody": "Limited activities need a configured opening period. Hiding an activity removes its directory entry but does not block an otherwise eligible visitor with its link. Reopening keeps balances and history. The picture-book activity exchanges general credits for draft paper and brushes; it does not support reverse exchange or exchange between those currencies. The default prices are 1,000 general credits per draft paper and 10,000 per brush. Brush supply is a cumulative shared cap, initially ten; reducing the cap does not confiscate existing balances, and task refunds do not restore exchange supply. Administrators may change future prices and settings. A no-charge quote lets you review the selected size and exact price without requesting an image. Submitting reserves both quoted currency amounts multiplied by the requested image count under the accepted model and pricing revisions. If a revision changes first, review a fresh quote. Any valid partial success charges the full accepted task price. Failure, an unresolved result at the execution deadline, or cancellation before dispatch refunds both currencies. After dispatch you cannot cancel, and closing the page does not cancel. The server controls ordering and upstream requests; no participant receives a privileged queue or free allowance. Default queue and execution limits are 30 minutes each. Successful images have a ten-minute memory pickup window and may be lost on page closure, expiry or restart without a refund. Restart refunds queued tasks whose in-memory payload was lost; an uncertain upstream submission is never automatically repeated. Natural activity end lets accepted work finish, while manual pause or maintenance cancels undispatched tasks and refunds them. Bans prevent result access; account deletion removes private data while minimal anonymous execution cleanup may continue. Administrators open Lake Notes for defined periods. The entry fee is shown before confirmation and charged at most once per period in general credits. Device changes, price edits and reopening after a pause do not repeat that fee; another period may charge separately. Profiles and coins persist across periods. Ending, pause or maintenance preserves progress and stops play and exchanges. The four directions between coins and general or game credits are configured separately and start disabled. Exchanges use the confirmed whole-lot quantity and preserve the remainder; a price change requires fresh confirmation. These virtual assets have no cash redemption, withdrawal or user-to-user transfer. Custom picture-book dimensions must have an applicable quote; price changes require reselection and confirmation.",
         "inactivityTitle": "Inactivity policies",
@@ -2044,8 +2058,9 @@
         "closed": "Donation intake is closed. Existing donation records remain available to review and manage."
       },
       "donationsTitle": "My donations",
-      "requestUnit": "Charged for requests that begin returning a valid response.",
+      "requestUnit": "Charged per billable request.",
       "tokenUnit": "Per million tokens; input, cache writes, cache reads, and output are priced separately.",
+      "billingHelp": "An upstream HTTP 200 stream is billable, including empty responses and later errors. Missing usage is charged at the reserved amount. Nonstream requests require a valid response to become billable.",
       "priceCaption": "Charity model prices",
       "priceType": "Item",
       "userPrice": "Price",
@@ -2669,14 +2684,14 @@
       "accountPresentation.deleteAction": "Delete account…"
     },
     "lakeNotes": {
-      "back": "Back to activities",
+      "back": "Back to games",
       "intro": "Hold Space or the fishing button to rise; release to fall. Keep the fish inside the catch bar.",
       "entryHeading": "Entry for this period",
       "entryFee": "Entry fee for this period: {{amount}} general credits",
       "entryScope": "The entry fee covers the whole period. Enter again when a new period opens; your progress and coins carry over.",
       "paid": "Entry confirmed for this period",
       "enter": "Confirm fee and join",
-      "closed": "The activity is closed. Your coins, basket and saved progress remain available when it reopens.",
+      "closed": "The game is closed. Your progress is saved.",
       "entryUnknown": "Entry is unconfirmed. Try entering again.",
       "retry": "Retry the same action",
       "saved": "Saved",
@@ -2784,7 +2799,7 @@
       "treasureReward": "Chest reward: {{coins}} coins · {{bait}} ×{{count}}",
       "debrisReward": "Recovered {{item}}",
       "exchangeHeading": "Exchange coins and site credits",
-      "exchangeHelp": "Choose the number of batches to preview the cost and amount received.",
+      "exchangeHelp": "Exchange coins and credits at the configured rates. Check the amounts before confirming.",
       "direction": "Direction",
       "batches": "Number of batches",
       "quote": "Preview exchange",
@@ -3013,6 +3028,174 @@
           "coast_anglerfish": {
             "name": "Anglerfish",
             "description": "A glowing lure sways above its head; it approaches shore only on stormy nights."
+          },
+          "lake_bluegill": {
+            "name": "Bluegill",
+            "description": "A round sunfish with dark bars and a blue-black gill spot, often found in the shallows."
+          },
+          "lake_pumpkinseed": {
+            "name": "Pumpkinseed",
+            "description": "Blue-green cheek lines and orange speckles brighten this small fish among the weeds."
+          },
+          "lake_rudd": {
+            "name": "Rudd",
+            "description": "Copper-gold scales, red fins and an upturned mouth mark this surface feeder."
+          },
+          "lake_roach": {
+            "name": "Roach",
+            "description": "Silver scales and warm red fins shimmer as shoals drift through quiet bays."
+          },
+          "lake_yellowperch": {
+            "name": "Yellow perch",
+            "description": "Black bands cross its yellow sides beneath two distinct dorsal fins."
+          },
+          "lake_paddlefish": {
+            "name": "Paddlefish",
+            "description": "Its long, flat snout is unmistakable. Habitat changes have reduced real populations; this game's giant is enlarged."
+          },
+          "river_minnow": {
+            "name": "Eurasian minnow",
+            "description": "Small, spindle-shaped fish with a dark side stripe gather in clear shallows."
+          },
+          "river_bleak": {
+            "name": "Bleak",
+            "description": "A thin silver body flashes just beneath the surface as its upturned mouth searches for food."
+          },
+          "river_stoneloach": {
+            "name": "Stone loach",
+            "description": "Sandy markings hide it on the riverbed, where short barbels search between stones."
+          },
+          "river_smallmouth": {
+            "name": "Smallmouth bass",
+            "description": "Bronze sides and dark bars blend into rocky shallows; the mouth ends before the rear of the eye."
+          },
+          "river_chub": {
+            "name": "Chub",
+            "description": "A broad head and large scales stand out where swift water meets a quiet bend."
+          },
+          "river_europeansturgeon": {
+            "name": "European sturgeon",
+            "description": "Rows of bony plates armor this rare fish. In the game, it travels upriver on rainy nights."
+          },
+          "coast_mullet": {
+            "name": "Mullet",
+            "description": "Fine stripes run along its silver-gray body beneath two separate dorsal fins."
+          },
+          "coast_whiting": {
+            "name": "Whiting",
+            "description": "Three dorsal fins rise like small flags above a pale silver body in dim coastal water."
+          },
+          "coast_garfish": {
+            "name": "Garfish",
+            "description": "Long, narrow jaws and a blue-green back dart just below the surface."
+          },
+          "coast_blackseabream": {
+            "name": "Black sea bream",
+            "description": "Faint bands, a strong mouth and a tall dorsal fin suit life around reefs."
+          },
+          "coast_mahimahi": {
+            "name": "Mahi-mahi",
+            "description": "Blue-green and gold colors ripple below a long dorsal fin and a prominent forehead."
+          },
+          "coast_humpheadwrasse": {
+            "name": "Humphead wrasse",
+            "description": "Thick lips, a raised forehead and blue-green patterns give this protected fish a stately appearance."
+          },
+          "jungle_climbingperch": {
+            "name": "Climbing perch",
+            "description": "An olive body and spiny dorsal fin move slowly through sheltered water beside roots."
+          },
+          "jungle_threespotgourami": {
+            "name": "Three-spot gourami",
+            "description": "Dark spots and threadlike pelvic fins distinguish this fish in shallow, weedy bays."
+          },
+          "jungle_snakeskingourami": {
+            "name": "Snakeskin gourami",
+            "description": "Slanted markings resemble snakeskin as long pelvic fins probe underwater plants."
+          },
+          "jungle_croakinggourami": {
+            "name": "Croaking gourami",
+            "description": "This small striped brown fish shelters among fallen leaves and aquatic plants."
+          },
+          "jungle_moonlightgourami": {
+            "name": "Moonlight gourami",
+            "description": "Fine silver-white scales reflect softly around vivid orange-red eyes."
+          },
+          "jungle_redtailrasbora": {
+            "name": "Red-tailed rasbora",
+            "description": "A clear black stripe and a flick of red tail vanish into shallow shadows."
+          },
+          "jungle_silverflyingbarb": {
+            "name": "Silver flying barb",
+            "description": "A dark line runs along its bright silver body while long barbels search calm water."
+          },
+          "jungle_silverbarb": {
+            "name": "Silver barb",
+            "description": "Broad silver scales and warm yellow fins drift along the shallow bay."
+          },
+          "jungle_bronzefeatherback": {
+            "name": "Bronze featherback",
+            "description": "A long anal fin ripples like a ribbon below an arched bronze-gray back."
+          },
+          "jungle_yellowcatfish": {
+            "name": "Yellow catfish",
+            "description": "Long barbels lead a flat head and brown-green body past submerged roots."
+          },
+          "jungle_bigheadcatfish": {
+            "name": "Bighead catfish",
+            "description": "A broad head, long barbels and fine dark spots blend into muddy, slow water."
+          },
+          "jungle_stripedsnakehead": {
+            "name": "Striped snakehead",
+            "description": "An elongated, slant-striped body and snake-like head emerge from shallow weeds."
+          },
+          "jungle_peacockeel": {
+            "name": "Peacock eel",
+            "description": "A pointed snout searches the mud beneath a row of eye-shaped markings."
+          },
+          "jungle_beardlessbarb": {
+            "name": "Beardless barb",
+            "description": "Speckled silver scales end at a conspicuous black spot near the tail."
+          },
+          "jungle_clownfeatherback": {
+            "name": "Clown featherback",
+            "description": "Eye-shaped black spots line an arched silver-gray body that patrols deep pools after dusk."
+          },
+          "jungle_smallscalearcherfish": {
+            "name": "Smallscale archerfish",
+            "description": "Dark bars and an upturned mouth mark this silver-yellow hunter near the surface."
+          },
+          "jungle_giantgourami": {
+            "name": "Giant gourami",
+            "description": "A broad, pale copper body moves with slow strength through submerged roots."
+          },
+          "jungle_tinfoilbarb": {
+            "name": "Tinfoil barb",
+            "description": "Large silver scales gleam like foil beside red fins and black-edged tail lobes."
+          },
+          "jungle_hampalabarb": {
+            "name": "Hampala barb",
+            "description": "A dark band belts its sides while a black-edged red tail powers sudden bursts."
+          },
+          "jungle_asianarowana": {
+            "name": "Asian arowana",
+            "description": "Large copper-gold scales cover a long body, with two barbels swaying beneath the jaw."
+          },
+          "jungle_giantsnakehead": {
+            "name": "Giant snakehead",
+            "description": "A broad head and blue-black patterns announce a predator that pauses between surges."
+          },
+          "jungle_stripedpangasius": {
+            "name": "Striped pangasius",
+            "description": "Low-set eyes and a smooth silver-gray body glide through broad, deep pools."
+          },
+          "jungle_mekonggiantcatfish": {
+            "name": "Mekong giant catfish",
+            "description": "A vast gray shape passes like a shadow. Its rare freshwater inspiration is enlarged in this game."
+          },
+          "jungle_siamesegiantcarp": {
+            "name": "Giant Siamese carp",
+            "description": "A massive head and large silver-black scales suggest an ancient fish, enlarged here from its rare real-world inspiration."
           }
         },
         "locations": {
@@ -3030,6 +3213,11 @@
             "name": "Coast",
             "scene": "Sea breezes cross the pier as waves touch the shore.",
             "description": "A saltwater pier and nearby sea, with schooling small fish and ocean travelers."
+          },
+          "jungle": {
+            "name": "Jungle bend",
+            "scene": "Tree shadows cross the water as tropical fish pass between roots and shallows.",
+            "description": "Small fish gather in the shallows of this forest river; giants shelter in the deep bends."
           }
         },
         "gear": {
@@ -3088,6 +3276,10 @@
           "sonarBobber": {
             "name": "Sonar bobber",
             "description": "Reveals the fish species after the bite."
+          },
+          "legendRod": {
+            "name": "Legendary angler rod",
+            "description": "Claim free after catching 10 legendary fish. Supports bait and three tackle slots, at most two of one kind. The rod itself adds no bar size or forgiveness."
           }
         },
         "skills": {
@@ -3191,7 +3383,9 @@
       },
       "catalogTitle": "Fish catalog",
       "ledgerEntry": "Lake Notes: period entry",
-      "ledgerExchange": "Lake Notes: coin and credit exchange"
+      "ledgerExchange": "Lake Notes: coin and credit exchange",
+      "buyBatch": "Buy {{count}} · {{cost}} coins",
+      "bitePreparation": "Fish hooked. Get ready!"
     },
     "quickstart": {
       "title": "Connect your service",
@@ -3378,6 +3572,12 @@
       "items": {
         "unknown": "Unknown catch"
       }
+    },
+    "steadycatch": {
+      "title": "Catch You Steadily"
+    },
+    "lakenotes": {
+      "title": "Lake Notes"
     }
   },
   "recurringLimits": {

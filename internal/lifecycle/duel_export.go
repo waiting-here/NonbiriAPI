@@ -9,12 +9,24 @@ import (
 // These fields pin the personal projection independently of live response DTOs.
 // Rule JSON has already passed the game's participant-specific visibility filter.
 type DuelExport struct {
+	Competitive   *DuelRatingExport   `json:"competitive,omitempty"`
 	AI            *DuelAIExport       `json:"ai,omitempty"`
 	Queue         *DuelQueueExport    `json:"queue"`
 	Current       *DuelStateExport    `json:"current"`
 	CurrentRounds []DuelRoundExport   `json:"current_rounds"`
 	History       []DuelMatchExport   `json:"history"`
 	Loadouts      []DuelLoadoutExport `json:"loadouts,omitempty"`
+}
+type DuelRatingExport struct {
+	Rating    int   `json:"rating"`
+	Played    int64 `json:"played"`
+	UpdatedAt int64 `json:"updated_at"`
+}
+type DuelMatchRatingExport struct {
+	Result       int   `json:"result"`
+	RatingBefore int   `json:"rating_before"`
+	RatingAfter  int   `json:"rating_after"`
+	SettledAt    int64 `json:"settled_at"`
 }
 type DuelLoadoutExport struct {
 	Slot      int             `json:"slot"`
@@ -48,6 +60,7 @@ type DuelStateExport struct {
 	ContentHash  string                `json:"content_hash"`
 	Revision     string                `json:"revision"`
 	PhaseSeq     string                `json:"phase_seq"`
+	DecisionID   string                `json:"decision_id,omitempty"`
 	Phase        string                `json:"phase"`
 	Round        int                   `json:"round"`
 	Deadline     *int64                `json:"deadline"`
@@ -91,8 +104,9 @@ type DuelDetailExport struct {
 	RoundStartEvents json.RawMessage    `json:"round_start_events"`
 }
 type DuelMatchExport struct {
-	Detail DuelDetailExport  `json:"detail"`
-	Rounds []DuelRoundExport `json:"rounds"`
+	Competitive *DuelMatchRatingExport `json:"competitive,omitempty"`
+	Detail      DuelDetailExport       `json:"detail"`
+	Rounds      []DuelRoundExport      `json:"rounds"`
 }
 type DuelRoundExport struct {
 	Sources     [2]string       `json:"sources,omitempty"`

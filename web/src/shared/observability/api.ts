@@ -23,6 +23,7 @@ export interface ErrorMetadata {
   bytes_saved: number;
   truncated: boolean;
   save_state: 'saved' | 'capacity_exhausted' | 'unavailable';
+  failure_reason?: '' | 'read_failure' | 'storage_failure';
   created_at: number;
   expires_at: number;
 }
@@ -86,6 +87,7 @@ export function errorBytes(body: ErrorBody): Uint8Array<ArrayBuffer> {
     bytes = new Uint8Array(binary.length);
     for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
   }
-  if (bytes.byteLength !== body.bytes_saved || bytes.byteLength > 1_048_576) throw new Error('Invalid diagnostic byte count');
+  if (bytes.byteLength !== body.bytes_saved || bytes.byteLength > 1_048_576)
+    throw new Error('Invalid diagnostic byte count');
   return bytes;
 }

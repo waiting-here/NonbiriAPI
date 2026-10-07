@@ -11,8 +11,9 @@ import (
 )
 
 type actionBody struct {
-	PhaseSeq string          `json:"phase_seq"`
-	Action   json.RawMessage `json:"action"`
+	PhaseSeq   string          `json:"phase_seq"`
+	DecisionID string          `json:"decision_id,omitempty"`
+	Action     json.RawMessage `json:"action"`
 }
 type surrenderBody struct {
 	PhaseSeq string `json:"phase_seq"`
@@ -44,7 +45,7 @@ func (s *Service) act(ctx context.Context, in ActionInput, surrender bool) (Muta
 		return MutationResult{}, err
 	}
 	route := "/api/games/" + s.rules.ID() + "/sessions/{id}/actions"
-	var body any = actionBody{PhaseSeq: in.PhaseSeq, Action: in.Action}
+	var body any = actionBody{PhaseSeq: in.PhaseSeq, DecisionID: in.DecisionID, Action: in.Action}
 	if surrender {
 		route = "/api/games/" + s.rules.ID() + "/sessions/{id}/surrender"
 		body = surrenderBody{PhaseSeq: in.PhaseSeq}
@@ -81,7 +82,17 @@ func (s *Service) act(ctx context.Context, in ActionInput, surrender bool) (Muta
 		s.publish(ctx, facts)
 		return MutationResult{}, ErrConflict
 	}
-	if v.PhaseSeq != seq || !surrender && (v.Phase == "settlement" || v.Seats[seat].Locked) {
+	validWindow := v.PhaseSeq == seq
+	if rules, ok := v.rules.(SequentialRules); ok && !surrender {
+		ids, err := rules.Decisions(v.Mode, v.Payload.Rules)
+		if err != nil {
+			return MutationResult{}, err
+		}
+		validWindow = ids[seat] != "" && in.DecisionID == ids[seat]
+	} else if in.DecisionID != "" {
+		return MutationResult{}, ErrInvalidRequest
+	}
+	if !validWindow || !surrender && (v.Phase == "settlement" || v.Seats[seat].Locked) {
 		return MutationResult{}, ErrConflict
 	}
 	var action json.RawMessage
@@ -136,6 +147,9 @@ func (s *Service) act(ctx context.Context, in ActionInput, surrender bool) (Muta
 // Both human and source decisions arrive here only after Rules.Accept and the
 // authoritative actor/window/deadline checks in their transaction.
 func (s *Service) commitAcceptedAction(ctx context.Context, tx *sql.Tx, v *sessionRecord, expected db.U128, seat int, action json.RawMessage, origin, failure string, now int64) (activities.PublishFacts, error) {
+	if _, ok := v.rules.(SequentialRules); ok {
+		return s.step(ctx, tx, v, expected, seat, action, origin == "timeout", now)
+	}
 	v.Seats[seat].Action = action
 	v.Seats[seat].Locked = true
 	recordActionSource(v, seat, action, origin, failure, now)

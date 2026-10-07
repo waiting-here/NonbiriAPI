@@ -53,6 +53,9 @@ const (
 	KindDuelQueueRelease     Kind = "duel_queue_release"
 	KindDuelSessionStart     Kind = "duel_session_start"
 	KindDuelTerminal         Kind = "duel_terminal"
+	KindCatchTicket          Kind = "catch_ticket"
+	KindCatchRefund          Kind = "catch_refund"
+	KindCatchReward          Kind = "catch_reward"
 	KindAITicket             Kind = "ai_ticket"
 	KindAITerminal           Kind = "ai_terminal"
 	KindBlackjackReserve     Kind = "blackjack_reserve"
@@ -85,6 +88,7 @@ const (
 	sourceRPSSession       sourceType = "rps_session"
 	sourceDuelQueue        sourceType = "duel_queue"
 	sourceDuelSession      sourceType = "duel_session"
+	sourceCatchSession     sourceType = "catch_session"
 	sourceBlackjackPayment sourceType = "blackjack_payment"
 	sourceImageTask        sourceType = "image_task"
 )
@@ -189,6 +193,7 @@ const (
 	reservationGameOnboarding
 	reservationDuelQueue
 	reservationDuelSession
+	reservationCatchSession
 	reservationBlackjackPayment
 	reservationImageTask
 )
@@ -243,6 +248,10 @@ func DuelQueueReservation(id string) (ReservationRef, error) {
 	return ReservationRef{kind: reservationDuelQueue, id: id}, nil
 }
 
+func CatchSessionReservation(id string) (ReservationRef, error) {
+	return opaqueReservation(reservationCatchSession, id, "sc_")
+}
+
 func DuelSessionReservation(id string) (ReservationRef, error) {
 	if duelIDGame(id, false) == "" {
 		return ReservationRef{}, ErrInvalidReservation
@@ -258,12 +267,18 @@ func duelIDGame(id string, queue bool) string {
 		if db.ValidateOpaqueID(id, "likq_") {
 			return "likes"
 		}
+		if db.ValidateOpaqueID(id, "gwtq_") {
+			return "gwent"
+		}
 	} else {
 		if db.ValidateOpaqueID(id, "bid_") {
 			return "bidding"
 		}
 		if db.ValidateOpaqueID(id, "lik_") {
 			return "likes"
+		}
+		if db.ValidateOpaqueID(id, "gwt_") {
+			return "gwent"
 		}
 	}
 	return ""

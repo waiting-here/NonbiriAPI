@@ -22,6 +22,9 @@ func (s *Service) RegisterRoutes(user resources.UserRouteRegistrar, continuation
 	if user == nil || continuation == nil {
 		return ErrInvariant
 	}
+	if err := s.registerRankingRoute(user); err != nil {
+		return err
+	}
 	base := "/api/games/" + s.rules.ID()
 	if err := randomhttp.RegisterContinuation(continuation, s.database, s.authorizer, s.rules.ID(), s.now, s.authorizeRandomness); err != nil {
 		return err
@@ -152,7 +155,7 @@ func (s *Service) RegisterRoutes(user resources.UserRouteRegistrar, continuation
 			if !readJSON(w, r, &body) {
 				return
 			}
-			value, err := s.Action(r.Context(), ActionInput{Identity: identity, IdempotencyKey: key, SessionID: r.PathValue("id"), PhaseSeq: body.PhaseSeq, Action: body.Action})
+			value, err := s.Action(r.Context(), ActionInput{Identity: identity, IdempotencyKey: key, SessionID: r.PathValue("id"), PhaseSeq: body.PhaseSeq, DecisionID: body.DecisionID, Action: body.Action})
 			writeMutation(w, value, err)
 		}); err != nil {
 			return err
@@ -161,7 +164,7 @@ func (s *Service) RegisterRoutes(user resources.UserRouteRegistrar, continuation
 	return nil
 }
 func (s *Service) PublicCatalog() (json.RawMessage, error) {
-	if s.rules.ID() != "likes" {
+	if s.rules.ID() != "likes" && s.rules.ID() != "gwent" {
 		return nil, ErrNotFound
 	}
 	modes := map[string]json.RawMessage{}

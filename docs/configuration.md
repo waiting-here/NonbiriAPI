@@ -8,7 +8,9 @@ Model APIs configure `role_policy` separately for each model. Native/empty rules
 
 Administrator risk-audit configuration adds `user_ip_window_hours` (integer 1–720, default 24) and `user_ip_min_ips` (2–1000, default 3), alongside existing thresholds/revision. It flags one Discord identity using at least that many trusted API addresses in a rolling window across old/current accounts. Shared-IP counts deduplicate Discord identities. Full stewards can read the settings; only administrators change them. Scans never impose a penalty.
 
-Lake Notes uses the existing limited-activity configuration envelope with empty `module_config:{}`. Separate finite period APIs set an explicit fee before publication and four exact exchange directions. Fresh and upgraded instances start the new activity hidden without an open schedule and every exchange disabled. [Activity configuration](limited-activities.md#lake-notes) describes units and fields. Role policies, periods and UI preferences do not introduce environment variables.
+Lake Notes is a permanent free minigame with four independently configured exchanges. Fresh installations start closed; an open legacy activity stays available after upgrade, with all exchanges initially disabled. See [game settings and API](lake-notes.md).
+
+[Steady Catch](steady-catch.md) starts disabled with zero ticket and first-clear reward. [AI Gwent](ai-gwent.md) and its Standard mode also start disabled; the initial ticket is 5,000 credits, with 1% each for the platform, welfare pool and Thursday pool. Review these values in **Games** before enabling either game. Gwent uses the same prize-pool settlement as Bidding Duel.
 
 Preserve the database's stable encrypted renewed-review matching material with the master key. Resetting it would bypass cross-account secret-text review requirements and is not a supported repair or configuration edit.
 
@@ -96,7 +98,8 @@ The administrator station exposes the following authoritative keys. Unknown keys
 | `default_endpoint_key_limit` | integer `[1,10000]` | 20 per endpoint |
 | `default_model_limit` | integer `[1,10000]` | 100 per user |
 | `default_binding_limit` | integer `[1,10000]` | 50 per model |
-| `default_rpm_per_user` | integer `[1,4096]` | 60; administrator-controlled default |
+| `default_rpm_per_user` | integer `[1,4096]` | 60 charity model calls per user; the user's `rpm_limit` overrides this default |
+| `global_rpm_per_user` | integer `[1,4096]` | 60 model calls per user, including personal and charity calls |
 | `global_rpm` | integer `[1,4096]` | 600 across the process |
 | `default_per_endpoint_concurrency` | integer `[1,100000]` | 8 per normalized base URL |
 | `egress_global_concurrency` | integer `[1,100000]` | 32 across all outbound requests |
@@ -110,7 +113,7 @@ The administrator station exposes the following authoritative keys. Unknown keys
 | `charity_enabled` | boolean | `false`; charity system master switch — while off, no new charity routing happens and the price table is hidden; in-flight reservations still settle |
 | `donation_accept_enabled` | boolean | `false`; gates new donation submissions only; review/routing of existing donations is unaffected |
 | `charity_token_reserve_milli` | nullable canonical positive decimal milli-credit string | **null (default) = not configured** — distinct from an explicit value; while unset, per-token charity models without a model-level override cannot be routed (fail closed), although an enabled model record may still be saved; PATCH rejects `null` and non-positive values |
-| `rpm_ban_threshold` | integer `[0,4096]` | `5`; charity requests denied by the site's per-user RPM limit before an automatic ban; personal calls, global limits, shared key limits and upstream `429` do not count; `0` disables |
+| `rpm_ban_threshold` | integer `[0,4096]` | `5`; requests denied by the per-user charity RPM limit before an automatic ban; personal calls, global limits, shared key limits and upstream `429` do not count; `0` disables |
 | `rpm_ban_window_seconds` | integer `[1,316224000]` | `86400`; persisted rolling RPM violation window; unexpired counts survive restart and same-Discord re-registration |
 | `rpm_ban_duration_seconds` | integer `[1,316224000]` | `86400`; automatic ban duration |
 | `charity_min_chars` | integer `[0,1048576]` | `20`; counted Unicode message runes before a charity request is dispatched; `0` disables |
@@ -188,7 +191,7 @@ The administrator user APIs expose both nullable raw values and their current fa
 }
 ```
 
-`PATCH /admin/api/users/{id}` accepts `endpoint_limit` (`0..10000`), `rpm_limit` (`1..4096`), and `concurrency_limit` (`1..100000`) as canonical decimal strings in profile mode. Effective projections are also strings. The matching `/api/steward/users/{id}` route lets a current L6 steward change another current L1–L5 user's settings, subject to a final transaction permission check. An absent field is unchanged and JSON `null` restores its fallback. An explicit override may be lower, equal to, or higher than the corresponding default; defaults are not clamps. The global RPM and egress gates remain independent. A concurrency value of `0` is invalid and never means unlimited.
+`PATCH /admin/api/users/{id}` accepts `endpoint_limit` (`0..10000`), `rpm_limit` (`1..4096`), and `concurrency_limit` (`1..100000`) as canonical decimal strings in profile mode. Effective projections are also strings. The matching `/api/steward/users/{id}` route lets a current L6 steward change another current L1–L5 user's settings, subject to a final transaction permission check. An absent field is unchanged and JSON `null` restores its fallback. The user RPM override applies to charity calls. An explicit override may be lower, equal to, or higher than the corresponding default; defaults are not clamps. The global RPM and egress gates remain independent. A concurrency value of `0` is invalid and never means unlimited.
 
 Donation-key charity limits use a different explicit contract: `max_concurrency` is `[0,100000]`, `rpm_limit` is `[0,4096]`, and `0` means unlimited without falling back to a site, user, or endpoint default. Donation creation/replacement normalizes omitted or JSON-null fields to zero. In a reviewer/admin/level-6 partial update, omission or null means unchanged and an explicit zero removes the limit.
 
@@ -208,7 +211,7 @@ Mainstream channels are managed through `/admin/api/mainstream-channels`, not `s
 
 ### Runtime application
 
-RPM and concurrency settings update the shared in-process controllers immediately. Per-user concurrency admission occurs before RPM reservation; a concurrency refusal creates no RPM hit or automatic penalty. Resource-count caps are read transactionally on each create. Display, legal, donation guidance, registration, OAuth admission, maintenance, Connector defaults, activities, reports, and game values are read from the database without rebuilding; responses are `no-store`. The site timezone offset carries no runtime singleton: consumers resolve it per transaction and fail closed when it is unset.
+RPM and concurrency settings update the shared in-process controllers immediately. Per-user concurrency admission occurs before bounded model classification and RPM reservation. Charity calls check their charity cap first, then both the per-user global and site-wide caps; personal calls use the latter two. A concurrency refusal creates no RPM hit or automatic penalty. Resource-count caps are read transactionally on each create. Display, legal, donation guidance, registration, OAuth admission, maintenance, Connector defaults, activities, reports, and game values are read from the database without rebuilding; responses are `no-store`. The site timezone offset carries no runtime singleton: consumers resolve it per transaction and fail closed when it is unset.
 
 `GET /api/config` exposes only the display/legal values, the two donation notices, `maintenance_mode`, `registration_open`, and `announcement_epoch`. The admin-host bootstrap endpoint exposes the same safe projection after administrator authentication. Neither exposes operational rate limits, Discord gate IDs, alert preferences, or secrets.
 

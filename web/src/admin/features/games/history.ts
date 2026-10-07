@@ -97,7 +97,7 @@ const cursor = (value: unknown) => nullableString(value, 'history cursor', { min
 const ref = (value: unknown, game: GameID, dataset: Dataset) =>
   opaqueID(
     value,
-    dataset === 'anonymous' ? 'dah_' : game === 'likes' ? 'lik_' : 'bid_',
+    dataset === 'anonymous' ? 'dah_' : game === 'gwent' ? 'gwt_' : game === 'likes' ? 'lik_' : 'bid_',
     'match reference',
   );
 const hash = (value: unknown) => {
@@ -331,7 +331,7 @@ export function normalizeExport(value: unknown, game: GameID, dataset: Dataset):
   };
 }
 const base = (game: GameID) =>
-  `/admin/api/games/${oneOf(game, ['bidding', 'likes'], 'game')}/history`;
+  `/admin/api/games/${oneOf(game, ['bidding', 'likes', 'gwent'], 'game')}/history`;
 export async function getHistory(
   game: GameID,
   dataset: Dataset,

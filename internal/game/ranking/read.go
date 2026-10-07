@@ -149,6 +149,12 @@ func credits(milli *big.Int) string {
 }
 
 func identity(public bool, username, nick, discord, avatar, guild string) Identity {
+	return ProfileIdentity(public, username, nick, discord, avatar, guild)
+}
+
+// ProfileIdentity applies the shared text and image-origin rules to a public
+// game profile. Callers supply the current preference and account eligibility.
+func ProfileIdentity(public bool, username, nick, discord, avatar, guild string) Identity {
 	if !public {
 		return Identity{Kind: "anonymous"}
 	}

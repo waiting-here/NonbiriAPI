@@ -126,7 +126,7 @@
     },
     "failurePolicy": {
       "label": "Consecutive failure disable threshold",
-      "help": "Default: 10. Set to 0 to keep the key available after repeated errors.",
+      "help": "Default: 10. Set to 0 to disable automatic removal. An upstream HTTP 200 resets the charity key's failure count and stops retries; later errors are still reported.",
       "zeroWarning": "Never disable automatically for errors: this key may still be called after repeated failures. Manual disabling, expiry, bans and quota limits still apply.",
       "saved": "Current disable threshold: {{value}}",
       "recalculate": "Saving preserves the failure count and immediately recalculates the error-disabled state. It does not enable the key or reset its failure count.",
@@ -376,8 +376,8 @@
           "duration": "Duration",
           "seconds": "{{seconds}} seconds",
           "storage": "Error text storage",
-          "storageSummary": "Used {{used}} / {{budget}} MiB · {{count}} not saved",
-          "storageFailures": "Read or storage failures: {{count}}. Excludes database pages, indexes and WAL.",
+          "storageSummary": "{{used}} / {{budget}} MiB used · {{count}} bodies omitted over time",
+          "storageFailures": "Lifetime totals: {{capacity}} over budget, {{count}} read or storage failures. {{current}} records currently available.",
           "retryHint": "Retry later, or add a second source to the model.",
           "keyHint": "Check that this service key is valid.",
           "rateHint": "The provider limited the rate. Try again later.",
@@ -394,7 +394,9 @@
             "rejected": "Rejected before dispatch",
             "cancelled": "Cancelled",
             "failed": "Failed ({{status}})"
-          }
+          },
+          "storageHistoryHelp": "Lifetime totals do not decrease when records expire. Missing bodies cannot be recovered. Browse retained records from the last 30 days below. Capacity counts raw bodies only, excluding database pages, indexes and WAL.",
+          "storageRecords": "Browse missing records"
         }
       },
       "charity": {
@@ -883,7 +885,8 @@
       },
       "games": {
         "bidding": "Bidding",
-        "likes": "Likes"
+        "likes": "Likes",
+        "gwent": "AI Gwent"
       }
     },
     "riskAudit": {
@@ -1153,7 +1156,6 @@
       "errorEvent": "Error event",
       "truncated": "(truncated)",
       "rawBodyWasNotSavedBecauseThe": "Raw body was not saved because the storage budget was full.",
-      "rawBodyCouldNotBeSaved": "Raw body could not be saved.",
       "nextEvents": "Next events",
       "loadOriginalBody": "Load original body",
       "couldNotLoadTheErrorBody": "Could not load the error body.",
@@ -1173,7 +1175,10 @@
       "downloadDiagnosticSummary": "Download diagnostic summary",
       "downloadOriginal": "Download original",
       "bodyPreview": "Body preview",
-      "previewShowsTheFirst65536CharactersCopy": "Preview shows the first 65,536 characters. Copy or download for the complete body."
+      "previewShowsTheFirst65536CharactersCopy": "Preview shows the first 65,536 characters. Copy or download for the complete body.",
+      "rawBodyReadFailed": "The upstream body could not be read.",
+      "rawBodyStorageFailed": "The body was read but could not be stored.",
+      "rawBodyUnspecifiedFailure": "This older record does not distinguish read and storage failures."
     },
     "sourceQuality": {
       "direct": "Direct connection address",
@@ -1437,7 +1442,7 @@
       "elevatedPassword": "Administrator password",
       "elevatedPasswordHint": "Verify your identity to confirm this action. Your password is not saved here.",
       "endpointLimit": "Endpoint limit",
-      "rpmLimit": "RPM limit",
+      "rpmLimit": "Charity RPM limit",
       "concurrencyLimit": "In-flight concurrency limit",
       "limitHint": "Leave a limit blank to use the default. The default per-user concurrency is 5. Site, endpoint and key limits also apply to requests.",
       "deletePasswordRequired": "Enter the administrator password to continue.",

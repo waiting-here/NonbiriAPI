@@ -154,7 +154,7 @@ func (f publicScopeFixture) request(body string) *httptest.ResponseRecorder {
 }
 
 func TestPublicSelfRPMDenialDoesNotBanAccount(t *testing.T) {
-	f := newPublicScopeFixture(t, ratelimit.RPMConfig{GlobalLimit: 100, PerUserLimit: 1}, http.StatusOK)
+	f := newPublicScopeFixture(t, ratelimit.RPMConfig{GlobalLimit: 100, PerUserLimit: 1, CharityPerUserLimit: 1}, http.StatusOK)
 	for index := 0; index < 3; index++ {
 		w := f.request(`{"model":"private/model","messages":[{"role":"user","content":"x"}]}`)
 		want := http.StatusTooManyRequests
@@ -194,7 +194,7 @@ func TestPublicRPMBanCountsOnlyDecodedCharityAndUserLimit(t *testing.T) {
 		{name: "downstream key or upstream 429", body: `{"model":"[公益]care/model","messages":[]}`, global: 100, user: 100, downstream: 429},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			f := newPublicScopeFixture(t, ratelimit.RPMConfig{GlobalLimit: tc.global, PerUserLimit: tc.user}, tc.downstream)
+			f := newPublicScopeFixture(t, ratelimit.RPMConfig{GlobalLimit: tc.global, PerUserLimit: tc.user, CharityPerUserLimit: tc.user}, tc.downstream)
 			for i := 0; i < 3; i++ {
 				w := f.request(tc.body)
 				want := http.StatusTooManyRequests
@@ -236,7 +236,7 @@ func TestPublicRPMBanCountsOnlyDecodedCharityAndUserLimit(t *testing.T) {
 }
 
 func TestPublicCharityRPMBanThroughHTTPServer(t *testing.T) {
-	f := newPublicScopeFixture(t, ratelimit.RPMConfig{GlobalLimit: 100, PerUserLimit: 1}, http.StatusOK)
+	f := newPublicScopeFixture(t, ratelimit.RPMConfig{GlobalLimit: 100, PerUserLimit: 1, CharityPerUserLimit: 1}, http.StatusOK)
 	server := httptest.NewServer(httpmw.API(f.handler))
 	defer server.Close()
 	client := server.Client()
@@ -276,8 +276,8 @@ func TestPublicCharityRPMBanThroughHTTPServer(t *testing.T) {
 func TestPublicRPMDenialRechecksAccountAndCancellation(t *testing.T) {
 	for _, state := range []string{"banned", "deleted during body read", "cancelled"} {
 		t.Run(state, func(t *testing.T) {
-			f := newPublicScopeFixture(t, ratelimit.RPMConfig{GlobalLimit: 100, PerUserLimit: 1}, http.StatusOK)
-			if got := f.request(`{"model":"provider/model","messages":[]}`).Code; got != 200 {
+			f := newPublicScopeFixture(t, ratelimit.RPMConfig{GlobalLimit: 100, PerUserLimit: 1, CharityPerUserLimit: 1}, http.StatusOK)
+			if got := f.request(`{"model":"[公益]care/model","messages":[]}`).Code; got != 200 {
 				t.Fatal(got)
 			}
 			ctx, cancel := context.WithCancel(context.Background())

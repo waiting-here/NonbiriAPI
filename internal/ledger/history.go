@@ -59,6 +59,7 @@ var historyCategories = map[string][]Kind{
 	"lake_notes":   {KindLakeEntry, KindLakeExchange},
 	"picture_book": {KindActivityExchange, KindImageReserve, KindImageSettle, KindImageRefund, KindImageDeleteFinalize},
 	"inactivity":   {KindInactivityDecay},
+	"steadycatch": {KindCatchTicket, KindCatchRefund, KindCatchReward},
 	"fat_fish":     {KindFatFishUnlock, KindFatFishTicket, KindFatFishReward, KindFatFishRefund},
 }
 

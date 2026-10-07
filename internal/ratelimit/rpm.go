@@ -19,22 +19,24 @@ const (
 	DefaultRPMPerUserLimit = 60
 )
 
-// RPMLimits contains the two caps enforced by one shared RPM instance.
+// RPMLimits contains the site-wide, per-user and charity-only per-user caps.
 type RPMLimits struct {
-	GlobalLimit  int
-	PerUserLimit int
+	GlobalLimit         int
+	PerUserLimit        int
+	CharityPerUserLimit int
 }
 
 // RPMConfig configures a process-local global and per-user sliding window.
 // GlobalLimit includes active reservations and committed records. A new
 // reservation is rejected when either cap is already reached.
 type RPMConfig struct {
-	Window       time.Duration
-	GlobalLimit  int
-	PerUserLimit int
-	MaxUserKeys  int
-	MaxEvents    int
-	MaxKeyBytes  int
+	Window              time.Duration
+	GlobalLimit         int
+	PerUserLimit        int
+	CharityPerUserLimit int
+	MaxUserKeys         int
+	MaxEvents           int
+	MaxKeyBytes         int
 }
 
 // DefaultRPMConfig returns finite defaults suitable for an explicitly shared
@@ -72,19 +74,19 @@ func (c RPMConfig) normalized() (RPMConfig, error) {
 		return RPMConfig{}, err
 	}
 	if c.GlobalLimit < 1 || c.GlobalLimit > c.MaxEvents ||
-		c.PerUserLimit < 1 || c.PerUserLimit > c.MaxEvents {
+		c.PerUserLimit < 1 || c.PerUserLimit > c.MaxEvents || c.CharityPerUserLimit < 0 || c.CharityPerUserLimit > c.MaxEvents {
 		return RPMConfig{}, ErrInvalidConfig
 	}
 	return c, nil
 }
 
 func (c RPMConfig) limits() RPMLimits {
-	return RPMLimits{GlobalLimit: c.GlobalLimit, PerUserLimit: c.PerUserLimit}
+	return RPMLimits{GlobalLimit: c.GlobalLimit, PerUserLimit: c.PerUserLimit, CharityPerUserLimit: c.CharityPerUserLimit}
 }
 
 func validateRPMLimits(limits RPMLimits, maxEvents int) error {
 	if limits.GlobalLimit < 1 || limits.GlobalLimit > maxEvents ||
-		limits.PerUserLimit < 1 || limits.PerUserLimit > maxEvents {
+		limits.PerUserLimit < 1 || limits.PerUserLimit > maxEvents || limits.CharityPerUserLimit < 0 || limits.CharityPerUserLimit > maxEvents {
 		return ErrInvalidConfig
 	}
 	return nil
@@ -98,19 +100,21 @@ const (
 	RPMGlobalLimit
 	RPMUserLimit
 	RPMCapacity
+	RPMCharityUserLimit
 )
 
 // RPMDecision is a consistent snapshot taken under the limiter mutex. Counts
 // in an admitted Record or reservation include the newly admitted event;
 // counts in Check and a denied decision describe the state before admission.
 type RPMDecision struct {
-	Allowed     bool
-	Reason      RPMReason
-	GlobalCount int
-	UserCount   int
-	GlobalLimit int
-	UserLimit   int
-	RetryAfter  time.Duration
+	Allowed                    bool
+	Reason                     RPMReason
+	GlobalCount                int
+	UserCount                  int
+	GlobalLimit                int
+	UserLimit                  int
+	RetryAfter                 time.Duration
+	CharityCount, CharityLimit int
 }
 
 type rpmEventState uint32
@@ -129,6 +133,7 @@ type rpmEvent struct {
 	state    atomic.Uint32
 	observer RPMObserver
 	decision RPMDecision
+	charity  bool
 }
 
 // RPM is a thread-safe, bounded sliding-window limiter. One instance must be
@@ -386,6 +391,10 @@ func (r *RPM) reserve(ctx context.Context, userKey string, userLimit int) (*RPMR
 }
 
 func (r *RPM) reserveObserved(ctx context.Context, userKey string, userLimit int, observer RPMObserver) (*RPMReservation, RPMDecision, error) {
+	return r.reserveModelObserved(ctx, userKey, userLimit, false, 0, observer)
+}
+
+func (r *RPM) reserveModelObserved(ctx context.Context, userKey string, userLimit int, charity bool, charityLimit int, observer RPMObserver) (*RPMReservation, RPMDecision, error) {
 	if r == nil {
 		return nil, RPMDecision{}, ErrClosed
 	}
@@ -394,6 +403,11 @@ func (r *RPM) reserveObserved(ctx context.Context, userKey string, userLimit int
 	}
 	if err := validateKeyBytes(userKey, r.maxKeyBytes); err != nil {
 		return nil, RPMDecision{}, err
+	}
+	if charityLimit != 0 {
+		if err := r.validateUserLimit(charityLimit); err != nil {
+			return nil, RPMDecision{}, err
+		}
 	}
 	if userLimit != 0 {
 		if err := r.validateUserLimit(userLimit); err != nil {
@@ -417,6 +431,9 @@ func (r *RPM) reserveObserved(ctx context.Context, userKey string, userLimit int
 		userLimit = r.limits.PerUserLimit
 	}
 	decision := r.decisionLocked(userKey, userLimit, now)
+	if charity {
+		decision = r.charityDecisionLocked(userKey, charityLimit, now, decision)
+	}
 	if !decision.Allowed {
 		r.observeLocked(observer, "denied", now, now, decision)
 		return nil, decision, nil
@@ -428,6 +445,10 @@ func (r *RPM) reserveObserved(ctx context.Context, userKey string, userLimit int
 		return nil, decision, ErrCapacity
 	}
 	event := r.newEventLocked(userKey, now, rpmEventActive)
+	event.charity = charity
+	if charity {
+		decision.CharityCount++
+	}
 	decision.GlobalCount++
 	decision.UserCount++
 	decision.Reason = RPMAllowed

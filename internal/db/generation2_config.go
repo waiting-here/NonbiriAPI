@@ -132,6 +132,7 @@ func buildGenerationTwoConfigCatalog() map[string]generationTwoConfigSpec {
 		"default_model_limit":              uintSpec(formatGenerationTwoUint(uint64(DefaultModelLimit)), 1, 10000),
 		"default_binding_limit":            uintSpec(formatGenerationTwoUint(uint64(DefaultBindingLimit)), 1, 10000),
 		"default_rpm_per_user":             uintSpec(formatGenerationTwoUint(uint64(ratelimit.DefaultRPMPerUserLimit)), 1, 4096),
+		"global_rpm_per_user":              uintSpec(formatGenerationTwoUint(uint64(ratelimit.DefaultRPMPerUserLimit)), 1, 4096),
 		"global_rpm":                       uintSpec(formatGenerationTwoUint(uint64(ratelimit.DefaultRPMGlobalLimit)), 1, 4096),
 		"default_per_endpoint_concurrency": uintSpec(formatGenerationTwoUint(uint64(egress.DefaultPerEndpointConcurrency)), 1, 100000),
 		"egress_global_concurrency":        uintSpec(formatGenerationTwoUint(uint64(egress.DefaultGlobalConcurrency)), 1, 100000),
@@ -239,6 +240,11 @@ func buildGenerationTwoConfigCatalog() map[string]generationTwoConfigSpec {
 		catalog["game_rps_"+mode+"_dealer_seconds"] = uintSpec("15", 5, 15)
 		catalog["game_rps_"+mode+"_follower_seconds"] = uintSpec("15", 5, 15)
 	}
+	catalog["game_lakenotes_enabled"] = boolSpec("0")
+	catalog["game_lakenotes_exchanges"] = textSpec(`{"coins_to_game":{"enabled":false,"source_amount":"","target_amount":""},"coins_to_general":{"enabled":false,"source_amount":"","target_amount":""},"game_to_coins":{"enabled":false,"source_amount":"","target_amount":""},"general_to_coins":{"enabled":false,"source_amount":"","target_amount":""}}`, 4096, false)
+	catalog["game_steadycatch_enabled"] = boolSpec("0")
+	catalog["game_steadycatch_price_milli"] = amountSpec("0", 0)
+	catalog["game_steadycatch_first_reward_milli"] = amountSpec("0", 0)
 	for key, value := range duelConfigDefaults() {
 		switch {
 		case strings.HasSuffix(key, "_enabled"):

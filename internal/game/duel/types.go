@@ -64,6 +64,7 @@ type State struct {
 	ContentHash  string          `json:"content_hash"`
 	Revision     string          `json:"revision"`
 	PhaseSeq     string          `json:"phase_seq"`
+	DecisionID   string          `json:"decision_id,omitempty"`
 	Phase        string          `json:"phase"`
 	Round        int             `json:"round"`
 	Deadline     *int64          `json:"deadline"`
@@ -150,6 +151,7 @@ type ActionInput struct {
 	IdempotencyKey string
 	SessionID      string
 	PhaseSeq       string
+	DecisionID     string
 	Action         json.RawMessage
 }
 

@@ -2,6 +2,26 @@
   --bj-gold: #aa7a31;
   --bj-felt: #235344;
 }
+
+@media (min-width: 64rem) {
+  .bj-board--viewer-participant {
+    display: grid;
+    grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
+    gap: 0.75rem 1rem;
+    align-items: start;
+  }
+  .bj-board--viewer-participant > .bj-mine {
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+  .bj-board--viewer-participant > :not(.bj-dealer, .bj-mine, .bj-table-watermark) {
+    grid-column: 1 / -1;
+  }
+  .blackjack-game .bj-board--viewer-participant :is(.bj-dealer, .bj-mine) .bj-card {
+    width: clamp(3rem, 7dvh, 5rem);
+  }
+}
 [data-theme='dark'] .blackjack-game {
   --bj-gold: #dfb567;
   --bj-felt: #153b30;

@@ -183,7 +183,7 @@ func (r *Repository) recordError(ctx context.Context, ref DiagnosticRef, seq int
 	if event.Status() != 0 {
 		status = event.Status()
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO request_error_bodies(request_log_id,task_id,operation_id,attempt_seq,event_seq,http_status,content_type,body,bytes_saved,truncated,save_state,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`, logID, taskID, operationID, ref.AttemptSeq, seq, status, event.ContentType(), body, size, event.Truncated(), state, at, at+RetentionSeconds); err != nil {
+	if _, err = tx.ExecContext(ctx, `INSERT INTO request_error_bodies(request_log_id,task_id,operation_id,attempt_seq,event_seq,http_status,content_type,body,bytes_saved,truncated,save_state,failure_reason,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, logID, taskID, operationID, ref.AttemptSeq, seq, status, event.ContentType(), body, size, event.Truncated(), state, event.FailureReason(), at, at+RetentionSeconds); err != nil {
 		return err
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE observability_state SET raw_body_bytes=raw_body_bytes+?,raw_capacity_omissions=raw_capacity_omissions+?,raw_unavailable=raw_unavailable+? WHERE id=1`, size, boolInt(state == "capacity_exhausted"), boolInt(state == "unavailable")); err != nil {
@@ -216,14 +216,15 @@ func (r *Repository) ReconcileCounters(ctx context.Context) error {
 }
 
 type ErrorMetadata struct {
-	EventSeq    int64  `json:"event_seq"`
-	HTTPStatus  *int   `json:"http_status"`
-	ContentType string `json:"content_type"`
-	BytesSaved  int64  `json:"bytes_saved"`
-	Truncated   bool   `json:"truncated"`
-	SaveState   string `json:"save_state"`
-	CreatedAt   int64  `json:"created_at"`
-	ExpiresAt   int64  `json:"expires_at"`
+	FailureReason string `json:"failure_reason,omitempty"`
+	EventSeq      int64  `json:"event_seq"`
+	HTTPStatus    *int   `json:"http_status"`
+	ContentType   string `json:"content_type"`
+	BytesSaved    int64  `json:"bytes_saved"`
+	Truncated     bool   `json:"truncated"`
+	SaveState     string `json:"save_state"`
+	CreatedAt     int64  `json:"created_at"`
+	ExpiresAt     int64  `json:"expires_at"`
 }
 type ErrorPage struct {
 	Data      []ErrorMetadata `json:"data"`
@@ -242,7 +243,7 @@ func ListErrorsTx(ctx context.Context, tx *sql.Tx, logID int64, attempt int, aft
 	if tx == nil || logID <= 0 || attempt < 1 || after < 0 {
 		return page, ErrInvalid
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT event_seq,http_status,content_type,bytes_saved,truncated,save_state,created_at,expires_at FROM request_error_bodies WHERE request_log_id=? AND attempt_seq=? AND event_seq>? ORDER BY event_seq LIMIT 21`, logID, attempt, after)
+	rows, err := tx.QueryContext(ctx, `SELECT event_seq,http_status,content_type,bytes_saved,truncated,save_state,failure_reason,created_at,expires_at FROM request_error_bodies WHERE request_log_id=? AND attempt_seq=? AND event_seq>? ORDER BY event_seq LIMIT 21`, logID, attempt, after)
 	if err != nil {
 		return page, err
 	}
@@ -250,7 +251,7 @@ func ListErrorsTx(ctx context.Context, tx *sql.Tx, logID int64, attempt int, aft
 	for rows.Next() {
 		var item ErrorMetadata
 		var status sql.NullInt64
-		if err = rows.Scan(&item.EventSeq, &status, &item.ContentType, &item.BytesSaved, &item.Truncated, &item.SaveState, &item.CreatedAt, &item.ExpiresAt); err != nil {
+		if err = rows.Scan(&item.EventSeq, &status, &item.ContentType, &item.BytesSaved, &item.Truncated, &item.SaveState, &item.FailureReason, &item.CreatedAt, &item.ExpiresAt); err != nil {
 			return page, err
 		}
 		if status.Valid {
@@ -274,7 +275,7 @@ func ErrorBodyTx(ctx context.Context, tx *sql.Tx, logID int64, attempt int, even
 	if tx == nil || logID <= 0 || attempt < 1 || event < 1 {
 		return item, ErrInvalid
 	}
-	err := tx.QueryRowContext(ctx, `SELECT event_seq,http_status,content_type,bytes_saved,truncated,save_state,created_at,expires_at,body FROM request_error_bodies WHERE request_log_id=? AND attempt_seq=? AND event_seq=?`, logID, attempt, event).Scan(&item.EventSeq, &status, &item.ContentType, &item.BytesSaved, &item.Truncated, &item.SaveState, &item.CreatedAt, &item.ExpiresAt, &body)
+	err := tx.QueryRowContext(ctx, `SELECT event_seq,http_status,content_type,bytes_saved,truncated,save_state,failure_reason,created_at,expires_at,body FROM request_error_bodies WHERE request_log_id=? AND attempt_seq=? AND event_seq=?`, logID, attempt, event).Scan(&item.EventSeq, &status, &item.ContentType, &item.BytesSaved, &item.Truncated, &item.SaveState, &item.FailureReason, &item.CreatedAt, &item.ExpiresAt, &body)
 	defer clear(body)
 	if err != nil {
 		return item, err

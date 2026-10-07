@@ -11,7 +11,6 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
-	"github.com/waiting-here/NonbiriAPI/internal/requestbody"
 	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
 	"github.com/waiting-here/NonbiriAPI/internal/routing"
 )
@@ -72,34 +71,20 @@ func (handler *Handler) models(writer http.ResponseWriter, request *http.Request
 }
 
 func (handler *Handler) chat(writer http.ResponseWriter, request *http.Request, userID int64) {
-	mediaType, ok := validateChatMedia(request)
-	if !ok {
-		writeFailure(writer, platformFailure(httperr.CodeInvalidRequest, "invalid request"))
+	p, prepared := request.Context().Value(preparedIngressKey{}).(*preparedIngress)
+	if !prepared {
+		p = prepareIngress(request)
+		defer p.clear()
+	}
+	if request.Context().Err() != nil {
 		return
 	}
-	limit, err := requestbody.Limit(request.Context())
-	if err != nil {
-		writeFailure(writer, platformFailure(httperr.CodeServiceUnavailable, "request configuration unavailable"))
+	if p.failure != nil {
+		writeFailure(writer, *p.failure)
 		return
 	}
-	if request.ContentLength > limit {
-		writeFailure(writer, platformFailure(httperr.CodePayloadTooLarge, "request body too large"))
-		return
-	}
-	body, err := readBoundedBody(request.Body, limit)
-	if err != nil {
-		if request.Context().Err() != nil {
-			return
-		}
-		if errors.Is(err, openai.ErrPayloadTooLarge) {
-			writeFailure(writer, platformFailure(httperr.CodePayloadTooLarge, "request body too large"))
-		} else {
-			writeFailure(writer, platformFailure(httperr.CodeInvalidRequest, "invalid request"))
-		}
-		return
-	}
-	defer clear(body)
-	decoded, filtered, charity, err := handler.service.decodeIngress(request.Context(), userID, body, requestkind.OperationForPath(request.URL.Path))
+	decoded, filtered, charity, err := handler.service.decodeEnvelope(request.Context(), userID, p.body, p.envelope, requestkind.OperationForPath(request.URL.Path))
+
 	if err != nil {
 		if request.Context().Err() == nil {
 			handler.service.writePreAcceptanceFailure(request.Context(), writer, nil, nil, err, charity, request.Header.Get("Accept-Language"))
@@ -109,7 +94,7 @@ func (handler *Handler) chat(writer http.ResponseWriter, request *http.Request, 
 	defer decoded.Clear()
 	defer clear(filtered)
 	requestattempt.Model(request.Context(), decoded.Model)
-	handler.service.execute(request.Context(), writer, userID, decoded, filtered, mediaType, request.Header.Get("Accept-Language"), request.Header)
+	handler.service.execute(request.Context(), writer, userID, decoded, filtered, p.mediaType, request.Header.Get("Accept-Language"), request.Header)
 }
 
 func validateChatMedia(request *http.Request) (string, bool) {

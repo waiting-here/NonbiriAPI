@@ -45,6 +45,7 @@ const (
 	KeyDefaultModelLimit         = "default_model_limit"
 	KeyDefaultBindingLimit       = "default_binding_limit"
 	KeyDefaultRPMPerUser         = "default_rpm_per_user"
+	KeyGlobalRPMPerUser          = "global_rpm_per_user"
 	KeyGlobalRPM                 = "global_rpm"
 	KeyModelRequestBodyLimitMiB  = requestbody.ConfigKey
 	KeyDefaultPerEndpointConc    = "default_per_endpoint_concurrency"
@@ -270,6 +271,7 @@ var knownSiteConfig = func() map[string]keySpec {
 		KeyDefaultModelLimit:             {kind: kindInt, min: 1, max: maxResourceLimitValue, def: db.DefaultModelLimit},
 		KeyDefaultBindingLimit:           {kind: kindInt, min: 1, max: maxResourceLimitValue, def: db.DefaultBindingLimit},
 		KeyDefaultRPMPerUser:             {kind: kindInt, min: 1, max: maxRPMValue, def: ratelimit.DefaultRPMPerUserLimit},
+		KeyGlobalRPMPerUser:              {kind: kindInt, min: 1, max: maxRPMValue, def: ratelimit.DefaultRPMPerUserLimit},
 		KeyGlobalRPM:                     {kind: kindInt, min: 1, max: maxRPMValue, def: ratelimit.DefaultRPMGlobalLimit},
 		KeyModelRequestBodyLimitMiB:      {kind: kindInt, min: 1, max: requestbody.MaximumMiB, def: requestbody.DefaultMiB},
 		KeyDefaultPerEndpointConc:        {kind: kindInt, min: 1, max: maxConcurrencyValue, def: egress.DefaultPerEndpointConcurrency},
@@ -371,6 +373,7 @@ var knownSiteConfig = func() map[string]keySpec {
 	}
 	addDuelKeySpecs(known)
 	addBlackjackKeySpecs(known)
+	addPermanentGameKeySpecs(known)
 	return known
 }()
 

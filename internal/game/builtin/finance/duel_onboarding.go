@@ -6,11 +6,15 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/game/bidding/config"
 	ports "github.com/waiting-here/NonbiriAPI/internal/game/finance"
+	gwentconfig "github.com/waiting-here/NonbiriAPI/internal/game/gwent/config"
 	likesconfig "github.com/waiting-here/NonbiriAPI/internal/game/likes/config"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 )
 
 func (p duelPort) onboardingPort() onboarding {
+	if p.game == "gwent" {
+		return onboarding{gwentconfig.Descriptor()}
+	}
 	if p.game == "likes" {
 		return onboarding{likesconfig.Descriptor()}
 	}
@@ -18,6 +22,9 @@ func (p duelPort) onboardingPort() onboarding {
 }
 
 func (p duelPort) onboardingTasks(mode string) ([]string, error) {
+	if p.game == "gwent" && mode == "standard" {
+		return nil, nil
+	}
 	if p.game == "bidding" {
 		switch mode {
 		case "tier1", "tier2", "tier3":
@@ -49,7 +56,7 @@ func (p duelPort) finishOnboarding(ctx context.Context, tx *sql.Tx, input ports.
 		return ledger.ErrInvalidPlan
 	}
 	possible, err := p.onboardingTasks(mode)
-	if err != nil {
+	if err != nil || len(possible) == 0 {
 		return err
 	}
 	port := p.onboardingPort()

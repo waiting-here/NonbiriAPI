@@ -83,6 +83,8 @@ type Service struct {
 	deviceKey, ipKey, cursorKey [32]byte
 	queuePrefix, sessionPrefix  string
 	closed, recovered           atomic.Bool
+	recoveryMu                  sync.Mutex
+	recoveryAfter               string
 	actionMu                    sync.Mutex
 	actions                     map[int64][]time.Time
 	workerMu                    sync.Mutex
@@ -142,6 +144,9 @@ func (s *Service) initializeReader() error {
 	case "likes":
 		s.queuePrefix = "likq_"
 		s.sessionPrefix = "lik_"
+	case "gwent":
+		s.queuePrefix = "gwtq_"
+		s.sessionPrefix = "gwt_"
 	default:
 		return ErrInvariant
 	}

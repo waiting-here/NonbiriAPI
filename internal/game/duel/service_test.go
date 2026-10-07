@@ -23,6 +23,8 @@ import (
 	bidconfig "github.com/waiting-here/NonbiriAPI/internal/game/bidding/config"
 	builtinfinance "github.com/waiting-here/NonbiriAPI/internal/game/builtin/finance"
 	"github.com/waiting-here/NonbiriAPI/internal/game/duel"
+	"github.com/waiting-here/NonbiriAPI/internal/game/gwent"
+	gwentconfig "github.com/waiting-here/NonbiriAPI/internal/game/gwent/config"
 	"github.com/waiting-here/NonbiriAPI/internal/game/likes"
 	likeconfig "github.com/waiting-here/NonbiriAPI/internal/game/likes/config"
 	likeengine "github.com/waiting-here/NonbiriAPI/internal/game/likes/engine"
@@ -130,6 +132,11 @@ func newFixture(t *testing.T, kind string, override ...duel.Rules) *fixture {
 				}
 			}
 		}
+	}
+	if kind == "gwent" {
+		descriptor = gwentconfig.Descriptor()
+		f.rules = gwent.Rules{}
+		f.mode = "standard"
 	}
 	exec := func(query string, args ...any) sql.Result {
 		r, err := tx.ExecContext(f.ctx, query, args...)
@@ -267,7 +274,7 @@ func (f *fixture) matched() duel.State {
 }
 func (f *fixture) action(user int, state duel.State, body string) duel.MutationResult {
 	f.t.Helper()
-	result, err := f.s.Action(f.ctx, duel.ActionInput{Identity: f.identity(user), IdempotencyKey: f.key(), SessionID: state.ID, PhaseSeq: state.PhaseSeq, Action: []byte(body)})
+	result, err := f.s.Action(f.ctx, duel.ActionInput{Identity: f.identity(user), IdempotencyKey: f.key(), SessionID: state.ID, PhaseSeq: state.PhaseSeq, DecisionID: state.DecisionID, Action: []byte(body)})
 	if err != nil {
 		f.t.Fatal(err)
 	}

@@ -9,14 +9,7 @@ import {
   stationSessionMatches,
   StationSessionChangedError,
 } from '@shared/charityManagement';
-import {
-  getLakeDetail,
-  directions,
-  directionUnits,
-  unitsToNatural,
-  type Direction,
-} from '@shared/lakenotes/api';
-import { useDateTimeFormatter } from '@shared/utils/datetime';
+import { directions, directionUnits, unitsToNatural, type Direction } from '@shared/lakenotes/api';
 import { UserPageGate } from '../../components/UserPageGate';
 import { useUserSession } from '../../data';
 import { economySessionRequest } from '../../features/economy/queries';
@@ -31,7 +24,6 @@ import {
   checkpoint,
   controlCast,
   controlInput,
-  enter,
   exchange,
   getCast,
   getProfile,
@@ -56,8 +48,8 @@ function LakeExchange({
   text: LakeText;
 }) {
   const client = useQueryClient(),
-    period = view.period;
-  const enabled = period ? directions.filter((d) => period.exchanges[d]?.enabled) : [];
+    settings = view.settings;
+  const enabled = directions.filter((d) => settings.exchanges[d].enabled);
   const [direction, setDirection] = useState<Direction>(enabled[0] ?? 'general_to_coins'),
     [quantity, setQuantity] = useState('1'),
     [quote, setQuote] = useState<Quote | null>(null),
@@ -87,7 +79,7 @@ function LakeExchange({
     locked = operation.isPending || unknown;
   const actual = enabled.includes(direction) ? direction : enabled[0];
   const preview = async () => {
-    if (!period || !actual || locked || quoting) return;
+    if (!actual || locked || quoting) return;
     setQuote(null);
     setError(null);
     setSaved(false);
@@ -96,7 +88,7 @@ function LakeExchange({
       if (!/^[1-9][0-9]{0,38}$/.test(quantity)) throw new Error(text('batchInvalid'));
       const result = await economySessionRequest(
         client,
-        () => getQuote({ period_id: period.id, direction: actual, quantity }),
+        () => getQuote({ direction: actual, quantity }),
         account,
       );
       setQuote(result);
@@ -113,10 +105,9 @@ function LakeExchange({
     }
     if (!quote || view.readonly) return;
     operation.mutate({
-      period_id: quote.period_id,
       direction: quote.direction,
       quantity: quote.quantity,
-      expected_period_revision: quote.period_revision,
+      expected_settings_revision: quote.settings_revision,
       expected_profile_revision: quote.profile_revision,
     });
   };
@@ -202,19 +193,12 @@ function LakeExchange({
 }
 
 function LakeContent({ account }: { account: string }) {
-  const formatDateTime = useDateTimeFormatter();
   const { t: text } = useLakeCopy(),
     client = useQueryClient(),
     [menu, setMenu] = useState<Menu | null>(null);
   const query = useQuery({
     queryKey: lakeKeys(account),
     queryFn: ({ signal }) => economySessionRequest(client, () => getProfile({ signal }), account),
-    refetchOnWindowFocus: false,
-  });
-  const detail = useQuery({
-    queryKey: [...lakeKeys(account), 'detail'],
-    queryFn: ({ signal }) =>
-      economySessionRequest(client, () => getLakeDetail({ signal }), account),
     refetchOnWindowFocus: false,
   });
   const controller = useMemo(() => {
@@ -247,17 +231,6 @@ function LakeContent({ account }: { account: string }) {
   }, [query.data, controller]);
   useEffect(() => () => controller.dispose(), [controller]);
   const update = (view: ProfileView) => client.setQueryData(lakeKeys(account), view);
-  const entry = useRetainedOperation(
-    async (input: Parameters<typeof enter>[0], key, context) => {
-      const result = await enter(input, key, { signal: context.signal });
-      context.commit(() => update(result.profile));
-      return result;
-    },
-    async (_input, error, context) => {
-      if (!error || !responseOutcomeUnknown(error)) await context.commit(() => query.refetch());
-    },
-    ['user', 'lake-notes'],
-  );
   const action = useRetainedOperation(
     async (input: Parameters<typeof act>[0], key, context) => {
       const result = await act(input, key, { signal: context.signal });
@@ -299,8 +272,6 @@ function LakeContent({ account }: { account: string }) {
     current = view.cast,
     unfinished = Boolean(current && !terminalPhase(current.phase));
   const locked =
-    entry.isPending ||
-    entry.outcome === 'unknown' ||
     action.isPending ||
     action.outcome === 'unknown' ||
     control.isPending ||
@@ -318,75 +289,71 @@ function LakeContent({ account }: { account: string }) {
   };
   const terminal = state.status === 'terminal' ? state.result : null;
   return (
-    <div className="page">
+    <div className="page lake-page">
       <PageHeader
         title={text('title')}
-        icon="activities"
-        back={<Link to="/activities">{text('back')}</Link>}
+        icon="games"
+        back={<Link to="/games">{text('back')}</Link>}
       />
-      <Card>
-        <h2>{text('entryHeading')}</h2>
-        {view.period ? (
-          <>
-            <h3>{view.period.name}</h3>
-            <p>
-              {formatDateTime(view.period.starts_at)} — {formatDateTime(view.period.ends_at)}
-            </p>
-            <p>
-              {text('entryFee', {
-                amount: unitsToNatural(view.period.entry_fee_milli ?? '0', 'general'),
-              })}
-            </p>
-          </>
-        ) : null}
-        <p>{text('entryScope')}</p>
-        {view.entitlement ? <p role="status">{text('paid')}</p> : null}
-        {detail.isPending ? (
-          <LoadingState />
-        ) : detail.error ? (
-          <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
-        ) : detail.data?.status !== 'open' || !view.period ? (
-          <p role="status">{text('closed')}</p>
-        ) : null}
-        {detail.data?.module_config.periods
-          .filter((period) => period.id !== view.period?.id)
-          .map((period) => (
-            <p key={period.id}>
-              {period.name} · {formatDateTime(period.starts_at)} — {formatDateTime(period.ends_at)}
-            </p>
-          ))}
-        {entry.error ? <ErrorState error={entry.error} /> : null}
-        {entry.outcome === 'unknown' ? <p role="status">{text('entryUnknown')}</p> : null}
-        {(!view.entitlement && view.period) || entry.outcome === 'unknown' ? (
-          <button
-            className="btn btn-primary"
-            type="button"
-            disabled={
-              entry.isPending || (entry.outcome !== 'unknown' && detail.data?.status !== 'open')
-            }
-            onClick={() => {
-              if (entry.outcome === 'unknown' && entry.variables) entry.mutate(entry.variables);
-              else if (view.period)
-                entry.mutate({
-                  period_id: view.period.id,
-                  expected_period_revision: view.period.revision,
-                });
-            }}
-          >
-            {entry.outcome === 'unknown' ? text('retry') : text('enter')}
-          </button>
-        ) : null}
-      </Card>
+      {view.readonly ? <p role="status">{text('closed')}</p> : null}
       <div className="lake-game">
         <section className="shell">
-          <header className="topbar">
-            <h2>{text('title')}</h2>
-            <p className="top-note">{text('intro')}</p>
-          </header>
           <LakeScene
             controller={controller}
             profile={p}
             keyboardEnabled={menu === null}
+            result={
+              terminal ? (
+                <section className="lake-result" role="status">
+                  <h2>{text(terminal.cast.phase === 'success' ? 'success' : 'failed')}</h2>
+                  {terminal.cast.state.result?.debris ? (
+                    <>
+                      <img
+                        src={art(terminal.cast.state.result.debris, true)}
+                        alt=""
+                        loading="lazy"
+                      />
+                      <p>
+                        {text('debrisReward', {
+                          item: catalogText(text, 'debris', terminal.cast.state.result.debris),
+                        })}
+                      </p>
+                    </>
+                  ) : terminal.cast.phase === 'success' && terminal.cast.state.plan.fishKind ? (
+                    <>
+                      <img
+                        src={art(terminal.cast.state.plan.fishKind)}
+                        alt={catalogText(text, 'fish', terminal.cast.state.plan.fishKind)}
+                        loading="lazy"
+                      />
+                      <p>
+                        {text('rewardSummary', {
+                          fish: catalogText(text, 'fish', terminal.cast.state.plan.fishKind),
+                          length: terminal.cast.state.plan.length,
+                          quality: catalogText(
+                            text,
+                            'quality',
+                            'q' + terminal.cast.state.result?.quality,
+                            '',
+                          ),
+                          xp: terminal.cast.state.result?.xp ?? 0,
+                        })}
+                      </p>
+                    </>
+                  ) : null}
+                  {terminal.cast.state.result?.overflow ? <p>{text('overflow')}</p> : null}
+                  {terminal.cast.state.reward ? (
+                    <p>
+                      {text('treasureReward', {
+                        coins: terminal.cast.state.reward.coins,
+                        bait: catalogText(text, 'baits', terminal.cast.state.reward.bait),
+                        count: terminal.cast.state.reward.count,
+                      })}
+                    </p>
+                  ) : null}
+                </section>
+              ) : null
+            }
             controls={
               <>
                 <div className="lake-save" role="status">
@@ -525,52 +492,6 @@ function LakeContent({ account }: { account: string }) {
               </>
             }
           />
-          {terminal ? (
-            <section className="lake-result" role="status">
-              <h2>{text(terminal.cast.phase === 'success' ? 'success' : 'failed')}</h2>
-              {terminal.cast.state.result?.debris ? (
-                <>
-                  <img src={art(terminal.cast.state.result.debris, true)} alt="" loading="lazy" />
-                  <p>
-                    {text('debrisReward', {
-                      item: catalogText(text, 'debris', terminal.cast.state.result.debris),
-                    })}
-                  </p>
-                </>
-              ) : terminal.cast.phase === 'success' && terminal.cast.state.plan.fishKind ? (
-                <>
-                  <img
-                    src={art(terminal.cast.state.plan.fishKind)}
-                    alt={catalogText(text, 'fish', terminal.cast.state.plan.fishKind)}
-                    loading="lazy"
-                  />
-                  <p>
-                    {text('rewardSummary', {
-                      fish: catalogText(text, 'fish', terminal.cast.state.plan.fishKind),
-                      length: terminal.cast.state.plan.length,
-                      quality: catalogText(
-                        text,
-                        'quality',
-                        'q' + terminal.cast.state.result?.quality,
-                        '',
-                      ),
-                      xp: terminal.cast.state.result?.xp ?? 0,
-                    })}
-                  </p>
-                </>
-              ) : null}
-              {terminal.cast.state.result?.overflow ? <p>{text('overflow')}</p> : null}
-              {terminal.cast.state.reward ? (
-                <p>
-                  {text('treasureReward', {
-                    coins: terminal.cast.state.reward.coins,
-                    bait: catalogText(text, 'baits', terminal.cast.state.reward.bait),
-                    count: terminal.cast.state.reward.count,
-                  })}
-                </p>
-              ) : null}
-            </section>
-          ) : null}
           {menu ? (
             <LakeMenus
               key={menu}

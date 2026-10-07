@@ -43,14 +43,22 @@ type SiteConfigRepositoryOptions struct {
 	Store           *db.Store
 	FinalAuthorizer SiteConfigFinalAuthorizer
 	Now             func() time.Time
-	Committed       func([]string)
+	Committed       func(SiteConfigCommit)
+}
+
+// SiteConfigCommit carries the validated snapshot from a successful transaction.
+// Revision allows observers to discard callbacks overtaken by a newer commit.
+type SiteConfigCommit struct {
+	Revision int64
+	Keys     []string
+	Values   map[string]string
 }
 
 type SiteConfigRepository struct {
 	database        *sql.DB
 	finalAuthorizer SiteConfigFinalAuthorizer
 	now             func() time.Time
-	committed       func([]string)
+	committed       func(SiteConfigCommit)
 }
 
 func NewSiteConfigRepository(options SiteConfigRepositoryOptions) (*SiteConfigRepository, error) {
@@ -298,7 +306,7 @@ func (repository *SiteConfigRepository) PatchSiteConfig(ctx context.Context, inp
 		return SiteConfigMutationResult{}, classifySiteConfigDatabase("commit configuration mutation", err)
 	}
 	if repository.committed != nil {
-		repository.committed([]string{input.Key})
+		repository.committed(SiteConfigCommit{Revision: revision + 1, Keys: []string{input.Key}, Values: stored})
 	}
 	return SiteConfigMutationResult{Status: http.StatusOK, Body: body, Response: response}, nil
 }

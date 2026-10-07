@@ -209,7 +209,7 @@ describe('shared account management', () => {
       );
       await view.user.click(await screen.findByRole('tab', { name: 'Limits and level' }));
       const endpoint = await screen.findByLabelText('Endpoint limit');
-      const rpm = screen.getByLabelText('RPM limit');
+      const rpm = screen.getByLabelText('Charity RPM limit');
       const concurrency = screen.getByLabelText('In-flight concurrency limit');
       const save = screen.getByRole('button', { name: 'Save settings' });
       fireEvent.change(endpoint, { target: { value: '99' } });

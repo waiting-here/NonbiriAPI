@@ -8,11 +8,18 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Added
 
+- Steady Catch with keyboard and touch controls, 134 meme entries, a configurable ticket and first-clear reward, and rolling scoreboards. It starts disabled with both amounts set to zero.
+- AI Gwent with four factions, server-authoritative native Go rules, deck building, timed decisions and timeout play. Player matches use a configurable shared prize pool; rolling win rankings and private Elo records are separate from payments. The game starts disabled.
+- Administrator-only endpoint tags, bulk tag changes and filtering by tag or site user ID. Raw-error storage now lists missing records and distinguishes read, queue and storage failures.
+- Separate per-user charity and global request limits, with charity-first classification when both are exceeded.
 - Bidding Duel AI challenges with four editable local strategies, multiple configurable opponents, situation previews, optional use of bounded personal match memory and one-time game-credit rewards. AI entry is disabled with zero prices by default; waiting is unpaid and running matches retain their accepted settings.
 - A versioned, game-independent decision interface with bounded scheduling and authoritative action submission. Account export v13 includes personal AI preferences, samples, used summaries and first-clear records; anonymous archives omit personal memory and identity links.
 
 ### Changed
 
+- Lake Notes moves from limited activities to permanent free games, preserving profiles, unfinished casts and payment records. The expanded fishing catalog adds progression and equipment choices; all four credit exchanges start disabled after migration.
+- Charity requests stop retrying and clear consecutive key failures when an upstream returns HTTP 200. An actual upstream 200 stream consumes quota even if it later fails or returns no content; missing usage settles against the reserved amount. Protocol errors remain visible in request logs and sanitized caller responses.
+- Plain HTTP upstream endpoints remain available with a credential and content exposure warning.
 - Game history downloads use one streaming ZIP. Anonymous exports include recent records after anonymization; date filters exclude older archives whose dates were removed.
 - AI strategies have a dedicated administration page, and shared side forms expand within their pages. Bidding Duel separates player matches from a compact opponent selector and labels local strategies as first-generation AI players.
 
@@ -30,6 +37,10 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Fixed
 
+- Discord callbacks accept the issuer parameter and tolerate additional provider metadata while validating login state and issuer identity.
+- The first visit to legal settings no longer inherits a hidden ordinary-settings search. Discord blacklists use stable newest-first ordering.
+- CallerKey acceptance rechecks revocation in the dispatch transaction. Lowered concurrency limits apply to new admissions immediately, implicit HTTP transport retries cannot replay request bodies, and image downloads have bounded write deadlines.
+- New game layouts keep primary controls accessible at desktop and mobile sizes; Lake Notes catch results no longer expand the fishing viewport.
 - Dark-mode AI cards use the game's theme colors.
 - Donations rejected before any approval show that they were never approved.
 

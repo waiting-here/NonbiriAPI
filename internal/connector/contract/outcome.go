@@ -22,7 +22,9 @@ const (
 func ValidOutcome(disposition StreakDisposition, origin FailureOrigin) bool {
 	switch disposition {
 	case StreakSuccess:
-		return origin == OriginNone
+		// An accepted HTTP response may reset key failures while retaining a
+		// subsequent protocol, read or delivery error.
+		return origin == OriginNone || origin == OriginUpstreamResponse || origin == OriginUpstreamProtocol || origin == OriginNetwork || origin == OriginTimeout || origin == OriginClientCancel || origin == OriginDownstream || origin == OriginPlatform || origin == OriginRecoveryUnknown
 	case StreakUpstreamFailure:
 		return origin == OriginUpstreamResponse || origin == OriginUpstreamProtocol || origin == OriginNetwork || origin == OriginTimeout
 	case StreakNeutral:

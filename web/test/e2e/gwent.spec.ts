@@ -1,0 +1,180 @@
+import { readFileSync, mkdirSync } from 'node:fs';
+import { expect, test } from './test';
+import { collectConsoleViolations, mockPublicConfig, mockRoleSession } from './support';
+import { USER_ORIGIN } from './ports';
+import { gamesSnapshotWire } from '../../src/user/games/common/testFixtures';
+import type { Card, CardDefinition, View } from '../../src/user/games/gwent/types';
+
+const cards = JSON.parse(
+  readFileSync('../internal/game/gwent/engine/cards.json', 'utf8'),
+) as CardDefinition[];
+const card = (id: string, instance_id: number): Card => {
+  const definition = cards.find((item) => item.id === id)!;
+  return { ...definition, instance_id, base_power: definition.power };
+};
+function home() {
+  const player = {
+    faction: 'openai' as const,
+    lives: 2,
+    passed: false,
+    hand_count: 10,
+    deck_count: 20,
+    grave: [],
+    leader: card('openai_leader', 1),
+    leader_available: true,
+    boost: 0,
+    shield: false,
+  };
+  const view: View = {
+    version: 1,
+    round: 1,
+    phase: 'turn',
+    turn: 0,
+    self: player,
+    enemy: { ...player, faction: 'claude', leader: card('claude_leader', 2) },
+    hand: Array.from({ length: 10 }, (_, i) =>
+      card(i % 2 ? 'openai_reasoner' : 'openai_agent', 10 + i),
+    ),
+    board: (['enemy', 'self'] as const).flatMap((side, i) =>
+      ['siege', 'ranged', 'close'].map((row, j) => ({
+        side,
+        row,
+        total: 18,
+        weather: false,
+        cards: Array.from({ length: 6 }, (_, k) =>
+          card('openai_agent', 100 + i * 100 + j * 10 + k),
+        ),
+      })),
+    ),
+    weather: [],
+    rounds: [],
+    legal_actions: [{ kind: 'play', card: 10, row: 'close' }, { kind: 'pass' }],
+  };
+  return {
+    server_now: 1800000000,
+    queue: null,
+    latest_result: null,
+    current: {
+      id: `gwt_${'A'.repeat(22)}`,
+      game: 'gwent',
+      mode: 'standard',
+      rules_version: 1,
+      content_hash: 'b'.repeat(64),
+      revision: '3',
+      phase_seq: '2',
+      decision_id: '2',
+      phase: 'turn',
+      round: 1,
+      deadline: 1800000030,
+      server_now: 1800000000,
+      you: 0,
+      locked: [false, true],
+      ticket: '1',
+      rake_bp: { platform: 0, welfare: 0, thursday: 0 },
+      own_payment: { general: '1', game: '0' },
+      profiles: [
+        { kind: 'anonymous' },
+        { kind: 'public', display_name: 'Card player', avatar_url: null },
+      ],
+      resolution: null,
+      round_start: null,
+      view,
+    },
+  };
+}
+
+for (const theme of ['light', 'dark']) {
+  test(`card battle and choices remain usable across viewports in ${theme}`, async ({ page }) => {
+    const errors = collectConsoleViolations(page);
+    await page.addInitScript((theme) => {
+      localStorage.setItem('nb.lang', 'en');
+      localStorage.setItem('nb.theme', theme);
+    }, theme);
+    await mockRoleSession(page, 'user', 'user');
+    await mockPublicConfig(page, 'user');
+    const snapshot = gamesSnapshotWire(),
+      state = home(),
+      writes: unknown[] = [];
+    snapshot.gwent.enabled = true;
+    snapshot.gwent.modes.standard.enabled = true;
+    await page.route('**/api/games**', async (route) => {
+      const request = route.request(),
+        url = new URL(request.url()),
+        path = url.pathname;
+      if (path === '/api/games') return route.fulfill({ json: snapshot });
+      if (path === '/api/games/gwent/state') return route.fulfill({ json: state });
+      if (path.includes('/randomness/')) return route.fulfill({ json: { proof: null } });
+      if (path.endsWith('/catalog'))
+        return route.fulfill({ json: { modes: { standard: { rules_version: 1, cards } } } });
+      if (path.endsWith('/actions')) {
+        writes.push(request.postDataJSON());
+        state.current.locked = [true, false];
+        state.current.view.legal_actions = [];
+        return route.fulfill({
+          json: { session_id: state.current.id, revision: '4', phase_seq: '3', locked: true },
+        });
+      }
+      if (path.endsWith('/leaderboard'))
+        return route.fulfill({
+          json: { window: url.searchParams.get('window'), rows: [], me: null },
+        });
+      return route.fallback();
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`${USER_ORIGIN}/games/gwent`);
+    await expect(page.locator('.gwt-player.is-enemy')).toContainText('Card player');
+    await expect(page.locator('.gwt-row')).toHaveCount(6);
+    for (const size of [
+      { width: 1440, height: 900 },
+      { width: 1280, height: 720 },
+      { width: 1024, height: 600 },
+      { width: 390, height: 844 },
+      { width: 320, height: 740 },
+    ]) {
+      await page.setViewportSize(size);
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth - innerWidth),
+        JSON.stringify({
+          size,
+          overflow: await page.locator('.gwent-game *').evaluateAll((nodes) =>
+            nodes
+              .filter(
+                (node) =>
+                  node.getBoundingClientRect().right > innerWidth + 1 &&
+                  getComputedStyle(node.parentElement!).overflowX === 'visible',
+              )
+              .slice(0, 12)
+              .map((node) => [node.className, node.getBoundingClientRect().width]),
+          ),
+        }),
+      ).toBeLessThanOrEqual(1);
+      const hand = await page.locator('.gwt-hand').boundingBox();
+      expect(hand!.height).toBeGreaterThanOrEqual(90);
+      const lastRow = await page.locator('.gwt-row').last().boundingBox();
+      const ownStatus = await page.locator('.gwt-player.is-self').boundingBox();
+      expect(lastRow!.y + lastRow!.height).toBeLessThanOrEqual(ownStatus!.y + 1);
+      if (size.width > 760) {
+        const match = await page.locator('.gwt-match').boundingBox();
+        expect(hand!.y + hand!.height).toBeLessThanOrEqual(match!.y + match!.height + 1);
+        expect(match!.height).toBeLessThanOrEqual(size.height);
+      }
+      await page.locator('.gwt-hand .gwt-card').first().click();
+      await expect(page.locator('.gwt-inspector h3')).toHaveText('OpenAI Agent');
+      await expect(page.getByRole('button', { name: 'Play · Front line' })).toBeEnabled();
+      if (process.env.NONBIRI_GAME_PRESENTATION_EVIDENCE && [1280, 390].includes(size.width)) {
+        mkdirSync(process.env.NONBIRI_GAME_PRESENTATION_EVIDENCE, { recursive: true });
+        await page.screenshot({
+          path: `${process.env.NONBIRI_GAME_PRESENTATION_EVIDENCE}/gwent-${theme}-${size.width}.png`,
+          fullPage: true,
+        });
+      }
+    }
+    expect(writes).toEqual([]);
+    await page.getByRole('button', { name: 'Play · Front line' }).click();
+    expect(writes).toEqual([
+      { phase_seq: '2', decision_id: '2', action: { kind: 'play', card: 10, row: 'close' } },
+    ]);
+    await expect(page.getByRole('button', { name: 'Play · Front line' })).toHaveCount(0);
+    errors.assertNone();
+  });
+}

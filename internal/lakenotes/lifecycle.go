@@ -3,33 +3,13 @@ package lakenotes
 import (
 	"context"
 	"database/sql"
-	"math"
 	"strings"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/game/host"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
-	"github.com/waiting-here/NonbiriAPI/internal/limitedactivities"
 )
-
-var _ limitedactivities.Runtime = (*Service)(nil)
-
-func (s *Service) ActivityRuntime() limitedactivities.Runtime { return s }
-func (s *Service) ReadyTx(ctx context.Context, tx *sql.Tx) (bool, error) {
-	var ready bool
-	e := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='lake_notes_casts')").Scan(&ready)
-	return ready, e
-}
-
-// ClampLeaseDeadlineTx preserves the active baseline and acknowledged state.
-func (s *Service) ClampLeaseDeadlineTx(ctx context.Context, tx *sql.Tx, endsAt int64) error {
-	if endsAt > math.MaxInt64/int64(time.Second) {
-		return nil
-	}
-	deadline := endsAt * int64(time.Second)
-	_, e := tx.ExecContext(ctx, "UPDATE lake_notes_casts SET lease_until_ns=? WHERE paused=0 AND phase IN ('waiting','playing') AND lease_until_ns>?", deadline, deadline)
-	return e
-}
 
 // pauseTx updates the authoritative controller columns. Decode overlays them
 // on the last exact simulation snapshot; no unacknowledged tick is replayed.
@@ -60,16 +40,16 @@ func (s *Service) expireUserTx(ctx context.Context, tx *sql.Tx, user int64, now 
 	}
 	return s.pauseTx(ctx, tx, now.UnixNano(), where, args, false)
 }
-func (s *Service) PreparePauseTx(ctx context.Context, tx *sql.Tx, now int64) (limitedactivities.Finalizer, error) {
+func (s *Service) PreparePauseTx(ctx context.Context, tx *sql.Tx, now int64) (host.Finalizer, error) {
 	return nil, s.pauseTx(ctx, tx, now*int64(time.Second), "", nil, false)
 }
-func (s *Service) PrepareMaintenanceTx(ctx context.Context, tx *sql.Tx, now int64) (limitedactivities.Finalizer, error) {
+func (s *Service) PrepareMaintenanceTx(ctx context.Context, tx *sql.Tx, now int64) (host.Finalizer, error) {
 	return s.PreparePauseTx(ctx, tx, now)
 }
-func (s *Service) PrepareBanTx(ctx context.Context, tx *sql.Tx, user, now int64) (limitedactivities.Finalizer, error) {
+func (s *Service) PrepareBanTx(ctx context.Context, tx *sql.Tx, user, now int64) (host.Finalizer, error) {
 	return nil, s.pauseTx(ctx, tx, now*int64(time.Second), "user_id=?", []any{user}, false)
 }
-func (s *Service) PrepareDeleteTx(ctx context.Context, tx *sql.Tx, user, now int64) (limitedactivities.Finalizer, error) {
+func (s *Service) PrepareDeleteTx(ctx context.Context, tx *sql.Tx, user, now int64) (host.Finalizer, error) {
 	if user <= 0 {
 		return nil, ErrInvalid
 	}

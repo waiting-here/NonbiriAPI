@@ -14,6 +14,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/activities"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
 	"github.com/waiting-here/NonbiriAPI/internal/game/host"
+	"github.com/waiting-here/NonbiriAPI/internal/game/rating"
 )
 
 type finalizer struct {
@@ -100,6 +101,11 @@ func (s *Service) PrepareDeleteTx(ctx context.Context, tx *sql.Tx, user, now int
 	facts, err := s.cancelUser(ctx, tx, user, now)
 	if err != nil {
 		return nil, err
+	}
+	if s.descriptor.ResolveBoard("wins") == nil {
+		if err := rating.DeleteTx(ctx, tx, s.rules.ID(), user); err != nil {
+			return nil, err
+		}
 	}
 	if s.rules.ID() == "likes" {
 		if _, err := tx.ExecContext(ctx, `DELETE FROM game_likes_loadouts WHERE user_id=?`, user); err != nil {
@@ -326,16 +332,18 @@ func (s *Service) Retain(ctx context.Context, now int64, limit int, deadline tim
 }
 
 type Export struct {
-	AI            *AIExport     `json:"ai,omitempty"`
-	Queue         *Queue        `json:"queue"`
-	Current       *State        `json:"current"`
-	CurrentRounds []RoundView   `json:"current_rounds"`
-	History       []ExportMatch `json:"history"`
-	Loadouts      []LoadoutItem `json:"loadouts,omitempty"`
+	Competitive   *rating.Export `json:"competitive,omitempty"`
+	AI            *AIExport      `json:"ai,omitempty"`
+	Queue         *Queue         `json:"queue"`
+	Current       *State         `json:"current"`
+	CurrentRounds []RoundView    `json:"current_rounds"`
+	History       []ExportMatch  `json:"history"`
+	Loadouts      []LoadoutItem  `json:"loadouts,omitempty"`
 }
 type ExportMatch struct {
-	Detail HistoryDetail `json:"detail"`
-	Rounds []RoundView   `json:"rounds"`
+	Detail      HistoryDetail       `json:"detail"`
+	Rounds      []RoundView         `json:"rounds"`
+	Competitive *rating.MatchResult `json:"competitive,omitempty"`
 }
 
 func (s *Service) ExportTx(ctx context.Context, tx *sql.Tx, user, now int64, limit int) (any, host.Finalizer, error) {
@@ -355,6 +363,18 @@ func (s *Service) ExportTx(ctx context.Context, tx *sql.Tx, user, now int64, lim
 			return ErrResourceLimit
 		}
 		return nil
+	}
+	if s.descriptor.ResolveBoard("wins") == nil {
+		var err error
+		result.Competitive, err = rating.ExportTx(ctx, tx, s.rules.ID(), user)
+		if err != nil {
+			return nil, nil, err
+		}
+		if result.Competitive != nil {
+			if err := charge(result.Competitive); err != nil {
+				return nil, nil, err
+			}
+		}
 	}
 	if s.rules.ID() == "likes" {
 		var err error
@@ -485,7 +505,19 @@ func (s *Service) ExportTx(ctx context.Context, tx *sql.Tx, user, now int64, lim
 		if err != nil {
 			return nil, nil, err
 		}
-		result.History = append(result.History, ExportMatch{Detail: detail, Rounds: rounds})
+		item := ExportMatch{Detail: detail, Rounds: rounds}
+		if s.descriptor.ResolveBoard("wins") == nil {
+			item.Competitive, err = rating.MatchTx(ctx, tx, s.rules.ID(), id, user)
+			if err != nil {
+				return nil, nil, err
+			}
+			if item.Competitive != nil {
+				if err := charge(item.Competitive); err != nil {
+					return nil, nil, err
+				}
+			}
+		}
+		result.History = append(result.History, item)
 	}
 	body, err := json.Marshal(result)
 	if err != nil {

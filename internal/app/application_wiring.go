@@ -30,6 +30,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/donation"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/elevation"
+	"github.com/waiting-here/NonbiriAPI/internal/forward"
 	gamehost "github.com/waiting-here/NonbiriAPI/internal/game/host"
 	"github.com/waiting-here/NonbiriAPI/internal/game/ranking"
 	"github.com/waiting-here/NonbiriAPI/internal/issues"
@@ -269,6 +270,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err != nil {
 		return nil, fmt.Errorf("create audit runtime: %w", err)
 	}
+	audits.outbound = outbound
 	if err := gatewaypolicy.NewStore(store.DB()).Initialize(startupContext, cfg.GatewayModelsImport, cfg.GatewayModels); err != nil {
 		return nil, fmt.Errorf("initialize Gateway model capabilities: %w", err)
 	}
@@ -316,7 +318,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 		Secrets:      vault,
 		Accounting:   claim.NewLedgerAccounting(),
 		Charity:      charityService,
-		Acceptance:   maintenanceService,
+		Acceptance:   forward.CallerKeyAcceptanceGate{Next: maintenanceService},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create claim service: %w", err)
@@ -496,7 +498,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 		return nil, fmt.Errorf("attach user-session invalidation observer: %w", err)
 	}
 	activityEngines, err = newActivityRuntime(store, vault, authRuntime, roleAuthorizer,
-		maintenanceService, outbound, audits, userInvalidations, gameRuntimes.CancelUserDuelsTx, options.ActivityNow)
+		maintenanceService, outbound, audits, userInvalidations, gameRuntimes.CancelUserDuelsTx, gameRuntimes, options.ActivityNow)
 	if err != nil {
 		return nil, fmt.Errorf("create limited activity runtimes: %w", err)
 	}

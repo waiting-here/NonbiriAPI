@@ -230,7 +230,7 @@ type charityPolicyRouter struct {
 }
 
 func applyPublicRPMDenial(ctx context.Context, userID int64, reason ratelimit.RPMReason, abuse *antiabuse.Service) error {
-	if abuse != nil && reason == ratelimit.RPMUserLimit && forward.CharityRPMDenial(ctx, userID) {
+	if abuse != nil && reason == ratelimit.RPMCharityUserLimit {
 		err := abuse.RPMDenied(ctx, userID, reason)
 		if errors.Is(err, charityrouting.ErrUnauthorized) {
 			return flowcontrol.ErrInvalidUser
@@ -248,7 +248,7 @@ func publicFlowHandler(flow *flowcontrol.Controller, next http.Handler) (http.Ha
 	if err != nil {
 		return nil, err
 	}
-	return forward.WithRPMDenialScope(middleware.Wrap(next)), nil
+	return middleware.WrapClassified(next, forward.RPMClassifier()), nil
 }
 
 func (router charityPolicyRouter) Preflight(ctx context.Context, userID int64, model string, request *openai.ChatRequest, now int64) (forward.CharityPreflight, error) {

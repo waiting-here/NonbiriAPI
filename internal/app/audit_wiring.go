@@ -3,19 +3,23 @@ package app
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/adminapi"
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/clientguard"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/economyaudit"
+	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/flowcontrol"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
 	"github.com/waiting-here/NonbiriAPI/internal/logapi"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
+	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/riskaudit"
@@ -25,17 +29,20 @@ import (
 // Runtime observers are installed before admission opens and share the existing
 // request identity. They never create a second request or consume an API quota.
 type auditRuntime struct {
-	observations *observability.Repository
-	diagnostics  *observability.DiagnosticReader
-	risk         *riskaudit.Repository
-	collector    *riskaudit.Collector
-	economy      *economyaudit.Service
-	access       *observability.AccessObserver
-	flow         *flowcontrol.Controller
-	cancel       context.CancelFunc
-	workers      sync.WaitGroup
-	closeOnce    sync.Once
-	closeErr     error
+	observations   *observability.Repository
+	diagnostics    *observability.DiagnosticReader
+	risk           *riskaudit.Repository
+	collector      *riskaudit.Collector
+	economy        *economyaudit.Service
+	access         *observability.AccessObserver
+	flow           *flowcontrol.Controller
+	outbound       *egress.Stack
+	configMu       sync.Mutex
+	configRevision int64
+	cancel         context.CancelFunc
+	workers        sync.WaitGroup
+	closeOnce      sync.Once
+	closeErr       error
 }
 
 func newAuditRuntime(ctx context.Context, store *db.Store, vault *secret.Vault, authorizer *roleFinalTxAuthorizer) (*auditRuntime, error) {
@@ -88,15 +95,25 @@ func (a *auditRuntime) classify(ctx context.Context, userID int64, kind string) 
 	a.collector.Bind(requestattempt.CurrentID(ctx), userID, kind)
 }
 
-func (a *auditRuntime) configurationChanged(keys []string) {
-	for _, key := range keys {
-		if key == "global_rpm" || key == "default_rpm_per_user" {
-			if a.flow != nil {
-				a.flow.NotifyConfigurationChanged()
-			}
-			return
-		}
+func (a *auditRuntime) configurationChanged(change adminapi.SiteConfigCommit) {
+	a.configMu.Lock()
+	defer a.configMu.Unlock()
+	if change.Revision <= a.configRevision {
+		return
 	}
+	if a.flow != nil {
+		global, _ := strconv.Atoi(change.Values[adminapi.KeyGlobalRPM])
+		user, _ := strconv.Atoi(change.Values[adminapi.KeyGlobalRPMPerUser])
+		charity, _ := strconv.Atoi(change.Values[adminapi.KeyDefaultRPMPerUser])
+		_ = a.flow.SetLimits(ratelimit.RPMLimits{GlobalLimit: global, PerUserLimit: user, CharityPerUserLimit: charity})
+	}
+	if a.outbound != nil {
+		// Both values come from the snapshot validated before this commit.
+		global, _ := strconv.Atoi(change.Values[egress.GlobalConcurrencyConfigKey])
+		endpoint, _ := strconv.Atoi(change.Values[egress.PerEndpointConcurrencyConfigKey])
+		_ = a.outbound.SetConcurrencyLimits(egress.ConcurrencyLimits{Global: global, PerEndpoint: endpoint})
+	}
+	a.configRevision = change.Revision
 }
 
 // Wrap belongs inside the host/proxy validation boundary. CaptureSource reads

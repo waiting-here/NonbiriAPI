@@ -6,8 +6,17 @@
     "max_stake": "50000",
     "stake_step": "1000",
     "default_stake": "5000",
-    "rake_bp": {"platform": 100, "welfare": 100, "thursday": 100},
-    "quick_stakes": ["1000", "5000", "10000", "50000"],
+    "rake_bp": {
+      "platform": 100,
+      "welfare": 100,
+      "thursday": 100
+    },
+    "quick_stakes": [
+      "1000",
+      "5000",
+      "10000",
+      "50000"
+    ],
     "available": true,
     "config_hash": "951c2ff7aa625bf0734c80c61de529007b6b34dfdf922c8e70db83e1fb2a2fa4",
     "queue_capacity": 4096,
@@ -19,13 +28,46 @@
   "balance": "1000000",
   "game_balance": "0",
   "onboarding": {
+    "gwent": {
+      "items": [],
+      "all_completed": true
+    },
+    "steadycatch": {
+      "items": [],
+      "all_completed": true
+    },
     "blackjack": {
       "items": [
-        {"key":"complete","reward":"1000","asset_type":"general","completed":false},
-        {"key":"first_win","reward":"2000","asset_type":"general","completed":false},
-        {"key":"first_bust","reward":"3000","asset_type":"general","completed":false},
-        {"key":"first_21","reward":"4000","asset_type":"general","completed":false},
-        {"key":"first_natural_21","reward":"5000","asset_type":"general","completed":false}
+        {
+          "key": "complete",
+          "reward": "1000",
+          "asset_type": "general",
+          "completed": false
+        },
+        {
+          "key": "first_win",
+          "reward": "2000",
+          "asset_type": "general",
+          "completed": false
+        },
+        {
+          "key": "first_bust",
+          "reward": "3000",
+          "asset_type": "general",
+          "completed": false
+        },
+        {
+          "key": "first_21",
+          "reward": "4000",
+          "asset_type": "general",
+          "completed": false
+        },
+        {
+          "key": "first_natural_21",
+          "reward": "5000",
+          "asset_type": "general",
+          "completed": false
+        }
       ],
       "all_completed": false
     },
@@ -100,21 +142,65 @@
     },
     "bidding": {
       "items": [
-        {"key":"complete_tier_1","reward":"1000","asset_type":"general","completed":false},
-        {"key":"complete_tier_2","reward":"2000","asset_type":"general","completed":false},
-        {"key":"complete_tier_3","reward":"5000","asset_type":"general","completed":false},
-        {"key":"first_win","reward":"2000","asset_type":"general","completed":false}
+        {
+          "key": "complete_tier_1",
+          "reward": "1000",
+          "asset_type": "general",
+          "completed": false
+        },
+        {
+          "key": "complete_tier_2",
+          "reward": "2000",
+          "asset_type": "general",
+          "completed": false
+        },
+        {
+          "key": "complete_tier_3",
+          "reward": "5000",
+          "asset_type": "general",
+          "completed": false
+        },
+        {
+          "key": "first_win",
+          "reward": "2000",
+          "asset_type": "general",
+          "completed": false
+        }
       ],
       "all_completed": false
     },
     "likes": {
       "items": [
-        {"key":"quick_complete","reward":"1000","asset_type":"general","completed":false},
-        {"key":"quick_win","reward":"2000","asset_type":"general","completed":false},
-        {"key":"standard_complete","reward":"5000","asset_type":"general","completed":false},
-        {"key":"standard_win","reward":"10000","asset_type":"general","completed":false}
+        {
+          "key": "quick_complete",
+          "reward": "1000",
+          "asset_type": "general",
+          "completed": false
+        },
+        {
+          "key": "quick_win",
+          "reward": "2000",
+          "asset_type": "general",
+          "completed": false
+        },
+        {
+          "key": "standard_complete",
+          "reward": "5000",
+          "asset_type": "general",
+          "completed": false
+        },
+        {
+          "key": "standard_win",
+          "reward": "10000",
+          "asset_type": "general",
+          "completed": false
+        }
       ],
       "all_completed": false
+    },
+    "lakenotes": {
+      "items": [],
+      "all_completed": true
     }
   },
   "tutorial_rps_seen": false,
@@ -275,5 +361,60 @@
     "queue_capacity": 4096,
     "plan_seconds": 30,
     "settlement_seconds": 0
+  },
+  "gwent": {
+    "available": true,
+    "choice_seconds": 15,
+    "enabled": false,
+    "modes": {
+      "standard": {
+        "available": true,
+        "content_hash": "f40c4871d88b4ff89312be92a1f9481d8dad8118fe8913320468a24d194d3e49",
+        "enabled": false,
+        "rake_bp": {
+          "platform": 100,
+          "welfare": 100,
+          "thursday": 100
+        },
+        "terms_hash": "f6466365799e3da1ce837776123b1eb99d0ce87b18001df3f04fddd3c83f1b77",
+        "ticket": "5000"
+      }
+    },
+    "mulligan_seconds": 20,
+    "queue_capacity": 4096,
+    "queue_seconds": 120,
+    "turn_seconds": 30
+  },
+  "steadycatch": {
+    "enabled": false,
+    "price": "0",
+    "first_clear_reward": "0",
+    "available": true,
+    "first_cleared": false
+  },
+  "lakenotes": {
+    "enabled": false,
+    "exchanges": {
+      "coins_to_general": {
+        "enabled": false,
+        "source_amount": "",
+        "target_amount": ""
+      },
+      "general_to_coins": {
+        "enabled": false,
+        "source_amount": "",
+        "target_amount": ""
+      },
+      "coins_to_game": {
+        "enabled": false,
+        "source_amount": "",
+        "target_amount": ""
+      },
+      "game_to_coins": {
+        "enabled": false,
+        "source_amount": "",
+        "target_amount": ""
+      }
+    }
   }
 }

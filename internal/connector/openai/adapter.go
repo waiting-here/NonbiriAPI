@@ -281,6 +281,9 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWri
 	target.credential.clear()
 
 	response, err := client.Do(httpRequest)
+	if response != nil {
+		defer func() { result.UpstreamStatus = response.StatusCode }()
+	}
 	httpRequest.Header.Del("Authorization")
 	clear(body)
 	if response != nil && response.Request != nil {
@@ -294,6 +297,9 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWri
 		return connectorcontract.TransportFailed(failed, err, ctx)
 	}
 	defer func() { _ = response.Body.Close() }()
+	if err := connectorcontract.ObserveUpstreamResponse(writer, response.StatusCode, request.Stream); err != nil {
+		return AttemptResult{Failure: connectorcontract.FailureInternal, Diagnostic: "upstream response checkpoint failed"}
+	}
 
 	if response.StatusCode < http.StatusOK || response.StatusCode > 299 || request.Stream && response.StatusCode != http.StatusOK {
 		result := connectorcontract.UpstreamFailed(upstreamFailure(statusDiagnostic(response.StatusCode), response.StatusCode), connectorcontract.OriginUpstreamResponse)

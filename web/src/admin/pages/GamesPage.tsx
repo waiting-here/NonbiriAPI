@@ -1,3 +1,4 @@
+import { LakeFields, lakeWire } from '../features/lakenotes/LakeFields';
 import { useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
@@ -15,7 +16,12 @@ import {
 } from '../features/operations/economy';
 import { useRetainedOperation } from '../features/operations/useRetainedOperation';
 import { DuelConfiguration } from '../features/games/Configuration';
-import { FishingFields, LinklinkFields, RPSFields } from '../features/games/GameFields';
+import {
+  CatchFields,
+  FishingFields,
+  LinklinkFields,
+  RPSFields,
+} from '../features/games/GameFields';
 import { ExpandablePanel } from '@shared/components/ui/ExpandablePanel';
 import { Note, Panel, PanelBody, SaveBar, Toggle } from '@shared/components/ui';
 import '../features/games/configuration.css';
@@ -101,7 +107,8 @@ function amountMilli(value: string): bigint | null {
 const validInteger = (value: number, minimum: number, maximum: number) =>
   Number.isSafeInteger(value) && value >= minimum && value <= maximum;
 
-type ConfigGame = GameName | 'bidding' | 'likes' | 'blackjack';
+type ConfigGame =
+  GameName | 'bidding' | 'likes' | 'blackjack' | 'gwent' | 'steadycatch' | 'lakenotes';
 type GameProblem = { game: ConfigGame | null; message: string; field?: string };
 
 function validateGamesDraft(draft: GamesConfig, t: TFunction): GameProblem | null {
@@ -279,13 +286,15 @@ function canonicalGamesDraft(draft: GamesConfig): GamesConfig {
     if (milli === null) return value;
     return `${milli / 1000n}${milli % 1000n ? '.' + (milli % 1000n).toString().padStart(3, '0').replace(/0+$/, '') : ''}`;
   };
+  result.steadycatch.price = canonical(result.steadycatch.price);
+  result.steadycatch.first_clear_reward = canonical(result.steadycatch.first_clear_reward);
   for (const bait of ['worm', 'lure', 'premium'] as const)
     result.fishing.bait_prices[bait] = canonical(result.fishing.bait_prices[bait]);
   for (const spec of ['6x8', '8x8', '10x10'] as const)
     result.linklink.specs[spec].price = canonical(result.linklink.specs[spec].price);
   for (const mode of RPS_MODES)
     result.rps.modes[mode].base = canonical(result.rps.modes[mode].base);
-  for (const game of ['bidding', 'likes'] as const) {
+  for (const game of ['bidding', 'likes', 'gwent'] as const) {
     const config = result[game];
     if (config)
       for (const mode of Object.values(config.modes)) mode.ticket = canonical(mode.ticket);
@@ -316,13 +325,50 @@ function GamesEditor({
     setDraft(updater);
   };
   const label = (game: ConfigGame) =>
-    game === 'bidding' || game === 'likes' || game === 'blackjack'
+    game === 'bidding' ||
+    game === 'likes' ||
+    game === 'blackjack' ||
+    game === 'gwent' ||
+    game === 'steadycatch' ||
+    game === 'lakenotes'
       ? gameLabel(game, text)
       : t(GAME_LABEL_KEYS[game]);
   const problem = (): GameProblem | null => {
+    if (draft.lakenotes.enabled && !draft.master_enabled)
+      return {
+        game: 'lakenotes',
+        message: text('请先开启小游戏总开关。', 'Enable the games master switch first.'),
+      };
+    try {
+      lakeWire(draft.lakenotes);
+    } catch {
+      return {
+        game: 'lakenotes',
+        message: text(
+          '请填写完整兑换比例，金币为正整数，积分最多三位小数。',
+          'Enter both exchange amounts. Use positive whole coins and credits with up to three decimals.',
+        ),
+      };
+    }
+    if (draft.steadycatch.enabled && !draft.master_enabled)
+      return {
+        game: 'steadycatch',
+        message: text('请先开启小游戏总开关。', 'Enable the games master switch first.'),
+      };
+    if (
+      amountMilli(draft.steadycatch.price) === null ||
+      amountMilli(draft.steadycatch.first_clear_reward) === null
+    )
+      return {
+        game: 'steadycatch',
+        message: text(
+          '金额应为非负数，最多三位小数。',
+          'Use nonnegative amounts with up to three decimal places.',
+        ),
+      };
     const basic = validateGamesDraft(draft, t);
     if (basic) return basic;
-    for (const game of ['bidding', 'likes'] as const) {
+    for (const game of ['bidding', 'likes', 'gwent'] as const) {
       const message = validateDuelConfigurations(
         { master_enabled: draft.master_enabled, [game]: draft[game] },
         text,
@@ -398,6 +444,13 @@ function GamesEditor({
       `${values.length} modes · ${values.filter((value) => value.enabled).length} enabled`,
     );
   const summary = (game: ConfigGame) => {
+    if (game === 'lakenotes')
+      return text('免费常驻 · 四向兑换', 'Free play · four exchange directions');
+    if (game === 'steadycatch')
+      return text(
+        '90 秒接物挑战 · 仅首通奖励',
+        '90-second catch challenge · first-clear reward only',
+      );
     if (game === 'fishing')
       return `${Object.values(draft.fishing.bait_prices).join(' / ')} ${text('积分', 'credits')} · ${text('抽成', 'fees')} ${Object.values(draft.fishing.rake_bp).reduce((a, b) => a + b, 0) / 100}%`;
     if (game === 'linklink') return enabledSummary(Object.values(draft.linklink.specs));
@@ -425,7 +478,19 @@ function GamesEditor({
             onChange={(master_enabled) => edit((current) => ({ ...current, master_enabled }))}
           />
           <div className="admin-game-list">
-            {(['fishing', 'linklink', 'rps', 'bidding', 'likes', 'blackjack'] as const)
+            {(
+              [
+                'fishing',
+                'linklink',
+                'rps',
+                'bidding',
+                'likes',
+                'blackjack',
+                'gwent',
+                'steadycatch',
+                'lakenotes',
+              ] as const
+            )
               .filter((game) => draft[game])
               .map((game) => (
                 <div className="admin-game-row" key={game}>
@@ -510,6 +575,12 @@ function GamesEditor({
         {formError ? <Note tone="bad">{formError.message}</Note> : null}
         {stale ? <Note tone="bad">{t('admin.games.validation.changedElsewhere')}</Note> : null}
         {save.error ? <ErrorState error={save.error} /> : null}
+        {active === 'lakenotes' && (
+          <LakeFields draft={draft} edit={edit} disabled={save.isPending} />
+        )}
+        {active === 'steadycatch' && (
+          <CatchFields draft={draft} edit={edit} disabled={save.isPending} />
+        )}
         {active === 'fishing' ? (
           <FishingFields draft={draft} edit={edit} disabled={save.isPending} />
         ) : null}
@@ -519,7 +590,7 @@ function GamesEditor({
         {active === 'rps' ? (
           <RPSFields draft={draft} edit={edit} disabled={save.isPending} />
         ) : null}
-        {(active === 'bidding' || active === 'likes') && draft[active] ? (
+        {(active === 'bidding' || active === 'likes' || active === 'gwent') && draft[active] ? (
           <DuelConfiguration
             game={active}
             value={draft[active]}
@@ -604,7 +675,10 @@ export function GamesPage() {
                             value:
                               row.game === 'bidding' ||
                               row.game === 'likes' ||
-                              row.game === 'blackjack'
+                              row.game === 'blackjack' ||
+                              row.game === 'gwent' ||
+                              row.game === 'steadycatch' ||
+                              row.game === 'lakenotes'
                                 ? modeLabel(row.mode, duelText)
                                 : enumLabel(t, RPS_MODE_LABEL_KEYS, row.mode),
                           })
@@ -619,7 +693,10 @@ export function GamesPage() {
                             value:
                               row.game === 'bidding' ||
                               row.game === 'likes' ||
-                              row.game === 'blackjack'
+                              row.game === 'blackjack' ||
+                              row.game === 'gwent' ||
+                              row.game === 'steadycatch' ||
+                              row.game === 'lakenotes'
                                 ? ({
                                     plan: duelText('选招', 'Choosing skills'),
                                     settlement: duelText('结算展示', 'Settlement presentation'),
@@ -627,6 +704,11 @@ export function GamesPage() {
                                     bid: duelText('竞标', 'Bidding'),
                                     seating: duelText('落座', 'Seating'),
                                     decision: duelText('决策', 'Decisions'),
+                                    mulligan: duelText('换牌', 'Mulligan'),
+                                    turn: duelText('出牌', 'Playing cards'),
+                                    choice: duelText('选择目标', 'Choosing a target'),
+                                    playing: duelText('游玩中', 'Playing'),
+                                    paused: duelText('已暂停', 'Paused'),
                                   }[row.phase] ?? row.phase)
                                 : enumLabel(t, RPS_PHASE_LABEL_KEYS, row.phase),
                           })
@@ -639,7 +721,12 @@ export function GamesPage() {
                       <StatusBadge
                         active
                         label={
-                          row.game === 'bidding' || row.game === 'likes' || row.game === 'blackjack'
+                          row.game === 'bidding' ||
+                          row.game === 'likes' ||
+                          row.game === 'blackjack' ||
+                          row.game === 'gwent' ||
+                          row.game === 'steadycatch' ||
+                          row.game === 'lakenotes'
                             ? gameLabel(row.game, duelText)
                             : enumLabel(t, GAME_LABEL_KEYS, row.game)
                         }

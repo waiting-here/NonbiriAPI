@@ -3,7 +3,7 @@ import { exactRecord, invalidResponse } from './strict';
 export const RANDOM_ALGORITHM = 'hmac-sha256-reject64-v1';
 export const RANDOM_MAX_BYTES = 2 * 1024 * 1024;
 const maxSamples = 65664;
-const games = ['fishing', 'linklink', 'rps', 'bidding', 'likes', 'blackjack'] as const;
+const games = ['fishing', 'linklink', 'rps', 'bidding', 'likes', 'blackjack', 'gwent'] as const;
 export type RandomGame = (typeof games)[number];
 export interface RandomProof {
   readonly algorithm: typeof RANDOM_ALGORITHM;

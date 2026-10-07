@@ -49,28 +49,29 @@ type TreasureReward struct {
 	Count int    `json:"count"`
 }
 type Cast struct {
-	RulesID         string          `json:"rules_id"`
-	Snapshot        Snapshot        `json:"snapshot"`
-	Plan            EncounterPlan   `json:"plan"`
-	Phase           string          `json:"phase"`
-	Paused          bool            `json:"paused"`
-	Tick            uint64          `json:"tick"`
-	Held            bool            `json:"held"`
-	WaitRemaining   float64         `json:"waitRemaining"`
-	BarY            float64         `json:"barY"`
-	BarVelocity     float64         `json:"barVelocity"`
-	Progress        float64         `json:"progress"`
-	WasHit          bool            `json:"wasHit"`
-	Elapsed         float64         `json:"elapsed"`
-	HitTime         float64         `json:"hitTime"`
-	EffectiveTime   float64         `json:"effectiveTime"`
-	CurrentMissTime float64         `json:"currentMissTime"`
-	LongestMissTime float64         `json:"longestMissTime"`
-	Fish            *FishState      `json:"fish,omitempty"`
-	Treasure        *Treasure       `json:"treasure,omitempty"`
-	Motion          MotionRandom    `json:"motion"`
-	Result          *TerminalResult `json:"result,omitempty"`
-	Reward          *TreasureReward `json:"reward,omitempty"`
+	BitePreparationRemaining float64         `json:"bitePreparationRemaining"`
+	RulesID                  string          `json:"rules_id"`
+	Snapshot                 Snapshot        `json:"snapshot"`
+	Plan                     EncounterPlan   `json:"plan"`
+	Phase                    string          `json:"phase"`
+	Paused                   bool            `json:"paused"`
+	Tick                     uint64          `json:"tick"`
+	Held                     bool            `json:"held"`
+	WaitRemaining            float64         `json:"waitRemaining"`
+	BarY                     float64         `json:"barY"`
+	BarVelocity              float64         `json:"barVelocity"`
+	Progress                 float64         `json:"progress"`
+	WasHit                   bool            `json:"wasHit"`
+	Elapsed                  float64         `json:"elapsed"`
+	HitTime                  float64         `json:"hitTime"`
+	EffectiveTime            float64         `json:"effectiveTime"`
+	CurrentMissTime          float64         `json:"currentMissTime"`
+	LongestMissTime          float64         `json:"longestMissTime"`
+	Fish                     *FishState      `json:"fish,omitempty"`
+	Treasure                 *Treasure       `json:"treasure,omitempty"`
+	Motion                   MotionRandom    `json:"motion"`
+	Result                   *TerminalResult `json:"result,omitempty"`
+	Reward                   *TreasureReward `json:"reward,omitempty"`
 }
 
 func (c Cast) Terminal() bool { return c.Phase == "success" || c.Phase == "failed" }
@@ -111,13 +112,20 @@ func pickFish(p Profile, e Effects, bait, rod string, r Random53) (FishType, err
 	weather := WeatherForDay(p.Day)
 	choices := []FishType{}
 	weights := []float64{}
+	tierTotals := map[string]float64{}
+	for _, f := range catalog.Fish {
+		if f.Location == p.Location && available(f, period, weather) && (rod != "trainingRod" || f.Difficulty < 50) {
+			tierTotals[f.Rarity] += f.Weight
+		}
+	}
 	total := 0.0
 	for _, f := range catalog.Fish {
 		if f.Location != p.Location || !available(f, period, weather) || rod == "trainingRod" && f.Difficulty >= 50 {
 			continue
 		}
 		rank := catalog.Rarities[f.Rarity].Rank
-		weight := f.Weight
+		baseWeight := float64(float64(catalog.RarityWeights[f.Rarity]*f.Weight) / tierTotals[f.Rarity])
+		weight := baseWeight
 		if p.First == "tracker" && rank >= 3 {
 			weight = float64(weight * 1.2)
 		}
@@ -136,7 +144,7 @@ func pickFish(p Profile, e Effects, bait, rod string, r Random53) (FishType, err
 		if rank == 5 {
 			weight = float64(weight * defaultOne(e.LegendWeight))
 		}
-		weight = math.Min(weight, float64(f.Weight*4.5))
+		weight = math.Min(weight, float64(baseWeight*4.5))
 		choices = append(choices, f)
 		weights = append(weights, weight)
 		total = float64(total + weight)
@@ -314,7 +322,9 @@ func step(p *Profile, c *Cast, held bool) error {
 				c.Phase = "playing"
 				c.BarY = float64(1 - float64(c.Snapshot.BarHeight/2))
 				c.BarVelocity = 0
-				f := InitialFish(c.Plan.Challenge)
+				kind, _ := Fish(c.Plan.FishKind)
+				f := InitialFish(c.Plan.Challenge, kind)
+				c.BitePreparationRemaining = .5
 				c.Fish = &f
 				if c.Plan.TreasureY != nil {
 					c.Treasure = &Treasure{Y: *c.Plan.TreasureY}
@@ -325,6 +335,16 @@ func step(p *Profile, c *Cast, held bool) error {
 	}
 	if c.Phase != "playing" {
 		return ErrInvalid
+	}
+	if c.BitePreparationRemaining > 0 {
+		used := math.Min(TickSeconds, c.BitePreparationRemaining)
+		c.BitePreparationRemaining = math.Max(0, float64(c.BitePreparationRemaining-used))
+		if c.BitePreparationRemaining < 1e-9 {
+			c.BitePreparationRemaining = 0
+		}
+		if float64(TickSeconds-used) < 1e-9 {
+			return nil
+		}
 	}
 	s := c.Snapshot
 	e := s.Effects
@@ -371,7 +391,7 @@ func step(p *Profile, c *Cast, held bool) error {
 		c.BarVelocity = float64(-c.BarVelocity * e.BottomBounce)
 	}
 	f, _ := Fish(c.Plan.FishKind)
-	c.Fish.Step(&c.Motion, f.Behavior, challenge)
+	c.Fish.Step(&c.Motion, f, challenge)
 	hit := c.Fish.Y >= float64(c.BarY-half) && c.Fish.Y <= float64(c.BarY+half)
 	c.WasHit = hit
 	c.EffectiveTime = float64(c.EffectiveTime + TickSeconds)
@@ -412,7 +432,7 @@ func step(p *Profile, c *Cast, held bool) error {
 	if hit {
 		rate = float64(float64(float64(0.12*challenge.Gain)*float64(rare1*rare2)) * e.ProgressGain)
 	} else if s.HadCaught {
-		rate = float64(float64(float64(-0.18*challenge.Loss)*float64(calm1*calm2)) * e.ProgressLoss)
+		rate = float64(float64(float64(-0.15*challenge.Loss)*float64(calm1*calm2)) * e.ProgressLoss)
 	}
 	c.Progress = clamp(float64(c.Progress+float64(rate*TickSeconds)), 0, 1)
 	if c.Progress >= 1 {

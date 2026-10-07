@@ -22,7 +22,7 @@ type castRow struct {
 	started, lease             sql.NullInt64
 }
 
-const castColumns = "id,user_id,source_period_id,rules_id,storage_version,generation,revision,snapshot,reward_plan,phase,paused,last_tick,held,active_elapsed_ns,active_started_at_ns,lease_until_ns"
+const castColumns = "id,user_id,coalesce(source_period_id,''),rules_id,storage_version,generation,revision,snapshot,reward_plan,phase,paused,last_tick,held,active_elapsed_ns,active_started_at_ns,lease_until_ns"
 
 func scanCast(scan func(...any) error) (castRow, error) {
 	var row castRow
@@ -39,7 +39,7 @@ func scanCast(scan func(...any) error) (castRow, error) {
 	if e != nil {
 		return row, e
 	}
-	row.state, e = decodeStoredCast(version, snapshot)
+	row.state, e = decodeStoredCast(version, rulesID, snapshot)
 	if e != nil {
 		return row, ErrInvariant
 	}
@@ -48,7 +48,7 @@ func scanCast(scan func(...any) error) (castRow, error) {
 			return row, ErrInvariant
 		}
 	}
-	if row.state.RulesID != rulesID || row.state.Phase != phase || row.state.Tick != tick {
+	if row.state.Phase != phase || row.state.Tick != tick {
 		return row, ErrInvariant
 	}
 	row.state.Paused, row.state.Held = paused, held
@@ -119,7 +119,7 @@ func saveCastTx(ctx context.Context, tx *sql.Tx, c *castRow, now time.Time, ack 
 	if c.state.Terminal() {
 		terminal = now.Unix()
 	}
-	r, e := tx.ExecContext(ctx, "UPDATE lake_notes_casts SET phase=?,paused=?,generation=?,revision=revision+1,last_tick=?,snapshot=?,reward_plan=?,held=?,active_elapsed_ns=?,active_started_at_ns=?,lease_until_ns=?,last_ack_json=?,terminal_at=?,updated_at=? WHERE id=? AND user_id=? AND revision=?", c.state.Phase, c.state.Paused, c.generation, c.state.Tick, raw, reward, c.state.Held, c.elapsed, c.started, c.lease, string(last), terminal, now.Unix(), c.id, c.user, c.revision)
+	r, e := tx.ExecContext(ctx, "UPDATE lake_notes_casts SET rules_id=?,storage_version=?,phase=?,paused=?,generation=?,revision=revision+1,last_tick=?,snapshot=?,reward_plan=?,held=?,active_elapsed_ns=?,active_started_at_ns=?,lease_until_ns=?,last_ack_json=?,terminal_at=?,updated_at=? WHERE id=? AND user_id=? AND revision=?", rules.RulesID, castStorageVersion, c.state.Phase, c.state.Paused, c.generation, c.state.Tick, raw, reward, c.state.Held, c.elapsed, c.started, c.lease, string(last), terminal, now.Unix(), c.id, c.user, c.revision)
 	if e != nil {
 		return e
 	}
@@ -163,7 +163,7 @@ func (s *Service) Start(ctx context.Context, user int64, key string, in StartInp
 		return MutationResult[CastResult]{}, e
 	}
 	result, e := mutate(ctx, s, user, false, key, "POST", baseRoute+"/casts", in, func(tx *sql.Tx, now time.Time) (CastResult, error) {
-		p, e := s.qualifiedTx(ctx, tx, user, now.Unix())
+		_, e := s.qualifiedTx(ctx, tx, user, now.Unix())
 		if e != nil {
 			return CastResult{}, e
 		}
@@ -203,15 +203,12 @@ func (s *Service) Start(ctx context.Context, user int64, key string, in StartInp
 		if e != nil {
 			return CastResult{}, e
 		}
-		deadline, e := s.leaseDeadlineTx(ctx, tx, p, now)
-		if e != nil {
-			return CastResult{}, e
-		}
+		deadline := now.Add(LeaseDuration).UnixNano()
 		raw, e := rules.EncodeCast(state)
 		if e != nil {
 			return CastResult{}, e
 		}
-		_, e = tx.ExecContext(ctx, "INSERT INTO lake_notes_casts(id,user_id,source_period_id,rules_id,storage_version,phase,paused,generation,revision,last_tick,snapshot,reward_plan,held,active_elapsed_ns,active_started_at_ns,lease_until_ns,created_at,updated_at) VALUES(?,?,?,?,?,?,0,1,1,0,?,X'7b7d',0,0,?,?,?,?)", id, user, p.ID, rules.RulesID, castStorageVersion, state.Phase, raw, now.UnixNano(), deadline, now.Unix(), now.Unix())
+		_, e = tx.ExecContext(ctx, "INSERT INTO lake_notes_casts(id,user_id,source_period_id,rules_id,storage_version,phase,paused,generation,revision,last_tick,snapshot,reward_plan,held,active_elapsed_ns,active_started_at_ns,lease_until_ns,created_at,updated_at) VALUES(?,?,?,?,?,?,0,1,1,0,?,X'7b7d',0,0,?,?,?,?)", id, user, nil, rules.RulesID, castStorageVersion, state.Phase, raw, now.UnixNano(), deadline, now.Unix(), now.Unix())
 		if e != nil {
 			return CastResult{}, e
 		}
@@ -323,7 +320,7 @@ func (s *Service) Checkpoint(ctx context.Context, user int64, id, key string, in
 		if c.state.Terminal() {
 			return CastResult{}, ErrConflict
 		}
-		period, gateErr := s.qualifiedTx(ctx, tx, user, now.Unix())
+		_, gateErr := s.qualifiedTx(ctx, tx, user, now.Unix())
 		if gateErr != nil && !closedError(gateErr) {
 			return CastResult{}, gateErr
 		}
@@ -377,10 +374,7 @@ func (s *Service) Checkpoint(ctx context.Context, user int64, id, key string, in
 			}
 		} else {
 			c.started = sql.NullInt64{Int64: now.UnixNano(), Valid: true}
-			deadline, e := s.leaseDeadlineTx(ctx, tx, period, now)
-			if e != nil {
-				return CastResult{}, e
-			}
+			deadline := now.Add(LeaseDuration).UnixNano()
 			c.lease = sql.NullInt64{Int64: deadline, Valid: true}
 		}
 		if e = saveProfileTx(ctx, tx, user, &row, now.Unix()); e != nil {
@@ -441,9 +435,8 @@ func (s *Service) control(ctx context.Context, user int64, id, key string, in Co
 		if c.revision != expected || c.generation != gen {
 			return CastResult{}, ErrConflict
 		}
-		var period Period
 		if resume {
-			if period, e = s.qualifiedTx(ctx, tx, user, now.Unix()); e != nil {
+			if _, e = s.qualifiedTx(ctx, tx, user, now.Unix()); e != nil {
 				return CastResult{}, e
 			}
 			if c.generation == math.MaxInt64 {
@@ -460,10 +453,7 @@ func (s *Service) control(ctx context.Context, user int64, id, key string, in Co
 			c.generation++
 			c.state.Paused = false
 			c.started = sql.NullInt64{Int64: now.UnixNano(), Valid: true}
-			deadline, e := s.leaseDeadlineTx(ctx, tx, period, now)
-			if e != nil {
-				return CastResult{}, e
-			}
+			deadline := now.Add(LeaseDuration).UnixNano()
 			c.lease = sql.NullInt64{Int64: deadline, Valid: true}
 		}
 		if e = saveCastTx(ctx, tx, &c, now, map[string]any{}); e != nil {
@@ -481,21 +471,4 @@ func (s *Service) Pause(ctx context.Context, user int64, id, key string, in Cont
 }
 func (s *Service) Resume(ctx context.Context, user int64, id, key string, in ControlInput) (MutationResult[CastResult], error) {
 	return s.control(ctx, user, id, key, in, true)
-}
-
-// A control lease never extends beyond the authoritative open interval.
-func (s *Service) leaseDeadlineTx(ctx context.Context, tx *sql.Tx, p Period, now time.Time) (int64, error) {
-	deadline := now.Add(LeaseDuration).UnixNano()
-	periodEnd := time.Unix(p.EndsAt, 0)
-	if periodEnd.Before(now.Add(LeaseDuration)) {
-		deadline = periodEnd.UnixNano()
-	}
-	var end sql.NullInt64
-	if e := tx.QueryRowContext(ctx, "SELECT ends_at FROM limited_activity_configs WHERE activity_key=?", Key).Scan(&end); e != nil {
-		return 0, e
-	}
-	if end.Valid && time.Unix(end.Int64, 0).Before(time.Unix(0, deadline)) {
-		deadline = time.Unix(end.Int64, 0).UnixNano()
-	}
-	return deadline, nil
 }

@@ -41,6 +41,8 @@ type ExportDocument struct {
 	RPS                 RPSExport                       `json:"rps"`
 	Bidding             DuelExport                      `json:"bidding"`
 	Likes               DuelExport                      `json:"likes"`
+	SteadyCatch         CatchExport                     `json:"steadycatch"`
+	Gwent               DuelExport                      `json:"gwent"`
 	Blackjack           BlackjackExport                 `json:"blackjack"`
 	Randomness          []RandomnessProofExport         `json:"randomness"`
 }

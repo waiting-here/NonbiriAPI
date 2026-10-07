@@ -130,8 +130,8 @@ export const USER_ROUTE_DESCRIPTORS = [
     registered: true,
   }),
   user({
-    id: 'lake-notes',
-    path: '/activities/lake-notes',
+    id: 'game-lake-notes',
+    path: '/games/lake-notes',
     access: 'user',
     layout: 'game',
     registered: true,
@@ -174,6 +174,20 @@ export const USER_ROUTE_DESCRIPTORS = [
   user({
     id: 'game-likes',
     path: '/games/likes',
+    access: 'user',
+    layout: 'game',
+    registered: true,
+  }),
+  user({
+    id: 'game-steady-catch',
+    path: '/games/steady-catch',
+    access: 'user',
+    layout: 'game',
+    registered: true,
+  }),
+  user({
+    id: 'game-gwent',
+    path: '/games/gwent',
     access: 'user',
     layout: 'game',
     registered: true,
@@ -288,7 +302,7 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
   }),
   admin({
     id: 'admin-lake-notes',
-    path: '/limited-activities/lake-notes',
+    path: '/games/lake-notes/periods',
     access: 'admin',
     layout: 'wide',
     registered: true,

@@ -129,3 +129,268 @@
     flex: 1 1 130px;
   }
 }
+
+.lake-game .scenery[data-location='lake'] {
+  background-image: url('/assets/lake-notes/scene-lake.webp');
+}
+.lake-game .scenery[data-location='lake'][data-weather='cloudy'] {
+  background-image: url('/assets/lake-notes/scene-lake-cloudy.webp');
+}
+.lake-game .scenery[data-location='lake'][data-weather='rain'] {
+  background-image: url('/assets/lake-notes/scene-lake-cloudy.webp');
+}
+.lake-game .scenery[data-location='lake'][data-period='night'] {
+  background-image: url('/assets/lake-notes/scene-lake-night.webp');
+}
+.lake-game .scenery[data-location='lake'][data-period='night'][data-weather='cloudy'] {
+  background-image: url('/assets/lake-notes/scene-lake-cloudy-night.webp');
+}
+.lake-game .scenery[data-location='lake'][data-period='night'][data-weather='rain'] {
+  background-image: url('/assets/lake-notes/scene-lake-cloudy-night.webp');
+}
+.lake-game .location-preview.lake {
+  background-image: url('/assets/lake-notes/scene-lake.webp');
+}
+.lake-game .scenery[data-location='river'] {
+  background-image: url('/assets/lake-notes/scene-river.webp');
+}
+.lake-game .scenery[data-location='river'][data-weather='cloudy'] {
+  background-image: url('/assets/lake-notes/scene-river-cloudy.webp');
+}
+.lake-game .scenery[data-location='river'][data-weather='rain'] {
+  background-image: url('/assets/lake-notes/scene-river-cloudy.webp');
+}
+.lake-game .scenery[data-location='river'][data-period='night'] {
+  background-image: url('/assets/lake-notes/scene-river-night.webp');
+}
+.lake-game .scenery[data-location='river'][data-period='night'][data-weather='cloudy'] {
+  background-image: url('/assets/lake-notes/scene-river-cloudy-night.webp');
+}
+.lake-game .scenery[data-location='river'][data-period='night'][data-weather='rain'] {
+  background-image: url('/assets/lake-notes/scene-river-cloudy-night.webp');
+}
+.lake-game .location-preview.river {
+  background-image: url('/assets/lake-notes/scene-river.webp');
+}
+.lake-game .scenery[data-location='coast'] {
+  background-image: url('/assets/lake-notes/scene-coast.webp');
+}
+.lake-game .scenery[data-location='coast'][data-weather='cloudy'] {
+  background-image: url('/assets/lake-notes/scene-coast-cloudy.webp');
+}
+.lake-game .scenery[data-location='coast'][data-weather='rain'] {
+  background-image: url('/assets/lake-notes/scene-coast-cloudy.webp');
+}
+.lake-game .scenery[data-location='coast'][data-period='night'] {
+  background-image: url('/assets/lake-notes/scene-coast-night.webp');
+}
+.lake-game .scenery[data-location='coast'][data-period='night'][data-weather='cloudy'] {
+  background-image: url('/assets/lake-notes/scene-coast-cloudy-night.webp');
+}
+.lake-game .scenery[data-location='coast'][data-period='night'][data-weather='rain'] {
+  background-image: url('/assets/lake-notes/scene-coast-cloudy-night.webp');
+}
+.lake-game .location-preview.coast {
+  background-image: url('/assets/lake-notes/scene-coast.webp');
+}
+.lake-game .scenery[data-location='jungle'] {
+  background-image: url('/assets/lake-notes/scene-jungle.webp');
+}
+.lake-game .scenery[data-location='jungle'][data-weather='cloudy'] {
+  background-image: url('/assets/lake-notes/scene-jungle-cloudy.webp');
+}
+.lake-game .scenery[data-location='jungle'][data-weather='rain'] {
+  background-image: url('/assets/lake-notes/scene-jungle-cloudy.webp');
+}
+.lake-game .scenery[data-location='jungle'][data-period='night'] {
+  background-image: url('/assets/lake-notes/scene-jungle-night.webp');
+}
+.lake-game .scenery[data-location='jungle'][data-period='night'][data-weather='cloudy'] {
+  background-image: url('/assets/lake-notes/scene-jungle-cloudy-night.webp');
+}
+.lake-game .scenery[data-location='jungle'][data-period='night'][data-weather='rain'] {
+  background-image: url('/assets/lake-notes/scene-jungle-cloudy-night.webp');
+}
+.lake-game .location-preview.jungle {
+  background-image: url('/assets/lake-notes/scene-jungle.webp');
+}
+
+/* Keep a complete catch and its controls inside the same play area. */
+.lake-page {
+  gap: 1rem;
+}
+.lake-game {
+  margin-block: 0;
+}
+.lake-game .game-grid {
+  min-height: 0;
+  grid-template-columns: minmax(0, 1.2fr) minmax(190px, 0.65fr) minmax(245px, 0.85fr);
+  height: clamp(360px, var(--lake-play-height, calc(100dvh - 280px)), 690px);
+}
+.lake-game .scenery {
+  min-height: 0;
+  height: 100%;
+}
+.lake-game .panel {
+  padding: 14px;
+  min-height: 0;
+  gap: 8px;
+}
+.lake-game .panel-heading {
+  padding-bottom: 6px;
+}
+.lake-game .panel-heading h2 {
+  display: none;
+}
+.lake-game .arena {
+  min-height: 120px;
+  height: auto;
+  flex: 1;
+  margin: 0 auto;
+  gap: 14px;
+}
+.lake-game .panel .hint-line {
+  margin: 0;
+  font-size: 12px;
+}
+.lake-game .panel .controls {
+  margin: 0;
+  flex-shrink: 0;
+}
+.lake-game .lake-dashboard {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px;
+  background: #f5ebd5;
+  color: #1c3633;
+}
+.lake-game .lake-dashboard .lake-save {
+  padding-block: 0;
+}
+.lake-game .lake-dashboard .lake-actions,
+.lake-game .lake-dashboard .menu-actions {
+  margin-block: 0.6rem;
+}
+.lake-game .lake-dashboard .stats {
+  gap: 0.4rem;
+  margin-block: 0.6rem;
+}
+.lake-game .lake-dashboard .loadout {
+  margin-block: 0.6rem;
+}
+.lake-game .lake-dashboard .menu-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+.lake-game .lake-dashboard .menu-actions button {
+  margin: 0;
+  padding: 9px 6px;
+  min-height: 42px;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.lake-game .lake-result {
+  position: absolute;
+  z-index: 5;
+  inset: auto 10px 10px;
+  max-height: calc(100% - 90px);
+  overflow-y: auto;
+  background: #fff6e8f2;
+  border: 2px solid #7b684c;
+  border-radius: 10px;
+  padding: 12px;
+}
+.lake-game .lake-result h2 {
+  justify-content: center;
+  font-size: 18px;
+}
+.lake-game .lake-result p {
+  margin: 0.4rem 0;
+}
+.lake-game .lake-result img {
+  width: min(180px, 80%);
+  max-height: 120px;
+}
+.lake-game .lake-menu .lake-rod-art {
+  width: 100%;
+  height: 100px;
+  object-fit: contain;
+}
+@media (max-width: 1050px) {
+  .lake-game .game-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(200px, 0.65fr);
+    height: auto;
+  }
+  .lake-game .scenery,
+  .lake-game .panel {
+    height: clamp(300px, 52dvh, 420px);
+  }
+  .lake-game .lake-dashboard {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 1rem;
+    overflow: visible;
+  }
+  .lake-game .lake-dashboard .lake-save,
+  .lake-game .lake-dashboard .loadout,
+  .lake-game .lake-dashboard .menu-actions {
+    grid-column: 1 / -1;
+  }
+  .lake-game .lake-dashboard .menu-actions {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@media (max-width: 560px) {
+  .lake-game .game-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(150px, 1fr);
+  }
+  .lake-game .panel {
+    padding: 8px;
+    gap: 6px;
+  }
+  .lake-game .arena {
+    gap: 8px;
+  }
+  .lake-game .track {
+    flex-basis: 72px;
+    width: 72px;
+  }
+  .lake-game .progress-wrap {
+    width: 35px;
+  }
+  .lake-game .progress-track {
+    width: 24px;
+  }
+  .lake-game .panel-heading {
+    flex-direction: column;
+    gap: 4px;
+  }
+  .lake-game .panel .hint-line {
+    font-size: 11px;
+  }
+  .lake-game .lake-dashboard {
+    padding: 10px;
+  }
+  .lake-game .lake-dashboard .menu-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .lake-game .lake-result {
+    inset: auto 4px 4px;
+    padding: 6px;
+  }
+  .lake-game .lake-result h2 {
+    font-size: 15px;
+  }
+  .lake-game .lake-result img {
+    max-height: 70px;
+    margin-block: 4px;
+  }
+  .lake-game .lake-result p {
+    font-size: 12px;
+    line-height: 1.4;
+  }
+}

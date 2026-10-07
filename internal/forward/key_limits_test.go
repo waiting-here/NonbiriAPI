@@ -31,7 +31,7 @@ func TestSharedKeyLimitResponsesDoNotNotifyIngressRPMPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := WithRPMDenialScope(middleware.Wrap(NewHandler(f.service)))
+	handler := middleware.WrapClassified(NewHandler(f.service), RPMClassifier())
 	for i := 0; i < 3; i++ {
 		request := withCallerIdentity(httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"[公益]care/model","messages":[]}`)), resources.CallerIdentity{UserID: 1, Generation: 1})
 		recorder := httptest.NewRecorder()

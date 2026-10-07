@@ -16,7 +16,6 @@ import (
 
 const PictureBook = "picture-book"
 const FatFish = "fat-fish"
-const LakeNotes = "lake-notes"
 const maxUnix = int64(253402300799)
 
 var (
@@ -45,12 +44,6 @@ type Runtime interface {
 	PrepareDeleteTx(context.Context, *sql.Tx, int64, int64) (Finalizer, error)
 	RecoverBeforeListener(context.Context, int64, int, time.Duration) (lifecycle.WorkResult, error)
 	Retain(context.Context, int64, int, time.Duration) (lifecycle.WorkResult, error)
-}
-
-// LeaseDeadlineRuntime shortens an existing lease when a future closing time
-// changes, without pausing an activity that is still open.
-type LeaseDeadlineRuntime interface {
-	ClampLeaseDeadlineTx(context.Context, *sql.Tx, int64) error
 }
 
 type UserAuthorizer interface {

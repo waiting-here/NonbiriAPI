@@ -450,7 +450,7 @@ CREATE INDEX idx_charity_bindings_model ON charity_model_bindings(charity_model_
 CREATE TABLE charity_model_stats (model_id INTEGER PRIMARY KEY REFERENCES charity_models(id) ON DELETE CASCADE, next_slot INTEGER NOT NULL DEFAULT 0 CHECK(next_slot BETWEEN 0 AND 99), sample_count INTEGER NOT NULL DEFAULT 0 CHECK(sample_count BETWEEN 0 AND 100), success_count INTEGER NOT NULL DEFAULT 0 CHECK(success_count BETWEEN 0 AND 100)) STRICT;
 CREATE TABLE charity_model_outcomes (model_id INTEGER NOT NULL REFERENCES charity_models(id) ON DELETE CASCADE, slot INTEGER NOT NULL CHECK(slot BETWEEN 0 AND 99), success INTEGER NOT NULL CHECK(success IN (0,1)), created_at INTEGER NOT NULL, PRIMARY KEY(model_id,slot));
 CREATE TABLE idempotency_records (
- scope TEXT NOT NULL CHECK(scope IN ('credential_report','control_mutation','openai_chat_completions','charity_chat_completions','model_discovery','maintenance','announcement','activity','game_fishing','game_linklink','game_rps','game_bidding','game_likes','game_blackjack','activity_loan','donation','lake_notes','personal_automation')), actor_scope_hash BLOB NOT NULL CHECK(typeof(actor_scope_hash)='blob' AND length(actor_scope_hash)=32), key_hash BLOB NOT NULL CHECK(typeof(key_hash)='blob' AND length(key_hash)=32), request_hash BLOB NOT NULL CHECK(typeof(request_hash)='blob' AND length(request_hash)=32), lookup_fingerprint BLOB CHECK(lookup_fingerprint IS NULL OR (typeof(lookup_fingerprint)='blob' AND length(lookup_fingerprint)=32)), state TEXT NOT NULL CHECK(state IN ('accepted','completed')), http_status INTEGER NOT NULL CHECK(http_status=0 OR http_status BETWEEN 100 AND 599), response_body BLOB NOT NULL CHECK(typeof(response_body)='blob' AND length(response_body)<=65536), created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), expires_at INTEGER NOT NULL CHECK(expires_at BETWEEN 0 AND 253402300799), PRIMARY KEY(scope,actor_scope_hash,key_hash), CHECK(expires_at>=created_at), CHECK((scope='credential_report' AND lookup_fingerprint IS NOT NULL AND expires_at=created_at+86400) OR (scope<>'credential_report' AND lookup_fingerprint IS NULL)), CHECK((state='accepted' AND http_status=0 AND length(response_body)=0) OR (state='completed' AND http_status BETWEEN 100 AND 599))
+ scope TEXT NOT NULL CHECK(scope IN ('credential_report','control_mutation','openai_chat_completions','charity_chat_completions','model_discovery','maintenance','announcement','activity','game_fishing','game_linklink','game_rps','game_bidding','game_likes','game_gwent','game_catch','game_blackjack','activity_loan','donation','lake_notes','personal_automation')), actor_scope_hash BLOB NOT NULL CHECK(typeof(actor_scope_hash)='blob' AND length(actor_scope_hash)=32), key_hash BLOB NOT NULL CHECK(typeof(key_hash)='blob' AND length(key_hash)=32), request_hash BLOB NOT NULL CHECK(typeof(request_hash)='blob' AND length(request_hash)=32), lookup_fingerprint BLOB CHECK(lookup_fingerprint IS NULL OR (typeof(lookup_fingerprint)='blob' AND length(lookup_fingerprint)=32)), state TEXT NOT NULL CHECK(state IN ('accepted','completed')), http_status INTEGER NOT NULL CHECK(http_status=0 OR http_status BETWEEN 100 AND 599), response_body BLOB NOT NULL CHECK(typeof(response_body)='blob' AND length(response_body)<=65536), created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), expires_at INTEGER NOT NULL CHECK(expires_at BETWEEN 0 AND 253402300799), PRIMARY KEY(scope,actor_scope_hash,key_hash), CHECK(expires_at>=created_at), CHECK((scope='credential_report' AND lookup_fingerprint IS NOT NULL AND expires_at=created_at+86400) OR (scope<>'credential_report' AND lookup_fingerprint IS NULL)), CHECK((state='accepted' AND http_status=0 AND length(response_body)=0) OR (state='completed' AND http_status BETWEEN 100 AND 599))
 );
 CREATE INDEX idx_idempotency_expiry ON idempotency_records(expires_at);
 CREATE TABLE logical_requests (
@@ -582,11 +582,11 @@ CREATE TABLE accepted_operations (
 );
 CREATE INDEX idx_accepted_operations_state ON accepted_operations(state,created_at,id);
 CREATE TABLE credit_accounts (
- id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0), kind TEXT NOT NULL CHECK(kind IN ('user','pool','platform','external')), user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, code TEXT, balance_sign INTEGER NOT NULL CHECK(balance_sign IN (-1,0,1)), balance_mag BLOB NOT NULL CHECK(typeof(balance_mag)='blob' AND length(balance_mag)=16), created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, asset_type TEXT NOT NULL DEFAULT 'general' CHECK(asset_type IN ('general','game','sketch_paper','sketch_brush')), CHECK((balance_sign=0 AND hex(balance_mag)='00000000000000000000000000000000') OR (balance_sign<>0 AND hex(balance_mag)<>'00000000000000000000000000000000')), CHECK((kind='user' AND user_id IS NOT NULL AND code IS NULL) OR (kind<>'user' AND user_id IS NULL AND code IS NOT NULL AND length(code) BETWEEN 1 AND 64)), CHECK(kind IN ('user','external') OR balance_sign IN (0,1)), CHECK((kind='user' AND code IS NULL) OR (kind='external' AND code='external') OR (kind='pool' AND length(code)=31 AND substr(code,1,5)='pool:' AND substr(code,6,4)='pol_' AND substr(code,10) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(code,-1,1) IN ('A','Q','g','w')) OR (kind='platform' AND (code IN ('platform','forward_reserve','charity_reserve','game_fishing_reserve','image_activity_reserve') OR (length(code)=44 AND substr(code,1,18)='blackjack-payment:' AND substr(code,19,4)='bjp_' AND substr(code,23) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(code,-1,1) IN ('A','Q','g','w')) OR (length(code)=38 AND substr(code,1,11)='duel-queue:' AND substr(code,12,5) IN ('bidq_','likq_') AND substr(code,17) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(code,-1,1) IN ('A','Q','g','w')) OR (length(code)=39 AND substr(code,1,13)='duel-session:' AND substr(code,14,4) IN ('bid_','lik_') AND substr(code,18) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(code,-1,1) IN ('A','Q','g','w')) OR (length(code)=37 AND substr(code,1,10)='rps-queue:' AND substr(code,11,5)='rpsq_' AND substr(code,16) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(code,-1,1) IN ('A','Q','g','w')) OR (length(code)=38 AND substr(code,1,12)='rps-session:' AND substr(code,13,4)='rps_' AND substr(code,17) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(code,-1,1) IN ('A','Q','g','w')))))
+ id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0), kind TEXT NOT NULL CHECK(kind IN ('user','pool','platform','external')), user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, code TEXT, balance_sign INTEGER NOT NULL CHECK(balance_sign IN (-1,0,1)), balance_mag BLOB NOT NULL CHECK(typeof(balance_mag)='blob' AND length(balance_mag)=16), created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, asset_type TEXT NOT NULL DEFAULT 'general' CHECK(asset_type IN ('general','game','sketch_paper','sketch_brush')), CHECK((balance_sign=0 AND hex(balance_mag)='00000000000000000000000000000000') OR (balance_sign<>0 AND hex(balance_mag)<>'00000000000000000000000000000000')), CHECK((kind='user' AND user_id IS NOT NULL AND code IS NULL) OR (kind<>'user' AND user_id IS NULL AND code IS NOT NULL AND length(code) BETWEEN 1 AND 64)), CHECK(kind IN ('user','external') OR balance_sign IN (0,1)), CHECK((kind='user' AND code IS NULL) OR (kind='external' AND code='external') OR (kind='pool' AND length(code)=31 AND substr(code,1,5)='pool:' AND substr(code,6,4)='pol_' AND substr(code,10) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(code,-1,1) IN ('A','Q','g','w')) OR (kind='platform' AND (code IN ('platform','forward_reserve','charity_reserve','game_fishing_reserve','image_activity_reserve') OR (length(code)=44 AND substr(code,1,18)='blackjack-payment:' AND substr(code,19,4)='bjp_' AND substr(code,23) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(code,-1,1) IN ('A','Q','g','w')) OR (length(code)=38 AND substr(code,1,11)='duel-queue:' AND substr(code,12,5) IN ('bidq_','likq_','gwtq_') AND substr(code,17) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(code,-1,1) IN ('A','Q','g','w')) OR (length(code)=39 AND substr(code,1,13)='duel-session:' AND substr(code,14,4) IN ('bid_','lik_','gwt_') AND substr(code,18) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(code,-1,1) IN ('A','Q','g','w')) OR (length(code)=37 AND substr(code,1,10)='rps-queue:' AND substr(code,11,5)='rpsq_' AND substr(code,16) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(code,-1,1) IN ('A','Q','g','w')) OR (length(code)=38 AND substr(code,1,12)='rps-session:' AND substr(code,13,4)='rps_' AND substr(code,17) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(code,-1,1) IN ('A','Q','g','w')))))
 );
 CREATE TABLE credit_capacity (id INTEGER PRIMARY KEY CHECK(id=1), last_ledger_seq INTEGER NOT NULL CHECK(last_ledger_seq BETWEEN 0 AND 9223372036854775807), reserved_future_rows BLOB NOT NULL CHECK(typeof(reserved_future_rows)='blob' AND length(reserved_future_rows)=16), revision BLOB NOT NULL CHECK(typeof(revision)='blob' AND length(revision)=16));
 CREATE TABLE credit_operations (
- id TEXT NOT NULL PRIMARY KEY CHECK(typeof(id)='text' AND length(id)=25 AND substr(id,1,3)='op_' AND substr(id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')), ledger_seq INTEGER NOT NULL UNIQUE CHECK(ledger_seq BETWEEN 1 AND 9223372036854775807), kind TEXT NOT NULL CHECK(kind IN ('admin_user_adjustment','admin_pool_adjustment','account_delete_zero','checkin_award','game_onboarding_reward','activity_loan','image_reserve','image_settle','image_refund','image_delete_finalize','activity_exchange','inactivity_decay','fatfish_unlock','fatfish_ticket','fatfish_reward','fatfish_refund','lake_entry','lake_exchange','anti_abuse_penalty','welfare_claim','thursday_contribution','thursday_payout','forward_reserve','forward_settle','forward_release','charity_reserve','charity_settle','charity_release','donor_reward','thursday_finalize','fishing_reserve','fishing_settle','fishing_release','linklink_entry','rps_queue_reserve','rps_queue_release','rps_session_start','rps_round_cut','rps_terminal','duel_queue_reserve','duel_queue_release','duel_session_start','duel_terminal','ai_ticket','ai_terminal','blackjack_reserve','blackjack_settle','blackjack_release')), source_type TEXT NOT NULL CHECK(source_type IN ('image_task','operation','logical_request','dispatch_claim','period','fishing_batch','linklink_session','rps_queue','rps_session','duel_queue','duel_session','blackjack_payment')), source_id TEXT NOT NULL, source_seq BLOB NOT NULL CHECK(typeof(source_seq)='blob' AND length(source_seq)=16), actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, donation_credit_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, donation_credit_delta_sign INTEGER NOT NULL CHECK(donation_credit_delta_sign IN (-1,0,1)), donation_credit_delta_mag BLOB NOT NULL CHECK(typeof(donation_credit_delta_mag)='blob' AND length(donation_credit_delta_mag)=16), donation_credit_after BLOB CHECK(donation_credit_after IS NULL OR (typeof(donation_credit_after)='blob' AND length(donation_credit_after)=16)), reason TEXT CHECK(reason IS NULL OR (typeof(reason)='text' AND length(reason) BETWEEN 1 AND 1024 AND length(CAST(reason AS BLOB))<=4096)), created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), compacted INTEGER NOT NULL DEFAULT 0 CHECK(compacted IN (0,1)), UNIQUE(kind,source_type,source_id,source_seq), CHECK((donation_credit_delta_sign=0 AND hex(donation_credit_delta_mag)='00000000000000000000000000000000') OR (donation_credit_delta_sign<>0 AND hex(donation_credit_delta_mag)<>'00000000000000000000000000000000')), CHECK((donation_credit_user_id IS NULL AND donation_credit_delta_sign=0 AND donation_credit_after IS NULL) OR (donation_credit_user_id IS NOT NULL AND kind IN ('admin_user_adjustment','donor_reward'))), CHECK((donation_credit_delta_sign=0 OR kind IN ('admin_user_adjustment','donor_reward'))), CHECK((reason IS NULL OR kind IN ('admin_user_adjustment','admin_pool_adjustment','anti_abuse_penalty'))), CHECK((source_type='operation' AND length(source_id)=25 AND substr(source_id,1,3)='op_' AND substr(source_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='image_task' AND length(source_id)=26 AND substr(source_id,1,4)='img_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='logical_request' AND length(source_id)=26 AND substr(source_id,1,4)='req_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='dispatch_claim' AND length(source_id)=26 AND substr(source_id,1,4)='clm_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='period' AND length(source_id)=26 AND substr(source_id,1,4)='thu_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='fishing_batch' AND length(source_id)=25 AND substr(source_id,1,3)='fb_' AND substr(source_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='linklink_session' AND length(source_id)=25 AND substr(source_id,1,3)='ll_' AND substr(source_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='rps_queue' AND length(source_id)=27 AND substr(source_id,1,5)='rpsq_' AND substr(source_id,6) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='blackjack_payment' AND length(source_id)=26 AND substr(source_id,1,4)='bjp_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='duel_queue' AND length(source_id)=27 AND substr(source_id,1,5) IN ('bidq_','likq_') AND substr(source_id,6) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='duel_session' AND length(source_id)=26 AND substr(source_id,1,4) IN ('bid_','lik_') AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='rps_session' AND length(source_id)=26 AND substr(source_id,1,4)='rps_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w'))), CHECK((kind IN ('admin_user_adjustment','admin_pool_adjustment','account_delete_zero','checkin_award','game_onboarding_reward','activity_loan','activity_exchange','inactivity_decay','fatfish_unlock','fatfish_ticket','fatfish_reward','fatfish_refund','lake_entry','lake_exchange','anti_abuse_penalty','welfare_claim','thursday_contribution','thursday_payout') AND source_type='operation' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('forward_reserve','forward_settle','forward_release','charity_reserve','charity_settle','charity_release') AND source_type='logical_request' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('image_reserve','image_settle','image_refund','image_delete_finalize') AND source_type='image_task' AND hex(source_seq)='00000000000000000000000000000000') OR (kind='donor_reward' AND source_type='dispatch_claim' AND hex(source_seq)='00000000000000000000000000000000') OR (kind='thursday_finalize' AND source_type='period' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('fishing_reserve','fishing_settle','fishing_release') AND source_type='fishing_batch' AND hex(source_seq)='00000000000000000000000000000000') OR (kind='linklink_entry' AND source_type='linklink_session' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('rps_queue_reserve','rps_queue_release') AND source_type='rps_queue' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('rps_session_start','rps_terminal') AND source_type='rps_session' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('blackjack_reserve','blackjack_settle','blackjack_release') AND source_type='blackjack_payment' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('duel_queue_reserve','duel_queue_release') AND source_type='duel_queue' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('duel_session_start','duel_terminal','ai_ticket','ai_terminal') AND source_type='duel_session' AND hex(source_seq)='00000000000000000000000000000000') OR (kind='rps_round_cut' AND source_type='rps_session' AND hex(source_seq)<>'00000000000000000000000000000000'))
+ id TEXT NOT NULL PRIMARY KEY CHECK(typeof(id)='text' AND length(id)=25 AND substr(id,1,3)='op_' AND substr(id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')), ledger_seq INTEGER NOT NULL UNIQUE CHECK(ledger_seq BETWEEN 1 AND 9223372036854775807), kind TEXT NOT NULL CHECK(kind IN ('admin_user_adjustment','admin_pool_adjustment','account_delete_zero','checkin_award','game_onboarding_reward','activity_loan','image_reserve','image_settle','image_refund','image_delete_finalize','activity_exchange','inactivity_decay','fatfish_unlock','fatfish_ticket','fatfish_reward','fatfish_refund','lake_entry','lake_exchange','anti_abuse_penalty','welfare_claim','thursday_contribution','thursday_payout','forward_reserve','forward_settle','forward_release','charity_reserve','charity_settle','charity_release','donor_reward','thursday_finalize','fishing_reserve','fishing_settle','fishing_release','linklink_entry','rps_queue_reserve','rps_queue_release','rps_session_start','rps_round_cut','rps_terminal','duel_queue_reserve','duel_queue_release','duel_session_start','duel_terminal','ai_ticket','ai_terminal','catch_ticket','catch_refund','catch_reward','blackjack_reserve','blackjack_settle','blackjack_release')), source_type TEXT NOT NULL CHECK(source_type IN ('image_task','operation','logical_request','dispatch_claim','period','fishing_batch','linklink_session','rps_queue','rps_session','duel_queue','duel_session','catch_session','blackjack_payment')), source_id TEXT NOT NULL, source_seq BLOB NOT NULL CHECK(typeof(source_seq)='blob' AND length(source_seq)=16), actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, donation_credit_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, donation_credit_delta_sign INTEGER NOT NULL CHECK(donation_credit_delta_sign IN (-1,0,1)), donation_credit_delta_mag BLOB NOT NULL CHECK(typeof(donation_credit_delta_mag)='blob' AND length(donation_credit_delta_mag)=16), donation_credit_after BLOB CHECK(donation_credit_after IS NULL OR (typeof(donation_credit_after)='blob' AND length(donation_credit_after)=16)), reason TEXT CHECK(reason IS NULL OR (typeof(reason)='text' AND length(reason) BETWEEN 1 AND 1024 AND length(CAST(reason AS BLOB))<=4096)), created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), compacted INTEGER NOT NULL DEFAULT 0 CHECK(compacted IN (0,1)), UNIQUE(kind,source_type,source_id,source_seq), CHECK((donation_credit_delta_sign=0 AND hex(donation_credit_delta_mag)='00000000000000000000000000000000') OR (donation_credit_delta_sign<>0 AND hex(donation_credit_delta_mag)<>'00000000000000000000000000000000')), CHECK((donation_credit_user_id IS NULL AND donation_credit_delta_sign=0 AND donation_credit_after IS NULL) OR (donation_credit_user_id IS NOT NULL AND kind IN ('admin_user_adjustment','donor_reward'))), CHECK((donation_credit_delta_sign=0 OR kind IN ('admin_user_adjustment','donor_reward'))), CHECK((reason IS NULL OR kind IN ('admin_user_adjustment','admin_pool_adjustment','anti_abuse_penalty'))), CHECK((source_type='operation' AND length(source_id)=25 AND substr(source_id,1,3)='op_' AND substr(source_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='image_task' AND length(source_id)=26 AND substr(source_id,1,4)='img_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='logical_request' AND length(source_id)=26 AND substr(source_id,1,4)='req_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='dispatch_claim' AND length(source_id)=26 AND substr(source_id,1,4)='clm_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='period' AND length(source_id)=26 AND substr(source_id,1,4)='thu_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='fishing_batch' AND length(source_id)=25 AND substr(source_id,1,3)='fb_' AND substr(source_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='catch_session' AND length(source_id)=25 AND substr(source_id,1,3)='sc_' AND substr(source_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='linklink_session' AND length(source_id)=25 AND substr(source_id,1,3)='ll_' AND substr(source_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='rps_queue' AND length(source_id)=27 AND substr(source_id,1,5)='rpsq_' AND substr(source_id,6) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='blackjack_payment' AND length(source_id)=26 AND substr(source_id,1,4)='bjp_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='duel_queue' AND length(source_id)=27 AND substr(source_id,1,5) IN ('bidq_','likq_','gwtq_') AND substr(source_id,6) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='duel_session' AND length(source_id)=26 AND substr(source_id,1,4) IN ('bid_','lik_','gwt_') AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='rps_session' AND length(source_id)=26 AND substr(source_id,1,4)='rps_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w'))), CHECK((kind IN ('admin_user_adjustment','admin_pool_adjustment','account_delete_zero','checkin_award','game_onboarding_reward','activity_loan','activity_exchange','inactivity_decay','fatfish_unlock','fatfish_ticket','fatfish_reward','fatfish_refund','lake_entry','lake_exchange','anti_abuse_penalty','welfare_claim','thursday_contribution','thursday_payout') AND source_type='operation' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('forward_reserve','forward_settle','forward_release','charity_reserve','charity_settle','charity_release') AND source_type='logical_request' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('image_reserve','image_settle','image_refund','image_delete_finalize') AND source_type='image_task' AND hex(source_seq)='00000000000000000000000000000000') OR (kind='donor_reward' AND source_type='dispatch_claim' AND hex(source_seq)='00000000000000000000000000000000') OR (kind='thursday_finalize' AND source_type='period' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('fishing_reserve','fishing_settle','fishing_release') AND source_type='fishing_batch' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('catch_ticket','catch_refund','catch_reward') AND source_type='catch_session' AND hex(source_seq)='00000000000000000000000000000000') OR (kind='linklink_entry' AND source_type='linklink_session' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('rps_queue_reserve','rps_queue_release') AND source_type='rps_queue' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('rps_session_start','rps_terminal') AND source_type='rps_session' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('blackjack_reserve','blackjack_settle','blackjack_release') AND source_type='blackjack_payment' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('duel_queue_reserve','duel_queue_release') AND source_type='duel_queue' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('duel_session_start','duel_terminal','ai_ticket','ai_terminal') AND source_type='duel_session' AND hex(source_seq)='00000000000000000000000000000000') OR (kind='rps_round_cut' AND source_type='rps_session' AND hex(source_seq)<>'00000000000000000000000000000000'))
 ) WITHOUT ROWID;
 CREATE INDEX idx_credit_operations_source ON credit_operations(source_type,source_id,source_seq);
 CREATE INDEX idx_credit_operations_created ON credit_operations(created_at,ledger_seq);
@@ -4212,7 +4212,7 @@ WHEN NOT EXISTS(
   AND e.delta_sign=CASE WHEN NEW.award_milli=0 THEN 0 ELSE 1 END AND hex(e.delta_mag)=printf('%032X',NEW.award_milli))
 BEGIN SELECT RAISE(ABORT,'game check-in operation mismatch'); END;
 CREATE TABLE game_duel_catalogs (
- game_key TEXT NOT NULL CHECK(game_key IN ('bidding','likes')),
+ game_key TEXT NOT NULL CHECK(game_key IN ('bidding','likes','gwent')),
  content_hash TEXT NOT NULL CHECK(length(content_hash)=64 AND content_hash NOT GLOB '*[^0-9a-f]*'),
  rules_version INTEGER NOT NULL CHECK(rules_version=1),
  design_version TEXT NOT NULL CHECK(length(design_version) BETWEEN 1 AND 32),
@@ -4221,9 +4221,9 @@ CREATE TABLE game_duel_catalogs (
  PRIMARY KEY(game_key,content_hash)
 ) STRICT;
 CREATE TABLE game_duel_queue (
- id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=27 AND substr(id,1,5) IN ('bidq_','likq_') AND substr(id,6) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')),
- game_key TEXT NOT NULL CHECK((game_key='bidding' AND substr(id,1,5)='bidq_') OR (game_key='likes' AND substr(id,1,5)='likq_')),
- mode TEXT NOT NULL CHECK((game_key='bidding' AND mode IN ('tier1','tier2','tier3')) OR (game_key='likes' AND mode IN ('quick','standard'))),
+ id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=27 AND substr(id,1,5) IN ('bidq_','likq_','gwtq_') AND substr(id,6) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')),
+ game_key TEXT NOT NULL CHECK((game_key='bidding' AND substr(id,1,5)='bidq_') OR (game_key='likes' AND substr(id,1,5)='likq_') OR (game_key='gwent' AND substr(id,1,5)='gwtq_')),
+ mode TEXT NOT NULL CHECK((game_key='bidding' AND mode IN ('tier1','tier2','tier3')) OR (game_key='likes' AND mode IN ('quick','standard')) OR (game_key='gwent' AND mode='standard')),
  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
  revision BLOB NOT NULL CHECK(typeof(revision)='blob' AND length(revision)=16 AND hex(revision)<>'00000000000000000000000000000000'),
  created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300679),
@@ -4239,17 +4239,17 @@ CREATE TABLE game_duel_queue (
  ledger_rows_remaining BLOB NOT NULL CHECK(typeof(ledger_rows_remaining)='blob' AND length(ledger_rows_remaining)=16 AND hex(ledger_rows_remaining) IN ('00000000000000000000000000000000','00000000000000000000000000000001')),
  device_hash BLOB NOT NULL CHECK(typeof(device_hash)='blob' AND length(device_hash)=32),
  ip_hash BLOB NOT NULL CHECK(typeof(ip_hash)='blob' AND length(ip_hash)=32),
- loadout_json TEXT CHECK((game_key='bidding' AND loadout_json IS NULL) OR (game_key='likes' AND typeof(loadout_json)='text' AND length(CAST(loadout_json AS BLOB))<=4096 AND json_valid(loadout_json))),
+ loadout_json TEXT CHECK((game_key='bidding' AND loadout_json IS NULL) OR (game_key IN ('likes','gwent') AND typeof(loadout_json)='text' AND length(CAST(loadout_json AS BLOB))<=4096 AND json_valid(loadout_json))),
  FOREIGN KEY(game_key,content_hash) REFERENCES game_duel_catalogs(game_key,content_hash) ON DELETE RESTRICT
 ) STRICT;
 CREATE INDEX idx_duel_queue_match ON game_duel_queue(game_key,mode,terms_hash,created_at,id);
 CREATE INDEX idx_duel_queue_deadline ON game_duel_queue(game_key,deadline,id);
 CREATE UNIQUE INDEX idx_duel_queue_user ON game_duel_queue(user_id,game_key);
 CREATE TABLE game_duel_sessions (
- id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4) IN ('bid_','lik_') AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')),
- game_key TEXT NOT NULL CHECK((game_key='bidding' AND substr(id,1,4)='bid_') OR (game_key='likes' AND substr(id,1,4)='lik_')),
+ id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4) IN ('bid_','lik_','gwt_') AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')),
+ game_key TEXT NOT NULL CHECK((game_key='bidding' AND substr(id,1,4)='bid_') OR (game_key='likes' AND substr(id,1,4)='lik_') OR (game_key='gwent' AND substr(id,1,4)='gwt_')),
  economy TEXT NOT NULL DEFAULT 'pvp' CHECK(economy IN ('pvp','ai_challenge')),
- mode TEXT NOT NULL CHECK((economy='pvp' AND ((game_key='bidding' AND mode IN ('tier1','tier2','tier3')) OR (game_key='likes' AND mode IN ('quick','standard')))) OR (economy='ai_challenge' AND game_key='bidding' AND mode='ai')),
+ mode TEXT NOT NULL CHECK((economy='pvp' AND ((game_key='bidding' AND mode IN ('tier1','tier2','tier3')) OR (game_key='likes' AND mode IN ('quick','standard')) OR (game_key='gwent' AND mode='standard'))) OR (economy='ai_challenge' AND game_key='bidding' AND mode='ai')),
  content_hash TEXT NOT NULL,
  terms_json TEXT NOT NULL CHECK(typeof(terms_json)='text' AND length(CAST(terms_json AS BLOB))<=4096 AND json_valid(terms_json)),
  terms_hash TEXT NOT NULL CHECK(length(terms_hash)=64 AND terms_hash NOT GLOB '*[^0-9a-f]*'),
@@ -4258,7 +4258,7 @@ CREATE TABLE game_duel_sessions (
  welfare_bp INTEGER NOT NULL CHECK(welfare_bp BETWEEN 0 AND 9999),
  thursday_bp INTEGER NOT NULL CHECK(thursday_bp BETWEEN 0 AND 9999 AND platform_bp+welfare_bp+thursday_bp<10000),
  state TEXT NOT NULL CHECK(state IN ('active','terminal')),
- phase TEXT NOT NULL CHECK(phase IN ('joker','bid','plan','settlement','terminal')),
+ phase TEXT NOT NULL CHECK(phase IN ('joker','bid','plan','settlement','mulligan','turn','choice','terminal')),
  round INTEGER NOT NULL CHECK(round BETWEEN 1 AND 75 AND (game_key<>'bidding' OR round<=13) AND (mode<>'quick' OR round<=25)),
  revision BLOB NOT NULL CHECK(typeof(revision)='blob' AND length(revision)=16 AND hex(revision)<>'00000000000000000000000000000000'),
  phase_seq BLOB NOT NULL CHECK(typeof(phase_seq)='blob' AND length(phase_seq)=16 AND hex(phase_seq)<>'00000000000000000000000000000000'),
@@ -4272,7 +4272,7 @@ CREATE TABLE game_duel_sessions (
  terminal_at INTEGER CHECK(terminal_at IS NULL OR terminal_at BETWEEN started_at AND 253399708799),
  delete_at INTEGER CHECK(delete_at IS NULL OR delete_at=terminal_at+2592000),
  outcome TEXT CHECK(outcome IS NULL OR outcome IN ('decided','draw','system_cancelled')),
- reason TEXT CHECK(reason IS NULL OR reason IN ('rounds','target','double-overload','limit','surrender','server_restart','account_unavailable')),
+ reason TEXT CHECK(reason IS NULL OR reason IN ('rounds','target','double-overload','limit','surrender','server_restart','account_unavailable','afk')),
  winner_seat INTEGER CHECK(winner_seat IS NULL OR winner_seat IN (0,1)),
  score0 INTEGER CHECK(score0 IS NULL OR score0 BETWEEN 0 AND 1000000000),
  score1 INTEGER CHECK(score1 IS NULL OR score1 BETWEEN 0 AND 1000000000),
@@ -4282,7 +4282,7 @@ CREATE TABLE game_duel_sessions (
  thursday_milli INTEGER CHECK(thursday_milli IS NULL OR thursday_milli BETWEEN 0 AND ticket_milli),
  terminal_operation_id TEXT UNIQUE REFERENCES credit_operations(id) ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
  FOREIGN KEY(game_key,content_hash) REFERENCES game_duel_catalogs(game_key,content_hash) ON DELETE RESTRICT,
- CHECK((state='active' AND ((game_key='bidding' AND phase IN ('joker','bid')) OR (game_key='likes' AND phase IN ('plan','settlement'))) AND phase_deadline IS NOT NULL AND (hex(ledger_rows_remaining)='00000000000000000000000000000001' OR (economy='ai_challenge' AND hex(ledger_rows_remaining)='00000000000000000000000000000000')) AND terminal_at IS NULL AND delete_at IS NULL AND outcome IS NULL AND reason IS NULL AND winner_seat IS NULL AND score0 IS NULL AND score1 IS NULL AND prize_milli IS NULL AND platform_milli IS NULL AND welfare_milli IS NULL AND thursday_milli IS NULL AND terminal_operation_id IS NULL) OR (state='terminal' AND phase='terminal' AND phase_deadline IS NULL AND hex(ledger_rows_remaining)='00000000000000000000000000000000' AND terminal_at IS NOT NULL AND delete_at IS NOT NULL AND outcome IS NOT NULL AND reason IS NOT NULL AND score0 IS NOT NULL AND score1 IS NOT NULL AND prize_milli IS NOT NULL AND platform_milli IS NOT NULL AND welfare_milli IS NOT NULL AND thursday_milli IS NOT NULL AND (terminal_operation_id IS NOT NULL OR (economy='ai_challenge' AND ticket_milli=0)))),
+ CHECK((state='active' AND ((game_key='bidding' AND phase IN ('joker','bid')) OR (game_key='likes' AND phase IN ('plan','settlement')) OR (game_key='gwent' AND phase IN ('mulligan','turn','choice'))) AND phase_deadline IS NOT NULL AND (hex(ledger_rows_remaining)='00000000000000000000000000000001' OR (economy='ai_challenge' AND hex(ledger_rows_remaining)='00000000000000000000000000000000')) AND terminal_at IS NULL AND delete_at IS NULL AND outcome IS NULL AND reason IS NULL AND winner_seat IS NULL AND score0 IS NULL AND score1 IS NULL AND prize_milli IS NULL AND platform_milli IS NULL AND welfare_milli IS NULL AND thursday_milli IS NULL AND terminal_operation_id IS NULL) OR (state='terminal' AND phase='terminal' AND phase_deadline IS NULL AND hex(ledger_rows_remaining)='00000000000000000000000000000000' AND terminal_at IS NOT NULL AND delete_at IS NOT NULL AND outcome IS NOT NULL AND reason IS NOT NULL AND score0 IS NOT NULL AND score1 IS NOT NULL AND prize_milli IS NOT NULL AND platform_milli IS NOT NULL AND welfare_milli IS NOT NULL AND thursday_milli IS NOT NULL AND (terminal_operation_id IS NOT NULL OR (economy='ai_challenge' AND ticket_milli=0)))),
  CHECK(state='active' OR (economy='pvp' AND ((outcome='decided' AND winner_seat IS NOT NULL AND reason NOT IN ('server_restart','account_unavailable') AND prize_milli+platform_milli+welfare_milli+thursday_milli=ticket_milli) OR (outcome IN ('draw','system_cancelled') AND winner_seat IS NULL AND prize_milli=0 AND platform_milli=0 AND welfare_milli=0 AND thursday_milli=0))) OR (economy='ai_challenge' AND prize_milli=0 AND welfare_milli=0 AND thursday_milli=0 AND ((outcome IN ('decided','draw') AND platform_milli=ticket_milli AND (outcome='decided')=(winner_seat IS NOT NULL)) OR (outcome='system_cancelled' AND winner_seat IS NULL AND platform_milli=0)))),
  CHECK(economy='pvp' OR (platform_bp=0 AND welfare_bp=0 AND thursday_bp=0)),
  CHECK(state='active' OR (outcome='system_cancelled' AND reason IN ('server_restart','account_unavailable')) OR (outcome<>'system_cancelled' AND reason NOT IN ('server_restart','account_unavailable')))
@@ -4310,7 +4310,7 @@ CREATE TABLE game_duel_seats (
 CREATE INDEX idx_duel_seats_user ON game_duel_seats(user_id,session_id);
 CREATE TABLE game_duel_user_slots (
  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
- game_key TEXT NOT NULL CHECK(game_key IN ('bidding','likes')),
+ game_key TEXT NOT NULL CHECK(game_key IN ('bidding','likes','gwent')),
  queue_id TEXT UNIQUE REFERENCES game_duel_queue(id) ON DELETE RESTRICT,
  ai_queue_id TEXT UNIQUE REFERENCES game_ai_queue(id) ON DELETE RESTRICT,
  session_id TEXT REFERENCES game_duel_sessions(id) ON DELETE RESTRICT,
@@ -4326,9 +4326,9 @@ CREATE TABLE game_duel_rounds (
 CREATE TABLE game_duel_anonymous (
  export_seq INTEGER PRIMARY KEY AUTOINCREMENT,
  archive_id TEXT NOT NULL UNIQUE CHECK(length(archive_id)=26 AND substr(archive_id,1,4)='dah_' AND substr(archive_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(archive_id,-1,1) IN ('A','Q','g','w')),
- game_key TEXT NOT NULL CHECK(game_key IN ('bidding','likes')),
+ game_key TEXT NOT NULL CHECK(game_key IN ('bidding','likes','gwent')),
  economy TEXT NOT NULL DEFAULT 'pvp' CHECK(economy IN ('pvp','ai_challenge')),
- mode TEXT NOT NULL CHECK((economy='pvp' AND ((game_key='bidding' AND mode IN ('tier1','tier2','tier3')) OR (game_key='likes' AND mode IN ('quick','standard')))) OR (economy='ai_challenge' AND game_key='bidding' AND mode='ai')),
+ mode TEXT NOT NULL CHECK((economy='pvp' AND ((game_key='bidding' AND mode IN ('tier1','tier2','tier3')) OR (game_key='likes' AND mode IN ('quick','standard')) OR (game_key='gwent' AND mode='standard'))) OR (economy='ai_challenge' AND game_key='bidding' AND mode='ai')),
  content_hash TEXT NOT NULL,
  header_json TEXT NOT NULL CHECK(typeof(header_json)='text' AND length(CAST(header_json AS BLOB))<=1048576 AND json_valid(header_json)),
  FOREIGN KEY(game_key,content_hash) REFERENCES game_duel_catalogs(game_key,content_hash) ON DELETE RESTRICT
@@ -4462,7 +4462,7 @@ CREATE TRIGGER blackjack_event_immutable BEFORE UPDATE ON game_blackjack_events 
 CREATE TRIGGER blackjack_anonymous_immutable BEFORE UPDATE ON game_blackjack_anonymous BEGIN SELECT RAISE(ABORT,'blackjack archive immutable'); END;
 CREATE TABLE game_random_proofs (
  resource_id TEXT PRIMARY KEY NOT NULL,
- game_key TEXT NOT NULL CHECK(game_key IN ('fishing','linklink','rps','bidding','likes','blackjack')),
+ game_key TEXT NOT NULL CHECK(game_key IN ('fishing','linklink','rps','bidding','likes','gwent','blackjack')),
  fishing_id TEXT UNIQUE REFERENCES game_fishing_batches(id) ON DELETE CASCADE,
  linklink_id TEXT UNIQUE REFERENCES game_linklink_sessions(id) ON DELETE CASCADE,
  linklink_summary_id TEXT UNIQUE REFERENCES game_linklink_summaries(session_id) ON DELETE CASCADE,
@@ -4475,7 +4475,7 @@ CREATE TABLE game_random_proofs (
   (game_key='fishing' AND fishing_id IS resource_id AND linklink_id IS NULL AND linklink_summary_id IS NULL AND rps_id IS NULL AND rps_summary_id IS NULL AND duel_id IS NULL AND blackjack_id IS NULL) OR
   (game_key='linklink' AND ((linklink_id IS resource_id AND linklink_summary_id IS NULL) OR (linklink_summary_id IS resource_id AND linklink_id IS NULL)) AND fishing_id IS NULL AND rps_id IS NULL AND rps_summary_id IS NULL AND duel_id IS NULL AND blackjack_id IS NULL) OR
   (game_key='rps' AND ((rps_id IS resource_id AND rps_summary_id IS NULL) OR (rps_summary_id IS resource_id AND rps_id IS NULL)) AND fishing_id IS NULL AND linklink_id IS NULL AND linklink_summary_id IS NULL AND duel_id IS NULL AND blackjack_id IS NULL) OR
-  (game_key IN ('bidding','likes') AND duel_id IS resource_id AND fishing_id IS NULL AND linklink_id IS NULL AND linklink_summary_id IS NULL AND rps_id IS NULL AND rps_summary_id IS NULL AND blackjack_id IS NULL) OR
+  (game_key IN ('bidding','likes','gwent') AND duel_id IS resource_id AND fishing_id IS NULL AND linklink_id IS NULL AND linklink_summary_id IS NULL AND rps_id IS NULL AND rps_summary_id IS NULL AND blackjack_id IS NULL) OR
   (game_key='blackjack' AND blackjack_id IS resource_id AND fishing_id IS NULL AND linklink_id IS NULL AND linklink_summary_id IS NULL AND rps_id IS NULL AND rps_summary_id IS NULL AND duel_id IS NULL)
  ),
  CHECK(json_extract(private_json,'$.resource_id') IS resource_id AND json_extract(private_json,'$.game') IS game_key AND json_extract(private_json,'$.algorithm') IS 'hmac-sha256-reject64-v1'),
@@ -4507,7 +4507,7 @@ CREATE TABLE game_rank_counters (
 CREATE TABLE game_rank_events (
  seq BLOB NOT NULL PRIMARY KEY CHECK(length(seq)=16 AND seq>X'00000000000000000000000000000000'),
  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
- game_key TEXT NOT NULL CHECK(game_key IN ('fishing','linklink','rps','bidding','likes','blackjack')),
+ game_key TEXT NOT NULL CHECK(game_key IN ('fishing','linklink','rps','bidding','likes','gwent','steadycatch','blackjack')),
  source_id TEXT NOT NULL CHECK(length(source_id) BETWEEN 1 AND 128 AND source_id NOT GLOB '*[^A-Za-z0-9_:-]*'),
  settled_at INTEGER NOT NULL CHECK(settled_at BETWEEN 0 AND 253399708799),
  loss_sign INTEGER CHECK(loss_sign IS NULL OR loss_sign IN (-1,0,1)),
@@ -5057,7 +5057,7 @@ CREATE TABLE economy_audit_buckets (
  asset_type TEXT NOT NULL CHECK(asset_type IN ('general','game','sketch_paper','sketch_brush')),
  kind TEXT NOT NULL CHECK(typeof(kind)='text' AND length(kind) BETWEEN 1 AND 64 AND kind NOT GLOB '*[^a-z0-9_]*'),
  source_type TEXT NOT NULL CHECK(typeof(source_type)='text' AND length(source_type) BETWEEN 1 AND 32 AND source_type NOT GLOB '*[^a-z0-9_]*'),
- channel TEXT NOT NULL CHECK(channel IN ('admin','account','checkin','welfare','thursday','api','charity','donation','fishing','linklink','rps','bidding','likes','blackjack','onboarding','loan','picture_book','inactivity','penalty','fat_fish','lake_notes','unclassified')),
+ channel TEXT NOT NULL CHECK(channel IN ('admin','account','checkin','welfare','thursday','api','charity','donation','fishing','linklink','rps','bidding','likes','gwent','steadycatch','blackjack','onboarding','loan','picture_book','inactivity','penalty','fat_fish','lake_notes','unclassified')),
  bucket TEXT NOT NULL CHECK(bucket IN ('hour','day')),
  bucket_start INTEGER NOT NULL CHECK(typeof(bucket_start)='integer' AND bucket_start BETWEEN -86400 AND 253402300799),
  offset_minutes INTEGER NOT NULL CHECK(typeof(offset_minutes)='integer' AND offset_minutes BETWEEN -720 AND 840 AND offset_minutes%30=0),
@@ -5586,7 +5586,7 @@ BEGIN SELECT RAISE(ABORT,'deleted account projection has no automatic expiry'); 
 CREATE TABLE self_deletion_duel_aborts (
  id INTEGER PRIMARY KEY,
  discord_id TEXT NOT NULL CHECK(length(CAST(discord_id AS BLOB)) BETWEEN 1 AND 128),
- game_key TEXT NOT NULL CHECK(game_key IN ('bidding','likes')),
+ game_key TEXT NOT NULL CHECK(game_key IN ('bidding','likes','gwent')),
  match_id TEXT NOT NULL CHECK(length(CAST(match_id AS BLOB)) BETWEEN 1 AND 128),
  former_user_id INTEGER NOT NULL CHECK(former_user_id>0),
  reason TEXT NOT NULL CHECK(reason='self_deletion_cancelled_match'),
@@ -6156,7 +6156,7 @@ CREATE TABLE lake_notes_profiles (
 CREATE TABLE lake_notes_casts (
  id TEXT PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='lnc_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')),
  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
- source_period_id TEXT NOT NULL REFERENCES lake_notes_periods(id) ON DELETE RESTRICT,
+ source_period_id TEXT REFERENCES lake_notes_periods(id) ON DELETE RESTRICT,
  rules_id TEXT NOT NULL CHECK(length(CAST(rules_id AS BLOB)) BETWEEN 1 AND 128),
  phase TEXT NOT NULL CHECK(phase IN ('waiting','playing','success','failed')),
  paused INTEGER NOT NULL CHECK(paused IN (0,1)),
@@ -6191,8 +6191,9 @@ CREATE TABLE lake_notes_entitlements (
 CREATE TABLE lake_notes_exchange_receipts (
  id TEXT PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='lne_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')),
  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
- period_id TEXT NOT NULL REFERENCES lake_notes_periods(id) ON DELETE RESTRICT,
- period_revision INTEGER NOT NULL CHECK(period_revision>=1),
+ period_id TEXT REFERENCES lake_notes_periods(id) ON DELETE RESTRICT,
+ period_revision INTEGER CHECK(period_revision>=1),
+ config_revision INTEGER CHECK(config_revision>=1),
  direction TEXT NOT NULL CHECK(direction IN ('general_to_coin','coin_to_general','game_to_coin','coin_to_game')),
  quantity_mag BLOB NOT NULL CHECK(length(quantity_mag)=16 AND quantity_mag<>zeroblob(16)),
  source_lot BLOB NOT NULL CHECK(length(source_lot)=16 AND source_lot<>zeroblob(16)),
@@ -6202,6 +6203,7 @@ CREATE TABLE lake_notes_exchange_receipts (
  operation_key_hash BLOB NOT NULL CHECK(length(operation_key_hash)=32),
  ledger_operation_id TEXT NOT NULL REFERENCES credit_operations(id) ON DELETE RESTRICT,
  created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799),
+ CHECK((period_id IS NOT NULL AND period_revision IS NOT NULL AND config_revision IS NULL) OR (period_id IS NULL AND period_revision IS NULL AND config_revision IS NOT NULL)),
  UNIQUE(user_id,operation_key_hash)
 ) STRICT, WITHOUT ROWID;
 CREATE TABLE personal_automation_batches (
@@ -6323,28 +6325,28 @@ BEGIN SELECT RAISE(ABORT,'published game content is immutable'); END;
 CREATE TRIGGER donation_usage_reservations_outcome_insert_guard BEFORE INSERT ON donation_usage_reservations
 WHEN NOT COALESCE((NEW.state IN ('reserved') AND NEW.streak_disposition IS NULL AND NEW.failure_origin IS NULL)
  OR (NEW.state IN ('committed','released') AND (
-  (NEW.state='committed' AND NEW.streak_disposition='success' AND NEW.failure_origin='none' AND NEW.protocol_success=1)
+  (NEW.state='committed' AND NEW.streak_disposition='success' AND ((NEW.failure_origin='none' AND NEW.protocol_success=1) OR (NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout','client_cancel','downstream','platform','recovery_unknown') AND NEW.protocol_success=0)))
   OR (NEW.streak_disposition='upstream_failure' AND NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout') AND COALESCE(NEW.protocol_success,0)=0)
   OR (NEW.streak_disposition='neutral' AND NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown') AND COALESCE(NEW.protocol_success,0)=0))),0)
 BEGIN SELECT RAISE(ABORT,'invalid terminal outcome'); END;
 CREATE TRIGGER donation_usage_reservations_outcome_update_guard BEFORE UPDATE ON donation_usage_reservations
 WHEN NOT COALESCE((NEW.state IN ('reserved') AND NEW.streak_disposition IS NULL AND NEW.failure_origin IS NULL)
  OR (NEW.state IN ('committed','released') AND (
-  (NEW.state='committed' AND NEW.streak_disposition='success' AND NEW.failure_origin='none' AND NEW.protocol_success=1)
+  (NEW.state='committed' AND NEW.streak_disposition='success' AND ((NEW.failure_origin='none' AND NEW.protocol_success=1) OR (NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout','client_cancel','downstream','platform','recovery_unknown') AND NEW.protocol_success=0)))
   OR (NEW.streak_disposition='upstream_failure' AND NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout') AND COALESCE(NEW.protocol_success,0)=0)
   OR (NEW.streak_disposition='neutral' AND NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown') AND COALESCE(NEW.protocol_success,0)=0))),0)
 BEGIN SELECT RAISE(ABORT,'invalid terminal outcome'); END;
 CREATE TRIGGER dispatch_claims_outcome_insert_guard BEFORE INSERT ON dispatch_claims
 WHEN NOT COALESCE((NEW.state IN ('claimed','dispatched') AND NEW.streak_disposition IS NULL AND NEW.failure_origin IS NULL)
  OR (NEW.state IN ('committed','released') AND (
-  (NEW.state='committed' AND NEW.streak_disposition='success' AND NEW.failure_origin='none')
+  (NEW.state='committed' AND NEW.streak_disposition='success' AND NEW.failure_origin IN ('none','upstream_response','upstream_protocol','network','timeout','client_cancel','downstream','platform','recovery_unknown'))
   OR (NEW.streak_disposition='upstream_failure' AND NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout'))
   OR (NEW.streak_disposition='neutral' AND NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown')))),0)
 BEGIN SELECT RAISE(ABORT,'invalid terminal outcome'); END;
 CREATE TRIGGER dispatch_claims_outcome_update_guard BEFORE UPDATE ON dispatch_claims
 WHEN NOT COALESCE((NEW.state IN ('claimed','dispatched') AND NEW.streak_disposition IS NULL AND NEW.failure_origin IS NULL)
  OR (NEW.state IN ('committed','released') AND (
-  (NEW.state='committed' AND NEW.streak_disposition='success' AND NEW.failure_origin='none')
+  (NEW.state='committed' AND NEW.streak_disposition='success' AND NEW.failure_origin IN ('none','upstream_response','upstream_protocol','network','timeout','client_cancel','downstream','platform','recovery_unknown'))
   OR (NEW.streak_disposition='upstream_failure' AND NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout'))
   OR (NEW.streak_disposition='neutral' AND NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown')))),0)
 BEGIN SELECT RAISE(ABORT,'invalid terminal outcome'); END;
@@ -6479,7 +6481,7 @@ CREATE TABLE schema_state (
 ) STRICT;
 INSERT INTO credit_compaction(id,through_seq,details_before,sweep_at,sweep_after_seq) VALUES(1,0,0,0,0);
 INSERT INTO game_blackjack_clock(id,observed_at) VALUES(1,0);
-INSERT INTO schema_state(id,version) VALUES(1,3);
+INSERT INTO schema_state(id,version) VALUES(1,4);
 
 CREATE TABLE game_ai_settings (
  game_key TEXT PRIMARY KEY NOT NULL,
@@ -6600,3 +6602,80 @@ WHEN NEW.state='terminal' AND OLD.state='active' BEGIN
 END;
 
 INSERT INTO game_ai_settings(game_key) VALUES('bidding');
+
+CREATE TABLE admin_endpoint_tags (
+ base_url TEXT NOT NULL CHECK(length(base_url) BETWEEN 1 AND 4096),
+ tag TEXT NOT NULL CHECK(tag IN ('abusive_third_party','community_charity')),
+ PRIMARY KEY(base_url,tag)
+) STRICT, WITHOUT ROWID;
+CREATE INDEX idx_admin_endpoint_tags_tag ON admin_endpoint_tags(tag,base_url);
+
+ALTER TABLE request_error_bodies ADD COLUMN failure_reason TEXT NOT NULL DEFAULT '' CHECK(failure_reason IN ('','read_failure','storage_failure'));
+CREATE INDEX idx_request_errors_missing ON request_error_bodies(id) WHERE save_state<>'saved';
+
+ALTER TABLE dispatch_response_starts ADD COLUMN http_status INTEGER CHECK(http_status IS NULL OR (typeof(http_status)='integer' AND http_status=200));
+
+CREATE TABLE game_duel_ratings (
+ game_key TEXT NOT NULL CHECK(game_key='gwent'),
+ user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ rating INTEGER NOT NULL,
+ played INTEGER NOT NULL CHECK(played>=1),
+ updated_at INTEGER NOT NULL,
+ PRIMARY KEY(game_key,user_id)
+) STRICT, WITHOUT ROWID;
+CREATE TABLE game_duel_results (
+ session_id TEXT NOT NULL REFERENCES game_duel_sessions(id) ON DELETE CASCADE,
+ game_key TEXT NOT NULL CHECK(game_key='gwent'),
+ user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ result INTEGER NOT NULL CHECK(result IN (0,1,2)),
+ rating_before INTEGER NOT NULL,
+ rating_after INTEGER NOT NULL,
+ settled_at INTEGER NOT NULL,
+ PRIMARY KEY(session_id,user_id)
+) STRICT, WITHOUT ROWID;
+CREATE INDEX idx_duel_results_window ON game_duel_results(game_key,settled_at,user_id);
+CREATE INDEX idx_duel_results_user ON game_duel_results(user_id,game_key,settled_at,session_id);
+
+
+CREATE TABLE game_catch_sessions (
+ id TEXT PRIMARY KEY NOT NULL CHECK(length(id)=25 AND substr(id,1,3)='sc_' AND substr(id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')),
+ user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+ status TEXT NOT NULL CHECK(status IN ('playing','paused','completed','failed','abandoned','cancelled')),
+ revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 9007199254740991),
+ seed INTEGER NOT NULL CHECK(seed BETWEEN 0 AND 4294967295),
+ engine_json TEXT NOT NULL CHECK(json_valid(engine_json) AND length(engine_json)<=32768),
+ tick INTEGER NOT NULL CHECK(tick BETWEEN 0 AND 5400),
+ anchor_tick INTEGER NOT NULL CHECK(anchor_tick BETWEEN 0 AND tick),
+ anchor_ms INTEGER NOT NULL CHECK(anchor_ms BETWEEN 0 AND 253402300799000),
+ price_milli INTEGER NOT NULL CHECK(price_milli BETWEEN 0 AND 9000000000000000),
+ general_paid_milli INTEGER NOT NULL CHECK(general_paid_milli BETWEEN 0 AND price_milli),
+ game_paid_milli INTEGER NOT NULL CHECK(game_paid_milli BETWEEN 0 AND price_milli),
+ first_reward_milli INTEGER NOT NULL CHECK(first_reward_milli BETWEEN 0 AND 9000000000000000),
+ first_clear INTEGER NOT NULL DEFAULT 0 CHECK(first_clear IN (0,1)),
+ reward_milli INTEGER NOT NULL DEFAULT 0 CHECK(reward_milli BETWEEN 0 AND first_reward_milli),
+ score INTEGER NOT NULL DEFAULT 0 CHECK(score>=0),
+ entry_operation_id TEXT,
+ terminal_operation_id TEXT,
+ ledger_rows_remaining BLOB NOT NULL CHECK(typeof(ledger_rows_remaining)='blob' AND length(ledger_rows_remaining)=16 AND hex(ledger_rows_remaining) IN ('00000000000000000000000000000000','00000000000000000000000000000001')),
+ last_request_hash BLOB CHECK(last_request_hash IS NULL OR (typeof(last_request_hash)='blob' AND length(last_request_hash)=32)),
+ created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799),
+ expires_at INTEGER NOT NULL CHECK(expires_at>created_at),
+ updated_at INTEGER NOT NULL CHECK(updated_at>=created_at),
+ terminal_at INTEGER,
+ CHECK(general_paid_milli+game_paid_milli=price_milli),
+ CHECK((status IN ('playing','paused') AND terminal_at IS NULL AND first_clear=0 AND reward_milli=0) OR
+       (status NOT IN ('playing','paused') AND terminal_at>=created_at AND hex(ledger_rows_remaining)='00000000000000000000000000000000')),
+ CHECK(first_clear=0 OR status='completed'),
+ CHECK(reward_milli=0 OR first_clear=1)
+) STRICT;
+CREATE UNIQUE INDEX idx_catch_active_user ON game_catch_sessions(user_id) WHERE status IN ('playing','paused');
+CREATE INDEX idx_catch_user_history ON game_catch_sessions(user_id,created_at DESC,id);
+CREATE INDEX idx_catch_expiry ON game_catch_sessions(expires_at,id) WHERE status IN ('playing','paused');
+CREATE INDEX idx_catch_retention ON game_catch_sessions(terminal_at,id) WHERE terminal_at IS NOT NULL;
+CREATE INDEX idx_catch_score ON game_catch_sessions(terminal_at,user_id,score DESC) WHERE status IN ('completed','failed');
+CREATE TABLE game_catch_inputs (
+ session_id TEXT NOT NULL REFERENCES game_catch_sessions(id) ON DELETE CASCADE,
+ until_tick INTEGER NOT NULL CHECK(until_tick BETWEEN 1 AND 5400),
+ controls_json TEXT NOT NULL CHECK(json_valid(controls_json) AND length(controls_json)<=65536),
+ PRIMARY KEY(session_id,until_tick)
+);

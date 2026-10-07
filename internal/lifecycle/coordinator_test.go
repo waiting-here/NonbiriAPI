@@ -75,7 +75,7 @@ func TestExportUsesOneTransactionFrozenOrderAndEmptyArrays(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Export: %v", err)
 	}
-	wantOrder := []string{"fishing", "linklink", "rps", "bidding", "likes", "blackjack", "fat_fish", "randomness", "identity", "resources", "personal_automation", "issues", "ledger", "activities", "donations", "charity", "rankings", "penalties", "governance", "request_adaptation", "continuity"}
+	wantOrder := []string{"fishing", "linklink", "rps", "bidding", "likes", "steadycatch", "gwent", "blackjack", "fat_fish", "randomness", "identity", "resources", "personal_automation", "issues", "ledger", "activities", "donations", "charity", "rankings", "penalties", "governance", "request_adaptation", "continuity"}
 	if !reflect.DeepEqual(fixture.exports.calls, wantOrder) {
 		t.Fatalf("export order = %v, want %v", fixture.exports.calls, wantOrder)
 	}
@@ -92,7 +92,7 @@ func TestExportUsesOneTransactionFrozenOrderAndEmptyArrays(t *testing.T) {
 	if document.Endpoints == nil || document.CatalogPairs == nil || document.Models == nil || document.PersonalAutomation == nil || document.Issues == nil ||
 		document.CreditLedger == nil || document.WelfareClaims == nil || document.Thursday == nil || document.Donations == nil ||
 		document.Fishing.Pending == nil || document.Fishing.Terminal == nil || document.LinkLink.Summaries == nil || document.RPS.Summaries == nil ||
-		document.GameOnboardingHolds == nil || document.Loans == nil || document.Penalties == nil || document.GameRankings.Totals == nil || document.GameRankings.Events == nil {
+		document.Gwent.History == nil || document.Gwent.CurrentRounds == nil || document.GameOnboardingHolds == nil || document.Loans == nil || document.Penalties == nil || document.GameRankings.Totals == nil || document.GameRankings.Events == nil {
 		t.Fatal("an empty export collection encoded as null")
 	}
 	for index, finalizer := range finalizers {
@@ -267,6 +267,8 @@ func configuredDeleteAdapters(calls *[]string, finalizers []*testFinalizer, fail
 	}
 	return DeleteAdapters{
 		PersonalAutomation:   makeAdapter(19, "personal_automation"),
+		Gwent:                makeAdapter(20, "gwent"),
+		SteadyCatch:          makeAdapter(21, "steadycatch"),
 		FatFish:              makeAdapter(18, "fat_fish"),
 		RequestAdaptation:    makeAdapter(17, "request_adaptation"),
 		Continuity:           makeAdapter(16, "continuity"),
@@ -283,7 +285,7 @@ func TestDeleteAccountCommitsDatabaseBeforeRetirementAndFinalizers(t *testing.T)
 	fixture := newLifecycleTestFixture(t, 100)
 	userID := seedLifecycleUser(t, fixture.store.DB(), "delete-success", false, 100)
 	calls := []string{}
-	finalizers := make([]*testFinalizer, 20)
+	finalizers := make([]*testFinalizer, 22)
 	for index := range finalizers {
 		finalizers[index] = &testFinalizer{}
 	}
@@ -303,7 +305,7 @@ func TestDeleteAccountCommitsDatabaseBeforeRetirementAndFinalizers(t *testing.T)
 	if err := coordinator.DeleteAccount(context.Background(), userID, 100); err != nil {
 		t.Fatalf("DeleteAccount: %v", err)
 	}
-	wantOrder := []string{"continuity", "auth", "personal_automation", "request_adaptation", "resources", "claim_log", "issues", "donations", "activities", "reports", "fishing", "linklink", "rps", "bidding", "likes", "blackjack", "fat_fish", "debug", "governance", "charity_routing", "ledger"}
+	wantOrder := []string{"continuity", "auth", "personal_automation", "request_adaptation", "resources", "claim_log", "issues", "donations", "activities", "reports", "fishing", "linklink", "rps", "bidding", "likes", "steadycatch", "gwent", "blackjack", "fat_fish", "debug", "governance", "charity_routing", "ledger"}
 	if !reflect.DeepEqual(calls, wantOrder) {
 		t.Fatalf("delete order = %v, want %v", calls, wantOrder)
 	}
@@ -328,7 +330,7 @@ func TestDeleteAccountFailureRollsBackAndAbortsPreparedState(t *testing.T) {
 	fixture := newLifecycleTestFixture(t, 100)
 	userID := seedLifecycleUser(t, fixture.store.DB(), "delete-rollback", false, 100)
 	calls := []string{}
-	finalizers := make([]*testFinalizer, 20)
+	finalizers := make([]*testFinalizer, 22)
 	for index := range finalizers {
 		finalizers[index] = &testFinalizer{}
 	}

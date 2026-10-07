@@ -11,7 +11,11 @@ vi.mock('../features/operations/core', async (original) => ({
   ...api,
 }));
 vi.mock('@shared/operations/MaintenancePanel', () => ({ MaintenancePanel: () => null }));
-vi.mock('../features/operations/LegalHoldPanel', () => ({ LegalHoldPanel: () => null }));
+vi.mock('../features/operations/LegalHoldPanel', () => ({
+  LegalHoldPanel: () => (
+    <input type="password" autoComplete="current-password" aria-label="Hold password" />
+  ),
+}));
 vi.mock('../features/gateway/GatewayCapabilitiesSection', () => ({
   default: function GatewayDraft() {
     const [value, setValue] = useState('');
@@ -71,6 +75,33 @@ beforeEach(() => {
 });
 
 describe('site settings discovery and saving', () => {
+  it('opens legal text before mounting credential forms and isolates search autofill', async () => {
+    bundle.catalog.push({
+      ...entry('legal_terms_override_zh', 'legal', pair('Terms in Chinese', '中文服务条款')),
+      type: 'text',
+      unit: null,
+      minimum: null,
+      maximum: 100000,
+      step: null,
+      raw_default: '',
+      effective_fallback: '',
+    });
+    bundle.values.legal_terms_override_zh = 'Reviewable terms';
+    const view = await renderWithProviders(<SettingsPage />, { station: 'admin', role: 'admin' });
+    await screen.findByLabelText('Response wait');
+    expect(screen.queryByLabelText('Hold password')).toBeNull();
+    const search = screen.getByRole('searchbox');
+    expect(search).toHaveAttribute('autocomplete', 'off');
+    expect(search.closest('form')).toBe(screen.getByRole('search'));
+    await view.user.type(search, 'unmatched prior search');
+    await view.user.click(screen.getByRole('button', { name: 'Legal text' }));
+    expect(search).toHaveValue('');
+    expect(screen.getByLabelText('Terms in Chinese')).toHaveValue('Reviewable terms');
+    expect(screen.queryByLabelText('Hold password')).toBeNull();
+    await view.user.click(screen.getByRole('button', { name: /^Legal holds$/ }));
+    expect(screen.getByLabelText('Hold password')).toBeVisible();
+    expect(search.closest('form')!.contains(screen.getByLabelText('Hold password'))).toBe(false);
+  });
   it.each(['en', 'zh'] as const)(
     'reveals searched settings and keeps an edited field visible in %s',
     async (locale) => {

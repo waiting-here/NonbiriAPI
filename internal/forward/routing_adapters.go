@@ -34,8 +34,8 @@ func (adapter *ClaimServiceAdapter) TakeForDispatch(ctx context.Context, handle 
 	return adapter.service.TakeForDispatch(ctx, handle)
 }
 
-func (adapter *ClaimServiceAdapter) MarkResponseStarted(ctx context.Context, handle claim.Handle) error {
-	return adapter.service.MarkResponseStarted(ctx, handle)
+func (adapter *ClaimServiceAdapter) MarkResponseStarted(ctx context.Context, handle claim.Handle, status ...int) error {
+	return adapter.service.MarkResponseStarted(ctx, handle, status...)
 }
 
 func (adapter *ClaimServiceAdapter) ReleaseUndispatched(ctx context.Context, handle claim.Handle) (claim.Attempt, error) {

@@ -11,7 +11,7 @@ const MaxBasket = 80
 const MaxBait = 999
 const MaxDebris = 9999
 const MaxSafeInteger = uint64(9007199254740991)
-const SourceSHA256 = "0111446f88d42e9dae1a215159fd230e3cc0e2a612512500e06bcfb92108eca2"
+const SourceSHA256 = "c1962f3f7278493b3af025488bd866fde8aae45fc69ed3a3ee92cf0acde83d0c"
 
 type FishType struct {
 	Name        string   `json:"name"`
@@ -45,14 +45,15 @@ type Effects struct {
 	FishSpeed      float64 `json:"fishSpeed"`
 }
 type GearType struct {
-	Name        string  `json:"name"`
-	Slot        string  `json:"slot"`
-	Cost        int     `json:"cost"`
-	TackleSlots int     `json:"tackleSlots"`
-	BaitAllowed bool    `json:"baitAllowed"`
-	Description string  `json:"description"`
-	Unlock      string  `json:"unlock,omitempty"`
-	Effects     Effects `json:"effects,omitempty"`
+	LegendaryRequired int     `json:"legendaryRequired,omitempty"`
+	Name              string  `json:"name"`
+	Slot              string  `json:"slot"`
+	Cost              int     `json:"cost"`
+	TackleSlots       int     `json:"tackleSlots"`
+	BaitAllowed       bool    `json:"baitAllowed"`
+	Description       string  `json:"description"`
+	Unlock            string  `json:"unlock,omitempty"`
+	Effects           Effects `json:"effects,omitempty"`
 }
 type BaitType struct {
 	Name        string  `json:"name"`
@@ -79,6 +80,7 @@ type ContractTemplate struct {
 	Target int    `json:"target"`
 }
 type Catalog struct {
+	RarityWeights    map[string]float64          `json:"RARITY_WEIGHTS"`
 	Config           map[string]float64          `json:"CONFIG"`
 	Rarities         map[string]RarityType       `json:"RARITIES"`
 	Locations        map[string]TextType         `json:"LOCATIONS"`

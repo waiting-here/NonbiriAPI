@@ -448,6 +448,12 @@
   height: 115px;
   margin-block: 0.3rem;
 }
+.likes-passives > summary {
+  padding: 0.5rem 0;
+  color: var(--l-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
 .likes-chibi {
   width: 110px;
   flex-shrink: 0;

@@ -59,9 +59,11 @@ transaction consumes the corresponding reward hold and records the once-only
 completion. Modules retain source payment amounts for refunds and never infer
 historical funding that was not recorded.
 
-The two-player service shares admission, ledger ports, simultaneous phase locks,
-bounded workers, safe history and lifecycle behavior. Rules remain in independent
-Bidding and Likes engines. Likes commits a round atomically before its event-paced
+The two-player service shares admission, ledger ports, simultaneous and sequential
+decision windows, bounded workers, safe history and lifecycle behavior. Rules remain
+in independent Bidding, Likes and Gwent engines. Gwent can suspend an action for a
+target or card choice; private legal actions and decision tokens belong to the acting
+seat. Likes commits a round atomically before its event-paced
 presentation; clients consume the server's structured events and replenish from
 the next round's facts. A process startup cancels unfinished two-player games;
 later periodic recovery only advances live deadlines. Neither presentation nor a
@@ -87,9 +89,9 @@ cancelling other seats or recreating a wallet. Export v8 includes owner-safe que
 current-table and recent-history records; 30-day records become administrator-only
 anonymous facts without payment sources or emotes.
 
-All six modules use the shared, versioned randomness protocol. The proof store
-has seven explicit cascading parent references for five resource families;
-LinkLink and RPS move a proof from live state to their retained terminal summary.
+Fishing, LinkLink, RPS, Bidding, Likes, Blackjack and Gwent use the shared,
+versioned randomness protocol. LinkLink and RPS move a proof from live state to
+their retained terminal summary.
 Active projections and account exports expose only commitment metadata. Blackjack
 reveals after all table decisions end and the result commits; Bidding, Likes,
 RPS and LinkLink reveal after the whole game ends. Intermediate Likes settlement
@@ -98,3 +100,18 @@ Proofs follow owner access and parent retention, with terminal access limited to
 30 days; current Blackjack spectators do not gain history access. Seeds and
 commitments are excluded from anonymous archives. See the
 [randomness protocol and verification guide](game-randomness.md).
+
+Steady Catch owns a deterministic tick engine and bounded, revisioned input batches.
+The server limits advancement by elapsed time and commits scores and payments from
+its own simulation. Lake Notes owns persistent progression and a recoverable fishing
+simulation; its old activity receipts remain valid after moving into the game host.
+Both modules participate in the same configuration, account and shutdown boundaries.
+See [Steady Catch](steady-catch.md) and [Lake Notes](lake-notes.md).
+
+The [AI decision interface](ai-players.md) separates observations, legal actions,
+decision windows and budgets from the decision provider. Local scorers, neural
+models and remote services can implement the provider boundary without owning
+game state or settlement. Gwent currently uses its ported scorer only for timed-out
+turns; it does not expose AI opponents. Its sequential choices use the same action
+validation as human input. Competitive ratings are a separate module with game-scoped
+records and terminal-transaction updates, described in [AI Gwent](ai-gwent.md).

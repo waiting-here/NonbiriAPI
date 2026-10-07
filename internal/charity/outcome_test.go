@@ -4,8 +4,60 @@ import (
 	"context"
 	"testing"
 
+	"github.com/waiting-here/NonbiriAPI/internal/claim"
+	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
+
+func TestAcceptedResponseClearsStreakWithoutProtocolSuccessOrCharge(t *testing.T) {
+	e := newCharityTestEnv(t)
+	if _, err := e.store.DB().Exec("UPDATE donation_keys SET failure_streak=? WHERE id=?", u128Blob(t, 2), e.donationKey); err != nil {
+		t.Fatal(err)
+	}
+	request := e.accept(t, e.requestModel, 2400, 1)
+	reserved := e.claim(t, request, 1, true)
+	e.completeAttempt(t, request, reserved, claim.CharityAttemptInput{
+		CompletedAt: charityTestNow + 1, UsageUnknown: true,
+		StreakDisposition: contract.StreakSuccess, FailureOrigin: contract.OriginUpstreamProtocol,
+	}, claim.RewardZero, claim.CharityActual{})
+	var count []byte
+	var disabled bool
+	if err := e.store.DB().QueryRow("SELECT failure_streak,failure_disabled FROM donation_keys WHERE id=?", e.donationKey).Scan(&count, &disabled); err != nil {
+		t.Fatal(err)
+	}
+	assertU128(t, count, 0, "accepted response clears previous failures")
+	var success, price, reward int
+	if err := e.store.DB().QueryRow("SELECT protocol_success,price_actual_milli,reward_actual_milli FROM donation_usage_reservations WHERE claim_id=?", reserved.id).Scan(&success, &price, &reward); err != nil || disabled || success != 0 || price != 0 || reward != 0 {
+		t.Fatal("protocol and accounting facts changed", disabled, success, price, reward, err)
+	}
+}
+
+func TestAcceptedEmptyStreamUsesFrozenReservationWithoutRepeatingCharge(t *testing.T) {
+	for _, perToken := range []bool{false, true} {
+		e := newCharityTestEnv(t)
+		model, reserved, price, charge := e.requestModel, int64(2400), int64(3000), int64(2400)
+		if perToken {
+			model, reserved, price, charge = e.tokenModel, 5, 5, 4
+		}
+		request := e.accept(t, model, reserved, 1)
+		claimed := e.claim(t, request, 1, true)
+		e.completeAttempt(t, request, claimed, claim.CharityAttemptInput{
+			CompletedAt: charityTestNow + 1, UsageUnknown: true, ResponseStarted: true,
+			StreakDisposition: contract.StreakSuccess, FailureOrigin: contract.OriginUpstreamProtocol,
+		}, claim.RewardZero, claim.CharityActual{PriceMilli: price})
+		actual, err := e.service.CalculateRequestCharge(context.Background(), request, claim.AccountingCommit)
+		if err != nil || actual != charge {
+			t.Fatalf("token=%t charge=%d want=%d err=%v", perToken, actual, charge, err)
+		}
+		var calls, used, held []byte
+		if err := e.store.DB().QueryRow("SELECT calls_used,price_used_mag,price_reserved_mag FROM donation_keys WHERE id=?", e.donationKey).Scan(&calls, &used, &held); err != nil {
+			t.Fatal(err)
+		}
+		assertU128(t, calls, 1, "empty stream consumes one call")
+		assertU128(t, used, price, "frozen reservation charged once")
+		assertU128(t, held, 0, "reservation released")
+	}
+}
 
 func TestNeutralOutcomeFoldAdvancesInOrderAndRollsBack(t *testing.T) {
 	e := newCharityTestEnv(t)

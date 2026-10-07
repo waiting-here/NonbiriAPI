@@ -271,17 +271,17 @@ func TestRPMOnlyCountsPerUserLimitAndRevokesAtThreshold(t *testing.T) {
 	user := f.user()
 	f.set(KeyRPMBanThreshold, "2")
 	f.set(KeyRPMBanDurationSeconds, "90")
-	for _, reason := range []ratelimit.RPMReason{ratelimit.RPMAllowed, ratelimit.RPMGlobalLimit, ratelimit.RPMCapacity} {
+	for _, reason := range []ratelimit.RPMReason{ratelimit.RPMAllowed, ratelimit.RPMUserLimit, ratelimit.RPMGlobalLimit, ratelimit.RPMCapacity} {
 		f.service.RPMDenied(context.Background(), user, reason)
 	}
 	if len(f.service.windows) != 0 {
 		t.Fatal("unrelated denials counted")
 	}
-	f.service.RPMDenied(context.Background(), user, ratelimit.RPMUserLimit)
+	f.service.RPMDenied(context.Background(), user, ratelimit.RPMCharityUserLimit)
 	if f.scalar(`SELECT is_banned FROM users WHERE id=?`, user) != 0 {
 		t.Fatal("premature ban")
 	}
-	f.service.RPMDenied(context.Background(), user, ratelimit.RPMUserLimit)
+	f.service.RPMDenied(context.Background(), user, ratelimit.RPMCharityUserLimit)
 	if f.scalar(`SELECT banned_until FROM users WHERE id=?`, user) != f.clock.Load()+90 || f.bans.Load() != 1 || f.scalar(`SELECT COUNT(*) FROM request_logs`) != 2 {
 		t.Fatal("RPM consequence mismatch")
 	}

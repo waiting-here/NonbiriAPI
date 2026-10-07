@@ -43,7 +43,7 @@ func TestViolationWindowSurvivesDeletionAndDoesNotExtendOriginalExpiry(t *testin
 	f.set(KeyRPMBanDurationSeconds, "1")
 	start := f.clock.Load()
 	for range 2 {
-		if err := f.service.RPMDenied(ctx, user, ratelimit.RPMUserLimit); err != nil {
+		if err := f.service.RPMDenied(ctx, user, ratelimit.RPMCharityUserLimit); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -90,7 +90,7 @@ func TestViolationWindowSurvivesDeletionAndDoesNotExtendOriginalExpiry(t *testin
 	if _, err := f.store.DB().Exec(`UPDATE users SET discord_id='45678' WHERE id=?`, newUser); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.service.RPMDenied(ctx, newUser, ratelimit.RPMUserLimit); err != nil {
+	if err := f.service.RPMDenied(ctx, newUser, ratelimit.RPMCharityUserLimit); err != nil {
 		t.Fatal(err)
 	}
 	if f.scalar(`SELECT banned_until FROM users WHERE id=?`, newUser) != start+1 || f.scalar(`SELECT count(*) FROM abuse_window_events WHERE user_id=?`, newUser) != 3 {
@@ -99,7 +99,7 @@ func TestViolationWindowSurvivesDeletionAndDoesNotExtendOriginalExpiry(t *testin
 	f.restart()
 	f.set(KeyRPMBanWindowSeconds, "1000")
 	f.clock.Store(start + 100)
-	if err := f.service.RPMDenied(ctx, newUser, ratelimit.RPMUserLimit); err != nil {
+	if err := f.service.RPMDenied(ctx, newUser, ratelimit.RPMCharityUserLimit); err != nil {
 		t.Fatal(err)
 	}
 	if f.scalar(`SELECT count(*) FROM abuse_window_events WHERE user_id=?`, newUser) != 1 || f.scalar(`SELECT count(*) FROM abuse_cases WHERE user_id=?`, newUser) != 1 {

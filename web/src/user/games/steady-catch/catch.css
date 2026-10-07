@@ -1,0 +1,237 @@
+.catch-game {
+  --catch-dark: 0;
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  max-width: 1120px;
+  margin: auto;
+}
+[data-theme='dark'] .catch-game {
+  --catch-dark: 1;
+}
+.catch-page-header,
+.catch-ranking header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+.catch-page-header h1 {
+  margin: 0.35rem 0;
+}
+.catch-page-header p {
+  margin: 0;
+  color: var(--nb-color-text-muted);
+}
+.catch-round {
+  scroll-margin-top: 84px;
+  display: grid;
+  justify-items: center;
+  gap: 0.6rem;
+  padding: 0.75rem;
+  border: 1px solid var(--nb-color-border);
+  background: var(--nb-color-surface);
+  border-radius: 18px;
+}
+.catch-hud {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.7rem;
+  width: 100%;
+  max-width: 660px;
+}
+.catch-hud > div {
+  display: grid;
+  gap: 0.15rem;
+}
+.catch-hud span {
+  font-size: 0.8rem;
+}
+.catch-hud strong {
+  font-size: 1.2rem;
+}
+.catch-hud small {
+  font-weight: 400;
+  font-size: 0.8rem;
+}
+.catch-empty-heart {
+  opacity: 0.6;
+}
+.catch-stage {
+  position: relative;
+  width: min(100%, 600px, calc((100dvh - 248px) * 1.07143));
+  aspect-ratio: 15/14;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid var(--nb-color-border);
+}
+.catch-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: crosshair;
+}
+.catch-canvas:focus-visible {
+  outline: 3px solid var(--nb-color-accent);
+  outline-offset: -3px;
+}
+.catch-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgb(9 30 25 / 0.4);
+}
+.catch-overlay__card {
+  max-height: 100%;
+  overflow: auto;
+  width: min(100%, 410px);
+  padding: 1.2rem;
+  border-radius: 16px;
+  color: #173b31;
+  background: #f5fbf6;
+  box-shadow: 0 10px 40px rgb(0 0 0 / 0.15);
+}
+[data-theme='dark'] .catch-overlay__card {
+  color: #e9f5ec;
+  background: #203b34;
+  border: 1px solid #598675;
+}
+.catch-overlay__card h2 {
+  font-size: 1.3rem;
+  margin: 0 0 0.5rem;
+}
+.catch-overlay__card p {
+  line-height: 1.55;
+  margin: 0.5rem 0;
+}
+.catch-actions,
+.catch-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+.catch-controls {
+  width: 100%;
+  max-width: 660px;
+}
+.catch-controls .btn,
+.catch-actions .btn {
+  min-height: 44px;
+}
+.catch-controls > span {
+  margin-left: auto;
+  font-size: 0.78rem;
+}
+.catch-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--nb-color-border);
+  border-radius: 16px;
+}
+.catch-entry:not(:has(img)) {
+  grid-template-columns: 1fr;
+}
+.catch-entry .game-hero {
+  width: 100%;
+  border-radius: 10px;
+}
+.catch-help,
+.catch-ranking {
+  padding: 1rem;
+  border: 1px solid var(--nb-color-border);
+  border-radius: 16px;
+}
+.catch-help summary {
+  cursor: pointer;
+  padding: 0.25rem;
+}
+.catch-help p,
+.catch-ranking p {
+  line-height: 1.65;
+}
+.catch-ranking table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.catch-ranking td,
+.catch-ranking th {
+  padding: 0.65rem;
+  text-align: left;
+  border-bottom: 1px solid var(--nb-color-border);
+}
+.catch-ranking th:last-child,
+.catch-ranking td:last-child {
+  text-align: right;
+}
+@media (max-width: 600px) {
+  .catch-page-header h1 {
+    font-size: 1.4rem;
+  }
+  .catch-entry {
+    grid-template-columns: 1fr;
+  }
+  .catch-round {
+    padding: 0.5rem;
+    gap: 0.5rem;
+  }
+  .catch-hud {
+    gap: 0.35rem;
+  }
+  .catch-hud strong {
+    font-size: 1rem;
+  }
+  .catch-controls > span {
+    width: 100%;
+    margin: 0;
+  }
+  .catch-overlay__card {
+    padding: 0.85rem;
+  }
+  .catch-overlay__card h2 {
+    font-size: 1.1rem;
+  }
+  .catch-overlay__card p {
+    font-size: 0.9rem;
+  }
+  .catch-stage {
+    width: min(100%, calc((100dvh - 288px) * 1.07143));
+  }
+}
+
+.catch-game > *,
+.catch-page-header > * {
+  min-width: 0;
+  max-width: 100%;
+}
+.catch-round > * {
+  min-width: 0;
+}
+.catch-page-header .game-wallets {
+  flex-wrap: wrap;
+}
+.catch-page-header .game-wallets > span {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.catch-ranking table {
+  min-width: 0;
+  table-layout: fixed;
+}
+.catch-ranking th:first-child {
+  width: 15%;
+}
+.catch-ranking th:last-child {
+  width: 25%;
+}

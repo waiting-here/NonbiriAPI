@@ -44,7 +44,8 @@ var storageSchema = schemaRegistry{
 	versions: []schemaMigration{
 		{version: 1, manifest: baselineManifestHash},
 		{version: 2, manifest: terminalReservationIndexesManifestHash, sql: terminalReservationIndexesSQL},
-		{version: 3, manifest: PinnedGenerationTwoManifestHash, sql: aiPlayersSQL},
+		{version: 3, manifest: aiPlayersManifestHash, sql: aiPlayersSQL},
+		{version: 4, manifest: PinnedGenerationTwoManifestHash, sql: managementAndGamesSQL},
 	},
 	bridges: preReleaseSchemaBridges(),
 }

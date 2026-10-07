@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/game"
+	lakeconfig "github.com/waiting-here/NonbiriAPI/internal/lakenotes/config"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
@@ -33,8 +35,9 @@ func (a authority) check(ctx context.Context, tx *sql.Tx, user int64, role authz
 func (a authority) AuthorizeUserMutation(ctx context.Context, tx *sql.Tx, user int64) error {
 	return a.check(ctx, tx, user, authz.RoleUser)
 }
-func (a authority) AuthorizeAdmin(ctx context.Context, tx *sql.Tx, user int64) error {
-	return a.check(ctx, tx, user, authz.RoleAdministrator)
+func (a authority) AuthorizeAdminMutation(ctx context.Context, tx *sql.Tx) error {
+	actor, _ := ctx.Value(actorContext{}).(authz.Actor)
+	return a.check(ctx, tx, actor.UserID, authz.RoleAdministrator)
 }
 
 type admission struct{}
@@ -169,27 +172,77 @@ func (f *fixture) fund(t *testing.T, user int64, asset ledger.Asset, value int64
 	})
 }
 func testKey(n int) string { return fmt.Sprintf("lake-operation-%012d", n) }
-func ptr(s string) *string { return &s }
-func (f *fixture) period(t *testing.T, fee string) Period {
-	t.Helper()
-	in := PeriodInput{ExpectedRevision: "0", Name: "Lake", Status: "published", StartsAt: testNow - 1, EndsAt: testNow + 3600, EntryFeeMilli: ptr(fee), Exchanges: map[Direction]ExchangeSetting{}}
-	for _, d := range directions {
-		in.Exchanges[d] = ExchangeSetting{true, "7", "250"}
+func (f *fixture) configure(wire lakeconfig.Wire) (Settings, error) {
+	ctx := f.ctx(f.admin)
+	tx, err := f.database.BeginTx(ctx, nil)
+	if err != nil {
+		return Settings{}, err
 	}
-	out, e := f.service.SavePeriod(f.ctx(f.admin), f.admin, "", testKey(1), in)
-	if e != nil {
-		t.Fatal(e)
+	defer tx.Rollback()
+	old, err := settingsTx(ctx, tx)
+	if err != nil {
+		return Settings{}, err
 	}
-	if _, e = f.database.Exec("UPDATE limited_activity_configs SET visible=1 WHERE activity_key=?", Key); e != nil {
-		t.Fatal(e)
+	before, err := (lakeconfig.Codec{}).CompileWire(game.ConfigJSON(old.Wire), true)
+	if err != nil {
+		return Settings{}, err
 	}
-	return out.Value
+	after, err := (lakeconfig.Codec{}).CompileWire(game.ConfigJSON(wire), true)
+	if err != nil {
+		return Settings{}, err
+	}
+	if err = f.service.Module().ConfigurationChangedTx(ctx, tx, before, after); err != nil {
+		return Settings{}, err
+	}
+	raw := after.Raw()
+	raw[game.GamesEnabledKey] = "1"
+	for key, value := range raw {
+		if _, err = tx.Exec("UPDATE site_config SET value=? WHERE key=?", value, key); err != nil {
+			return Settings{}, err
+		}
+	}
+	if _, err = tx.Exec("UPDATE config_revisions SET revision=revision+1 WHERE domain='games'"); err != nil {
+		return Settings{}, err
+	}
+	out, err := settingsTx(ctx, tx)
+	if err != nil {
+		return out, err
+	}
+	return out, tx.Commit()
 }
-func (f *fixture) enter(t *testing.T, p Period) ProfileView {
+func (f *fixture) enable(t *testing.T) Settings {
 	t.Helper()
-	out, e := f.service.Entry(f.ctx(f.user), f.user, testKey(2), EntryInput{p.ID, p.Revision})
-	if e != nil {
-		t.Fatal(e)
+	wire := lakeconfig.Wire{Enabled: true, Exchanges: lakeconfig.Defaults()}
+	for _, d := range directions {
+		wire.Exchanges[d] = ExchangeSetting{Enabled: true, SourceAmount: "7", TargetAmount: "250"}
 	}
-	return out.Value.Profile
+	out, err := f.configure(wire)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+func (f *fixture) profile(t *testing.T) ProfileView {
+	t.Helper()
+	f.tx(t, func(tx *sql.Tx) {
+		if _, err := profileTx(f.ctx(f.user), tx, f.user, true, testNow); err != nil {
+			t.Fatal(err)
+		}
+	})
+	out, err := f.service.Profile(f.ctx(f.user), f.user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+func (f *fixture) legacyPeriod(t *testing.T) string {
+	t.Helper()
+	id, err := db.GenerateOpaqueID("lnp_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.database.Exec("INSERT INTO lake_notes_periods(id,name,revision,status,starts_at,ends_at,entry_fee_milli,created_at,updated_at) VALUES(?,'Previous waters',1,'published',?,?,0,?,?)", id, testNow-1, testNow+1, testNow-1, testNow-1); err != nil {
+		t.Fatal(err)
+	}
+	return id
 }

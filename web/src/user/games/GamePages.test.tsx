@@ -331,7 +331,7 @@ describe('beta.1 game pages', () => {
     expect(audio.play.mock.calls).toEqual([['fishing_epic']]);
   });
 
-  it('renders six center cards and marks any playable mode as open', async () => {
+  it('renders registered center cards and marks any playable mode as open', async () => {
     const snapshot = gamesSnapshotWire();
     snapshot.fishing.enabled = false;
     snapshot.rps.modes.standard.enabled = false;
@@ -344,11 +344,11 @@ describe('beta.1 game pages', () => {
     expect(await screen.findByRole('heading', { name: 'Games' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Pond fishing' })).toBeInTheDocument();
     expect(screen.getAllByText('Open')).toHaveLength(2);
-    expect(rendered.container.querySelectorAll('.game-center-card.is-closed')).toHaveLength(4);
+    expect(rendered.container.querySelectorAll('.game-center-card.is-closed')).toHaveLength(7);
     expect(screen.getByText('0 of 2 modes open')).toBeInTheDocument();
-    expect(rendered.container.querySelectorAll('a.game-center-card')).toHaveLength(6);
+    expect(rendered.container.querySelectorAll('a.game-center-card')).toHaveLength(9);
     expect(rendered.container.querySelector('a.game-center-card button')).toBeNull();
-    expect(screen.getAllByRole('link')).toHaveLength(7);
+    expect(screen.getAllByRole('link')).toHaveLength(10);
     const heroes = Array.from(
       rendered.container.querySelectorAll<HTMLImageElement>(
         '.game-center-card__hero img.game-hero',
@@ -361,12 +361,14 @@ describe('beta.1 game pages', () => {
       expect.stringMatching(/bidding\.webp$/),
       expect.stringMatching(/likes\.webp$/),
       expect.stringMatching(/blackjack\.webp$/),
+      expect.stringMatching(/steadycatch\.webp$/),
     ]);
     expect(heroes.map(({ width, height }) => [width, height])).toEqual(
-      Array.from({ length: 6 }, () => [960, 480]),
+      Array.from({ length: 7 }, () => [960, 480]),
     );
     expect(heroes.map((hero) => hero.getAttribute('loading'))).toEqual([
       'eager',
+      'lazy',
       'lazy',
       'lazy',
       'lazy',
@@ -387,9 +389,9 @@ describe('beta.1 game pages', () => {
       },
     ]);
     await renderWithProviders(<GameCenter />, { station: 'user', route: '/games', role: 'user' });
-    expect(await screen.findAllByText('Not open')).toHaveLength(6);
+    expect(await screen.findAllByText('Not open')).toHaveLength(9);
     expect(screen.queryByRole('link', { name: 'Enter game' })).not.toBeInTheDocument();
-    expect(screen.getAllByRole('link', { name: /View rules and records/ })).toHaveLength(6);
+    expect(screen.getAllByRole('link', { name: /View rules and records/ })).toHaveLength(9);
   });
 
   it('keeps each game’s rules entry available during maintenance', async () => {
