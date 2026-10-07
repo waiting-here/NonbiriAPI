@@ -288,6 +288,16 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	}
 
 	outbound := req.Clone(ctx)
+	if outbound.Method != http.MethodGet && outbound.Method != http.MethodHead && outbound.Method != http.MethodOptions && outbound.Method != http.MethodTrace {
+		// A second billable attempt must pass through the claim rail. Retain
+		// provider idempotency headers, but do not let Transport replay a body.
+		outbound.GetBody = nil
+		_, idempotent := outbound.Header["Idempotency-Key"]
+		_, legacyIdempotent := outbound.Header["X-Idempotency-Key"]
+		if !c.disableReplay && (idempotent || legacyIdempotent) && (outbound.Body == nil || outbound.Body == http.NoBody) {
+			outbound.Body = io.NopCloser(strings.NewReader(""))
+		}
+	}
 	if c.disableReplay {
 		outbound.GetBody = nil
 		for name := range outbound.Header {
