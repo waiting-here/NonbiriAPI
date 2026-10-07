@@ -1,4 +1,12 @@
-import { advance, HZ, LAST_TICK, type Input, type Phrase, type State } from './engine';
+import {
+  advance,
+  HZ,
+  LAST_TICK,
+  type Input,
+  type Phrase,
+  type State,
+  type CollectionEvent,
+} from './engine';
 
 export interface Session {
   id: string;
@@ -32,6 +40,7 @@ export class CatchSession {
   error: unknown = null;
   private listeners = new Set<() => void>();
   private inputs: Input[] = [];
+  private collections: CollectionEvent[] = [];
   private pending: Controls | null = null;
   private inFlight: Promise<void> | null = null;
   private pauseWanted = false;
@@ -72,6 +81,11 @@ export class CatchSession {
     if (direction === 0) this.target = this.state.x;
     this.direction = direction;
   }
+  takeCollections() {
+    const events = this.collections;
+    this.collections = [];
+    return events;
+  }
   shield() {
     this.shieldWanted = true;
   }
@@ -96,7 +110,9 @@ export class CatchSession {
       batch.push(input);
     }
     if (batch.length) {
-      this.state = advance(this.state, batch, desired, this.phrases);
+      this.state = advance(this.state, batch, desired, this.phrases, (event) =>
+        this.collections.push(event),
+      );
       this.inputs.push(...batch.filter((input) => input.tick <= this.state.tick));
     }
     if (this.state.cause) this.active = false;

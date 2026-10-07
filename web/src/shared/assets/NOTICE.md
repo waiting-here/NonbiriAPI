@@ -49,3 +49,6 @@ the supplied game.
 
 Catch You Steadily includes an original illustrated cover and the supplied
 game's character art, resized as local WebP assets under AGPL-3.0.
+Its canvas renderer, interface styling and synthesized sound effects are adapted
+from the supplied original game with permission to distribute under AGPL-3.0.
+Meme quotations and source notes in the catalog retain their separate references.

@@ -1,0 +1,826 @@
+{
+  "phrases": {
+    "M001": {
+      "family": "ChatGPT",
+      "evidence": "observed",
+      "sources": ["S01"]
+    },
+    "M002": {
+      "family": "ChatGPT",
+      "evidence": "observed",
+      "sources": ["S02"]
+    },
+    "M003": {
+      "family": "ChatGPT",
+      "evidence": "observed",
+      "sources": ["S02"]
+    },
+    "M004": {
+      "family": "ChatGPT",
+      "evidence": "observed",
+      "sources": ["S02"]
+    },
+    "M005": {
+      "family": "ChatGPT",
+      "evidence": "observed",
+      "sources": ["S02"]
+    },
+    "M006": {
+      "family": "ChatGPT",
+      "evidence": "observed",
+      "sources": ["S02"]
+    },
+    "M007": {
+      "family": "GPT / Codex",
+      "evidence": "observed",
+      "sources": ["S03"]
+    },
+    "M008": {
+      "family": "GPT / Codex",
+      "evidence": "observed",
+      "sources": ["S03"]
+    },
+    "M009": {
+      "family": "GPT / Codex",
+      "evidence": "observed",
+      "sources": ["S03"]
+    },
+    "M010": {
+      "family": "GPT / Codex",
+      "evidence": "observed",
+      "sources": ["S03"]
+    },
+    "M011": {
+      "family": "GPT / Codex",
+      "evidence": "observed",
+      "sources": ["S03"]
+    },
+    "M012": {
+      "family": "GPT / Codex",
+      "evidence": "observed",
+      "sources": ["S03"]
+    },
+    "M013": {
+      "family": "GPT / Codex",
+      "evidence": "observed",
+      "sources": ["S03"]
+    },
+    "M014": {
+      "family": "GPT / Codex",
+      "evidence": "observed",
+      "sources": ["S03"]
+    },
+    "M015": {
+      "family": "多模型",
+      "evidence": "observed",
+      "sources": ["S04"]
+    },
+    "M016": {
+      "family": "多模型",
+      "evidence": "observed",
+      "sources": ["S04"]
+    },
+    "M017": {
+      "family": "多模型",
+      "evidence": "observed",
+      "sources": ["S04"]
+    },
+    "M018": {
+      "family": "多模型",
+      "evidence": "observed",
+      "sources": ["S04"]
+    },
+    "M019": {
+      "family": "Gemini",
+      "evidence": "observed",
+      "sources": ["S05"]
+    },
+    "M020": {
+      "family": "Gemini",
+      "evidence": "observed",
+      "sources": ["S05"]
+    },
+    "M021": {
+      "family": "Gemini",
+      "evidence": "observed",
+      "sources": ["S06"]
+    },
+    "M022": {
+      "family": "Gemini",
+      "evidence": "observed",
+      "sources": ["S06"]
+    },
+    "M023": {
+      "family": "Gemini",
+      "evidence": "observed",
+      "sources": ["S06"]
+    },
+    "M024": {
+      "family": "Claude / RP",
+      "evidence": "observed",
+      "sources": ["S07"]
+    },
+    "M025": {
+      "family": "多模型 / RP",
+      "evidence": "observed",
+      "sources": ["S08"]
+    },
+    "M026": {
+      "family": "多模型 / RP",
+      "evidence": "observed",
+      "sources": ["S08"]
+    },
+    "M027": {
+      "family": "多模型 / RP",
+      "evidence": "observed",
+      "sources": ["S08"]
+    },
+    "M028": {
+      "family": "多模型 / RP",
+      "evidence": "observed",
+      "sources": ["S08"]
+    },
+    "M029": {
+      "family": "多模型 / RP",
+      "evidence": "observed",
+      "sources": ["S09"]
+    },
+    "M030": {
+      "family": "多模型 / RP",
+      "evidence": "observed",
+      "sources": ["S09"]
+    },
+    "M031": {
+      "family": "多模型 / RP",
+      "evidence": "observed",
+      "sources": ["S09"]
+    },
+    "M032": {
+      "family": "多模型 / RP",
+      "evidence": "observed",
+      "sources": ["S09"]
+    },
+    "M033": {
+      "family": "多模型 / RP",
+      "evidence": "observed",
+      "sources": ["S10"]
+    },
+    "M034": {
+      "family": "多模型 / RP",
+      "evidence": "observed",
+      "sources": ["S10"]
+    },
+    "M035": {
+      "family": "多模型 / RP",
+      "evidence": "observed",
+      "sources": ["S10"]
+    },
+    "M036": {
+      "family": "多模型 / RP",
+      "evidence": "observed",
+      "sources": ["S10"]
+    },
+    "M037": {
+      "family": "多模型 / RP",
+      "evidence": "observed",
+      "sources": ["S10"]
+    },
+    "M038": {
+      "family": "多模型 / RP",
+      "evidence": "observed",
+      "sources": ["S10"]
+    },
+    "M039": {
+      "family": "多模型",
+      "evidence": "observed",
+      "sources": ["S11"]
+    },
+    "M040": {
+      "family": "多模型",
+      "evidence": "observed",
+      "sources": ["S11"]
+    },
+    "M041": {
+      "family": "多模型",
+      "evidence": "observed",
+      "sources": ["S11"]
+    },
+    "M042": {
+      "family": "多模型",
+      "evidence": "observed",
+      "sources": ["S11"]
+    },
+    "M043": {
+      "family": "多模型",
+      "evidence": "observed",
+      "sources": ["S11"]
+    },
+    "M046": {
+      "family": "多模型",
+      "evidence": "observed",
+      "sources": ["S12"]
+    },
+    "M050": {
+      "family": "多模型",
+      "evidence": "observed",
+      "sources": ["S14"]
+    },
+    "M051": {
+      "family": "多模型",
+      "evidence": "observed",
+      "sources": ["S14"]
+    },
+    "M052": {
+      "family": "多模型",
+      "evidence": "observed",
+      "sources": ["S14"]
+    },
+    "M053": {
+      "family": "多模型",
+      "evidence": "observed",
+      "sources": ["S14"]
+    },
+    "M054": {
+      "family": "多模型",
+      "evidence": "observed",
+      "sources": ["S14"]
+    },
+    "M055": {
+      "family": "多模型",
+      "evidence": "observed",
+      "sources": ["S04"]
+    },
+    "M056": {
+      "family": "多模型",
+      "evidence": "observed",
+      "sources": ["S04"]
+    },
+    "M057": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S02", "S04"]
+    },
+    "M058": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S02", "S04"]
+    },
+    "M059": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S02", "S04"]
+    },
+    "M060": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S02", "S04"]
+    },
+    "M061": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S02", "S04"]
+    },
+    "M062": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S02", "S04"]
+    },
+    "M063": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S02", "S04"]
+    },
+    "M064": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S02", "S04"]
+    },
+    "M065": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S05", "S06"]
+    },
+    "M066": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S05", "S06"]
+    },
+    "M067": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S05", "S06"]
+    },
+    "M068": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S05", "S06"]
+    },
+    "M069": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S05", "S06"]
+    },
+    "M070": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S05", "S06"]
+    },
+    "M071": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S05", "S06"]
+    },
+    "M072": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S05", "S06"]
+    },
+    "M073": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S07", "S08", "S09", "S10"]
+    },
+    "M074": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S07", "S08", "S09", "S10"]
+    },
+    "M075": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S07", "S08", "S09", "S10"]
+    },
+    "M076": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S07", "S08", "S09", "S10"]
+    },
+    "M077": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S07", "S08", "S09", "S10"]
+    },
+    "M078": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S07", "S08", "S09", "S10"]
+    },
+    "M079": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S07", "S08", "S09", "S10"]
+    },
+    "M080": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S07", "S08", "S09", "S10"]
+    },
+    "M081": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S03"]
+    },
+    "M082": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S03"]
+    },
+    "M083": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S03"]
+    },
+    "M084": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S03"]
+    },
+    "M085": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S03"]
+    },
+    "M086": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S03"]
+    },
+    "M087": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S03"]
+    },
+    "M088": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S03"]
+    },
+    "M089": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S04", "S11", "S12"]
+    },
+    "M090": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S04", "S11", "S12"]
+    },
+    "M091": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S04", "S11", "S12"]
+    },
+    "M092": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S04", "S11", "S12"]
+    },
+    "M093": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S04", "S11", "S12"]
+    },
+    "M094": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S04", "S11", "S12"]
+    },
+    "M095": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S04", "S11", "S12"]
+    },
+    "M096": {
+      "family": "游戏改写",
+      "evidence": "adapted",
+      "sources": ["S04", "S11", "S12"]
+    },
+    "C001": {
+      "family": "GPT / Codex",
+      "evidence": "observed",
+      "sources": ["R01"]
+    },
+    "C002": {
+      "family": "GPT / Codex",
+      "evidence": "observed",
+      "sources": ["R01"]
+    },
+    "C003": {
+      "family": "GPT / Codex",
+      "evidence": "observed",
+      "sources": ["R01"]
+    },
+    "C004": {
+      "family": "GPT / Codex",
+      "evidence": "observed",
+      "sources": ["R01"]
+    },
+    "C005": {
+      "family": "GPT / Codex",
+      "evidence": "observed",
+      "sources": ["R01"]
+    },
+    "C006": {
+      "family": "GPT / Codex",
+      "evidence": "observed",
+      "sources": ["R01", "R14"]
+    },
+    "C007": {
+      "family": "GPT / Codex",
+      "evidence": "observed",
+      "sources": ["R01"]
+    },
+    "C008": {
+      "family": "GPT / Codex",
+      "evidence": "observed",
+      "sources": ["R01", "R14"]
+    },
+    "C009": {
+      "family": "GPT / Codex",
+      "evidence": "observed",
+      "sources": ["R14"]
+    },
+    "C010": {
+      "family": "GPT / Codex",
+      "evidence": "observed",
+      "sources": ["R14"]
+    },
+    "C011": {
+      "family": "GPT / Codex",
+      "evidence": "observed",
+      "sources": ["R14", "R01"]
+    },
+    "C012": {
+      "family": "GPT / Codex",
+      "evidence": "observed",
+      "sources": ["R14"]
+    },
+    "C013": {
+      "family": "Claude",
+      "evidence": "observed",
+      "sources": ["R02"]
+    },
+    "C015": {
+      "family": "多模型",
+      "evidence": "observed",
+      "sources": ["R02"]
+    },
+    "C016": {
+      "family": "GPT",
+      "evidence": "observed",
+      "sources": ["R02"]
+    },
+    "C017": {
+      "family": "多模型",
+      "evidence": "observed",
+      "sources": ["R02"]
+    },
+    "C018": {
+      "family": "Gemini / RP",
+      "evidence": "observed",
+      "sources": ["R03"]
+    },
+    "C019": {
+      "family": "Gemini / RP",
+      "evidence": "observed",
+      "sources": ["R03"]
+    },
+    "C020": {
+      "family": "DeepSeek",
+      "evidence": "observed",
+      "sources": ["R03"]
+    },
+    "C021": {
+      "family": "DeepSeek",
+      "evidence": "observed",
+      "sources": ["R03"]
+    },
+    "C022": {
+      "family": "多模型 / RP",
+      "evidence": "observed",
+      "sources": ["R03"]
+    },
+    "C023": {
+      "family": "多模型 / RP",
+      "evidence": "observed",
+      "sources": ["R03"]
+    },
+    "C025": {
+      "family": "多模型",
+      "evidence": "observed",
+      "sources": ["R05"]
+    },
+    "C026": {
+      "family": "多模型",
+      "evidence": "observed",
+      "sources": ["R05"]
+    },
+    "C027": {
+      "family": "多模型",
+      "evidence": "observed",
+      "sources": ["R05", "R08"]
+    },
+    "C029": {
+      "family": "ChatGPT",
+      "evidence": "observed",
+      "sources": ["R06"]
+    },
+    "C030": {
+      "family": "ChatGPT",
+      "evidence": "observed",
+      "sources": ["R06"]
+    },
+    "C031": {
+      "family": "多模型",
+      "evidence": "observed",
+      "sources": ["R07"]
+    },
+    "C032": {
+      "family": "多模型",
+      "evidence": "observed",
+      "sources": ["R07"]
+    },
+    "C033": {
+      "family": "多模型",
+      "evidence": "observed",
+      "sources": ["R07"]
+    },
+    "C042": {
+      "family": "Claude",
+      "evidence": "observed",
+      "sources": ["R13", "R10", "R11", "R12"]
+    },
+    "C043": {
+      "family": "Claude",
+      "evidence": "observed",
+      "sources": ["R10"]
+    },
+    "C044": {
+      "family": "Claude",
+      "evidence": "observed",
+      "sources": ["R10", "R11"]
+    },
+    "custom_1": {
+      "family": "",
+      "evidence": "adapted",
+      "sources": []
+    },
+    "custom_2": {
+      "family": "",
+      "evidence": "adapted",
+      "sources": []
+    },
+    "custom_3": {
+      "family": "",
+      "evidence": "adapted",
+      "sources": []
+    },
+    "custom_4": {
+      "family": "",
+      "evidence": "adapted",
+      "sources": []
+    },
+    "custom_5": {
+      "family": "",
+      "evidence": "adapted",
+      "sources": []
+    },
+    "custom_6": {
+      "family": "",
+      "evidence": "adapted",
+      "sources": []
+    },
+    "custom_7": {
+      "family": "",
+      "evidence": "adapted",
+      "sources": []
+    },
+    "custom_8": {
+      "family": "",
+      "evidence": "adapted",
+      "sources": []
+    },
+    "custom_9": {
+      "family": "",
+      "evidence": "adapted",
+      "sources": []
+    },
+    "custom_10": {
+      "family": "",
+      "evidence": "adapted",
+      "sources": []
+    }
+  },
+  "sources": [
+    {
+      "id": "S01",
+      "title": "ChatGPT 的“稳稳接住”报道",
+      "url": "https://www.wired.com/story/chatgpt-chinese-catch-you-steadily-sycophancy",
+      "note": "媒体报道；确认梗的传播，不证明起源或出现频率。"
+    },
+    {
+      "id": "S02",
+      "title": "ChatGPT，别再“稳稳接住我”了",
+      "url": "https://www.ifanr.com/1665148",
+      "note": "文章中的短语片段；关联 ChatGPT。"
+    },
+    {
+      "id": "S03",
+      "title": "gpt-5.x (codex) 中文口癖收集",
+      "url": "https://linux.do/t/topic/1768077",
+      "note": "2026-03-16 起的用户讨论；开发场景口癖。"
+    },
+    {
+      "id": "S04",
+      "title": "佬们觉得最典的 AI 口头禅？",
+      "url": "https://linux.do/t/topic/2498086",
+      "note": "2026-06-29 起的用户整理；模型归属为网友印象。"
+    },
+    {
+      "id": "S05",
+      "title": "Gemini 3.1 新增“极其”八股/BUG",
+      "url": "https://linux.do/t/topic/1637948",
+      "note": "2026-02-23 起的用户报告，主要谈中文角色扮演。"
+    },
+    {
+      "id": "S06",
+      "title": "Gemini 2.5 Pro 很喜欢加 最终的/真正的/完美的",
+      "url": "https://linux.do/t/topic/1110590",
+      "note": "2025-10-31 的用户报告；方案讨论场景。"
+    },
+    {
+      "id": "S07",
+      "title": "狐狐的 AI 角色扮演教程：相关名词",
+      "url": "https://awaa-col.github.io/Role-Play/角色扮演介绍/",
+      "note": "教程将“眼中闪过一丝”作为“克八股”例子；只取短语，无复用插画或教程。"
+    },
+    {
+      "id": "S08",
+      "title": "教你如何写 AI 八股文",
+      "url": "https://linux.do/t/topic/1402588",
+      "note": "社区模仿与吐槽；不能作为某模型独占证据。"
+    },
+    {
+      "id": "S09",
+      "title": "觉得酒馆越来越不好玩了（第 3 页）",
+      "url": "https://linux.do/t/topic/1537152?page=3",
+      "note": "角色扮演用户讨论中的短语。"
+    },
+    {
+      "id": "S10",
+      "title": "zh-ai-flavor-rules 公开规则表",
+      "url": "https://github.com/foreverseapp/zh-ai-flavor-rules/blob/main/rules/rules.json",
+      "note": "维护者公开列出的套话词表；只是作者的编辑规则。"
+    },
+    {
+      "id": "S11",
+      "title": "输入一股 AI 味，还指望回答像个人？",
+      "url": "https://developer.cloud.tencent.com/article/2699794?policyId=1003",
+      "note": "写作者自列的去 AI 味词语；跨模型共享。"
+    },
+    {
+      "id": "S12",
+      "title": "拆掉 AI 八股腔的提示词手册",
+      "url": "https://gist.github.com/meiqiu912/a497fb89e3ebbfedc4332bc2d348d256",
+      "note": "作者提示词中的短模板，不代表这些正常词语属于 AI。"
+    },
+    {
+      "id": "S14",
+      "title": "Stop Slop Zh 的公开说明",
+      "url": "https://ottermind.ai/skills/stop-slop-zh",
+      "note": "作者所列的连接词和直译腔。"
+    },
+    {
+      "id": "R01",
+      "title": "开发场景口癖收集",
+      "url": "https://linux.do/t/topic/1768077",
+      "note": "主帖及回复可读；主帖显示151赞，个别短语有回复呼应。赞数只对应帖子。"
+    },
+    {
+      "id": "R02",
+      "title": "多模型口头禅讨论",
+      "url": "https://linux.do/t/topic/2498086",
+      "note": "主帖显示24赞；模型标签为发帖者联想，未逐张核验配图或原始聊天。"
+    },
+    {
+      "id": "R03",
+      "title": "角色扮演与口癖讨论",
+      "url": "https://linux.do/t/topic/2147647",
+      "note": "已读正文；部分内容为对视频的回忆，未找到对应原视频片段。"
+    },
+    {
+      "id": "R05",
+      "title": "生成文章的既视感讨论",
+      "url": "https://v2ex.com/t/1205977",
+      "note": "可见32条回复、4771次浏览；不将整帖浏览量算作单个词的传播量。"
+    },
+    {
+      "id": "R06",
+      "title": "ChatGPT 修稿风格观察",
+      "url": "https://www.dcard.tw/f/talk/p/259143483",
+      "note": "作者明确称正文后半为其请 ChatGPT 总结的结果；其中例句用于说明文风，没有原始分享链接。"
+    },
+    {
+      "id": "R07",
+      "title": "用户分享的句型禁用表",
+      "url": "https://www.dcard.tw/f/chatgpt/p/260208755",
+      "note": "正文可读；是网友编写的限制提示，不能当作模型实际说过这些话的证据。"
+    },
+    {
+      "id": "R08",
+      "title": "r/ChatGPT 用词与格式讨论",
+      "url": "https://www.reddit.com/r/ChatGPT/comments/1d50rv3/what_are_some_words_phrases_or_other_patterns_you/",
+      "note": "多个回复列出英文词汇及破折号；属于社区印象，不是自动检测依据。"
+    },
+    {
+      "id": "R10",
+      "title": "r/ClaudeAI 关于绝对赞同句型的讨论",
+      "url": "https://www.reddit.com/r/ClaudeAI/comments/1l99myk/i_banned_the_phrase_youre_absolutely_right/",
+      "note": "可见主帖116赞、关于找到问题的回复102赞；含夸张改写，不能整体标为模型原话。"
+    },
+    {
+      "id": "R11",
+      "title": "r/ClaudeAI 关于绝对赞同与上线宣告的梗",
+      "url": "https://www.reddit.com/r/ClaudeAI/comments/1opfu2i/you_are_absolutely_right/",
+      "note": "可见主帖1220赞、上线宣告回复107赞；作为传播线索，不验证其代码或输出结论。"
+    },
+    {
+      "id": "R12",
+      "title": "Claude 赞同口癖话题",
+      "url": "https://news.ycombinator.com/item?id=44885398",
+      "note": "页面可见773分、533条评论，链接到相关问题及梗；只能证明另一社区的讨论，不能当独立原始输出。"
+    },
+    {
+      "id": "R13",
+      "title": "Claude Code issue 中的输出转录",
+      "url": "https://github.com/anthropics/claude-code/issues/3382",
+      "note": "问题作者附了工具响应转录；这是作者报告的一次输出，未经独立复现，也不代表最早出处。"
+    },
+    {
+      "id": "R14",
+      "title": "开发者对回复风格的反馈",
+      "url": "https://v2ex.com/t/1218023",
+      "note": "主帖列出相关句式，36条回复；对词语的报告与对产品能力的主观评价分开。"
+    }
+  ]
+}

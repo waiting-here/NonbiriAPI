@@ -1,7 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { expect, it } from 'vitest';
-import { advance, newGame, type Input, type Phrase, type State } from './engine';
+import {
+  advance,
+  newGame,
+  type Input,
+  type Phrase,
+  type State,
+  type CollectionEvent,
+} from './engine';
 
 const phrases = JSON.parse(
   readFileSync('../internal/game/steadycatch/engine/phrases.json', 'utf8'),
@@ -45,3 +52,38 @@ it('is independent of rendering frequency and does not mutate acknowledged state
     expect(newGame(scenario.seed)).toEqual(old);
   }
 });
+
+it.each([
+  { combo: 0, double: false, points: [10, 20] },
+  { combo: 3, double: true, points: [20, 80] },
+])(
+  'reports exact same-tick card points at combo $combo, double $double',
+  ({ combo, double, points }) => {
+    const cards: Phrase[] = [
+      { id: 'white', text: 'White', category: 'test', gold: false },
+      { id: 'gold', text: 'Gold', category: 'test', gold: true },
+    ];
+    const before = newGame(1);
+    before.combo = combo;
+    before.spawn_in = 100;
+    before.effects.double = double ? 100 : 0;
+    before.items = cards.map((_, payload) => ({
+      id: payload + 1,
+      kind: 'phrase',
+      payload,
+      x: 300000,
+      y: 414000,
+      width: 152000,
+      height: 62000,
+      speed: 2000,
+    }));
+    const saved = structuredClone(before);
+    const events: CollectionEvent[] = [];
+    const inputs = [{ tick: 1, target: 300000, direction: 0 }];
+    const actual = advance(before, inputs, 1, cards, (event) => events.push(event));
+    expect(events.map((event) => event.points)).toEqual(points);
+    expect(events.map((event) => event.combo)).toEqual([combo + 1, combo + 2]);
+    expect(actual).toEqual(advance(before, inputs, 1, cards));
+    expect(before).toEqual(saved);
+  },
+);

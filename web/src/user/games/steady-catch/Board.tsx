@@ -1,224 +1,247 @@
 import { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { type Phrase } from './engine';
 import { CatchSession } from './session';
+import { createRenderer, type RenderEvent } from './render.mjs';
+import { CatchAudio } from './audio';
 import { useCatchText } from './copy';
 
-const hazards = ['断章取义', '虚假引用', '提示词注入', '无限复读', '上下文丢失', '幻觉来袭'];
-const props = ['护盾', '慢慢来', '吸梗磁铁', '双倍得分', '生命 +1'];
-function wrapped(ctx: CanvasRenderingContext2D, text: string, width: number) {
-  const lines: string[] = [];
-  let line = '';
-  for (const char of text) {
-    if (line && ctx.measureText(line + char).width > width) {
-      lines.push(line);
-      line = '';
-    }
-    line += char;
-  }
-  if (line) lines.push(line);
-  return lines;
+export interface CatchFeedback {
+  text: string;
+  points: number;
 }
 export function CatchBoard({
   session,
   phrases,
+  audio,
+  onCatch,
 }: {
-  session: CatchSession;
+  session: CatchSession | null;
   phrases: readonly Phrase[];
+  audio: CatchAudio;
+  onCatch: (feedback: CatchFeedback) => void;
 }) {
   const t = useCatchText();
-  const canvas = useRef<HTMLCanvasElement>(null);
+  const { i18n } = useTranslation();
+  const english = !i18n.resolvedLanguage?.startsWith('zh');
+  const canvas = useRef<HTMLCanvasElement>(null),
+    toast = useRef<HTMLDivElement>(null),
+    live = useRef<HTMLDivElement>(null),
+    keys = useRef(new Set<string>());
   useEffect(() => {
-    const node = canvas.current!;
-    const ctx = node.getContext('2d')!;
-    const player = new Image();
-    player.src = '/assets/steady-catch/player.webp';
-    let frame = 0,
-      redraw = true;
-    let previous = session.state;
-    let lastCaught = previous.caught,
-      smileUntil = 0;
-    const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let dark = false,
-      textSize = 18;
-    const resize = () => {
-      const bounds = node.getBoundingClientRect();
-      const ratio = Math.min(2, devicePixelRatio || 1);
-      node.width = Math.max(1, Math.round(bounds.width * ratio));
-      node.height = Math.max(1, Math.round(bounds.height * ratio));
-      textSize = Math.max(18, Math.min(30, Math.ceil((13 * 600) / bounds.width)));
-      redraw = true;
+    const node = canvas.current!,
+      renderer = createRenderer(node, phrases, english);
+    const observer = new ResizeObserver(renderer.resize);
+    observer.observe(node);
+    renderer.resize();
+    const text = (zh: string, en: string) => (english ? en : zh);
+    const held = keys.current;
+    const direction = () =>
+      session?.move(
+        Number(held.has('arrowright') || held.has('d')) -
+          Number(held.has('arrowleft') || held.has('a')),
+      );
+    const clear = () => {
+      held.clear();
+      session?.move(0);
     };
-    const theme = () => {
-      dark = getComputedStyle(node).getPropertyValue('--catch-dark').trim() === '1';
-      redraw = true;
-    };
-    const sizeObserver = new ResizeObserver(resize);
-    sizeObserver.observe(node);
-    const themeObserver = new MutationObserver(theme);
-    themeObserver.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['data-theme'],
+    const off = session?.subscribe(() => {
+      if (!session.active) clear();
     });
-    player.onload = () => {
-      redraw = true;
+    const keydown = (e: KeyboardEvent) => {
+      if (
+        !session ||
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLSelectElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target instanceof HTMLElement && e.target.isContentEditable) ||
+        node.closest('.catch-game')?.querySelector('dialog[open]')
+      )
+        return;
+      const key = e.key.toLowerCase();
+      if (['arrowleft', 'arrowright', 'a', 'd'].includes(key) && session.active) {
+        e.preventDefault();
+        held.add(key);
+        direction();
+      }
+      if ((key === 'p' || key === 'escape') && !e.repeat && !session.terminal) {
+        e.preventDefault();
+        clear();
+        void (session.active ? session.pause() : session.resume());
+      }
+      if (key === ' ' && session.active && !e.repeat) {
+        e.preventDefault();
+        session.shield();
+      }
     };
-    resize();
-    theme();
-    const paint = () => {
+    const keyup = (e: KeyboardEvent) => {
+      if (held.delete(e.key.toLowerCase())) direction();
+    };
+    node.addEventListener('pointerdown', clear);
+    window.addEventListener('keydown', keydown);
+    window.addEventListener('keyup', keyup);
+    window.addEventListener('blur', clear);
+    let previous = session?.state,
+      wasActive = false,
+      frame = 0,
+      lastTime = 0,
+      toastUntil = 0,
+      activeTime = 0;
+    const announce = (message: string, danger = false, duration = 1.7) => {
+      toast.current!.textContent = message;
+      toast.current!.className = 'toast visible' + (danger ? ' danger-toast' : '');
+      toastUntil = activeTime + duration;
+    };
+    function paint(now: number) {
       frame = requestAnimationFrame(paint);
-      session.frame();
-      const state = session.state;
-      if (!redraw && previous === state) return;
-      redraw = false;
-      previous = state;
-      ctx.setTransform(node.width / 600, 0, 0, node.height / 560, 0, 0);
-      ctx.clearRect(0, 0, 600, 560);
-      ctx.fillStyle = dark ? '#203a35' : '#eaf7f0';
-      ctx.fillRect(0, 0, 600, 560);
-      ctx.strokeStyle = dark ? '#2a5148' : '#d4e9dd';
-      ctx.lineWidth = 1;
-      for (let x = 0; x < 600; x += 40) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, 560);
-        ctx.stroke();
-      }
-      for (let y = 0; y < 560; y += 40) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(600, y);
-        ctx.stroke();
-      }
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      for (const item of state.items) {
-        const x = item.x / 1000,
-          y = item.y / 1000,
-          w = item.width / 1000;
-        const gold = item.kind === 'phrase' && phrases[item.payload].gold;
-        ctx.fillStyle =
-          item.kind === 'hazard'
-            ? '#7d293c'
-            : item.kind === 'prop'
-              ? '#215c83'
-              : gold
-                ? '#735314'
-                : dark
-                  ? '#f1f7ee'
-                  : '#fff';
-        ctx.beginPath();
-        ctx.roundRect(x - w / 2, y - 31, w, 62, 11);
-        ctx.fill();
-        ctx.strokeStyle = item.kind === 'hazard' ? '#ef7e95' : gold ? '#edc451' : '#75b79b';
-        ctx.lineWidth = gold ? 3 : 1.5;
-        ctx.stroke();
-        const text =
-          item.kind === 'phrase'
-            ? phrases[item.payload].text
-            : item.kind === 'hazard'
-              ? hazards[item.payload]
-              : props[item.payload];
-        let font = textSize;
-        ctx.font = '600 ' + font + 'px system-ui';
-        let lines = wrapped(ctx, text, w - 16);
-        while (lines.length > 3 && font > 12) {
-          font--;
-          ctx.font = '600 ' + font + 'px system-ui';
-          lines = wrapped(ctx, text, w - 16);
-        }
-        ctx.fillStyle = item.kind === 'phrase' && !gold ? '#143c32' : '#fff';
-        lines
-          .slice(0, 3)
-          .forEach((line, index) =>
-            ctx.fillText(line, x, y + (index - (Math.min(3, lines.length) - 1) / 2) * (font + 1)),
-          );
-      }
-      const x = state.x / 1000;
-      if (state.effects.shield > state.tick) {
-        ctx.strokeStyle = '#72d9ed';
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.ellipse(x, 488, 55, 65, 0, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-      ctx.fillStyle = dark ? '#84e2b4' : '#197a59';
-      ctx.beginPath();
-      ctx.roundRect(x - 43, 442, 86, 8, 4);
-      ctx.fill();
-      ctx.globalAlpha =
-        state.invulnerable > state.tick && !reducedMotion && state.tick % 12 < 6 ? 0.5 : 1;
-      if (player.complete && player.naturalWidth) {
-        if (state.caught > lastCaught) smileUntil = state.tick + 18;
-        lastCaught = state.caught;
-        const pose =
-          state.invulnerable > state.tick
-            ? 3
-            : smileUntil > state.tick
-              ? 2
-              : state.direction && !reducedMotion
-                ? Math.floor(state.tick / 7) % 2
-                : 0;
-        const tile = player.naturalWidth / 2;
-        ctx.drawImage(
-          player,
-          (pose % 2) * tile,
-          Math.floor(pose / 2) * tile,
-          tile,
-          tile,
-          x - 98,
-          346,
-          196,
-          196,
+      const dt = lastTime ? Math.min(0.045, (now - lastTime) / 1000) : 0.016;
+      lastTime = now;
+      session?.frame();
+      const state = session?.state;
+      if (session?.active) activeTime += dt;
+      const events: RenderEvent[] = [];
+      if (session?.active && !wasActive && state?.tick === 0) {
+        announce(
+          text('开场很温柔。先稳稳接几句。', 'A gentle opening. Catch a few phrases first.'),
+          false,
+          2.2,
         );
-      } else {
-        ctx.fillStyle = '#54ae87';
-        ctx.beginPath();
-        ctx.arc(x, 490, 30, 0, Math.PI * 2);
-        ctx.fill();
+        live.current!.textContent = text(
+          '游戏开始。接住八股卡，避开红色错误卡。',
+          'Game started. Catch phrases and avoid red error cards.',
+        );
       }
-      ctx.globalAlpha = 1;
-    };
+      wasActive = !!session?.active;
+      if (state && previous && state.tick > previous.tick) {
+        const hazards = text(
+          '429 限流|自信的幻觉|上下文丢失|502 离线|复读死循环|JSON 崩了',
+          '429 Rate limit|Confident hallucination|Context lost|502 Offline|Repetition loop|Broken JSON',
+        ).split('|');
+        for (const collection of session?.takeCollections() ?? []) {
+          const { kind, payload, points, combo } = collection;
+          if (kind === 'phrase') {
+            onCatch({ text: phrases[payload].text, points });
+            events.push({ kind: 'catch', text: '+' + points });
+            if (combo === 5 || combo === 10)
+              announce(
+                text('连击 ', 'Combo ') +
+                  combo +
+                  text(' · 接物倍率 ×', ' · Multiplier ×') +
+                  (1 + Math.min(2, Math.floor(combo / 5))),
+              );
+            if (collection.chargeReady)
+              announce(
+                text(
+                  '护场已充满！需要时点按或按空格',
+                  'Shield ready! Tap or press Space when needed.',
+                ),
+              );
+          } else if (kind === 'hazard') {
+            events.push(
+              collection.blocked
+                ? { kind: 'prop', text: text('已挡住', 'Blocked') }
+                : { kind: 'hit', text: '−1 ♥' },
+            );
+            if (!collection.blocked)
+              announce(hazards[payload] + ' · ' + text('耐心 −1', 'Health −1'), true);
+          } else {
+            events.push({ kind: 'prop' });
+            if (payload === 4)
+              announce(
+                collection.hpDelta === 0
+                  ? text('耐心已满 · 这次无需重新生成', 'Health full · No regeneration needed')
+                  : text('重新生成 · 耐心 +1', 'Regenerate · Health +1'),
+              );
+            else
+              announce(
+                [
+                  text('上下文护盾 · 护盾 7 秒', 'Context shield · Shield for 7 seconds'),
+                  text('低温采样 · 降速 7 秒', 'Low temperature · Slow for 7 seconds'),
+                  text('注意力磁铁 · 磁吸 7 秒', 'Attention magnet · Magnet for 7 seconds'),
+                  text('Token 翻倍 · 双倍 7 秒', 'Double tokens · Double score for 7 seconds'),
+                ][payload],
+              );
+          }
+          audio.beep(
+            kind === 'phrase' ? 'catch' : kind === 'hazard' && !collection.blocked ? 'hit' : 'prop',
+            combo,
+          );
+        }
+        if (
+          previous.charge === 10 &&
+          state.charge < 10 &&
+          state.effects.shield > previous.effects.shield
+        ) {
+          events.push({ kind: 'prop' });
+          audio.beep('prop', state.combo);
+          announce(text('稳稳护场 · 4 秒内放心接', 'Steady shield · Catch freely for 4 seconds'));
+        }
+        if (Math.floor(state.tick / 1800) > Math.floor(previous.tick / 1800) && !state.cause)
+          announce(
+            state.tick >= 3600
+              ? text('最后 30 秒 · 极其极其极其！', 'Last 30 seconds · Extremely extreme!')
+              : text('第二幕 · 八股浓度开始升高', 'Act II · More phrases incoming'),
+            false,
+            2.5,
+          );
+
+        if (state.cause && !previous.cause)
+          live.current!.textContent =
+            text('本局结束。分数 ', 'Game over. Score ') +
+            state.score +
+            text('，接住 ', ', caught ') +
+            state.caught;
+      }
+      previous = state;
+      if (activeTime > toastUntil) toast.current!.classList.remove('visible');
+      if (events.length)
+        events.forEach((event, index) =>
+          renderer.paint(state ?? null, !!session?.active, index === 0 ? dt : 0, event),
+        );
+      else renderer.paint(state ?? null, !!session?.active, dt);
+    }
     frame = requestAnimationFrame(paint);
     return () => {
+      clear();
       cancelAnimationFrame(frame);
-      sizeObserver.disconnect();
-      themeObserver.disconnect();
-      player.onload = null;
+      observer.disconnect();
+      renderer.destroy();
+      off?.();
+      node.removeEventListener('pointerdown', clear);
+      window.removeEventListener('keydown', keydown);
+      window.removeEventListener('keyup', keyup);
+      window.removeEventListener('blur', clear);
     };
-  }, [session, phrases]);
+  }, [session, phrases, english, audio, onCatch]);
   return (
-    <canvas
-      ref={canvas}
-      className="catch-canvas"
-      tabIndex={0}
-      aria-label={t(
-        '接物场地。左右方向键或 A、D 移动，空格释放护盾。也可拖动或点击场地。',
-        'Catch field. Move with Left/Right or A/D, use Space for shield, or drag and tap.',
-      )}
-      onPointerDown={(event) => {
-        event.currentTarget.focus({ preventScroll: true });
-        event.currentTarget.setPointerCapture(event.pointerId);
-        const box = event.currentTarget.getBoundingClientRect();
-        session.aim(((event.clientX - box.left) / box.width) * 600000);
-      }}
-      onPointerMove={(event) => {
-        if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
-        const box = event.currentTarget.getBoundingClientRect();
-        session.aim(((event.clientX - box.left) / box.width) * 600000);
-      }}
-      onKeyDown={(event) => {
-        const key = event.key.toLowerCase();
-        if (['arrowleft', 'arrowright', 'a', 'd', ' '].includes(key)) {
-          event.preventDefault();
-          if (key === ' ') session.shield();
-          else session.move(key === 'a' || key === 'arrowleft' ? -1 : 1);
-        }
-      }}
-      onKeyUp={(event) => {
-        if (['arrowleft', 'arrowright', 'a', 'd'].includes(event.key.toLowerCase()))
-          session.move(0);
-      }}
-      onBlur={() => session.move(0)}
-    />
+    <>
+      <canvas
+        ref={canvas}
+        tabIndex={0}
+        aria-label={t(
+          '游戏区域。左右箭头或 A D 移动；鼠标在场内移动，手机按住滑动。空格释放护场，P 暂停。',
+          'Game field. Move with arrows or A/D, mouse, or touch. Space for shield; P to pause.',
+        )}
+        onPointerDown={(e) => {
+          if (!session?.active) return;
+          e.currentTarget.focus({ preventScroll: true });
+          e.currentTarget.setPointerCapture(e.pointerId);
+          const r = e.currentTarget.getBoundingClientRect();
+          session.aim(((e.clientX - r.left) / r.width) * 600000);
+        }}
+        onPointerMove={(e) => {
+          if (
+            !session?.active ||
+            keys.current.size > 0 ||
+            (e.pointerType !== 'mouse' && !e.currentTarget.hasPointerCapture(e.pointerId))
+          )
+            return;
+          const r = e.currentTarget.getBoundingClientRect();
+          session.aim(((e.clientX - r.left) / r.width) * 600000);
+        }}
+      />
+      <div ref={toast} className="toast" aria-live="polite" />
+      <div ref={live} className="sr-only" role="status" />
+    </>
   );
 }
