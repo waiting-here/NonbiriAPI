@@ -270,6 +270,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err != nil {
 		return nil, fmt.Errorf("create audit runtime: %w", err)
 	}
+	audits.outbound = outbound
 	if err := gatewaypolicy.NewStore(store.DB()).Initialize(startupContext, cfg.GatewayModelsImport, cfg.GatewayModels); err != nil {
 		return nil, fmt.Errorf("initialize Gateway model capabilities: %w", err)
 	}

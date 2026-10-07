@@ -11,7 +11,12 @@ func TestSiteConfigurationNotifiesOnlyCommittedChanges(t *testing.T) {
 	authorizer := &siteConfigTestFinalAuthorizer{}
 	repository := newSiteConfigTestRepository(t, store, authorizer)
 	var keys []string
-	repository.committed = func(changed []string) { keys = append(keys, changed...) }
+	repository.committed = func(change SiteConfigCommit) {
+		keys = append(keys, change.Keys...)
+		if change.Revision != 2 || change.Values[KeySiteName] != "Changed site" {
+			t.Fatalf("committed snapshot = %+v", change)
+		}
+	}
 	if _, err := siteConfigPatch(t, repository, KeySiteName, `"Changed site"`, "config-observer-commit-0001"); err != nil {
 		t.Fatal(err)
 	}
