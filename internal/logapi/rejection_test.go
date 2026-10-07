@@ -2,8 +2,11 @@ package logapi
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 )
 
 func TestPrehandlerPhaseFiltersAndManagementExport(t *testing.T) {
@@ -53,6 +56,57 @@ func TestPrehandlerPhaseFiltersAndManagementExport(t *testing.T) {
 	for _, query := range []string{"phase=", "phase=unknown", "phase=handler&phase=pre_handler"} {
 		if _, err := parseListFilter(query, "user", false); err == nil {
 			t.Fatal("accepted invalid phase", query)
+		}
+	}
+}
+
+func TestManagementRejectionDetailListReadExportAndLegacyFallback(t *testing.T) {
+	f := newLogFixture(t)
+	f.mustExec(`UPDATE request_logs SET rejection_stage='preflight',rejection_reason='invalid_request',request_method='POST',request_path='/v1/chat/completions',caller_result_class='failed',caller_status=400,caller_error_code='invalid_request',attempt_count=0,uncached_input_tokens=0,cache_write_input_tokens=0,cache_read_input_tokens=0,output_tokens=0,usage_unknown=0 WHERE logical_request_id=?`, f.charityID)
+	want := requestattempt.NewDetail("stream", "expected a boolean or null")
+	for _, diag := range []string{requestattempt.EncodeDetail(want), "", `raw error PRIVATE_INPUT`, `{"field":"PRIVATE_FIELD","reason":"PRIVATE_INPUT"}`} {
+		f.mustExec(`UPDATE request_logs SET error_diag=? WHERE logical_request_id=?`, diag, f.charityID)
+		ctx := context.Background()
+		admin, err := f.repo.ListAdmin(ctx, ListFilter{Phase: "pre_handler"})
+		if err != nil || len(admin.Data) != 1 {
+			t.Fatal(admin, err)
+		}
+		expected := diag == requestattempt.EncodeDetail(want)
+		got := admin.Data[0].RejectionDetail
+		if expected && (got == nil || *got != *want) || !expected && got != nil {
+			t.Fatal("invalid projection", got)
+		}
+		detail, err := f.repo.GetAdmin(ctx, f.charityID, AttemptFilter{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		steward, err := f.repo.GetSteward(ctx, 999, f.charityID, AttemptFilter{}, allowLogStewardRead{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, d := range []*requestattempt.RejectionDetail{detail.Request.RejectionDetail, steward.Request.RejectionDetail} {
+			if expected && (d == nil || *d != *want) || !expected && d != nil {
+				t.Fatal("read guessed a cause", d)
+			}
+		}
+		exported, err := f.repo.ExportSteward(ctx, 999, ListFilter{Phase: "pre_handler"}, allowLogStewardRead{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		csv, err := MarshalAdminCSV(exported)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if expected && !strings.Contains(string(csv), "stream,expected a boolean or null") || strings.Contains(string(csv), "PRIVATE_") {
+			t.Fatal(string(csv))
+		}
+		user, err := f.repo.GetUser(ctx, logUserOne, f.charityID, AttemptFilter{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := json.Marshal(user)
+		if strings.Contains(string(body), "rejection_detail") || strings.Contains(string(body), "expected a boolean") {
+			t.Fatal("user received management diagnostic", string(body))
 		}
 	}
 }

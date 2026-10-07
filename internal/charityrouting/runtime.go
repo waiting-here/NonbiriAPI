@@ -18,6 +18,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
 )
 
@@ -36,6 +37,10 @@ func (s *Service) Preflight(ctx context.Context, userID int64, fullName string, 
 	}
 	actual, err := request.CharityTextRuneCount()
 	if err != nil {
+		var validation *openai.ValidationError
+		if errors.As(err, &validation) {
+			requestattempt.Detail(ctx, validation.Detail)
+		}
 		return RuntimePreflight{}, ErrInvalidRequest
 	}
 	return s.preflight(ctx, userID, fullName, &actual, decisionNow)

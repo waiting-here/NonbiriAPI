@@ -15,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 )
 
 const (
@@ -361,6 +362,7 @@ func optionalInt64(value *int64) string {
 }
 
 type commonLogRecord struct {
+	rejectionDetail                                             *requestattempt.RejectionDetail
 	origin                                                      OriginIdentity
 	charityModel                                                *string
 	rejectionStage, rejectionReason, requestMethod, requestPath sql.NullString

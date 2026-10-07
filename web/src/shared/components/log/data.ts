@@ -78,7 +78,13 @@ export interface UserCharityLogRow extends LogRowCommon {
 
 export type UserLogRow = UserSelfLogRow | UserCharityLogRow;
 
+export interface RejectionDetail {
+  field: string;
+  reason: string;
+}
+
 export interface AdminLogRow extends LogRowCommon, LogOrigin {
+  rejection_detail?: RejectionDetail | null;
   charity_model?: string | null;
   role: 'admin';
   usage_total_mismatch: boolean;
@@ -88,6 +94,7 @@ export interface AdminLogRow extends LogRowCommon, LogOrigin {
 }
 
 export interface StewardLogRow extends LogRowCommon, LogOrigin {
+  rejection_detail?: RejectionDetail | null;
   charity_model?: string | null;
   role: 'steward';
   usage_total_mismatch: boolean;
@@ -297,7 +304,10 @@ function commonRow(root: WireRecord): LogRowCommon {
       ? null
       : oneOf(root.caller_result_class, RESULT_CLASSES, 'caller result class');
   const callerStatus = nullableInteger(root.caller_status, 'caller status', 100, 599);
-  const callerErrorCode = nullableString(root.caller_error_code, 'caller error code', { min: 1, ascii: true });
+  const callerErrorCode = nullableString(root.caller_error_code, 'caller error code', {
+    min: 1,
+    ascii: true,
+  });
   if (callerErrorCode !== null && !/^[a-z0-9_]+$/.test(callerErrorCode))
     invalidResponse('caller error code');
   const startedAt = unixSecond(root.started_at, 'log start time');
@@ -379,6 +389,7 @@ export function normalizeAdminLogRow(value: unknown): AdminLogRow {
       'caller_identity',
       'attempt_count',
       'charity_model',
+      'rejection_detail',
       'usage_total_mismatch',
     ],
     'administrator log row',
@@ -392,12 +403,22 @@ export function normalizeAdminLogRow(value: unknown): AdminLogRow {
   return {
     ...common,
     role: 'admin',
+    rejection_detail: managementRejectionDetail(root),
     ...normalizeLogOrigin(root),
     usage_total_mismatch: boolean(root.usage_total_mismatch, 'usage total mismatch marker'),
     user_id: nullableDecimalID(root.user_id, 'log user id'),
     caller_identity: callerIdentity,
     charity_model: managementCharityModel(root, common.route_kind),
     attempt_count: decimal(root.attempt_count, 'attempt count'),
+  };
+}
+
+function managementRejectionDetail(root: WireRecord): RejectionDetail | null {
+  if (root.rejection_detail === undefined || root.rejection_detail === null) return null;
+  const detail = record(root.rejection_detail, ['field', 'reason'], 'rejection detail');
+  return {
+    field: string(detail.field, 'rejection field', { min: 1 }),
+    reason: string(detail.reason, 'rejection description', { min: 1 }),
   };
 }
 
@@ -426,6 +447,7 @@ export function normalizeStewardLogRow(value: unknown): StewardLogRow {
       'caller_identity',
       'attempt_count',
       'charity_model',
+      'rejection_detail',
       'usage_total_mismatch',
     ],
     'steward log row',
@@ -439,6 +461,7 @@ export function normalizeStewardLogRow(value: unknown): StewardLogRow {
   return {
     ...common,
     role: 'steward',
+    rejection_detail: managementRejectionDetail(root),
     ...normalizeLogOrigin(root),
     usage_total_mismatch: boolean(root.usage_total_mismatch, 'usage total mismatch marker'),
     user_id: nullableDecimalID(root.user_id, 'log user id'),
