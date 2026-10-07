@@ -11,7 +11,7 @@ The current development version is **1.0.0-rc.6**. See the [changelog](CHANGELOG
 - `/v1/models`, `/v1/chat/completions` and `/v1/embeddings` ingress, with OpenAI-compatible, Anthropic-compatible and AI SDK Gateway v3 connectors. Supported operations and protocol limits are defined in the [API contract](docs/api-contract.md).
 - Personal model names, discovery, routing, bounded request adaptation and a memory-only Debug Hub. Charity resources add donated keys, budgets, credit accounting and scoped steward management.
 - Discord sign-in, a separate administrator station, bilingual responsive pages and configurable branding. Users can export or delete their accounts.
-- Optional check-ins, shared activities and six games with server-authoritative settlement, recovery and privacy-aware rankings.
+- Optional check-ins, shared activities and nine games with server-authoritative settlement, recovery and privacy-aware rankings.
 - A shared outbound security boundary, encrypted upstream secrets, bounded diagnostics and retention controls. Request logs and credit details have a 30-day ordinary retention period; compacted balance and audit summaries preserve accounting continuity.
 
 ## Build and run
@@ -92,6 +92,7 @@ The race gate needs a working C compiler. CI also covers real browsers, licenses
 | --- | --- |
 | Gateway models and cache controls | [Gateway controls](docs/gateway-model-controls.md) |
 | Games and verifiable randomness | [Duel games](docs/duel-games.md), [AI players](docs/ai-players.md), [Blackjack](docs/blackjack.md), [randomness](docs/game-randomness.md) |
+| New game modules | [Steady Catch](docs/steady-catch.md), [AI Gwent](docs/ai-gwent.md), [Lake Notes](docs/lake-notes.md) |
 | Picture-book activity | [Activity guide](docs/image-activity.md) |
 | Exports, deletion and retained records | [Data lifecycle](docs/data-lifecycle-checklist.md) |
 | Offline integrity and accounting audit | [Maintenance verification](docs/api-contract.md#10-maintenance-recovery-and-retention) |

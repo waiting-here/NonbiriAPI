@@ -11,7 +11,7 @@ NonbiriAPI 是可自行部署的 AI API 端点管理平台，提供 OpenAI-compa
 - 提供 `/v1/models`、`/v1/chat/completions` 和 `/v1/embeddings`，可连接 OpenAI-compatible、Anthropic-compatible 和 AI SDK Gateway v3 上游。支持的操作与协议边界见 [API 契约](docs/api-contract.md)。
 - 支持个人模型命名、发现、路由、有限的请求适配及仅驻留内存的 Debug Hub。公益资源支持密钥捐赠、使用预算、积分结算与分级协管。
 - Discord 登录、独立管理员站、中英双语响应式页面和站点外观配置；用户可导出数据或删除账号。
-- 可选的签到、共享活动及六款小游戏，结算和恢复由服务端控制，榜单遵循隐私设置。
+- 可选的签到、共享活动及九款小游戏，结算和恢复由服务端控制，榜单遵循隐私设置。
 - 统一出站安全策略、上游凭据加密、有限诊断与留存清理。请求日志和积分明细通常保留 30 天；压缩后的余额基线与审计汇总保持账务连续。
 
 ## 构建与启动
@@ -92,6 +92,7 @@ race 检查需要可用的 C 编译器。CI 还覆盖真实浏览器、许可证
 | --- | --- |
 | Gateway 模型与缓存控制 | [Gateway 设置](docs/gateway-model-controls.md) |
 | 游戏和随机结果验证 | [对战游戏](docs/duel-games.md)、[AI 玩家](docs/ai-players.md)、[二十一点](docs/blackjack.md)、[随机性](docs/game-randomness.md) |
+| 新游戏模块 | [稳稳地接住你](docs/steady-catch.md)、[AI 昆特牌](docs/ai-gwent.md)、[垂钓手记](docs/lake-notes.md) |
 | 绘本活动 | [活动指南](docs/image-activity.md) |
 | 导出、删号与记录留存 | [数据生命周期](docs/data-lifecycle-checklist.md) |
 | 离线完整性与账务审计 | [维护验证](docs/api-contract.md#10-maintenance-recovery-and-retention) |

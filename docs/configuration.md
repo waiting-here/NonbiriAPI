@@ -10,6 +10,8 @@ Administrator risk-audit configuration adds `user_ip_window_hours` (integer 1–
 
 Lake Notes is a permanent free minigame with four independently configured exchanges. Fresh installations start closed; an open legacy activity stays available after upgrade, with all exchanges initially disabled. See [game settings and API](lake-notes.md).
 
+[Steady Catch](steady-catch.md) starts disabled with zero ticket and first-clear reward. [AI Gwent](ai-gwent.md) and its Standard mode also start disabled; the initial ticket is 5,000 credits, with 1% each for the platform, welfare pool and Thursday pool. Review these values in **Games** before enabling either game. Gwent uses the same prize-pool settlement as Bidding Duel.
+
 Preserve the database's stable encrypted renewed-review matching material with the master key. Resetting it would bypass cross-account secret-text review requirements and is not a supported repair or configuration edit.
 
 ## Gateway cost attribution
