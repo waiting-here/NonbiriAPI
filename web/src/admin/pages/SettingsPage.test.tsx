@@ -12,7 +12,9 @@ vi.mock('../features/operations/core', async (original) => ({
 }));
 vi.mock('@shared/operations/MaintenancePanel', () => ({ MaintenancePanel: () => null }));
 vi.mock('../features/operations/LegalHoldPanel', () => ({
-  LegalHoldPanel: () => <input type="password" autoComplete="current-password" aria-label="Hold password" />,
+  LegalHoldPanel: () => (
+    <input type="password" autoComplete="current-password" aria-label="Hold password" />
+  ),
 }));
 vi.mock('../features/gateway/GatewayCapabilitiesSection', () => ({
   default: function GatewayDraft() {
@@ -76,8 +78,13 @@ describe('site settings discovery and saving', () => {
   it('opens legal text before mounting credential forms and isolates search autofill', async () => {
     bundle.catalog.push({
       ...entry('legal_terms_override_zh', 'legal', pair('Terms in Chinese', '中文服务条款')),
-      type: 'text', unit: undefined, minimum: null, maximum: 100000, step: null,
-      raw_default: '', effective_fallback: '',
+      type: 'text',
+      unit: null,
+      minimum: null,
+      maximum: 100000,
+      step: null,
+      raw_default: '',
+      effective_fallback: '',
     });
     bundle.values.legal_terms_override_zh = 'Reviewable terms';
     const view = await renderWithProviders(<SettingsPage />, { station: 'admin', role: 'admin' });
@@ -91,7 +98,7 @@ describe('site settings discovery and saving', () => {
     expect(search).toHaveValue('');
     expect(screen.getByLabelText('Terms in Chinese')).toHaveValue('Reviewable terms');
     expect(screen.queryByLabelText('Hold password')).toBeNull();
-    await view.user.click(screen.getByRole('button', { name: 'Legal holds', exact: true }));
+    await view.user.click(screen.getByRole('button', { name: /^Legal holds$/ }));
     expect(screen.getByLabelText('Hold password')).toBeVisible();
     expect(search.closest('form')!.contains(screen.getByLabelText('Hold password'))).toBe(false);
   });
