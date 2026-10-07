@@ -40,6 +40,8 @@ func TestUpgradeFromVersionedSource(t *testing.T) {
 	case "2":
 	case "3":
 		expected = aiPlayersManifestHash
+	case "4":
+		expected = managementAndGamesManifestHash
 	default:
 		t.Fatal("exact source schema version must be supplied")
 	}

@@ -11,7 +11,7 @@ import (
 )
 
 func (p duelPort) AIStart(ctx context.Context, tx *sql.Tx, input ports.AIStart, write ports.AIStartMutation) error {
-	if p.game != "bidding" || write == nil || !p.validID(input.SessionID, false) || !validDuelMeta(input.Meta) || input.UserID <= 0 || input.Meta.ActorUserID != input.UserID || input.Ticket.Sign() < 0 {
+	if (p.game != "bidding" && p.game != "gwent") || write == nil || !p.validID(input.SessionID, false) || !validDuelMeta(input.Meta) || input.UserID <= 0 || input.Meta.ActorUserID != input.UserID || input.Ticket.Sign() < 0 {
 		return ledger.ErrInvalidPlan
 	}
 	wallets, err := walletAccounts(ctx, tx, input.UserID)
@@ -46,7 +46,7 @@ func (p duelPort) AIStart(ctx context.Context, tx *sql.Tx, input ports.AIStart, 
 			return err
 		}
 		var n int
-		err := tx.QueryRowContext(ctx, `SELECT count(*) FROM game_duel_sessions s JOIN game_duel_seats h ON h.session_id=s.id JOIN game_duel_seats b ON b.session_id=s.id AND b.seat_no<>h.seat_no WHERE s.id=? AND s.game_key='bidding' AND s.economy='ai_challenge' AND s.state='active' AND s.ticket_milli=? AND s.general_account_id=? AND s.game_account_id=? AND s.ledger_rows_remaining=? AND h.participant_kind='human' AND h.user_id=? AND h.general_paid_milli=? AND h.game_paid_milli=? AND b.participant_kind='bot'`, input.SessionID, input.Ticket.Big().Int64(), accounts.General, accounts.Game, db.EncodeU128(hold), input.UserID, payment.General.Big().Int64(), payment.Game.Big().Int64()).Scan(&n)
+		err := tx.QueryRowContext(ctx, `SELECT count(*) FROM game_duel_sessions s JOIN game_duel_seats h ON h.session_id=s.id JOIN game_duel_seats b ON b.session_id=s.id AND b.seat_no<>h.seat_no WHERE s.id=? AND s.game_key=? AND s.economy='ai_challenge' AND s.state='active' AND s.ticket_milli=? AND s.general_account_id=? AND s.game_account_id=? AND s.ledger_rows_remaining=? AND h.participant_kind='human' AND h.user_id=? AND h.general_paid_milli=? AND h.game_paid_milli=? AND b.participant_kind='bot'`, input.SessionID, p.game, input.Ticket.Big().Int64(), accounts.General, accounts.Game, db.EncodeU128(hold), input.UserID, payment.General.Big().Int64(), payment.Game.Big().Int64()).Scan(&n)
 		if err != nil {
 			return err
 		}
@@ -78,13 +78,13 @@ func (p duelPort) AIStart(ctx context.Context, tx *sql.Tx, input ports.AIStart, 
 }
 
 func (p duelPort) AITerminal(ctx context.Context, tx *sql.Tx, input ports.AIFinish, write ports.AITerminalMutation) error {
-	if p.game != "bidding" || write == nil || !p.validID(input.SessionID, false) || !validDuelMeta(input.Meta) || input.Meta.ActorUserID != 0 || input.Reward.Sign() < 0 {
+	if (p.game != "bidding" && p.game != "gwent") || write == nil || !p.validID(input.SessionID, false) || !validDuelMeta(input.Meta) || input.Meta.ActorUserID != 0 || input.Reward.Sign() < 0 {
 		return ledger.ErrInvalidPlan
 	}
 	var user, ticket, general, game int64
 	var accounts ledger.AccountPair
 	var remaining []byte
-	err := tx.QueryRowContext(ctx, `SELECT h.user_id,s.ticket_milli,h.general_paid_milli,h.game_paid_milli,s.general_account_id,s.game_account_id,s.ledger_rows_remaining FROM game_duel_sessions s JOIN game_duel_seats h ON h.session_id=s.id AND h.participant_kind='human' WHERE s.id=? AND s.game_key='bidding' AND s.economy='ai_challenge' AND s.state='active'`, input.SessionID).Scan(&user, &ticket, &general, &game, &accounts.General, &accounts.Game, &remaining)
+	err := tx.QueryRowContext(ctx, `SELECT h.user_id,s.ticket_milli,h.general_paid_milli,h.game_paid_milli,s.general_account_id,s.game_account_id,s.ledger_rows_remaining FROM game_duel_sessions s JOIN game_duel_seats h ON h.session_id=s.id AND h.participant_kind='human' WHERE s.id=? AND s.game_key=? AND s.economy='ai_challenge' AND s.state='active'`, input.SessionID, p.game).Scan(&user, &ticket, &general, &game, &accounts.General, &accounts.Game, &remaining)
 	if err != nil {
 		return err
 	}

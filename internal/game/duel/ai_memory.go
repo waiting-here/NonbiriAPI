@@ -16,6 +16,9 @@ import (
 func aiChallengeScope(game, challenge string) string { return "ai:" + game + ":" + challenge }
 
 func (s *Service) readAIMemory(ctx context.Context, tx *sql.Tx, user int64, terms AITerms, now int64) (bool, json.RawMessage, int, error) {
+	if provider, ok := s.aiAdapter.(interface{ UsesMemory() bool }); ok && !provider.UsesMemory() {
+		return false, nil, 0, nil
+	}
 	enabled := true
 	if err := tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT memory_enabled FROM game_ai_preferences WHERE user_id=? AND bot_id=?),1)`, user, terms.BotID).Scan(&enabled); err != nil {
 		return false, nil, 0, err
@@ -48,6 +51,9 @@ func (s *Service) readAIMemory(ctx context.Context, tx *sql.Tx, user int64, term
 }
 
 func (s *Service) saveAIMemory(ctx context.Context, tx *sql.Tx, v *sessionRecord, now int64) error {
+	if provider, ok := s.aiAdapter.(interface{ UsesMemory() bool }); ok && !provider.UsesMemory() {
+		return nil
+	}
 	if v.Reason != "rounds" || v.Outcome == "system_cancelled" {
 		return nil
 	}

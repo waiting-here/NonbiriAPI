@@ -51,6 +51,49 @@ eligible human bids by relative hand position; forced single-card choices,
 timeouts and cancelled matches do not teach preferences. Recent revealed bids
 also inform the current match when cross-match memory is off.
 
+## Gwent challenges
+
+AI Gwent provides four stable built-in challenges, one each for OpenAI,
+DeepSeek, Claude and Gemini. Its original local scorer evaluates legal moves;
+opening exchanges and effect choices use the original automatic choices. It does
+not call an external model. Hidden opposing card identities and unknown draw
+order are excluded from its observation.
+
+The administrator chooses one original deck preset for each faction. All sixteen
+presets are available: `standard-balanced`, `standard-resource`,
+`standard-bond` and `standard-control` for each of the four factions. These
+configure the opponent's deck, not adjustable scorer weights. The policy definition
+is `{schema:"gwent-local/v1",faction,preset}`, where `faction` is
+`openai|deepseek|claude|gemini` and `preset` is one of those four IDs. The built-in
+challenges initially use `standard-balanced`. Editing their deck, name or prices
+retains their challenge IDs and first-clear status.
+
+Gwent's AI entry, policies and players start disabled, with zero tickets and
+first-clear rewards. They are independent of Bidding Duel and Gwent's Standard
+PvP ticket, deductions and switch. Enable the games master switch, Gwent, its AI
+entry and the chosen player/strategy before admitting challenges.
+
+Players submit their own legal deck with the queue request. The accepted human
+deck, opponent preset, immutable policy version and prices remain frozen for that
+entry. Waiting is unpaid; admission charges the frozen ticket, game credits first.
+A normal win earns the configured game-credit reward once per challenge. Normal
+completion, surrender, draws and a legal technical fallback do not refund a ticket;
+system cancellation refunds its original payment sources. AI challenges affect
+neither PvP win rankings nor Elo, and grant no newcomer reward. The separate free
+local AI-versus-AI demo creates no server match, result, ranking or reward.
+
+Gwent collects and uses no personal decision memory, exposes no preference or
+strategy-preview route, and reports `memory_enabled:false,memory_samples:0`.
+The common administrator player body retains `memory_days,memory_games` with the
+existing ranges; keep their returned values when editing Gwent players. They do
+not enable Gwent memory. Its admin response has four faction templates and an
+empty `scenarios` list.
+
+Account export v13 includes `gwent.ai` first-clear records and retained match
+snapshots; preference and memory collections are empty. Account deletion removes
+private links and data while retaining anonymous public match facts and the
+minimal same-identity receipt that prevents a repeated first-clear reward.
+
 ## HTTP routes
 
 All routes use the station/session, origin, strict JSON, idempotency and error
@@ -69,6 +112,13 @@ require an `Idempotency-Key` except the read-only preview.
 | `POST /admin/api/games/bidding/ai/policies` | Strategy body below → saved policy/version |
 | `POST /admin/api/games/bidding/ai/bots` | Player body below → saved player |
 | `POST /admin/api/games/bidding/ai/preview` | `{definition,scenario}` → `{candidates,matched_rule,filter_empty,memory_weight}` |
+| `GET /api/games/gwent/ai` | Same offer shape; each `terms.ai` adds the frozen `bot_loadout` |
+| `POST /api/games/gwent/queue` | `{mode:"ai",bot_id,expected_terms_hash,loadout}` → 202 `{queue_id,revision,deadline}`; no device token |
+| `DELETE /api/games/gwent/queue/{gaq_id}` | `{expected_revision:"1"}` → 204; unpaid cancellation |
+| `GET /admin/api/games/gwent/ai` | `{settings,policies,bots,presets,scenarios}`; `scenarios:[]` |
+| `POST /admin/api/games/gwent/ai/settings` | `{enabled,revision}` → updated settings |
+| `POST /admin/api/games/gwent/ai/policies` | Same policy body, with the Gwent definition above → saved policy/version |
+| `POST /admin/api/games/gwent/ai/bots` | Same player body → saved player |
 
 Settings revisions and expected revisions are decimal strings. Creation uses
 `id:"",expected_revision:"0"`; edits use the returned ID/revision. Names have
@@ -86,23 +136,29 @@ per policy. A policy response adds `revision,version,source_id,schema_id`.
 A player write is
 `{id,expected_revision,name,description,enabled,policy_id,policy_version,ticket,
 first_reward,memory_days,memory_games,new_challenge}`.
-There are at most 100 players. Memory defaults to 30 days/30 games, with ranges
-1–30/1–100. A player response replaces `expected_revision,new_challenge` with
-`revision,challenge_id`. IDs use `bot_`, `aip_`, `aic_` and `aiq_` prefixes.
+There are at most 100 players. Bidding Duel memory defaults to 30 days/30 games.
+The common player fields accept ranges 1–30/1–100. A player response replaces
+`expected_revision,new_challenge` with
+`revision,challenge_id`. Player, policy and challenge IDs use `bot_`, `aip_` and
+`aic_`; queue IDs use `aiq_` for Bidding Duel and `gaq_` for Gwent.
 
 Offer terms include the existing duel fields plus `economy:"ai_challenge"` and
 `ai:{bot_id,bot_name,description,revision,challenge_id,rules_key,policy_id,
 policy_version,source_id,policy_schema,first_reward,memory_days,memory_games}`.
-Settings, identity, balance and accepted terms are rechecked at admission. A
-changed hash or revision returns `409 conflict`; insufficient credit rejects
+For Gwent, `ai` also includes `bot_loadout:{faction,leader,cards:[{id,count}]}`.
+The required queue `loadout` uses the same deck shape and the existing Gwent
+catalog/deck limits. It is frozen separately from the opponent offer hash. The
+queue state returns the accepted human `loadout`; current and result AI terms
+retain `bot_loadout`. Settings, identity, balance and accepted terms are rechecked
+at admission. A changed hash or revision returns `409 conflict`; insufficient credit rejects
 admission without a payment; full queues return `resource_limit`. A failed queue
 appears in state as `ai_queue_error`: `expired`, `closed`,
 `account_unavailable`, `insufficient_credits`, `server_restart`.
 The failure receipt lasts 120 seconds; a new accepted entry replaces it.
 
-AI waiting is FIFO, capped at 64 entries and 120 seconds. Up to ten AI matches
-run at once; one user cannot occupy both AI and PvP for the same game. The local
-source has two compute slots, a 250 ms budget including waiting, and a 500 ms
+AI waiting is FIFO, capped at 64 entries and 120 seconds per game. Up to ten AI
+matches run at once per game; one user cannot occupy both AI and PvP for the same
+game. The local source has two compute slots, a 250 ms budget including waiting, and a 500 ms
 submission margin before the game deadline. Source timeout/failure/invalid action
 uses the game's legal automatic choice. Technical fallback does not refund or
 remove otherwise valid first-clear eligibility.
@@ -121,8 +177,9 @@ first-clear records; see the [lifecycle checklist](data-lifecycle-checklist.md#a
 
 `internal/game/ai` defines a game-independent capability, request/window/result
 protocol and bounded pool. `internal/game/bidding` adapts visible observations,
-legal actions, memory and local policies. The duel runtime owns admission,
-authoritative submission and settlement.
+legal actions, memory and local policies. `internal/game/gwent` adapts the original
+local scorer, preset decks and sequential choices without personal memory. The
+duel runtime owns admission, authoritative submission and settlement.
 
 A source implements `ID`, `Supports` and `Decide(context, Request)`. It need not
 return scores or text. Protocol 1 currently registers `choice/v1`, where a source

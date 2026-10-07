@@ -61,9 +61,9 @@ func ClassifyForAudit(kind Kind, sourceID string) AuditClassification {
 	case KindCatchReward:
 		channel, behavior = "steadycatch", "reward"
 	case KindAITicket:
-		channel, behavior = "bidding", "reserve"
+		channel, behavior = duelIDGame(sourceID, false), "reserve"
 	case KindAITerminal:
-		channel, behavior = "bidding", "settlement"
+		channel, behavior = duelIDGame(sourceID, false), "settlement"
 	case KindGameOnboardingReward:
 		channel, behavior = "onboarding", "reward"
 	case KindActivityLoan:

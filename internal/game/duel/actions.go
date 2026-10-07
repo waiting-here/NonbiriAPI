@@ -148,6 +148,7 @@ func (s *Service) act(ctx context.Context, in ActionInput, surrender bool) (Muta
 // authoritative actor/window/deadline checks in their transaction.
 func (s *Service) commitAcceptedAction(ctx context.Context, tx *sql.Tx, v *sessionRecord, expected db.U128, seat int, action json.RawMessage, origin, failure string, now int64) (activities.PublishFacts, error) {
 	if _, ok := v.rules.(SequentialRules); ok {
+		recordActionSource(v, seat, action, origin, failure, now)
 		return s.step(ctx, tx, v, expected, seat, action, origin == "timeout", now)
 	}
 	v.Seats[seat].Action = action

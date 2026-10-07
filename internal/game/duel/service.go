@@ -60,6 +60,7 @@ type Options struct {
 	ReportError     func(error)
 }
 type Service struct {
+	aiQueuePrefix               string
 	aiAdapter                   AIAdapter
 	aiPool                      *ai.Pool
 	aiCompiled                  sync.Map
@@ -99,6 +100,10 @@ func New(o Options) (*Service, error) {
 	s := &Service{database: o.Database, descriptor: o.Descriptor, rules: o.Rules, finance: o.Finance, authorizer: o.UserAuthorizer, continuation: o.Continuation, limiter: o.Limiter, pools: o.Pools, publisher: o.Publisher, now: o.Now, generateID: o.GenerateID, reportError: o.ReportError, actions: map[int64][]time.Time{}}
 	s.adminAuthorizer, s.adminAudit, s.exporting = o.AdminAuthorizer, o.AdminAudit, map[int64]bool{}
 	s.aiAdapter = o.AI
+	s.aiQueuePrefix = "aiq_"
+	if s.rules.ID() == "gwent" {
+		s.aiQueuePrefix = "gaq_"
+	}
 	if o.AI != nil {
 		if _, ok := o.Finance.(finance.AIDuel); !ok {
 			return nil, ErrInvariant

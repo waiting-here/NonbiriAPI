@@ -105,6 +105,8 @@ func New(options Options) (*Runtime, error) {
 			var aiAdapter duel.AIAdapter
 			if descriptor.ID == game.BiddingID {
 				aiAdapter = bidding.AIAdapter{}
+			} else if descriptor.ID == game.GwentID {
+				aiAdapter = gwent.AIAdapter{}
 			}
 			service, err := duel.New(duel.Options{
 				AI:       aiAdapter,

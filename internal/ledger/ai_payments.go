@@ -5,7 +5,7 @@ import "github.com/waiting-here/NonbiriAPI/internal/db"
 // AI entry fees keep their original currencies until a terminal decision.
 func NewAITicket(meta Meta, id string, wallets, escrow AccountPair, payment Payment) (Plan, error) {
 	total, err := paymentTotal(payment)
-	if err != nil || !positive(total) || !validPrimitive(total) || !wallets.valid() || !escrow.valid() || duelIDGame(id, false) != "bidding" {
+	if err != nil || !positive(total) || !validPrimitive(total) || !wallets.valid() || !escrow.valid() || (duelIDGame(id, false) != "bidding" && duelIDGame(id, false) != "gwent") {
 		return Plan{}, ErrInvalidPlan
 	}
 	p, err := newPlan(meta, KindAITicket, sourceDuelSession, id, db.U128{})
@@ -21,7 +21,7 @@ func NewAITicket(meta Meta, id string, wallets, escrow AccountPair, payment Paym
 // and issues a first-clear game reward. A wholly free result needs no ledger row.
 func NewAITerminal(meta Meta, id string, escrow, wallets, platforms AccountPair, externalGame int64, payment Payment, reward Amount, cancelled bool) (Plan, error) {
 	total, err := paymentTotal(payment)
-	if err != nil || !validNonnegativePrimitive(total) || !validNonnegativePrimitive(reward) || total.IsZero() && reward.IsZero() || cancelled && !reward.IsZero() || !escrow.valid() || !wallets.valid() || meta.ActorUserID != 0 || duelIDGame(id, false) != "bidding" {
+	if err != nil || !validNonnegativePrimitive(total) || !validNonnegativePrimitive(reward) || total.IsZero() && reward.IsZero() || cancelled && !reward.IsZero() || !escrow.valid() || !wallets.valid() || meta.ActorUserID != 0 || (duelIDGame(id, false) != "bidding" && duelIDGame(id, false) != "gwent") {
 		return Plan{}, ErrInvalidPlan
 	}
 	ref, err := DuelSessionReservation(id)

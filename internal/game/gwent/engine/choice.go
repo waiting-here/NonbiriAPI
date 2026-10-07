@@ -37,6 +37,7 @@ func (s *State) choose(seat int, choice Choice, action Action, random io.Reader)
 					return err
 				}
 			} else {
+				choice.Selected = append(choice.Selected, id)
 				p.Deck = append(p.Deck, id)
 			}
 			drawn := p.Deck[0]

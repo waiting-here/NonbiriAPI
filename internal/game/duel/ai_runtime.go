@@ -5,7 +5,9 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"io"
 	"math/rand/v2"
 	"strconv"
 	"time"
@@ -89,7 +91,18 @@ func (s *Service) driveAI(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		request.Window = ai.Window{Match: v.ID, Actor: strconv.Itoa(seat), Token: v.PhaseSeq.Decimal(), Phase: v.Phase}
+		token := v.PhaseSeq.Decimal()
+		if rules, ok := v.rules.(SequentialRules); ok {
+			ids, err := rules.Decisions(v.Mode, v.Payload.Rules)
+			if err != nil {
+				return err
+			}
+			token = ids[seat]
+			if token == "" {
+				continue
+			}
+		}
+		request.Window = ai.Window{Match: v.ID, Actor: strconv.Itoa(seat), Token: token, Phase: v.Phase}
 		request.DecisionID = v.ID + "/" + request.Window.Actor + "/" + request.Window.Token
 		request.RulesVersion = v.Terms.ContentHash
 		// Wall-clock game deadlines become a monotonic local budget. The final
@@ -176,7 +189,15 @@ func (s *Service) submitAI(ctx context.Context, request ai.Request, seat int, ph
 	if v.Economy != AIEconomy || v.AI == nil || v.AI.BotSeat != seat || v.Seats[seat].Kind != "bot" {
 		return ErrInvariant
 	}
-	if v.State != "active" || v.PhaseSeq != phase || v.Seats[seat].Locked {
+	validWindow := v.PhaseSeq == phase
+	if rules, ok := v.rules.(SequentialRules); ok {
+		ids, err := rules.Decisions(v.Mode, v.Payload.Rules)
+		if err != nil {
+			return err
+		}
+		validWindow = ids[seat] != "" && ids[seat] == request.Window.Token
+	}
+	if v.State != "active" || !validWindow || v.Seats[seat].Locked {
 		return ErrConflict
 	}
 	if facts, changed, err := s.advance(ctx, tx, &v, now); err != nil {
@@ -203,7 +224,7 @@ func (s *Service) submitAI(ctx context.Context, request ai.Request, seat int, ph
 		}
 	}
 	if failure != "" {
-		body, err = v.rules.Automatic(v.Mode, v.Payload.Rules, seat)
+		body, err = s.aiFallback(&v, seat, request)
 		if err != nil {
 			return err
 		}
@@ -214,7 +235,7 @@ func (s *Service) submitAI(ctx context.Context, request ai.Request, seat int, ph
 			return err
 		}
 		failure = "illegal_action"
-		body, err = v.rules.Automatic(v.Mode, v.Payload.Rules, seat)
+		body, err = s.aiFallback(&v, seat, request)
 		if err != nil {
 			return err
 		}
@@ -241,4 +262,23 @@ func (s *Service) submitAI(ctx context.Context, request ai.Request, seat int, ph
 	}
 	s.publish(ctx, facts)
 	return nil
+}
+
+// aiFallback keeps provider failures separate from human timeout accounting.
+func (s *Service) aiFallback(v *sessionRecord, seat int, request ai.Request) (json.RawMessage, error) {
+	if rules, ok := v.rules.(interface {
+		AIFallback(string, json.RawMessage, int, io.Reader) (json.RawMessage, error)
+	}); ok {
+		return rules.AIFallback(v.Mode, v.Payload.Rules, seat, aiRandomReader{request.Random})
+	}
+	return v.rules.Automatic(v.Mode, v.Payload.Rules, seat)
+}
+
+type aiRandomReader struct{ random ai.Random }
+
+func (r aiRandomReader) Read(body []byte) (int, error) {
+	for i := range body {
+		body[i] = byte(r.random.IntN(256))
+	}
+	return len(body), nil
 }

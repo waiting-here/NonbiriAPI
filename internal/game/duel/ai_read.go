@@ -81,6 +81,10 @@ func (s *Service) ReadAI(ctx context.Context, identity Identity) (AIHome, error)
 		if err := tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT memory_enabled FROM game_ai_preferences WHERE user_id=? AND bot_id=?),1),min(?,(SELECT count(*) FROM game_ai_memories WHERE user_id=? AND bot_id=? AND feature_version=? AND completed_at>? AND expires_at>?))`, identity.UserID, bot.ID, bot.MemoryGames, identity.UserID, bot.ID, s.aiAdapter.FeatureVersion(), now-int64(bot.MemoryDays)*86400, now).Scan(&offer.MemoryEnabled, &offer.MemorySamples); err != nil {
 			return home, err
 		}
+		if provider, ok := s.aiAdapter.(interface{ UsesMemory() bool }); ok && !provider.UsesMemory() {
+			offer.MemoryEnabled = false
+			offer.MemorySamples = 0
+		}
 		home.Bots = append(home.Bots, offer)
 	}
 	return home, nil
@@ -138,5 +142,5 @@ func (s *Service) projectAIQueue(ctx context.Context, tx *sql.Tx, id string) (*Q
 	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM game_ai_queue WHERE game_key=? AND state='waiting' AND ordinal<=(SELECT ordinal FROM game_ai_queue WHERE id=?)`, s.rules.ID(), id).Scan(&position); err != nil {
 		return nil, err
 	}
-	return &Queue{ID: q.ID, Revision: "1", Mode: "ai", Deadline: q.Deadline, Ticket: q.Snapshot.Terms.Ticket, Payment: game.PaymentFromMilli(0, 0), TermsHash: q.TermsHash, RulesVersion: 1, Economy: AIEconomy, AI: q.Snapshot.Terms.AI, Position: position}, nil
+	return &Queue{Loadout: q.Snapshot.HumanLoadout, ID: q.ID, Revision: "1", Mode: "ai", Deadline: q.Deadline, Ticket: q.Snapshot.Terms.Ticket, Payment: game.PaymentFromMilli(0, 0), TermsHash: q.TermsHash, RulesVersion: 1, Economy: AIEconomy, AI: q.Snapshot.Terms.AI, Position: position}, nil
 }
