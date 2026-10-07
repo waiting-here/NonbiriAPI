@@ -2684,7 +2684,9 @@
       "accountPresentation.deleteAction": "Delete account…"
     },
     "lakeNotes": {
-      "back": "Back to games",
+      "exchangeAvailable": "Fishing is free. Coin exchange is available below.",
+      "exchangeUnavailable": "Fishing is free. Coin exchange is currently closed; catches stay in the game.",
+      "back": "Back to game center",
       "intro": "Hold Space or the fishing button to rise; release to fall. Keep the fish inside the catch bar.",
       "entryHeading": "Entry for this period",
       "entryFee": "Entry fee for this period: {{amount}} general credits",
