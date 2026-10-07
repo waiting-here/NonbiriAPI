@@ -235,7 +235,13 @@ func (s *State) endTurn(seat int, kind string, _ io.Reader) error {
 }
 func (s *State) endRound(random io.Reader) error {
 	diff := s.difference()
-	record := RoundRecord{Round: s.Round, Scores: s.Scores()}
+	record := RoundRecord{
+		Round: s.Round, Scores: s.Scores(),
+		LivesBefore: &[2]int{s.Players[0].Lives, s.Players[1].Lives},
+	}
+	for row, name := range rows {
+		record.Rows = append(record.Rows, RoundRow{Row: name, Scores: [2]int{s.RowTotal(0, row), s.RowTotal(1, row)}})
+	}
 	if diff != 0 {
 		winner := 0
 		if diff < 0 {
@@ -264,6 +270,7 @@ func (s *State) endRound(random io.Reader) error {
 			p.Lives--
 		}
 	}
+	s.Rounds[len(s.Rounds)-1].LivesAfter = &[2]int{s.Players[0].Lives, s.Players[1].Lives}
 	s.clearWeather()
 	var effects []Effect
 	// Snapshot before clearing: an avenger's successor remains for the next round.

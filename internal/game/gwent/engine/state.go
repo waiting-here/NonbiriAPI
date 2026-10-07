@@ -38,10 +38,17 @@ type Row struct {
 	Special int   `json:"special,omitempty"`
 	Total   int   `json:"total"`
 }
-type RoundRecord struct {
-	Round  int    `json:"round"`
+type RoundRow struct {
+	Row    string `json:"row"`
 	Scores [2]int `json:"scores"`
-	Winner *int   `json:"winner"`
+}
+type RoundRecord struct {
+	Round       int        `json:"round"`
+	Scores      [2]int     `json:"scores"`
+	Winner      *int       `json:"winner"`
+	Rows        []RoundRow `json:"rows,omitempty"`
+	LivesBefore *[2]int    `json:"lives_before,omitempty"`
+	LivesAfter  *[2]int    `json:"lives_after,omitempty"`
 }
 type Result struct {
 	Winner *int   `json:"winner"`
