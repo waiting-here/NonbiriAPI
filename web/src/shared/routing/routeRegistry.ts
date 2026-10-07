@@ -179,6 +179,18 @@ export const USER_ROUTE_DESCRIPTORS = [
     registered: true,
   }),
   user({
+    id: 'game-steady-catch',
+    path: '/games/steady-catch',
+    access: 'user', layout: 'game', registered: true,
+  }),
+  user({
+    id: 'game-gwent',
+    path: '/games/gwent',
+    access: 'user',
+    layout: 'game',
+    registered: true,
+  }),
+  user({
     id: 'game-blackjack',
     path: '/games/blackjack',
     access: 'user',

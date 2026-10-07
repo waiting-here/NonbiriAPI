@@ -183,13 +183,16 @@ func operationChannelCondition(f Filter, column string) string {
 	case ledger.KindDuelQueueReserve, ledger.KindDuelQueueRelease, ledger.KindDuelSessionStart, ledger.KindDuelTerminal:
 		bidding := fmt.Sprintf("(substr(%s,1,4)='bid_' OR substr(%s,1,5)='bidq_')", column, column)
 		likes := fmt.Sprintf("(substr(%s,1,4)='lik_' OR substr(%s,1,5)='likq_')", column, column)
+		gwent := fmt.Sprintf("(substr(%s,1,4)='gwt_' OR substr(%s,1,5)='gwtq_')", column, column)
 		switch f.Channel {
 		case "bidding":
 			return " AND " + bidding
 		case "likes":
 			return " AND " + likes
+		case "gwent":
+			return " AND " + gwent
 		case "unclassified":
-			return " AND NOT (" + bidding + " OR " + likes + ")"
+			return " AND NOT (" + bidding + " OR " + likes + " OR " + gwent + ")"
 		default:
 			return " AND 0"
 		}

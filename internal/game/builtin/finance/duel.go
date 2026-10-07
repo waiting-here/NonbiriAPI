@@ -22,6 +22,8 @@ func (p duelPort) validID(id string, queue bool) bool {
 	prefix := "bid_"
 	if p.game == "likes" {
 		prefix = "lik_"
+	} else if p.game == "gwent" {
+		prefix = "gwt_"
 	} else if p.game != "bidding" {
 		return false
 	}

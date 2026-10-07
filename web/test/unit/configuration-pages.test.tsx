@@ -944,6 +944,8 @@ const initialGameConfig: GamesConfig = {
   },
   bidding: duelConfigFixture('bidding'),
   likes: duelConfigFixture('likes'),
+  gwent: duelConfigFixture('gwent'),
+  steadycatch: { enabled: false, price: '0', first_clear_reward: '0' },
   revision: '7',
   master_enabled: true,
   fishing: {
@@ -1063,6 +1065,8 @@ function installGameServer(options: { rejectPatch?: boolean } = {}) {
       blackjack: structuredClone(mutable.blackjack),
       bidding: structuredClone(previous.bidding),
       likes: structuredClone(previous.likes),
+    gwent: structuredClone(previous.gwent),
+    steadycatch: structuredClone(previous.steadycatch),
       revision: String(BigInt(state.revision) + 1n),
       master_enabled: mutable.master_enabled,
       fishing: structuredClone(mutable.fishing),
@@ -1188,10 +1192,12 @@ describe('standalone Admin Games feature', () => {
     await rendered.user.click(save);
     await waitFor(() => expect(server.patches).toHaveLength(1));
     expect(server.patches[0]).toEqual({
+      steadycatch: initialGameConfig.steadycatch,
       expected_revision: '7',
       master_enabled: true,
       bidding: initialGameConfig.bidding,
       likes: initialGameConfig.likes,
+    gwent: initialGameConfig.gwent,
       blackjack: initialGameConfig.blackjack,
       fishing: {
         ...initialGameConfig.fishing,

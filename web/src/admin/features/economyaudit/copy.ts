@@ -39,6 +39,8 @@ export function channelLabel(channel: string, t: Text) {
         rps: t('石头剪刀布', 'Rock paper scissors'),
         bidding: t('竞标对决', 'Bidding duel'),
         likes: t('回合制对战', 'Turn-based battle'),
+        gwent: t('AI 昆特牌', 'AI Gwent'),
+        steadycatch: t('稳稳地接住你', 'Catch You Steadily'),
         blackjack: t('二十一点', 'Blackjack'),
         onboarding: t('新人奖励', 'Onboarding rewards'),
         loan: t('赛博网贷', 'Credit exchange loan'),

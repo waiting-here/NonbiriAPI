@@ -885,7 +885,8 @@
       },
       "games": {
         "bidding": "Bidding",
-        "likes": "Likes"
+        "likes": "Likes",
+        "gwent": "AI Gwent"
       }
     },
     "riskAudit": {

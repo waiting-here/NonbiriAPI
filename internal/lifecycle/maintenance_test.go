@@ -31,7 +31,7 @@ func recoveryAdaptersWithRecorder(record func(string)) RecoveryAdapters {
 		Idempotency:        makeAdapter("idempotency"), Discovery: makeAdapter("discovery"), Claims: makeAdapter("claims"),
 		Thursday: makeAdapter("thursday"), Reports: makeAdapter("reports"), Fishing: makeAdapter("fishing"),
 		LinkLink: makeAdapter("linklink"), RPS: makeAdapter("rps"), Donations: makeAdapter("donations"), Secrets: makeAdapter("secrets"),
-		Bidding: makeAdapter("bidding"), Likes: makeAdapter("likes"), Blackjack: makeAdapter("blackjack"),
+		Bidding: makeAdapter("bidding"), Likes: makeAdapter("likes"), SteadyCatch: makeAdapter("steadycatch"), Gwent: makeAdapter("gwent"), Blackjack: makeAdapter("blackjack"),
 	}
 }
 
@@ -57,7 +57,7 @@ func retentionAdaptersWithRecorder(record func(string)) RetentionAdapters {
 		Observability: makeAdapter("observability"), RiskAudit: makeAdapter("risk_audit"),
 		Issues: makeAdapter("issues"), Fishing: makeAdapter("fishing"), LinkLink: makeAdapter("linklink"),
 		RPS: makeAdapter("rps"), Reports: makeAdapter("reports"), Donations: makeAdapter("donations"),
-		Bidding: makeAdapter("bidding"), Likes: makeAdapter("likes"), Blackjack: makeAdapter("blackjack"),
+		Bidding: makeAdapter("bidding"), Likes: makeAdapter("likes"), SteadyCatch: makeAdapter("steadycatch"), Gwent: makeAdapter("gwent"), Blackjack: makeAdapter("blackjack"),
 		Charity: makeAdapter("charity"), Idempotency: makeAdapter("idempotency"), Secrets: makeAdapter("secrets"),
 	}
 }
@@ -74,10 +74,10 @@ func TestMaintenanceRunsFrozenRecoveryThenRetentionOrder(t *testing.T) {
 	}
 	want := []string{
 		"recovery:personal_automation", "recovery:idempotency", "recovery:discovery", "recovery:claims", "recovery:thursday", "recovery:reports",
-		"recovery:fishing", "recovery:linklink", "recovery:rps", "recovery:bidding", "recovery:likes", "recovery:blackjack", "recovery:donations", "recovery:fat_fish", "recovery:secrets",
+		"recovery:fishing", "recovery:linklink", "recovery:rps", "recovery:bidding", "recovery:likes", "recovery:steadycatch", "recovery:gwent", "recovery:blackjack", "recovery:donations", "recovery:fat_fish", "recovery:secrets",
 		"recovery:governance", "recovery:charity_routing",
 		"retention:personal_automation", "retention:continuity", "retention:sessions", "retention:request_logs", "retention:audits", "retention:observability", "retention:risk_audit", "retention:issues", "retention:fishing",
-		"retention:linklink", "retention:rps", "retention:bidding", "retention:likes", "retention:blackjack", "retention:reports", "retention:fat_fish", "retention:donations", "retention:charity",
+		"retention:linklink", "retention:rps", "retention:bidding", "retention:likes", "retention:steadycatch", "retention:gwent", "retention:blackjack", "retention:reports", "retention:fat_fish", "retention:donations", "retention:charity",
 		"retention:idempotency", "retention:secrets", "retention:governance", "retention:charity_routing", "retention:request_adaptation", "retention:ledger",
 	}
 	if !reflect.DeepEqual(calls, want) {

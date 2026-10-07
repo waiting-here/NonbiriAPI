@@ -19,6 +19,8 @@
   "balance": "1000000",
   "game_balance": "0",
   "onboarding": {
+    "gwent": {"items": [], "all_completed": true},
+    "steadycatch": {"items": [], "all_completed": true},
     "blackjack": {
       "items": [
         {"key":"complete","reward":"1000","asset_type":"general","completed":false},
@@ -275,5 +277,35 @@
     "queue_capacity": 4096,
     "plan_seconds": 30,
     "settlement_seconds": 0
+  } ,
+  "gwent": {
+    "available": true,
+    "choice_seconds": 15,
+    "enabled": false,
+    "modes": {
+      "standard": {
+        "available": true,
+        "content_hash": "f40c4871d88b4ff89312be92a1f9481d8dad8118fe8913320468a24d194d3e49",
+        "enabled": false,
+        "rake_bp": {
+          "platform": 100,
+          "welfare": 100,
+          "thursday": 100
+        },
+        "terms_hash": "f6466365799e3da1ce837776123b1eb99d0ce87b18001df3f04fddd3c83f1b77",
+        "ticket": "5000"
+      }
+    },
+    "mulligan_seconds": 20,
+    "queue_capacity": 4096,
+    "queue_seconds": 120,
+    "turn_seconds": 30
+  },
+  "steadycatch": {
+    "enabled": false,
+    "price": "0",
+    "first_clear_reward": "0",
+    "available": true,
+    "first_cleared": false
   }
 }

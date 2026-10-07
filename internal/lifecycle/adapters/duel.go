@@ -18,7 +18,7 @@ type DuelAdapter struct {
 }
 
 func NewRegisteredDuel(service *host.Service, id string) *DuelAdapter {
-	if service == nil || (id != game.BiddingID && id != game.LikesID) {
+	if service == nil || (id != game.BiddingID && id != game.LikesID && id != game.GwentID) {
 		return nil
 	}
 	return &DuelAdapter{service: service, id: id}
@@ -90,11 +90,14 @@ func mapDuelExport(v duel.Export) lifecycle.DuelExport {
 	for _, item := range v.Loadouts {
 		out.Loadouts = append(out.Loadouts, lifecycle.DuelLoadoutExport{Slot: item.Slot, Revision: item.Revision, Mode: item.Mode, Loadout: append([]byte(nil), item.Loadout...), UpdatedAt: item.UpdatedAt})
 	}
+	if v.Competitive != nil {
+		out.Competitive = &lifecycle.DuelRatingExport{Rating: v.Competitive.Rating, Played: v.Competitive.Played, UpdatedAt: v.Competitive.UpdatedAt}
+	}
 	if q := v.Queue; q != nil {
 		out.Queue = &lifecycle.DuelQueueExport{Economy: q.Economy, AI: mapAITerms(q.AI), Position: q.Position, ID: q.ID, Revision: q.Revision, Mode: q.Mode, Deadline: q.Deadline, Ticket: q.Ticket, Payment: lifecycle.GamePaymentExport(q.Payment), TermsHash: q.TermsHash, RulesVersion: q.RulesVersion, Loadout: q.Loadout}
 	}
 	if s := v.Current; s != nil {
-		out.Current = &lifecycle.DuelStateExport{Economy: s.Economy, AI: mapAIView(s.AI), Sources: mapAISources(s.Sources), ID: s.ID, Game: s.Game, Mode: s.Mode, RulesVersion: s.RulesVersion, ContentHash: s.ContentHash, Revision: s.Revision, PhaseSeq: s.PhaseSeq, Phase: s.Phase, Round: s.Round, Deadline: s.Deadline, ServerNow: s.ServerNow, You: s.You, Locked: s.Locked, Ticket: s.Ticket, Rake: lifecycle.DuelRatesExport(s.Rake), OwnPayment: lifecycle.GamePaymentExport(s.OwnPayment), View: s.View, Resolution: mapDuelResolution(s.Resolution)}
+		out.Current = &lifecycle.DuelStateExport{Economy: s.Economy, AI: mapAIView(s.AI), Sources: mapAISources(s.Sources), ID: s.ID, Game: s.Game, Mode: s.Mode, RulesVersion: s.RulesVersion, ContentHash: s.ContentHash, Revision: s.Revision, PhaseSeq: s.PhaseSeq, DecisionID: s.DecisionID, Phase: s.Phase, Round: s.Round, Deadline: s.Deadline, ServerNow: s.ServerNow, You: s.You, Locked: s.Locked, Ticket: s.Ticket, Rake: lifecycle.DuelRatesExport(s.Rake), OwnPayment: lifecycle.GamePaymentExport(s.OwnPayment), View: s.View, Resolution: mapDuelResolution(s.Resolution)}
 		if r := s.RoundStart; r != nil {
 			out.Current.RoundStart = &lifecycle.DuelRoundStartExport{Round: r.Round, StartedAt: r.StartedAt, Events: r.Events}
 		}
@@ -102,6 +105,9 @@ func mapDuelExport(v duel.Export) lifecycle.DuelExport {
 	for i, m := range v.History {
 		d := m.Detail
 		out.History[i] = lifecycle.DuelMatchExport{Detail: lifecycle.DuelDetailExport{Sources: mapAISources(d.Sources), RulesVersion: d.RulesVersion, ContentHash: d.ContentHash, Ticket: d.Ticket, Rake: lifecycle.DuelRatesExport(d.Rake), Initial: d.Initial, TerminalActions: d.TerminalActions, RoundStartEvents: d.RoundStartEvents}, Rounds: mapDuelRounds(m.Rounds)}
+		if m.Competitive != nil {
+			out.History[i].Competitive = &lifecycle.DuelMatchRatingExport{Result: m.Competitive.Result, RatingBefore: m.Competitive.RatingBefore, RatingAfter: m.Competitive.RatingAfter, SettledAt: m.Competitive.SettledAt}
+		}
 		if r := d.Result; r != nil {
 			out.History[i].Detail.Result = &lifecycle.DuelResultExport{Economy: r.Economy, AI: mapAIView(r.AI), ID: r.ID, Game: r.Game, Mode: r.Mode, TerminalAt: r.TerminalAt, Outcome: r.Outcome, Reason: r.Reason, Scores: r.Scores, OwnPayment: lifecycle.GamePaymentExport(r.OwnPayment), OwnRefund: lifecycle.GamePaymentExport(r.OwnRefund), PrizeGeneral: r.PrizeGeneral, Rake: lifecycle.DuelAmountsExport(r.Rake), Resolution: mapDuelResolution(r.Resolution), You: r.You, View: r.View}
 		}

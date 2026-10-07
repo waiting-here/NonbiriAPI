@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"encoding/json"
 	"io"
 	"slices"
 
@@ -8,6 +9,10 @@ import (
 )
 
 func (s *State) drain(random io.Reader) error {
+	return s.drainRounds(random, nil)
+}
+
+func (s *State) drainRounds(random io.Reader, rounds *[]State) error {
 	for steps := 0; !s.waiting() && len(s.Queue) > 0 && s.Result == nil; steps++ {
 		if steps >= 4096 {
 			return ErrState
@@ -16,6 +21,17 @@ func (s *State) drain(random io.Reader) error {
 		s.Queue = s.Queue[1:]
 		if err := s.effect(e, random); err != nil {
 			return err
+		}
+		if rounds != nil && e.Kind == "round_after_clear" {
+			raw, err := json.Marshal(s)
+			if err != nil {
+				return err
+			}
+			var snapshot State
+			if err := json.Unmarshal(raw, &snapshot); err != nil {
+				return err
+			}
+			*rounds = append(*rounds, snapshot)
 		}
 	}
 	return nil

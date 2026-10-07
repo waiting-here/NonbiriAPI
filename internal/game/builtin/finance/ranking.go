@@ -9,6 +9,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/game/blackjack/engine"
 	ports "github.com/waiting-here/NonbiriAPI/internal/game/finance"
 	"github.com/waiting-here/NonbiriAPI/internal/game/ranking"
+	"github.com/waiting-here/NonbiriAPI/internal/game/rating"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 )
 
@@ -17,6 +18,11 @@ func recordRank(ctx context.Context, tx *sql.Tx, user int64, game, source string
 }
 
 func (p duelPort) finishRanking(ctx context.Context, tx *sql.Tx, input ports.DuelFinish, ticket int64, cuts ledger.DuelCuts) error {
+	if p.game == "gwent" {
+		if err := rating.RecordTx(ctx, tx, p.game, input.SessionID); err != nil {
+			return err
+		}
+	}
 	started, err := progressionStarted(ctx, tx, input.Meta.CreatedAt)
 	if err != nil || !started {
 		return err

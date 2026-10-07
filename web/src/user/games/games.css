@@ -620,3 +620,6 @@
   color: var(--nb-color-accent);
   background: var(--nb-color-surface-muted);
 }
+.game-gwent-hero { display: grid; grid-template-columns: repeat(4, 1fr); position: relative; aspect-ratio: 2; overflow: hidden; background: #16352f; }
+.game-gwent-hero img { width: 100%; height: 100%; object-fit: cover; }
+.game-gwent-hero span { position: absolute; bottom: 0; inset-inline: 0; padding: .6rem; background: linear-gradient(transparent, #09251feb); color: #fff; font-size: 1.5rem; font-weight: 800; letter-spacing: .18em; text-align: center; }

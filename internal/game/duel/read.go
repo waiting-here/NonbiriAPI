@@ -21,7 +21,15 @@ func (s *Service) projectState(v sessionRecord, seat int, now int64) (*State, er
 	if v.Payload.RoundStartedAt != nil {
 		start = &RoundStart{Round: v.Round, StartedAt: *v.Payload.RoundStartedAt, Events: v.Payload.RoundStartEvents}
 	}
-	return &State{Sources: visibleActionSources(v, seat), Economy: v.Economy, AI: projectAI(v), ID: v.ID, Game: s.rules.ID(), Mode: v.Mode, RulesVersion: 1, ContentHash: v.Terms.ContentHash, Revision: v.Revision.Decimal(), PhaseSeq: v.PhaseSeq.Decimal(), Phase: v.Phase, Round: v.Round, Deadline: v.Deadline, ServerNow: now, You: seat, Locked: [2]bool{v.Seats[0].Locked, v.Seats[1].Locked}, Ticket: v.Terms.Ticket, Rake: v.Terms.Rake, OwnPayment: game.PaymentFromMilli(v.Ticket, v.Seats[seat].GamePaid), View: view, Resolution: v.Payload.Resolution, RoundStart: start}, nil
+	var decision string
+	if rules, ok := v.rules.(SequentialRules); ok {
+		ids, err := rules.Decisions(v.Mode, v.Payload.Rules)
+		if err != nil {
+			return nil, err
+		}
+		decision = ids[seat]
+	}
+	return &State{Sources: visibleActionSources(v, seat), Economy: v.Economy, AI: projectAI(v), ID: v.ID, Game: s.rules.ID(), Mode: v.Mode, RulesVersion: 1, ContentHash: v.Terms.ContentHash, Revision: v.Revision.Decimal(), PhaseSeq: v.PhaseSeq.Decimal(), DecisionID: decision, Phase: v.Phase, Round: v.Round, Deadline: v.Deadline, ServerNow: now, You: seat, Locked: [2]bool{v.Seats[0].Locked, v.Seats[1].Locked}, Ticket: v.Terms.Ticket, Rake: v.Terms.Rake, OwnPayment: game.PaymentFromMilli(v.Ticket, v.Seats[seat].GamePaid), View: view, Resolution: v.Payload.Resolution, RoundStart: start}, nil
 }
 func (s *Service) projectResult(v sessionRecord, seat int) (*ResultSummary, error) {
 	if v.State != "terminal" || v.TerminalAt == nil {

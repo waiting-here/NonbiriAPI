@@ -17,11 +17,14 @@ import (
 	builtinfinance "github.com/waiting-here/NonbiriAPI/internal/game/builtin/finance"
 	"github.com/waiting-here/NonbiriAPI/internal/game/duel"
 	fishingruntime "github.com/waiting-here/NonbiriAPI/internal/game/fishing/runtime"
+	"github.com/waiting-here/NonbiriAPI/internal/game/gwent"
+	gwentconfig "github.com/waiting-here/NonbiriAPI/internal/game/gwent/config"
 	"github.com/waiting-here/NonbiriAPI/internal/game/host"
 	"github.com/waiting-here/NonbiriAPI/internal/game/likes"
 	likesconfig "github.com/waiting-here/NonbiriAPI/internal/game/likes/config"
 	"github.com/waiting-here/NonbiriAPI/internal/game/linklink"
 	"github.com/waiting-here/NonbiriAPI/internal/game/rps"
+	"github.com/waiting-here/NonbiriAPI/internal/game/steadycatch"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
@@ -141,6 +144,7 @@ func New(options Options) (*Runtime, error) {
 		},
 		game.BiddingID: duelFactory(biddingconfig.Descriptor(), bidding.Rules{}),
 		game.LikesID:   duelFactory(likesconfig.Descriptor(), likesRules),
+		game.GwentID:   duelFactory(gwentconfig.Descriptor(), gwent.Rules{}),
 		game.FishingID: func(shared host.Services) (*host.Module, error) {
 			financial, err := builtinfinance.ForModule(game.FishingID)
 			if err != nil {
@@ -152,6 +156,21 @@ func New(options Options) (*Runtime, error) {
 			}
 			defer clear(key)
 			service, err := fishingruntime.New(fishingruntime.Options{Store: options.Store, Finance: financial.Fishing, Pools: options.Pools, ActivityEvents: options.ActivityEvents, UserAuthorizer: shared.UserAuthorizer, Limiter: shared.Limiter, LeaderboardTieKey: key, Now: shared.Now})
+			if err != nil {
+				return nil, err
+			}
+			return service.Module(), nil
+		},
+		game.SteadyCatchID: func(shared host.Services) (*host.Module, error) {
+			financial, err := builtinfinance.ForModule(game.SteadyCatchID)
+			if err != nil {
+				return nil, err
+			}
+			service, err := steadycatch.New(steadycatch.Options{Shared: shared, Finance: financial.Solo, Continuation: options.Continuation, ReportError: func(err error) {
+				if options.PublishErrors != nil {
+					options.PublishErrors.ReportRPSPublishError(err)
+				}
+			}})
 			if err != nil {
 				return nil, err
 			}
@@ -185,7 +204,7 @@ func New(options Options) (*Runtime, error) {
 	if err != nil {
 		return nil, err
 	}
-	cancelDuels, err := duel.Cancellation(duels[game.BiddingID], duels[game.LikesID])
+	cancelDuels, err := duel.Cancellation(duels[game.BiddingID], duels[game.LikesID], duels[game.GwentID])
 	if err != nil {
 		_ = runtime.Close()
 		return nil, err

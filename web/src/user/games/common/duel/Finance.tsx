@@ -44,11 +44,13 @@ export function DuelFinance<V, P>({ result }: { readonly result: DuelResult<V, P
         ? text('common.accountUnavailable')
         : result.reason === 'surrender'
           ? text('common.aPlayerSurrendered')
-          : result.reason === 'target'
-            ? text('common.targetReached')
-            : result.reason === 'double-overload'
-              ? text('common.bothPlayersOverloaded')
-              : text('common.gameCompleted');
+          : result.reason === 'afk'
+            ? text('common.timeoutForfeit')
+            : result.reason === 'target'
+              ? text('common.targetReached')
+              : result.reason === 'double-overload'
+                ? text('common.bothPlayersOverloaded')
+                : text('common.gameCompleted');
   return (
     <section className="duel-finance">
       <h2>{outcomeText(result.outcome, text)}</h2>

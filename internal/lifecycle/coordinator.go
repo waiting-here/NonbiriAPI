@@ -37,6 +37,8 @@ type ExportAdapters struct {
 	RPS                RPSExporter
 	Bidding            DuelExporter
 	Likes              DuelExporter
+	SteadyCatch        CatchExporter
+	Gwent              DuelExporter
 	Blackjack          BlackjackExporter
 	Randomness         RandomnessExporter
 	Rankings           RankingExporter
@@ -62,6 +64,8 @@ type DeleteAdapters struct {
 	RPS                  DeleteAdapter
 	Bidding              DeleteAdapter
 	Likes                DeleteAdapter
+	SteadyCatch          DeleteAdapter
+	Gwent                DeleteAdapter
 	Blackjack            DeleteAdapter
 	FatFish              DeleteAdapter
 	DebugAccountStream   DeleteAdapter
@@ -86,6 +90,8 @@ func (adapters DeleteAdapters) ordered() []DeleteAdapter {
 		adapters.RPS,
 		adapters.Bidding,
 		adapters.Likes,
+		adapters.SteadyCatch,
+		adapters.Gwent,
 		adapters.Blackjack,
 		adapters.FatFish,
 		adapters.DebugAccountStream,
@@ -109,6 +115,8 @@ type RecoveryAdapters struct {
 	RPS                RecoveryAdapter
 	Bidding            RecoveryAdapter
 	Likes              RecoveryAdapter
+	SteadyCatch        RecoveryAdapter
+	Gwent              RecoveryAdapter
 	Blackjack          RecoveryAdapter
 	FatFish            RecoveryAdapter
 	Donations          RecoveryAdapter
@@ -135,6 +143,8 @@ func (adapters RecoveryAdapters) ordered() []namedRecoveryAdapter {
 		{"rps", adapters.RPS},
 		{"bidding", adapters.Bidding},
 		{"likes", adapters.Likes},
+		{"steadycatch", adapters.SteadyCatch},
+		{"gwent", adapters.Gwent},
 		{"blackjack", adapters.Blackjack},
 		{"donations", adapters.Donations},
 		{"fat_fish", adapters.FatFish},
@@ -162,6 +172,8 @@ type RetentionAdapters struct {
 	RPS                RetentionAdapter
 	Bidding            RetentionAdapter
 	Likes              RetentionAdapter
+	SteadyCatch        RetentionAdapter
+	Gwent              RetentionAdapter
 	Blackjack          RetentionAdapter
 	FatFish            RetentionAdapter
 	Reports            RetentionAdapter
@@ -193,6 +205,8 @@ func (adapters RetentionAdapters) ordered() []namedRetentionAdapter {
 		{"rps", adapters.RPS},
 		{"bidding", adapters.Bidding},
 		{"likes", adapters.Likes},
+		{"steadycatch", adapters.SteadyCatch},
+		{"gwent", adapters.Gwent},
 		{"blackjack", adapters.Blackjack},
 		{"reports", adapters.Reports},
 		{"fat_fish", adapters.FatFish},
@@ -301,7 +315,7 @@ func New(config Config) (*Coordinator, error) {
 func completeExportAdapters(a ExportAdapters) bool {
 	return a.PersonalAutomation != nil && a.Identity != nil && a.Resources != nil && a.Issues != nil && a.Ledger != nil &&
 		a.Activities != nil && a.Donations != nil && a.Charity != nil && a.Fishing != nil &&
-		a.LinkLink != nil && a.RPS != nil && a.Bidding != nil && a.Likes != nil && a.Blackjack != nil && a.Randomness != nil &&
+		a.LinkLink != nil && a.RPS != nil && a.Bidding != nil && a.Likes != nil && a.SteadyCatch != nil && a.Gwent != nil && a.Blackjack != nil && a.Randomness != nil &&
 		a.Rankings != nil && a.Penalties != nil && a.Governance != nil &&
 		a.RequestAdaptation != nil && a.Continuity != nil && a.FatFish != nil
 }
@@ -400,6 +414,18 @@ func (coordinator *Coordinator) Export(ctx context.Context, userID, decisionNow 
 		return nil, err
 	}
 	if document.Likes, finalizer, err = coordinator.export.Likes.ExportDuel(ctx, tx, request); finalizer != nil {
+		finalizers = append(finalizers, finalizer)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if document.SteadyCatch, finalizer, err = coordinator.export.SteadyCatch.ExportCatch(ctx, tx, request); finalizer != nil {
+		finalizers = append(finalizers, finalizer)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if document.Gwent, finalizer, err = coordinator.export.Gwent.ExportDuel(ctx, tx, request); finalizer != nil {
 		finalizers = append(finalizers, finalizer)
 	}
 	if err != nil {
@@ -567,10 +593,13 @@ func normalizeExportDocument(document *ExportDocument) {
 	if document.Randomness == nil {
 		document.Randomness = []RandomnessProofExport{}
 	}
+	if document.SteadyCatch.Sessions == nil {
+		document.SteadyCatch.Sessions = []json.RawMessage{}
+	}
 	if document.Blackjack.History == nil {
 		document.Blackjack.History = []BlackjackHistoryExport{}
 	}
-	for _, value := range []*DuelExport{&document.Bidding, &document.Likes} {
+	for _, value := range []*DuelExport{&document.Bidding, &document.Likes, &document.Gwent} {
 		if value.CurrentRounds == nil {
 			value.CurrentRounds = []DuelRoundExport{}
 		}
@@ -683,8 +712,11 @@ func validateExportCollectionBounds(document ExportDocument) error {
 	if blackjackRows > CollectionLimit {
 		return ErrTooLarge
 	}
-	for _, value := range []DuelExport{document.Bidding, document.Likes} {
+	for _, value := range []DuelExport{document.Bidding, document.Likes, document.Gwent} {
 		rows := len(value.CurrentRounds) + len(value.History)
+		if value.Competitive != nil {
+			rows++
+		}
 		if value.Queue != nil {
 			rows++
 		}
@@ -693,13 +725,16 @@ func validateExportCollectionBounds(document ExportDocument) error {
 		}
 		for _, item := range value.History {
 			rows += len(item.Rounds)
+			if item.Competitive != nil {
+				rows++
+			}
 		}
 		if rows > CollectionLimit {
 			return ErrTooLarge
 		}
 	}
 	lengths := []int{
-		len(document.RequestAdaptations), len(document.Continuity),
+		len(document.RequestAdaptations), len(document.Continuity), len(document.SteadyCatch.Sessions),
 		len(document.GameOnboardingHolds), len(document.Loans), len(document.GameRankings.Totals), len(document.GameRankings.Events), len(document.Penalties),
 		len(document.Randomness),
 		len(document.Endpoints), len(document.CatalogPairs), len(document.Models), len(document.Issues),

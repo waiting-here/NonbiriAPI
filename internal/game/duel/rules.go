@@ -5,6 +5,7 @@ package duel
 import (
 	"encoding/json"
 	"errors"
+	"io"
 )
 
 var (
@@ -45,6 +46,28 @@ type Transition struct {
 	Record       json.RawMessage
 	Presentation json.RawMessage
 	Round        int
+}
+
+// SequentialRules applies each accepted action immediately, including choices
+// made independently by both seats. Decision IDs belong to a seat's window;
+// another seat's action must not invalidate an otherwise unchanged choice.
+type SequentialRules interface {
+	Decisions(string, json.RawMessage) ([2]string, error)
+	Step(string, json.RawMessage, int, json.RawMessage, bool, io.Reader) (StepTransition, error)
+	Resume(string, json.RawMessage) (json.RawMessage, error)
+}
+
+type CompletedRound struct {
+	Round  int
+	Before json.RawMessage
+	After  json.RawMessage
+	Facts  json.RawMessage
+}
+
+type StepTransition struct {
+	State        json.RawMessage
+	Rounds       []CompletedRound
+	KeepDeadline bool
 }
 
 // Rules is a constructor-bound capability. No request chooses or replaces a

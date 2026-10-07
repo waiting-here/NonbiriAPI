@@ -7,8 +7,17 @@
     "max_stake": "50000",
     "stake_step": "1000",
     "default_stake": "5000",
-    "rake_bp": {"platform": 100, "welfare": 100, "thursday": 100},
-    "quick_stakes": ["1000", "5000", "10000", "50000"]
+    "rake_bp": {
+      "platform": 100,
+      "welfare": 100,
+      "thursday": 100
+    },
+    "quick_stakes": [
+      "1000",
+      "5000",
+      "10000",
+      "50000"
+    ]
   },
   "fishing": {
     "enabled": false,
@@ -151,5 +160,24 @@
         }
       }
     }
+  },
+  "gwent": {
+    "enabled": false,
+    "modes": {
+      "standard": {
+        "enabled": false,
+        "ticket": "5000",
+        "rake_bp": {
+          "platform": 100,
+          "welfare": 100,
+          "thursday": 100
+        }
+      }
+    }
+  },
+  "steadycatch": {
+    "enabled": false,
+    "price": "0",
+    "first_clear_reward": "0"
   }
 }

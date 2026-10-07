@@ -1,6 +1,7 @@
 import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
 import type { DuelResult } from './types';
 export const duelCopyKeys = {
+  'common.timeoutForfeit': 'user.games.duel.common.timeoutForfeit',
   'common.thisGameIsNotOpen': 'user.games.duel.common.thisGameIsNotOpen',
   'common.thisModeIsNotOpen': 'user.games.duel.common.thisModeIsNotOpen',
   'common.theGameIsTemporarilyUnavailableTryAgain':

@@ -349,3 +349,48 @@ export function RPSFields({ draft, disabled, edit }: Props) {
     </>
   );
 }
+
+export function CatchFields({ draft, disabled, edit }: Props) {
+  const t = useGameAdminText();
+  return (
+    <fieldset className="nb-fieldset" disabled={disabled}>
+      <legend>{t('门票与首次通关', 'Entry and first clear')}</legend>
+      <p>
+        {t(
+          '坚持 90 秒、保有生命且达到 600 分即可通关。仅首次通关发放游戏积分；金额为 0 时免费或不发奖。',
+          'Survive 90 seconds with 600 points to clear. Only the first clear awards game credits. Zero means free entry or no reward.',
+        )}
+      </p>
+      <div className="nb-grid nb-grid--2">
+        {(['price', 'first_clear_reward'] as const).map((key) => (
+          <Field
+            key={key}
+            label={
+              key === 'price'
+                ? t('门票积分', 'Entry credits')
+                : t('首通游戏积分', 'First-clear game credits')
+            }
+          >
+            {(props) => (
+              <Affix
+                {...props}
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="0.001"
+                unit={t('积分', 'credits')}
+                value={draft.steadycatch[key]}
+                onChange={(event) =>
+                  edit((current) => ({
+                    ...current,
+                    steadycatch: { ...current.steadycatch, [key]: event.target.value },
+                  }))
+                }
+              />
+            )}
+          </Field>
+        ))}
+      </div>
+    </fieldset>
+  );
+}

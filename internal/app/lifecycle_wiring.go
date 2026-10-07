@@ -398,6 +398,8 @@ func newLifecycleCoordinator(
 	rpsAdapter := lifecycleadapters.NewRegisteredRPS(gameRuntimes.Service)
 	biddingAdapter := lifecycleadapters.NewRegisteredDuel(gameRuntimes.Service, game.BiddingID)
 	likesAdapter := lifecycleadapters.NewRegisteredDuel(gameRuntimes.Service, game.LikesID)
+	catchAdapter := lifecycleadapters.NewRegisteredCatch(gameRuntimes.Service)
+	gwentAdapter := lifecycleadapters.NewRegisteredDuel(gameRuntimes.Service, game.GwentID)
 	blackjackAdapter := lifecycleadapters.NewRegisteredBlackjack(gameRuntimes.Service)
 	reportAdapter := lifecycleadapters.NewReportLifecycle(reportRepository)
 	announcementAdapter := lifecycleadapters.NewAnnouncementAuditLifecycle(announcementRepository)
@@ -422,7 +424,7 @@ func newLifecycleCoordinator(
 			Identity:           accountResources, Resources: accountResources, Issues: accountResources,
 			Ledger: ledgerAdapter, Activities: activityAdapter, Donations: donationAdapter,
 			Charity: charityAdapter, Fishing: fishingAdapter, LinkLink: linkLinkAdapter, RPS: rpsAdapter,
-			Bidding: biddingAdapter, Likes: likesAdapter, Blackjack: blackjackAdapter,
+			Bidding: biddingAdapter, Likes: likesAdapter, SteadyCatch: catchAdapter, Gwent: gwentAdapter, Blackjack: blackjackAdapter,
 			Randomness: lifecycleadapters.RandomnessAdapter{},
 			Rankings:   lifecycleadapters.RankingAdapter{}, Penalties: lifecycleadapters.PenaltyAdapter{},
 		},
@@ -437,7 +439,7 @@ func newLifecycleCoordinator(
 			IssuesAnnouncements: lifecycleadapters.NewIssueAnnouncementDelete(issueService.Sources()),
 			Donations:           donationAdapter, Activities: activityAdapter, Reports: reportAdapter,
 			Fishing: fishingAdapter, LinkLink: linkLinkAdapter, RPS: rpsAdapter,
-			Bidding: biddingAdapter, Likes: likesAdapter, Blackjack: blackjackAdapter,
+			Bidding: biddingAdapter, Likes: likesAdapter, SteadyCatch: catchAdapter, Gwent: gwentAdapter, Blackjack: blackjackAdapter,
 			DebugAccountStream: runtimeMemory,
 		},
 		Recovery: lifecycle.RecoveryAdapters{
@@ -455,6 +457,8 @@ func newLifecycleCoordinator(
 			RPS:                lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.RPSID),
 			Bidding:            lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.BiddingID),
 			Likes:              lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.LikesID),
+			SteadyCatch:        lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.SteadyCatchID),
+			Gwent:              lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.GwentID),
 			Blackjack:          lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.BlackjackID),
 			Donations:          lifecycleadapters.NewDonationRecovery(donationService),
 			Secrets:            secretAdapter,
@@ -474,7 +478,7 @@ func newLifecycleCoordinator(
 			RiskAudit:          riskRetention{repository: audits.risk, clientGuard: forwardRuntime.clientGuard},
 			Issues:             lifecycleadapters.NewIssueRetention(issueService),
 			Fishing:            fishingAdapter, LinkLink: linkLinkAdapter, RPS: rpsAdapter,
-			Bidding: biddingAdapter, Likes: likesAdapter, Blackjack: blackjackAdapter,
+			Bidding: biddingAdapter, Likes: likesAdapter, SteadyCatch: catchAdapter, Gwent: gwentAdapter, Blackjack: blackjackAdapter,
 			Reports: reportAdapter, Donations: donationAdapter, Charity: charityAdapter,
 			Idempotency: idempotencyAdapter, Secrets: secretAdapter,
 		},

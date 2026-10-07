@@ -74,7 +74,7 @@ func validText(value string, max int) bool {
 
 func validGame(game string) bool {
 	switch game {
-	case "fishing", "linklink", "rps", "bidding", "likes", "blackjack":
+	case "fishing", "linklink", "rps", "bidding", "likes", "gwent", "blackjack":
 		return true
 	}
 	return false

@@ -277,7 +277,7 @@ func validOpaquePrefix(prefix string) bool {
 		return true
 	case "img_", "imdl_", "iup_", "aev_", "rsk_", "aud_", "scn_", "ics_", "ffl_", "ffv_", "ffp_", "ffn_", "ffc_", "fpt_", "lnp_", "lnc_", "lne_", "pab_":
 		return true
-	case "goh_", "ann_", "op_", "req_", "clm_", "pol_", "thu_", "fb_", "ll_", "rpsq_", "rps_", "rpc_", "rpt_", "iss_", "lgh_", "b1e_", "sse_", "thp_", "gle_", "dbs_", "dbt_", "dbe_", "mch_", "qlr_", "bidq_", "bid_", "likq_", "lik_", "dah_", "bjq_", "bjt_", "bjp_", "bja_", "loan_", "lqn_", "abc_":
+	case "goh_", "ann_", "op_", "req_", "clm_", "pol_", "thu_", "fb_", "ll_", "sc_", "rpsq_", "rps_", "rpc_", "rpt_", "iss_", "lgh_", "b1e_", "sse_", "thp_", "gle_", "dbs_", "dbt_", "dbe_", "mch_", "qlr_", "bidq_", "bid_", "likq_", "lik_", "gwtq_", "gwt_", "dah_", "bjq_", "bjt_", "bjp_", "bja_", "loan_", "lqn_", "abc_":
 		return true
 	default:
 		return false

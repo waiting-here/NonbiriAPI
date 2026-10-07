@@ -28,6 +28,14 @@ function cardState(
   snapshot: GamesSnapshot,
   kind: GameHeroKind,
 ): { state: Availability; detail: string; total?: number } {
+  if (kind === 'steadycatch')
+    return {
+      state:
+        snapshot.gamesEnabled && snapshot.steadycatch.enabled && snapshot.steadycatch.available
+          ? 'open'
+          : 'closed',
+      detail: formatCredits(snapshot.steadycatch.price),
+    };
   if (kind === 'blackjack')
     return {
       state:
@@ -74,7 +82,7 @@ function GameCard({ card }: { card: CenterCard }) {
         : text('common.open')
       : text('presentation.unavailable');
   const detail =
-    card.id === 'fishing' || card.id === 'blackjack'
+    card.id === 'fishing' || card.id === 'blackjack' || card.id === 'steadycatch'
       ? text('center.from', { amount: card.detail })
       : card.id === 'linklink'
         ? text('center.specs', { count: card.detail })
@@ -110,7 +118,7 @@ export function GameCenter() {
   if (snapshot.error && !maintenance)
     return <ErrorState error={snapshot.error} onRetry={() => void snapshot.refetch()} />;
   const cards: CenterCard[] = (
-    ['fishing', 'linklink', 'rps', 'bidding', 'likes', 'blackjack'] as const
+    ['fishing', 'linklink', 'rps', 'bidding', 'likes', 'blackjack', 'gwent', 'steadycatch'] as const
   ).map((id) => {
     const availability =
       maintenance || !snapshot.data
@@ -118,7 +126,7 @@ export function GameCenter() {
         : cardState(snapshot.data, id);
     return {
       id,
-      path: `/games/${id}`,
+      path: id === 'steadycatch' ? '/games/steady-catch' : `/games/${id}`,
       title: `center.${id}.title`,
       body: `center.${id}.body`,
       ...availability,

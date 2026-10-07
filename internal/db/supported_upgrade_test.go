@@ -65,6 +65,10 @@ func supportedSourceFixture(t *testing.T) *sql.DB {
 	if err := seedGenerationTwo(context.Background(), tx, hostileOID("b1e_")); err != nil {
 		t.Fatal(err)
 	}
+	// The historical source predates these configuration rows.
+	if _, err := tx.Exec(`DELETE FROM site_config WHERE key='global_rpm_per_user' OR key LIKE 'game_gwent_%' OR key LIKE 'game_steadycatch_%'`); err != nil {
+		t.Fatal(err)
+	}
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}

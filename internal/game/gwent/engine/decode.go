@@ -12,13 +12,13 @@ func Decode(raw []byte) (State, error) {
 	if len(raw) > 1<<20 || json.Unmarshal(raw, &s) != nil {
 		return State{}, ErrState
 	}
-	if err := s.validate(); err != nil {
+	if err := s.Validate(); err != nil {
 		return State{}, err
 	}
 	return s, nil
 }
 
-func (s *State) validate() error {
+func (s *State) Validate() error {
 	if s.Version != Version || !slices.Contains([]string{"initiative", "mulligan", "playing", "terminal"}, s.Stage) ||
 		s.Round < 1 || s.Round > 3 || s.Turn < 0 || s.Turn > 1 || s.First < 0 || s.First > 1 ||
 		len(s.Cards) < 2 || len(s.Cards) > 1024 || len(s.Queue) > 4096 || len(s.Rounds) > 3 || len(s.Events) > 40 {

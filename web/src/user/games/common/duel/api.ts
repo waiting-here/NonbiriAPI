@@ -36,6 +36,7 @@ export type DuelIntent =
       readonly kind: 'action';
       readonly id: string;
       readonly phaseSeq: string;
+      readonly decisionID?: string;
       readonly action: unknown;
     }
   | { readonly kind: 'surrender'; readonly id: string; readonly phaseSeq: string };
@@ -85,7 +86,7 @@ export async function sendDuelIntent(game: DuelGame, intent: DuelIntent, key: st
       : intent.kind === 'cancel'
         ? { expected_revision: intent.revision }
         : intent.kind === 'action'
-          ? { phase_seq: intent.phaseSeq, action: intent.action }
+          ? { phase_seq: intent.phaseSeq, ...(intent.decisionID ? { decision_id: intent.decisionID } : {}), action: intent.action }
           : { phase_seq: intent.phaseSeq };
   const response = await gameRequest<unknown>(path, {
     method: intent.kind === 'cancel' ? 'DELETE' : 'POST',

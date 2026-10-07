@@ -18,6 +18,8 @@ export function gamesSnapshotWire() {
     games_enabled: true,
     bidding: duelSnapshotWire('bidding'),
     likes: duelSnapshotWire('likes'),
+    gwent: duelSnapshotWire('gwent'),
+    steadycatch: { enabled: false, available: true, price: '0', first_clear_reward: '0', first_cleared: false },
     blackjack: blackjackSnapshotWire(),
     fishing: {
       enabled: true,
@@ -40,7 +42,7 @@ export function gamesSnapshotWire() {
   };
 }
 
-export function duelSnapshotWire(game: 'bidding' | 'likes') {
+export function duelSnapshotWire(game: 'bidding' | 'likes' | 'gwent') {
   const mode = {
     enabled: false,
     available: true,
@@ -54,11 +56,11 @@ export function duelSnapshotWire(game: 'bidding' | 'likes') {
     available: true,
     queue_seconds: 120,
     queue_capacity: 4096,
-    ...(game === 'bidding'
+    ...(game === 'gwent' ? { mulligan_seconds: 20, turn_seconds: 30, choice_seconds: 15 } : game === 'bidding'
       ? { joker_seconds: 10, bid_seconds: 20 }
       : { plan_seconds: 30, settlement_seconds: 5 }),
     modes: Object.fromEntries(
-      (game === 'bidding' ? ['tier1', 'tier2', 'tier3'] : ['quick', 'standard']).map((key) => [
+      (game === 'gwent' ? ['standard'] : game === 'bidding' ? ['tier1', 'tier2', 'tier3'] : ['quick', 'standard']).map((key) => [
         key,
         { ...mode },
       ]),

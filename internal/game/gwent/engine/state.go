@@ -261,6 +261,18 @@ func (s *State) Seconds() int64 {
 }
 
 func Apply(state State, seat int, action Action, random io.Reader) (State, error) {
+	return applyAction(state, seat, action, random, nil)
+}
+
+// ApplyWithRounds captures only completed round boundaries. Persisting a full
+// before/after state for every card selection would duplicate entire decks.
+func ApplyWithRounds(state State, seat int, action Action, random io.Reader) (State, []State, error) {
+	var rounds []State
+	next, err := applyAction(state, seat, action, random, &rounds)
+	return next, rounds, err
+}
+
+func applyAction(state State, seat int, action Action, random io.Reader, rounds *[]State) (State, error) {
 	if seat < 0 || seat > 1 || !slices.Contains(state.Legal(seat), action) {
 		return State{}, ErrInvalid
 	}
@@ -290,7 +302,7 @@ func Apply(state State, seat int, action Action, random io.Reader) (State, error
 	if err != nil {
 		return State{}, err
 	}
-	if err = next.drain(random); err != nil {
+	if err = next.drainRounds(random, rounds); err != nil {
 		return State{}, err
 	}
 	return next, nil

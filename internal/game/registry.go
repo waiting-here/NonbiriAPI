@@ -15,6 +15,8 @@ const (
 	BiddingVersion  = 1
 	LikesID         = "likes"
 	LikesVersion    = 1
+	GwentID         = "gwent"
+	SteadyCatchID   = "steadycatch"
 
 	LinkLinkSpec6x8   = "6x8"
 	LinkLinkSpec8x8   = "8x8"

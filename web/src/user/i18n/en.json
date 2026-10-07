@@ -181,6 +181,7 @@
           "serverRestarted": "Server restarted",
           "accountUnavailable": "Account unavailable",
           "aPlayerSurrendered": "A player surrendered",
+          "timeoutForfeit": "A player forfeited after repeated timeouts",
           "targetReached": "Target reached",
           "bothPlayersOverloaded": "Both players overloaded",
           "gameCompleted": "Game completed",
@@ -1254,7 +1255,15 @@
           "from": "From {{amount}} credits",
           "specs": "{{count}} of 3 board sizes open",
           "modes": "{{count}} of {{total}} modes open",
-          "learn": "Learn, history and ongoing games"
+          "learn": "Learn, history and ongoing games",
+          "gwent": {
+            "title": "AI Gwent",
+            "body": "Four factions, three battle lines. Build a deck and outplay a human opponent."
+          },
+          "steadycatch": {
+            "title": "Catch You Steadily",
+            "body": "Catch memes and dodge hazards in a 90-second challenge with ChatGPT."
+          }
         },
         "fishing": {
           "eyebrow": "Pond fishing",
@@ -3379,6 +3388,9 @@
       "items": {
         "unknown": "Unknown catch"
       }
+    },
+    "steadycatch": {
+      "title": "Catch You Steadily"
     }
   },
   "recurringLimits": {

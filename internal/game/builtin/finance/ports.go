@@ -11,6 +11,7 @@ import (
 )
 
 type Capabilities struct {
+	Solo      ports.Solo
 	Fishing   ports.Fishing
 	LinkLink  ports.LinkLink
 	RPS       ports.RPS
@@ -22,13 +23,15 @@ type Capabilities struct {
 // There is no command-name escape hatch or generic balance mutation method.
 func ForModule(id string) (Capabilities, error) {
 	switch id {
+	case game.SteadyCatchID:
+		return Capabilities{Solo: catchPort{}}, nil
 	case game.FishingID:
 		return Capabilities{Fishing: fishingPort{onboarding{fishingconfig.Descriptor()}}}, nil
 	case game.LinkLinkID:
 		return Capabilities{LinkLink: linkLinkPort{onboarding{linklinkconfig.Descriptor()}}}, nil
 	case game.RPSID:
 		return Capabilities{RPS: rpsPort{onboarding{rpsconfig.Descriptor()}}}, nil
-	case "bidding", "likes":
+	case "bidding", "likes", "gwent":
 		return Capabilities{Duel: duelPort{game: id}}, nil
 	case game.BlackjackID:
 		return Capabilities{Blackjack: blackjackPort{}}, nil

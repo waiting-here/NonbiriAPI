@@ -49,7 +49,7 @@ func TestExportDocumentHasClosedTopLevel(t *testing.T) {
 		"request_adaptations", "continuity", "fat_fish",
 		"limited_activities", "image_tasks", "inactivity", "lake_notes",
 		"game_onboarding_holds", "loans", "game_rankings", "penalties",
-		"bidding", "likes", "blackjack", "randomness",
+		"bidding", "likes", "steadycatch", "gwent", "blackjack", "randomness",
 		"caller_key", "catalog_pairs", "charity", "checkins", "game_onboarding", "credit_ledger", "donations", "endpoints",
 		"fishing", "generated_at", "issues", "linklink", "log_summary", "models", "rps",
 		"schema_version", "thursday", "usage", "user", "welfare_claims", "personal_automation",

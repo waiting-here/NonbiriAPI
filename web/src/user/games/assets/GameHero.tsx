@@ -5,18 +5,37 @@ import blackjackHero from '@shared/assets/game-heroes/blackjack.webp';
 import biddingHero from '@shared/assets/game-heroes/bidding.webp';
 import likesHero from '@shared/assets/game-heroes/likes.webp';
 
+import catchHero from '@shared/assets/game-heroes/steadycatch.webp';
+
 const heroSources = {
+  steadycatch: catchHero,
   fishing: fishingHero,
   linklink: linkLinkHero,
   rps: rpsHero,
   bidding: biddingHero,
   blackjack: blackjackHero,
   likes: likesHero,
+  gwent: '',
 } as const;
 
 export type GameHeroKind = keyof typeof heroSources;
 
 export function GameHero({ kind }: { kind: GameHeroKind }) {
+  if (kind === 'gwent')
+    return (
+      <div className="game-gwent-hero" aria-hidden="true">
+        {['openai', 'deepseek', 'claude', 'gemini'].map((faction) => (
+          <img
+            key={faction}
+            src={`/assets/gwent/cards/${faction}_leader-cg-v1.webp`}
+            alt=""
+            loading="lazy"
+            decoding="async"
+          />
+        ))}
+        <span>AI GWENT</span>
+      </div>
+    );
   return (
     <img
       className="game-hero"

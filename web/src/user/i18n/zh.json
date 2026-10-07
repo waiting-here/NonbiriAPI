@@ -181,6 +181,7 @@
           "serverRestarted": "服务器重启",
           "accountUnavailable": "账号不可用",
           "aPlayerSurrendered": "一方认输",
+          "timeoutForfeit": "一方连续超时判负",
           "targetReached": "达到目标",
           "bothPlayersOverloaded": "双方过载",
           "gameCompleted": "对局结束",
@@ -1254,7 +1255,15 @@
           "from": "{{amount}} 积分起",
           "specs": "3 种棋盘开放 {{count}} 种",
           "modes": "{{total}} 种模式开放 {{count}} 种",
-          "learn": "学习、记录与进行中的对局"
+          "learn": "学习、记录与进行中的对局",
+          "gwent": {
+            "title": "AI 昆特牌",
+            "body": "四大阵营，三线交锋。组建卡牌队伍，与真人对手争夺胜局。"
+          },
+          "steadycatch": {
+            "title": "稳稳地接住你",
+            "body": "接住热梗，躲过故障。和 ChatGPT 一起挑战 90 秒。"
+          }
         },
         "fishing": {
           "eyebrow": "池塘垂钓",
@@ -3379,6 +3388,9 @@
       "items": {
         "unknown": "未知收获"
       }
+    },
+    "steadycatch": {
+      "title": "稳稳地接住你"
     }
   },
   "recurringLimits": {

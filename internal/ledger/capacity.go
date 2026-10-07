@@ -259,6 +259,8 @@ func validReservation(ref ReservationRef) bool {
 		return ref.parentID == "" && db.ValidateOpaqueID(ref.id, "goh_")
 	case reservationDuelQueue:
 		return ref.parentID == "" && duelIDGame(ref.id, true) != ""
+	case reservationCatchSession:
+		return ref.parentID == "" && db.ValidateOpaqueID(ref.id, "sc_")
 	case reservationDuelSession:
 		return ref.parentID == "" && duelIDGame(ref.id, false) != ""
 	default:
@@ -295,6 +297,8 @@ func readReservationRemaining(ctx context.Context, tx *sql.Tx, ref ReservationRe
 		row = tx.QueryRowContext(ctx, `SELECT ledger_rows_remaining FROM game_onboarding_holds WHERE id=?`, ref.id)
 	case reservationDuelQueue:
 		row = tx.QueryRowContext(ctx, `SELECT ledger_rows_remaining FROM game_duel_queue WHERE id=?`, ref.id)
+	case reservationCatchSession:
+		row = tx.QueryRowContext(ctx, `SELECT ledger_rows_remaining FROM game_catch_sessions WHERE id=?`, ref.id)
 	case reservationDuelSession:
 		row = tx.QueryRowContext(ctx, `SELECT ledger_rows_remaining FROM game_duel_sessions WHERE id=?`, ref.id)
 	}

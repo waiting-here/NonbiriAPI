@@ -136,6 +136,10 @@ func newAutomationFixture(t *testing.T) *automationFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := f.app.authRuntime.IdentityContinuity().BindUserTx(context.Background(), tx, f.userID); err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
 	if _, err := ledger.CreateUserAccount(context.Background(), tx, f.userID, time.Now().Unix()); err != nil {
 		_ = tx.Rollback()
 		t.Fatal(err)

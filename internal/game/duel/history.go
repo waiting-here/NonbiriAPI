@@ -256,7 +256,7 @@ func (s *Service) roundView(rules Rules, mode string, raw []byte, seat int, term
 }
 func (s *Service) Rounds(ctx context.Context, identity Identity, id string, in PageInput, allowActive bool) (RoundPage, error) {
 	limit, err := pageLimit(in.Limit, 5, 10)
-	if err != nil || in.Mode != "" || allowActive && s.rules.ID() != "likes" {
+	if err != nil || in.Mode != "" || allowActive && s.rules.ID() != "likes" && s.rules.ID() != "gwent" {
 		return RoundPage{}, ErrInvalidRequest
 	}
 	tx, now, err := s.beginRead(ctx)

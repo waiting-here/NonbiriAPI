@@ -42,3 +42,10 @@ Its optional background music is "Monkeys Spinning Monkeys" by Kevin MacLeod
 (incompetech.com), distributed unchanged under CC BY 4.0. See the bundled
 [attribution and license](/assets/fatfish/NOTICE.md). The music is a separate
 licensed work and is not relicensed under AGPL-3.0.
+
+AI Gwent includes 216 card illustrations as resized WebP assets, distributed
+with permission under AGPL-3.0. Card rules and descriptions are adapted from
+the supplied game.
+
+Catch You Steadily includes an original illustrated cover and the supplied
+game's character art, resized as local WebP assets under AGPL-3.0.

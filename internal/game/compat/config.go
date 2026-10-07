@@ -8,12 +8,16 @@ import (
 	biddingconfig "github.com/waiting-here/NonbiriAPI/internal/game/bidding/config"
 	blackjackconfig "github.com/waiting-here/NonbiriAPI/internal/game/blackjack/config"
 	fishingconfig "github.com/waiting-here/NonbiriAPI/internal/game/fishing/config"
+	gwentconfig "github.com/waiting-here/NonbiriAPI/internal/game/gwent/config"
 	likesconfig "github.com/waiting-here/NonbiriAPI/internal/game/likes/config"
 	linklinkconfig "github.com/waiting-here/NonbiriAPI/internal/game/linklink/config"
 	rpsconfig "github.com/waiting-here/NonbiriAPI/internal/game/rps/config"
+	catchconfig "github.com/waiting-here/NonbiriAPI/internal/game/steadycatch/config"
 )
 
 type GamesConfig struct {
+	SteadyCatch   catchconfig.Wire                  `json:"steadycatch"`
+	Gwent         gwentconfig.Wire                  `json:"gwent"`
 	Revision      string                            `json:"revision"`
 	MasterEnabled bool                              `json:"master_enabled"`
 	Fishing       fishingconfig.FishingWireConfig   `json:"fishing"`
@@ -26,6 +30,8 @@ type GamesConfig struct {
 
 // GamesSnapshot is the exact user-facing configuration/readiness projection.
 type GamesSnapshot struct {
+	SteadyCatch     CatchSnapshotModule                `json:"steadycatch"`
+	Gwent           GwentSnapshotModule                `json:"gwent"`
 	Onboarding      map[string]game.OnboardingProgress `json:"onboarding"`
 	GameBalance     string                             `json:"game_balance"`
 	ServerNow       int64                              `json:"server_now"`
@@ -38,6 +44,12 @@ type GamesSnapshot struct {
 	Bidding         BiddingSnapshotModule              `json:"bidding"`
 	Likes           LikesSnapshotModule                `json:"likes"`
 	Blackjack       BlackjackSnapshotModule            `json:"blackjack"`
+}
+
+type CatchSnapshotModule struct {
+	catchconfig.Wire
+	Available    bool `json:"available"`
+	FirstCleared bool `json:"first_cleared"`
 }
 
 type BlackjackSnapshotModule struct {
@@ -97,6 +109,8 @@ type RPSSnapshotModule struct {
 	Modes   map[string]rpsconfig.RPSWireMode `json:"modes"`
 }
 type GamesConfigPatch struct {
+	SteadyCatch      *catchconfig.Patch                  `json:"steadycatch,omitempty"`
+	Gwent            *gwentconfig.Patch                  `json:"gwent,omitempty"`
 	ExpectedRevision string                              `json:"expected_revision"`
 	MasterEnabled    *bool                               `json:"master_enabled,omitempty"`
 	Fishing          *fishingconfig.FishingConfigPatch   `json:"fishing,omitempty"`
@@ -124,4 +138,15 @@ func (patch GamesConfigPatch) Merge(current GamesConfig) (GamesConfig, error) {
 		return GamesConfig{}, err
 	}
 	return result, nil
+}
+
+type GwentSnapshotModule struct {
+	Enabled         bool                        `json:"enabled"`
+	Available       bool                        `json:"available"`
+	Modes           map[string]DuelSnapshotMode `json:"modes"`
+	QueueSeconds    int                         `json:"queue_seconds"`
+	MulliganSeconds int                         `json:"mulligan_seconds"`
+	TurnSeconds     int                         `json:"turn_seconds"`
+	ChoiceSeconds   int                         `json:"choice_seconds"`
+	QueueCapacity   int                         `json:"queue_capacity"`
 }

@@ -47,7 +47,8 @@ func (s *Service) enterPhase(v *sessionRecord, now int64, advance bool) error {
 		return nil
 	}
 	maxSeconds := int64(20)
-	if s.rules.ID() == "likes" {
+	_, sequential := v.rules.(SequentialRules)
+	if s.rules.ID() == "likes" || sequential {
 		maxSeconds = 30
 	}
 	if info.Seconds < 1 || info.Seconds > maxSeconds {
@@ -180,6 +181,22 @@ func (s *Service) advance(ctx context.Context, tx *sql.Tx, v *sessionRecord, now
 			return facts, true, err
 		}
 		return activities.PublishFacts{}, true, s.saveSession(ctx, tx, v, expected)
+	}
+	if _, ok := v.rules.(SequentialRules); ok {
+		for seat := range 2 {
+			if v.Seats[seat].Locked {
+				continue
+			}
+			action, err := v.rules.Automatic(v.Mode, v.Payload.Rules, seat)
+			if err != nil {
+				return activities.PublishFacts{}, false, err
+			}
+			v.Seats[seat].TimeoutCount++
+			v.Payload.RoundTimeouts[seat] = true
+			facts, err := s.step(ctx, tx, v, expected, seat, action, true, now)
+			return facts, true, err
+		}
+		return activities.PublishFacts{}, false, ErrInvariant
 	}
 	for seat := range 2 {
 		if v.Seats[seat].Locked {

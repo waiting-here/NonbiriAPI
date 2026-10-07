@@ -30,6 +30,8 @@ const INITIAL_CONFIG: GamesConfig = {
   },
   bidding: duelConfigFixture('bidding'),
   likes: duelConfigFixture('likes'),
+  gwent: duelConfigFixture('gwent'),
+  steadycatch: { enabled: false, price: '0', first_clear_reward: '0' },
   revision: '7',
   master_enabled: true,
   fishing: {
@@ -112,6 +114,8 @@ function applyPatch(config: GamesConfig, rawPatch: Record<string, unknown>): Gam
     blackjack: structuredClone(patch.blackjack),
     bidding: structuredClone(config.bidding),
     likes: structuredClone(config.likes),
+    gwent: structuredClone(config.gwent),
+    steadycatch: structuredClone(config.steadycatch),
     revision: String(BigInt(config.revision) + 1n),
     master_enabled: patch.master_enabled,
     fishing: structuredClone(patch.fishing),
@@ -232,6 +236,7 @@ test('admin games route performs authoritative PATCH with keyboard input at 390p
     blackjack: INITIAL_CONFIG.blackjack,
     bidding: INITIAL_CONFIG.bidding,
     likes: INITIAL_CONFIG.likes,
+    gwent: INITIAL_CONFIG.gwent,
     fishing: {
       ...INITIAL_CONFIG.fishing,
       blue_fish_chance_bps: 3750,
