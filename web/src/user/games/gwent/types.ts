@@ -54,6 +54,9 @@ export interface Round {
   round: number;
   scores: [number, number];
   winner: number | null;
+  rows?: { row: string; scores: [number, number] }[];
+  lives_before?: [number, number];
+  lives_after?: [number, number];
   actions?: { seat: number; action: Action; automatic?: boolean }[];
 }
 export interface View {
@@ -73,12 +76,15 @@ export interface View {
 }
 export interface Catalog {
   content_hash: string;
-  modes: { standard: { rules_version: number; cards: CardDefinition[] } };
+  modes: {
+    standard: { rules_version: number; cards: CardDefinition[] };
+    ai?: { rules_version: number; cards: CardDefinition[] };
+  };
 }
 
 export const gwentCodec: DuelCodec<View, Round, never, never, Deck, Action> = {
   game: 'gwent',
-  modes: ['standard'],
+  modes: ['standard', 'ai'],
   view: (value) => value as View,
   facts: (value) => value as Round,
   loadout: (value) => value as Deck,

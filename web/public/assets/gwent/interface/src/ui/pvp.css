@@ -1,0 +1,31 @@
+#pvp-room-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+#pvp-room-controls[hidden],
+#pvp-leave[hidden] {
+  display: none;
+}
+#pvp-room-controls label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#pvp-room-code {
+  width: 155px;
+  max-width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #34424f;
+  border-radius: 6px;
+  background: #0d141d;
+  color: #dce6ef;
+  text-transform: uppercase;
+}
+#pvp-room-status {
+  width: 100%;
+  color: #91a5b5;
+  font-size: 12px;
+}
