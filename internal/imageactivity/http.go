@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
@@ -554,6 +555,16 @@ func (s *Service) serveImage(w http.ResponseWriter, r *http.Request, p UserPrinc
 		return
 	}
 	defer release()
+	controller := http.NewResponseController(w)
+	deadline := time.Now().Add(30 * time.Second)
+	if limit, ok := r.Context().Deadline(); ok && limit.Before(deadline) {
+		deadline = limit
+	}
+	if err := controller.SetWriteDeadline(deadline); err != nil && !errors.Is(err, http.ErrNotSupported) {
+		writeError(w, ErrUnavailable)
+		return
+	}
+	defer func() { _ = controller.SetWriteDeadline(time.Time{}) }()
 	ext := "png"
 	if img.mime == "image/jpeg" {
 		ext = "jpg"
