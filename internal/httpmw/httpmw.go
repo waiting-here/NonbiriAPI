@@ -125,7 +125,8 @@ func (p *policy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		request.Header.Del(name)
 	}
 
-	setSecurityHeaders(w, info.https, station == host.StationUser && request.URL.Path == "/assets/gwent/interface/index.html")
+	gameEntry := request.URL.Path == "/assets/gwent/interface/index.html" || request.URL.Path == "/assets/gwent/interface/"
+	setSecurityHeaders(w, info.https, station == host.StationUser && gameEntry)
 	if station == host.StationUnknown {
 		writeMisdirected(w)
 		return

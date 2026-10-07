@@ -300,7 +300,9 @@ func TestOnlyUserGameInterfaceAllowsSameOriginFraming(t *testing.T) {
 		{"example.com", gamePath, true},
 		{"admin.example.com", gamePath, false},
 		{"example.com", "/games/gwent", false},
-		{"example.com", "/assets/gwent/interface/", false},
+		{"example.com", "/assets/gwent/interface/", true},
+		{"admin.example.com", "/assets/gwent/interface/", false},
+		{"example.com", "/assets/gwent/interface/platform.js", false},
 		{"example.com", "/api/session", false},
 		{"admin.example.com", "/", false},
 	} {
