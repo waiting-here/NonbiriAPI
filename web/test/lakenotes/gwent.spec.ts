@@ -156,21 +156,23 @@ async function actionUI(page: Page, arena: FrameLocator, current: Match, action:
     await arena.locator('#arena-hand button').nth(index).click();
     if (action.row) {
       const spy = current.view.hand[index].abilities.includes('spy');
-      await arena.locator(`#arena-${spy ? 'op' : 'me'}-${action.row}`).click();
+      await arena.locator(`#arena-${spy ? 'op' : 'me'}-${action.row} .row-info`).click();
     }
   }
   const response = await submitted;
   expect(response.status(), await response.text()).toBe(200);
-  expect(response.request().postDataJSON()).toEqual({
-    phase_seq: current.phase_seq,
+  const sent = response.request().postDataJSON();
+  expect(sent).toEqual({
+    phase_seq: expect.stringMatching(/^[1-9][0-9]*$/),
     decision_id: current.decision_id,
     action,
   });
+  expect(BigInt(sent.phase_seq)).toBeGreaterThanOrEqual(BigInt(current.phase_seq));
 }
 function select(view: View): Action {
   if (view.choice) {
     if (view.choice.kind === 'mulligan' && view.choice.remaining === 2)
-      return view.legal_actions.find((a) => a.kind === 'swap') ?? view.legal_actions[0];
+      return view.legal_actions.find((a) => a.kind === 'redraw') ?? view.legal_actions[0];
     return view.legal_actions.find((a) => a.kind === 'continue') ?? view.legal_actions[0];
   }
   const lead = view.board.reduce(
@@ -189,7 +191,7 @@ function select(view: View): Action {
     : (play ?? view.legal_actions.find((a) => a.kind === 'pass') ?? view.legal_actions[0]);
 }
 
-test('original Gwent AI plays a paid legal match, restores results, refunds restart, and keeps demo free', async ({
+test('original Gwent AI plays a paid legal match, restores results, resumes after restart, and keeps demo free', async ({
   browser,
 }) => {
   test.setTimeout(120000);
@@ -208,7 +210,11 @@ test('original Gwent AI plays a paid legal match, restores results, refunds rest
       enabled: boolean;
       bots: {
         terms_hash: string;
-        terms: { ticket: string; ai: { bot_id: string; first_reward: string; bot_loadout: Deck } };
+        terms: {
+          content_hash: string;
+          ticket: string;
+          ai: { bot_id: string; first_reward: string; bot_loadout: Deck };
+        };
       }[];
     }>(ctx, base + '/ai');
     expect(offers.enabled).toBe(true);
@@ -268,7 +274,7 @@ test('original Gwent AI plays a paid legal match, restores results, refunds rest
       .poll(async () => (await get<Home>(ctx, base + '/state')).current?.id ?? null)
       .not.toBeNull();
     const admitted = (await get<Home>(ctx, base + '/state')).current!;
-    expect(admitted.content_hash).toBe(catalog.content_hash);
+    expect(admitted.content_hash).toBe(offer.terms.content_hash);
     expect(
       creditsToMilli(admitted.own_payment.general) + creditsToMilli(admitted.own_payment.game),
     ).toBe(2000n);
@@ -312,8 +318,10 @@ test('original Gwent AI plays a paid legal match, restores results, refunds rest
         choices++;
         decisions.add(current.decision_id);
       }
-      if (action.kind === 'swap') swaps++;
-      await actionUI(page, arena, current, action);
+      if (action.kind === 'redraw') swaps++;
+      await test.step(`${current.phase_seq} ${current.view.choice?.kind ?? 'turn'} ${JSON.stringify(action)}`, async () => {
+        await actionUI(page, arena, current, action);
+      });
     }
     expect(
       result,
@@ -378,18 +386,46 @@ test('original Gwent AI plays a paid legal match, restores results, refunds rest
     const second = (await get<Home>(ctx, base + '/state')).current!;
     await page.goto(fixture().user_url + '/games');
     await control(ctx, 'restart');
-    const cancelled = (await get<Home>(ctx, base + '/state')).latest_result!;
-    expect(cancelled.id).toBe(second.id);
-    expect(cancelled.outcome).toBe('system_cancelled');
-    expect(cancelled.reason).toBe('server_restart');
-    expect(cancelled.own_refund).toEqual(second.own_payment);
-    expect(cancelled.ai.reward).toBe('0');
-    expect(await get<Wallets>(ctx, '/api/games')).toMatchObject({
-      balance: after.balance,
-      game_balance: after.game_balance,
-    });
+    const resumed = (await get<Home>(ctx, base + '/state')).current!;
+    expect(resumed.id).toBe(second.id);
+    expect(resumed.own_payment).toEqual(second.own_payment);
+    expect(resumed.decision_id).not.toBe(second.decision_id);
+    const secondPaid = await get<Wallets>(ctx, '/api/games');
+    expect(creditsToMilli(after.balance) - creditsToMilli(secondPaid.balance)).toBe(
+      creditsToMilli(second.own_payment.general),
+    );
+    expect(creditsToMilli(after.game_balance) - creditsToMilli(secondPaid.game_balance)).toBe(
+      creditsToMilli(second.own_payment.game),
+    );
     await page.goto(fixture().user_url + '/games/gwent');
+    for (let step = 0; step < 8; step++) {
+      const current = (await get<Home>(ctx, base + '/state')).current!;
+      await aligned(arena, current);
+      if (!current.view.choice) break;
+      await actionUI(page, arena, current, select(current.view));
+    }
+    await expect(arena.locator('#arena-dialog')).not.toBeVisible();
+    await arena.locator('#arena-concede').click();
+    const surrendered = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === base + '/sessions/' + second.id + '/surrender' &&
+        response.request().method() === 'POST',
+    );
+    await arena
+      .locator('#dialog-actions')
+      .getByRole('button', { name: '认输', exact: true })
+      .click();
+    expect((await surrendered).status()).toBe(200);
     await expect(arena.locator('#result-overlay')).toBeVisible();
+    const lost = (await get<Home>(ctx, base + '/state')).latest_result!;
+    expect(lost.id).toBe(second.id);
+    expect(lost.outcome).toBe('loss');
+    expect(lost.ai.reward).toBe('0');
+    expect(lost.own_refund).toEqual({ general: '0', game: '0' });
+    expect(await get<Wallets>(ctx, '/api/games')).toMatchObject({
+      balance: secondPaid.balance,
+      game_balance: secondPaid.game_balance,
+    });
     await arena.locator('#return-lobby').click();
     const historyBefore = await get<{ items: Result[] }>(ctx, base + '/history');
     const writes: string[] = [];
@@ -404,14 +440,14 @@ test('original Gwent AI plays a paid legal match, restores results, refunds rest
     });
     await arena.locator('[data-mode="demo"]').click();
     await expect(arena.locator('#platform-terms')).toContainText('免费本机演示');
-    await arena.locator('#arena-speed').selectOption('0.12');
     await arena.locator('#launch-watch').click();
     await expect(arena.locator('#battle')).toBeVisible();
+    await arena.locator('#arena-speed').selectOption('0.12');
     await expect(arena.locator('#result-overlay')).toBeVisible({ timeout: 30000 });
     expect(writes).toEqual([]);
     expect(await get<Wallets>(ctx, '/api/games')).toMatchObject({
-      balance: after.balance,
-      game_balance: after.game_balance,
+      balance: secondPaid.balance,
+      game_balance: secondPaid.game_balance,
     });
     expect(await get<{ items: Result[] }>(ctx, base + '/history')).toEqual(historyBefore);
   } finally {

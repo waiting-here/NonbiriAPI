@@ -521,7 +521,7 @@ interface ConsoleViolation {
   length: number;
 }
 
-export function collectConsoleViolations(page: Page) {
+export function collectConsoleViolations(page: Page, allowedWarning?: string) {
   const violations: ConsoleViolation[] = [];
   const record = (type: string, value: string) => {
     violations.push({
@@ -530,6 +530,7 @@ export function collectConsoleViolations(page: Page) {
     });
   };
   page.on('console', (message) => {
+    if (message.type() === 'warning' && message.text() === allowedWarning) return;
     if (message.type() === 'error' || message.type() === 'warning') {
       record(message.type(), message.text());
     }

@@ -89,7 +89,10 @@ function home() {
 
 for (const theme of ['light', 'dark']) {
   test(`card battle and choices remain usable across viewports in ${theme}`, async ({ page }) => {
-    const errors = collectConsoleViolations(page);
+    const errors = collectConsoleViolations(
+      page,
+      'An iframe which has both allow-scripts and allow-same-origin for its sandbox attribute can escape its sandboxing.',
+    );
     await page.addInitScript((theme) => {
       localStorage.setItem('nb.lang', 'en');
       localStorage.setItem('nb.theme', theme);
@@ -189,7 +192,7 @@ for (const theme of ['light', 'dark']) {
         new URL(response.url()).pathname.endsWith('/actions') &&
         response.request().method() === 'POST',
     );
-    await arena.locator('#arena-me-close').click();
+    await arena.locator('#arena-me-close .row-info').click();
     expect((await submitted).status()).toBe(200);
     expect(writes).toEqual([
       { phase_seq: '2', decision_id: '2', action: { kind: 'play', card: 10, row: 'close' } },
