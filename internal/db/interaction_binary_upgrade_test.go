@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	lakeRules "github.com/waiting-here/NonbiriAPI/internal/lakenotes/rules"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
@@ -103,27 +104,43 @@ func verifyReleasedStorageUpgrade(t *testing.T, source, expectedSourceManifest s
 		t.Fatal(err)
 	}
 	assertRetainedManifest(t, prior, expectedSourceManifest)
-	before := interactionTableDigests(t, prior, sourceManifest)
+	before := interactionTableDigests(t, prior, sourceManifest, false)
 	wantConfig := upgradeSiteConfig(t, prior)
+	preserveManagementConfig := expectedSourceManifest == managementAndGamesManifestHash
+	var biddingSettings *[2]int64
+	for _, table := range sourceManifest.Tables {
+		if table.Name == "game_ai_settings" {
+			biddingSettings = &[2]int64{}
+			if err := prior.QueryRow("SELECT enabled,revision FROM game_ai_settings WHERE game_key='bidding'").Scan(&biddingSettings[0], &biddingSettings[1]); err != nil {
+				t.Fatal("source Bidding AI settings", err)
+			}
+		}
+	}
+	var wantSequences map[string]int64
+	if preserveManagementConfig {
+		wantSequences = upgradeDuelSequences(t, prior)
+	}
 	var lakeOpen bool
 	if err := prior.QueryRow(`SELECT EXISTS(SELECT 1 FROM limited_activity_configs WHERE activity_key='lake-notes' AND visible=1 AND paused=0)`).Scan(&lakeOpen); err != nil {
 		t.Fatal(err)
 	}
-	for key, value := range map[string]string{
-		"global_rpm_per_user":      "60",
-		"game_steadycatch_enabled": "0", "game_steadycatch_price_milli": "0", "game_steadycatch_first_reward_milli": "0",
-		"game_gwent_enabled": "0", "game_gwent_standard_enabled": "0", "game_gwent_standard_ticket_milli": "5000000",
-		"game_gwent_standard_rake_platform_bp": "100", "game_gwent_standard_rake_welfare_bp": "100", "game_gwent_standard_rake_thursday_bp": "100",
-		"game_lakenotes_enabled":   "0",
-		"game_lakenotes_exchanges": `{"coins_to_game":{"enabled":false,"source_amount":"","target_amount":""},"coins_to_general":{"enabled":false,"source_amount":"","target_amount":""},"game_to_coins":{"enabled":false,"source_amount":"","target_amount":""},"general_to_coins":{"enabled":false,"source_amount":"","target_amount":""}}`,
-	} {
-		wantConfig[key] = upgradeSetting{Value: value}
-	}
-	if lakeOpen {
-		wantConfig["game_lakenotes_enabled"] = upgradeSetting{Value: "1"}
-		master := wantConfig["games_enabled"]
-		master.Value = "1"
-		wantConfig["games_enabled"] = master
+	if !preserveManagementConfig {
+		for key, value := range map[string]string{
+			"global_rpm_per_user":      "60",
+			"game_steadycatch_enabled": "0", "game_steadycatch_price_milli": "0", "game_steadycatch_first_reward_milli": "0",
+			"game_gwent_enabled": "0", "game_gwent_standard_enabled": "0", "game_gwent_standard_ticket_milli": "5000000",
+			"game_gwent_standard_rake_platform_bp": "100", "game_gwent_standard_rake_welfare_bp": "100", "game_gwent_standard_rake_thursday_bp": "100",
+			"game_lakenotes_enabled":   "0",
+			"game_lakenotes_exchanges": `{"coins_to_game":{"enabled":false,"source_amount":"","target_amount":""},"coins_to_general":{"enabled":false,"source_amount":"","target_amount":""},"game_to_coins":{"enabled":false,"source_amount":"","target_amount":""},"general_to_coins":{"enabled":false,"source_amount":"","target_amount":""}}`,
+		} {
+			wantConfig[key] = upgradeSetting{Value: value}
+		}
+		if lakeOpen {
+			wantConfig["game_lakenotes_enabled"] = upgradeSetting{Value: "1"}
+			master := wantConfig["games_enabled"]
+			master.Value = "1"
+			wantConfig["games_enabled"] = master
+		}
 	}
 	if err := prior.Close(); err != nil {
 		t.Fatal(err)
@@ -158,7 +175,7 @@ func verifyReleasedStorageUpgrade(t *testing.T, source, expectedSourceManifest s
 			t.Fatal("fresh and upgraded schema differ", err)
 		}
 		if attempt == 0 {
-			after := interactionTableDigests(t, database, sourceManifest)
+			after := interactionTableDigests(t, database, sourceManifest, true)
 			for table, want := range before {
 				if table == "schema_state" || table == "site_config" {
 					continue
@@ -171,10 +188,27 @@ func verifyReleasedStorageUpgrade(t *testing.T, source, expectedSourceManifest s
 				t.Errorf("configuration differs from preserved source plus declared game defaults (rows %d, want %d)", len(got), len(wantConfig))
 			}
 		}
-		for _, table := range []string{"lake_notes_profiles", "lake_notes_casts"} {
-			var unknown int
-			if err := database.QueryRow("SELECT count(*) FROM " + table + " WHERE storage_version<>1").Scan(&unknown); err != nil || unknown != 0 {
-				t.Fatal("saved Lake Notes format was not initialized", table, unknown, err)
+		if biddingSettings != nil {
+			var got [2]int64
+			if err := database.QueryRow("SELECT enabled,revision FROM game_ai_settings WHERE game_key='bidding'").Scan(&got[0], &got[1]); err != nil || got != *biddingSettings {
+				t.Fatal("retained Bidding AI settings changed", got, biddingSettings, err)
+			}
+		}
+		var gwentSettings [2]int64
+		if err := database.QueryRow("SELECT enabled,revision FROM game_ai_settings WHERE game_key='gwent'").Scan(&gwentSettings[0], &gwentSettings[1]); err != nil || gwentSettings != [2]int64{0, 1} {
+			t.Fatal("new Gwent AI setting differs from its disabled default", gwentSettings, err)
+		}
+		if wantSequences != nil {
+			if got := upgradeDuelSequences(t, database); !reflect.DeepEqual(got, wantSequences) {
+				t.Fatal("duel/AI queue sequence counters changed", got, wantSequences)
+			}
+		}
+		if !preserveManagementConfig {
+			for _, table := range []string{"lake_notes_profiles", "lake_notes_casts"} {
+				var unknown int
+				if err := database.QueryRow("SELECT count(*) FROM " + table + " WHERE storage_version<>1").Scan(&unknown); err != nil || unknown != 0 {
+					t.Fatal("saved Lake Notes format was not initialized", table, unknown, err)
+				}
 			}
 		}
 		rows, err := database.Query(`SELECT context_id,encrypted_secret FROM endpoint_key_secrets`)
@@ -250,7 +284,7 @@ type interactionTableDigest struct {
 
 // Order-independent digests keep the real-copy check bounded in memory. Column
 // types participate in each row hash; row counts, sum and XOR preserve duplicates.
-func interactionTableDigests(t *testing.T, database *sql.DB, manifest generationManifest) map[string]interactionTableDigest {
+func interactionTableDigests(t *testing.T, database *sql.DB, manifest generationManifest, excludeNewGwentSetting ...bool) map[string]interactionTableDigest {
 	t.Helper()
 	out := make(map[string]interactionTableDigest)
 	for _, table := range manifest.Tables {
@@ -262,6 +296,9 @@ func interactionTableDigests(t *testing.T, database *sql.DB, manifest generation
 			columns[i] = hostileQuoteIdent(column.Name)
 		}
 		query := "SELECT " + strings.Join(columns, ",") + " FROM " + hostileQuoteIdent(table.Name)
+		if table.Name == "game_ai_settings" && len(excludeNewGwentSetting) > 0 && excludeNewGwentSetting[0] {
+			query += " WHERE game_key<>'gwent'"
+		}
 		rows, err := database.Query(query)
 		if err != nil {
 			t.Fatal(err)
@@ -304,4 +341,95 @@ func interactionTableDigests(t *testing.T, database *sql.DB, manifest generation
 		out[table.Name] = digest
 	}
 	return out
+}
+
+func upgradeDuelSequences(t *testing.T, database *sql.DB) map[string]int64 {
+	t.Helper()
+	rows, err := database.Query("SELECT name,seq FROM sqlite_sequence WHERE name IN ('game_duel_sessions','game_duel_anonymous','game_ai_queue')")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	values := map[string]int64{}
+	for rows.Next() {
+		var name string
+		var sequence int64
+		if err := rows.Scan(&name, &sequence); err != nil {
+			t.Fatal(err)
+		}
+		values[name] = sequence
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return values
+}
+
+func TestManagementSourceUpgradePreservesConfiguredGamesAndLakeV2(t *testing.T) {
+	t.Setenv("NONBIRI_UPGRADE_MASTER_KEY_FILE", "")
+	vault, err := secret.New(bytes.Repeat([]byte{0x42}, secret.MasterKeyBytes))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer vault.Close()
+	path := bootstrapTestPath(t, "management-source.sqlite")
+	store, err := Open(path, vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	database := store.DB()
+	user := hostileInsertUser(t, database, "saved-game", 0, testNow)
+	profile := lakeRules.InitialProfile()
+	profile, cast, err := lakeRules.Start(profile, lakeRules.CryptoRandom{Reader: bytes.NewReader(make([]byte, 1024))}, 123)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cast.Paused = true
+	profileRaw, err := lakeRules.EncodeProfile(profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	castRaw, err := lakeRules.EncodeCast(cast)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hostileMustExec(t, database, "INSERT INTO lake_notes_profiles(user_id,revision,rules_id,storage_version,coin_mag,profile,updated_at) VALUES(?,7,?,1,zeroblob(16),?,?)", user, lakeRules.RulesID, profileRaw, testNow)
+	hostileMustExec(t, database, "INSERT INTO lake_notes_casts(id,user_id,rules_id,storage_version,phase,paused,generation,revision,last_tick,snapshot,reward_plan,held,active_elapsed_ns,created_at,updated_at) VALUES(?,?,?,2,'waiting',1,3,8,0,?,X'7b7d',0,0,?,?)", hostileOID("lnc_"), user, lakeRules.RulesID, castRaw, testNow, testNow)
+	credentialContext, err := secret.NewGenerationTwoEndpointKeyContext(hostileBlob16(101))
+	if err != nil {
+		t.Fatal(err)
+	}
+	envelope, err := vault.SealForGenerationTwoContext([]byte("retained-fixture-credential"), credentialContext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hostileMustExec(t, database, "INSERT INTO endpoint_key_secrets(context_id,canonical_base_url,connector_type,encrypted_secret,created_at,orphaned_at) VALUES(?,?,?,?,?,?)", credentialContext.ContextID(), bootstrapTestCredentialOrigin, bootstrapTestConnector, envelope, testNow, time.Now().Unix())
+	for key, value := range map[string]string{
+		"global_rpm_per_user": "123", "games_enabled": "1", "game_lakenotes_enabled": "0",
+		"game_gwent_enabled": "1", "game_gwent_standard_enabled": "1", "game_gwent_standard_ticket_milli": "7000",
+		"game_steadycatch_enabled": "1", "game_steadycatch_price_milli": "5000", "game_steadycatch_first_reward_milli": "9000",
+	} {
+		hostileMustExec(t, database, "UPDATE site_config SET value=?,updated_at=? WHERE key=?", value, testNow, key)
+	}
+	hostileMustExec(t, database, "UPDATE limited_activity_configs SET visible=1,paused=0 WHERE activity_key='lake-notes'")
+	hostileMustExec(t, database, "UPDATE game_ai_settings SET enabled=1,revision=9 WHERE game_key='bidding'")
+	if err := validateSourceConfig(context.Background(), database); err != nil {
+		t.Fatalf("invalid configured fixture: %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	source, err := openSQLite(path, "rw")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = source.Close() })
+	hostileMustExec(t, source, "PRAGMA foreign_keys=OFF;"+preGwentAIFixture+"PRAGMA foreign_keys=ON;")
+	hostileMustExec(t, source, "INSERT INTO sqlite_sequence(name,seq) VALUES('game_duel_anonymous',77),('game_ai_queue',41)")
+	assertRetainedManifest(t, source, managementAndGamesManifestHash)
+	if err := source.Close(); err != nil {
+		t.Fatal(err)
+	}
+	verifyReleasedStorageUpgrade(t, path, managementAndGamesManifestHash)
 }
