@@ -41,6 +41,14 @@ func (s *Service) decodeIngress(ctx context.Context, user int64, body []byte, op
 		return nil, nil, false, err
 	}
 	defer envelope.Clear()
+	return s.decodeEnvelope(ctx, user, body, envelope, operation)
+}
+
+func (s *Service) decodeEnvelope(ctx context.Context, user int64, body []byte, envelope *openai.RequestEnvelope, operation contract.Operation) (*validatedRequest, []byte, bool, error) {
+	limit, err := requestbody.Limit(ctx)
+	if err != nil {
+		return nil, nil, false, err
+	}
 	charity := modelname.IsCharity(envelope.Model)
 	filtered := body
 	var policy CharityRequestPolicy

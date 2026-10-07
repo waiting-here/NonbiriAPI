@@ -67,7 +67,8 @@ const (
 	DefaultRetryAfter = time.Second
 )
 
-// UserLimits is one request-time, server-side snapshot. RPMLimitSet=false
+// UserLimits is one request-time, server-side snapshot. RPMLimit is the charity
+// cap; RPMLimitSet=false
 // selects the current administrator default. ConcurrencyLimit is always the
 // effective value (the DB resolver maps NULL to the built-in 5).
 type UserLimits struct {
@@ -117,7 +118,7 @@ type Config struct {
 	// OnDenied is called only after an atomic admission denial has been
 	// classified. Its synchronous error replaces the denial with an unavailable
 	// response; a policy whose transaction failed cannot claim success. In particular,
-	// callers must only attribute RPMUserLimit to the user; global, capacity,
+	// callers must only attribute RPMCharityUserLimit to the user; global, capacity,
 	// and other shared-resource denials are not user violations.
 	OnDenied func(context.Context, int64, ratelimit.RPMReason) error
 	Observer Observer
@@ -205,6 +206,15 @@ func nilClock(clock ratelimit.Clock) bool {
 // A concurrency denial creates no RPM event and never invokes OnDenied. If RPM
 // refuses or errors, the permit is released before this method returns.
 func (c *Controller) Admit(ctx context.Context, userID int64) (*Reservation, time.Duration, error) {
+	return c.admit(ctx, userID, nil)
+}
+
+// AdmitModel admits a request whose model namespace has already been decoded.
+func (c *Controller) AdmitModel(ctx context.Context, userID int64, charity bool) (*Reservation, time.Duration, error) {
+	return c.admit(ctx, userID, func() (bool, error) { return charity, nil })
+}
+
+func (c *Controller) admit(ctx context.Context, userID int64, classify func() (bool, error)) (*Reservation, time.Duration, error) {
 	if c == nil || c.limiter == nil || c.userConcurrency == nil || c.userAdmissions == nil {
 		return nil, 0, ErrClosed
 	}
@@ -260,16 +270,20 @@ func (c *Controller) Admit(ctx context.Context, userID int64) (*Reservation, tim
 	// mutex or any denial observer.
 	guard.release()
 
-	var reservation *ratelimit.RPMReservation
-	var decision ratelimit.RPMDecision
-	if limits.RPMLimitSet {
-		reservation, decision, err = c.limiter.ReserveObserved(ctx, rpmKey, limits.RPMLimit, c.rpmObserver(userID, requestID))
-	} else {
-		// NULL uses the current site default inside the RPM limiter's own lock.
-		// Do not take a separate Limits snapshot: SetLimits and Reserve must not
-		// have a TOCTOU gap.
-		reservation, decision, err = c.limiter.ReserveObserved(ctx, rpmKey, 0, c.rpmObserver(userID, requestID))
+	charity := false
+	if classify != nil {
+		charity, err = classify()
+		if err != nil {
+			permit.Release()
+			return nil, 0, err
+		}
 	}
+	charityLimit := 0
+	if limits.RPMLimitSet {
+		charityLimit = limits.RPMLimit
+	}
+	reservation, decision, err := c.limiter.ReserveModelObserved(ctx, rpmKey, charity, charityLimit, c.rpmObserver(userID, requestID))
+
 	if err != nil {
 		permit.Release()
 		switch {
@@ -298,7 +312,9 @@ func (c *Controller) Admit(ctx context.Context, userID int64) (*Reservation, tim
 
 func (c *Controller) notifyDenied(ctx context.Context, userID int64, reason ratelimit.RPMReason) error {
 	safeReason := "resource_limit_exceeded"
-	if reason == ratelimit.RPMUserLimit {
+	if reason == ratelimit.RPMCharityUserLimit {
+		safeReason = "user_rpm"
+	} else if reason == ratelimit.RPMUserLimit {
 		safeReason = "user_rpm"
 	} else if reason == ratelimit.RPMGlobalLimit {
 		safeReason = "global_rpm"

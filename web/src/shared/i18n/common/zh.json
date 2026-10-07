@@ -1441,7 +1441,7 @@
       "elevatedPassword": "管理员密码",
       "elevatedPasswordHint": "验证身份后确认本次操作，页面不会保存密码。",
       "endpointLimit": "端点上限",
-      "rpmLimit": "RPM 上限",
+      "rpmLimit": "公益 RPM 上限",
       "concurrencyLimit": "在途并发上限",
       "limitHint": "限制留空时使用默认值，单用户并发默认为 5。请求还需满足全站、端点和密钥的限制。",
       "deletePasswordRequired": "请输入管理员密码后继续。",

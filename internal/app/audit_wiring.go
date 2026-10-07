@@ -19,6 +19,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
 	"github.com/waiting-here/NonbiriAPI/internal/logapi"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
+	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/riskaudit"
@@ -95,18 +96,16 @@ func (a *auditRuntime) classify(ctx context.Context, userID int64, kind string) 
 }
 
 func (a *auditRuntime) configurationChanged(change adminapi.SiteConfigCommit) {
-	for _, key := range change.Keys {
-		if key == "global_rpm" || key == "default_rpm_per_user" {
-			if a.flow != nil {
-				a.flow.NotifyConfigurationChanged()
-			}
-			break
-		}
-	}
 	a.configMu.Lock()
 	defer a.configMu.Unlock()
 	if change.Revision <= a.configRevision {
 		return
+	}
+	if a.flow != nil {
+		global, _ := strconv.Atoi(change.Values[adminapi.KeyGlobalRPM])
+		user, _ := strconv.Atoi(change.Values[adminapi.KeyGlobalRPMPerUser])
+		charity, _ := strconv.Atoi(change.Values[adminapi.KeyDefaultRPMPerUser])
+		_ = a.flow.SetLimits(ratelimit.RPMLimits{GlobalLimit: global, PerUserLimit: user, CharityPerUserLimit: charity})
 	}
 	if a.outbound != nil {
 		// Both values come from the snapshot validated before this commit.

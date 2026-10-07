@@ -110,6 +110,10 @@ func loadRuntimeLimits(ctx context.Context, store *db.Store) (ratelimit.RPMConfi
 	if err != nil {
 		return ratelimit.RPMConfig{}, egress.ConcurrencyLimits{}, err
 	}
+	globalUserRPM, err := parse(adminapi.KeyGlobalRPMPerUser, 4096)
+	if err != nil {
+		return ratelimit.RPMConfig{}, egress.ConcurrencyLimits{}, err
+	}
 	egressGlobal, err := parse(egress.GlobalConcurrencyConfigKey, 100000)
 	if err != nil {
 		return ratelimit.RPMConfig{}, egress.ConcurrencyLimits{}, err
@@ -120,7 +124,8 @@ func loadRuntimeLimits(ctx context.Context, store *db.Store) (ratelimit.RPMConfi
 	}
 	rpm := ratelimit.DefaultRPMConfig()
 	rpm.GlobalLimit = globalRPM
-	rpm.PerUserLimit = defaultRPM
+	rpm.PerUserLimit = globalUserRPM
+	rpm.CharityPerUserLimit = defaultRPM
 	return rpm, egress.ConcurrencyLimits{Global: egressGlobal, PerEndpoint: egressPerEndpoint}, nil
 }
 

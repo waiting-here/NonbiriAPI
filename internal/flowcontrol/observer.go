@@ -31,6 +31,8 @@ func (c *Controller) rpmObserver(userID int64, requestID string) ratelimit.RPMOb
 		}
 		reason := ""
 		switch v.Decision.Reason {
+		case ratelimit.RPMCharityUserLimit:
+			reason = "user_rpm"
 		case ratelimit.RPMUserLimit:
 			reason = "user_rpm"
 		case ratelimit.RPMGlobalLimit:

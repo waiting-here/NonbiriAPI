@@ -55,11 +55,12 @@ func TestRPMDeletionRecoveryKeepsOriginalWindowAndResetsOnlyLimits(t *testing.T)
 		return c
 	}
 	controller := newController()
-	for range 2 {
-		r, _, err := controller.Admit(ctx, user)
+	for i := range 2 {
+		r, _, err := controller.AdmitModel(ctx, user, i == 0)
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		r.Commit()
 	}
 	begin := func() *sql.Tx {
@@ -98,6 +99,23 @@ func TestRPMDeletionRecoveryKeepsOriginalWindowAndResetsOnlyLimits(t *testing.T)
 			if _, _, err := c.Admit(ctx, newUser); !errors.Is(err, ErrRateLimited) {
 				t.Fatal("same identity reset live window", err)
 			}
+		}
+		key, err := c.loadRPMWindow(ctx, newUser)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, facts, err := c.limiter.SnapshotUser(key)
+		if err != nil || len(facts) != 2 {
+			t.Fatal("restored facts", facts, err)
+		}
+		classified := 0
+		for _, fact := range facts {
+			if fact.Charity {
+				classified++
+			}
+		}
+		if classified != 1 {
+			t.Fatal("charity classification lost or inferred for personal request", facts)
 		}
 	}
 	clock.Advance(10 * time.Second)

@@ -518,6 +518,11 @@ INSERT INTO charity_routing_settings(model_id,revision,affinity_ttl_seconds) SEL
 		if _, err := store.DB().Exec(`UPDATE users SET rpm_limit=1 WHERE id=?`, userID); err != nil {
 			t.Fatal(err)
 		}
+		limits := app.forward.flow.Limits()
+		limits.PerUserLimit = 1
+		if err := app.forward.flow.SetLimits(limits); err != nil {
+			t.Fatal(err)
+		}
 		for i := 0; i < 3; i++ {
 			personal := testApplicationRequest(t, app.handler, http.MethodPost, auditUserHost, "/v1/chat/completions", `{"model":"provider/model","messages":[{"role":"user","content":"x"}]}`, nil, headers)
 			if personal.Code != http.StatusTooManyRequests {

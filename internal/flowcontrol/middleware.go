@@ -45,17 +45,24 @@ func NewMiddleware(controller *Controller, identity IdentityResolver) (*Middlewa
 // Wrap returns a handler that meters next. It must be mounted between the
 // CallerKey auth middleware and the forward handler at the same path root.
 func (m *Middleware) Wrap(next http.Handler) http.Handler {
+	return m.WrapClassified(next, nil)
+}
+
+type RequestClassifier func(*http.Request) (*http.Request, bool, func(), error)
+
+// WrapClassified acquires concurrency before preparing the bounded envelope.
+func (m *Middleware) WrapClassified(next http.Handler, classifier RequestClassifier) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		m.serveHTTP(writer, request, next)
+		m.serveHTTP(writer, request, next, classifier)
 	})
 }
 
 // ServeHTTP meters the pre-registered next handler (set through Wrap).
 func (m *Middleware) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
-	m.serveHTTP(writer, request, m.next)
+	m.serveHTTP(writer, request, m.next, nil)
 }
 
-func (m *Middleware) serveHTTP(writer http.ResponseWriter, request *http.Request, next http.Handler) {
+func (m *Middleware) serveHTTP(writer http.ResponseWriter, request *http.Request, next http.Handler, classifier RequestClassifier) {
 	if m == nil || m.controller == nil || m.identity == nil {
 		writeUnavailable(writer, request)
 		return
@@ -75,7 +82,22 @@ func (m *Middleware) serveHTTP(writer http.ResponseWriter, request *http.Request
 	}
 
 	requestattempt.Stage(request.Context(), "flow", "")
-	reservation, retryAfter, err := m.controller.Admit(request.Context(), userID)
+	var cleanup func()
+	defer func() {
+		if cleanup != nil {
+			cleanup()
+		}
+	}()
+	classify := func() (bool, error) {
+		if classifier == nil {
+			return false, nil
+		}
+		var charity bool
+		var err error
+		request, charity, cleanup, err = classifier(request)
+		return charity, err
+	}
+	reservation, retryAfter, err := m.controller.admit(request.Context(), userID, classify)
 	if err != nil {
 		if request.Context().Err() != nil {
 			return

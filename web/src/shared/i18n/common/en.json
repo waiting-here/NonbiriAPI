@@ -1441,7 +1441,7 @@
       "elevatedPassword": "Administrator password",
       "elevatedPasswordHint": "Verify your identity to confirm this action. Your password is not saved here.",
       "endpointLimit": "Endpoint limit",
-      "rpmLimit": "RPM limit",
+      "rpmLimit": "Charity RPM limit",
       "concurrencyLimit": "In-flight concurrency limit",
       "limitHint": "Leave a limit blank to use the default. The default per-user concurrency is 5. Site, endpoint and key limits also apply to requests.",
       "deletePasswordRequired": "Enter the administrator password to continue.",
