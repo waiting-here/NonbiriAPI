@@ -45,14 +45,25 @@ func (s brokenGwentSource) Decide(context.Context, ai.Request) (ai.Result, error
 type brokenGwentAdapter struct{ gwent.AIAdapter }
 
 func (a brokenGwentAdapter) Source() ai.Source { return brokenGwentSource{a.AIAdapter.Source()} }
-func gwentAIFixture(t *testing.T, adapter duel.AIAdapter) (*fixture, duel.AIBot) {
+func gwentAIFixture(t *testing.T, adapter duel.AIAdapter, observeErrors ...func(error)) (*fixture, duel.AIBot) {
 	t.Helper()
 	f := adminFixture(t, "gwent")
 	if err := f.s.Close(); err != nil {
 		t.Fatal(err)
 	}
 	f.options.AI = adapter
-	f.options.ReportError = func(err error) { t.Errorf("AI callback: %v", err) }
+	f.options.ReportError = func(err error) {
+		// A bounded SQL commit may expire under contention; the next Tick
+		// retries the still-current window. Completion assertions remain required.
+		if errors.Is(err, context.DeadlineExceeded) {
+			t.Logf("AI callback retry: %v", err)
+		} else {
+			t.Errorf("AI callback: %v", err)
+		}
+		for _, observe := range observeErrors {
+			observe(err)
+		}
+	}
 	var err error
 	f.s, err = duel.New(f.options)
 	if err != nil {
@@ -568,6 +579,81 @@ func TestGwentAIDeadlineUsesLegalFallbackWithoutBotTimeoutLoss(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("deadline fallback was not exercised")
+	}
+	f.ledger()
+}
+
+func TestGwentAICallbackDeadlinePreservesWindowForRetry(t *testing.T) {
+	source := waitingGwentSource{Source: gwent.AIAdapter{}.Source(), pending: make(chan waitingDecision, 8)}
+	callbackErrors := make(chan error, 8)
+	f, bot := gwentAIFixture(t, waitingGwentAdapter{source: source}, func(err error) {
+		callbackErrors <- err
+	})
+	deck, _ := gwentengine.PresetDeck("openai", "standard-balanced")
+	f.enqueueGwentAI(bot, deck)
+	f.tick()
+	current := f.read(0).Current
+	if current == nil || current.Phase != "mulligan" {
+		t.Fatal("missing opening window", current)
+	}
+	var first waitingDecision
+	select {
+	case first = <-source.pending:
+	case <-time.After(5 * time.Second):
+		t.Fatal("missing initial AI decision")
+	}
+	lock, err := f.db.BeginTx(f.ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Rollback()
+	if _, err := lock.ExecContext(f.ctx, `UPDATE game_duel_user_slots SET game_key=game_key WHERE 0`); err != nil {
+		t.Fatal(err)
+	}
+	close(first.release)
+	select {
+	case err := <-callbackErrors:
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatal("expected bounded callback commit to expire", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("callback did not report its commit deadline")
+	}
+	if err := lock.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	if n := countAI(t, f, "SELECT count(*) FROM game_duel_seats WHERE session_id=? AND participant_kind='bot' AND locked=0 AND timeout_count=0", current.ID); n != 1 {
+		t.Fatal("expired callback changed the bot window or timeout count", n)
+	}
+	var retried waitingDecision
+	deadline := time.After(5 * time.Second)
+	for retried.request.DecisionID == "" {
+		f.tick()
+		select {
+		case retried = <-source.pending:
+		case <-deadline:
+			t.Fatal("AI window was not retried")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	if retried.request.DecisionID != first.request.DecisionID || retried.request.Window != first.request.Window {
+		t.Fatal("callback deadline replaced the authoritative decision", first.request.Window, retried.request.Window)
+	}
+	close(retried.release)
+	deadline = time.After(5 * time.Second)
+	for {
+		var locked bool
+		if err := f.db.QueryRow("SELECT locked FROM game_duel_seats WHERE session_id=? AND participant_kind='bot'", current.ID).Scan(&locked); err != nil {
+			t.Fatal(err)
+		}
+		if locked {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("retried callback did not commit its legal choice")
+		case <-time.After(10 * time.Millisecond):
+		}
 	}
 	f.ledger()
 }
