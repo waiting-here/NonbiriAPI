@@ -1,3 +1,4 @@
+import { EndpointTransportNotice } from '@shared/components/EndpointTransportNotice';
 import { Fold, MoreMenu, OutcomeNote } from '@shared/components/ui';
 import { ExpandablePanel } from '@shared/components/ui/ExpandablePanel';
 import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
@@ -1679,6 +1680,7 @@ export function EndpointDetail({
               <dt>{t('endpoints.baseUrl')}</dt>
               <dd>
                 <SafeCopyValue value={endpoint.data.base_url} label={t('endpoints.baseUrl')} />
+                <EndpointTransportNotice url={endpoint.data.base_url} />
               </dd>
             </div>
             <div>

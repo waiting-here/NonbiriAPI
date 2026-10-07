@@ -1,3 +1,4 @@
+import { EndpointTransportNotice } from '@shared/components/EndpointTransportNotice';
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchState } from '@shared/operations/useSearchState';
@@ -202,6 +203,7 @@ function ChannelForm({
           <small>{t('admin.mainstreamChannels.form.baseUrlHelp')}</small>
         </label>
       </div>
+      <EndpointTransportNotice url={draft.base_url} />
       <Toggle
         label={t('admin.mainstreamChannels.form.enabled')}
         checked={draft.enabled}
