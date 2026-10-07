@@ -46,7 +46,7 @@ func (s *Service) listBlacklistFiltered(ctx context.Context, actorID int64, role
 	defer cancel()
 	now := s.now().Unix()
 	owner := filterOwner("blacklist", role.actorKind(), strconv.FormatInt(actorID, 10), query.ActorKind, strconv.FormatInt(query.ActorUserID, 10), query.DiscordID, query.Q)
-	after, err := s.decodeTextCursor(query.Cursor, "admin_blacklist", owner, now)
+	afterTime, afterID, err := s.decodeBlacklistCursor(query.Cursor, owner, now)
 	if err != nil {
 		return empty, err
 	}
@@ -61,12 +61,12 @@ LEFT JOIN users u ON u.discord_id=b.discord_id
 WHERE (?='' OR COALESCE(o.first_actor_kind,'unknown')=?)
 AND (?=0 OR o.first_actor_user_id=?) AND (?='' OR b.discord_id=?)
 AND (?='' OR instr(b.discord_id,?)>0 OR instr(b.reason,?)>0)
-AND (?='' OR b.discord_id<?)`
-	args := []any{query.ActorKind, query.ActorKind, query.ActorUserID, query.ActorUserID, query.DiscordID, query.DiscordID, query.Q, query.Q, query.Q, after, after}
+AND (?='' OR b.created_at<? OR (b.created_at=? AND b.discord_id<?))`
+	args := []any{query.ActorKind, query.ActorKind, query.ActorUserID, query.ActorUserID, query.DiscordID, query.DiscordID, query.Q, query.Q, query.Q, afterID, afterTime, afterTime, afterID}
 	if role == roleSteward {
 		selection += ` AND (u.id IS NULL OR u.is_admin=0)`
 	}
-	statement, args, meta, err := listPageQuery(ctx, tx, selection, ` ORDER BY b.discord_id DESC`, args, query.Page, limit)
+	statement, args, meta, err := listPageQuery(ctx, tx, selection, ` ORDER BY b.created_at DESC,b.discord_id DESC`, args, query.Page, limit)
 	if err != nil {
 		return empty, err
 	}
@@ -104,7 +104,7 @@ AND (?='' OR b.discord_id<?)`
 		page.Data = page.Data[:limit]
 	}
 	if more && query.Page == nil {
-		page.NextCursor, err = s.encodeCursor("admin_blacklist", owner, now, db.CursorAtom{Kind: db.CursorText, Text: page.Data[len(page.Data)-1].DiscordID})
+		page.NextCursor, err = s.encodeBlacklistCursor(owner, now, page.Data[len(page.Data)-1])
 		if err != nil {
 			return empty, err
 		}
@@ -113,6 +113,43 @@ AND (?='' OR b.discord_id<?)`
 		return empty, err
 	}
 	return page, nil
+}
+
+const blacklistCursorScope = "admin_blacklist_created"
+
+func (s *Service) decodeBlacklistCursor(token, owner string, now int64) (int64, string, error) {
+	if token == "" {
+		return 0, "", nil
+	}
+	key, err := s.deriveCursorKey()
+	if err != nil {
+		return 0, "", err
+	}
+	defer clear(key)
+	cursor, err := db.DecodePaginationCursorWithDerivedKey(key, token, blacklistCursorScope, owner, uint64(now))
+	if err != nil || len(cursor.Atoms) != 2 || cursor.Atoms[0].Kind != db.CursorUint || cursor.Atoms[0].Uint > uint64(maxUnixSecond) || cursor.Atoms[1].Kind != db.CursorText || !validDiscordID(cursor.Atoms[1].Text) {
+		return 0, "", ErrInvalidRequest
+	}
+	return int64(cursor.Atoms[0].Uint), cursor.Atoms[1].Text, nil
+}
+
+func (s *Service) encodeBlacklistCursor(owner string, now int64, last BlacklistEntry) (*string, error) {
+	if now < 0 || now > maxUnixSecond-cursorTTLSeconds {
+		return nil, ErrUnavailable
+	}
+	key, err := s.deriveCursorKey()
+	if err != nil {
+		return nil, err
+	}
+	defer clear(key)
+	token, err := db.EncodePaginationCursorWithDerivedKey(key, blacklistCursorScope, owner, uint64(now+cursorTTLSeconds), []db.CursorAtom{
+		{Kind: db.CursorUint, Uint: uint64(last.CreatedAt)},
+		{Kind: db.CursorText, Text: last.DiscordID},
+	})
+	if err != nil {
+		return nil, ErrInvariant
+	}
+	return &token, nil
 }
 
 func (s *Service) listBlacklistEvents(ctx context.Context, actorID int64, role managementRole, discordID string, requested pagination.Request) (Page[BlacklistEvent], error) {

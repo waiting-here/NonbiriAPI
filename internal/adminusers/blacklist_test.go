@@ -3,6 +3,7 @@ package adminusers
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -10,7 +11,54 @@ import (
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
+
+func TestBlacklistNewestFirstAcrossPageAndCursorModes(t *testing.T) {
+	f := newAdminUsersFixture(t)
+	want := []string{"123456789012345602", "123456789012345601", "123456789012345699"}
+	for i, id := range want {
+		created := adminUsersTestNow - 10
+		if i == 2 {
+			created--
+		}
+		if _, err := f.store.DB().Exec(`INSERT INTO discord_blacklist(discord_id,reason,created_at) VALUES(?,'ordering fixture',?)`, id, created); err != nil {
+			t.Fatal(err)
+		}
+	}
+	page, err := f.service.listBlacklistFiltered(context.Background(), f.adminID, roleAdmin,
+		BlacklistQuery{Q: "ordering fixture", Page: &pagination.Request{Page: 1, Size: 20}})
+	if err != nil || len(page.Data) != len(want) {
+		t.Fatalf("page = %+v, %v", page, err)
+	}
+	for i, id := range want {
+		if page.Data[i].DiscordID != id {
+			t.Fatalf("position %d = %s, want %s", i, page.Data[i].DiscordID, id)
+		}
+	}
+	cursor := ""
+	for i, id := range want {
+		page, err = f.service.listBlacklistFiltered(context.Background(), f.adminID, roleAdmin,
+			BlacklistQuery{Q: "ordering fixture", Limit: 1, Cursor: cursor})
+		if err != nil || len(page.Data) != 1 || page.Data[0].DiscordID != id {
+			t.Fatalf("cursor page %d = %+v, %v", i, page, err)
+		}
+		if i == len(want)-1 {
+			if page.NextCursor != nil {
+				t.Fatal("unexpected final cursor")
+			}
+			break
+		}
+		if page.NextCursor == nil {
+			t.Fatal("missing next cursor")
+		}
+		cursor = *page.NextCursor
+		if _, err := f.service.listBlacklistFiltered(context.Background(), f.adminID, roleAdmin,
+			BlacklistQuery{Q: "another filter", Limit: 1, Cursor: cursor}); !errors.Is(err, ErrInvalidRequest) {
+			t.Fatalf("cursor escaped its filter: %v", err)
+		}
+	}
+}
 
 func blacklistRequest(f *adminUsersFixture, add bool, id, reason, key string) *httptest.ResponseRecorder {
 	route := routeBlacklist
