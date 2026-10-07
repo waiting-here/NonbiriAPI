@@ -87,9 +87,13 @@ export function GwentGame({ config, wallets, accepting, refreshWallets }: DuelLo
     frame.current?.contentWindow?.postMessage({ channel, ...message }, location.origin);
   const viewport = () => {
     const rect = frame.current?.getBoundingClientRect();
+    const headerBottom =
+      document.querySelector('.nb-user-header')?.getBoundingClientRect().bottom ?? 0;
+    const visibleTop = Math.max(0, headerBottom, rect?.top ?? 0);
+    const visibleBottom = Math.min(innerHeight, rect?.bottom ?? innerHeight);
     return {
-      top: Math.max(0, -(rect?.top ?? 0)),
-      height: Math.max(200, innerHeight - Math.max(0, rect?.top ?? 0)),
+      top: Math.max(0, visibleTop - (rect?.top ?? 0)),
+      height: Math.max(1, visibleBottom - visibleTop),
       screenHeight: innerHeight,
     };
   };

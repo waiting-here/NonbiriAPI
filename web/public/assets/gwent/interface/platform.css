@@ -9,7 +9,7 @@ dialog[open] {
   top: calc(var(--visible-top, 0px) + var(--visible-height, 100vh) / 2);
   margin: 0 auto;
   transform: translateY(-50%);
-  max-height: calc(var(--visible-height, 100vh) - 32px);
+  max-height: max(0px, calc(var(--visible-height, 100vh) - 32px));
 }
 .result-overlay {
   position: absolute;

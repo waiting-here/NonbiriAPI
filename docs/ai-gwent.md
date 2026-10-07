@@ -49,7 +49,9 @@ from user pages and public boards, but are included in the owner's account expor
 The shared duel service supplies queues, payments, history and deletion. Gwent
 adds sequential decision windows and resumable effect choices. Actions must match
 the current seat, revision and decision window; the server never sends an opponent's
-hidden hand or deck order. Restart cancels unsettled matches with source refunds.
+hidden hand or deck order. A server restart resumes active matches with their saved
+cards and a new decision window, without charging another ticket. Pending queues
+are cancelled; system cancellations refund the original payment sources.
 
 Routes use `/api/games/gwent` for catalog, state, queue, actions, surrender,
 history, randomness proofs and `leaderboard?window=7d|30d`. Administrator history
