@@ -175,19 +175,20 @@ type DuelAIClearExport struct {
 }
 
 type DuelAITerms struct {
-	BotID         string `json:"bot_id"`
-	BotName       string `json:"bot_name"`
-	Description   string `json:"description"`
-	Revision      int64  `json:"revision,string"`
-	ChallengeID   string `json:"challenge_id"`
-	RulesKey      string `json:"rules_key"`
-	PolicyID      string `json:"policy_id"`
-	PolicyVersion int    `json:"policy_version"`
-	SourceID      string `json:"source_id"`
-	PolicySchema  string `json:"policy_schema"`
-	FirstReward   string `json:"first_reward"`
-	MemoryDays    int    `json:"memory_days"`
-	MemoryGames   int    `json:"memory_games"`
+	BotLoadout    json.RawMessage `json:"bot_loadout,omitempty"`
+	BotID         string          `json:"bot_id"`
+	BotName       string          `json:"bot_name"`
+	Description   string          `json:"description"`
+	Revision      int64           `json:"revision,string"`
+	ChallengeID   string          `json:"challenge_id"`
+	RulesKey      string          `json:"rules_key"`
+	PolicyID      string          `json:"policy_id"`
+	PolicyVersion int             `json:"policy_version"`
+	SourceID      string          `json:"source_id"`
+	PolicySchema  string          `json:"policy_schema"`
+	FirstReward   string          `json:"first_reward"`
+	MemoryDays    int             `json:"memory_days"`
+	MemoryGames   int             `json:"memory_games"`
 }
 
 type DuelAIView struct {

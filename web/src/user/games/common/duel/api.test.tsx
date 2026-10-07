@@ -98,3 +98,45 @@ describe('two-player request recovery', () => {
     ).rejects.toThrow();
   });
 });
+
+describe('AI queue receipts', () => {
+  it.each([
+    ['bidding', 'aiq_'],
+    ['gwent', 'gaq_'],
+  ] as const)(
+    'accepts the %s queue prefix and rejects the other game',
+    async (game, expectedPrefix) => {
+      const fetch = vi.fn<(url: unknown, options?: RequestInit) => Promise<Response>>(async () =>
+        json(
+          { queue_id: expectedPrefix + 'AAAAAAAAAAAAAAAAAAAAAA', revision: '1', deadline: 2000 },
+          202,
+        ),
+      );
+      vi.stubGlobal('fetch', fetch);
+      const intent = {
+        kind: 'queue',
+        mode: 'ai',
+        termsHash: 'a'.repeat(64),
+        botID: 'bot',
+        loadout: { faction: 'openai' },
+      } as const;
+      await expect(sendDuelIntent(game, intent, 'safe-key')).resolves.toBeUndefined();
+      expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toMatchObject({
+        mode: 'ai',
+        bot_id: 'bot',
+        loadout: intent.loadout,
+      });
+      fetch.mockImplementationOnce(async () =>
+        json(
+          {
+            queue_id: (game === 'gwent' ? 'aiq_' : 'gaq_') + 'AAAAAAAAAAAAAAAAAAAAAA',
+            revision: '1',
+            deadline: 2000,
+          },
+          202,
+        ),
+      );
+      await expect(sendDuelIntent(game, intent, 'safe-key')).rejects.toThrow();
+    },
+  );
+});

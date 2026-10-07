@@ -60,7 +60,7 @@ func (s *State) ability(e Effect, _ io.Reader) error {
 	case "safety_layer":
 		p.Shield = true
 	case "context_window":
-		s.offer(owner, Choice{Kind: "context_window", Source: id, Options: slices.Clone(p.Hand), Remaining: 3, CanQuit: true})
+		s.offer(owner, Choice{Kind: "context_window", Initial: slices.Clone(p.Hand), Source: id, Options: slices.Clone(p.Hand), Remaining: 3, CanQuit: true})
 	case "mardroeme":
 		side, row, found := s.locate(id)
 		if !found {

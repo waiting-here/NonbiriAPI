@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"io"
 	"math"
 	"strconv"
 
@@ -186,6 +187,36 @@ func (s *Service) advance(ctx context.Context, tx *sql.Tx, v *sessionRecord, now
 		for seat := range 2 {
 			if v.Seats[seat].Locked {
 				continue
+			}
+			if v.Seats[seat].Kind == "bot" {
+				secret, err := randomness.Load(ctx, tx, s.rules.ID(), v.ID)
+				if err != nil || secret == nil {
+					return activities.PublishFacts{}, false, ErrInvariant
+				}
+				stream, err := secret.Stream("ai-fallback")
+				if err != nil {
+					return activities.PublishFacts{}, false, err
+				}
+				rules, ok := v.rules.(interface {
+					AIFallback(string, json.RawMessage, int, io.Reader) (json.RawMessage, error)
+				})
+				if !ok {
+					return activities.PublishFacts{}, false, ErrInvariant
+				}
+				action, err := rules.AIFallback(v.Mode, v.Payload.Rules, seat, stream)
+				if err != nil {
+					return activities.PublishFacts{}, false, err
+				}
+				if err = randomness.Save(ctx, tx, secret); err != nil {
+					return activities.PublishFacts{}, false, err
+				}
+				accepted, err := v.rules.Accept(v.Mode, v.Payload.Rules, seat, action)
+				if err != nil {
+					return activities.PublishFacts{}, false, err
+				}
+				recordActionSource(v, seat, accepted, "fallback", "deadline", now)
+				facts, err := s.step(ctx, tx, v, expected, seat, accepted, false, now)
+				return facts, true, err
 			}
 			action, err := v.rules.Automatic(v.Mode, v.Payload.Rules, seat)
 			if err != nil {

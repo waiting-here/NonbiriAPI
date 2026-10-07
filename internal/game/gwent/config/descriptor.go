@@ -6,9 +6,15 @@ func Descriptor() game.ModuleDescriptor {
 	return game.ModuleDescriptor{
 		ID: ID, Version: Version, StableOrder: 6,
 		BoardIDs:         []string{"wins"},
-		ResourcePrefixes: []string{"gwtq_", "gwt_"}, Modes: Modes(),
+		ResourcePrefixes: []string{"gwtq_", "gwt_", "gaq_"}, Modes: append(Modes(), "ai"),
 		HomeRouteID: "game-gwent", ContinuationIDs: []string{"gwent_session"}, Codec: Codec{},
 		Routes: []game.RouteDeclaration{
+			{Station: "user", Method: "GET", Pattern: "/api/games/gwent/ai"},
+			{Station: "admin", Method: "GET", Pattern: "/admin/api/games/gwent/ai"},
+			{Station: "admin", Method: "POST", Pattern: "/admin/api/games/gwent/ai/settings"},
+			{Station: "admin", Method: "POST", Pattern: "/admin/api/games/gwent/ai/policies"},
+			{Station: "admin", Method: "POST", Pattern: "/admin/api/games/gwent/ai/bots"},
+
 			{Station: "user", Method: "GET", Pattern: "/api/games/gwent/leaderboard"},
 			{Station: "user", Method: "GET", Pattern: "/api/games/gwent/randomness/{id}", Continuation: true},
 			{Station: "admin", Method: "GET", Pattern: "/admin/api/games/gwent/history"},

@@ -1,0 +1,1459 @@
+[
+  {
+    "id": "standard-balanced",
+    "name": "均衡部署",
+    "difficulty": "入门",
+    "description": "侦察寻找主力组合，恢复补充后续输出；按局势分配战线，为后续小局留牌。",
+    "coreIds": [
+      "openai_astra_hero",
+      "openai_infra_branch",
+      "openai_infra_stream"
+    ],
+    "deck": {
+      "faction": "openai",
+      "leader": "openai_leader",
+      "cards": [
+        {
+          "id": "openai_astra_hero",
+          "count": 1
+        },
+        {
+          "id": "openai_sol61_hero",
+          "count": 1
+        },
+        {
+          "id": "openai_sol6_hero",
+          "count": 1
+        },
+        {
+          "id": "openai_sol56_hero",
+          "count": 1
+        },
+        {
+          "id": "openai_infra_branch",
+          "count": 3
+        },
+        {
+          "id": "openai_infra_stream",
+          "count": 3
+        },
+        {
+          "id": "openai_infra_kv",
+          "count": 1
+        },
+        {
+          "id": "openai_infra_toolrouter",
+          "count": 1
+        },
+        {
+          "id": "openai_scout",
+          "count": 3
+        },
+        {
+          "id": "openai_restore",
+          "count": 2
+        },
+        {
+          "id": "openai_infra_cache",
+          "count": 1
+        },
+        {
+          "id": "openai_infra_memory",
+          "count": 1
+        },
+        {
+          "id": "openai_infra_judge",
+          "count": 1
+        },
+        {
+          "id": "openai_infra_sandbox",
+          "count": 1
+        },
+        {
+          "id": "openai_infra_planner",
+          "count": 1
+        },
+        {
+          "id": "clear_signal",
+          "count": 1
+        },
+        {
+          "id": "compute_surge",
+          "count": 1
+        },
+        {
+          "id": "safety_layer",
+          "count": 1
+        },
+        {
+          "id": "circuit_breaker",
+          "count": 1
+        }
+      ]
+    }
+  },
+  {
+    "id": "standard-resource",
+    "name": "资源续航",
+    "difficulty": "进阶",
+    "description": "侦察补牌，恢复与诱饵回收普通单位；适时放弃一局。侦察会送给敌方战力。",
+    "coreIds": [
+      "openai_astra_hero",
+      "openai_scout",
+      "openai_infra_retrieval",
+      "openai_restore",
+      "openai_infra_branch",
+      "openai_infra_stream"
+    ],
+    "deck": {
+      "faction": "openai",
+      "leader": "openai_leader",
+      "cards": [
+        {
+          "id": "openai_astra_hero",
+          "count": 1
+        },
+        {
+          "id": "openai_sol61_hero",
+          "count": 1
+        },
+        {
+          "id": "openai_sol6_hero",
+          "count": 1
+        },
+        {
+          "id": "openai_sol56_hero",
+          "count": 1
+        },
+        {
+          "id": "openai_scout",
+          "count": 2
+        },
+        {
+          "id": "openai_infra_retrieval",
+          "count": 1
+        },
+        {
+          "id": "openai_restore",
+          "count": 2
+        },
+        {
+          "id": "openai_infra_memory",
+          "count": 1
+        },
+        {
+          "id": "openai_infra_cache",
+          "count": 1
+        },
+        {
+          "id": "openai_infra_branch",
+          "count": 3
+        },
+        {
+          "id": "openai_infra_stream",
+          "count": 3
+        },
+        {
+          "id": "openai_infra_sandbox",
+          "count": 1
+        },
+        {
+          "id": "openai_infra_judge",
+          "count": 1
+        },
+        {
+          "id": "openai_astra_reason",
+          "count": 3
+        },
+        {
+          "id": "clear_signal",
+          "count": 1
+        },
+        {
+          "id": "compute_surge",
+          "count": 1
+        },
+        {
+          "id": "safety_layer",
+          "count": 1
+        },
+        {
+          "id": "circuit_breaker",
+          "count": 1
+        }
+      ]
+    }
+  },
+  {
+    "id": "standard-bond",
+    "name": "联结增益",
+    "difficulty": "进阶",
+    "description": "联结配合同线增益与翻倍，侦察寻找组合，恢复同名单位重建联结；独立输出支撑后续小局。留意天气与剪枝。",
+    "coreIds": [
+      "openai_astra_hero",
+      "openai_infra_embed",
+      "openai_infra_stream"
+    ],
+    "deck": {
+      "faction": "openai",
+      "leader": "openai_leader_compute",
+      "cards": [
+        {
+          "id": "openai_astra_hero",
+          "count": 1
+        },
+        {
+          "id": "openai_sol61_hero",
+          "count": 1
+        },
+        {
+          "id": "openai_sol6_hero",
+          "count": 1
+        },
+        {
+          "id": "openai_sol56_hero",
+          "count": 1
+        },
+        {
+          "id": "openai_infra_embed",
+          "count": 3
+        },
+        {
+          "id": "openai_infra_stream",
+          "count": 3
+        },
+        {
+          "id": "openai_scout",
+          "count": 3
+        },
+        {
+          "id": "openai_infra_retrieval",
+          "count": 1
+        },
+        {
+          "id": "openai_infra_memory",
+          "count": 1
+        },
+        {
+          "id": "openai_infra_cache",
+          "count": 1
+        },
+        {
+          "id": "openai_restore",
+          "count": 2
+        },
+        {
+          "id": "openai_infra_visionbridge",
+          "count": 1
+        },
+        {
+          "id": "openai_infra_kv",
+          "count": 1
+        },
+        {
+          "id": "openai_infra_judge",
+          "count": 1
+        },
+        {
+          "id": "openai_infra_sandbox",
+          "count": 1
+        },
+        {
+          "id": "clear_signal",
+          "count": 1
+        },
+        {
+          "id": "compute_surge",
+          "count": 1
+        },
+        {
+          "id": "safety_layer",
+          "count": 1
+        },
+        {
+          "id": "circuit_breaker",
+          "count": 1
+        }
+      ]
+    }
+  },
+  {
+    "id": "standard-control",
+    "name": "天气剪枝",
+    "difficulty": "进阶",
+    "description": "前线输出配合剪枝，冷启动压低双方前线；恢复与双诱饵重复利用普通单位，留意英雄免疫。",
+    "coreIds": [
+      "openai_astra_hero",
+      "openai_infra_branch",
+      "openai_infra_judge",
+      "openai_infra_sandbox"
+    ],
+    "deck": {
+      "faction": "openai",
+      "leader": "openai_leader",
+      "cards": [
+        {
+          "id": "openai_astra_hero",
+          "count": 1
+        },
+        {
+          "id": "openai_sol61_hero",
+          "count": 1
+        },
+        {
+          "id": "openai_sol6_hero",
+          "count": 1
+        },
+        {
+          "id": "openai_sol56_hero",
+          "count": 1
+        },
+        {
+          "id": "openai_infra_branch",
+          "count": 3
+        },
+        {
+          "id": "openai_infra_beam",
+          "count": 2
+        },
+        {
+          "id": "openai_infra_judge",
+          "count": 1
+        },
+        {
+          "id": "openai_infra_sandbox",
+          "count": 1
+        },
+        {
+          "id": "openai_scout",
+          "count": 3
+        },
+        {
+          "id": "openai_restore",
+          "count": 2
+        },
+        {
+          "id": "openai_infra_cache",
+          "count": 1
+        },
+        {
+          "id": "openai_astra_reason",
+          "count": 2
+        },
+        {
+          "id": "openai_infra_toolrouter",
+          "count": 1
+        },
+        {
+          "id": "clear_signal",
+          "count": 1
+        },
+        {
+          "id": "circuit_breaker",
+          "count": 2
+        },
+        {
+          "id": "openai_infra_visionbridge",
+          "count": 1
+        },
+        {
+          "id": "openai_astra_tools",
+          "count": 1
+        },
+        {
+          "id": "cold_start",
+          "count": 1
+        }
+      ]
+    }
+  },
+  {
+    "id": "standard-balanced",
+    "name": "均衡部署",
+    "difficulty": "入门",
+    "description": "侦察寻找主力组合，恢复补充后续输出；按局势分配战线，为后续小局留牌。",
+    "coreIds": [
+      "deepseek_v4pro_hero",
+      "deepseek_infra_branch",
+      "deepseek_infra_embed"
+    ],
+    "deck": {
+      "faction": "deepseek",
+      "leader": "deepseek_leader",
+      "cards": [
+        {
+          "id": "deepseek_v4pro_hero",
+          "count": 1
+        },
+        {
+          "id": "deepseek_v41flash_hero",
+          "count": 1
+        },
+        {
+          "id": "deepseek_v32exp_hero",
+          "count": 1
+        },
+        {
+          "id": "deepseek_v31terminus_hero",
+          "count": 1
+        },
+        {
+          "id": "deepseek_infra_branch",
+          "count": 3
+        },
+        {
+          "id": "deepseek_infra_embed",
+          "count": 3
+        },
+        {
+          "id": "deepseek_infra_visionbridge",
+          "count": 1
+        },
+        {
+          "id": "deepseek_infra_toolrouter",
+          "count": 1
+        },
+        {
+          "id": "deepseek_scout",
+          "count": 3
+        },
+        {
+          "id": "deepseek_restore",
+          "count": 2
+        },
+        {
+          "id": "deepseek_infra_cache",
+          "count": 1
+        },
+        {
+          "id": "deepseek_infra_memory",
+          "count": 1
+        },
+        {
+          "id": "deepseek_infra_judge",
+          "count": 1
+        },
+        {
+          "id": "deepseek_infra_sandbox",
+          "count": 1
+        },
+        {
+          "id": "deepseek_infra_planner",
+          "count": 1
+        },
+        {
+          "id": "clear_signal",
+          "count": 1
+        },
+        {
+          "id": "compute_surge",
+          "count": 1
+        },
+        {
+          "id": "safety_layer",
+          "count": 1
+        },
+        {
+          "id": "circuit_breaker",
+          "count": 1
+        }
+      ]
+    }
+  },
+  {
+    "id": "standard-resource",
+    "name": "资源续航",
+    "difficulty": "进阶",
+    "description": "侦察补牌，恢复与诱饵回收普通单位；适时放弃一局。侦察会送给敌方战力。",
+    "coreIds": [
+      "deepseek_v4pro_hero",
+      "deepseek_scout",
+      "deepseek_infra_retrieval",
+      "deepseek_restore",
+      "deepseek_infra_branch",
+      "deepseek_infra_stream"
+    ],
+    "deck": {
+      "faction": "deepseek",
+      "leader": "deepseek_leader",
+      "cards": [
+        {
+          "id": "deepseek_v4pro_hero",
+          "count": 1
+        },
+        {
+          "id": "deepseek_v41flash_hero",
+          "count": 1
+        },
+        {
+          "id": "deepseek_v32exp_hero",
+          "count": 1
+        },
+        {
+          "id": "deepseek_v31terminus_hero",
+          "count": 1
+        },
+        {
+          "id": "deepseek_scout",
+          "count": 2
+        },
+        {
+          "id": "deepseek_infra_retrieval",
+          "count": 1
+        },
+        {
+          "id": "deepseek_restore",
+          "count": 3
+        },
+        {
+          "id": "deepseek_infra_memory",
+          "count": 2
+        },
+        {
+          "id": "deepseek_infra_branch",
+          "count": 3
+        },
+        {
+          "id": "deepseek_infra_stream",
+          "count": 3
+        },
+        {
+          "id": "deepseek_v4pro_reason",
+          "count": 3
+        },
+        {
+          "id": "clear_signal",
+          "count": 1
+        },
+        {
+          "id": "compute_surge",
+          "count": 1
+        },
+        {
+          "id": "safety_layer",
+          "count": 1
+        },
+        {
+          "id": "circuit_breaker",
+          "count": 1
+        },
+        {
+          "id": "retrieval_agent",
+          "count": 1
+        }
+      ]
+    }
+  },
+  {
+    "id": "standard-bond",
+    "name": "联结增益",
+    "difficulty": "进阶",
+    "description": "联结配合同线增益与翻倍，侦察寻找组合，恢复同名单位重建联结；独立输出支撑后续小局。留意天气与剪枝。",
+    "coreIds": [
+      "deepseek_v4pro_hero",
+      "deepseek_infra_embed",
+      "deepseek_infra_stream"
+    ],
+    "deck": {
+      "faction": "deepseek",
+      "leader": "deepseek_leader",
+      "cards": [
+        {
+          "id": "deepseek_v4pro_hero",
+          "count": 1
+        },
+        {
+          "id": "deepseek_v41flash_hero",
+          "count": 1
+        },
+        {
+          "id": "deepseek_v32exp_hero",
+          "count": 1
+        },
+        {
+          "id": "deepseek_v31terminus_hero",
+          "count": 1
+        },
+        {
+          "id": "deepseek_infra_embed",
+          "count": 3
+        },
+        {
+          "id": "deepseek_infra_stream",
+          "count": 3
+        },
+        {
+          "id": "deepseek_scout",
+          "count": 3
+        },
+        {
+          "id": "deepseek_infra_retrieval",
+          "count": 1
+        },
+        {
+          "id": "deepseek_infra_memory",
+          "count": 1
+        },
+        {
+          "id": "deepseek_infra_cache",
+          "count": 1
+        },
+        {
+          "id": "deepseek_restore",
+          "count": 2
+        },
+        {
+          "id": "deepseek_infra_visionbridge",
+          "count": 1
+        },
+        {
+          "id": "deepseek_infra_kv",
+          "count": 1
+        },
+        {
+          "id": "deepseek_infra_judge",
+          "count": 1
+        },
+        {
+          "id": "deepseek_infra_sandbox",
+          "count": 1
+        },
+        {
+          "id": "clear_signal",
+          "count": 1
+        },
+        {
+          "id": "compute_surge",
+          "count": 1
+        },
+        {
+          "id": "safety_layer",
+          "count": 1
+        },
+        {
+          "id": "circuit_breaker",
+          "count": 1
+        }
+      ]
+    }
+  },
+  {
+    "id": "standard-control",
+    "name": "天气剪枝",
+    "difficulty": "进阶",
+    "description": "前线输出配合剪枝，冷启动压低双方前线；恢复与双诱饵重复利用普通单位，留意英雄免疫。",
+    "coreIds": [
+      "deepseek_v4pro_hero",
+      "deepseek_infra_branch",
+      "deepseek_infra_judge",
+      "deepseek_infra_sandbox"
+    ],
+    "deck": {
+      "faction": "deepseek",
+      "leader": "deepseek_leader",
+      "cards": [
+        {
+          "id": "deepseek_v4pro_hero",
+          "count": 1
+        },
+        {
+          "id": "deepseek_v41flash_hero",
+          "count": 1
+        },
+        {
+          "id": "deepseek_v32exp_hero",
+          "count": 1
+        },
+        {
+          "id": "deepseek_v31terminus_hero",
+          "count": 1
+        },
+        {
+          "id": "deepseek_infra_branch",
+          "count": 3
+        },
+        {
+          "id": "deepseek_infra_beam",
+          "count": 1
+        },
+        {
+          "id": "deepseek_infra_judge",
+          "count": 2
+        },
+        {
+          "id": "deepseek_infra_sandbox",
+          "count": 2
+        },
+        {
+          "id": "deepseek_scout",
+          "count": 2
+        },
+        {
+          "id": "deepseek_restore",
+          "count": 1
+        },
+        {
+          "id": "deepseek_infra_cache",
+          "count": 1
+        },
+        {
+          "id": "deepseek_infra_memory",
+          "count": 1
+        },
+        {
+          "id": "deepseek_v4pro_reason",
+          "count": 2
+        },
+        {
+          "id": "deepseek_infra_toolrouter",
+          "count": 1
+        },
+        {
+          "id": "deepseek_infra_solver",
+          "count": 1
+        },
+        {
+          "id": "deepseek_infra_verifier",
+          "count": 1
+        },
+        {
+          "id": "clear_signal",
+          "count": 1
+        },
+        {
+          "id": "circuit_breaker",
+          "count": 2
+        },
+        {
+          "id": "cold_start",
+          "count": 1
+        }
+      ]
+    }
+  },
+  {
+    "id": "standard-balanced",
+    "name": "均衡部署",
+    "difficulty": "入门",
+    "description": "侦察寻找主力组合，恢复补充后续输出；按局势分配战线，为后续小局留牌。",
+    "coreIds": [
+      "claude_fable51_hero",
+      "claude_infra_branch",
+      "claude_infra_embed"
+    ],
+    "deck": {
+      "faction": "claude",
+      "leader": "claude_leader_retrieve",
+      "cards": [
+        {
+          "id": "claude_fable51_hero",
+          "count": 1
+        },
+        {
+          "id": "claude_opus55_hero",
+          "count": 1
+        },
+        {
+          "id": "claude_sonnet55_hero",
+          "count": 1
+        },
+        {
+          "id": "claude_opus5_hero",
+          "count": 1
+        },
+        {
+          "id": "claude_infra_branch",
+          "count": 3
+        },
+        {
+          "id": "claude_infra_embed",
+          "count": 3
+        },
+        {
+          "id": "claude_infra_visionbridge",
+          "count": 1
+        },
+        {
+          "id": "claude_infra_toolrouter",
+          "count": 1
+        },
+        {
+          "id": "claude_scout",
+          "count": 3
+        },
+        {
+          "id": "claude_restore",
+          "count": 2
+        },
+        {
+          "id": "claude_infra_cache",
+          "count": 1
+        },
+        {
+          "id": "claude_infra_memory",
+          "count": 1
+        },
+        {
+          "id": "claude_infra_judge",
+          "count": 1
+        },
+        {
+          "id": "claude_infra_sandbox",
+          "count": 1
+        },
+        {
+          "id": "claude_fable51_reason",
+          "count": 1
+        },
+        {
+          "id": "clear_signal",
+          "count": 1
+        },
+        {
+          "id": "compute_surge",
+          "count": 1
+        },
+        {
+          "id": "safety_layer",
+          "count": 1
+        },
+        {
+          "id": "circuit_breaker",
+          "count": 1
+        }
+      ]
+    }
+  },
+  {
+    "id": "standard-resource",
+    "name": "资源续航",
+    "difficulty": "进阶",
+    "description": "侦察补牌，恢复与诱饵回收普通单位；适时放弃一局。侦察会送给敌方战力。",
+    "coreIds": [
+      "claude_fable51_hero",
+      "claude_infra_branch",
+      "claude_infra_stream"
+    ],
+    "deck": {
+      "faction": "claude",
+      "leader": "claude_leader",
+      "cards": [
+        {
+          "id": "claude_fable51_hero",
+          "count": 1
+        },
+        {
+          "id": "claude_opus55_hero",
+          "count": 1
+        },
+        {
+          "id": "claude_sonnet55_hero",
+          "count": 1
+        },
+        {
+          "id": "claude_opus5_hero",
+          "count": 1
+        },
+        {
+          "id": "claude_infra_branch",
+          "count": 3
+        },
+        {
+          "id": "claude_infra_stream",
+          "count": 3
+        },
+        {
+          "id": "claude_infra_kv",
+          "count": 1
+        },
+        {
+          "id": "claude_infra_toolrouter",
+          "count": 1
+        },
+        {
+          "id": "claude_scout",
+          "count": 3
+        },
+        {
+          "id": "claude_infra_retrieval",
+          "count": 1
+        },
+        {
+          "id": "claude_restore",
+          "count": 2
+        },
+        {
+          "id": "claude_infra_cache",
+          "count": 1
+        },
+        {
+          "id": "claude_infra_memory",
+          "count": 1
+        },
+        {
+          "id": "claude_infra_sandbox",
+          "count": 1
+        },
+        {
+          "id": "claude_infra_judge",
+          "count": 1
+        },
+        {
+          "id": "clear_signal",
+          "count": 1
+        },
+        {
+          "id": "compute_surge",
+          "count": 1
+        },
+        {
+          "id": "safety_layer",
+          "count": 1
+        },
+        {
+          "id": "circuit_breaker",
+          "count": 1
+        }
+      ]
+    }
+  },
+  {
+    "id": "standard-bond",
+    "name": "联结增益",
+    "difficulty": "进阶",
+    "description": "联结配合同线增益与翻倍，侦察寻找组合，恢复同名单位重建联结；独立输出支撑后续小局。留意天气与剪枝。",
+    "coreIds": [
+      "claude_fable51_hero",
+      "claude_infra_embed",
+      "claude_cluster"
+    ],
+    "deck": {
+      "faction": "claude",
+      "leader": "claude_leader",
+      "cards": [
+        {
+          "id": "claude_fable51_hero",
+          "count": 1
+        },
+        {
+          "id": "claude_opus55_hero",
+          "count": 1
+        },
+        {
+          "id": "claude_sonnet55_hero",
+          "count": 1
+        },
+        {
+          "id": "claude_opus5_hero",
+          "count": 1
+        },
+        {
+          "id": "claude_infra_embed",
+          "count": 3
+        },
+        {
+          "id": "claude_cluster",
+          "count": 3
+        },
+        {
+          "id": "claude_scout",
+          "count": 3
+        },
+        {
+          "id": "claude_infra_retrieval",
+          "count": 1
+        },
+        {
+          "id": "claude_infra_memory",
+          "count": 1
+        },
+        {
+          "id": "claude_infra_cache",
+          "count": 1
+        },
+        {
+          "id": "claude_restore",
+          "count": 2
+        },
+        {
+          "id": "claude_infra_visionbridge",
+          "count": 2
+        },
+        {
+          "id": "claude_infra_judge",
+          "count": 1
+        },
+        {
+          "id": "claude_infra_sandbox",
+          "count": 1
+        },
+        {
+          "id": "clear_signal",
+          "count": 1
+        },
+        {
+          "id": "compute_surge",
+          "count": 1
+        },
+        {
+          "id": "safety_layer",
+          "count": 1
+        },
+        {
+          "id": "circuit_breaker",
+          "count": 1
+        }
+      ]
+    }
+  },
+  {
+    "id": "standard-control",
+    "name": "天气剪枝",
+    "difficulty": "进阶",
+    "description": "前线输出配合剪枝，冷启动压低双方前线；恢复与双诱饵重复利用普通单位，留意英雄免疫。",
+    "coreIds": [
+      "claude_fable51_hero",
+      "claude_infra_beam",
+      "claude_infra_judge",
+      "claude_infra_sandbox"
+    ],
+    "deck": {
+      "faction": "claude",
+      "leader": "claude_leader_retrieve",
+      "cards": [
+        {
+          "id": "claude_fable51_hero",
+          "count": 1
+        },
+        {
+          "id": "claude_opus55_hero",
+          "count": 1
+        },
+        {
+          "id": "claude_sonnet55_hero",
+          "count": 1
+        },
+        {
+          "id": "claude_opus5_hero",
+          "count": 1
+        },
+        {
+          "id": "claude_infra_beam",
+          "count": 2
+        },
+        {
+          "id": "claude_infra_judge",
+          "count": 2
+        },
+        {
+          "id": "claude_infra_sandbox",
+          "count": 2
+        },
+        {
+          "id": "claude_scout",
+          "count": 3
+        },
+        {
+          "id": "claude_restore",
+          "count": 2
+        },
+        {
+          "id": "claude_infra_cache",
+          "count": 1
+        },
+        {
+          "id": "claude_infra_memory",
+          "count": 1
+        },
+        {
+          "id": "claude_fable51_reason",
+          "count": 2
+        },
+        {
+          "id": "claude_infra_solver",
+          "count": 2
+        },
+        {
+          "id": "claude_vision",
+          "count": 1
+        },
+        {
+          "id": "clear_signal",
+          "count": 1
+        },
+        {
+          "id": "circuit_breaker",
+          "count": 2
+        },
+        {
+          "id": "cold_start",
+          "count": 1
+        }
+      ]
+    }
+  },
+  {
+    "id": "standard-balanced",
+    "name": "均衡部署",
+    "difficulty": "入门",
+    "description": "侦察寻找主力组合，恢复补充后续输出；按局势分配战线，为后续小局留牌。",
+    "coreIds": [
+      "gemini_flash38_hero",
+      "gemini_infra_branch",
+      "gemini_infra_embed"
+    ],
+    "deck": {
+      "faction": "gemini",
+      "leader": "gemini_leader_clear",
+      "cards": [
+        {
+          "id": "gemini_flash38_hero",
+          "count": 1
+        },
+        {
+          "id": "gemini_pro31_hero",
+          "count": 1
+        },
+        {
+          "id": "gemini_live38_hero",
+          "count": 1
+        },
+        {
+          "id": "gemini_flash37_hero",
+          "count": 1
+        },
+        {
+          "id": "gemini_infra_branch",
+          "count": 3
+        },
+        {
+          "id": "gemini_infra_embed",
+          "count": 3
+        },
+        {
+          "id": "gemini_infra_visionbridge",
+          "count": 1
+        },
+        {
+          "id": "gemini_infra_toolrouter",
+          "count": 1
+        },
+        {
+          "id": "gemini_scout",
+          "count": 3
+        },
+        {
+          "id": "gemini_restore",
+          "count": 2
+        },
+        {
+          "id": "gemini_infra_cache",
+          "count": 1
+        },
+        {
+          "id": "gemini_infra_memory",
+          "count": 1
+        },
+        {
+          "id": "gemini_infra_judge",
+          "count": 1
+        },
+        {
+          "id": "gemini_infra_sandbox",
+          "count": 1
+        },
+        {
+          "id": "gemini_infra_planner",
+          "count": 1
+        },
+        {
+          "id": "clear_signal",
+          "count": 1
+        },
+        {
+          "id": "compute_surge",
+          "count": 1
+        },
+        {
+          "id": "safety_layer",
+          "count": 1
+        },
+        {
+          "id": "circuit_breaker",
+          "count": 1
+        }
+      ]
+    }
+  },
+  {
+    "id": "standard-resource",
+    "name": "资源续航",
+    "difficulty": "进阶",
+    "description": "侦察补牌，恢复与诱饵回收普通单位；适时放弃一局。侦察会送给敌方战力。",
+    "coreIds": [
+      "gemini_flash38_hero",
+      "gemini_scout",
+      "gemini_infra_retrieval",
+      "gemini_restore",
+      "gemini_infra_branch",
+      "gemini_infra_stream"
+    ],
+    "deck": {
+      "faction": "gemini",
+      "leader": "gemini_leader_clear",
+      "cards": [
+        {
+          "id": "gemini_flash38_hero",
+          "count": 1
+        },
+        {
+          "id": "gemini_pro31_hero",
+          "count": 1
+        },
+        {
+          "id": "gemini_live38_hero",
+          "count": 1
+        },
+        {
+          "id": "gemini_flash37_hero",
+          "count": 1
+        },
+        {
+          "id": "gemini_scout",
+          "count": 2
+        },
+        {
+          "id": "gemini_infra_retrieval",
+          "count": 2
+        },
+        {
+          "id": "gemini_restore",
+          "count": 2
+        },
+        {
+          "id": "gemini_infra_memory",
+          "count": 1
+        },
+        {
+          "id": "gemini_infra_cache",
+          "count": 1
+        },
+        {
+          "id": "gemini_infra_branch",
+          "count": 3
+        },
+        {
+          "id": "gemini_infra_stream",
+          "count": 3
+        },
+        {
+          "id": "gemini_infra_judge",
+          "count": 1
+        },
+        {
+          "id": "gemini_flash38_reason",
+          "count": 2
+        },
+        {
+          "id": "clear_signal",
+          "count": 1
+        },
+        {
+          "id": "compute_surge",
+          "count": 1
+        },
+        {
+          "id": "safety_layer",
+          "count": 1
+        },
+        {
+          "id": "circuit_breaker",
+          "count": 1
+        },
+        {
+          "id": "gemini_infra_rollback",
+          "count": 1
+        }
+      ]
+    }
+  },
+  {
+    "id": "standard-bond",
+    "name": "联结增益",
+    "difficulty": "进阶",
+    "description": "联结配合同线增益与翻倍，侦察寻找组合，恢复同名单位重建联结；独立输出支撑后续小局。留意天气与剪枝。",
+    "coreIds": [
+      "gemini_flash38_hero",
+      "gemini_infra_embed",
+      "gemini_infra_stream"
+    ],
+    "deck": {
+      "faction": "gemini",
+      "leader": "gemini_leader_clear",
+      "cards": [
+        {
+          "id": "gemini_flash38_hero",
+          "count": 1
+        },
+        {
+          "id": "gemini_pro31_hero",
+          "count": 1
+        },
+        {
+          "id": "gemini_live38_hero",
+          "count": 1
+        },
+        {
+          "id": "gemini_flash37_hero",
+          "count": 1
+        },
+        {
+          "id": "gemini_infra_embed",
+          "count": 3
+        },
+        {
+          "id": "gemini_infra_stream",
+          "count": 3
+        },
+        {
+          "id": "gemini_scout",
+          "count": 3
+        },
+        {
+          "id": "gemini_infra_retrieval",
+          "count": 1
+        },
+        {
+          "id": "gemini_infra_memory",
+          "count": 1
+        },
+        {
+          "id": "gemini_infra_cache",
+          "count": 1
+        },
+        {
+          "id": "gemini_restore",
+          "count": 2
+        },
+        {
+          "id": "gemini_infra_visionbridge",
+          "count": 1
+        },
+        {
+          "id": "gemini_infra_kv",
+          "count": 1
+        },
+        {
+          "id": "gemini_infra_judge",
+          "count": 1
+        },
+        {
+          "id": "gemini_infra_sandbox",
+          "count": 1
+        },
+        {
+          "id": "clear_signal",
+          "count": 1
+        },
+        {
+          "id": "compute_surge",
+          "count": 1
+        },
+        {
+          "id": "safety_layer",
+          "count": 1
+        },
+        {
+          "id": "circuit_breaker",
+          "count": 1
+        }
+      ]
+    }
+  },
+  {
+    "id": "standard-control",
+    "name": "天气剪枝",
+    "difficulty": "进阶",
+    "description": "前线输出配合剪枝，冷启动压低双方前线；恢复与双诱饵重复利用普通单位，留意英雄免疫。",
+    "coreIds": [
+      "gemini_flash38_hero",
+      "gemini_infra_beam",
+      "gemini_infra_judge",
+      "gemini_infra_sandbox"
+    ],
+    "deck": {
+      "faction": "gemini",
+      "leader": "gemini_leader_clear",
+      "cards": [
+        {
+          "id": "gemini_flash38_hero",
+          "count": 1
+        },
+        {
+          "id": "gemini_pro31_hero",
+          "count": 1
+        },
+        {
+          "id": "gemini_live38_hero",
+          "count": 1
+        },
+        {
+          "id": "gemini_flash37_hero",
+          "count": 1
+        },
+        {
+          "id": "gemini_infra_beam",
+          "count": 2
+        },
+        {
+          "id": "gemini_infra_judge",
+          "count": 2
+        },
+        {
+          "id": "gemini_infra_sandbox",
+          "count": 2
+        },
+        {
+          "id": "gemini_scout",
+          "count": 3
+        },
+        {
+          "id": "gemini_restore",
+          "count": 2
+        },
+        {
+          "id": "gemini_infra_cache",
+          "count": 1
+        },
+        {
+          "id": "gemini_infra_memory",
+          "count": 1
+        },
+        {
+          "id": "gemini_flash38_reason",
+          "count": 2
+        },
+        {
+          "id": "gemini_infra_solver",
+          "count": 2
+        },
+        {
+          "id": "gemini_vision",
+          "count": 1
+        },
+        {
+          "id": "clear_signal",
+          "count": 1
+        },
+        {
+          "id": "circuit_breaker",
+          "count": 2
+        },
+        {
+          "id": "cold_start",
+          "count": 1
+        }
+      ]
+    }
+  }
+]

@@ -10,6 +10,7 @@ export function aiPlayerLabel(sourceID: string, t: ReturnType<typeof useAIText>)
     : t('AI 玩家', 'AI player');
 }
 export interface AITerms {
+  bot_loadout?: unknown;
   bot_id: string;
   bot_name: string;
   description: string;

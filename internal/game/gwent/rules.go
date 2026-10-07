@@ -51,7 +51,7 @@ var catalog = func() duel.Catalog {
 
 func (Rules) ID() string { return "gwent" }
 func (Rules) Catalog(mode string) (duel.Catalog, error) {
-	if mode != "standard" {
+	if mode != "standard" && mode != "ai" {
 		return duel.Catalog{}, duel.ErrInvalidRequest
 	}
 	return catalog, nil

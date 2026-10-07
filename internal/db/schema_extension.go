@@ -45,7 +45,8 @@ var storageSchema = schemaRegistry{
 		{version: 1, manifest: baselineManifestHash},
 		{version: 2, manifest: terminalReservationIndexesManifestHash, sql: terminalReservationIndexesSQL},
 		{version: 3, manifest: aiPlayersManifestHash, sql: aiPlayersSQL},
-		{version: 4, manifest: PinnedGenerationTwoManifestHash, sql: managementAndGamesSQL},
+		{version: 4, manifest: managementAndGamesManifestHash, sql: managementAndGamesSQL},
+		{version: 5, manifest: PinnedGenerationTwoManifestHash, sql: gwentAISQL},
 	},
 	bridges: preReleaseSchemaBridges(),
 }

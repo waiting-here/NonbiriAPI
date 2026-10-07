@@ -359,7 +359,7 @@ func TestAIInsufficientAdmissionAndSharedUserSlot(t *testing.T) {
 	}
 	home, err := f.s.HomeSummaryTx(f.ctx, tx, f.users[0])
 	tx.Rollback()
-	if err != nil || len(home.Continue) != 1 || !strings.HasPrefix(home.Continue[0].ResourceID, "aiq_") {
+	if err != nil || len(home.Continue) != 1 || !strings.HasPrefix(home.Continue[0].ResourceID, "aiq_") || home.Continue[0].Game != "bidding" || home.Continue[0].State != "waiting" || home.Continue[0].RouteID != "game-bidding" {
 		t.Fatalf("AI continuation %+v %v", home, err)
 	}
 	f.tick()

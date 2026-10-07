@@ -26,6 +26,9 @@ func (s *Service) registerAIRoutes(user resources.UserRouteRegistrar) error {
 	}); err != nil {
 		return err
 	}
+	if provider, ok := s.aiAdapter.(interface{ UsesMemory() bool }); ok && !provider.UsesMemory() {
+		return nil
+	}
 	return user.RegisterUserRoute("POST", base+"/preference", func(w http.ResponseWriter, r *http.Request, p resources.UserPrincipal) {
 		if r.URL.RawQuery != "" {
 			writeError(w, ErrInvalidRequest)
@@ -62,7 +65,11 @@ func (s *Service) registerAIAdminRoutes(admin host.AdminRegistrar) error {
 	})); err != nil {
 		return err
 	}
-	for _, name := range []string{"settings", "policies", "bots", "preview"} {
+	names := []string{"settings", "policies", "bots", "preview"}
+	if provider, ok := s.aiAdapter.(interface{ UsesMemory() bool }); ok && !provider.UsesMemory() {
+		names = names[:3]
+	}
+	for _, name := range names {
 		if err := admin.RegisterAdminRoute("POST", base+"/"+name, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.RawQuery != "" {
 				writeError(w, ErrInvalidRequest)

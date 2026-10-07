@@ -199,7 +199,7 @@ func (s *Service) releaseQueue(ctx context.Context, tx *sql.Tx, q queueRecord, a
 	}))
 }
 func (s *Service) CancelQueue(ctx context.Context, in CancelInput) (MutationResult, error) {
-	if db.ValidateOpaqueID(in.QueueID, "aiq_") {
+	if db.ValidateOpaqueID(in.QueueID, s.aiQueuePrefix) {
 		return s.cancelAIQueue(ctx, in)
 	}
 	expected, err := db.ParseU128Decimal(in.ExpectedRevision)

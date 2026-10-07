@@ -13,6 +13,7 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Administrator-only endpoint tags, bulk tag changes and filtering by tag or site user ID. Raw-error storage now lists missing records and distinguishes read, queue and storage failures.
 - Separate per-user charity and global request limits, with charity-first classification when both are exceeded.
 - Bidding Duel AI challenges with four editable local strategies, multiple configurable opponents, situation previews, optional use of bounded personal match memory and one-time game-credit rewards. AI entry is disabled with zero prices by default; waiting is unpaid and running matches retain their accepted settings.
+- Gwent AI challenges use the original local scorer and four stable faction opponents with administrator-selected original deck presets. AI entry starts disabled with zero tickets and first-clear rewards, retains accepted decks and prices, and has no personal memory or effect on PvP rankings.
 - A versioned, game-independent decision interface with bounded scheduling and authoritative action submission. Account export v13 includes personal AI preferences, samples, used summaries and first-clear records; anonymous archives omit personal memory and identity links.
 
 ### Changed

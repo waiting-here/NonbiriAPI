@@ -4249,7 +4249,7 @@ CREATE TABLE game_duel_sessions (
  id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4) IN ('bid_','lik_','gwt_') AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')),
  game_key TEXT NOT NULL CHECK((game_key='bidding' AND substr(id,1,4)='bid_') OR (game_key='likes' AND substr(id,1,4)='lik_') OR (game_key='gwent' AND substr(id,1,4)='gwt_')),
  economy TEXT NOT NULL DEFAULT 'pvp' CHECK(economy IN ('pvp','ai_challenge')),
- mode TEXT NOT NULL CHECK((economy='pvp' AND ((game_key='bidding' AND mode IN ('tier1','tier2','tier3')) OR (game_key='likes' AND mode IN ('quick','standard')) OR (game_key='gwent' AND mode='standard'))) OR (economy='ai_challenge' AND game_key='bidding' AND mode='ai')),
+ mode TEXT NOT NULL CHECK((economy='pvp' AND ((game_key='bidding' AND mode IN ('tier1','tier2','tier3')) OR (game_key='likes' AND mode IN ('quick','standard')) OR (game_key='gwent' AND mode='standard'))) OR (economy='ai_challenge' AND game_key IN ('bidding','gwent') AND mode='ai')),
  content_hash TEXT NOT NULL,
  terms_json TEXT NOT NULL CHECK(typeof(terms_json)='text' AND length(CAST(terms_json AS BLOB))<=4096 AND json_valid(terms_json)),
  terms_hash TEXT NOT NULL CHECK(length(terms_hash)=64 AND terms_hash NOT GLOB '*[^0-9a-f]*'),
@@ -4328,7 +4328,7 @@ CREATE TABLE game_duel_anonymous (
  archive_id TEXT NOT NULL UNIQUE CHECK(length(archive_id)=26 AND substr(archive_id,1,4)='dah_' AND substr(archive_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(archive_id,-1,1) IN ('A','Q','g','w')),
  game_key TEXT NOT NULL CHECK(game_key IN ('bidding','likes','gwent')),
  economy TEXT NOT NULL DEFAULT 'pvp' CHECK(economy IN ('pvp','ai_challenge')),
- mode TEXT NOT NULL CHECK((economy='pvp' AND ((game_key='bidding' AND mode IN ('tier1','tier2','tier3')) OR (game_key='likes' AND mode IN ('quick','standard')) OR (game_key='gwent' AND mode='standard'))) OR (economy='ai_challenge' AND game_key='bidding' AND mode='ai')),
+ mode TEXT NOT NULL CHECK((economy='pvp' AND ((game_key='bidding' AND mode IN ('tier1','tier2','tier3')) OR (game_key='likes' AND mode IN ('quick','standard')) OR (game_key='gwent' AND mode='standard'))) OR (economy='ai_challenge' AND game_key IN ('bidding','gwent') AND mode='ai')),
  content_hash TEXT NOT NULL,
  header_json TEXT NOT NULL CHECK(typeof(header_json)='text' AND length(CAST(header_json AS BLOB))<=1048576 AND json_valid(header_json)),
  FOREIGN KEY(game_key,content_hash) REFERENCES game_duel_catalogs(game_key,content_hash) ON DELETE RESTRICT
@@ -6481,7 +6481,7 @@ CREATE TABLE schema_state (
 ) STRICT;
 INSERT INTO credit_compaction(id,through_seq,details_before,sweep_at,sweep_after_seq) VALUES(1,0,0,0,0);
 INSERT INTO game_blackjack_clock(id,observed_at) VALUES(1,0);
-INSERT INTO schema_state(id,version) VALUES(1,4);
+INSERT INTO schema_state(id,version) VALUES(1,5);
 
 CREATE TABLE game_ai_settings (
  game_key TEXT PRIMARY KEY NOT NULL,
@@ -6537,7 +6537,7 @@ CREATE TABLE game_ai_challenges (
 CREATE TRIGGER game_ai_challenge_immutable BEFORE UPDATE ON game_ai_challenges BEGIN SELECT RAISE(ABORT,'AI challenge immutable'); END;
 CREATE TABLE game_ai_queue (
  ordinal INTEGER PRIMARY KEY AUTOINCREMENT,
- id TEXT NOT NULL UNIQUE CHECK(length(id)=26 AND substr(id,1,4)='aiq_'),
+ id TEXT NOT NULL UNIQUE CHECK(length(id)=26 AND ((game_key='bidding' AND substr(id,1,4)='aiq_') OR (game_key='gwent' AND substr(id,1,4)='gaq_'))),
  game_key TEXT NOT NULL,
  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
  bot_id TEXT NOT NULL REFERENCES game_ai_bots(id) ON DELETE RESTRICT,
@@ -6601,7 +6601,7 @@ WHEN NEW.state='terminal' AND OLD.state='active' BEGIN
  INSERT INTO game_duel_history(game_key,session_id) VALUES(NEW.game_key,NEW.id);
 END;
 
-INSERT INTO game_ai_settings(game_key) VALUES('bidding');
+INSERT INTO game_ai_settings(game_key) VALUES('bidding'),('gwent');
 
 CREATE TABLE admin_endpoint_tags (
  base_url TEXT NOT NULL CHECK(length(base_url) BETWEEN 1 AND 4096),

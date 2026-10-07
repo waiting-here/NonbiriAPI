@@ -64,6 +64,8 @@ type Effect struct {
 	IDs   []int  `json:"ids,omitempty"`
 }
 type Choice struct {
+	Initial   []int    `json:"initial,omitempty"`
+	Selected  []int    `json:"selected,omitempty"`
 	Kind      string   `json:"kind"`
 	Source    int      `json:"source,omitempty"`
 	Options   []int    `json:"options"`
