@@ -90,7 +90,7 @@ func TestFourExactExchangesReplayAndAtomicFailure(t *testing.T) {
 			t.Fatal(i, e)
 		}
 	}
-	p.Exchanges[GeneralToCoins] = ExchangeSetting{true, "7", "251"}
+	p.Exchanges[GeneralToCoins] = ExchangeSetting{Enabled: true, SourceAmount: "7", TargetAmount: "251"}
 	changed, e := f.configure(p.Wire)
 	if e != nil {
 		t.Fatal(e)

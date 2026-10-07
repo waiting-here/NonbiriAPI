@@ -26,7 +26,7 @@ func periodTx(ctx context.Context, tx *sql.Tx, id string) (Period, error) {
 	}
 	p.Exchanges = map[Direction]ExchangeSetting{}
 	for _, d := range directions {
-		p.Exchanges[d] = ExchangeSetting{false, "", ""}
+		p.Exchanges[d] = ExchangeSetting{}
 	}
 	rows, e := tx.QueryContext(ctx, "SELECT direction,enabled,source_lot,target_lot FROM lake_notes_exchange_settings WHERE period_id=?", id)
 	if e != nil {

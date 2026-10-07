@@ -247,6 +247,8 @@ test('admin games route performs authoritative PATCH with keyboard input at 390p
     bidding: INITIAL_CONFIG.bidding,
     likes: INITIAL_CONFIG.likes,
     gwent: INITIAL_CONFIG.gwent,
+    steadycatch: INITIAL_CONFIG.steadycatch,
+    lakenotes: INITIAL_CONFIG.lakenotes,
     fishing: {
       ...INITIAL_CONFIG.fishing,
       blue_fish_chance_bps: 3750,

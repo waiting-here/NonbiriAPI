@@ -373,6 +373,7 @@ var knownSiteConfig = func() map[string]keySpec {
 	}
 	addDuelKeySpecs(known)
 	addBlackjackKeySpecs(known)
+	addPermanentGameKeySpecs(known)
 	return known
 }()
 

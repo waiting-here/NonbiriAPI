@@ -214,7 +214,7 @@ func (f *fixture) enable(t *testing.T) Settings {
 	t.Helper()
 	wire := lakeconfig.Wire{Enabled: true, Exchanges: lakeconfig.Defaults()}
 	for _, d := range directions {
-		wire.Exchanges[d] = ExchangeSetting{true, "7", "250"}
+		wire.Exchanges[d] = ExchangeSetting{Enabled: true, SourceAmount: "7", TargetAmount: "250"}
 	}
 	out, err := f.configure(wire)
 	if err != nil {

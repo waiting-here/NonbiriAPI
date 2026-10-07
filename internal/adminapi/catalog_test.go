@@ -271,8 +271,8 @@ func TestGameCatalogUsesAuthoritativeRegistryDefaults(t *testing.T) {
 		byKey[entry.Key] = entry
 	}
 	registryKeys := builtinconfig.SiteConfigKeys()
-	if len(registryKeys) != 85 {
-		t.Fatalf("game registry keys=%d, want 85", len(registryKeys))
+	if len(registryKeys) != 96 {
+		t.Fatalf("game registry keys=%d, want 96", len(registryKeys))
 	}
 	for _, key := range registryKeys {
 		entry, ok := byKey[key]

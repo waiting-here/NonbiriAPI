@@ -6,12 +6,13 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/game"
 	biddingconfig "github.com/waiting-here/NonbiriAPI/internal/game/bidding/config"
+	gwentconfig "github.com/waiting-here/NonbiriAPI/internal/game/gwent/config"
 	likesconfig "github.com/waiting-here/NonbiriAPI/internal/game/likes/config"
 )
 
 // Defaults come from the same codecs used by the dedicated game configuration API.
 func addDuelKeySpecs(known map[string]keySpec) {
-	for _, codec := range []game.ConfigCodec{biddingconfig.Codec{}, likesconfig.Codec{}} {
+	for _, codec := range []game.ConfigCodec{biddingconfig.Codec{}, likesconfig.Codec{}, gwentconfig.Codec{}} {
 		value, err := codec.Compile(nil)
 		if err != nil {
 			panic("invalid built-in duel defaults")
@@ -50,6 +51,7 @@ func addDuelCatalogMetadata() {
 		modes       []string
 	}{
 		{"bidding", "竞标对决", "Bidding Duel", biddingconfig.Modes()},
+		{"gwent", "AI 昆特牌", "AI Gwent", gwentconfig.Modes()},
 		{"likes", "回合制对战小游戏（测试）", "Turn-based Battle Minigame (Test)", likesconfig.Modes()},
 	} {
 		enabled := "game_" + duel.key + "_enabled"
@@ -68,5 +70,5 @@ func addDuelCatalogMetadata() {
 }
 
 func isDuelTicketKey(key string) bool {
-	return (strings.HasPrefix(key, "game_bidding_") || strings.HasPrefix(key, "game_likes_")) && strings.HasSuffix(key, "_ticket_milli")
+	return (strings.HasPrefix(key, "game_bidding_") || strings.HasPrefix(key, "game_likes_") || strings.HasPrefix(key, "game_gwent_")) && strings.HasSuffix(key, "_ticket_milli")
 }

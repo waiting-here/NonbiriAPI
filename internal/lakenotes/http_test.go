@@ -159,8 +159,8 @@ func TestCheckpointEdgeValidationAndSharedBudget(t *testing.T) {
 func TestQuoteBoundsCreditPrimitiveAndWideCoins(t *testing.T) {
 	maxCoin := "340282366920938463463374607431768211455"
 	p := Settings{Revision: "1", Wire: lakeconfig.Wire{Exchanges: map[Direction]ExchangeSetting{
-		GeneralToCoins: {true, "1", maxCoin},
-		CoinsToGeneral: {true, maxCoin, "1"},
+		GeneralToCoins: {Enabled: true, SourceAmount: "1", TargetAmount: maxCoin},
+		CoinsToGeneral: {Enabled: true, SourceAmount: maxCoin, TargetAmount: "1"},
 	}}}
 	for _, d := range []Direction{GeneralToCoins, CoinsToGeneral} {
 		q, e := quoteAmounts(p, QuoteInput{d, "1"})
@@ -171,7 +171,7 @@ func TestQuoteBoundsCreditPrimitiveAndWideCoins(t *testing.T) {
 	if _, e := quoteAmounts(p, QuoteInput{GeneralToCoins, "2"}); e == nil {
 		t.Fatal("U128 output overflow accepted")
 	}
-	p.Exchanges[GeneralToCoins] = ExchangeSetting{true, "9000000000000001", "1"}
+	p.Exchanges[GeneralToCoins] = ExchangeSetting{Enabled: true, SourceAmount: "9000000000000001", TargetAmount: "1"}
 	if _, e := quoteAmounts(p, QuoteInput{GeneralToCoins, "1"}); e == nil {
 		t.Fatal("credit primitive overflow accepted")
 	}

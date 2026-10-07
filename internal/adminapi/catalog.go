@@ -146,6 +146,7 @@ var catalogMetadataByKey = map[string]catalogMetadata{
 func init() {
 	addDuelCatalogMetadata()
 	addBlackjackCatalogMetadata()
+	addPermanentGameCatalogMetadata()
 	addLoanCatalogMetadata()
 	add := func(key, group, titleZh, titleEn, descriptionZh, descriptionEn string, unit localizedCatalogText, gates ...string) {
 		catalogMetadataByKey[key] = catalogMetadata{
