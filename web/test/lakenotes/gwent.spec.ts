@@ -160,7 +160,7 @@ async function actionUI(page: Page, arena: FrameLocator, current: Match, action:
     }
   }
   const response = await submitted;
-  expect(response.status(), await response.text()).toBe(200);
+  expect(response.status()).toBe(200);
   const sent = response.request().postDataJSON();
   expect(sent).toEqual({
     phase_seq: expect.stringMatching(/^[1-9][0-9]*$/),

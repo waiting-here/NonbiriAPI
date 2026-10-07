@@ -293,15 +293,19 @@ for (const width of [1440, 768, 390])
         }
         await page.goto(`${USER_ORIGIN}/activities`);
         const slots = page.locator('.activity-slot');
-        await expect(slots).toHaveCount(3);
-        await expect(page.locator('.activity-slot.is-available')).toHaveCount(open ? 3 : 0);
+        await expect(slots).toHaveCount(2);
+        await expect(page.locator('.activity-slot.is-available')).toHaveCount(open ? 2 : 0);
+        const loan = page.locator('.loan-card');
+        await expect(loan.locator('.loan-promo__rules')).toBeVisible();
+        await expect(loan.locator('details')).toHaveCount(0);
         await expect(page.locator('#limited-activities-heading')).toHaveCount(0);
         if (!open) {
           await expect(slots.locator('summary').first()).toBeVisible();
           await expect(page.locator('.activity-slot[open]')).toHaveCount(0);
           await slots.first().locator(':scope > summary').click();
           await expect(slots.first()).toHaveAttribute('open', '');
-          await expect(slots.first().locator('.loan-actions .btn-primary')).toBeDisabled();
+          await expect(loan.locator('.loan-actions .btn-primary')).toBeDisabled();
+          await expect(slots.first().locator('.economy-welfare-card .btn-primary')).toBeDisabled();
           await slots.first().locator(':scope > summary').click();
         }
         expect(
