@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
   refresh: vi.fn(),
   historyRead: vi.fn(),
   retry: vi.fn(),
-  current: null as null | { id: string; phaseSeq: string; decisionID: string; deadline: number },
+  current: null as null | { id: string; phaseSeq: string; decisionID?: string; deadline: number },
 }));
 vi.mock('../../data', () => ({
   useUserSession: () => ({ data: { user: { id: 'user-example' } } }),
@@ -169,6 +169,64 @@ describe('original arena platform bridge', () => {
     });
     expect(mocks.run).not.toHaveBeenCalled();
     expect(mocks.refresh).toHaveBeenCalled();
+  });
+  it('uses the independent decision for actions while surrender still requires the current global phase', async () => {
+    mocks.current = {
+      id: 'gwt_AAAAAAAAAAAAAAAAAAAAAA',
+      phaseSeq: '4',
+      decisionID: '9',
+      deadline: 0,
+    };
+    const { frame, result } = await mount();
+    mocks.current = { ...mocks.current, phaseSeq: '5' };
+    result.rerender(<GwentGame {...context} />);
+    mocks.run.mockClear();
+    const message = {
+      type: 'action',
+      id: mocks.current.id,
+      phaseSeq: '4',
+      decisionID: '9',
+      action: { kind: 'redraw', card: 2 },
+    };
+    dispatch(frame, message);
+    expect(mocks.run).toHaveBeenCalledExactlyOnceWith({
+      kind: 'action',
+      id: message.id,
+      phaseSeq: '5',
+      decisionID: '9',
+      action: message.action,
+    });
+    dispatch(frame, { ...message, phaseSeq: '5', decisionID: '8' });
+    dispatch(frame, { type: 'surrender', id: message.id, phaseSeq: '4' });
+    expect(mocks.run).toHaveBeenCalledTimes(1);
+    dispatch(frame, { type: 'surrender', id: message.id, phaseSeq: '5' });
+    expect(mocks.run).toHaveBeenLastCalledWith({
+      kind: 'surrender',
+      id: message.id,
+      phaseSeq: '5',
+    });
+  });
+  it('falls back to the global phase only when no decision identity exists', async () => {
+    mocks.current = { id: 'gwt_AAAAAAAAAAAAAAAAAAAAAA', phaseSeq: '7', deadline: 0 };
+    const { frame } = await mount();
+    mocks.run.mockClear();
+    const message = {
+      type: 'action',
+      id: mocks.current.id,
+      phaseSeq: '6',
+      action: { kind: 'pass' },
+    };
+    dispatch(frame, message);
+    dispatch(frame, { ...message, phaseSeq: '7', decisionID: 'retired' });
+    expect(mocks.run).not.toHaveBeenCalled();
+    dispatch(frame, { ...message, phaseSeq: '7' });
+    expect(mocks.run).toHaveBeenCalledExactlyOnceWith({
+      kind: 'action',
+      id: message.id,
+      phaseSeq: '7',
+      decisionID: undefined,
+      action: message.action,
+    });
   });
   it('rejects foreign senders and stale windows; binds the action to its decision', async () => {
     mocks.current = {

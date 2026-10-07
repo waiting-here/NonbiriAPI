@@ -201,8 +201,9 @@ export function GwentGame({ config, wallets, accepting, refreshWallets }: DuelLo
       message.type === 'action' &&
       current &&
       message.id === current.id &&
-      message.phaseSeq === current.phaseSeq &&
-      message.decisionID === current.decisionID
+      (current.decisionID
+        ? message.decisionID === current.decisionID
+        : !message.decisionID && message.phaseSeq === current.phaseSeq)
     ) {
       duel.run({
         kind: 'action',

@@ -147,6 +147,59 @@ describe('original battlefield with authoritative actions', () => {
     });
     expect(document.querySelector<HTMLButtonElement>('#dialog-cards button')!.disabled).toBe(true);
   });
+  it('keeps the human redraw button valid when an independent opponent action advances the global phase', () => {
+    const f = fixture();
+    const action = { kind: 'redraw', card: f.view.hand[0].instance_id };
+    const view = {
+      ...f.view,
+      choice: { kind: 'mulligan', cards: f.view.hand, rows: [], remaining: 2, can_quit: true },
+      legal_actions: [action, { kind: 'continue' }],
+    };
+    const current = { ...f.snapshot.home.current, view };
+    f.renderer.render({ ...f.snapshot, home: { current } });
+    const redraw = document.querySelector<HTMLButtonElement>('#dialog-cards button')!;
+    f.renderer.render({ ...f.snapshot, home: { current: { ...current, phaseSeq: '2' } } });
+    expect(document.querySelector('#dialog-cards button')).toBe(redraw);
+    expect(redraw.disabled).toBe(false);
+    redraw.click();
+    expect(f.send).toHaveBeenLastCalledWith({
+      type: 'action',
+      id: 'match',
+      phaseSeq: '1',
+      decisionID: 'choice',
+      action,
+    });
+    f.renderer.render({
+      ...f.snapshot,
+      home: { current: { ...current, phaseSeq: '3', decisionID: 'next' } },
+    });
+    redraw.click();
+    expect(f.send.mock.calls.filter(([message]) => message.type === 'action')).toHaveLength(1);
+    document.querySelector<HTMLButtonElement>('#dialog-cards button')!.click();
+    expect(f.send).toHaveBeenLastCalledWith({
+      type: 'action',
+      id: 'match',
+      phaseSeq: '3',
+      decisionID: 'next',
+      action,
+    });
+  });
+  it('keeps surrender confirmation strict when only the global phase advances', () => {
+    const f = fixture();
+    f.renderer.confirmSurrender();
+    const oldConfirm = document.querySelector<HTMLButtonElement>(
+      '#dialog-actions button:last-child',
+    )!;
+    f.renderer.render({
+      ...f.snapshot,
+      home: { current: { ...f.snapshot.home.current, phaseSeq: '2' } },
+    });
+    oldConfirm.click();
+    expect(f.send.mock.calls.filter(([message]) => message.type === 'surrender')).toHaveLength(0);
+    f.renderer.confirmSurrender();
+    document.querySelector<HTMLButtonElement>('#dialog-actions button:last-child')!.click();
+    expect(f.send).toHaveBeenLastCalledWith({ type: 'surrender', id: 'match', phaseSeq: '2' });
+  });
   it('rejects detached decision and surrender buttons after the window changes', () => {
     const f = fixture();
     const target = { ...f.view.hand[0], instance_id: 3 };
