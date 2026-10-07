@@ -54,7 +54,7 @@ test('paid Catch survives pause and reload, confirms replacement, and saves a le
     await page.getByRole('button', { name: 'Start catching', exact: true }).click();
     const firstResponse = await starting;
     expect(firstResponse.status()).toBe(200);
-    const first = (await firstResponse.json()) as Session;
+    const first = await current(ctx);
     expect(first.payment).toEqual({ general: '2', game: '0' });
     expect(creditsToMilli(before.balance) - creditsToMilli((await wallets(ctx)).balance)).toBe(
       2000n,
@@ -90,12 +90,18 @@ test('paid Catch survives pause and reload, confirms replacement, and saves a le
     await confirmation.getByRole('button', { name: 'Start a new game', exact: true }).click();
     const abandonedResponse = await abandoning;
     expect(abandonedResponse.status()).toBe(200);
-    const abandoned = (await abandonedResponse.json()) as Session;
+    // Read the persisted receipt through the same idempotent control request;
+    // Chromium may discard network response bodies while the UI advances.
+    const abandoned = await controls(
+      ctx,
+      first,
+      abandonedResponse.request().postDataJSON() as Controls,
+    );
     expect(abandoned.status).toBe('abandoned');
     expect(abandoned.reward).toBe('0');
     const nextResponse = await replacement;
     expect(nextResponse.status()).toBe(200);
-    const next = (await nextResponse.json()) as Session;
+    const next = await current(ctx);
     expect(next.id).not.toBe(first.id);
     expect(next.payment).toEqual(first.payment);
     await expect(page.getByRole('button', { name: 'Pause game', exact: true })).toBeEnabled();
