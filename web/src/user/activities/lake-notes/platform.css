@@ -24,3 +24,8 @@
   align-items: end;
   flex-wrap: wrap;
 }
+
+.lake-original:has(.skill-modal:not([hidden])) {
+  position: relative;
+  z-index: var(--nb-z-overlay);
+}

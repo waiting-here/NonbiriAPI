@@ -64,6 +64,10 @@ test('free permanent play, menus, four exchanges and restart recovery', async ({
   await configure(admin);
   await page.reload();
   expect((await profile(ctx)).wallet).toEqual(before.wallet);
+  await expect(page.locator('.lake-original #scenery')).toHaveCSS(
+    'background-image',
+    /url\(.*assets\/lake-notes\/scene-lake/,
+  );
   for (const menu of ['location', 'skill', 'shop', 'basket', 'catalog', 'contracts']) {
     await page.locator('.lake-original #' + menu + 'Button').click();
     const dialog = page.locator('.lake-original #' + menu + 'Modal');
@@ -91,11 +95,9 @@ test('free permanent play, menus, four exchanges and restart recovery', async ({
     (response) =>
       new URL(response.url()).pathname.endsWith('/pause') && response.request().method() === 'POST',
   );
-  const other = await ctx.newPage();
-  await other.bringToFront();
+  await page.locator('.lake-back').click();
   expect((await paused).status()).toBe(200);
-  await page.bringToFront();
-  await other.close();
+  await page.goto(fixture().user_url + '/games/lake-notes');
   await expect(page.locator('.lake-original #overlayButton')).toBeVisible();
   const saved = (await profile(ctx)).cast!;
   await control(ctx, 'restart');
@@ -161,16 +163,22 @@ test('game layout, menus and cover fit both themes and small screens', async ({ 
     const menus = page.locator('.lake-original .dock');
     const clipped = await menus.evaluate((el) => {
       const bounds = el.getBoundingClientRect();
-      return Array.from(el.querySelectorAll('button')).some((button) => {
-        const b = button.getBoundingClientRect();
-        return (
-          b.left < bounds.left - 1 ||
-          b.right > bounds.right + 1 ||
-          button.scrollWidth > button.clientWidth + 1
-        );
-      });
+      return Array.from(el.querySelectorAll('button'))
+        .filter((button) => {
+          const b = button.getBoundingClientRect();
+          return (
+            b.left < bounds.left - 1 ||
+            b.right > bounds.right + 1 ||
+            button.scrollWidth > button.clientWidth + 1
+          );
+        })
+        .map((button) => ({
+          text: button.textContent,
+          width: button.clientWidth,
+          contentWidth: button.scrollWidth,
+        }));
     });
-    expect(clipped).toBe(false);
+    expect(clipped).toEqual([]);
     await page.locator('.lake-original #catalogButton').click();
     const dialog = page.locator('.lake-original #catalogModal');
     await expect(dialog).toBeVisible();
@@ -185,6 +193,7 @@ test('game layout, menus and cover fit both themes and small screens', async ({ 
     const shared = language === 'zh' ? commonZh.common.lakeNotes : c;
     await page.route('**/assets/lake-notes/cover.png', (route) => route.abort('failed'));
     await page.reload();
+    await card.scrollIntoViewIfNeeded();
     await expect(page.getByRole('img', { name: shared.coverAlt, exact: true })).toBeVisible();
     await expect(page.locator('.lake-cover-fallback')).toHaveText(shared.title);
     await ctx.close();

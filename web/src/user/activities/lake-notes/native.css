@@ -1,6 +1,6 @@
 @scope (.lake-original) {
 
-    .lake-original {
+    :scope {
       --ink: #1c3633;
       --deep: #0c2327;
       --parchment-base: #f4ecdc;
@@ -39,8 +39,8 @@
       color: var(--ink);
     }
     * { box-sizing: border-box; }
-    .lake-original { min-width: 320px; min-height: 100%; margin: 0; }
-    .lake-original {
+    :scope { min-width: 320px; min-height: 100%; margin: 0; }
+    :scope {
       background: radial-gradient(circle at 18% 7%, #224340 0, transparent 40%),
                   radial-gradient(circle at 87% 88%, #163638 0, transparent 40%),
                   #0c2327;
@@ -468,26 +468,26 @@
       transition: transform 0.08s ease-out;
     }
     .fish svg { width: 100%; height: 100%; overflow: visible; }
-    .fish-.lake-original { fill: #f7bd6a; stroke: #6b472e; stroke-width: 2.6; stroke-linejoin: round; }
+    .fish-body { fill: #f7bd6a; stroke: #6b472e; stroke-width: 2.6; stroke-linejoin: round; }
     .fish-fin { fill: #df8b62; stroke: #6b472e; stroke-width: 2; stroke-linejoin: round; }
     .fish-eye { fill: #1c3330; }
-    .fish[data-kind="silver"] .fish-.lake-original { fill: #dce9dc; }
+    .fish[data-kind="silver"] .fish-body { fill: #dce9dc; }
     .fish[data-kind="silver"] .fish-fin { fill: #9bbdb9; }
-    .fish[data-kind="mud"] .fish-.lake-original { fill: #ae9373; }
+    .fish[data-kind="mud"] .fish-body { fill: #ae9373; }
     .fish[data-kind="mud"] .fish-fin { fill: #806f60; }
-    .fish[data-kind="sky"] .fish-.lake-original { fill: #9ed4e4; }
+    .fish[data-kind="sky"] .fish-body { fill: #9ed4e4; }
     .fish[data-kind="sky"] .fish-fin { fill: #6caac9; }
-    .fish[data-kind="red"] .fish-.lake-original { fill: #ee9675; }
+    .fish[data-kind="red"] .fish-body { fill: #ee9675; }
     .fish[data-kind="red"] .fish-fin { fill: #d66561; }
-    .fish[data-kind="teal"] .fish-.lake-original { fill: #88ccb3; }
+    .fish[data-kind="teal"] .fish-body { fill: #88ccb3; }
     .fish[data-kind="teal"] .fish-fin { fill: #5aab9a; }
-    .fish[data-kind="violet"] .fish-.lake-original { fill: #bca5d9; }
+    .fish[data-kind="violet"] .fish-body { fill: #bca5d9; }
     .fish[data-kind="violet"] .fish-fin { fill: #8975b3; }
-    .fish[data-kind="frost"] .fish-.lake-original { fill: #c9e8ed; }
+    .fish[data-kind="frost"] .fish-body { fill: #c9e8ed; }
     .fish[data-kind="frost"] .fish-fin { fill: #8ab7c8; }
-    .fish[data-kind="star"] .fish-.lake-original { fill: #f0d575; }
+    .fish[data-kind="star"] .fish-body { fill: #f0d575; }
     .fish[data-kind="star"] .fish-fin { fill: #c79e40; }
-    .fish[data-kind="abyss"] .fish-.lake-original { fill: #637f9b; }
+    .fish[data-kind="abyss"] .fish-body { fill: #637f9b; }
     .fish[data-kind="abyss"] .fish-fin { fill: #415273; }
     .fish[data-rarity="legendary"] {
       filter: drop-shadow(0 0 10px #ffe57a) drop-shadow(0 0 18px #ffb338) drop-shadow(2px 4px 4px rgba(0,0,0,0.8));
@@ -1196,7 +1196,7 @@
 
     /* 响应式适配 */
     @media (max-width: 860px) {
-      .lake-original { padding: 12px; }
+      :scope { padding: 12px; }
       .topbar { min-height: 85px; padding: 14px 18px; }
       .top-note { display: none; }
       .game-grid { grid-template-columns: 1fr; }
@@ -1229,7 +1229,7 @@
     @media (prefers-reduced-motion: reduce) { .bobber, .ripple { animation-duration: 5s; } .rain-drop, .rain-splash { display: none; animation: none; } }
 
 /* Imported fullscreen journal UI */
-.lake-original {
+:scope {
   --float: #e4553a;
   --float-deep: #9c2e1c;
   --lakeink: #0f2a2e;
@@ -1242,7 +1242,7 @@
   --sans: "Noto Sans SC", -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif}
 html,body,#root,#game-host {
   height:100%}
-.lake-original {
+:scope {
   padding:0!important;
   margin:0;
   display:block!important;
@@ -2075,7 +2075,7 @@ html,body,#root,#game-host {
   flex: 0 0 auto; padding: 18px 24px 6px; background: var(--paper);
   border-bottom: 1px solid #b8914f30;
 }
-#gameRoot .drawer-.lake-original {
+#gameRoot .drawer-body {
   flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
   padding: 0 24px max(24px, env(safe-area-inset-bottom));
   scrollbar-width: thin; scrollbar-color: var(--brass) var(--parchment-accent);
@@ -2159,7 +2159,7 @@ html,body,#root,#game-host {
   #gameRoot .dock-btn.ready::after { right: 8px; top: 5px; }
   #gameRoot .skill-card, #gameRoot #shopModal .skill-card { width: 100%; padding: 0; }
   #gameRoot .drawer-header { padding: max(10px, env(safe-area-inset-top)) 12px 6px; }
-  #gameRoot .drawer-.lake-original { padding: 0 12px max(20px, env(safe-area-inset-bottom)); }
+  #gameRoot .drawer-body { padding: 0 12px max(20px, env(safe-area-inset-bottom)); }
   #gameRoot .skill-head h3 { font-size: 22px; }
   #gameRoot .collection-tools { flex-wrap: wrap; }
   #gameRoot .collection-item { display: grid; grid-template-columns: 60px minmax(0, 1fr); }
