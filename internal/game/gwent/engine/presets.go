@@ -120,7 +120,7 @@ func LocalChoice(s State, seat int, random io.Reader) (Action, error) {
 		slices.SortStableFunc(normal, func(a, b int) int { return cardOrder[s.definition(a).ID] - cardOrder[s.definition(b).ID] })
 		candidates = append(candidates, normal...)
 		for _, id := range candidates {
-			a := Action{Kind: "swap", Card: id}
+			a := Action{Kind: "redraw", Card: id}
 			if s.definition(id).Power < 15 && slices.Contains(legal, a) {
 				return a, nil
 			}
