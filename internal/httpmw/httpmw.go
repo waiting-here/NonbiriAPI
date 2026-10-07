@@ -125,7 +125,7 @@ func (p *policy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		request.Header.Del(name)
 	}
 
-	setSecurityHeaders(w, info.https)
+	setSecurityHeaders(w, info.https, station == host.StationUser && request.URL.Path == "/assets/gwent/interface/index.html")
 	if station == host.StationUnknown {
 		writeMisdirected(w)
 		return
@@ -277,10 +277,14 @@ func parseForwardedAddress(raw string) (netip.Addr, bool) {
 	return netip.Addr{}, false
 }
 
-func setSecurityHeaders(w http.ResponseWriter, secure bool) {
-	w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'")
+func setSecurityHeaders(w http.ResponseWriter, secure, embeddedGame bool) {
+	ancestor, frameOption := "'none'", "DENY"
+	if embeddedGame {
+		ancestor, frameOption = "'self'", "SAMEORIGIN"
+	}
+	w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors "+ancestor+"; form-action 'self'")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("X-Frame-Options", "DENY")
+	w.Header().Set("X-Frame-Options", frameOption)
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
 	if secure {
