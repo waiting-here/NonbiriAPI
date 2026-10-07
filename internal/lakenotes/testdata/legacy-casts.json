@@ -1,0 +1,384 @@
+[
+  {
+    "name": "waiting",
+    "profile": {
+      "coins": "0",
+      "xp": "0",
+      "location": "lake",
+      "day": 1,
+      "clockMinutes": "f64:0000000000807640",
+      "ownedGear": [
+        "bambooPole"
+      ],
+      "equipped": {
+        "rod": "bambooPole"
+      },
+      "baitStock": {
+        "basic": 0,
+        "glimmer": 0,
+        "abyss": 0,
+        "deluxe": 0
+      },
+      "basket": [],
+      "records": {
+        "gold": {
+          "caught": "1",
+          "maxLength": 20,
+          "bestQuality": 0,
+          "perfectCount": "0"
+        }
+      },
+      "nextCatchId": 1,
+      "savedLoadouts": [
+        null,
+        null,
+        null
+      ],
+      "debrisStock": {
+        "driftwood": 0,
+        "bottle": 0,
+        "boot": 0,
+        "line": 0
+      },
+      "trashRecovered": "0",
+      "treasureOpened": "0",
+      "contracts": [],
+      "contractsDay": 0,
+      "completedContracts": "0",
+      "streak": "0"
+    },
+    "cast": {
+      "rules_id": "lake-notes-d1be1134679327c43a38766d857cb0d3131659d2049cf7ea667034bcf727255e",
+      "snapshot": {
+        "level": 0,
+        "hadCaught": true,
+        "rod": "bambooPole",
+        "location": "lake",
+        "effects": {
+          "barHeight": "f64:0000000000000000",
+          "acceleration": "f64:000000000000f03f",
+          "progressGain": "f64:000000000000f03f",
+          "progressLoss": "f64:000000000000f03f",
+          "rareWeight": "f64:000000000000f03f",
+          "legendWeight": "f64:000000000000f03f",
+          "bottomBounce": "f64:555555555555e53f",
+          "barbedCount": 0,
+          "qualityBonus": 0,
+          "spinnerSeconds": "f64:0000000000000000",
+          "sonar": false,
+          "biteDelay": "f64:0000000000000000",
+          "epicWeight": "f64:0000000000000000",
+          "fishSpeed": "f64:0000000000000000"
+        },
+        "barHeight": "f64:48b4c2e640a2c53f"
+      },
+      "plan": {
+        "waitSeconds": "f64:3333333333f30640",
+        "biteTick": 173,
+        "biteDay": 1,
+        "biteClockMinutes": "f64:89666666660a7740",
+        "length": 44,
+        "sizeFactor": "f64:53b81e85eb51d83f",
+        "challenge": {
+          "difficulty": "f64:0000000000004240",
+          "fishSpeed": "f64:000000000000f03f",
+          "tempo": "f64:000000000000f03f",
+          "gain": "f64:000000000000f03f",
+          "loss": "f64:000000000000f03f"
+        },
+        "fishKind": "lake_carp",
+        "treasureY": "f64:000000000000e03f"
+      },
+      "phase": "waiting",
+      "paused": false,
+      "tick": 0,
+      "held": false,
+      "waitRemaining": "f64:3333333333f30640",
+      "barY": "f64:cdcccccccccce43f",
+      "barVelocity": "f64:0000000000000000",
+      "progress": "f64:333333333333d33f",
+      "wasHit": true,
+      "elapsed": "f64:0000000000000000",
+      "hitTime": "f64:0000000000000000",
+      "effectiveTime": "f64:0000000000000000",
+      "currentMissTime": "f64:0000000000000000",
+      "longestMissTime": "f64:0000000000000000",
+      "motion": {
+        "state": 123456789,
+        "draw_count": 0
+      }
+    }
+  },
+  {
+    "name": "playing",
+    "profile": {
+      "coins": "0",
+      "xp": "0",
+      "location": "lake",
+      "day": 1,
+      "clockMinutes": "f64:2400000000107740",
+      "ownedGear": [
+        "bambooPole"
+      ],
+      "equipped": {
+        "rod": "bambooPole"
+      },
+      "baitStock": {
+        "basic": 0,
+        "glimmer": 0,
+        "abyss": 0,
+        "deluxe": 0
+      },
+      "basket": [],
+      "records": {
+        "gold": {
+          "caught": "1",
+          "maxLength": 20,
+          "bestQuality": 0,
+          "perfectCount": "0"
+        }
+      },
+      "nextCatchId": 1,
+      "savedLoadouts": [
+        null,
+        null,
+        null
+      ],
+      "debrisStock": {
+        "driftwood": 0,
+        "bottle": 0,
+        "boot": 0,
+        "line": 0
+      },
+      "trashRecovered": "0",
+      "treasureOpened": "0",
+      "contracts": [],
+      "contractsDay": 0,
+      "completedContracts": "0",
+      "streak": "0"
+    },
+    "cast": {
+      "rules_id": "lake-notes-d1be1134679327c43a38766d857cb0d3131659d2049cf7ea667034bcf727255e",
+      "snapshot": {
+        "level": 0,
+        "hadCaught": true,
+        "rod": "bambooPole",
+        "location": "lake",
+        "effects": {
+          "barHeight": "f64:0000000000000000",
+          "acceleration": "f64:000000000000f03f",
+          "progressGain": "f64:000000000000f03f",
+          "progressLoss": "f64:000000000000f03f",
+          "rareWeight": "f64:000000000000f03f",
+          "legendWeight": "f64:000000000000f03f",
+          "bottomBounce": "f64:555555555555e53f",
+          "barbedCount": 0,
+          "qualityBonus": 0,
+          "spinnerSeconds": "f64:0000000000000000",
+          "sonar": false,
+          "biteDelay": "f64:0000000000000000",
+          "epicWeight": "f64:0000000000000000",
+          "fishSpeed": "f64:0000000000000000"
+        },
+        "barHeight": "f64:48b4c2e640a2c53f"
+      },
+      "plan": {
+        "waitSeconds": "f64:3333333333f30640",
+        "biteTick": 173,
+        "biteDay": 1,
+        "biteClockMinutes": "f64:89666666660a7740",
+        "length": 44,
+        "sizeFactor": "f64:53b81e85eb51d83f",
+        "challenge": {
+          "difficulty": "f64:0000000000004240",
+          "fishSpeed": "f64:000000000000f03f",
+          "tempo": "f64:000000000000f03f",
+          "gain": "f64:000000000000f03f",
+          "loss": "f64:000000000000f03f"
+        },
+        "fishKind": "lake_carp",
+        "treasureY": "f64:000000000000e03f"
+      },
+      "phase": "playing",
+      "paused": false,
+      "tick": 180,
+      "held": false,
+      "waitRemaining": "f64:66d2dddddddd8dbf",
+      "barY": "f64:77a927e3b74bed3f",
+      "barVelocity": "f64:2157d09bdf7a7bbf",
+      "progress": "f64:7f6abc749318d43f",
+      "wasHit": true,
+      "elapsed": "f64:ddddddddddddbd3f",
+      "hitTime": "f64:ddddddddddddbd3f",
+      "effectiveTime": "f64:ddddddddddddbd3f",
+      "currentMissTime": "f64:0000000000000000",
+      "longestMissTime": "f64:0000000000000000",
+      "motion": {
+        "state": 1105418523,
+        "draw_count": 14
+      },
+      "fish": {
+        "position": "f64:5d28beb70f537f40",
+        "y": "f64:8a073820733cec3f",
+        "speed": "f64:2e465da8d4faf6bf",
+        "target": "f64:ec51b81e85eb7540",
+        "drift": "f64:0000000000000000"
+      },
+      "treasure": {
+        "y": "f64:000000000000e03f",
+        "progress": "f64:0000000000000000",
+        "secured": false
+      }
+    }
+  },
+  {
+    "name": "terminal",
+    "profile": {
+      "coins": "53",
+      "xp": "43",
+      "location": "lake",
+      "day": 1,
+      "clockMinutes": "f64:d9666666664a7840",
+      "ownedGear": [
+        "bambooPole"
+      ],
+      "equipped": {
+        "rod": "bambooPole"
+      },
+      "baitStock": {
+        "basic": 0,
+        "glimmer": 1,
+        "abyss": 0,
+        "deluxe": 0
+      },
+      "basket": [
+        {
+          "id": 1,
+          "kind": "lake_carp",
+          "length": 44,
+          "quality": 2,
+          "perfect": true,
+          "locked": false
+        }
+      ],
+      "records": {
+        "gold": {
+          "caught": "1",
+          "maxLength": 20,
+          "bestQuality": 0,
+          "perfectCount": "0"
+        },
+        "lake_carp": {
+          "caught": "1",
+          "maxLength": 44,
+          "bestQuality": 2,
+          "perfectCount": "1"
+        }
+      },
+      "nextCatchId": 2,
+      "savedLoadouts": [
+        null,
+        null,
+        null
+      ],
+      "debrisStock": {
+        "driftwood": 0,
+        "bottle": 0,
+        "boot": 0,
+        "line": 0
+      },
+      "trashRecovered": "0",
+      "treasureOpened": "1",
+      "contracts": [],
+      "contractsDay": 0,
+      "completedContracts": "0",
+      "streak": "1"
+    },
+    "cast": {
+      "rules_id": "lake-notes-d1be1134679327c43a38766d857cb0d3131659d2049cf7ea667034bcf727255e",
+      "snapshot": {
+        "level": 0,
+        "hadCaught": true,
+        "rod": "bambooPole",
+        "location": "lake",
+        "effects": {
+          "barHeight": "f64:0000000000000000",
+          "acceleration": "f64:000000000000f03f",
+          "progressGain": "f64:000000000000f03f",
+          "progressLoss": "f64:000000000000f03f",
+          "rareWeight": "f64:000000000000f03f",
+          "legendWeight": "f64:000000000000f03f",
+          "bottomBounce": "f64:555555555555e53f",
+          "barbedCount": 0,
+          "qualityBonus": 0,
+          "spinnerSeconds": "f64:0000000000000000",
+          "sonar": false,
+          "biteDelay": "f64:0000000000000000",
+          "epicWeight": "f64:0000000000000000",
+          "fishSpeed": "f64:0000000000000000"
+        },
+        "barHeight": "f64:48b4c2e640a2c53f"
+      },
+      "plan": {
+        "waitSeconds": "f64:3333333333f30640",
+        "biteTick": 173,
+        "biteDay": 1,
+        "biteClockMinutes": "f64:89666666660a7740",
+        "length": 44,
+        "sizeFactor": "f64:53b81e85eb51d83f",
+        "challenge": {
+          "difficulty": "f64:0000000000004240",
+          "fishSpeed": "f64:000000000000f03f",
+          "tempo": "f64:000000000000f03f",
+          "gain": "f64:000000000000f03f",
+          "loss": "f64:000000000000f03f"
+        },
+        "fishKind": "lake_carp",
+        "treasureY": "f64:000000000000e03f"
+      },
+      "phase": "success",
+      "paused": false,
+      "tick": 573,
+      "held": false,
+      "waitRemaining": "f64:66d2dddddddd8dbf",
+      "barY": "f64:7525c450305fe33f",
+      "barVelocity": "f64:28e3b74b3d19bf3f",
+      "progress": "f64:000000000000f03f",
+      "wasHit": true,
+      "elapsed": "f64:96aaaaaaaaaa1a40",
+      "hitTime": "f64:4255555555551940",
+      "effectiveTime": "f64:96aaaaaaaaaa1a40",
+      "currentMissTime": "f64:0000000000000000",
+      "longestMissTime": "f64:555555555555d53f",
+      "motion": {
+        "state": 1462642313,
+        "draw_count": 808
+      },
+      "fish": {
+        "position": "f64:ac7ff6fbbfbc7440",
+        "y": "f64:d5d06a205ab1e23f",
+        "speed": "f64:a33877e49546a73f",
+        "target": "f64:ca5c06061af67440",
+        "drift": "f64:0000000000000000"
+      },
+      "treasure": {
+        "y": "f64:000000000000e03f",
+        "progress": "f64:000000000000f03f",
+        "secured": true
+      },
+      "result": {
+        "success": true,
+        "perfect": true,
+        "quality": 2,
+        "xp": 43,
+        "overflow": false,
+        "catchValue": 48
+      },
+      "reward": {
+        "coins": 53,
+        "bait": "glimmer",
+        "count": 1
+      }
+    }
+  }
+]

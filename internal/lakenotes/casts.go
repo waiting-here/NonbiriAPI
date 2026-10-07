@@ -39,7 +39,7 @@ func scanCast(scan func(...any) error) (castRow, error) {
 	if e != nil {
 		return row, e
 	}
-	row.state, e = decodeStoredCast(version, snapshot)
+	row.state, e = decodeStoredCast(version, rulesID, snapshot)
 	if e != nil {
 		return row, ErrInvariant
 	}
@@ -48,7 +48,7 @@ func scanCast(scan func(...any) error) (castRow, error) {
 			return row, ErrInvariant
 		}
 	}
-	if row.state.RulesID != rulesID || row.state.Phase != phase || row.state.Tick != tick {
+	if row.state.Phase != phase || row.state.Tick != tick {
 		return row, ErrInvariant
 	}
 	row.state.Paused, row.state.Held = paused, held
@@ -119,7 +119,7 @@ func saveCastTx(ctx context.Context, tx *sql.Tx, c *castRow, now time.Time, ack 
 	if c.state.Terminal() {
 		terminal = now.Unix()
 	}
-	r, e := tx.ExecContext(ctx, "UPDATE lake_notes_casts SET phase=?,paused=?,generation=?,revision=revision+1,last_tick=?,snapshot=?,reward_plan=?,held=?,active_elapsed_ns=?,active_started_at_ns=?,lease_until_ns=?,last_ack_json=?,terminal_at=?,updated_at=? WHERE id=? AND user_id=? AND revision=?", c.state.Phase, c.state.Paused, c.generation, c.state.Tick, raw, reward, c.state.Held, c.elapsed, c.started, c.lease, string(last), terminal, now.Unix(), c.id, c.user, c.revision)
+	r, e := tx.ExecContext(ctx, "UPDATE lake_notes_casts SET rules_id=?,storage_version=?,phase=?,paused=?,generation=?,revision=revision+1,last_tick=?,snapshot=?,reward_plan=?,held=?,active_elapsed_ns=?,active_started_at_ns=?,lease_until_ns=?,last_ack_json=?,terminal_at=?,updated_at=? WHERE id=? AND user_id=? AND revision=?", rules.RulesID, castStorageVersion, c.state.Phase, c.state.Paused, c.generation, c.state.Tick, raw, reward, c.state.Held, c.elapsed, c.started, c.lease, string(last), terminal, now.Unix(), c.id, c.user, c.revision)
 	if e != nil {
 		return e
 	}

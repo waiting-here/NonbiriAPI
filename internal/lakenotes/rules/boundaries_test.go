@@ -26,7 +26,7 @@ func TestOriginalActionConformance(t *testing.T) {
 	if e = json.Unmarshal(raw, &fixture); e != nil {
 		t.Fatal(e)
 	}
-	if len(fixture.Actions) != 89 {
+	if len(fixture.Actions) != 94 {
 		t.Fatal("action fixture count")
 	}
 	for _, v := range fixture.Actions {
@@ -157,8 +157,8 @@ func TestSkillsAndFreeGearUnlocks(t *testing.T) {
 		t.Fatal("perfect unlock tiers")
 	}
 	p.Records["star"] = Record{Caught: "1", MaxLength: 100, BestQuality: 0, PerfectCount: "0"}
-	if p.UnlockReady("curiosityLure", 1) {
-		t.Fatal("changed original abyss-specific unlock")
+	if !p.UnlockReady("curiosityLure", 1) {
+		t.Fatal("legendary catch did not unlock lure")
 	}
 	p.Records["abyss"] = Record{Caught: "2", MaxLength: 150, BestQuality: 0, PerfectCount: "0"}
 	if !p.UnlockReady("curiosityLure", 2) {
@@ -297,7 +297,8 @@ func TestProfileClockBitsAndPerfectEdges(t *testing.T) {
 		c.EffectiveTime = 1
 		c.HitTime = test.accuracy
 		c.LongestMissTime = test.miss
-		f := InitialFish(c.Plan.Challenge)
+		kind, _ := Fish(c.Plan.FishKind)
+		f := InitialFish(c.Plan.Challenge, kind)
 		c.Fish = &f
 		if e := finish(&p, &c, true); e != nil {
 			t.Fatal(e)

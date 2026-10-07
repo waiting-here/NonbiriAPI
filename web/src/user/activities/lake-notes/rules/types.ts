@@ -34,6 +34,7 @@ export interface Loadout {
   rod: string;
   tackle1?: string;
   tackle2?: string;
+  tackle3?: string;
   bait?: string;
 }
 export interface Catch {
@@ -95,6 +96,8 @@ export interface Challenge {
   loss: number;
 }
 export interface FishState {
+  dartDirection: number;
+  reverseRemaining: number;
   position: number;
   y: number;
   speed: number;
@@ -145,6 +148,7 @@ export interface TreasureReward {
   count: number;
 }
 export interface Cast {
+  bitePreparationRemaining: number;
   rules_id: string;
   snapshot: Snapshot;
   plan: EncounterPlan;
@@ -169,6 +173,7 @@ export interface Cast {
   reward?: TreasureReward;
 }
 export interface Action {
+  quantity?: number;
   action: string;
   id?: string;
   slot?: string;

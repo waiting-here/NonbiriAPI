@@ -10,6 +10,7 @@ type Loadout struct {
 	Rod     string `json:"rod"`
 	Tackle1 string `json:"tackle1,omitempty"`
 	Tackle2 string `json:"tackle2,omitempty"`
+	Tackle3 string `json:"tackle3,omitempty"`
 	Bait    string `json:"bait,omitempty"`
 }
 type Catch struct {
@@ -112,7 +113,7 @@ func (p Profile) Effects(l Loadout) Effects {
 		e.ProgressLoss = float64(2.0 / 3.0)
 	}
 	trap := 0
-	for _, id := range []string{l.Tackle1, l.Tackle2}[:rod.TackleSlots] {
+	for _, id := range []string{l.Tackle1, l.Tackle2, l.Tackle3}[:rod.TackleSlots] {
 		switch id {
 		case "corkBobber":
 			e.BarHeight = float64(e.BarHeight + float64(24.0/568.0))

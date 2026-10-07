@@ -72,6 +72,9 @@ func decode(r *http.Request, out any, required ...string) error {
 			return ErrInvalid
 		}
 		set := map[string]bool{"action": true, "expected_profile_revision": true}
+		if name == "buy_bait" {
+			set["quantity"] = true
+		}
 		for _, key := range keys {
 			set[key] = true
 			if _, ok := fields[key]; !ok {

@@ -24,7 +24,7 @@ export function applyAction(p: Profile, a: Action) {
     equip_gear: 'is',
     save_gear_loadout: 'n',
     load_gear_loadout: 'n',
-    buy_bait: 'i',
+    buy_bait: 'iq',
     select_bait: 'i',
     sell_fish: 'f',
     sell_all_fish: '',
@@ -49,7 +49,9 @@ export function applyAction(p: Profile, a: Action) {
     (a.slot && !mask.includes('s')) ||
     (a.index !== undefined && !mask.includes('n')) ||
     (a.fish_ids?.length && !mask.includes('f')) ||
-    (a.locked !== undefined && !mask.includes('l'))
+    (a.locked !== undefined && !mask.includes('l')) ||
+    (a.quantity !== undefined &&
+      (!mask.includes('q') || !Number.isInteger(a.quantity) || a.quantity < 1 || a.quantity > 999))
   )
     fail();
   if (
@@ -87,6 +89,7 @@ export function applyAction(p: Profile, a: Action) {
         const slots = rod && 'tackleSlots' in rod ? rod.tackleSlots : 0;
         if (slots >= 1 && !profile.equipped.tackle1) profile.equipped.tackle1 = id;
         else if (slots >= 2 && !profile.equipped.tackle2) profile.equipped.tackle2 = id;
+        else if (slots >= 3 && !profile.equipped.tackle3) profile.equipped.tackle3 = id;
       }
       break;
     }
@@ -95,18 +98,20 @@ export function applyAction(p: Profile, a: Action) {
         if (gear(id)?.slot !== 'rod' || !copies(profile, id)) fail();
         profile.equipped = fitLoadout({ ...profile.equipped, rod: id });
       } else {
-        if (a.slot !== 'tackle1' && a.slot !== 'tackle2') fail();
-        const slot = a.slot as 'tackle1' | 'tackle2',
-          other = slot === 'tackle1' ? 'tackle2' : 'tackle1',
+        if (!['tackle1', 'tackle2', 'tackle3'].includes(a.slot || '')) fail();
+        const slot = a.slot as 'tackle1' | 'tackle2' | 'tackle3',
+          used = (['tackle1', 'tackle2', 'tackle3'] as const).filter(
+            (s) => s !== slot && profile.equipped[s] === id,
+          ).length,
           rod = gear(profile.equipped.rod);
         if (
           !rod ||
           !('tackleSlots' in rod) ||
-          rod.tackleSlots < (slot === 'tackle1' ? 1 : 2) ||
+          rod.tackleSlots < Number(slot.slice(-1)) ||
           (id &&
             (gear(id)?.slot !== 'tackle' ||
               !copies(profile, id) ||
-              (profile.equipped[other] === id && copies(profile, id) < 2)))
+              used >= Math.min(2, copies(profile, id))))
         )
           fail();
         if (id) profile.equipped[slot] = id;
@@ -131,8 +136,12 @@ export function applyAction(p: Profile, a: Action) {
     case 'buy_bait': {
       const b = catalog.BAITS[id as keyof typeof catalog.BAITS];
       if (!b || profile.baitStock[id] >= 999) fail();
-      spend(b.cost);
-      profile.baitStock[id]++;
+      let count = Math.min(a.quantity ?? 1, 999 - profile.baitStock[id]);
+      const affordable = BigInt(profile.coins) / BigInt(b.cost);
+      if (affordable < BigInt(count)) count = Number(affordable);
+      if (!count) fail();
+      spend(b.cost * count);
+      profile.baitStock[id] += count;
       break;
     }
     case 'select_bait': {

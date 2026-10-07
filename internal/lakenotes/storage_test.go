@@ -61,7 +61,7 @@ func TestCastStorageRequiresKnownFormatAndExactRules(t *testing.T) {
 	for _, saved := range []struct {
 		version int
 		rulesID string
-	}{{2, rules.RulesID}, {1, "unknown-rules"}} {
+	}{{3, rules.RulesID}, {1, "unknown-rules"}} {
 		if _, err := f.database.Exec("UPDATE lake_notes_casts SET storage_version=?,rules_id=? WHERE id=?", saved.version, saved.rulesID, id); err != nil {
 			t.Fatal(err)
 		}
@@ -73,7 +73,7 @@ func TestCastStorageRequiresKnownFormatAndExactRules(t *testing.T) {
 			t.Fatal("checkpoint replaced or rerolled", err)
 		}
 	}
-	if _, err := f.database.Exec("UPDATE lake_notes_casts SET storage_version=1,rules_id=? WHERE id=?", rules.RulesID, id); err != nil {
+	if _, err := f.database.Exec("UPDATE lake_notes_casts SET storage_version=2,rules_id=? WHERE id=?", rules.RulesID, id); err != nil {
 		t.Fatal(err)
 	}
 	current, err := f.service.Cast(f.ctx(f.user), f.user, id)

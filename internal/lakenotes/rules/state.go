@@ -31,18 +31,18 @@ func ValidateCast(c Cast) error {
 			return ErrInvalid
 		}
 	}
-	for _, n := range []float64{c.WaitRemaining, c.BarY, c.BarVelocity, c.Progress, c.Elapsed, c.HitTime, c.EffectiveTime, c.CurrentMissTime, c.LongestMissTime, s.BarHeight, s.Effects.BarHeight, s.Effects.Acceleration, s.Effects.ProgressGain, s.Effects.ProgressLoss, s.Effects.RareWeight, s.Effects.LegendWeight, s.Effects.BottomBounce, s.Effects.SpinnerSeconds, c.Plan.WaitSeconds, c.Plan.BiteClockMinutes, c.Plan.SizeFactor, c.Plan.Challenge.Difficulty, c.Plan.Challenge.FishSpeed, c.Plan.Challenge.Tempo, c.Plan.Challenge.Gain, c.Plan.Challenge.Loss} {
+	for _, n := range []float64{c.BitePreparationRemaining, c.WaitRemaining, c.BarY, c.BarVelocity, c.Progress, c.Elapsed, c.HitTime, c.EffectiveTime, c.CurrentMissTime, c.LongestMissTime, s.BarHeight, s.Effects.BarHeight, s.Effects.Acceleration, s.Effects.ProgressGain, s.Effects.ProgressLoss, s.Effects.RareWeight, s.Effects.LegendWeight, s.Effects.BottomBounce, s.Effects.SpinnerSeconds, c.Plan.WaitSeconds, c.Plan.BiteClockMinutes, c.Plan.SizeFactor, c.Plan.Challenge.Difficulty, c.Plan.Challenge.FishSpeed, c.Plan.Challenge.Tempo, c.Plan.Challenge.Gain, c.Plan.Challenge.Loss} {
 		if !finite(n) {
 			return ErrInvalid
 		}
 	}
-	if s.BarHeight < 0.08 || s.BarHeight > 0.5 || s.Effects.BarHeight < 0 || s.Effects.BarHeight > float64(48.0/568.0) || s.Effects.Acceleration != 1 || s.Effects.ProgressGain != 1 || s.Effects.ProgressLoss <= 0 || s.Effects.ProgressLoss > 1 || s.Effects.BarbedCount < 0 || s.Effects.BarbedCount > 2 || s.Effects.QualityBonus < 0 || s.Effects.QualityBonus > 2 || s.Effects.SpinnerSeconds < 0 || s.Effects.SpinnerSeconds > 20 || s.Effects.BottomBounce <= 0 || s.Effects.BottomBounce > float64(2.0/3.0) {
+	if s.BarHeight < 0.08 || s.BarHeight > 0.5 || s.Effects.BarHeight < 0 || s.Effects.BarHeight > float64(48.0/568.0) || s.Effects.Acceleration != 1 || s.Effects.ProgressGain != 1 || s.Effects.ProgressLoss <= 0 || s.Effects.ProgressLoss > 1 || s.Effects.BarbedCount < 0 || s.Effects.BarbedCount > 2 || s.Effects.QualityBonus < 0 || s.Effects.QualityBonus > 2 || s.Effects.SpinnerSeconds < 0 || s.Effects.SpinnerSeconds > 25 || s.Effects.BottomBounce <= 0 || s.Effects.BottomBounce > float64(2.0/3.0) {
 		return ErrInvalid
 	}
 	if c.Plan.WaitSeconds <= 0 || c.Plan.WaitSeconds > 6 || c.Plan.BiteTick < 1 || c.Plan.BiteTick > 360 || c.Plan.BiteDay < 1 || c.Plan.BiteDay > MaxSafeInteger || c.Plan.BiteClockMinutes < 0 || c.Plan.BiteClockMinutes >= 1440 || c.Plan.SizeFactor < 0 || c.Plan.SizeFactor > 1 {
 		return ErrInvalid
 	}
-	if c.BarY < 0 || c.BarY > 1 || math.Abs(c.BarVelocity) > 2.4 || c.Progress < 0 || c.Progress > 1 || c.Elapsed < 0 || c.HitTime < 0 || c.EffectiveTime < 0 || c.CurrentMissTime < 0 || c.LongestMissTime < 0 || c.HitTime > c.EffectiveTime || c.CurrentMissTime > c.LongestMissTime {
+	if c.BitePreparationRemaining < 0 || c.BitePreparationRemaining > .5 || c.BarY < 0 || c.BarY > 1 || math.Abs(c.BarVelocity) > 2.4 || c.Progress < 0 || c.Progress > 1 || c.Elapsed < 0 || c.HitTime < 0 || c.EffectiveTime < 0 || c.CurrentMissTime < 0 || c.LongestMissTime < 0 || c.HitTime > c.EffectiveTime || c.CurrentMissTime > c.LongestMissTime {
 		return ErrInvalid
 	}
 	if c.Plan.Debris != "" {
@@ -76,12 +76,12 @@ func ValidateCast(c Cast) error {
 	}
 	if c.Fish != nil {
 		f := c.Fish
-		for _, n := range []float64{f.Position, f.Y, f.Speed, f.Target, f.Drift} {
+		for _, n := range []float64{f.Position, f.Y, f.Speed, f.Target, f.Drift, f.ReverseRemaining} {
 			if !finite(n) {
 				return ErrInvalid
 			}
 		}
-		if f.Position < 0 || f.Position > 532 || f.Y != float64(f.Position/568) || f.Target < -1 || f.Target > 548 || f.Drift < -1.5 || f.Drift > 1.5 {
+		if f.DartDirection < -1 || f.DartDirection > 1 || f.ReverseRemaining < 0 || f.ReverseRemaining > .65 || f.Position < 0 || f.Position > 532 || f.Y != float64(f.Position/568) || f.Target < -1 || f.Target > 548 || f.Drift < -1.5 || f.Drift > 1.5 {
 			return ErrInvalid
 		}
 	}
@@ -106,7 +106,7 @@ func ValidateCast(c Cast) error {
 	}
 	if c.Result != nil {
 		r := c.Result
-		if r.Success != (c.Phase == "success") || r.Quality < 0 || r.Quality > 3 || r.XP < 0 || r.XP > 1000 || r.CatchValue < 0 || r.CatchValue > 700 || r.Perfect && !r.Success {
+		if r.Success != (c.Phase == "success") || r.Quality < 0 || r.Quality > 3 || r.XP < 0 || r.XP > 1000 || r.CatchValue < 0 || r.CatchValue > 780 || r.Perfect && !r.Success {
 			return ErrInvalid
 		}
 	}
@@ -124,15 +124,15 @@ func StateBytes(p Profile, c Cast) []byte {
 	b := make([]byte, 0, 256)
 	putFloat := func(v float64) { b = binary.LittleEndian.AppendUint64(b, math.Float64bits(v)) }
 	putInt := func(v uint64) { b = binary.LittleEndian.AppendUint64(b, v) }
-	for _, v := range []float64{p.ClockMinutes, c.WaitRemaining, c.BarY, c.BarVelocity, c.Progress, c.Elapsed, c.HitTime, c.EffectiveTime, c.CurrentMissTime, c.LongestMissTime} {
+	for _, v := range []float64{p.ClockMinutes, c.BitePreparationRemaining, c.WaitRemaining, c.BarY, c.BarVelocity, c.Progress, c.Elapsed, c.HitTime, c.EffectiveTime, c.CurrentMissTime, c.LongestMissTime} {
 		putFloat(v)
 	}
 	if c.Fish == nil {
-		for i := 0; i < 5; i++ {
+		for i := 0; i < 7; i++ {
 			putFloat(0)
 		}
 	} else {
-		for _, v := range []float64{c.Fish.Position, c.Fish.Y, c.Fish.Speed, c.Fish.Target, c.Fish.Drift} {
+		for _, v := range []float64{c.Fish.Position, c.Fish.Y, c.Fish.Speed, c.Fish.Target, c.Fish.Drift, c.Fish.ReverseRemaining, float64(c.Fish.DartDirection)} {
 			putFloat(v)
 		}
 	}
@@ -207,7 +207,7 @@ func EncodeCast(c Cast) ([]byte, error) {
 	return json.Marshal(tree)
 }
 
-var floatKeys = map[string]bool{"waitSeconds": true, "biteClockMinutes": true, "sizeFactor": true, "treasureY": true, "difficulty": true, "fishSpeed": true, "tempo": true, "gain": true, "loss": true, "barHeight": true, "acceleration": true, "progressGain": true, "progressLoss": true, "rareWeight": true, "legendWeight": true, "bottomBounce": true, "spinnerSeconds": true, "biteDelay": true, "epicWeight": true, "waitRemaining": true, "barY": true, "barVelocity": true, "progress": true, "elapsed": true, "hitTime": true, "effectiveTime": true, "currentMissTime": true, "longestMissTime": true, "position": true, "y": true, "speed": true, "target": true, "drift": true}
+var floatKeys = map[string]bool{"bitePreparationRemaining": true, "reverseRemaining": true, "waitSeconds": true, "biteClockMinutes": true, "sizeFactor": true, "treasureY": true, "difficulty": true, "fishSpeed": true, "tempo": true, "gain": true, "loss": true, "barHeight": true, "acceleration": true, "progressGain": true, "progressLoss": true, "rareWeight": true, "legendWeight": true, "bottomBounce": true, "spinnerSeconds": true, "biteDelay": true, "epicWeight": true, "waitRemaining": true, "barY": true, "barVelocity": true, "progress": true, "elapsed": true, "hitTime": true, "effectiveTime": true, "currentMissTime": true, "longestMissTime": true, "position": true, "y": true, "speed": true, "target": true, "drift": true}
 
 func encodeFloatTree(t any) {
 	switch v := t.(type) {

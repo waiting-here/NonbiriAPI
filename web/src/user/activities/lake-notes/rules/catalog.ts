@@ -88,7 +88,7 @@ export function equipmentEffects(loadout: Loadout): Effects {
   if (!rod) throw Error('unknown rod');
   if (loadout.rod === 'trainingRod') effects.progressLoss = 2 / 3;
   let trapCount = 0;
-  for (const id of [loadout.tackle1, loadout.tackle2].slice(
+  for (const id of [loadout.tackle1, loadout.tackle2, loadout.tackle3].slice(
     0,
     'tackleSlots' in rod ? rod.tackleSlots : 0,
   )) {

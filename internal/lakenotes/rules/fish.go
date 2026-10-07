@@ -10,22 +10,28 @@ type Challenge struct {
 	Loss       float64 `json:"loss"`
 }
 type FishState struct {
-	Position float64 `json:"position"`
-	Y        float64 `json:"y"`
-	Speed    float64 `json:"speed"`
-	Target   float64 `json:"target"`
-	Drift    float64 `json:"drift"`
+	DartDirection    int     `json:"dartDirection"`
+	ReverseRemaining float64 `json:"reverseRemaining"`
+	Position         float64 `json:"position"`
+	Y                float64 `json:"y"`
+	Speed            float64 `json:"speed"`
+	Target           float64 `json:"target"`
+	Drift            float64 `json:"drift"`
 }
 
 func MakeChallenge(f FishType, length int) Challenge {
 	relative := clamp(float64(float64(length-f.Length[0])/float64(f.Length[1]-f.Length[0])), 0, 1)
 	return Challenge{Difficulty: clamp(float64(f.Difficulty+round(float64(relative*8))), 5, 110), FishSpeed: 1, Tempo: 1, Gain: 1, Loss: 1}
 }
-func InitialFish(c Challenge) FishState {
+func InitialFish(c Challenge, kind FishType) FishState {
 	p := clamp(float64(float64(508.0/568.0)*568), 0, 532)
-	return FishState{Position: p, Y: float64(p / 568), Target: clamp(float64(float64(float64(100-c.Difficulty)/100)*548), 0, 548)}
+	f := FishState{Position: p, Y: float64(p / 568)}
+	f.setTarget(clamp(float64(float64(float64(100-c.Difficulty)/100)*548), 0, 548), kind)
+	return f
 }
-func (f *FishState) Step(r *MotionRandom, behavior string, c Challenge) {
+func (f *FishState) Step(r *MotionRandom, kind FishType, c Challenge) {
+	behavior := kind.Behavior
+	f.ReverseRemaining = math.Max(0, float64(f.ReverseRemaining-TickSeconds))
 	steps := float64(TickSeconds * 60)
 	d := c.Difficulty
 	tempo := c.Tempo
@@ -36,7 +42,7 @@ func (f *FishState) Step(r *MotionRandom, behavior string, c Challenge) {
 	threshold := float64(float64(float64(float64(d*weight)/4000)*tempo) * steps)
 	if r.Next() < threshold && (behavior != "smooth" || f.Target < 0) {
 		percent := math.Min(0.99, float64(float64(d+r.Range(10, 45))/100))
-		f.Target = clamp(float64(f.Position+float64(r.Range(-f.Position, float64(548-f.Position))*percent)), 0, 548)
+		f.setTarget(clamp(float64(f.Position+float64(r.Range(-f.Position, float64(548-f.Position))*percent)), 0, 548), kind)
 	}
 	if behavior == "floater" {
 		f.Drift = math.Max(-1.5, float64(f.Drift-float64(0.01*steps)))
@@ -52,7 +58,7 @@ func (f *FishState) Step(r *MotionRandom, behavior string, c Challenge) {
 		if r.Next() < 0.5 {
 			direction = -1
 		}
-		f.Target = clamp(float64(f.Position+float64(direction*r.Range(50, 101))), 0, 548)
+		f.setTarget(clamp(float64(f.Position+float64(direction*r.Range(50, 101))), 0, 548), kind)
 	} else {
 		f.Target = -1
 	}
@@ -61,8 +67,34 @@ func (f *FishState) Step(r *MotionRandom, behavior string, c Challenge) {
 		if r.Next() < 0.5 {
 			direction = -1
 		}
-		f.Target = clamp(float64(f.Position+float64(direction*r.Range(51, float64(101+float64(d*2))))), 0, 548)
+		f.setTarget(clamp(float64(f.Position+float64(direction*r.Range(51, float64(101+float64(d*2))))), 0, 548), kind)
 	}
 	f.Position = clamp(float64(f.Position+float64(float64(float64(f.Speed+f.Drift)*c.FishSpeed)*steps)), 0, 532)
 	f.Y = float64(f.Position / 568)
+}
+
+func (f *FishState) setTarget(target float64, kind FishType) {
+	if kind.Behavior == "dart" && (kind.Rarity == "common" || kind.Rarity == "uncommon") {
+		delta := float64(target - f.Position)
+		direction := 0
+		if delta > 0 {
+			direction = 1
+		} else if delta < 0 {
+			direction = -1
+		}
+		large := math.Abs(delta) > 50
+		if large && f.DartDirection != 0 && direction != f.DartDirection && f.ReverseRemaining > 0 {
+			return
+		}
+		distance := 120.0
+		if kind.Rarity == "uncommon" {
+			distance = 145
+		}
+		target = clamp(target, float64(f.Position-distance), float64(f.Position+distance))
+		if large && direction != f.DartDirection {
+			f.DartDirection = direction
+			f.ReverseRemaining = .65
+		}
+	}
+	f.Target = clamp(target, 0, 548)
 }

@@ -52,7 +52,7 @@ func TestOriginalFullGameConformance(t *testing.T) {
 	if e = json.Unmarshal(raw, &fixture); e != nil {
 		t.Fatal(e)
 	}
-	if fixture.SourceSHA256 != SourceSHA256 || len(fixture.Vectors) != 279 {
+	if fixture.SourceSHA256 != SourceSHA256 || len(fixture.Vectors) != 426 {
 		t.Fatal("fixture identity")
 	}
 	for _, v := range fixture.Vectors {
@@ -105,7 +105,7 @@ func TestOriginalFullGameConformance(t *testing.T) {
 }
 
 func TestCatalogIdentity(t *testing.T) {
-	if len(catalog.Fish) != 54 || len(catalog.Gear) != 14 || len(catalog.Baits) != 4 || len(catalog.Skills) != 10 || len(catalog.Debris) != 4 || len(catalog.ContractSlots) != 5 {
+	if len(catalog.Fish) != 96 || len(catalog.Gear) != 15 || len(catalog.Baits) != 4 || len(catalog.Skills) != 10 || len(catalog.Debris) != 4 || len(catalog.ContractSlots) != 5 {
 		t.Fatal("incomplete catalog")
 	}
 	raw, e := os.ReadFile("catalog_manifest.json")
@@ -193,10 +193,10 @@ func TestLongOriginalMotionVectors(t *testing.T) {
 	for _, v := range fixture.Cases {
 		rng := MotionRandom{State: v.Seed}
 		challenge := Challenge{Difficulty: float64(v.Difficulty), Tempo: 0.92, FishSpeed: 1.05, Gain: 1, Loss: 1}
-		fish := InitialFish(challenge)
+		fish := InitialFish(challenge, FishType{Behavior: v.Behavior, Rarity: "rare"})
 		h := sha256.New()
 		for i := 0; i < v.Steps; i++ {
-			fish.Step(&rng, v.Behavior, challenge)
+			fish.Step(&rng, FishType{Behavior: v.Behavior, Rarity: "rare"}, challenge)
 			b := make([]byte, 48)
 			for j, n := range []float64{fish.Position, fish.Y, fish.Speed, fish.Target, fish.Drift} {
 				binary.LittleEndian.PutUint64(b[j*8:], math.Float64bits(n))
