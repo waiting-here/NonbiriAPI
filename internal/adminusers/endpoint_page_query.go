@@ -3,6 +3,7 @@ package adminusers
 import (
 	"context"
 	"database/sql"
+	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
@@ -20,14 +21,26 @@ WHERE e.base_url=? GROUP BY e.user_id`
 
 // Count and choose groups before reading their child-key totals. The materialized
 // window keeps aggregates for skipped groups out of both numbered and cursor reads.
-func endpointOverviewPageQuery(ctx context.Context, tx *sql.Tx, q, after string, requested *pagination.Request, limit int) (string, []any, *pagination.Metadata, error) {
-	window, args, metadata, err := listPageQuery(ctx, tx, endpointOverviewGroups, ` ORDER BY e.base_url ASC`, []any{q, q, after}, requested, limit)
+func endpointOverviewPageQuery(ctx context.Context, tx *sql.Tx, q, after string, requested *pagination.Request, limit int, tags ...string) (string, []any, *pagination.Metadata, error) {
+	selection := endpointOverviewGroups
+	args := []any{q, q, after}
+	if len(tags) > 0 && tags[0] != "" {
+		clause := ` AND EXISTS(SELECT 1 FROM admin_endpoint_tags t WHERE t.base_url=e.base_url AND t.tag=?)`
+		if tags[0] == "untagged" {
+			clause = ` AND NOT EXISTS(SELECT 1 FROM admin_endpoint_tags t WHERE t.base_url=e.base_url)`
+		} else {
+			args = append(args, tags[0])
+		}
+		selection = strings.Replace(selection, "GROUP BY e.base_url", clause+" GROUP BY e.base_url", 1)
+	}
+	window, args, metadata, err := listPageQuery(ctx, tx, selection, ` ORDER BY e.base_url ASC`, args, requested, limit)
 	if err != nil {
 		return "", nil, nil, err
 	}
 	return `WITH endpoint_page AS MATERIALIZED (` + window + `)
 SELECT p.base_url,COUNT(DISTINCT e.user_id),COUNT(*),
- COALESCE(SUM((SELECT COUNT(*) FROM endpoint_keys k WHERE k.endpoint_id=e.id)),0)
+ COALESCE(SUM((SELECT COUNT(*) FROM endpoint_keys k WHERE k.endpoint_id=e.id)),0),
+ (SELECT COALESCE(group_concat(tag,','),'') FROM (SELECT tag FROM admin_endpoint_tags WHERE base_url=p.base_url ORDER BY tag))
 FROM endpoint_page p
 CROSS JOIN endpoints e ON e.base_url=p.base_url
 CROSS JOIN users u ON u.id=e.user_id AND u.is_admin=0

@@ -327,6 +327,61 @@ describe('administrator paged operation pages', () => {
     expect(await screen.findByText('9')).toBeVisible();
   });
 
+  it('adds a tag to selected endpoints and filters the refreshed list', async () => {
+    const urls = ['https://first.example/v1', 'https://second.example/v1'];
+    let saved = false;
+    const requests = installFetch((url, method, init) => {
+      if (url.pathname === '/admin/api/session') return { admin: { username: 'fixture-admin' } };
+      if (method === 'PATCH' && url.pathname === '/admin/api/overview/endpoints/tags') {
+        expect(JSON.parse(String(init?.body))).toEqual({
+          base_urls: urls,
+          tag: 'abusive_third_party',
+          add: true,
+        });
+        expect(new Headers(init?.headers).get('Idempotency-Key')).toBeTruthy();
+        saved = true;
+        return new Response(null, { status: 204 });
+      }
+      if (method === 'GET' && url.pathname === '/admin/api/overview/endpoints') {
+        return page(
+          urls.map((base_url) => ({
+            base_url,
+            tags: saved ? ['abusive_third_party'] : [],
+            user_count: '1',
+            endpoint_count: '2',
+            key_count: '1',
+            users: [endpointUser],
+          })),
+          '1',
+          20,
+        );
+      }
+      throw new Error(`Unexpected request: ${method} ${url.pathname}`);
+    });
+    const view = await renderWithProviders(<EndpointsPage />, {
+      station: 'admin',
+      role: 'admin',
+      route: '/endpoints',
+    });
+    await screen.findByText(urls[0]);
+    expect(screen.getByRole('button', { name: 'Add tag' })).toBeDisabled();
+    await view.user.click(screen.getByRole('checkbox', { name: 'Select endpoints on this page' }));
+    await view.user.click(screen.getByRole('button', { name: 'Add tag' }));
+    await screen.findByText('Tags updated');
+    expect(screen.getByRole('button', { name: 'Add tag' })).toBeDisabled();
+    await view.user.selectOptions(
+      screen.getAllByRole('combobox', { name: 'Tags' })[0],
+      'abusive_third_party',
+    );
+    await waitFor(() =>
+      expect(requests.some((url) => url.searchParams.get('tag') === 'abusive_third_party')).toBe(
+        true,
+      ),
+    );
+    await view.user.click(screen.getByRole('button', { name: 'Reset' }));
+    expect(screen.getAllByRole('combobox', { name: 'Tags' })[0]).toHaveValue('');
+  });
+
   it('keeps pool filters and page size in URL page mode', async () => {
     const requests = installFetch((url, method) => {
       if (method === 'GET' && url.pathname === '/admin/api/session') {

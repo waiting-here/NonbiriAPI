@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { useTranslation } from 'react-i18next';
 import { clearStationSession } from '@shared/charityManagement';
@@ -11,6 +11,7 @@ import {
   adminPageKeys,
   getAdminEndpointUsersPage,
   getAdminEndpointsPage,
+  setAdminEndpointTags,
 } from '../features/operations/adminPages';
 import { useAdminSession } from '../data';
 import '@shared/operations/operations.css';
@@ -107,6 +108,7 @@ function EndpointsPageContent({ account, scopeReady, sessionError }: EndpointsPa
   const client = useQueryClient();
   const [searchParams, setSearchParams] = useSearchState();
   const query = searchParams.get('q') ?? '';
+  const tag = searchParams.get('tag') ?? '';
   const expanded = searchParams.get('expanded_base_url');
   const [draft, setDraft] = useState(query);
   const [queryError, setQueryError] = useState<string | null>(null);
@@ -115,18 +117,35 @@ function EndpointsPageContent({ account, scopeReady, sessionError }: EndpointsPa
     listType: 'admin.endpoints',
     scopeKey: account,
     scopeReady,
-    resetKey: query,
+    resetKey: `${query}:${tag}`,
   });
   const result = useQuery({
-    queryKey: adminPageKeys.endpoints(account, query, pager.page, pager.pageSize),
-    queryFn: ({ signal }) => getAdminEndpointsPage(query, pager.page, pager.pageSize, signal),
+    queryKey: adminPageKeys.endpoints(account, query, pager.page, pager.pageSize, tag),
+    queryFn: ({ signal }) => getAdminEndpointsPage(query, pager.page, pager.pageSize, signal, tag),
     retry: false,
     enabled: scopeReady,
     placeholderData: (previous, previousQuery) =>
-      previousQuery?.queryKey[3] === account && previousQuery.queryKey[4] === query
+      previousQuery?.queryKey[3] === account &&
+      previousQuery.queryKey[4] === query &&
+      previousQuery.queryKey[7] === tag
         ? previous
         : undefined,
   });
+  const selectionScope = `${query}:${tag}:${pager.page}:${pager.pageSize}`;
+  const [selection, setSelection] = useState<{ scope: string; urls: string[] }>({
+    scope: '',
+    urls: [],
+  });
+  const selected = selection.scope === selectionScope ? selection.urls : [];
+  const [editTag, setEditTag] = useState('abusive_third_party');
+  const tags = useMutation({
+    mutationFn: (add: boolean) => setAdminEndpointTags(selected, editTag, add),
+    onSuccess: async () => {
+      setSelection({ scope: '', urls: [] });
+      await client.invalidateQueries({ queryKey: ['admin', 'operations', 'endpoints', account] });
+    },
+  });
+  const select = (urls: string[]) => setSelection({ scope: selectionScope, urls });
   useEffect(() => {
     // POP navigation restores the committed search value while this input is
     // still mounted.
@@ -138,9 +157,10 @@ function EndpointsPageContent({ account, scopeReady, sessionError }: EndpointsPa
       clearStationSession(client, 'admin');
     }
   }, [client, result.error]);
-  const commitFilter = (nextQuery: string) => {
+  const commitFilter = (nextQuery: string, resetTags = false) => {
     setSearchParams((previous) => {
       const next = new URLSearchParams(previous);
+      if (resetTags) next.delete('tag');
       if (nextQuery) next.set('q', nextQuery);
       else next.delete('q');
       next.delete('page');
@@ -201,18 +221,74 @@ function EndpointsPageContent({ account, scopeReady, sessionError }: EndpointsPa
           <button className="btn btn-secondary" type="submit">
             {t('common.applyFilter')}
           </button>
+          <label className="ops-form-field">
+            <span>{t('admin.endpoints.tags')}</span>
+            <select
+              value={tag}
+              onChange={(event) =>
+                setSearchParams((previous) => {
+                  const next = new URLSearchParams(previous);
+                  if (event.target.value) next.set('tag', event.target.value);
+                  else next.delete('tag');
+                  next.set('page', '1');
+                  next.delete('expanded_base_url');
+                  return next;
+                })
+              }
+            >
+              <option value="">{t('admin.endpoints.allTags')}</option>
+              <option value="untagged">{t('admin.endpoints.untagged')}</option>
+              <option value="abusive_third_party">
+                {t('admin.endpoints.abusive_third_party')}
+              </option>
+              <option value="community_charity">{t('admin.endpoints.community_charity')}</option>
+            </select>
+          </label>
           <button
             className="btn btn-quiet"
             type="button"
             onClick={() => {
               setDraft('');
               setQueryError(null);
-              commitFilter('');
+              commitFilter('', true);
             }}
           >
             {t('common.resetFilter')}
           </button>
         </form>
+        <div className="ops-toolbar">
+          <span>{t('admin.endpoints.selected', { count: selected.length })}</span>
+          <select
+            aria-label={t('admin.endpoints.tags')}
+            value={editTag}
+            onChange={(event) => setEditTag(event.target.value)}
+            disabled={tags.isPending}
+          >
+            <option value="abusive_third_party">{t('admin.endpoints.abusive_third_party')}</option>
+            <option value="community_charity">{t('admin.endpoints.community_charity')}</option>
+          </select>
+          <button
+            className="btn btn-secondary"
+            type="button"
+            disabled={!selected.length || tags.isPending || result.isFetching}
+            onClick={() => tags.mutate(true)}
+          >
+            {t('admin.endpoints.addTag')}
+          </button>
+          <button
+            className="btn btn-quiet"
+            type="button"
+            disabled={!selected.length || tags.isPending || result.isFetching}
+            onClick={() => tags.mutate(false)}
+          >
+            {t('admin.endpoints.removeTag')}
+          </button>
+        </div>
+        {tags.error ? (
+          <ErrorState error={tags.error} />
+        ) : tags.isSuccess ? (
+          <p role="status">{t('admin.endpoints.tagsSaved')}</p>
+        ) : null}
         {queryError ? (
           <p id="endpoint-query-error" className="inline-error" role="alert">
             {queryError}
@@ -236,7 +312,26 @@ function EndpointsPageContent({ account, scopeReady, sessionError }: EndpointsPa
               <table className="ops-table ops-table--responsive">
                 <thead>
                   <tr>
+                    <th>
+                      <input
+                        type="checkbox"
+                        aria-label={t('admin.endpoints.selectAll')}
+                        checked={
+                          result.data.data.length > 0 &&
+                          result.data.data.every((group) => selected.includes(group.base_url))
+                        }
+                        disabled={tags.isPending || result.isFetching}
+                        onChange={(event) =>
+                          select(
+                            event.target.checked
+                              ? result.data.data.map((group) => group.base_url)
+                              : [],
+                          )
+                        }
+                      />
+                    </th>
                     <th>{t('admin.endpoints.baseUrl')}</th>
+                    <th>{t('admin.endpoints.tags')}</th>
                     <th>{t('admin.endpoints.users')}</th>
                     <th>{t('admin.endpoints.endpointCount')}</th>
                     <th>{t('admin.endpoints.keys')}</th>
@@ -249,11 +344,33 @@ function EndpointsPageContent({ account, scopeReady, sessionError }: EndpointsPa
                     return (
                       <Fragment key={group.base_url}>
                         <tr>
+                          <td>
+                            <input
+                              type="checkbox"
+                              aria-label={t('admin.endpoints.selectEndpoint', {
+                                url: group.base_url,
+                              })}
+                              checked={selected.includes(group.base_url)}
+                              disabled={tags.isPending || result.isFetching}
+                              onChange={(event) =>
+                                select(
+                                  event.target.checked
+                                    ? [...selected, group.base_url]
+                                    : selected.filter((url) => url !== group.base_url),
+                                )
+                              }
+                            />
+                          </td>
                           <td
                             className="ops-cell-wide ops-wrap"
                             data-label={t('admin.endpoints.baseUrl')}
                           >
                             {group.base_url}
+                          </td>
+                          <td data-label={t('admin.endpoints.tags')}>
+                            {group.tags.length
+                              ? group.tags.map((value) => t(`admin.endpoints.${value}`)).join(' · ')
+                              : t('admin.endpoints.untagged')}
                           </td>
                           <td data-label={t('admin.endpoints.users')}>{group.user_count}</td>
                           <td data-label={t('admin.endpoints.endpointCount')}>
@@ -276,7 +393,7 @@ function EndpointsPageContent({ account, scopeReady, sessionError }: EndpointsPa
                         </tr>
                         {open ? (
                           <tr>
-                            <td colSpan={5}>
+                            <td colSpan={7}>
                               <EndpointUsersPanel
                                 account={account}
                                 scopeReady={scopeReady}

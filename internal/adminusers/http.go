@@ -94,6 +94,7 @@ func RegisterRoutes(registrar AdminRouteRegistrar, service *Service) error {
 		{http.MethodGet, routeUsage, api.getUsage},
 		{http.MethodGet, routeActivity, api.getActivity},
 		{http.MethodGet, routeEndpointOverview, api.getEndpointOverview},
+		{http.MethodPatch, routeEndpointTags, api.patchEndpointTags},
 		{http.MethodGet, routeEndpointOverviewUsers, api.getEndpointOverviewUsers},
 	}...)
 	for _, route := range routes {
@@ -431,11 +432,11 @@ func (api *httpAPI) getEndpointOverview(writer http.ResponseWriter, request *htt
 	if !requireNoBody(writer, request) {
 		return
 	}
-	values, ok := strictQuery(writer, request, "q", "cursor", "limit", "page", "page_size")
+	values, ok := strictQuery(writer, request, "q", "tag", "cursor", "limit", "page", "page_size")
 	if !ok {
 		return
 	}
-	query := EndpointOverviewQuery{}
+	query := EndpointOverviewQuery{Tag: values.Get("tag")}
 	if raw, set := singleQuery(values, "q"); set {
 		if !validFilter(raw) {
 			writeError(writer, ErrInvalidRequest)

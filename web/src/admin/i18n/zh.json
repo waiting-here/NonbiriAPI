@@ -67,7 +67,18 @@
       "searchPlaceholder": "按基础 URL 子串筛选",
       "searchAria": "按基础 URL 筛选端点",
       "queryTooLong": "搜索内容过长，请缩短后再试。",
-      "noProbeNotice": "此页面绝不会发送 ping、HEAD、空请求、付费请求或后台健康检查请求。"
+      "noProbeNotice": "此页面绝不会发送 ping、HEAD、空请求、付费请求或后台健康检查请求。",
+      "tags": "标签",
+      "allTags": "全部标签",
+      "untagged": "无标签",
+      "abusive_third_party": "违规第三方",
+      "community_charity": "社区公益站",
+      "selectAll": "选择本页端点",
+      "selectEndpoint": "选择 {{url}}",
+      "selected": "已选 {{count}} 个端点",
+      "addTag": "添加标签",
+      "removeTag": "移除标签",
+      "tagsSaved": "标签已更新"
     },
     "alerts": {
       "nav": "告警",
