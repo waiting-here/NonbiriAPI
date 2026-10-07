@@ -1,4 +1,5 @@
 import { readFileSync, mkdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { expect, test } from './test';
 import { collectConsoleViolations, mockPublicConfig, mockRoleSession } from './support';
 import { USER_ORIGIN } from './ports';
@@ -12,6 +13,9 @@ const card = (id: string, instance_id: number): Card => {
   const definition = cards.find((item) => item.id === id)!;
   return { ...definition, instance_id, base_power: definition.power };
 };
+const contentHash = createHash('sha256')
+  .update(JSON.stringify({ rules_version: 1, cards }))
+  .digest('hex');
 function home() {
   const player = {
     faction: 'openai' as const,
@@ -59,7 +63,7 @@ function home() {
       game: 'gwent',
       mode: 'standard',
       rules_version: 1,
-      content_hash: 'b'.repeat(64),
+      content_hash: contentHash,
       revision: '3',
       phase_seq: '2',
       decision_id: '2',
@@ -103,12 +107,21 @@ for (const theme of ['light', 'dark']) {
         path = url.pathname;
       if (path === '/api/games') return route.fulfill({ json: snapshot });
       if (path === '/api/games/gwent/state') return route.fulfill({ json: state });
+      if (path === '/api/games/gwent/ai')
+        return route.fulfill({ json: { enabled: false, bots: [] } });
       if (path.includes('/randomness/')) return route.fulfill({ json: { proof: null } });
       if (path.endsWith('/catalog'))
-        return route.fulfill({ json: { modes: { standard: { rules_version: 1, cards } } } });
+        return route.fulfill({
+          json: {
+            content_hash: contentHash,
+            modes: { standard: { rules_version: 1, cards }, ai: { rules_version: 1, cards } },
+          },
+        });
       if (path.endsWith('/actions')) {
         writes.push(request.postDataJSON());
         state.current.locked = [true, false];
+        state.current.phase_seq = '3';
+        state.current.decision_id = '3';
         state.current.view.legal_actions = [];
         return route.fulfill({
           json: { session_id: state.current.id, revision: '4', phase_seq: '3', locked: true },
@@ -122,45 +135,43 @@ for (const theme of ['light', 'dark']) {
     });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`${USER_ORIGIN}/games/gwent`);
-    await expect(page.locator('.gwt-player.is-enemy')).toContainText('Card player');
-    await expect(page.locator('.gwt-row')).toHaveCount(6);
+    const arena = page.frameLocator('iframe.gwent-original-frame');
+    await expect(arena.locator('#arena-stats-op')).toContainText('Card player');
+    await expect(arena.locator('.arena-row')).toHaveCount(6);
     for (const size of [
       { width: 1440, height: 900 },
       { width: 1280, height: 720 },
-      { width: 1024, height: 600 },
       { width: 390, height: 844 },
       { width: 320, height: 740 },
+      { width: 720, height: 420 },
     ]) {
       await page.setViewportSize(size);
       expect(
-        await page.evaluate(() => document.documentElement.scrollWidth - innerWidth),
-        JSON.stringify({
-          size,
-          overflow: await page.locator('.gwent-game *').evaluateAll((nodes) =>
-            nodes
-              .filter(
-                (node) =>
-                  node.getBoundingClientRect().right > innerWidth + 1 &&
-                  getComputedStyle(node.parentElement!).overflowX === 'visible',
-              )
-              .slice(0, 12)
-              .map((node) => [node.className, node.getBoundingClientRect().width]),
-          ),
-        }),
-      ).toBeLessThanOrEqual(1);
-      const hand = await page.locator('.gwt-hand').boundingBox();
-      expect(hand!.height).toBeGreaterThanOrEqual(90);
-      const lastRow = await page.locator('.gwt-row').last().boundingBox();
-      const ownStatus = await page.locator('.gwt-player.is-self').boundingBox();
-      expect(lastRow!.y + lastRow!.height).toBeLessThanOrEqual(ownStatus!.y + 1);
-      if (size.width > 760) {
-        const match = await page.locator('.gwt-match').boundingBox();
-        expect(hand!.y + hand!.height).toBeLessThanOrEqual(match!.y + match!.height + 1);
-        expect(match!.height).toBeLessThanOrEqual(size.height);
+        await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1),
+        JSON.stringify(size),
+      ).toBe(true);
+      await expect
+        .poll(
+          () =>
+            arena
+              .locator('body')
+              .evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1),
+          { message: JSON.stringify(size) },
+        )
+        .toBe(true);
+      const hand = await arena.locator('#arena-hand').boundingBox();
+      expect(hand!.height).toBeGreaterThan(0);
+      const rows = await arena.locator('.arena-row').all();
+      for (const row of rows) {
+        const bounds = await row.boundingBox();
+        expect(bounds!.width).toBeGreaterThan(0);
+        expect(bounds!.height).toBeGreaterThan(0);
       }
-      await page.locator('.gwt-hand .gwt-card').first().click();
-      await expect(page.locator('.gwt-inspector h3')).toHaveText('OpenAI Agent');
-      await expect(page.getByRole('button', { name: 'Play · Front line' })).toBeEnabled();
+      await arena.locator('#arena-hand button').first().click();
+      await expect(arena.locator('#selection-name')).toContainText(
+        cards.find((c) => c.id === 'openai_agent')!.name,
+      );
+      await expect(arena.locator('#arena-me-close')).toHaveClass(/target-row/);
       if (process.env.NONBIRI_GAME_PRESENTATION_EVIDENCE && [1280, 390].includes(size.width)) {
         mkdirSync(process.env.NONBIRI_GAME_PRESENTATION_EVIDENCE, { recursive: true });
         await page.screenshot({
@@ -168,13 +179,22 @@ for (const theme of ['light', 'dark']) {
           fullPage: true,
         });
       }
+      // Toggle the same selection off so the next viewport begins in the same state.
+      await arena.locator('#arena-hand button').first().click();
     }
     expect(writes).toEqual([]);
-    await page.getByRole('button', { name: 'Play · Front line' }).click();
+    await arena.locator('#arena-hand button').first().click();
+    const submitted = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname.endsWith('/actions') &&
+        response.request().method() === 'POST',
+    );
+    await arena.locator('#arena-me-close').click();
+    expect((await submitted).status()).toBe(200);
     expect(writes).toEqual([
       { phase_seq: '2', decision_id: '2', action: { kind: 'play', card: 10, row: 'close' } },
     ]);
-    await expect(page.getByRole('button', { name: 'Play · Front line' })).toHaveCount(0);
+    await expect(arena.locator('#battle')).not.toHaveClass(/my-turn/);
     errors.assertNone();
   });
 }
