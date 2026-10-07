@@ -108,8 +108,11 @@ const templates = {
   },
 };
 
-const resolveId = (faction, config, token) =>
-  token.startsWith('@') ? token.slice(1) : `${faction}_${token.replace('$', config.front + '_')}`;
+const resolveId = (faction, config, token) => {
+  if (token.startsWith('@')) return token.slice(1);
+  const name = token.startsWith('$') ? `${config.front}_${token.slice(1)}` : token;
+  return `${faction}_${name}`;
+};
 export const PRESET_IDS = new Set([
   'preset',
   ...Object.keys(templates).map((id) => `theme-${id}`),
