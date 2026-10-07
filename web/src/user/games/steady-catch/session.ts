@@ -33,6 +33,7 @@ export class CatchSession {
   private listeners = new Set<() => void>();
   private inputs: Input[] = [];
   private pending: Controls | null = null;
+  private inFlight: Promise<void> | null = null;
   private pauseWanted = false;
   private anchor = 0;
   private anchorTick = 0;
@@ -120,7 +121,12 @@ export class CatchSession {
       until_tick: this.authority.state.tick,
       inputs: [],
     });
-    if (!this.error && !this.terminal) {
+    if (
+      !this.error &&
+      !this.terminal &&
+      !this.pauseWanted &&
+      (this.authority.status as Session['status']) === 'playing'
+    ) {
       this.anchor = this.clock();
       this.anchorTick = this.state.tick;
       this.active = true;
@@ -133,8 +139,8 @@ export class CatchSession {
     this.pauseWanted = true;
     this.direction = 0;
     this.notify();
-    if (!this.busy && !this.error && !this.terminal && this.authority.status === 'playing')
-      await this.flush();
+    if (this.inFlight) await this.inFlight;
+    if (!this.error && !this.terminal && this.authority.status === 'playing') await this.flush();
   }
 
   async abandon() {
@@ -169,30 +175,42 @@ export class CatchSession {
     });
   }
 
-  private async transmit(request: Controls) {
+  private transmit(request: Controls): Promise<void> {
+    if (this.inFlight) return this.inFlight;
     this.busy = true;
     this.pending = request;
     this.notify();
-    try {
-      const next = await this.send(this.authority.id, request);
-      this.authority = next;
-      this.pending = null;
-      this.error = null;
-      this.inputs = this.inputs.filter((input) => input.tick > next.state.tick);
-      if (this.terminal || next.status === 'paused' || request.action === 'resume') {
-        this.state = next.state;
-        this.inputs = [];
+    this.inFlight = Promise.resolve().then(async () => {
+      try {
+        const next = await this.send(this.authority.id, request);
+        this.authority = next;
+        this.pending = null;
+        this.error = null;
+        this.inputs = this.inputs.filter((input) => input.tick > next.state.tick);
+        if (this.terminal || next.status === 'paused' || request.action === 'resume') {
+          this.state = next.state;
+          this.inputs = [];
+          this.active = false;
+        }
+      } catch (error) {
         this.active = false;
+        this.pauseWanted = true;
+        this.error = error;
+      } finally {
+        this.busy = false;
+        this.inFlight = null;
+        this.notify();
       }
-    } catch (error) {
-      this.active = false;
-      this.pauseWanted = true;
-      this.error = error;
-    } finally {
-      this.busy = false;
-      this.notify();
-    }
-    if (!this.error && !this.terminal && this.pauseWanted && this.authority.status === 'playing')
-      await this.flush();
+      if (
+        !this.error &&
+        !this.terminal &&
+        this.authority.status === 'playing' &&
+        (this.pauseWanted ||
+          this.state.tick - this.authority.state.tick >= HZ ||
+          (this.state.cause && this.state.tick > this.authority.state.tick))
+      )
+        await this.flush();
+    });
+    return this.inFlight;
   }
 }
