@@ -902,8 +902,9 @@ func (service *Service) runAttempts(
 			sink, responseStart = checkpointResponseWriter(sink, func() error {
 				checkpointContext, cancel := context.WithTimeout(context.WithoutCancel(parent), service.settlement)
 				defer cancel()
-				return service.claims.MarkResponseStarted(checkpointContext, handle)
+				return service.claims.MarkResponseStarted(checkpointContext, handle, responseStart.upstreamStatus)
 			})
+			responseStart.acceptedStreams = plan.charity
 		}
 		protocolConnector := service.connectors[candidate.ConnectorType]
 		if protocolConnector == nil {
@@ -943,7 +944,13 @@ func (service *Service) runAttempts(
 		run.result, run.hasResult = result, true
 		settleContext, cancel := context.WithTimeout(context.WithoutCancel(parent), service.settlement)
 		outcome := attemptOutcome(result)
-		if responseStart != nil && responseStart.started {
+		acceptedByCharityUpstream := plan.charity && result.UpstreamStatus == http.StatusOK
+		if acceptedByCharityUpstream {
+			// Key availability follows HTTP acceptance. Protocol completion and
+			// the durable billing checkpoint retain their own facts.
+			outcome.StreakDisposition = connectorcontract.StreakSuccess
+		}
+		if responseStart != nil && (responseStart.started || responseStart.upstreamStatus == http.StatusOK) {
 			outcome.ResponseStarted = true
 		}
 		_, completionErr := service.claims.CompleteAttempt(settleContext, handle, outcome)
@@ -953,7 +960,7 @@ func (service *Service) runAttempts(
 			run.terminalBlocked = true
 			break
 		}
-		if run.responseStarted || result.Success || !retryable(result, plan.silentRetry) || index == len(plan.candidates)-1 {
+		if acceptedByCharityUpstream || run.responseStarted || result.Success || !retryable(result, plan.silentRetry) || index == len(plan.candidates)-1 {
 			break
 		}
 		if !service.backoff.wait(executionContext, index) {
@@ -1277,7 +1284,7 @@ func attemptOutcome(result connectorcontract.AttemptResult) claim.AttemptOutcome
 		StreakDisposition: result.StreakDisposition, FailureOrigin: result.FailureOrigin,
 		Kind: kind, UpstreamStatus: result.UpstreamStatus, Diagnostic: result.Diagnostic,
 		UpstreamCode: result.ErrorDetail.Code(),
-		Usage:        result.Usage, ProtocolSuccess: result.StreakDisposition == connectorcontract.StreakSuccess, ResponseStarted: result.Committed,
+		Usage:        result.Usage, ProtocolSuccess: result.StreakDisposition == connectorcontract.StreakSuccess && result.FailureOrigin == connectorcontract.OriginNone, ResponseStarted: result.Committed,
 	}
 }
 

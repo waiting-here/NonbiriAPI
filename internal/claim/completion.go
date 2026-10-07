@@ -366,7 +366,7 @@ func (s *Service) completeAttemptTx(
 		}
 		outcome.ResponseStarted = outcome.ResponseStarted || started
 		if outcome.ResponseStarted && !started {
-			if err := recordResponseStartTx(ctx, tx, record.claimID, at); err != nil {
+			if err := recordResponseStartTx(ctx, tx, record.claimID, at, outcome.UpstreamStatus); err != nil {
 				return Attempt{}, err
 			}
 		}
@@ -982,7 +982,10 @@ func normalizeAttemptOutcome(outcome AttemptOutcome) AttemptOutcome {
 }
 func validAttemptOutcome(outcome AttemptOutcome) bool {
 	if !connectorcontract.ValidOutcome(outcome.StreakDisposition, outcome.FailureOrigin) ||
-		outcome.ProtocolSuccess != (outcome.StreakDisposition == connectorcontract.StreakSuccess) {
+		outcome.ProtocolSuccess != (outcome.StreakDisposition == connectorcontract.StreakSuccess && outcome.FailureOrigin == connectorcontract.OriginNone) {
+		return false
+	}
+	if outcome.StreakDisposition == connectorcontract.StreakSuccess && !outcome.ProtocolSuccess && (outcome.Kind != ResultResponse || outcome.UpstreamStatus != 200) {
 		return false
 	}
 	if outcome.Kind != ResultResponse && outcome.Kind != ResultSynthetic {

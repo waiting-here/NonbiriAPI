@@ -2,14 +2,23 @@ package forward
 
 import "net/http"
 
-// Connectors write only validated successful payloads before their first body
-// commit. Error frames are emitted only after that boundary. The checkpoint
-// therefore records upstream output even if the downstream write later fails.
+// Charity streams establish the durable billing checkpoint at HTTP 200.
+// Other responses establish it on validated output, before downstream delivery.
 type responseStartWriter struct {
 	http.ResponseWriter
-	mark    func() error
-	started bool
-	err     error
+	mark            func() error
+	acceptedStreams bool
+	upstreamStatus  int
+	started         bool
+	err             error
+}
+
+func (w *responseStartWriter) ObserveUpstreamResponse(status int, stream bool) error {
+	if w.acceptedStreams && stream && status == http.StatusOK {
+		w.upstreamStatus = status
+		return w.MarkResponseStarted()
+	}
+	return nil
 }
 
 func (w *responseStartWriter) Write(body []byte) (int, error) {

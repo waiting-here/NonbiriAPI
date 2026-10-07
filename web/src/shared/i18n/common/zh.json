@@ -126,7 +126,7 @@
     },
     "failurePolicy": {
       "label": "连续失败下架阈值",
-      "help": "默认 10。设为 0 后，密钥不会因连续报错自动下架。",
+      "help": "默认 10，设为 0 可关闭报错自动下架。公益调用收到上游 HTTP 200 即清零并停止重试，后续错误仍会显示。",
       "zeroWarning": "永不因报错自动下架：这把密钥发生连续错误时仍可能被调用。手动禁用、到期、封禁及配额限制仍然有效。",
       "saved": "当前下架阈值：{{value}}",
       "recalculate": "保存后保留已有失败次数并立即重算报错下架状态。此操作不会启用密钥或重置失败次数。",
@@ -1155,7 +1155,6 @@
       "errorEvent": "错误事件",
       "truncated": "（已截断）",
       "rawBodyWasNotSavedBecauseThe": "原文因容量不足未保存。",
-      "rawBodyCouldNotBeSaved": "原文读取或保存失败。",
       "nextEvents": "后续事件",
       "loadOriginalBody": "加载原始正文",
       "couldNotLoadTheErrorBody": "无法加载错误正文。",

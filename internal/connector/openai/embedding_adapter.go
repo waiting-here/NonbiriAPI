@@ -62,6 +62,9 @@ func (a *Adapter) AttemptEmbedding(ctx context.Context, writer http.ResponseWrit
 	httpRequest.Header.Set("Authorization", "Bearer "+string(target.credential.bearer))
 	target.credential.clear()
 	response, err := client.Do(httpRequest)
+	if response != nil {
+		defer func() { result.UpstreamStatus = response.StatusCode }()
+	}
 	httpRequest.Header.Del("Authorization")
 	clear(body)
 	if response != nil && response.Request != nil {

@@ -126,7 +126,7 @@
     },
     "failurePolicy": {
       "label": "Consecutive failure disable threshold",
-      "help": "Default: 10. Set to 0 to keep the key available after repeated errors.",
+      "help": "Default: 10. Set to 0 to disable automatic removal. An upstream HTTP 200 resets the charity key's failure count and stops retries; later errors are still reported.",
       "zeroWarning": "Never disable automatically for errors: this key may still be called after repeated failures. Manual disabling, expiry, bans and quota limits still apply.",
       "saved": "Current disable threshold: {{value}}",
       "recalculate": "Saving preserves the failure count and immediately recalculates the error-disabled state. It does not enable the key or reset its failure count.",
@@ -1155,7 +1155,6 @@
       "errorEvent": "Error event",
       "truncated": "(truncated)",
       "rawBodyWasNotSavedBecauseThe": "Raw body was not saved because the storage budget was full.",
-      "rawBodyCouldNotBeSaved": "Raw body could not be saved.",
       "nextEvents": "Next events",
       "loadOriginalBody": "Load original body",
       "couldNotLoadTheErrorBody": "Could not load the error body.",

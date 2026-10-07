@@ -244,7 +244,7 @@ func (rail *fakeClaimRail) RevokeUndelivered(context.Context, claim.Handle) erro
 	return nil
 }
 
-func (rail *fakeClaimRail) MarkResponseStarted(context.Context, claim.Handle) error {
+func (rail *fakeClaimRail) MarkResponseStarted(context.Context, claim.Handle, ...int) error {
 	return nil
 }
 

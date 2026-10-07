@@ -9,11 +9,10 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 )
 
-// MarkResponseStarted records that a model-call connector has validated its
-// first successful response payload. It precedes delivery so recovery never
-// has to infer successful output from a dispatch alone.
-func (s *Service) MarkResponseStarted(ctx context.Context, handle Handle) error {
-	if s == nil || s.db == nil || ctx == nil || !validHandle(handle) || handle.purpose == PurposeDiscovery {
+// MarkResponseStarted persists the billable-response checkpoint before delivery.
+// The optional status records a received HTTP 200 stream for restart recovery.
+func (s *Service) MarkResponseStarted(ctx context.Context, handle Handle, status ...int) error {
+	if s == nil || s.db == nil || ctx == nil || !validHandle(handle) || handle.purpose == PurposeDiscovery || len(status) > 1 || len(status) == 1 && status[0] != 0 && status[0] != 200 {
 		return ErrInvalidInput
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -38,17 +37,25 @@ func (s *Service) MarkResponseStarted(ctx context.Context, handle Handle) error 
 	if at < record.dispatchedAt.Int64 {
 		at = record.dispatchedAt.Int64
 	}
-	if err := recordResponseStartTx(ctx, tx, record.claimID, at); err != nil {
+	if err := recordResponseStartTx(ctx, tx, record.claimID, at, status...); err != nil {
 		return err
 	}
 	return tx.Commit()
 }
 
-func recordResponseStartTx(ctx context.Context, tx *sql.Tx, claimID string, at int64) error {
+func recordResponseStartTx(ctx context.Context, tx *sql.Tx, claimID string, at int64, status ...int) error {
+	var received any
+	if len(status) == 1 && status[0] == 200 {
+		received = 200
+	}
 	var existing int64
-	err := tx.QueryRowContext(ctx, `SELECT started_at FROM dispatch_response_starts WHERE claim_id=?`, claimID).Scan(&existing)
+	var existingStatus sql.NullInt64
+	err := tx.QueryRowContext(ctx, `SELECT started_at,http_status FROM dispatch_response_starts WHERE claim_id=?`, claimID).Scan(&existing, &existingStatus)
 	if err == nil {
-		return nil
+		if received != nil && !existingStatus.Valid {
+			_, err = tx.ExecContext(ctx, `UPDATE dispatch_response_starts SET http_status=200 WHERE claim_id=?`, claimID)
+		}
+		return err
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return err
@@ -57,8 +64,8 @@ func recordResponseStartTx(ctx context.Context, tx *sql.Tx, claimID string, at i
 	if err != nil {
 		return fmt.Errorf("claim: assign recurring success: %w", err)
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO dispatch_response_starts(claim_id,started_at)
-VALUES(?,?) ON CONFLICT(claim_id) DO NOTHING`, claimID, at)
+	_, err = tx.ExecContext(ctx, `INSERT INTO dispatch_response_starts(claim_id,started_at,http_status)
+VALUES(?,?,?) ON CONFLICT(claim_id) DO NOTHING`, claimID, at, received)
 	if err != nil {
 		return fmt.Errorf("claim: record successful response: %w", err)
 	}

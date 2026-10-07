@@ -174,6 +174,9 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, w http.ResponseWriter, 
 	clear(cipher)
 	sent = attribution != ""
 	response, err := client.Do(request)
+	if response != nil {
+		defer func() { result.UpstreamStatus = response.StatusCode }()
+	}
 	request.Header.Del("Authorization")
 	if response != nil && response.Request != nil {
 		response.Request.Header.Del("Authorization")
@@ -191,6 +194,9 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, w http.ResponseWriter, 
 	}
 	if response == nil || response.Body == nil {
 		return upstreamFailure("upstream response was unavailable", 0)
+	}
+	if err := contract.ObserveUpstreamResponse(w, response.StatusCode, stream); err != nil {
+		return contract.AttemptResult{Failure: contract.FailureInternal, Diagnostic: "upstream response checkpoint failed"}
 	}
 	if response.StatusCode < 200 || response.StatusCode > 299 || stream && response.StatusCode != 200 {
 		result = contract.UpstreamFailed(upstreamFailure("upstream returned an error status", response.StatusCode), contract.OriginUpstreamResponse)

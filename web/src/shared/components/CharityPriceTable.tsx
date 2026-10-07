@@ -206,6 +206,8 @@ export function CharityPriceTable({
       </div>
       <p className="muted charity-price-note">
         {t(mode === 'per_token' ? 'user.charity.tokenUnit' : 'user.charity.requestUnit')}
+        {' '}
+        {t('user.charity.billingHelp')}
       </p>
     </div>
   );

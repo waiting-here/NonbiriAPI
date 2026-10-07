@@ -23,6 +23,7 @@ func forceTransport(f *serviceFixture, rule transportpolicy.Rule) {
 
 type canceledTransportBody struct {
 	ctx    context.Context
+	cancel context.CancelFunc
 	first  *strings.Reader
 	closed chan struct{}
 	once   sync.Once
@@ -32,6 +33,7 @@ func (b *canceledTransportBody) Read(p []byte) (int, error) {
 	if b.first.Len() > 0 {
 		return b.first.Read(p)
 	}
+	b.cancel()
 	<-b.ctx.Done()
 	return 0, b.ctx.Err()
 }
@@ -44,7 +46,7 @@ func TestBufferedTransportCancellationKeepsUpstreamUsage(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
 			marks := 0
-			f.service.claims = embeddingMarkRail{fakeClaimRail: f.claims, mark: func() error { marks++; cancel(); return nil }}
+			f.service.claims = embeddingMarkRail{fakeClaimRail: f.claims, mark: func() error { marks++; return nil }}
 			usage := ""
 			if known {
 				usage = `,"usage":{"prompt_tokens":20,"completion_tokens":3,"total_tokens":23}`
@@ -55,7 +57,7 @@ func TestBufferedTransportCancellationKeepsUpstreamUsage(t *testing.T) {
 			b := &delayedStreamBackend{do: func(r *http.Request) (*http.Response, error) {
 				calls++
 				response := streamResponse(200, "")
-				response.Body = &canceledTransportBody{ctx: r.Context(), first: strings.NewReader(chunk), closed: closed}
+				response.Body = &canceledTransportBody{ctx: r.Context(), cancel: cancel, first: strings.NewReader(chunk), closed: closed}
 				return response, nil
 			}}
 			useRealStreamConnector(t, f, contract.TypeOpenAICompatible, b, 1, false)
