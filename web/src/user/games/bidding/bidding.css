@@ -893,3 +893,65 @@
   background: color-mix(in srgb, #60a58a 12%, transparent);
   margin-block: 1rem;
 }
+
+@media (min-width: 64rem) {
+  .bid-play {
+    scroll-margin-top: 5rem;
+    display: grid;
+    grid-template-columns: minmax(16rem, 0.7fr) minmax(0, 1.3fr);
+    gap: 0.75rem 1rem;
+  }
+  .bid-play
+    > :is(.bid-phase, .bid-scoreboard, .bid-matched, .bid-public, .bid-played, .duel-actions) {
+    grid-column: 1 / -1;
+  }
+  .bid-play .bid-scoreboard > section {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    padding: 0.5rem;
+  }
+  .bid-play .bid-scoreboard strong {
+    margin: 0;
+    font-size: 1.8rem;
+  }
+  .bid-play .bid-table {
+    gap: 0.65rem;
+    padding: 0.75rem;
+    flex-wrap: wrap;
+  }
+  .bid-play .bid-table .bid-reward {
+    width: clamp(3rem, 5vw, 4.5rem);
+  }
+  .bid-play .bid-pool {
+    flex-basis: 100%;
+    text-align: center;
+  }
+  .bid-play .bid-pool > strong {
+    font-size: 2.5rem;
+  }
+  .bid-play .bid-carry {
+    margin: 0.25rem 0 0;
+    padding: 0.25rem;
+  }
+  .bid-play .bid-decision {
+    min-width: 0;
+    padding-top: 0;
+  }
+  .bid-play .bid-decision .bid-hand {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    min-width: 0;
+  }
+  .bid-play .bid-decision .bid-card {
+    aspect-ratio: auto;
+    height: 5.5rem;
+    min-height: 0 !important;
+  }
+  .bid-play .bid-played .bid-table-scroll {
+    max-height: 14rem;
+    overflow-y: auto;
+  }
+}

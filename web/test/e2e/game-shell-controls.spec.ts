@@ -131,7 +131,7 @@ for (const width of [1440, 768, 390])
         await expect(page.locator('h1')).toBeVisible();
         if (game) await expect(page.locator('.game-actionbar'), game).toHaveCount(1);
         else {
-          await expect(page.locator('a.game-center-card')).toHaveCount(6);
+          await expect(page.locator('a.game-center-card')).toHaveCount(9);
           await expect(page.locator('a.game-center-card button')).toHaveCount(0);
           if (width === 390) {
             const cards = page.locator('a.game-center-card');
@@ -139,7 +139,7 @@ for (const width of [1440, 768, 390])
               await page
                 .locator('.game-center-grid')
                 .evaluate((el) => el.getBoundingClientRect().height),
-            ).toBeLessThan(1000);
+            ).toBeLessThan(1500);
             for (const card of await cards.all()) {
               const hero = await card.locator('.game-center-card__hero').boundingBox();
               const body = await card.locator('.game-center-card__body').boundingBox();

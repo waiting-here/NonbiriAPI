@@ -153,7 +153,7 @@ export function BiddingGame({
       {current?.ai && <AIMatchInfo ai={current.ai} sources={current.sources} />}
       <BiddingPresentation home={home} onCue={audio.sound.play} />
       {current ? (
-        <>
+        <div className="bid-play">
           <div className="bid-phase">
             <strong>
               {text('bidding.round')} {current.round} / 13 {text('bidding.message')}
@@ -251,7 +251,7 @@ export function BiddingGame({
               {text('bidding.yourEntry')}: <GamePayment payment={current.payment} />
             </small>
           </div>
-        </>
+        </div>
       ) : queue ? (
         <section className="bid-lobby">
           <span className="bid-eyebrow">

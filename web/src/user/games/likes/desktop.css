@@ -45,7 +45,7 @@
   }
 
   .likes-character {
-    height: 11rem;
+    height: clamp(8rem, 20dvh, 18rem);
     gap: 2rem;
   }
 
@@ -58,8 +58,6 @@
   }
 
   .likes-arena[data-presenting='true'] .likes-character {
-    height: clamp(22rem, 52vh, 42rem);
-    margin-block: 1rem;
     border-radius: 0.6rem;
     background:
       radial-gradient(

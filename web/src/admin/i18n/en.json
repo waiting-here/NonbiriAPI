@@ -74,6 +74,7 @@
       "untagged": "Untagged",
       "abusive_third_party": "Abusive third party",
       "community_charity": "Community charity",
+      "select": "Select",
       "selectAll": "Select endpoints on this page",
       "selectEndpoint": "Select {{url}}",
       "selected": "{{count}} endpoints selected",

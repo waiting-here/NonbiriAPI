@@ -74,6 +74,7 @@
       "untagged": "无标签",
       "abusive_third_party": "违规第三方",
       "community_charity": "社区公益站",
+      "select": "选择",
       "selectAll": "选择本页端点",
       "selectEndpoint": "选择 {{url}}",
       "selected": "已选 {{count}} 个端点",

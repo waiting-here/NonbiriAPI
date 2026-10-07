@@ -367,7 +367,7 @@ function EndpointsPageContent({ account, scopeReady, sessionError }: EndpointsPa
                     return (
                       <Fragment key={group.base_url}>
                         <tr>
-                          <td>
+                          <td data-label={t('admin.endpoints.select')}>
                             <input
                               type="checkbox"
                               aria-label={t('admin.endpoints.selectEndpoint', {

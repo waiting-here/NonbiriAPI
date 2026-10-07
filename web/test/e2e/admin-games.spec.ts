@@ -385,7 +385,7 @@ for (const scenario of [
     await page.setViewportSize(scenario);
     await page.goto(`${ADMIN_ORIGIN}/games`);
     const rows = page.locator('.admin-game-row');
-    await expect(rows).toHaveCount(6);
+    await expect(rows).toHaveCount(9);
     const capture = async (name: string) => {
       if (process.env.NONBIRI_VISUAL_DIR)
         await page.screenshot({
@@ -394,7 +394,7 @@ for (const scenario of [
         });
     };
     await capture('overview');
-    for (let index = 0; index < 6; index++) {
+    for (let index = 0; index < 9; index++) {
       const trigger = rows.nth(index).getByRole('button');
       await trigger.click();
       const dialog = page.locator('.nb-expandable-panel:not([hidden])');
