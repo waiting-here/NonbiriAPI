@@ -1,0 +1,24 @@
+.decision-timer {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--selected-color, #77e4c8);
+  color: var(--selected-color, #77e4c8);
+  background: #101720;
+  font: 600 12px monospace;
+  white-space: nowrap;
+}
+.decision-timer[hidden] {
+  display: none;
+}
+.decision-timer.urgent {
+  color: #ffbe87;
+  border-color: #ff9e72;
+}
+#decision-dialog-timer {
+  margin: 0 0 12px;
+}
+.battle-heading:has(.decision-timer) {
+  flex-wrap: wrap;
+}

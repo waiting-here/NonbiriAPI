@@ -1,0 +1,12 @@
+AI Gwent Arena interface
+
+The original interface, card content, selected illustrations and thumbnails are
+included with permission from the rights holder. The integrated interface uses
+the original layouts, deck editor, card catalog and local demonstration engine.
+Sound effects are synthesized locally. Online matches use the platform server.
+
+The original interface identifies Gwent Classic as its underlying game engine:
+https://github.com/asundr/gwent-classic
+
+The application source is distributed under the repository license. This notice
+does not grant additional rights to third-party names or trademarks in card art.

@@ -1,0 +1,30 @@
+.leader-picker {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+.leader-picker select {
+  flex: 1 1 15rem;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.55rem;
+  color: var(--text, #e9e6df);
+  background: #111722;
+  border: 1px solid #647185;
+  border-radius: 0.45rem;
+}
+.leader-control {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 4px;
+  min-width: 0;
+}
+.leader-control .leader-button {
+  min-width: 0;
+  flex: 1;
+}
+.hand-actions .leader-help {
+  padding-inline: 9px;
+  color: var(--card-color, var(--soft));
+}

@@ -466,3 +466,43 @@
       border-color 0.15s;
   }
 }
+
+.gwent-original {
+  width: 100%;
+  min-width: 0;
+}
+.gwent-original-frame {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: #07090f;
+  overflow: hidden;
+}
+
+.gwent-host-dialog {
+  --panel: #10151e;
+  --text: #e9eef8;
+  --muted: #98a4b8;
+  color: #e9eef8;
+  background: #10151e;
+  border: 1px solid #293544;
+  border-radius: 16px;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}
+.gwent-host-dialog .btn {
+  border-radius: 8px;
+  border: 1px solid #293544;
+  color: #e9eef8;
+  background: #171f2b;
+}
+
+.gwent-frame-fallback {
+  padding: 20px;
+  color: #e9eef8;
+  background: #10151e;
+  border: 1px solid #293544;
+  border-radius: 12px;
+}
+.gwent-frame-fallback a {
+  color: #77e4c8;
+}

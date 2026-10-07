@@ -1,0 +1,13 @@
+/* Keep card badges, selection and hover layers inside the scrolling card group. */
+.dialog-cards {
+  isolation: isolate;
+}
+
+/* Sticky confirmation controls must paint above cards passing underneath them. */
+.dialog-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  padding: 16px 0;
+  background: linear-gradient(180deg, transparent, var(--panel-solid, #10191d) 35%);
+}

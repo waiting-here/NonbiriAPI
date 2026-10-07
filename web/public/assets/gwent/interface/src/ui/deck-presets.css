@@ -1,0 +1,20 @@
+.deck-plan {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.deck-help {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--soft);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.deck-plan .deck-reroll {
+  font-size: 11px;
+  padding: 4px 8px;
+}
