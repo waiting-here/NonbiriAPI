@@ -18,6 +18,9 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Changed
 
+- Gwent, Lake Notes and Steady Catch restore their supplied original interfaces, artwork, menus and interactions. Gwent includes all 16 standard deck presets, local custom decks and free AI spectator demonstrations; account games keep server-authoritative progress and settlement.
+- Cyber Loan stays first in permanent activities, spans the desktop row and shows its rules without expanding a panel. All nine games provide a consistent return link, and games without per-game credit rewards show that fact beside entry controls.
+- Administrator and steward request logs explain preflight rejections with safe field and validation details; older records explicitly report when details were not recorded.
 - Lake Notes moves from limited activities to permanent free games, preserving profiles, unfinished casts and payment records. The expanded fishing catalog adds progression and equipment choices; all four credit exchanges start disabled after migration.
 - Charity requests stop retrying and clear consecutive key failures when an upstream returns HTTP 200. An actual upstream 200 stream consumes quota even if it later fails or returns no content; missing usage settles against the reserved amount. Protocol errors remain visible in request logs and sanitized caller responses.
 - Plain HTTP upstream endpoints remain available with a credential and content exposure warning.
@@ -38,6 +41,9 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Fixed
 
+- Home game continuations accept Gwent, Steady Catch and Lake Notes records without rejecting the whole section.
+- Fishing and catch sessions drain pending checkpoints, save pauses before resuming, and recover correctly when their pages remount. Fishing storage failures now include bounded server diagnostics.
+- Thursday contribution counts stay together on one line, with readable adjacent amounts and units.
 - Discord callbacks accept the issuer parameter and tolerate additional provider metadata while validating login state and issuer identity.
 - The first visit to legal settings no longer inherits a hidden ordinary-settings search. Discord blacklists use stable newest-first ordering.
 - CallerKey acceptance rechecks revocation in the dispatch transaction. Lowered concurrency limits apply to new admissions immediately, implicit HTTP transport retries cannot replay request bodies, and image downloads have bounded write deadlines.

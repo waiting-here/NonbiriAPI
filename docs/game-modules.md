@@ -111,7 +111,7 @@ See [Steady Catch](steady-catch.md) and [Lake Notes](lake-notes.md).
 The [AI decision interface](ai-players.md) separates observations, legal actions,
 decision windows and budgets from the decision provider. Local scorers, neural
 models and remote services can implement the provider boundary without owning
-game state or settlement. Gwent currently uses its ported scorer only for timed-out
-turns; it does not expose AI opponents. Its sequential choices use the same action
+game state or settlement. Gwent uses its ported scorer for faction AI challenges
+and timed-out human turns. Its sequential choices use the same action
 validation as human input. Competitive ratings are a separate module with game-scoped
 records and terminal-transaction updates, described in [AI Gwent](ai-gwent.md).

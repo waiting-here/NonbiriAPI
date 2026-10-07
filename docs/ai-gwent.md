@@ -5,6 +5,13 @@ Claude and Gemini factions. Players build a deck, exchange opening cards and
 compete across up to three rounds. The card catalog and in-game descriptions
 define individual abilities.
 
+The original interface includes 16 standard presets, random decks, the card
+catalog and up to eight custom decks per faction. Custom decks stay in this
+browser under the signed-in account and can be imported or exported in the deck
+editor. They are not part of the server's account export; deleting the account
+clears its local decks in the browser performing the deletion. A free local
+AI-vs-AI demonstration does not charge tickets or write account results.
+
 Rules, shuffled decks, hidden hands and choices are authoritative on the Go
 server. The browser handles input and presentation. Players can face human
 opponents or one of four faction AI challenges. The original local scorer handles

@@ -21,6 +21,7 @@ export function clearAccountLocalNamespace(accountId: string): void {
   const prefix = `nb.account.${accountId}.`;
   try {
     removeNamespace(window.localStorage, prefix);
+    removeNamespace(window.localStorage, `nonbiri.gwent.decks.${accountId}.`);
   } catch {
     // Best effort after authoritative deletion.
   }

@@ -68,7 +68,7 @@ is `{schema:"gwent-local/v1",faction,preset}`, where `faction` is
 challenges initially use `standard-balanced`. Editing their deck, name or prices
 retains their challenge IDs and first-clear status.
 
-Gwent's AI entry, policies and players start disabled, with zero tickets and
+Gwent's AI entry and players start disabled, with zero tickets and
 first-clear rewards. They are independent of Bidding Duel and Gwent's Standard
 PvP ticket, deductions and switch. Enable the games master switch, Gwent, its AI
 entry and the chosen player/strategy before admitting challenges.
