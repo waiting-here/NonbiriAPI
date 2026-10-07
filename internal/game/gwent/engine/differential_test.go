@@ -49,32 +49,7 @@ func TestOriginalRuleTransitions(t *testing.T) {
 	}
 	for _, test := range cases {
 		t.Run(test.Name, func(t *testing.T) {
-			s := fixture()
-			for seat := range 2 {
-				p := &s.Players[seat]
-				p.Faction = test.Factions[seat]
-				p.Leader = s.makeCard(test.Leaders[seat], seat)
-				p.LeaderUsed = s.has(p.Leader, "leader_deepseek_rebirth")
-				p.Shield = test.Shield[seat]
-				hand(&s, seat, test.Hand[seat]...)
-				for _, def := range test.Deck[seat] {
-					p.Deck = append(p.Deck, s.makeCard(def, seat))
-				}
-				for _, def := range test.Grave[seat] {
-					p.Grave = append(p.Grave, s.makeCard(def, seat))
-				}
-			}
-			for _, row := range test.Board {
-				ri := slices.Index(rows, row.Row)
-				field(&s, row.Seat, ri, row.Cards...)
-				if row.Special != "" {
-					s.Board[row.Seat][ri].Special = s.makeCard(row.Special, row.Seat)
-				}
-			}
-			for _, def := range test.Weather {
-				s.Weather = append(s.Weather, s.makeCard(def, 1))
-			}
-			s.refreshAll()
+			s := originalInitial(test)
 			assertOriginalSnapshot(t, s, test.Expected[0], 0)
 			for step, command := range test.Actions {
 				if command.Row == "weather" {
@@ -209,4 +184,34 @@ func firstDifference(got, want any, path string) string {
 		}
 	}
 	return strings.TrimSpace(fmt.Sprintf("%s: got %v; original %v", path, got, want))
+}
+
+func originalInitial(test originalFixture) State {
+	s := fixture()
+	for seat := range 2 {
+		p := &s.Players[seat]
+		p.Faction = test.Factions[seat]
+		p.Leader = s.makeCard(test.Leaders[seat], seat)
+		p.LeaderUsed = s.has(p.Leader, "leader_deepseek_rebirth")
+		p.Shield = test.Shield[seat]
+		hand(&s, seat, test.Hand[seat]...)
+		for _, def := range test.Deck[seat] {
+			p.Deck = append(p.Deck, s.makeCard(def, seat))
+		}
+		for _, def := range test.Grave[seat] {
+			p.Grave = append(p.Grave, s.makeCard(def, seat))
+		}
+	}
+	for _, row := range test.Board {
+		ri := slices.Index(rows, row.Row)
+		field(&s, row.Seat, ri, row.Cards...)
+		if row.Special != "" {
+			s.Board[row.Seat][ri].Special = s.makeCard(row.Special, row.Seat)
+		}
+	}
+	for _, def := range test.Weather {
+		s.Weather = append(s.Weather, s.makeCard(def, 1))
+	}
+	s.refreshAll()
+	return s
 }
