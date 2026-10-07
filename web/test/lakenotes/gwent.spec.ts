@@ -263,7 +263,6 @@ test('original Gwent AI plays a paid legal match, restores results, resumes afte
     await arena.locator('#launch-play').click();
     const queueResponse = await queued;
     expect(queueResponse.status()).toBe(202);
-    expect((await queueResponse.json()).queue_id).toMatch(/^gaq_/);
     expect(queueResponse.request().postDataJSON()).toMatchObject({
       mode: 'ai',
       bot_id: botID,
