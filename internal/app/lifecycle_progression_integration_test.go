@@ -1,16 +1,21 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/antiabuse"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/forward"
 	"github.com/waiting-here/NonbiriAPI/internal/game/linklink"
 	"github.com/waiting-here/NonbiriAPI/internal/game/ranking"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
@@ -105,8 +110,21 @@ func TestPersonalHistoryExportExpiryOwnershipAndDeletion(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := f.app.forward.abuse.RecordShort(ctx, f.users[0], "[公益]fixture/model", 1); err != nil {
+	caller, err := forward.NewCallerKeyMiddleware(f.app.resourceRepo, f.app.forward.lifecycle)
+	if err != nil {
 		t.Fatal(err)
+	}
+	request := httptest.NewRequest("POST", "/v1/chat/completions", nil)
+	request.Header.Set("Authorization", "Bearer nbk_"+base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{0x4a}, 32)))
+	response := httptest.NewRecorder()
+	caller.Wrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, err := f.app.forward.abuse.RecordShort(r.Context(), f.users[0], "[公益]fixture/model", 1); err != nil {
+			t.Fatal(err)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})).ServeHTTP(response, request)
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("fixture authentication failed: %d", response.Code)
 	}
 	f.clock.Store(time.Now().Unix())
 	now := f.clock.Load()

@@ -30,6 +30,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/donation"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/elevation"
+	"github.com/waiting-here/NonbiriAPI/internal/forward"
 	gamehost "github.com/waiting-here/NonbiriAPI/internal/game/host"
 	"github.com/waiting-here/NonbiriAPI/internal/game/ranking"
 	"github.com/waiting-here/NonbiriAPI/internal/issues"
@@ -316,7 +317,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 		Secrets:      vault,
 		Accounting:   claim.NewLedgerAccounting(),
 		Charity:      charityService,
-		Acceptance:   maintenanceService,
+		Acceptance:   forward.CallerKeyAcceptanceGate{Next: maintenanceService},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create claim service: %w", err)
