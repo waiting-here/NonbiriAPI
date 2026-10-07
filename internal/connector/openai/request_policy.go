@@ -62,7 +62,7 @@ func NormalizeExcludedRequestFields(fields []string) ([]string, error) {
 // The ordinary operation decoder validates the independently filtered copy.
 func DecodeRequestEnvelope(body io.Reader, limit int64, operation contract.Operation) (*RequestEnvelope, error) {
 	if body == nil || operation != contract.OperationChatCompletions && operation != contract.OperationEmbeddings {
-		return nil, ErrInvalidRequest
+		return nil, invalidField("body", "expected one valid UTF-8 JSON object")
 	}
 	limit = requestbody.DecoderLimit(limit)
 	data, err := readBounded(body, limit)
@@ -71,11 +71,11 @@ func DecodeRequestEnvelope(body io.Reader, limit int64, operation contract.Opera
 	}
 	defer clear(data)
 	if operation == contract.OperationEmbeddings && !validateEmbeddingJSON(data) {
-		return nil, ErrInvalidRequest
+		return nil, invalidField("body", "expected one valid UTF-8 JSON object")
 	}
 	fields, err := decodeJSONObject(data, maxTopLevelFields)
 	if err != nil {
-		return nil, ErrInvalidRequest
+		return nil, err
 	}
 	result := &RequestEnvelope{fields: fields, bodyLimit: limit}
 	valid := false
@@ -90,22 +90,22 @@ func DecodeRequestEnvelope(body io.Reader, limit int64, operation contract.Opera
 		switch field.name {
 		case "model":
 			if json.Unmarshal(raw, &result.Model) != nil || !validOpaqueText(result.Model, MaxPlatformModelRunes, true) {
-				return nil, ErrInvalidRequest
+				return nil, invalidField("model", "expected a nonempty model name of at most 133 characters without control characters")
 			}
 		case "stream":
 			if operation == contract.OperationEmbeddings {
 				if !bytes.Equal(raw, []byte("false")) {
-					return nil, ErrInvalidRequest
+					return nil, invalidField("stream", "expected false; embeddings do not support streaming")
 				}
 			} else if !bytes.Equal(raw, []byte("null")) {
 				if !bytes.Equal(raw, []byte("true")) && !bytes.Equal(raw, []byte("false")) || json.Unmarshal(raw, &result.Stream) != nil {
-					return nil, ErrInvalidRequest
+					return nil, invalidField("stream", "expected a boolean or null")
 				}
 			}
 		case "input":
 			if operation == contract.OperationEmbeddings {
 				if embeddingInputCount(raw) == 0 {
-					return nil, ErrInvalidRequest
+					return nil, invalidField("input", "expected a nonempty string, token array, or batch of at most 2048 inputs")
 				}
 				inputSeen = true
 			}
@@ -113,13 +113,16 @@ func DecodeRequestEnvelope(body io.Reader, limit int64, operation contract.Opera
 			if operation == contract.OperationEmbeddings {
 				var value string
 				if json.Unmarshal(raw, &value) != nil || value != "float" && value != "base64" {
-					return nil, ErrInvalidRequest
+					return nil, invalidField("encoding_format", "expected float or base64")
 				}
 			}
 		}
 	}
-	if result.Model == "" || operation == contract.OperationEmbeddings && !inputSeen {
-		return nil, ErrInvalidRequest
+	if operation == contract.OperationEmbeddings && !inputSeen {
+		return nil, invalidField("input", "required field is missing")
+	}
+	if result.Model == "" {
+		return nil, invalidField("model", "required field is missing")
 	}
 	valid = true
 	return result, nil

@@ -56,8 +56,11 @@ export class LakeController {
     this.value = { result: this.confirmed, status, error };
     if (!this.stopped) this.listeners.forEach((fn) => fn());
   }
+  activate() {
+    this.stopped = false;
+  }
   adopt(result: CastResult, control = false) {
-    if (this.inFlight) return;
+    if (this.stopped || this.inFlight) return;
     this.confirmed = structuredClone(result);
     this.inputs = [];
     this.attempt = null;
@@ -185,6 +188,16 @@ export class LakeController {
         throw error;
       } finally {
         this.inFlight = null;
+        // A terminal tick may have queued behind this request. Continue saving
+        // without requiring another simulation tick after the local terminal.
+        if (
+          this.running &&
+          !this.pausing &&
+          !this.stopped &&
+          this.predicted &&
+          (this.inputs.length >= 120 || (this.inputs.length > 0 && terminal(this.predicted.cast)))
+        )
+          void this.flush().catch(() => undefined);
       }
     })();
     this.inFlight = request;
@@ -241,8 +254,8 @@ export class LakeController {
     if (!this.stopped) this.saved(result);
   }
   dispose() {
-    void this.pause().catch(() => undefined);
     this.stopped = true;
+    void this.pause().catch(() => undefined);
     this.listeners.clear();
   }
 }

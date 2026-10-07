@@ -58,6 +58,7 @@ export const revisionValue = (value: unknown) =>
   decimalValue(value, { bits: 128, positive: true }, 'revision');
 export const prefix = (game: DuelGame, queue = false) =>
   `${{ bidding: 'bid', likes: 'lik', gwent: 'gwt' }[game]}${queue ? 'q' : ''}_`;
+export const aiQueuePrefix = (game: DuelGame) => (game === 'gwent' ? 'gaq_' : 'aiq_');
 export function ratesValue(value: unknown): Rates {
   const r = exactRecord(value, ['platform', 'welfare', 'thursday']);
   const v = {
@@ -71,7 +72,11 @@ export function ratesValue(value: unknown): Rates {
 export function configValue(value: unknown, game: DuelGame, modes: readonly string[]): DuelConfig {
   modes = modes.filter((mode) => mode !== 'ai');
   const timers =
-    game === 'gwent' ? ['mulligan_seconds', 'turn_seconds', 'choice_seconds'] : game === 'bidding' ? ['joker_seconds', 'bid_seconds'] : ['plan_seconds', 'settlement_seconds'];
+    game === 'gwent'
+      ? ['mulligan_seconds', 'turn_seconds', 'choice_seconds']
+      : game === 'bidding'
+        ? ['joker_seconds', 'bid_seconds']
+        : ['plan_seconds', 'settlement_seconds'];
   const r = exactRecord(value, [
     'enabled',
     'available',
@@ -133,6 +138,20 @@ function optionalDecode<T>(value: unknown, decode?: (item: unknown) => T): T | n
   if (!decode) invalidResponse('unexpected game field');
   return decode(value);
 }
+function aiTermsValue<L>(
+  terms: AITerms | undefined,
+  decode?: (item: unknown) => L,
+): AITerms | undefined {
+  if (!terms || terms.bot_loadout === undefined) return terms;
+  return { ...terms, bot_loadout: optionalDecode(terms.bot_loadout, decode) };
+}
+function aiViewValue<L>(
+  view: AIView | undefined,
+  decode?: (item: unknown) => L,
+): AIView | undefined {
+  if (!view) return view;
+  return { ...view, terms: aiTermsValue(view.terms, decode)! };
+}
 function resolutionValue<P>(
   value: unknown,
   decode?: (item: unknown) => P,
@@ -191,7 +210,7 @@ export function resultValue<V, F, P, S, L, A>(
   enumValue(r.game, [c.game], 'game');
   const rake = exactRecord(r.rake, ['platform', 'welfare', 'thursday']);
   return {
-    ai: r.ai as AIView | undefined,
+    ai: aiViewValue(r.ai as AIView | undefined, c.loadout),
     id: opaqueID(r.id, prefix(c.game), 'result'),
     contentHash: r.content_hash === undefined ? undefined : hashValue(r.content_hash),
     game: c.game,
@@ -260,7 +279,7 @@ function stateValue<V, F, P, S, L, A>(
   enumValue(r.game, [c.game], 'game');
   safeInteger(r.rules_version, 1, 1, 'rules version');
   return {
-    ai: r.ai as AIView | undefined,
+    ai: aiViewValue(r.ai as AIView | undefined, c.loadout),
     sources: r.action_sources as AIActionSource[] | undefined,
     id: opaqueID(r.id, prefix(c.game), 'session'),
     game: c.game,
@@ -271,7 +290,11 @@ function stateValue<V, F, P, S, L, A>(
     decisionID: r.decision_id as string | undefined,
     phase: enumValue(
       r.phase,
-      c.game === 'gwent' ? (['mulligan', 'turn', 'choice'] as const) : c.game === 'bidding' ? (['joker', 'bid'] as const) : (['plan', 'settlement'] as const),
+      c.game === 'gwent'
+        ? (['mulligan', 'turn', 'choice'] as const)
+        : c.game === 'bidding'
+          ? (['joker', 'bid'] as const)
+          : (['plan', 'settlement'] as const),
       'phase',
     ),
     round: safeInteger(
@@ -314,9 +337,9 @@ export function homeValue<V, F, P, S, L, A>(
     if (c.game === 'likes' && (q.loadout === undefined || q.loadout === null))
       invalidResponse('likes loadout');
     return {
-      ai: q.ai as AITerms | undefined,
+      ai: aiTermsValue(q.ai as AITerms | undefined, c.loadout),
       position: q.position as number | undefined,
-      id: opaqueID(q.id, q.mode === 'ai' ? 'aiq_' : prefix(c.game, true), 'queue'),
+      id: opaqueID(q.id, q.mode === 'ai' ? aiQueuePrefix(c.game) : prefix(c.game, true), 'queue'),
       revision: revisionValue(q.revision),
       mode: enumValue(q.mode, c.modes, 'queue mode'),
       deadline: unixTime(q.deadline, 'queue deadline'),

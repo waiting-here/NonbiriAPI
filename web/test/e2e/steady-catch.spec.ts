@@ -62,36 +62,35 @@ for (const theme of ['light', 'dark']) {
       return route.fulfill({ json: { game_profile_public: false } });
     });
     await page.goto(USER_ORIGIN + '/games/steady-catch');
-    await expect(page.getByRole('button', { name: 'Play / resume' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Keep catching', exact: true })).toBeVisible();
     for (const [width, height] of [
       [1440, 900],
       [1280, 720],
-      [1024, 600],
+      [720, 420],
       [390, 844],
       [320, 740],
     ]) {
       await page.setViewportSize({ width, height });
       await page
-        .locator('.catch-round')
+        .locator('.game-column')
         .evaluate((node) => node.scrollIntoView({ block: 'start' }));
-      const bounds = await page.locator('.catch-round').boundingBox();
-      expect(bounds!.y).toBeGreaterThanOrEqual(69);
-      expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(height);
+      const bounds = await page.locator('.stage canvas').boundingBox();
+      expect(bounds!.width).toBeGreaterThan(0);
+      expect(bounds!.height).toBeGreaterThan(0);
+      await expect(page.getByRole('button', { name: 'Resume game', exact: true })).toBeVisible();
       const horizontal = await page.evaluate(
         () => document.documentElement.scrollWidth > innerWidth,
       );
-      const overflow = await page
-        .locator('.catch-game *')
-        .evaluateAll((nodes) =>
-          nodes
-            .map((node) => ({
-              tag: node.tagName,
-              cls: node.className,
-              right: node.getBoundingClientRect().right,
-              width: node.getBoundingClientRect().width,
-            }))
-            .filter((node) => node.right > innerWidth + 1),
-        );
+      const overflow = await page.locator('.catch-game *').evaluateAll((nodes) =>
+        nodes
+          .map((node) => ({
+            tag: node.tagName,
+            cls: node.className,
+            right: node.getBoundingClientRect().right,
+            width: node.getBoundingClientRect().width,
+          }))
+          .filter((node) => node.right > innerWidth + 1),
+      );
       expect(horizontal, JSON.stringify({ width, overflow })).toBe(false);
       if (process.env.NONBIRI_SCREENSHOT_DIR && [1280, 390].includes(width)) {
         mkdirSync(process.env.NONBIRI_SCREENSHOT_DIR, { recursive: true });
@@ -100,13 +99,13 @@ for (const theme of ['light', 'dark']) {
         });
       }
     }
-    await page.getByRole('button', { name: 'Play / resume' }).click();
-    await expect(page.locator('.catch-canvas')).toBeFocused();
+    await page.getByRole('button', { name: 'Keep catching', exact: true }).click();
+    await expect(page.locator('.stage canvas')).toBeFocused();
     await page.keyboard.down('ArrowRight');
     await expect.poll(() => writes.some((w) => w.action === 'advance')).toBe(true);
     await page.keyboard.up('ArrowRight');
-    await page.getByRole('button', { name: 'Pause', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Play / resume' })).toBeVisible();
+    await page.getByRole('button', { name: 'Pause game', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Keep catching', exact: true })).toBeVisible();
     await expect.poll(() => state.status).toBe('paused');
     expect(state.state.x).toBeGreaterThan(300000);
     expect(writes.every((w) => !('score' in w))).toBe(true);

@@ -12,6 +12,15 @@ export interface Phrase {
   category: string;
   gold: boolean;
 }
+export interface CollectionEvent {
+  kind: Item['kind'];
+  payload: number;
+  points: number;
+  combo: number;
+  hpDelta: number;
+  chargeReady: boolean;
+  blocked: boolean;
+}
 export interface Input {
   tick: number;
   target: number;
@@ -90,6 +99,7 @@ export function advance(
   inputs: readonly Input[],
   until: number,
   phrases: readonly Phrase[],
+  onCollect?: (event: CollectionEvent) => void,
 ): State {
   const s: State = {
     ...before,
@@ -233,7 +243,20 @@ export function advance(
       ) {
         item.checked = true;
         if (Math.abs(item.x - s.x) < item.width / 2 + PAD_HALF) {
+          const score = s.score,
+            hp = s.hp,
+            hits = s.hits,
+            charge = s.charge;
           collect(item);
+          onCollect?.({
+            kind: item.kind,
+            payload: item.payload,
+            points: s.score - score,
+            combo: s.combo,
+            hpDelta: s.hp - hp,
+            chargeReady: charge < 10 && s.charge === 10,
+            blocked: item.kind === 'hazard' && s.hits === hits,
+          });
           continue;
         }
         if (item.kind === 'phrase') {

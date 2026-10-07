@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import phrases from '../../../../../internal/game/steadycatch/engine/phrases.json';
-import { advance, newGame } from './engine';
+import { advance, newGame, LAST_TICK } from './engine';
 import { CatchSession, type Controls, type Session } from './session';
 function initial(): Session {
   return {
@@ -22,6 +22,99 @@ const settle = async () => {
   for (let i = 0; i < 8; i++) await Promise.resolve();
 };
 describe('catch checkpoint coordination', () => {
+  it('sends a local terminal tail after a delayed earlier checkpoint', async () => {
+    let time = 0,
+      authority = initial();
+    authority.state.tick = LAST_TICK - 120;
+    const writes: Controls[] = [];
+    let release!: () => void;
+    const first = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const session = new CatchSession(
+      authority,
+      phrases,
+      async (_, request) => {
+        writes.push(request);
+        if (request.action === 'advance' && writes.length === 2) await first;
+        const state = advance(authority.state, request.inputs, request.until_tick, phrases);
+        authority = {
+          ...authority,
+          state,
+          revision: authority.revision + 1,
+          status: state.cause ? 'failed' : 'playing',
+          terminal_at: state.cause ? 20 : null,
+        };
+        return structuredClone(authority);
+      },
+      () => time,
+    );
+    await session.resume();
+    time = 1000;
+    session.frame();
+    await settle();
+    time = 2000;
+    session.frame();
+    expect(session.active).toBe(false);
+    expect(session.state.cause).toBeTruthy();
+    expect(session.authority.state.tick).toBe(LAST_TICK - 120);
+    release();
+    await settle();
+    expect(writes.map((w) => w.action)).toEqual(['resume', 'advance', 'advance']);
+    expect(session.terminal).toBe(true);
+    expect(session.state).toEqual(session.authority.state);
+  });
+  it('awaits both the current checkpoint and persisted pause before a quick menu resume', async () => {
+    let time = 0,
+      authority = initial();
+    const writes: Controls[] = [];
+    let releaseAdvance!: () => void, releasePause!: () => void;
+    const advanceResponse = new Promise<void>((resolve) => {
+      releaseAdvance = resolve;
+    });
+    const pauseResponse = new Promise<void>((resolve) => {
+      releasePause = resolve;
+    });
+    const session = new CatchSession(
+      authority,
+      phrases,
+      async (_, request) => {
+        writes.push(request);
+        if (request.action === 'advance') await advanceResponse;
+        if (request.action === 'pause') await pauseResponse;
+        authority = {
+          ...authority,
+          revision: authority.revision + 1,
+          state: advance(authority.state, request.inputs, request.until_tick, phrases),
+          status: request.action === 'pause' ? 'paused' : 'playing',
+        };
+        return structuredClone(authority);
+      },
+      () => time,
+    );
+    await session.resume();
+    time = 1000;
+    session.frame();
+    await settle();
+    let paused = false;
+    const closeMenu = session.pause().then(async () => {
+      paused = true;
+      await session.resume();
+    });
+    await settle();
+    expect(paused).toBe(false);
+    expect(writes.map((w) => w.action)).toEqual(['resume', 'advance']);
+    releaseAdvance();
+    await settle();
+    expect(paused).toBe(false);
+    expect(writes.map((w) => w.action)).toEqual(['resume', 'advance', 'pause']);
+    releasePause();
+    await closeMenu;
+    expect(writes.map((w) => w.action)).toEqual(['resume', 'advance', 'pause', 'resume']);
+    expect(session.active).toBe(true);
+    expect(session.authority.status).toBe('playing');
+  });
+
   it('keeps rendering while a checkpoint is pending and pauses in order', async () => {
     let time = 0,
       authority = initial();
@@ -50,14 +143,16 @@ describe('catch checkpoint coordination', () => {
     session.aim(500000);
     time = 1000;
     session.frame();
+    await settle();
     expect(writes).toHaveLength(2);
     time = 2000;
     session.frame();
     expect(session.state.tick).toBe(120);
     expect(session.authority.state.tick).toBe(0);
-    await session.pause();
+    const paused = session.pause();
     expect(writes).toHaveLength(2);
     unblock!();
+    await paused;
     await settle();
     expect(writes.map((r) => r.action)).toEqual(['resume', 'advance', 'pause']);
     expect(writes[2].inputs[0].tick).toBe(61);

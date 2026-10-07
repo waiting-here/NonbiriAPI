@@ -1,0 +1,2284 @@
+@scope (.lake-original) {
+
+    :scope {
+      --ink: #1c3633;
+      --deep: #0c2327;
+      --parchment-base: #f4ecdc;
+      --parchment-card: #fdf8ed;
+      --parchment-accent: #ede3ce;
+      --brass: #b89154;
+      --brass-dark: #785a2b;
+      --brass-light: #e5c388;
+      --leather: #4e3629;
+      --line: #2e4d46;
+      --line-subtle: #98aba3;
+      --green: #488656;
+      --green-glow: #6fba7e;
+      --gold: #d49838;
+      --gold-glow: #fadb73;
+      --orange: #c75c3e;
+      --water-deep: #1e4f55;
+      --water-surface: #56a59b;
+      --lake-scene: url("/assets/lake-notes/scene-lake.webp");
+      --river-scene: url("/assets/lake-notes/scene-river.webp");
+      --coast-scene: url("/assets/lake-notes/scene-coast.webp");
+      --jungle-scene: url("/assets/lake-notes/scene-jungle.webp");
+      --lake-night-scene: url("/assets/lake-notes/scene-lake-night.webp");
+      --river-night-scene: url("/assets/lake-notes/scene-river-night.webp");
+      --coast-night-scene: url("/assets/lake-notes/scene-coast-night.webp");
+      --jungle-night-scene: url("/assets/lake-notes/scene-jungle-night.webp");
+      --lake-cloudy-scene: url("/assets/lake-notes/scene-lake-cloudy.webp");
+      --river-cloudy-scene: url("/assets/lake-notes/scene-river-cloudy.webp");
+      --coast-cloudy-scene: url("/assets/lake-notes/scene-coast-cloudy.webp");
+      --jungle-cloudy-scene: url("/assets/lake-notes/scene-jungle-cloudy.webp");
+      --lake-cloudy-night-scene: url("/assets/lake-notes/scene-lake-cloudy-night.webp");
+      --river-cloudy-night-scene: url("/assets/lake-notes/scene-river-cloudy-night.webp");
+      --coast-cloudy-night-scene: url("/assets/lake-notes/scene-coast-cloudy-night.webp");
+      --jungle-cloudy-night-scene: url("/assets/lake-notes/scene-jungle-cloudy-night.webp");
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Trebuchet MS", sans-serif;
+      color: var(--ink);
+    }
+    * { box-sizing: border-box; }
+    :scope { min-width: 320px; min-height: 100%; margin: 0; }
+    :scope {
+      background: radial-gradient(circle at 18% 7%, #224340 0, transparent 40%),
+                  radial-gradient(circle at 87% 88%, #163638 0, transparent 40%),
+                  #0c2327;
+      background-attachment: fixed;
+      padding: clamp(14px, 3vw, 36px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    button, select { font: inherit; }
+    button { cursor: pointer; transition: transform 0.15s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.15s, background-color 0.2s, filter 0.15s; }
+    .shell, .shell * { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-user-drag: none; }
+    button:focus-visible, select:focus-visible, .track:focus-visible { outline: 3px solid #f0d59e; outline-offset: 4px; }
+
+    /* 羊皮纸主手账外壳 */
+    .shell {
+      width: 100%;
+      max-width: 1180px;
+      margin: 0 auto;
+      overflow: hidden;
+      background: var(--parchment-base);
+      border: 4px solid var(--brass);
+      border-radius: 18px;
+      box-shadow:
+        0 0 0 4px #26190f,
+        0 16px 0 #07171a,
+        0 30px 60px rgba(0, 0, 0, 0.65),
+        inset 0 0 60px rgba(184, 145, 84, 0.15);
+      position: relative;
+    }
+
+    /* 顶部航海日志手记栏 */
+    .topbar {
+      min-height: 100px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 18px clamp(20px, 4vw, 42px);
+      border-bottom: 3px solid var(--line);
+      background:
+        radial-gradient(ellipse at 50% 0%, #fffcf4 0%, #f7edd8 100%),
+        repeating-linear-gradient(90deg, rgba(212,176,122,0.06) 0 20px, transparent 20px 40px);
+      position: relative;
+    }
+    .topbar::after {
+      content: "";
+      position: absolute;
+      bottom: -7px;
+      left: 0; right: 0;
+      height: 4px;
+      background: repeating-linear-gradient(90deg, var(--brass) 0 8px, transparent 8px 16px);
+      opacity: 0.5;
+    }
+    .eyebrow {
+      margin: 0 0 4px;
+      color: #947141;
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: .32em;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .eyebrow::before {
+      content: "✧";
+      color: var(--brass);
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(26px, 3.2vw, 38px);
+      line-height: 1.1;
+      letter-spacing: .09em;
+      color: #1a3834;
+      text-shadow: 1px 1px 0 rgba(255,255,255,0.7);
+    }
+    .top-note {
+      max-width: 360px;
+      margin: 0;
+      color: #4f6b64;
+      font-size: 13px;
+      line-height: 1.65;
+      text-align: right;
+      border-left: 2px dashed rgba(78, 107, 100, 0.3);
+      padding-left: 18px;
+    }
+
+    /* 游戏主舞台布局 */
+    .game-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(375px, .85fr);
+      min-height: 600px;
+    }
+
+    /* 左侧自然水域视窗 */
+    .scenery {
+      position: relative;
+      overflow: hidden;
+      min-height: 600px;
+      isolation: isolate;
+      background: #badfd1;
+      box-shadow: inset -8px 0 24px rgba(0,0,0,0.15);
+    }
+    .scenery[data-location] {
+      background-size: cover;
+      background-position: center center;
+      transition: background-image 0.5s ease-in-out;
+    }
+    .scenery[data-location="lake"] { background-image: var(--lake-scene); }
+    .scenery[data-location="river"] { background-image: var(--river-scene); }
+    .scenery[data-location="coast"] { background-image: var(--coast-scene); }
+    .scenery[data-location="jungle"] { background-image: var(--jungle-scene); }
+    .scenery[data-location="lake"][data-period="night"] { background-image: var(--lake-night-scene); }
+    .scenery[data-location="river"][data-period="night"] { background-image: var(--river-night-scene); }
+    .scenery[data-location="coast"][data-period="night"] { background-image: var(--coast-night-scene); }
+    .scenery[data-location="jungle"][data-period="night"] { background-image: var(--jungle-night-scene); }
+    .scenery[data-location="lake"][data-sky="overcast"] { background-image: var(--lake-cloudy-scene); }
+    .scenery[data-location="river"][data-sky="overcast"] { background-image: var(--river-cloudy-scene); }
+    .scenery[data-location="coast"][data-sky="overcast"] { background-image: var(--coast-cloudy-scene); }
+    .scenery[data-location="jungle"][data-sky="overcast"] { background-image: var(--jungle-cloudy-scene); }
+    .scenery[data-location="lake"][data-sky="overcast"][data-period="night"] { background-image: var(--lake-cloudy-night-scene); }
+    .scenery[data-location="river"][data-sky="overcast"][data-period="night"] { background-image: var(--river-cloudy-night-scene); }
+    .scenery[data-location="coast"][data-sky="overcast"][data-period="night"] { background-image: var(--coast-cloudy-night-scene); }
+    .scenery[data-location="jungle"][data-sky="overcast"][data-period="night"] { background-image: var(--jungle-cloudy-night-scene); }
+    .scenery::before {
+      content: ""; position: absolute; inset: 0; pointer-events: none;
+      background: var(--weather-wash, linear-gradient(transparent, transparent)), var(--time-wash, linear-gradient(transparent, transparent));
+    }
+    .scenery[data-period="dawn"] { --time-wash: linear-gradient(115deg, rgba(255,211,139,.22), rgba(198,179,206,.11)); }
+    .scenery[data-period="dusk"] { --time-wash: linear-gradient(105deg, rgba(221,112,82,.24), rgba(83,69,132,.26)); }
+    .scenery[data-weather="cloudy"] { --weather-wash: linear-gradient(transparent, transparent); }
+    .scenery[data-weather="rain"] { --weather-wash: linear-gradient(rgba(24,43,58,.22), rgba(29,55,66,.14)); }
+    .scenery[data-weather="rain"][data-period="night"] { --weather-wash: linear-gradient(rgba(14,27,40,.12), rgba(21,40,54,.08)); }
+    .scenery[data-sky="overcast"][data-period="dawn"] { --time-wash: linear-gradient(115deg, rgba(255,211,139,.08), rgba(198,179,206,.08)); }
+    .weather-rain {
+      display: none; position: absolute; inset: 0; pointer-events: none; overflow: hidden;
+    }
+    .scenery[data-weather="rain"] .weather-rain { display: block; }
+    .rain-drop { position: absolute; top: -8%; left: var(--x); width: var(--width); height: 100%; animation: falling-rain var(--duration) var(--delay) linear infinite; opacity: var(--opacity); will-change: transform; }
+    .rain-drop::after { content: ""; position: absolute; top: 0; width: 100%; height: var(--length); background: linear-gradient(transparent, #effaff 65%, #effaff); transform: rotate(8deg); border-radius: 50%; }
+    .rain-splash { position: absolute; left: var(--x); top: var(--y); width: 20px; height: 5px; border: 1px solid #d3e9e8; border-radius: 50%; opacity: 0; animation: rain-splash var(--duration) var(--delay) ease-out infinite; }
+    @media (max-width: 600px) { .rain-drop:nth-child(n+21) { display: none; } }
+    .scenery[data-location] .sky, .scenery[data-location] .sun, .scenery[data-location] .cloud,
+    .scenery[data-location] .hill, .scenery[data-location] .treeline, .scenery[data-location] .water,
+    .scenery[data-location] .shore, .scenery[data-location] .pier, .scenery[data-location] .reeds { display: none; }
+
+    .sky { position: absolute; inset: 0 0 43%; background: linear-gradient(#bfe9df, #e5edca 88%); }
+    .sun { position: absolute; top: 52px; right: 80px; width: 84px; aspect-ratio: 1; border-radius: 50%; background: #ffe5a1; box-shadow: 0 0 0 16px #ffe6ae55; }
+    .cloud { position: absolute; height: 16px; width: 95px; border-radius: 20px; background: #fff9e8c9; box-shadow: 18px -12px 0 4px #fff9e8c9, 50px -4px 0 2px #fff9e8c9; }
+    .cloud.one { top: 96px; left: 12%; } .cloud.two { top: 145px; right: 18%; transform: scale(.7); opacity: .8; }
+    .hill { position: absolute; bottom: 42%; width: 72%; height: 180px; border-radius: 50% 50% 0 0; background: #93bfa4; }
+    .hill.one { left: -24%; } .hill.two { right: -22%; height: 140px; background: #85b4a0; }
+    .treeline { position: absolute; bottom: 42%; left: 0; right: 0; height: 87px; background: repeating-linear-gradient(102deg, transparent 0 31px, #4e8978 32px 46px, transparent 47px 79px); clip-path: polygon(0 100%,0 75%,4% 40%,8% 78%,13% 22%,18% 76%,24% 35%,29% 80%,36% 17%,41% 80%,48% 44%,53% 78%,60% 27%,65% 78%,72% 38%,78% 79%,84% 21%,90% 80%,96% 40%,100% 77%,100% 100%); }
+    .water { position: absolute; inset: 57% 0 0; background: linear-gradient(#88c8b8 0 6px, #5aafa9 7px 55%, #398d94 100%); }
+    .water::before { content: ""; position: absolute; inset: 18px 0 0; opacity: .38; background: repeating-linear-gradient(175deg, transparent 0 27px, #c7e6c4 28px 31px, transparent 32px 75px); }
+    .shore { position: absolute; bottom: -25px; left: -30px; width: 47%; height: 160px; background: #d4b37b; border: 7px solid #9b815d; border-radius: 47% 60% 0 0; transform: rotate(-10deg); }
+    .shore::after { content: ""; position: absolute; right: 4%; top: 13%; width: 78%; height: 9px; border-radius: 50%; background: #eac98f; transform: rotate(-8deg); }
+    .pier { position: absolute; left: 6%; bottom: 93px; width: 39%; height: 28px; background: repeating-linear-gradient(90deg, #9a684b 0 29px, #86583f 30px 33px); border: 4px solid #634936; border-radius: 3px; transform: rotate(4deg); box-shadow: 0 15px 0 -8px #674b38; }
+    .pier::after { content: ""; position: absolute; right: 12%; top: 22px; width: 12px; height: 80px; background: #71503b; z-index: -1; }
+    .reeds { position: absolute; bottom: 40px; left: 3%; width: 40px; height: 90px; border-left: 5px solid #4a8568; transform: rotate(-15deg); }
+    .reeds::before, .reeds::after { content: ""; position: absolute; bottom: 0; width: 5px; height: 75px; background: #4a8568; transform-origin: bottom; }
+    .reeds::before { transform: rotate(27deg); } .reeds::after { transform: rotate(52deg); height: 64px; }
+
+    .fishing-rig { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+    .fishing-rig path { fill: none; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+    .rod-outline { stroke: #231b14; stroke-width: 7; }
+    .rod-highlight { stroke: #995c32; stroke-width: 4; }
+    .rod-light { stroke: #e3b078; stroke-width: 1.4; }
+    .rod-grip { stroke: #463422; stroke-width: 12; }
+    .rod-guide { stroke: #d9c38d; stroke-width: 2; }
+    .rod-reel { fill: #d4a757; stroke: #231b14; stroke-width: .65; }
+    .rod-reel-core { fill: #2d3b38; }
+    .fishing-line { stroke: #fffae8; stroke-width: 1.8; filter: drop-shadow(0 1px 2px rgba(10,30,35,0.7)); }
+
+    .bobber {
+      position: absolute;
+      left: 61%;
+      top: 60%;
+      width: 24px;
+      height: 30px;
+      border: 3px solid #233e38;
+      border-radius: 50% 50% 46% 46%;
+      background: linear-gradient(#fffcee 0 46%, #e65f41 48%);
+      transform: translateX(-50%);
+      box-shadow: 0 6px 12px rgba(14, 46, 45, 0.4);
+      animation: bob 2s ease-in-out infinite;
+    }
+    .bobber::after {
+      content: "";
+      position: absolute;
+      left: 8px;
+      top: -11px;
+      width: 2px;
+      height: 9px;
+      background: #233e38;
+      border-radius: 1px;
+    }
+    .ripple {
+      position: absolute;
+      left: 61%;
+      top: calc(60% + 22px);
+      width: 80px;
+      height: 18px;
+      border: 2px solid rgba(220, 255, 230, 0.7);
+      border-radius: 50%;
+      transform: translateX(-50%);
+      animation: ripple 2s ease-in-out infinite;
+    }
+    .ripple.two { width: 120px; opacity: .5; animation-delay: .5s; }
+
+    /* 复古便签/日记卡片 */
+    .scene-card {
+      position: absolute;
+      top: 24px;
+      left: 24px;
+      max-width: 240px;
+      padding: 14px 18px;
+      border: 2px solid var(--brass);
+      border-radius: 8px;
+      background: rgba(254, 250, 239, 0.94);
+      backdrop-filter: blur(4px);
+      box-shadow:
+        0 4px 14px rgba(0, 0, 0, 0.18),
+        3px 3px 0 var(--brass-dark);
+      position: relative;
+    }
+    .scene-card::before {
+      content: "📌";
+      position: absolute;
+      top: -10px;
+      left: 10px;
+      font-size: 14px;
+      filter: drop-shadow(0 2px 2px rgba(0,0,0,0.3));
+    }
+    .scene-card small {
+      display: block;
+      margin-bottom: 5px;
+      color: #997541;
+      font-weight: 900;
+      letter-spacing: .16em;
+      font-size: 11px;
+    }
+    .scene-card strong {
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--ink);
+    }
+    .scene-caption {
+      position: absolute;
+      bottom: 20px;
+      right: 22px;
+      color: #f7ffea;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-shadow: 0 2px 4px rgba(10, 35, 37, 0.9);
+      background: rgba(16, 47, 53, 0.6);
+      padding: 5px 12px;
+      border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+    .scene-bite .bobber { animation: bite .24s ease-in-out infinite alternate; }
+    .scene-bite .ripple { animation-duration: .45s; }
+    .scene-success .bobber { box-shadow: 0 0 0 3px rgba(246, 180, 69, .4), 0 6px 12px rgba(14, 46, 45, .4); }
+
+    /* 右侧钓鱼操作仪表盘 */
+    .panel {
+      padding: 24px clamp(20px, 3.5vw, 36px) 26px;
+      border-left: 3px solid var(--line);
+      background:
+        radial-gradient(ellipse at 80% 20%, #fdf8eb 0%, #f5ebd5 100%),
+        repeating-linear-gradient(45deg, rgba(184, 145, 84, 0.03) 0 10px, transparent 10px 20px);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+    }
+    .panel-heading {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      gap: 12px;
+      padding-bottom: 12px;
+      border-bottom: 2px dashed rgba(78, 107, 100, 0.25);
+    }
+    h2 {
+      margin: 0 0 5px;
+      font-size: 21px;
+      letter-spacing: .08em;
+      color: #1a3834;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    h2::before {
+      content: "🎣";
+      font-size: 18px;
+    }
+    .muted {
+      margin: 0;
+      color: #5d756d;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .phase-badge {
+      padding: 6px 12px;
+      border: 2px solid var(--brass);
+      border-radius: 6px;
+      color: #274b41;
+      background: #eef6e4;
+      white-space: nowrap;
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 0.05em;
+      box-shadow: 2px 2px 0 var(--brass-dark);
+      text-transform: uppercase;
+    }
+
+    /* 核心钓鱼游戏舞台/水银气压计轨道 */
+    .arena {
+      display: flex;
+      justify-content: center;
+      align-items: stretch;
+      gap: 26px;
+      margin: 16px auto;
+      height: 360px;
+    }
+
+    /* 钓鱼轨道（拟物古铜/深水视窗） */
+    .track {
+      position: relative;
+      width: 108px;
+      height: 100%;
+      flex: 0 0 108px;
+      overflow: hidden;
+      outline: none;
+      border: 5px solid #1a3c3e;
+      border-radius: 14px;
+      background:
+        radial-gradient(circle at 50% 20%, #468e87 0%, #1e4a50 100%),
+        repeating-linear-gradient(180deg, rgba(255,255,255,0.06) 0 20px, transparent 20px 40px);
+      box-shadow:
+        0 0 0 2px var(--brass),
+        inset 0 0 18px rgba(0,0,0,0.5),
+        5px 6px 0 rgba(20, 40, 36, 0.4);
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    /* 轨道内景刻度线 */
+    .track::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(180deg,
+        rgba(255,255,255,0.2) 0 1px,
+        transparent 1px 18px,
+        rgba(255,255,255,0.4) 18px 19px,
+        transparent 19px 36px);
+      pointer-events: none;
+      z-index: 1;
+    }
+    .track::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: linear-gradient(90deg,
+        rgba(0,0,0,0.3) 0%,
+        transparent 25%,
+        transparent 75%,
+        rgba(0,0,0,0.3) 100%);
+      z-index: 4;
+    }
+
+    /* 捕捉条（丝绒绿/夜光翡翠） */
+    .catch-bar {
+      position: absolute;
+      left: 6px;
+      right: 6px;
+      top: 0;
+      height: 70px;
+      border: 3px solid #3c6e3b;
+      border-radius: 9px;
+      background: linear-gradient(180deg, rgba(162, 222, 114, 0.82) 0%, rgba(109, 185, 78, 0.85) 100%);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.6),
+        inset 0 -2px 4px rgba(0,0,0,0.2),
+        0 0 12px rgba(135, 219, 90, 0.35);
+      pointer-events: none;
+      transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+      z-index: 2;
+    }
+    .catch-bar.hit {
+      border-color: #f7ffbb;
+      background: linear-gradient(180deg, rgba(205, 255, 128, 0.95) 0%, rgba(136, 224, 76, 0.95) 100%);
+      box-shadow:
+        inset 0 0 10px #ffffff,
+        0 0 20px #eaff9e,
+        0 0 35px rgba(175, 255, 102, 0.7);
+    }
+    .catch-bar::before {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 10%; right: 10%;
+      height: 2px;
+      background: rgba(255,255,255,0.4);
+      transform: translateY(-50%);
+    }
+
+    /* 鱼的运动体 */
+    .fish {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      width: 48px;
+      height: 34px;
+      transform: translate(-50%, -50%);
+      filter: drop-shadow(2px 4px 4px rgba(5, 25, 25, 0.7));
+      pointer-events: none;
+      z-index: 3;
+      transition: transform 0.08s ease-out;
+    }
+    .fish svg { width: 100%; height: 100%; overflow: visible; }
+    .fish-body { fill: #f7bd6a; stroke: #6b472e; stroke-width: 2.6; stroke-linejoin: round; }
+    .fish-fin { fill: #df8b62; stroke: #6b472e; stroke-width: 2; stroke-linejoin: round; }
+    .fish-eye { fill: #1c3330; }
+    .fish[data-kind="silver"] .fish-body { fill: #dce9dc; }
+    .fish[data-kind="silver"] .fish-fin { fill: #9bbdb9; }
+    .fish[data-kind="mud"] .fish-body { fill: #ae9373; }
+    .fish[data-kind="mud"] .fish-fin { fill: #806f60; }
+    .fish[data-kind="sky"] .fish-body { fill: #9ed4e4; }
+    .fish[data-kind="sky"] .fish-fin { fill: #6caac9; }
+    .fish[data-kind="red"] .fish-body { fill: #ee9675; }
+    .fish[data-kind="red"] .fish-fin { fill: #d66561; }
+    .fish[data-kind="teal"] .fish-body { fill: #88ccb3; }
+    .fish[data-kind="teal"] .fish-fin { fill: #5aab9a; }
+    .fish[data-kind="violet"] .fish-body { fill: #bca5d9; }
+    .fish[data-kind="violet"] .fish-fin { fill: #8975b3; }
+    .fish[data-kind="frost"] .fish-body { fill: #c9e8ed; }
+    .fish[data-kind="frost"] .fish-fin { fill: #8ab7c8; }
+    .fish[data-kind="star"] .fish-body { fill: #f0d575; }
+    .fish[data-kind="star"] .fish-fin { fill: #c79e40; }
+    .fish[data-kind="abyss"] .fish-body { fill: #637f9b; }
+    .fish[data-kind="abyss"] .fish-fin { fill: #415273; }
+    .fish[data-rarity="legendary"] {
+      filter: drop-shadow(0 0 10px #ffe57a) drop-shadow(0 0 18px #ffb338) drop-shadow(2px 4px 4px rgba(0,0,0,0.8));
+      animation: legendPulse 1.2s ease-in-out infinite alternate;
+    }
+    @keyframes legendPulse {
+      from { transform: translate(-50%, -50%) scale(1); }
+      to { transform: translate(-50%, -50%) scale(1.1); }
+    }
+
+    /* 捕获进度表（复古蒸汽水银温度计感） */
+    .progress-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      width: 54px;
+    }
+    .progress-label {
+      color: #3b574f;
+      font-size: 11px;
+      font-weight: 900;
+      writing-mode: vertical-rl;
+      letter-spacing: .24em;
+    }
+    .progress-track {
+      position: relative;
+      flex: 1;
+      width: 32px;
+      overflow: hidden;
+      border: 4px solid #28443e;
+      border-radius: 8px;
+      background: #dfcfbc;
+      box-shadow:
+        0 0 0 2px var(--brass),
+        inset 0 0 8px rgba(0,0,0,0.3),
+        4px 5px 0 rgba(20, 40, 36, 0.3);
+    }
+    .progress-fill {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 30%;
+      background: linear-gradient(180deg, #b0e87b 0%, #68b849 100%);
+      border-top: 3px solid #e7ffc4;
+      box-shadow: 0 0 12px rgba(126, 219, 74, 0.5);
+      transition: background .2s, height .05s linear;
+    }
+    .progress-track.danger .progress-fill {
+      background: linear-gradient(180deg, #ff8c69 0%, #c74b28 100%);
+      border-top-color: #ffe0d4;
+      box-shadow: 0 0 14px rgba(230, 80, 50, 0.6);
+    }
+    .progress-value {
+      min-width: 48px;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 900;
+      font-variant-numeric: tabular-nums;
+      color: #1a3834;
+      background: #ebdfc8;
+      padding: 3px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--brass);
+    }
+
+    /* 实时操作与提示栏 */
+    .hint-line {
+      min-height: 40px;
+      margin: 4px 0 0;
+      text-align: center;
+      color: #3b5951;
+      font-size: 13px;
+      line-height: 1.55;
+      background: rgba(220, 238, 222, 0.45);
+      border: 1px dashed rgba(78, 107, 100, 0.4);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px 12px;
+    }
+
+    /* 控制按键组 */
+    .controls { display: flex; gap: 12px; margin-top: 14px; }
+    .controls.covered { visibility: hidden; }
+
+    .primary, .hold, .resume {
+      min-height: 54px;
+      border: 3px solid #233b35;
+      border-radius: 8px;
+      font-weight: 900;
+      letter-spacing: .08em;
+      box-shadow: 0 6px 0 #182c27, 0 8px 16px rgba(0,0,0,0.18);
+      font-size: 15px;
+    }
+    .primary:active, .hold:active, .resume:active, .hold.pressed {
+      transform: translateY(5px);
+      box-shadow: 0 1px 0 #182c27, 0 3px 6px rgba(0,0,0,0.15);
+    }
+    .primary {
+      flex: 1;
+      color: #2b1f09;
+      background: linear-gradient(180deg, #fce18d 0%, #e6a845 100%);
+      border-color: #573a11;
+      box-shadow: 0 6px 0 #3a2507, 0 8px 16px rgba(0,0,0,0.18);
+    }
+    .primary:hover:not(:disabled) {
+      filter: brightness(1.06);
+    }
+    .hold {
+      flex: 1.15;
+      color: #123326;
+      background: linear-gradient(180deg, #c2f092 0%, #7dbf50 100%);
+      border-color: #2f5426;
+      box-shadow: 0 6px 0 #1f3b18, 0 8px 16px rgba(0,0,0,0.18);
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .hold:disabled { cursor: default; opacity: .5; filter: grayscale(0.5); }
+    .primary:disabled { cursor: default; opacity: .58; }
+
+    /* 下部数据面板 */
+    .lower {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-top: 18px;
+      padding-top: 14px;
+      border-top: 2px dashed #baa483;
+    }
+    .rarity-info {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      color: #557268;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .rarity-info b {
+      color: var(--ink);
+      font-size: 16px;
+      letter-spacing: 0.05em;
+    }
+    .rarity-info b[data-rarity="rare"] { color: #226b80; }
+    .rarity-info b[data-rarity="epic"] { color: #7f4f9f; }
+    .rarity-info b[data-rarity="legendary"] {
+      color: #bc681a;
+      text-shadow: 0 0 10px rgba(245, 175, 50, 0.4);
+    }
+
+    .stats {
+      display: flex;
+      gap: 14px;
+      color: #557064;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .stats span {
+      background: rgba(234, 222, 198, 0.6);
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: 1px solid rgba(184, 145, 84, 0.3);
+      text-align: center;
+    }
+    .stats b {
+      display: block;
+      color: #173b37;
+      font-size: 17px;
+      margin-top: 2px;
+    }
+
+    /* 经验与进度面板 */
+    .progression {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 16px;
+      margin-top: 16px;
+      padding: 14px 16px;
+      border: 2px solid var(--brass);
+      border-radius: 10px;
+      background: #edf4dc;
+      box-shadow: inset 0 0 10px rgba(184, 145, 84, 0.12), 2px 2px 0 rgba(0,0,0,0.1);
+    }
+    .xp-heading {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 7px;
+      color: #274b40;
+      font-size: 13px;
+      font-weight: 900;
+    }
+    .xp-heading span { color: #587965; font-variant-numeric: tabular-nums; }
+    .xp-track {
+      height: 11px;
+      overflow: hidden;
+      border: 2px solid #4b6f5d;
+      border-radius: 10px;
+      background: #cdd9ba;
+      box-shadow: inset 0 1px 3px rgba(0,0,0,0.25);
+    }
+    .xp-fill {
+      width: 0;
+      height: 100%;
+      background: linear-gradient(90deg, #74be51 0%, #9ddc68 100%);
+      box-shadow: 0 0 6px rgba(135, 205, 90, 0.6);
+      transition: width .3s ease-out;
+    }
+    .loadout {
+      margin: 8px 2px 0;
+      color: #4b6b5e;
+      font-size: 11px;
+      line-height: 1.5;
+      font-weight: 600;
+    }
+
+    /* 菜单快捷动作按钮组 */
+    .menu-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    #locationButton, #restButton, #contractsButton { grid-column: 1 / -1; }
+    .treasure-marker {
+      position: absolute; left: 50%; width: 30px; height: 26px; transform: translate(-50%, -50%);
+      z-index: 3; pointer-events: none; filter: drop-shadow(0 2px 3px #173c36);
+    }
+    .treasure-marker.secured { opacity: .45; }
+    .treasure-marker img { width: 100%; height: 100%; object-fit: contain; }
+    .treasure-reward { display: flex; justify-content: center; align-items: center; gap: 8px; margin: 10px 0; color: #8b6728; font-size: 12px; font-weight: 800; }
+    .treasure-reward img { width: 52px; height: 48px; object-fit: contain; }
+    .treasure-reward[hidden] { display: none; }
+    .treasure-status { margin: -6px 0 10px; color: #8b6728; font-size: 12px; font-weight: 800; text-align: center; }
+    .treasure-meter { display: inline-block; width: 88px; height: 9px; margin: 0 6px; overflow: hidden; border: 1px solid #8b6728; border-radius: 5px; background: #e4dac0; vertical-align: middle; }
+    .treasure-meter i { display: block; height: 100%; width: 0; background: #d6a548; }
+    .quest-card { padding: 14px; border: 2px solid #8ba889; border-radius: 8px; background: #eef5df; }
+    .quest-card.active { border-color: #b89154; background: #fff5db; }
+    .quest-card h4 { margin: 0 0 6px; color: #163d34; }
+    .quest-card p { margin: 4px 0; color: #506d60; font-size: 12px; line-height: 1.6; }
+    .quest-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .quest-actions button, .utility-button { padding: 8px 12px; border: 2px solid #52745d; border-radius: 6px; background: #d4e8b3; color: #1a4234; font-size: 12px; font-weight: 900; }
+    .quest-actions button:disabled, .utility-button:disabled { opacity: .5; cursor: default; }
+    .quest-actions .cancel { background: #eee3cf; border-color: #9d8870; }
+    .utility-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px; }
+    .utility-row p { flex: 1; min-width: 180px; color: #506d60; font-size: 12px; line-height: 1.6; margin: 0; }
+
+    .skill-open {
+      min-height: 42px;
+      padding: 0 12px;
+      border: 2px solid #3c6553;
+      border-radius: 6px;
+      color: #1a4235;
+      background: #d4e8b3;
+      font-size: 12px;
+      font-weight: 900;
+      white-space: nowrap;
+      box-shadow: 0 3px 0 #28473a;
+    }
+    .skill-open:hover:not(:disabled) {
+      background: #e2f4c4;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 0 #28473a;
+    }
+    .skill-open:active:not(:disabled) {
+      transform: translateY(3px);
+      box-shadow: 0 0 0 #28473a;
+    }
+    .skill-open.ready {
+      background: linear-gradient(180deg, #fedb88 0%, #f4b44b 100%);
+      border-color: #8c5d26;
+      box-shadow: 0 3px 0 #5c3b14, 0 0 10px rgba(245, 185, 75, 0.4);
+      animation: readyPulse 1.5s ease-in-out infinite alternate;
+    }
+    @keyframes readyPulse {
+      from { filter: brightness(1); }
+      to { filter: brightness(1.12); }
+    }
+    .skill-open:disabled { opacity: .52; cursor: default; }
+
+    /* 弹窗与悬浮遮罩 (全屏沉浸手账风) */
+    .overlay {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      z-index: 10;
+      background: rgba(12, 35, 39, 0.85);
+      backdrop-filter: blur(5px);
+      padding: 18px;
+      animation: fadeIn 0.2s ease-out;
+    }
+    .overlay[hidden] { display: none; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    .overlay-card {
+      width: min(100%, 360px);
+      padding: 28px 24px;
+      border: 4px solid var(--brass);
+      border-radius: 14px;
+      background: var(--parchment-card);
+      box-shadow:
+        0 16px 36px rgba(0, 0, 0, 0.5),
+        6px 6px 0 var(--brass-dark);
+      text-align: center;
+      position: relative;
+    }
+    .overlay-icon { font-size: 44px; line-height: 1; margin-bottom: 8px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2)); }
+    .overlay-card h3 {
+      margin: 10px 0 8px;
+      font-size: 24px;
+      letter-spacing: 0.05em;
+      color: #1a3a34;
+    }
+    .overlay-card p {
+      margin: 0 0 20px;
+      color: #4b665c;
+      font-size: 14px;
+      line-height: 1.65;
+    }
+    .overlay-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .overlay-actions .resume { flex: 1 0 100%; width: auto; }
+    .overlay-actions .secondary { flex: 1; }
+    .resume {
+      width: 100%;
+      color: #2b1f09;
+      background: linear-gradient(180deg, #fce18d 0%, #e6a845 100%);
+      border-color: #573a11;
+      box-shadow: 0 5px 0 #3a2507;
+    }
+    .secondary {
+      min-height: 50px;
+      padding: 0 14px;
+      border: 3px solid #5a7667;
+      border-radius: 8px;
+      color: #22473d;
+      background: #e1edd2;
+      font-weight: 900;
+      box-shadow: 0 4px 0 #3d594b;
+    }
+    .secondary:active { transform: translateY(4px); box-shadow: 0 0 0 #3d594b; }
+    .secondary[hidden] { display: none; }
+    .catch-art {
+      display: block;
+      width: min(100%, 250px);
+      height: 125px;
+      margin: 6px auto 10px;
+      object-fit: contain;
+      filter: drop-shadow(0 6px 12px rgba(0,0,0,0.22));
+    }
+    .catch-art[hidden] { display: none; }
+
+    /* 模态弹窗系统 (技能树、渔具铺、鱼篓、图鉴、钓点选择) */
+    .skill-modal {
+      position: absolute;
+      inset: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      background: rgba(10, 31, 35, 0.88);
+      backdrop-filter: blur(6px);
+      animation: fadeIn 0.2s ease-out;
+    }
+    .skill-modal[hidden] { display: none; }
+
+    .skill-card {
+      width: min(100%, 420px);
+      max-height: 92%;
+      overflow-y: auto;
+      padding: 24px;
+      border: 4px solid var(--brass);
+      border-radius: 14px;
+      background: var(--parchment-card);
+      box-shadow:
+        0 18px 45px rgba(0, 0, 0, 0.6),
+        6px 6px 0 var(--brass-dark);
+      scrollbar-width: thin;
+      scrollbar-color: var(--brass) var(--parchment-accent);
+    }
+    .skill-card::-webkit-scrollbar { width: 6px; }
+    .skill-card::-webkit-scrollbar-thumb { background: var(--brass); border-radius: 3px; }
+    .skill-card::-webkit-scrollbar-track { background: var(--parchment-accent); }
+
+    #shopModal .skill-card { width: min(100%, 640px); }
+
+    .skill-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding-bottom: 12px;
+      border-bottom: 2px dashed rgba(184, 145, 84, 0.5);
+    }
+    .skill-head h3 {
+      margin: 0;
+      font-size: 22px;
+      color: #1a3c36;
+      letter-spacing: .06em;
+    }
+    .skill-close {
+      width: 34px;
+      height: 34px;
+      border: 2px solid #5d7e6d;
+      border-radius: 6px;
+      background: #e3eed6;
+      color: #24463b;
+      font-weight: 900;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 0 #3d594b;
+    }
+    .skill-close:hover {
+      background: #ffd9d4;
+      border-color: #b3564c;
+      color: #8c261b;
+    }
+    .skill-close:active { transform: translateY(2px); box-shadow: none; }
+
+    .skill-intro {
+      margin: 12px 0 16px;
+      color: #4b665c;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .skill-choices { display: grid; gap: 10px; }
+    .skill-section-label {
+      margin: 10px 0 2px;
+      color: #8e6c38;
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: .1em;
+    }
+    .skill-locked-note {
+      margin: 0;
+      padding: 9px 12px;
+      border: 1px dashed #b7cba7;
+      border-radius: 6px;
+      color: #698273;
+      font-size: 12px;
+      background: rgba(220, 235, 210, 0.4);
+    }
+    .skill-option {
+      width: 100%;
+      padding: 12px 14px;
+      border: 2px solid #749677;
+      border-radius: 8px;
+      background: #eef5df;
+      color: var(--ink);
+      text-align: left;
+      box-shadow: 0 2px 0 #5b7962;
+    }
+    .skill-option:hover:not(:disabled), .skill-option:focus-visible {
+      border-color: #246a53;
+      background: #e2f4c9;
+      transform: translateY(-1px);
+    }
+    .skill-option:disabled { opacity: .55; cursor: default; }
+    .skill-option.selected {
+      border-color: #2e6e49;
+      background: #d8f0b4;
+      box-shadow: 0 0 0 2px #53946a;
+      opacity: 1;
+    }
+    .skill-option strong, .skill-option span { display: block; }
+    .skill-option strong { margin-bottom: 4px; font-size: 14px; color: #153830; }
+    .skill-option span, .skill-summary { color: #506d60; font-size: 12px; line-height: 1.5; }
+
+    #shopSummary {
+      margin: 0 0 14px;
+      padding: 10px 12px;
+      border: 2px solid var(--brass);
+      border-radius: 6px;
+      background: #edf5dc;
+    }
+    .skill-summary { margin: 16px 0 0; }
+
+    /* 商店列表与装备物品卡片 */
+    .shop-list { display: grid; gap: 10px; }
+    .shop-group {
+      margin: 10px 0 2px;
+      color: #8c672e;
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: .08em;
+    }
+    .shop-item {
+      padding: 12px 14px;
+      border: 2px solid #8ba889;
+      border-radius: 8px;
+      background: #eef5df;
+      box-shadow: 0 2px 0 #6e8a6d;
+    }
+    .shop-item.equipped {
+      border-color: #2e714c;
+      background: #dcf2be;
+      box-shadow: 0 2px 0 #285d3f, 0 0 12px rgba(80, 160, 100, 0.2);
+    }
+    .shop-item strong { font-size: 14px; color: #163d34; }
+    .shop-item.rod-item { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 12px; align-items: center; }
+    .rod-shop-art { display: block; width: 56px; height: 116px; object-fit: cover; pointer-events: none; }
+    .float-swatch { display: inline-block; width: 12px; height: 16px; margin-left: 8px; vertical-align: middle; border: 2px solid #233e38; border-radius: 50%; }
+    .shop-item p { margin: 5px 0 10px; color: #4e6b5d; font-size: 12px; line-height: 1.5; }
+    .shop-item button {
+      min-height: 32px;
+      padding: 4px 12px;
+      border: 2px solid #3d6854;
+      border-radius: 5px;
+      color: #1a4234;
+      background: #d4e8b3;
+      font-size: 12px;
+      font-weight: 900;
+      box-shadow: 0 2px 0 #2b4d3d;
+    }
+    .shop-item button:hover:not(:disabled) { background: #e3f4c4; transform: translateY(-1px); }
+    .shop-item button:active:not(:disabled) { transform: translateY(2px); box-shadow: none; }
+    .shop-item button:disabled { opacity: .52; cursor: default; }
+    .shop-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    /* 鱼篓与图鉴 */
+    .collection-tools {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      margin: 0 0 14px;
+      padding: 8px 12px;
+      background: #edf5dc;
+      border-radius: 6px;
+      border: 1px solid #b7cba7;
+    }
+    .collection-tools span { color: #436355; font-size: 12px; font-weight: 800; }
+    .collection-tools button {
+      padding: 6px 12px;
+      border: 2px solid #3d6854;
+      border-radius: 5px;
+      background: #d4e8b3;
+      color: #1a4234;
+      font-size: 12px;
+      font-weight: 900;
+      box-shadow: 0 2px 0 #2b4d3d;
+    }
+    .collection-tools button:hover:not(:disabled) { background: #e3f4c4; }
+    .collection-tools button:active:not(:disabled) { transform: translateY(2px); box-shadow: none; }
+    .collection-tools button:disabled { opacity: .52; cursor: default; }
+    .collection-empty { margin: 0; padding: 24px 10px; color: #5f7a6b; text-align: center; font-size: 14px; }
+
+    .collection-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      border: 2px solid #8ba889;
+      border-radius: 8px;
+      background: #eef5df;
+      box-shadow: 0 2px 0 #729170;
+    }
+    .collection-item strong { display: block; font-size: 14px; color: #163d34; }
+    .collection-item span { display: block; color: #506d60; font-size: 11px; line-height: 1.5; margin-top: 2px; }
+    .collection-item button {
+      flex: none;
+      min-height: 32px;
+      padding: 4px 10px;
+      border: 2px solid #3d6854;
+      border-radius: 5px;
+      background: #d4e8b3;
+      color: #1a4234;
+      font-size: 11px;
+      font-weight: 900;
+      box-shadow: 0 2px 0 #2b4d3d;
+    }
+    .collection-item button:hover:not(:disabled) { background: #e3f4c4; }
+    .collection-item button:active:not(:disabled) { transform: translateY(2px); box-shadow: none; }
+    .collection-item button:disabled { opacity: .52; cursor: default; }
+    .collection-actions { display: flex; gap: 6px; }
+    .collection-item.locked { border-color: #b89154; background: #fff5db; box-shadow: 0 2px 0 #8c672e; }
+
+    /* 图鉴卡片 */
+    .catalog-entry {
+      padding: 10px 12px;
+      border: 2px solid #8ba889;
+      border-radius: 8px;
+      background: #eef5df;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 2px 0 #729170;
+    }
+    .catalog-entry.unknown { opacity: .7; background: #e6ede0; border-style: dashed; }
+    .catalog-entry strong { display: block; font-size: 14px; color: #163d34; }
+    .catalog-entry span { display: block; margin-top: 3px; color: #506d60; font-size: 11px; line-height: 1.5; }
+    .fish-art { width: 84px; height: 60px; flex: none; object-fit: contain; filter: drop-shadow(0 3px 6px rgba(0,0,0,0.18)); }
+    .fish-art.unknown {
+      display: grid;
+      place-items: center;
+      border: 2px dashed #9caf9d;
+      border-radius: 6px;
+      color: #7b9489;
+      background: #dce7d2;
+      font-size: 28px;
+      font-weight: 900;
+    }
+    .catalog-tabs { display: flex; gap: 8px; margin: 0 0 14px; }
+    .catalog-tabs button {
+      flex: 1;
+      padding: 8px 6px;
+      border: 2px solid #729179;
+      border-radius: 6px;
+      background: #e3ecd2;
+      color: #274b40;
+      font-size: 12px;
+      font-weight: 900;
+      box-shadow: 0 2px 0 #527059;
+    }
+    .catalog-tabs button.active {
+      border-color: #26594c;
+      background: #b6e09e;
+      box-shadow: inset 0 2px 4px rgba(0,0,0,0.15);
+      transform: translateY(1px);
+    }
+
+    /* 钓点切换选择卡片 */
+    .location-grid { display: grid; gap: 12px; }
+    .location-option {
+      width: 100%;
+      padding: 12px;
+      border: 3px solid #6b8f79;
+      border-radius: 10px;
+      background: #eef5df;
+      color: var(--ink);
+      text-align: left;
+      box-shadow: 0 3px 0 #4f735d;
+    }
+    .location-option:hover { border-color: #2c6856; background: #e3f4c6; transform: translateY(-1px); }
+    .location-option.active {
+      border-color: #26594c;
+      background: #d4eebd;
+      box-shadow: 0 0 0 2px #4b8f72, 0 3px 0 #20473d;
+    }
+    .location-option strong, .location-option span { display: block; }
+    .location-option strong { margin: 8px 0 3px; font-size: 16px; color: #163d34; }
+    .location-option span { color: #506d60; font-size: 12px; line-height: 1.5; }
+    .location-preview {
+      display: block;
+      height: 64px;
+      overflow: hidden;
+      border-radius: 6px;
+      background-color: #58aaa7;
+      background-size: cover;
+      background-position: center 55%;
+      border: 1px solid rgba(0,0,0,0.15);
+      box-shadow: inset 0 0 8px rgba(0,0,0,0.25);
+    }
+    .location-preview.lake { background-image: var(--lake-scene); }
+    .location-preview.river { background-image: var(--river-scene); }
+    .location-preview.coast { background-image: var(--coast-scene); }
+    .location-preview.jungle { background-image: var(--jungle-scene); }
+    .location-preview.lake[data-period="night"] { background-image: var(--lake-night-scene); }
+    .location-preview.river[data-period="night"] { background-image: var(--river-night-scene); }
+    .location-preview.coast[data-period="night"] { background-image: var(--coast-night-scene); }
+    .location-preview.jungle[data-period="night"] { background-image: var(--jungle-night-scene); }
+    .location-preview.lake[data-sky="overcast"] { background-image: var(--lake-cloudy-scene); }
+    .location-preview.river[data-sky="overcast"] { background-image: var(--river-cloudy-scene); }
+    .location-preview.coast[data-sky="overcast"] { background-image: var(--coast-cloudy-scene); }
+    .location-preview.jungle[data-sky="overcast"] { background-image: var(--jungle-cloudy-scene); }
+    .location-preview.lake[data-sky="overcast"][data-period="night"] { background-image: var(--lake-cloudy-night-scene); }
+    .location-preview.river[data-sky="overcast"][data-period="night"] { background-image: var(--river-cloudy-night-scene); }
+    .location-preview.coast[data-sky="overcast"][data-period="night"] { background-image: var(--coast-cloudy-night-scene); }
+    .location-preview.jungle[data-sky="overcast"][data-period="night"] { background-image: var(--jungle-cloudy-night-scene); }
+    .location-preview { position: relative; overflow: hidden; }
+    .location-preview::after { content: ''; position: absolute; inset: 0; pointer-events: none; }
+    .location-preview[data-weather="rain"]::after { background: linear-gradient(rgba(24,43,58,.22), rgba(29,55,66,.14)); }
+    .location-preview[data-weather="rain"][data-period="night"]::after { background: linear-gradient(rgba(14,27,40,.12), rgba(21,40,54,.08)); }
+
+    /* 底部复古装订信息栏 */
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px clamp(20px, 4vw, 42px);
+      border-top: 3px solid var(--line);
+      background: #eae0c2;
+      color: #557267;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .05em;
+    }
+
+    @keyframes bob { 50% { transform: translate(-50%, 7px); } }
+    @keyframes bite { to { transform: translate(-50%, 14px); } }
+    @keyframes ripple { 50% { opacity: .55; transform: translateX(-50%) scale(1.25); } }
+    @keyframes falling-rain { to { transform: translate3d(-60px, 116%, 0); } }
+    @keyframes rain-splash { 0%, 55%, 100% { opacity: 0; transform: scale(.3); } 60% { opacity: .32; transform: scale(.45); } 85% { opacity: 0; transform: scale(1.3); } }
+
+    /* 响应式适配 */
+    @media (max-width: 860px) {
+      :scope { padding: 12px; }
+      .topbar { min-height: 85px; padding: 14px 18px; }
+      .top-note { display: none; }
+      .game-grid { grid-template-columns: 1fr; }
+      .scenery { min-height: 220px; height: 220px; }
+      .scenery[data-location] { background-position: center 56%; }
+      .sky { inset: 0 0 38%; } .hill, .treeline { bottom: 38%; } .water { inset: 62% 0 0; }
+      .sun { top: 20px; right: 45px; width: 47px; } .cloud.one { top: 37px; transform: scale(.65); } .cloud.two { top: 55px; }
+      .shore { height: 90px; bottom: -40px; } .pier { bottom: 47px; height: 19px; } .pier::after { top: 15px; height: 45px; }
+      .reeds { transform: scale(.5) rotate(-15deg); transform-origin: bottom left; }
+      .scene-card { top: 12px; left: 14px; padding: 8px 12px; max-width: 180px; } .scene-card strong { font-size: 12px; }
+      .scene-caption { bottom: 10px; font-size: 11px; padding: 3px 10px; }
+      .panel { border-left: 0; border-top: 3px solid var(--line); padding: 18px 20px 22px; }
+      .arena { height: min(340px, 44vh); min-height: 250px; margin: 14px auto; }
+      .lower { margin-top: 16px; }
+      .footer { display: none; }
+    }
+    @media (max-width: 440px) {
+      .shell { border-width: 3px; border-radius: 12px; }
+      .topbar { padding: 12px 14px; }
+      .scenery { height: 175px; min-height: 175px; }
+      .pier { bottom: 36px; }
+      .arena { height: min(310px, 40vh); min-height: 224px; gap: 16px; }
+      .track { width: 94px; flex-basis: 94px; }
+      .controls { gap: 8px; }
+      .primary, .hold { font-size: 14px; min-height: 48px; }
+      .stats { gap: 6px; }
+      .stats span { padding: 4px 8px; }
+      .menu-actions { grid-template-columns: 1fr; }
+    }
+    @media (prefers-reduced-motion: reduce) { .bobber, .ripple { animation-duration: 5s; } .rain-drop, .rain-splash { display: none; animation: none; } }
+
+/* Imported fullscreen journal UI */
+:scope {
+  --float: #e4553a;
+  --float-deep: #9c2e1c;
+  --lakeink: #0f2a2e;
+  --paper: #f6efdf;
+  --paper-hi: #fffaf0;
+  --brass2: #b8914f;
+  --reed: #7dba6a;
+  --reed-deep: #3f7a3a;
+  --serif: "Noto Serif SC", "Songti SC", serif;
+  --sans: "Noto Sans SC", -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif}
+html,body,#root,#game-host {
+  height:100%}
+:scope {
+  padding:0!important;
+  margin:0;
+  display:block!important;
+  background:var(--lakeink)!important;
+  overflow:hidden}
+#gameRoot.shell {
+  max-width:none;
+  width:100%;
+  height:100dvh;
+  margin:0;
+  border:0;
+  border-radius:0;
+  box-shadow:none;
+  background:var(--lakeink);
+  font-family:var(--sans);
+  color:var(--lakeink)}
+#gameRoot .scenery {
+  position:relative;
+  width:100%;
+  height:100dvh;
+  min-height:540px;
+  background-position:center 62%;
+  box-shadow:none;
+  touch-action:manipulation}
+#gameRoot[data-state=playing] .scenery {
+  touch-action:none;
+  cursor:grab}
+#gameRoot[data-held=yes] .scenery {
+  cursor:grabbing}
+.vignette {
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  z-index:0;
+  background:linear-gradient(180deg,rgba(8,26,30,.38) 0%,transparent 20%,transparent 68%,rgba(8,26,30,.5) 100%),radial-gradient(ellipse at 55% 60%,transparent 45%,rgba(8,26,30,.28) 100%);
+  transition:background .6s}
+#gameRoot[data-state=playing] .vignette {
+  background:linear-gradient(180deg,rgba(8,26,30,.45) 0%,transparent 22%,transparent 66%,rgba(8,26,30,.6) 100%),radial-gradient(ellipse at 58% 60%,transparent 28%,rgba(8,26,30,.5) 100%)}
+#gameRoot .bobber {
+  left:55%;
+  top:66%;
+  z-index:1}
+#gameRoot .ripple {
+  left:55%;
+  top:calc(66% + 22px)}
+#gameRoot .fishing-rig {
+  z-index:1}
+.hud {
+  position:absolute;
+  top:20px;
+  z-index:5}
+.hud-left {
+  left:22px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  align-items:flex-start}
+.hud-right {
+  right:22px;
+  display:flex;
+  gap:10px;
+  align-items:flex-start}
+.brand {
+  display:flex;
+  align-items:center;
+  gap:8px}
+.brand-seal {
+  font-family:var(--serif);
+  font-weight:900;
+  font-size:14px;
+  color:var(--paper-hi);
+  background:var(--float);
+  padding:4px 6px;
+  border-radius:4px;
+  letter-spacing:.08em;
+  box-shadow:0 2px 0 var(--float-deep)}
+.brand-name {
+  font-family:var(--serif);
+  font-weight:900;
+  font-size:20px;
+  color:var(--paper-hi);
+  letter-spacing:.3em;
+  text-shadow:0 2px 8px rgba(0,0,0,.45)}
+#gameRoot .scene-card {
+  position:relative;
+  top:auto;
+  left:auto;
+  max-width:300px;
+  min-width:240px;
+  padding:12px 16px;
+  border:0;
+  border-radius:12px;
+  background:color-mix(in oklab,var(--paper) 92%,transparent);
+  backdrop-filter:blur(8px);
+  box-shadow:0 10px 30px #081a1e47,inset 0 0 0 1px #b8914f73}
+#gameRoot .scene-card:before {
+  content:none}
+#gameRoot .scene-card small {
+  font-size:14px;
+  letter-spacing:.08em;
+  color:#8a6a36;
+  font-weight:700;
+  font-variant-numeric:tabular-nums;
+  margin-bottom:4px}
+#gameRoot .scene-card strong {
+  display:block;
+  font-family:var(--serif);
+  font-weight:600;
+  font-size:16px;
+  line-height:1.5;
+  color:var(--lakeink)}
+.scene-actions {
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-top:10px}
+.ico-slot {
+  position:relative;
+  display:inline-flex}
+.ico-slot>.ico {
+  position:absolute;
+  left:10px;
+  top:50%;
+  transform:translateY(-50%);
+  pointer-events:none;
+  z-index:1;
+  color:currentColor}
+.chip {
+  min-height:34px;
+  padding:0 12px 0 34px;
+  border:0;
+  border-radius:999px;
+  background:#0f2a2e14;
+  color:var(--lakeink);
+  font-size:14px;
+  font-weight:700}
+.scene-actions .ico-slot {
+  color:var(--lakeink)}
+.chip:hover:not(:disabled) {
+  background:#0f2a2e26}
+.chip:disabled {
+  opacity:.45;
+  cursor:default}
+.purse {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  height:44px;
+  padding:0 16px 0 12px;
+  border-radius:999px;
+  background:color-mix(in oklab,var(--paper) 92%,transparent);
+  backdrop-filter:blur(8px);
+  box-shadow:0 10px 30px #081a1e47,inset 0 0 0 1px #b8914f73;
+  color:#a3731d}
+.purse b {
+  font-family:var(--serif);
+  font-size:20px;
+  font-weight:900;
+  color:var(--lakeink);
+  font-variant-numeric:tabular-nums}
+.level-card {
+  width:220px;
+  padding:10px 14px;
+  border-radius:12px;
+  background:color-mix(in oklab,var(--paper) 92%,transparent);
+  backdrop-filter:blur(8px);
+  box-shadow:0 10px 30px #081a1e47,inset 0 0 0 1px #b8914f73}
+#gameRoot .xp-heading {
+  display:flex;
+  justify-content:space-between;
+  align-items:baseline;
+  margin:0 0 6px;
+  font-size:14px}
+#gameRoot .xp-heading strong {
+  font-family:var(--serif);
+  font-size:16px;
+  font-weight:900;
+  color:var(--lakeink)}
+#gameRoot .xp-heading span {
+  font-size:14px;
+  color:#5f7a70}
+#gameRoot .xp-track {
+  height:8px;
+  border:0;
+  border-radius:99px;
+  background:#0f2a2e1f;
+  box-shadow:none;
+  overflow:hidden}
+#gameRoot .xp-fill {
+  background:linear-gradient(90deg,#d8a444,#f0cf73);
+  border-radius:99px}
+.tallies {
+  display:flex;
+  gap:14px;
+  margin-top:8px;
+  font-size:14px;
+  color:#5f7a70}
+.tallies b {
+  color:var(--lakeink);
+  font-variant-numeric:tabular-nums}
+.bite-banner {
+  position:absolute;
+  left:50%;
+  top:22px;
+  z-index:4;
+  transform:translate(-50%,-12px);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:6px;
+  text-align:center;
+  opacity:0;
+  transition:opacity .3s,transform .3s;
+  pointer-events:none;
+  max-width:min(46vw,520px)}
+#gameRoot[data-state=waiting] .bite-banner,#gameRoot[data-state=playing] .bite-banner {
+  opacity:1;
+  transform:translate(-50%)}
+#gameRoot .phase-badge {
+  padding:5px 14px;
+  border:0;
+  border-radius:999px;
+  font-size:14px;
+  font-weight:700;
+  letter-spacing:.12em;
+  background:#0f2a2eb8;
+  color:var(--paper-hi);
+  box-shadow:none}
+#gameRoot[data-state=playing] .phase-badge {
+  background:var(--float);
+  animation:badgePulse .9s ease-in-out infinite alternate}
+@keyframes badgePulse {
+  to {
+  box-shadow:0 0 0 8px #e4553a00;
+  transform:scale(1.04)}
+0% {
+  box-shadow:0 0 #e4553a8c}
+}
+.fish-name {
+  margin:0;
+  font-family:var(--serif);
+  font-weight:900;
+  font-size:clamp(22px,2.6vw,34px);
+  color:var(--paper-hi);
+  letter-spacing:.06em;
+  text-shadow:0 2px 14px rgba(8,26,30,.7)}
+#gameRoot[data-state=waiting] .fish-name {
+  font-size:18px;
+  font-weight:600}
+#gameRoot .rarity-info {
+  display:none;
+  margin:0;
+  padding:0;
+  border:0;
+  background:none;
+  color:#fffaf0d9;
+  font-size:14px;
+  text-shadow:0 1px 6px rgba(0,0,0,.6)}
+#gameRoot[data-state=playing] .rarity-info {
+  display:block}
+#gameRoot .rarity-info b {
+  margin-left:4px;
+  color:var(--paper-hi);
+  font-size:14px}
+#gameRoot .rarity-info b[data-rarity=rare] {
+  color:#9fe0f0}
+#gameRoot .rarity-info b[data-rarity=epic] {
+  color:#d9b8ff}
+#gameRoot .rarity-info b[data-rarity=legendary] {
+  color:#ffe27a}
+#gameRoot .arena {
+  position:absolute;
+  z-index:3;
+  margin:0;
+  left:calc(55% + 70px);
+  top:50%;
+  height:min(56vh,440px);
+  gap:14px;
+  opacity:0;
+  visibility:hidden;
+  transform:translateY(-40%) scale(.92);
+  transition:opacity .28s ease,transform .45s cubic-bezier(.2,.9,.25,1.15),visibility 0s .3s}
+#gameRoot[data-state=playing] .arena {
+  opacity:1;
+  visibility:visible;
+  transform:translateY(-50%) scale(1);
+  transition:opacity .25s ease,transform .45s cubic-bezier(.2,.9,.25,1.15),visibility 0s}
+#gameRoot .track {
+  width:96px;
+  flex:0 0 96px;
+  border:0;
+  border-radius:48px;
+  background:linear-gradient(180deg,#56a59b8c,#0f343ad1);
+  backdrop-filter:blur(6px);
+  box-shadow:inset 0 0 0 2px #fffaf08c,inset 0 0 24px #00000059,0 18px 40px #081a1e73}
+#gameRoot .track:before {
+  opacity:.45}
+#gameRoot .track:after {
+  border-radius:48px}
+#gameRoot .catch-bar {
+  left:8px;
+  right:8px;
+  border-radius:40px;
+  border:0;
+  background:linear-gradient(180deg,#a0e080bf,#6eb656cc);
+  box-shadow:inset 0 0 0 2px #f0ffd2b3}
+#gameRoot .catch-bar.hit {
+  background:linear-gradient(180deg,#d2ff96f2,#87dc5af2);
+  box-shadow:inset 0 0 0 2px #fbffe0,0 0 26px #beff78bf}
+#gameRoot .progress-wrap {
+  width:44px;
+  gap:8px}
+#gameRoot .progress-label {
+  color:var(--paper-hi);
+  font-size:14px;
+  font-weight:700;
+  text-shadow:0 1px 6px rgba(0,0,0,.6)}
+#gameRoot .progress-track {
+  width:18px;
+  border:0;
+  border-radius:99px;
+  background:#0f2a2e8c;
+  box-shadow:inset 0 0 0 2px #fffaf080,0 10px 24px #081a1e59}
+#gameRoot .progress-fill {
+  border-top:0;
+  background:linear-gradient(180deg,#d9f7a6,var(--reed))}
+#gameRoot .progress-track.danger .progress-fill {
+  background:linear-gradient(180deg,#ffb39c,var(--float))}
+#gameRoot .progress-value {
+  min-width:48px;
+  border:0;
+  background:var(--paper);
+  font-size:14px;
+  border-radius:99px;
+  padding:2px 8px}
+#gameRoot .treasure-status {
+  position:absolute;
+  top:calc(100% + 12px);
+  left:0;
+  margin:0;
+  white-space:nowrap;
+  padding:6px 12px;
+  border-radius:999px;
+  background:#0f2a2ebf;
+  color:#ffe3a3;
+  font-size:14px}
+#gameRoot .treasure-status[hidden] {
+  display:none}
+.deck {
+  position:absolute;
+  left:50%;
+  bottom:26px;
+  transform:translate(-50%);
+  z-index:5;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:10px;
+  width:min(92vw,440px)}
+#gameRoot .hint-line {
+  min-height:0;
+  margin:0;
+  padding:6px 14px;
+  border:0;
+  border-radius:999px;
+  background:#0f2a2e9e;
+  backdrop-filter:blur(6px);
+  color:var(--paper-hi);
+  font-size:14px;
+  line-height:1.5;
+  text-align:center}
+#gameRoot .controls {
+  margin:0;
+  gap:0;
+  width:100%;
+  justify-content:center}
+#gameRoot .controls .primary,#gameRoot .controls .hold {
+  flex:0 0 auto;
+  width:min(100%,300px);
+  min-height:64px;
+  border-radius:999px;
+  font-family:var(--serif);
+  font-size:20px;
+  font-weight:900;
+  letter-spacing:.12em}
+#gameRoot .cast {
+  position:relative;
+  padding:0 28px 0 64px;
+  border:0;
+  color:var(--paper-hi);
+  background:var(--float);
+  box-shadow:0 6px 0 var(--float-deep),0 16px 30px #081a1e66}
+#gameRoot .cast:before {
+  content:"";
+  position:absolute;
+  left:22px;
+  top:50%;
+  width:22px;
+  height:28px;
+  transform:translateY(-50%);
+  border-radius:50% 50% 46% 46%;
+  border:2px solid var(--float-deep);
+  background:linear-gradient(var(--paper-hi) 0 46%,#ffb7a6 48%);
+  animation:bob 2s ease-in-out infinite}
+#gameRoot .cast:hover:not(:disabled) {
+  background:#ec6347;
+  transform:translateY(-1px)}
+#gameRoot .cast:active:not(:disabled) {
+  transform:translateY(5px);
+  box-shadow:0 1px 0 var(--float-deep),0 8px 16px #081a1e66}
+#gameRoot .cast:disabled {
+  opacity:1;
+  background:#0f2a2eb8;
+  color:#fffaf0d9;
+  box-shadow:0 16px 30px #081a1e4d;
+  cursor:default}
+#gameRoot .cast:disabled:before {
+  border-color:#ffffff80;
+  background:linear-gradient(var(--paper-hi) 0 46%,var(--float) 48%);
+  animation:bite .5s ease-in-out infinite alternate}
+#gameRoot .hold {
+  display:none;
+  border:0;
+  color:#10301a;
+  background:linear-gradient(180deg,#b5ea8f,var(--reed));
+  box-shadow:0 6px 0 var(--reed-deep),0 16px 30px #081a1e66}
+#gameRoot[data-state=playing] .cast {
+  display:none}
+#gameRoot[data-state=playing] .hold {
+  display:block}
+#gameRoot .hold.pressed,#gameRoot[data-held=yes] .hold {
+  transform:translateY(5px) scale(.98);
+  box-shadow:0 1px 0 var(--reed-deep),0 0 30px #beff7899}
+#gameRoot .hold:disabled {
+  opacity:.6;
+  filter:none}
+.keys {
+  margin:0;
+  font-size:14px;
+  color:#fffaf0b3;
+  text-shadow:0 1px 4px rgba(0,0,0,.6);
+  opacity:0;
+  transition:opacity .3s}
+#gameRoot[data-state=playing] .keys {
+  opacity:1}
+#gameRoot .controls.covered {
+  visibility:hidden}
+#gameRoot .loadout {
+  position:absolute;
+  right:22px;
+  bottom:26px;
+  z-index:4;
+  margin:0;
+  max-width:300px;
+  font-size:14px;
+  line-height:1.5;
+  text-align:right;
+  color:#fffaf0c7;
+  text-shadow:0 1px 4px rgba(0,0,0,.7);
+  background:none;
+  border:0;
+  padding:0}
+.dock {
+  position:absolute;
+  left:0;
+  top:50%;
+  transform:translateY(-40%);
+  z-index:5;
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  gap:6px;
+  transition:opacity .3s,transform .3s}
+#gameRoot[data-state=playing] .dock,#gameRoot[data-state=waiting] .dock {
+  opacity:.6;
+  transform:translate(-12px,-40%)}
+.dock-label {
+  margin:0 0 4px 18px;
+  font-family:var(--serif);
+  font-weight:900;
+  font-size:14px;
+  letter-spacing:.3em;
+  color:var(--paper-hi);
+  text-shadow:0 1px 6px rgba(0,0,0,.6)}
+.dock .ico-slot {
+  color:#6a4d22}
+.dock-btn {
+  min-height:44px;
+  min-width:120px;
+  padding:0 18px 0 40px;
+  border:0;
+  text-align:left;
+  border-radius:0 12px 12px 0;
+  font-size:14px;
+  font-weight:700;
+  color:var(--lakeink);
+  background:var(--paper);
+  box-shadow:0 8px 20px #081a1e4d,inset -3px 0 0 var(--brass2);
+  transition:transform .15s,padding .15s,background .15s}
+.dock .ico-slot>.ico {
+  left:14px}
+.dock-btn:hover:not(:disabled) {
+  padding-left:48px;
+  background:var(--paper-hi)}
+.dock .ico-slot:hover>.ico {
+  left:20px}
+.dock-btn:disabled {
+  cursor:default}
+.dock-btn.ready {
+  background:#fff3cf;
+  box-shadow:0 8px 20px #081a1e4d,inset -4px 0 0 var(--float)}
+.dock-btn.ready:after {
+  content:"";
+  display:inline-block;
+  width:8px;
+  height:8px;
+  margin-left:8px;
+  border-radius:50%;
+  background:var(--float);
+  vertical-align:middle}
+#gameRoot .overlay {
+  position:fixed;
+  z-index:30;
+  background:#081a1e8c;
+  backdrop-filter:blur(3px)}
+#gameRoot .overlay-card {
+  width:min(92vw,380px);
+  padding:26px 24px 22px;
+  border:0;
+  border-radius:20px;
+  background:var(--paper);
+  box-shadow:0 30px 70px #00000080,inset 0 0 0 1px #b8914f80;
+  animation:cardIn .45s cubic-bezier(.2,.9,.25,1.2)}
+@keyframes cardIn {
+  0% {
+  transform:translateY(24px) scale(.94);
+  opacity:0}
+}
+#gameRoot .overlay-card h3 {
+  font-family:var(--serif);
+  font-weight:900;
+  font-size:26px;
+  color:var(--lakeink)}
+#gameRoot .overlay-card p {
+  font-size:15px;
+  color:#4b665c}
+#gameRoot .catch-art {
+  width:100%;
+  height:150px;
+  margin:0 0 6px;
+  padding:10px;
+  border-radius:14px;
+  object-fit:contain;
+  background:radial-gradient(ellipse at 50% 60%,#fffaf0,#eadcbe);
+  box-shadow:inset 0 0 0 1px #b8914f80}
+#gameRoot .resume {
+  min-height:56px;
+  border:0;
+  border-radius:999px;
+  font-family:var(--serif);
+  font-size:18px;
+  letter-spacing:.1em;
+  color:var(--paper-hi);
+  background:var(--float);
+  box-shadow:0 5px 0 var(--float-deep)}
+#gameRoot .overlay-card .secondary {
+  min-height:46px;
+  border:0;
+  border-radius:999px;
+  font-size:14px;
+  background:#0f2a2e14;
+  color:var(--lakeink);
+  box-shadow:none}
+#gameRoot .skill-modal {
+  position:fixed;
+  z-index:40;
+  justify-content:flex-end;
+  align-items:stretch;
+  padding:0;
+  background:#081a1e73;
+  backdrop-filter:blur(2px);
+  animation:fadeIn .2s ease-out}
+#gameRoot .skill-card,#gameRoot #shopModal .skill-card {
+  width:min(100vw,520px);
+  max-height:none;
+  height:100%;
+  border:0;
+  border-radius:22px 0 0 22px;
+  padding:18px 24px 28px;
+  background:var(--paper);
+  box-shadow:-20px 0 60px #0006;
+  animation:drawerIn .35s cubic-bezier(.2,.9,.25,1)}
+@keyframes drawerIn {
+  0% {
+  transform:translate(60px);
+  opacity:.4}
+}
+#gameRoot .skill-head {
+  border-bottom:0;
+  padding:8px 0 6px}
+#gameRoot .skill-head h3 {
+  font-family:var(--serif);
+  font-weight:900;
+  font-size:26px;
+  letter-spacing:.06em}
+#gameRoot .skill-close {
+  width:40px;
+  height:40px;
+  border-radius:50%;
+  border:0;
+  background:#0f2a2e14;
+  font-size:22px;
+  box-shadow:none}
+.journal-tabs {
+  display:flex;
+  gap:4px;
+  margin:0 -8px 10px;
+  padding:4px;
+  border-radius:999px;
+  background:#0f2a2e12}
+.journal-tabs button {
+  flex:1;
+  min-height:38px;
+  border:0;
+  border-radius:999px;
+  background:none;
+  font-size:14px;
+  font-weight:700;
+  color:#5f7a70}
+.journal-tabs button:hover {
+  color:var(--lakeink)}
+.journal-tabs button[aria-current=page] {
+  background:var(--paper-hi);
+  color:var(--lakeink);
+  box-shadow:0 2px 8px #0f2a2e26,inset 0 -2px 0 var(--float)}
+@media(max-width:720px) {
+  .hud {
+  top:12px}
+.hud-left {
+  left:12px;
+  right:12px}
+.brand {
+  display:none}
+#gameRoot .scene-card {
+  max-width:none;
+  min-width:0;
+  width:calc(100vw - 152px);
+  padding:10px 12px}
+#gameRoot .scene-card small,#gameRoot .scene-card strong {
+  font-size:14px}
+.chip {
+  font-size:14px;
+  min-height:32px}
+.hud-right {
+  right:12px;
+  flex-direction:column;
+  align-items:flex-end;
+  gap:8px}
+.level-card {
+  width:118px;
+  padding:8px 10px}
+#gameRoot .xp-heading {
+  flex-direction:column;
+  gap:2px}
+.tallies {
+  flex-direction:column;
+  gap:0}
+.bite-banner {
+  top:206px;
+  left:14px;
+  transform:translateY(-8px);
+  align-items:flex-start;
+  text-align:left;
+  max-width:calc(100vw - 150px)}
+#gameRoot[data-state=waiting] .bite-banner,#gameRoot[data-state=playing] .bite-banner {
+  transform:translate(0)}
+.fish-name {
+  font-size:22px}
+#gameRoot .hint-line {
+  font-size:14px;
+  padding:6px 12px;
+  border-radius:14px}
+#gameRoot .bobber,#gameRoot .ripple {
+  left:40%}
+#gameRoot .arena {
+  left:auto;
+  right:14px;
+  height:min(46vh,360px);
+  gap:8px;
+  top:52%}
+#gameRoot .track {
+  width:80px;
+  flex-basis:80px}
+#gameRoot .treasure-status {
+  left:auto;
+  right:0}
+.deck {
+  bottom:78px}
+#gameRoot .controls .primary,#gameRoot .controls .hold {
+  min-height:58px;
+  font-size:18px}
+#gameRoot .loadout {
+  display:none}
+.dock {
+  inset:auto 0 0;
+  transform:none;
+  flex-direction:row;
+  gap:0;
+  justify-content:space-around;
+  padding:6px 4px calc(6px + env(safe-area-inset-bottom));
+  background:color-mix(in oklab,var(--paper) 94%,transparent);
+  backdrop-filter:blur(8px);
+  box-shadow:0 -8px 24px #081a1e40}
+#gameRoot[data-state=playing] .dock,#gameRoot[data-state=waiting] .dock {
+  transform:none;
+  opacity:.5}
+.dock-label {
+  display:none}
+.dock .ico-slot {
+  flex:1;
+  justify-content:center}
+.dock .ico-slot>.ico {
+  left:50%;
+  top:8px;
+  transform:translate(-50%)}
+.dock .ico-slot:hover>.ico {
+  left:50%}
+.dock-btn,.dock-btn:hover:not(:disabled) {
+  min-width:0;
+  width:100%;
+  min-height:52px;
+  padding:26px 2px 4px;
+  border-radius:10px;
+  text-align:center;
+  background:none;
+  box-shadow:none;
+  font-size:14px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis}
+.dock-btn.ready {
+  background:#fff3cf;
+  box-shadow:none}
+.dock-btn.ready:after {
+  position:absolute;
+  top:6px;
+  right:22%;
+  margin:0}
+#gameRoot .skill-card,#gameRoot #shopModal .skill-card {
+  border-radius:0;
+  padding:12px 16px 24px}
+.journal-tabs {
+  margin:0 0 10px}
+}
+@media(prefers-reduced-motion:reduce) {
+  #gameRoot .cast:before {
+  animation:none}
+}
+
+
+
+/* Bounded motion and viewport layout fixes */
+/* Keep the redesigned journal, with bounded motion and viewport-based layout. */
+#gameRoot.shell { height: 100vh; height: 100dvh; min-height: 0; isolation: isolate; }
+#gameRoot .scenery { height: 100%; min-height: 0; overflow: hidden; }
+#gameRoot .fishing-water { position: absolute; inset: 0; pointer-events: none; }
+#gameRoot .cast { overflow: hidden; isolation: isolate; touch-action: manipulation; }
+#gameRoot .cast::before { pointer-events: none; animation: castFloat 2s ease-in-out infinite; }
+#gameRoot .cast:disabled::before { animation: castWait .7s ease-in-out infinite; }
+@keyframes castFloat {
+  0%, 100% { transform: translateY(-50%); }
+  50% { transform: translateY(calc(-50% - 3px)); }
+}
+@keyframes castWait {
+  0%, 100% { transform: translateY(calc(-50% + 2px)); }
+  50% { transform: translateY(calc(-50% - 2px)); }
+}
+#gameRoot .arena, #gameRoot[data-state=playing] .arena {
+  min-height: 0; transform: translateY(-50%); transition: opacity .16s ease, visibility 0s;
+}
+#gameRoot[data-state=playing] .phase-badge { animation: none; }
+#gameRoot .catch-bar.hit { box-shadow: inset 0 0 0 2px #fbffe0, 0 0 12px #beff7860; }
+#gameRoot .level-card { width: 190px; }
+#gameRoot .tallies { opacity: .76; }
+#gameRoot[data-state=playing] .tallies { display: none; }
+#gameRoot .progress-label { writing-mode: horizontal-tb; letter-spacing: 0; }
+#gameRoot .treasure-status {
+  display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px;
+  top: calc(100% + 8px); width: 100%; padding: 7px 8px; white-space: normal;
+  border-radius: 12px; text-align: center; line-height: 1.35;
+}
+#gameRoot .treasure-status[hidden] { display: none; }
+#gameRoot .treasure-status > span:first-child { flex: 1 0 100%; }
+#gameRoot .treasure-meter { margin: 0; }
+#gameRoot .keys { display: none; }
+#gameRoot .dock-count { display: none; pointer-events: none; }
+#gameRoot .skill-intro, #gameRoot .skill-summary, #gameRoot .shop-item p,
+#gameRoot .collection-item span, #gameRoot .catalog-entry span,
+#gameRoot .quest-card p, #gameRoot .utility-row p { font-size: 14px; line-height: 1.55; }
+#gameRoot .collection-actions button, #gameRoot .quest-actions button,
+#gameRoot .utility-button, #gameRoot .catalog-tabs button { font-size: 14px; }
+#gameRoot .deck { bottom: max(22px, env(safe-area-inset-bottom)); }
+#gameRoot .hold.pressed, #gameRoot[data-held=yes] .hold { transform: translateY(3px); }
+#gameRoot .hint-line { overflow-wrap: anywhere; }
+#gameRoot .overlay {
+  inset: 0; padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  overflow-y: auto; overscroll-behavior: contain;
+}
+#gameRoot .overlay-card {
+  width: min(100%, 410px); max-height: 100%; overflow-y: auto; overscroll-behavior: contain;
+  padding: 22px; border: 2px solid #b8914f80; animation: journalCardIn .18s ease-out;
+}
+@keyframes journalCardIn { from { opacity: 0; transform: translateY(8px); } }
+#gameRoot .overlay[data-rarity=uncommon] .overlay-card { border-color: #6ca16e; }
+#gameRoot .overlay[data-rarity=rare] .overlay-card { border-color: #4393a9; }
+#gameRoot .overlay[data-rarity=epic] .overlay-card { border-color: #a47cb5; }
+#gameRoot .overlay[data-rarity=legendary] .overlay-card { border-color: #c49b3d; }
+#gameRoot .overlay-icon:empty { display: none; }
+#gameRoot .overlay-icon { font-size: 34px; margin-bottom: 6px; }
+#gameRoot .overlay-card p { margin-bottom: 12px; line-height: 1.55; }
+#gameRoot .catch-art { height: clamp(100px, 22vh, 160px); filter: none; }
+#gameRoot .overlay-actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 9px; }
+#gameRoot .overlay-actions .resume { grid-column: 1 / -1; width: 100%; min-width: 0; }
+#gameRoot .overlay-actions .secondary { min-width: 0; padding: 8px; }
+#gameRoot .treasure-reward { margin: 6px 0 12px; }
+#gameRoot .skill-card, #gameRoot #shopModal .skill-card {
+  display: flex; flex-direction: column; min-height: 0; padding: 0; overflow: hidden;
+}
+#gameRoot .drawer-header {
+  flex: 0 0 auto; padding: 18px 24px 6px; background: var(--paper);
+  border-bottom: 1px solid #b8914f30;
+}
+#gameRoot .drawer-body {
+  flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  padding: 0 24px max(24px, env(safe-area-inset-bottom));
+  scrollbar-width: thin; scrollbar-color: var(--brass) var(--parchment-accent);
+}
+#gameRoot .drawer-body::-webkit-scrollbar { width: 6px; }
+#gameRoot .drawer-body::-webkit-scrollbar-thumb { background: var(--brass); border-radius: 3px; }
+#gameRoot .drawer-body::-webkit-scrollbar-track { background: var(--parchment-accent); }
+#gameRoot .journal-tabs { position: static; margin: 0 0 8px; background: var(--paper); border: 1px solid #b8914f50; }
+#gameRoot .journal-tabs button { min-height: 40px; min-width: 0; padding: 0 4px; }
+#gameRoot .skill-head { position: static; background: var(--paper); }
+#gameRoot .skill-close { width: 44px; height: 44px; flex: 0 0 44px; }
+#gameRoot .collection-actions button, #gameRoot .quest-actions button, #gameRoot .utility-button { min-height: 40px; }
+
+/* Phone portrait: reserve space for each region instead of overlapping absolute offsets. */
+@media (max-width: 720px) {
+  #gameRoot .scenery {
+    display: grid; grid-template-columns: minmax(0, 1fr) 104px;
+    grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+    grid-template-areas: "info wallet" "banner banner" "water arena" "deck deck" "dock dock";
+    gap: 8px; padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+    background-position: center 62%;
+  }
+  #gameRoot .hud-left { grid-area: info; position: relative; inset: auto; min-width: 0; gap: 0; }
+  #gameRoot .fishing-water { grid-area: water; position: relative; inset: auto; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; }
+  #gameRoot .fishing-water .bobber { left: 72%; top: 65%; }
+  #gameRoot .fishing-water .ripple { left: 72%; top: calc(65% + 22px); width: 66px; }
+  #gameRoot .fishing-water .ripple.two { width: 94px; }
+  #gameRoot .brand { display: none; }
+  #gameRoot .scene-card { width: 100%; max-width: none; min-width: 0; padding: 10px; border-radius: 12px; }
+  #gameRoot .scene-card small { margin-bottom: 4px; letter-spacing: 0; line-height: 1.4; }
+  #gameRoot .scene-card strong { font-size: 14px; line-height: 1.4; }
+  #gameRoot .scene-actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; margin-top: 8px; }
+  #gameRoot .scene-actions .ico-slot { min-width: 0; }
+  #gameRoot .chip { width: 100%; min-width: 0; min-height: 40px; padding: 4px 5px 4px 25px; line-height: 1.25; white-space: normal; }
+  #gameRoot .scene-actions .ico-slot > .ico { left: 6px; width: 16px; height: 16px; }
+  #gameRoot .hud-right { grid-area: wallet; position: relative; inset: auto; width: 104px; gap: 6px; align-items: stretch; }
+  #gameRoot .purse { height: 36px; gap: 5px; padding: 0 8px; min-width: 0; justify-content: center; }
+  #gameRoot .purse > .ico { flex: 0 0 16px; width: 16px; }
+  #gameRoot .purse b { font-family: var(--sans); font-size: 16px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  #gameRoot .level-card { width: 100%; padding: 9px 8px; }
+  #gameRoot .xp-heading { display: block; margin-bottom: 6px; text-align: center; }
+  #gameRoot .xp-heading strong { font-family: var(--sans); font-size: 14px; white-space: nowrap; }
+  #gameRoot .xp-heading span, #gameRoot .tallies { display: none; }
+  #gameRoot .bite-banner, #gameRoot[data-state=waiting] .bite-banner, #gameRoot[data-state=playing] .bite-banner {
+    grid-area: banner; position: relative; inset: auto; transform: none; max-width: none; width: 100%;
+    display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 4px 8px; text-align: left;
+    visibility: hidden; opacity: 0; transition: opacity .16s ease; pointer-events: none;
+  }
+  #gameRoot[data-state=waiting] .bite-banner, #gameRoot[data-state=playing] .bite-banner { visibility: visible; opacity: 1; }
+  #gameRoot .phase-badge { width: max-content; padding: 4px 8px; font-size: 14px; letter-spacing: 0; }
+  #gameRoot .fish-name, #gameRoot[data-state=waiting] .fish-name { font-size: 16px; line-height: 1.4; letter-spacing: 0; }
+  #gameRoot .rarity-info { grid-column: 1 / -1; }
+  #gameRoot .arena, #gameRoot[data-state=playing] .arena {
+    grid-area: arena; position: relative; inset: auto; height: 100%; width: 104px; min-height: 0; margin: 0;
+    align-self: stretch; transform: none; gap: 8px; padding-bottom: 46px;
+  }
+  #gameRoot .track { width: 62px; flex-basis: 62px; }
+  #gameRoot .progress-wrap { width: 34px; gap: 6px; }
+  #gameRoot .progress-value { min-width: 34px; padding: 2px 4px; }
+  #gameRoot .progress-label { font-size: 14px; }
+  #gameRoot .treasure-status { top: auto; bottom: 0; left: auto; right: 0; font-size: 12px; padding: 3px 5px; gap: 2px; }
+  #gameRoot .treasure-meter { width: 52px; }
+  #gameRoot .treasure-status > span:first-child { font-size: 12px; }
+  #gameRoot .deck { grid-area: deck; position: relative; inset: auto; transform: none; width: 100%; min-width: 0; gap: 8px; }
+  #gameRoot .hint-line { max-width: 100%; max-height: 44px; padding: 4px 10px; border-radius: 12px; overflow: hidden; line-height: 1.4; }
+  #gameRoot .controls { width: 100%; }
+  #gameRoot .controls .primary, #gameRoot .controls .hold { width: min(100%, 330px); min-height: 56px; font-size: 18px; }
+  #gameRoot .loadout { display: none; }
+  #gameRoot .dock, #gameRoot[data-state=playing] .dock, #gameRoot[data-state=waiting] .dock {
+    grid-area: dock; position: relative; inset: auto; transform: none; width: 100%; opacity: 1;
+    display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px; padding: 4px;
+    border-radius: 14px; background: var(--paper); backdrop-filter: none;
+  }
+  #gameRoot .dock .ico-slot { min-width: 0; display: block; }
+  #gameRoot .dock-count:not([hidden]) { display: block; position: absolute; top: 2px; right: 4px; min-width: 16px; padding: 0 3px; border-radius: 8px; background: #e5dcc6; color: var(--lakeink); font-size: 12px; line-height: 16px; text-align: center; }
+  #gameRoot .dock-count.ready { background: var(--float); color: var(--paper-hi); }
+  #gameRoot #contractsButton.ready::after { display: none; }
+  #gameRoot .dock .ico-slot > .ico, #gameRoot .dock .ico-slot:hover > .ico { left: 50%; top: 6px; transform: translateX(-50%); }
+  #gameRoot .dock-btn, #gameRoot .dock-btn:hover:not(:disabled) { min-width: 0; min-height: 50px; padding: 24px 2px 4px; font-size: 14px; }
+  #gameRoot .dock-btn:disabled { opacity: .55; }
+  #gameRoot .dock-btn.ready::after { right: 8px; top: 5px; }
+  #gameRoot .skill-card, #gameRoot #shopModal .skill-card { width: 100%; padding: 0; }
+  #gameRoot .drawer-header { padding: max(10px, env(safe-area-inset-top)) 12px 6px; }
+  #gameRoot .drawer-body { padding: 0 12px max(20px, env(safe-area-inset-bottom)); }
+  #gameRoot .skill-head h3 { font-size: 22px; }
+  #gameRoot .collection-tools { flex-wrap: wrap; }
+  #gameRoot .collection-item { display: grid; grid-template-columns: 60px minmax(0, 1fr); }
+  #gameRoot .collection-item > div, #gameRoot .catalog-entry > div { min-width: 0; overflow-wrap: anywhere; }
+  #gameRoot .fish-art { width: 60px; height: 50px; }
+  #gameRoot .collection-item .collection-actions { grid-column: 1 / -1; justify-content: flex-end; }
+  #gameRoot .catalog-entry { display: grid; grid-template-columns: 60px minmax(0, 1fr); }
+  #gameRoot .shop-item { min-width: 0; }
+}
+
+@media (max-width: 720px) and (max-height: 700px) {
+  #gameRoot .scenery { gap: 6px; }
+  #gameRoot .scene-card strong, #gameRoot .hint-line { display: none; }
+  #gameRoot .scene-card { padding: 8px; }
+  #gameRoot .scene-actions { margin-top: 6px; }
+  #gameRoot .scene-actions .ico-slot > .ico { display: none; }
+  #gameRoot .chip { padding: 4px; min-height: 36px; }
+  #gameRoot .arena, #gameRoot[data-state=playing] .arena { padding-bottom: 40px; }
+}
+@media (max-width: 720px) and (max-height: 600px) {
+  #gameRoot .phase-badge, #gameRoot .rarity-info { display: none; }
+  #gameRoot .bite-banner { grid-template-columns: minmax(0, 1fr); }
+  #gameRoot .fish-name { font-size: 14px; }
+  #gameRoot .overlay-card { padding: 14px; }
+  #gameRoot .catch-art { height: 100px; }
+  #gameRoot .overlay-icon { font-size: 26px; }
+  #gameRoot .overlay-card h3 { margin: 6px 0; font-size: 22px; }
+  #gameRoot .overlay-card p { font-size: 14px; margin-bottom: 10px; }
+  #gameRoot .resume { min-height: 48px; }
+}
+
+/* Short landscape screens keep the action beside the fishing track. */
+@media (min-width: 560px) and (max-width: 960px) and (max-height: 500px) {
+  #gameRoot .scenery {
+    display: grid; grid-template-columns: minmax(0, 1fr) 132px minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas: "info banner wallet" "water arena deck" "dock dock dock";
+    gap: 6px 12px; padding: max(8px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+  }
+  #gameRoot .hud-left { grid-area: info; position: relative; inset: auto; gap: 0; }
+  #gameRoot .fishing-water { grid-area: water; position: relative; inset: auto; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; }
+  #gameRoot .fishing-water .bobber { left: 72%; top: 65%; }
+  #gameRoot .fishing-water .ripple { left: 72%; top: calc(65% + 22px); width: 66px; }
+  #gameRoot .fishing-water .ripple.two { width: 94px; }
+  #gameRoot .brand, #gameRoot .scene-card strong, #gameRoot .hint-line, #gameRoot .loadout, #gameRoot .tallies, #gameRoot .xp-heading span { display: none; }
+  #gameRoot .scene-card { width: 100%; min-width: 0; max-width: 300px; padding: 6px 8px; }
+  #gameRoot .scene-card small { letter-spacing: 0; font-size: 14px; }
+  #gameRoot .scene-actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); margin-top: 4px; gap: 4px; }
+  #gameRoot .chip { min-height: 32px; width: 100%; min-width: 0; padding: 4px 6px; white-space: normal; }
+  #gameRoot .scene-actions .ico { display: none; }
+  #gameRoot .hud-right { grid-area: wallet; position: relative; inset: auto; width: 100%; flex-direction: row; justify-content: flex-end; align-items: center; gap: 6px; }
+  #gameRoot .level-card { width: 108px; padding: 7px; }
+  #gameRoot .xp-heading { display: block; margin-bottom: 4px; }
+  #gameRoot .xp-heading strong { font-size: 14px; }
+  #gameRoot .purse { height: 36px; padding: 0 8px; }
+  #gameRoot .purse b { font-size: 16px; }
+  #gameRoot .bite-banner, #gameRoot[data-state=waiting] .bite-banner, #gameRoot[data-state=playing] .bite-banner {
+    grid-area: banner; position: relative; inset: auto; transform: none; width: 100%; max-width: none; align-self: center;
+  }
+  #gameRoot .phase-badge, #gameRoot .rarity-info { display: none; }
+  #gameRoot .fish-name, #gameRoot[data-state=waiting] .fish-name { font-size: 14px; }
+  #gameRoot .arena, #gameRoot[data-state=playing] .arena { grid-area: arena; position: relative; inset: auto; transform: none; width: 132px; height: 100%; padding-bottom: 38px; gap: 8px; }
+  #gameRoot .track { width: 80px; flex-basis: 80px; }
+  #gameRoot .progress-wrap { width: 38px; }
+  #gameRoot .treasure-status { top: auto; bottom: 0; font-size: 12px; }
+  #gameRoot .deck { grid-area: deck; position: relative; inset: auto; transform: none; width: 100%; align-self: center; }
+  #gameRoot .controls .primary, #gameRoot .controls .hold { width: min(100%, 260px); min-height: 52px; font-size: 16px; }
+  #gameRoot .dock, #gameRoot[data-state=waiting] .dock, #gameRoot[data-state=playing] .dock {
+    grid-area: dock; position: relative; inset: auto; transform: none; flex-direction: row; justify-content: center;
+    opacity: 1; gap: 4px; padding: 4px; border-radius: 12px; background: var(--paper);
+  }
+  #gameRoot .dock-label { display: none; }
+  #gameRoot .dock-btn, #gameRoot .dock-btn:hover:not(:disabled) { min-height: 38px; padding: 4px 12px 4px 32px; min-width: 0; }
+  #gameRoot .dock .ico-slot { flex: 1; }
+  #gameRoot .dock .ico-slot > .ico, #gameRoot .dock .ico-slot:hover > .ico { left: 10px; top: 50%; transform: translateY(-50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #gameRoot .cast::before, #gameRoot .cast:disabled::before { animation: none; transform: translateY(-50%); }
+  #gameRoot .arena, #gameRoot[data-state=playing] .arena, #gameRoot .overlay-card, #gameRoot .skill-card { animation: none; transition: none; }
+}
+
+/* Catch presentation is separate from rewards: skipping never changes the save. */
+#gameRoot .catch-showcase { position: relative; isolation: isolate; }
+#gameRoot .catch-showcase::before { content: ''; position: absolute; inset: 25% 8% 10%; z-index: -1; border-radius: 50%; background: radial-gradient(ellipse, #d8c79444, transparent 70%); pointer-events: none; }
+#gameRoot .overlay[data-rarity=rare] .catch-showcase::before { background: radial-gradient(ellipse, #65b8cb44, transparent 70%); }
+#gameRoot .overlay[data-rarity=epic] .catch-showcase::before { background: radial-gradient(ellipse, #b08ccc44, transparent 70%); }
+#gameRoot .overlay[data-rarity=legendary] .catch-showcase::before { background: radial-gradient(ellipse, #e6bb5866, transparent 70%); }
+#gameRoot .catch-splash { position: absolute; left: 22%; right: 22%; bottom: 8%; height: 18%; border: 2px solid #72aaa980; border-radius: 50%; pointer-events: none; opacity: 0; }
+#gameRoot .overlay[data-feedback=landing] .catch-art { animation: catchLanding var(--landing-ms, 360ms) cubic-bezier(.2,.7,.35,1) both; }
+#gameRoot .overlay[data-feedback=landing] .catch-splash { animation: catchSplash var(--landing-ms, 360ms) ease-out both; }
+#gameRoot .overlay[data-feedback=landing] .catch-badges { opacity: 0; }
+#gameRoot .overlay[data-feedback=counting] .catch-badges { animation: catchBadgesIn .18s ease-out both; }
+#gameRoot .catch-badges { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin: 6px 0 10px; }
+#gameRoot .catch-badge { font-size: 13px; padding: 4px 9px; border-radius: 20px; color: #376e69; background: #e0eadb; border: 1px solid #8faaa180; }
+#gameRoot .catch-badge[data-tone=gold] { color: #89612b; background: #f8ebbf; border-color: #c6a04e80; }
+#gameRoot .catch-badge[data-tone=record] { color: #77538c; background: #ecdfef; border-color: #a681b180; }
+#gameRoot .catch-growth { text-align: left; margin: 10px 0 14px; padding: 10px 12px; border-radius: 12px; background: #e5e7d6; }
+#gameRoot .catch-growth-head { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 5px; font-size: 14px; }
+#gameRoot .catch-growth-track { height: 7px; overflow: hidden; border-radius: 8px; background: #345e5824; margin: 7px 0; }
+#gameRoot .catch-growth-fill { height: 100%; background: #d4a23f; width: 0; }
+#gameRoot .catch-growth small { display: block; line-height: 1.6; color: #597975; }
+#gameRoot .catch-growth small:empty { display: none; }
+#gameRoot .feedback-settings .skill-card { width: min(100%, 520px); }
+#gameRoot .settings-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 12px 0; padding: 10px 0; border-bottom: 1px solid #b8914f40; }
+#gameRoot .settings-row input[type=checkbox] { width: 22px; height: 22px; accent-color: #35716a; flex-shrink: 0; }
+#gameRoot .settings-row input[type=range] { width: min(42vw, 180px); accent-color: #35716a; }
+#gameRoot .save-tools { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+#gameRoot .save-tools button, #gameRoot .save-file-label, #gameRoot .save-download { font: inherit; font-size: 14px; border: 1px solid #b8914f; border-radius: 9px; padding: 10px 12px; color: #345d57; background: #f8f0dd; cursor: pointer; text-decoration: none; }
+#gameRoot .save-file-label { position: relative; overflow: hidden; }
+#gameRoot .save-file-label input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+#gameRoot .save-file-label:focus-within { outline: 2px solid #345d57; outline-offset: 3px; }
+#gameRoot .save-status { font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+#gameRoot .catch-badges[hidden], #gameRoot .catch-growth[hidden], #gameRoot .save-download[hidden], #gameRoot #confirmImport[hidden], #gameRoot #cancelImport[hidden] { display: none; }
+#gameRoot #settingsButton { padding: 4px 8px; min-width: 40px; }
+@media(max-width:720px), (min-width:560px) and (max-width:960px) and (max-height:500px) { #gameRoot .scene-actions { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 40px; } #gameRoot #settingsButton { padding: 4px; } }
+#gameRoot[data-reduce-feedback=yes] .catch-art, #gameRoot[data-reduce-feedback=yes] .catch-splash, #gameRoot[data-reduce-feedback=yes] .catch-badges { animation: none; }
+@keyframes catchLanding { 0% { opacity: .3; transform: translateY(22px) rotate(-7deg) scale(.88); } 55% { opacity: 1; transform: translateY(-9px) rotate(3deg) scale(1.02); } 100% { transform: none; } }
+@keyframes catchSplash { 0% { opacity: 0; transform: scale(.5); } 35% { opacity: .65; } 100% { opacity: 0; transform: scale(1.65); } }
+@keyframes catchBadgesIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media(prefers-reduced-motion:reduce) { #gameRoot .catch-art, #gameRoot .catch-splash, #gameRoot .catch-badges { animation: none !important; } }
+
+}

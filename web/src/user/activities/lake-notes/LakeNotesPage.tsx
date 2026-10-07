@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router';
-import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import { Card, ErrorState, LoadingState } from '@shared/components/States';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { responseOutcomeUnknown } from '@shared/operations/api';
 import {
@@ -13,12 +13,11 @@ import { directions, directionUnits, unitsToNatural, type Direction } from '@sha
 import { UserPageGate } from '../../components/UserPageGate';
 import { useUserSession } from '../../data';
 import { economySessionRequest } from '../../features/economy/queries';
-import { caught, levelFromXp, xpForLevel, type Action } from './rules';
+import { type Action } from './rules';
 import { LakeController } from './controller';
-import { LakeScene } from './scene';
-import { LakeMenus, type Menu } from './menus';
-import { art, loadoutLabel } from './presentation';
-import { catalogText, useLakeCopy, type LakeText } from './copy';
+import { NativeLake } from './NativeLake';
+import { nativeEnglish } from './native-language';
+import { useLakeCopy, type LakeText } from './copy';
 import {
   act,
   checkpoint,
@@ -35,8 +34,8 @@ import {
   type ProfileView,
   type Quote,
 } from './api';
-import './original.css';
-import './lake.css';
+
+import './platform.css';
 
 function LakeExchange({
   view,
@@ -193,9 +192,8 @@ function LakeExchange({
 }
 
 function LakeContent({ account }: { account: string }) {
-  const { t: text } = useLakeCopy(),
-    client = useQueryClient(),
-    [menu, setMenu] = useState<Menu | null>(null);
+  const { t: text, language } = useLakeCopy(),
+    client = useQueryClient();
   const query = useQuery({
     queryKey: lakeKeys(account),
     queryFn: ({ signal }) => economySessionRequest(client, () => getProfile({ signal }), account),
@@ -225,11 +223,14 @@ function LakeContent({ account }: { account: string }) {
   }, [account, client]);
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot);
   useEffect(() => {
+    controller.activate();
+    return () => controller.dispose();
+  }, [controller]);
+  useEffect(() => {
     const view = query.data;
     if (view?.cast && !controller.snapshot().result)
       controller.adopt({ profile: view, cast: view.cast });
   }, [query.data, controller]);
-  useEffect(() => () => controller.dispose(), [controller]);
   const update = (view: ProfileView) => client.setQueryData(lakeKeys(account), view);
   const action = useRetainedOperation(
     async (input: Parameters<typeof act>[0], key, context) => {
@@ -255,7 +256,7 @@ function LakeContent({ account }: { account: string }) {
       context.commit(() => {
         update(result.profile);
         controller.adopt(result, true);
-        document.querySelector<HTMLElement>('.lake-game .track')?.focus();
+        document.querySelector<HTMLElement>('.lake-original .track')?.focus();
       });
       return result;
     },
@@ -264,264 +265,126 @@ function LakeContent({ account }: { account: string }) {
     },
     ['user', 'lake-notes'],
   );
-  if (query.isPending) return <LoadingState />;
-  if (query.error || !query.data)
-    return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
+  if (query.isPending || query.error || !query.data)
+    return (
+      <div className="page lake-page">
+        <div className="lake-platform-toolbar">
+          <Link className="lake-back" to="/games">
+            {text('back')}
+          </Link>
+        </div>
+        {query.isPending ? (
+          <LoadingState />
+        ) : (
+          <ErrorState error={query.error} onRetry={() => void query.refetch()} />
+        )}
+      </div>
+    );
   const view = query.data,
-    p = view.profile,
-    current = view.cast,
-    unfinished = Boolean(current && !terminalPhase(current.phase));
+    unfinished = Boolean(view.cast && !terminalPhase(view.cast.phase));
   const locked =
     action.isPending ||
     action.outcome === 'unknown' ||
     control.isPending ||
     control.outcome === 'unknown';
-  const blocked = view.readonly || unfinished || locked,
-    level = levelFromXp(p.xp),
-    levelStart = xpForLevel(level),
-    next = level === 20 ? levelStart : xpForLevel(level + 1);
-  const xpPercent =
-    level === 20
-      ? 100
-      : Number(((BigInt(p.xp) - BigInt(levelStart)) * 100n) / BigInt(next - levelStart));
-  const onAction = (input: Action) => {
-    if (!blocked) action.mutate({ ...input, expected_profile_revision: view.revision });
+  const blocked = view.readonly || unfinished || locked;
+  const onAction = async (input: Action) => {
+    if (blocked) return;
+    return action.mutateAsync({ ...input, expected_profile_revision: view.revision });
   };
-  const terminal = state.status === 'terminal' ? state.result : null;
+  const resume = () => {
+    if (controller.snapshot().status === 'unknown') {
+      void controller.retry().catch(() => undefined);
+      return;
+    }
+    const cast = controller.snapshot().result?.cast ?? view.cast;
+    if (cast && !locked && !view.readonly)
+      control.mutate({ kind: 'resume', id: cast.id, input: controlInput(cast) });
+  };
   return (
     <div className="page lake-page">
-      <PageHeader
-        title={text('title')}
-        icon="games"
-        back={<Link to="/games">{text('back')}</Link>}
-      />
-      {view.readonly ? <p role="status">{text('closed')}</p> : null}
-      <div className="lake-game">
-        <section className="shell">
-          <LakeScene
-            controller={controller}
-            profile={p}
-            keyboardEnabled={menu === null}
-            result={
-              terminal ? (
-                <section className="lake-result" role="status">
-                  <h2>{text(terminal.cast.phase === 'success' ? 'success' : 'failed')}</h2>
-                  {terminal.cast.state.result?.debris ? (
-                    <>
-                      <img
-                        src={art(terminal.cast.state.result.debris, true)}
-                        alt=""
-                        loading="lazy"
-                      />
-                      <p>
-                        {text('debrisReward', {
-                          item: catalogText(text, 'debris', terminal.cast.state.result.debris),
-                        })}
-                      </p>
-                    </>
-                  ) : terminal.cast.phase === 'success' && terminal.cast.state.plan.fishKind ? (
-                    <>
-                      <img
-                        src={art(terminal.cast.state.plan.fishKind)}
-                        alt={catalogText(text, 'fish', terminal.cast.state.plan.fishKind)}
-                        loading="lazy"
-                      />
-                      <p>
-                        {text('rewardSummary', {
-                          fish: catalogText(text, 'fish', terminal.cast.state.plan.fishKind),
-                          length: terminal.cast.state.plan.length,
-                          quality: catalogText(
-                            text,
-                            'quality',
-                            'q' + terminal.cast.state.result?.quality,
-                            '',
-                          ),
-                          xp: terminal.cast.state.result?.xp ?? 0,
-                        })}
-                      </p>
-                    </>
-                  ) : null}
-                  {terminal.cast.state.result?.overflow ? <p>{text('overflow')}</p> : null}
-                  {terminal.cast.state.reward ? (
-                    <p>
-                      {text('treasureReward', {
-                        coins: terminal.cast.state.reward.coins,
-                        bait: catalogText(text, 'baits', terminal.cast.state.reward.bait),
-                        count: terminal.cast.state.reward.count,
-                      })}
-                    </p>
-                  ) : null}
-                </section>
-              ) : null
-            }
-            controls={
-              <>
-                <div className="lake-save" role="status">
-                  {state.status === 'unknown'
-                    ? text('reconnecting')
-                    : state.status === 'conflict' || (state.status === 'readonly' && unfinished)
-                      ? text('controllerLost')
-                      : state.status === 'saving'
-                        ? text('saving')
-                        : text('saved')}
-                </div>
-                {state.error ? <ErrorState error={state.error} /> : null}
-                <div className="lake-actions">
-                  {!unfinished ? (
-                    <button
-                      type="button"
-                      className="primary"
-                      disabled={view.readonly || locked}
-                      onClick={() =>
-                        control.mutate({ kind: 'start', expected_profile_revision: view.revision })
-                      }
-                    >
-                      {terminal ? text('again') : text('start')}
-                    </button>
-                  ) : null}
-                  {state.status === 'running' || state.status === 'saving' ? (
-                    <button
-                      type="button"
-                      className="secondary"
-                      onClick={() => void controller.pause().catch(() => undefined)}
-                    >
-                      {text('pause')}
-                    </button>
-                  ) : null}
-                  {unfinished &&
-                  state.status !== 'running' &&
-                  state.status !== 'saving' &&
-                  state.status !== 'unknown' ? (
-                    <button
-                      className="resume"
-                      type="button"
-                      disabled={view.readonly || locked}
-                      onClick={() => {
-                        const cast = state.result?.cast ?? current;
-                        if (cast)
-                          control.mutate({
-                            kind: 'resume',
-                            id: cast.id,
-                            input: controlInput(cast),
-                          });
-                      }}
-                    >
-                      {current?.paused ? text('resume') : text('takeOver')}
-                    </button>
-                  ) : null}
-                  {state.status === 'unknown' ? (
-                    <button
-                      type="button"
-                      className="resume"
-                      onClick={() => void controller.retry().catch(() => undefined)}
-                    >
-                      {text('retry')}
-                    </button>
-                  ) : null}
-                  {unfinished && state.status !== 'saving' ? (
-                    <button
-                      type="button"
-                      onClick={() => void controller.readCurrent().catch(() => undefined)}
-                    >
-                      {text('checkSaved')}
-                    </button>
-                  ) : null}
-                </div>
-                <div className="stats">
-                  <span>
-                    {text('coins')}
-                    <b>{p.coins}</b>
-                  </span>
-                  <span>{text('caught', { count: String(caught(p)) })}</span>
-                  <span>{text('streak', { count: p.streak })}</span>
-                </div>
-                <div className="xp-heading">
-                  <strong>{text('level', { level })}</strong>
-                  <span>
-                    {level === 20
-                      ? text('maxLevel', { xp: p.xp })
-                      : text('xp', {
-                          xp: String(BigInt(p.xp) - BigInt(levelStart)),
-                          next: next - levelStart,
-                        })}
-                  </span>
-                </div>
-                <div
-                  className="xp-track"
-                  role="progressbar"
-                  aria-label={text('level', { level })}
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={xpPercent}
-                >
-                  <div className="xp-fill" style={{ width: xpPercent + '%' }} />
-                </div>
-                <p className="loadout">
-                  {text('loadout', {
-                    gear: loadoutLabel(text, p.equipped),
-                    bait: p.selectedBait
-                      ? catalogText(text, 'baits', p.selectedBait)
-                      : text('none'),
-                  })}
-                </p>
-                <div className="menu-actions">
-                  {(['locations', 'skills', 'shop', 'basket', 'catalog', 'contracts'] as const).map(
-                    (item) => (
-                      <button
-                        type="button"
-                        className="skill-open"
-                        key={item}
-                        onClick={() => {
-                          controller.setHeld(false);
-                          setMenu(item);
-                        }}
-                      >
-                        {text(item)}
-                      </button>
-                    ),
-                  )}
-                  <button
-                    type="button"
-                    className="skill-open"
-                    disabled={blocked}
-                    onClick={() => onAction({ action: 'rest' })}
-                  >
-                    {text('rest')}
-                  </button>
-                </div>
-              </>
-            }
-          />
-          {menu ? (
-            <LakeMenus
-              key={menu}
-              menu={menu}
-              profile={p}
-              blocked={blocked}
-              text={text}
-              onAction={onAction}
-              close={() => setMenu(null)}
-            />
-          ) : null}
-        </section>
+      <div className="lake-platform-toolbar">
+        <Link className="lake-back" to="/games">
+          {text('back')}
+        </Link>
+        <p>
+          {Object.values(view.settings.exchanges).some((direction) => direction.enabled)
+            ? text('exchangeAvailable')
+            : text('exchangeUnavailable')}
+        </p>
       </div>
-      {action.error || control.error ? <ErrorState error={action.error ?? control.error} /> : null}
-      {action.outcome === 'unknown' || control.outcome === 'unknown' ? (
-        <div role="status">
-          <p>{text('saveUnknown')}</p>
+      {view.readonly ? <p role="status">{text('closed')}</p> : null}
+      <NativeLake
+        bridge={{
+          language,
+          translate: nativeEnglish,
+          profile: () => view.profile,
+          revision: () => view.revision,
+          snapshot: controller.snapshot,
+          projection: controller.projection,
+          held: (held) => controller.setHeld(held),
+          tick: () => controller.tick(),
+          act: onAction,
+          start: () => {
+            if (!blocked)
+              control.mutate({ kind: 'start', expected_profile_revision: view.revision });
+          },
+          resume,
+          pause: () => {
+            void controller.pause().catch(() => undefined);
+          },
+          blocked: () => blocked,
+          busy: () => locked,
+          readonly: () => view.readonly,
+          text,
+        }}
+      />
+      <div className="lake-platform-controls">
+        <p role="status">
+          {state.status === 'unknown'
+            ? text('reconnecting')
+            : state.status === 'saving'
+              ? text('saving')
+              : text('saved')}
+        </p>
+        {unfinished && state.status !== 'saving' ? (
           <button
-            className="btn btn-secondary"
             type="button"
-            onClick={() => {
-              if (action.outcome === 'unknown' && action.variables) action.mutate(action.variables);
-              else if (control.variables) control.mutate(control.variables);
-            }}
+            className="btn btn-secondary"
+            onClick={() => void controller.readCurrent().catch(() => undefined)}
+          >
+            {text('checkSaved')}
+          </button>
+        ) : null}
+        {state.status === 'unknown' ? (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => void controller.retry().catch(() => undefined)}
           >
             {text('retry')}
           </button>
-        </div>
-      ) : null}
-      {action.isSuccess ? <p role="status">{text('actionSaved')}</p> : null}
+        ) : null}
+        {state.error || action.error || control.error ? (
+          <ErrorState error={state.error ?? action.error ?? control.error} />
+        ) : null}
+        {action.outcome === 'unknown' || control.outcome === 'unknown' ? (
+          <div role="status">
+            <p>{text('saveUnknown')}</p>
+            <button
+              className="btn btn-secondary"
+              type="button"
+              onClick={() => {
+                if (action.outcome === 'unknown' && action.variables)
+                  action.mutate(action.variables);
+                else if (control.variables) control.mutate(control.variables);
+              }}
+            >
+              {text('retry')}
+            </button>
+          </div>
+        ) : null}
+      </div>
       <LakeExchange view={view} account={account} text={text} />
     </div>
   );

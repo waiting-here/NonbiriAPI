@@ -281,3 +281,60 @@ func TestProjectionDoesNotExposeOpposingHandDeckOrChoices(t *testing.T) {
 }
 
 var _ io.Reader = zeroRandom{}
+
+func TestRoundSummaryKeepsFinalRowsBeforeClearingAndLegacyRecords(t *testing.T) {
+	s := fixture()
+	field(&s, 0, 0, "openai_agent", "openai_agent")
+	field(&s, 0, 1, "openai_vision")
+	field(&s, 0, 2, "openai_server")
+	field(&s, 1, 0, "claude_agent")
+	field(&s, 1, 1, "claude_vision")
+	field(&s, 1, 2, "claude_server")
+	s.Players[1].Lives = 1
+	s.Players[1].Passed = true
+	next, boundaries, err := ApplyWithRounds(s, 0, Action{Kind: "pass"}, zeroRandom{})
+	if err != nil || len(boundaries) != 1 || len(next.Rounds) != 1 {
+		t.Fatalf("round end: boundaries=%d err=%v", len(boundaries), err)
+	}
+	wantRows := []RoundRow{{"close", [2]int{12, 6}}, {"ranged", [2]int{7, 7}}, {"siege", [2]int{8, 8}}}
+	record := next.Rounds[0]
+	if !reflect.DeepEqual(record.Rows, wantRows) || record.Scores != [2]int{27, 21} ||
+		record.LivesBefore == nil || *record.LivesBefore != [2]int{2, 1} ||
+		record.LivesAfter == nil || *record.LivesAfter != [2]int{2, 0} || record.Winner == nil || *record.Winner != 0 {
+		t.Fatalf("final summary: %+v", record)
+	}
+	if next.Scores() != [2]int{} || next.Result == nil || next.Result.Winner == nil || *next.Result.Winner != 0 {
+		t.Fatalf("clear or verdict changed: scores=%v result=%+v", next.Scores(), next.Result)
+	}
+	for viewer := range 2 {
+		view, err := Project(boundaries[0], viewer)
+		if err != nil || !reflect.DeepEqual(view.Rounds[0], record) {
+			t.Fatalf("seat %d lost public summary: %v", viewer, err)
+		}
+	}
+	raw, err := json.Marshal(next)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var legacy map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &legacy); err != nil {
+		t.Fatal(err)
+	}
+	legacy["rounds"] = json.RawMessage(`[{"round":1,"scores":[27,21],"winner":0}]`)
+	raw, err = json.Marshal(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old, err := Decode(raw)
+	if err != nil || old.Rounds[0].Rows != nil || old.Rounds[0].LivesBefore != nil || old.Rounds[0].LivesAfter != nil {
+		t.Fatalf("legacy record did not decode without invented fields: %v", err)
+	}
+	view, err := Project(old, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(view.Rounds[0])
+	if err != nil || string(encoded) != `{"round":1,"scores":[27,21],"winner":0}` {
+		t.Fatalf("legacy projection fabricated details: %s %v", encoded, err)
+	}
+}

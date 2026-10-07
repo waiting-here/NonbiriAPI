@@ -36,6 +36,14 @@ func publicActionSources(v sessionRecord, anonymous bool) []ActionSource {
 func visibleActionSources(v sessionRecord, seat int) []ActionSource {
 	out := []ActionSource{}
 	for _, action := range v.Payload.Actions {
+		if v.Terms.Game == "gwent" && action.Seat != seat && action.Action != nil {
+			var move struct {
+				Kind string `json:"kind"`
+			}
+			if json.Unmarshal(action.Action, &move) != nil || (move.Kind != "play" && move.Kind != "pass" && move.Kind != "leader") {
+				continue
+			}
+		}
 		if action.PhaseSeq != v.PhaseSeq.Decimal() || action.Seat == seat || action.Origin == "rule" {
 			out = append(out, action)
 		}

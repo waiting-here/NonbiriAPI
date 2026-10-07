@@ -291,6 +291,35 @@ func TestSecurityHeadersPreserveSSE(t *testing.T) {
 	}
 }
 
+func TestOnlyUserGameInterfaceAllowsSameOriginFraming(t *testing.T) {
+	const gamePath = "/assets/gwent/interface/index.html"
+	for _, tc := range []struct {
+		host, path string
+		embedded   bool
+	}{
+		{"example.com", gamePath, true},
+		{"admin.example.com", gamePath, false},
+		{"example.com", "/games/gwent", false},
+		{"example.com", "/assets/gwent/interface/", true},
+		{"admin.example.com", "/assets/gwent/interface/", false},
+		{"example.com", "/assets/gwent/interface/platform.js", false},
+		{"example.com", "/api/session", false},
+		{"admin.example.com", "/", false},
+	} {
+		t.Run(tc.host+tc.path, func(t *testing.T) {
+			rec := runBoundary(t, testConfig(false), recordingHandler(), makeRequest(http.MethodGet, "http://wire.invalid"+tc.path, tc.host, "198.51.100.9:1234"))
+			ancestor, frameOption := "frame-ancestors 'none'", "DENY"
+			if tc.embedded {
+				ancestor, frameOption = "frame-ancestors 'self'", "SAMEORIGIN"
+			}
+			csp := rec.Header().Get("Content-Security-Policy")
+			if !strings.Contains(csp, ancestor) || rec.Header().Get("X-Frame-Options") != frameOption || !strings.Contains(csp, "script-src 'self';") || !strings.Contains(csp, "object-src 'none';") {
+				t.Fatalf("incorrect game framing boundary: %v", rec.Header())
+			}
+		})
+	}
+}
+
 func TestSecurityHeadersAndAPIEnvelope(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /json", func(w http.ResponseWriter, _ *http.Request) {

@@ -1,6 +1,8 @@
 import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
 
 const keys = {
+  exchangeAvailable: 'user.lakeNotes.exchangeAvailable',
+  exchangeUnavailable: 'user.lakeNotes.exchangeUnavailable',
   ledgerEntry: 'user.lakeNotes.ledgerEntry',
   ledgerExchange: 'user.lakeNotes.ledgerExchange',
   back: 'user.lakeNotes.back',

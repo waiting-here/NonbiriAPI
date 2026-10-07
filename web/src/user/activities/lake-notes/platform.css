@@ -1,0 +1,31 @@
+.lake-platform-toolbar,
+.lake-platform-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.lake-platform-toolbar p,
+.lake-platform-controls p {
+  margin: 0;
+}
+.lake-platform-toolbar {
+  padding: 0.5rem 0;
+}
+.lake-back {
+  font-weight: 700;
+}
+.lake-platform-toolbar p {
+  font-weight: 600;
+}
+.lake-form fieldset {
+  display: flex;
+  gap: 0.75rem;
+  align-items: end;
+  flex-wrap: wrap;
+}
+
+.lake-original:has(.skill-modal:not([hidden])) {
+  position: relative;
+  z-index: var(--nb-z-overlay);
+}

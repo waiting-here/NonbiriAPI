@@ -1,0 +1,110 @@
+html,
+body {
+  overflow-x: hidden;
+}
+body {
+  min-height: 0;
+}
+dialog[open] {
+  top: calc(var(--visible-top, 0px) + var(--visible-height, 100vh) / 2);
+  margin: 0 auto;
+  transform: translateY(-50%);
+  max-height: max(0px, calc(var(--visible-height, 100vh) - 32px));
+}
+.result-overlay {
+  position: absolute;
+  min-height: 100%;
+  align-items: flex-start;
+  padding-top: calc(var(--visible-top, 0px) + 32px);
+}
+.platform-offer {
+  max-width: 100%;
+}
+.setup-note strong {
+  color: var(--text);
+}
+.platform-ledger {
+  display: grid;
+  gap: 12px;
+}
+.platform-history-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.platform-replay-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.platform-replay-controls input {
+  min-width: 150px;
+  flex: 1;
+}
+#platform-back {
+  white-space: nowrap;
+}
+@media (max-width: 700px) {
+  #platform-back {
+    font-size: 11px;
+  }
+  .topbar {
+    flex-wrap: wrap;
+  }
+  .platform-history-row {
+    align-items: flex-start;
+  }
+}
+.arena-card.playable {
+  cursor: pointer;
+}
+.player-panel .pile-count {
+  cursor: pointer;
+}
+#arena-dialog .dialog-cards > section > p {
+  white-space: pre-line;
+}
+.platform-replay-controls {
+  margin-bottom: 12px;
+}
+
+@media (max-width: 800px) {
+  .topbar {
+    height: auto;
+    min-height: 58px;
+    padding: 10px 0;
+    gap: 8px;
+  }
+  .topnav {
+    flex-basis: 100%;
+    justify-content: space-between;
+    gap: 4px;
+  }
+  .topnav .nav-button {
+    flex: 1;
+    padding: 7px 4px;
+  }
+  .topbar > .version {
+    display: none;
+  }
+  .topbar > .brand {
+    margin-left: auto;
+  }
+  .topbar > .nav-button {
+    font-size: 12px;
+    padding: 7px 8px;
+  }
+}
+.result-back {
+  position: absolute;
+  top: 16px;
+  left: 32px;
+  z-index: 1;
+}
+@media (max-width: 800px) {
+  .result-back {
+    left: 12px;
+  }
+}

@@ -256,6 +256,7 @@ func (repository *Repository) ListAdmin(ctx context.Context, filter ListFilter) 
 		}
 		if len(page.Data) < filter.Limit {
 			page.Data = append(page.Data, AdminLogRow{
+				RejectionDetail: record.rejectionDetail,
 				OriginIdentity:  record.origin,
 				RejectionFields: rejectionFields(record),
 				ID:              record.id, RouteKind: RouteKind(record.routeKind),
@@ -402,6 +403,7 @@ func (repository *Repository) ListSteward(
 			// Construct directly into the independent Steward type. No Admin DTO
 			// exists on this path, including transiently.
 			page.Data = append(page.Data, StewardLogRow{
+				RejectionDetail: record.rejectionDetail,
 				OriginIdentity:  record.origin,
 				RejectionFields: rejectionFields(record),
 				ID:              record.id, RouteKind: RouteKind(record.routeKind),

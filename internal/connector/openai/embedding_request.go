@@ -64,7 +64,7 @@ func (*EmbeddingRequest) LogValue() slog.Value {
 
 func DecodeEmbeddingRequest(body io.Reader, limit int64) (*EmbeddingRequest, error) {
 	if body == nil {
-		return nil, ErrInvalidRequest
+		return nil, invalidField("body", "expected one valid UTF-8 JSON object")
 	}
 	limit = requestbody.DecoderLimit(limit)
 	data, err := readBounded(body, limit)
@@ -72,56 +72,59 @@ func DecodeEmbeddingRequest(body io.Reader, limit int64) (*EmbeddingRequest, err
 		if errors.Is(err, ErrPayloadTooLarge) {
 			return nil, err
 		}
-		return nil, ErrInvalidRequest
+		return nil, invalidField("body", "expected one valid UTF-8 JSON object")
 	}
 	defer clear(data)
 	if !validateEmbeddingJSON(data) {
-		return nil, ErrInvalidRequest
+		return nil, invalidField("body", "expected one valid UTF-8 JSON object")
 	}
 	fields, ok := borrowedObjectFields(data)
 	if !ok {
-		return nil, ErrInvalidRequest
+		return nil, invalidField("body", "expected one valid UTF-8 JSON object")
 	}
 	r := &EmbeddingRequest{EncodingFormat: "float", bodyLimit: limit}
 	for _, field := range fields {
 		switch field.name {
 		case "model":
 			if json.Unmarshal(field.value, &r.Model) != nil || !validOpaqueText(r.Model, MaxPlatformModelRunes, true) {
-				return nil, ErrInvalidRequest
+				return nil, invalidField("model", "expected a nonempty model name of at most 133 characters without control characters")
 			}
 		case "input":
 			r.InputCount = embeddingInputCount(field.value)
 			if r.InputCount == 0 {
-				return nil, ErrInvalidRequest
+				return nil, invalidField("input", "expected a nonempty string, token array, or batch of at most 2048 inputs")
 			}
 		case "encoding_format":
 			if json.Unmarshal(field.value, &r.EncodingFormat) != nil || (r.EncodingFormat != "float" && r.EncodingFormat != "base64") || isJSONNull(field.value) {
-				return nil, ErrInvalidRequest
+				return nil, invalidField("encoding_format", "expected float or base64")
 			}
 		case "dimensions":
 			value, ok := embeddingInteger(field.value)
 			if !ok || value == 0 {
-				return nil, ErrInvalidRequest
+				return nil, invalidField("dimensions", "expected a positive integer up to 2147483647")
 			}
 			r.Dimensions = int(value)
 		case "user":
 			var value string
 			if isJSONNull(field.value) || json.Unmarshal(field.value, &value) != nil || utf8.RuneCountInString(value) > 512 {
-				return nil, ErrInvalidRequest
+				return nil, invalidField("user", "expected a string of at most 512 characters without control characters")
 			}
 			for _, r := range value {
 				if unicode.IsControl(r) {
-					return nil, ErrInvalidRequest
+					return nil, invalidField("user", "expected a string of at most 512 characters without control characters")
 				}
 			}
 		case "stream":
 			if !bytes.Equal(field.value, []byte("false")) {
-				return nil, ErrInvalidRequest
+				return nil, invalidField("stream", "expected false; embeddings do not support streaming")
 			}
 		}
 	}
-	if r.Model == "" || r.InputCount == 0 {
-		return nil, ErrInvalidRequest
+	if r.InputCount == 0 {
+		return nil, invalidField("input", "required field is missing")
+	}
+	if r.Model == "" {
+		return nil, invalidField("model", "required field is missing")
 	}
 	r.fields = make([]jsonField, len(fields))
 	for i, field := range fields {

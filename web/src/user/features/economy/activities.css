@@ -1,6 +1,6 @@
 .economy-activities-page .economy-activities-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--nb-space-4);
   align-items: start;
 }
@@ -29,7 +29,7 @@
   background: transparent;
 }
 .economy-activities-page .loan-card {
-  grid-column: auto;
+  grid-column: 1 / -1;
 }
 .economy-activities-page .loan-promo__copy,
 .economy-activities-page .loan-promo__offer {
@@ -60,7 +60,7 @@
   align-content: start;
 }
 .economy-activities-page .economy-stat-grid {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 6rem), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr));
 }
 .economy-activities-page .economy-stat-grid > section {
   padding: var(--nb-space-3);

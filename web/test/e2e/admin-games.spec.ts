@@ -484,9 +484,7 @@ for (const width of [390, 1440]) {
     await page.goto(ADMIN_ORIGIN + '/games');
     await page.getByRole('link', { name: 'AI players and strategies' }).click();
     const dialog = page.getByRole('region', { name: 'AI players and strategies', exact: true });
-    await expect(
-      page.getByRole('heading', { name: 'Bidding Duel · AI players and strategies' }),
-    ).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'AI players and challenges' })).toBeVisible();
     await dialog.getByRole('button', { name: 'Duplicate', exact: true }).click();
     await dialog
       .getByRole('spinbutton', { name: 'Preserve strong cards', exact: true })

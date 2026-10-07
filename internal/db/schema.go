@@ -19,3 +19,6 @@ var aiPlayersSQL string
 
 //go:embed migrations/0004_management_and_games.sql
 var managementAndGamesSQL string
+
+//go:embed migrations/0005_gwent_ai.sql
+var gwentAISQL string

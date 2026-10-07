@@ -393,6 +393,27 @@ export type HomeCheckinCapability =
 
 export type HomeGameSummary =
   | {
+      game: 'gwent';
+      route_id: 'game-gwent';
+      kind: 'continue';
+      resource_id: string;
+      state: 'waiting' | 'active';
+    }
+  | {
+      game: 'lakenotes';
+      route_id: 'game-lake-notes';
+      kind: 'continue';
+      resource_id: string;
+      state: 'active';
+    }
+  | {
+      game: 'steadycatch';
+      route_id: 'game-steady-catch';
+      kind: 'continue';
+      resource_id: string;
+      state: 'active';
+    }
+  | {
       game: 'blackjack';
       route_id: 'game-blackjack';
       kind: 'continue';

@@ -414,7 +414,7 @@ func (s *Service) ExportTx(ctx context.Context, tx *sql.Tx, user, now int64, lim
 			return nil, nil, err
 		}
 	}
-	if s.rules.ID() == "bidding" {
+	if s.rules.ID() == "bidding" || s.rules.ID() == "gwent" {
 		result.AI, err = s.exportAI(ctx, tx, user, now, remaining, charge)
 		if err != nil {
 			return nil, nil, err

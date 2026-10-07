@@ -12,6 +12,7 @@ import {
 } from '../strict';
 import { useGameVisibility } from '../visibility';
 import {
+  aiQueuePrefix,
   cursorValue,
   detailValue,
   homeValue,
@@ -86,7 +87,11 @@ export async function sendDuelIntent(game: DuelGame, intent: DuelIntent, key: st
       : intent.kind === 'cancel'
         ? { expected_revision: intent.revision }
         : intent.kind === 'action'
-          ? { phase_seq: intent.phaseSeq, ...(intent.decisionID ? { decision_id: intent.decisionID } : {}), action: intent.action }
+          ? {
+              phase_seq: intent.phaseSeq,
+              ...(intent.decisionID ? { decision_id: intent.decisionID } : {}),
+              action: intent.action,
+            }
           : { phase_seq: intent.phaseSeq };
   const response = await gameRequest<unknown>(path, {
     method: intent.kind === 'cancel' ? 'DELETE' : 'POST',
@@ -100,7 +105,7 @@ export async function sendDuelIntent(game: DuelGame, intent: DuelIntent, key: st
   }
   if (intent.kind === 'queue') {
     const r = exactRecord(response.data, ['queue_id', 'revision', 'deadline']);
-    opaqueID(r.queue_id, intent.botID ? 'aiq_' : prefix(game, true), 'queue receipt');
+    opaqueID(r.queue_id, intent.botID ? aiQueuePrefix(game) : prefix(game, true), 'queue receipt');
     revisionValue(r.revision);
     unixTime(r.deadline, 'queue receipt');
   } else {

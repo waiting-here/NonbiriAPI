@@ -362,7 +362,7 @@ export function ThursdayCard({
             </section>
             <section>
               <span>{t('user.activities.thursday.myCount')}</span>
-              <strong>
+              <strong className="economy-count-ratio">
                 <ExactCount value={current.myCount} /> /{' '}
                 <ExactCount value={String(current.perUserLimit)} />
               </strong>

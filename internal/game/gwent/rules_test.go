@@ -104,8 +104,15 @@ func TestCompletedRoundsKeepContiguousCompactHistory(t *testing.T) {
 				if err != nil || after.Round < record.Round || after.Round > record.Round+1 {
 					t.Fatalf("invalid round end: %+v %v", after, err)
 				}
-				if _, err := r.RoundView("standard", record.Facts, 0, true); err != nil {
+				facts, err := r.RoundView("standard", record.Facts, 0, true)
+				if err != nil {
 					t.Fatal(err)
+				}
+				var summary engine.RoundRecord
+				if json.Unmarshal(facts, &summary) != nil || len(summary.Rows) != 3 ||
+					summary.LivesBefore == nil || *summary.LivesBefore != [2]int{2 - len(records), 2 - len(records)} ||
+					summary.LivesAfter == nil || *summary.LivesAfter != [2]int{1 - len(records), 1 - len(records)} {
+					t.Fatalf("history summary omitted boundary state: %s", facts)
 				}
 				records = append(records, record)
 			}
@@ -148,6 +155,25 @@ func TestThirdConsecutiveTurnTimeoutForfeits(t *testing.T) {
 				}
 				raw = next.State
 				break
+			}
+		}
+	}
+}
+
+func TestLegacyRoundHistoryOmitsUnavailableSummary(t *testing.T) {
+	raw := json.RawMessage(`{"round":1,"scores":[12,6],"winner":0,"actions":[]}`)
+	for _, terminal := range []bool{false, true} {
+		projected, err := (Rules{}).RoundView("standard", raw, 1, terminal)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var fields map[string]json.RawMessage
+		if json.Unmarshal(projected, &fields) != nil || string(fields["scores"]) != "[12,6]" {
+			t.Fatalf("legacy history lost scores: %s", projected)
+		}
+		for _, field := range []string{"rows", "lives_before", "lives_after"} {
+			if _, ok := fields[field]; ok {
+				t.Fatalf("legacy history fabricated %s: %s", field, projected)
 			}
 		}
 	}

@@ -373,6 +373,49 @@ function normalizeHomeContinue(value: unknown): HomeGameSummary {
   }
   if (record.state === 'waiting' || record.state === 'active') {
     const state = record.state;
+    if (record.game === 'gwent' && record.route_id === 'game-gwent') {
+      return {
+        game: 'gwent',
+        route_id: 'game-gwent',
+        kind: 'continue',
+        state,
+        resource_id: opaqueID(
+          record.resource_id,
+          state === 'waiting'
+            ? typeof record.resource_id === 'string' && record.resource_id.startsWith('gaq_')
+              ? 'gaq_'
+              : 'gwtq_'
+            : 'gwt_',
+          'gwent resource',
+        ),
+      };
+    }
+    if (
+      state === 'active' &&
+      record.game === 'lakenotes' &&
+      record.route_id === 'game-lake-notes'
+    ) {
+      return {
+        game: 'lakenotes',
+        route_id: 'game-lake-notes',
+        kind: 'continue',
+        state,
+        resource_id: opaqueID(record.resource_id, 'lnc_', 'lake notes cast'),
+      };
+    }
+    if (
+      state === 'active' &&
+      record.game === 'steadycatch' &&
+      record.route_id === 'game-steady-catch'
+    ) {
+      return {
+        game: 'steadycatch',
+        route_id: 'game-steady-catch',
+        kind: 'continue',
+        state,
+        resource_id: opaqueID(record.resource_id, 'sc_', 'steady catch session'),
+      };
+    }
     if (record.game === 'blackjack' && record.route_id === 'game-blackjack') {
       return {
         game: 'blackjack',
@@ -394,7 +437,11 @@ function normalizeHomeContinue(value: unknown): HomeGameSummary {
         state,
         resource_id: opaqueID(
           record.resource_id,
-          state === 'waiting' ? 'bidq_' : 'bid_',
+          state === 'waiting'
+            ? typeof record.resource_id === 'string' && record.resource_id.startsWith('aiq_')
+              ? 'aiq_'
+              : 'bidq_'
+            : 'bid_',
           'bidding resource',
         ),
       };

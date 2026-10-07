@@ -1,5 +1,4 @@
 import { useTranslation } from 'react-i18next';
-import { Fold } from '@shared/components/ui/Fold';
 import { useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
@@ -119,7 +118,7 @@ export function LoanCard({
           <p className="loan-promo__slogan">
             {text('升！升舱的钱我来出！', 'Upgrade! I’ll cover your ticket!')}
           </p>
-          <Fold plain title={t('user.activities.presentation.rules')}>
+          <div className="loan-promo__rules">
             <p className="loan-promo__pitch">
               {text(
                 '大额游戏积分，随借随玩。即刻加入牌局，早日暴富不是梦！',
@@ -128,10 +127,10 @@ export function LoanCard({
             </p>
             <ul className="loan-promo__perks">
               <li>{text('游戏积分即刻到账', 'Game credits in an instant')}</li>
-              <li>{text('六大游戏随心畅玩', 'Six games to explore')}</li>
+              <li>{text('多款游戏随心畅玩', 'More games to explore')}</li>
               <li>{text('高光时刻等你登场', 'Your next big moment awaits')}</li>
             </ul>
-          </Fold>
+          </div>
         </div>
         <div className="loan-promo__offer">
           <div className="loan-promo__ticket-heading">

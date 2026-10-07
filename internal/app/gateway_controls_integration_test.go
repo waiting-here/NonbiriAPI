@@ -11,6 +11,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/gatewaypolicy"
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 )
 
 func TestGatewayHTTPPreservesModelControlsBeforeAccounting(t *testing.T) {
@@ -48,7 +49,7 @@ func TestGatewayHTTPPreservesModelControlsBeforeAccounting(t *testing.T) {
 		if status != 200 {
 			t.Fatalf("%s: %d %s", model, status, out)
 		}
-		for _, bad := range []string{
+		for index, bad := range []string{
 			strings.Replace(raw, `"max_completion_tokens":128000`, `"max_completion_tokens":128000,"max_tokens":64`, 1),
 			strings.Replace(raw, `"reasoning_effort":"max"`, `"reasoning_effort":"xhigh"`, 1),
 			strings.Replace(raw, `"store":false`, `"store":"false"`, 1),
@@ -57,6 +58,22 @@ func TestGatewayHTTPPreservesModelControlsBeforeAccounting(t *testing.T) {
 			status, out = f.post(t, "/v1/chat/completions", bad)
 			if status != 400 || !strings.Contains(string(out), "invalid_request") || strings.Contains(string(out), "PRIVATE_") {
 				t.Fatalf("bad admission: %d %s", status, out)
+			}
+
+			var diag string
+			if err := f.store.DB().QueryRow(`SELECT error_diag FROM request_logs ORDER BY id DESC LIMIT 1`).Scan(&diag); err != nil {
+				t.Fatal(err)
+			}
+			detail := requestattempt.DecodeDetail(diag)
+			if detail == nil || strings.Contains(diag, "PRIVATE_") {
+				t.Fatal("missing or unsafe model rejection detail", diag)
+			}
+			expectedFields := []string{"max_completion_tokens/max_tokens", "reasoning_effort", "store", "request"}
+			if detail.Field != expectedFields[index] {
+				t.Fatal("incorrect rejection field", detail)
+			}
+			if strings.Contains(bad, `"PRIVATE_UNKNOWN"`) && (detail.Field != "request" || detail.Reason != "unsupported request feature or unknown field") {
+				t.Fatal("unknown name was retained", detail)
 			}
 		}
 	}
@@ -116,6 +133,14 @@ func TestGatewayHTTPCacheAdmissionAndOnlineChanges(t *testing.T) {
 	status, out := f.post(t, "/v1/chat/completions", body("provider/self"))
 	if status != 400 || !strings.Contains(string(out), "cache_control") {
 		t.Fatalf("disabled cache mapping: %d %s", status, out)
+	}
+	var diag string
+	if err := f.store.DB().QueryRow(`SELECT error_diag FROM request_logs ORDER BY id DESC LIMIT 1`).Scan(&diag); err != nil {
+		t.Fatal(err)
+	}
+	detail := requestattempt.DecodeDetail(diag)
+	if detail == nil || detail.Field != "cache_control" || detail.Reason != "cache mapping is not enabled for this model" {
+		t.Fatal("missing cache rejection check", diag)
 	}
 	if calls.Load() != 6 {
 		t.Fatalf("rejected cache request dispatched: %d", calls.Load())

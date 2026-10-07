@@ -2,11 +2,14 @@ package lakenotes
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/game/host"
@@ -107,7 +110,7 @@ func key(r *http.Request) (string, error) {
 	}
 	return v[0], nil
 }
-func respond(w http.ResponseWriter, v any, e error) {
+func respond(w http.ResponseWriter, v any, e error, operation ...string) {
 	w.Header().Set("Cache-Control", "no-store")
 	if e == nil {
 		httperr.WriteJSON(w, http.StatusOK, v)
@@ -134,7 +137,61 @@ func respond(w http.ResponseWriter, v any, e error) {
 	case errors.Is(e, maintenance.ErrMaintenanceOn), errors.Is(e, resources.ErrMaintenance):
 		code, message = httperr.CodeMaintenance, "The site is under maintenance."
 	}
+	if code == httperr.CodeServiceUnavailable {
+		name := "other"
+		if len(operation) > 0 {
+			name = operation[0]
+		}
+		category := "internal"
+		attrs := []any{"operation", name}
+		var sqliteCode interface{ Code() int }
+		switch {
+		case errors.Is(e, ErrInvariant):
+			category = "stored_state"
+		case errors.Is(e, context.Canceled):
+			category = "cancelled"
+		case errors.Is(e, context.DeadlineExceeded):
+			category = "deadline"
+		case errors.As(e, &sqliteCode):
+			category = "sqlite"
+			attrs = append(attrs, "sqlite_base_code", sqliteCode.Code()&255, "sqlite_extended_code", sqliteCode.Code())
+		}
+		attrs = append(attrs, "category", category)
+		slog.Error("saved fishing request failed", attrs...)
+	}
 	httperr.WriteError(w, httperr.New(code, message))
+}
+
+func safeOperation(r *http.Request) string {
+	switch r.URL.Path {
+	case baseRoute + "/profile":
+		return "read_profile"
+	case baseRoute + "/rules":
+		return "read_rules"
+	case baseRoute + "/casts":
+		return "start_cast"
+	case baseRoute + "/actions":
+		return "profile_action"
+	case baseRoute + "/exchange":
+		return "exchange"
+	case baseRoute + "/exchange/quote":
+		return "exchange_quote"
+	case adminBaseRoute + "/periods":
+		return "read_periods"
+	}
+	if strings.HasPrefix(r.URL.Path, baseRoute+"/casts/") {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/checkpoint"):
+			return "checkpoint"
+		case strings.HasSuffix(r.URL.Path, "/pause"):
+			return "pause_cast"
+		case strings.HasSuffix(r.URL.Path, "/resume"):
+			return "resume_cast"
+		default:
+			return "read_cast"
+		}
+	}
+	return "other"
 }
 
 // RegisterRoutes uses the existing session, CSRF and account-lifecycle bridges.
@@ -145,11 +202,11 @@ func RegisterRoutes(users resources.UserRouteRegistrar, continuation resources.C
 	get := func(fn func(*http.Request, int64) (any, error)) resources.AuthorizedUserHandler {
 		return func(w http.ResponseWriter, r *http.Request, p resources.UserPrincipal) {
 			if !empty(r) {
-				respond(w, nil, ErrInvalid)
+				respond(w, nil, ErrInvalid, safeOperation(r))
 				return
 			}
 			v, e := fn(r, p.UserID)
-			respond(w, v, e)
+			respond(w, v, e, safeOperation(r))
 		}
 	}
 	for _, route := range []struct {
@@ -240,11 +297,11 @@ func RegisterRoutes(users resources.UserRouteRegistrar, continuation resources.C
 		handler := func(w http.ResponseWriter, r *http.Request, p resources.UserPrincipal) {
 			k, err := key(r)
 			if err != nil {
-				respond(w, nil, err)
+				respond(w, nil, err, safeOperation(r))
 				return
 			}
 			out, err := route.fn(r, p.UserID, k)
-			respond(w, out, err)
+			respond(w, out, err, safeOperation(r))
 		}
 		var err error
 		if route.path == "/casts/{id}/pause" {
@@ -261,11 +318,11 @@ func RegisterRoutes(users resources.UserRouteRegistrar, continuation resources.C
 	if e := users.RegisterUserRoute("POST", baseRoute+"/exchange/quote", func(w http.ResponseWriter, r *http.Request, p resources.UserPrincipal) {
 		var in QuoteInput
 		if e := decode(r, &in, "direction", "quantity"); e != nil {
-			respond(w, nil, e)
+			respond(w, nil, e, safeOperation(r))
 			return
 		}
 		out, e := s.Quote(r.Context(), p.UserID, in)
-		respond(w, out, e)
+		respond(w, out, e, safeOperation(r))
 	}); e != nil {
 		return e
 	}
@@ -274,7 +331,7 @@ func RegisterRoutes(users resources.UserRouteRegistrar, continuation resources.C
 		page, size := 1, 20
 		for name, values := range q {
 			if (name != "page" && name != "page_size") || len(values) != 1 {
-				respond(w, nil, ErrInvalid)
+				respond(w, nil, ErrInvalid, safeOperation(r))
 				return
 			}
 		}
@@ -282,26 +339,26 @@ func RegisterRoutes(users resources.UserRouteRegistrar, continuation resources.C
 		if v := q.Get("page"); v != "" {
 			page, e = strconv.Atoi(v)
 			if e != nil {
-				respond(w, nil, ErrInvalid)
+				respond(w, nil, ErrInvalid, safeOperation(r))
 				return
 			}
 		}
 		if v := q.Get("page_size"); v != "" {
 			size, e = strconv.Atoi(v)
 			if e != nil {
-				respond(w, nil, ErrInvalid)
+				respond(w, nil, ErrInvalid, safeOperation(r))
 				return
 			}
 		}
 		if r.Body != nil {
 			raw, e := io.ReadAll(io.LimitReader(r.Body, 1))
 			if e != nil || len(raw) > 0 {
-				respond(w, nil, ErrInvalid)
+				respond(w, nil, ErrInvalid, safeOperation(r))
 				return
 			}
 		}
 		out, e := s.Periods(r.Context(), page, size)
-		respond(w, out, e)
+		respond(w, out, e, safeOperation(r))
 	})); e != nil {
 		return e
 	}

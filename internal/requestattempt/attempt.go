@@ -19,6 +19,7 @@ type Fact struct {
 	ID, Method, Path, Stage, Reason, Model string
 	Status                                 int
 	Code                                   string
+	Detail                                 *RejectionDetail
 }
 
 type Recorder func(context.Context, int64, Fact) error
@@ -141,6 +142,7 @@ func Snapshot(ctx context.Context, id, model, stage, reason string, status int, 
 		a.mu.Lock()
 		defer a.mu.Unlock()
 		f.Method, f.Path = a.fact.Method, a.fact.Path
+		f.Detail = a.fact.Detail
 		if model == "" {
 			f.Model = a.fact.Model
 		}

@@ -80,6 +80,9 @@ const GAME_PATHS: Record<HomeGameSummary['route_id'], string> = {
   'game-bidding': '/games/bidding',
   'game-blackjack': '/games/blackjack',
   'game-likes': '/games/likes',
+  'game-gwent': '/games/gwent',
+  'game-lake-notes': '/games/lake-notes',
+  'game-steady-catch': '/games/steady-catch',
 };
 
 const GAME_LABELS = {
@@ -89,6 +92,9 @@ const GAME_LABELS = {
   'game-bidding': 'home.gameBidding',
   'game-blackjack': 'home.gameBlackjack',
   'game-likes': 'home.gameLikes',
+  'game-gwent': 'home.gameGwent',
+  'game-lake-notes': 'home.gameLakeNotes',
+  'game-steady-catch': 'home.gameSteadyCatch',
 } as const;
 
 function isEnabledCheckin(

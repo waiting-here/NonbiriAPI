@@ -34,9 +34,11 @@ func TestEveryClosedLedgerKindFitsAuditChannelsForEveryAsset(t *testing.T) {
 	for _, raw := range strings.Split(kinds[1], ",") {
 		kind := ledger.Kind(strings.Trim(raw, "'"))
 		seen := map[string]bool{}
-		for _, source := range []string{"bid_example", "lik_example", "future_example"} {
+		for _, prefix := range []string{"bid_", "lik_", "gwt_", "future_"} {
+			source := prefix + strings.Repeat("A", 22)
 			classification := ledger.ClassifyForAudit(kind, source)
-			wantKnown := !strings.HasPrefix(string(kind), "duel_") || source != "future_example"
+			usesDuelSource := strings.HasPrefix(string(kind), "duel_") || kind == ledger.KindAITicket || kind == ledger.KindAITerminal
+			wantKnown := !usesDuelSource || prefix != "future_"
 			if classification.Known != wantKnown {
 				t.Fatal("closed kind classification coverage changed", kind, source, classification)
 			}

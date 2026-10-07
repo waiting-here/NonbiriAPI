@@ -1,0 +1,27 @@
+.rules-guide {
+  grid-column: 1 / -1;
+  min-width: 0;
+  text-align: left;
+}
+.rules-guide section,
+.rules-guide details {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border, #283244);
+}
+.rules-guide h3,
+.rules-guide summary {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text, #e9edf5);
+}
+.rules-guide summary {
+  cursor: pointer;
+}
+.rules-guide p {
+  margin-top: 8px;
+  color: var(--soft, #b6bfd0);
+  font-size: 13px;
+  line-height: 1.8;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}

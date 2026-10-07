@@ -344,3 +344,89 @@ for (const role of ['admin', 'steward'] as const) {
     expect(drawer.querySelector('example')).toBeNull();
   });
 }
+
+describe('preflight rejection details', () => {
+  it.each(['admin', 'steward'] as const)(
+    'shows the recorded check for %s and keeps markup as text',
+    async (role) => {
+      const row = {
+        ...stewardRow(null),
+        phase: 'pre_handler',
+        rejection_stage: 'preflight',
+        rejection_reason: 'invalid_request',
+        request_method: 'POST',
+        request_path: '/v1/chat/completions',
+        caller_result_class: 'failed',
+        caller_status: 400,
+        caller_error_code: 'invalid_request',
+        attempt_count: '0',
+        usage: { ...usage, output_tokens: '0', total_tokens: '0' },
+        rejection_detail: { field: 'stream', reason: '<img src=x onerror=alert(1)>' },
+      };
+      installFixtures(role, row);
+      const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role={role} />, {
+        station: role === 'admin' ? 'admin' : 'user',
+        role: role === 'admin' ? 'admin' : 'level6',
+      });
+      await view.user.click(await screen.findByRole('button', { name: 'Details' }));
+      const drawer = await screen.findByRole('region', { name: /Log details/ });
+      expect(within(drawer).getByText('Rejection details')).toBeInTheDocument();
+      expect(within(drawer).getByText('stream: <img src=x onerror=alert(1)>')).toBeInTheDocument();
+      expect(drawer.querySelector('img')).toBeNull();
+      view.unmount();
+    },
+  );
+
+  it.each(['admin', 'steward'] as const)(
+    'shows an honest fallback for older %s rows',
+    async (role) => {
+      const row = {
+        ...stewardRow(null),
+        phase: 'pre_handler',
+        rejection_stage: 'preflight',
+        rejection_reason: 'invalid_request',
+        request_method: 'POST',
+        request_path: '/v1/chat/completions',
+        caller_result_class: 'failed',
+        caller_status: 400,
+        caller_error_code: 'invalid_request',
+        attempt_count: '0',
+        usage: { ...usage, output_tokens: '0', total_tokens: '0' },
+      };
+      installFixtures(role, row);
+      const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role={role} />, {
+        station: role === 'admin' ? 'admin' : 'user',
+        role: role === 'admin' ? 'admin' : 'level6',
+      });
+      await view.user.click(await screen.findByRole('button', { name: 'Details' }));
+      expect(await screen.findByText('Detailed reason was not recorded')).toBeInTheDocument();
+      view.unmount();
+    },
+  );
+});
+
+it('shows the recorded validation reason in Chinese', async () => {
+  const row = {
+    ...stewardRow(null),
+    phase: 'pre_handler',
+    rejection_stage: 'preflight',
+    rejection_reason: 'invalid_request',
+    request_method: 'POST',
+    request_path: '/v1/chat/completions',
+    caller_result_class: 'failed',
+    caller_status: 400,
+    caller_error_code: 'invalid_request',
+    attempt_count: '0',
+    usage: { ...usage, output_tokens: '0', total_tokens: '0' },
+    rejection_detail: { field: 'stream', reason: 'expected a boolean or null' },
+  };
+  installFixtures('steward', row);
+  const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role="steward" />, {
+    station: 'user',
+    role: 'level6',
+    locale: 'zh',
+  });
+  await view.user.click(await screen.findByRole('button', { name: '详情' }));
+  expect(await screen.findByText('stream: 需要布尔值或 null')).toBeInTheDocument();
+  view.unmount();
+});

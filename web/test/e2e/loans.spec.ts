@@ -63,20 +63,18 @@ for (const scenario of [
       const loan = (await page.locator('.loan-card').boundingBox())!;
       const welfare = (await page.locator('.economy-welfare-card').boundingBox())!;
       const thursday = (await page.locator('.economy-thursday-card').boundingBox())!;
+      const grid = (await page.locator('.economy-activities-grid').boundingBox())!;
+      expect(Math.abs(loan.x - grid.x)).toBeLessThan(2);
+      expect(Math.abs(loan.width - grid.width)).toBeLessThan(2);
+      expect(welfare.y).toBeGreaterThanOrEqual(loan.y + loan.height);
       if (width < 768) {
-        expect(welfare.y).toBeGreaterThanOrEqual(loan.y + loan.height);
         expect(thursday.y).toBeGreaterThanOrEqual(welfare.y + welfare.height);
       } else {
-        expect(Math.abs(welfare.y - loan.y)).toBeLessThan(2);
-        expect(welfare.x).toBeGreaterThanOrEqual(loan.x + loan.width);
-        if (thursday.y < welfare.y + welfare.height) {
-          expect(Math.abs(thursday.y - loan.y)).toBeLessThan(2);
-          expect(thursday.x).toBeGreaterThanOrEqual(welfare.x + welfare.width);
-        } else
-          expect(thursday.y).toBeGreaterThanOrEqual(
-            Math.max(loan.y + loan.height, welfare.y + welfare.height),
-          );
+        expect(Math.abs(thursday.y - welfare.y)).toBeLessThan(2);
+        expect(thursday.x).toBeGreaterThanOrEqual(welfare.x + welfare.width);
       }
+      await expect(page.locator('.loan-promo__rules')).toBeVisible();
+      await expect(page.locator('.loan-card details')).toHaveCount(0);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,
       );

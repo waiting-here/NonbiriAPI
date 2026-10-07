@@ -16,6 +16,13 @@ best score in the window, and break ties by the earlier result. They follow the
 shared public-profile preference. First-clear eligibility survives ordinary history
 cleanup and follows the account-continuity policy.
 
+The interface preserves the supplied game's canvas artwork, animation, sound,
+catalog and controls. The catalog contains 134 selected entries and their source
+notes. The personal best panel uses the account's last 30 days of results.
+Opening the catalog or instructions pauses play; closing it resumes after the
+pause is saved. Restarting an unfinished game asks for confirmation, abandons the
+old game without a refund, and charges the current ticket for the new game.
+
 ## Runtime and API
 
 The browser renders immediately from the same deterministic rules used by Go.

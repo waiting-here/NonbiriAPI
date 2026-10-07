@@ -1,5 +1,4 @@
 import { useState, type ReactNode } from 'react';
-import { useLoanText } from '@shared/components/loanCopy';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { ErrorState, LoadingState, PageHeader } from '@shared/components/States';
@@ -52,7 +51,6 @@ function ActivitySlot({
 
 function ActivitiesContent() {
   const { t } = useTranslation();
-  const loanText = useLoanText();
   const session = useUserSession();
   const activities = useActivities();
   const accountID = session.data?.user.id;
@@ -89,17 +87,12 @@ function ActivitiesContent() {
           />
           <ActivitiesMasterNotice snapshot={activities.data} />
           <section className="economy-activities-grid" aria-label={t('user.activities.cardsLabel')}>
-            <ActivitySlot
-              title={loanText('赛博网贷', 'Cyber loan')}
-              available={activities.data.master.available}
-            >
-              <LoanCard
-                key={`loan:${accountID}`}
-                account={accountID ?? ''}
-                loan={activities.data.loan}
-                masterAvailable={activities.data.master.available}
-              />
-            </ActivitySlot>
+            <LoanCard
+              key={`loan:${accountID}`}
+              account={accountID ?? ''}
+              loan={activities.data.loan}
+              masterAvailable={activities.data.master.available}
+            />
             <ActivitySlot
               title={t('user.activities.welfare.title')}
               available={activities.data.master.available}

@@ -1,4 +1,5 @@
 import { GameHeaderTool } from '../common/GameHeader';
+import { GameBackLink } from '../common/GameBackLink';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { Note } from '@shared/components/ui/Note';
@@ -328,9 +329,7 @@ export function LikesGame(context: DuelLobbyContext) {
   return (
     <div className="likes-game">
       <header className="likes-heading">
-        <Link className="game-back-link" to="/games">
-          {text('blackjack.gameCenter')}
-        </Link>
+        <GameBackLink />
         <div>
           <h1>{text('likes.turnBasedBattleMinigameTest')}</h1>
           <BattleAtmosphere

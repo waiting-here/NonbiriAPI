@@ -42,6 +42,15 @@ func (s *Service) aiConfiguration(ctx context.Context, tx *sql.Tx, id string) (A
 	terms.FirstReward = game.FormatAmount(reward)
 	snapshot.Terms = Terms{Economy: AIEconomy, AI: &terms, Game: s.rules.ID(), Mode: "ai", Ticket: game.FormatAmount(ticket), RulesVersion: 1, ContentHash: catalog.Hash}
 	snapshot.Policy = json.RawMessage(raw)
+	if provider, ok := s.aiAdapter.(interface {
+		BotLoadout(json.RawMessage) (json.RawMessage, error)
+	}); ok {
+		terms.BotLoadout, err = provider.BotLoadout(snapshot.Policy)
+		if err != nil {
+			return snapshot, false, err
+		}
+		snapshot.Terms.AI = &terms
+	}
 	if terms.SourceID != s.aiAdapter.Source().ID() || terms.PolicySchema != s.aiAdapter.PolicySchema() || terms.RulesKey != s.aiAdapter.RulesKey() {
 		return snapshot, false, ErrInvariant
 	}
@@ -49,7 +58,17 @@ func (s *Service) aiConfiguration(ctx context.Context, tx *sql.Tx, id string) (A
 }
 
 func (s *Service) enqueueAI(ctx context.Context, in EnqueueInput) (MutationResult, error) {
-	if s.aiAdapter == nil || !db.ValidateOpaqueID(in.BotID, "bot_") || len(in.ExpectedTermsHash) != 64 || len(in.Loadout) != 0 {
+	if s.aiAdapter == nil || !db.ValidateOpaqueID(in.BotID, "bot_") || len(in.ExpectedTermsHash) != 64 {
+		return MutationResult{}, ErrInvalidRequest
+	}
+	var loadout json.RawMessage
+	if _, ok := s.rules.(SequentialRules); ok {
+		var err error
+		loadout, err = s.rules.Loadout("ai", in.Loadout)
+		if err != nil {
+			return MutationResult{}, err
+		}
+	} else if len(in.Loadout) != 0 {
 		return MutationResult{}, ErrInvalidRequest
 	}
 	tx, now, err := s.begin(ctx)
@@ -60,7 +79,7 @@ func (s *Service) enqueueAI(ctx context.Context, in EnqueueInput) (MutationResul
 	if err := s.authorize(ctx, tx, in.Identity); err != nil {
 		return MutationResult{}, err
 	}
-	body := enqueueBody{Mode: "ai", BotID: in.BotID, ExpectedTermsHash: in.ExpectedTermsHash}
+	body := enqueueBody{Mode: "ai", BotID: in.BotID, ExpectedTermsHash: in.ExpectedTermsHash, Loadout: loadout}
 	route := "/api/games/" + s.rules.ID() + "/queue"
 	if replay, err := s.probeReplay(ctx, tx, in.Identity, in.IdempotencyKey, "POST", route, "", body, now); err != nil {
 		return MutationResult{}, err
@@ -127,10 +146,11 @@ func (s *Service) enqueueAI(ctx context.Context, in EnqueueInput) (MutationResul
 		return MutationResult{}, ErrUnavailable
 	}
 	defer start.Release()
-	id, err := s.generate("aiq_")
+	id, err := s.generate(s.aiQueuePrefix)
 	if err != nil {
 		return MutationResult{}, err
 	}
+	snapshot.HumanLoadout = loadout
 	raw, err := Encode(snapshot)
 	if err != nil {
 		return MutationResult{}, err
@@ -183,7 +203,7 @@ func (s *Service) releaseAIQueue(ctx context.Context, tx *sql.Tx, id, reason str
 	return err
 }
 func (s *Service) cancelAIQueue(ctx context.Context, in CancelInput) (MutationResult, error) {
-	if s.aiAdapter == nil || !db.ValidateOpaqueID(in.QueueID, "aiq_") || in.ExpectedRevision != "1" {
+	if s.aiAdapter == nil || !db.ValidateOpaqueID(in.QueueID, s.aiQueuePrefix) || in.ExpectedRevision != "1" {
 		return MutationResult{}, ErrInvalidRequest
 	}
 	tx, now, err := s.begin(ctx)
@@ -357,7 +377,9 @@ func (s *Service) startAI(ctx context.Context, tx *sql.Tx, q aiQueueRecord, now 
 	if !ok {
 		return ErrInvariant
 	}
-	state, err := creator.CreateWithRandom("ai", [2]json.RawMessage{}, initialStream)
+	var loadouts [2]json.RawMessage
+	loadouts[human], loadouts[bot] = snapshot.HumanLoadout, terms.AI.BotLoadout
+	state, err := creator.CreateWithRandom("ai", loadouts, initialStream)
 	if err != nil {
 		return err
 	}

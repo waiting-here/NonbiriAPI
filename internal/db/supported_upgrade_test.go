@@ -25,7 +25,13 @@ var preAIPlayersFixture string
 //go:embed testdata/pre_management_and_games.sql
 var preManagementAndGamesFixture string
 
-func aiPlayersStorageSchema() string { return generationTwoSchema + preManagementAndGamesFixture }
+//go:embed testdata/pre_gwent_ai.sql
+var preGwentAIFixture string
+
+func managementAndGamesStorageSchema() string { return generationTwoSchema + preGwentAIFixture }
+func aiPlayersStorageSchema() string {
+	return managementAndGamesStorageSchema() + preManagementAndGamesFixture
+}
 
 func baselineStorageSchema() string {
 	return aiPlayersStorageSchema() + preAIPlayersFixture + `
@@ -77,6 +83,7 @@ func supportedSourceFixture(t *testing.T) *sql.DB {
 
 func TestSupportedReleasedSchemaIdentity(t *testing.T) {
 	for _, source := range []struct{ schema, manifest string }{
+		{managementAndGamesStorageSchema(), managementAndGamesManifestHash},
 		{aiPlayersStorageSchema(), aiPlayersManifestHash},
 		{preLedgerRetentionSchema(), preLedgerRetentionManifestHash},
 		{preQueryIndexesSchema(), preQueryIndexesManifestHash},

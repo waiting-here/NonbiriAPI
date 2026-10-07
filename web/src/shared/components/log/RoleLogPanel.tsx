@@ -1,3 +1,4 @@
+import { rejectionDescriptionKeys } from './rejectionDescriptions';
 import {
   useCallback,
   useEffect,
@@ -89,6 +90,7 @@ function ShortLogTime({ at }: { at: number }) {
 
 function UsageMismatchBadge({ visible }: { visible: boolean }) {
   const { t } = useTranslation();
+
   if (!visible) return null;
   const label = t('common.operations.logs.usageTotalMismatch');
   const explanation = t('common.operations.logs.usageTotalMismatchExplanation');
@@ -328,6 +330,14 @@ function ScopedRoleLogPanel({
 }) {
   const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
+  const rejectionDescription = (reason: string) => {
+    const counts = /^content has (\d+) characters; minimum is (\d+)$/.exec(reason);
+    return counts
+      ? t('logs.rejectionContentLength', { actual: counts[1], minimum: counts[2] })
+      : typeof rejectionDescriptionKeys[reason] === 'string'
+        ? t(rejectionDescriptionKeys[reason])
+        : reason;
+  };
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchState();
   const station = role === 'admin' ? 'admin' : role === 'steward' ? 'steward' : 'user';
@@ -772,6 +782,16 @@ function ScopedRoleLogPanel({
                         ),
                 },
                 { label: t('logs.rejectionReason'), value: detailRequest.rejection_reason },
+                ...(detailRequest.role !== 'user'
+                  ? [
+                      {
+                        label: t('logs.rejectionDetail'),
+                        value: detailRequest.rejection_detail
+                          ? `${detailRequest.rejection_detail.field}: ${rejectionDescription(detailRequest.rejection_detail.reason)}`
+                          : t('logs.rejectionDetailMissing'),
+                      },
+                    ]
+                  : []),
                 {
                   label: t('logs.requestRoute'),
                   value: `${detailRequest.request_method} ${detailRequest.request_path}`,

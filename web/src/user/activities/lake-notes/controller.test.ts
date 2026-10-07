@@ -75,6 +75,104 @@ function transport(result: CastResult): CastTransport {
   };
 }
 describe('Lake cast control', () => {
+  it('persists the unmount pause while suppressing late saves and adoption', async () => {
+    const result = fixture(),
+      saved = vi.fn(),
+      notice = vi.fn(),
+      server = transport(result);
+    let confirmed = result;
+    let finish!: (value: CastResult) => void;
+    server.checkpoint = vi.fn(() =>
+      new Promise<CastResult>((resolve) => {
+        finish = resolve;
+      }).then((value) => {
+        confirmed = value;
+        return value;
+      }),
+    );
+    server.pause = vi.fn(async () => {
+      confirmed = structuredClone(confirmed);
+      confirmed.cast.paused = confirmed.cast.readonly = confirmed.cast.state.paused = true;
+      confirmed.cast.state.held = false;
+      return confirmed;
+    });
+    const controller = new LakeController(server, saved);
+    controller.subscribe(notice);
+    controller.adopt(result, true);
+    for (let i = 0; i < 19; i++) controller.tick();
+    const pending = controller.flush();
+    notice.mockClear();
+    controller.dispose();
+    finish(replay(result, vi.mocked(server.checkpoint).mock.calls[0][1]));
+    await pending;
+    for (let i = 0; i < 4; i++) await Promise.resolve();
+    expect(server.pause).toHaveBeenCalledOnce();
+    expect(controller.snapshot().result?.cast.ack_tick).toBe(19);
+    expect(controller.snapshot().status).toBe('paused');
+    expect(saved).not.toHaveBeenCalled();
+    expect(notice).not.toHaveBeenCalled();
+    controller.adopt(result, true);
+    controller.tick();
+    expect(controller.snapshot().status).toBe('paused');
+    expect(server.checkpoint).toHaveBeenCalledOnce();
+  });
+  it('does not adopt or publish a read that completes after the page leaves', async () => {
+    const result = fixture(),
+      saved = vi.fn(),
+      notice = vi.fn(),
+      server = transport(result);
+    let finish!: (value: CastResult) => void;
+    server.read = vi.fn(
+      () =>
+        new Promise<CastResult>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const controller = new LakeController(server, saved);
+    controller.adopt(result);
+    controller.subscribe(notice);
+    const pending = controller.readCurrent();
+    controller.dispose();
+    finish(fixture(19));
+    await pending;
+    expect(controller.snapshot().result).toEqual(result);
+    expect(saved).not.toHaveBeenCalled();
+    expect(notice).not.toHaveBeenCalled();
+    expect(server.pause).not.toHaveBeenCalled();
+  });
+
+  it('confirms a terminal tail accumulated while an earlier checkpoint was in flight', async () => {
+    const result = fixture(240);
+    result.cast.state.snapshot.hadCaught = true;
+    result.cast.state.progress = 0.31;
+    result.cast.state.barY = result.cast.state.snapshot.barHeight / 2;
+    result.cast.state.barVelocity = 0;
+    let release!: () => void;
+    const heldResponse = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let confirmed = result;
+    const server = transport(result);
+    server.checkpoint = vi.fn(async (_id, input) => {
+      if (vi.mocked(server.checkpoint).mock.calls.length === 1) await heldResponse;
+      confirmed = replay(confirmed, input);
+      return confirmed;
+    });
+    const controller = new LakeController(server);
+    controller.adopt(result, true);
+    controller.setHeld(true);
+    for (let tick = 0; tick < 480; tick++) controller.tick();
+    expect(server.checkpoint).toHaveBeenCalledTimes(1);
+    expect(controller.projection()?.cast.phase).toBe('failed');
+    expect(controller.queuedTicks()).toBeGreaterThan(120);
+    release();
+    await controller.flush();
+    await Promise.resolve();
+    expect(server.checkpoint).toHaveBeenCalledTimes(2);
+    expect(controller.snapshot().status).toBe('terminal');
+    expect(controller.queuedTicks()).toBe(0);
+  });
+
   it('sends exact contiguous held edges and rebases to accepted replay', async () => {
     const result = fixture(),
       server = transport(result),

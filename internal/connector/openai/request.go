@@ -149,7 +149,7 @@ func (*ChatRequest) LogValue() slog.Value {
 // boundary while mixed routing may select a connector that represents null.
 func DecodeChatRequest(body io.Reader, limit int64) (*ChatRequest, error) {
 	if body == nil {
-		return nil, ErrInvalidRequest
+		return nil, invalidField("body", "expected one valid UTF-8 JSON object")
 	}
 	limit = requestbody.DecoderLimit(limit)
 	data, err := readBounded(body, limit)
@@ -157,14 +157,14 @@ func DecodeChatRequest(body io.Reader, limit int64) (*ChatRequest, error) {
 		if errors.Is(err, ErrPayloadTooLarge) {
 			return nil, err
 		}
-		return nil, ErrInvalidRequest
+		return nil, invalidField("body", "expected one valid UTF-8 JSON object")
 	}
 	defer clear(data)
 
 	fields, err := decodeJSONObject(data, maxTopLevelFields)
 	if err != nil {
 		clearFields(fields)
-		return nil, ErrInvalidRequest
+		return nil, err
 	}
 	request := &ChatRequest{fields: fields, bodyLimit: limit}
 	modelSeen := false
@@ -175,7 +175,7 @@ func DecodeChatRequest(body io.Reader, limit int64) (*ChatRequest, error) {
 			modelSeen = true
 			if err := json.Unmarshal(field.value, &request.Model); err != nil || !validOpaqueText(request.Model, MaxPlatformModelRunes, true) {
 				request.Clear()
-				return nil, ErrInvalidRequest
+				return nil, invalidField("model", "expected a nonempty model name of at most 133 characters without control characters")
 			}
 		case "stream":
 			streamSeen = true
@@ -186,17 +186,17 @@ func DecodeChatRequest(body io.Reader, limit int64) (*ChatRequest, error) {
 			}
 			if !bytes.Equal(trimmed, []byte("true")) && !bytes.Equal(trimmed, []byte("false")) {
 				request.Clear()
-				return nil, ErrInvalidRequest
+				return nil, invalidField("stream", "expected a boolean or null")
 			}
 			if err := json.Unmarshal(trimmed, &request.Stream); err != nil {
 				request.Clear()
-				return nil, ErrInvalidRequest
+				return nil, invalidField("stream", "expected a boolean or null")
 			}
 		}
 	}
 	if !modelSeen {
 		request.Clear()
-		return nil, ErrInvalidRequest
+		return nil, invalidField("model", "required field is missing")
 	}
 	if !streamSeen {
 		request.Stream = false
@@ -208,7 +208,7 @@ func DecodeChatRequest(body io.Reader, limit int64) (*ChatRequest, error) {
 				clear(merged)
 				if !ok {
 					request.Clear()
-					return nil, ErrInvalidRequest
+					return nil, invalidField("stream_options", "expected an object or null")
 				}
 				break
 			}
@@ -387,13 +387,13 @@ func (r *ChatRequest) CharityTextRuneCount() (int, error) {
 	}
 	var messages []json.RawMessage
 	if err := json.Unmarshal(raw, &messages); err != nil {
-		return 0, ErrInvalidRequest
+		return 0, invalidField("messages", "expected an array of message objects")
 	}
 	count := 0
 	for _, messageRaw := range messages {
 		var message map[string]json.RawMessage
 		if err := json.Unmarshal(messageRaw, &message); err != nil {
-			return 0, ErrInvalidRequest
+			return 0, invalidField("messages[]", "expected a message object")
 		}
 		content, ok := message["content"]
 		if !ok {
@@ -414,7 +414,7 @@ func (r *ChatRequest) CharityTextRuneCount() (int, error) {
 				Text string `json:"text"`
 			}
 			if err := json.Unmarshal(partRaw, &part); err != nil {
-				return 0, ErrInvalidRequest
+				return 0, invalidField("messages[].content[]", "content block type and text must be strings")
 			}
 			if part.Type == "text" {
 				count += utf8.RuneCountInString(part.Text)
@@ -550,16 +550,16 @@ func readBounded(reader io.Reader, limit int64) ([]byte, error) {
 // copied by encoding/json and remain valid after the input buffer is cleared.
 func decodeJSONObject(data []byte, maxFields int) ([]jsonField, error) {
 	if len(data) == 0 || !utf8.Valid(data) || maxFields < 1 {
-		return nil, ErrInvalidRequest
+		return nil, invalidField("body", "expected one valid UTF-8 JSON object")
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	first, err := decoder.Token()
 	if err != nil {
-		return nil, err
+		return nil, invalidField("body", "expected one valid UTF-8 JSON object")
 	}
 	delim, ok := first.(json.Delim)
 	if !ok || delim != '{' {
-		return nil, ErrInvalidRequest
+		return nil, invalidField("body", "expected one valid UTF-8 JSON object")
 	}
 
 	fields := make([]jsonField, 0, min(maxFields, 16))
@@ -567,44 +567,44 @@ func decodeJSONObject(data []byte, maxFields int) ([]jsonField, error) {
 	for decoder.More() {
 		if len(fields) == maxFields {
 			clearFields(fields)
-			return nil, ErrInvalidRequest
+			return nil, invalidField("body", "too many top-level fields")
 		}
 		token, err := decoder.Token()
 		if err != nil {
 			clearFields(fields)
-			return nil, err
+			return nil, invalidField("body", "expected one valid UTF-8 JSON object")
 		}
 		name, ok := token.(string)
 		if !ok || !validFieldName(name) {
 			clearFields(fields)
-			return nil, ErrInvalidRequest
+			return nil, invalidField("body", "invalid top-level field name")
 		}
 		if _, duplicate := seen[name]; duplicate {
 			clearFields(fields)
-			return nil, ErrInvalidRequest
+			return nil, invalidField("body", "duplicate top-level field")
 		}
 		seen[name] = struct{}{}
 		var value json.RawMessage
 		if err := decoder.Decode(&value); err != nil {
 			clear(value)
 			clearFields(fields)
-			return nil, err
+			return nil, invalidField("body", "expected one valid UTF-8 JSON object")
 		}
 		fields = append(fields, jsonField{name: name, value: value})
 	}
 	last, err := decoder.Token()
 	if err != nil {
 		clearFields(fields)
-		return nil, err
+		return nil, invalidField("body", "expected one valid UTF-8 JSON object")
 	}
 	if delim, ok := last.(json.Delim); !ok || delim != '}' {
 		clearFields(fields)
-		return nil, ErrInvalidRequest
+		return nil, invalidField("body", "expected one valid UTF-8 JSON object")
 	}
 	var extra any
 	if err := decoder.Decode(&extra); err != io.EOF {
 		clearFields(fields)
-		return nil, ErrInvalidRequest
+		return nil, invalidField("body", "trailing JSON values are not allowed")
 	}
 	return fields, nil
 }
