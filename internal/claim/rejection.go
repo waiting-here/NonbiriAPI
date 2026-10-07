@@ -86,7 +86,7 @@ VALUES(?,?,?,?,'terminal',1,'failed',?,?,'none',0,'user',?,?,?,?,?,?,?)`, fact.I
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO request_logs
 (logical_request_id,user_id,model,route_kind,caller_result_class,caller_status,caller_error_code,status_code,error_code,started_at,completed_at,rejection_stage,rejection_reason,request_method,request_path,error_diag)
-VALUES(?,?,?,?,'failed',?,?,?,?,?,?,?,?,?,?,?)`, fact.ID, user, model, route, fact.Status, fact.Code, fact.Status, fact.Code, at, at, fact.Stage, fact.Reason, fact.Method, fact.Path, rejectionDetailValue(fact.Detail)); err != nil {
+VALUES(?,?,?,?,'failed',?,?,?,?,?,?,?,?,?,?,?)`, fact.ID, user, model, route, fact.Status, fact.Code, fact.Status, fact.Code, at, at, fact.Stage, fact.Reason, fact.Method, fact.Path, requestattempt.EncodeDetail(fact.Detail)); err != nil {
 		return err
 	}
 	if s.observations != nil {
@@ -117,12 +117,4 @@ func (s *Service) RecordCharityRejectionTx(ctx context.Context, tx *sql.Tx, user
 	}
 	_, err := tx.ExecContext(ctx, `UPDATE request_logs SET error_diag=? WHERE logical_request_id=? AND user_id=? AND rejection_reason='content_too_short'`, fmt.Sprintf("content has %d characters; minimum is %d", actual, minimum), requestID, userID)
 	return err
-}
-
-func rejectionDetailValue(detail *requestattempt.RejectionDetail) any {
-	value := requestattempt.EncodeDetail(detail)
-	if value == "" {
-		return nil
-	}
-	return value
 }
