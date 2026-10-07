@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../../test/unit/support';
 import { ApiError } from '@shared/query/http';
 import { HomeDashboard } from '../../pages/HomePage';
+import { getHomeGameSummary } from './api';
 import { AccountLanguageForm, AccountLifecyclePanel, AccountWorkspace } from './AccountWorkspace';
 import { coreKeys } from './queries';
 import { normalizeUserEnvelope } from './normalizers';
@@ -107,6 +108,47 @@ async function renderHomeDashboard(
 }
 
 describe('home independent capability states', () => {
+  it('renders all new games and AI queues from a successful mixed HTTP summary', async () => {
+    const envelope = canonicalEnvelope();
+    const entries = [
+      ['linklink', 'game-linklink', 'll_', 'active', '/games/linklink'],
+      ['bidding', 'game-bidding', 'aiq_', 'waiting', '/games/bidding'],
+      ['gwent', 'game-gwent', 'gaq_', 'waiting', '/games/gwent'],
+      ['lakenotes', 'game-lake-notes', 'lnc_', 'active', '/games/lake-notes'],
+      ['steadycatch', 'game-steady-catch', 'sc_', 'active', '/games/steady-catch'],
+    ];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input) =>
+        jsonResponse(
+          String(input) === '/api/home/game-summary'
+            ? {
+                continue: entries.map(([game, route_id, prefix, state]) => ({
+                  game,
+                  route_id,
+                  state,
+                  resource_id: prefix + 'A'.repeat(22),
+                })),
+                pending_results: [],
+              }
+            : envelope,
+        ),
+      ),
+    );
+    await renderHomeDashboard(envelope.user, {
+      checkin: { state: 'unavailable' },
+      gameCheckin: { state: 'unavailable' },
+      games: { state: 'available', load: getHomeGameSummary },
+      announcements: { state: 'available', load: async () => homeAnnouncementPage() },
+    });
+    await waitFor(() => {
+      for (const [, , , , path] of entries)
+        expect(
+          document.querySelector(`.core-choice-grid a.core-choice[href="${path}"]`),
+        ).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/invalid home game continuation/i)).not.toBeInTheDocument();
+  });
   it('checks in each wallet independently and refreshes the shared balances', async () => {
     const envelope = canonicalEnvelope();
     envelope.user.balance = '0';

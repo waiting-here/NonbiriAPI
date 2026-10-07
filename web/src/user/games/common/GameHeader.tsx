@@ -1,4 +1,5 @@
 import { useDuelText } from './duel/copy';
+import { GameBackLink } from './GameBackLink';
 import { OnboardingCard } from './OnboardingCard';
 import { GameWallets } from './GameWallets';
 import type { GamesSnapshot } from './types';
@@ -28,11 +29,7 @@ export function GameHeader({
   return (
     <>
       <PageHeader
-        back={
-          <Link className="game-back-link" to="/games">
-            {text('common.back')}
-          </Link>
-        }
+        back={<GameBackLink />}
         title={text(`${game}.eyebrow`)}
         actions={
           <>

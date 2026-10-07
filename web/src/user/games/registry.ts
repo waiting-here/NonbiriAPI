@@ -1,17 +1,26 @@
 import { createElement, lazy, Suspense, type ComponentType } from 'react';
+import { GameBackLink } from './common/GameBackLink';
 import { LoadingState } from '@shared/components/States';
 import { BiddingPage, LikesPage, GwentPage } from './common/duel/DuelPage';
+function GameLoading() {
+  return createElement(
+    'main',
+    { className: 'game-page' },
+    createElement(GameBackLink),
+    createElement(LoadingState),
+  );
+}
 const Catch = lazy(async () => ({
   default: (await import('./steady-catch/SteadyCatchGame')).SteadyCatchGame,
 }));
 function CatchPage() {
-  return createElement(Suspense, { fallback: createElement(LoadingState) }, createElement(Catch));
+  return createElement(Suspense, { fallback: createElement(GameLoading) }, createElement(Catch));
 }
 const Lake = lazy(async () => ({
   default: (await import('../activities/lake-notes/LakeNotesPage')).LakeNotesPage,
 }));
 function LakePage() {
-  return createElement(Suspense, { fallback: createElement(LoadingState) }, createElement(Lake));
+  return createElement(Suspense, { fallback: createElement(GameLoading) }, createElement(Lake));
 }
 const Fishing = lazy(async () => ({
   default: (await import('./fishing/FishingGame')).FishingGame,
@@ -24,22 +33,18 @@ const Blackjack = lazy(async () => ({
   default: (await import('./blackjack/BlackjackGame')).BlackjackGame,
 }));
 function FishingPage() {
-  return createElement(Suspense, { fallback: createElement(LoadingState) }, createElement(Fishing));
+  return createElement(Suspense, { fallback: createElement(GameLoading) }, createElement(Fishing));
 }
 function LinkLinkPage() {
-  return createElement(
-    Suspense,
-    { fallback: createElement(LoadingState) },
-    createElement(LinkLink),
-  );
+  return createElement(Suspense, { fallback: createElement(GameLoading) }, createElement(LinkLink));
 }
 function RPSPage() {
-  return createElement(Suspense, { fallback: createElement(LoadingState) }, createElement(RPS));
+  return createElement(Suspense, { fallback: createElement(GameLoading) }, createElement(RPS));
 }
 function BlackjackPage() {
   return createElement(
     Suspense,
-    { fallback: createElement(LoadingState) },
+    { fallback: createElement(GameLoading) },
     createElement(Blackjack),
   );
 }

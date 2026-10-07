@@ -1169,7 +1169,8 @@
             "seconds": "{{seconds}} 秒",
             "new": "开始另一局"
           },
-          "empty": "没有进行中的棋盘或近 30 天结果摘要。"
+          "empty": "没有进行中的棋盘或近 30 天结果摘要。",
+          "noRegularReward": "没有逐局积分奖励。普通完成不发放积分；符合条件的一次性新人任务奖励仍可领取。"
         },
         "onboarding": {
           "title": "新人奖励",
@@ -2464,6 +2465,9 @@
       "home.gameBidding": "竞标对决",
       "home.gameBlackjack": "二十一点",
       "home.gameLikes": "回合制对战小游戏（测试）",
+      "home.gameGwent": "AI 昆特牌",
+      "home.gameLakeNotes": "垂钓手记",
+      "home.gameSteadyCatch": "稳稳地接住你",
       "home.capabilityUnavailable": "此摘要暂不可用。",
       "endpoints.title": "我的服务",
       "endpoints.description": "管理服务地址、密钥和可用模型。",

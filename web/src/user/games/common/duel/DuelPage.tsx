@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback } from 'react';
 import { ErrorState, LoadingState } from '@shared/components/States';
 import { useGamesSnapshot } from '../snapshot';
 import { isMaintenance } from '../request';
+import { GameBackLink } from '../GameBackLink';
 import type { DuelGame, DuelConfig, DuelLobbyContext } from './types';
 import '../../games.css';
 
@@ -16,9 +17,20 @@ function DuelPage({ game }: { readonly game: DuelGame }) {
   const snapshot = useGamesSnapshot();
   const { refetch } = snapshot;
   const refreshWallets = useCallback(() => refetch(), [refetch]);
-  if (snapshot.isPending) return <LoadingState />;
+  if (snapshot.isPending)
+    return (
+      <main className="game-page">
+        <GameBackLink />
+        <LoadingState />
+      </main>
+    );
   if (snapshot.error && !snapshot.data && !isMaintenance(snapshot.error))
-    return <ErrorState error={snapshot.error} onRetry={refreshWallets} />;
+    return (
+      <main className="game-page">
+        <GameBackLink />
+        <ErrorState error={snapshot.error} onRetry={refreshWallets} />
+      </main>
+    );
   const context: DuelLobbyContext = {
     config: snapshot.data?.[game] ?? unavailable,
     wallets: snapshot.data ?? { balance: '0', gameBalance: '0' },
@@ -28,8 +40,21 @@ function DuelPage({ game }: { readonly game: DuelGame }) {
   };
   return (
     <main className="game-page">
-      <Suspense fallback={<LoadingState />}>
-        {game === 'gwent' ? <Gwent {...context} /> : game === 'bidding' ? <Bidding {...context} /> : <Likes {...context} />}
+      <Suspense
+        fallback={
+          <>
+            <GameBackLink />
+            <LoadingState />
+          </>
+        }
+      >
+        {game === 'gwent' ? (
+          <Gwent {...context} />
+        ) : game === 'bidding' ? (
+          <Bidding {...context} />
+        ) : (
+          <Likes {...context} />
+        )}
       </Suspense>
     </main>
   );
@@ -41,4 +66,6 @@ export function LikesPage() {
   return <DuelPage game="likes" />;
 }
 
-export function GwentPage() { return <DuelPage game="gwent" />; }
+export function GwentPage() {
+  return <DuelPage game="gwent" />;
+}

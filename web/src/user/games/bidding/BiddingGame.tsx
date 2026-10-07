@@ -1,7 +1,7 @@
 import { BiddingLobby, AIMatchInfo, AIActionLog } from './AIPlayers';
 import { useAIText } from '@shared/aiPlayers';
 import { GameHeaderTool } from '../common/GameHeader';
-import { Link } from 'react-router';
+import { GameBackLink } from '../common/GameBackLink';
 import { GameActionBar } from '../common/GameActionBar';
 import { useCallback, useState } from 'react';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
@@ -92,9 +92,7 @@ export function BiddingGame({
     <div className="bidding-game">
       <header className="bid-heading">
         <div>
-          <Link className="game-back-link" to="/games">
-            {text('blackjack.gameCenter')}
-          </Link>
+          <GameBackLink />
           <h1>{text('bidding.biddingDuel')}</h1>
           <p>{text('bidding.holdYourNerveTakeTheWholePool')}</p>
         </div>

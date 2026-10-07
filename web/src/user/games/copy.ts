@@ -1,5 +1,6 @@
 import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
 const keys = {
+  'linklink.noRegularReward': 'user.games.copy.linklink.noRegularReward',
   'center.free': 'user.games.copy.center.free',
   'center.lakenotes.title': 'user.games.copy.center.lakenotes.title',
   'center.lakenotes.body': 'user.games.copy.center.lakenotes.body',

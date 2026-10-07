@@ -1,7 +1,7 @@
 import { GameHeaderTool } from '../common/GameHeader';
+import { GameBackLink } from '../common/GameBackLink';
 import { GameActionBar } from '../common/GameActionBar';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   BLACKJACK_ACTIONS,
@@ -374,14 +374,12 @@ export function BlackjackGame() {
       <div ref={surface} className="bidding-game blackjack-game">
         <header className="bid-heading">
           <div>
+            <GameBackLink />
             <h1>{text('blackjack.blackjack')}</h1>
             <p>{text('blackjack.oneTableYourOwnHandAgainstThe')}</p>
           </div>
           <div className="duel-actions">
             {snapshot.data && <GameWallets wallets={snapshot.data} />}
-            <Link className="btn btn-secondary" to="/games">
-              {text('blackjack.gameCenter')}
-            </Link>
             <GameHeaderTool
               icon="?"
               label={text('bidding.rules')}

@@ -48,15 +48,33 @@ describe('core wire normalizers', () => {
   });
 
   it('keeps charity visibility independent and rejects private restriction details', () => {
-    const raw = jsonFixture('internal/auth/testdata/user_envelope.json') as { user: Record<string, unknown> };
-    const restriction = { kind: 'ban', reason_code: 'charity_rpm', reason: 'Rate limit exceeded.', started_at: 1_700_000_000, ends_at: null };
-    const user = { ...raw.user, charity_profile_public: true, automatic_restrictions: [restriction] };
+    const raw = jsonFixture('internal/auth/testdata/user_envelope.json') as {
+      user: Record<string, unknown>;
+    };
+    const restriction = {
+      kind: 'ban',
+      reason_code: 'charity_rpm',
+      reason: 'Rate limit exceeded.',
+      started_at: 1_700_000_000,
+      ends_at: null,
+    };
+    const user = {
+      ...raw.user,
+      charity_profile_public: true,
+      automatic_restrictions: [restriction],
+    };
     const parsed = normalizeUserEnvelope({ user }).user;
     expect(parsed.charity_profile_public).toBe(true);
     expect(parsed.game_profile_public).toBe(false);
     expect(parsed.automatic_restrictions).toEqual([restriction]);
-    for (const automatic_restrictions of [[{ ...restriction, evidence: [] }], [restriction, restriction], [{ ...restriction, kind: 'deduction' }]]) {
-      expect(() => normalizeUserEnvelope({ user: { ...user, automatic_restrictions } })).toThrow(/restriction/i);
+    for (const automatic_restrictions of [
+      [{ ...restriction, evidence: [] }],
+      [restriction, restriction],
+      [{ ...restriction, kind: 'deduction' }],
+    ]) {
+      expect(() => normalizeUserEnvelope({ user: { ...user, automatic_restrictions } })).toThrow(
+        /restriction/i,
+      );
     }
   });
 
@@ -151,9 +169,9 @@ describe('core wire normalizers', () => {
     expect(() => normalizeHomeCheckinStatus({ enabled: false, reason: 'hidden' })).toThrow(
       /check-in status/i,
     );
-    expect(() => normalizeHomeCheckinStatus({ enabled: false, mutually_exclusive: 'true' })).toThrow(
-      /mutual exclusion/i,
-    );
+    expect(() =>
+      normalizeHomeCheckinStatus({ enabled: false, mutually_exclusive: 'true' }),
+    ).toThrow(/mutual exclusion/i);
     expect(() =>
       normalizeHomeCheckinStatus({ enabled: false, blocked_by_other_checkin: 1 }),
     ).toThrow(/other check-in block/i);
@@ -222,6 +240,33 @@ describe('core wire normalizers', () => {
         },
       ],
     };
+    const added = [
+      ['bidding', 'game-bidding', 'bidq_', 'waiting'],
+      ['bidding', 'game-bidding', 'aiq_', 'waiting'],
+      ['likes', 'game-likes', 'lik_', 'active'],
+      ['blackjack', 'game-blackjack', 'bjt_', 'active'],
+      ['gwent', 'game-gwent', 'gwtq_', 'waiting'],
+      ['gwent', 'game-gwent', 'gaq_', 'waiting'],
+      ['gwent', 'game-gwent', 'gwt_', 'active'],
+      ['lakenotes', 'game-lake-notes', 'lnc_', 'active'],
+      ['steadycatch', 'game-steady-catch', 'sc_', 'active'],
+    ].map(([game, route_id, prefix, state]) => ({
+      game,
+      route_id,
+      state,
+      resource_id: prefix + suffix,
+    }));
+    expect(
+      normalizeHomeGameSummary({ ...valid, continue: [...valid.continue, ...added] }),
+    ).toHaveLength(14);
+    for (const item of added) {
+      expect(() =>
+        normalizeHomeGameSummary({
+          continue: [{ ...item, resource_id: 'll_' + suffix }],
+          pending_results: [],
+        }),
+      ).toThrow();
+    }
     const result = normalizeHomeGameSummary(valid);
     expect(result).toHaveLength(5);
     expect(result[0]).toMatchObject({ kind: 'continue', state: 'recovery_required' });

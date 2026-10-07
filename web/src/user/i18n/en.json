@@ -1169,7 +1169,8 @@
             "seconds": "{{seconds}} seconds",
             "new": "Start another board"
           },
-          "empty": "No active board or recent 30-day summary."
+          "empty": "No active board or recent 30-day summary.",
+          "noRegularReward": "No per-game credit rewards. Regular completions award no credits; eligible one-time newcomer rewards still apply."
         },
         "onboarding": {
           "title": "Newcomer rewards",
@@ -2464,6 +2465,9 @@
       "home.gameBidding": "Bidding Duel",
       "home.gameBlackjack": "Blackjack",
       "home.gameLikes": "Turn-based Battle Minigame (Test)",
+      "home.gameGwent": "AI Gwent",
+      "home.gameLakeNotes": "Lake Notes",
+      "home.gameSteadyCatch": "Catch You Steadily",
       "home.capabilityUnavailable": "This summary is not available yet.",
       "endpoints.title": "My services",
       "endpoints.description": "Manage service addresses, keys and available models.",

@@ -128,6 +128,18 @@ export function AIPlayers({
                   <dd>{offer.completed ? '✓' : <GameMoney value={bot.first_reward} />}</dd>
                 </div>
               </dl>
+              <p className="game-inline-notice game-inline-notice--warning">
+                <strong>{t('没有逐局积分奖励。', 'No per-game credit rewards.')} </strong>
+                {offer.completed
+                  ? t(
+                      '此挑战已完成首通，再次获胜不再发放积分。',
+                      'This challenge is already cleared. Further wins award no credits.',
+                    )
+                  : t(
+                      '仅首次获胜可领取上方首通奖励。',
+                      'Only your first win awards the first-clear reward shown above.',
+                    )}
+              </p>
               <p>
                 {t('可用样本', 'Available samples')}: {offer.memory_samples}
               </p>

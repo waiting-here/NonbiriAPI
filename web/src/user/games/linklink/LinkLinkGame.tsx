@@ -719,6 +719,9 @@ export function LinkLinkGame() {
       {!state ? (
         <Card className="linklink-lobby">
           <h2>{text('linklink.startReview')}</h2>
+          <p className="game-inline-notice game-inline-notice--warning">
+            {text('linklink.noRegularReward')}
+          </p>
           {current.isSuccess && current.data === null ? <p>{text('linklink.empty')}</p> : null}
           <div className="linklink-specs">
             {LINKLINK_SPECS.map((value) => {
