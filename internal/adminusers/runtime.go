@@ -621,7 +621,7 @@ FROM site_activity_daily WHERE day<?`, ` ORDER BY day DESC`, []any{upper}, query
 
 func (service *Service) EndpointOverview(ctx context.Context, adminID int64, query EndpointOverviewQuery) (Page[EndpointOverview], error) {
 	limit := normalizePageLimit(query.Page, query.Cursor, query.Limit)
-	if limit == 0 || !validEndpointTagFilter(query.Tag) {
+	if limit == 0 || query.UserID < 0 || !validEndpointTagFilter(query.Tag) {
 		return Page[EndpointOverview]{}, ErrInvalidRequest
 	}
 	if query.Page != nil {
@@ -634,6 +634,9 @@ func (service *Service) EndpointOverview(ctx context.Context, adminID int64, que
 		return Page[EndpointOverview]{}, ErrUnavailable
 	}
 	owner := filterOwner("endpoints", query.Q, query.Tag)
+	if query.UserID != 0 {
+		owner = filterOwner("endpoints", query.Q, query.Tag, strconv.FormatInt(query.UserID, 10))
+	}
 	after, err := service.decodeTextCursor(query.Cursor, cursorScopeEndpoints, owner, now)
 	if err != nil {
 		return Page[EndpointOverview]{}, err
@@ -644,7 +647,7 @@ func (service *Service) EndpointOverview(ctx context.Context, adminID int64, que
 	}
 	done := false
 	defer rollbackUnlessDone(tx, &done)
-	selection, args, metadata, err := endpointOverviewPageQuery(ctx, tx, query.Q, after, query.Page, limit, query.Tag)
+	selection, args, metadata, err := endpointOverviewPageQuery(ctx, tx, query.Q, after, query.Page, limit, query)
 	if err != nil {
 		return Page[EndpointOverview]{}, err
 	}

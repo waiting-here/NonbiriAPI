@@ -67,6 +67,7 @@
       "searchPlaceholder": "Filter by base URL substring",
       "searchAria": "Filter endpoints by base URL",
       "queryTooLong": "The search is too long. Shorten it and try again.",
+      "userFilterHint": "Shows endpoints used by this user. Counts and expanded user lists cover the whole site.",
       "noProbeNotice": "This surface never sends ping, HEAD, empty, paid, or background health-check requests.",
       "tags": "Tags",
       "allTags": "All tags",

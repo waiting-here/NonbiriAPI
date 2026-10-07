@@ -109,29 +109,33 @@ function EndpointsPageContent({ account, scopeReady, sessionError }: EndpointsPa
   const [searchParams, setSearchParams] = useSearchState();
   const query = searchParams.get('q') ?? '';
   const tag = searchParams.get('tag') ?? '';
+  const userId = searchParams.get('user_id') ?? '';
   const expanded = searchParams.get('expanded_base_url');
   const [draft, setDraft] = useState(query);
+  const [userDraft, setUserDraft] = useState(userId);
   const [queryError, setQueryError] = useState<string | null>(null);
   const pager = useUrlPagePager({
     station: 'admin',
     listType: 'admin.endpoints',
     scopeKey: account,
     scopeReady,
-    resetKey: `${query}:${tag}`,
+    resetKey: `${query}:${tag}:${userId}`,
   });
   const result = useQuery({
-    queryKey: adminPageKeys.endpoints(account, query, pager.page, pager.pageSize, tag),
-    queryFn: ({ signal }) => getAdminEndpointsPage(query, pager.page, pager.pageSize, signal, tag),
+    queryKey: adminPageKeys.endpoints(account, query, pager.page, pager.pageSize, tag, userId),
+    queryFn: ({ signal }) =>
+      getAdminEndpointsPage(query, pager.page, pager.pageSize, signal, tag, userId),
     retry: false,
     enabled: scopeReady,
     placeholderData: (previous, previousQuery) =>
       previousQuery?.queryKey[3] === account &&
       previousQuery.queryKey[4] === query &&
-      previousQuery.queryKey[7] === tag
+      previousQuery.queryKey[7] === tag &&
+      previousQuery.queryKey[8] === userId
         ? previous
         : undefined,
   });
-  const selectionScope = `${query}:${tag}:${pager.page}:${pager.pageSize}`;
+  const selectionScope = `${query}:${tag}:${userId}:${pager.page}:${pager.pageSize}`;
   const [selection, setSelection] = useState<{ scope: string; urls: string[] }>({
     scope: '',
     urls: [],
@@ -153,16 +157,22 @@ function EndpointsPageContent({ account, scopeReady, sessionError }: EndpointsPa
     setDraft(query);
   }, [query]);
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setUserDraft(userId);
+  }, [userId]);
+  useEffect(() => {
     if (isUnauthorized(result.error) || isForbidden(result.error)) {
       clearStationSession(client, 'admin');
     }
   }, [client, result.error]);
-  const commitFilter = (nextQuery: string, resetTags = false) => {
+  const commitFilter = (nextQuery: string, nextUser: string, resetTags = false) => {
     setSearchParams((previous) => {
       const next = new URLSearchParams(previous);
       if (resetTags) next.delete('tag');
       if (nextQuery) next.set('q', nextQuery);
       else next.delete('q');
+      if (nextUser) next.set('user_id', nextUser);
+      else next.delete('user_id');
       next.delete('page');
       next.set('page', '1');
       next.delete('page_size');
@@ -200,7 +210,7 @@ function EndpointsPageContent({ account, scopeReady, sessionError }: EndpointsPa
               return;
             }
             setQueryError(null);
-            commitFilter(draft);
+            commitFilter(draft, userDraft.trim());
           }}
         >
           <label className="ops-form-field">
@@ -216,6 +226,16 @@ function EndpointsPageContent({ account, scopeReady, sessionError }: EndpointsPa
                 setDraft(next);
                 if (new TextEncoder().encode(next).byteLength <= 512) setQueryError(null);
               }}
+            />
+          </label>
+          <label className="ops-form-field">
+            <span>{t('common.userId')}</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[1-9][0-9]*"
+              value={userDraft}
+              onChange={(event) => setUserDraft(event.target.value)}
             />
           </label>
           <button className="btn btn-secondary" type="submit">
@@ -249,8 +269,9 @@ function EndpointsPageContent({ account, scopeReady, sessionError }: EndpointsPa
             type="button"
             onClick={() => {
               setDraft('');
+              setUserDraft('');
               setQueryError(null);
-              commitFilter('', true);
+              commitFilter('', '', true);
             }}
           >
             {t('common.resetFilter')}
@@ -302,8 +323,10 @@ function EndpointsPageContent({ account, scopeReady, sessionError }: EndpointsPa
           <ErrorState error={result.error} onRetry={() => void result.refetch()} />
         ) : result.data.data.length === 0 ? (
           <EmptyState
-            title={query ? t('common.noResults') : t('admin.endpoints.empty')}
-            body={query ? t('common.noResultsBody') : t('admin.endpoints.emptyBody')}
+            title={query || tag || userId ? t('common.noResults') : t('admin.endpoints.empty')}
+            body={
+              query || tag || userId ? t('common.noResultsBody') : t('admin.endpoints.emptyBody')
+            }
           />
         ) : (
           <div aria-busy={result.isFetching}>
@@ -420,6 +443,7 @@ function EndpointsPageContent({ account, scopeReady, sessionError }: EndpointsPa
           />
         ) : null}
         <p className="inline-notice">{t('admin.endpoints.noProbeNotice')}</p>
+        {userId ? <p className="inline-notice">{t('admin.endpoints.userFilterHint')}</p> : null}
       </Card>
     </div>
   );

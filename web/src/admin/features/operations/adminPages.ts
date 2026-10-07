@@ -98,8 +98,14 @@ export const adminPageKeys = {
     level = '',
   ) => managedUserKeys.list('admin', account, banned, query, level, '', page, size),
   user: (account: string, id: string) => ['admin', 'operations', 'user', account, id] as const,
-  endpoints: (account: string, query: string, page: string, size: PageSize, tag = '') =>
-    ['admin', 'operations', 'endpoints', account, query, page, size, tag] as const,
+  endpoints: (
+    account: string,
+    query: string,
+    page: string,
+    size: PageSize,
+    tag = '',
+    userId = '',
+  ) => ['admin', 'operations', 'endpoints', account, query, page, size, tag, userId] as const,
   endpointUsers: (account: string, baseURL: string, page: string, size: PageSize) =>
     ['admin', 'operations', 'endpoint-users', account, baseURL, page, size] as const,
   activitiesConfig: (account: string) =>
@@ -131,12 +137,14 @@ export async function getAdminEndpointsPage(
   pageSize: PageSize,
   signal?: AbortSignal,
   tag = '',
+  userId = '',
 ): Promise<AdminPage<EndpointOverview>> {
   validateWindow(page, pageSize);
   validateText(query, 512, true);
   const path = adminPagePath('/admin/api/overview/endpoints', {
     q: query || undefined,
     tag: tag || undefined,
+    user_id: userId || undefined,
     page,
     page_size: pageSize,
   });

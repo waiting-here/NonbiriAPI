@@ -126,6 +126,7 @@ type PageQuery struct {
 type EndpointOverviewQuery struct {
 	Q      string
 	Tag    string
+	UserID int64
 	Cursor string
 	Limit  int
 	Page   *pagination.Request

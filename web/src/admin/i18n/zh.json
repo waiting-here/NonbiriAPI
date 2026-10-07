@@ -67,6 +67,7 @@
       "searchPlaceholder": "按基础 URL 子串筛选",
       "searchAria": "按基础 URL 筛选端点",
       "queryTooLong": "搜索内容过长，请缩短后再试。",
+      "userFilterHint": "仅列出该用户使用的端点，数量统计及用户列表仍显示各端点的全站情况。",
       "noProbeNotice": "此页面绝不会发送 ping、HEAD、空请求、付费请求或后台健康检查请求。",
       "tags": "标签",
       "allTags": "全部标签",

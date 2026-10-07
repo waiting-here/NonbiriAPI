@@ -21,15 +21,23 @@ WHERE e.base_url=? GROUP BY e.user_id`
 
 // Count and choose groups before reading their child-key totals. The materialized
 // window keeps aggregates for skipped groups out of both numbered and cursor reads.
-func endpointOverviewPageQuery(ctx context.Context, tx *sql.Tx, q, after string, requested *pagination.Request, limit int, tags ...string) (string, []any, *pagination.Metadata, error) {
+func endpointOverviewPageQuery(ctx context.Context, tx *sql.Tx, q, after string, requested *pagination.Request, limit int, filters ...EndpointOverviewQuery) (string, []any, *pagination.Metadata, error) {
 	selection := endpointOverviewGroups
 	args := []any{q, q, after}
-	if len(tags) > 0 && tags[0] != "" {
+	var filter EndpointOverviewQuery
+	if len(filters) > 0 {
+		filter = filters[0]
+	}
+	if filter.UserID != 0 {
+		selection = strings.Replace(selection, "GROUP BY e.base_url", " AND e.user_id=? GROUP BY e.base_url", 1)
+		args = append(args, filter.UserID)
+	}
+	if filter.Tag != "" {
 		clause := ` AND EXISTS(SELECT 1 FROM admin_endpoint_tags t WHERE t.base_url=e.base_url AND t.tag=?)`
-		if tags[0] == "untagged" {
+		if filter.Tag == "untagged" {
 			clause = ` AND NOT EXISTS(SELECT 1 FROM admin_endpoint_tags t WHERE t.base_url=e.base_url)`
 		} else {
-			args = append(args, tags[0])
+			args = append(args, filter.Tag)
 		}
 		selection = strings.Replace(selection, "GROUP BY e.base_url", clause+" GROUP BY e.base_url", 1)
 	}

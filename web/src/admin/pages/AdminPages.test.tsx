@@ -378,8 +378,22 @@ describe('administrator paged operation pages', () => {
         true,
       ),
     );
+    await view.user.type(screen.getByRole('textbox', { name: 'User ID' }), '42');
+    await view.user.click(screen.getByRole('button', { name: 'Apply filter' }));
+    await waitFor(() =>
+      expect(
+        requests.some(
+          (url) =>
+            url.searchParams.get('user_id') === '42' &&
+            url.searchParams.get('tag') === 'abusive_third_party' &&
+            url.searchParams.get('page') === '1',
+        ),
+      ).toBe(true),
+    );
+    expect(screen.getByRole('button', { name: 'Add tag' })).toBeDisabled();
     await view.user.click(screen.getByRole('button', { name: 'Reset' }));
     expect(screen.getAllByRole('combobox', { name: 'Tags' })[0]).toHaveValue('');
+    expect(screen.getByRole('textbox', { name: 'User ID' })).toHaveValue('');
   });
 
   it('keeps pool filters and page size in URL page mode', async () => {
