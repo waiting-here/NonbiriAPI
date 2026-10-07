@@ -18,22 +18,30 @@ interface Props {
   accountId?: string | number;
   scopeReady: boolean;
   enabled?: boolean;
+  storage?: boolean;
 }
 export function IndependentDiagnostics(props: Props) {
   if (!props.scopeReady || props.enabled === false || props.accountId === undefined) return null;
-  return <ScopedDiagnostics key={`${props.role}:${props.accountId}`} role={props.role} />;
+  return (
+    <ScopedDiagnostics
+      key={`${props.role}:${props.accountId}`}
+      role={props.role}
+      storage={props.storage}
+    />
+  );
 }
 function useWords() {
   const { i18n } = useTranslation();
   return (en: string, zh: string) => (i18n.resolvedLanguage?.startsWith('zh') ? zh : en);
 }
-function ScopedDiagnostics({ role }: { role: DiagnosticRole }) {
+function ScopedDiagnostics({ role, storage }: { role: DiagnosticRole; storage?: boolean }) {
   const formatDateTime = useDateTimeFormatter();
   const words = useWords();
   const [kind, setKind] = useState<IndependentKind>('all');
   const [user, setUser] = useState('');
   const [subject, setSubject] = useState('');
-  const [hours, setHours] = useState('24');
+  const [hours, setHours] = useState(storage ? '720' : '24');
+  const [reason, setReason] = useState('missing');
   const [page, setPage] = useState<IndependentPage>();
   const [applied, setApplied] = useState<IndependentFilter>();
   const [busy, setBusy] = useState(false);
@@ -42,6 +50,7 @@ function ScopedDiagnostics({ role }: { role: DiagnosticRole }) {
   useEffect(() => () => controller.current?.abort(), []);
   const labels = {
     all: words('All categories', '全部类别'),
+    api_request: words('API requests', 'API 请求'),
     model_discovery: words('Model discovery', '模型列表拉取'),
     image_task: words('Image generation and polling', '绘本生成与查询'),
     image_discovery: words('Image model discovery', '绘本模型拉取'),
@@ -60,6 +69,7 @@ function ScopedDiagnostics({ role }: { role: DiagnosticRole }) {
         ? { ...applied, before: page.next_before }
         : {
             kind,
+            ...(storage ? { storage: reason } : {}),
             user_id: user.trim() || undefined,
             subject_id: subject.trim() || undefined,
             from: to - Number(hours) * 3600,
@@ -83,9 +93,17 @@ function ScopedDiagnostics({ role }: { role: DiagnosticRole }) {
   return (
     <section
       className="card request-diagnostics independent-diagnostics"
-      aria-label={words('Discovery and activity diagnostics', '模型拉取与活动诊断')}
+      aria-label={
+        storage
+          ? words('Missing raw error records', '未保存的错误原文')
+          : words('Discovery and activity diagnostics', '模型拉取与活动诊断')
+      }
     >
-      <h2>{words('Discovery and activity diagnostics', '模型拉取与活动诊断')}</h2>
+      <h2>
+        {storage
+          ? words('Missing raw error records', '未保存的错误原文')
+          : words('Discovery and activity diagnostics', '模型拉取与活动诊断')}
+      </h2>
       <p>
         {words(
           'Failure details from the last 30 days. Only administrators and full stewards can read these records.',
@@ -102,13 +120,29 @@ function ScopedDiagnostics({ role }: { role: DiagnosticRole }) {
         <label>
           {words('Category', '类别')}
           <select value={kind} onChange={(event) => setKind(event.target.value as IndependentKind)}>
-            {(Object.keys(labels) as IndependentKind[]).map((key) => (
-              <option key={key} value={key}>
-                {labels[key]}
-              </option>
-            ))}
+            {(Object.keys(labels) as IndependentKind[])
+              .filter((key) => storage || key !== 'api_request')
+              .map((key) => (
+                <option key={key} value={key}>
+                  {labels[key]}
+                </option>
+              ))}
           </select>
         </label>
+        {storage ? (
+          <label>
+            {words('Reason', '原因')}
+            <select value={reason} onChange={(event) => setReason(event.target.value)}>
+              <option value="missing">{words('All missing bodies', '全部未保存')}</option>
+              <option value="capacity_exhausted">{words('Storage budget full', '容量不足')}</option>
+              <option value="read_failure">{words('Read failure', '读取失败')}</option>
+              <option value="storage_failure">{words('Storage failure', '保存失败')}</option>
+              <option value="unspecified">
+                {words('Unspecified older failure', '旧记录，原因未细分')}
+              </option>
+            </select>
+          </label>
+        ) : null}
         <label>
           {words('User ID', '用户 ID')}
           <input
@@ -162,7 +196,9 @@ function ScopedDiagnostics({ role }: { role: DiagnosticRole }) {
               {entry.truncated ? words(' · truncated', ' · 已截断') : ''}
               {entry.synthetic ? words(' · safe diagnostic', ' · 安全诊断') : ''}
             </summary>
-            {entry.save_state !== 'saved' && <OmittedBody state={entry.save_state} />}
+            {entry.save_state !== 'saved' && (
+              <OmittedBody state={entry.save_state} reason={entry.failure_reason} />
+            )}
             <Detail
               role={role}
               id={entry.id}
@@ -188,7 +224,7 @@ function ScopedDiagnostics({ role }: { role: DiagnosticRole }) {
     </section>
   );
 }
-export function OmittedBody({ state }: { state: string }) {
+export function OmittedBody({ state, reason }: { state: string; reason?: string }) {
   const words = useWords();
   return (
     <p role="status">
@@ -197,7 +233,14 @@ export function OmittedBody({ state }: { state: string }) {
             'Raw body was not saved because the storage budget was full.',
             '原文因容量不足未保存。',
           )
-        : words('Raw body could not be read or saved.', '原文读取或保存失败。')}
+        : reason === 'read_failure'
+          ? words('The upstream body could not be read.', '读取上游原文失败。')
+          : reason === 'storage_failure'
+            ? words('The body was read but could not be stored.', '原文已读取，但保存失败。')
+            : words(
+                'This older record does not distinguish read and storage failures.',
+                '此旧记录未区分读取失败或保存失败。',
+              )}
     </p>
   );
 }
@@ -254,7 +297,7 @@ function Detail({
           {detail.body.save_state === 'saved' ? (
             <RawErrorViewer key={id} body={detail.body} />
           ) : (
-            <OmittedBody state={detail.body.save_state} />
+            <OmittedBody state={detail.body.save_state} reason={detail.body.failure_reason} />
           )}
           {detail.source && (
             <section aria-label={words('Request source', '请求来源')}>

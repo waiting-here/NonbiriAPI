@@ -15,20 +15,29 @@ const MaxRawBodyBytes = 1 << 20
 // Event is a short-lived capability. Only the diagnostic owner should consume
 // its bytes; formatting the event never reveals upstream content.
 type Event struct {
-	status      int
-	contentType string
-	body        []byte
-	truncated   bool
-	unavailable bool
+	status        int
+	contentType   string
+	body          []byte
+	truncated     bool
+	unavailable   bool
+	failureReason string
 }
 
-func (e Event) Status() int         { return e.status }
-func (e Event) ContentType() string { return e.contentType }
-func (e Event) Truncated() bool     { return e.truncated }
-func (e Event) Unavailable() bool   { return e.unavailable }
+func (e Event) Status() int           { return e.status }
+func (e Event) ContentType() string   { return e.contentType }
+func (e Event) Truncated() bool       { return e.truncated }
+func (e Event) Unavailable() bool     { return e.unavailable }
+func (e Event) FailureReason() string { return e.failureReason }
 
 // WithoutBody preserves failure metadata after a storage failure.
-func (e Event) WithoutBody() Event { e.body = nil; e.unavailable = true; return e }
+func (e Event) WithoutBody() Event {
+	e.body = nil
+	e.unavailable = true
+	if e.failureReason == "" {
+		e.failureReason = "storage_failure"
+	}
+	return e
+}
 
 // Bytes is valid only during the synchronous sink call. Retaining owners must
 // copy it into their bounded storage before returning.
@@ -54,7 +63,7 @@ func (c Context) ReadResponse(ctx context.Context, response *http.Response, summ
 		return Detail{}
 	}
 	if response.Body == nil {
-		emit(ctx, Event{status: response.StatusCode, contentType: response.Header.Get("Content-Type"), unavailable: true})
+		emit(ctx, Event{status: response.StatusCode, contentType: response.Header.Get("Content-Type"), unavailable: true, failureReason: "read_failure"})
 		return Detail{}
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, MaxRawBodyBytes+1))
@@ -65,6 +74,7 @@ func (c Context) ReadResponse(ctx context.Context, response *http.Response, summ
 	}
 	if err != nil {
 		event.body = nil
+		event.failureReason = "read_failure"
 	}
 	emit(ctx, event)
 	if err != nil || event.truncated {

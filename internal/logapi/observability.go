@@ -132,7 +132,7 @@ func (api *diagnosticAPI) diagnosticCapacity(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	defer tx.Rollback()
-	value, err := observability.RawCapacityTx(ctx, tx)
+	value, err := observability.RawCapacityTx(ctx, tx, api.repository.now().Unix())
 	if err != nil {
 		writeLogError(w, translateSQLError(err))
 		return

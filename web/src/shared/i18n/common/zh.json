@@ -376,8 +376,8 @@
           "duration": "耗时",
           "seconds": "{{seconds}} 秒",
           "storage": "错误原文存储",
-          "storageSummary": "已用 {{used}} / {{budget}} MiB · {{count}} 条未保存",
-          "storageFailures": "读取或保存失败 {{count}} 条。容量不包含数据库页、索引和 WAL。",
+          "storageSummary": "已用 {{used}} / {{budget}} MiB · 历史累计 {{count}} 条未保存",
+          "storageFailures": "累计容量不足 {{capacity}} 条，读取或保存失败 {{count}} 条；当前可查 {{current}} 条。",
           "retryHint": "稍后重试，或在模型里添加第二个来源。",
           "keyHint": "检查这个服务的密钥是否有效。",
           "rateHint": "服务商限制了频率，稍后再试。",
@@ -394,7 +394,9 @@
             "rejected": "调用前被拒绝",
             "cancelled": "已取消",
             "failed": "失败（{{status}}）"
-          }
+          },
+          "storageHistoryHelp": "累计数不会随记录到期减少。未保存的原文无法补回；下方可查询最近30天内仍在保留期的记录。容量仅计原文，不含数据库页、索引和 WAL。",
+          "storageRecords": "查看未保存记录"
         }
       },
       "charity": {
@@ -1173,7 +1175,10 @@
       "downloadDiagnosticSummary": "下载诊断摘要",
       "downloadOriginal": "下载原始正文",
       "bodyPreview": "正文预览",
-      "previewShowsTheFirst65536CharactersCopy": "预览仅展示前 65,536 个字符，可复制或下载完整正文。"
+      "previewShowsTheFirst65536CharactersCopy": "预览仅展示前 65,536 个字符，可复制或下载完整正文。",
+      "rawBodyReadFailed": "读取上游原文失败。",
+      "rawBodyStorageFailed": "原文已读取，但保存失败。",
+      "rawBodyUnspecifiedFailure": "此旧记录未区分读取失败或保存失败。"
     },
     "sourceQuality": {
       "direct": "直接连接地址",

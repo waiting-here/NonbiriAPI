@@ -376,8 +376,8 @@
           "duration": "Duration",
           "seconds": "{{seconds}} seconds",
           "storage": "Error text storage",
-          "storageSummary": "Used {{used}} / {{budget}} MiB · {{count}} not saved",
-          "storageFailures": "Read or storage failures: {{count}}. Excludes database pages, indexes and WAL.",
+          "storageSummary": "{{used}} / {{budget}} MiB used · {{count}} bodies omitted over time",
+          "storageFailures": "Lifetime totals: {{capacity}} over budget, {{count}} read or storage failures. {{current}} records currently available.",
           "retryHint": "Retry later, or add a second source to the model.",
           "keyHint": "Check that this service key is valid.",
           "rateHint": "The provider limited the rate. Try again later.",
@@ -394,7 +394,9 @@
             "rejected": "Rejected before dispatch",
             "cancelled": "Cancelled",
             "failed": "Failed ({{status}})"
-          }
+          },
+          "storageHistoryHelp": "Lifetime totals do not decrease when records expire. Missing bodies cannot be recovered. Browse retained records from the last 30 days below. Capacity counts raw bodies only, excluding database pages, indexes and WAL.",
+          "storageRecords": "Browse missing records"
         }
       },
       "charity": {
@@ -1173,7 +1175,10 @@
       "downloadDiagnosticSummary": "Download diagnostic summary",
       "downloadOriginal": "Download original",
       "bodyPreview": "Body preview",
-      "previewShowsTheFirst65536CharactersCopy": "Preview shows the first 65,536 characters. Copy or download for the complete body."
+      "previewShowsTheFirst65536CharactersCopy": "Preview shows the first 65,536 characters. Copy or download for the complete body.",
+      "rawBodyReadFailed": "The upstream body could not be read.",
+      "rawBodyStorageFailed": "The body was read but could not be stored.",
+      "rawBodyUnspecifiedFailure": "This older record does not distinguish read and storage failures."
     },
     "sourceQuality": {
       "direct": "Direct connection address",

@@ -35,6 +35,7 @@ type DiagnosticActor struct {
 	Admin  bool
 }
 type DiagnosticFilter struct {
+	Storage   string
 	Kind      string
 	UserID    int64
 	SubjectID string
@@ -88,7 +89,7 @@ func diagnosticNumber(value string, zero bool) (int64, error) {
 	return n, nil
 }
 func diagnosticKind(kind string) bool {
-	return kind == "all" || kind == "model_discovery" || kind == "image_task" || kind == "image_discovery"
+	return kind == "all" || kind == "api_request" || kind == "model_discovery" || kind == "image_task" || kind == "image_discovery"
 }
 func normalizeDiagnosticFilter(f DiagnosticFilter, now int64) (DiagnosticFilter, error) {
 	if now < 0 || now >= 253402300799 {
@@ -109,7 +110,7 @@ func normalizeDiagnosticFilter(f DiagnosticFilter, now int64) (DiagnosticFilter,
 	if f.To == 0 {
 		f.To = now + 1
 	}
-	if !diagnosticKind(f.Kind) || f.Limit < 1 || f.Limit > 20 || f.UserID < 0 || f.From < 0 || f.To <= f.From || f.To-f.From > RetentionSeconds || f.To > now+1 {
+	if !validStorageFilter(f.Storage) || !diagnosticKind(f.Kind) || f.Limit < 1 || f.Limit > 20 || f.UserID < 0 || f.From < 0 || f.To <= f.From || f.To-f.From > RetentionSeconds || f.To > now+1 {
 		return f, ErrInvalid
 	}
 	if f.From < now-RetentionSeconds {
@@ -166,14 +167,14 @@ const diagnosticJoins = `
 `
 const diagnosticLive = `
  e.expires_at>? AND (
- (l.route_kind='model_discovery' AND l.user_id IS NOT NULL AND EXISTS(SELECT 1 FROM users u WHERE u.id=l.user_id) AND (l.completed_at IS NULL OR l.completed_at>?))
+ ((l.route_kind='model_discovery' OR (l.id IS NOT NULL AND e.save_state<>'saved')) AND l.user_id IS NOT NULL AND EXISTS(SELECT 1 FROM users u WHERE u.id=l.user_id) AND (l.completed_at IS NULL OR l.completed_at>?))
  OR (t.user_id IS NOT NULL AND t.finance_state<>'deleted' AND EXISTS(SELECT 1 FROM users u WHERE u.id=t.user_id) AND (t.completed_at IS NULL OR t.completed_at>?))
  OR (o.kind='image_model_discovery' AND o.actor_user_id IS NOT NULL AND f.operation_id IS NOT NULL AND EXISTS(SELECT 1 FROM users u WHERE u.id=o.actor_user_id) AND (f.completed_at IS NULL OR f.completed_at>?))
  )`
-const diagnosticKindExpr = "CASE WHEN l.id IS NOT NULL THEN 'model_discovery' WHEN t.id IS NOT NULL THEN 'image_task' ELSE 'image_discovery' END"
+const diagnosticKindExpr = "CASE WHEN l.route_kind='model_discovery' THEN 'model_discovery' WHEN l.id IS NOT NULL THEN 'api_request' WHEN t.id IS NOT NULL THEN 'image_task' ELSE 'image_discovery' END"
 const diagnosticSubjectExpr = "COALESCE(l.logical_request_id,t.id,o.id)"
 const diagnosticUserExpr = "COALESCE(l.user_id,t.user_id,o.actor_user_id)"
-const diagnosticColumns = "e.id," + diagnosticKindExpr + "," + diagnosticSubjectExpr + "," + diagnosticUserExpr + ",e.attempt_seq,e.event_seq,e.http_status,e.content_type,e.bytes_saved,e.truncated,e.save_state,e.created_at,e.expires_at,d.method,d.url,d.request_body,d.request_content_type,d.dispatched_at"
+const diagnosticColumns = "e.id," + diagnosticKindExpr + "," + diagnosticSubjectExpr + "," + diagnosticUserExpr + ",e.attempt_seq,e.event_seq,e.http_status,e.content_type,e.bytes_saved,e.truncated,e.save_state,e.failure_reason,e.created_at,e.expires_at,d.method,d.url,d.request_body,d.request_content_type,d.dispatched_at"
 
 type diagnosticScanner interface{ Scan(...any) error }
 
@@ -183,7 +184,7 @@ func scanDiagnostic(row diagnosticScanner, body *[]byte) (DiagnosticItem, error)
 	var status sql.NullInt64
 	var method, dispatchURL, requestBody, requestContentType sql.NullString
 	var dispatchedAt sql.NullInt64
-	values := []any{&id, &out.Kind, &out.SubjectID, &user, &out.AttemptSeq, &out.EventSeq, &status, &out.ContentType, &out.BytesSaved, &out.Truncated, &out.SaveState, &out.CreatedAt, &out.ExpiresAt, &method, &dispatchURL, &requestBody, &requestContentType, &dispatchedAt}
+	values := []any{&id, &out.Kind, &out.SubjectID, &user, &out.AttemptSeq, &out.EventSeq, &status, &out.ContentType, &out.BytesSaved, &out.Truncated, &out.SaveState, &out.FailureReason, &out.CreatedAt, &out.ExpiresAt, &method, &dispatchURL, &requestBody, &requestContentType, &dispatchedAt}
 	if body != nil {
 		values = append(values, body)
 	}
@@ -219,6 +220,22 @@ func (r *DiagnosticReader) List(ctx context.Context, actor DiagnosticActor, filt
 	defer tx.Rollback()
 	query := "SELECT " + diagnosticColumns + diagnosticJoins + " WHERE " + diagnosticLive + " AND e.created_at>=? AND e.created_at<?"
 	args := []any{now, now - RetentionSeconds, now - RetentionSeconds, now - RetentionSeconds, f.From, f.To}
+	if f.Storage == "" {
+		query += " AND (l.id IS NULL OR l.route_kind='model_discovery')"
+	} else {
+		query += " AND e.save_state<>'saved'"
+		switch f.Storage {
+		case "capacity_exhausted":
+			query += " AND e.save_state='capacity_exhausted'"
+		case "read_failure", "storage_failure", "unspecified":
+			reason := f.Storage
+			if reason == "unspecified" {
+				reason = ""
+			}
+			query += " AND e.save_state='unavailable' AND e.failure_reason=?"
+			args = append(args, reason)
+		}
+	}
 	if f.Kind != "all" {
 		query += " AND " + diagnosticKindExpr + "=?"
 		args = append(args, f.Kind)
@@ -304,7 +321,7 @@ func (r *DiagnosticReader) Detail(ctx context.Context, actor DiagnosticActor, id
 		out.Body.Body = base64.StdEncoding.EncodeToString(raw)
 	}
 	var source string
-	if out.Item.Kind == "model_discovery" {
+	if out.Item.Kind == "model_discovery" || out.Item.Kind == "api_request" {
 		err = tx.QueryRowContext(ctx, "SELECT s.source_json FROM request_source_facts s JOIN request_logs l ON l.id=s.request_log_id WHERE l.logical_request_id=? AND s.user_id=l.user_id AND s.occurred_at>?", out.Item.SubjectID, now-RetentionSeconds).Scan(&source)
 	} else if out.Item.Kind == "image_task" {
 		err = tx.QueryRowContext(ctx, "SELECT s.source_json FROM image_task_sources s JOIN image_activity_tasks t ON t.id=s.task_id WHERE t.id=? AND s.user_id=t.user_id AND s.occurred_at>?", out.Item.SubjectID, now-RetentionSeconds).Scan(&source)
@@ -324,4 +341,12 @@ func (r *DiagnosticReader) Detail(ctx context.Context, actor DiagnosticActor, id
 		return out, ErrUnavailable
 	}
 	return out, nil
+}
+
+func validStorageFilter(value string) bool {
+	switch value {
+	case "", "missing", "capacity_exhausted", "read_failure", "storage_failure", "unspecified":
+		return true
+	}
+	return false
 }
