@@ -237,9 +237,19 @@ test('all alert filters and retained details accept current deletion snapshots a
       .toBe(true);
   }
   await page.setViewportSize({ width: 1280, height: 1000 });
-  await expect(page.getByText('Other synthetic alert')).toBeVisible();
-  await page.getByLabel('Alert type').selectOption('account_deleted');
+  await expect(page.getByLabel('Resolution status')).toHaveValue('all');
+  const fetchAlert = page.getByRole('row').filter({
+    hasText: 'Could not fetch the model list. Check the service address and key.',
+  });
+  await expect(fetchAlert).toBeVisible();
   await expect(page.getByText('Other synthetic alert')).toHaveCount(0);
+  await fetchAlert.getByRole('button', { name: 'Details', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Alert details #9' })).toBeVisible();
+  await expect(page.getByText('Other synthetic alert', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Close details' }).click();
+  await expect(page.getByText('Other synthetic alert')).toHaveCount(0);
+  await page.getByLabel('Alert type').selectOption('account_deleted');
+  await expect(fetchAlert).toHaveCount(0);
   for (const [id, snapshot] of [
     ['7', deletionSnapshots.v1],
     ['8', deletionSnapshots.v2],
@@ -266,12 +276,14 @@ test('all alert filters and retained details accept current deletion snapshots a
   await expect(page.getByText(deletionSnapshots.v1.discord_id)).toBeVisible();
   await expect(page.getByText(deletionSnapshots.v2.discord_id)).toBeVisible();
   await page.getByLabel('Alert type').selectOption('all');
-  await expect(page.getByText('Other synthetic alert')).toBeVisible();
+  await expect(fetchAlert).toBeVisible();
+  await expect(page.getByText('Other synthetic alert')).toHaveCount(0);
   malformed = true;
   await page.reload();
   await expect(
     page.getByText('The service returned an invalid response.', { exact: true }),
   ).toBeVisible();
+  await expect(fetchAlert).toHaveCount(0);
   await expect(page.getByText('Other synthetic alert')).toHaveCount(0);
   errors.assertNone();
 });
