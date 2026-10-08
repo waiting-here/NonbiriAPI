@@ -130,7 +130,7 @@ Setting both is a startup error.
 | --- | --- | --- |
 | `NONBIRI_DISCORD_CLIENT_ID` | yes | 1–512 bytes, from the Discord developer portal. |
 | `NONBIRI_DISCORD_CLIENT_SECRET` | yes | 1–4096 bytes, from the portal. |
-| `NONBIRI_DISCORD_OAUTH_SCOPES` | no | Leave unset to use `identify guilds.members.read`. If overridden while registration is enabled, retain both scopes; `identify` alone cannot check guild membership. |
+| `NONBIRI_DISCORD_OAUTH_SCOPES` | no | Leave unset to use `identify guilds.members.read`. Registration and sign-in without an exemption require both scopes; `identify` alone cannot check guild membership. |
 
 In the Discord application settings, set the OAuth redirect URI to
 `https://<user-host>/api/auth/discord/callback` (the user station, not the admin

@@ -269,7 +269,7 @@ func TestUserSessionInvalidationObserverCommittedReplacementAndRollback(t *testi
 		go func() {
 			token, _, err := fixture.runtime.refreshExistingUser(
 				context.Background(), userID,
-				DiscordIdentity{ID: "discord-1", Username: "Replacement", Avatar: "replacement-avatar"}, nil,
+				DiscordIdentity{ID: "discord-1", Username: "Replacement", Avatar: "replacement-avatar"}, &discordMembership{guild: "guild-1", member: &GuildMember{Roles: []string{"role-1"}}},
 			)
 			result <- replacementResult{token: token, err: err}
 		}()
@@ -303,7 +303,7 @@ func TestUserSessionInvalidationObserverCommittedReplacementAndRollback(t *testi
 		}
 		if _, _, err := fixture.runtime.refreshExistingUser(
 			context.Background(), userID,
-			DiscordIdentity{ID: "discord-1", Username: "Rejected", Avatar: "rejected-avatar"}, nil,
+			DiscordIdentity{ID: "discord-1", Username: "Rejected", Avatar: "rejected-avatar"}, &discordMembership{guild: "guild-1", member: &GuildMember{Roles: []string{"role-1"}}},
 		); err == nil {
 			t.Fatal("replacement unexpectedly succeeded")
 		}

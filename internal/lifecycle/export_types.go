@@ -55,6 +55,7 @@ type UserExport struct {
 	GuildNick                 *string `json:"guild_nick"`
 	GuildAvatarURL            *string `json:"guild_avatar_url"`
 	Lang                      string  `json:"lang"`
+	DiscordGatePolicy         string  `json:"discord_gate_policy"`
 	IsBanned                  bool    `json:"is_banned"`
 	BannedUntil               *int64  `json:"banned_until"`
 	CharitySuspendedUntil     *int64  `json:"charity_suspended_until"`

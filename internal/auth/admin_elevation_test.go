@@ -303,7 +303,7 @@ func TestAdminElevationRequiresPasswordAndBindsSession(t *testing.T) {
 	}
 }
 
-func TestExistingIdentityIgnoresRegistrationAndMemberRefreshFailures(t *testing.T) {
+func TestExemptExistingIdentityIgnoresRegistrationAndMemberRefreshFailures(t *testing.T) {
 	f := newRuntimeFixture(t, nil)
 	loginUser(t, f, "initial", "")
 
@@ -333,6 +333,7 @@ func TestExistingIdentityIgnoresRegistrationAndMemberRefreshFailures(t *testing.
 		}
 	}
 
+	setConfig("discord_registered_user_gate_exempt", "1")
 	setConfig("registration_open", "0")
 	addExistingLogin("closed-registration", "Alice Closed", func(context.Context, string) (GuildMember, error) {
 		return GuildMember{Nick: "Closed Gate Nick", Avatar: "closed-avatar", Roles: []string{"role-1"}}, nil

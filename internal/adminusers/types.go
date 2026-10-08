@@ -37,6 +37,7 @@ type AdminUser struct {
 	AvatarURL                 *string                        `json:"avatar_url"`
 	GuildNick                 *string                        `json:"guild_nick"`
 	GuildAvatarURL            *string                        `json:"guild_avatar_url"`
+	DiscordGatePolicy         string                         `json:"discord_gate_policy"`
 	IsAdmin                   bool                           `json:"is_admin"`
 	IsBanned                  bool                           `json:"is_banned"`
 	BannedReason              string                         `json:"banned_reason"`
@@ -144,6 +145,9 @@ type ProfileMutation struct {
 	Lang             string
 	LevelSet         bool
 	Level            *int
+
+	DiscordGatePolicySet bool
+	DiscordGatePolicy    string
 }
 
 type EconomyMutation struct {

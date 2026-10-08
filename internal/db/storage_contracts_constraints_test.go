@@ -23,10 +23,10 @@ func TestStorageContractsCompatibilityRegistryIsDetachedAndClosed(t *testing.T) 
 		}
 		seen[hash] = true
 	}
-	if len(seen) != 7 || !seen[managementAndGamesManifestHash] || !seen[aiPlayersManifestHash] || !seen[preLedgerRetentionManifestHash] || !seen[preQueryIndexesManifestHash] || !seen[preStorageVersionManifestHash] || !seen[baselineManifestHash] || !seen[terminalReservationIndexesManifestHash] {
+	if len(seen) != 8 || !seen[gwentAIManifestHash] || !seen[managementAndGamesManifestHash] || !seen[aiPlayersManifestHash] || !seen[preLedgerRetentionManifestHash] || !seen[preQueryIndexesManifestHash] || !seen[preStorageVersionManifestHash] || !seen[baselineManifestHash] || !seen[terminalReservationIndexesManifestHash] {
 		t.Fatal("deployed source missing")
 	}
-	if descriptor.SchemaVersion != 5 || !reflect.DeepEqual(descriptor.SourceSchemaVersions, []int{1, 2, 3, 4}) {
+	if descriptor.SchemaVersion != 6 || !reflect.DeepEqual(descriptor.SourceSchemaVersions, []int{1, 2, 3, 4, 5}) {
 		t.Fatal("unexpected stable schema history")
 	}
 	descriptor.SourceManifestHashes[0] = "unknown"
