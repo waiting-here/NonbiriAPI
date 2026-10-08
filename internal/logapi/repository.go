@@ -414,7 +414,7 @@ func validateCommonRecord(record commonLogRecord) error {
 		return ErrInvariant
 	}
 	switch RouteKind(record.routeKind) {
-	case RouteOpenAIChat, RouteCharityChat, RouteOpenAIEmbeddings, RouteCharityEmbeddings, RouteDiscovery:
+	case RouteOpenAIChat, RouteCharityChat, RouteOpenAIEmbeddings, RouteCharityEmbeddings, RouteOpenAIImages, RouteCharityImages, RouteDiscovery:
 	default:
 		return ErrInvariant
 	}

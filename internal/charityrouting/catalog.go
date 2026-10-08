@@ -119,7 +119,7 @@ CROSS JOIN (SELECT ? AS decision_now,? AS token_reserve,? AS charity_enabled) cx
 	rows, err := tx.QueryContext(ctx, `SELECT cm.id,cm.provider,cm.model,cm.full_name,cm.pricing_mode,
 cm.request_user_price,cm.uncached_user_price,cm.cache_write_user_price,cm.cache_read_user_price,cm.output_user_price,
 cm.discount_enabled,cm.discount_percent,cm.discount_start_at,cm.discount_end_at,
-cm.enabled,a.allowed_level_mask,a.public_description,`+catalogAvailableSQL()+from+` ORDER BY cm.full_name,cm.id LIMIT ? OFFSET ?`,
+cm.enabled,a.allowed_level_mask,a.public_description,cm.model_types,`+catalogAvailableSQL()+from+` ORDER BY cm.full_name,cm.id LIMIT ? OFFSET ?`,
 		append(args, page.Size, offset)...)
 	if err != nil {
 		return Catalog{}, fmt.Errorf("charity routing: read catalog page: %w", err)
@@ -182,7 +182,7 @@ func scanCatalogModel(scanner interface{ Scan(...any) error }, level int) (Catal
 	var start, end sql.NullInt64
 	if err := scanner.Scan(&id, &model.Provider, &model.Model, &model.FullName, &mode,
 		&requestPrice, &tokenPrices[0], &tokenPrices[1], &tokenPrices[2], &tokenPrices[3],
-		&discountEnabled, &model.Discount.Percent, &start, &end, &enabled, &mask, &model.PublicDescription, &model.CurrentlyAvailable); err != nil {
+		&discountEnabled, &model.Discount.Percent, &start, &end, &enabled, &mask, &model.PublicDescription, &model.ModelTypes, &model.CurrentlyAvailable); err != nil {
 		return CatalogModel{}, 0, fmt.Errorf("charity routing: scan catalog model: %w", err)
 	}
 	model.ID = strconv.FormatInt(id, 10)

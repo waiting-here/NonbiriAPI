@@ -49,6 +49,15 @@ func newEmbeddingHTTPFixture(t *testing.T, custom ...http.HandlerFunc) *embeddin
 
 func newEmbeddingHTTPFixtureWithConfig(t *testing.T, configure func(*config.Config, string), custom ...http.HandlerFunc) *embeddingHTTPFixture {
 	t.Helper()
+	connectorType := "openai-compatible"
+	if len(custom) != 0 {
+		connectorType = "ai-sdk-gateway-v3"
+	}
+	return newModelHTTPFixture(t, configure, connectorType, custom...)
+}
+
+func newModelHTTPFixture(t *testing.T, configure func(*config.Config, string), connectorType string, custom ...http.HandlerFunc) *embeddingHTTPFixture {
+	t.Helper()
 	f := &embeddingHTTPFixture{}
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if len(custom) != 0 {
@@ -143,10 +152,6 @@ func newEmbeddingHTTPFixtureWithConfig(t *testing.T, configure func(*config.Conf
 	f.caller = seedRootCallerIdentity(t, f.store)
 	if err := f.store.DB().QueryRow(`SELECT user_id FROM caller_keys WHERE generation=1`).Scan(&f.userID); err != nil {
 		t.Fatal(err)
-	}
-	connectorType := "openai-compatible"
-	if len(custom) != 0 {
-		connectorType = "ai-sdk-gateway-v3"
 	}
 	f.seedModels(t, vault, upstream.URL+"/v1", connectorType)
 	stack, err := egress.NewStack(egress.StackOptions{AllowedOrigins: []string{upstream.URL}, RequestTimeout: 5 * time.Second})
@@ -246,7 +251,7 @@ func (f *embeddingHTTPFixture) seedModels(t *testing.T, vault *secret.Vault, bas
 		f.exec(t, `INSERT INTO model_discovery_evidence(endpoint_key_id,state,revision,safe_class,safe_diag,fetched_count) VALUES(?,'unknown',1,'none','',0)`, key)
 		f.exec(t, `INSERT INTO model_pair_catalog(endpoint_key_id,normalized_model_id,automatic_supports,manual_supports,automatic_revision,pair_revision,updated_at) VALUES(?,'private-model',0,1,0,1,?)`, key, now)
 		if index == 0 {
-			model := f.exec(t, `INSERT INTO models(user_id,provider,model,full_name,route_strategy,silent_retry,flatten_tool_calls,revision,binding_revision,created_at,updated_at) VALUES(?,'provider','self','provider/self','ordered',0,1,1,1,?,?)`, user, now, now)
+			model := f.exec(t, `INSERT INTO models(user_id,provider,model,full_name,route_strategy,silent_retry,flatten_tool_calls,revision,binding_revision,model_types,created_at,updated_at) VALUES(?,'provider','self','provider/self','ordered',0,1,1,1,3,?,?)`, user, now, now)
 			f.exec(t, `INSERT INTO model_bindings(model_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at) VALUES(?,?,'private-model',0,?,?)`, model, key, now, now)
 			continue
 		}
@@ -255,7 +260,7 @@ func (f *embeddingHTTPFixture) seedModels(t *testing.T, vault *secret.Vault, bas
 		donationKey := f.exec(t, `INSERT INTO donation_keys(donation_id,endpoint_key_id,display_head,display_tail,canonical_base_url,connector_type,price_used_mag,price_reserved_mag,calls_used,calls_reserved,tokens_used,tokens_reserved,token_reserve,enabled,failure_streak,streak_generation,next_claim_seq,next_fold_seq,safe_note,created_at,updated_at,source_endpoint_key_id,report_fingerprint) VALUES(?,?,'head','tail',?,'`+connectorType+`',?,?,?,?,?,?,5,1,?,?,?,?,'fixture',?,?,?,?)`, donation, key, base, zero, zero, zero, zero, zero, zero, zero, one, one, one, now, now, key, fingerprint)
 		f.exec(t, `INSERT INTO donation_key_memberships(endpoint_key_id,donation_key_id,donation_id,created_at) VALUES(?,?,?,?)`, key, donationKey, donation, now)
 		for _, mode := range []string{"per_request", "per_token"} {
-			model := f.exec(t, `INSERT INTO charity_models(provider,model,full_name,enabled,pricing_mode,request_user_price,request_donor_reward,uncached_user_price,uncached_donor_reward,discount_percent,discount_enabled,flatten_tool_calls,revision,binding_revision,created_at,updated_at) VALUES('provider',?,?,1,?,3000,1250,4000000,2000000,80,1,1,1,1,?,?)`, mode, "[公益]provider/"+mode, mode, now, now)
+			model := f.exec(t, `INSERT INTO charity_models(provider,model,full_name,enabled,pricing_mode,request_user_price,request_donor_reward,uncached_user_price,uncached_donor_reward,discount_percent,discount_enabled,flatten_tool_calls,revision,binding_revision,model_types,created_at,updated_at) VALUES('provider',?,?,1,?,3000,1250,4000000,2000000,80,1,1,1,1,3,?,?)`, mode, "[公益]provider/"+mode, mode, now, now)
 			f.exec(t, `INSERT INTO charity_model_access(model_id,allowed_level_mask,public_description) VALUES(?,31,'')`, model)
 			f.exec(t, `INSERT INTO charity_routing_settings(model_id,revision,affinity_ttl_seconds) VALUES(?,1,300)`, model)
 			f.exec(t, `INSERT INTO charity_model_bindings(charity_model_id,donation_key_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at) VALUES(?,?,?,'private-model',0,?,?)`, model, donationKey, key, now, now)

@@ -12,6 +12,7 @@ import (
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/debug"
+	"github.com/waiting-here/NonbiriAPI/internal/modeltype"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
 	"github.com/waiting-here/NonbiriAPI/internal/transportpolicy"
 )
@@ -103,6 +104,10 @@ func (router *fakeCharityRouter) ReserveForOutput(_ context.Context, _ int64, cu
 }
 
 func (router *fakeCharityRouter) PreflightEmbedding(ctx context.Context, userID int64, model string, _ *openai.EmbeddingRequest, now int64) (CharityPreflight, error) {
+	return router.Preflight(ctx, userID, model, nil, now)
+}
+
+func (router *fakeCharityRouter) PreflightImage(ctx context.Context, userID int64, model string, _ *openai.ImageRequest, now int64) (CharityPreflight, error) {
 	return router.Preflight(ctx, userID, model, nil, now)
 }
 
@@ -346,6 +351,7 @@ func newServiceFixture(t *testing.T, capture DebugCapture) *serviceFixture {
 	}
 	personal := &fakePersonalRouter{
 		preflight: PersonalPreflight{
+			ModelTypes:    modeltype.Set{connectorcontract.OperationChatCompletions, connectorcontract.OperationEmbeddings, connectorcontract.OperationImagesGenerations},
 			TransportRule: transportpolicy.Passthrough,
 			RolePolicy:    rolepolicy.Default(),
 			ModelID:       7, OwnerUserID: 1, Provider: "provider", Model: "model", FullName: "provider/model",
@@ -357,6 +363,7 @@ func newServiceFixture(t *testing.T, capture DebugCapture) *serviceFixture {
 	charityCandidate.EndpointID, charityCandidate.EndpointKeyID, charityCandidate.DonationKeyID = 21, 22, 23
 	charity := &fakeCharityRouter{
 		preflight: CharityPreflight{
+			ModelTypes:    modeltype.Set{connectorcontract.OperationChatCompletions, connectorcontract.OperationEmbeddings, connectorcontract.OperationImagesGenerations},
 			TransportRule: transportpolicy.Passthrough,
 			RolePolicy:    rolepolicy.Default(), Revision: 1,
 			ModelID: 8, Provider: "care", Model: "model", FullName: "[公益]care/model", ReservedMilli: 10,

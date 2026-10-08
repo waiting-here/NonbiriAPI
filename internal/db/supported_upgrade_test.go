@@ -31,7 +31,11 @@ var preGwentAIFixture string
 //go:embed testdata/pre_discord_gate.sql
 var preDiscordGateFixture string
 
-func gwentAIStorageSchema() string            { return generationTwoSchema + preDiscordGateFixture }
+//go:embed testdata/pre_model_types.sql
+var preModelTypesFixture string
+
+func discordGateStorageSchema() string        { return generationTwoSchema + preModelTypesFixture }
+func gwentAIStorageSchema() string            { return discordGateStorageSchema() + preDiscordGateFixture }
 func managementAndGamesStorageSchema() string { return gwentAIStorageSchema() + preGwentAIFixture }
 func aiPlayersStorageSchema() string {
 	return managementAndGamesStorageSchema() + preManagementAndGamesFixture
@@ -87,6 +91,7 @@ func supportedSourceFixture(t *testing.T) *sql.DB {
 
 func TestSupportedReleasedSchemaIdentity(t *testing.T) {
 	for _, source := range []struct{ schema, manifest string }{
+		{discordGateStorageSchema(), discordGateManifestHash},
 		{gwentAIStorageSchema(), gwentAIManifestHash},
 		{managementAndGamesStorageSchema(), managementAndGamesManifestHash},
 		{aiPlayersStorageSchema(), aiPlayersManifestHash},

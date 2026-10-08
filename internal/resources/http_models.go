@@ -6,12 +6,14 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/waiting-here/NonbiriAPI/internal/modeltype"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
 	"github.com/waiting-here/NonbiriAPI/internal/transportpolicy"
 )
 
 type createModelRequest struct {
+	ModelTypes       requestField[modeltype.Set]        `json:"model_types"`
 	TransportRule    requestField[transportpolicy.Rule] `json:"transport_rule"`
 	RolePolicy       requestField[rolepolicy.Policy]    `json:"role_policy"`
 	Provider         requestField[string]               `json:"provider"`
@@ -22,6 +24,7 @@ type createModelRequest struct {
 }
 
 type createModelCanonical struct {
+	ModelTypes       *modeltype.Set        `json:"model_types,omitempty"`
 	TransportRule    *transportpolicy.Rule `json:"transport_rule,omitempty"`
 	RolePolicy       *rolepolicy.Policy    `json:"role_policy,omitempty"`
 	Provider         string                `json:"provider"`
@@ -32,6 +35,7 @@ type createModelCanonical struct {
 }
 
 type patchModelRequest struct {
+	ModelTypes       requestField[modeltype.Set]        `json:"model_types"`
 	TransportRule    requestField[transportpolicy.Rule] `json:"transport_rule"`
 	RolePolicy       requestField[rolepolicy.Policy]    `json:"role_policy"`
 	Provider         requestField[string]               `json:"provider"`
@@ -43,6 +47,7 @@ type patchModelRequest struct {
 }
 
 type patchModelCanonical struct {
+	ModelTypes       *modeltype.Set        `json:"model_types,omitempty"`
 	TransportRule    *transportpolicy.Rule `json:"transport_rule,omitempty"`
 	RolePolicy       *rolepolicy.Policy    `json:"role_policy,omitempty"`
 	Provider         *string               `json:"provider,omitempty"`
@@ -130,7 +135,7 @@ func (api *httpAPI) createModel(writer http.ResponseWriter, request *http.Reques
 		return
 	}
 	canonical := createModelCanonical{
-		RolePolicy: optionalPointer(body.RolePolicy), TransportRule: optionalPointer(body.TransportRule),
+		ModelTypes: optionalPointer(body.ModelTypes), RolePolicy: optionalPointer(body.RolePolicy), TransportRule: optionalPointer(body.TransportRule),
 		Provider: body.Provider.Value, Model: body.Model.Value,
 		RouteStrategy: optionalPointer(body.RouteStrategy), SilentRetry: optionalPointer(body.SilentRetry),
 		FlattenToolCalls: optionalPointer(body.FlattenToolCalls),
@@ -140,6 +145,9 @@ func (api *httpAPI) createModel(writer http.ResponseWriter, request *http.Reques
 		return
 	}
 	input := CreateModelInput{Provider: canonical.Provider, Model: canonical.Model, RolePolicy: canonical.RolePolicy}
+	if canonical.ModelTypes != nil {
+		input.ModelTypes = canonical.ModelTypes.Clone()
+	}
 	if canonical.TransportRule != nil {
 		input.TransportRule = *canonical.TransportRule
 		if !input.TransportRule.Valid() {
@@ -187,12 +195,12 @@ func (api *httpAPI) patchModel(writer http.ResponseWriter, request *http.Request
 		return
 	}
 	revision, revisionOK := canonicalExpectedRevision(body.ExpectedRevision)
-	if !revisionOK || (!body.Provider.Set && !body.Model.Set && !body.RouteStrategy.Set && !body.SilentRetry.Set && !body.FlattenToolCalls.Set && !body.RolePolicy.Set && !body.TransportRule.Set) {
+	if !revisionOK || (!body.Provider.Set && !body.Model.Set && !body.RouteStrategy.Set && !body.SilentRetry.Set && !body.FlattenToolCalls.Set && !body.RolePolicy.Set && !body.TransportRule.Set && !body.ModelTypes.Set) {
 		writeResourceError(writer, ErrInvalidRequest)
 		return
 	}
 	canonical := patchModelCanonical{
-		RolePolicy: optionalPointer(body.RolePolicy), TransportRule: optionalPointer(body.TransportRule),
+		ModelTypes: optionalPointer(body.ModelTypes), RolePolicy: optionalPointer(body.RolePolicy), TransportRule: optionalPointer(body.TransportRule),
 		Provider: optionalPointer(body.Provider), Model: optionalPointer(body.Model),
 		RouteStrategy: optionalPointer(body.RouteStrategy), SilentRetry: optionalPointer(body.SilentRetry),
 		FlattenToolCalls: optionalPointer(body.FlattenToolCalls), ExpectedRevision: body.ExpectedRevision.Value,
@@ -202,7 +210,7 @@ func (api *httpAPI) patchModel(writer http.ResponseWriter, request *http.Request
 		return
 	}
 	result, err := api.repository.PatchModel(request.Context(), principal.UserID, modelID, mutation, PatchModelInput{
-		TransportRule: canonical.TransportRule, RolePolicy: canonical.RolePolicy, Provider: canonical.Provider, Model: canonical.Model, RouteStrategy: canonical.RouteStrategy,
+		ModelTypes: canonical.ModelTypes, TransportRule: canonical.TransportRule, RolePolicy: canonical.RolePolicy, Provider: canonical.Provider, Model: canonical.Model, RouteStrategy: canonical.RouteStrategy,
 		SilentRetry: canonical.SilentRetry, FlattenToolCalls: canonical.FlattenToolCalls, ExpectedRevision: revision,
 	})
 	if err != nil {

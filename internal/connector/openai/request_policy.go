@@ -46,7 +46,7 @@ func NormalizeExcludedRequestFields(fields []string) ([]string, error) {
 			}
 		}
 		switch name {
-		case "model", "messages", "input", "stream", "stream_options", "tools", "tool_choice", "functions", "function_call", "response_format", "encoding_format":
+		case "model", "messages", "input", "prompt", "stream", "stream_options", "tools", "tool_choice", "functions", "function_call", "response_format", "encoding_format":
 			return nil, ErrInvalidRequest
 		}
 		if !seen[name] {
@@ -61,7 +61,7 @@ func NormalizeExcludedRequestFields(fields []string) ([]string, error) {
 // routing/input fields without interpreting optional business parameters.
 // The ordinary operation decoder validates the independently filtered copy.
 func DecodeRequestEnvelope(body io.Reader, limit int64, operation contract.Operation) (*RequestEnvelope, error) {
-	if body == nil || operation != contract.OperationChatCompletions && operation != contract.OperationEmbeddings {
+	if body == nil || !operation.Valid() {
 		return nil, invalidField("body", "expected one valid UTF-8 JSON object")
 	}
 	limit = requestbody.DecoderLimit(limit)

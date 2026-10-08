@@ -6,6 +6,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/modeltype"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
 	"github.com/waiting-here/NonbiriAPI/internal/transportpolicy"
@@ -160,6 +161,7 @@ type Binding struct {
 }
 
 type Model struct {
+	ModelTypes       modeltype.Set        `json:"model_types"`
 	TransportRule    transportpolicy.Rule `json:"transport_rule"`
 	RolePolicy       rolepolicy.Policy    `json:"role_policy"`
 	ID               string               `json:"id"`
@@ -275,6 +277,7 @@ type DeleteManualInput struct {
 }
 
 type CreateModelInput struct {
+	ModelTypes       modeltype.Set
 	TransportRule    transportpolicy.Rule
 	RolePolicy       *rolepolicy.Policy
 	Provider         string
@@ -285,6 +288,7 @@ type CreateModelInput struct {
 }
 
 type PatchModelInput struct {
+	ModelTypes       *modeltype.Set
 	TransportRule    *transportpolicy.Rule
 	RolePolicy       *rolepolicy.Policy
 	Provider         *string

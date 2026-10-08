@@ -21,7 +21,7 @@ const (
 	DefaultRequestTimeout               = 20 * time.Minute
 	DefaultResponseHeaderTimeout        = 15 * time.Minute
 	DefaultTLSHandshakeTimeout          = 10 * time.Second
-	DefaultMaxResponseBytes       int64 = 32 << 20
+	DefaultMaxResponseBytes       int64 = 64 << 20
 	DefaultMaxResponseHeaderBytes int64 = 1 << 20
 )
 

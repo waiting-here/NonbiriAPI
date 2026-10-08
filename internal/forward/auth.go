@@ -238,7 +238,7 @@ func exactIngressMethod(path, escapedPath string) string {
 	switch path {
 	case "/v1/models":
 		return http.MethodGet
-	case "/v1/chat/completions", "/v1/embeddings":
+	case "/v1/chat/completions", "/v1/embeddings", "/v1/images/generations":
 		return http.MethodPost
 	default:
 		return ""

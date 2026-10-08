@@ -31,8 +31,10 @@ type RouteKind = requestkind.Kind
 const (
 	RouteOpenAIChat        = requestkind.OpenAIChat
 	RouteOpenAIEmbeddings  = requestkind.OpenAIEmbeddings
+	RouteOpenAIImages      = requestkind.OpenAIImages
 	RouteCharityChat       = requestkind.CharityChat
 	RouteCharityEmbeddings = requestkind.CharityEmbeddings
+	RouteCharityImages     = requestkind.CharityImages
 	RouteDiscovery         = requestkind.Discovery
 )
 

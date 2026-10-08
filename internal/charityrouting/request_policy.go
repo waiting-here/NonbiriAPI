@@ -8,6 +8,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/charityaccess"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
+	"github.com/waiting-here/NonbiriAPI/internal/modeltype"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
 	"github.com/waiting-here/NonbiriAPI/internal/transportpolicy"
 )
@@ -15,6 +16,7 @@ import (
 // RequestPolicy is a candidate-free ingress snapshot. The caller binds its
 // model identity to admission and retains the same exclusions for retries.
 type RequestPolicy struct {
+	ModelTypes            modeltype.Set
 	TransportRule         transportpolicy.Rule
 	RolePolicy            rolepolicy.Policy
 	Revision              int64
@@ -67,8 +69,8 @@ FROM users u JOIN site_config c ON c.key='charity_enabled' WHERE u.id=?`, userID
 		return result, ErrCharitySuspended
 	}
 	var encoded, encodedRole string
-	err = tx.QueryRowContext(ctx, `SELECT id,full_name,excluded_request_fields,role_policy,revision,transport_rule FROM charity_models WHERE full_name=? AND enabled=1`, fullName).
-		Scan(&result.ModelID, &result.FullName, &encoded, &encodedRole, &result.Revision, &result.TransportRule)
+	err = tx.QueryRowContext(ctx, `SELECT id,full_name,excluded_request_fields,role_policy,revision,transport_rule,model_types FROM charity_models WHERE full_name=? AND enabled=1`, fullName).
+		Scan(&result.ModelID, &result.FullName, &encoded, &encodedRole, &result.Revision, &result.TransportRule, &result.ModelTypes)
 	if errors.Is(err, sql.ErrNoRows) {
 		return result, ErrNotFound
 	}

@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/waiting-here/NonbiriAPI/internal/charityaccess"
+	"github.com/waiting-here/NonbiriAPI/internal/modeltype"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
 	"github.com/waiting-here/NonbiriAPI/internal/transportpolicy"
 )
@@ -330,6 +331,7 @@ func parseDiscount(wire discountWire) (DiscountInput, map[string]any, error) {
 }
 
 type modelCreateWire struct {
+	ModelTypes            requiredField[modeltype.Set]        `json:"model_types"`
 	TransportRule         requiredField[transportpolicy.Rule] `json:"transport_rule"`
 	RolePolicy            requiredField[rolepolicy.Policy]    `json:"role_policy"`
 	IsMainstream          requiredField[bool]                 `json:"is_mainstream"`
@@ -403,6 +405,13 @@ func parseModelCreate(wire modelCreateWire) (ModelCreate, map[string]any, error)
 			return ModelCreate{}, nil, ErrInvalidRequest
 		}
 		canonical["public_description"] = input.PublicDescription
+	}
+	if wire.ModelTypes.Set {
+		if !wire.ModelTypes.Value.Valid() {
+			return input, nil, ErrInvalidRequest
+		}
+		input.ModelTypes = wire.ModelTypes.Value.Clone()
+		canonical["model_types"] = wire.ModelTypes.Value
 	}
 	if wire.TransportRule.Set {
 		if !wire.TransportRule.Value.Valid() {
@@ -498,6 +507,7 @@ func parseDiscountPatch(wire discountPatchWire) (*DiscountPatchInput, map[string
 }
 
 type modelPatchWire struct {
+	ModelTypes            requiredField[modeltype.Set]        `json:"model_types"`
 	TransportRule         requiredField[transportpolicy.Rule] `json:"transport_rule"`
 	RolePolicy            requiredField[rolepolicy.Policy]    `json:"role_policy"`
 	IsMainstream          requiredField[bool]                 `json:"is_mainstream"`
@@ -600,6 +610,13 @@ func parseModelPatch(wire modelPatchWire) (ModelPatch, map[string]any, error) {
 		policy := wire.RolePolicy.Value.Clone()
 		input.RolePolicy = &policy
 		canonical["role_policy"] = policy
+	}
+	if wire.ModelTypes.Set {
+		if !wire.ModelTypes.Value.Valid() {
+			return ModelPatch{}, nil, ErrInvalidRequest
+		}
+		input.ModelTypes = &wire.ModelTypes.Value
+		canonical["model_types"] = wire.ModelTypes.Value
 	}
 	if wire.TransportRule.Set {
 		if !wire.TransportRule.Value.Valid() {

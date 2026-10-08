@@ -338,7 +338,7 @@ CREATE TABLE models (
  revision INTEGER NOT NULL DEFAULT 1 CHECK(revision BETWEEN 1 AND 9223372036854775807),
  binding_revision INTEGER NOT NULL DEFAULT 0 CHECK(binding_revision BETWEEN 0 AND 9223372036854775807),
  created_at INTEGER NOT NULL,
- updated_at INTEGER NOT NULL, role_policy TEXT NOT NULL DEFAULT '{"default_action":"native","rules":{}}' CHECK(typeof(role_policy)='text' AND length(CAST(role_policy AS BLOB))<=8192 AND json_valid(role_policy) AND json_type(role_policy)='object' AND COALESCE(json_type(role_policy,'$.default_action'),'')='text' AND json_extract(role_policy,'$.default_action') IN ('native','passthrough','system','user','assistant','reject') AND COALESCE(json_type(role_policy,'$.rules'),'')='object'), transport_rule TEXT NOT NULL DEFAULT 'passthrough' CHECK(transport_rule IN ('passthrough','force_non_stream','force_stream')),
+ updated_at INTEGER NOT NULL, role_policy TEXT NOT NULL DEFAULT '{"default_action":"native","rules":{}}' CHECK(typeof(role_policy)='text' AND length(CAST(role_policy AS BLOB))<=8192 AND json_valid(role_policy) AND json_type(role_policy)='object' AND COALESCE(json_type(role_policy,'$.default_action'),'')='text' AND json_extract(role_policy,'$.default_action') IN ('native','passthrough','system','user','assistant','reject') AND COALESCE(json_type(role_policy,'$.rules'),'')='object'), transport_rule TEXT NOT NULL DEFAULT 'passthrough' CHECK(transport_rule IN ('passthrough','force_non_stream','force_stream')), model_types INTEGER NOT NULL DEFAULT 1 CHECK(typeof(model_types)='integer' AND model_types BETWEEN 1 AND 7),
  UNIQUE(user_id,full_name), UNIQUE(id,user_id), CHECK(full_name=provider||'/'||model)
 );
 CREATE INDEX idx_models_user ON models(user_id);
@@ -364,7 +364,7 @@ CREATE TABLE charity_models (
  uncached_donor_reward INTEGER NOT NULL DEFAULT 0 CHECK(uncached_donor_reward BETWEEN 0 AND 9000000000000000), cache_write_donor_reward INTEGER NOT NULL DEFAULT 0 CHECK(cache_write_donor_reward BETWEEN 0 AND 9000000000000000), cache_read_donor_reward INTEGER NOT NULL DEFAULT 0 CHECK(cache_read_donor_reward BETWEEN 0 AND 9000000000000000), output_donor_reward INTEGER NOT NULL DEFAULT 0 CHECK(output_donor_reward BETWEEN 0 AND 9000000000000000),
  discount_percent INTEGER NOT NULL DEFAULT 100 CHECK(discount_percent BETWEEN 0 AND 100), discount_start_at INTEGER, discount_end_at INTEGER, discount_enabled INTEGER NOT NULL DEFAULT 0 CHECK(discount_enabled IN (0,1)), flatten_tool_calls INTEGER NOT NULL DEFAULT 0 CHECK(flatten_tool_calls IN (0,1)), created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
  revision INTEGER NOT NULL DEFAULT 1 CHECK(revision BETWEEN 1 AND 9223372036854775807), binding_revision INTEGER NOT NULL DEFAULT 0 CHECK(binding_revision BETWEEN 0 AND 9223372036854775807), created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, is_mainstream INTEGER NOT NULL DEFAULT 0 CHECK(is_mainstream IN (0,1)), excluded_request_fields TEXT NOT NULL DEFAULT '[]'
- CHECK(json_valid(excluded_request_fields) AND json_type(excluded_request_fields)='array' AND length(excluded_request_fields)<=2200), role_policy TEXT NOT NULL DEFAULT '{"default_action":"native","rules":{}}' CHECK(typeof(role_policy)='text' AND length(CAST(role_policy AS BLOB))<=8192 AND json_valid(role_policy) AND json_type(role_policy)='object' AND COALESCE(json_type(role_policy,'$.default_action'),'')='text' AND json_extract(role_policy,'$.default_action') IN ('native','passthrough','system','user','assistant','reject') AND COALESCE(json_type(role_policy,'$.rules'),'')='object'), transport_rule TEXT NOT NULL DEFAULT 'passthrough' CHECK(transport_rule IN ('passthrough','force_non_stream','force_stream')),
+ CHECK(json_valid(excluded_request_fields) AND json_type(excluded_request_fields)='array' AND length(excluded_request_fields)<=2200), role_policy TEXT NOT NULL DEFAULT '{"default_action":"native","rules":{}}' CHECK(typeof(role_policy)='text' AND length(CAST(role_policy AS BLOB))<=8192 AND json_valid(role_policy) AND json_type(role_policy)='object' AND COALESCE(json_type(role_policy,'$.default_action'),'')='text' AND json_extract(role_policy,'$.default_action') IN ('native','passthrough','system','user','assistant','reject') AND COALESCE(json_type(role_policy,'$.rules'),'')='object'), transport_rule TEXT NOT NULL DEFAULT 'passthrough' CHECK(transport_rule IN ('passthrough','force_non_stream','force_stream')), model_types INTEGER NOT NULL DEFAULT 1 CHECK(typeof(model_types)='integer' AND model_types BETWEEN 1 AND 7),
  CHECK(full_name='[公益]'||provider||'/'||model), CHECK(discount_end_at IS NULL OR discount_start_at IS NULL OR discount_end_at>=discount_start_at)
 );
 CREATE TABLE donation_keys (
@@ -456,7 +456,7 @@ CREATE INDEX idx_idempotency_expiry ON idempotency_records(expires_at);
 CREATE TABLE logical_requests (
  id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='req_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')),
  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
- route_kind TEXT NOT NULL CHECK(route_kind IN ('openai_chat_completions','charity_chat_completions','model_discovery','openai_embeddings','charity_embeddings')),
+ route_kind TEXT NOT NULL CHECK(route_kind IN ('openai_chat_completions','charity_chat_completions','model_discovery','openai_embeddings','charity_embeddings','openai_images_generations','charity_images_generations')),
  model_snapshot TEXT NOT NULL DEFAULT '' CHECK(typeof(model_snapshot)='text' AND length(CAST(model_snapshot AS BLOB))<=512),
  state TEXT NOT NULL CHECK(state IN ('accepted','running','terminal')),
  attempt_limit INTEGER NOT NULL CHECK(attempt_limit BETWEEN 1 AND 100),
@@ -468,7 +468,7 @@ CREATE TABLE logical_requests (
  settlement_destination TEXT NOT NULL CHECK(settlement_destination IN ('user','external')),
  ledger_rows_remaining BLOB NOT NULL CHECK(typeof(ledger_rows_remaining)='blob' AND length(ledger_rows_remaining)=16),
  created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799),
- terminal_at INTEGER CHECK(terminal_at IS NULL OR terminal_at BETWEEN 0 AND 253402300799), rejection_stage TEXT CHECK(rejection_stage IS NULL OR rejection_stage IN ('authorization','flow','preflight')), rejection_reason TEXT CHECK(rejection_reason IS NULL OR rejection_reason IN ('unauthorized','forbidden','charity_suspended','feature_disabled','maintenance','invalid_request','not_found','unbound_model','insufficient_credits','user_rpm','global_rpm','shared_rpm','concurrency','content_too_short','payload_too_large','resource_limit_exceeded','service_unavailable')), request_method TEXT CHECK(request_method IS NULL OR request_method IN ('GET','POST')), request_path TEXT CHECK(request_path IS NULL OR request_path IN ('/v1/models','/v1/chat/completions','/v1/embeddings')),
+ terminal_at INTEGER CHECK(terminal_at IS NULL OR terminal_at BETWEEN 0 AND 253402300799), rejection_stage TEXT CHECK(rejection_stage IS NULL OR rejection_stage IN ('authorization','flow','preflight')), rejection_reason TEXT CHECK(rejection_reason IS NULL OR rejection_reason IN ('unauthorized','forbidden','charity_suspended','feature_disabled','maintenance','invalid_request','not_found','unbound_model','insufficient_credits','user_rpm','global_rpm','shared_rpm','concurrency','content_too_short','payload_too_large','resource_limit_exceeded','service_unavailable')), request_method TEXT CHECK(request_method IS NULL OR request_method IN ('GET','POST')), request_path TEXT CHECK(request_path IS NULL OR request_path IN ('/v1/models','/v1/chat/completions','/v1/embeddings','/v1/images/generations')),
  CHECK((state<>'terminal' AND caller_result_class IS NULL AND caller_status IS NULL AND caller_error_code IS NULL AND terminal_at IS NULL) OR
        (state='terminal' AND caller_result_class IS NOT NULL AND terminal_at IS NOT NULL AND terminal_at>=created_at AND
         ((caller_result_class='success' AND caller_status BETWEEN 200 AND 399 AND caller_error_code IS NULL) OR
@@ -528,7 +528,7 @@ CREATE TABLE request_logs (
  model TEXT NOT NULL DEFAULT '' CHECK(typeof(model)='text' AND length(CAST(model AS BLOB))<=512),
  endpoint_key_id INTEGER REFERENCES endpoint_keys(id) ON DELETE SET NULL,
  upstream_model_id TEXT NOT NULL DEFAULT '' CHECK(typeof(upstream_model_id)='text' AND length(upstream_model_id)<=512),
- route_kind TEXT NOT NULL DEFAULT 'openai_chat_completions' CHECK(route_kind IN ('openai_chat_completions','charity_chat_completions','model_discovery','openai_embeddings','charity_embeddings')),
+ route_kind TEXT NOT NULL DEFAULT 'openai_chat_completions' CHECK(route_kind IN ('openai_chat_completions','charity_chat_completions','model_discovery','openai_embeddings','charity_embeddings','openai_images_generations','charity_images_generations')),
  endpoint_base_url TEXT NOT NULL DEFAULT '' CHECK(typeof(endpoint_base_url)='text' AND length(CAST(endpoint_base_url AS BLOB))<=4096),
  caller_result_class TEXT CHECK(caller_result_class IS NULL OR caller_result_class IN ('success','failed','cancelled')),
  caller_status INTEGER CHECK(caller_status IS NULL OR caller_status BETWEEN 100 AND 599),
@@ -546,7 +546,7 @@ CREATE TABLE request_logs (
  error_source TEXT NOT NULL DEFAULT 'platform' CHECK(error_source IN ('platform','upstream')),
  error_code TEXT NOT NULL DEFAULT '' CHECK(typeof(error_code)='text' AND length(CAST(error_code AS BLOB))<=64 AND error_code NOT GLOB '*[^a-z0-9_]*'),
  error_diag TEXT NOT NULL DEFAULT '' CHECK(typeof(error_diag)='text' AND length(CAST(error_diag AS BLOB))<=4096),
- legal_hold_consumed INTEGER NOT NULL DEFAULT 0 CHECK(legal_hold_consumed IN (0,1)), rejection_stage TEXT CHECK(rejection_stage IS NULL OR rejection_stage IN ('authorization','flow','preflight')), rejection_reason TEXT CHECK(rejection_reason IS NULL OR rejection_reason IN ('unauthorized','forbidden','charity_suspended','feature_disabled','maintenance','invalid_request','not_found','unbound_model','insufficient_credits','user_rpm','global_rpm','shared_rpm','concurrency','content_too_short','payload_too_large','resource_limit_exceeded','service_unavailable')), request_method TEXT CHECK(request_method IS NULL OR request_method IN ('GET','POST')), request_path TEXT CHECK(request_path IS NULL OR request_path IN ('/v1/models','/v1/chat/completions','/v1/embeddings')), usage_total_mismatch INTEGER NOT NULL DEFAULT 0
+ legal_hold_consumed INTEGER NOT NULL DEFAULT 0 CHECK(legal_hold_consumed IN (0,1)), rejection_stage TEXT CHECK(rejection_stage IS NULL OR rejection_stage IN ('authorization','flow','preflight')), rejection_reason TEXT CHECK(rejection_reason IS NULL OR rejection_reason IN ('unauthorized','forbidden','charity_suspended','feature_disabled','maintenance','invalid_request','not_found','unbound_model','insufficient_credits','user_rpm','global_rpm','shared_rpm','concurrency','content_too_short','payload_too_large','resource_limit_exceeded','service_unavailable')), request_method TEXT CHECK(request_method IS NULL OR request_method IN ('GET','POST')), request_path TEXT CHECK(request_path IS NULL OR request_path IN ('/v1/models','/v1/chat/completions','/v1/embeddings','/v1/images/generations')), usage_total_mismatch INTEGER NOT NULL DEFAULT 0
  CHECK(typeof(usage_total_mismatch)='integer' AND usage_total_mismatch IN (0,1)), origin_user_id INTEGER CHECK(origin_user_id IS NULL OR (typeof(origin_user_id)='integer' AND origin_user_id>0)), origin_discord_id TEXT CHECK(origin_discord_id IS NULL OR (typeof(origin_discord_id)='text' AND length(origin_discord_id) BETWEEN 1 AND 20 AND origin_discord_id NOT GLOB '*[^0-9]*' AND substr(origin_discord_id,1,1) BETWEEN '1' AND '9')),
  CHECK((caller_result_class IS NULL AND caller_status IS NULL AND caller_error_code IS NULL AND completed_at IS NULL AND status_code=0 AND error_code='') OR
        (caller_result_class='success' AND caller_status BETWEEN 200 AND 399 AND caller_error_code IS NULL AND completed_at IS NOT NULL) OR
@@ -4710,21 +4710,24 @@ WHEN (NEW.rejection_stage IS NULL AND (NEW.rejection_reason IS NOT NULL OR NEW.r
  OR (NEW.rejection_stage IS NOT NULL AND (NEW.rejection_reason IS NULL OR NEW.request_method IS NULL OR NEW.request_path IS NULL
  OR NOT ((NEW.request_method='GET' AND NEW.request_path='/v1/models' AND NEW.route_kind='model_discovery')
  OR (NEW.request_method='POST' AND NEW.request_path='/v1/chat/completions' AND NEW.route_kind IN ('openai_chat_completions','charity_chat_completions'))
- OR (NEW.request_method='POST' AND NEW.request_path='/v1/embeddings' AND NEW.route_kind IN ('openai_embeddings','charity_embeddings')))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/embeddings' AND NEW.route_kind IN ('openai_embeddings','charity_embeddings'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/images/generations' AND NEW.route_kind IN ('openai_images_generations','charity_images_generations')))
  OR NEW.caller_result_class IS NOT 'failed' OR NEW.state<>'terminal' OR NEW.accounting_state<>'none' OR NEW.account_reserved_milli<>0 OR NEW.ledger_rows_remaining<>X'00000000000000000000000000000000')) BEGIN SELECT RAISE(ABORT,'invalid pre-handler rejection'); END;
 CREATE TRIGGER logical_requests_rejection_update BEFORE UPDATE ON logical_requests
 WHEN (NEW.rejection_stage IS NULL AND (NEW.rejection_reason IS NOT NULL OR NEW.request_method IS NOT NULL OR NEW.request_path IS NOT NULL))
  OR (NEW.rejection_stage IS NOT NULL AND (NEW.rejection_reason IS NULL OR NEW.request_method IS NULL OR NEW.request_path IS NULL
  OR NOT ((NEW.request_method='GET' AND NEW.request_path='/v1/models' AND NEW.route_kind='model_discovery')
  OR (NEW.request_method='POST' AND NEW.request_path='/v1/chat/completions' AND NEW.route_kind IN ('openai_chat_completions','charity_chat_completions'))
- OR (NEW.request_method='POST' AND NEW.request_path='/v1/embeddings' AND NEW.route_kind IN ('openai_embeddings','charity_embeddings')))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/embeddings' AND NEW.route_kind IN ('openai_embeddings','charity_embeddings'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/images/generations' AND NEW.route_kind IN ('openai_images_generations','charity_images_generations')))
  OR NEW.caller_result_class IS NOT 'failed' OR NEW.state<>'terminal' OR NEW.accounting_state<>'none' OR NEW.account_reserved_milli<>0 OR NEW.ledger_rows_remaining<>X'00000000000000000000000000000000')) BEGIN SELECT RAISE(ABORT,'invalid pre-handler rejection'); END;
 CREATE TRIGGER request_logs_rejection_insert BEFORE INSERT ON request_logs
 WHEN (NEW.rejection_stage IS NULL AND (NEW.rejection_reason IS NOT NULL OR NEW.request_method IS NOT NULL OR NEW.request_path IS NOT NULL))
  OR (NEW.rejection_stage IS NOT NULL AND (NEW.rejection_reason IS NULL OR NEW.request_method IS NULL OR NEW.request_path IS NULL
  OR NOT ((NEW.request_method='GET' AND NEW.request_path='/v1/models' AND NEW.route_kind='model_discovery')
  OR (NEW.request_method='POST' AND NEW.request_path='/v1/chat/completions' AND NEW.route_kind IN ('openai_chat_completions','charity_chat_completions'))
- OR (NEW.request_method='POST' AND NEW.request_path='/v1/embeddings' AND NEW.route_kind IN ('openai_embeddings','charity_embeddings')))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/embeddings' AND NEW.route_kind IN ('openai_embeddings','charity_embeddings'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/images/generations' AND NEW.route_kind IN ('openai_images_generations','charity_images_generations')))
  OR NEW.caller_result_class IS NOT 'failed' OR NEW.attempt_count<>0 OR NEW.uncached_input_tokens<>0 OR NEW.cache_write_input_tokens<>0 OR NEW.cache_read_input_tokens<>0 OR NEW.output_tokens<>0 OR NEW.usage_unknown<>0
  OR NOT EXISTS(SELECT 1 FROM logical_requests r WHERE r.id=NEW.logical_request_id AND r.rejection_stage IS NEW.rejection_stage AND r.rejection_reason IS NEW.rejection_reason AND r.request_method IS NEW.request_method AND r.request_path IS NEW.request_path))) BEGIN SELECT RAISE(ABORT,'invalid pre-handler rejection'); END;
 CREATE TRIGGER request_logs_rejection_update BEFORE UPDATE ON request_logs
@@ -4732,7 +4735,8 @@ WHEN (NEW.rejection_stage IS NULL AND (NEW.rejection_reason IS NOT NULL OR NEW.r
  OR (NEW.rejection_stage IS NOT NULL AND (NEW.rejection_reason IS NULL OR NEW.request_method IS NULL OR NEW.request_path IS NULL
  OR NOT ((NEW.request_method='GET' AND NEW.request_path='/v1/models' AND NEW.route_kind='model_discovery')
  OR (NEW.request_method='POST' AND NEW.request_path='/v1/chat/completions' AND NEW.route_kind IN ('openai_chat_completions','charity_chat_completions'))
- OR (NEW.request_method='POST' AND NEW.request_path='/v1/embeddings' AND NEW.route_kind IN ('openai_embeddings','charity_embeddings')))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/embeddings' AND NEW.route_kind IN ('openai_embeddings','charity_embeddings'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/images/generations' AND NEW.route_kind IN ('openai_images_generations','charity_images_generations')))
  OR NEW.caller_result_class IS NOT 'failed' OR NEW.attempt_count<>0 OR NEW.uncached_input_tokens<>0 OR NEW.cache_write_input_tokens<>0 OR NEW.cache_read_input_tokens<>0 OR NEW.output_tokens<>0 OR NEW.usage_unknown<>0
  OR NOT EXISTS(SELECT 1 FROM logical_requests r WHERE r.id=NEW.logical_request_id AND r.rejection_stage IS NEW.rejection_stage AND r.rejection_reason IS NEW.rejection_reason AND r.request_method IS NEW.request_method AND r.request_path IS NEW.request_path))) BEGIN SELECT RAISE(ABORT,'invalid pre-handler rejection'); END;
 CREATE INDEX idx_request_logs_phase ON request_logs(user_id,rejection_stage,started_at,id);
@@ -6481,7 +6485,7 @@ CREATE TABLE schema_state (
 ) STRICT;
 INSERT INTO credit_compaction(id,through_seq,details_before,sweep_at,sweep_after_seq) VALUES(1,0,0,0,0);
 INSERT INTO game_blackjack_clock(id,observed_at) VALUES(1,0);
-INSERT INTO schema_state(id,version) VALUES(1,6);
+INSERT INTO schema_state(id,version) VALUES(1,7);
 
 CREATE TABLE game_ai_settings (
  game_key TEXT PRIMARY KEY NOT NULL,

@@ -643,9 +643,9 @@ func validAcceptInput(input AcceptInput) bool {
 		return false
 	}
 	switch input.Route {
-	case RouteOpenAIChat, RouteOpenAIEmbeddings:
+	case RouteOpenAIChat, RouteOpenAIEmbeddings, RouteOpenAIImages:
 		return input.CharityModelID == 0 && input.CharityDecisionNow == nil && input.OutputTokenFloor == 0
-	case RouteCharityChat, RouteCharityEmbeddings:
+	case RouteCharityChat, RouteCharityEmbeddings, RouteCharityImages:
 		return input.CharityModelID > 0 && input.CharityDecisionNow != nil &&
 			*input.CharityDecisionNow >= 0 && *input.CharityDecisionNow <= maxUnixSecond
 	default:
