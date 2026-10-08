@@ -1,4 +1,5 @@
 import type { ReactNode, SVGProps } from 'react';
+import { GAME_ICON_NAMES, GAME_ICON_PATHS, ICON_STROKE_WIDTH, type GameIconName } from './iconPaths';
 
 export const ICON_NAMES = [
   'home',
@@ -26,11 +27,10 @@ export const ICON_NAMES = [
   'arrow-left',
   'check',
   'info',
-  'warning',
   'error',
   'empty',
   'maintenance',
-  'spark',
+  ...GAME_ICON_NAMES,
   'logout',
 ] as const;
 
@@ -41,7 +41,7 @@ type IconProps = Omit<SVGProps<SVGSVGElement>, 'name'> & {
   label?: string;
 };
 
-const PATHS: Record<IconName, ReactNode> = {
+const PATHS: Record<Exclude<IconName, GameIconName>, ReactNode> = {
   home: <path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" />,
   resources: <path d="M4 5h16v4H4zm0 6h16v8H4zm4 3h8" />,
   models: <path d="M12 3 4 7l8 4 8-4-8-4Zm-8 8 8 4 8-4M4 15l8 4 8-4" />,
@@ -67,13 +67,15 @@ const PATHS: Record<IconName, ReactNode> = {
   'arrow-left': <path d="M19 12H5m6-6-6 6 6 6" />,
   check: <path d="m5 12 4 4L19 6" />,
   info: <path d="M12 17v-5m0-4h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />,
-  warning: <path d="M12 4 2.5 20h19L12 4Zm0 6v4m0 3h.01" />,
   error: <path d="M12 4 2.5 20h19L12 4Zm-3 6 6 6m0-6-6 6" />,
   empty: <path d="M4 6h16v12H4zm4 4h8m-8 4h5" />,
   maintenance: <path d="m4 20 10-10 4 4L8 24H4zm10-10 3-3 4 4-3 3M6 4h6m-8 4h5" />,
-  spark: <path d="m12 3 1.4 6.6L20 12l-6.6 1.4L12 20l-1.4-6.6L4 12l6.6-2.4z" />,
   logout: <path d="M10 4H5v16h5m5-4 4-4-4-4m4 4H9" />,
 };
+
+function isGameIcon(name: IconName): name is GameIconName {
+  return name in GAME_ICON_PATHS;
+}
 
 export function Icon({ name, label, className, ...props }: IconProps) {
   const labelled = Boolean(label);
@@ -86,14 +88,14 @@ export function Icon({ name, label, className, ...props }: IconProps) {
       stroke="currentColor"
       strokeLinecap="round"
       strokeLinejoin="round"
-      strokeWidth="1.8"
+      strokeWidth={ICON_STROKE_WIDTH}
       role={labelled ? 'img' : undefined}
       aria-hidden={labelled ? undefined : true}
       aria-label={label}
       focusable="false"
     >
       {label ? <title>{label}</title> : null}
-      {PATHS[name]}
+      {isGameIcon(name) ? <path d={GAME_ICON_PATHS[name]} /> : PATHS[name]}
     </svg>
   );
 }

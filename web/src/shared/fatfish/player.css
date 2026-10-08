@@ -35,7 +35,7 @@
   outline: 3px solid var(--nb-color-focus); outline-offset: 2px;
 }
 .fatfish-player__music-credit { overflow-wrap: anywhere; }
-.fatfish-player__music-credit a { color: var(--nb-color-link); }
+.fatfish-player__music-credit a { color: var(--nb-color-accent); }
 .fatfish-player__music p { flex-basis: 100%; color: var(--nb-color-danger); }
 .fatfish-canvas {
   display: block; width: 100%; height: auto; aspect-ratio: 736 / 816;

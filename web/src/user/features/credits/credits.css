@@ -10,11 +10,6 @@
   gap: 0.5rem 1rem;
   padding-bottom: 1.25rem;
 }
-.credit-history__overview strong {
-  font-size: clamp(1.5rem, 3vw, 2rem);
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
-}
 .credit-history__overview small {
   flex-basis: 100%;
   color: var(--nb-color-text-muted);
@@ -180,9 +175,6 @@
   }
 }
 
-.credit-history__balance--long strong {
-  font-size: 1.125rem;
-}
 @media (max-width: 48rem) {
   .credit-history__balance--long {
     grid-column: 1 / -1;

@@ -9,19 +9,19 @@ export function GameWallets({
 }) {
   const { text } = useGameCopy();
   return (
-    <div className="game-wallets">
-      <span>
-        {text('common.generalBalance')}{' '}
-        <strong>
+    <dl className="game-wallets">
+      <div>
+        <dt>{text('common.generalBalance')}</dt>
+        <dd>
           <GameMoney value={wallets.balance} />
-        </strong>
-      </span>
-      <span>
-        {text('common.gameBalance')}{' '}
-        <strong>
+        </dd>
+      </div>
+      <div>
+        <dt>{text('common.gameBalance')}</dt>
+        <dd>
           <GameMoney value={wallets.gameBalance} />
-        </strong>
-      </span>
-    </div>
+        </dd>
+      </div>
+    </dl>
   );
 }

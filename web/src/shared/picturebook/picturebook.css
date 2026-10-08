@@ -44,7 +44,7 @@
   gap: 0.75rem;
 }
 .picturebook-form fieldset.picturebook-card {
-  border: 1px solid var(--border, #8885);
+  border: 1px solid var(--nb-color-border);
   border-radius: 0.6rem;
   padding: 1rem;
 }
@@ -97,7 +97,7 @@
   width: auto;
 }
 .picturebook-card {
-  border: 1px solid var(--border, #8885);
+  border: 1px solid var(--nb-color-border);
   border-radius: 0.6rem;
   padding: 1rem;
   min-width: 0;

@@ -1110,7 +1110,7 @@ button.nb-row:hover {
   font-weight: 600;
 }
 .nb-stat__value {
-  font-size: 1.35rem;
+  margin: 0;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
@@ -1124,9 +1124,6 @@ button.nb-row:hover {
 @media (max-width: 32rem) {
   .nb-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .nb-stat__value {
-    font-size: 1.15rem;
   }
 }
 

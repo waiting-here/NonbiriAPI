@@ -19,7 +19,7 @@
   place-items: center;
   width: 2rem;
   height: 2rem;
-  border-radius: var(--nb-radius-full);
+  border-radius: var(--nb-radius-pill);
   color: var(--nb-color-accent);
   background: var(--nb-color-accent-soft);
   font-weight: 700;
