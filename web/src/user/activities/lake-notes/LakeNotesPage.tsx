@@ -30,6 +30,7 @@ import {
   lakeKeys,
   startCast,
   terminalPhase,
+  type CastResult,
   type ControlInput,
   type ProfileView,
   type Quote,
@@ -197,16 +198,22 @@ function LakeContent({ account }: { account: string }) {
   const query = useQuery({
     queryKey: lakeKeys(account),
     queryFn: ({ signal }) => economySessionRequest(client, () => getProfile({ signal }), account),
+    refetchOnMount: 'always',
     refetchOnWindowFocus: false,
   });
   const controller = useMemo(() => {
-    const station = captureStationSession(client, 'steward');
-    const request = async <T,>(call: () => Promise<T>) => {
-      if (!stationSessionMatches(client, 'steward', station))
+    const subject = captureStationSession(client, 'steward').subject;
+    const sessions = new WeakMap<CastResult, ReturnType<typeof captureStationSession>>();
+    const request = async (call: () => Promise<CastResult>) => {
+      // Session reads advance the request generation without changing accounts.
+      // Bind each new checkpoint to the current session of this controller's owner.
+      const station = captureStationSession(client, 'steward');
+      if (station.subject !== subject || !stationSessionMatches(client, 'steward', station))
         throw new StationSessionChangedError();
       const result = await call();
       if (!stationSessionMatches(client, 'steward', station))
         throw new StationSessionChangedError();
+      sessions.set(result, station);
       return result;
     };
     return new LakeController(
@@ -216,7 +223,8 @@ function LakeContent({ account }: { account: string }) {
         read: (id) => request(() => getCast(id)),
       },
       (result) => {
-        if (stationSessionMatches(client, 'steward', station))
+        const savedSession = sessions.get(result);
+        if (savedSession && stationSessionMatches(client, 'steward', savedSession))
           client.setQueryData(lakeKeys(account), result.profile);
       },
     );
@@ -228,7 +236,10 @@ function LakeContent({ account }: { account: string }) {
   }, [controller]);
   useEffect(() => {
     const view = query.data;
-    if (view?.cast && !controller.snapshot().result)
+    const status = controller.snapshot().status;
+    // Returning to a cached page can reveal a newer saved cast. Preserve active
+    // input and uncertain requests, but refresh a controller waiting to resume.
+    if (view?.cast && !['running', 'saving', 'unknown'].includes(status))
       controller.adopt({ profile: view, cast: view.cast });
   }, [query.data, controller]);
   const update = (view: ProfileView) => client.setQueryData(lakeKeys(account), view);
@@ -283,6 +294,7 @@ function LakeContent({ account }: { account: string }) {
   const view = query.data,
     unfinished = Boolean(view.cast && !terminalPhase(view.cast.phase));
   const locked =
+    query.isFetching ||
     action.isPending ||
     action.outcome === 'unknown' ||
     control.isPending ||

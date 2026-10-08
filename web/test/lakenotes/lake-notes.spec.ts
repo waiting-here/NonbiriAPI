@@ -97,16 +97,31 @@ test('free permanent play, menus, four exchanges and restart recovery', async ({
   );
   await page.locator('.lake-back').click();
   expect((await paused).status()).toBe(200);
-  await page.goto(fixture().user_url + '/games/lake-notes');
-  await expect(page.locator('.lake-original #overlayButton')).toBeVisible();
   const saved = (await profile(ctx)).cast!;
+  // Keep the shell mounted beyond its session freshness window. Returning by
+  // in-app navigation must survive the resulting same-account session refresh.
+  await page.waitForTimeout(15_100);
   await control(ctx, 'restart');
-  await page.reload();
+  const sessionRefresh = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === '/api/session' && response.status() === 200,
+  );
+  await page.locator('a[href="/games/lake-notes"]').click();
+  await sessionRefresh;
+  await expect(page.locator('.lake-original #overlayButton')).toBeVisible();
   expect((await profile(ctx)).cast?.state.plan).toEqual(saved.state.plan);
+  const resumed = page.waitForResponse((response) =>
+    new URL(response.url()).pathname.endsWith('/resume'),
+  );
   await page.locator('.lake-original #overlayButton').click();
+  const resumedResponse = await resumed;
+  expect(resumedResponse.status(), await resumedResponse.text()).toBe(200);
   await expect
     .poll(async () => BigInt((await profile(ctx)).cast?.generation ?? '0'))
     .toBeGreaterThan(BigInt(saved.generation));
+  await expect
+    .poll(async () => (await profile(ctx)).cast?.ack_tick ?? 0, { timeout: 8000 })
+    .toBeGreaterThan(saved.ack_tick);
+  await expect(page.getByRole('alert')).toHaveCount(0);
   await configure(admin, false);
   await page.reload();
   await expect(page.getByText(u.closed, { exact: true })).toBeVisible();
