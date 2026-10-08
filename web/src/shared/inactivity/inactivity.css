@@ -21,6 +21,30 @@
   font-size: var(--nb-font-size-md);
   font-weight: var(--nb-font-weight-semibold);
 }
+.inactivity-section,
+.inactivity-asset,
+.inactivity-assets {
+  display: grid;
+  gap: var(--nb-space-4);
+  min-width: 0;
+}
+.inactivity-section {
+  border-top: 1px solid var(--nb-color-border);
+  padding-top: var(--nb-space-5);
+}
+.inactivity-section h3,
+.inactivity-asset h4 {
+  margin: 0;
+  font-size: var(--nb-font-size-md);
+}
+.inactivity-assets {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+}
+.inactivity-asset {
+  align-content: start;
+  border-top: 1px solid var(--nb-color-border);
+  padding-top: var(--nb-space-4);
+}
 .inactivity-panel label:not(.nb-toggle) {
   display: grid;
   align-content: start;
@@ -67,7 +91,7 @@
 .inactivity-panel .nb-panel__foot {
   margin-top: var(--nb-space-2);
 }
-@media (max-width: 37.5rem) {
+@media (width < 40rem) {
   .inactivity-panel fieldset {
     padding: var(--nb-space-3);
   }

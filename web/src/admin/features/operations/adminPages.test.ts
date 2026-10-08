@@ -79,6 +79,7 @@ const pool = {
   id: `pol_${'A'.repeat(22)}`,
   pool_type: 'welfare',
   period_id: null,
+  period_date: null,
   state: 'open',
   revision: '1',
   balance: '0',

@@ -1,4 +1,5 @@
 import { EndpointTransportNotice } from '@shared/components/EndpointTransportNotice';
+import { CopyValue } from '@shared/components/CopyValue';
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchState } from '@shared/operations/useSearchState';
@@ -225,7 +226,12 @@ function ChannelForm({
               )}
         </button>
         {onCancel ? (
-          <button className="nb-btn nb-btn--secondary" type="button" disabled={busy} onClick={onCancel}>
+          <button
+            className="nb-btn nb-btn--secondary"
+            type="button"
+            disabled={busy}
+            onClick={onCancel}
+          >
             {t('common.cancel')}
           </button>
         ) : null}
@@ -586,8 +592,15 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
                       mobileLabel: t('admin.mainstreamChannels.table.baseUrl'),
                       cell: 'meta',
                       render: (channel) => (
-                        <span className="channel-base-url" title={channel.base_url}>
-                          {channel.base_url}
+                        <span className="channel-url-row">
+                          <span className="channel-base-url" title={channel.base_url}>
+                            {channel.base_url}
+                          </span>
+                          <CopyValue
+                            value={channel.base_url}
+                            label={t('admin.mainstreamChannels.table.baseUrl')}
+                            showValue={false}
+                          />
                         </span>
                       ),
                     },

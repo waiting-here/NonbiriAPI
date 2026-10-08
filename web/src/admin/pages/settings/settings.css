@@ -76,6 +76,9 @@
   margin: 0;
   font-size: 0.95rem;
 }
+.settings-content .nb-setting__text > .nb-badge {
+  justify-self: start;
+}
 .settings-content .nb-setting__text p,
 .settings-content .nb-setting__meta {
   font-size: 0.8rem;

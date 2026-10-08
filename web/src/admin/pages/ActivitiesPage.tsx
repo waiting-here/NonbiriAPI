@@ -900,13 +900,16 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
                     header: t('admin.activities.pools.period'),
                     mobileLabel: t('admin.activities.pools.period'),
                     cell: 'meta',
-                    render: (pool) =>
-                      pool.period_id ??
-                      t(
-                        pool.pool_type === 'welfare'
-                          ? 'admin.activities.pools.singleton'
-                          : 'admin.activities.pools.unboundPeriod',
-                      ),
+                    render: (pool) => (
+                      <span title={pool.period_id ?? undefined}>
+                        {pool.period_date ??
+                          t(
+                            pool.pool_type === 'welfare'
+                              ? 'admin.activities.pools.singleton'
+                              : 'admin.activities.pools.unboundPeriod',
+                          )}
+                      </span>
+                    ),
                   },
                   {
                     key: 'balance',
@@ -1025,7 +1028,11 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
           {adjust.error ? <ErrorState error={adjust.error} /> : null}
           <div className="ops-actions">
             <button
-              className={adjustment.direction === 'decrease' ? 'nb-btn nb-btn--danger' : 'nb-btn nb-btn--primary'}
+              className={
+                adjustment.direction === 'decrease'
+                  ? 'nb-btn nb-btn--danger'
+                  : 'nb-btn nb-btn--primary'
+              }
               type="button"
               disabled={adjustmentBlocked || currentPoolDecreaseBlocked}
               onClick={() => {

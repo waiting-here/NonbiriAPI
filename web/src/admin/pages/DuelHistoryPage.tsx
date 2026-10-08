@@ -2,6 +2,7 @@ import { SimplePager } from '@shared/operations/SimplePager';
 import { useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
+import { useTranslation } from 'react-i18next';
 import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { useSiteTimeOffset } from '@shared/components/timeContextValue';
@@ -80,6 +81,7 @@ function HistoryResults({
   selection: Selection;
 }) {
   const formatDateTime = useDateTimeFormatter();
+  const { t: text } = useTranslation();
   const t = useGameAdminText(),
     [cursors, setCursors] = useState<(string | null)[]>([null]),
     [selected, setSelected] = useState<string | null>(null),
@@ -132,7 +134,14 @@ function HistoryResults({
                         {item.winner !== null && (
                           <span>
                             {' '}
-                            · {t('胜者席位', 'Winning seat')} {item.winner}
+                            ·{' '}
+                            {text('admin.gameHistory.winner', {
+                              seat: text(
+                                item.winner === 0
+                                  ? 'admin.gameHistory.firstPlayer'
+                                  : 'admin.gameHistory.secondPlayer',
+                              ),
+                            })}
                           </span>
                         )}
                       </div>
@@ -144,22 +153,29 @@ function HistoryResults({
                         <>
                           <p>{formatDateTime(item.recent.terminal_at)}</p>
                           <p>
-                            {item.recent.participants
-                              .map((p) =>
-                                p.user_id === null
-                                  ? t('账号已删除', 'Deleted account')
-                                  : `${p.display_name} (${p.user_id})`,
-                              )
-                              .join(' / ')}
+                            {item.recent.participants.map((p, index) => (
+                              <span key={index}>
+                                {index > 0 ? ' / ' : ''}
+                                {p.kind === 'bot' ? (
+                                  `${p.display_name} · AI`
+                                ) : p.user_id === null ? (
+                                  t('账号已删除', 'Deleted account')
+                                ) : (
+                                  <>
+                                    {p.display_name}{' '}
+                                    <span title={text('common.userId')}>({p.user_id})</span>
+                                  </>
+                                )}
+                              </span>
+                            ))}
                           </p>
                         </>
                       )}
-                      <p className="admin-duel-id">
-                        {dataset === 'recent'
-                          ? t('原局ID', 'Original match ID')
-                          : t('匿名资料编号', 'Anonymous record ID')}
-                        : {item.match_ref}
-                      </p>
+                      {dataset === 'anonymous' ? (
+                        <p className="admin-duel-id">
+                          {t('匿名资料编号', 'Anonymous record ID')}: {item.match_ref}
+                        </p>
+                      ) : null}
                       <button
                         className="nb-btn nb-btn--secondary"
                         type="button"

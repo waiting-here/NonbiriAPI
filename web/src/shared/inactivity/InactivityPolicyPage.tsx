@@ -39,8 +39,8 @@ function AssetEditor({
   zh: boolean;
 }) {
   return (
-    <fieldset>
-      <legend>{name}</legend>
+    <section className="inactivity-asset" aria-label={name}>
+      <h4>{name}</h4>
       <Toggle
         label={zh ? '对此积分启用衰减' : 'Decay this currency'}
         checked={rule !== null}
@@ -82,7 +82,7 @@ function AssetEditor({
           />
         </>
       )}
-    </fieldset>
+    </section>
   );
 }
 function Days({
@@ -286,8 +286,8 @@ function Editor({
                 : 'Leave blank to use each account’s due time. When set, decay and protective bans become due at this time and run in minute batches. A one-day interval at 12:00 runs daily at noon. Changing the time grants at least seven days of grace.'}
             </small>
           </label>
-          <fieldset className="inactivity-section">
-            <legend>{zh ? '积分衰减' : 'Credit decay'}</legend>
+          <section className="inactivity-section" aria-labelledby="inactivity-decay-heading">
+            <h3 id="inactivity-decay-heading">{zh ? '积分衰减' : 'Credit decay'}</h3>
             <Toggle
               label={zh ? '启用积分衰减' : 'Enable credit decay'}
               checked={policy.decay.enabled}
@@ -295,7 +295,7 @@ function Editor({
             />
             {policy.decay.enabled && (
               <>
-                <div className="ops-field-grid">
+                <div className="nb-grid nb-grid--2">
                   <Days
                     zh={zh}
                     name={zh ? '未活跃天数' : 'Inactive days'}
@@ -313,7 +313,7 @@ function Editor({
                     }
                   />
                 </div>
-                <div className="ops-grid">
+                <div className="inactivity-assets">
                   {(['general', 'game'] as const).map((asset) => (
                     <AssetEditor
                       key={asset}
@@ -342,9 +342,11 @@ function Editor({
                 </div>
               </>
             )}
-          </fieldset>
-          <fieldset>
-            <legend>{zh ? '保护性永久封禁' : 'Permanent protective ban'}</legend>
+          </section>
+          <section className="inactivity-section" aria-labelledby="inactivity-protection-heading">
+            <h3 id="inactivity-protection-heading">
+              {zh ? '保护性永久封禁' : 'Permanent protective ban'}
+            </h3>
             <Toggle
               label={zh ? '启用保护性封禁' : 'Enable protective bans'}
               checked={policy.protection.enabled}
@@ -362,7 +364,7 @@ function Editor({
                 }
               />
             )}
-          </fieldset>
+          </section>
           <PanelFoot>
             <button
               className="nb-btn nb-btn--secondary"

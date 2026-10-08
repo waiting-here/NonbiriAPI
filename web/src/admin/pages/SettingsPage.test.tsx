@@ -75,6 +75,22 @@ beforeEach(() => {
 });
 
 describe('site settings discovery and saving', () => {
+  it('restores a default in the draft and saves only through the save bar', async () => {
+    const view = await renderWithProviders(<SettingsPage />, { station: 'admin', role: 'admin' });
+    view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'fixture' } });
+    expect(await screen.findByLabelText('Response wait')).toHaveValue(130);
+    expect(screen.getByText('Modified')).toBeVisible();
+    await view.user.click(screen.getByRole('button', { name: 'Restore default' }));
+    expect(screen.getByLabelText('Response wait')).toHaveValue(120);
+    expect(screen.queryByText('Modified')).toBeNull();
+    expect(api.patchSiteSettings).not.toHaveBeenCalled();
+    await view.user.click(screen.getByRole('button', { name: 'Save all changes' }));
+    await waitFor(() => expect(api.patchSiteSettings).toHaveBeenCalledTimes(1));
+    expect(api.patchSiteSettings.mock.calls[0][0]).toEqual({
+      expected_revision: '1',
+      values: { response_wait_seconds: 120 },
+    });
+  });
   it('opens legal text before mounting credential forms and isolates search autofill', async () => {
     bundle.catalog.push({
       ...entry('legal_terms_override_zh', 'legal', pair('Terms in Chinese', '中文服务条款')),

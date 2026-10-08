@@ -22,19 +22,20 @@ const (
 )
 
 type poolRecord struct {
-	id        string
-	poolType  string
-	periodID  sql.NullString
-	accountID int64
-	state     string
-	revision  int64
-	createdAt int64
-	closedAt  sql.NullInt64
+	id         string
+	poolType   string
+	periodID   sql.NullString
+	periodDate sql.NullString
+	accountID  int64
+	state      string
+	revision   int64
+	createdAt  int64
+	closedAt   sql.NullInt64
 }
 
 func scanPoolRecord(scanner interface{ Scan(...any) error }) (poolRecord, error) {
 	var record poolRecord
-	err := scanner.Scan(&record.id, &record.poolType, &record.periodID, &record.accountID, &record.state, &record.revision, &record.createdAt, &record.closedAt)
+	err := scanner.Scan(&record.id, &record.poolType, &record.periodID, &record.accountID, &record.state, &record.revision, &record.createdAt, &record.closedAt, &record.periodDate)
 	if err != nil {
 		return poolRecord{}, err
 	}
@@ -54,7 +55,8 @@ func readPoolRecordTx(ctx context.Context, tx *sql.Tx, poolID string) (poolRecor
 		return poolRecord{}, ErrNotFound
 	}
 	record, err := scanPoolRecord(tx.QueryRowContext(ctx, `
-SELECT id,pool_type,period_id,account_id,state,revision,created_at,closed_at
+SELECT id,pool_type,period_id,account_id,state,revision,created_at,closed_at,
+       (SELECT period_key FROM thursday_periods WHERE id=shared_pools.period_id)
 FROM shared_pools WHERE id=?`, poolID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return poolRecord{}, ErrNotFound
@@ -81,6 +83,10 @@ func projectPoolTx(ctx context.Context, tx *sql.Tx, record poolRecord) (Pool, er
 	if record.periodID.Valid {
 		value := record.periodID.String
 		pool.PeriodID = &value
+	}
+	if record.periodDate.Valid {
+		value := record.periodDate.String
+		pool.PeriodDate = &value
 	}
 	if record.closedAt.Valid {
 		value := record.closedAt.Int64
@@ -167,7 +173,8 @@ func (r *Repository) ListPools(ctx context.Context, query PoolListQuery) (Page[P
 		arguments = append(arguments, limit+1)
 	}
 	rows, err := tx.QueryContext(ctx, `
-SELECT id,pool_type,period_id,account_id,state,revision,created_at,closed_at
+SELECT id,pool_type,period_id,account_id,state,revision,created_at,closed_at,
+       (SELECT period_key FROM thursday_periods WHERE id=shared_pools.period_id)
 FROM shared_pools WHERE `+strings.Join(clauses, " AND ")+`
 ORDER BY created_at,id`+limitSQL, arguments...)
 	if err != nil {

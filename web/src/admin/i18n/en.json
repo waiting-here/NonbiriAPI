@@ -80,7 +80,8 @@
       "selected": "{{count}} endpoints selected",
       "addTag": "Add tag",
       "removeTag": "Remove tag",
-      "tagsSaved": "Tags updated"
+      "tagsSaved": "Tags updated",
+      "selectForBatch": "Select services below to change their tags."
     },
     "alerts": {
       "nav": "Alerts",
@@ -131,6 +132,20 @@
         "worker": "Background task checkpoint failed",
         "actions": "Alert actions",
         "deletionSnapshot": "Balances before deletion"
+      },
+      "kindDescription": {
+        "fetchFailed": "Could not fetch the model list. Check the service address and key.",
+        "forwardError": "An upstream request did not complete. Open the details for failure information.",
+        "registrationRejected": "A registration request did not meet the site access requirements.",
+        "maintenanceEnabled": "The site entered maintenance mode.",
+        "donationFailureDisabled": "A donated key was disabled after repeated failures.",
+        "issueProjectionIncomplete": "Issue records could not be fully summarized. Open the details.",
+        "reportRetryExhausted": "Report processing did not complete after repeated retries and needs review.",
+        "fishingRetryExhausted": "Fishing processing did not complete after repeated retries and needs review.",
+        "rpsTerminalRetrying": "Completion of a rock-paper-scissors match is being retried.",
+        "workerCheckpointFailed": "A background task could not save its progress. Open the details.",
+        "invariantViolation": "A system data check found an inconsistency that needs review.",
+        "accountDeleted": "An account was deleted. Its deletion snapshot is available in the details."
       }
     },
     "settings": {
@@ -225,7 +240,8 @@
       "regular": "General",
       "otherConfiguration": "Other configuration",
       "confirmationHint": "Settings requiring care will be confirmed before saving.",
-      "confirmTitle": "Save settings requiring care?"
+      "confirmTitle": "Save settings requiring care?",
+      "restoreDefault": "Restore default"
     },
     "games": {
       "nav": "Games",
@@ -1088,7 +1104,16 @@
         "mismatch": "Mismatch",
         "incomplete": "Incomplete coverage",
         "periods": "Time details ({{count}} periods)"
-      }
+      },
+      "keyboardTitle": "Keyboard controls",
+      "keyboardHelp": "Use Left and Right to select a time bucket, Home and End for the first and last. The table also lists exact amounts."
+    },
+    "gameHistory": {
+      "winner": "Winner: {{seat}}",
+      "firstPlayer": "first player",
+      "secondPlayer": "second player",
+      "anonymousMatch": "Anonymous match",
+      "players": "Players: {{count}}"
     }
   },
   "user": {

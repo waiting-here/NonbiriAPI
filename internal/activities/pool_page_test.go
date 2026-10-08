@@ -154,3 +154,33 @@ func TestPoolPageHTTPStrictParsingAndFinalAuthorization(t *testing.T) {
 		t.Fatal("cancelled pool page accepted")
 	}
 }
+
+func TestPoolPeriodDateProjection(t *testing.T) {
+	f := newActivityFixture(t, 1_800_400_000)
+	seedClosedPoolPages(t, f, 1)
+	service, _ := NewService(ServiceConfig{Repository: f.repository})
+	api := httpAPI{service: service}
+	for _, state := range []string{PoolStateOpen, PoolStateClosed} {
+		response := httptest.NewRecorder()
+		api.listPools(response, httptest.NewRequest(http.MethodGet, routeAdminPools+"?page=1&state="+state, nil), AdminPrincipal{UserID: f.adminID})
+		var page struct {
+			Data []map[string]any `json:"data"`
+		}
+		if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &page) != nil || len(page.Data) == 0 {
+			t.Fatalf("pool response: %d %s", response.Code, response.Body)
+		}
+		for _, pool := range page.Data {
+			date, present := pool["period_date"]
+			if !present {
+				t.Fatal("pool response omitted period_date")
+			}
+			if state == PoolStateClosed {
+				if date != "1970-01-08" || pool["period_id"] != fmt.Sprintf("thu_%021dA", 1) {
+					t.Fatalf("assigned period: %+v", pool)
+				}
+			} else if date != nil || pool["period_id"] != nil {
+				t.Fatalf("unassigned period: %+v", pool)
+			}
+		}
+	}
+}

@@ -1,15 +1,24 @@
+.channel-url-row {
+  display: flex;
+  align-items: center;
+  gap: var(--nb-space-2);
+  min-width: 0;
+  max-width: 100%;
+}
+.channel-url-row .nb-copy-value {
+  flex-shrink: 0;
+}
 .channel-base-url {
   display: block;
+  min-width: 0;
   max-width: 16rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--nb-font-mono);
 }
-@media (max-width: 48rem) {
+@media (width < 48rem) {
   .channel-base-url {
-    max-width: 100%;
-    white-space: normal;
-    overflow-wrap: anywhere;
+    max-width: min(16rem, 100%);
   }
 }

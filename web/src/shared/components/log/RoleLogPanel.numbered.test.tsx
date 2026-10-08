@@ -1,12 +1,9 @@
+import { renderHistoricalLogs as renderWithProviders } from '../../../../test/unit/logSupport';
 import { installNativeDialog } from '../../../../test/unit/nativeDialog';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import { useLocation, useNavigate } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
-import {
-  installJsonFetchFixtures,
-  renderWithProviders,
-  type JsonFetchFixture,
-} from '../../../../test/unit/support';
+import { installJsonFetchFixtures, type JsonFetchFixture } from '../../../../test/unit/support';
 import { RoleLogPanel } from './RoleLogPanel';
 
 installNativeDialog();

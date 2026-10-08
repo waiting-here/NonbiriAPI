@@ -21,6 +21,13 @@
 .alerts-page .alert-deletion-facts {
   grid-template-columns: minmax(0, 1fr);
 }
+.alert-description {
+  margin: 0;
+}
+.alert-original-message {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 @media (width < 48rem) {
   .alerts-page .nb-table td {
     max-width: none;
@@ -29,7 +36,21 @@
     flex: 1;
   }
   .alerts-page .nb-table td[data-cell='status'] {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: end;
     max-width: 9rem;
     white-space: normal;
+  }
+  .alerts-page .nb-table td:first-child {
+    grid-column: 1;
+    grid-row: 2;
+    align-self: center;
+  }
+  .alerts-page .nb-table td:first-child::before {
+    display: none;
+  }
+  .alerts-page .nb-table td[data-cell='title'] {
+    grid-column: 1 / -1;
   }
 }
