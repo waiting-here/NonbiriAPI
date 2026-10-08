@@ -6,6 +6,7 @@ import { GameBackLink } from '../common/GameBackLink';
 import { GameActionBar } from '../common/GameActionBar';
 import { useCallback, useState } from 'react';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
+import { Fold } from '@shared/components/ui/Fold';
 import { GameWallets } from '../common/GameWallets';
 import { Leaderboard } from '../ranking/Leaderboard';
 import { LeaderboardTabs } from '../ranking/LeaderboardTabs';
@@ -102,14 +103,24 @@ export function BiddingGame({
             sound={audio.sound}
             audioUnavailable={audio.unavailable}
             items={[
-              { id: 'rules', label: text('bidding.rules'), icon: 'help', onClick: () => setRules(true) },
+              {
+                id: 'rules',
+                label: text('bidding.rules'),
+                icon: 'help',
+                onClick: () => setRules(true),
+              },
               {
                 id: 'history',
                 label: text('bidding.gameHistory'),
                 icon: 'history',
                 onClick: () => setHistory(true),
               },
-              { id: 'rankings', label: text('ranking.leaderboards'), icon: 'trophy', href: '#game-rankings' },
+              {
+                id: 'rankings',
+                label: text('ranking.leaderboards'),
+                icon: 'trophy',
+                href: '#game-rankings',
+              },
             ]}
           />
         </div>
@@ -278,19 +289,6 @@ export function BiddingGame({
         </section>
       ) : (
         <>
-          {home?.latestResult && (
-            <section className="bid-result">
-              <DuelFinance result={home.latestResult} />
-              {home.latestResult.view && (
-                <>
-                  <PlayedHistory view={home.latestResult.view} you={home.latestResult.you} />
-                  {home.latestResult.view.rewards.some((card) => card.status === 'discarded') && (
-                    <p className="bid-carry">{text('bidding.theFinalRoundTiedTheRemainingPool')}</p>
-                  )}
-                </>
-              )}
-            </section>
-          )}
           <BiddingLobby
             blocked={duel.blocked}
             onStart={duel.run}
@@ -339,6 +337,19 @@ export function BiddingGame({
               </GameActionBar>
             </section>
           </BiddingLobby>
+          {home?.latestResult && (
+            <section className="bid-result">
+              <DuelFinance result={home.latestResult} />
+              {home.latestResult.view && (
+                <Fold title={text('bidding.viewPlayedHistory')}>
+                  <PlayedHistory view={home.latestResult.view} you={home.latestResult.you} />
+                  {home.latestResult.view.rewards.some((card) => card.status === 'discarded') && (
+                    <p className="bid-carry">{text('bidding.theFinalRoundTiedTheRemainingPool')}</p>
+                  )}
+                </Fold>
+              )}
+            </section>
+          )}
         </>
       )}
       {rules && <BiddingRules onClose={closeRules} />}

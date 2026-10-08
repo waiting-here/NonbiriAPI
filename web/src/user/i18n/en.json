@@ -340,7 +340,8 @@
           "inCarriedPool": "In carried pool",
           "discarded2": "Discarded",
           "awardedToYou": "Awarded to you",
-          "awardedToOpponent": "Awarded to opponent"
+          "awardedToOpponent": "Awarded to opponent",
+          "viewPlayedHistory": "View played cards"
         },
         "blackjack": {
           "blackjackTableRules": "Blackjack · Table rules",
@@ -1033,7 +1034,8 @@
           "qUICKTUTORIAL": "QUICK · TUTORIAL",
           "waitingForYouNoCountdown": "Waiting for you · no countdown",
           "roundResolved": "Round resolved",
-          "completeTheHighlightedStepsForThisTeaching": "Complete the highlighted steps for this teaching plan."
+          "completeTheHighlightedStepsForThisTeaching": "Complete the highlighted steps for this teaching plan.",
+          "targetRounds": "Target {{likes}} likes · {{rounds}} rounds"
         },
         "ranking": {
           "stayAnonymousOnTheTrueCharityLeaderboard": "Stay anonymous on the True Charity leaderboard",
@@ -1260,7 +1262,7 @@
           "details": "View availability",
           "from": "From {{amount}} credits",
           "specs": "{{count}} of 3 board sizes open",
-          "modes": "{{count}} of {{total}} modes open",
+          "modes": "Playable modes: {{count}}",
           "learn": "Learn, history and ongoing games",
           "gwent": {
             "title": "AI Gwent",
@@ -1274,7 +1276,10 @@
           "lakenotes": {
             "title": "Lake Notes",
             "body": "Collect fish across four waters, upgrade your gear, and fill your fishing journal."
-          }
+          },
+          "modesAll": "Modes: {{count}}",
+          "firstClearReward": "First-clear reward",
+          "winCredits": "Win credits"
         },
         "fishing": {
           "eyebrow": "Pond fishing",
@@ -1398,10 +1403,10 @@
           "title": "Three players, one showdown",
           "description": "Three players, three gestures. Read the table and make your move.",
           "tutorial": {
-            "title": "How this table works",
             "1": "Choose quick, standard, or deathmatch. The game begins when three players join.",
             "2": "Pick a gesture before the timer runs out. Everyone reveals their choice together.",
             "3": "View the complete result here before joining another RPS match.",
+            "title": "How this table works",
             "next": "Next",
             "skip": "Skip for now",
             "finish": "Enter the lobby",
@@ -1602,8 +1607,8 @@
         "activityWallet": "Get game credits from activities →",
         "unavailable": "Not open",
         "test": "Test",
-        "learn": "View rules and records →",
-        "enter": "Enter →",
+        "learn": "View",
+        "enter": "Enter",
         "rankings": "Rankings · Last 7×24 hours",
         "calculation": "How it is calculated",
         "soundControls": "Sound",
@@ -2716,7 +2721,7 @@
       "closed": "The game is closed. Your progress is saved.",
       "entryUnknown": "Entry is unconfirmed. Try entering again.",
       "retry": "Retry the same action",
-      "saved": "Saved",
+      "saved": "Progress saved automatically.",
       "saving": "Saving",
       "reconnecting": "Connection interrupted; fishing is paused. Resume from the last saved point.",
       "checkSaved": "Check saved progress",
@@ -2821,7 +2826,7 @@
       "treasureReward": "Chest reward: {{coins}} coins · {{bait}} ×{{count}}",
       "debrisReward": "Recovered {{item}}",
       "exchangeHeading": "Exchange coins and site credits",
-      "exchangeHelp": "Exchange coins and credits at the configured rates. Check the amounts before confirming.",
+      "exchangeHelp": "Exchange rate: {{source}} {{sourceUnit}} : {{target}} {{targetUnit}}. Preview the amounts before confirming.",
       "direction": "Direction",
       "batches": "Number of batches",
       "quote": "Preview exchange",
@@ -3407,7 +3412,9 @@
       "ledgerEntry": "Lake Notes: period entry",
       "ledgerExchange": "Lake Notes: coin and credit exchange",
       "buyBatch": "Buy {{count}} · {{cost}} coins",
-      "bitePreparation": "Fish hooked. Get ready!"
+      "bitePreparation": "Fish hooked. Get ready!",
+      "saveHelp": "Your save follows your account across devices.",
+      "previewFirst": "Preview the exchange first."
     },
     "quickstart": {
       "title": "Connect your service",

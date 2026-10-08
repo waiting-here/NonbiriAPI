@@ -24,6 +24,14 @@
   align-items: end;
   flex-wrap: wrap;
 }
+.lake-save-note,
+.lake-exchange-hint {
+  font-size: var(--nb-font-size-sm);
+  color: var(--nb-color-text-muted);
+}
+.lake-exchange-hint {
+  margin-bottom: 0;
+}
 
 .lake-original:has(.skill-modal:not([hidden])) {
   position: relative;

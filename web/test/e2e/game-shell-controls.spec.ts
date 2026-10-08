@@ -48,6 +48,7 @@ for (const width of [1440, 768, 390])
         const url = new URL(route.request().url()),
           path = url.pathname;
         if (path === '/api/games') return route.fulfill({ json: snapshot });
+        if (path.includes('/randomness/')) return route.fulfill({ json: { proof: null } });
         if (path.endsWith('/catalog')) return route.fulfill({ json: catalogWire() });
         if (path === '/api/games/likes/loadouts')
           return route.fulfill({ json: { capacity: 10, slots: [] } });

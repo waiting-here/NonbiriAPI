@@ -95,6 +95,13 @@
 .game-card-detail {
   font-variant-numeric: tabular-nums;
 }
+.game-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--nb-space-2);
+  min-width: 0;
+}
 
 .game-footnote {
   margin: 1rem 0 0;
@@ -445,6 +452,33 @@
     aspect-ratio: auto;
     min-height: 7rem;
   }
+  .game-center-card--fishing .game-hero {
+    object-position: 30% 40%;
+  }
+  .game-center-card--linklink .game-hero,
+  .game-center-card--rps .game-hero,
+  .game-center-card--steadycatch .game-hero {
+    object-position: center;
+  }
+  .game-center-card--bidding .game-hero,
+  .game-center-card--likes .game-hero {
+    object-position: 30% center;
+  }
+  .game-center-card--blackjack .game-hero {
+    object-position: 50% 40%;
+  }
+  .game-center-card--gwent .game-gwent-hero {
+    height: 100%;
+    aspect-ratio: auto;
+    grid-template-columns: 1fr;
+  }
+  .game-center-card--gwent .game-gwent-hero img:not(:first-child) {
+    display: none;
+  }
+  .game-center-card--gwent .game-gwent-hero span {
+    font-size: var(--nb-font-size-xs);
+    letter-spacing: 0.08em;
+  }
   .game-center-card__hero > .nb-badge {
     top: var(--nb-space-2);
     right: auto;
@@ -466,12 +500,21 @@
   }
   .game-card-foot {
     font-size: var(--nb-font-size-xs);
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .game-card-foot > .nb-btn {
+    align-self: end;
+    white-space: nowrap;
+  }
+  .game-card-meta {
+    gap: var(--nb-space-1);
   }
 }
 
 .game-actionbar {
   display: flex;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 1rem;
   width: 100%;
@@ -480,6 +523,7 @@
   display: grid;
   gap: 0.15rem;
   min-width: 0;
+  white-space: nowrap;
   font-size: var(--nb-text-xs);
 }
 .game-actionbar__cost strong {
@@ -533,7 +577,9 @@
   .game-page:has(.game-actionbar),
   .bidding-game:has(.game-actionbar),
   .likes-game:has(.game-actionbar) {
-    padding-bottom: calc(var(--game-actionbar-h, 4.5rem) + env(safe-area-inset-bottom) + var(--nb-space-4));
+    padding-bottom: calc(
+      var(--game-actionbar-h, 4.5rem) + env(safe-area-inset-bottom) + var(--nb-space-4)
+    );
   }
   .game-actionbar {
     position: fixed;
@@ -654,9 +700,31 @@
   color: var(--nb-color-accent);
   background: var(--nb-color-surface-muted);
 }
-.game-gwent-hero { display: grid; grid-template-columns: repeat(4, 1fr); position: relative; aspect-ratio: 2; overflow: hidden; background: #16352f; }
-.game-gwent-hero img { width: 100%; height: 100%; object-fit: cover; }
-.game-gwent-hero span { position: absolute; bottom: 0; inset-inline: 0; padding: .6rem; background: linear-gradient(transparent, #09251feb); color: #fff; font-size: 1.5rem; font-weight: 800; letter-spacing: .18em; text-align: center; }
+.game-gwent-hero {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  position: relative;
+  aspect-ratio: 2;
+  overflow: hidden;
+  background: #16352f;
+}
+.game-gwent-hero img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.game-gwent-hero span {
+  position: absolute;
+  bottom: 0;
+  inset-inline: 0;
+  padding: 0.6rem;
+  background: linear-gradient(transparent, #09251feb);
+  color: #fff;
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-align: center;
+}
 
 .game-toolbar {
   min-width: 0;

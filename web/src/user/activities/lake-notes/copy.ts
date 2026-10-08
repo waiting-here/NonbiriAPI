@@ -16,6 +16,8 @@ const keys = {
   entryUnknown: 'user.lakeNotes.entryUnknown',
   retry: 'user.lakeNotes.retry',
   saved: 'user.lakeNotes.saved',
+  saveHelp: 'user.lakeNotes.saveHelp',
+  previewFirst: 'user.lakeNotes.previewFirst',
   saving: 'user.lakeNotes.saving',
   reconnecting: 'user.lakeNotes.reconnecting',
   checkSaved: 'user.lakeNotes.checkSaved',

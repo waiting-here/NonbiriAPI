@@ -180,8 +180,10 @@ function Lobby({
       <div className="likes-enqueue">
         <span>
           {catalog.mode === 'quick' ? text('likes.quickMode') : text('likes.standardMode')} ·{' '}
-          {catalog.parameters.TARGET_LIKES} ♥ · {catalog.parameters.MAX_ROUNDS}{' '}
-          {text('likes.roundLimit')}
+          {text('likes.targetRounds', {
+            likes: catalog.parameters.TARGET_LIKES,
+            rounds: catalog.parameters.MAX_ROUNDS,
+          })}
         </span>
         <GameActionBar cost={<GameMoney value={mode?.ticket ?? '0'} />}>
           <button
@@ -591,9 +593,14 @@ export function LikesGame(context: DuelLobbyContext) {
                         {m === 'quick' ? text('likes.quick') : text('likes.standard')}
                       </strong>
                       <span>
-                        {catalogQuery.data!.modes[m].parameters.TARGET_LIKES} ♥ ·{' '}
-                        {catalogQuery.data!.modes[m].parameters.MAX_ROUNDS} {text('likes.rounds')}
+                        {text('likes.targetRounds', {
+                          likes: catalogQuery.data!.modes[m].parameters.TARGET_LIKES,
+                          rounds: catalogQuery.data!.modes[m].parameters.MAX_ROUNDS,
+                        })}
                       </span>
+                      {entryProblem(context, m) ? (
+                        <small>{entryMessage(entryProblem(context, m)!, text)}</small>
+                      ) : null}
                     </button>
                   ))}
                 </div>

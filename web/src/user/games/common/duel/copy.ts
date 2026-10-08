@@ -1,6 +1,8 @@
 import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
 import type { DuelResult } from './types';
 export const duelCopyKeys = {
+  'bidding.viewPlayedHistory': 'user.games.duel.bidding.viewPlayedHistory',
+  'likes.targetRounds': 'user.games.duel.likes.targetRounds',
   'common.timeoutForfeit': 'user.games.duel.common.timeoutForfeit',
   'common.thisGameIsNotOpen': 'user.games.duel.common.thisGameIsNotOpen',
   'common.thisModeIsNotOpen': 'user.games.duel.common.thisModeIsNotOpen',

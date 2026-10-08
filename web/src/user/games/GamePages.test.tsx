@@ -349,7 +349,10 @@ describe('beta.1 game pages', () => {
     expect(screen.getByRole('heading', { name: 'Pond fishing' })).toBeInTheDocument();
     expect(screen.getAllByText('Open')).toHaveLength(2);
     expect(rendered.container.querySelectorAll('.game-center-card.is-closed')).toHaveLength(7);
-    expect(screen.getByText('0 of 2 modes open')).toBeInTheDocument();
+    expect(screen.getAllByText('Playable modes: 2')).toHaveLength(2);
+    expect(
+      rendered.container.querySelector('.game-center-card--likes .game-card-meta'),
+    ).not.toHaveTextContent('modes');
     expect(rendered.container.querySelectorAll('a.game-center-card')).toHaveLength(9);
     expect(rendered.container.querySelector('a.game-center-card button')).toBeNull();
     expect(screen.getAllByRole('link')).toHaveLength(10);
@@ -392,10 +395,18 @@ describe('beta.1 game pages', () => {
         body: { error: { code: 'maintenance', message: 'maintenance' } },
       },
     ]);
-    await renderWithProviders(<GameCenter />, { station: 'user', route: '/games', role: 'user' });
+    const rendered = await renderWithProviders(<GameCenter />, {
+      station: 'user',
+      route: '/games',
+      role: 'user',
+    });
     expect(await screen.findAllByText('Not open')).toHaveLength(9);
     expect(screen.queryByRole('link', { name: 'Enter game' })).not.toBeInTheDocument();
-    expect(screen.getAllByRole('link', { name: /View rules and records/ })).toHaveLength(9);
+    expect(rendered.container.querySelectorAll('a.game-center-card')).toHaveLength(9);
+    expect(screen.getByRole('link', { name: /Pond fishing/ })).toHaveAttribute(
+      'href',
+      '/games/fishing',
+    );
   });
 
   it('keeps each game’s rules entry available during maintenance', async () => {
