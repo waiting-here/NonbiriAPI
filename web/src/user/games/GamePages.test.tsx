@@ -174,7 +174,8 @@ describe('beta.1 game pages', () => {
       route: '/games/linklink',
     });
     await waitFor(() => expect(screen.getAllByRole('gridcell')[0]).toBeEnabled());
-    await view.user.click(screen.getByRole('button', { name: 'Sound off' }));
+    await view.user.click(screen.getByRole('button', { name: 'Sound' }));
+    await view.user.click(screen.getByRole('menuitemcheckbox', { name: 'Sound off' }));
     expect(audio.play).not.toHaveBeenCalled();
     const next = {
       ...initial,
@@ -242,7 +243,8 @@ describe('beta.1 game pages', () => {
       route: '/games/fishing',
     });
     await screen.findByRole('list', { name: /Your catch is ready|收获已揭晓/ });
-    await view.user.click(screen.getByRole('button', { name: 'Sound off' }));
+    await view.user.click(screen.getByRole('button', { name: 'Sound' }));
+    await view.user.click(screen.getByRole('menuitemcheckbox', { name: 'Sound off' }));
     expect(audio.play).not.toHaveBeenCalled();
     const batch = 'fb_AAAAAAAAAAAAAAAAAAAAAQ';
     act(() =>
@@ -293,7 +295,8 @@ describe('beta.1 game pages', () => {
     act(replace);
     await waitFor(() => expect(audio.play.mock.calls).toEqual([['fishing_epic']]));
     act(replace);
-    await view.user.click(screen.getByRole('button', { name: 'Sound on' }));
+    await view.user.click(screen.getByRole('button', { name: 'Sound' }));
+    await view.user.click(screen.getByRole('menuitemcheckbox', { name: 'Sound on' }));
     const mutedBatch = 'fb_AAAAAAAAAAAAAAAAAAAAAw';
     act(() =>
       view.queryClient.setQueryData(
@@ -327,7 +330,8 @@ describe('beta.1 game pages', () => {
       ),
     );
     await screen.findByRole('list', { name: /Your catch is ready|收获已揭晓/ });
-    await view.user.click(screen.getByRole('button', { name: 'Sound off' }));
+    await view.user.click(screen.getByRole('button', { name: 'Sound' }));
+    await view.user.click(screen.getByRole('menuitemcheckbox', { name: 'Sound off' }));
     expect(audio.play.mock.calls).toEqual([['fishing_epic']]);
   });
 

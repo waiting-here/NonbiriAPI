@@ -1103,12 +1103,7 @@ export function RPSGame() {
     deathmatchGateOpen && deathmatchAffordable && homeQuery.isSuccess && !homeQuery.error;
   const closeRules = useCallback(() => setRulesOpen(false), []);
   const header = (
-    <GameHeader
-      wallets={snapshot.data}
-      game="rps"
-      sound={sound}
-      onRules={() => setRulesOpen(true)}
-    />
+    <GameHeader wallets={snapshot.data} game="rps" sound={sound} onRules={() => setRulesOpen(true)} />
   );
   const rulesDialog = <RPSRules open={rulesOpen} onClose={closeRules} />;
   if (snapshot.isPending)
@@ -1145,20 +1140,11 @@ export function RPSGame() {
         sound={sound}
         onRules={() => setRulesOpen(true)}
         rankingsAvailable={Boolean(snapshot.data) && home?.kind !== 'pending_result'}
-      >
-        {!session ? (
-          <button
-            type="button"
-            className="nb-btn nb-btn--secondary"
-            onClick={() => {
-              setTutorialPage(0);
-              setTutorialVisibility('open');
-            }}
-          >
-            {text('rps.tutorial.replay')}
-          </button>
-        ) : null}
-      </GameHeader>
+        tools={!session ? [{
+          id: 'tutorial', label: text('rps.tutorial.replay'), icon: 'play',
+          onClick: () => {setTutorialPage(0); setTutorialVisibility('open');},
+        }] : []}
+      />
       <RandomnessProof
         game="rps"
         id={session?.sessionID ?? pending?.sessionID}

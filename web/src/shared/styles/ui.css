@@ -353,15 +353,15 @@
 .nb-more__menu:popover-open {
   display: grid;
 }
-.nb-more__menu button {
+.nb-more__menu :is(button, a) {
   all: unset;
   padding: 0.55rem 0.75rem;
   border-radius: var(--nb-radius-sm);
   cursor: pointer;
   font-size: var(--nb-font-size-sm);
 }
-.nb-more__menu button:hover,
-.nb-more__menu button:focus-visible {
+.nb-more__menu :is(button, a):hover,
+.nb-more__menu :is(button, a):focus-visible {
   background: var(--nb-color-accent-quiet);
 }
 .nb-more__menu .is-danger {
@@ -1580,7 +1580,7 @@ button.nb-row:hover {
 .nb-tabs {
   min-width: 0;
 }
-.nb-more__menu button:disabled {
+.nb-more__menu :is(button:disabled, a[aria-disabled='true']) {
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -1602,7 +1602,7 @@ button.nb-row:hover {
     height: 2.5rem;
   }
   .nb-pager__pages button,
-  .nb-more__menu button,
+  .nb-more__menu :is(button, a),
   .nb-tabs [role='tab'],
   .nb-quick button {
     min-height: 2.5rem;
@@ -1647,7 +1647,7 @@ button.nb-row:hover {
 @media (max-width: 48rem), (pointer: coarse) {
   .nb-btn--sm,
   .nb-more > summary,
-  .nb-more__menu button,
+  .nb-more__menu :is(button, a),
   .nb-chip button,
   .nb-seg span,
   .nb-tabs [role='tab'],

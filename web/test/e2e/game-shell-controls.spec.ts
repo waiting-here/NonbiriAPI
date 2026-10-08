@@ -382,13 +382,19 @@ for (const scenario of [
     });
     await page.goto(`${USER_ORIGIN}/games/likes`);
     const header = page.locator('.likes-heading');
-    await expect(header.locator('.game-header-tool')).toHaveCount(7);
-    const sound = header.locator('button[aria-pressed]').first();
-    await expect(sound).toHaveAttribute('aria-label', /.+/);
-    const pressed = await sound.getAttribute('aria-pressed');
+    await expect(header.locator('.game-toolbar__button')).toHaveCount(5);
+    const sound = header.getByRole('button', {name: scenario.locale === 'zh' ? '声音' : 'Sound', exact: true});
     await sound.focus();
     await sound.press('Space');
-    await expect(sound).toHaveAttribute('aria-pressed', pressed === 'true' ? 'false' : 'true');
+    const toggle = page.getByRole('menuitemcheckbox').first();
+    await expect(toggle).toBeFocused();
+    const checked = await toggle.getAttribute('aria-checked');
+    await toggle.press('Space');
+    await expect(sound).toBeFocused();
+    await sound.press('Space');
+    await expect(page.getByRole('menuitemcheckbox').first()).toHaveAttribute('aria-checked', checked === 'true' ? 'false' : 'true');
+    await page.keyboard.press('Escape');
+    await expect(sound).toBeFocused();
     const rules = header.getByRole('button', {
       name: scenario.locale === 'zh' ? '规则' : 'Rules',
       exact: true,

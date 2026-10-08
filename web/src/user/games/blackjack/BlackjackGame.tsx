@@ -1,4 +1,5 @@
-import { GameHeaderTool } from '../common/GameHeader';
+import { GameToolbar } from '../common/GameToolbar';
+import { GameMoney } from '../common/GameMoney';
 import { GameBackLink } from '../common/GameBackLink';
 import { GameActionBar } from '../common/GameActionBar';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -25,7 +26,6 @@ import { BlackjackBoard, BlackjackSettlement, emoteText } from './Table';
 import { blackjackAudioFacts } from './audioFacts';
 import { useArcadeAudio } from '../common/audio/useArcadeAudio';
 import { useSnapshotAudioFacts } from '../common/audio/useSnapshotAudioFacts';
-import { ArcadeAudioControls } from '../common/audio/ArcadeAudioControls';
 import '../games.css';
 import '../common/duel/duel.css';
 import '../bidding/bidding.css';
@@ -218,6 +218,7 @@ function QueueForm({
 }) {
   const text = useDuelText();
   const [stake, setStake] = useState(config.default_stake);
+  const [editingStake, setEditingStake] = useState(false);
   let selected: bigint | null = null;
   let valid = false;
   try {
@@ -243,18 +244,17 @@ function QueueForm({
       <label>
         {text('blackjack.baseStake')}
         <input
-          type="number"
+          type="text"
           inputMode="decimal"
-          min={config.min_stake}
-          max={config.max_stake}
-          step={config.stake_step}
-          value={stake}
+          value={editingStake || selected === null ? stake : formatCredits(stake)}
+          onFocus={() => setEditingStake(true)}
+          onBlur={() => setEditingStake(false)}
           onChange={(e) => setStake(e.target.value)}
           disabled={blocked}
           aria-invalid={!valid}
         />
       </label>
-      <GameActionBar cost={stake}>
+      <GameActionBar cost={selected === null ? '—' : <GameMoney value={stake} />}>
         <button
           className="nb-btn nb-btn--primary"
           type="submit"
@@ -380,25 +380,20 @@ export function BlackjackGame() {
           </div>
           <div className="duel-actions">
             {snapshot.data && <GameWallets wallets={snapshot.data} />}
-            <GameHeaderTool
-              icon="?"
-              label={text('bidding.rules')}
-              onClick={() => setPanel('rules')}
+            <GameToolbar
+              sound={sound}
+              audioUnavailable={audio.unavailable}
+              items={[
+                { id: 'rules', label: text('bidding.rules'), icon: 'help', onClick: () => setPanel('rules') },
+                {
+                  id: 'history',
+                  label: text('blackjack.history'),
+                  icon: 'history',
+                  onClick: () => setPanel('history'),
+                },
+                { id: 'rankings', label: text('ranking.leaderboards'), icon: 'trophy', href: '#game-rankings' },
+              ]}
             />
-            <GameHeaderTool
-              icon="◷"
-              label={text('blackjack.history')}
-              onClick={() => setPanel('history')}
-            />
-            <ArcadeAudioControls compact sound={sound} unavailable={audio.unavailable} />
-            <a
-              className="nb-btn nb-btn--secondary game-header-tool"
-              href="#game-rankings"
-              aria-label={text('ranking.leaderboards')}
-              title={text('ranking.leaderboards')}
-            >
-              <span aria-hidden="true">▥</span>
-            </a>
           </div>
         </header>
         {snapshot.data && (
