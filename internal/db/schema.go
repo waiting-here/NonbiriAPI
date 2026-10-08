@@ -25,3 +25,6 @@ var gwentAISQL string
 
 //go:embed migrations/0006_discord_gate.sql
 var discordGateSQL string
+
+//go:embed migrations/0007_model_types_and_images.sql
+var modelTypesAndImagesSQL string

@@ -106,6 +106,7 @@ type AdapterConfig struct {
 
 	MaxJSONResponseBytes      int64
 	MaxEmbeddingResponseBytes int64
+	MaxImageResponseBytes     int64
 	MaxStreamBytes            int64
 	MaxSSELineBytes           int
 	MaxSSEEventBytes          int
@@ -118,6 +119,7 @@ type Adapter struct {
 	backend                   backend.Backend
 	maxJSONResponseBytes      int64
 	maxEmbeddingResponseBytes int64
+	maxImageResponseBytes     int64
 	maxStreamBytes            int64
 	maxSSELineBytes           int
 	maxSSEEventBytes          int
@@ -128,7 +130,7 @@ func NewAdapter(config AdapterConfig) (*Adapter, error) {
 	if backend.IsNil(config.Backend) {
 		return nil, errors.New("openai connector: egress backend is required")
 	}
-	if config.MaxJSONResponseBytes < 0 || config.MaxEmbeddingResponseBytes < 0 || config.MaxStreamBytes < 0 || config.MaxSSELineBytes < 0 || config.MaxSSEEventBytes < 0 || config.StreamWriteTimeout < 0 {
+	if config.MaxJSONResponseBytes < 0 || config.MaxEmbeddingResponseBytes < 0 || config.MaxImageResponseBytes < 0 || config.MaxStreamBytes < 0 || config.MaxSSELineBytes < 0 || config.MaxSSEEventBytes < 0 || config.StreamWriteTimeout < 0 {
 		return nil, errors.New("openai connector: limits must not be negative")
 	}
 	if config.MaxJSONResponseBytes == 0 {
@@ -162,6 +164,10 @@ func NewAdapter(config AdapterConfig) (*Adapter, error) {
 		config.StreamWriteTimeout = DefaultStreamWriteTimeout
 	}
 	sharedMax := config.Backend.MaxResponseBytes()
+	if config.MaxImageResponseBytes == 0 || config.MaxImageResponseBytes > DefaultMaxImageResponseBytes {
+		config.MaxImageResponseBytes = DefaultMaxImageResponseBytes
+	}
+	config.MaxImageResponseBytes = min(config.MaxImageResponseBytes, sharedMax)
 	if config.MaxEmbeddingResponseBytes == 0 || config.MaxEmbeddingResponseBytes > DefaultMaxEmbeddingResponseBytes {
 		config.MaxEmbeddingResponseBytes = DefaultMaxEmbeddingResponseBytes
 	}
@@ -185,6 +191,7 @@ func NewAdapter(config AdapterConfig) (*Adapter, error) {
 		backend:                   config.Backend,
 		maxJSONResponseBytes:      config.MaxJSONResponseBytes,
 		maxEmbeddingResponseBytes: config.MaxEmbeddingResponseBytes,
+		maxImageResponseBytes:     config.MaxImageResponseBytes,
 		maxStreamBytes:            config.MaxStreamBytes,
 		maxSSELineBytes:           config.MaxSSELineBytes,
 		maxSSEEventBytes:          config.MaxSSEEventBytes,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 
+	"github.com/waiting-here/NonbiriAPI/internal/modeltype"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
 	"github.com/waiting-here/NonbiriAPI/internal/transportpolicy"
 )
@@ -154,6 +155,7 @@ type CatalogPairExport struct {
 }
 
 type ModelExport struct {
+	ModelTypes       modeltype.Set        `json:"model_types"`
 	TransportRule    transportpolicy.Rule `json:"transport_rule"`
 	RolePolicy       rolepolicy.Policy    `json:"role_policy"`
 	ID               string               `json:"id"`

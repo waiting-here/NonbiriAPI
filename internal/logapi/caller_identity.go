@@ -20,8 +20,8 @@ type OriginIdentity struct {
 // The join is limited to charity rows and surviving ordinary accounts; neither
 // historical log snapshots nor donation owners participate in the identity.
 // The requested charity model is projected separately from the log snapshot.
-const callerIdentityColumns = `u.id IS NOT NULL,COALESCE(NULLIF(u.guild_nick,''),NULLIF(u.username,'')),NULLIF(u.discord_id,''),CASE WHEN l.route_kind IN ('charity_chat_completions','charity_embeddings') THEN NULLIF(l.model,'') END,l.origin_user_id,l.origin_discord_id,l.user_id IS NULL,(SELECT alert_id FROM admin_account_deletions WHERE former_user_id=l.origin_user_id),CASE WHEN l.rejection_stage IS NOT NULL THEN l.error_diag END`
-const callerIdentityJoin = ` LEFT JOIN users u ON u.id=l.user_id AND u.is_admin=0 AND l.route_kind IN ('charity_chat_completions','charity_embeddings') `
+const callerIdentityColumns = `u.id IS NOT NULL,COALESCE(NULLIF(u.guild_nick,''),NULLIF(u.username,'')),NULLIF(u.discord_id,''),CASE WHEN l.route_kind IN ('charity_chat_completions','charity_embeddings','charity_images_generations') THEN NULLIF(l.model,'') END,l.origin_user_id,l.origin_discord_id,l.user_id IS NULL,(SELECT alert_id FROM admin_account_deletions WHERE former_user_id=l.origin_user_id),CASE WHEN l.rejection_stage IS NOT NULL THEN l.error_diag END`
+const callerIdentityJoin = ` LEFT JOIN users u ON u.id=l.user_id AND u.is_admin=0 AND l.route_kind IN ('charity_chat_completions','charity_embeddings','charity_images_generations') `
 
 func scanManagementCommon(scanner rowScanner, extra ...any) (commonLogRecord, *CallerIdentity, error) {
 	var present bool
@@ -55,4 +55,4 @@ func scanManagementCommon(scanner rowScanner, extra ...any) (commonLogRecord, *C
 }
 
 // Match the call-time platform name; instr treats SQL wildcard characters literally.
-const charityModelPredicate = " AND l.route_kind IN ('charity_chat_completions','charity_embeddings') AND instr(lower(l.model),lower(?))>0"
+const charityModelPredicate = " AND l.route_kind IN ('charity_chat_completions','charity_embeddings','charity_images_generations') AND instr(lower(l.model),lower(?))>0"

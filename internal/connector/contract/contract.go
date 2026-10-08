@@ -29,12 +29,13 @@ const (
 type Operation string
 
 const (
-	OperationChatCompletions Operation = "chat_completions"
-	OperationEmbeddings      Operation = "embeddings"
+	OperationChatCompletions   Operation = "chat_completions"
+	OperationEmbeddings        Operation = "embeddings"
+	OperationImagesGenerations Operation = "images_generations"
 )
 
 func (o Operation) Valid() bool {
-	return o == OperationChatCompletions || o == OperationEmbeddings
+	return o == OperationChatCompletions || o == OperationEmbeddings || o == OperationImagesGenerations
 }
 
 // Capability is one fidelity guarantee made by a connector descriptor.
@@ -56,6 +57,7 @@ const (
 	CapabilityReasoningEffort
 	CapabilityStorage
 	CapabilityPromptCache
+	CapabilityImagesGenerations
 )
 
 const KnownCapabilities = CapabilityText |
@@ -69,6 +71,7 @@ const KnownCapabilities = CapabilityText |
 	CapabilitySampling |
 	CapabilityUnknownOpenAIFields |
 	CapabilityModelDiscovery |
+	CapabilityImagesGenerations |
 	CapabilityEmbeddings |
 	CapabilityReasoningEffort |
 	CapabilityStorage | CapabilityPromptCache

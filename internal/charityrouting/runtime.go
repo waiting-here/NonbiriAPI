@@ -55,6 +55,13 @@ func (s *Service) PreflightEmbedding(ctx context.Context, userID int64, fullName
 	return s.preflight(ctx, userID, fullName, nil, decisionNow)
 }
 
+func (s *Service) PreflightImage(ctx context.Context, userID int64, fullName string, request *openai.ImageRequest, decisionNow int64) (RuntimePreflight, error) {
+	if request == nil || request.Model != fullName || request.Count < 1 {
+		return RuntimePreflight{}, ErrInvalidRequest
+	}
+	return s.preflight(ctx, userID, fullName, nil, decisionNow)
+}
+
 func (s *Service) preflight(ctx context.Context, userID int64, fullName string, textRunes *int, decisionNow int64) (RuntimePreflight, error) {
 	if s == nil || s.db == nil || ctx == nil || userID <= 0 || fullName == "" || decisionNow < 0 || decisionNow > maxUnixSecond {
 		return RuntimePreflight{}, ErrInvalidRequest
@@ -106,10 +113,10 @@ WHERE u.id=?`, userID).Scan(&admin, &banned, &bannedUntil, &suspendedUntil, &gat
 	var requestPrice int64
 	var discountStart, discountEnd sql.NullInt64
 	err = tx.QueryRowContext(ctx, `SELECT id,provider,model,full_name,enabled,flatten_tool_calls,
-pricing_mode,request_user_price,discount_percent,discount_enabled,discount_start_at,discount_end_at,role_policy,revision,transport_rule
+pricing_mode,request_user_price,discount_percent,discount_enabled,discount_start_at,discount_end_at,role_policy,revision,transport_rule,model_types
 FROM charity_models WHERE full_name=?`, fullName).Scan(&preflight.ModelID, &preflight.Provider, &preflight.Model,
 		&preflight.FullName, &enabled, &preflight.FlattenToolCalls, &pricingMode, &requestPrice,
-		&discount, &discountEnabled, &discountStart, &discountEnd, &encodedPolicy, &preflight.Revision, &preflight.TransportRule)
+		&discount, &discountEnabled, &discountStart, &discountEnd, &encodedPolicy, &preflight.Revision, &preflight.TransportRule, &preflight.ModelTypes)
 	if errors.Is(err, sql.ErrNoRows) {
 		return RuntimePreflight{}, ErrNotFound
 	}
@@ -329,10 +336,10 @@ func (s *Service) readSnapshotTx(ctx context.Context, tx *sql.Tx, modelID, decis
 		return RuntimeSnapshot{}, ErrNotFound
 	}
 	err := tx.QueryRowContext(ctx, `SELECT id,provider,model,full_name,enabled,flatten_tool_calls,
-pricing_mode,request_user_price,discount_percent,discount_enabled,discount_start_at,discount_end_at,role_policy,revision,transport_rule
+pricing_mode,request_user_price,discount_percent,discount_enabled,discount_start_at,discount_end_at,role_policy,revision,transport_rule,model_types
 FROM charity_models WHERE id=?`, modelID).Scan(&snapshot.ModelID, &snapshot.Provider, &snapshot.Model,
 		&snapshot.FullName, &enabled, &snapshot.FlattenToolCalls, &pricingMode, &requestPrice,
-		&discount, &discountEnabled, &discountStart, &discountEnd, &encodedPolicy, &snapshot.Revision, &snapshot.TransportRule)
+		&discount, &discountEnabled, &discountStart, &discountEnd, &encodedPolicy, &snapshot.Revision, &snapshot.TransportRule, &snapshot.ModelTypes)
 	if errors.Is(err, sql.ErrNoRows) {
 		return RuntimeSnapshot{}, ErrNotFound
 	}
@@ -564,7 +571,7 @@ func (s *Service) Capability(ctx context.Context, userID, decisionNow int64) (Ca
 	rows, err := tx.QueryContext(ctx, `SELECT id,provider,model,full_name,pricing_mode,
 request_user_price,uncached_user_price,cache_write_user_price,cache_read_user_price,output_user_price,
 discount_enabled,discount_percent,discount_start_at,discount_end_at,
-(SELECT allowed_level_mask FROM charity_model_access WHERE model_id=charity_models.id) FROM charity_models
+(SELECT allowed_level_mask FROM charity_model_access WHERE model_id=charity_models.id),model_types FROM charity_models
 WHERE enabled=1 ORDER BY id`)
 	if err != nil {
 		return Capability{}, fmt.Errorf("charity routing: read capability models: %w", err)
@@ -583,7 +590,7 @@ WHERE enabled=1 ORDER BY id`)
 		var discountStart, discountEnd sql.NullInt64
 		if err := rows.Scan(&id, &model.Provider, &model.Model, &model.FullName, &mode,
 			&requestPrice, &tokenPrices[0], &tokenPrices[1], &tokenPrices[2], &tokenPrices[3],
-			&discountEnabled, &model.Discount.Percent, &discountStart, &discountEnd, &mask); err != nil {
+			&discountEnabled, &model.Discount.Percent, &discountStart, &discountEnd, &mask, &model.ModelTypes); err != nil {
 			_ = rows.Close()
 			return Capability{}, fmt.Errorf("charity routing: scan capability model: %w", err)
 		}

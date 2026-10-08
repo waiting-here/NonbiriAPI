@@ -425,7 +425,7 @@ func TestManagementSourceUpgradePreservesConfiguredGamesAndLakeV2(t *testing.T) 
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = source.Close() })
-	hostileMustExec(t, source, "PRAGMA foreign_keys=OFF;"+preGwentAIFixture+"PRAGMA foreign_keys=ON;")
+	hostileMustExec(t, source, "PRAGMA foreign_keys=OFF;"+strings.TrimPrefix(managementAndGamesStorageSchema(), generationTwoSchema)+"PRAGMA foreign_keys=ON;")
 	hostileMustExec(t, source, "INSERT INTO sqlite_sequence(name,seq) VALUES('game_duel_anonymous',77),('game_ai_queue',41)")
 	assertRetainedManifest(t, source, managementAndGamesManifestHash)
 	if err := source.Close(); err != nil {

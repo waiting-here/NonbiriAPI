@@ -30,6 +30,7 @@ type AttemptInput struct {
 	Credential   *connectorcontract.ShortLivedSecret
 	Ingress      *openai.ChatRequest
 	Embedding    *openai.EmbeddingRequest
+	Image        *openai.ImageRequest
 	Policy       connectorcontract.AttemptPolicy
 	Sink         ResponseSink
 	Observer     *SafeObserver
@@ -40,9 +41,11 @@ type AttemptInput struct {
 func (input AttemptInput) validOperation() bool {
 	switch input.Operation {
 	case connectorcontract.OperationChatCompletions:
-		return input.Ingress != nil && input.Embedding == nil
+		return input.Ingress != nil && input.Embedding == nil && input.Image == nil
 	case connectorcontract.OperationEmbeddings:
-		return input.Ingress == nil && input.Embedding != nil
+		return input.Ingress == nil && input.Embedding != nil && input.Image == nil
+	case connectorcontract.OperationImagesGenerations:
+		return input.Ingress == nil && input.Embedding == nil && input.Image != nil
 	default:
 		return false
 	}
@@ -72,6 +75,10 @@ type OpenAIDriver interface {
 // safety identifier; production adapters implement this optional interface.
 type OpenAIPolicyDriver interface {
 	AttemptWithPolicy(context.Context, http.ResponseWriter, openai.Target, *openai.ChatRequest, connectorcontract.AttemptPolicy) openai.AttemptResult
+}
+
+type OpenAIImageDriver interface {
+	AttemptImage(context.Context, http.ResponseWriter, openai.Target, *openai.ImageRequest, connectorcontract.AttemptPolicy) openai.AttemptResult
 }
 
 type OpenAIEmbeddingDriver interface {
@@ -176,8 +183,13 @@ func (r *Registry) SupportsRequest(t connectorcontract.Type, request *openai.Cha
 // SupportsOperationRequest applies descriptor capabilities before physical
 // lookup or reservation. A mixed binding never sends embeddings to chat-only
 // connectors, while upstream model support remains an upstream decision.
-func (r *Registry) SupportsOperationRequest(t connectorcontract.Type, operation connectorcontract.Operation, chat *openai.ChatRequest, embedding *openai.EmbeddingRequest) bool {
+func (r *Registry) SupportsOperationRequest(t connectorcontract.Type, operation connectorcontract.Operation, chat *openai.ChatRequest, embedding *openai.EmbeddingRequest, images ...*openai.ImageRequest) bool {
 	input := AttemptInput{Operation: operation, Ingress: chat, Embedding: embedding}
+	if len(images) == 1 {
+		input.Image = images[0]
+	} else if len(images) > 1 {
+		return false
+	}
 	if !input.validOperation() {
 		return false
 	}
@@ -185,6 +197,9 @@ func (r *Registry) SupportsOperationRequest(t connectorcontract.Type, operation 
 		return r.SupportsRequest(t, chat)
 	}
 	descriptor, ok := r.Descriptor(t)
+	if operation == connectorcontract.OperationImagesGenerations {
+		return ok && descriptor.Capabilities.Has(connectorcontract.CapabilityImagesGenerations)
+	}
 	return ok && descriptor.Capabilities.Has(connectorcontract.CapabilityEmbeddings) && (descriptor.SupportsEmbedding == nil || descriptor.SupportsEmbedding(embedding))
 }
 
@@ -316,7 +331,7 @@ func openAICapabilities() connectorcontract.CapabilitySet {
 			connectorcontract.CapabilityUnknownOpenAIFields |
 			connectorcontract.CapabilityReasoningEffort |
 			connectorcontract.CapabilityStorage | connectorcontract.CapabilityPromptCache |
-			connectorcontract.CapabilityEmbeddings |
+			connectorcontract.CapabilityEmbeddings | connectorcontract.CapabilityImagesGenerations |
 			connectorcontract.CapabilityModelDiscovery,
 	)
 }
@@ -331,6 +346,9 @@ func (c *openAIConnector) Attempt(ctx context.Context, input AttemptInput) conne
 	}
 	if input.Operation == connectorcontract.OperationEmbeddings {
 		return c.attemptEmbedding(ctx, input)
+	}
+	if input.Operation == connectorcontract.OperationImagesGenerations {
+		return c.attemptImage(ctx, input)
 	}
 	// The two experimental policies are opt-in and must never silently fall
 	// back to the legacy driver seam. A legacy driver is compatible only when
@@ -520,12 +538,16 @@ func nilInterface(value any) bool {
 
 // CheckTargetRequest checks exact model policy after adaptation and before any
 // reservation or credential access. It is also safe for mixed-provider routes.
-func (r *Registry) CheckTargetRequest(target connectorcontract.Target, operation connectorcontract.Operation, chat *openai.ChatRequest, embedding *openai.EmbeddingRequest, policy connectorcontract.AttemptPolicy) error {
+func (r *Registry) CheckTargetRequest(target connectorcontract.Target, operation connectorcontract.Operation, chat *openai.ChatRequest, embedding *openai.EmbeddingRequest, policy connectorcontract.AttemptPolicy, images ...*openai.ImageRequest) error {
 	reject := func(stage, reason string) error {
 		return &connectorcontract.RequestRejection{Stage: stage, Field: "request", Reason: reason}
 	}
 	descriptor, ok := r.Descriptor(target.Type())
-	if !ok || !(AttemptInput{Operation: operation, Ingress: chat, Embedding: embedding}).validOperation() {
+	input := AttemptInput{Operation: operation, Ingress: chat, Embedding: embedding}
+	if len(images) == 1 {
+		input.Image = images[0]
+	}
+	if !ok || len(images) > 1 || !input.validOperation() {
 		return reject("capability preflight", "unsupported operation")
 	}
 	if operation == connectorcontract.OperationChatCompletions {
@@ -541,7 +563,7 @@ func (r *Registry) CheckTargetRequest(target connectorcontract.Target, operation
 			return reject("protocol preflight", "request cannot be represented by this connector")
 		}
 	}
-	if !r.SupportsOperationRequest(target.Type(), operation, chat, embedding) {
+	if !r.SupportsOperationRequest(target.Type(), operation, chat, embedding, images...) {
 		return reject("protocol preflight", "request cannot be represented by this connector")
 	}
 	return nil

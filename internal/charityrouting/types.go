@@ -14,6 +14,7 @@ import (
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/donation"
 	"github.com/waiting-here/NonbiriAPI/internal/gatewaypolicy"
+	"github.com/waiting-here/NonbiriAPI/internal/modeltype"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -92,6 +93,7 @@ type CapabilityDiscount struct {
 }
 
 type CapabilityModel struct {
+	ModelTypes    modeltype.Set             `json:"model_types"`
 	RecentSuccess observability.SuccessRate `json:"recent_success"`
 	ID            string                    `json:"id"`
 	Provider      string                    `json:"provider"`
@@ -137,6 +139,7 @@ type AdminRollingSuccess struct {
 }
 
 type AdminCharityModel struct {
+	ModelTypes            modeltype.Set        `json:"model_types"`
 	TransportRule         transportpolicy.Rule `json:"transport_rule"`
 	RolePolicy            rolepolicy.Policy    `json:"role_policy"`
 	IsMainstream          bool                 `json:"is_mainstream"`
@@ -193,6 +196,7 @@ type StewardRollingSuccess struct {
 }
 
 type StewardCharityModel struct {
+	ModelTypes            modeltype.Set         `json:"model_types"`
 	TransportRule         transportpolicy.Rule  `json:"transport_rule"`
 	RolePolicy            rolepolicy.Policy     `json:"role_policy"`
 	IsMainstream          bool                  `json:"is_mainstream"`
@@ -314,6 +318,7 @@ type DiscountPatchInput struct {
 }
 
 type ModelCreate struct {
+	ModelTypes            modeltype.Set        `json:"model_types,omitempty"`
 	TransportRule         transportpolicy.Rule `json:"transport_rule,omitempty"`
 	RolePolicy            *rolepolicy.Policy   `json:"role_policy,omitempty"`
 	IsMainstream          bool                 `json:"is_mainstream"`
@@ -332,6 +337,7 @@ type ModelCreate struct {
 }
 
 type ModelPatch struct {
+	ModelTypes            *modeltype.Set        `json:"model_types,omitempty"`
 	TransportRule         *transportpolicy.Rule `json:"transport_rule,omitempty"`
 	RolePolicy            *rolepolicy.Policy    `json:"role_policy,omitempty"`
 	IsMainstream          *bool                 `json:"is_mainstream,omitempty"`
@@ -413,6 +419,7 @@ func (candidate RuntimeCandidate) ClaimCandidate() claim.Candidate {
 }
 
 type RuntimeSnapshot struct {
+	ModelTypes       modeltype.Set
 	TransportRule    transportpolicy.Rule
 	RolePolicy       rolepolicy.Policy
 	Revision         int64
@@ -430,6 +437,7 @@ type RuntimeSnapshot struct {
 // eligibility facts. It intentionally has no endpoint, key, donation, health,
 // quota, or binding field.
 type RuntimePreflight struct {
+	ModelTypes       modeltype.Set
 	TransportRule    transportpolicy.Rule
 	RolePolicy       rolepolicy.Policy
 	Revision         int64

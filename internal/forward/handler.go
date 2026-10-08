@@ -45,7 +45,7 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 	switch request.URL.Path {
 	case "/v1/models":
 		handler.models(writer, request, userID)
-	case "/v1/chat/completions", "/v1/embeddings":
+	case "/v1/chat/completions", "/v1/embeddings", "/v1/images/generations":
 		requestattempt.Stage(request.Context(), "preflight", "")
 		handler.chat(writer, request, userID)
 	}

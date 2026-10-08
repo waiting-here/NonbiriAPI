@@ -1,8 +1,8 @@
 # NonbiriAPI HTTP API Contract
 
 - Status: **current source, including Unreleased rc.6 changes**. The latest published source prerelease is rc.5. Check an instance's deployed build before using new routes.
-- Scope: the OpenAI-compatible ingress routes are `GET /v1/models`, `POST /v1/chat/completions`, and `POST /v1/embeddings`. Chat supports OpenAI-compatible, Anthropic-compatible and native AI SDK Gateway v3 upstreams; embeddings support OpenAI-compatible and the strict Gateway text subset. There is no public Anthropic-native or rerank API.
-- Authority: this document reflects the current source route registry, strict request/response types, stable error catalog, and contract tests. A future wire change requires a changelog entry; undocumented database fields never enter an API response automatically. Image generation is available only through the session-authenticated limited activity, not ordinary `/v1/images/generations` or personal/charity model routes.
+- Scope: the OpenAI-compatible ingress routes are `GET /v1/models`, `POST /v1/chat/completions`, `POST /v1/embeddings`, and `POST /v1/images/generations`. Chat supports OpenAI-compatible, Anthropic-compatible and native AI SDK Gateway v3 upstreams; embeddings support OpenAI-compatible and the strict Gateway text subset; image generation supports OpenAI-compatible upstreams. There is no public Anthropic-native or rerank API.
+- Authority: this document reflects the current source route registry, strict request/response types, stable error catalog, and contract tests. A future wire change requires a changelog entry; undocumented database fields never enter an API response automatically. The session-authenticated picture-book activity has its own configuration and accounting, separate from the public image-generation model route.
 - Release boundary: new source behavior is listed in [rc.6](../CHANGELOG.md#100-rc6---unreleased). This document does not assert that an instance has deployed it.
 
 ## 1. Shared wire rules
@@ -28,7 +28,7 @@ An incorrect password at `POST /admin/api/auth/elevate` returns `403 elevated_re
 
 #### Browser cross-origin access
 
-The three exact public model routes support CORS: `GET /v1/models`, `POST /v1/chat/completions`, and `POST /v1/embeddings`. Responses, including authentication, maintenance, validation, rate-limit and upstream errors and streaming responses, carry `Access-Control-Allow-Origin: *`. Browser clients supply their CallerKey explicitly in `Authorization` and use the default fetch credentials mode or `credentials: 'omit'`; `credentials: 'include'` is not supported. `Access-Control-Allow-Credentials` is never enabled. `Retry-After` is exposed to browser code.
+The four exact public model routes support CORS: `GET /v1/models`, `POST /v1/chat/completions`, `POST /v1/embeddings`, and `POST /v1/images/generations`. Responses, including authentication, maintenance, validation, rate-limit and upstream errors and streaming responses, carry `Access-Control-Allow-Origin: *`. Browser clients supply their CallerKey explicitly in `Authorization` and use the default fetch credentials mode or `credentials: 'omit'`; `credentials: 'include'` is not supported. `Access-Control-Allow-Credentials` is never enabled. `Retry-After` is exposed to browser code.
 
 A valid `OPTIONS` preflight needs no CallerKey and returns an empty `204` before maintenance, authentication or request admission. It does not call an upstream, consume caller limits, reserve credits or create a call log. It permits only the exact route's method, echoes validated requested header **names** (including Authorization, Content-Type and SDK metadata headers), and permits browser preflight caching for 600 seconds. It includes `Cache-Control: no-store` and `Vary: Origin, Access-Control-Request-Method, Access-Control-Request-Headers`. Origin is not reflected; opaque browser origins such as `null` use the same wildcard permission.
 
@@ -122,7 +122,7 @@ On a per-user RPM denial, the server can attribute a charity violation only afte
 
 Personal models use `ordered` or `random` routing. Request capability filtering happens before a credential is decrypted. Silent retry follows the existing pre-output boundary; heartbeat comments alone do not count as output. A clean EOF is never success: non-streaming requires a complete valid response, and streaming requires a valid protocol terminator and `[DONE]`. Client disconnect cancels upstream work.
 
-Personal and charity models expose `transport_rule`. Existing and new models default to `passthrough`; this field applies only to Chat Completions and leaves embeddings unchanged. The caller's `stream` format remains authoritative. Caller mode, upstream mode and model policy are frozen before reservation and retained across retries.
+Personal and charity models expose `transport_rule`. Existing and new models default to `passthrough`; this field applies only to Chat Completions and leaves embeddings and image generation unchanged. The caller's `stream` format remains authoritative. Caller mode, upstream mode and model policy are frozen before reservation and retained across retries.
 
 | `transport_rule` | Upstream and caller behavior |
 | --- | --- |
@@ -167,9 +167,9 @@ The table below describes ingress validation and OpenAI-compatible forwarding. G
 | `stream` | Optional `false` is forwarded; `true`, null and other values are invalid. |
 | Other fields | For OpenAI-compatible upstreams, bounded valid JSON is preserved semantically for the upstream to interpret. If `safety_identifier` is supplied it is overwritten with the same pseudonym; otherwise it is not added. |
 
-Chat and embedding bodies share the configured model-request limit (default 10 MiB), with JSON depth at most 64, at most 1024 top-level fields and field names at most 256 Unicode runes. Duplicate keys, invalid UTF-8, trailing JSON and invalid standard fields are rejected. The platform does not tokenize text or infer a model-specific input limit. Rewritten OpenAI requests are bounded to the configured ingress limit for that request plus 16 KiB for server-generated fields.
+Chat, embedding and image-generation bodies share the configured model-request limit (default 10 MiB), with JSON depth at most 64, at most 1024 top-level fields and field names at most 256 Unicode runes. Duplicate keys, invalid UTF-8, trailing JSON and invalid standard fields are rejected. The platform does not tokenize text or infer a model-specific input limit. Rewritten OpenAI requests are bounded to the configured ingress limit for that request plus 16 KiB for server-generated fields.
 
-An OpenAI-compatible connector appends `/embeddings` to the configured base: `https://provider.example/v1` becomes `https://provider.example/v1/embeddings`, while a bare host becomes `/embeddings`. It neither inserts `/v1` nor accepts a separate full-path override. Models have no purpose field, and `GET /v1/models` does not certify embedding support. The same model may be called through either operation. Candidate filtering excludes unsupported connector types, including Anthropic, before key access; the upstream decides whether its specific model supports embeddings.
+An OpenAI-compatible connector appends `/embeddings` to the configured base: `https://provider.example/v1` becomes `https://provider.example/v1/embeddings`, while a bare host becomes `/embeddings`. It neither inserts `/v1` nor accepts a separate full-path override. The platform model must enable `embeddings` in `model_types`; `GET /v1/models` alone does not certify embedding support. A model may enable multiple operations. Candidate filtering excludes unsupported connector types, including Anthropic, before key access; the upstream decides whether its specific model supports embeddings.
 
 The chat-only `transport_rule`, `force_store_false` and `flatten_tool_calls` policies do not alter embeddings. An explicitly supplied nonstandard `store` field is passed through. Embeddings are exempt from the charity minimum-content check and its penalty; all other identity, feature, level, expiry, rate, concurrency, credit and quota rules still apply, including charity per-user RPM violation attribution.
 
@@ -215,11 +215,23 @@ Runable with SillyTavern 1.19.0 has been verified for non-streaming and streamin
 
 Catalog prices are upstream metadata and do not certify actual gateway credits or model capability. Provider-specific validation and exceptions are recorded in the release notes; a model-list entry does not certify every operation.
 
+### 2.5 `POST /v1/images/generations`
+
+Uses the same CallerKey, exact-path, CORS, admission, cancellation, retry and accounting boundaries as chat. Only `openai-compatible` upstreams support this operation; the connector appends `/images/generations` to the configured versioned base URL. The platform model must enable `images_generations`. Unsupported model types reject before request acceptance or key claims with `400 invalid_request` and “model does not support this request type”; this does not increase key failures.
+
+Requests require the platform `model` and a nonempty string `prompt`. `n` accepts 1–10 (default 1), `partial_images` 0–3, `output_compression` 0–100, and `stream` a boolean (default false); optional null values use defaults. String parameters such as `size`, `quality`, `background`, `output_format`, `moderation`, `response_format` and `style` are forwarded for the upstream model to validate. Other bounded JSON fields are retained; the server substitutes the bound model and its scoped caller pseudonym in `user` and any supplied `safety_identifier`. Chat role/transport/flattening/store policies and the charity text-length penalty do not apply.
+
+Non-streaming success requires HTTP 200, a valid `created` timestamp and exactly `n` images in `data`, each containing a nonempty valid `b64_json` or HTTP(S) `url`. Standard output fields and `revised_prompt` are retained; vendor metadata is omitted. The platform does not fetch URLs or decode images into a disk cache. `stream:true` accepts standard `image_generation.partial_image` and `image_generation.completed` SSE events. Exactly `n` valid completed events establish protocol success; the caller receives each image event and its reported usage. Fewer completed images, clean EOF, `[DONE]`, malformed output and partial-only streams do not establish success.
+
+Image JSON responses, cumulative SSE input, individual SSE lines and events are bounded to **64 MiB**, or the smaller shared egress limit. The shared default is 64 MiB; existing chat and embedding caps remain unchanged. Streaming uses a one-event queue and a 64 KiB read buffer. Large responses still require bounded transient validation and projection buffers; administrators should size shared concurrency for available memory.
+
+Valid `usage.input_tokens` and `usage.output_tokens` map to uncached input and output accounting. Multi-image streams sum the usage of all completed images with checked arithmetic; a missing/invalid usage report or overflow makes the whole request usage unknown. Missing/invalid usage uses the existing conservative settlement rule. Charity pricing remains the model's configured per-request or token pricing: an `n>1` request consumes one call, not one call per image. An upstream streaming HTTP 200 consumes reserved quota and resets the failure streak even if a later event fails; nonstream charging still requires a valid response. Invalid HTTP 200 image bodies are not saved as raw diagnostics; explicit upstream errors retain the existing restricted diagnostic exception. Debug supports both image caller modes with the same owner-only bounded RAM request capture and safe outcomes, without storing generated images.
+
 ## 3. User identity, account, resources, and logs
 
 All routes in this section require a user session unless marked anonymous.
 
-Request-log and Debug `route_kind` values are `openai_chat_completions`, `charity_chat_completions`, `model_discovery`, `openai_embeddings`, and `charity_embeddings`; Debug accepts the four model-call kinds only. Log clients using a closed enum must accept the two embedding values. Existing model/status/time filters, pagination, role-specific projections and exports include both operations. Personal and charity embedding records retain their corresponding privacy boundary; they do not store input or vectors.
+Request-log and Debug `route_kind` values are `openai_chat_completions`, `charity_chat_completions`, `model_discovery`, `openai_embeddings`, `charity_embeddings`, `openai_images_generations`, and `charity_images_generations`; Debug accepts the six model-call kinds only. Log clients using a closed enum must accept these values. Existing model/status/time filters, pagination, role-specific projections and exports include all three model operations. Personal and charity records retain their corresponding privacy boundary; request logs do not store prompts, vectors or image contents.
 
 | Method and path | Request / response |
 | --- | --- |
@@ -426,6 +438,12 @@ Always inspect `results`, including on HTTP 200. At least one success returns 20
 Each confirmed item commits independently. Within a fixed 24-hour window, the original key and complete ordered input return confirmed success/failed items unchanged and continue only unfinished items. Changing target or content under the same key conflicts before business writes. Correct a confirmed failed item and submit only that failed subset as a new operation. A dropped response, cancellation or timeout does not prove rollback: first retry the original key and body. After expiry, read the actual resources before deciding to start another operation. Restart does not automatically resend secrets or start remaining items. Results never echo input secrets or notes.
 
 Import has a 30-second total budget, append 60 seconds and results at most 64 KiB. Personal and charity automation reads and writes share **four concurrent requests globally and one per user**, without a queue. At most 1,000 active batches per user and 10,000 globally may be registered; capacity rejects new registrations but permits existing retries. No model-call credits or charity usage are charged. Revocation or loss of permission stops further work while preserving already committed items.
+
+### Model operation types
+
+Personal and charity model create/PATCH/GET, authorized model lists, automation reads, the public charity catalog and personal resource exports include `model_types`: a nonempty array drawn from `chat_completions`, `embeddings` and `images_generations`. Duplicate or unknown values, empty arrays and explicit null are invalid. Creating a model without the field enables only chat; omitting it from PATCH preserves the current selection. Upgrades preserve chat and embeddings for existing models. The final candidate snapshot rechecks the requested operation before request acceptance, key claims or reservations; admitted requests and retries retain that snapshot. This does not alter the earlier freeze point for role and transport policies. Enabling a platform type does not add that capability to an unsupported connector or upstream model.
+
+Existing ownership, administrator/steward scope, revision and idempotency rules apply. CallerKey automation only reads this setting and does not gain model-setting write access; level-5 stewards retain their existing limited policy permissions.
 
 ### 3.5 Model message-role policy
 
