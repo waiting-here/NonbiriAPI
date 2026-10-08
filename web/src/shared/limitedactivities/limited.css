@@ -52,7 +52,7 @@
 .limited-entry__copy :is(.btn, .nb-btn) {
   margin-top: 0.4rem;
 }
-@media (max-width: 640px) {
+@media (width <= 40rem) {
   .limited-entry {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -97,7 +97,7 @@
   font-variant-numeric: tabular-nums;
 }
 .limited-notice {
-  border-inline-start: 3px solid var(--color-accent, #8274b9);
+  border-inline-start: 3px solid var(--nb-color-accent);
   padding: 0.6rem 1rem;
 }
 .limited-actions {

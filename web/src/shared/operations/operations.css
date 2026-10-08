@@ -4,7 +4,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-3, 0.75rem);
+  gap: var(--nb-space-3);
 }
 
 form.ops-toolbar {
@@ -20,7 +20,7 @@ form.ops-toolbar > label {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   min-width: 0;
-  gap: var(--space-4, 1rem);
+  gap: var(--nb-space-4);
 }
 
 .gateway-capability-target {
@@ -34,7 +34,7 @@ form.ops-toolbar > label {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   min-width: 0;
-  gap: var(--space-4, 1rem);
+  gap: var(--nb-space-4);
 }
 
 .ops-page .card > :where(h2, h3, h4, p, dl),
@@ -59,7 +59,7 @@ form.ops-toolbar > label {
 .ops-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
-  gap: var(--space-4, 1rem);
+  gap: var(--nb-space-4);
 }
 
 fieldset.ops-field-grid {
@@ -72,14 +72,14 @@ fieldset.ops-field-grid {
 .ops-field-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
-  gap: var(--space-3, 0.75rem);
+  gap: var(--nb-space-3);
 }
 
 .ops-field-grid label,
 .ops-form-field {
   display: grid;
   min-width: 0;
-  gap: var(--space-2, 0.5rem);
+  gap: var(--nb-space-2);
 }
 
 .ops-field-grid :is(input, select, textarea),
@@ -90,14 +90,14 @@ fieldset.ops-field-grid {
 .ops-field-grid > .checkbox-label {
   align-self: stretch;
   width: 100%;
-  border: 1px solid var(--border-subtle, var(--nb-color-border));
+  border: 1px solid var(--nb-color-border);
   background: var(--nb-color-surface-alt);
 }
 
 .ops-readonly-field {
   display: grid;
   align-content: start;
-  gap: var(--space-2, 0.5rem);
+  gap: var(--nb-space-2);
   min-width: 0;
 }
 
@@ -110,7 +110,7 @@ fieldset.ops-field-grid {
   display: flex;
   min-height: 2.7rem;
   align-items: center;
-  border: 1px solid var(--border-subtle, var(--nb-color-border));
+  border: 1px solid var(--nb-color-border);
   border-radius: var(--nb-radius-sm);
   padding: 0.62rem 0.72rem;
   background: var(--nb-color-surface-alt);
@@ -135,7 +135,7 @@ fieldset.ops-field-grid {
 .ops-table th,
 .ops-table td {
   padding: 0.7rem;
-  border-bottom: 1px solid var(--border-subtle, currentColor);
+  border-bottom: 1px solid var(--nb-color-border);
   text-align: left;
   vertical-align: top;
   overflow-wrap: anywhere;
@@ -169,7 +169,7 @@ fieldset.ops-field-grid {
   min-width: 0;
 }
 
-@media (max-width: 60rem) {
+@media (width <= 64rem) {
   .ops-table--responsive,
   .ops-table--responsive > tbody {
     display: block;
@@ -219,7 +219,7 @@ fieldset.ops-field-grid {
 }
 
 .ops-kv dt {
-  color: var(--text-muted, inherit);
+  color: var(--nb-color-text-muted);
 }
 
 .ops-kv dd {
@@ -229,11 +229,11 @@ fieldset.ops-field-grid {
 
 .ops-danger,
 .ops-danger-zone {
-  border-color: var(--danger, #b42318);
+  border-color: var(--nb-color-danger);
 }
 
 .ops-danger-copy {
-  color: var(--danger, #b42318);
+  color: var(--nb-color-danger);
 }
 
 .ops-safe-json,
@@ -257,36 +257,20 @@ fieldset.ops-field-grid {
 }
 
 .ops-subcard {
-  padding: var(--space-3, 0.75rem);
-  border: 1px solid var(--border-subtle, currentColor);
+  padding: var(--nb-space-3);
+  border: 1px solid var(--nb-color-border);
   border-radius: 0.75rem;
 }
 
 .ops-settings-columns {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 32rem), 1fr));
-  gap: var(--space-5, 1.25rem);
+  gap: var(--nb-space-5);
   align-items: start;
 }
 
 .ops-settings-columns > section {
   min-width: 0;
-}
-
-.ops-save-bar {
-  position: sticky;
-  top: 5rem;
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 0.75rem;
-  background: var(--nb-color-surface);
-}
-.ops-save-bar > p {
-  flex-basis: 100%;
-  margin: 0;
 }
 .ops-setting summary {
   cursor: pointer;
@@ -297,9 +281,9 @@ fieldset.ops-field-grid {
 .ops-setting {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
-  gap: var(--space-4, 1rem);
-  padding-block: var(--space-3, 0.75rem);
-  border-top: 1px solid var(--border-subtle, currentColor);
+  gap: var(--nb-space-4);
+  padding-block: var(--nb-space-3);
+  border-top: 1px solid var(--nb-color-border);
 }
 
 .ops-setting > div,
@@ -313,7 +297,7 @@ fieldset.ops-field-grid {
 .ops-setting-control {
   display: grid;
   align-content: start;
-  gap: var(--space-3, 0.75rem);
+  gap: var(--nb-space-3);
 }
 
 .ops-advanced {
@@ -350,7 +334,7 @@ fieldset.ops-field-grid {
   justify-content: space-between;
 }
 
-@media (max-width: 40rem) {
+@media (width <= 40rem) {
   form.ops-toolbar {
     align-items: stretch;
     flex-direction: column;
@@ -479,7 +463,7 @@ fieldset.ops-field-grid {
 .ops-users-table td {
   overflow-wrap: anywhere;
 }
-@media (max-width: 48rem) {
+@media (width <= 48rem) {
   .ops-users-table,
   .ops-users-table tbody {
     display: block;

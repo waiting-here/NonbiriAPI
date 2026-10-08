@@ -53,7 +53,7 @@
   display: grid;
   gap: 1rem;
 }
-@media (max-width: 650px) {
+@media (width <= 48rem) {
   .lake-period-grid {
     grid-template-columns: minmax(0, 1fr);
   }

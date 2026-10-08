@@ -252,12 +252,12 @@
 .api-access-page .personal-automation-guide th {
   overflow-wrap: anywhere;
 }
-@media (max-width: 56rem) {
+@media (width <= 64rem) {
   .home-page .home-hero {
     grid-template-columns: minmax(0, 1fr);
   }
 }
-@media (max-width: 48rem) {
+@media (width <= 48rem) {
   .home-page button,
   .home-page .home-announcement-card__actions :is(.btn, .nb-btn),
   .api-access-page :is(.btn, .nb-btn) {
@@ -304,7 +304,7 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
-@media (max-width: 32rem) {
+@media (width <= 32rem) {
   .home-page .core-checkin-grid {
     grid-template-columns: minmax(0, 1fr);
   }

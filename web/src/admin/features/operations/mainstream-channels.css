@@ -6,7 +6,7 @@
   white-space: nowrap;
   font-family: var(--nb-font-mono);
 }
-@media (max-width: 48rem) {
+@media (width <= 48rem) {
   .channel-base-url {
     max-width: 100%;
     white-space: normal;

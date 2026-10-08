@@ -67,7 +67,7 @@
 .inactivity-panel .nb-panel__foot {
   margin-top: var(--nb-space-2);
 }
-@media (max-width: 37.5rem) {
+@media (width <= 40rem) {
   .inactivity-panel fieldset {
     padding: var(--nb-space-3);
   }

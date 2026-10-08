@@ -33,7 +33,7 @@
 .blacklist-management .nb-table th:first-child {
   width: 24%;
 }
-@media (max-width: 37.5rem) {
+@media (width <= 40rem) {
   .blacklist-management .nb-table {
     table-layout: auto;
   }

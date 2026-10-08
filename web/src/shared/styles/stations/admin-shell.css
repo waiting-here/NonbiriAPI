@@ -72,7 +72,7 @@
   display: none;
 }
 
-@media (max-width: 52rem) {
+@media (width <= 64rem) {
   .admin-sidebar {
     position: fixed;
     inset: 4.25rem auto 0 0;
@@ -214,7 +214,7 @@
   width: 100%;
 }
 
-@media (max-width: 64rem) {
+@media (width <= 64rem) {
   .nb-admin-shell {
     display: block;
   }
@@ -248,7 +248,7 @@
   }
 }
 
-@media (max-width: 34rem) {
+@media (width <= 40rem) {
   .nb-admin-header {
     gap: var(--nb-space-3);
     padding-inline: var(--nb-space-3);

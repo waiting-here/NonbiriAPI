@@ -159,12 +159,12 @@
 }
 .fatfish-admin .fatfish-condition-children { margin-left: 1rem; }
 .fatfish-admin code, .fatfish-admin [role="status"] { overflow-wrap: anywhere; word-break: break-word; }
-@media (max-width: 850px) {
+@media (width <= 64rem) {
   .fatfish-admin .fatfish-editor-body { grid-template-columns: minmax(0, 1fr); }
   .fatfish-admin .fatfish-inspector { max-height: none; }
   .fatfish-admin .fatfish-node-map svg { min-width: 0; }
 }
-@media (max-width: 600px) {
+@media (width <= 40rem) {
   .fatfish-admin .fatfish-directory { align-items: stretch; }
   .fatfish-admin .fatfish-directory h2 { width: 100%; }
   .fatfish-admin .fatfish-directory ul { flex-basis: 100%; }

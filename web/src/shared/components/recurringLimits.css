@@ -336,7 +336,7 @@
   margin: 0;
 }
 
-@media (max-width: 44rem) {
+@media (width <= 48rem) {
   .recurring-limits__header,
   .recurring-limits__rule-summary,
   .recurring-limits__save-row,
@@ -354,7 +354,7 @@
   }
 }
 
-@media (max-width: 36rem) {
+@media (width <= 40rem) {
   .recurring-limits-disclosure {
     padding: 0.65rem;
   }
@@ -372,7 +372,7 @@
   }
 }
 
-@media (max-width: 20rem) {
+@media (width <= 32rem) {
   .recurring-limits__rule-summary,
   .recurring-limits__rule-body {
     padding: 0.65rem;

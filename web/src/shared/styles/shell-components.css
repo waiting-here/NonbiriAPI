@@ -39,7 +39,7 @@
   border-top: 1px solid var(--nb-color-border);
 }
 
-@media (max-width: 34rem) {
+@media (width <= 40rem) {
   .nb-public-shell__header {
     align-items: flex-start;
     flex-direction: column;
@@ -140,7 +140,7 @@
   position: relative;
 }
 
-@media (max-width: 30rem) {
+@media (width <= 32rem) {
   .nb-brand__name {
     max-width: 9.5rem;
   }

@@ -59,7 +59,7 @@
 .legal-toc--mobile {
   display: none;
 }
-@media (max-width: 63.999rem) {
+@media (width < 64rem) {
   .legal-layout {
     grid-template-columns: minmax(0, 1fr);
     gap: var(--nb-space-4);
