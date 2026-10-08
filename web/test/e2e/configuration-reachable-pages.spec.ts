@@ -927,11 +927,23 @@ test('reachable level-6 steward page keeps its bounded log projection usable', a
   page,
 }) => {
   const guard = await prepare(context, page, 'user', 'level6', 'en', 'dark');
-  await mockJson(page, {
-    origin: USER_ORIGIN,
-    method: 'GET',
-    path: '/api/steward/logs?page=1&page_size=20',
-    body: numberedResponse([], '1', 20),
+  await page.route('**/api/steward/logs?**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    expect(request.method()).toBe('GET');
+    expect(url.origin).toBe(USER_ORIGIN);
+    expect(url.pathname).toBe('/api/steward/logs');
+    expect(url.searchParams.get('page')).toBe('1');
+    expect(url.searchParams.get('page_size')).toBe('20');
+    const from = url.searchParams.get('from');
+    const to = url.searchParams.get('to');
+    expect(from).toMatch(/^(0|[1-9][0-9]*)$/);
+    expect(to).toMatch(/^(0|[1-9][0-9]*)$/);
+    expect(Number.isSafeInteger(Number(from))).toBe(true);
+    expect(Number.isSafeInteger(Number(to))).toBe(true);
+    expect(Number(to)).toBeLessThanOrEqual(253_402_300_799);
+    expect(Number(to) - Number(from)).toBe(86_400);
+    await route.fulfill({ json: numberedResponse([], '1', 20) });
   });
   await mockJson(page, {
     origin: USER_ORIGIN,
