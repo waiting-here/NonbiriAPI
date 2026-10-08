@@ -509,9 +509,10 @@ export function LikesGame(context: DuelLobbyContext) {
                 <button type="button" disabled={duel.blocked} onClick={() => setSurrender(true)}>
                   {text('bidding.surrender')}
                 </button>
-                <span>
-                  {text('bidding.yourEntry')}: <GamePayment payment={current.payment} />
-                </span>
+                <div>
+                  <span>{text('bidding.yourEntry')}</span>
+                  <GamePayment payment={current.payment} />
+                </div>
               </div>
             </>
           ) : queue ? (

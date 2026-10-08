@@ -285,7 +285,7 @@ describe('pool adjustment confirmation', () => {
       period_id: previousPeriod.id,
     });
     const view = await renderActivities();
-    await view.user.click(await screen.findByRole('button', { name: 'Select' }));
+    await view.user.click(await screen.findByRole('button', { name: 'Adjust balance' }));
     expect(screen.getByRole('option', { name: 'Decrease' })).toBeDisabled();
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     expect(writes).toHaveLength(0);
@@ -297,7 +297,7 @@ describe('pool adjustment confirmation', () => {
       const writes = installActivities(null, true, welfarePool);
       const view = await renderActivities();
       expect(screen.queryByRole('columnheader', { name: 'Revision' })).not.toBeInTheDocument();
-      await view.user.click(await screen.findByRole('button', { name: 'Select' }));
+      await view.user.click(await screen.findByRole('button', { name: 'Adjust balance' }));
       await view.user.selectOptions(screen.getByLabelText('Direction'), direction);
       await view.user.type(screen.getByLabelText('Amount (credits)'), '2.5');
       await view.user.type(screen.getByLabelText('Reason'), 'Correct pool balance');

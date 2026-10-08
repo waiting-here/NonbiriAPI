@@ -245,9 +245,10 @@ export function BiddingGame({
             >
               {text('bidding.surrender')}
             </button>
-            <small>
-              {text('bidding.yourEntry')}: <GamePayment payment={current.payment} />
-            </small>
+            <div>
+              <span>{text('bidding.yourEntry')}</span>
+              <GamePayment payment={current.payment} />
+            </div>
           </div>
         </div>
       ) : queue ? (

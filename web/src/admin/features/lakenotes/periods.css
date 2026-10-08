@@ -43,7 +43,7 @@
 }
 .lake-exchange-setting,
 .lake-period-list article {
-  border: 1px solid var(--border);
+  border: 1px solid var(--nb-color-border);
   border-radius: 0.75rem;
   padding: 1rem;
   display: grid;

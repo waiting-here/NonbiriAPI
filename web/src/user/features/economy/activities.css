@@ -97,7 +97,7 @@
 }
 .economy-activities-page .limited-entry__action {
   color: var(--nb-color-accent);
-  font-size: var(--nb-text-sm);
+  font-size: var(--nb-font-size-sm);
 }
 @media (max-width: 39.999rem) {
   .economy-activities-page a.limited-entry {

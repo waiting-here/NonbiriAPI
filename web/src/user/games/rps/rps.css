@@ -65,16 +65,16 @@
   background: var(--nb-color-accent-soft);
   font-weight: 800;
 }
-.rps-seat dl,
-.rps-economy dl,
-.rps-result dl {
+.rps-seat dl:not(.game-wallets),
+.rps-economy dl:not(.game-wallets),
+.rps-result dl:not(.game-wallets) {
   display: grid;
   gap: 0.4rem;
   margin: 0;
 }
-.rps-seat dl > div,
-.rps-economy dl > div,
-.rps-result dl > div {
+.rps-seat dl:not(.game-wallets) > div,
+.rps-economy dl:not(.game-wallets) > div,
+.rps-result dl:not(.game-wallets) > div {
   display: flex;
   justify-content: space-between;
   gap: 0.75rem;

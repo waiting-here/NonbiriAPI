@@ -35,7 +35,7 @@
       "noActivity": "暂无活动记录",
       "noActivityBody": "暂时没有活动记录。",
       "reportsTitle": "凭据举报",
-      "nonTerminalReports": "未终态总数",
+      "nonTerminalReports": "非终态",
       "pendingIndexing": "正在索引",
       "pendingReview": "待审核",
       "approvedProcessing": "正在处理",
@@ -366,14 +366,14 @@
       "pools": {
         "allStates": "全部奖池状态",
         "allTypes": "全部奖池类型",
-        "adjust": "调整",
+        "adjust": "操作",
         "balance": "余额",
         "emptyBody": "当前没有共享池。",
         "emptyTitle": "没有共享池",
         "filterState": "奖池状态",
         "filterType": "奖池类型",
         "period": "周期",
-        "select": "选择",
+        "select": "调整余额",
         "singleton": "长期共用",
         "unboundPeriod": "尚未绑定周期",
         "title": "共享池",
@@ -499,7 +499,7 @@
         "indexing": "索引中",
         "processing": "处理中",
         "review": "待审核",
-        "title": "非终态数量"
+        "title": "非终态"
       },
       "decisionAction": {
         "approve": "已批准删除",
@@ -855,7 +855,8 @@
       "next": "下一页",
       "cancelHelp": "取消会停止本期玩法和兑换，保留已付资格、收据和档案。",
       "publishHelp": "发布后，用户可在期次开放时间内参与，并按设置支付入场费用。",
-      "withdrawalHelp": "停止发布后，该期次的游玩与兑换将停止，已有入场记录、回执和档案会保留。"
+      "withdrawalHelp": "停止发布后，该期次的游玩与兑换将停止，已有入场记录、回执和档案会保留。",
+      "periodHistoryDescription": "保留原活动的期次记录。游戏开放与兑换在游戏配置中管理。"
     },
     "fatfish": {
       "workspace": {

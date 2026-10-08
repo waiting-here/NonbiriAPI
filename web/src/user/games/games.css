@@ -133,6 +133,7 @@
 }
 
 .game-money {
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
   font-weight: 700;
 }
@@ -267,16 +268,27 @@
 .game-wallets {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem 1.25rem;
-  align-items: baseline;
+  gap: var(--nb-space-2) var(--nb-space-5);
+  align-items: start;
+  margin: 0;
 }
-.game-wallets > span {
-  display: block;
-  max-width: 100%;
+.game-wallets > div {
   min-width: 0;
 }
-.game-wallets .game-money__unit {
+.game-wallets dt {
+  font-size: var(--nb-font-size-xs);
+  color: var(--nb-color-text-muted);
+}
+.game-wallets dd {
+  margin: 0;
   white-space: nowrap;
+}
+
+@media (width < 40rem) {
+  .game-page .nb-page-header__actions > .game-wallets {
+    flex-basis: 100%;
+    text-align: start;
+  }
 }
 
 @media (max-width: 540px) {

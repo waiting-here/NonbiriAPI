@@ -390,3 +390,14 @@
   width: 100%;
   max-width: 100%;
 }
+
+.nb-stats > .nb-stat {
+  min-width: 0;
+  container-type: inline-size;
+}
+.nb-stat__value,
+.nb-stat strong {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(var(--nb-font-size-md), 9cqi, var(--nb-font-size-2xl));
+}

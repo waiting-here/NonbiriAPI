@@ -1659,12 +1659,9 @@
   text-align: right;
 }
 .catch-game .game-wallets {
+  --nb-color-text-muted: var(--muted);
   color: var(--muted);
-  font-size: 12px;
-  flex-wrap: wrap;
-}
-.catch-game .game-wallets a {
-  color: var(--mint);
+  font-size: var(--nb-font-size-xs);
 }
 .catch-game .effect-bar {
   z-index: 1;
