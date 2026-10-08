@@ -129,8 +129,14 @@ for (const scenario of [
   });
 }
 
-for (const role of ['user', 'admin', 'steward'] as const) {
-  test(`pre-handler filters and export preserve ${role} projection`, async ({ page }) => {
+const logExportScenarios = (['user', 'admin', 'steward'] as const).flatMap((role) =>
+  [390, 1280].map((width) => ({ role, width })),
+);
+for (const { role, width } of logExportScenarios) {
+  test(`pre-handler filters and export preserve ${role} projection at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
     const guard = collectConsoleViolations(page),
       station = role === 'admin' ? 'admin' : 'user';
     const origin = role === 'admin' ? ADMIN_ORIGIN : USER_ORIGIN,
@@ -208,11 +214,17 @@ for (const role of ['user', 'admin', 'steward'] as const) {
     await page.getByRole('button', { name: 'Apply filter', exact: true }).click();
     await expect.poll(() => filters.some((q) => q.includes('phase=pre_handler'))).toBe(true);
     await page.locator('.log-export > summary').click();
-    await expect(page.getByRole('link', { name: 'Export JSON (programs)' })).toHaveAttribute(
-      'href',
-      path + '/export.json?phase=pre_handler',
-    );
     const exportLink = page.getByRole('link', { name: 'Export JSON (programs)' });
+    const exportURL = new URL((await exportLink.getAttribute('href'))!, origin);
+    const activeFilters = new URL(page.url()).searchParams;
+    expect(exportURL.pathname).toBe(path + '/export.json');
+    expect(Object.fromEntries(exportURL.searchParams)).toEqual({
+      phase: 'pre_handler',
+      from: activeFilters.get('from'),
+      to: activeFilters.get('to'),
+    });
+    expect(Number(activeFilters.get('from'))).toBeGreaterThan(0);
+    expect(Number(activeFilters.get('to')) - Number(activeFilters.get('from'))).toBe(86_400);
     await exportLink.click({ trial: true });
     const exportBounds = (await exportLink.boundingBox())!;
     expect(exportBounds.x).toBeGreaterThanOrEqual(0);
@@ -220,7 +232,7 @@ for (const role of ['user', 'admin', 'steward'] as const) {
     if (process.env.NONBIRI_VISUAL_DIR) {
       mkdirSync(process.env.NONBIRI_VISUAL_DIR, { recursive: true });
       await page.screenshot({
-        path: join(process.env.NONBIRI_VISUAL_DIR, `log-export-${role}.png`),
+        path: join(process.env.NONBIRI_VISUAL_DIR, `log-export-${role}-${width}.png`),
       });
     }
     await page.getByRole('button', { name: 'Details', exact: true }).click();
