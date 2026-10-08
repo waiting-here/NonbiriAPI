@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import phrases from '../../../../../internal/game/steadycatch/engine/phrases.json';
 import { advance, newGame, LAST_TICK } from './engine';
 import { CatchSession, type Controls, type Session } from './session';
@@ -21,6 +21,53 @@ function initial(): Session {
 const settle = async () => {
   for (let i = 0; i < 8; i++) await Promise.resolve();
 };
+describe('catch preparation countdown', () => {
+  afterEach(() => vi.useRealTimers());
+  it('keeps preview controls local until all opening beats finish', async () => {
+    vi.useFakeTimers();
+    const value = initial();
+    const send = vi.fn(async () => ({ ...value, status: 'playing' as const, revision: 2 }));
+    const session = new CatchSession(value, phrases, send);
+    const ready = session.beginCountdown();
+    expect(session.countdown).toBe(3);
+    session.move(1);
+    session.frame();
+    expect(session.previewX).toBeGreaterThan(value.state.x);
+    expect(session.state).toEqual(value.state);
+    await vi.advanceTimersByTimeAsync(1800);
+    expect(session.countdown).toBe(0);
+    expect(send).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(350);
+    await ready;
+    expect(send).toHaveBeenCalledExactlyOnceWith(value.id, {
+      revision: 1,
+      action: 'resume',
+      until_tick: 0,
+      inputs: [],
+    });
+    expect(session.active).toBe(true);
+    expect(session.countdown).toBeNull();
+  });
+  it('cancels without dispatch, including a replacement countdown', async () => {
+    vi.useFakeTimers();
+    const value = initial();
+    const send = vi.fn(async () => ({ ...value, status: 'playing' as const }));
+    const session = new CatchSession(value, phrases, send);
+    const first = session.beginCountdown();
+    await vi.advanceTimersByTimeAsync(600);
+    await session.pause();
+    const second = session.beginCountdown(2);
+    await vi.advanceTimersByTimeAsync(600);
+    expect(session.countdown).toBe(1);
+    await session.pause();
+    await vi.advanceTimersByTimeAsync(3000);
+    await Promise.all([first, second]);
+    expect(send).not.toHaveBeenCalled();
+    expect(session.active).toBe(false);
+    expect(session.authority.status).toBe('paused');
+    expect(session.countdown).toBeNull();
+  });
+});
 describe('catch checkpoint coordination', () => {
   it('sends a local terminal tail after a delayed earlier checkpoint', async () => {
     let time = 0,

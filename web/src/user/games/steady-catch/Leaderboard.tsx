@@ -5,6 +5,7 @@ import { gameRequest } from '../common/request';
 import { PublicGameIdentity } from '../common/PublicGameIdentity';
 import { GamePrivacyControl } from '../common/GamePrivacyControl';
 import { publicIdentity } from '../common/strict';
+import { formatCount } from '@shared/utils/formatNumber';
 import { useCatchText } from './copy';
 interface Row {
   rank: string;
@@ -27,20 +28,27 @@ export function CatchLeaderboard() {
         .data,
     staleTime: 30000,
   });
-  const row = (r: Row) => (
-    <tr key={r.rank}>
-      <td>{r.rank}</td>
-      <td>
-        <PublicGameIdentity
-          identity={publicIdentity(r.identity, 'ranking identity')}
-          isMe={r.is_me}
-          anonymousLabel={t('匿名玩家', 'Anonymous player')}
-          meLabel={t('你', 'you')}
-        />
-      </td>
-      <td>{r.score}</td>
-    </tr>
-  );
+  const row = (r: Row) => {
+    const identity = publicIdentity(r.identity, 'ranking identity');
+    return (
+      <tr key={r.rank}>
+        <td>{formatCount(r.rank).display}</td>
+        <td
+          title={
+            identity.kind === 'public' ? identity.displayName : t('匿名玩家', 'Anonymous player')
+          }
+        >
+          <PublicGameIdentity
+            identity={identity}
+            isMe={r.is_me}
+            anonymousLabel={t('匿名玩家', 'Anonymous player')}
+            meLabel={t('你', 'you')}
+          />
+        </td>
+        <td>{formatCount(r.score).display}</td>
+      </tr>
+    );
+  };
   return (
     <section className="catch-ranking" id="game-rankings">
       <header>
@@ -50,7 +58,7 @@ export function CatchLeaderboard() {
       <div className="catch-actions">
         {['7d', '30d'].map((value) => (
           <button
-            className="btn btn-secondary"
+            className="nb-btn nb-btn--secondary"
             key={value}
             aria-pressed={window === value}
             onClick={() => setWindow(value)}
@@ -66,19 +74,21 @@ export function CatchLeaderboard() {
         )}
       </p>
       {query.error && <ErrorState error={query.error} onRetry={() => void query.refetch()} />}
-      <table>
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>{t('玩家', 'Player')}</th>
-            <th>{t('分数', 'Score')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {query.data?.rows.map(row)}
-          {query.data?.me && row(query.data.me)}
-        </tbody>
-      </table>
+      <div className="catch-ranking__scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>{t('玩家', 'Player')}</th>
+              <th>{t('分数', 'Score')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {query.data?.rows.map(row)}
+            {query.data?.me && row(query.data.me)}
+          </tbody>
+        </table>
+      </div>
       {query.data?.rows.length === 0 && <p>{t('暂无成绩', 'No results yet')}</p>}
     </section>
   );

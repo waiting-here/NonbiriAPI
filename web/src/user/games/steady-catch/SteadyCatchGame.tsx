@@ -1,19 +1,25 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ErrorState, LoadingState } from '@shared/components/States';
+import { Icon, type IconName } from '@shared/components/Icon';
 import { GameWallets } from '../common/GameWallets';
 import { GameBackLink } from '../common/GameBackLink';
+import { GameToolbar } from '../common/GameToolbar';
+import { formatCredits } from '../common/strict';
 import { createIdempotencyKey, gameRequest } from '../common/request';
 import { useGamesSnapshot, gameKeys } from '../common/snapshot';
 import { HZ, LAST_TICK, newGame, type Phrase } from './engine';
 import { CatchSession, type Controls, type Session } from './session';
 import { CatchBoard, type CatchFeedback } from './Board';
 import { CatchAudio } from './audio';
+import { CatchResult } from './CatchResult';
 import { CatchLeaderboard } from './Leaderboard';
-import { CatchCatalog, CatchDialog, CatchHelp } from './CatchDialogs';
+import { CatchCatalog, CatchDialog } from './CatchDialogs';
+import { CatchHelp } from './CatchHelp';
 import { useCatchText } from './copy';
 import '../games.css';
 import './catch.css';
+import './polish.css';
 
 const sessionKey = ['user', 'games', 'steadycatch', 'session'] as const;
 const send = async (id: string, json: Controls) =>
@@ -30,6 +36,61 @@ interface Entry {
 }
 const idle = newGame(1);
 type AssetStatus = 'loading' | 'ready' | 'error';
+
+function EntryTerms({ entry, playing }: { entry: Entry; playing: boolean }) {
+  const t = useCatchText();
+  const [expanded, setExpanded] = useState(() => {
+    if (!entry.firstCleared && Number(entry.firstClearReward) > 0) return true;
+    try {
+      return sessionStorage.getItem('nb.catch.reward-notice') !== 'seen';
+    } catch {
+      return true;
+    }
+  });
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('nb.catch.reward-notice', 'seen');
+    } catch {
+      // The disclosure remains usable without browser storage.
+    }
+  }, []);
+  const [wasPlaying, setWasPlaying] = useState(playing);
+  if (playing !== wasPlaying) {
+    setWasPlaying(playing);
+    if (playing) setExpanded(false);
+  }
+  return (
+    <details
+      className="entry-terms"
+      open={expanded}
+      onToggle={(event) => setExpanded(event.currentTarget.open)}
+    >
+      <summary>
+        {t('门票 ', 'Entry ')}
+        {formatCredits(entry.price)}
+        {t(' 积分 · ', ' credits · ')}
+        {entry.firstCleared
+          ? t('已首通，本局不发积分', 'Already cleared; no credits this game')
+          : Number(entry.firstClearReward) > 0
+            ? t('首通可领 ', 'First-clear reward: ') + formatCredits(entry.firstClearReward)
+            : t('本局不发积分', 'No credits this game')}
+      </summary>
+      <p className="reward-notice">
+        <strong>{t('没有逐局积分奖励', 'No per-game credit rewards')}</strong>
+        <span>
+          {entry.firstCleared
+            ? t(
+                '已领过首通奖励，本局不再发放积分。',
+                'First clear already completed; this game awards no credits.',
+              )
+            : t('仅首次通关可领取游戏积分：', 'Only the first clear awards game credits: ') +
+              formatCredits(entry.firstClearReward)}{' '}
+          {t('局内分数不等于钱包积分。', 'Game score is not wallet credit.')}
+        </span>
+      </p>
+    </details>
+  );
+}
 
 function usePresentation() {
   const [asset, setAsset] = useState<AssetStatus>('loading');
@@ -51,6 +112,7 @@ function Round({
   phrases,
   autoStart,
   controllerRef,
+  collectionRef,
   audio,
   reload,
   refresh,
@@ -67,6 +129,7 @@ function Round({
   phrases: readonly Phrase[];
   autoStart: boolean;
   controllerRef: RefObject<CatchSession | null>;
+  collectionRef: RefObject<CatchFeedback[]>;
   audio: CatchAudio;
   reload: () => void;
   refresh: () => void;
@@ -86,10 +149,14 @@ function Round({
   const [recent, setRecent] = useState<CatchFeedback[]>([]);
   const field = useRef<HTMLElement>(null);
   const onCatch = useCallback(
-    (item: CatchFeedback) => setRecent((values) => [item, ...values].slice(0, 3)),
-    [],
+    (item: CatchFeedback) => {
+      collectionRef.current = [item, ...collectionRef.current];
+      setRecent(collectionRef.current);
+    },
+    [collectionRef],
   );
   useEffect(() => {
+    collectionRef.current = [];
     controllerRef.current = session;
     if (!session) return;
     let terminal = session.terminal;
@@ -105,9 +172,10 @@ function Round({
       if (!mounted) return;
       if (session.authority.status === 'playing') void session.pause();
       else if (autoStart && !session.terminal)
-        void session
-          .resume()
-          .then(() => field.current?.querySelector('canvas')?.focus({ preventScroll: true }));
+        void session.beginCountdown().then(() => {
+          if (session.active)
+            field.current?.querySelector('canvas')?.focus({ preventScroll: true });
+        });
     });
     const hide = () => {
       if (document.hidden) void session.pause();
@@ -123,11 +191,12 @@ function Round({
       window.removeEventListener('blur', blur);
       void session.pause();
     };
-  }, [session, refresh, autoStart, controllerRef]);
+  }, [session, refresh, autoStart, controllerRef, collectionRef]);
   const state = session?.state ?? idle,
     result = session?.authority;
   const terminal = !!session?.terminal,
-    active = !!session?.active;
+    active = !!session?.active,
+    counting = session?.countdown != null;
   const title =
     result?.status === 'completed'
       ? t('这次，真的接住了', 'This time, you caught it')
@@ -140,9 +209,9 @@ function Round({
             : t('再接几句就过关了', 'A few more catches next time');
   const resume = () =>
     asset === 'ready' &&
-    void session
-      ?.resume()
-      .then(() => field.current?.querySelector('canvas')?.focus({ preventScroll: true }));
+    void session?.beginCountdown(2).then(() => {
+      if (session.active) field.current?.querySelector('canvas')?.focus({ preventScroll: true });
+    });
   const best = useQuery({
     queryKey: ['user', 'games', 'steadycatch', 'leaderboard', '30d'],
     queryFn: async ({ signal }) =>
@@ -157,38 +226,18 @@ function Round({
   const bestScore = best.data?.me?.score ?? best.data?.rows.find((row) => row.is_me)?.score;
   const [previousBest, setPreviousBest] = useState<number | null>(null);
   if (!terminal && previousBest === null && best.data) setPreviousBest(bestScore ?? 0);
-  const notice = (
-    <p className="reward-notice">
-      <strong>{t('没有逐局积分奖励', 'No per-game credit rewards')}</strong>
-      <span>
-        {entry?.firstCleared
-          ? t(
-              '已领过首通奖励，本局不再发放积分。',
-              'First clear already completed; this game awards no credits.',
-            )
-          : t('仅首次通关可领取游戏积分：', 'Only the first clear awards game credits: ') +
-            (entry?.firstClearReward ?? '—')}{' '}
-        {t('局内分数不等于钱包积分。', 'Game score is not wallet credit.')}
-      </span>
-    </p>
-  );
   return (
     <>
-      <div className="entry-terms">
-        <span>
-          {t('门票', 'Entry')}: {entry?.price ?? '—'}
-        </span>
-        {notice}
-      </div>
+      {entry && <EntryTerms entry={entry} playing={active || counting} />}
       <div className="layout">
         <section className="game-column" ref={field} aria-label={t('接物游戏', 'Catch game')}>
           <div className="hud">
-            <div className="score-stat">
+            <div className="score-stat" aria-label={t('本局分数', 'Game score')}>
               <span className="stat-label">{t('本局分数', 'Game score')}</span>
               <strong>{state.score}</strong>
               <span className="goal">/ 600</span>
             </div>
-            <div className="time-stat">
+            <div className="time-stat" aria-label={t('剩余时间', 'Time left')}>
               <span className="stat-label">{t('剩余时间', 'Time left')}</span>
               <strong>
                 {Math.ceil((LAST_TICK - state.tick) / HZ)}
@@ -217,10 +266,12 @@ function Round({
                 !!session.error ||
                 asset !== 'ready'
               }
-              aria-label={active ? t('暂停游戏', 'Pause game') : t('继续游戏', 'Resume game')}
-              onClick={() => (active ? void session?.pause() : resume())}
+              aria-label={
+                active || counting ? t('暂停游戏', 'Pause game') : t('继续游戏', 'Resume game')
+              }
+              onClick={() => (active || counting ? void session?.pause() : resume())}
             >
-              {!session || active ? 'Ⅱ' : '▷'}
+              <Icon name={!session || active || counting ? 'pause' : 'play'} />
             </button>
           </div>
           <div className="stage">
@@ -268,7 +319,12 @@ function Round({
                   </span>
                 ))}
             </div>
-            {(!active || !!session?.error) && (
+            {counting && (
+              <div key={session?.countdown} className="catch-countdown" aria-live="assertive">
+                {session?.countdown === 0 ? t('接！', 'Go!') : session?.countdown}
+              </div>
+            )}
+            {!counting && (!active || !!session?.error) && (
               <div className={'overlay' + (session ? ' centered' : '')}>
                 {!session ? (
                   <div className="start-panel">
@@ -279,7 +335,9 @@ function Round({
                       {t('稳稳地', 'Catch you')}
                       <br />
                       <span>{t('接住你', 'steadily')}</span>
-                      <i aria-hidden="true">✦</i>
+                      <i aria-hidden="true">
+                        <Icon name="spark" />
+                      </i>
                     </h1>
                     <p className="intro">
                       {t('接住那些熟悉的句子。', 'Catch those familiar phrases.')}
@@ -325,7 +383,11 @@ function Round({
                 ) : (
                   <div className="end-panel" role="status">
                     <span className="end-symbol">
-                      {terminal ? (result?.status === 'completed' ? '✦' : '✧') : 'Ⅱ'}
+                      <Icon
+                        name={
+                          terminal ? (result?.status === 'completed' ? 'spark' : 'shield') : 'pause'
+                        }
+                      />
                     </span>
                     <h2>
                       {terminal
@@ -337,64 +399,15 @@ function Round({
                             : t('先缓一缓', 'Take a breath')}
                     </h2>
                     {terminal ? (
-                      <>
-                        {(result?.status === 'completed' || result?.status === 'failed') && (
-                          <p className="result-message">
-                            {previousBest !== null && state.score > previousBest
-                              ? t(
-                                  '近 30 天新纪录！你的托盘有点东西。',
-                                  'A new 30-day best! You know how to catch.',
-                                )
-                              : result.status === 'completed'
-                                ? t(
-                                    '90 秒八股雨，已被你稳稳兜底。',
-                                    'You caught the 90-second phrase shower steadily.',
-                                  )
-                                : state.cause === 'hp'
-                                  ? t(
-                                      '下一局，红色错误卡就让它掉下去吧。',
-                                      'Next time, let the red error cards fall.',
-                                    )
-                                  : t(
-                                      '目标 600 分。连击和金卡能让分数涨得更快。',
-                                      'Aim for 600 points. Combos and golden cards help you score faster.',
-                                    )}
-                          </p>
-                        )}
-                        {result?.first_clear && (
-                          <p>
-                            {t('首次通关！获得游戏积分：', 'First clear! Game credits awarded: ') +
-                              result.reward}
-                          </p>
-                        )}
-                        <div className="end-score">
-                          {state.score} <span>{t('分', 'points')}</span>
-                        </div>
-                        <div className="result-stats">
-                          <span>
-                            <b>{state.caught}</b>
-                            {t('接住句数', 'Caught')}
-                          </span>
-                          <span>
-                            <b>{state.max_combo}</b>
-                            {t('最高连击', 'Best combo')}
-                          </span>
-                          <span>
-                            <b>{Math.ceil(state.tick / HZ)}</b>
-                            {t('本局秒数', 'Seconds')}
-                          </span>
-                        </div>
-                        <button
-                          className="primary"
-                          disabled={!enabled || busy || asset !== 'ready'}
-                          onClick={start}
-                        >
-                          {busy ? t('正在开局', 'Starting') : t('再接一局', 'Catch again')}
-                        </button>
-                        <button className="secondary" onClick={openCatalog}>
-                          {t('翻翻刚才的梗', 'Browse the phrases')}
-                        </button>
-                      </>
+                      <CatchResult
+                        result={result!}
+                        previousBest={previousBest}
+                        caught={recent}
+                        disabled={!enabled || busy || asset !== 'ready'}
+                        busy={busy}
+                        start={start}
+                        openCatalog={openCatalog}
+                      />
                     ) : session.error ? (
                       <>
                         <p>
@@ -459,7 +472,7 @@ function Round({
                 <button
                   className="move-button"
                   key={dir}
-                  disabled={!active}
+                  disabled={!active && !counting}
                   aria-label={dir < 0 ? t('向左移动', 'Move left') : t('向右移动', 'Move right')}
                   onPointerDown={(e) => {
                     e.currentTarget.setPointerCapture(e.pointerId);
@@ -469,7 +482,7 @@ function Round({
                   onPointerCancel={() => session?.move(0)}
                   onLostPointerCapture={() => session?.move(0)}
                 >
-                  {dir < 0 ? '◀' : '▶'}
+                  <Icon name="arrow-left" className={dir > 0 ? 'move-right' : undefined} />
                 </button>
               ))}
             </div>
@@ -490,7 +503,9 @@ function Round({
               disabled={!active || state.charge < 10}
               onClick={() => session?.shield()}
             >
-              <span className="ability-symbol">✧</span>
+              <span className="ability-symbol">
+                <Icon name="shield" />
+              </span>
               <span>
                 <b>{t('稳稳护场', 'Steady shield')}</b>
                 <small>
@@ -511,7 +526,7 @@ function Round({
             </button>
           </div>
           <p className="below-note">
-            <span aria-hidden="true">✦</span>
+            <Icon name="spark" />
             {t(
               '漏接不扣耐心，只中断连击。坚持 90 秒并达到 600 分就过关。',
               'Misses break combos without costing health. Last 90 seconds and reach 600 points to clear.',
@@ -527,31 +542,33 @@ function Round({
             {[
               [
                 'normal',
-                '+',
+                'book',
                 t('白色八股卡', 'White phrase'),
                 t('接住 +10 分，连击越高越赚', 'Catch for +10; combos multiply'),
               ],
               [
                 'gold',
-                '✦',
+                'spark',
                 t('金色名场面', 'Golden moment'),
                 t('接住 +20 分，同样累计连击', 'Catch for +20; keeps the combo'),
               ],
               [
                 'danger',
-                '!',
+                'warning',
                 t('红色错误卡', 'Red error'),
                 t('躲开！接到扣 1 点耐心', 'Avoid! Costs 1 health'),
               ],
               [
                 'power',
-                '✧',
+                'shield',
                 t('绿色道具卡', 'Green power-up'),
                 t('护盾、降速、磁吸、加分、回血', 'Shield, slow, magnet, score, heal'),
               ],
             ].map(([style, icon, title, description]) => (
               <div className="guide-row" key={style}>
-                <span className={'mini-card ' + style}>{icon}</span>
+                <span className={'mini-card ' + style}>
+                  <Icon name={icon as IconName} />
+                </span>
                 <div>
                   <b>{title}</b>
                   <p>{description}</p>
@@ -571,7 +588,7 @@ function Round({
             </div>
             <ul>
               {recent.length ? (
-                recent.map((item, i) => (
+                recent.slice(0, 3).map((item, i) => (
                   <li key={i}>
                     <span>{item.text}</span>
                     <b>+{item.points}</b>
@@ -596,7 +613,7 @@ function Round({
             </p>
           </section>
           <button className="help-button" onClick={openHelp}>
-            {t('玩法与道具说明', 'How to play and power-ups')} <span aria-hidden="true">?</span>
+            {t('玩法与道具说明', 'How to play and power-ups')} <Icon name="help" />
           </button>
         </aside>
         <CatchDialog
@@ -658,10 +675,13 @@ export function SteadyCatchGame() {
     [sound, setSound] = useState(false),
     [dialog, setDialog] = useState<'catalog' | 'help' | null>(null);
   const controllerRef = useRef<CatchSession | null>(null),
+    collectionRef = useRef<CatchFeedback[]>([]),
     startKey = useRef<string | null>(null),
     modalResume = useRef<Promise<void> | null>(null),
     modalSequence = useRef(0);
   const [audio] = useState(() => new CatchAudio());
+  const [catalogScope, setCatalogScope] = useState<'all' | 'round'>('all');
+  const [catalogCaught, setCatalogCaught] = useState<string[]>([]);
   useEffect(() => () => audio.dispose(), [audio]);
   const [created, setCreated] = useState<string | null>(null);
   const refetch = current.refetch;
@@ -694,10 +714,13 @@ export function SteadyCatchGame() {
       setBusy(false);
     }
   };
-  const openDialog = (value: 'catalog' | 'help') => {
+  const openDialog = (value: 'catalog' | 'help', round = false) => {
+    setCatalogCaught(collectionRef.current.map((item) => item.id));
     modalSequence.current++;
     const session = controllerRef.current;
-    modalResume.current = session?.active ? session.pause() : null;
+    modalResume.current =
+      session?.active || session?.countdown != null ? (session?.pause() ?? null) : null;
+    setCatalogScope(round ? 'round' : 'all');
     setDialog(value);
   };
   const closeDialog = () => {
@@ -713,7 +736,7 @@ export function SteadyCatchGame() {
           session === controllerRef.current &&
           !document.hidden
         )
-          return session?.resume();
+          return session?.beginCountdown(2);
       });
   };
   const settings = snapshot.data?.steadycatch;
@@ -721,7 +744,46 @@ export function SteadyCatchGame() {
   return (
     <main className="game-page catch-game">
       <div className="app">
-        <GameBackLink className="catch-back" />
+        <div className="catch-navigation">
+          <GameBackLink className="catch-back" />
+          <GameToolbar
+            items={[
+              {
+                id: 'rules',
+                label: t('玩法说明', 'How to play'),
+                icon: 'help',
+                onClick: () => openDialog('help'),
+              },
+              {
+                id: 'credits',
+                label: t('积分记录', 'Credit history'),
+                icon: 'credits',
+                to: '/credits',
+              },
+              {
+                id: 'rankings',
+                label: t('排行榜', 'Rankings'),
+                icon: 'trophy',
+                href: '#game-rankings',
+              },
+              {
+                id: 'catalog',
+                label: t('梗图鉴', 'Phrases'),
+                icon: 'book',
+                onClick: () => openDialog('catalog'),
+              },
+            ]}
+            sound={{
+              enabled: sound,
+              toggle: () => {
+                audio.enable(!sound);
+                setSound(!sound);
+              },
+              labelOn: t('音效已开启', 'Sound effects on'),
+              labelOff: t('音效已关闭', 'Sound effects off'),
+            }}
+          />
+        </div>
         <header className="topbar">
           <div className="brand">
             <span className="brand-mark" aria-hidden="true">
@@ -732,25 +794,7 @@ export function SteadyCatchGame() {
               <small>{t('AI 八股接物机', 'AI PHRASE CATCHER')}</small>
             </span>
           </div>
-          <div className="top-actions">
-            <div className="version">
-              {snapshot.data && <GameWallets wallets={snapshot.data} />}
-            </div>
-            <button className="quiet" onClick={() => openDialog('catalog')}>
-              {t('梗图鉴', 'Phrases')} <span className="count">{catalog.data?.length ?? 134}</span>
-            </button>
-            <button
-              className="icon-button"
-              aria-label={sound ? t('关闭音效', 'Mute sounds') : t('开启音效', 'Enable sounds')}
-              aria-pressed={sound}
-              onClick={() => {
-                audio.enable(!sound);
-                setSound(!sound);
-              }}
-            >
-              ♪{!sound && <span className="sound-off">×</span>}
-            </button>
-          </div>
+          <div className="version">{snapshot.data && <GameWallets wallets={snapshot.data} />}</div>
         </header>
         {asset === 'error' && (
           <p role="alert">
@@ -771,6 +815,7 @@ export function SteadyCatchGame() {
             phrases={catalog.data}
             autoStart={created === current.data?.id}
             controllerRef={controllerRef}
+            collectionRef={collectionRef}
             audio={audio}
             reload={() =>
               void current.refetch().then((r) => {
@@ -785,7 +830,7 @@ export function SteadyCatchGame() {
             enabled={enabled}
             busy={busy}
             entry={settings}
-            openCatalog={() => openDialog('catalog')}
+            openCatalog={() => openDialog('catalog', true)}
             openHelp={() => openDialog('help')}
             asset={asset}
             coarse={coarse}
@@ -804,7 +849,13 @@ export function SteadyCatchGame() {
           </span>
         </footer>
         {catalog.data && (
-          <CatchCatalog phrases={catalog.data} open={dialog === 'catalog'} onClose={closeDialog} />
+          <CatchCatalog
+            phrases={catalog.data}
+            caught={catalogCaught}
+            initialScope={catalogScope}
+            open={dialog === 'catalog'}
+            onClose={closeDialog}
+          />
         )}
         <CatchHelp open={dialog === 'help'} onClose={closeDialog} />
       </div>
