@@ -11,6 +11,7 @@ import type { DuelLobbyContext, Page, DuelRound } from '../common/duel/types';
 import { useDuelText } from '../common/duel/copy';
 import { gameRequest } from '../common/request';
 import { spendableGameCredits } from '../common/spendable';
+import { formatCredits } from '../common/strict';
 import { RandomnessProof } from '../common/RandomnessProof';
 import { GwentLeaderboard } from './Leaderboard';
 import { gwentCodec, type Deck, type Action, type View, type Round } from './types';
@@ -81,7 +82,7 @@ export function GwentGame({ config, wallets, accepting, refreshWallets }: DuelLo
     canRematch: rematchFor?.accountID === (account.data?.user.id ?? null),
     remaining,
     error: feedback ?? bridgeError,
-    availableCredits: spendableGameCredits(wallets).total,
+    availableCredits: formatCredits(spendableGameCredits(wallets).total),
   };
   const send = (message: Record<string, unknown>) =>
     frame.current?.contentWindow?.postMessage({ channel, ...message }, location.origin);

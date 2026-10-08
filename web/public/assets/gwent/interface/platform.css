@@ -63,9 +63,6 @@ dialog[open] {
 .player-panel .pile-count {
   cursor: pointer;
 }
-#arena-dialog .dialog-cards > section > p {
-  white-space: pre-line;
-}
 .platform-replay-controls {
   margin-bottom: 12px;
 }

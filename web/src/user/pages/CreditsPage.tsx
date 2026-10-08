@@ -15,6 +15,7 @@ import { formatDateTime } from '@shared/utils/datetime';
 import { UserPageGate } from '../components/UserPageGate';
 import { useUserSession } from '../data';
 import { coreSessionMatchesAccount } from '../features/core/queries';
+import { ExactCredits, ExactCount } from '../features/core/components';
 import {
   HISTORY_ASSET_FILTERS,
   HISTORY_CATEGORIES,
@@ -144,17 +145,25 @@ function CreditHistory({
       <Card>
         <div className="nb-stats credit-history__overview" aria-label={copy.asset}>
           {[
-            [copy.balance, history.isError ? '—' : (data?.current_balance ?? '—')],
-            [copy.game, history.isError ? '—' : (data?.game_balance ?? '—')],
-            [copy.sketch_paper, wallet.isError ? '—' : (wallet.data?.sketch_paper ?? '—')],
-            [copy.sketch_brush, wallet.isError ? '—' : (wallet.data?.sketch_brush ?? '—')],
-          ].map(([label, value]) => (
+            [copy.balance, history.isError ? '—' : (data?.current_balance ?? '—'), 'credits'],
+            [copy.game, history.isError ? '—' : (data?.game_balance ?? '—'), 'credits'],
+            [copy.sketch_paper, wallet.isError ? '—' : (wallet.data?.sketch_paper ?? '—'), 'count'],
+            [copy.sketch_brush, wallet.isError ? '—' : (wallet.data?.sketch_brush ?? '—'), 'count'],
+          ].map(([label, value, type]) => (
             <div
               className={`nb-stat${value.length > 12 ? ' credit-history__balance--long' : ''}`}
               key={label}
             >
               <span>{label}</span>
-              <strong>{value}</strong>
+              <strong>
+                {value === '—' ? (
+                  value
+                ) : type === 'count' ? (
+                  <ExactCount value={value} />
+                ) : (
+                  <ExactCredits value={value} />
+                )}
+              </strong>
             </div>
           ))}
         </div>

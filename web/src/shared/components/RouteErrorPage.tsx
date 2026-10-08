@@ -1,7 +1,6 @@
 import { Button } from '@shared/components/ui/Button';
 import { useTranslation } from 'react-i18next';
 import { Link, useRouteError } from 'react-router';
-import { Icon, type IconName } from './Icon';
 import { isApiError, isForbidden, isNotFoundError } from '@shared/query/http';
 import { usePublicConfig } from '@shared/query/publicConfig';
 import { routePath } from '@shared/routing/routeRegistry';
@@ -29,58 +28,77 @@ export function classifyRouteError(error: unknown): RouteErrorKind {
  * Router errors are intentionally not echoed: route errors can contain raw
  * upstream or implementation text. The user gets a bounded recovery action.
  */
-export function RouteErrorPage({ station = 'user', authenticated = false }: { station?: 'user' | 'admin'; authenticated?: boolean }) {
+export function RouteErrorPage({
+  station = 'user',
+  authenticated = false,
+}: {
+  station?: 'user' | 'admin';
+  authenticated?: boolean;
+}) {
   const { t } = useTranslation();
   const error = useRouteError();
-  const config = usePublicConfig(station === 'user' || (station === 'admin' && authenticated), station === 'admin' ? '/admin/api/config' : '/api/config');
+  const config = usePublicConfig(
+    station === 'user' || (station === 'admin' && authenticated),
+    station === 'admin' ? '/admin/api/config' : '/api/config',
+  );
   const siteName = config.data?.siteName || t('app.name');
   const kind = classifyRouteError(error);
-  const titleKey = kind === '404'
-    ? 'common.notFoundTitle'
-    : kind === '403'
-      ? 'common.forbiddenTitle'
-      : kind === '500'
-        ? 'common.serverErrorTitle'
-        : kind === 'maintenance'
-          ? 'common.maintenanceTitle'
-          : kind === 'network'
-          ? 'common.networkError'
-          : 'common.routeErrorTitle';
-  const bodyKey = kind === '404'
-    ? 'common.notFoundBody'
-    : kind === '403'
-      ? 'common.forbiddenBody'
-      : kind === '500'
-        ? 'common.serverErrorBody'
-        : kind === 'maintenance'
-          ? 'common.maintenanceBody'
-          : kind === 'network'
-          ? 'common.networkHint'
-          : 'common.routeErrorBody';
-  const icon: IconName = kind === '404'
-    ? 'empty'
-    : kind === 'network'
-      ? 'info'
-      : kind === 'maintenance'
-        ? 'maintenance'
-        : kind === '403'
-          ? 'warning'
-          : 'error';
-  const recovery = kind === 'maintenance' ? null : kind === '403' || kind === '404' ? (
-    <Link className="nb-btn nb-btn--secondary" to={routePath(station, station === 'admin' ? 'admin-home' : 'home')}>
-      {t('common.backHome')}
-    </Link>
-  ) : (
-    <Button type="button" variant="primary" onClick={() => window.location.reload()}>
-      {t('common.reload')}
-    </Button>
-  );
+  const titleKey =
+    kind === '404'
+      ? 'common.notFoundTitle'
+      : kind === '403'
+        ? 'common.forbiddenTitle'
+        : kind === '500'
+          ? 'common.serverErrorTitle'
+          : kind === 'maintenance'
+            ? 'common.maintenanceTitle'
+            : kind === 'network'
+              ? 'common.networkError'
+              : 'common.routeErrorTitle';
+  const bodyKey =
+    kind === '404'
+      ? 'common.notFoundBody'
+      : kind === '403'
+        ? 'common.forbiddenBody'
+        : kind === '500'
+          ? 'common.serverErrorBody'
+          : kind === 'maintenance'
+            ? 'common.maintenanceBody'
+            : kind === 'network'
+              ? 'common.networkHint'
+              : 'common.routeErrorBody';
+  const recovery =
+    kind === 'maintenance' ? null : kind === '403' || kind === '404' ? (
+      <Link
+        className="nb-btn nb-btn--secondary"
+        to={routePath(station, station === 'admin' ? 'admin-home' : 'home')}
+      >
+        {t('common.backHome')}
+      </Link>
+    ) : (
+      <Button
+        type="button"
+        variant="primary"
+        onClick={() => window.location.reload()}
+      >
+        {t('common.reload')}
+      </Button>
+    );
   const body = (
     <section className="page nb-standalone-state" data-error-kind={kind}>
       <div className="nb-state nb-state--error">
         <span className="nb-state__icon">
-          <img className="nb-state__illustration" src={kind === '404' ? emptyStateURL : kind === 'maintenance' ? maintenanceStateURL : errorStateURL} alt="" />
-          <Icon name={icon} />
+          <img
+            className="nb-state__illustration"
+            src={
+              kind === '404'
+                ? emptyStateURL
+                : kind === 'maintenance'
+                  ? maintenanceStateURL
+                  : errorStateURL
+            }
+            alt=""
+          />
         </span>
         <div>
           <h1>{t(titleKey)}</h1>
