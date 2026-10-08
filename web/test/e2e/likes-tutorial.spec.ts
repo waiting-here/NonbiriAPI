@@ -121,11 +121,13 @@ test('skipping persists, replay and refresh restart, unavailable storage remains
   );
   await page.reload();
   await expect(page.locator('.likes-tutorial-invite')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Tutorial', exact: true }).click();
+  await page.getByRole('button', { name: 'More', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Tutorial', exact: true }).click();
   await expect(page.locator('.likes-tutorial-tip h3')).toHaveText('Let’s play a practice match');
   await page.locator('[data-tutorial-next]').click();
   await page.reload();
-  await page.getByRole('button', { name: 'Tutorial', exact: true }).click();
+  await page.getByRole('button', { name: 'More', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Tutorial', exact: true }).click();
   await expect(page.locator('.likes-tutorial-tip h3')).toHaveText('Let’s play a practice match');
   await page.evaluate(() => {
     Storage.prototype.setItem = () => {
@@ -144,7 +146,8 @@ test('an actual queue discovered while teaching takes precedence immediately', a
   await expect(page.locator('.likes-tutorial')).toBeVisible();
   fixture.queue();
   await expect(page.locator('.likes-tutorial')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Tutorial', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'More', exact: true }).click();
+  await expect(page.getByRole('menuitem', { name: 'Tutorial', exact: true })).toBeDisabled();
   expect(fixture.writes).toEqual([]);
   errors.assertNone();
 });

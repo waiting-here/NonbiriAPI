@@ -4,6 +4,10 @@
   overflow-wrap: anywhere;
 }
 
+.game-page > #game-rankings {
+  min-width: 0;
+}
+
 @media (min-width: 40rem) {
   .game-page > .nb-page-header {
     flex-wrap: wrap;
@@ -285,6 +289,18 @@
 }
 
 @media (width < 40rem) {
+  .game-page .duel-actions:has(> .game-wallets) {
+    min-width: 0;
+    width: 100%;
+  }
+  .game-page :is(.nb-page-header__actions, .duel-actions) > .game-wallets {
+    width: 100%;
+    min-width: 0;
+    container-type: inline-size;
+  }
+  .game-page :is(.nb-page-header__actions, .duel-actions) > .game-wallets dd {
+    font-size: clamp(var(--nb-font-size-xs), 5cqi, var(--nb-font-size-md));
+  }
   .game-page .nb-page-header__actions > .game-wallets {
     flex-basis: 100%;
     text-align: start;
@@ -508,10 +524,16 @@
   }
 }
 @media (max-width: 39.999rem) {
+  html:has(.game-actionbar) {
+    scroll-padding-bottom: calc(var(--game-actionbar-h, 4.5rem) + var(--nb-space-8));
+  }
+  .game-page :is(input, select, textarea) {
+    scroll-margin-bottom: var(--nb-space-4);
+  }
   .game-page:has(.game-actionbar),
   .bidding-game:has(.game-actionbar),
   .likes-game:has(.game-actionbar) {
-    padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+    padding-bottom: calc(var(--game-actionbar-h, 4.5rem) + env(safe-area-inset-bottom) + var(--nb-space-4));
   }
   .game-actionbar {
     position: fixed;
@@ -635,3 +657,52 @@
 .game-gwent-hero { display: grid; grid-template-columns: repeat(4, 1fr); position: relative; aspect-ratio: 2; overflow: hidden; background: #16352f; }
 .game-gwent-hero img { width: 100%; height: 100%; object-fit: cover; }
 .game-gwent-hero span { position: absolute; bottom: 0; inset-inline: 0; padding: .6rem; background: linear-gradient(transparent, #09251feb); color: #fff; font-size: 1.5rem; font-weight: 800; letter-spacing: .18em; text-align: center; }
+
+.game-toolbar {
+  min-width: 0;
+  max-width: 100%;
+}
+.game-toolbar__items {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--nb-space-2);
+}
+.game-toolbar .game-toolbar__button {
+  min-width: 40px;
+  min-height: 40px;
+  padding: var(--nb-space-2);
+  font-size: var(--nb-font-size-sm);
+  text-decoration: none;
+}
+.game-toolbar__button .nb-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+.game-toolbar__button[aria-disabled='true'] {
+  color: var(--nb-color-text-subtle);
+  background: var(--nb-color-surface-muted);
+  border-color: var(--nb-color-border);
+  cursor: not-allowed;
+}
+.game-toolbar__label {
+  display: none;
+}
+.game-toolbar .nb-more__menu :is(button, a) {
+  display: flex;
+  align-items: center;
+  gap: var(--nb-space-2);
+}
+.game-toolbar .nb-more__menu [aria-checked='true'] {
+  color: var(--nb-color-accent);
+  background: var(--nb-color-accent-quiet);
+}
+@media (min-width: 64rem) {
+  .game-toolbar__label {
+    display: inline;
+  }
+  .game-toolbar .game-toolbar__button {
+    padding-inline: var(--nb-space-3);
+  }
+}

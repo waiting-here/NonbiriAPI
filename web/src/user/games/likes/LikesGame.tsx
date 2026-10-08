@@ -1,7 +1,7 @@
-import { GameHeaderTool } from '../common/GameHeader';
+import { GameToolbar } from '../common/GameToolbar';
+import { GameMoney } from '../common/GameMoney';
 import { GameBackLink } from '../common/GameBackLink';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router';
 import { Note } from '@shared/components/ui/Note';
 import { GameActionBar } from '../common/GameActionBar';
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
@@ -43,7 +43,6 @@ import { tutorialStatus, saveTutorialStatus, tutorialStorageKey } from './tutori
 import { useArcadeAudio } from '../common/audio/useArcadeAudio';
 import { useSnapshotAudioFacts } from '../common/audio/useSnapshotAudioFacts';
 import { BattleAtmosphere } from './BattleAtmosphere';
-import { ArcadeAudioControls } from '../common/audio/ArcadeAudioControls';
 import type { LikesView, Presentation, Selection } from './types';
 import '../games.css';
 import '../common/duel/duel.css';
@@ -184,7 +183,7 @@ function Lobby({
           {catalog.parameters.TARGET_LIKES} ♥ · {catalog.parameters.MAX_ROUNDS}{' '}
           {text('likes.roundLimit')}
         </span>
-        <GameActionBar cost={mode?.ticket ?? '0'}>
+        <GameActionBar cost={<GameMoney value={mode?.ticket ?? '0'} />}>
           <button
             type="button"
             className="likes-primary"
@@ -345,48 +344,47 @@ export function LikesGame(context: DuelLobbyContext) {
         </div>
         <div className="duel-actions">
           <GameWallets wallets={context.wallets} />
-          <ArcadeAudioControls
-            compact
+          <GameToolbar
             sound={audio.sound}
             music={audio.music}
-            unavailable={audio.unavailable}
+            audioUnavailable={audio.unavailable}
+            items={[
+              {
+                id: 'rules',
+                label: text('likes.rules'),
+                icon: 'help',
+                disabled: !c,
+                onClick: () => setRules(true),
+              },
+              {
+                id: 'guide',
+                label: text('likes.fieldGuide'),
+                icon: 'book',
+                disabled: !c,
+                onClick: () => setGuide(''),
+              },
+              {
+                id: 'history',
+                label: text('bidding.gameHistory'),
+                icon: 'history',
+                disabled: !c,
+                onClick: () => setHistory(true),
+              },
+              {
+                id: 'tutorial',
+                label: text('likes.tutorial'),
+                icon: 'play',
+                disabled: !canTeach,
+                onClick: () => setTutorial(true),
+              },
+              {
+                id: 'rankings',
+                label: t('user.games.presentation.overallRankings'),
+                icon: 'trophy',
+                to: '/games#game-rankings',
+              },
+            ]}
           />
-          <GameHeaderTool
-            icon="?"
-            label={text('likes.rules')}
-            type="button"
-            disabled={!c}
-            onClick={() => setRules(true)}
-          />
-          <GameHeaderTool
-            icon="▤"
-            label={text('likes.fieldGuide')}
-            type="button"
-            disabled={!c}
-            onClick={() => setGuide('')}
-          />
-          <GameHeaderTool
-            icon="◷"
-            label={text('bidding.gameHistory')}
-            type="button"
-            disabled={!c}
-            onClick={() => setHistory(true)}
-          />
-          <GameHeaderTool
-            icon="▶"
-            label={text('likes.tutorial')}
-            type="button"
-            disabled={!canTeach}
-            onClick={() => setTutorial(true)}
-          />
-          <Link
-            className="nb-btn nb-btn--secondary game-header-tool"
-            to="/games#game-rankings"
-            aria-label={t('user.games.presentation.overallRankings')}
-            title={t('user.games.presentation.overallRankings')}
-          >
-            <span aria-hidden="true">▥</span>
-          </Link>
         </div>
       </header>
       {context.onboarding && (

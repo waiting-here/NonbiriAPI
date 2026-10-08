@@ -1,6 +1,7 @@
 import { BiddingLobby, AIMatchInfo, AIActionLog } from './AIPlayers';
 import { useAIText } from '@shared/aiPlayers';
-import { GameHeaderTool } from '../common/GameHeader';
+import { GameToolbar } from '../common/GameToolbar';
+import { GameMoney } from '../common/GameMoney';
 import { GameBackLink } from '../common/GameBackLink';
 import { GameActionBar } from '../common/GameActionBar';
 import { useCallback, useState } from 'react';
@@ -28,7 +29,6 @@ import { BiddingRoundView, PlayedHistory } from './HistoryView';
 import { biddingAudioFacts } from './audioFacts';
 import { useArcadeAudio } from '../common/audio/useArcadeAudio';
 import { useSnapshotAudioFacts } from '../common/audio/useSnapshotAudioFacts';
-import { ArcadeAudioControls } from '../common/audio/ArcadeAudioControls';
 import { BiddingPresentation } from './BiddingPresentation';
 import '../games.css';
 import '../common/duel/duel.css';
@@ -98,27 +98,20 @@ export function BiddingGame({
         </div>
         <div className="duel-actions">
           <GameWallets wallets={wallets} />
-          <ArcadeAudioControls compact sound={audio.sound} unavailable={audio.unavailable} />
-          <GameHeaderTool
-            icon="?"
-            label={text('bidding.rules')}
-            type="button"
-            onClick={() => setRules(true)}
+          <GameToolbar
+            sound={audio.sound}
+            audioUnavailable={audio.unavailable}
+            items={[
+              { id: 'rules', label: text('bidding.rules'), icon: 'help', onClick: () => setRules(true) },
+              {
+                id: 'history',
+                label: text('bidding.gameHistory'),
+                icon: 'history',
+                onClick: () => setHistory(true),
+              },
+              { id: 'rankings', label: text('ranking.leaderboards'), icon: 'trophy', href: '#game-rankings' },
+            ]}
           />
-          <GameHeaderTool
-            icon="◷"
-            label={text('bidding.gameHistory')}
-            type="button"
-            onClick={() => setHistory(true)}
-          />
-          <a
-            className="nb-btn nb-btn--secondary game-header-tool"
-            href="#game-rankings"
-            aria-label={text('ranking.leaderboards')}
-            title={text('ranking.leaderboards')}
-          >
-            <span aria-hidden="true">▥</span>
-          </a>
         </div>
       </header>
       {onboarding && <OnboardingCard game="bidding" progress={onboarding} />}
@@ -330,7 +323,7 @@ export function BiddingGame({
                 ))}
               </div>
               {selected && <DuelTerms mode={selected} />}
-              <GameActionBar cost={formatCredits(selected?.ticket ?? '0')}>
+              <GameActionBar cost={<GameMoney value={selected?.ticket ?? '0'} />}>
                 <button
                   type="button"
                   className="nb-btn nb-btn--primary"

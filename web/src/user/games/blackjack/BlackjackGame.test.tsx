@@ -255,7 +255,7 @@ describe('blackjack public state and simultaneous controls', () => {
       route: '/games/blackjack',
       role: 'user',
     });
-    const stake = await screen.findByRole('spinbutton', { name: 'Base stake' });
+    const stake = await screen.findByRole('textbox', { name: 'Base stake' });
     expect(screen.queryByRole('region', { name: 'Hand actions' })).not.toBeInTheDocument();
     expect(screen.queryByRole('group', { name: 'Preset emotes' })).not.toBeInTheDocument();
     fireEvent.change(stake, { target: { value: '1500' } });
@@ -272,10 +272,14 @@ describe('blackjack public state and simultaneous controls', () => {
       role: 'user',
     });
     const group = await screen.findByRole('group', { name: 'Quick stake selection' });
-    const stake = screen.getByRole('spinbutton', { name: 'Base stake' });
+    const stake = screen.getByRole('textbox', { name: 'Base stake' });
     for (const amount of ['1,000', '50,000', '10,000'])
       await view.user.click(within(group).getByRole('button', { name: amount }));
-    expect(stake).toHaveValue(10000);
+    expect(stake).toHaveValue('10,000');
+    await view.user.click(stake);
+    expect(stake).toHaveValue('10000');
+    await view.user.tab();
+    expect(stake).toHaveValue('10,000');
     expect(within(group).getByRole('button', { name: '10,000' })).toHaveAttribute(
       'aria-pressed',
       'true',
@@ -289,7 +293,7 @@ describe('blackjack public state and simultaneous controls', () => {
       await view.queryClient.invalidateQueries({ queryKey: blackjackKeys.state });
     });
     await waitFor(() => expect(within(group).getAllByRole('button')).toHaveLength(2));
-    expect(stake).toHaveValue(10000);
+    expect(stake).toHaveValue('10,000');
     expect(within(group).queryByRole('button', { pressed: true })).not.toBeInTheDocument();
     server.home.config.min_stake = '20000';
     server.home.config.quick_stakes = [];
@@ -301,7 +305,7 @@ describe('blackjack public state and simultaneous controls', () => {
         screen.queryByRole('group', { name: 'Quick stake selection' }),
       ).not.toBeInTheDocument(),
     );
-    expect(stake).toHaveValue(10000);
+    expect(stake).toHaveValue('10,000');
     expect(screen.getByRole('button', { name: 'Join queue' })).toBeDisabled();
   });
 

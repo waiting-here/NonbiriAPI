@@ -95,7 +95,7 @@ describe('RPS presentation in the real game page', () => {
         expect(seats[2]).toHaveTextContent('Rock');
         expect(view.container.querySelectorAll('.rps-result__seats svg')).toHaveLength(3);
         expect(screen.getByText('Starting buy-in (actual input)').parentElement).toHaveTextContent(
-          'General credits 3 creditsGame credits 2 credits',
+          /General creditss*3 creditss*Game creditss*2 credits/,
         );
         expect(screen.getByText('Ending cash-out in general credits').parentElement).toHaveTextContent(
           '6 credits',
@@ -152,7 +152,8 @@ describe('RPS presentation in the real game page', () => {
       );
     };
     frame('snapshot', initial);
-    await view.user.click(screen.getByRole('button', { name: 'Sound off' }));
+    await view.user.click(screen.getByRole('button', { name: 'Sound' }));
+    await view.user.click(screen.getByRole('menuitemcheckbox', { name: 'Sound off' }));
     expect(audio.play).not.toHaveBeenCalled();
     const next = rpsStateWire('dealer_raise', '2');
     next.phase_seq = '2';
@@ -255,8 +256,10 @@ describe('RPS presentation in the real game page', () => {
     finish();
     finish();
     expect(audio.play.mock.calls).toEqual([['phase'], ['follow'], ['win']]);
-    await view.user.click(screen.getByRole('button', { name: 'Sound on' }));
-    await view.user.click(screen.getByRole('button', { name: 'Sound off' }));
+    await view.user.click(screen.getByRole('button', { name: 'Sound' }));
+    await view.user.click(screen.getByRole('menuitemcheckbox', { name: 'Sound on' }));
+    await view.user.click(screen.getByRole('button', { name: 'Sound' }));
+    await view.user.click(screen.getByRole('menuitemcheckbox', { name: 'Sound off' }));
     expect(audio.play.mock.calls).toEqual([['phase'], ['follow'], ['win']]);
   });
 });
