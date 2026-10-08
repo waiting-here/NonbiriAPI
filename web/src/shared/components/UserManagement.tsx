@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import {
   Affix,
   DataTable,
+  Field,
   Fold,
   OutcomeNote,
   Segmented,
@@ -58,6 +59,7 @@ interface UserDraft {
   concurrencyLimit: string;
   level: string;
   lang: '' | 'zh' | 'en';
+  discordGatePolicy: AdminUser['discord_gate_policy'];
   economyTarget: 'balance' | 'game_balance' | 'donation_credit';
   economyDirection: 'increase' | 'decrease';
   economyAmount: string;
@@ -88,6 +90,7 @@ const draftFor = (user: AdminUser): UserDraft => ({
   concurrencyLimit: user.concurrency_limit ?? '',
   level: user.level.manual === null ? '' : String(user.level.manual),
   lang: user.lang,
+  discordGatePolicy: user.discord_gate_policy,
   economyTarget: 'balance',
   economyDirection: 'increase',
   economyAmount: '',
@@ -197,7 +200,8 @@ function UserAuthority({
     endpoint !== baseline.endpoint_limit ||
     rpm !== baseline.rpm_limit ||
     concurrency !== baseline.concurrency_limit ||
-    draft.lang !== baseline.lang;
+    draft.lang !== baseline.lang ||
+    (role === 'admin' && draft.discordGatePolicy !== baseline.discord_gate_policy);
   const levelChanged = (draft.level ? Number(draft.level) : null) !== baseline.level.manual;
   const profileBusy = coordinating || profile.isPending || manualLevel.isPending;
   const saveLimits = async () => {
@@ -208,6 +212,9 @@ function UserAuthority({
       rpm_limit: rpm,
       concurrency_limit: concurrency,
       ...(draft.lang ? { lang: draft.lang } : {}),
+      ...(role === 'admin' && draft.discordGatePolicy !== baseline.discord_gate_policy
+        ? { discord_gate_policy: draft.discordGatePolicy }
+        : {}),
     };
     const levelBody = { mode: 'profile', level: draft.level ? Number(draft.level) : null };
     let revision = baseline.revision;
@@ -418,6 +425,29 @@ function UserAuthority({
                   <option value="en">English</option>
                 </select>
               </label>
+              {role === 'admin' ? (
+                <Field
+                  label={t('management.users.discordGatePolicy')}
+                  help={t('management.users.discordGateHelp')}
+                >
+                  {(field) => (
+                    <select
+                      {...field}
+                      value={draft.discordGatePolicy}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          discordGatePolicy: event.target.value as UserDraft['discordGatePolicy'],
+                        })
+                      }
+                    >
+                      <option value="inherit">{t('management.users.discordGateInherit')}</option>
+                      <option value="require">{t('management.users.discordGateRequire')}</option>
+                      <option value="exempt">{t('management.users.discordGateExempt')}</option>
+                    </select>
+                  )}
+                </Field>
+              ) : null}
               {invalidLimits ? (
                 <p className="field-error" role="alert">
                   {t('management.users.limitInvalid')}

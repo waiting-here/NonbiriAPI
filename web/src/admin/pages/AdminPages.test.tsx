@@ -34,6 +34,7 @@ const adminUser = {
   guild_nick: null,
   guild_avatar_url: null,
   is_admin: false,
+  discord_gate_policy: 'inherit',
   is_banned: true,
   banned_reason: 'fixture moderation',
   banned_until: null,

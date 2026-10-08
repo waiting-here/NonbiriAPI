@@ -43,6 +43,7 @@ const adminUser = {
   guild_nick: null,
   guild_avatar_url: null,
   is_admin: false,
+  discord_gate_policy: 'inherit',
   is_banned: false,
   banned_reason: '',
   banned_until: null,
@@ -86,6 +87,23 @@ const pool = {
 };
 
 describe('administrator page wire', () => {
+  it('reads all Discord sign-in policies and rejects unknown or missing policies', async () => {
+    for (const policy of ['inherit', 'require', 'exempt']) {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => jsonResponse({ ...adminUser, discord_gate_policy: policy })),
+      );
+      await expect(getAdminUserDetail('7')).resolves.toMatchObject({ discord_gate_policy: policy });
+    }
+    for (const policy of [undefined, null, '', 'auto']) {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => jsonResponse({ ...adminUser, discord_gate_policy: policy })),
+      );
+      await expect(getAdminUserDetail('7')).rejects.toMatchObject({ code: 'invalid_response' });
+    }
+  });
+
   it('rejects invalid windows, filters and identities before making any request', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
