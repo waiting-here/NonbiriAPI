@@ -922,7 +922,7 @@ function ScopedRoleLogPanel({
   return (
     <Card className={`ops-stack log-panel log-panel--${role}`}>
       <div className="card-title-row">
-        <h2>{title}</h2>
+        {role !== 'user' && <h2>{title}</h2>}
         {!invalidKeyFilter && (
           <details className="nb-more log-export">
             <summary className="nb-btn nb-btn--secondary">

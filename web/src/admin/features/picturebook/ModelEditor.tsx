@@ -181,7 +181,7 @@ export const ModelEditor = forwardRef<
         ) : null}
         {formError || save.error ? <ErrorState error={formError ?? save.error} /> : null}
         <button
-          className="btn btn-primary"
+          className="nb-btn nb-btn--primary"
           type="submit"
           disabled={save.pending || saved || disabled}
         >
@@ -228,7 +228,7 @@ export const ModelEditor = forwardRef<
           </p>
         )}
         <button
-          className="btn btn-secondary"
+          className="nb-btn nb-btn--secondary"
           type="button"
           disabled={checking || save.locked || disabled || !previewModel}
           onClick={() => {

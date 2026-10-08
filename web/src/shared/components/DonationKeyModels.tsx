@@ -46,7 +46,7 @@ export function DonationKeyModels(props: Props) {
     <section className="ops-subcard">
       <button
         type="button"
-        className="btn btn-secondary"
+        className="nb-btn nb-btn--secondary"
         aria-expanded={open}
         onClick={() =>
           setParams((previous) => {
@@ -153,7 +153,7 @@ function KeyModelPages({
       <p>{t('common.keyModels.help')}</p>
       <button
         type="button"
-        className="btn btn-quiet"
+        className="nb-btn nb-btn--ghost"
         disabled={query.isFetching}
         onClick={() => void query.refetch()}
       >
@@ -182,7 +182,7 @@ function KeyModelPages({
             </p>
             <div className="ops-actions">
               <button
-                className="btn btn-secondary"
+                className="nb-btn nb-btn--secondary"
                 type="button"
                 aria-expanded={expanded === model.model_id}
                 onClick={() =>
@@ -197,7 +197,7 @@ function KeyModelPages({
                 {t('common.keyModels.connections')}
               </button>
               <button
-                className="btn btn-quiet"
+                className="nb-btn nb-btn--ghost"
                 type="button"
                 onClick={() =>
                   setParams(
