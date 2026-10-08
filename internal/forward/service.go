@@ -1051,7 +1051,9 @@ func (run *attemptRun) completeUndeliveredSynthetic(parent context.Context, serv
 }
 
 func (service *Service) classifyCaller(parent, executionContext context.Context, plan executionPlan, run attemptRun) (claim.CallerResult, *wireFailure) {
-	if parent.Err() != nil || executionCancelled(parent, executionContext) {
+	// A client can close after receiving the complete response while settlement
+	// is still running. That late disconnect cannot undo successful delivery.
+	if (parent.Err() != nil || executionCancelled(parent, executionContext)) && (!run.hasResult || !run.result.Success) {
 		return claim.CallerResult{Class: claim.ResultCancelled}, nil
 	}
 	if run.failure != nil {

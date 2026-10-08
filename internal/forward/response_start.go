@@ -42,15 +42,18 @@ func (w *responseStartWriter) Unwrap() http.ResponseWriter { return w.ResponseWr
 
 type flushingResponseStartWriter struct {
 	*responseStartWriter
-	flusher http.Flusher
 }
 
-func (w *flushingResponseStartWriter) Flush() { w.flusher.Flush() }
+func (w *flushingResponseStartWriter) FlushError() error {
+	return http.NewResponseController(w.ResponseWriter).Flush()
+}
+
+func (w *flushingResponseStartWriter) Flush() { _ = w.FlushError() }
 
 func checkpointResponseWriter(writer http.ResponseWriter, mark func() error) (http.ResponseWriter, *responseStartWriter) {
 	checkpoint := &responseStartWriter{ResponseWriter: writer, mark: mark}
-	if flusher, ok := writer.(http.Flusher); ok {
-		return &flushingResponseStartWriter{responseStartWriter: checkpoint, flusher: flusher}, checkpoint
+	if _, ok := writer.(http.Flusher); ok {
+		return &flushingResponseStartWriter{responseStartWriter: checkpoint}, checkpoint
 	}
 	return checkpoint, checkpoint
 }
