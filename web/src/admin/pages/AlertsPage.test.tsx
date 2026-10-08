@@ -201,7 +201,11 @@ describe('administrator alerts page', () => {
       },
     );
 
-    expect(await screen.findByText('<plain alert>')).toBeVisible();
+    expect(await screen.findByRole('checkbox', { name: 'Select alert 7' })).toBeVisible();
+    expect(screen.queryByText('<plain alert>')).not.toBeInTheDocument();
+    expect(
+      screen.getByText('Could not fetch the model list. Check the service address and key.'),
+    ).toBeVisible();
     expect(screen.getByRole('combobox', { name: 'Resolution status' })).toHaveValue('true');
     expect(screen.getByRole('combobox', { name: 'Items per page' })).toHaveValue('50');
     expect(screen.getByText('51 items')).toBeVisible();
@@ -243,12 +247,12 @@ describe('administrator alerts page', () => {
       },
     );
 
-    expect(await screen.findByText('Alert 1')).toBeVisible();
+    expect(await screen.findByRole('checkbox', { name: 'Select alert 1' })).toBeVisible();
     await rendered.user.selectOptions(
       screen.getByRole('combobox', { name: 'Resolution status' }),
       'true',
     );
-    expect(await screen.findByText('Alert 2')).toBeVisible();
+    expect(await screen.findByRole('checkbox', { name: 'Select alert 2' })).toBeVisible();
     const search = new URLSearchParams(screen.getByTestId('location-search').textContent ?? '');
     expect(search.get('resolved')).toBe('true');
     expect(search.get('page')).toBe('1');
@@ -256,7 +260,7 @@ describe('administrator alerts page', () => {
     expect(fetchMock.mock.calls.map(([input]) => String(input))).toContain(
       '/admin/api/alerts?resolved=true&page=1&page_size=50',
     );
-    expect(screen.queryByText('Alert 1')).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Select alert 1' })).not.toBeInTheDocument();
   });
 
   it('canonicalizes the default filter and presents a server-clamped last page', async () => {
@@ -282,7 +286,7 @@ describe('administrator alerts page', () => {
       { station: 'admin', role: 'admin', route: '/alerts?page=999&page_size=20' },
     );
 
-    expect(await screen.findByText('Alert 21')).toBeVisible();
+    expect(await screen.findByRole('checkbox', { name: 'Select alert 21' })).toBeVisible();
     expect(screen.getByText('21 items')).toBeVisible();
     expect(screen.getByText('That page is no longer available. Showing page 2.')).toBeVisible();
     const search = new URLSearchParams(screen.getByTestId('location-search').textContent ?? '');
@@ -330,7 +334,7 @@ describe('administrator alerts page', () => {
       route: '/alerts?resolved=false&page=3&page_size=20',
     });
 
-    expect(await screen.findByText('Alert 41')).toBeVisible();
+    expect(await screen.findByRole('checkbox', { name: 'Select alert 41' })).toBeVisible();
     await rendered.user.click(screen.getByRole('button', { name: 'Alert actions' }));
     await rendered.user.click(screen.getByRole('menuitem', { name: 'Resolve' }));
     await waitFor(() => expect(resolvedOnServer).toBe(true));
@@ -349,8 +353,10 @@ describe('administrator alerts page', () => {
     expect(postCalls[0]?.[0]).toBe('/admin/api/alerts/41/resolve');
     expect(JSON.parse(String(postCalls[0]?.[1]?.body))).toEqual({ resolved: true });
 
-    expect(await screen.findByText('Alert 20')).toBeVisible();
-    await waitFor(() => expect(screen.queryByText('Alert 41')).not.toBeInTheDocument());
+    expect(await screen.findByRole('checkbox', { name: 'Select alert 20' })).toBeVisible();
+    await waitFor(() =>
+      expect(screen.queryByRole('checkbox', { name: 'Select alert 41' })).not.toBeInTheDocument(),
+    );
     expect(screen.getByText('40 items')).toBeVisible();
     expect(screen.getByText('That page is no longer available. Showing page 2.')).toBeVisible();
     const listRequests = fetchMock.mock.calls
@@ -397,10 +403,12 @@ describe('administrator alerts page', () => {
         route: '/alerts?resolved=false&page=1&page_size=20',
       });
 
-      expect(await screen.findByText('Alert 1')).toBeVisible();
+      expect(await screen.findByRole('checkbox', { name: 'Select alert 1' })).toBeVisible();
       await rendered.user.click(screen.getByRole('button', { name: 'Alert actions' }));
       await rendered.user.click(screen.getByRole('menuitem', { name: 'Resolve' }));
-      await waitFor(() => expect(screen.queryByText('Alert 1')).not.toBeInTheDocument());
+      await waitFor(() =>
+        expect(screen.queryByRole('checkbox', { name: 'Select alert 1' })).not.toBeInTheDocument(),
+      );
       expect(screen.queryByRole('button', { name: 'Resolve' })).not.toBeInTheDocument();
       expect(
         screen.getByText(
@@ -449,12 +457,12 @@ describe('administrator alerts page', () => {
       route: '/alerts?resolved=false&page=1&page_size=20',
     });
 
-    expect(await screen.findByText('Alert 1')).toBeVisible();
+    expect(await screen.findByRole('checkbox', { name: 'Select alert 1' })).toBeVisible();
     await rendered.user.click(screen.getByRole('button', { name: 'Next' }));
     await waitFor(() =>
       expect(fetchMock.mock.calls.some(([input]) => String(input).includes('page=2'))).toBe(true),
     );
-    expect(screen.getByText('Alert 1')).toBeVisible();
+    expect(screen.getByRole('checkbox', { name: 'Select alert 1' })).toBeVisible();
     expect(document.querySelector('[aria-busy="true"]')).toBeInTheDocument();
     await rendered.user.click(screen.getAllByRole('button', { name: 'Alert actions' })[0]);
     expect(screen.getAllByRole('menuitem', { name: 'Resolve' })[0]).toBeDisabled();
@@ -469,8 +477,8 @@ describe('administrator alerts page', () => {
       );
       await nextPage.promise;
     });
-    expect(await screen.findByText('Alert 21')).toBeVisible();
-    expect(screen.queryByText('Alert 1')).not.toBeInTheDocument();
+    expect(await screen.findByRole('checkbox', { name: 'Select alert 21' })).toBeVisible();
+    expect(screen.queryByRole('checkbox', { name: 'Select alert 1' })).not.toBeInTheDocument();
   });
 
   it('restores a previous URL collection on browser back', async () => {
@@ -501,14 +509,14 @@ describe('administrator alerts page', () => {
       },
     );
 
-    expect(await screen.findByText('Alert open')).toBeVisible();
+    expect(await screen.findByRole('checkbox', { name: 'Select alert 1' })).toBeVisible();
     await rendered.user.selectOptions(
       screen.getByRole('combobox', { name: 'Resolution status' }),
       'true',
     );
-    expect(await screen.findByText('Alert closed')).toBeVisible();
+    expect(await screen.findByRole('checkbox', { name: 'Select alert 2' })).toBeVisible();
     await rendered.user.click(screen.getByRole('button', { name: 'Back' }));
-    expect(await screen.findByText('Alert open')).toBeVisible();
+    expect(await screen.findByRole('checkbox', { name: 'Select alert 1' })).toBeVisible();
     expect(screen.getByRole('combobox', { name: 'Resolution status' })).toHaveValue('false');
     expect(screen.getByTestId('location-search')).toHaveTextContent(
       '?resolved=false&page=1&page_size=20',
@@ -549,14 +557,16 @@ describe('administrator alerts page', () => {
     );
     currentAccount = 'B';
     rendered.queryClient.setQueryData(adminKeys.session, session('B'));
-    expect(await screen.findByText('Alert B')).toBeVisible();
+    expect(await screen.findByRole('checkbox', { name: 'Select alert 2' })).toBeVisible();
 
     await act(async () => {
       oldPage.resolve(jsonResponse(page([alert('1', false, { message: 'Alert A' })])));
       await oldPage.promise;
     });
-    await waitFor(() => expect(screen.queryByText('Alert A')).not.toBeInTheDocument());
-    expect(screen.getByText('Alert B')).toBeVisible();
+    await waitFor(() =>
+      expect(screen.queryByRole('checkbox', { name: 'Select alert 1' })).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole('checkbox', { name: 'Select alert 2' })).toBeVisible();
   });
 });
 
@@ -890,7 +900,7 @@ it('renders current deletion snapshots with all filters and opens both retained 
     await rendered.user.click(summary);
   expect(await screen.findByText(deletionSnapshots.v1.discord_id)).toBeVisible();
   expect(screen.getByText(deletionSnapshots.v2.discord_id)).toBeVisible();
-  expect(screen.getByText('Alert 9')).toBeVisible();
+  expect(screen.getByRole('checkbox', { name: 'Select alert 9' })).toBeVisible();
   expect(fetchMock.mock.calls.map(([input]) => String(input))).toContain(
     '/admin/api/alerts?page=1&page_size=20',
   );
@@ -898,7 +908,9 @@ it('renders current deletion snapshots with all filters and opens both retained 
     screen.getByRole('combobox', { name: 'Alert type' }),
     'account_deleted',
   );
-  await waitFor(() => expect(screen.queryByText('Alert 9')).not.toBeInTheDocument());
+  await waitFor(() =>
+    expect(screen.queryByRole('checkbox', { name: 'Select alert 9' })).not.toBeInTheDocument(),
+  );
   for (const [id, snapshot] of [
     ['7', deletionSnapshots.v1],
     ['8', deletionSnapshots.v2],

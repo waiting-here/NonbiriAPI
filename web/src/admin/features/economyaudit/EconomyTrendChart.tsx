@@ -13,6 +13,8 @@ import {
 import { displayAmount, siteDateTime, type Series } from './api';
 import { chartAmountAtRatio, chartRatio } from './chartMath';
 import { assetLabel, useEconomyText } from './copy';
+import { useTranslation } from 'react-i18next';
+import { Fold } from '@shared/components/ui';
 
 Chart.register(
   CategoryScale,
@@ -29,19 +31,20 @@ const PLOT_SCALE = 1_000_000;
 
 function chartColors() {
   const style = getComputedStyle(document.documentElement);
-  const token = (name: string, fallback: string) => style.getPropertyValue(name).trim() || fallback;
+  const token = (name: string) => style.getPropertyValue(name).trim();
   return {
-    foreground: token('--nb-color-text', '#172536'),
-    muted: token('--nb-color-text-muted', '#607084'),
-    grid: token('--nb-color-border', '#d8e2ec'),
-    surface: token('--nb-color-surface-raised', '#ffffff'),
-    issued: token('--nb-color-success', '#138a5b'),
-    reclaimed: token('--nb-color-warning', '#aa6800'),
+    foreground: token('--nb-color-text'),
+    muted: token('--nb-color-text-muted'),
+    grid: token('--nb-color-border'),
+    surface: token('--nb-color-surface-raised'),
+    issued: token('--nb-color-success'),
+    reclaimed: token('--nb-color-warning'),
   };
 }
 
 export function EconomyTrendChart({ series }: { readonly series: Series }) {
   const t = useEconomyText();
+  const { t: text } = useTranslation();
   const captionId = useId();
   const canvas = useRef<HTMLCanvasElement>(null);
   const chart = useRef<Chart<'line'> | null>(null);
@@ -135,7 +138,10 @@ export function EconomyTrendChart({ series }: { readonly series: Series }) {
           if (elements[0]) setSelected(elements[0].index);
         },
         plugins: {
-          legend: { display: true, labels: { color: colors.foreground } },
+          legend: {
+            display: true,
+            labels: { color: colors.foreground, usePointStyle: true, pointStyle: 'line' },
+          },
           tooltip: {
             backgroundColor: colors.surface,
             titleColor: colors.foreground,
@@ -250,12 +256,13 @@ export function EconomyTrendChart({ series }: { readonly series: Series }) {
       ) : (
         <p>{t('所选区间没有趋势数据。', 'No trend data for this interval.')}</p>
       )}
-      <figcaption id={captionId}>
-        {t(
-          '绿色实线表示新增发行，橙色虚线表示永久回收。用左右方向键切换时段，Home 和 End 跳到首尾；下表列出精确金额。',
-          'Green solid line shows new issuance; orange dashed line shows permanent retirement. Use Left and Right to select a time bucket, Home and End for the first and last. Exact amounts are also in the table.',
-        )}
-      </figcaption>
+      {points.length > 0 ? (
+        <figcaption>
+          <Fold plain title={text('admin.economyAudit.keyboardTitle')}>
+            <p id={captionId}>{text('admin.economyAudit.keyboardHelp')}</p>
+          </Fold>
+        </figcaption>
+      ) : null}
     </figure>
   );
 }

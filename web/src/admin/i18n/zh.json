@@ -80,7 +80,8 @@
       "selected": "已选 {{count}} 个端点",
       "addTag": "添加标签",
       "removeTag": "移除标签",
-      "tagsSaved": "标签已更新"
+      "tagsSaved": "标签已更新",
+      "selectForBatch": "先选择下方服务，再批量调整标签。"
     },
     "alerts": {
       "nav": "告警",
@@ -131,6 +132,20 @@
         "worker": "后台任务检查点失败",
         "actions": "告警操作",
         "deletionSnapshot": "删除前余额"
+      },
+      "kindDescription": {
+        "fetchFailed": "模型列表获取失败，请检查服务地址和密钥。",
+        "forwardError": "上游调用未完成，可在详情中查看失败信息。",
+        "registrationRejected": "一次注册请求未通过站点准入条件。",
+        "maintenanceEnabled": "站点已进入维护状态。",
+        "donationFailureDisabled": "捐赠密钥因连续失败已自动停用。",
+        "issueProjectionIncomplete": "问题记录尚未完整汇总，请查看详情。",
+        "reportRetryExhausted": "举报处理多次重试后仍未完成，需要检查。",
+        "fishingRetryExhausted": "垂钓处理多次重试后仍未完成，需要检查。",
+        "rpsTerminalRetrying": "猜拳对局的结束处理正在重试。",
+        "workerCheckpointFailed": "后台任务未能保存进度，请查看详情。",
+        "invariantViolation": "系统数据检查发现异常，需要检查。",
+        "accountDeleted": "用户已删除账号，可查看删号时的资料快照。"
       }
     },
     "settings": {
@@ -225,7 +240,8 @@
       "regular": "常规",
       "otherConfiguration": "其他配置",
       "confirmationHint": "包含需谨慎的设置，保存前会再确认一次。",
-      "confirmTitle": "保存需谨慎的设置？"
+      "confirmTitle": "保存需谨慎的设置？",
+      "restoreDefault": "恢复默认"
     },
     "games": {
       "nav": "游戏",
@@ -1088,7 +1104,16 @@
         "mismatch": "不一致",
         "incomplete": "覆盖不完整",
         "periods": "分时明细（{{count}} 个时段）"
-      }
+      },
+      "keyboardTitle": "键盘操作",
+      "keyboardHelp": "用左右方向键切换时段，Home 和 End 跳到首尾；下表也列出精确金额。"
+    },
+    "gameHistory": {
+      "winner": "胜者：{{seat}}",
+      "firstPlayer": "先手",
+      "secondPlayer": "后手",
+      "players": "{{count}} 名玩家",
+      "anonymousMatch": "匿名对局"
     }
   },
   "user": {

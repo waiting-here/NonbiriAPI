@@ -335,7 +335,7 @@
         "charge": "扣费（积分）",
         "request": "请求",
         "callerResult": "调用方结果",
-        "callerError": "调用方错误",
+        "callerError": "诊断代码",
         "endpointKeyId": "端点密钥 ID",
         "usageTotalMismatch": "用量总数不一致",
         "usageTotalMismatchExplanation": "上游报告的总数与有效用量分项之和不同；计费使用这些分项。",

@@ -1,6 +1,7 @@
 import { SimplePager } from '@shared/operations/SimplePager';
 import { useState } from 'react';
 import { Link } from 'react-router';
+import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
@@ -102,6 +103,7 @@ function Detail({
 }
 export function BlackjackHistoryPage() {
   const formatDateTime = useDateTimeFormatter();
+  const { t: text } = useTranslation();
   const t = useGameAdminText();
   const session = useAdminSession();
   const [dataset, setDataset] = useState<BlackjackDataset>('recent');
@@ -156,9 +158,13 @@ export function BlackjackHistoryPage() {
                     key={h.id}
                     onClick={() => setSelected(h.id)}
                   >
-                    <span>{h.started_at === null ? h.id : formatDateTime(h.started_at)}</span>
                     <span>
-                      {h.seats} {t('席', 'seats')} ·{' '}
+                      {h.started_at === null
+                        ? text('admin.gameHistory.anonymousMatch')
+                        : formatDateTime(h.started_at)}
+                    </span>
+                    <span>
+                      {text('admin.gameHistory.players', { count: h.seats })} ·{' '}
                       {h.phase === 'cancelled'
                         ? t('已取消', 'Cancelled')
                         : `${t('到账', 'Paid')} ${h.net}`}

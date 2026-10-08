@@ -1,3 +1,4 @@
+import './limited-activities.css';
 import { useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -265,7 +266,7 @@ export function LimitedActivitiesPage({
         icon="activities"
       />
       {session.data?.admin && !session.error && !pictureBook ? (
-        <div className="nb-grid nb-grid--3">
+        <div className="limited-activities-grid">
           {[
             {
               title: copy('喵帕斯的绘本', 'Nyanpasu’s picture book'),

@@ -26,6 +26,7 @@ const welfarePool: Pool = {
   id: `pol_${'C'.repeat(21)}A`,
   pool_type: 'welfare',
   period_id: null,
+  period_date: null,
   state: 'open',
   revision: '3',
   balance: '50',
@@ -283,6 +284,7 @@ describe('pool adjustment confirmation', () => {
       id: previousPeriod.current_pool_id,
       pool_type: 'thursday',
       period_id: previousPeriod.id,
+      period_date: previousPeriod.period_key,
     });
     const view = await renderActivities();
     await view.user.click(await screen.findByRole('button', { name: 'Adjust balance' }));

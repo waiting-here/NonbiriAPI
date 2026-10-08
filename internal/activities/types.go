@@ -56,14 +56,15 @@ type Page[T any] struct {
 }
 
 type Pool struct {
-	ID        string  `json:"id"`
-	PoolType  string  `json:"pool_type"`
-	PeriodID  *string `json:"period_id"`
-	State     string  `json:"state"`
-	Revision  string  `json:"revision"`
-	Balance   string  `json:"balance"`
-	CreatedAt int64   `json:"created_at"`
-	ClosedAt  *int64  `json:"closed_at"`
+	ID         string  `json:"id"`
+	PoolType   string  `json:"pool_type"`
+	PeriodID   *string `json:"period_id"`
+	PeriodDate *string `json:"period_date"`
+	State      string  `json:"state"`
+	Revision   string  `json:"revision"`
+	Balance    string  `json:"balance"`
+	CreatedAt  int64   `json:"created_at"`
+	ClosedAt   *int64  `json:"closed_at"`
 }
 
 type PumpsBP struct {
