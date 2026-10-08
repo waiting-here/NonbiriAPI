@@ -9,7 +9,10 @@ const mocks = vi.hoisted(() => ({ language: 'zh', paint: vi.fn() }));
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ i18n: { resolvedLanguage: mocks.language } }),
 }));
-vi.mock('./copy', () => ({ useCatchText: () => (zh: string) => zh }));
+vi.mock('./copy', async (original) => ({
+  ...(await original<typeof import('./copy')>()),
+  useCatchText: () => (zh: string) => zh,
+}));
 vi.mock('./render.mjs', () => ({
   createRenderer: () => ({ resize() {}, destroy() {}, paint: mocks.paint }),
 }));
@@ -148,8 +151,8 @@ it.each([
     const screen = mount(session);
     await tick(17);
     expect(screen.onCatch.mock.calls.map(([value]) => value)).toEqual([
-      { text: 'White', points: points[0] },
-      { text: 'Gold', points: points[1] },
+      { id: 'white', text: 'White', points: points[0], combo: combo + 1, gold: false },
+      { id: 'gold', text: 'Gold', points: points[1], combo: combo + 2, gold: true },
     ]);
     expect(mocks.paint.mock.calls.map((args) => args[3]?.text).filter(Boolean)).toEqual(
       points.map((p) => '+' + p),

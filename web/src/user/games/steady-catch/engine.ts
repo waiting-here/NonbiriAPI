@@ -13,7 +13,9 @@ export interface Phrase {
   gold: boolean;
 }
 export interface CollectionEvent {
-  kind: Item['kind'];
+  kind: Item['kind'] | 'miss';
+  x: number;
+  lostCombo: number;
   payload: number;
   points: number;
   combo: number;
@@ -250,6 +252,8 @@ export function advance(
           collect(item);
           onCollect?.({
             kind: item.kind,
+            x: item.x,
+            lostCombo: 0,
             payload: item.payload,
             points: s.score - score,
             combo: s.combo,
@@ -260,8 +264,20 @@ export function advance(
           continue;
         }
         if (item.kind === 'phrase') {
+          const lostCombo = s.combo;
           s.combo = 0;
           s.missed++;
+          onCollect?.({
+            kind: 'miss',
+            payload: item.payload,
+            x: item.x,
+            lostCombo,
+            points: 0,
+            combo: 0,
+            hpDelta: 0,
+            chargeReady: false,
+            blocked: false,
+          });
         }
       }
       if (item.y - item.height / 2 < HEIGHT + 10000) remaining.push(item);

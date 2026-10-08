@@ -1,8 +1,12 @@
-/* global getComputedStyle, matchMedia, Image, window */
+/* global getComputedStyle, matchMedia, Image, window, Path2D */
+import { GAME_ICON_PATHS, ICON_STROKE_WIDTH } from '@shared/components/iconPaths';
 export function createRenderer(canvas, phrases, english) {
   const ctx = canvas.getContext('2d'),
     font = getComputedStyle(canvas).fontFamily;
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const icons = Object.fromEntries(
+    Object.entries(GAME_ICON_PATHS).map(([name, path]) => [name, new Path2D(path)]),
+  );
   const sprite = new Image();
   let assetReady = false,
     tile = 640,
@@ -71,6 +75,15 @@ export function createRenderer(canvas, phrases, english) {
     }
     return size;
   }
+  function drawIcon(name, x, y, size) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(size / 24, size / 24);
+    ctx.lineWidth = ICON_STROKE_WIDTH;
+    ctx.lineCap = ctx.lineJoin = 'round';
+    ctx.stroke(icons[name]);
+    ctx.restore();
+  }
   function drawCard(item) {
     const { kind, payload, x, y, width, height } = item,
       gold = kind === 'phrase' && payload.rarity === 'gold';
@@ -83,40 +96,58 @@ export function createRenderer(canvas, phrases, english) {
             ? ['#ffe5ac', '#755321', '#f7c16a']
             : ['#e9f4f7', '#254a60', '#b4d4df'];
     ctx.save();
+    if (kind === 'phrase' && item.checked) ctx.filter = 'grayscale(40%)';
     ctx.translate(x, y);
     ctx.rotate(item.tilt + (reducedMotion ? 0 : Math.sin(sceneTime * 1.2 + item.wobble) * 0.012));
     ctx.shadowColor = '#0005';
     ctx.shadowBlur = 10;
     ctx.shadowOffsetY = 4;
-    roundRect(-width / 2, -height / 2, width, height, 10);
+    if (kind === 'hazard') {
+      ctx.beginPath();
+      ctx.moveTo(-width / 2 + 8, -height / 2);
+      ctx.lineTo(width / 2 - 8, -height / 2);
+      ctx.lineTo(width / 2, 0);
+      ctx.lineTo(width / 2 - 8, height / 2);
+      ctx.lineTo(-width / 2 + 8, height / 2);
+      ctx.lineTo(-width / 2, 0);
+      ctx.closePath();
+    } else roundRect(-width / 2, -height / 2, width, height, 10);
     ctx.fillStyle = colors[0];
     ctx.fill();
     ctx.shadowBlur = 0;
     ctx.shadowOffsetY = 0;
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = kind === 'hazard' ? 2 : 1.5;
     ctx.strokeStyle = colors[2];
+    if (kind === 'hazard' && !reducedMotion)
+      ctx.globalAlpha = 0.8 + Math.sin((sceneTime * Math.PI) / 0.6) * 0.2;
     ctx.stroke();
+    ctx.globalAlpha = 1;
     ctx.fillStyle = colors[1];
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
-    ctx.font = '600 11px ' + font;
+    ctx.font = '700 13px ' + font;
     const tag =
       kind === 'phrase'
         ? gold
           ? english
-            ? '✦ Gold · +20'
-            : '✦ 名场面 · +20'
+            ? 'CN meme'
+            : '名场面'
           : english
-            ? '＋ Phrase · +10'
-            : '＋ 八股 · +10'
+            ? 'CN meme'
+            : '八股'
         : kind === 'hazard'
           ? english
-            ? '! Avoid · −1 ♥'
-            : '! 躲开 · −1 ♥'
+            ? 'Avoid'
+            : '躲开'
           : english
-            ? '✧ Power-up · Catch'
-            : '✧ 道具 · 接住';
-    ctx.fillText(tag, -width / 2 + 12, -height / 2 + 14);
+            ? 'Power'
+            : '道具';
+    ctx.strokeStyle = colors[1];
+    const icon = kind === 'hazard' ? 'warning' : kind === 'prop' ? 'shield' : 'spark';
+    const labelWidth = ctx.measureText(tag).width;
+    const withIcon = labelWidth + 38 <= width;
+    if (withIcon || kind === 'hazard') drawIcon(icon, -width / 2 + 8, -height / 2 + 6, 15);
+    ctx.fillText(tag, -width / 2 + (withIcon || kind === 'hazard' ? 28 : 8), -height / 2 + 14);
     ctx.textAlign = 'center';
     textFit(payload.text, width - 20, w < 500 ? 16 : 17);
     ctx.fillText(payload.text, 0, 10);
@@ -124,9 +155,13 @@ export function createRenderer(canvas, phrases, english) {
   }
   function drawBackground() {
     const bg = ctx.createLinearGradient(0, 0, 0, h);
-    bg.addColorStop(0, '#112a40');
-    bg.addColorStop(0.65, '#0d2235');
-    bg.addColorStop(1, '#15363c');
+    const act = Math.min(2, Math.floor(state.time / 30));
+    const colors = [
+      ['#112a40', '#0d2235', '#15363c'],
+      ['#1a2440', '#241f46', '#2a2050'],
+      ['#2a1a2a', '#341d28', '#3a1e24'],
+    ][act];
+    colors.forEach((color, index) => bg.addColorStop([0, 0.65, 1][index], color));
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, w, h);
     const glow = ctx.createRadialGradient(w * 0.72, h * 0.62, 0, w * 0.72, h * 0.62, w * 0.65);
@@ -139,9 +174,22 @@ export function createRenderer(canvas, phrases, english) {
       const x = (((i * 137 + 32) % 997) / 997) * w,
         y = (((i * 73 + 16) % 631) / 631) * (h - 40);
       ctx.beginPath();
+      ctx.globalAlpha =
+        act === 2 && !reducedMotion ? 0.5 + (Math.sin(sceneTime * 5 + i) + 1) / 4 : 1;
       ctx.arc(x, y, i % 7 === 0 ? 1.6 : 0.8, 0, Math.PI * 2);
       ctx.fill();
+      if (act === 1) {
+        const rainY = (y + (reducedMotion ? 0 : sceneTime * 45)) % h;
+        const length = 14 + state.time / 3;
+        ctx.strokeStyle = '#b8aad527';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x, rainY);
+        ctx.lineTo(x - length / 4, rainY + length);
+        ctx.stroke();
+      }
     }
+    ctx.globalAlpha = 1;
     ctx.strokeStyle = '#6fa9b225';
     ctx.lineWidth = 1;
     ctx.setLineDash([3, 9]);
@@ -180,6 +228,16 @@ export function createRenderer(canvas, phrases, english) {
     ctx.beginPath();
     ctx.ellipse(x, h - 18, size * 0.22, 7, 0, 0, Math.PI * 2);
     ctx.fill();
+    if (state.combo >= 10) {
+      ctx.strokeStyle = '#ffd87c8c';
+      ctx.lineWidth = 2;
+      ctx.shadowColor = '#ffd87c';
+      ctx.shadowBlur = reducedMotion ? 0 : 14;
+      ctx.beginPath();
+      ctx.ellipse(x, sy + size * 0.5, size * 0.39, size * 0.43, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
     if (state.effects.shield > state.time) {
       ctx.fillStyle = '#91efdb0c';
       ctx.strokeStyle = '#b5f9deae';
@@ -255,7 +313,15 @@ export function createRenderer(canvas, phrases, english) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     drawBackground();
     if (state.mode === 'ready') drawDemo();
-    for (const item of state.items) drawCard(item);
+    for (const item of state.items) {
+      if (item.landing) {
+        ctx.fillStyle = '#ff899433';
+        ctx.beginPath();
+        ctx.ellipse(item.x, catchY(), item.width / 2, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      drawCard(item);
+    }
     drawPlayer();
     ctx.save();
     for (const p of state.particles) {
@@ -283,6 +349,7 @@ export function createRenderer(canvas, phrases, english) {
       mode: value ? (active ? 'playing' : 'paused') : 'ready',
       x: value ? (value.x / 600000) * w : w * 0.72,
       time: value ? value.tick / 60 : 0,
+      combo: value?.combo ?? 0,
       direction: value && active ? Math.sign((value.x / 600000) * w - previous.x) : 0,
       invulnerable: (value?.invulnerable ?? 0) / 60,
       effects: Object.fromEntries(
@@ -290,6 +357,13 @@ export function createRenderer(canvas, phrases, english) {
       ),
       items: (value?.items ?? []).map((i) => ({
         ...i,
+        landing:
+          value.tick >= 3600 &&
+          i.kind === 'hazard' &&
+          !i.checked &&
+          (446000 - i.y - i.height / 2) /
+            (i.speed * (value.effects.slow > value.tick ? 0.58 : 1)) <=
+            24,
         payload:
           i.kind === 'phrase'
             ? catalog.phrases[i.payload]
@@ -303,10 +377,13 @@ export function createRenderer(canvas, phrases, english) {
       })),
     };
     if (event) {
-      state.action = event.kind === 'hit' ? 'hit' : 'catch';
-      state.actionUntil = state.time + 0.45;
-      const color = event.kind === 'hit' ? '#ff9eac' : '#b7f4da';
-      if (!reducedMotion)
+      if (event.kind !== 'miss') {
+        state.action = event.kind === 'hit' ? 'hit' : 'catch';
+        state.actionUntil = state.time + 0.45;
+      }
+      const color =
+        event.kind === 'miss' ? '#b8cadb' : event.kind === 'hit' ? '#ff9eac' : '#b7f4da';
+      if (!reducedMotion && event.kind !== 'miss')
         for (let i = 0; i < 12; i++) {
           const a = Math.random() * Math.PI * 2,
             v = 40 + Math.random() * 100;
@@ -322,7 +399,13 @@ export function createRenderer(canvas, phrases, english) {
           });
         }
       if (event.text)
-        state.floaters.push({ x: state.x, y: catchY() - 25, life: 1, text: event.text, color });
+        state.floaters.push({
+          x: event.x === undefined ? state.x : (event.x / 600000) * w,
+          y: catchY() - 25,
+          life: event.kind === 'miss' ? 0.6 : 1,
+          text: event.text,
+          color,
+        });
     }
     if (active) {
       for (const p of state.particles) {

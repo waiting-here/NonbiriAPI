@@ -4,7 +4,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { SteadyCatchGame } from './SteadyCatchGame';
+import { CatchResult } from './CatchResult';
 import { newGame } from './engine';
+import type { ToolItem } from '../common/GameToolbar';
 import type { Controls, Session } from './session';
 
 const calls = vi.hoisted(() => ({ request: vi.fn(), coarse: false }));
@@ -12,6 +14,17 @@ vi.mock('./copy', () => ({ useCatchText: () => (zh: string) => zh }));
 vi.mock('./Board', () => ({ CatchBoard: () => <canvas /> }));
 vi.mock('./Leaderboard', () => ({ CatchLeaderboard: () => null }));
 vi.mock('../common/GameWallets', () => ({ GameWallets: () => null }));
+vi.mock('../common/GameToolbar', () => ({
+  GameToolbar: ({ items }: { items: readonly ToolItem[] }) => (
+    <>
+      {items.map((item) => (
+        <button key={item.id} onClick={item.onClick}>
+          {item.label}
+        </button>
+      ))}
+    </>
+  ),
+}));
 vi.mock('../common/GameBackLink', () => ({
   GameBackLink: () => <a href="/games">返回游戏中心</a>,
 }));
@@ -153,7 +166,7 @@ it('starts once under StrictMode and waits for the saved pause before closing a 
   const view = mount();
   await ready();
   fireEvent.click(screen.getByRole('button', { name: '开始接住' }));
-  await waitFor(() => expect(screen.getByRole('button', { name: '暂停游戏' })).toBeEnabled());
+  await waitFor(() => expect(controls).toEqual(['resume']), { timeout: 3500 });
   expect(controls).toEqual(['resume']);
   holdPause = true;
   fireEvent.click(screen.getByRole('button', { name: /梗图鉴/ }));
@@ -164,8 +177,44 @@ it('starts once under StrictMode and waits for the saved pause before closing a 
   await act(async () => {
     releasePause!();
   });
-  await waitFor(() => expect(controls).toEqual(['resume', 'pause', 'resume']));
+  await waitFor(() => expect(controls).toEqual(['resume', 'pause', 'resume']), { timeout: 2500 });
   expect(screen.getByRole('button', { name: '暂停游戏' })).toBeEnabled();
   view.unmount();
   await waitFor(() => expect(controls).toEqual(['resume', 'pause', 'resume', 'pause']));
+});
+
+it('shows the record gain, misses and the golden catch from this round', () => {
+  const result: Session = {
+    id: 'result',
+    status: 'completed',
+    revision: 1,
+    state: { ...newGame(1), tick: 5400, score: 920, caught: 40, max_combo: 12, missed: 7 },
+    payment: { game: '1', general: '0' },
+    first_clear_reward: '3',
+    first_clear: true,
+    reward: '3',
+    created_at: 1,
+    expires_at: 1801,
+    terminal_at: 91,
+    server_ms: 91000,
+  };
+  render(
+    <CatchResult
+      result={result}
+      previousBest={700}
+      caught={[
+        { id: 'white', text: '普通句子', points: 30, combo: 12, gold: false },
+        { id: 'gold', text: '金色名场面', points: 20, combo: 1, gold: true },
+      ]}
+      disabled={false}
+      busy={false}
+      start={vi.fn()}
+      openCatalog={vi.fn()}
+    />,
+  );
+  expect(screen.getByText('新纪录！比之前高 +220')).toBeVisible();
+  expect(screen.getByText('漏接')).toHaveTextContent('7');
+  expect(screen.getByText('坚持了 90 秒')).toBeVisible();
+  expect(screen.getByText('“金色名场面”')).toBeVisible();
+  expect(screen.queryByText('“普通句子”')).toBeNull();
 });

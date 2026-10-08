@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Icon } from '@shared/components/Icon';
 import type { Phrase } from './engine';
 import notes from './catalog-notes.json';
 import { useCatchText } from './copy';
@@ -66,16 +67,27 @@ export function CatchDialog({
 
 export function CatchCatalog({
   phrases,
+  caught = [],
+  initialScope = 'all',
   open,
   onClose,
 }: {
   phrases: readonly Phrase[];
+  caught?: readonly string[];
+  initialScope?: 'all' | 'round';
   open: boolean;
   onClose: () => void;
 }) {
   const t = useCatchText();
   const [search, setSearch] = useState(''),
     [category, setCategory] = useState('all');
+  const [scope, setScope] = useState(initialScope);
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) setScope(initialScope);
+  }
+  const collected = new Set(caught);
   const metadata = notes.phrases as Record<
     string,
     { family: string; evidence: string; sources: string[] }
@@ -83,6 +95,7 @@ export function CatchCatalog({
   const sources = new Map(notes.sources.map((source) => [source.id, source]));
   const matches = phrases.filter(
     (p) =>
+      (scope === 'all' || collected.has(p.id)) &&
       (category === 'all' || p.category === category) &&
       [p.text, p.category, metadata[p.id]?.family ?? '']
         .join(' ')
@@ -108,9 +121,21 @@ export function CatchCatalog({
           ' game adaptations. Model labels describe community associations, not exclusive origins or measured frequency.',
         )}
       </p>
+      <div className="catalog-scope" role="group" aria-label={t('图鉴范围', 'Catalog scope')}>
+        <button
+          className="quiet"
+          aria-pressed={scope === 'round'}
+          onClick={() => setScope('round')}
+        >
+          {t('本局接住', 'This round')}
+        </button>
+        <button className="quiet" aria-pressed={scope === 'all'} onClick={() => setScope('all')}>
+          {t('全部', 'All')}
+        </button>
+      </div>
       <div className="catalog-controls">
         <label className="search-field">
-          <span aria-hidden="true">⌕</span>
+          <Icon name="search" />
           <input
             type="search"
             value={search}
@@ -146,7 +171,17 @@ export function CatchCatalog({
           const meta = metadata[p.id];
           return (
             <article className="phrase-tile" key={p.id}>
-              <p className="phrase-title">{p.text}</p>
+              <p className="phrase-title">
+                {collected.has(p.id) && (
+                  <span
+                    className="collected-check"
+                    aria-label={t('本局已接住', 'Caught this round')}
+                  >
+                    ✓{' '}
+                  </span>
+                )}
+                {p.text}
+              </p>
               <small>
                 <i className={'dot ' + (meta?.evidence === 'observed' ? 'observed' : 'adapted')} />
                 {meta?.evidence === 'observed'
@@ -174,7 +209,14 @@ export function CatchCatalog({
           );
         })}
         {!matches.length && (
-          <p>{t('没有找到这个梗，试试别的词。', 'No phrases found. Try another word.')}</p>
+          <p>
+            {scope === 'round' && !caught.length
+              ? t(
+                  '本次打开页面后还没有接住卡片。',
+                  'No catches recorded since this page was opened.',
+                )
+              : t('没有找到这个梗，试试别的词。', 'No phrases found. Try another word.')}
+          </p>
         )}
       </div>
       <details className="sources">
@@ -198,95 +240,6 @@ export function CatchCatalog({
           ))}
         </ol>
       </details>
-    </CatchDialog>
-  );
-}
-
-export function CatchHelp({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const t = useCatchText();
-  return (
-    <CatchDialog
-      open={open}
-      onClose={onClose}
-      title={t('怎么稳稳接住', 'How to catch steadily')}
-      className="help-dialog"
-    >
-      <p>
-        {t(
-          '移动角色，把接物垫放在卡片下方。卡片经过虚线所在高度时，垫子接到卡片就算成功。',
-          'Move the character to place the catching pad below a card. Catch it as it crosses the dotted line.',
-        )}
-      </p>
-      <div className="help-controls">
-        <p>
-          <b>{t('电脑', 'Desktop')}</b>
-          {t(
-            '在场内移动鼠标／拖动；← → 或 A D 移动；空格护场；P 或 Esc 暂停。',
-            'Move or drag the mouse; use arrows or A/D, Space for shield, P or Esc to pause.',
-          )}
-        </p>
-        <p>
-          <b>{t('手机', 'Mobile')}</b>
-          {t(
-            '按住场内左右滑动，或长按下方方向按钮。',
-            'Drag across the field or hold a direction button below.',
-          )}
-        </p>
-      </div>
-      <p>
-        {t(
-          '白卡 10 分，金卡 20 分。每连接 5 句提升倍率，最高 ×3。漏接或受伤中断连击；漏接不扣耐心。道具不会中断连击。',
-          'White cards give 10 points, gold cards 20. Every five catches increase the multiplier up to ×3. Misses or damage reset the combo; misses do not cost health. Power-ups preserve the combo.',
-        )}
-      </p>
-      <h3>{t('道具', 'Power-ups')}</h3>
-      <ul className="prop-list">
-        {[
-          [
-            t('上下文护盾', 'Context shield'),
-            t('抵挡错误卡，持续 7 秒', 'Blocks hazards for 7 seconds'),
-          ],
-          [
-            t('低温采样', 'Low temperature'),
-            t('全部卡片降速，持续 7 秒', 'Slows cards for 7 seconds'),
-          ],
-          [
-            t('注意力磁铁', 'Attention magnet'),
-            t('吸引附近的八股卡，持续 7 秒', 'Attracts nearby phrases for 7 seconds'),
-          ],
-          [
-            t('Token 翻倍', 'Double tokens'),
-            t('接物分数翻倍，持续 7 秒', 'Doubles scores for 7 seconds'),
-          ],
-          [
-            t('重新生成', 'Regenerate'),
-            t('恢复 1 点耐心，上限 5 点', 'Restores 1 health, up to 5'),
-          ],
-        ].map(([name, description]) => (
-          <li key={name}>
-            <b>{name}</b>
-            <span>{description}</span>
-          </li>
-        ))}
-      </ul>
-      <p>
-        {t(
-          '稳稳护场：每接 10 句充满一次，按按钮或空格释放 4 秒护盾。满充能后可保留到需要时。',
-          'Every 10 catches charge a four-second shield. Press the button or Space when you need it.',
-        )}
-      </p>
-      <p>
-        {t(
-          '坚持 90 秒、保有耐心并拿到 600 分即通关。切到其他窗口会自动暂停。',
-          'Survive 90 seconds with health remaining and 600 points to clear. Switching windows pauses the game.',
-        )}
-      </p>
-      <p>
-        {t(
-          '门票先扣游戏积分，不足补通用积分。仅首次通关发放奖励；局内分数不是钱包积分。正常结束或放弃不退票，系统中止原路退票。暂停与离线不推进游戏，本局从创建起保留 30 分钟。',
-          'Entry uses game credits first, then general credits. Only the first clear gives a reward; the game score is not wallet credit. Completion and abandonment do not refund entry; system cancellation does. Pausing and going offline stop play. A session lasts 30 minutes from creation.',
-        )}
-      </p>
     </CatchDialog>
   );
 }
