@@ -21,6 +21,7 @@ import { useAuthoritativeCountdown } from '../common/countdown';
 import { useGameVisibility } from '../common/visibility';
 import { useGameSound } from '../common/useGameSound';
 import { GameHeader } from '../common/GameHeader';
+import { GameHero } from '../assets/GameHero';
 import { RandomnessProof } from '../common/RandomnessProof';
 import { GameMoney } from '../common/GameMoney';
 import { PublicGameIdentity } from '../common/PublicGameIdentity';
@@ -173,7 +174,11 @@ function Tutorial({
             {text('rps.tutorial.skip')}
           </button>
           {page < 2 ? (
-            <button type="button" className="nb-btn nb-btn--primary" onClick={() => onPage(page + 1)}>
+            <button
+              type="button"
+              className="nb-btn nb-btn--primary"
+              onClick={() => onPage(page + 1)}
+            >
               {text('rps.tutorial.next')}
             </button>
           ) : (
@@ -1103,7 +1108,12 @@ export function RPSGame() {
     deathmatchGateOpen && deathmatchAffordable && homeQuery.isSuccess && !homeQuery.error;
   const closeRules = useCallback(() => setRulesOpen(false), []);
   const header = (
-    <GameHeader wallets={snapshot.data} game="rps" sound={sound} onRules={() => setRulesOpen(true)} />
+    <GameHeader
+      wallets={snapshot.data}
+      game="rps"
+      sound={sound}
+      onRules={() => setRulesOpen(true)}
+    />
   );
   const rulesDialog = <RPSRules open={rulesOpen} onClose={closeRules} />;
   if (snapshot.isPending)
@@ -1140,10 +1150,21 @@ export function RPSGame() {
         sound={sound}
         onRules={() => setRulesOpen(true)}
         rankingsAvailable={Boolean(snapshot.data) && home?.kind !== 'pending_result'}
-        tools={!session ? [{
-          id: 'tutorial', label: text('rps.tutorial.replay'), icon: 'play',
-          onClick: () => {setTutorialPage(0); setTutorialVisibility('open');},
-        }] : []}
+        tools={
+          !session
+            ? [
+                {
+                  id: 'tutorial',
+                  label: text('rps.tutorial.replay'),
+                  icon: 'play',
+                  onClick: () => {
+                    setTutorialPage(0);
+                    setTutorialVisibility('open');
+                  },
+                },
+              ]
+            : []
+        }
       />
       <RandomnessProof
         game="rps"
@@ -1245,10 +1266,12 @@ export function RPSGame() {
                 <button
                   type="button"
                   key={mode}
+                  data-mode={mode}
                   className={displayedMode === mode ? 'is-selected' : ''}
                   aria-pressed={displayedMode === mode}
                   onClick={() => setSelectedMode(mode)}
                 >
+                  <GameHero kind="rps" />
                   <strong>{text(`rps.mode.${mode}`)}</strong>
                   <span>{text(`rps.mode.${mode}Help`)}</span>
                   {config ? (

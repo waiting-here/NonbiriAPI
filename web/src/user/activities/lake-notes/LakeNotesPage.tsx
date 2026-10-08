@@ -10,6 +10,7 @@ import {
   StationSessionChangedError,
 } from '@shared/charityManagement';
 import { directions, directionUnits, unitsToNatural, type Direction } from '@shared/lakenotes/api';
+import { formatCredits } from '../../games/common/strict';
 import { UserPageGate } from '../../components/UserPageGate';
 import { useUserSession } from '../../data';
 import { economySessionRequest } from '../../features/economy/queries';
@@ -113,10 +114,21 @@ function LakeExchange({
   };
   if (!enabled.length && !unknown && !saved) return null;
   const pair = quote ? directionUnits[quote.direction] : null;
+  const rate = actual ? settings.exchanges[actual] : null;
+  const rateUnits = actual ? directionUnits[actual] : null;
   return (
     <Card>
       <h2>{text('exchangeHeading')}</h2>
-      <p>{text('exchangeHelp')}</p>
+      {rate && rateUnits ? (
+        <p>
+          {text('exchangeHelp', {
+            source: formatCredits(unitsToNatural(rate.source_amount, rateUnits[0])),
+            sourceUnit: text(rateUnits[0]),
+            target: formatCredits(unitsToNatural(rate.target_amount, rateUnits[1])),
+            targetUnit: text(rateUnits[1]),
+          })}
+        </p>
+      ) : null}
       <form
         className="lake-form"
         onChange={() => {
@@ -161,7 +173,7 @@ function LakeExchange({
               required
             />
           </label>
-          <button type="submit" className="btn btn-secondary">
+          <button type="submit" className="nb-btn nb-btn--secondary">
             {text('quote')}
           </button>
         </fieldset>
@@ -169,9 +181,9 @@ function LakeExchange({
       {quote && pair ? (
         <p className="lake-quote">
           {text('quoteAmounts', {
-            source: unitsToNatural(quote.source_amount, pair[0]),
+            source: formatCredits(unitsToNatural(quote.source_amount, pair[0])),
             sourceUnit: text(pair[0]),
-            target: unitsToNatural(quote.target_amount, pair[1]),
+            target: formatCredits(unitsToNatural(quote.target_amount, pair[1])),
             targetUnit: text(pair[1]),
           })}
         </p>
@@ -182,12 +194,15 @@ function LakeExchange({
       {saved ? <p role="status">{text('exchangeSaved')}</p> : null}
       <button
         type="button"
-        className="btn btn-primary"
+        className="nb-btn nb-btn--primary"
         onClick={confirm}
         disabled={operation.isPending || (!unknown && (!quote || view.readonly))}
       >
         {unknown ? text('retry') : text('exchangeConfirm')}
       </button>
+      {!quote && !unknown && !saved && !view.readonly ? (
+        <p className="lake-exchange-hint">{text('previewFirst')}</p>
+      ) : null}
     </Card>
   );
 }
@@ -352,17 +367,20 @@ function LakeContent({ account }: { account: string }) {
         }}
       />
       <div className="lake-platform-controls">
-        <p role="status">
-          {state.status === 'unknown'
-            ? text('reconnecting')
-            : state.status === 'saving'
-              ? text('saving')
-              : text('saved')}
+        <p className="lake-save-note">
+          {text('saveHelp')}{' '}
+          <span role="status">
+            {state.status === 'unknown'
+              ? text('reconnecting')
+              : state.status === 'saving'
+                ? text('saving')
+                : text('saved')}
+          </span>
         </p>
         {unfinished && state.status !== 'saving' ? (
           <button
             type="button"
-            className="btn btn-secondary"
+            className="nb-btn nb-btn--secondary"
             onClick={() => void controller.readCurrent().catch(() => undefined)}
           >
             {text('checkSaved')}
@@ -371,7 +389,7 @@ function LakeContent({ account }: { account: string }) {
         {state.status === 'unknown' ? (
           <button
             type="button"
-            className="btn btn-secondary"
+            className="nb-btn nb-btn--secondary"
             onClick={() => void controller.retry().catch(() => undefined)}
           >
             {text('retry')}
@@ -384,7 +402,7 @@ function LakeContent({ account }: { account: string }) {
           <div role="status">
             <p>{text('saveUnknown')}</p>
             <button
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               type="button"
               onClick={() => {
                 if (action.outcome === 'unknown' && action.variables)

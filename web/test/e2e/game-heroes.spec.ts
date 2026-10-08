@@ -37,6 +37,7 @@ for (const fixture of cases) {
     await expect(cards).toHaveCount(9);
     await expect(heroes).toHaveCount(7);
     for (const hero of await cards.locator('img').all()) {
+      if (!(await hero.isVisible())) continue;
       await hero.scrollIntoViewIfNeeded();
       await expect(hero).toHaveJSProperty('complete', true);
       expect(

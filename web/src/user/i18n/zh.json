@@ -341,7 +341,8 @@
           "inCarriedPool": "奖池累计",
           "discarded2": "丢弃",
           "awardedToYou": "归你所有",
-          "awardedToOpponent": "归对手所有"
+          "awardedToOpponent": "归对手所有",
+          "viewPlayedHistory": "查看出牌过程"
         },
         "blackjack": {
           "blackjackTableRules": "二十一点 · 桌规",
@@ -1034,7 +1035,8 @@
           "qUICKTUTORIAL": "快速模式 · 教学",
           "waitingForYouNoCountdown": "等待你的操作，无倒计时",
           "roundResolved": "本轮结算完成",
-          "completeTheHighlightedStepsForThisTeaching": "请按高亮步骤完成本轮教学方案。"
+          "completeTheHighlightedStepsForThisTeaching": "请按高亮步骤完成本轮教学方案。",
+          "targetRounds": "目标 {{likes}} 赞 · {{rounds}} 轮"
         },
         "ranking": {
           "stayAnonymousOnTheTrueCharityLeaderboard": "在真·慈善榜中匿名",
@@ -1261,7 +1263,7 @@
           "details": "查看开放状态",
           "from": "{{amount}} 积分起",
           "specs": "3 种棋盘开放 {{count}} 种",
-          "modes": "{{total}} 种模式开放 {{count}} 种",
+          "modes": "{{count}} 种模式可玩",
           "learn": "学习、记录与进行中的对局",
           "gwent": {
             "title": "AI 昆特牌",
@@ -1275,7 +1277,10 @@
           "lakenotes": {
             "title": "垂钓手记",
             "body": "在四处水域收集渔获、升级装备，写下你的垂钓故事。"
-          }
+          },
+          "modesAll": "{{count}} 种模式",
+          "firstClearReward": "首通奖励",
+          "winCredits": "可赢积分"
         },
         "fishing": {
           "eyebrow": "池塘垂钓",
@@ -1399,10 +1404,10 @@
           "title": "三人同桌，一决胜负",
           "description": "三人同桌，石头剪刀布。看准局势，亮出你的下一手。",
           "tutorial": {
-            "title": "这张桌子怎么玩",
             "1": "选择快速、标准或生死斗，凑齐三人即可开局。",
             "2": "倒计时结束前选好手势，大家同时揭晓。",
             "3": "请先在本页查看完整结果，之后才能加入下一局猜拳。",
+            "title": "这张桌子怎么玩",
             "next": "下一步",
             "skip": "暂时跳过",
             "finish": "进入大厅",
@@ -1603,8 +1608,8 @@
         "activityWallet": "去活动领游戏积分 →",
         "unavailable": "未开放",
         "test": "测试",
-        "learn": "查看规则和记录 →",
-        "enter": "进入 →",
+        "learn": "查看",
+        "enter": "进入",
         "rankings": "排行榜 · 近 7×24 小时",
         "calculation": "怎么计算",
         "soundControls": "声音",
@@ -2725,7 +2730,7 @@
       "closed": "游戏暂未开放，已有存档保留。",
       "entryUnknown": "入场结果尚未确认，请重试入场。",
       "retry": "重试同一次操作",
-      "saved": "已保存",
+      "saved": "进度已自动保存。",
       "saving": "保存中",
       "reconnecting": "连接中断，已暂停。将从最后保存的进度接续。",
       "checkSaved": "查看已保存进度",
@@ -2830,7 +2835,7 @@
       "treasureReward": "宝箱奖励：{{coins}} 金币 · {{bait}} ×{{count}}",
       "debrisReward": "捞起{{item}}",
       "exchangeHeading": "金币与站内积分兑换",
-      "exchangeHelp": "按管理员设置兑换金币和积分，确认前请核对数量。",
+      "exchangeHelp": "兑换比率 {{source}} {{sourceUnit}} : {{target}} {{targetUnit}}，预览后确认数量。",
       "direction": "兑换方向",
       "batches": "兑换份数",
       "quote": "预览兑换",
@@ -3416,7 +3421,9 @@
       "ledgerEntry": "垂钓手记：期次入场",
       "ledgerExchange": "垂钓手记：金币与积分兑换",
       "buyBatch": "购买 {{count}} 个 · {{cost}} 金币",
-      "bitePreparation": "鱼上钩了，准备控竿"
+      "bitePreparation": "鱼上钩了，准备控竿",
+      "saveHelp": "存档随账号同步，换设备后可继续。",
+      "previewFirst": "请先预览兑换。"
     },
     "quickstart": {
       "title": "接入自用服务",

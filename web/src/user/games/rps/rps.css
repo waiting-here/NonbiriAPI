@@ -152,6 +152,7 @@
 }
 .rps-modes > button {
   display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr);
   gap: 0.5rem;
   min-width: 0;
   padding: 0.85rem;
@@ -160,6 +161,25 @@
   background: var(--nb-color-surface);
   color: var(--nb-color-text);
   text-align: left;
+}
+.rps-modes > button > :not(.game-hero) {
+  grid-column: 2;
+}
+.rps-modes .game-hero {
+  grid-column: 1;
+  grid-row: 1 / span 6;
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: 0.65rem;
+}
+.rps-modes [data-mode='quick'] .game-hero {
+  object-position: left center;
+}
+.rps-modes [data-mode='standard'] .game-hero {
+  object-position: center;
+}
+.rps-modes [data-mode='deathmatch'] .game-hero {
+  object-position: right center;
 }
 .rps-modes > button.is-selected {
   border-color: var(--nb-color-accent);
