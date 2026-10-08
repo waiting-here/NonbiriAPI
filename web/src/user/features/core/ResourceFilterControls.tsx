@@ -210,6 +210,7 @@ function ResourceFilterForm({ control }: { control: ResourceFilterControl }) {
   const choices = {
     ordered: t('models.ordered'),
     random: t('models.random'),
+    cache_balanced: t('models.cacheBalanced'),
     available: t('common.available'),
     unavailable: t('filters.unavailable'),
     unconfigured: t('filters.unconfigured'),
@@ -263,6 +264,7 @@ function ResourceFilterForm({ control }: { control: ResourceFilterControl }) {
             {select('route_strategy', t('models.strategy'), [
               ['ordered', t('models.ordered')],
               ['random', t('models.random')],
+              ['cache_balanced', t('models.cacheBalanced')],
             ])}
             {select('connection_state', t('filters.connection'), [
               ['available', t('common.available')],

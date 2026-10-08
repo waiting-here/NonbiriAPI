@@ -146,7 +146,11 @@
       "moreSource": "Source actions for {{name}}",
       "dirtyCount": "{{count}} changes",
       "discard": "Discard changes",
-      "deleteHelp": "Clients will no longer be able to use {{name}}. Source services and keys remain unchanged."
+      "deleteHelp": "Clients will no longer be able to use {{name}}. Source services and keys remain unchanged.",
+      "status": "Status",
+      "actions": "Actions",
+      "balancedSummary": "Optimized load balancing",
+      "balancedHelp": "Reuse a source recently used by the same user and model for up to 5 minutes; otherwise prefer sources with less recent load."
     },
     "games": {
       "nav": "Games",
@@ -1630,7 +1634,9 @@
           "openaiChatCompletions": "OpenAI-Compatible chat completions",
           "charityChatCompletions": "Charity chat completions",
           "openaiEmbeddings": "Personal embedding",
-          "charityEmbeddings": "Charity embedding"
+          "charityEmbeddings": "Charity embedding",
+          "openaiImagesGenerations": "Personal image generation",
+          "charityImagesGenerations": "Charity image generation"
         },
         "trace": {
           "capturing": "Capturing",
@@ -2025,7 +2031,8 @@
           "level_denied": "Your level is not allowed",
           "no_usable_key": "No usable charity resource",
           "available": "Available now"
-        }
+        },
+        "pricingHelp": "Prices are in credits. Request prices apply per billable request; token prices are per million tokens."
       },
       "donationDetailTitle": "Donation details",
       "donationDetailDescription": "Review the current donation, review, and resource status.",
@@ -2686,7 +2693,8 @@
       "accountPresentation.fontHint": "Adjust interface text size.",
       "accountPresentation.exportBody": "Confirm again with Discord; you will return here automatically and download your export.",
       "accountPresentation.exportAction": "Export…",
-      "accountPresentation.deleteAction": "Delete account…"
+      "accountPresentation.deleteAction": "Delete account…",
+      "models.cacheBalanced": "Optimized load balancing"
     },
     "lakeNotes": {
       "exchangeAvailable": "Fishing is free. Coin exchange is available below.",

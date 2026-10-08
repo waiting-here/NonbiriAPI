@@ -1,4 +1,16 @@
-import { rejectionDescriptionKeys } from './rejectionDescriptions';
+import { clearStationSession } from '@shared/charityManagement';
+import { Card, EmptyState, ErrorState, LoadingState } from '@shared/components/States';
+import { useDisplayTimeContext } from '@shared/components/timeContextValue';
+import { Fold, Note } from '@shared/components/ui';
+import { RawStorageSummary } from '@shared/observability/RawStorageSummary';
+import { AttemptErrors, RequestSource } from '@shared/observability/RequestDiagnostics';
+import { type PageSize } from '@shared/operations/pageNumbers';
+import { PagePagination } from '@shared/operations/PagePagination';
+import { useSearchState } from '@shared/operations/useSearchState';
+import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
+import { isApiError } from '@shared/query/http';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   useCallback,
   useEffect,
@@ -8,27 +20,8 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import { useSearchState } from '@shared/operations/useSearchState';
 import { useTranslation } from 'react-i18next';
-import { clearStationSession } from '@shared/charityManagement';
-import { isApiError } from '@shared/query/http';
-import { useDateTimeFormatter } from '@shared/utils/datetime';
-import { Card, EmptyState, ErrorState, LoadingState } from '@shared/components/States';
-import { PagePagination } from '@shared/operations/PagePagination';
-import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
-import { type PageSize } from '@shared/operations/pageNumbers';
-import { Fold, Note } from '@shared/components/ui';
-import { LogResultBadge, logResult, logResultCopyKey } from './LogResult';
-import { useDisplayTimeContext } from '@shared/components/timeContextValue';
 import { CallerIdentity } from './CallerIdentity';
-import { LogOriginIdentity } from './LogOriginIdentity';
-import { LogDetailPanel } from './LogDetailPanel';
-import { LogFilters, type LogFilterField } from './LogFilters';
-import { LogTable, type LogColumn } from './LogTable';
-import { TokenBuckets } from './TokenBuckets';
-import { AttemptErrors, RequestSource } from '@shared/observability/RequestDiagnostics';
-import { RawStorageSummary } from '@shared/observability/RawStorageSummary';
 import {
   roleLogExportPath,
   validateLogFilter,
@@ -38,12 +31,19 @@ import {
   type LogRouteKind,
   type RoleLogRow,
 } from './data';
+import { LogDetailPanel } from './LogDetailPanel';
+import { LogFilters, type LogFilterField } from './LogFilters';
+import { LogOriginIdentity } from './LogOriginIdentity';
+import { LogResultBadge, logResult, logResultCopyKey } from './LogResult';
+import { LogTable, type LogColumn } from './LogTable';
 import {
   numberedLogKeys,
   useRoleLogDetailPage,
   useRoleLogsPage,
   type NumberedRoleLogDetail,
 } from './numberedQueries';
+import { rejectionDescriptionKeys } from './rejectionDescriptions';
+import { TokenBuckets } from './TokenBuckets';
 import { useLogUrlState } from './useLogUrlState';
 
 const ROUTE_LABEL_KEYS: Record<LogRouteKind, string> = {
@@ -51,6 +51,8 @@ const ROUTE_LABEL_KEYS: Record<LogRouteKind, string> = {
   charity_chat_completions: 'common.operations.logs.route.charityChatCompletions',
   openai_embeddings: 'common.operations.logs.route.openaiEmbeddings',
   charity_embeddings: 'common.operations.logs.route.charityEmbeddings',
+  openai_images_generations: 'common.operations.logs.route.openaiImagesGenerations',
+  charity_images_generations: 'common.operations.logs.route.charityImagesGenerations',
   model_discovery: 'common.operations.logs.route.modelDiscovery',
 };
 
@@ -593,7 +595,9 @@ function ScopedRoleLogPanel({
         ? 'common.operations.logs.presentation.models'
         : route.endsWith('embeddings')
           ? 'common.operations.logs.presentation.embeddings'
-          : 'common.operations.logs.presentation.chat',
+          : route.endsWith('images_generations')
+            ? 'common.operations.logs.presentation.images'
+            : 'common.operations.logs.presentation.chat',
     );
   const modelCell = (row: RoleLogRow) => (
     <>

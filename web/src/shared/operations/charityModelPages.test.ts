@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getManagedCharityModel, getManagedCharityModelsPage } from './charityModelPages';
 import type { CharityRole } from './charity';
+import { getManagedCharityModel, getManagedCharityModelsPage } from './charityModelPages';
 
 const model = (id = '1', extra: Record<string, unknown> = {}) => ({
+  model_types: ['chat_completions', 'embeddings'],
   route_strategy: 'expiry_weighted',
   id,
   provider: 'Provider',

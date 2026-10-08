@@ -146,7 +146,11 @@
       "moreSource": "{{name}} 的来源操作",
       "dirtyCount": "已修改 {{count}} 项",
       "discard": "放弃修改",
-      "deleteHelp": "客户端将无法再使用 {{name}}。来源服务和密钥不受影响。"
+      "deleteHelp": "客户端将无法再使用 {{name}}。来源服务和密钥不受影响。",
+      "status": "状态",
+      "actions": "操作",
+      "balancedSummary": "综合优化负载均衡",
+      "balancedHelp": "优先复用同用户、同模型在 5 分钟内使用的来源；其余选择近期负载较低的来源。"
     },
     "games": {
       "nav": "游戏",
@@ -1630,7 +1634,9 @@
           "openaiChatCompletions": "OpenAI-Compatible 聊天补全",
           "charityChatCompletions": "公益聊天补全",
           "openaiEmbeddings": "自用向量嵌入",
-          "charityEmbeddings": "公益向量嵌入"
+          "charityEmbeddings": "公益向量嵌入",
+          "openaiImagesGenerations": "自用图像生成",
+          "charityImagesGenerations": "公益图像生成"
         },
         "trace": {
           "capturing": "采集中",
@@ -2025,7 +2031,8 @@
           "level_denied": "本人等级不允许",
           "no_usable_key": "当前没有可用公益资源",
           "available": "当前可用"
-        }
+        },
+        "pricingHelp": "价格以积分显示；按次模型按计费请求结算，Token 价格按每百万 Token 计算。"
       },
       "donationDetailTitle": "捐赠详情",
       "donationDetailDescription": "查看捐赠、审核和资源的当前状态。",
@@ -2686,7 +2693,8 @@
       "accountPresentation.fontHint": "调整界面文字大小。",
       "accountPresentation.exportBody": "导出前需要 Discord 再次确认，完成后会自动返回并下载。",
       "accountPresentation.exportAction": "导出…",
-      "accountPresentation.deleteAction": "删除账户…"
+      "accountPresentation.deleteAction": "删除账户…",
+      "models.cacheBalanced": "综合优化负载均衡"
     },
     "lakeNotes": {
       "exchangeAvailable": "垂钓免费入场。金币兑换已开放，可查看下方兑换。",

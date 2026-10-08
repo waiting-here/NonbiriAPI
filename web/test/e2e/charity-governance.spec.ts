@@ -1,6 +1,6 @@
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { expect, test, type Page } from './test';
+import { numberedResponse } from './numbered-fixtures';
 import { ADMIN_ORIGIN, USER_ORIGIN } from './ports';
 import {
   assertNoSensitiveBrowserPersistence,
@@ -11,7 +11,7 @@ import {
   mockPublicConfig,
   mockRoleSession,
 } from './support';
-import { numberedResponse } from './numbered-fixtures';
+import { expect, test, type Page } from './test';
 
 const NOW = 1_800_000_000;
 const EVIDENCE_DIR = process.env.NONBIRI_VISUAL_DIR
@@ -250,6 +250,7 @@ function donationPageItem(donation: JSONRecord): JSONRecord {
 
 function capabilityModel(model: string): JSONRecord {
   return {
+    model_types: ['chat_completions', 'embeddings'],
     id: '1',
     provider: 'provider',
     model,

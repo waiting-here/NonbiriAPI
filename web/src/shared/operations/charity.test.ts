@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   getManagedBindings,
-  normalizeCharityBindingCandidate,
   normalizeAdminCharityModel,
   normalizeAdminDonation,
+  normalizeCharityBindingCandidate,
   normalizeStewardCharityModel,
   normalizeStewardDonation,
 } from './charity';
@@ -109,6 +109,7 @@ describe.each([normalizeAdminDonation, normalizeStewardDonation])(
 );
 
 const model = {
+  model_types: ['chat_completions', 'embeddings'],
   id: '1',
   provider: 'provider',
   model: 'model',
@@ -408,8 +409,13 @@ describe('charity model wire', () => {
         model: modelName,
         full_name: fullName,
       }),
-    ).toMatchObject({ full_name: fullName, binding_revision: '0' });
+    ).toMatchObject({
+      model_types: ['chat_completions', 'embeddings'],
+      full_name: fullName,
+      binding_revision: '0',
+    });
     expect(normalizeStewardCharityModel(model)).toMatchObject({
+      model_types: ['chat_completions', 'embeddings'],
       full_name: '[公益]provider/model',
       binding_revision: '0',
     });

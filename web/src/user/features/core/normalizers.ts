@@ -1,9 +1,10 @@
-import { normalizeTransportRule } from '@shared/transportRule';
-import { normalizeRolePolicy } from '@shared/rolePolicy';
-import { normalizeAnnouncementSummary } from '../operations/data';
-import { oneOf } from '@shared/operations/wire';
+import { normalizeModelTypes } from '@shared/modelTypes';
 import { automaticRestrictions } from '@shared/operations/restrictions';
+import { oneOf } from '@shared/operations/wire';
 import { ApiError } from '@shared/query/http';
+import { normalizeRolePolicy } from '@shared/rolePolicy';
+import { normalizeTransportRule } from '@shared/transportRule';
+import { normalizeAnnouncementSummary } from '../operations/data';
 import {
   CONNECTOR_TYPES,
   type AccountLanguage,
@@ -11,10 +12,10 @@ import {
   type Binding,
   type BindingCandidate,
   type BindingsResponse,
-  type CandidateFilters,
   type CallerKeyAuthority,
   type CallerKeyMetadata,
   type CallerKeySecret,
+  type CandidateFilters,
   type CatalogEntry,
   type CatalogSourceType,
   type CatalogView,
@@ -26,21 +27,21 @@ import {
   type EndpointBrowse,
   type EndpointBrowseState,
   type EndpointCreateOptions,
-  type EndpointOrigin,
   type EndpointKey,
   type EndpointKeyBrowse,
+  type EndpointOrigin,
   type HomeAnnouncementSummary,
   type HomeCheckinResult,
   type HomeCheckinStatus,
   type HomeGameSummary,
+  type KeyBindingState,
+  type KeyBindingView,
   type MainstreamChannelOption,
   type ManualEntriesResponse,
   type ManualUpdateResponse,
   type Model,
   type ModelBrowse,
   type Page,
-  type KeyBindingState,
-  type KeyBindingView,
   type UsageSummary,
   type UserEnvelope,
   type UserProfile,
@@ -1311,6 +1312,7 @@ export function normalizeModel(value: unknown): Model {
       'model',
       'full_name',
       'route_strategy',
+      'model_types',
       'transport_rule',
       'silent_retry',
       'flatten_tool_calls',
@@ -1328,7 +1330,11 @@ export function normalizeModel(value: unknown): Model {
   const model = logicalName(record.model, 'logical model name');
   const fullName = scalarString(record.full_name, 'logical model full name');
   if (fullName !== `${provider}/${model}`) invalid('logical model full name');
-  if (record.route_strategy !== 'ordered' && record.route_strategy !== 'random')
+  if (
+    record.route_strategy !== 'ordered' &&
+    record.route_strategy !== 'random' &&
+    record.route_strategy !== 'cache_balanced'
+  )
     invalid('route strategy');
   const createdAt = unixTime(record.created_at, 'logical model creation time');
   const updatedAt = unixTime(record.updated_at, 'logical model update time');
@@ -1345,6 +1351,7 @@ export function normalizeModel(value: unknown): Model {
     full_name: fullName,
     transport_rule: normalizeTransportRule(record.transport_rule),
     route_strategy: record.route_strategy,
+    model_types: normalizeModelTypes(record.model_types),
     silent_retry: exactBoolean(record.silent_retry, 'silent retry setting'),
     flatten_tool_calls: exactBoolean(record.flatten_tool_calls, 'tool call setting'),
     revision: decimal(record.revision, 'logical model revision', true),

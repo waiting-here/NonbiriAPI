@@ -1,7 +1,12 @@
-import { useEffect, useRef } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { clearStationSession } from '@shared/charityManagement';
-import { isForbidden, isUnauthorized, apiFetch, ApiError } from '@shared/query/http';
+import {
+  isPageNumber,
+  normalizePageMetadata,
+  PAGE_SIZES,
+  type PageMetadata,
+  type PageSize,
+  validatePageResponse,
+} from '@shared/operations/pageNumbers';
 import {
   array,
   boolean,
@@ -12,14 +17,9 @@ import {
   string,
   unixSecond,
 } from '@shared/operations/wire';
-import {
-  isPageNumber,
-  normalizePageMetadata,
-  PAGE_SIZES,
-  type PageMetadata,
-  type PageSize,
-  validatePageResponse,
-} from '@shared/operations/pageNumbers';
+import { ApiError, apiFetch, isForbidden, isUnauthorized } from '@shared/query/http';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
 import { normalizeCharityCapabilityModel } from './normalize';
 import type { CharityCapabilityModel, DonationIntakeState } from './types';
 
@@ -341,6 +341,7 @@ function normalizeAllowedLevels(value: unknown): number[] {
 
 export function normalizeCatalogModel(value: unknown): CatalogModel {
   const required = [
+    'model_types',
     'id',
     'provider',
     'model',
@@ -360,6 +361,7 @@ export function normalizeCatalogModel(value: unknown): CatalogModel {
     provider: root.provider,
     model: root.model,
     full_name: root.full_name,
+    model_types: root.model_types,
     pricing: root.pricing,
     discount: root.discount,
     ...(root.recent_success !== undefined ? { recent_success: root.recent_success } : {}),
@@ -461,11 +463,7 @@ export async function getCharityCatalog(
   const result = normalizeCharityCatalog(
     await apiFetch<unknown>(`/api/charity/models?${query.toString()}`, { signal }),
   );
-  validatePageResponse(
-    result.pagination,
-    normalized.page,
-    normalized.pageSize,
-  );
+  validatePageResponse(result.pagination, normalized.page, normalized.pageSize);
   return result;
 }
 

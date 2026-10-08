@@ -28,6 +28,7 @@ export interface CharityCapabilityDiscount {
 }
 
 export interface CharityCapabilityModel {
+  modelTypes: import('@shared/modelTypes').ModelType[];
   recentSuccess?: import('@shared/operations/charitySuccess').CharitySuccess;
   id: string;
   provider: string;

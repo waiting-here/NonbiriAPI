@@ -1,8 +1,8 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useNavigate, useSearchParams } from 'react-router';
-import { CharityCatalogPanel } from './CharityCatalogPanel';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { installJsonFetchFixtures, renderWithProviders } from '../../../../test/unit/support';
+import { CharityCatalogPanel } from './CharityCatalogPanel';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -17,6 +17,7 @@ function catalogModel(
   overrides: Record<string, unknown> = {},
 ) {
   return {
+    model_types: ['chat_completions', 'embeddings'],
     id,
     provider: 'provider',
     model: modelName,
@@ -164,7 +165,7 @@ describe('charity catalog panel', () => {
     expect(screen.getByRole('button', { name: 'Remove availability filter' })).toBeVisible();
     expect(screen.getByText(/<b>plain<\/b>/)).toBeVisible();
     expect(rendered.container.querySelector('.charity-model-preview b')).toBeNull();
-    expect(screen.getByText('L1、L3、L5')).toBeVisible();
+    expect(screen.getByText('L1, L3, L5')).toBeVisible();
     expect(screen.getAllByText('Available now').length).toBeGreaterThanOrEqual(1);
     const toggle = screen.getByRole('button', { name: '[公益]provider/plain' });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');

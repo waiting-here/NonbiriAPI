@@ -324,7 +324,9 @@
           "charityChatCompletions": "公益聊天补全",
           "openaiEmbeddings": "自用向量嵌入",
           "charityEmbeddings": "公益向量嵌入",
-          "modelDiscovery": "模型检查"
+          "modelDiscovery": "模型检查",
+          "openaiImagesGenerations": "自用图像生成",
+          "charityImagesGenerations": "公益图像生成"
         },
         "resultValue": {
           "success": "成功",
@@ -396,7 +398,8 @@
             "failed": "失败（{{status}}）"
           },
           "storageHistoryHelp": "累计数不会随记录到期减少。未保存的原文无法补回；下方可查询最近30天内仍在保留期的记录。容量仅计原文，不含数据库页、索引和 WAL。",
-          "storageRecords": "查看未保存记录"
+          "storageRecords": "查看未保存记录",
+          "images": "图像生成"
         }
       },
       "charity": {
@@ -471,7 +474,7 @@
         "namingHelp": "服务商和模型名称用于定义站内 API 调用名，可自行填写。实际调用的上游模型在下方服务连接中选择。",
         "namePreview": "调用模型名预览",
         "routeStrategy": "调度策略",
-        "operationHelp": "调用方选择的 API 路径决定执行聊天补全或向量嵌入，请连接支持对应操作的上游模型。展平工具调用与 store=false 策略仅作用于聊天补全。",
+        "operationHelp": "所选接口还需上游模型支持。展平工具调用、消息角色和传输设置仅用于聊天补全。",
         "embeddingBillingHelp": "Embedding 批量输入按一次成功请求计次；按 Token 计费时，全部输入使用未缓存输入价格，向量维度不计为输出 Token。",
         "embeddingQuotaHelp": "一次成功的 Embedding 批量请求只占用一次捐赠调用额度；Token 用量为全部输入之和，向量维度不占输出 Token。",
         "routeOrdered": "按连接顺序",
@@ -650,7 +653,8 @@
         "batchFailureReset": "重置连续失败",
         "failureStrategy": "失败策略",
         "quotaReserve": "额度与预留",
-        "adaptationSettings": "请求适配"
+        "adaptationSettings": "请求适配",
+        "imageBillingHelp": "图像一次请求生成多张仍计一次；未返回用量时，沿用模型的预留结算规则。"
       },
       "management": {
         "details": "技术详情",
@@ -1374,6 +1378,14 @@
     },
     "inactivity": {
       "activityRules": "哪些操作算活跃？"
+    },
+    "modelTypes": {
+      "title": "模型类型",
+      "help": "选择此模型支持的接口，可多选。",
+      "required": "请至少选择一种模型类型。",
+      "chat_completions": "聊天补全",
+      "embeddings": "向量化",
+      "images_generations": "图像生成"
     }
   },
   "logs": {

@@ -1,3 +1,4 @@
+import { ModelTypesSummary } from './ModelTypesField';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -46,11 +47,21 @@ export function CharityRolePolicyForm({
     if (lost) onCapabilityLoss?.();
   }, [lost, onCapabilityLoss]);
   if (lost) return <p role="alert">{t('common.operations.charity.accessLost')}</p>;
+  if (!model.model_types.includes('chat_completions')) {
+    return (
+      <Card>
+        <h3>{model.full_name}</h3>
+        <ModelTypesSummary value={model.model_types} />
+        <p>{t('common.operations.charity.operationHelp')}</p>
+      </Card>
+    );
+  }
   const unknown = responseOutcomeUnknown(save.error);
   const policy = buildRolePolicy(draft);
   return (
     <Card>
       <h3>{model.full_name}</h3>
+      <ModelTypesSummary value={model.model_types} />
       <p>{t('common.rolePolicy.stewardScope')}</p>
       <RolePolicyEditor
         value={draft}
@@ -64,7 +75,7 @@ export function CharityRolePolicyForm({
       <div className="ops-actions">
         <button
           type="button"
-          className="btn btn-primary"
+          className="nb-btn nb-btn--primary"
           disabled={save.isPending || unknown || Boolean(policy.error)}
           onClick={() => {
             if (policy.policy) save.mutate({ id: model.id, revision, policy: policy.policy });
@@ -75,7 +86,7 @@ export function CharityRolePolicyForm({
         {unknown && save.variables ? (
           <button
             type="button"
-            className="btn btn-secondary"
+            className="nb-btn nb-btn--secondary"
             disabled={save.isPending}
             onClick={() => save.mutate(save.variables!)}
           >
@@ -84,7 +95,7 @@ export function CharityRolePolicyForm({
         ) : null}
         <button
           type="button"
-          className="btn btn-secondary"
+          className="nb-btn nb-btn--secondary"
           disabled={save.isPending || unknown}
           onClick={() => {
             setDraft(draftFromRolePolicy(model.role_policy));

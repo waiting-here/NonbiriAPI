@@ -1,7 +1,8 @@
-import { normalizeTransportRule } from '@shared/transportRule';
-import { normalizeRolePolicy, type RolePolicy } from '@shared/rolePolicy';
-import { ApiError, isApiError } from '@shared/query/http';
 import { queryPath } from '@shared/operations/api';
+import { ApiError, isApiError } from '@shared/query/http';
+import { normalizeRolePolicy, type RolePolicy } from '@shared/rolePolicy';
+import { normalizeTransportRule } from '@shared/transportRule';
+import { validateAccountExportIdentity } from './accountExportValidation';
 import {
   canonicalBaseURLPreview,
   canonicalCandidateFilters,
@@ -17,10 +18,10 @@ import {
   normalizeEndpointKey,
   normalizeEndpointKeyPage,
   normalizeEndpointPage,
+  normalizeHomeAnnouncementPage,
   normalizeHomeCheckinResult,
   normalizeHomeCheckinStatus,
   normalizeHomeGameSummary,
-  normalizeHomeAnnouncementPage,
   normalizeManualEntriesResponse,
   normalizeManualUpdateResponse,
   normalizeModel,
@@ -28,8 +29,8 @@ import {
   normalizeUserEnvelope,
   validateEndpointSecret,
   validateLogicalName,
-  validateManualValue,
   validateMainstreamChannelID,
+  validateManualValue,
   validatePaginationCursor,
   validatePersonalProviderName,
   validateResourceId,
@@ -37,7 +38,6 @@ import {
   validateScalarInput,
 } from './normalizers';
 import { coreRawRequest, coreRequest, operationHeaders } from './request';
-import { validateAccountExportIdentity } from './accountExportValidation';
 import {
   CONNECTOR_TYPES,
   type AccountAuthority,
@@ -50,6 +50,8 @@ import {
   type CallerKeySecret,
   type CandidateFilters,
   type CatalogView,
+  type ConnectorType,
+  type CreditAsset,
   type DiscoveryAccepted,
   type Endpoint,
   type EndpointCreateInput,
@@ -60,7 +62,6 @@ import {
   type EndpointPatchInput,
   type ExplicitLanguage,
   type HomeAnnouncementPage,
-  type CreditAsset,
   type HomeCheckinResult,
   type HomeCheckinStatus,
   type HomeGameSummary,
@@ -71,7 +72,6 @@ import {
   type ModelPatchInput,
   type OperationIdentity,
   type Page,
-  type ConnectorType,
   type UserEnvelope,
 } from './types';
 
@@ -305,7 +305,7 @@ async function boundedAccountExport(response: Response): Promise<Uint8Array> {
   return bytes;
 }
 
-function validateAccountExport(bytes: Uint8Array, accountId: string): 11 | 12 | 13 {
+function validateAccountExport(bytes: Uint8Array, accountId: string): 11 | 12 | 13 | 14 {
   let value: unknown;
   try {
     value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) as unknown;
@@ -315,7 +315,12 @@ function validateAccountExport(bytes: Uint8Array, accountId: string): 11 | 12 | 
   if (value === null || typeof value !== 'object' || Array.isArray(value))
     throw new ApiError('invalid_response', 'The server returned an invalid account export.', 200);
   const record = value as Record<string, unknown>;
-  if (record.schema_version !== 11 && record.schema_version !== 12 && record.schema_version !== 13)
+  if (
+    record.schema_version !== 11 &&
+    record.schema_version !== 12 &&
+    record.schema_version !== 13 &&
+    record.schema_version !== 14
+  )
     throw new ApiError('invalid_response', 'The server returned an invalid account export.', 200);
   validateAccountExportIdentity(record, accountId);
   return record.schema_version;
@@ -342,7 +347,9 @@ export async function exportAccount(
         ? 12
         : disposition === 'attachment; filename="nonbiriapi-account-export-v13.json"'
           ? 13
-          : null;
+          : disposition === 'attachment; filename="nonbiriapi-account-export-v14.json"'
+            ? 14
+            : null;
   if (!contentType.startsWith('application/json') || fileVersion === null) {
     throw new ApiError('invalid_response', 'The server returned invalid export metadata.', 200);
   }
@@ -934,17 +941,32 @@ export async function createModel(
   const record = exactInput(
     input,
     ['provider', 'model'],
-    ['route_strategy', 'silent_retry', 'flatten_tool_calls', 'role_policy', 'transport_rule'],
+    [
+      'model_types',
+      'route_strategy',
+      'silent_retry',
+      'flatten_tool_calls',
+      'role_policy',
+      'transport_rule',
+    ],
     'logical model creation input',
   );
   const routeStrategy = record.route_strategy;
-  if (routeStrategy !== undefined && routeStrategy !== 'ordered' && routeStrategy !== 'random') {
+  if (
+    routeStrategy !== undefined &&
+    routeStrategy !== 'ordered' &&
+    routeStrategy !== 'random' &&
+    routeStrategy !== 'cache_balanced'
+  ) {
     throw new ApiError('invalid_request', 'Invalid route strategy.', 400);
   }
   const payload: ModelCreateInput = {
     provider: validatePersonalProviderName(record.provider as string),
     model: validateLogicalName(record.model as string),
     ...(routeStrategy === undefined ? {} : { route_strategy: routeStrategy }),
+    ...(Object.hasOwn(record, 'model_types')
+      ? { model_types: record.model_types as ModelCreateInput['model_types'] }
+      : {}),
     ...(Object.hasOwn(record, 'silent_retry')
       ? { silent_retry: exactBooleanInput(record.silent_retry, 'silent retry setting') }
       : {}),
@@ -981,6 +1003,7 @@ export async function patchModel(
       'provider',
       'model',
       'route_strategy',
+      'model_types',
       'silent_retry',
       'flatten_tool_calls',
       'role_policy',
@@ -993,6 +1016,7 @@ export async function patchModel(
       'provider',
       'model',
       'route_strategy',
+      'model_types',
       'silent_retry',
       'flatten_tool_calls',
       'role_policy',
@@ -1004,7 +1028,8 @@ export async function patchModel(
   if (
     record.route_strategy !== undefined &&
     record.route_strategy !== 'ordered' &&
-    record.route_strategy !== 'random'
+    record.route_strategy !== 'random' &&
+    record.route_strategy !== 'cache_balanced'
   ) {
     throw new ApiError('invalid_request', 'Invalid route strategy.', 400);
   }
@@ -1018,6 +1043,9 @@ export async function patchModel(
       : {}),
     ...(Object.hasOwn(record, 'route_strategy')
       ? { route_strategy: record.route_strategy as ModelPatchInput['route_strategy'] }
+      : {}),
+    ...(Object.hasOwn(record, 'model_types')
+      ? { model_types: record.model_types as ModelCreateInput['model_types'] }
       : {}),
     ...(Object.hasOwn(record, 'silent_retry')
       ? { silent_retry: exactBooleanInput(record.silent_retry, 'silent retry setting') }

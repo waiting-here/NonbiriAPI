@@ -271,3 +271,17 @@
     text-align: center;
   }
 }
+
+.charity-model-editor > h3 {
+  overflow-wrap: anywhere;
+}
+.charity-model-call-name {
+  display: block;
+  max-width: 24rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.charity-model-editor > .model-types-field {
+  margin-block: var(--nb-space-4);
+}

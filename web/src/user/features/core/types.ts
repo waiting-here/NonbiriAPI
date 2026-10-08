@@ -1,7 +1,7 @@
-import type { TransportRule } from '@shared/transportRule';
-import type { RolePolicy } from '@shared/rolePolicy';
-export type { RoleAction, RolePolicy } from '@shared/rolePolicy';
 import type { AutomaticRestriction } from '@shared/operations/restrictions';
+import type { RolePolicy } from '@shared/rolePolicy';
+import type { TransportRule } from '@shared/transportRule';
+export type { RoleAction, RolePolicy } from '@shared/rolePolicy';
 
 export const CONNECTOR_TYPES = [
   'openai-compatible',
@@ -13,7 +13,7 @@ export type ConnectorType = (typeof CONNECTOR_TYPES)[number];
 export type CreditAsset = 'general' | 'game';
 export type AccountLanguage = '' | 'zh' | 'en';
 export type ExplicitLanguage = Exclude<AccountLanguage, ''>;
-export type RouteStrategy = 'ordered' | 'random';
+export type RouteStrategy = 'ordered' | 'random' | 'cache_balanced';
 export type CatalogSourceType = 'automatic' | 'manual';
 export type SuspensionState = 'none' | 'security_processing';
 
@@ -209,6 +209,7 @@ export interface CatalogView {
 }
 
 export interface Model {
+  model_types: import('@shared/modelTypes').ModelType[];
   transport_rule: TransportRule;
   id: string;
   provider: string;
@@ -321,6 +322,7 @@ export interface EndpointKeyPatchInput {
 }
 
 export interface ModelCreateInput {
+  model_types?: import('@shared/modelTypes').ModelType[];
   transport_rule?: TransportRule;
   provider: string;
   model: string;
@@ -331,6 +333,7 @@ export interface ModelCreateInput {
 }
 
 export interface ModelPatchInput {
+  model_types?: import('@shared/modelTypes').ModelType[];
   transport_rule?: TransportRule;
   provider?: string;
   model?: string;
@@ -498,7 +501,7 @@ export type LifecycleIntent = 'export' | 'delete';
 
 export interface AccountExportAttachment {
   blob: Blob;
-  schemaVersion: 11 | 12 | 13;
+  schemaVersion: 11 | 12 | 13 | 14;
 }
 
 export type AccountAuthority = 'active' | 'deleted';

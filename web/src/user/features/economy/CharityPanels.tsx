@@ -1,3 +1,4 @@
+import { ModelTypesSummary } from '@shared/components/ModelTypesField';
 import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
@@ -193,6 +194,7 @@ export function CharityCapabilityPanel({ capability }: { capability: CharityCapa
               <li key={model.id}>
                 <div className="economy-model-heading">
                   <CopyValue value={model.fullName} label={t('user.charity.modelName')} />
+                  <ModelTypesSummary value={model.modelTypes} />
                 </div>
                 <CharityPriceTable
                   mode={model.pricing.mode}

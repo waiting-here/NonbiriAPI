@@ -2,7 +2,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { coreKeys } from './queries';
 import { listKeyBindingsPage, useKeyBindingsPage } from './browseData';
 import {
   normalizeEndpoint,
@@ -10,6 +9,7 @@ import {
   normalizeKeyBindingView,
   normalizeModel,
 } from './normalizers';
+import { coreKeys } from './queries';
 
 const BASE_BINDING = {
   id: '51',
@@ -69,6 +69,7 @@ const OLD_KEY = {
 };
 
 const OLD_MODEL = {
+  model_types: ['chat_completions', 'embeddings'],
   id: '41',
   provider: 'logical',
   model: 'primary',

@@ -1,10 +1,11 @@
+import type { AdminDonation, CharityModel, ManagedDonationKey } from '@shared/operations/charity';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { useAdminSession } from '../../admin/data';
-import { useUserSession } from '../../user/data';
 import { describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
-import type { AdminDonation, CharityModel, ManagedDonationKey } from '@shared/operations/charity';
+import { useAdminSession } from '../../admin/data';
+import { useUserSession } from '../../user/data';
 import { CharityManagement } from './CharityManagement';
+import { CharityRolePolicyForm } from './CharityRolePolicyForm';
 
 function jsonResponse(value: unknown): Response {
   return new Response(JSON.stringify(value), {
@@ -321,6 +322,7 @@ function deferred<T>() {
 }
 
 const charityModel = (start: number, end: number): CharityModel => ({
+  model_types: ['chat_completions', 'embeddings'],
   route_strategy: 'expiry_weighted',
   affinity_ttl_seconds: 300,
   id: '1',
@@ -898,6 +900,7 @@ describe('CharityManagement corrective controls', () => {
 
     await waitFor(() => expect(patchBodies).toHaveLength(1));
     expect(patchBodies[0]).toEqual({
+      model_types: ['chat_completions', 'embeddings'],
       role_policy: { default_action: 'native', rules: {} },
       is_mainstream: false,
       excluded_request_fields: [],
@@ -1128,6 +1131,9 @@ describe('CharityManagement corrective controls', () => {
     });
 
     await view.user.click(await screen.findByRole('tab', { name: 'Charity models and bindings' }));
+    expect(screen.getByRole('checkbox', { name: 'Chat completions' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Embeddings' })).not.toBeChecked();
+    await view.user.click(screen.getByRole('checkbox', { name: 'Image generation' }));
     expect(screen.getByRole('checkbox', { name: 'L1' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'L5' })).toBeChecked();
     await view.user.click(screen.getByRole('button', { name: 'Clear all levels' }));
@@ -1167,6 +1173,7 @@ describe('CharityManagement corrective controls', () => {
     await view.user.click(screen.getByRole('button', { name: 'Add charity model' }));
     await waitFor(() => expect(createBodies).toHaveLength(1));
     expect(createBodies[0]).toMatchObject({
+      model_types: ['chat_completions', 'images_generations'],
       allowed_levels: [2, 5],
       public_description: 'First line\n<b>literal</b>\t😀',
     });
@@ -1428,4 +1435,20 @@ it('shows a directly rejected donation as never approved', async () => {
   await view.user.click(await screen.findByRole('button', { name: 'Review' }));
   expect(await screen.findByText('Never approved')).toBeVisible();
   expect(screen.queryByText('First approval source is unknown')).not.toBeInTheDocument();
+});
+
+describe('trainee model capabilities', () => {
+  it.each(['images_generations', 'embeddings'] as const)(
+    'shows non-chat capabilities without editable chat policies for %s',
+    async (types) => {
+      const model: CharityModel = { ...charityModel(10, 20), model_types: [types] };
+      await renderWithProviders(<CharityRolePolicyForm model={model} refresh={vi.fn()} />, {
+        station: 'user',
+        role: 'level5',
+      });
+      expect(screen.getByRole('heading', { name: model.full_name })).toBeVisible();
+      expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Save model' })).not.toBeInTheDocument();
+    },
+  );
 });

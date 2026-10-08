@@ -1,12 +1,13 @@
-import { normalizeTransportRule, type TransportRule } from '@shared/transportRule';
-import { apiFetch } from '@shared/query/http';
-import { decoded, idempotentOptions, queryPath } from './api';
-import { excludedFields } from './charityScope';
-import { normalizeRolePolicy, type RolePolicy } from '@shared/rolePolicy';
 import {
   normalizeGatewayCapabilityPolicy,
   type GatewayCapabilityPolicy,
 } from '@shared/gateway/capabilities';
+import { normalizeModelTypes } from '@shared/modelTypes';
+import { apiFetch } from '@shared/query/http';
+import { normalizeRolePolicy, type RolePolicy } from '@shared/rolePolicy';
+import { normalizeTransportRule, type TransportRule } from '@shared/transportRule';
+import { decoded, idempotentOptions, queryPath } from './api';
+import { excludedFields } from './charityScope';
 import {
   amount,
   array,
@@ -19,8 +20,8 @@ import {
   nullableDecimalID,
   nullableString,
   nullableUnixSecond,
-  opaqueID,
   oneOf,
+  opaqueID,
   page,
   record,
   string,
@@ -656,6 +657,7 @@ export function normalizeStewardDonation(value: unknown): StewardDonation {
 }
 
 export interface CharityModel {
+  model_types: import('@shared/modelTypes').ModelType[];
   transport_rule: TransportRule;
   role_policy?: RolePolicy;
   is_mainstream?: boolean;
@@ -726,6 +728,7 @@ export interface CharityBindings {
 
 function normalizeModel(value: unknown, label: string): CharityModel {
   const required = [
+    'model_types',
     'id',
     'provider',
     'model',
@@ -837,6 +840,7 @@ function normalizeModel(value: unknown, label: string): CharityModel {
     excluded_request_fields: normalizeExcludedFields(root.excluded_request_fields, label),
     model,
     full_name: fullName,
+    model_types: normalizeModelTypes(root.model_types),
     route_strategy:
       root.route_strategy === undefined
         ? 'expiry_weighted'

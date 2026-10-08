@@ -141,50 +141,52 @@ describe('role log wire', () => {
       '/api/logs/export.json?phase=pre_handler&model=m',
     );
   });
-  it.each(['openai_embeddings', 'charity_embeddings'] as const)(
-    'keeps the ownership and privacy projection for %s',
-    (route) => {
-      const charity = route === 'charity_embeddings';
-      const request = {
-        ...commonRow,
-        route_kind: route,
-        model: 'provider/model',
-        ...(charity ? {} : { attempt_count: '1' }),
-        usage: { ...usage, usage_unknown: true },
-      };
-      expect(normalizeUserLogRow(request)).toMatchObject({
-        route_kind: route,
-        kind: charity ? 'charity' : 'self',
-        usage: { usage_unknown: true },
-      });
-      const detail = charity
-        ? { request, caller_safe_result: { class: 'success' } }
-        : { request, attempts: { data: [], next_cursor: null } };
-      expect(normalizeUserLogDetail(detail).request.route_kind).toBe(route);
-      if (charity) {
-        expect(() => normalizeUserLogRow({ ...request, attempt_count: '1' })).toThrow(/charity/);
-        expect(() =>
-          normalizeUserLogDetail({ ...detail, attempts: { data: [], next_cursor: null } }),
-        ).toThrow();
-      }
-      for (const normalize of [normalizeAdminLogRow, normalizeStewardLogRow]) {
-        const management = { ...row, route_kind: route };
-        expect(normalize(management).route_kind).toBe(route);
-        const identity = { discord_nickname: 'Current caller', discord_id: syntheticDiscordID };
-        if (charity)
-          expect(normalize({ ...management, caller_identity: identity }).caller_identity).toEqual(
-            identity,
-          );
-        else
-          expect(() => normalize({ ...management, caller_identity: identity })).toThrow(
-            /caller identity/,
-          );
-      }
-      expect(() => normalizeUserLogRow({ ...request, route_kind: 'future_embeddings' })).toThrow(
-        /route kind/,
-      );
-    },
-  );
+  it.each([
+    'openai_embeddings',
+    'charity_embeddings',
+    'openai_images_generations',
+    'charity_images_generations',
+  ] as const)('keeps the ownership and privacy projection for %s', (route) => {
+    const charity = route.startsWith('charity_');
+    const request = {
+      ...commonRow,
+      route_kind: route,
+      model: 'provider/model',
+      ...(charity ? {} : { attempt_count: '1' }),
+      usage: { ...usage, usage_unknown: true },
+    };
+    expect(normalizeUserLogRow(request)).toMatchObject({
+      route_kind: route,
+      kind: charity ? 'charity' : 'self',
+      usage: { usage_unknown: true },
+    });
+    const detail = charity
+      ? { request, caller_safe_result: { class: 'success' } }
+      : { request, attempts: { data: [], next_cursor: null } };
+    expect(normalizeUserLogDetail(detail).request.route_kind).toBe(route);
+    if (charity) {
+      expect(() => normalizeUserLogRow({ ...request, attempt_count: '1' })).toThrow(/charity/);
+      expect(() =>
+        normalizeUserLogDetail({ ...detail, attempts: { data: [], next_cursor: null } }),
+      ).toThrow();
+    }
+    for (const normalize of [normalizeAdminLogRow, normalizeStewardLogRow]) {
+      const management = { ...row, route_kind: route };
+      expect(normalize(management).route_kind).toBe(route);
+      const identity = { discord_nickname: 'Current caller', discord_id: syntheticDiscordID };
+      if (charity)
+        expect(normalize({ ...management, caller_identity: identity }).caller_identity).toEqual(
+          identity,
+        );
+      else
+        expect(() => normalize({ ...management, caller_identity: identity })).toThrow(
+          /caller identity/,
+        );
+    }
+    expect(() => normalizeUserLogRow({ ...request, route_kind: 'future_embeddings' })).toThrow(
+      /route kind/,
+    );
+  });
 
   it('keeps every role under its station-owned cache root', () => {
     expect(roleLogKeys.root('admin')).toEqual(['admin', 'operations', 'logs']);

@@ -58,6 +58,7 @@ const otherAccount: UserProfile = {
 
 function modelRecord(id: string, bindingCount = '0'): Model {
   return {
+    model_types: ['chat_completions', 'embeddings'],
     id,
     provider: `provider-${id}`,
     model: `model-${id}`,

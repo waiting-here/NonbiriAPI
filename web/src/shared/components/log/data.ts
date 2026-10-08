@@ -1,4 +1,3 @@
-import { useQuery } from '@tanstack/react-query';
 import { decoded, queryPath } from '@shared/operations/api';
 import { logOriginFields, normalizeLogOrigin, type LogOrigin } from '@shared/operations/logOrigin';
 import {
@@ -25,6 +24,7 @@ import {
   type CursorPage,
   type WireRecord,
 } from '@shared/operations/wire';
+import { useQuery } from '@tanstack/react-query';
 
 export type LogRole = 'user' | 'admin' | 'steward';
 export type LogRouteKind = ModelCallRoute | 'model_discovery';
@@ -50,7 +50,8 @@ interface LogRowCommon {
   rejection_stage: 'authorization' | 'flow' | 'preflight' | null;
   rejection_reason: string | null;
   request_method: 'GET' | 'POST' | null;
-  request_path: '/v1/models' | '/v1/chat/completions' | '/v1/embeddings' | null;
+  request_path:
+    '/v1/models' | '/v1/chat/completions' | '/v1/embeddings' | '/v1/images/generations' | null;
   id: string;
   route_kind: LogRouteKind;
   caller_result_class: LogResultClass | null;
@@ -64,7 +65,11 @@ interface LogRowCommon {
 export interface UserSelfLogRow extends LogRowCommon {
   role: 'user';
   kind: 'self';
-  route_kind: 'openai_chat_completions' | 'openai_embeddings' | 'model_discovery';
+  route_kind:
+    | 'openai_chat_completions'
+    | 'openai_embeddings'
+    | 'openai_images_generations'
+    | 'model_discovery';
   model: string;
   attempt_count: string;
 }
@@ -72,7 +77,7 @@ export interface UserSelfLogRow extends LogRowCommon {
 export interface UserCharityLogRow extends LogRowCommon {
   role: 'user';
   kind: 'charity';
-  route_kind: 'charity_chat_completions' | 'charity_embeddings';
+  route_kind: 'charity_chat_completions' | 'charity_embeddings' | 'charity_images_generations';
   model: string;
 }
 
@@ -276,7 +281,7 @@ function rejection(root: WireRecord) {
   const method = oneOf(root.request_method, ['GET', 'POST'] as const, 'request method');
   const path = oneOf(
     root.request_path,
-    ['/v1/models', '/v1/chat/completions', '/v1/embeddings'] as const,
+    ['/v1/models', '/v1/chat/completions', '/v1/embeddings', '/v1/images/generations'] as const,
     'request path',
   );
   if ((method === 'GET') !== (path === '/v1/models') || root.caller_result_class !== 'failed')
