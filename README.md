@@ -55,7 +55,7 @@ curl https://api.example.com/v1/chat/completions \
   -d '{"model":"provider/model","messages":[{"role":"user","content":"Hello"}]}'
 ```
 
-Use `/v1/models` to list available names and call `/v1/embeddings` or `/v1/images/generations` for models configured to support those operations. New platform models enable chat by default; model settings can enable multiple operation types. Image generation currently uses OpenAI-compatible upstreams. Upstream base URLs include their API version, for example `https://provider.example/v1`. Browser clients use a Bearer CallerKey with `credentials: 'omit'`. Keep keys out of URLs and shared logs.
+Use `/v1/models` to list available names and call `/v1/embeddings` or `/v1/images/generations` for models configured to support those operations. Existing platform models retain chat and embeddings; new models enable chat by default. Model settings can enable multiple operation types. Image generation currently uses OpenAI-compatible upstreams. Upstream base URLs include their API version, for example `https://provider.example/v1`. Browser clients use a Bearer CallerKey with `credentials: 'omit'`. Keep keys out of URLs and shared logs.
 
 The [API contract](docs/api-contract.md) covers streaming, errors, billing, CORS, connector differences and personal automation. [Steward automation](docs/steward-automation.md) describes the administrator-provided integration guide.
 
