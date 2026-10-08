@@ -12,7 +12,7 @@ family. The registered routes, export builder, deletion coordinator, retention w
 and bilingual privacy text are covered by their implementation and contract tests.
 Schema presence alone never creates a route or expands a response.
 
-Current account export schema 13 retains earlier safe projections and adds the bounded families below. Its filename is `nonbiriapi-account-export-v13.json`; SQLite `user_version` remains 2. The schema-11 rows remain historical coverage for fields still retained. This does not assert that any particular instance has been upgraded.
+Current account export schema 14 retains earlier safe projections and adds `user.discord_gate_policy` and personal-model `model_types`, including the new `cache_balanced` routing value. Its filename is `nonbiriapi-account-export-v14.json`; SQLite `user_version` remains 2. The schema-11 rows remain historical coverage for fields still retained. This does not assert that any particular instance has been upgraded.
 
 Donated keys include the current U128 failure-disable threshold in owner, management and safe export projections. It follows the parent key/donation lifecycle and adds no retention window. Policy edits add no-secret donation review facts, retained under the existing donation-review policy; account deletion removes actor links. A zero threshold preserves error counting but never disables a key for errors. Expiry, withdrawal, bans, manual switches and quota limits remain effective.
 
