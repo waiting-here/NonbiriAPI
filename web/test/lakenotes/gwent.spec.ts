@@ -115,17 +115,26 @@ async function observed(page: Page) {
 }
 async function aligned(arena: FrameLocator, current: Match) {
   await expect
-    .poll(() =>
-      arena.locator('body').evaluate(() => {
-        const value = (
+    .poll(async () => {
+      const value = await arena.locator('body').evaluate(() => {
+        return (
           window as Window & {
             observedGwent?: { id: string; phaseSeq: string; decisionID: string };
           }
         ).observedGwent;
-        return value ? [value.id, value.phaseSeq, value.decisionID] : null;
-      }),
-    )
-    .toEqual([current.id, current.phase_seq, current.decision_id]);
+      });
+      // Another actor may advance the phase without changing this player's decision.
+      return value
+        ? [
+            value.id,
+            current.decision_id
+              ? BigInt(value.phaseSeq) >= BigInt(current.phase_seq)
+              : value.phaseSeq === current.phase_seq,
+            value.decisionID,
+          ]
+        : null;
+    })
+    .toEqual([current.id, true, current.decision_id]);
 }
 async function actionUI(page: Page, arena: FrameLocator, current: Match, action: Action) {
   await aligned(arena, current);
