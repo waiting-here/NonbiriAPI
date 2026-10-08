@@ -482,7 +482,7 @@ func hasRole(roles []string, want string) bool {
 	return false
 }
 
-func (r *Runtime) refreshExistingUser(ctx context.Context, userID int64, identity DiscordIdentity, member *GuildMember) (string, int64, error) {
+func (r *Runtime) refreshExistingUser(ctx context.Context, userID int64, identity DiscordIdentity, membership *discordMembership) (string, int64, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return "", 0, err
@@ -496,10 +496,16 @@ func (r *Runtime) refreshExistingUser(ctx context.Context, userID int64, identit
 	var revision []byte
 	var banned int
 	var bannedUntil sql.NullInt64
-	var language string
-	err = tx.QueryRowContext(ctx, `SELECT revision,is_banned,banned_until,lang FROM users WHERE id=? AND is_admin=0`, userID).Scan(&revision, &banned, &bannedUntil, &language)
+	var language, discordID, gatePolicy string
+	err = tx.QueryRowContext(ctx, `SELECT revision,is_banned,banned_until,lang,discord_id,discord_gate_policy FROM users WHERE id=? AND is_admin=0 AND NOT EXISTS(SELECT 1 FROM user_deletion_markers WHERE user_id=users.id)`, userID).Scan(&revision, &banned, &bannedUntil, &language, &discordID, &gatePolicy)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", 0, ErrProviderUnauthorized
+	}
 	if err != nil {
 		return "", 0, err
+	}
+	if !validDiscordIdentity(identity) || !hmacStringEqual(identity.ID, discordID) {
+		return "", 0, ErrInvalidIdentity
 	}
 	now := r.now().Unix()
 	if banned == 1 && (!bannedUntil.Valid || bannedUntil.Int64 > now) {
@@ -512,13 +518,16 @@ func (r *Runtime) refreshExistingUser(ctx context.Context, userID int64, identit
 	if blacklisted {
 		return "", 0, &verifiedLoginDenial{discordID: identity.ID}
 	}
+	if err := requireDiscordGateTx(ctx, tx, gatePolicy, membership); err != nil {
+		return "", 0, err
+	}
 	next, err := incrementU128(revision)
 	if err != nil {
 		return "", 0, err
 	}
 	memberSet, guildNick, guildAvatar := 0, "", ""
-	if member != nil {
-		memberSet, guildNick, guildAvatar = 1, member.Nick, member.Avatar
+	if membership != nil && membership.member != nil {
+		memberSet, guildNick, guildAvatar = 1, membership.member.Nick, membership.member.Avatar
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE users SET username=?,avatar=?,guild_nick=CASE WHEN ?=1 THEN ? ELSE guild_nick END,guild_avatar_url=CASE WHEN ?=1 THEN ? ELSE guild_avatar_url END,revision=?,updated_at=? WHERE id=? AND revision=? AND is_admin=0`, identity.Username, identity.Avatar, memberSet, guildNick, memberSet, guildAvatar, next, now, userID, revision)
 	if err != nil {

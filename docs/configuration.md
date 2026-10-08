@@ -42,7 +42,7 @@ Copy [admin.env.example](../admin.env.example) to a private path outside the che
 
 The timeout variables accept integer seconds only; decimals and out-of-range values are rejected. Blank or unset values use the defaults. Budgets cover the whole process phase rather than restarting for each step. Opening the database alone does not mean the application is ready; readiness follows full initialization and listener binding. See the [API contract](api-contract.md) for `/readyz`.
 
-If registration is enabled, an OAuth scope override must retain both identity and guild-member access; `identify` alone cannot satisfy the guild/role registration gate.
+An OAuth scope override must retain both identity and guild-member access for registration or sign-in without an exemption; `identify` alone cannot satisfy guild/role checks.
 
 The master key is not a normal setting. Back it up securely, keep its Unix file mode owner-only (`0400` or `0600`), and never replace it for an existing database. Losing it makes encrypted upstream credentials unrecoverable. The environment file also contains secrets (administrator password and OAuth client secret, and possibly SMTP credentials), so keep it readable only by root and the dedicated service account.
 
@@ -104,8 +104,9 @@ The administrator station exposes the following authoritative keys. Unknown keys
 | `default_per_endpoint_concurrency` | integer `[1,100000]` | 8 per normalized base URL |
 | `egress_global_concurrency` | integer `[1,100000]` | 32 across all outbound requests |
 | `anthropic_default_max_tokens` | nullable integer `[1,2147483647]` | raw `null`; effective fallback 65536 when an Anthropic attempt receives neither token-limit field; it is not a maximum for explicit values |
-| `discord_guild_id` | text, ≤128 bytes, blank allowed | required together with `discord_role_id` for new registration |
-| `discord_role_id` | text, ≤128 bytes, blank allowed | required together with `discord_guild_id` for new registration |
+| `discord_guild_id` | text, ≤128 bytes, blank allowed | required together with `discord_role_id` for registration and sign-in without an exemption |
+| `discord_role_id` | text, ≤128 bytes, blank allowed | required together with `discord_guild_id` for registration and sign-in without an exemption |
+| `discord_registered_user_gate_exempt` | boolean | false; exempts registered users from guild and role checks at their next sign-in, unless overridden per user |
 | `oauth_start_rate_limit` | integer `[0,1000]` | 10 starts per client IP; `0` disables the in-process layer |
 | `oauth_start_rate_window_seconds` | integer `[1,3600]` | 60-second window |
 | `oauth_start_rate_penalty_seconds` | integer `[0,3600]` | 60-second penalty; `0` disables the penalty duration |
@@ -203,7 +204,9 @@ A brand-new account is accepted only when all of these are true:
 2. both `discord_guild_id` and `discord_role_id` are non-empty;
 3. Discord confirms membership in that guild and possession of that role.
 
-If either ID is blank, new registration is paused; blank does **not** mean “skip that check.” Existing registered users can still sign in. Normal users may update their interface language and `game_profile_public` leaderboard preference through `PATCH /api/me`; endpoint, RPM, and concurrency limits are managed by administrators or authorized current L6 stewards; level-5 trainees cannot change user limits or physical-key RPM/concurrency and receive only their scoped charity-maintenance permissions.
+If either ID is blank, registration and sign-in without an exemption cannot complete. Existing accounts can sign in while registration is closed, but by default must still satisfy the guild and role checks. Administrators may enable `discord_registered_user_gate_exempt` globally or set `discord_gate_policy` in a user's profile to `inherit` (the default), `require`, or `exempt`. The per-user setting takes priority. Only administrators can change this setting through `PATCH /admin/api/users/{id}` in profile mode; stewards and users cannot change it. The current value is included in the user's account export and disappears with account deletion.
+
+Changes apply at the next OAuth sign-in. Existing sessions and API keys keep their current lifetime and authority checks. Exemption never bypasses Discord identity verification, bans, blacklists, account deletion or new-registration requirements. Normal users may update their interface language and `game_profile_public` leaderboard preference through `PATCH /api/me`; endpoint, RPM, and concurrency limits are managed by administrators or authorized current L6 stewards; level-5 trainees cannot change user limits or physical-key RPM/concurrency and receive only their scoped charity-maintenance permissions.
 
 ### Mainstream channel catalog
 

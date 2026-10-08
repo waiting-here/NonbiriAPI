@@ -22,3 +22,6 @@ var managementAndGamesSQL string
 
 //go:embed migrations/0005_gwent_ai.sql
 var gwentAISQL string
+
+//go:embed migrations/0006_discord_gate.sql
+var discordGateSQL string

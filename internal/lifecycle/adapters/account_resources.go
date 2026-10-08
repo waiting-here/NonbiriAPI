@@ -85,6 +85,7 @@ func (adapter *AccountResources) ExportIdentity(
 			ID: identity.ID, Username: identity.Username, Avatar: identity.Avatar, AvatarURL: identity.AvatarURL,
 			GuildNick: identity.GuildNick, GuildAvatarURL: identity.GuildAvatarURL, Lang: identity.Lang,
 			IsBanned: identity.IsBanned, BannedUntil: identity.BannedUntil,
+			DiscordGatePolicy:     identity.DiscordGatePolicy,
 			CharitySuspendedUntil: identity.CharitySuspendedUntil,
 			EndpointLimit:         identity.EndpointLimit, EffectiveEndpointLimit: identity.EffectiveEndpointLimit,
 			RPMLimit: identity.RPMLimit, EffectiveRPMLimit: identity.EffectiveRPMLimit,

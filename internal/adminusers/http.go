@@ -464,7 +464,7 @@ func (api *httpAPI) getEndpointOverview(writer http.ResponseWriter, request *htt
 }
 
 func decodeProfileMutation(object map[string]json.RawMessage) (ProfileMutation, bool) {
-	if !allowedObject(object, []string{"mode", "expected_revision"}, []string{"endpoint_limit", "rpm_limit", "concurrency_limit", "lang", "level"}) {
+	if !allowedObject(object, []string{"mode", "expected_revision"}, []string{"endpoint_limit", "rpm_limit", "concurrency_limit", "lang", "level", "discord_gate_policy"}) {
 		return ProfileMutation{}, false
 	}
 	revision, ok := requiredRevision(object, "expected_revision")
@@ -510,7 +510,13 @@ func decodeProfileMutation(object map[string]json.RawMessage) (ProfileMutation, 
 			input.Level = &level
 		}
 	}
-	if !input.EndpointLimitSet && !input.RPMLimitSet && !input.ConcurrencySet && !input.LangSet && !input.LevelSet {
+	if raw, set := object["discord_gate_policy"]; set {
+		input.DiscordGatePolicySet = true
+		if json.Unmarshal(raw, &input.DiscordGatePolicy) != nil || !db.ValidDiscordGatePolicy(input.DiscordGatePolicy) {
+			return ProfileMutation{}, false
+		}
+	}
+	if !input.EndpointLimitSet && !input.RPMLimitSet && !input.ConcurrencySet && !input.LangSet && !input.LevelSet && !input.DiscordGatePolicySet {
 		return ProfileMutation{}, false
 	}
 	return input, true
@@ -549,6 +555,9 @@ func decodeEconomyMutation(object map[string]json.RawMessage) (EconomyMutation, 
 
 func profileCanonical(input ProfileMutation) map[string]any {
 	canonical := map[string]any{"mode": "profile", "expected_revision": input.ExpectedRevision.Decimal()}
+	if input.DiscordGatePolicySet {
+		canonical["discord_gate_policy"] = input.DiscordGatePolicy
+	}
 	if input.EndpointLimitSet {
 		canonical["endpoint_limit"] = nullableDecimal(input.EndpointLimit)
 	}

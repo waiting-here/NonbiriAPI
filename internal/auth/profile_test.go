@@ -25,7 +25,7 @@ func TestPatchMeStrictIdempotentAndReauthorizesReplay(t *testing.T) {
 		}
 		return request(t, handler, host.StationUser, http.MethodPatch, "https://user.example/api/me", body, []*http.Cookie{cookie}, headers)
 	}
-	for name, input := range map[string]string{"unknown": `{"lang":"en","extra":true}`, "duplicate": `{"lang":"en","lang":"zh"}`, "null": `{"lang":null}`, "trailing": `{"lang":"en"} {}`} {
+	for name, input := range map[string]string{"unknown": `{"lang":"en","extra":true}`, "discord gate": `{"discord_gate_policy":"exempt"}`, "duplicate": `{"lang":"en","lang":"zh"}`, "null": `{"lang":null}`, "trailing": `{"lang":"en"} {}`} {
 		t.Run(name, func(t *testing.T) {
 			rec := patch(input, profileIdempotencyKey)
 			if rec.Code != http.StatusBadRequest {

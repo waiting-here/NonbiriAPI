@@ -84,14 +84,15 @@ var catalogMetadataByKey = map[string]catalogMetadata{
 	KeyDefaultPerEndpointConc:   {"limits", catalogText("默认端点并发", "Default endpoint concurrency"), catalogText("同一个上游地址同时处理的请求数；全站并发上限也同时生效。", "Requests that one upstream URL may handle at the same time. The site-wide concurrency limit also applies."), unitCount, []string{KeyEgressGlobalConc}},
 	KeyEgressGlobalConc:         {"limits", catalogText("全站出站并发", "Global egress concurrency"), catalogText("所有上游服务同时处理的请求总数。", "Total requests that all upstream services may handle at the same time."), unitCount, []string{KeyDefaultPerEndpointConc}},
 
-	KeyDiscordGuildID:            {"access", catalogText("Discord 服务器 ID", "Discord guild ID"), catalogText("新用户注册时须加入此 Discord 服务器；须同时设置服务器和身份组，任一留空会暂停新用户注册。", "New users must belong to this Discord server. Configure both server and role; leaving either empty pauses new registrations."), unitNone, nil},
-	KeyDiscordRoleID:             {"access", catalogText("Discord 身份组 ID", "Discord role ID"), catalogText("新用户注册时须持有此 Discord 身份组；须同时设置服务器和身份组，任一留空会暂停新用户注册。", "New users must hold this Discord role. Configure both server and role; leaving either empty pauses new registrations."), unitNone, nil},
-	KeyOAuthStartRateLimit:       {"access", catalogText("OAuth 启动次数", "OAuth start limit"), catalogText("一个客户端 IP 在窗口内可启动的 OAuth 流程次数。", "OAuth flows one client IP may start within the window."), unitCount, nil},
-	KeyOAuthStartRateWindowSecs:  {"access", catalogText("OAuth 启动窗口", "OAuth start window"), catalogText("OAuth 启动次数的统计窗口。", "Counting window for OAuth starts."), unitSecond, nil},
-	KeyOAuthStartRatePenaltySecs: {"access", catalogText("OAuth 启动处罚时长", "OAuth start penalty"), catalogText("超过登录启动次数上限后，该客户端 IP 暂时不能再次发起登录的时长。", "How long a client IP must wait before starting another sign-in after exceeding the limit."), unitSecond, nil},
-	KeyMaintenanceMode:           {"access", catalogText("维护模式", "Maintenance mode"), catalogText("阻止普通业务入口并展示维护状态。", "Blocks regular business entry points and exposes maintenance state."), unitNone, nil},
-	KeyRegistrationOpen:          {"access", catalogText("开放注册", "Registration open"), catalogText("控制新的 Discord 身份是否可以创建账号。", "Controls whether a new Discord identity may create an account."), unitNone, nil},
-	KeySiteTimezoneOffsetMinutes: {"economy", catalogText("站点时区偏移", "Site timezone offset"), catalogText("签到与按日活跃使用的 UTC 有符号分钟偏移；产生数据后不可修改。", "Signed minutes from UTC used by check-in and daily activity; immutable after data exists."), unitMinute, nil},
+	KeyDiscordGuildID:                  {"access", catalogText("Discord 服务器 ID", "Discord guild ID"), catalogText("注册和未豁免用户登录时须加入此服务器，并持有下方身份组。", "Registration and sign-in without an exemption require membership in this server and the role below."), unitNone, nil},
+	KeyDiscordRoleID:                   {"access", catalogText("Discord 身份组 ID", "Discord role ID"), catalogText("注册和未豁免用户登录时须持有此身份组。服务器或身份组留空时，无法完成核验。", "Registration and sign-in without an exemption require this role. Both server and role must be configured."), unitNone, nil},
+	KeyDiscordRegisteredUserGateExempt: {"access", catalogText("已注册用户免核验", "Exempt registered users"), catalogText("开启后，已注册且未封禁的用户可免于服务器和身份组核验。单独为用户设置的选项优先，下次登录时生效。", "Lets registered, unbanned users sign in without server or role checks. Individual user settings take priority. Applies at the next sign-in."), unitNone, nil},
+	KeyOAuthStartRateLimit:             {"access", catalogText("OAuth 启动次数", "OAuth start limit"), catalogText("一个客户端 IP 在窗口内可启动的 OAuth 流程次数。", "OAuth flows one client IP may start within the window."), unitCount, nil},
+	KeyOAuthStartRateWindowSecs:        {"access", catalogText("OAuth 启动窗口", "OAuth start window"), catalogText("OAuth 启动次数的统计窗口。", "Counting window for OAuth starts."), unitSecond, nil},
+	KeyOAuthStartRatePenaltySecs:       {"access", catalogText("OAuth 启动处罚时长", "OAuth start penalty"), catalogText("超过登录启动次数上限后，该客户端 IP 暂时不能再次发起登录的时长。", "How long a client IP must wait before starting another sign-in after exceeding the limit."), unitSecond, nil},
+	KeyMaintenanceMode:                 {"access", catalogText("维护模式", "Maintenance mode"), catalogText("阻止普通业务入口并展示维护状态。", "Blocks regular business entry points and exposes maintenance state."), unitNone, nil},
+	KeyRegistrationOpen:                {"access", catalogText("开放注册", "Registration open"), catalogText("控制新的 Discord 身份是否可以创建账号。", "Controls whether a new Discord identity may create an account."), unitNone, nil},
+	KeySiteTimezoneOffsetMinutes:       {"economy", catalogText("站点时区偏移", "Site timezone offset"), catalogText("签到与按日活跃使用的 UTC 有符号分钟偏移；产生数据后不可修改。", "Signed minutes from UTC used by check-in and daily activity; immutable after data exists."), unitMinute, nil},
 
 	KeyLevelThreshold2Milli:         {"economy", catalogText("Lv2 自动晋级阈值", "Lv2 auto-promotion threshold"), catalogText("累计捐赠者回馈达到此数值后自动晋级。", "Auto-promotes after cumulative donor reward reaches this amount."), unitMilli, []string{KeyLevelThreshold3Milli, KeyLevelThreshold4Milli}},
 	KeyLevelThreshold3Milli:         {"economy", catalogText("Lv3 自动晋级阈值", "Lv3 auto-promotion threshold"), catalogText("累计捐赠者回馈达到此数值后自动晋级。", "Auto-promotes after cumulative donor reward reaches this amount."), unitMilli, []string{KeyLevelThreshold2Milli, KeyLevelThreshold4Milli}},
@@ -401,9 +402,9 @@ func catalogSemantics(key string, spec keySpec) (zero *localizedCatalogText, nul
 	case KeySiteLogoURL:
 		empty = catalogTextPtr("不显示远程站点标志。", "Shows no remote site logo.")
 	case KeyDiscordGuildID:
-		empty = catalogTextPtr("暂停新用户注册；须同时填写服务器和身份组。", "Pauses new registrations. Configure both the server and role.")
+		empty = catalogTextPtr("暂停注册和未豁免用户登录；须同时填写服务器和身份组。", "Blocks registration and sign-in without an exemption. Configure both the server and role.")
 	case KeyDiscordRoleID:
-		empty = catalogTextPtr("暂停新用户注册；须同时填写服务器和身份组。", "Pauses new registrations. Configure both the server and role.")
+		empty = catalogTextPtr("暂停注册和未豁免用户登录；须同时填写服务器和身份组。", "Blocks registration and sign-in without an exemption. Configure both the server and role.")
 	case KeyLegalPrivacyOverrideZh, KeyLegalPrivacyOverrideEn, KeyLegalTermsOverrideZh, KeyLegalTermsOverrideEn:
 		empty = catalogTextPtr("恢复使用对应语言的内置法律模板。", "Restores the corresponding built-in legal template.")
 	case KeyCharityDonationNoticeZh, KeyCharityDonationNoticeEn:

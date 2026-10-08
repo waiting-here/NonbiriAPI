@@ -29,7 +29,7 @@ CREATE TABLE users (
  revision BLOB NOT NULL CHECK(typeof(revision)='blob' AND length(revision)=16),
  lang TEXT NOT NULL DEFAULT '' CHECK(lang IN ('','zh','en')),
  created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799),
- updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799), charity_profile_public INTEGER NOT NULL DEFAULT 0 CHECK(typeof(charity_profile_public)='integer' AND charity_profile_public IN (0,1)), donation_credit_achieved_at INTEGER CHECK(donation_credit_achieved_at IS NULL OR (typeof(donation_credit_achieved_at)='integer' AND donation_credit_achieved_at BETWEEN 0 AND 253402300799)), donation_credit_achieved_seq BLOB CHECK(donation_credit_achieved_seq IS NULL OR (typeof(donation_credit_achieved_seq)='blob' AND length(donation_credit_achieved_seq)=16 AND donation_credit_achieved_seq>X'00000000000000000000000000000000')) CHECK((donation_credit_achieved_at IS NULL)=(donation_credit_achieved_seq IS NULL)), ban_kind TEXT NOT NULL DEFAULT '' CHECK(ban_kind='' OR (ban_kind='protective_inactivity' AND is_admin=0 AND is_banned=1 AND banned_until IS NULL)),
+ updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799), charity_profile_public INTEGER NOT NULL DEFAULT 0 CHECK(typeof(charity_profile_public)='integer' AND charity_profile_public IN (0,1)), donation_credit_achieved_at INTEGER CHECK(donation_credit_achieved_at IS NULL OR (typeof(donation_credit_achieved_at)='integer' AND donation_credit_achieved_at BETWEEN 0 AND 253402300799)), donation_credit_achieved_seq BLOB CHECK(donation_credit_achieved_seq IS NULL OR (typeof(donation_credit_achieved_seq)='blob' AND length(donation_credit_achieved_seq)=16 AND donation_credit_achieved_seq>X'00000000000000000000000000000000')) CHECK((donation_credit_achieved_at IS NULL)=(donation_credit_achieved_seq IS NULL)), ban_kind TEXT NOT NULL DEFAULT '' CHECK(ban_kind='' OR (ban_kind='protective_inactivity' AND is_admin=0 AND is_banned=1 AND banned_until IS NULL)), discord_gate_policy TEXT NOT NULL DEFAULT 'inherit' CHECK(discord_gate_policy IN ('inherit','require','exempt') AND (is_admin=0 OR discord_gate_policy='inherit')),
  CHECK(endpoint_limit IS NULL OR endpoint_limit BETWEEN 0 AND 10000),
  CHECK(rpm_limit IS NULL OR rpm_limit BETWEEN 1 AND 4096),
  CHECK(concurrency_limit IS NULL OR concurrency_limit BETWEEN 1 AND 100000),
@@ -6481,7 +6481,7 @@ CREATE TABLE schema_state (
 ) STRICT;
 INSERT INTO credit_compaction(id,through_seq,details_before,sweep_at,sweep_after_seq) VALUES(1,0,0,0,0);
 INSERT INTO game_blackjack_clock(id,observed_at) VALUES(1,0);
-INSERT INTO schema_state(id,version) VALUES(1,5);
+INSERT INTO schema_state(id,version) VALUES(1,6);
 
 CREATE TABLE game_ai_settings (
  game_key TEXT PRIMARY KEY NOT NULL,

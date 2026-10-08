@@ -357,7 +357,7 @@ WHERE id=?`, u128FromBig(t, big.NewInt(1250)), u128FromBig(t, max), u128FromBig(
 	}
 	encoded, _ := json.Marshal(user)
 	var fields map[string]json.RawMessage
-	if json.Unmarshal(encoded, &fields) != nil || len(fields) != 27 {
+	if json.Unmarshal(encoded, &fields) != nil || len(fields) != 28 || string(fields["discord_gate_policy"]) != `"inherit"` {
 		t.Fatalf("AdminUser fields=%v", fields)
 	}
 	var usageFields map[string]json.RawMessage
