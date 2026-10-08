@@ -1,3 +1,4 @@
+import { CreditChange } from '../features/credits/CreditChange';
 import { useTranslation } from 'react-i18next';
 import { Segmented, Fold } from '@shared/components/ui';
 import { RecordsHeader } from '../components/RecordsHeader';
@@ -275,9 +276,9 @@ function CreditHistory({
                           <td data-label={copy.asset}>{copy[entry.asset_type]}</td>
                           <td
                             data-label={copy.change}
-                            className={`credit-history__amount ${entry.delta.startsWith('-') ? 'is-expense' : 'is-income'}`}
+                            className="credit-history__amount"
                           >
-                            {entry.delta.startsWith('-') ? entry.delta : `+${entry.delta}`}
+                            <CreditChange value={entry.delta} />
                           </td>
                           <td data-label={copy.category}>{reason(entry)}</td>
                           {data.data.some((row) => row.request_id !== null) ? (

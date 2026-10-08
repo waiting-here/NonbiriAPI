@@ -131,3 +131,13 @@
 .picturebook-help code {
   overflow-wrap: anywhere;
 }
+
+.picturebook-resource-cost {
+  display: inline-flex;
+  flex-wrap: wrap;
+  column-gap: var(--nb-space-1);
+}
+.picturebook-resource-cost > span {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}

@@ -1,3 +1,5 @@
+import { ResourceCost } from './ResourceCost';
+import { ExactCount } from '../core/components';
 import { SimplePager } from '@shared/operations/SimplePager';
 import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -41,25 +43,27 @@ export function TaskDetail({ id, account }: { readonly id: string; readonly acco
           ) : null}
           <dl className="picturebook-facts">
             <dt>{t('请求张数', 'Requested images')}</dt>
-            <dd>{task.n}</dd>
+            <dd>
+              <ExactCount value={String(task.n)} />
+            </dd>
             <dt>
               {task.billing_state === 'reserved'
                 ? t('已预扣', 'Reserved')
                 : t('实际收费', 'Charged')}
             </dt>
             <dd>
-              {task.charge.paper} {t('草稿纸', 'paper')} + {task.charge.brush}{' '}
-              {t('画笔', 'brushes')}
+              <ResourceCost value={task.charge} />
             </dd>
             <dt>{t('已退款', 'Refunded')}</dt>
             <dd>
-              {task.refund.paper} {t('草稿纸', 'paper')} + {task.refund.brush}{' '}
-              {t('画笔', 'brushes')}
+              <ResourceCost value={task.refund} />
             </dd>
             {task.queue_position !== null ? (
               <>
                 <dt>{t('当前排队位置', 'Queue position')}</dt>
-                <dd>{task.queue_position}</dd>
+                <dd>
+                  <ExactCount value={String(task.queue_position)} />
+                </dd>
               </>
             ) : null}
           </dl>
@@ -124,8 +128,8 @@ export function TaskHistory({
         {query.data?.data.map((task) => (
           <article className="picturebook-card" key={task.id}>
             <p>
-              {formatDateTime(task.created_at)} · {taskStatusLabel(task.status, t)} · {task.n}{' '}
-              {t('张', 'images')}
+              {formatDateTime(task.created_at)} · {taskStatusLabel(task.status, t)} ·{' '}
+              <ExactCount value={String(task.n)} /> {t('张', 'images')}
             </p>
             <button className="nb-btn nb-btn--secondary" onClick={() => onSelect(task.id)}>
               {t('查看任务', 'View task')}

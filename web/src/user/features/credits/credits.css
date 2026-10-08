@@ -64,11 +64,15 @@
   font-variant-numeric: tabular-nums;
   font-weight: 700;
 }
-.credit-history__amount.is-income {
+.credit-change.is-income {
   color: var(--nb-color-success);
 }
-.credit-history__amount.is-expense {
-  color: var(--nb-color-text);
+.credit-change.is-expense {
+  color: var(--nb-color-danger);
+}
+.credit-change {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 .credit-history__pagination,
 .credit-history__pagination nav,
@@ -156,7 +160,6 @@
 }
 .credit-history__filters > .nb-seg {
   justify-self: start;
-  flex-wrap: wrap;
 }
 .credit-history__filter-actions {
   align-items: center;

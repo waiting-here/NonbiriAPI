@@ -29,7 +29,7 @@ test('credit history filters, jumps between stable pages and fits a mobile viewp
       line: 1,
       asset_type: 'general',
       kind: params.has('category') ? 'charity_settle' : i === 1 ? 'donor_reward' : 'checkin_award',
-      delta: params.has('category') ? '-0.007' : '2.5',
+      delta: params.has('category') ? '-0.007' : i === 1 ? '-2000.125' : '2.5',
       created_at: 1_800_000_000 - offset - i,
       request_id: params.has('category') ? requestID : null,
     }));
@@ -50,10 +50,13 @@ test('credit history filters, jumps between stable pages and fits a mobile viewp
   await page.route('**/api/limited-activities/picture-book/wallet', (route) =>
     route.fulfill({ json: { general: '0', sketch_paper: '42', sketch_brush: '8' } }),
   );
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`${USER_ORIGIN}/credits`);
   await expect(page.getByRole('heading', { name: 'Records' })).toBeVisible();
   await expect(page.locator('.credit-history__table tbody tr')).toHaveCount(20);
-  await expect(page.getByText('9000000000000.007', { exact: true })).toBeVisible();
+  await expect(page.getByText('9,000,000,000,000.007', { exact: true })).toBeVisible();
+  await expect(page.locator('.credit-change.is-income').first()).toHaveText('+2.5');
+  await expect(page.locator('.credit-change.is-expense').first()).toHaveText('−2,000.125');
   await page.getByRole('button', { name: 'Next', exact: true }).click();
   await expect.poll(() => queries.at(-1)?.get('page')).toBe('2');
   expect(queries.at(-1)?.get('anchor')).toBe(anchor);
@@ -72,16 +75,29 @@ test('credit history filters, jumps between stable pages and fits a mobile viewp
     'href',
     `/logs?request_id=${requestID}`,
   );
-  await page.evaluate(() => window.scrollTo(0, 0));
-  await page.screenshot({
-    path: `${process.env.NONBIRI_SCREENSHOT_DIR ?? '../tmp'}/credit-history-desktop.png`,
-    fullPage: true,
-  });
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({
-    path: `${process.env.NONBIRI_SCREENSHOT_DIR ?? '../tmp'}/credit-history-mobile.png`,
-    fullPage: true,
-  });
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate(
+        (value) => document.documentElement.setAttribute('data-theme', value),
+        theme,
+      );
+      await page.evaluate(() => window.scrollTo(0, 0));
+      for (const label of await page.locator('.nb-seg label').all()) {
+        expect(await label.evaluate((node) => getComputedStyle(node).whiteSpace)).toBe('nowrap');
+      }
+      await page.screenshot({
+        path:
+          (process.env.NONBIRI_VISUAL_DIR ?? '../tmp') +
+          '/credit-history-' +
+          width +
+          '-' +
+          theme +
+          '.png',
+        fullPage: true,
+      });
+    }
+  }
   const overflowing = await page.locator('body *').evaluateAll((nodes) =>
     nodes
       .filter((node) => node.getBoundingClientRect().right > window.innerWidth + 1)
@@ -104,10 +120,6 @@ test('credit history filters, jumps between stable pages and fits a mobile viewp
         .evaluate((table) => table.scrollWidth <= table.clientWidth),
     )
     .toBe(true);
-  await page.screenshot({
-    path: `${process.env.NONBIRI_SCREENSHOT_DIR ?? '../tmp'}/credit-history-mobile.png`,
-    fullPage: true,
-  });
   await page.getByRole('button', { name: 'Clear filters' }).click();
   await expect(page.locator('.credit-history__table tbody tr')).toHaveCount(50);
   await expect(page.getByRole('link', { name: 'View request' })).toHaveCount(0);

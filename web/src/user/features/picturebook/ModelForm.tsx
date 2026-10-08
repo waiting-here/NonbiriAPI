@@ -1,3 +1,4 @@
+import { ResourceCost } from './ResourceCost';
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Card, ErrorState } from '@shared/components/States';
@@ -103,15 +104,11 @@ function Fields({
       <dl className="picturebook-facts">
         <dt>{t('每张价格', 'Price per image')}</dt>
         <dd>
-          {displayedPrice
-            ? displayedPrice.unit.paper +
-              ' ' +
-              t('草稿纸', 'paper') +
-              ' + ' +
-              displayedPrice.unit.brush +
-              ' ' +
-              t('画笔', 'brushes')
-            : t('此尺寸暂无可用价格', 'No price is available for this size')}
+          {displayedPrice ? (
+            <ResourceCost value={displayedPrice.unit} />
+          ) : (
+            t('此尺寸暂无可用价格', 'No price is available for this size')
+          )}
         </dd>
         {displayedPrice ? (
           <>
@@ -129,17 +126,7 @@ function Fields({
         ) : null}
         <dt>{t('本次预扣', 'Reservation')}</dt>
         <dd>
-          <output>
-            {total
-              ? total.paper +
-                ' ' +
-                t('草稿纸', 'paper') +
-                ' + ' +
-                total.brush +
-                ' ' +
-                t('画笔', 'brushes')
-              : '—'}
-          </output>
+          <output>{total ? <ResourceCost value={total} /> : '—'}</output>
         </dd>
       </dl>
       {wallet && total && !enough ? (
@@ -153,7 +140,7 @@ function Fields({
       {quoted ? (
         <p role="status">
           {t('模型或价格已变化。当前整单价格：', 'The model or price changed. Current total: ')}
-          {quoted.total.paper} {t('草稿纸', 'paper')} + {quoted.total.brush} {t('画笔', 'brushes')}
+          <ResourceCost value={quoted.total} />
           {t('。请载入最新配置后再确认。', '. Load the latest configuration before confirming.')}
         </p>
       ) : null}
@@ -185,7 +172,7 @@ function Fields({
       {quoteError ? <ErrorState error={quoteError} /> : null}
       {error ? <ErrorState error={error} /> : null}
       <button
-        className="btn btn-primary"
+        className="nb-btn nb-btn--primary"
         type="submit"
         disabled={pending || quoting || (!uncertain && (!permitted || !wallet || !enough))}
       >
@@ -267,7 +254,7 @@ export function ModelForm({
               </p>
               {latest ? (
                 <button
-                  className="btn btn-secondary"
+                  className="nb-btn nb-btn--secondary"
                   disabled={operation.locked}
                   onClick={() => setSnapshot(latest)}
                 >

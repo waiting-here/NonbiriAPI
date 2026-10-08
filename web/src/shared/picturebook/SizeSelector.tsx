@@ -64,10 +64,10 @@ export function SizeSelector({
       });
   };
   return (
-    <fieldset className="picturebook-field">
-      <legend>{t('尺寸', 'Size')}</legend>
+    <fieldset className="picturebook-field" aria-label={t('尺寸', 'Size')}>
+      {exactSizes === null ? <legend>{t('尺寸', 'Size')}</legend> : null}
       {capability.auto ? (
-        <label>
+        <label className="picturebook-checkbox">
           <input
             type="checkbox"
             checked={auto}

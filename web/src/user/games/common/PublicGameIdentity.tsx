@@ -58,7 +58,10 @@ export function PublicGameIdentity({
           {initial}
         </span>
       )}
-      <span className="public-game-identity__name">
+      <span
+        className="public-game-identity__name"
+        title={name + (isMe && meLabel ? ` · ${meLabel}` : '')}
+      >
         {name}
         {isMe && meLabel ? ` · ${meLabel}` : ''}
       </span>

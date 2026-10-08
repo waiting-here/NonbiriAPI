@@ -591,7 +591,9 @@ for (const width of [1440, 390]) {
       await expect(user.getByLabel('Quality')).toHaveValue('low');
       await user.getByLabel('Guidance').selectOption('2');
       await user.getByLabel('Quality').selectOption('high');
-      await expect(user.getByText('14 paper + 0 brushes')).toBeVisible();
+      await expect(
+        user.locator('.picturebook-facts dd').filter({ hasText: '14 paper + 0 brushes' }),
+      ).toBeVisible();
       await user.evaluate(() => window.scrollTo(0, 0));
       await user.screenshot({
         path: resolve(evidence, 'user-selection-' + width + '.png'),

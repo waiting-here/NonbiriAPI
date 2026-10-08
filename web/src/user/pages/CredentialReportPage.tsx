@@ -1,3 +1,4 @@
+import { Note } from '@shared/components/ui';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
@@ -118,7 +119,7 @@ export function CredentialReportPage() {
               <label className="ops-form-field">{t('user.report.noteLabel')}
                 <textarea rows={5} maxLength={2048} value={note} onChange={(event) => { intentKey.current = null; setNote(event.target.value); }} />
               </label>
-              <p className="inline-notice">{t('user.report.noteWarning')}</p>
+              <Note tone="warn">{t('user.report.noteWarning')}</Note>
               {validation ? <p className="field-error" role="alert">{t('user.report.validationError')}</p> : null}
               {error ? <ErrorState error={error} /> : null}
               <div className="ops-actions">

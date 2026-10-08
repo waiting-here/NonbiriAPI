@@ -615,7 +615,10 @@
 
 .nb-seg {
   display: inline-flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
   padding: 3px;
   gap: 3px;
   border-radius: var(--nb-radius-md);
@@ -624,6 +627,8 @@
 }
 .nb-seg label {
   position: relative;
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 .nb-seg input {
   position: absolute;
@@ -652,7 +657,7 @@
     display: flex;
   }
   .nb-seg label {
-    flex: 1 1 0;
+    flex: 0 0 auto;
   }
   .nb-seg span {
     text-align: center;

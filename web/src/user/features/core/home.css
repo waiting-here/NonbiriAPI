@@ -123,9 +123,6 @@
   margin: 0;
   font-size: var(--nb-font-size-sm);
 }
-.home-page .core-checkin-card .nb-fold {
-  margin: 0;
-}
 .home-page .home-announcements .home-announcement-list {
   gap: 0;
 }
@@ -154,9 +151,17 @@
 }
 .home-page .home-announcement-preview {
   grid-column: 1;
-  max-height: 2.9em;
+  max-height: none;
+  align-self: start;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
   font-size: var(--nb-font-size-sm);
   color: var(--nb-color-text-muted);
+}
+.home-page .home-announcement-preview p {
+  margin-block: 0;
 }
 .home-page .home-announcement-preview::after {
   content: none;
