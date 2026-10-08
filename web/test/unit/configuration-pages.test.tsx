@@ -860,6 +860,7 @@ describe('admin per-user limit explanations', () => {
       guild_nick: null,
       guild_avatar_url: null,
       is_admin: false,
+      discord_gate_policy: 'inherit',
       is_banned: false,
       banned_reason: '',
       banned_until: null,

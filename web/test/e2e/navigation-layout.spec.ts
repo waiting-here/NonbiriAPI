@@ -41,6 +41,7 @@ test('user management separates identifiers and copies Discord IDs exactly at de
     id: '7',
     discord_id: '1234567890123456789',
     is_admin: false,
+    discord_gate_policy: 'inherit',
     banned_reason: '',
     level: { manual: null, automatic: 1, effective: 1, display_name: 'Lv1' },
     revision: '1',
