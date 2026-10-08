@@ -1,3 +1,4 @@
+import { Button } from '@shared/components/ui/Button';
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { copyText } from '@shared/utils/clipboard';
@@ -59,15 +60,15 @@ export function LogDetailPanel({
               <div className="log-detail-diagnostics">
                 <h3>{diagnostics.label}</h3>
                 <pre>{diagnostics.text || t('common.notAvailable')}</pre>
-                <button
+                <Button
                   type="button"
-                  className="btn btn-secondary"
+
                   onClick={() => void copyText(diagnostics.text).then((ok) => setCopied(ok))}
                 >
                   {copied
                     ? t('common.copied')
                     : t('common.operations.logs.presentation.copyForAdmin')}
-                </button>
+                </Button>
                 <span className="visually-hidden" aria-live="polite">
                   {copied ? t('common.copied') : ''}
                 </span>

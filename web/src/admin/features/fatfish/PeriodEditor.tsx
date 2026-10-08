@@ -1,3 +1,4 @@
+import { SimplePager } from '@shared/operations/SimplePager';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -199,8 +200,13 @@ export function PeriodManager() {
       <button type="button" onClick={() => switchTo(null)}>{text('new_period')}</button>
       {list.isPending ? <LoadingState /> : list.error ? <ErrorState error={list.error} onRetry={() => void list.refetch()} /> : <>
         <ul>{list.data?.items.map((item) => <li key={item.id}><button type="button" onClick={() => switchTo(item.id)}>{item.title} · {item.state}</button></li>)}</ul>
-        <button type="button" disabled={page <= 1} onClick={() => setPage(page - 1)}>{text('previous')}</button>
-        <button type="button" disabled={!list.data?.has_more} onClick={() => setPage(page + 1)}>{text('next')}</button>
+        <SimplePager
+          page={page}
+          hasMore={Boolean(list.data?.has_more)}
+          onPrev={() => setPage(page - 1)}
+          onNext={() => setPage(page + 1)}
+          labels={{ previous: text('previous'), next: text('next') }}
+        />
       </>}
     </aside>
     {selectedID && detail.isPending ? <LoadingState /> : selectedID && detail.error ? <ErrorState error={detail.error} onRetry={() => void detail.refetch()} /> :

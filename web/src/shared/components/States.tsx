@@ -1,3 +1,4 @@
+import { Button } from '@shared/components/ui/Button';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { isApiError, isForbidden, isUnauthorized } from '@shared/query/http';
@@ -117,9 +118,9 @@ export function ErrorState({
           </details>
         ) : null}
         {onRetry ? (
-          <button type="button" className="btn btn-secondary" onClick={onRetry}>
+          <Button type="button"  onClick={onRetry}>
             {t('common.retry')}
-          </button>
+          </Button>
         ) : null}
       </div>
     </div>
@@ -139,7 +140,7 @@ export function AuthRequired({ station }: { station: 'user' | 'admin' }) {
         <p>{station === 'user' ? t('common.userSignInBody') : t('common.adminSignInBody')}</p>
         {registrationClosed ? <p className="inline-notice">{t('common.registrationClosed')}</p> : null}
         {href ? (
-          <a className="btn btn-primary" href={href}>
+          <a className="nb-btn nb-btn--primary" href={href}>
             {t('common.signIn')}
           </a>
         ) : null}
@@ -168,108 +169,6 @@ export function StatusBadge({
 
 export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
   return <section className={`card ${className}`}>{children}</section>;
-}
-
-export function Pagination({
-  page,
-  hasNext,
-  onChange,
-  pageSize,
-  pageSizeOptions,
-  onPageSizeChange,
-  onJumpToPage,
-}: {
-  page: number;
-  hasNext: boolean;
-  onChange: (nextPage: number) => void;
-  /** Current per-page size; enables the page-size selector when changeable. */
-  pageSize?: number;
-  /** Allowed per-page sizes (kept within the server page limits). */
-  pageSizeOptions?: readonly number[];
-  onPageSizeChange?: (pageSize: number) => void;
-  /**
-   * Offset-only page jump. Cursor-paginated lists cannot seek to an
-   * arbitrary page, so callers in cursor mode leave this unset and no
-   * jump control is rendered.
-   */
-  onJumpToPage?: (page: number) => void;
-}) {
-  const { t } = useTranslation();
-  const canPickSize =
-    pageSize !== undefined &&
-    onPageSizeChange !== undefined &&
-    pageSizeOptions !== undefined &&
-    pageSizeOptions.length > 0;
-  const jump = (raw: string) => {
-    if (!onJumpToPage) return;
-    const target = Number(raw);
-    if (!Number.isSafeInteger(target) || target < 1 || target === page) return;
-    onJumpToPage(target);
-  };
-  if (page <= 1 && !hasNext) return null;
-  return (
-    <nav className="pagination nb-pager" aria-label={t('common.pagination')}>
-      {canPickSize ? (
-        <label className="pagination-option nb-pager__size">
-          <span className="pagination-label">{t('common.pageSize')}</span>
-          <select
-            value={String(pageSize)}
-            onChange={(event) => {
-              const next = Number(event.target.value);
-              if (Number.isSafeInteger(next) && pageSizeOptions.includes(next)) {
-                onPageSizeChange(next);
-              }
-            }}
-          >
-            {pageSizeOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-        </label>
-      ) : null}
-      <button
-        type="button"
-        aria-label={t('common.previous')}
-        className="btn btn-secondary"
-        disabled={page <= 1}
-        onClick={() => onChange(Math.max(1, page - 1))}
-      >
-        <span aria-hidden="true">‹</span>
-      </button>
-      <span aria-live="polite">{t('common.page', { page })}</span>
-      <button
-        type="button"
-        aria-label={t('common.next')}
-        className="btn btn-secondary"
-        disabled={!hasNext}
-        onClick={() => onChange(page + 1)}
-      >
-        <span aria-hidden="true">›</span>
-      </button>
-      {onJumpToPage ? (
-        <label className="pagination-option nb-pager__number">
-          <span className="pagination-label">{t('common.jumpToPage')}</span>
-          <input
-            type="number"
-            min={1}
-            step={1}
-            key={page}
-            defaultValue={page}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                jump(event.currentTarget.value);
-              }
-            }}
-            onBlur={(event) => jump(event.target.value)}
-            aria-label={t('common.jumpToPage')}
-          />
-        </label>
-      ) : null}
-    </nav>
-  );
 }
 
 export function ReadOnlyValue({ value }: { value: string }) {

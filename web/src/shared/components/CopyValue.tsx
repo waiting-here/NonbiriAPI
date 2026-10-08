@@ -1,3 +1,4 @@
+import { Button } from '@shared/components/ui/Button';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { copyText } from '@shared/utils/clipboard';
@@ -16,16 +17,16 @@ export function CopyValue({
   return (
     <span className="nb-copy-value">
       {showValue ? <code>{value}</code> : null}
-      <button
+      <Button
         type="button"
-        className="btn btn-quiet"
+        variant="ghost"
         aria-label={t('common.copyValue', { label })}
         onClick={() => {
           void copyText(value).then((ok) => setResult({ value, ok }));
         }}
       >
         {result?.value === value && result.ok ? t('common.copied') : t('common.copy')}
-      </button>
+      </Button>
       {result?.value === value && !result.ok ? (
         <span role="status">{t('common.copyFailed')}</span>
       ) : null}

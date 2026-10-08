@@ -41,7 +41,7 @@ export function DuelFeedback({
     <div className="duel-feedback" role="status">
       <span>{pending ? text('common.confirming') : message}</span>
       {!pending && (
-        <button type="button" className="btn btn-secondary" onClick={onRetry}>
+        <button type="button" className="nb-btn nb-btn--secondary" onClick={onRetry}>
           {uncertain ? text('common.retrySameRequest') : text('common.refreshState')}
         </button>
       )}

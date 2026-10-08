@@ -72,7 +72,7 @@ export function DuelRoundLog<V, F, P, S, L, A>({
       <div className="duel-actions">
         <button
           type="button"
-          className="btn btn-secondary"
+          className="nb-btn nb-btn--secondary"
           onClick={() => {
             setCursor(null);
             void query.refetch();
@@ -82,7 +82,7 @@ export function DuelRoundLog<V, F, P, S, L, A>({
         </button>
         <button
           type="button"
-          className="btn btn-secondary"
+          className="nb-btn nb-btn--secondary"
           disabled={!query.data?.nextCursor || query.isFetching}
           onClick={() => setCursor(query.data?.nextCursor ?? null)}
         >
@@ -158,7 +158,7 @@ export function DuelHistory<V, F, P, S, L, A>({
       <p>{text('common.yourCompleteGamesFromTheLast30')}</p>
       {id ? (
         <>
-          <button type="button" className="btn btn-secondary" onClick={() => setID(null)}>
+          <button type="button" className="nb-btn nb-btn--secondary" onClick={() => setID(null)}>
             {text('blackjack.backToList')}
           </button>
           <HistoryDetail
@@ -195,7 +195,7 @@ export function DuelHistory<V, F, P, S, L, A>({
           <div className="duel-actions">
             <button
               type="button"
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               disabled={!cursor}
               onClick={() => setCursor(null)}
             >
@@ -203,7 +203,7 @@ export function DuelHistory<V, F, P, S, L, A>({
             </button>
             <button
               type="button"
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               disabled={!query.data?.nextCursor || query.isFetching}
               onClick={() => setCursor(query.data?.nextCursor ?? null)}
             >

@@ -339,7 +339,7 @@ function ResultPanel({
         {ackState === 'failed' ? (
           <div className="game-inline-notice game-inline-notice--warning" role="alert">
             <p>{text('fishing.result.ackFailed')}</p>
-            <button type="button" className="btn btn-secondary" onClick={onRetryACK}>
+            <button type="button" className="nb-btn nb-btn--secondary" onClick={onRetryACK}>
               {text('fishing.result.ackRetry')}
             </button>
           </div>
@@ -398,7 +398,7 @@ function LeaderboardCard({
         <h2>{text(titleKey)}</h2>
         <button
           type="button"
-          className="btn btn-secondary fishing-board__refresh"
+          className="nb-btn nb-btn--secondary fishing-board__refresh"
           aria-label={text('fishing.leaderboard.refresh')}
           disabled={query.isFetching}
           onClick={() => void query.refetch()}
@@ -910,7 +910,7 @@ export function FishingGame() {
               {pending.state === 'recovery_required' ? (
                 <button
                   type="button"
-                  className="btn btn-primary"
+                  className="nb-btn nb-btn--primary"
                   disabled={actionState !== 'idle'}
                   onClick={() => void recover()}
                 >
@@ -942,7 +942,7 @@ export function FishingGame() {
               <div className="game-state-actions">
                 <button
                   type="button"
-                  className="btn btn-secondary"
+                  className="nb-btn nb-btn--secondary"
                   onClick={() => void state.refetch()}
                 >
                   {text('fishing.unknown.check')}
@@ -950,14 +950,14 @@ export function FishingGame() {
                 {replayOperation ? (
                   <button
                     type="button"
-                    className="btn btn-primary"
+                    className="nb-btn nb-btn--primary"
                     onClick={() => void adoptStart(replayOperation)}
                   >
                     {text('fishing.unknown.replay')}
                   </button>
                 ) : null}
                 {pending?.state === 'recovery_required' ? (
-                  <button type="button" className="btn btn-primary" onClick={() => void recover()}>
+                  <button type="button" className="nb-btn nb-btn--primary" onClick={() => void recover()}>
                     {text('fishing.recovery.action')}
                   </button>
                 ) : null}
@@ -1043,7 +1043,7 @@ export function FishingGame() {
           <GameActionBar cost={<GameMoney value={frozenTotal} />}>
             <button
               type="button"
-              className="btn btn-primary fishing-start"
+              className="nb-btn nb-btn--primary fishing-start"
               disabled={!startsOpen || locked || !affordable}
               onClick={start}
             >

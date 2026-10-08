@@ -1,3 +1,4 @@
+import { Button } from '@shared/components/ui/Button';
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 import './expandable-panel.css';
 
@@ -41,14 +42,14 @@ export function ExpandablePanel({
         <h2 id={titleID} tabIndex={-1}>
           {title}
         </h2>
-        <button
+        <Button
           type="button"
-          className="nb-btn nb-btn--secondary"
+
           disabled={busy}
           onClick={onClose}
         >
           {closeLabel}
-        </button>
+        </Button>
       </div>
       <div className="nb-expandable-panel__body">{children}</div>
       {footer ? <div className="nb-expandable-panel__foot">{footer}</div> : null}

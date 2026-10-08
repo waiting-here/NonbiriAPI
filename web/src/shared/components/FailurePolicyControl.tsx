@@ -1,3 +1,4 @@
+import { Button } from '@shared/components/ui/Button';
 import { useId, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -88,9 +89,9 @@ export function FailurePolicyControl({
         disabled={save.isPending || unknown}
       />
       <p className="muted">{t('common.failurePolicy.recalculate')}</p>
-      <button
+      <Button
         type="button"
-        className="btn btn-secondary"
+
         disabled={
           save.isPending || (!unknown && (!validFailureThreshold(draft) || draft === threshold))
         }
@@ -106,7 +107,7 @@ export function FailurePolicyControl({
         }
       >
         {t(unknown ? 'common.failureReset.resume' : 'common.failurePolicy.save')}
-      </button>
+      </Button>
       {save.error ? <ErrorState error={save.error} /> : null}
       {save.isSuccess ? <p role="status">{t('common.failurePolicy.done')}</p> : null}
     </section>

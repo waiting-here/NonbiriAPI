@@ -162,7 +162,7 @@
   padding: var(--space-3, 0.75rem);
 }
 
-.donation-resource-picker__selected-list .btn {
+.donation-resource-picker__selected-list :is(.btn, .nb-btn) {
   flex: 0 0 auto;
 }
 
@@ -192,11 +192,11 @@
     grid-column: 1 / -1;
   }
 
-  .donation-resource-picker__search .btn {
+  .donation-resource-picker__search :is(.btn, .nb-btn) {
     min-width: 0;
   }
 
-  .donation-resource-picker__selected-list .btn {
+  .donation-resource-picker__selected-list :is(.btn, .nb-btn) {
     align-self: flex-start;
   }
 }

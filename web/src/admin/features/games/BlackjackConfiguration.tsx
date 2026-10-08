@@ -183,7 +183,7 @@ export function BlackjackConfiguration({
               </Field>
               <button
                 type="button"
-                className="btn btn-secondary"
+                className="nb-btn nb-btn--secondary"
                 aria-label={`${t('移除快捷金额', 'Remove quick amount')} ${index + 1}`}
                 onClick={() =>
                   onChange({
@@ -199,7 +199,7 @@ export function BlackjackConfiguration({
         </div>
         <button
           type="button"
-          className="btn btn-secondary"
+          className="nb-btn nb-btn--secondary"
           disabled={disabled || value.quick_stakes.length >= 8}
           onClick={() => onChange({ ...value, quick_stakes: [...value.quick_stakes, ''] })}
         >

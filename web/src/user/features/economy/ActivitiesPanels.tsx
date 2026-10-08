@@ -221,7 +221,7 @@ export function WelfareCard({
       <div className="form-actions">
         <button
           type="button"
-          className="btn btn-primary"
+          className="nb-btn nb-btn--primary"
           disabled={!canClaim || mutation.isPending || mutation.isReconciling}
           onClick={() => void claim()}
         >
@@ -446,7 +446,7 @@ export function ThursdayCard({
       <div className="form-actions">
         <button
           type="button"
-          className="btn btn-primary"
+          className="nb-btn nb-btn--primary"
           disabled={!canContribute || mutation.isPending || mutation.isReconciling}
           onClick={() => void contribute()}
         >

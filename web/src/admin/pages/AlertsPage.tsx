@@ -355,7 +355,7 @@ export function AlertsPage() {
             <h2>
               {copy.details} #{focusedID}
             </h2>
-            <button className="btn btn-quiet" type="button" onClick={() => focusAlert(null)}>
+            <button className="nb-btn nb-btn--ghost" type="button" onClick={() => focusAlert(null)}>
               {copy.close}
             </button>
             {returnTo ? <Link to={returnTo}>{copy.back}</Link> : null}
@@ -418,7 +418,7 @@ export function AlertsPage() {
                         {path ? <Link to={path}>{copy.open}</Link> : null}{' '}
                         {target.available && isDiagnosticTarget(target.kind, target.id) ? (
                           <button
-                            className="btn btn-secondary"
+                            className="nb-btn nb-btn--secondary"
                             type="button"
                             onClick={() => focusTarget(target)}
                           >
@@ -427,7 +427,7 @@ export function AlertsPage() {
                         ) : null}{' '}
                         {issueUser ? (
                           <button
-                            className="btn btn-secondary"
+                            className="nb-btn nb-btn--secondary"
                             type="button"
                             onClick={() => focusTarget(target, 'issue_user')}
                           >
@@ -447,7 +447,7 @@ export function AlertsPage() {
                       {selectedTarget.id}
                     </h3>
                     <button
-                      className="btn btn-quiet"
+                      className="nb-btn nb-btn--ghost"
                       type="button"
                       onClick={() => focusTarget(null)}
                     >
@@ -589,7 +589,7 @@ export function AlertsPage() {
           </label>
           {selected.length > 0 ? (
             <button
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               type="button"
               disabled={actionDisabled}
               onClick={() => bulk.mutate(selected)}
@@ -709,7 +709,7 @@ export function AlertsPage() {
                     render: (alert) => (
                       <div className="alert-actions">
                         <button
-                          className="btn btn-secondary"
+                          className="nb-btn nb-btn--secondary"
                           type="button"
                           onClick={() => focusAlert(alert.id)}
                         >

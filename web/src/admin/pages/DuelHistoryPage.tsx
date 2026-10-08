@@ -1,3 +1,4 @@
+import { SimplePager } from '@shared/operations/SimplePager';
 import { useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
@@ -160,7 +161,7 @@ function HistoryResults({
                         : {item.match_ref}
                       </p>
                       <button
-                        className="btn btn-secondary"
+                        className="nb-btn nb-btn--secondary"
                         type="button"
                         onClick={() => setSelected(item.match_ref)}
                       >
@@ -170,27 +171,13 @@ function HistoryResults({
                   ))}
                 </div>
               )}
-              <div className="ops-actions">
-                <button
-                  className="btn btn-secondary"
-                  type="button"
-                  disabled={cursors.length === 1}
-                  onClick={() => setCursors(cursors.slice(0, -1))}
-                >
-                  {t('上一页', 'Previous page')}
-                </button>
-                <span>
-                  {t('第', 'Page')} {cursors.length} {t('页', '')}
-                </span>
-                <button
-                  className="btn btn-secondary"
-                  type="button"
-                  disabled={!query.data.next_cursor}
-                  onClick={() => setCursors([...cursors, query.data.next_cursor])}
-                >
-                  {t('下一页', 'Next page')}
-                </button>
-              </div>
+              <SimplePager
+                page={cursors.length}
+                hasMore={Boolean(query.data.next_cursor)}
+                onPrev={() => setCursors(cursors.slice(0, -1))}
+                onNext={() => setCursors([...cursors, query.data.next_cursor])}
+                labels={{ previous: t('上一页', 'Previous page'), next: t('下一页', 'Next page') }}
+              />
             </>
           )
         )}
@@ -236,13 +223,13 @@ export function DuelHistoryPage() {
   return (
     <div className="page ops-page admin-duel-page">
       <PageHeader
+        back={<Link to="/games">{t('返回游戏配置', 'Back to game settings')}</Link>}
         title={t('对战历史与导出', 'Match history and exports')}
         description={t(
           '完整过程保留30天；到期后只保留移除身份与原始时间的匿名资料。',
           'Complete records remain available for 30 days, then become anonymous archives without identities or original timestamps.',
         )}
       />
-      <Link to="/games">{t('返回游戏管理', 'Back to game configuration')}</Link>
       <Card>
         <form onSubmit={submit} className="ops-stack">
           <div className="ops-field-grid">
@@ -326,7 +313,7 @@ export function DuelHistoryPage() {
               {t('请检查版本号和时间范围。', 'Check the version and time range.')}
             </p>
           )}
-          <button type="submit" className="btn btn-primary">
+          <button type="submit" className="nb-btn nb-btn--primary">
             {t('应用筛选', 'Apply filters')}
           </button>
         </form>

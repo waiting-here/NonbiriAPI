@@ -473,7 +473,7 @@ function CheckinCard({
             <p>{t('common.outcomeUnknown')}</p>
             <button
               type="button"
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               disabled={reconciling}
               onClick={() => void refreshAuthority()}
             >
@@ -551,7 +551,7 @@ function CheckinCard({
                 <p>{t('home.checkinRefreshFailed')}</p>
                 <button
                   type="button"
-                  className="btn btn-secondary"
+                  className="nb-btn nb-btn--secondary"
                   disabled={status.isFetching}
                   onClick={() => void status.refetch()}
                 >

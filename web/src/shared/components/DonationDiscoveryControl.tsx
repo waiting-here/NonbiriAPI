@@ -1,3 +1,4 @@
+import { Button } from '@shared/components/ui/Button';
 import { useEffect, useId, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -110,31 +111,31 @@ export function DonationDiscoveryControl({ role, target, disabled, onCapabilityL
   const label = single ? 'one' : target.donation_id === null ? 'all' : 'donation';
   return (
     <section className="donation-discovery" aria-label={t('common.donationDiscovery.title')}>
-      <button
+      <Button
         type="button"
-        className="btn btn-secondary"
+
         disabled={disabled || (job !== null && job.phase !== 'done')}
         aria-expanded={single ? undefined : confirming}
         aria-controls={single ? undefined : id}
         onClick={() => (single ? begin() : setConfirming((value) => !value))}
       >
         {t(`common.donationDiscovery.${label}`)}
-      </button>
+      </Button>
       {confirming ? (
         <div id={id} className="inline-notice">
           <p>{t(`common.donationDiscovery.${label}Help`)}</p>
           <p>{t('common.donationDiscovery.eligibility')}</p>
           <div className="ops-actions">
-            <button type="button" className="btn btn-primary" disabled={disabled} onClick={begin}>
+            <Button type="button" variant="primary" disabled={disabled} onClick={begin}>
               {t('common.donationDiscovery.confirm')}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className="btn btn-secondary"
+
               onClick={() => setConfirming(false)}
             >
               {t('common.cancel')}
-            </button>
+            </Button>
           </div>
         </div>
       ) : null}
@@ -153,21 +154,21 @@ export function DonationDiscoveryControl({ role, target, disabled, onCapabilityL
             </p>
           ) : null}
           {working ? (
-            <button type="button" className="btn btn-secondary" onClick={() => job.stop()}>
+            <Button type="button"  onClick={() => job.stop()}>
               {t('common.donationDiscovery.stop')}
-            </button>
+            </Button>
           ) : null}
           {job.phase === 'paused' ? (
             <>
               <p>{t('common.donationDiscovery.resumeHelp')}</p>
-              <button
+              <Button
                 type="button"
-                className="btn btn-secondary"
+
                 disabled={disabled}
                 onClick={() => void job.resume()}
               >
                 {t('common.donationDiscovery.resume')}
-              </button>
+              </Button>
             </>
           ) : null}
           {job.error ? <ErrorState error={job.error} /> : null}

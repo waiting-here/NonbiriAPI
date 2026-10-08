@@ -1,3 +1,4 @@
+import { Button } from '@shared/components/ui/Button';
 import { managementRoot, type ManagementRole } from '@shared/operations/managedUsers';
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
@@ -192,8 +193,8 @@ export function AnnouncementManagement({
         title={t('management.announcements.title')}
         description={t('management.announcements.description')}
         actions={
-          <button
-            className="btn btn-primary"
+          <Button
+            variant="primary"
             type="button"
             disabled={!accountID || Boolean(sessionError)}
             onClick={() => setCreating((value) => !value)}
@@ -201,7 +202,7 @@ export function AnnouncementManagement({
             {creating
               ? t('management.announcements.closeCreator')
               : t('management.announcements.createDraft')}
-          </button>
+          </Button>
         }
       />
       {creating ? (
@@ -288,14 +289,14 @@ export function AnnouncementManagement({
             </label>
           </div>
           {create.error ? <ErrorState error={create.error} /> : null}
-          <button
-            className="btn btn-primary"
+          <Button
+            variant="primary"
             type="button"
             disabled={create.isPending || !draftValid || !accountID || Boolean(sessionError)}
             onClick={submitCreate}
           >
             {t('management.announcements.createPrivateDraft')}
-          </button>
+          </Button>
         </Card>
       ) : null}
       <Card>
@@ -392,8 +393,8 @@ export function AnnouncementManagement({
                           className="ops-cell-wide"
                           data-label={t('management.announcements.table.open')}
                         >
-                          <button
-                            className="btn btn-secondary"
+                          <Button
+
                             type="button"
                             onClick={() =>
                               navigate(detailPath(item.id), {
@@ -402,7 +403,7 @@ export function AnnouncementManagement({
                             }
                           >
                             {t('management.announcements.edit')}
-                          </button>
+                          </Button>
                         </td>
                       </tr>
                     ))}

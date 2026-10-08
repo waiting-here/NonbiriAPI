@@ -62,7 +62,7 @@ export function PictureBookWait({ status }: { readonly status: TaskStatus }) {
       {active && !reduced && failed === 0 ? (
         <button
           type="button"
-          className="btn btn-secondary"
+          className="nb-btn nb-btn--secondary"
           aria-pressed={paused}
           onClick={() => setPaused((value) => !value)}
         >

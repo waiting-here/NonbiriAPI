@@ -145,7 +145,7 @@ export function KeyBrowseSummary({
     return (
       <div>
         <p className="core-inline-warning">{t('endpoints.routingUnknown')}</p>
-        <button type="button" className="btn btn-secondary" onClick={onRefresh}>
+        <button type="button" className="nb-btn nb-btn--secondary" onClick={onRefresh}>
           {t('common.refresh')}
         </button>
       </div>
@@ -169,7 +169,7 @@ export function KeyBrowseSummary({
           {!open ? <BindingPreviewList items={summary.preview} /> : null}
           <button
             type="button"
-            className="btn btn-secondary"
+            className="nb-btn nb-btn--secondary"
             aria-expanded={open}
             onClick={() => {
               const params = new URLSearchParams(location.search);

@@ -83,7 +83,7 @@
   border-bottom: 1px solid var(--nb-color-border);
   margin-bottom: 1rem;
 }
-.rank-tabs .btn {
+.rank-tabs :is(.btn, .nb-btn) {
   min-height: 44px;
 }
 .rank-switcher .progression-ranking {

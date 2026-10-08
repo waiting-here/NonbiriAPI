@@ -145,7 +145,7 @@ export function TaskScans<T>({
         <div className="ops-actions">
           <button
             type="button"
-            className="btn btn-primary"
+            className="nb-btn nb-btn--primary"
             disabled={
               start.isPending ||
               start.outcome === 'unknown' ||
@@ -161,7 +161,7 @@ export function TaskScans<T>({
           {running(scan) && (
             <button
               type="button"
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               disabled={cancel.isPending || cancel.outcome === 'unknown'}
               onClick={() => cancel.mutate(id)}
             >
@@ -170,7 +170,7 @@ export function TaskScans<T>({
           )}
           <button
             type="button"
-            className="btn btn-secondary"
+            className="nb-btn nb-btn--secondary"
             onClick={() => void client.invalidateQueries({ queryKey: key })}
           >
             {t('common.auditScans.refresh')}

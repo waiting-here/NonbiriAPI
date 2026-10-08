@@ -37,5 +37,5 @@ it('shows historical fees without period editing or activation', async () => {
     '/games',
   );
   expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
-  expect(screen.getAllByRole('button').length).toBe(2);
+  expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
 });

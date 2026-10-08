@@ -8,6 +8,8 @@ import type { ResourceFilters } from './resourceFilters';
 import type { ResourceFilterControl } from './useResourceFilters';
 
 const pageCopyKeys = {
+  'user.services.searchPlaceholder': 'user.services.searchPlaceholder',
+  'user.models.searchPlaceholder': 'user.models.searchPlaceholder',
   'user.services.filters': 'user.services.filters',
   'user.services.removeFilter': 'user.services.removeFilter',
 } as const;
@@ -139,6 +141,7 @@ function ResourceFilterForm({ control }: { control: ResourceFilterControl }) {
                 <input
                   className="nb-input"
                   type="search"
+                  placeholder={ui('user.services.searchPlaceholder')}
                   value={query}
                   aria-invalid={invalid}
                   onChange={(event) => setQuery(event.target.value)}
@@ -241,11 +244,12 @@ function ResourceFilterForm({ control }: { control: ResourceFilterControl }) {
               <input
                 value={query}
                 type="search"
+                placeholder={ui('user.models.searchPlaceholder')}
                 aria-invalid={invalid}
                 onChange={(event) => setQuery(event.target.value)}
               />
             </label>
-            <button type="submit" className="btn btn-secondary">
+            <button type="submit" className="nb-btn nb-btn--secondary">
               {t('common.search')}
             </button>
           </>
@@ -296,7 +300,7 @@ export function FilteredResourceEmpty({ control }: { control: ResourceFilterCont
       title={t('filters.empty')}
       body={t('filters.emptyBody')}
       action={
-        <button type="button" className="btn btn-secondary" onClick={control.clear}>
+        <button type="button" className="nb-btn nb-btn--secondary" onClick={control.clear}>
           {t('filters.clear')}
         </button>
       }

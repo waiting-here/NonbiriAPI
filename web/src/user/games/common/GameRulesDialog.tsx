@@ -15,7 +15,7 @@ export function GameRulesButton({
   readonly onClick: () => void;
 }) {
   return (
-    <button type="button" className="btn btn-secondary" onClick={onClick}>
+    <button type="button" className="nb-btn nb-btn--secondary" onClick={onClick}>
       {label}
     </button>
   );
@@ -79,7 +79,7 @@ export function GameRulesDialog({
           <button
             ref={closeRef}
             type="button"
-            className="btn btn-secondary game-rules-modal__close"
+            className="nb-btn nb-btn--secondary game-rules-modal__close"
             onClick={onClose}
           >
             {closeLabel}

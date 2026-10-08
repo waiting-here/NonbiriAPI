@@ -1,3 +1,4 @@
+import { Button } from '@shared/components/ui/Button';
 import { useTranslation } from 'react-i18next';
 import { Note } from './Note';
 
@@ -22,14 +23,14 @@ export function OutcomeNote({
   if (outcome.kind === 'idle') return null;
   const action = (label: string, run?: () => void) =>
     run ? (
-      <button
+      <Button
         type="button"
-        className="nb-btn nb-btn--secondary nb-btn--sm"
+        size="sm"
         disabled={busy}
         onClick={run}
       >
         {label}
-      </button>
+      </Button>
     ) : undefined;
   switch (outcome.kind) {
     case 'saved':

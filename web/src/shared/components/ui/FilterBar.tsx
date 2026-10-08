@@ -1,3 +1,4 @@
+import { Button } from '@shared/components/ui/Button';
 import { useState, type ReactNode } from 'react';
 
 export function FilterBar({
@@ -77,9 +78,9 @@ export function FilterBar({
             </span>
           ))}
           {onClearAll ? (
-            <button type="button" className="nb-btn nb-btn--ghost nb-btn--sm" onClick={onClearAll}>
+            <Button type="button" variant="ghost" size="sm" onClick={onClearAll}>
               {clearAllLabel}
-            </button>
+            </Button>
           ) : null}
         </div>
       ) : null}

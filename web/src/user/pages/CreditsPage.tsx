@@ -136,7 +136,7 @@ function CreditHistory({
       <RecordsHeader
         description={copy.description}
         actions={
-          <button type="button" className="btn btn-secondary" disabled={busy} onClick={url.refresh}>
+          <button type="button" className="nb-btn nb-btn--secondary" disabled={busy} onClick={url.refresh}>
             {copy.refresh}
           </button>
         }
@@ -218,10 +218,10 @@ function CreditHistory({
             </div>
           </Fold>
           <div className="credit-history__filter-actions">
-            <button className="btn btn-primary" disabled={busy || !timeReady}>
+            <button className="nb-btn nb-btn--primary" disabled={busy || !timeReady}>
               {copy.apply}
             </button>
-            <button className="btn btn-secondary" type="button" disabled={busy} onClick={reset}>
+            <button className="nb-btn nb-btn--secondary" type="button" disabled={busy} onClick={reset}>
               {copy.reset}
             </button>
           </div>

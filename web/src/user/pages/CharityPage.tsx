@@ -49,7 +49,7 @@ function DonationDetailContent({ donationID }: { donationID: string }) {
           title={t('user.charity.donationNotFound')}
           body={t('user.charity.donationNotFoundBody')}
           action={
-            <Link className="btn btn-secondary" to={returnTo}>
+            <Link className="nb-btn nb-btn--secondary" to={returnTo}>
               {t('user.charity.backToDonations')}
             </Link>
           }
@@ -61,7 +61,7 @@ function DonationDetailContent({ donationID }: { donationID: string }) {
           title={t('user.charity.donationNotFound')}
           body={t('user.charity.donationNotFoundBody')}
           action={
-            <Link className="btn btn-secondary" to={returnTo}>
+            <Link className="nb-btn nb-btn--secondary" to={returnTo}>
               {t('user.charity.backToDonations')}
             </Link>
           }
@@ -128,12 +128,12 @@ function CharityContent() {
         icon="charity"
         actions={
           <>
-            <Link className="btn btn-secondary" to="/keys#client">
+            <Link className="nb-btn nb-btn--secondary" to="/keys#client">
               {t('user.charity.apiAccess')}
             </Link>
             {session.data?.user.effective_level === 5 ||
             session.data?.user.effective_level === 6 ? (
-              <Link className="btn btn-secondary" to="/steward?tab=charity">
+              <Link className="nb-btn nb-btn--secondary" to="/steward?tab=charity">
                 {t('user.charity.manageCharity')}
               </Link>
             ) : null}

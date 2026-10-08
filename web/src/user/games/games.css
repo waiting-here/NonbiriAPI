@@ -72,7 +72,7 @@
   margin: 0;
   color: var(--nb-color-text-muted);
 }
-.game-center-card__body .btn {
+.game-center-card__body :is(.btn, .nb-btn) {
   margin-top: auto;
   align-self: flex-start;
 }
@@ -292,7 +292,7 @@
 }
 
 @media (max-width: 540px) {
-  .game-center-card__body .btn {
+  .game-center-card__body :is(.btn, .nb-btn) {
     width: 100%;
     justify-content: center;
   }

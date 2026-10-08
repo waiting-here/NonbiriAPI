@@ -98,7 +98,7 @@ export function CredentialReportPage() {
           {state === 'accepted' ? (
             <div role="status" className="ops-stack"><h2>{t('user.report.acceptedTitle')}</h2>
               <p>{t('user.report.acceptedBody')}</p>
-              <button type="button" className="btn btn-secondary" onClick={() => setState('idle')}>{t('user.report.submitAnother')}</button>
+              <button type="button" className="nb-btn nb-btn--secondary" onClick={() => setState('idle')}>{t('user.report.submitAnother')}</button>
             </div>
           ) : (
             <form className="ops-stack" onSubmit={submit}>
@@ -122,8 +122,8 @@ export function CredentialReportPage() {
               {validation ? <p className="field-error" role="alert">{t('user.report.validationError')}</p> : null}
               {error ? <ErrorState error={error} /> : null}
               <div className="ops-actions">
-                <button className="btn btn-primary" type="submit" disabled={state === 'submitting' || config.data.maintenanceMode}>{state === 'submitting' ? t('user.report.submitting') : t('user.report.submit')}</button>
-                <button className="btn btn-secondary" type="button" onClick={clearForm}>{t('user.report.cancelAndClear')}</button>
+                <button className="nb-btn nb-btn--primary" type="submit" disabled={state === 'submitting' || config.data.maintenanceMode}>{state === 'submitting' ? t('user.report.submitting') : t('user.report.submit')}</button>
+                <button className="nb-btn nb-btn--secondary" type="button" onClick={clearForm}>{t('user.report.cancelAndClear')}</button>
               </div>
             </form>
           )}

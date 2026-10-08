@@ -30,7 +30,7 @@ export function OwnerFailureReset({
       <p className="muted">{t('common.failureReset.help')}</p>
       <button
         type="button"
-        className="btn btn-secondary"
+        className="nb-btn nb-btn--secondary"
         disabled={reset.isPending || (disabled && !unknown)}
         onClick={() => reset.mutate(unknown && reset.variables ? reset.variables : { revision })}
       >

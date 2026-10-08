@@ -146,7 +146,8 @@
       "moreSource": "Source actions for {{name}}",
       "dirtyCount": "{{count}} changes",
       "discard": "Discard changes",
-      "deleteHelp": "Clients will no longer be able to use {{name}}. Source services and keys remain unchanged."
+      "deleteHelp": "Clients will no longer be able to use {{name}}. Source services and keys remain unchanged.",
+      "searchPlaceholder": "Model name or call name"
     },
     "games": {
       "nav": "Games",
@@ -2025,7 +2026,8 @@
           "level_denied": "Your level is not allowed",
           "no_usable_key": "No usable charity resource",
           "available": "Available now"
-        }
+        },
+        "searchPlaceholder": "Model name or public description"
       },
       "donationDetailTitle": "Donation details",
       "donationDetailDescription": "Review the current donation, review, and resource status.",
@@ -2046,6 +2048,7 @@
         "available": "At least one charity model is currently available."
       },
       "availableModels": "Available charity models",
+      "modelSearchPlaceholder": "Model name",
       "searchModels": "Search model names",
       "pricingFilter": "Pricing method",
       "allPricing": "All pricing methods",
@@ -2094,6 +2097,7 @@
       "reselectAfterConflict": "The available resources changed. Review the refreshed list and select the keys again.",
       "ownerPages": {
         "search": "Search donation description or ID",
+        "searchPlaceholder": "Donation description or ID",
         "status": "Review status",
         "clear": "Clear search",
         "invalidSearch": "Enter up to 128 characters without control characters.",
@@ -3558,7 +3562,8 @@
       "done": "Done",
       "apiKeyLink": "Create or view it in API access",
       "retryDiscovery": "Retry loading models",
-      "manualName": "Enter a model name manually"
+      "manualName": "Enter a model name manually",
+      "searchPlaceholder": "Name, address, or note"
     },
     "records": {
       "title": "Records",

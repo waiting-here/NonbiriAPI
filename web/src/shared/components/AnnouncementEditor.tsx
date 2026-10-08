@@ -1,3 +1,4 @@
+import { Button } from '@shared/components/ui/Button';
 import { managementRoot, type ManagementRole } from '@shared/operations/managedUsers';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
@@ -400,8 +401,8 @@ export function AnnouncementEditor({
         </fieldset>
         {save.error ? <ErrorState error={save.error} /> : null}
         <div className="ops-actions">
-          <button
-            className="btn btn-primary"
+          <Button
+            variant="primary"
             type="button"
             disabled={
               authorityBlocked ||
@@ -413,9 +414,9 @@ export function AnnouncementEditor({
             onClick={submitSave}
           >
             {t('management.announcements.detail.saveDraft')}
-          </button>
-          <button
-            className="btn btn-secondary"
+          </Button>
+          <Button
+
             type="button"
             disabled={
               authorityBlocked ||
@@ -427,9 +428,9 @@ export function AnnouncementEditor({
             onClick={() => preview.mutate(draft)}
           >
             {t('management.announcements.detail.preview')}
-          </button>
-          <button
-            className="btn btn-link"
+          </Button>
+          <Button
+            variant="link"
             type="button"
             disabled={save.isPending || lifecycle.isPending}
             onClick={() => {
@@ -441,7 +442,7 @@ export function AnnouncementEditor({
             }}
           >
             {t('management.announcements.detail.discard')}
-          </button>
+          </Button>
         </div>
       </Card>
       {preview.error ? (
@@ -505,8 +506,8 @@ export function AnnouncementEditor({
           />
         </label>
         <div className="ops-actions">
-          <button
-            className="btn btn-primary"
+          <Button
+            variant="primary"
             type="button"
             disabled={
               authorityBlocked || !complete || draftDirty || lifecycle.isPending || save.isPending
@@ -518,25 +519,25 @@ export function AnnouncementEditor({
               : item.published
                 ? t('management.announcements.detail.republish')
                 : t('management.announcements.detail.publish')}
-          </button>
+          </Button>
           {item.state === 'published' ? (
-            <button
-              className="btn btn-danger"
+            <Button
+              variant="danger"
               type="button"
               disabled={authorityBlocked || !reason.trim() || lifecycle.isPending || save.isPending}
               onClick={() => setConfirmation('withdraw')}
             >
               {t('management.announcements.detail.withdraw')}
-            </button>
+            </Button>
           ) : null}
-          <button
-            className="btn btn-danger"
+          <Button
+            variant="danger"
             type="button"
             disabled={authorityBlocked || !reason.trim() || lifecycle.isPending || save.isPending}
             onClick={() => setConfirmation('delete')}
           >
             {t('management.announcements.detail.permanentlyDelete')}
-          </button>
+          </Button>
         </div>
       </Card>
       {confirmation ? (

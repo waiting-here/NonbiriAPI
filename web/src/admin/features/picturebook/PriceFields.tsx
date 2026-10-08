@@ -139,7 +139,7 @@ export function PriceFields({
                 )}
               </div>
               <button
-                className="btn btn-secondary"
+                className="nb-btn nb-btn--secondary"
                 type="button"
                 onClick={() =>
                   onChange({
@@ -153,7 +153,7 @@ export function PriceFields({
             </fieldset>
           ))}
           <button
-            className="btn btn-secondary"
+            className="nb-btn nb-btn--secondary"
             type="button"
             disabled={!nextTier || value.tiers.length >= 64}
             onClick={() =>
@@ -221,7 +221,7 @@ export function PriceFields({
                 )}
               </div>
               <button
-                className="btn btn-secondary"
+                className="nb-btn nb-btn--secondary"
                 type="button"
                 onClick={() =>
                   onChange({
@@ -235,7 +235,7 @@ export function PriceFields({
             </fieldset>
           ))}
           <button
-            className="btn btn-secondary"
+            className="nb-btn nb-btn--secondary"
             type="button"
             disabled={value.sizes.length >= 2048}
             onClick={() =>

@@ -236,7 +236,7 @@ function AddEndpointKeyForm({
     <form className="core-card core-wizard core-form" onSubmit={(event) => void submit(event)}>
       <div className="core-card__header">
         <h2>{t('endpoints.addKey')}</h2>
-        <button type="button" className="btn btn-secondary" onClick={close}>
+        <button type="button" className="nb-btn nb-btn--secondary" onClick={close}>
           {t('common.cancel')}
         </button>
       </div>
@@ -314,7 +314,7 @@ function AddEndpointKeyForm({
       />
       <div className="core-form-actions">
         <span />
-        <button type="submit" className="btn btn-primary" disabled={busy}>
+        <button type="submit" className="nb-btn nb-btn--primary" disabled={busy}>
           {busy
             ? t('common.working')
             : hasAttempt
@@ -546,7 +546,7 @@ function ManualEntryRow({
         </div>
         <button
           type="button"
-          className="btn btn-secondary"
+          className="nb-btn nb-btn--secondary"
           disabled={busy || Boolean(attemptKind)}
           onClick={() => setEditing((value) => !value)}
         >
@@ -571,7 +571,7 @@ function ManualEntryRow({
         <div className="core-inline-warning" role="alert">
           <p>{t('endpoints.manualImpactUnknown')}</p>
           <button
-            className="btn btn-secondary"
+            className="nb-btn nb-btn--secondary"
             type="button"
             onClick={() => void impactQuery.refetch()}
           >
@@ -656,7 +656,7 @@ function ManualEntryRow({
             </button>
             <button
               type="button"
-              className="btn btn-primary"
+              className="nb-btn nb-btn--primary"
               disabled={
                 busy ||
                 attemptKind === 'delete' ||
@@ -856,7 +856,7 @@ function ManualCatalog({
           <span />
           <button
             type="submit"
-            className="btn btn-primary"
+            className="nb-btn nb-btn--primary"
             disabled={busy || (!hasAttempt && !upstreamModel)}
           >
             {busy
@@ -1409,7 +1409,7 @@ function EndpointKeyCard({
               <div className="core-form-actions">
                 <button
                   type="button"
-                  className="btn btn-secondary"
+                  className="nb-btn nb-btn--secondary"
                   disabled={busy || Boolean(replayAttempt)}
                   onClick={() => {
                     setNote(keyData.note);
@@ -1420,7 +1420,7 @@ function EndpointKeyCard({
                 </button>
                 <button
                   type="submit"
-                  className="btn btn-primary"
+                  className="nb-btn nb-btn--primary"
                   disabled={
                     busy ||
                     reconciliationRequired ||
@@ -1720,7 +1720,7 @@ export function EndpointDetail({
           {reconciliationRequired ? (
             <button
               type="button"
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               disabled={busy}
               onClick={() => void reconcile()}
             >
@@ -1730,7 +1730,7 @@ export function EndpointDetail({
           {replayAttempt && (replayAttempt.kind !== 'delete' || !deleteOpen) ? (
             <button
               type="button"
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               disabled={busy || reconciliationRequired}
               onClick={() => void runEndpointAction(replayAttempt)}
             >
@@ -1762,7 +1762,7 @@ export function EndpointDetail({
               <div className="core-form-actions">
                 <button
                   type="button"
-                  className="btn btn-secondary"
+                  className="nb-btn nb-btn--secondary"
                   disabled={busy || Boolean(replayAttempt)}
                   onClick={() => {
                     setEndpointNote(endpoint.data.note);
@@ -1773,7 +1773,7 @@ export function EndpointDetail({
                 </button>
                 <button
                   type="submit"
-                  className="btn btn-primary"
+                  className="nb-btn nb-btn--primary"
                   disabled={
                     busy ||
                     reconciliationRequired ||

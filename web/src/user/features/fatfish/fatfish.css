@@ -1,5 +1,5 @@
 .fatfish-page { display: grid; gap: 1.4rem; min-width: 0; }
-.fatfish-page .btn { min-height: 2.75rem; }
+.fatfish-page :is(.btn, .nb-btn) { min-height: 2.75rem; }
 .fatfish-page .fatfish-periods {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 13rem), 1fr)); gap: .65rem;
 }

@@ -105,7 +105,7 @@ function ScopedAttemptErrors({
   return (
     <section className="request-diagnostics">
       <button
-        className="btn btn-secondary"
+        className="nb-btn nb-btn--secondary"
         type="button"
         disabled={busy}
         onClick={() => void load()}
@@ -142,7 +142,7 @@ function ScopedAttemptErrors({
       ))}
       {page?.next_after != null && (
         <button
-          className="btn btn-secondary"
+          className="nb-btn nb-btn--secondary"
           type="button"
           disabled={busy}
           onClick={() => void load(page.next_after!)}
@@ -192,7 +192,7 @@ function LazyErrorBody({
   ) : (
     <>
       <button
-        className="btn btn-secondary"
+        className="nb-btn nb-btn--secondary"
         type="button"
         disabled={busy}
         onClick={() => void load()}
@@ -278,7 +278,7 @@ export function RawErrorViewer({ body }: { body: ErrorBody }) {
       )}
       <div className="diagnostic-actions">
         <button
-          className="btn btn-secondary"
+          className="nb-btn nb-btn--secondary"
           type="button"
           disabled={body.truncated || body.encoding === 'base64' || formatting}
           onClick={format}
@@ -287,7 +287,7 @@ export function RawErrorViewer({ body }: { body: ErrorBody }) {
         </button>
         {formatted && (
           <button
-            className="btn btn-secondary"
+            className="nb-btn nb-btn--secondary"
             type="button"
             onClick={() => setShowRaw((value) => !value)}
           >
@@ -299,7 +299,7 @@ export function RawErrorViewer({ body }: { body: ErrorBody }) {
           </button>
         )}
         <button
-          className="btn btn-secondary"
+          className="nb-btn nb-btn--secondary"
           type="button"
           onClick={() => {
             void copyText(showRaw ? raw : (formatted ?? raw)).then((ok) =>
@@ -309,7 +309,7 @@ export function RawErrorViewer({ body }: { body: ErrorBody }) {
         >
           {t('common.diagnostics.copyText')}
         </button>
-        <button className="btn btn-secondary" type="button" onClick={download}>
+        <button className="nb-btn nb-btn--secondary" type="button" onClick={download}>
           {synthetic
             ? t('common.diagnostics.downloadDiagnosticSummary')
             : t('common.diagnostics.downloadOriginal')}

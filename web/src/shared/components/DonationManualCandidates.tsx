@@ -1,3 +1,4 @@
+import { Button } from '@shared/components/ui/Button';
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -149,9 +150,9 @@ export function DonationManualCandidates({
             onChange={(event) => setSearchDraft({ query: q, value: event.target.value })}
           />
         </label>
-        <button type="submit" className="btn btn-secondary" disabled={mutation.isPending}>
+        <Button type="submit"  disabled={mutation.isPending}>
           {t('common.manualCandidates.searchAction')}
-        </button>
+        </Button>
       </form>
       {query.isPending ? <LoadingState /> : null}
       {query.error ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : null}
@@ -173,16 +174,16 @@ export function DonationManualCandidates({
                     )}
                   </p>
                   {editable && candidate.manual_entry_id && revision ? (
-                    <button
+                    <Button
                       type="button"
-                      className="btn btn-quiet"
+                      variant="ghost"
                       disabled={busy}
                       onClick={() =>
                         mutation.mutate({ remove: candidate.manual_entry_id!, revision })
                       }
                     >
                       {t('common.manualCandidates.remove', { name: candidate.display_name })}
-                    </button>
+                    </Button>
                   ) : null}
                 </li>
               ))}
@@ -217,16 +218,16 @@ export function DonationManualCandidates({
               {t('common.manualCandidates.invalidNames')}
             </p>
           ) : null}
-          <button
+          <Button
             type="button"
-            className="btn btn-primary"
+            variant="primary"
             disabled={entries.length === 0 || invalidNames}
             onClick={() =>
               revision && mutation.mutate({ entries, revision }, { onSuccess: () => setNames('') })
             }
           >
             {t('common.manualCandidates.add')}
-          </button>
+          </Button>
         </fieldset>
       ) : (
         <p>{t('common.operations.charity.terminalKeyImmutable')}</p>
@@ -236,13 +237,13 @@ export function DonationManualCandidates({
       {mutation.outcome === 'unknown' && mutation.variables ? (
         <>
           <p>{t('common.donationReview.unknown')}</p>
-          <button
+          <Button
             type="button"
-            className="btn btn-secondary"
+
             onClick={() => mutation.variables && mutation.mutate(mutation.variables)}
           >
             {t('common.donationReview.retrySame')}
-          </button>
+          </Button>
         </>
       ) : null}
       {mutation.isSuccess ? <p role="status">{t('common.manualCandidates.saved')}</p> : null}

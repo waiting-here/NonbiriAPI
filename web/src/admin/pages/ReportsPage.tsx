@@ -224,7 +224,7 @@ export function ReportsPage() {
                         </td>
                         <td data-label={t('admin.reports.table.open')}>
                           <Link
-                            className="btn btn-secondary"
+                            className="nb-btn nb-btn--secondary"
                             aria-disabled={reports.isFetching || Boolean(reports.error)}
                             onClick={(event) => {
                               if (reports.isFetching || reports.error) event.preventDefault();

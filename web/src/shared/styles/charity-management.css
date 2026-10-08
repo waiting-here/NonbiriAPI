@@ -167,7 +167,7 @@
     align-items: stretch;
     flex-direction: column;
   }
-  .charity-management .form-actions .btn {
+  .charity-management .form-actions :is(.btn, .nb-btn) {
     width: 100%;
   }
   .charity-management .ops-model-settings {

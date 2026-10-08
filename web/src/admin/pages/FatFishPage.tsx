@@ -1,3 +1,4 @@
+import { Tabs } from '@shared/components/ui/Tabs';
 import { Link, useSearchParams } from 'react-router';
 import { usePictureBookText } from '@shared/picturebook/copy';
 import { Card, PageHeader } from '@shared/components/States';
@@ -21,22 +22,15 @@ export function FatFishPage() {
         }
       />
       <Card>
-        <nav className="fatfish-tabs" aria-label={text('common.fatFishAdministration')}>
-          <button
-            type="button"
-            aria-current={tab === 'levels' ? 'page' : undefined}
-            onClick={() => setParams({ tab: 'levels' })}
-          >
-            {text('common.levelsAndVersions')}
-          </button>
-          <button
-            type="button"
-            aria-current={tab === 'periods' ? 'page' : undefined}
-            onClick={() => setParams({ tab: 'periods' })}
-          >
-            {text('common.periodsAndNodes')}
-          </button>
-        </nav>
+        <Tabs
+          label={text('common.fatFishAdministration')}
+          value={tab}
+          onChange={(tab) => setParams({ tab })}
+          tabs={[
+            { value: 'levels', label: text('common.levelsAndVersions') },
+            { value: 'periods', label: text('common.periodsAndNodes') },
+          ]}
+        />
         {tab === 'levels' ? <LevelManager /> : <PeriodManager />}
       </Card>
     </div>

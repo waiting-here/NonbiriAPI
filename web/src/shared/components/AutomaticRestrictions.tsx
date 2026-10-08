@@ -1,3 +1,4 @@
+import { Button } from '@shared/components/ui/Button';
 import { useEffect, useState } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -98,14 +99,14 @@ export function LoginRestrictions() {
           </article>
         ))}
       {query.hasNextPage ? (
-        <button
+        <Button
           type="button"
-          className="btn btn-secondary"
+
           disabled={query.isFetchingNextPage}
           onClick={() => void query.fetchNextPage()}
         >
           {t('common.reasons.more')}
-        </button>
+        </Button>
       ) : null}
     </section>
   );

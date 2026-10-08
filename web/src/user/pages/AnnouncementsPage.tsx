@@ -117,7 +117,7 @@ export function AnnouncementsPage() {
                     {dismissed ? (
                       <button
                         type="button"
-                        className="btn btn-secondary"
+                        className="nb-btn nb-btn--secondary"
                         onClick={() => {
                           restoreAnnouncement(key);
                           void announcements.refetch();
@@ -127,7 +127,7 @@ export function AnnouncementsPage() {
                       </button>
                     ) : null}
                     <Link
-                      className="btn btn-secondary"
+                      className="nb-btn nb-btn--secondary"
                       to={`/announcements/${encodeURIComponent(item.id)}`}
                       state={{ returnTo }}
                     >

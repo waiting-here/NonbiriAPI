@@ -484,7 +484,7 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
                           data-label={t('admin.reports.detail.lineageAction')}
                         >
                           <button
-                            className="btn btn-secondary"
+                            className="nb-btn nb-btn--secondary"
                             type="button"
                             disabled={targetList.isFetching}
                             onClick={() => {
@@ -525,7 +525,7 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
           <div className="ops-toolbar">
             <h2>{t('admin.reports.detail.lineageTitle')}</h2>
             <button
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               type="button"
               onClick={() => {
                 setLineageTarget(null);
@@ -639,7 +639,7 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
           {decide.error ? <ErrorState error={decide.error} /> : null}
           <div className="ops-actions">
             <button
-              className="btn btn-danger"
+              className="nb-btn nb-btn--danger"
               type="button"
               disabled={!reason.trim() || decide.isPending || resume.isPending}
               onClick={() => {
@@ -649,7 +649,7 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
               {t('admin.reports.detail.approveDeletion')}
             </button>
             <button
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               type="button"
               disabled={!reason.trim() || decide.isPending || resume.isPending}
               onClick={() => setDecision('reject')}
@@ -665,7 +665,7 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
           <p>{t('admin.reports.detail.continuationBody')}</p>
           {resume.error ? <ErrorState error={resume.error} /> : null}
           <button
-            className="btn btn-danger"
+            className="nb-btn nb-btn--danger"
             type="button"
             disabled={resume.isPending || decide.isPending || !detail.data.retry}
             onClick={() => {

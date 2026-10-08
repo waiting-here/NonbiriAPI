@@ -133,7 +133,7 @@ function History({ close }: { readonly close: () => void }) {
       <p>{text('blackjack.yourSettledTablesFromTheLast30')}</p>
       {selected ? (
         <>
-          <button className="btn btn-secondary" onClick={() => setSelected(null)}>
+          <button className="nb-btn nb-btn--secondary" onClick={() => setSelected(null)}>
             {text('blackjack.backToList')}
           </button>
           {detail.isPending ? (
@@ -167,7 +167,7 @@ function History({ close }: { readonly close: () => void }) {
                 {page.data.items.map((h) => (
                   <button
                     key={h.id}
-                    className="btn btn-secondary"
+                    className="nb-btn nb-btn--secondary"
                     onClick={() => setSelected(h.id)}
                   >
                     <span>{new Date(h.started_at * 1000).toLocaleString()}</span>
@@ -184,14 +184,14 @@ function History({ close }: { readonly close: () => void }) {
           )}
           <nav className="duel-actions" aria-label={text('blackjack.historyPages')}>
             <button
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               disabled={cursors.length === 1}
               onClick={() => setCursors((v) => v.slice(0, -1))}
             >
               {text('blackjack.previous')}
             </button>
             <button
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               disabled={!page.data?.next_cursor}
               onClick={() => {
                 if (page.data?.next_cursor) setCursors((v) => [...v, page.data.next_cursor]);
@@ -256,7 +256,7 @@ function QueueForm({
       </label>
       <GameActionBar cost={stake}>
         <button
-          className="btn btn-primary"
+          className="nb-btn nb-btn--primary"
           type="submit"
           disabled={blocked || !accepting || !valid || !current}
         >
@@ -273,7 +273,7 @@ function QueueForm({
             <button
               key={amount}
               type="button"
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               disabled={blocked}
               aria-pressed={selected === creditsToMilli(amount)}
               onClick={() => setStake(amount)}
@@ -334,7 +334,7 @@ export function BlackjackGame() {
                 <button
                   key={action}
                   type="button"
-                  className={`btn ${action === 'hit' ? 'btn-primary' : 'btn-secondary'}`}
+                  className={`nb-btn ${action === 'hit' ? 'nb-btn--primary' : 'nb-btn--secondary'}`}
                   disabled={game.blocked || own.pending || remaining === 0}
                   onClick={() => {
                     const h = home.table?.fact.cards?.seats.find((s) => s.number === own.seat)
@@ -392,7 +392,7 @@ export function BlackjackGame() {
             />
             <ArcadeAudioControls compact sound={sound} unavailable={audio.unavailable} />
             <a
-              className="btn btn-secondary game-header-tool"
+              className="nb-btn nb-btn--secondary game-header-tool"
               href="#game-rankings"
               aria-label={text('ranking.leaderboards')}
               title={text('ranking.leaderboards')}
@@ -495,7 +495,7 @@ export function BlackjackGame() {
                   {own.state !== 'playing' && (
                     <button
                       type="button"
-                      className="btn btn-secondary"
+                      className="nb-btn nb-btn--secondary"
                       disabled={game.blocked || (own.state === 'seated' && remaining === 0)}
                       onClick={() => game.run({ kind: 'leave', id: own.id })}
                     >
@@ -539,7 +539,7 @@ export function BlackjackGame() {
               <div className="bj-emotes" role="group" aria-label={text('blackjack.presetEmotes')}>
                 {BLACKJACK_EMOTES.map((emote) => (
                   <button
-                    className="btn btn-secondary"
+                    className="nb-btn nb-btn--secondary"
                     key={emote}
                     disabled={game.blocked}
                     onClick={() => {
@@ -555,7 +555,7 @@ export function BlackjackGame() {
         )}
         {!!game.error && <ErrorState error={game.error} />}
         {game.uncertain && (
-          <button className="btn btn-primary" disabled={game.pending} onClick={game.retry}>
+          <button className="nb-btn nb-btn--primary" disabled={game.pending} onClick={game.retry}>
             {text('blackjack.confirmPreviousAction')}
           </button>
         )}

@@ -30,7 +30,7 @@ export function ArcadeAudioControls({
       ) : (
         <button
           type="button"
-          className="btn btn-secondary"
+          className="nb-btn nb-btn--secondary"
           aria-pressed={sound.enabled}
           onClick={sound.toggle}
         >
@@ -48,7 +48,7 @@ export function ArcadeAudioControls({
         ) : (
           <button
             type="button"
-            className="btn btn-secondary"
+            className="nb-btn nb-btn--secondary"
             aria-pressed={music.enabled}
             onClick={music.toggle}
           >

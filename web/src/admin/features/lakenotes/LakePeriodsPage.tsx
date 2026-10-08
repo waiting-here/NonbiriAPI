@@ -1,3 +1,4 @@
+import { SimplePager } from '@shared/operations/SimplePager';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
@@ -54,23 +55,13 @@ export function LakePeriodsPage() {
               ))}
             </div>
           )}
-          <div className="lake-period-actions">
-            <button
-              className="btn btn-secondary"
-              disabled={page === 1}
-              onClick={() => setPage((p) => p - 1)}
-            >
-              {lakeText('previous')}
-            </button>
-            <span>{page}</span>
-            <button
-              className="btn btn-secondary"
-              disabled={!periods.data.has_more}
-              onClick={() => setPage((p) => p + 1)}
-            >
-              {lakeText('next')}
-            </button>
-          </div>
+          <SimplePager
+            page={page}
+            hasMore={periods.data.has_more}
+            onPrev={() => setPage((p) => p - 1)}
+            onNext={() => setPage((p) => p + 1)}
+            labels={{ previous: lakeText('previous'), next: lakeText('next') }}
+          />
         </Card>
       )}
     </div>

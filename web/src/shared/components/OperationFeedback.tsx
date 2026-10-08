@@ -1,3 +1,4 @@
+import { Button } from '@shared/components/ui/Button';
 import { useTranslation } from 'react-i18next';
 import type { OperationOutcome } from '@shared/operations/useRetainedOperation';
 
@@ -42,9 +43,9 @@ export function OperationFeedback({
         </details>
       ) : null}
       {actionable && onCheck ? (
-        <button type="button" className="btn btn-secondary" onClick={onCheck}>
+        <Button type="button"  onClick={onCheck}>
           {t('common.operation.check')}
-        </button>
+        </Button>
       ) : null}
     </div>
   );

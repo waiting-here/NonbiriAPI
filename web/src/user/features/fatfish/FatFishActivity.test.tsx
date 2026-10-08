@@ -71,7 +71,7 @@ describe('fat fish user service projection', () => {
     expect(screen.queryByText('Secret tank')).not.toBeInTheDocument();
     expect(screen.getByText('90071992547409.93')).toBeInTheDocument();
     expect(screen.getByText('ffc_1')).toBeInTheDocument();
-    await view.user.click(screen.getAllByRole('button', { name: 'Next' })[2]);
+    await view.user.click(within(screen.getByRole('heading', { name: 'Challenge history' }).closest('section')!).getByRole('button', { name: 'Next' }));
     await waitFor(() => expect(screen.getByText('ffc_2')).toBeInTheDocument());
   });
   it.each([false, true])(

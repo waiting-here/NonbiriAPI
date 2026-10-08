@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
 import { PagePagination } from './PagePagination';
 import { CursorPagination } from './CursorPagination';
-import { Pagination } from '../components/States';
+import { SimplePager } from './SimplePager';
 import { normalizePageMetadata, PAGE_SIZES, type PageMetadata } from './pageNumbers';
 
 function metadata(overrides: Partial<PageMetadata> = {}): PageMetadata {
@@ -18,7 +18,7 @@ function metadata(overrides: Partial<PageMetadata> = {}): PageMetadata {
 }
 
 describe('PagePagination', () => {
-  it('hides a single cursor/legacy page and preserves their callbacks on later pages', async () => {
+  it('hides a single cursor/simple page and preserves their callbacks on later pages', async () => {
     const previous = vi.fn();
     const next = vi.fn();
     const view = await renderWithProviders(
@@ -34,9 +34,18 @@ describe('PagePagination', () => {
     expect(previous).toHaveBeenCalledOnce();
     expect(next).toHaveBeenCalledWith('cursor-next');
     const onChange = vi.fn();
-    view.rerender(<Pagination page={1} hasNext={false} onChange={onChange} />);
+    view.rerender(
+      <SimplePager
+        page={1}
+        hasMore={false}
+        onPrev={() => onChange(0)}
+        onNext={() => onChange(2)}
+      />,
+    );
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
-    view.rerender(<Pagination page={2} hasNext onChange={onChange} />);
+    view.rerender(
+      <SimplePager page={2} hasMore onPrev={() => onChange(1)} onNext={() => onChange(3)} />,
+    );
     await view.user.click(screen.getByRole('button', { name: 'Previous' }));
     await view.user.click(screen.getByRole('button', { name: 'Next' }));
     expect(onChange.mock.calls).toEqual([[1], [3]]);

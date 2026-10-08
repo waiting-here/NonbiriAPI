@@ -1,3 +1,4 @@
+import { Button } from '@shared/components/ui/Button';
 import { Fold } from '@shared/components/ui';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -351,9 +352,9 @@ function MapEditor({
         ),
       )}
       {editable && endpointScope ? (
-        <button
+        <Button
           type="button"
-          className="nb-btn nb-btn--ghost"
+          variant="ghost"
           onClick={() =>
             change({
               ...section,
@@ -376,12 +377,12 @@ function MapEditor({
           }
         >
           {copy('example')}
-        </button>
+        </Button>
       ) : null}
       {editable ? (
-        <button
+        <Button
           type="button"
-          className="btn btn-secondary"
+
           onClick={() =>
             change({
               ...section,
@@ -390,7 +391,7 @@ function MapEditor({
           }
         >
           {copy('add')}
-        </button>
+        </Button>
       ) : null}
     </div>
   );
@@ -536,9 +537,9 @@ export function RequestAdaptationEditor({
     <section className="core-card">
       <div className="core-card__header">
         <h3>{copy('title')}</h3>
-        <button
+        <Button
           type="button"
-          className="btn btn-secondary"
+
           disabled={saving}
           onClick={() => {
             setLoading(true);
@@ -551,7 +552,7 @@ export function RequestAdaptationEditor({
           }}
         >
           {copy('refresh')}
-        </button>
+        </Button>
       </div>
       <p>{copy('description')}</p>
       {scope === 'endpoint' ? (
@@ -624,9 +625,9 @@ export function RequestAdaptationEditor({
                         />
                       </label>
                       {editable && scope === 'endpoint' ? (
-                        <button
+                        <Button
                           type="button"
-                          className="nb-btn nb-btn--ghost"
+                          variant="ghost"
                           onClick={() =>
                             updateList(kind, {
                               mode: section.mode,
@@ -642,7 +643,7 @@ export function RequestAdaptationEditor({
                           }
                         >
                           {copy('example')}
-                        </button>
+                        </Button>
                       ) : null}
                     </div>
                   )
@@ -671,9 +672,9 @@ export function RequestAdaptationEditor({
             );
           })}
           {editable ? (
-            <button className="btn btn-primary" type="submit" disabled={saving || saveBlocked}>
+            <Button variant="primary" type="submit" disabled={saving || saveBlocked}>
               {copy('save')}
-            </button>
+            </Button>
           ) : null}
         </form>
       ) : null}

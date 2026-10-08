@@ -1,3 +1,4 @@
+import { Button } from '@shared/components/ui/Button';
 import { useEffect, useId, useRef, useState, type InputHTMLAttributes } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -249,23 +250,23 @@ export function TimeInput({
           {draft.needsUTCConfirmation && (
             <span>
               {t('common.time.fallback')}{' '}
-              <button
+              <Button
                 type="button"
-                className="btn btn-link"
+                variant="link"
                 disabled={inputProps.disabled}
                 onClick={() => onChange((current) => ({ ...current, needsUTCConfirmation: false }))}
               >
                 {t('common.time.confirmUTC')}
-              </button>
+              </Button>
             </span>
           )}
           {invalid && <span role="alert">{t('common.time.invalid')}</span>}
           {fieldFailed && (
             <span role="alert">
               {t('common.time.failed')}{' '}
-              <button
+              <Button
                 type="button"
-                className="btn btn-link"
+                variant="link"
                 disabled={inputProps.disabled}
                 onClick={() => {
                   if (registry.isError) void registry.refetch();
@@ -273,18 +274,18 @@ export function TimeInput({
                 }}
               >
                 {t('common.retry')}
-              </button>
+              </Button>
             </span>
           )}
           {showZoneHint && contextFailed && !fieldFailed && (
-            <button
+            <Button
               type="button"
-              className="btn btn-link"
+              variant="link"
               disabled={inputProps.disabled}
               onClick={() => void context.refetch()}
             >
               {t('common.retry')}
-            </button>
+            </Button>
           )}
           {resolving && <span>{t('common.time.resolving')}</span>}
           {adjusted && (

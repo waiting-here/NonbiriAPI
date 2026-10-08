@@ -132,6 +132,7 @@ export function CharityCapabilityPanel({ capability }: { capability: CharityCapa
             <span>{t('user.charity.searchModels')}</span>
             <input
               type="search"
+              placeholder={t('user.charity.modelSearchPlaceholder')}
               value={modelQuery}
               maxLength={133}
               onChange={(event) => setModelQuery(event.target.value)}
@@ -392,7 +393,7 @@ export function DonationComposer({
             <p>{t('user.charity.presentation.chooseKeysHelp')}</p>
             <button
               type="button"
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               disabled={locked}
               onClick={() => setPickerOpen(true)}
             >
@@ -442,7 +443,7 @@ export function DonationComposer({
           closeLabel={t('common.close')}
           busy={mutation.isPending}
           footer={
-            <button type="button" className="btn btn-primary" onClick={() => setPickerOpen(false)}>
+            <button type="button" className="nb-btn nb-btn--primary" onClick={() => setPickerOpen(false)}>
               {t('user.charity.presentation.selectionDone')}
             </button>
           }
@@ -585,7 +586,7 @@ export function DonationComposer({
             {t('user.charity.presentation.selectedCount', { count: selectedChoices.length })}
           </span>
           <button
-            className="btn btn-primary"
+            className="nb-btn nb-btn--primary"
             type="submit"
             form={formID}
             disabled={
@@ -1060,13 +1061,13 @@ export function DonationCard({
             <div className="form-actions">
               <button
                 type="button"
-                className="btn btn-quiet"
+                className="nb-btn nb-btn--ghost"
                 onClick={() => setEditing(false)}
                 disabled={busy}
               >
                 {t('common.cancel')}
               </button>
-              <button type="submit" className="btn btn-primary" disabled={busy}>
+              <button type="submit" className="nb-btn nb-btn--primary" disabled={busy}>
                 {busy ? t('common.working') : t('common.save')}
               </button>
             </div>
@@ -1149,7 +1150,7 @@ export function DonationCard({
       ) : null}
       <div className="form-actions economy-donation-actions">
         {showDetailLink ? (
-          <Link className="btn btn-quiet" to={`/charity/donations/${donation.id}`}>
+          <Link className="nb-btn nb-btn--ghost" to={`/charity/donations/${donation.id}`}>
             {t('user.charity.openDonationDetail')}
           </Link>
         ) : null}
@@ -1157,7 +1158,7 @@ export function DonationCard({
           <>
             <button
               type="button"
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               onClick={() => {
                 setDescription(donation.description);
                 setEditing(true);
@@ -1171,7 +1172,7 @@ export function DonationCard({
             </button>
             <button
               type="button"
-              className="btn btn-danger"
+              className="nb-btn nb-btn--danger"
               onClick={() => setConfirmation('withdraw')}
               disabled={busy}
             >
@@ -1182,7 +1183,7 @@ export function DonationCard({
         {donation.status === 'approved' ? (
           <button
             type="button"
-            className="btn btn-danger"
+            className="nb-btn nb-btn--danger"
             onClick={() => setConfirmation('terminate')}
             disabled={busy}
           >
@@ -1288,7 +1289,7 @@ export function DonationOverviewPartialError({ onRetry }: { onRetry: () => void 
       <div>
         <h2>{t('user.charity.donationOverviewPartialTitle')}</h2>
         <p>{t('user.charity.donationOverviewPartialBody')}</p>
-        <button type="button" className="btn btn-secondary" onClick={onRetry}>
+        <button type="button" className="nb-btn nb-btn--secondary" onClick={onRetry}>
           {t('common.retry')}
         </button>
       </div>

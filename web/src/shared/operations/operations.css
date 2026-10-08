@@ -51,8 +51,8 @@ form.ops-toolbar > label {
   margin-bottom: 0;
 }
 
-.ops-page .card > .btn,
-.ops-subcard > .btn {
+.ops-page .card > :is(.btn, .nb-btn),
+.ops-subcard > :is(.btn, .nb-btn) {
   justify-self: start;
 }
 
@@ -357,7 +357,7 @@ fieldset.ops-field-grid {
   }
 
   form.ops-toolbar > label,
-  form.ops-toolbar > .btn {
+  form.ops-toolbar > :is(.btn, .nb-btn) {
     width: 100%;
     max-width: none;
   }
@@ -373,13 +373,13 @@ fieldset.ops-field-grid {
     width: 100%;
   }
 
-  .ops-actions > .btn,
-  .ops-page .card > .btn {
+  .ops-actions > :is(.btn, .nb-btn),
+  .ops-page .card > :is(.btn, .nb-btn) {
     width: 100%;
   }
 
-  .ops-page .card > .btn,
-  .ops-subcard > .btn {
+  .ops-page .card > :is(.btn, .nb-btn),
+  .ops-subcard > :is(.btn, .nb-btn) {
     justify-self: stretch;
   }
 

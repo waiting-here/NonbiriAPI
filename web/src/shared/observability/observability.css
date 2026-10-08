@@ -66,10 +66,10 @@
   cursor: pointer;
   padding-block: 0.5rem;
 }
-.request-diagnostics .btn {
+.request-diagnostics :is(.btn, .nb-btn) {
   align-self: start;
 }
-.diagnostic-filters .btn {
+.diagnostic-filters :is(.btn, .nb-btn) {
   align-self: end;
 }
 @media (max-width: 40rem) {
@@ -80,7 +80,7 @@
   .diagnostic-filters label {
     flex-basis: auto;
   }
-  .diagnostic-filters .btn {
+  .diagnostic-filters :is(.btn, .nb-btn) {
     align-self: stretch;
   }
 }

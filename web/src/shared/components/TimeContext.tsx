@@ -1,3 +1,4 @@
+import { Button } from '@shared/components/ui/Button';
 import { type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -61,9 +62,9 @@ export function TimeContextNotice({ station }: { station: TimeStation }) {
       {query.isError ? (
         <>
           {t('common.time.contextFailed')}{' '}
-          <button type="button" className="btn btn-link" onClick={() => void query.refetch()}>
+          <Button type="button" variant="link" onClick={() => void query.refetch()}>
             {t('common.retry')}
-          </button>
+          </Button>
         </>
       ) : !query.isSuccess ? (
         t('common.time.contextLoading')

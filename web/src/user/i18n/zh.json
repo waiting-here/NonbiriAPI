@@ -146,7 +146,8 @@
       "moreSource": "{{name}} 的来源操作",
       "dirtyCount": "已修改 {{count}} 项",
       "discard": "放弃修改",
-      "deleteHelp": "客户端将无法再使用 {{name}}。来源服务和密钥不受影响。"
+      "deleteHelp": "客户端将无法再使用 {{name}}。来源服务和密钥不受影响。",
+      "searchPlaceholder": "模型名或调用名"
     },
     "games": {
       "nav": "游戏",
@@ -2025,7 +2026,8 @@
           "level_denied": "本人等级不允许",
           "no_usable_key": "当前没有可用公益资源",
           "available": "当前可用"
-        }
+        },
+        "searchPlaceholder": "模型名或公开说明"
       },
       "donationDetailTitle": "捐赠详情",
       "donationDetailDescription": "查看捐赠、审核和资源的当前状态。",
@@ -2046,6 +2048,7 @@
         "available": "至少有一个公益模型当前可用。"
       },
       "availableModels": "可用公益模型",
+      "modelSearchPlaceholder": "模型名",
       "searchModels": "搜索模型名称",
       "pricingFilter": "计价方式",
       "allPricing": "全部计价方式",
@@ -2094,6 +2097,7 @@
       "reselectAfterConflict": "可用资源已变化，请检查刷新后的列表并重新选择密钥。",
       "ownerPages": {
         "search": "搜索捐赠描述或 ID",
+        "searchPlaceholder": "捐赠说明或 ID",
         "status": "审核状态",
         "clear": "清空搜索",
         "invalidSearch": "请输入最多 128 个字符，不含控制字符。",
@@ -3558,7 +3562,8 @@
       "done": "完成",
       "apiKeyLink": "在「API 接入」创建或查看",
       "retryDiscovery": "重试读取",
-      "manualName": "手动输入模型名"
+      "manualName": "手动输入模型名",
+      "searchPlaceholder": "名称、地址或备注"
     },
     "records": {
       "title": "记录",

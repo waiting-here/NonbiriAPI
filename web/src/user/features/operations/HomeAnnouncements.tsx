@@ -159,17 +159,17 @@ function AnnouncementCard({
       ) : detail?.error ? (
         <div className="home-announcement-detail-error" role="alert">
           <span>{t('home.announcement.detailError')}</span>
-          <button type="button" className="btn btn-quiet" disabled={busy} onClick={onRetry}>
+          <button type="button" className="nb-btn nb-btn--ghost" disabled={busy} onClick={onRetry}>
             {busy ? t('common.working') : t('common.retry')}
           </button>
         </div>
       ) : null}
       <div className="home-announcement-card__actions">
-        <Link className="btn btn-secondary" to={title}>
+        <Link className="nb-btn nb-btn--secondary" to={title}>
           {t('home.announcement.viewFull')}
         </Link>
         {summary.dismissible ? (
-          <button type="button" className="btn btn-quiet" onClick={() => onDismiss(summary)}>
+          <button type="button" className="nb-btn nb-btn--ghost" onClick={() => onDismiss(summary)}>
             {t('home.announcement.hide')}
           </button>
         ) : null}

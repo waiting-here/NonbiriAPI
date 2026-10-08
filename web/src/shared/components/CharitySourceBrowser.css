@@ -18,7 +18,7 @@
   min-width: 0;
 }
 
-.charity-source-browser__keys-header > .btn:hover:not(:disabled) {
+.charity-source-browser__keys-header > :is(.btn, .nb-btn):hover:not(:disabled) {
   /* Keep the return control's pointer hit area fixed at its lower edge. */
   transform: none;
 }
@@ -226,8 +226,8 @@
     flex-direction: column;
   }
 
-  .charity-source-browser__header > .btn,
-  .charity-source-browser__keys-header > .btn {
+  .charity-source-browser__header > :is(.btn, .nb-btn),
+  .charity-source-browser__keys-header > :is(.btn, .nb-btn) {
     width: 100%;
   }
 }
@@ -247,7 +247,7 @@
     flex-direction: column;
   }
 
-  .charity-source-browser__actions .btn {
+  .charity-source-browser__actions :is(.btn, .nb-btn) {
     width: 100%;
   }
 }

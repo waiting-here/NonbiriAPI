@@ -1,3 +1,4 @@
+import { SimplePager } from '@shared/operations/SimplePager';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ErrorState, LoadingState } from '@shared/components/States';
@@ -169,27 +170,16 @@ export function HistoryDetails({
                       />
                     </details>
                   ))}
-                  <div className="ops-actions">
-                    <button
-                      className="btn btn-secondary"
-                      type="button"
-                      disabled={cursors.length === 1}
-                      onClick={() => setCursors(cursors.slice(0, -1))}
-                    >
-                      {t('上一页轮次', 'Previous rounds')}
-                    </button>
-                    <span>
-                      {t('第', 'Page')} {cursors.length} {t('页', '')}
-                    </span>
-                    <button
-                      className="btn btn-secondary"
-                      type="button"
-                      disabled={!rounds.data.next_cursor}
-                      onClick={() => setCursors([...cursors, rounds.data.next_cursor])}
-                    >
-                      {t('下一页轮次', 'Next rounds')}
-                    </button>
-                  </div>
+                  <SimplePager
+                    page={cursors.length}
+                    hasMore={Boolean(rounds.data.next_cursor)}
+                    onPrev={() => setCursors(cursors.slice(0, -1))}
+                    onNext={() => setCursors([...cursors, rounds.data.next_cursor])}
+                    labels={{
+                      previous: t('上一页轮次', 'Previous rounds'),
+                      next: t('下一页轮次', 'Next rounds'),
+                    }}
+                  />
                 </>
               )
             )}
