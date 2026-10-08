@@ -387,7 +387,7 @@ func scanModelFacts(row *sql.Row) (modelFacts, error) {
 		return modelFacts{}, fmt.Errorf("routing: read model: %w", err)
 	}
 	if !facts.transportRule.Valid() || facts.id <= 0 || facts.userID <= 0 || facts.revision < 1 || facts.bindingRevision < 0 ||
-		(facts.strategy != "ordered" && facts.strategy != "random") || facts.fullName != facts.provider+"/"+facts.model ||
+		(facts.strategy != "ordered" && facts.strategy != "random" && facts.strategy != "cache_balanced") || facts.fullName != facts.provider+"/"+facts.model ||
 		facts.silentRetry < 0 || facts.silentRetry > 1 || facts.flattenToolCalls < 0 || facts.flattenToolCalls > 1 {
 		return modelFacts{}, errors.New("routing: invalid persisted model")
 	}

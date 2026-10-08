@@ -28,6 +28,10 @@ WHERE r.logical_request_id=? AND r.user_id=? AND m.strategy='cache_balanced'`,
 	if err != nil {
 		return Handle{}, fmt.Errorf("claim: read balanced routing settings: %w", err)
 	}
+	return s.claimBalancedCandidatesTx(ctx, tx, claimID, at, input, modelID, revision, false)
+}
+
+func (s *Service) claimBalancedCandidatesTx(ctx context.Context, tx *sql.Tx, claimID string, at int64, input ClaimInput, modelID, revision int64, personal bool) (Handle, error) {
 	type scored struct {
 		candidate BalancedCandidate
 		physical  [32]byte
@@ -36,14 +40,9 @@ WHERE r.logical_request_id=? AND r.user_id=? AND m.strategy='cache_balanced'`,
 		order     int
 	}
 	choices := make([]scored, 0, len(input.BalancedCandidates))
-	var affinityKey int64
-	var affinityPhysical []byte
-	var affinityRevision, affinityExpiry int64
-	err = tx.QueryRowContext(ctx, `SELECT endpoint_key_id,physical_id,routing_revision,expires_at
-FROM charity_key_affinities WHERE user_id=? AND model_id=?`, input.ActorUserID, modelID).
-		Scan(&affinityKey, &affinityPhysical, &affinityRevision, &affinityExpiry)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return Handle{}, fmt.Errorf("claim: read balanced association: %w", err)
+	affinity, err := currentAffinityTx(ctx, tx, input.ActorUserID, modelID, personal)
+	if err != nil {
+		return Handle{}, err
 	}
 	for index, option := range input.BalancedCandidates {
 		var secretRefID int64
@@ -70,15 +69,15 @@ WHERE k.id=?`, option.Candidate.EndpointKeyID).Scan(&secretRefID, &baseURL)
 		}
 		choices = append(choices, scored{
 			candidate: option, physical: physical, load: load, order: index,
-			preferred: affinityRevision == revision && affinityExpiry > at &&
-				affinityKey == option.Candidate.EndpointKeyID && string(affinityPhysical) == string(physical[:]),
+			preferred: affinity != nil && affinity.revision == revision && affinity.expiresAt > at &&
+				affinity.endpointKeyID == option.Candidate.EndpointKeyID && string(affinity.physicalID) == string(physical[:]),
 		})
 	}
 	if len(choices) == 0 {
 		return Handle{}, ErrNotFound
 	}
-	// The snapshot order is a weighted permutation. Stable sorting preserves
-	// its exact relative weighted order within each equal-load group.
+	// Stable sorting preserves the snapshot's random permutation within each
+	// equal-load group. Charity snapshots additionally apply expiry weights.
 	sort.SliceStable(choices, func(i, j int) bool {
 		if choices[i].preferred != choices[j].preferred {
 			return choices[i].preferred

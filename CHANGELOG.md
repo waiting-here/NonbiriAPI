@@ -8,6 +8,7 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Added
 
+- Cache-balanced routing for personal models, using a 300-second owner/model affinity and physical-key load shared with charity calls. Ordered and random calls contribute actual dispatch counts without changing their selection order.
 - Steady Catch with keyboard and touch controls, 134 meme entries, a configurable ticket and first-clear reward, and rolling scoreboards. It starts disabled with both amounts set to zero.
 - AI Gwent with four factions, server-authoritative native Go rules, deck building, timed decisions and timeout play. Player matches use a configurable shared prize pool; rolling win rankings and private Elo records are separate from payments. The game starts disabled.
 - Administrator-only endpoint tags, bulk tag changes and filtering by tag or site user ID. Raw-error storage now lists missing records and distinguishes read, queue and storage failures.

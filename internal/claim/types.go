@@ -175,6 +175,8 @@ type ClaimInput struct {
 	Candidate        Candidate
 	DonationKeyID    int64
 	OutputTokenFloor int64
+	// PersonalModelID associates routed personal attempts with their owner-scoped model.
+	PersonalModelID int64
 	// BalancedCandidates are already weighted into a random order by the
 	// routing snapshot. Claim chooses among them inside its write transaction.
 	BalancedCandidates []BalancedCandidate

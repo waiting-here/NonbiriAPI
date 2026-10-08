@@ -385,7 +385,7 @@ func TestCharityRoutingCountsAllStrategiesWithoutCreatingUnrequestedAffinity(t *
 	}
 }
 
-func TestCharityRoutingPhysicalLoadIsSharedAcrossModelsButNotPersonalCalls(t *testing.T) {
+func TestCharityRoutingPhysicalLoadIsSharedAcrossCharityAndPersonalModels(t *testing.T) {
 	fixture, caller, keys, donations := routingFixture(t, 300)
 	first := routingClaim(t, fixture, caller, keys[0], donations[0])
 	dispatchRoutingClaim(t, fixture, first)
@@ -423,10 +423,11 @@ INSERT INTO charity_routing_settings(model_id,revision,affinity_ttl_seconds) VAL
 	if err := fixture.db.QueryRow(`SELECT user_id FROM endpoints WHERE id=?`, keys[0].endpointID).Scan(&donor); err != nil {
 		t.Fatal(err)
 	}
+	personalModel := seedPersonalRoutingModel(t, fixture, donor, "model", "ordered", keys[0])
 	selfRequest := fixture.acceptSelf(donor, 1)
 	self, err := fixture.service.Claim(context.Background(), ClaimInput{
 		RequestID: selfRequest.ID, ActorUserID: donor, AttemptSeq: 1,
-		Purpose: PurposeSelf, Candidate: keys[0].candidate,
+		Purpose: PurposeSelf, Candidate: keys[0].candidate, PersonalModelID: personalModel,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -437,8 +438,23 @@ INSERT INTO charity_routing_settings(model_id,revision,affinity_ttl_seconds) VAL
 	}
 	selfGrant.Clear()
 	_, afterSelf, _ := routingCounts(t, fixture)
-	if afterSelf != 2 {
-		t.Fatalf("personal dispatch changed charity load to %d", afterSelf)
+	if afterSelf != 3 {
+		t.Fatalf("personal dispatch missing from shared physical load: %d", afterSelf)
+	}
+	if err := fixture.db.QueryRow(`SELECT count(*) FROM charity_dispatch_buckets`).Scan(&bucketRows); err != nil || bucketRows != 1 {
+		t.Fatalf("personal call split the same physical bucket: rows %d error %v", bucketRows, err)
+	}
+	otherCaller := fixture.seedUser("shared-load-caller", false)
+	otherRequest := fixture.acceptCharity(otherCaller, 1)
+	balanced, err := fixture.service.Claim(context.Background(), ClaimInput{
+		RequestID: otherRequest.ID, ActorUserID: otherCaller, AttemptSeq: 1, Purpose: PurposeCharity,
+		BalancedCandidates: []BalancedCandidate{
+			{Candidate: keys[0].candidate, DonationKeyID: donations[0]},
+			{Candidate: keys[1].candidate, DonationKeyID: donations[1]},
+		},
+	})
+	if err != nil || balanced.EndpointKeyID() != keys[1].keyID {
+		t.Fatalf("shared load did not affect charity selection: %d %v", balanced.EndpointKeyID(), err)
 	}
 }
 
