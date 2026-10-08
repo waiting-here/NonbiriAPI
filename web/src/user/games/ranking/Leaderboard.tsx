@@ -216,7 +216,7 @@ function RankingPanel({
                       meLabel={text('ranking.me')}
                     />
                   </td>
-                  <td>{formatCredits(row.amount)}</td>
+                  <td data-unit={text('ranking.credits')}>{formatCredits(row.amount)}</td>
                 </tr>
               ))}
             </tbody>

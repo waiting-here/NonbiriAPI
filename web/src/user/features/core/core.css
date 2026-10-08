@@ -900,14 +900,34 @@
   background: var(--nb-color-warning-soft);
   color: var(--nb-color-warning);
 }
-@media (max-width: 48rem) {
+@media (width < 48rem) {
+  .services-list {
+    display: grid;
+    gap: var(--nb-space-3);
+    padding: var(--nb-space-3);
+  }
   .services-list a.core-endpoint-card.nb-row {
+    position: relative;
     grid-template-columns: auto minmax(0, 1fr);
     gap: var(--nb-space-3);
+    border: 1px solid var(--nb-color-border);
+    border-radius: var(--nb-radius-md);
+  }
+  .services-list .nb-row__title {
+    min-height: var(--nb-space-10);
+    padding-inline-end: calc(var(--nb-space-16) + var(--nb-space-6));
+  }
+  .services-list .nb-row__title strong {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .services-list .nb-row__end {
-    grid-column: 2;
-    justify-self: end;
+    position: absolute;
+    top: var(--nb-space-4);
+    right: var(--nb-space-4);
   }
   .services-list .nb-row__facts {
     gap: var(--nb-space-1) var(--nb-space-3);

@@ -41,7 +41,8 @@
       "introAddressBody": "Connect charity models and your own services in your client.",
       "introGames": "Games and activities",
       "introGamesBody": "Check in, join activities or play games.",
-      "checkinRules": "Rewards and balance conditions"
+      "claimedToday": "Claimed today",
+      "availableTomorrow": "Available tomorrow"
     },
     "steward": {
       "donationsTitle": "Donation review queue",
@@ -1792,7 +1793,15 @@
         "endpoint": "Service"
       },
       "resourceType": "Related",
-      "closedResourceUnavailable": "The related service or key was deleted. This issue is closed."
+      "closedResourceUnavailable": "The related service or key was deleted. This issue is closed.",
+      "detail": {
+        "auth": "The service rejected the key.",
+        "rateLimit": "The service received too many requests.",
+        "timeout": "The service took too long to respond.",
+        "protocol": "The service returned an unreadable response.",
+        "transport": "The service could not be reached.",
+        "interrupted": "The service request was interrupted."
+      }
     },
     "report": {
       "nav": "Report leaked credential",

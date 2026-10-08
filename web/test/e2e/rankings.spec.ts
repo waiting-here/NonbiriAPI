@@ -1,3 +1,5 @@
+import { mkdir } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { expect, test } from './test';
 import {
   collectConsoleViolations,
@@ -13,12 +15,19 @@ import { blackjackWire } from '../../src/user/games/blackjack/testFixtures';
 for (const scenario of [
   { locale: 'zh', theme: 'dark', width: 390 },
   { locale: 'en', theme: 'light', width: 1440 },
+  { locale: 'en', theme: 'light', width: 390 },
+  { locale: 'zh', theme: 'dark', width: 1440 },
 ] as const) {
   test(`new rankings, privacy and paging ${scenario.locale} ${scenario.width}`, async ({
     page,
   }) => {
     const guard = collectConsoleViolations(page),
       zh = scenario.locale === 'zh';
+    const evidence = process.env.NONBIRI_VISUAL_DIR ?? '../tmp';
+    await mkdir(evidence, { recursive: true });
+    const longName = zh
+      ? '这是一个用于验证完整昵称可读性的公开玩家昵称'
+      : 'A public player with a comfortably long display name';
     await page.setViewportSize({ width: scenario.width, height: 900 });
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.addInitScript(({ locale, theme }) => {
@@ -70,9 +79,12 @@ for (const scenario of [
               rank: String(i + 1),
               amount: '9007199254740993.123',
               is_me: false,
-              identity: { kind: 'anonymous' },
+              identity:
+                i === 0
+                  ? { kind: 'public', display_name: longName, avatar_url: null }
+                  : { kind: 'anonymous' },
             })),
-            me: { rank: '21', amount: '17.125', is_me: true, identity: { kind: 'anonymous' } },
+            me: { rank: '101', amount: '17.125', is_me: true, identity: { kind: 'anonymous' } },
           },
         });
       }
@@ -94,7 +106,10 @@ for (const scenario of [
             rank: String(second ? 21 : i + 1),
             amount: '12345678901234567.123',
             is_me: second,
-            identity: { kind: 'anonymous' },
+            identity:
+              i === 0
+                ? { kind: 'public', display_name: longName, avatar_url: null }
+                : { kind: 'anonymous' },
           })),
           me: null,
           pagination: { page: p, page_size: 20, total_items: '21', total_pages: '2' },
@@ -152,6 +167,8 @@ for (const scenario of [
       const card = cards.first();
       await expect(card.locator('tbody tr')).toHaveCount(21);
       await expect(card.locator('[data-own-rank]')).toContainText('17.125');
+      await expect(card.locator('[data-own-rank] td').first()).toHaveText('101');
+      await expect(card.getByText(longName, { exact: true })).toHaveAttribute('title', longName);
       await expect(card.getByText('9,007,199,254,740,993.123', { exact: true })).toHaveCount(20);
       expect(await card.locator('img').count()).toBe(0);
       if (path !== '/games') {
@@ -195,7 +212,12 @@ for (const scenario of [
       if (path === '/games/blackjack')
         await page
           .locator('.rank-switcher')
-          .screenshot({ path: '../tmp/blackjack-rankings-' + scenario.width + '.png' });
+          .screenshot({
+            path: resolve(
+              evidence,
+              'blackjack-rankings-' + scenario.width + '-' + scenario.theme + '.png',
+            ),
+          });
       expect(
         await card
           .locator('.rank-table-scroll')
@@ -222,7 +244,9 @@ for (const scenario of [
     await expect(
       card.getByRole('button', { name: zh ? '下一页' : 'Next', exact: true }),
     ).toBeDisabled();
-    await card.screenshot({ path: `../tmp/rankings-${scenario.width}.png` });
+    await card.screenshot({
+      path: resolve(evidence, 'charity-rankings-' + scenario.width + '-' + scenario.theme + '.png'),
+    });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
     );

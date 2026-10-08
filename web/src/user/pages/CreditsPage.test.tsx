@@ -204,14 +204,14 @@ describe('credit history numbered page controls', () => {
               apply: 'Apply filters',
             };
       for (const [delta, asset, reason] of [
-        ['-2000', labels.general, labels.exchange],
+        ['−2,000', labels.general, labels.exchange],
         ['+2', labels.paper, labels.exchange],
-        ['-3', labels.brush, labels.reserve],
+        ['−3', labels.brush, labels.reserve],
         ['+3', labels.brush, labels.refund],
-        ['-0.125', labels.general, labels.decay],
+        ['−0.125', labels.general, labels.decay],
         ['+0.007', labels.game, locale === 'zh' ? '签到奖励' : 'Check-in reward'],
       ]) {
-        const row = table.getByText(delta).closest('tr')!;
+        const row = table.getByRole('cell', { name: delta }).closest('tr')!;
         expect(within(row).getByText(asset)).toBeVisible();
         expect(within(row).getByText(reason)).toBeVisible();
       }
@@ -235,13 +235,17 @@ describe('credit history numbered page controls', () => {
         'picture_book',
       );
       await view.user.click(screen.getByRole('button', { name: labels.apply }));
-      await waitFor(() => expect(table.queryByText('-2000')).not.toBeInTheDocument());
-      expect(table.getByText('+2')).toBeVisible();
+      await waitFor(() =>
+        expect(table.queryByRole('cell', { name: '−2,000' })).not.toBeInTheDocument(),
+      );
+      expect(table.getByRole('cell', { name: '+2' })).toBeVisible();
       await view.user.click(assets.getByRole('radio', { name: labels.brush }));
       await view.user.click(screen.getByRole('button', { name: labels.apply }));
-      await waitFor(() => expect(table.queryByText('+2')).not.toBeInTheDocument());
-      expect(table.getByText('-3')).toBeVisible();
-      expect(table.getByText('+3')).toBeVisible();
+      await waitFor(() =>
+        expect(table.queryByRole('cell', { name: '+2' })).not.toBeInTheDocument(),
+      );
+      expect(table.getByRole('cell', { name: '−3' })).toBeVisible();
+      expect(table.getByRole('cell', { name: '+3' })).toBeVisible();
       expect(requests).toContain(
         '/api/credits/history?asset_type=sketch_paper&page=1&page_size=20&category=picture_book',
       );
@@ -297,8 +301,8 @@ describe('credit history numbered page controls', () => {
       role: 'user',
       route: `/credits?page=2&anchor=${general.operation_id}`,
     });
-    expect(await screen.findByText('-1')).toBeVisible();
-    expect(screen.getByText('-2')).toBeVisible();
+    expect(await screen.findByRole('cell', { name: '−1' })).toBeVisible();
+    expect(screen.getByRole('cell', { name: '−2' })).toBeVisible();
     await view.user.click(
       within(screen.getByRole('radiogroup', { name: 'Credit type' })).getByRole('radio', {
         name: 'Game credits',
@@ -308,8 +312,8 @@ describe('credit history numbered page controls', () => {
     await waitFor(() =>
       expect(requests).toContain('/api/credits/history?asset_type=game&page=1&page_size=20'),
     );
-    await waitFor(() => expect(screen.queryByText('-1')).not.toBeInTheDocument());
-    expect(screen.getByText('-2')).toBeVisible();
+    await waitFor(() => expect(screen.queryByRole('cell', { name: '−1' })).not.toBeInTheDocument());
+    expect(screen.getByRole('cell', { name: '−2' })).toBeVisible();
   });
 
   it('uses all four page sizes, remembers ten rows, carries anchor, and refreshes latest', async () => {
@@ -348,7 +352,7 @@ describe('credit history numbered page controls', () => {
       { station: 'user', role: 'user', route: '/credits' },
     );
 
-    expect((await screen.findAllByText('+1')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByRole('cell', { name: '+1' })).length).toBeGreaterThan(0);
     expect(screen.getByText('21 items')).toBeVisible();
     const size = screen.getByRole('combobox', { name: 'Items per page' });
     expect(Array.from(size.querySelectorAll('option')).map((option) => option.value)).toEqual([
@@ -436,7 +440,7 @@ describe('credit history numbered page controls', () => {
       },
     );
 
-    expect((await screen.findAllByText('+1')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByRole('cell', { name: '+1' })).length).toBeGreaterThan(0);
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/credits'));
     expect(requests).not.toContain(
       '/api/credits/history?asset_type=all&page=0&page=01&page_size=30&anchor=bad',
@@ -448,7 +452,7 @@ describe('credit history numbered page controls', () => {
       'expense',
     );
     await view.user.click(screen.getByRole('button', { name: 'Apply filters' }));
-    expect(await screen.findByText('-1')).toBeVisible();
+    expect(await screen.findByRole('cell', { name: '−1' })).toBeVisible();
     expect(requests).toContain(
       '/api/credits/history?asset_type=all&page=1&page_size=20&category=charity&direction=expense',
     );
@@ -539,16 +543,16 @@ describe('credit history numbered page controls', () => {
       </>,
       { station: 'user', role: 'user', route: '/credits' },
     );
-    expect((await screen.findAllByText('+1')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByRole('cell', { name: '+1' })).length).toBeGreaterThan(0);
     await view.user.click(screen.getByRole('button', { name: 'Next' }));
     expect(await screen.findByText('21 items')).toBeVisible();
     await view.user.click(screen.getByRole('button', { name: 'Go back' }));
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/credits'));
-    expect((await screen.findAllByText('+1')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByRole('cell', { name: '+1' })).length).toBeGreaterThan(0);
 
     await view.user.click(screen.getByRole('button', { name: 'Open charity filter' }));
     await view.user.click(screen.getByRole('button', { name: 'Open donation filter' }));
-    expect(await screen.findByText('+2')).toBeVisible();
+    expect(await screen.findByRole('cell', { name: '+2' })).toBeVisible();
     await waitFor(() =>
       expect(requests).toContain(
         '/api/credits/history?asset_type=all&page=1&page_size=20&category=donation',
@@ -556,8 +560,8 @@ describe('credit history numbered page controls', () => {
     );
     resolveCharity(jsonResponse(historyPage([charityEntry], '1', 20, 1)));
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(screen.getByText('+2')).toBeVisible();
-    expect(screen.queryByText('-1')).not.toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: '+2' })).toBeVisible();
+    expect(screen.queryByRole('cell', { name: '−1' })).not.toBeInTheDocument();
   });
 
   it('remounts a changed account without its old anchor and hides private rows on 401/403', async () => {
@@ -602,7 +606,7 @@ describe('credit history numbered page controls', () => {
         route: `/credits?page=2&page_size=20&anchor=${oldAnchor}`,
       },
     );
-    expect((await screen.findAllByText('+1')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByRole('cell', { name: '+1' })).length).toBeGreaterThan(0);
 
     testSession.accountID = '2';
     view.rerender(
@@ -620,7 +624,7 @@ describe('credit history numbered page controls', () => {
       ).toHaveLength(1),
     );
     expect(screen.getByTestId('location')).toHaveTextContent('/credits');
-    expect(screen.queryByText('+2')).toBeInTheDocument();
+    expect(screen.queryByRole('cell', { name: '+2' })).toBeInTheDocument();
     expect(requests).not.toContain(
       `/api/credits/history?asset_type=all&page=1&page_size=20&anchor=${oldAnchor}`,
     );
@@ -628,11 +632,11 @@ describe('credit history numbered page controls', () => {
     status = 403;
     await view.user.click(screen.getByRole('button', { name: 'Open charity filter' }));
     expect((await screen.findAllByRole('alert'))[0]).toBeVisible();
-    expect(screen.queryByText('+2')).not.toBeInTheDocument();
+    expect(screen.queryByRole('cell', { name: '+2' })).not.toBeInTheDocument();
     status = 401;
     await view.user.click(screen.getByRole('button', { name: 'Open donation filter' }));
     expect((await screen.findAllByRole('alert'))[0]).toBeVisible();
-    expect(screen.queryByText('+2')).not.toBeInTheDocument();
+    expect(screen.queryByRole('cell', { name: '+2' })).not.toBeInTheDocument();
   });
 
   it('keeps pagination controls and totals for an empty result page', async () => {

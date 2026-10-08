@@ -41,7 +41,8 @@
       "introAddressBody": "在客户端中连接公益模型和自己的服务。",
       "introGames": "小游戏和活动",
       "introGamesBody": "签到、参加活动或玩小游戏。",
-      "checkinRules": "奖励与余额条件"
+      "claimedToday": "今日已签",
+      "availableTomorrow": "明天可领"
     },
     "steward": {
       "donationsTitle": "捐赠审核队列",
@@ -1792,7 +1793,15 @@
         "endpoint": "服务"
       },
       "resourceType": "相关",
-      "closedResourceUnavailable": "相关的服务或密钥已经删除，这个问题已关闭。"
+      "closedResourceUnavailable": "相关的服务或密钥已经删除，这个问题已关闭。",
+      "detail": {
+        "auth": "服务密钥验证失败",
+        "rateLimit": "服务请求过于频繁",
+        "timeout": "服务响应超时",
+        "protocol": "服务返回了无法识别的回复",
+        "transport": "无法连接到服务",
+        "interrupted": "服务请求已中断"
+      }
     },
     "report": {
       "nav": "举报泄露凭据",

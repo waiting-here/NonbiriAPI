@@ -148,7 +148,12 @@ describe('picture book page state', () => {
     expect(screen.getByText(/Choose an available size again/)).toBeVisible();
     expect(screen.getByRole('button', { name: 'Reserve currency and join queue' })).toBeDisabled();
     await view.user.selectOptions(screen.getByLabelText('Exact size'), '512x768');
-    expect(screen.getByText('12 paper + 4 brushes')).toBeVisible();
+    expect(
+      screen.getByText(
+        (_, element) =>
+          element?.tagName === 'DD' && element.textContent === '12 paper + 4 brushes',
+      ),
+    ).toBeVisible();
     await view.user.selectOptions(screen.getByLabelText('Image model'), first.id);
     expect(screen.getByLabelText('Width')).toHaveValue(512);
     expect(screen.getByLabelText('Height')).toHaveValue(512);
@@ -188,7 +193,12 @@ describe('picture book page state', () => {
     await view.user.type(screen.getByLabelText(/Prompt \*/), 'synthetic-private-prompt-marker');
     await view.user.clear(screen.getByLabelText('Image count'));
     await view.user.type(screen.getByLabelText('Image count'), '4');
-    expect(screen.getByText('8 paper + 4 brushes')).toBeVisible();
+    expect(
+      screen.getByText(
+        (_, element) =>
+          element?.tagName === 'DD' && element.textContent === '8 paper + 4 brushes',
+      ),
+    ).toBeVisible();
     await view.user.click(screen.getByRole('button', { name: 'Reserve currency and join queue' }));
     await screen.findByText(/submission result is unconfirmed/i);
     expect(screen.getByLabelText(/Prompt \*/)).toBeDisabled();
@@ -247,10 +257,20 @@ describe('picture book page state', () => {
       />,
     );
     expect(screen.getByText(/model configuration changed/i)).toBeVisible();
-    expect(screen.getAllByText('2 paper + 1 brushes').length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(
+        (_, element) =>
+          element?.tagName === 'DD' && element.textContent === '2 paper + 1 brushes',
+      ).length,
+    ).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'Reserve currency and join queue' })).toBeDisabled();
     await view.user.click(screen.getByRole('button', { name: 'Load latest configuration' }));
-    expect(screen.getAllByText('5 paper + 2 brushes').length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(
+        (_, element) =>
+          element?.tagName === 'DD' && element.textContent === '5 paper + 2 brushes',
+      ).length,
+    ).toBeGreaterThan(0);
   });
   it('renders independent size controls and submits their canonical size string', async () => {
     const model = modelFixture();
