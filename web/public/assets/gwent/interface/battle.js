@@ -447,8 +447,9 @@ export class PlatformBattle {
       : '这里尚无卡牌。';
     document.getElementById('dialog-cards').replaceChildren(
       ...cards.map((card) => {
-        const section = document.createElement('section'),
+        const section = document.createElement('div'),
           description = document.createElement('p');
+        section.className = 'dialog-card';
         description.textContent = cardDescription(this.enrich(card));
         section.append(cardElement(this.enrich(card)), description);
         return section;
