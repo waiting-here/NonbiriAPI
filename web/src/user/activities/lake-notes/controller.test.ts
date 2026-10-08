@@ -75,6 +75,38 @@ function transport(result: CastResult): CastTransport {
   };
 }
 describe('Lake cast control', () => {
+  it('recovers a lost terminal receipt with the same key without another control mutation', async () => {
+    const result = fixture(240);
+    result.cast.state.snapshot.hadCaught = true;
+    result.cast.state.progress = 0.01;
+    result.cast.state.barY = result.cast.state.snapshot.barHeight / 2;
+    result.cast.state.barVelocity = 0;
+    const server = transport(result);
+    let confirmed = result;
+    server.checkpoint = vi.fn(async (_id, input) => {
+      if (vi.mocked(server.checkpoint).mock.calls.length === 1) {
+        confirmed = replay(confirmed, input);
+        throw new ApiError('network_error', 'Terminal receipt lost.', 0);
+      }
+      return confirmed;
+    });
+    const saved = vi.fn();
+    const controller = new LakeController(server, saved);
+    controller.adopt(result, true);
+    controller.setHeld(true);
+    for (let tick = 0; tick < 480; tick++) controller.tick();
+    await expect(controller.flush()).rejects.toMatchObject({ code: 'network_error' });
+    expect(controller.projection()?.cast.phase).toBe('failed');
+    expect(controller.snapshot().status).toBe('unknown');
+    await controller.retry();
+    expect(controller.snapshot().status).toBe('terminal');
+    expect(vi.mocked(server.checkpoint).mock.calls[1]).toEqual(
+      vi.mocked(server.checkpoint).mock.calls[0],
+    );
+    expect(server.pause).not.toHaveBeenCalled();
+    expect(saved).toHaveBeenCalledOnce();
+    expect(controller.queuedTicks()).toBe(0);
+  });
   it('persists the unmount pause while suppressing late saves and adoption', async () => {
     const result = fixture(),
       saved = vi.fn(),

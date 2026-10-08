@@ -3573,7 +3573,11 @@ export function mountLake(root, bridge) {
       game.state = result.cast.phase;
       terminalShown = result.cast.id;
       presentTerminal(result.cast.state, before);
-    } else if (!terminal && (phase === 'success' || phase === 'failed')) {
+    } else if (
+      !terminal &&
+      (phase === 'success' || phase === 'failed') &&
+      (current.status === 'running' || current.status === 'saving')
+    ) {
       game.state = 'playing';
       game.paused = true;
       ui.overlay.hidden = false;
@@ -3584,6 +3588,8 @@ export function mountLake(root, bridge) {
       ui.overlayButton.disabled = true;
       ui.overlaySecondary.hidden = ui.overlayBasket.hidden = true;
     } else if (!terminal) {
+      game.paused = current.status !== 'running' && current.status !== 'saving';
+      if (phase === 'success' || phase === 'failed') game.state = 'playing';
       ui.overlay.hidden = !game.paused;
       ui.overlayButton.disabled = bridge.busy();
       if (game.paused) {
