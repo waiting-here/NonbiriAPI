@@ -3,6 +3,7 @@ package duel_test
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"testing"
 	"time"
 
@@ -132,8 +133,17 @@ func TestAICommitSurvivesOpponentLockAndCannotReviveDeletedMatch(t *testing.T) {
 				t.Fatal(err)
 			}
 			source := waitingSource{pending: make(chan waitingDecision, 4)}
+			retryNeeded := make(chan struct{}, 1)
 			f.options.AI = waitingAdapter{source: source}
-			f.options.ReportError = func(err error) { t.Logf("AI callback: %v", err) }
+			f.options.ReportError = func(err error) {
+				t.Logf("AI callback: %v", err)
+				if errors.Is(err, context.DeadlineExceeded) {
+					select {
+					case retryNeeded <- struct{}{}:
+					default:
+					}
+				}
+			}
 			var err error
 			f.s, err = bidding.New(f.options)
 			if err != nil {
@@ -200,13 +210,29 @@ func TestAICommitSurvivesOpponentLockAndCannotReviveDeletedMatch(t *testing.T) {
 				}
 			} else {
 				deadline = time.Now().Add(30 * time.Second)
+				retry := false
 				for time.Now().Before(deadline) {
 					current := f.read(0).Current
 					if current != nil && current.Round > v.Round {
 						return
 					}
 					select {
+					case <-retryNeeded:
+						retry = true
+					default:
+					}
+					// This fixture has no worker. Retry reported commit timeouts,
+					// while leaving an incorrectly rejected callback observable.
+					if retry {
+						f.tick()
+					}
+					select {
 					case next := <-source.pending:
+						current := f.read(0).Current
+						if current != nil && current.Round == v.Round &&
+							(next.request.Window != call.request.Window || next.request.DecisionID != call.request.DecisionID) {
+							t.Fatal("opponent lock replaced the independent AI decision", call.request.Window, next.request.Window)
+						}
 						close(next.release)
 					default:
 					}
