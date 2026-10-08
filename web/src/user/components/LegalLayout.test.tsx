@@ -9,7 +9,11 @@ describe('legal navigation', () => {
   it('uses real override headings, retains safe text blocks and stable anchors on rerender', async () => {
     const document = (
       <LegalLayout documentKey="privacy">
-        <LegalSections override={'## Data\nSafe <script> text\n### Retention\n- One\n- Two'} />
+        <LegalSections
+          override={
+            '## Data\nSafe <script> text\n### Retention\n- One\n- Two\n\n**Bounded retention**\n\n| Data | Duration |\n| --- | --- |\n| Logs | 30 days |\n\n[Contact](https://example.test/contact)'
+          }
+        />
       </LegalLayout>
     );
     const view = await renderWithProviders(document, {
@@ -20,6 +24,12 @@ describe('legal navigation', () => {
     await waitFor(() => expect(screen.getAllByRole('link', { name: 'Data' })).toHaveLength(3));
     expect(screen.getByText('Safe <script> text')).toBeVisible();
     expect(view.container.querySelector('script')).toBeNull();
+    expect(view.container.querySelector('.legal-markdown strong')).toHaveTextContent('Bounded retention');
+    expect(screen.getByRole('cell', { name: '30 days' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Contact' })).toHaveAttribute(
+      'href',
+      'https://example.test/contact',
+    );
     const body = view.container.querySelector('.legal-layout__body')!;
     expect(
       within(body as HTMLElement)

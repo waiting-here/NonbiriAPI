@@ -26,37 +26,45 @@ function escapeHTML(value: string): string {
     .replaceAll("'", '&#39;');
 }
 
-const markdown = new Marked({
-  gfm: true,
-  breaks: false,
-  renderer: {
-    html: ({ text }) => escapeHTML(text),
-    // Images remain text, so reading donor content sends no media requests.
-    image: ({ text }) => escapeHTML(text),
-    heading({ tokens, depth }) {
-      const level = Math.min(depth + 2, 6);
-      return `<h${level}>${this.parser.parseInline(tokens)}</h${level}>`;
-    },
-    link({ href, tokens }) {
-      const text = this.parser.parseInline(tokens);
-      const url = safeLink(href);
-      if (!url) return text;
-      const target = url.startsWith('#') || url.startsWith('/') ? '' : ' target="_blank"';
-      return `<a href="${escapeHTML(url)}"${target} rel="noopener noreferrer nofollow" referrerpolicy="no-referrer">${text}</a>`;
-    },
-    table(token) {
-      return `<div class="nb-markdown__table">${Renderer.prototype.table.call(this, token)}</div>`;
-    },
-  },
-});
+type HeadingShift = 0 | 2;
 
-function renderMarkdown(value: string): string {
+function createMarkdown(headingShift: HeadingShift) {
+  return new Marked({
+    gfm: true,
+    breaks: false,
+    renderer: {
+      html: ({ text }) => escapeHTML(text),
+      // Images remain text, so reading donor content sends no media requests.
+      image: ({ text }) => escapeHTML(text),
+      heading({ tokens, depth }) {
+        const level = Math.max(2, Math.min(depth + headingShift, 6));
+        return `<h${level}>${this.parser.parseInline(tokens)}</h${level}>`;
+      },
+      link({ href, tokens }) {
+        const text = this.parser.parseInline(tokens);
+        const url = safeLink(href);
+        if (!url) return text;
+        const target = url.startsWith('#') || url.startsWith('/') ? '' : ' target="_blank"';
+        return `<a href="${escapeHTML(url)}"${target} rel="noopener noreferrer nofollow" referrerpolicy="no-referrer">${text}</a>`;
+      },
+      table(token) {
+        return `<div class="nb-markdown__table">${Renderer.prototype.table.call(this, token)}</div>`;
+      },
+    },
+  });
+}
+
+const parsers = { 0: createMarkdown(0), 2: createMarkdown(2) };
+
+function renderMarkdown(value: string, headingShift: HeadingShift): string {
   try {
+    const markdown = parsers[headingShift];
     return DOMPurify.sanitize(markdown.parse(value, { async: false }), {
       ALLOWED_TAGS: [
         'p',
         'br',
         'hr',
+        'h2',
         'h3',
         'h4',
         'h5',
@@ -102,11 +110,13 @@ function renderMarkdown(value: string): string {
 export function MarkdownText({
   children,
   className = '',
+  headingShift = 2,
 }: {
   children: string;
   className?: string;
+  headingShift?: HeadingShift;
 }) {
-  const html = useMemo(() => renderMarkdown(children), [children]);
+  const html = useMemo(() => renderMarkdown(children, headingShift), [children, headingShift]);
   return (
     <div className={`nb-markdown ${className}`.trim()} dangerouslySetInnerHTML={{ __html: html }} />
   );
