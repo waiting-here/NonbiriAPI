@@ -14,6 +14,18 @@ const entry = (catalog, key, source, anchor, reason) => ({
 });
 
 const charityManagement = 'src/shared/components/CharityManagement.tsx';
+const charityModels = 'src/shared/components/charity/CharityModels.tsx';
+
+function charityRoleSource(key) {
+  const donationFields = [
+    'allStatuses',
+    'noDonations',
+    'noDonationsBody',
+    'saveKeyLimits',
+    'statusFilter',
+  ];
+  return donationFields.includes(key.split('.').at(-1)) ? charityManagement : charityModels;
+}
 const charityPanels = 'src/user/features/economy/CharityPanels.tsx';
 const activitiesPanels = 'src/user/features/economy/ActivitiesPanels.tsx';
 
@@ -147,7 +159,7 @@ const dynamicCopyKeys = [
     entry(
       'common',
       key,
-      charityManagement,
+      charityModels,
       "`common.operations.charity.${side === 'userPrices' ? 'userPrices' : 'donorRewards'}`",
       'The side expression has exactly the userPrices/donorRewards alternatives.',
     ),
@@ -188,7 +200,7 @@ const dynamicCopyKeys = [
     entry(
       'admin',
       key,
-      charityManagement,
+      charityRoleSource(key),
       key.endsWith('.donationsTitle') || key.endsWith('.modelsTitle')
         ? `charityCopyKey(frame, '${key.split('.').at(-1)}')`
         : key.endsWith('.enabled') || key.endsWith('.disabled')
@@ -233,7 +245,7 @@ const dynamicCopyKeys = [
     entry(
       'user',
       key,
-      charityManagement,
+      charityRoleSource(key),
       key.endsWith('.donationsTitle') || key.endsWith('.modelsTitle')
         ? `charityCopyKey(frame, '${key.split('.').at(-1)}')`
         : key.endsWith('.enabled') || key.endsWith('.disabled')
@@ -308,7 +320,7 @@ const dynamicCopyKeys = [
     entry(
       'admin',
       key,
-      charityManagement,
+      charityModels,
       't(tokenPriceCopyKey(role, side, field))',
       'tokenPriceCopyKey combines four token fields with the two explicit pricing sides.',
     ),
@@ -326,7 +338,7 @@ const dynamicCopyKeys = [
     entry(
       'user',
       key,
-      charityManagement,
+      charityModels,
       't(tokenPriceCopyKey(role, side, field))',
       'tokenPriceCopyKey combines four token fields with the two explicit pricing sides.',
     ),

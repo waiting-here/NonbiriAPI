@@ -67,7 +67,7 @@ describe('Debug v2 wire', () => {
     expect(() => normalizeDebugEvent({ ...wire, data: { ...wire.data, truncated: true } })).toThrow(/truncation/i);
   });
 
-  it.each(['charity_chat_completions', 'charity_embeddings'])('accepts only the fixed upstream projection for %s', (route) => {
+  it.each(['charity_chat_completions', 'charity_embeddings', 'charity_images_generations'])('accepts only the fixed upstream projection for %s', (route) => {
     const usage = {
       uncached_input_tokens: '0', cache_write_input_tokens: '0', cache_read_input_tokens: '0',
       output_tokens: '0', total_tokens: '0', usage_unknown: true, charge: '0',
@@ -107,6 +107,35 @@ describe('Debug v2 wire', () => {
     expect(() => normalizeDebugTrace({ ...trace, request: { ...trace.request, stream: true } })).toThrow(/stream/);
     expect(() => normalizeDebugTrace({ ...trace, request: { ...trace.request, route_kind: 'future_embeddings' } })).toThrow(/route/);
   });
+
+  it.each(['openai_images_generations', 'charity_images_generations'])(
+    'accepts image streams for %s',
+    (route) => {
+      const trace = {
+        trace_id: oid('dbt_'),
+        revision: '1',
+        state: 'capturing',
+        request: {
+          route_kind: route,
+          model: 'provider/image',
+          stream: true,
+          body: {
+            media_type: 'application/json',
+            byte_count: 2,
+            text: '{}',
+            base64: null,
+            truncated: false,
+          },
+        },
+        upstream_result: null,
+        caller_result: null,
+        created_at: 1,
+        updated_at: 2,
+        truncated: false,
+      };
+      expect(normalizeDebugTrace(trace).request).toMatchObject({ route_kind: route, stream: true });
+    },
+  );
 
   it('rejects caller results whose status, source, and stable code disagree', () => {
     const trace = {

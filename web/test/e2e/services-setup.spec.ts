@@ -1,14 +1,14 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { expect, test } from './test';
+import { numberedPage } from './numbered-fixtures';
 import { USER_ORIGIN } from './ports';
 import {
-  mockPublicConfig,
-  mockRoleSession,
   assertNoSensitiveBrowserPersistence,
   installURLPersistenceObserver,
+  mockPublicConfig,
+  mockRoleSession,
 } from './support';
-import { numberedPage } from './numbered-fixtures';
+import { expect, test } from './test';
 
 const endpoint = {
   id: '11',
@@ -65,6 +65,7 @@ const entries = ['model-a', 'model-b'].map((name, i) => ({
 }));
 function model(id: string, name: string, bound = false) {
   return {
+    model_types: ['chat_completions', 'embeddings'],
     id,
     provider: 'demo',
     model: name,

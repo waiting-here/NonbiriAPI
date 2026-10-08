@@ -94,6 +94,7 @@ const CAPABILITY_SERVER_NOW = 1_788_100_000;
 
 function capabilityModel(provider = 'provider', model = 'model') {
   return {
+    model_types: ['chat_completions', 'embeddings'],
     id: '1',
     provider,
     model,
@@ -169,6 +170,7 @@ describe('economy closed-wire normalizers', () => {
       models: [capabilityModel()],
     });
     expect(available.models[0]).toMatchObject({
+      modelTypes: ['chat_completions', 'embeddings'],
       fullName: '[公益]provider/model',
       pricing: {
         mode: 'per_request',

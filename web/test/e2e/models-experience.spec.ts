@@ -1,14 +1,17 @@
 import { mkdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { expect, test, type Page } from './test';
-import { USER_ORIGIN } from './ports';
-import { numberedPage } from './numbered-fixtures';
-import { collectConsoleViolations, mockPublicConfig, mockRoleSession } from './support';
 import type { Binding, BindingCandidate, Model } from '../../src/user/features/core/types';
+import { numberedPage } from './numbered-fixtures';
+import { USER_ORIGIN } from './ports';
+import { collectConsoleViolations, mockPublicConfig, mockRoleSession } from './support';
+import { expect, test, type Page } from './test';
 
 const cases = [
   { width: 1440, locale: 'en', theme: 'light', create: true },
   { width: 768, locale: 'zh', theme: 'dark', create: false },
+  { width: 1440, locale: 'zh', theme: 'light', create: false },
+  { width: 1440, locale: 'zh', theme: 'dark', create: false },
+  { width: 390, locale: 'zh', theme: 'dark', create: false },
   { width: 390, locale: 'zh', theme: 'light', create: false },
 ] as const;
 const candidate = (index: number): BindingCandidate => ({
@@ -23,6 +26,7 @@ const candidate = (index: number): BindingCandidate => ({
   source_types: [index === 10 ? 'manual' : 'automatic'],
 });
 const original: Model = {
+  model_types: ['chat_completions', 'embeddings'],
   id: '101',
   provider: 'team',
   model: 'assistant',
@@ -38,12 +42,12 @@ const original: Model = {
   created_at: 1700000000,
   updated_at: 1700000001,
 };
-async function picture(page: Page, name: string) {
+async function picture(page: Page, name: string, fullPage = true) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   if (!process.env.NONBIRI_VISUAL_DIR) return;
   const dir = resolve(process.env.NONBIRI_VISUAL_DIR);
   await mkdir(dir, { recursive: true });
-  await page.screenshot({ path: resolve(dir, `${name}.png`), fullPage: true });
+  await page.screenshot({ path: resolve(dir, `${name}.png`), fullPage });
 }
 async function fixture(page: Page, empty: boolean) {
   let model = { ...original, binding_count: empty ? '0' : '25' };
@@ -121,7 +125,9 @@ async function fixture(page: Page, empty: boolean) {
         patches.push(input());
         const fields = { ...input() };
         delete fields.expected_revision;
-        model = { ...model, ...fields, revision: '2' };
+        model = { ...model, ...fields, revision: String(Number(model.revision) + 1) };
+        model.full_name = model.provider + '/' + model.model;
+        models = models.map((row) => (row.id === model.id ? model : row));
       }
       body = model;
     } else if (path.endsWith('/bindings/order')) {
@@ -240,6 +246,7 @@ for (const scenario of cases) {
         .click();
       await expect(page.getByTestId('model-source-search')).toBeFocused();
       expect(state.creates[0]).toMatchObject({
+        model_types: ['chat_completions'],
         route_strategy: 'ordered',
         silent_retry: false,
         flatten_tool_calls: false,
@@ -335,6 +342,56 @@ for (const scenario of cases) {
       flatten_tool_calls: true,
       transport_rule: 'force_stream',
     });
+    await page.getByRole('button', { name: core('models.editModel'), exact: true }).click();
+    const editor = page.locator('.model-editor');
+    const types = editor.getByRole('group', { name: /Model types|模型类型/ });
+    const chat = types.getByRole('checkbox', { name: /Chat completions|聊天补全/ });
+    const embeddings = types.getByRole('checkbox', { name: /Embeddings|向量化/ });
+    const images = types.getByRole('checkbox', { name: /Image generation|图像生成/ });
+    await expect(chat).toBeChecked();
+    await expect(embeddings).toBeChecked({ checked: !scenario.create });
+    await images.check();
+    await editor.getByRole('button', { name: core('common.cancel'), exact: true }).click();
+    await page.getByRole('button', { name: core('models.editModel'), exact: true }).click();
+    await expect(images).not.toBeChecked();
+    await chat.uncheck();
+    await embeddings.uncheck();
+    await images.check();
+    const advanced = editor
+      .locator('.nb-fold')
+      .filter({ has: page.locator('summary', { hasText: text.advanced }) });
+    if (!(await advanced.evaluate((element) => (element as HTMLDetailsElement).open))) {
+      await advanced.locator('summary').click();
+    }
+    await expect(
+      editor.getByRole('switch', { name: core('models.silentRetry'), exact: true }),
+    ).toBeVisible();
+    await expect(
+      editor.getByRole('switch', { name: core('models.flattenTools'), exact: true }),
+    ).toHaveCount(0);
+    await page
+      .getByRole('radio', { name: core('models.cacheBalanced'), exact: true })
+      .locator('..')
+      .click();
+    await types.scrollIntoViewIfNeeded();
+    await picture(
+      page,
+      String(scenario.width) + '-' + scenario.locale + '-' + scenario.theme + '-image-types',
+      false,
+    );
+    await editor.getByRole('button', { name: core('common.save'), exact: true }).click();
+    await expect.poll(() => state.patches.length).toBe(2);
+    expect(state.patches[1]).toMatchObject({
+      model_types: ['images_generations'],
+      route_strategy: 'cache_balanced',
+    });
+    await page.getByRole('button', { name: core('models.editModel'), exact: true }).click();
+    await expect(images).toBeChecked();
+    await expect(chat).not.toBeChecked();
+    await expect(embeddings).not.toBeChecked();
+    await expect(
+      page.getByRole('radio', { name: core('models.cacheBalanced'), exact: true }),
+    ).toBeChecked();
     guard.assertNone();
   });
 }

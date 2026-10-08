@@ -1,13 +1,16 @@
-import { Fold } from '@shared/components/ui';
-import { RecordsHeader } from '../components/RecordsHeader';
-import { useMemo, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { MessagesView, MessageField } from '@shared/components/MessagesView';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
+import { MessageField, MessagesView } from '@shared/components/MessagesView';
 import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
+import { Fold } from '@shared/components/ui';
+import '@shared/operations/operations.css';
+import { isEmbeddingRoute } from '@shared/operations/requestKind';
 import { ApiError } from '@shared/query/http';
 import { formatDateTime } from '@shared/utils/datetime';
-import { isEmbeddingRoute } from '@shared/operations/requestKind';
+import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { RecordsHeader } from '../components/RecordsHeader';
+import '../features/debug/debug-v2.css';
+import { useDebugV2 } from '../features/debug/useDebugV2';
 import type { DebugObserverStatus } from '../features/debug/v2stream';
 import {
   safeRequestJSON,
@@ -18,9 +21,6 @@ import {
   type DebugTrace,
   type Presence,
 } from '../features/debug/v2types';
-import { useDebugV2 } from '../features/debug/useDebugV2';
-import '../features/debug/debug-v2.css';
-import '@shared/operations/operations.css';
 
 const PARAMETER_ORDER = [
   'model',
@@ -45,6 +45,8 @@ const ROUTE_LABEL_KEYS = {
   charity_chat_completions: 'user.debug.state.route.charityChatCompletions',
   openai_embeddings: 'user.debug.state.route.openaiEmbeddings',
   charity_embeddings: 'user.debug.state.route.charityEmbeddings',
+  openai_images_generations: 'user.debug.state.route.openaiImagesGenerations',
+  charity_images_generations: 'user.debug.state.route.charityImagesGenerations',
 } as const satisfies Record<DebugTrace['request']['route_kind'], string>;
 
 const TRACE_STATE_LABEL_KEYS = {

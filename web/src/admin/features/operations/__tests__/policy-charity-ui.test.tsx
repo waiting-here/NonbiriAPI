@@ -1,7 +1,3 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
-import { useAdminSession } from '../../../data';
-import { useUserSession } from '../../../../user/data';
-import { describe, expect, it, vi } from 'vitest';
 import { CharityManagement } from '@shared/components/CharityManagement';
 import type {
   AdminDonation,
@@ -9,7 +5,11 @@ import type {
   ManagedDonationKey,
   StewardDonation,
 } from '@shared/operations/charity';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../../../test/unit/support';
+import { useUserSession } from '../../../../user/data';
+import { useAdminSession } from '../../../data';
 
 function jsonResponse(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), {
@@ -450,6 +450,7 @@ describe('Generation 2 charity management policy', () => {
         createRequests.push(init ?? {});
         const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
         const model: CharityModel = {
+          model_types: ['chat_completions', 'embeddings'],
           route_strategy: body.route_strategy as CharityModel['route_strategy'],
           id: '1',
           provider: String(body.provider),
@@ -575,8 +576,12 @@ describe('Generation 2 charity management policy', () => {
     expect(await screen.findByRole('cell', { name: /^My donation/ })).toBeInTheDocument();
     await view.user.click(screen.getByRole('button', { name: 'Review' }));
     await waitFor(() => expect(onCapabilityLoss).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(screen.queryByRole('cell', { name: /^My donation/ })).not.toBeInTheDocument());
-    expect(screen.queryByRole('checkbox', { name: 'My donation', hidden: true })).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByRole('cell', { name: /^My donation/ })).not.toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByRole('checkbox', { name: 'My donation', hidden: true }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent(/access.*no longer/i);
   });
 });

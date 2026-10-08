@@ -1,3 +1,5 @@
+import { ModelTypesSummary } from '@shared/components/ModelTypesField';
+import { formatLevelRanges } from '@shared/utils/levels';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchState } from '@shared/operations/useSearchState';
@@ -229,8 +231,14 @@ function CatalogFilters({
   );
 }
 
-export function CharityCatalogPanel({ accountID, enabled = true }: { accountID: string | undefined; enabled?: boolean }) {
-  const { t } = useTranslation();
+export function CharityCatalogPanel({
+  accountID,
+  enabled = true,
+}: {
+  accountID: string | undefined;
+  enabled?: boolean;
+}) {
+  const { t, i18n } = useTranslation();
   const [searchParams, setSearchParams] = useSearchState();
   const urlState = readCharityCatalogUrlState(searchParams);
   const pager = useUrlPagePager({
@@ -310,6 +318,7 @@ export function CharityCatalogPanel({ accountID, enabled = true }: { accountID: 
   return (
     <Card className="economy-catalog-card">
       <h2>{t('user.charity.catalog.title')}</h2>
+      <p className="nb-sub">{t('user.charity.catalog.pricingHelp')}</p>
       <CatalogFilters
         key={urlState.filters.query}
         filter={filter}
@@ -368,6 +377,7 @@ export function CharityCatalogPanel({ accountID, enabled = true }: { accountID: 
                         <code>{model.fullName}</code>
                         <span aria-hidden="true">{expanded.has(model.id) ? '−' : '+'}</span>
                       </button>
+                      <ModelTypesSummary value={model.modelTypes} />
                       {model.publicDescription ? (
                         <span className="nb-sub charity-model-preview">
                           {Array.from(model.publicDescription).slice(0, 60).join('')}
@@ -409,7 +419,10 @@ export function CharityCatalogPanel({ accountID, enabled = true }: { accountID: 
                   cell: 'meta',
                   render: (model) =>
                     model.allowedLevels.length
-                      ? model.allowedLevels.map((level) => `L${level}`).join('、')
+                      ? formatLevelRanges(
+                          model.allowedLevels,
+                          i18n.language.startsWith('zh') ? '、' : ', ',
+                        )
                       : t('user.charity.catalog.noAllowedLevels'),
                 },
                 {

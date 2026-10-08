@@ -1,4 +1,5 @@
 import { Button } from '@shared/components/ui/Button';
+import { ModelTypesSummary } from './ModelTypesField';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -47,11 +48,21 @@ export function CharityRolePolicyForm({
     if (lost) onCapabilityLoss?.();
   }, [lost, onCapabilityLoss]);
   if (lost) return <p role="alert">{t('common.operations.charity.accessLost')}</p>;
+  if (!model.model_types.includes('chat_completions')) {
+    return (
+      <Card>
+        <h3>{model.full_name}</h3>
+        <ModelTypesSummary value={model.model_types} />
+        <p>{t('common.operations.charity.operationHelp')}</p>
+      </Card>
+    );
+  }
   const unknown = responseOutcomeUnknown(save.error);
   const policy = buildRolePolicy(draft);
   return (
     <Card>
       <h3>{model.full_name}</h3>
+      <ModelTypesSummary value={model.model_types} />
       <p>{t('common.rolePolicy.stewardScope')}</p>
       <RolePolicyEditor
         value={draft}

@@ -18,6 +18,7 @@ const keyMetadata = {
   generation: '1',
 };
 const model = {
+  model_types: ['chat_completions', 'embeddings'],
   id: '7',
   provider: 'my',
   model: 'model',
@@ -33,6 +34,7 @@ const model = {
   updated_at: 1700000001,
 };
 const charityModel = {
+  model_types: ['chat_completions', 'embeddings'],
   id: '1',
   provider: 'provider',
   model: 'model',

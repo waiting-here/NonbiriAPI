@@ -1,7 +1,8 @@
+import { numberedResponse } from './numbered-fixtures';
 import { ADMIN_ORIGIN, USER_ORIGIN } from './ports';
 import {
-  assertResponsiveOperationTables,
   assertNoSensitiveBrowserPersistence,
+  assertResponsiveOperationTables,
   collectConsoleViolations,
   installURLPersistenceObserver,
   mockJson,
@@ -10,7 +11,6 @@ import {
   userSession,
 } from './support';
 import { expect, test } from './test';
-import { numberedResponse } from './numbered-fixtures';
 
 type BrowserContext = Parameters<typeof installURLPersistenceObserver>[0];
 type Page = Parameters<typeof collectConsoleViolations>[0];
@@ -556,6 +556,7 @@ test.describe('donation expiry in UTC', () => {
         state: 'available',
         models: [
           {
+            model_types: ['chat_completions', 'embeddings'],
             id: '7',
             provider: 'provider',
             model: 'charity',
@@ -586,6 +587,7 @@ test.describe('donation expiry in UTC', () => {
       body: catalogPage(
         [
           {
+            model_types: ['chat_completions', 'embeddings'],
             id: '7',
             provider: 'provider',
             model: 'charity',
@@ -808,6 +810,7 @@ for (const locale of ['en', 'zh'] as const) {
         state: 'available',
         models: [
           {
+            model_types: ['chat_completions', 'embeddings'],
             id: '7',
             provider: 'provider',
             model: 'charity',
@@ -848,6 +851,7 @@ for (const locale of ['en', 'zh'] as const) {
       body: catalogPage(
         [
           {
+            model_types: ['chat_completions', 'embeddings'],
             id: '7',
             provider: 'provider',
             model: 'charity',

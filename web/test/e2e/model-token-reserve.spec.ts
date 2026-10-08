@@ -1,16 +1,16 @@
 import { mkdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { expect, test, type Page } from './test';
+import { numberedResponse } from './numbered-fixtures';
 import { ADMIN_ORIGIN, USER_ORIGIN } from './ports';
 import {
   assertNoSensitiveBrowserPersistence,
   collectConsoleViolations,
+  useNarrowReducedMotion as configureNarrowReducedMotion,
   installURLPersistenceObserver,
   mockPublicConfig,
   mockRoleSession,
-  useNarrowReducedMotion as configureNarrowReducedMotion,
 } from './support';
-import { numberedResponse } from './numbered-fixtures';
+import { expect, test, type Page } from './test';
 
 const EVIDENCE_DIR = process.env.NONBIRI_VISUAL_DIR
   ? resolve(process.env.NONBIRI_VISUAL_DIR)
@@ -43,7 +43,7 @@ type Pricing =
 interface Scenario {
   name: string;
   station: 'admin' | 'user';
-  role: 'admin' | 'level6';
+  role: 'admin' | 'level6' | 'level5';
   frame: 'admin' | 'steward';
   origin: string;
   root: string;
@@ -128,6 +128,7 @@ function requestPricing(): Pricing {
 
 function initialModel(): JSONRecord {
   return {
+    model_types: ['chat_completions', 'embeddings'],
     route_strategy: 'expiry_weighted',
     id: MODEL_ID,
     provider: 'provider',
@@ -232,6 +233,7 @@ async function installManagementRoutes(page: Page, scenario: Scenario, state: Fi
       state.model = {
         ...state.model,
         pricing,
+        model_types: body.model_types,
         ...(Object.hasOwn(body, 'transport_rule') ? { transport_rule: body.transport_rule } : {}),
         ...(Object.hasOwn(body, 'token_reserve_credits')
           ? { token_reserve_credits: body.token_reserve_credits }
@@ -284,10 +286,10 @@ async function prepare(
   };
 }
 
-async function saveScreenshot(page: Page, name: string): Promise<void> {
+async function saveScreenshot(page: Page, name: string, fullPage = true): Promise<void> {
   if (!EVIDENCE_DIR) return;
   await mkdir(EVIDENCE_DIR, { recursive: true });
-  await page.screenshot({ path: resolve(EVIDENCE_DIR, `${name}.png`), fullPage: true });
+  await page.screenshot({ path: resolve(EVIDENCE_DIR, `${name}.png`), fullPage });
 }
 
 async function assertPresentation(
@@ -628,3 +630,111 @@ for (const scenario of scenarios) {
     await assertPresentation(page, scenario, consoleGuard);
   });
 }
+
+for (const width of [390, 1440] as const) {
+  for (const theme of ['light', 'dark'] as const) {
+    test('model settings layout ' + width + ' ' + theme, async ({ context, page }) => {
+      const scenario = { ...scenarios[0], theme };
+      const state: FixtureState = { model: initialModel(), patchBodies: [], conflictNext: false };
+      const guard = await prepare(context, page, scenario);
+      await page.setViewportSize({ width, height: 900 });
+      await installManagementRoutes(page, scenario, state);
+      await page.goto(scenario.origin + scenario.pagePath);
+      await page
+        .locator('.ops-table tbody tr')
+        .filter({ hasText: MODEL_NAME })
+        .getByRole('button', { name: /Manage|管理/ })
+        .click();
+      const editor = page.locator('.card').filter({
+        has: page.getByRole('heading', { name: MODEL_NAME }),
+      });
+      await expect(editor).toBeVisible();
+      await saveScreenshot(page, 'charity-model-' + width + '-' + theme);
+      const types = editor.getByRole('group', { name: 'Model types' });
+      await types.scrollIntoViewIfNeeded();
+      await saveScreenshot(page, 'charity-types-' + width + '-' + theme, false);
+      await assertPresentation(page, scenario, guard);
+    });
+  }
+}
+
+for (const scenario of scenarios) {
+  test(
+    scenario.name + ' keeps model types on discard and persists multiple APIs',
+    async ({ context, page }) => {
+      const state: FixtureState = { model: initialModel(), patchBodies: [], conflictNext: false };
+      const guard = await prepare(context, page, scenario);
+      await installManagementRoutes(page, scenario, state);
+      await page.goto(scenario.origin + scenario.pagePath);
+      await page
+        .locator('.ops-table tbody tr')
+        .filter({ hasText: MODEL_NAME })
+        .getByRole('button', { name: /Manage|管理/ })
+        .click();
+      const editor = page
+        .locator('.card')
+        .filter({ has: page.getByRole('heading', { name: MODEL_NAME }) });
+      const types = editor.getByRole('group', { name: /Model types|模型类型/ });
+      const chat = types.getByRole('checkbox', { name: /Chat completions|聊天补全/ });
+      const embeddings = types.getByRole('checkbox', { name: /Embeddings|向量化/ });
+      const images = types.getByRole('checkbox', { name: /Image generation|图像生成/ });
+      const save = editor.getByRole('button', { name: /Save model|保存模型/ });
+      await expect(chat).toBeChecked();
+      await expect(embeddings).toBeChecked();
+      await expect(images).not.toBeChecked();
+      await images.check();
+      await editor.getByRole('button', { name: /Discard edits|放弃编辑/ }).click();
+      await expect(images).not.toBeChecked();
+      await chat.uncheck();
+      await embeddings.uncheck();
+      await expect(save).toBeDisabled();
+      await expect(types.getByRole('alert')).toBeVisible();
+      expect(state.patchBodies).toHaveLength(0);
+      await images.check();
+      await embeddings.check();
+      await expect(editor.getByRole('radiogroup', { name: /Streaming|流式输出/ })).toHaveCount(0);
+      await types.scrollIntoViewIfNeeded();
+      await saveScreenshot(page, scenario.name + '-image-types', false);
+      await save.click();
+      await expect.poll(() => state.patchBodies.length).toBe(1);
+      expect(state.patchBodies[0]).toMatchObject({
+        model_types: ['embeddings', 'images_generations'],
+      });
+      await page.reload();
+      await expect(chat).not.toBeChecked();
+      await expect(embeddings).toBeChecked();
+      await expect(images).toBeChecked();
+      await assertPresentation(page, scenario, guard);
+    },
+  );
+}
+
+test('level-five model view keeps capabilities read-only and hides chat policies for images', async ({
+  context,
+  page,
+}) => {
+  const scenario: Scenario = { ...scenarios[1], role: 'level5' };
+  const state: FixtureState = {
+    model: { ...initialModel(), model_types: ['images_generations'] },
+    patchBodies: [],
+    conflictNext: false,
+  };
+  const guard = await prepare(context, page, scenario);
+  await installManagementRoutes(page, scenario, state);
+  await page.goto(scenario.origin + scenario.pagePath);
+  await page
+    .locator('.ops-table tbody tr')
+    .filter({ hasText: MODEL_NAME })
+    .getByRole('button', { name: /Manage|管理/ })
+    .click();
+  const editor = page
+    .locator('.card')
+    .filter({ has: page.getByRole('heading', { name: MODEL_NAME }) });
+  await expect(editor.locator('.model-types-summary')).toHaveText('图像生成');
+  await expect(editor.getByRole('checkbox')).toHaveCount(0);
+  await expect(editor.getByRole('button', { name: /Save model|保存模型/ })).toHaveCount(0);
+  expect(state.patchBodies).toHaveLength(0);
+  await editor.scrollIntoViewIfNeeded();
+  await saveScreenshot(page, 'steward-level5-image-readonly-390-dark', false);
+  await assertPresentation(page, scenario, guard);
+});

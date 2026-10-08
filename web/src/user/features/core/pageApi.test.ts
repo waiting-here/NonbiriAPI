@@ -1,7 +1,7 @@
+import { PAGE_SIZES, type PageSize } from '@shared/operations/pageNumbers';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { PAGE_SIZES, type PageSize } from '@shared/operations/pageNumbers';
 import {
   getBindingCandidatesPage,
   getCatalogPage,
@@ -101,6 +101,7 @@ const catalogEntry = {
   updated_at: 1_700_000_000,
 };
 const model = {
+  model_types: ['chat_completions', 'embeddings'],
   id: '31',
   provider: 'Vendor',
   model: 'Exact',

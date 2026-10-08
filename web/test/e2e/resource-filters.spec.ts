@@ -1,7 +1,7 @@
-import { expect, test } from './test';
+import { numberedPage } from './numbered-fixtures';
 import { USER_ORIGIN } from './ports';
 import { collectConsoleViolations, mockPublicConfig, mockRoleSession } from './support';
-import { numberedPage } from './numbered-fixtures';
+import { expect, test } from './test';
 
 const endpoints = Array.from({ length: 23 }, (_, index) => ({
   id: String(index + 1),
@@ -157,6 +157,7 @@ test('personal models send all filters before pagination and preserve them throu
   await mockPublicConfig(page, 'user');
   await mockRoleSession(page, 'user', 'user');
   const model = {
+    model_types: ['chat_completions', 'embeddings'],
     id: '7',
     provider: 'Vendor',
     model: 'Logical',

@@ -273,6 +273,7 @@ const keys = {
   'models.strategy': 'user.core.models.strategy',
   'models.ordered': 'user.core.models.ordered',
   'models.random': 'user.core.models.random',
+  'models.cacheBalanced': 'user.core.models.cacheBalanced',
   'models.silentRetry': 'user.core.models.silentRetry',
   'models.flattenTools': 'user.core.models.flattenTools',
   'models.configurationTitle': 'user.core.models.configurationTitle',

@@ -1,6 +1,6 @@
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { expect, test, type Page } from './test';
+import { numberedPage } from './numbered-fixtures';
 import { ADMIN_ORIGIN, USER_ORIGIN } from './ports';
 import {
   assertNoSensitiveBrowserPersistence,
@@ -9,7 +9,7 @@ import {
   mockPublicConfig,
   mockRoleSession,
 } from './support';
-import { numberedPage } from './numbered-fixtures';
+import { expect, test, type Page } from './test';
 
 type BrowserContext = ReturnType<Page['context']>;
 type Locator = ReturnType<Page['locator']>;
@@ -192,6 +192,7 @@ function donationDetail(index: number): JSONRecord {
 function model(index: number): JSONRecord {
   const id = String(index + 1);
   return {
+    model_types: ['chat_completions', 'embeddings'],
     route_strategy: 'expiry_weighted',
     id,
     provider: 'DetailProvider',

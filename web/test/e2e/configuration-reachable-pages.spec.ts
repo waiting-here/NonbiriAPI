@@ -1,18 +1,18 @@
 import { readFileSync } from 'node:fs';
+import { numberedResponse } from './numbered-fixtures';
 import { ADMIN_ORIGIN, USER_ORIGIN } from './ports';
 import {
-  assertResponsiveOperationTables,
   assertNoSensitiveBrowserPersistence,
+  assertResponsiveOperationTables,
   collectConsoleViolations,
+  useNarrowReducedMotion as configureNarrowReducedMotion,
   installURLPersistenceObserver,
   mockJson,
   mockPublicConfig,
   mockRoleSession,
   tabTo,
-  useNarrowReducedMotion as configureNarrowReducedMotion,
 } from './support';
 import { expect, test } from './test';
-import { numberedResponse } from './numbered-fixtures';
 
 const backendCatalogCore = JSON.parse(
   readFileSync(new URL('../fixtures/site-config-catalog-core.json', import.meta.url), 'utf8'),
@@ -129,6 +129,7 @@ const pendingStewardDonation = {
 };
 
 const currentCharityModel = {
+  model_types: ['chat_completions', 'embeddings'],
   route_strategy: 'expiry_weighted',
   id: '7',
   provider: 'provider',

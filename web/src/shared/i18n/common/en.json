@@ -322,7 +322,9 @@
           "charityChatCompletions": "Charity chat completions",
           "openaiEmbeddings": "Personal embedding",
           "charityEmbeddings": "Charity embedding",
-          "modelDiscovery": "Model check"
+          "modelDiscovery": "Model check",
+          "openaiImagesGenerations": "Personal image generation",
+          "charityImagesGenerations": "Charity image generation"
         },
         "resultValue": {
           "success": "Success",
@@ -394,7 +396,8 @@
             "failed": "Failed ({{status}})"
           },
           "storageHistoryHelp": "Lifetime totals do not decrease when records expire. Missing bodies cannot be recovered. Browse retained records from the last 30 days below. Capacity counts raw bodies only, excluding database pages, indexes and WAL.",
-          "storageRecords": "Browse missing records"
+          "storageRecords": "Browse missing records",
+          "images": "Image generation"
         }
       },
       "charity": {
@@ -469,7 +472,7 @@
         "namingHelp": "Provider and model define the API name used on this site. Choose your own labels, then select the actual upstream models in service connections.",
         "namePreview": "API model name preview",
         "routeStrategy": "Routing strategy",
-        "operationHelp": "Your client's API path selects chat completions or embeddings. Connect a service model that supports that operation. Tool-call flattening and store=false apply only to chat completions.",
+        "operationHelp": "The upstream model must also support each selected API. Tool flattening, message-role and transport settings apply only to chat completions.",
         "embeddingBillingHelp": "An embedding batch counts as one successful request. Token pricing uses the uncached input price for all inputs; vector dimensions add no output tokens.",
         "embeddingQuotaHelp": "A successful embedding batch uses one call from the donation limit. Its token usage is the total input tokens, with no output tokens for vector dimensions.",
         "routeOrdered": "Connection order",
@@ -648,7 +651,8 @@
         "batchFailureReset": "Reset failure streaks",
         "failureStrategy": "Failure strategy",
         "quotaReserve": "Quota and reserve",
-        "adaptationSettings": "Request adaptation"
+        "adaptationSettings": "Request adaptation",
+        "imageBillingHelp": "Generating several images in one request counts as one call. Missing usage follows the model’s reservation settlement rule."
       },
       "management": {
         "details": "Technical details",
@@ -1376,6 +1380,14 @@
     },
     "inactivity": {
       "activityRules": "Which actions count as activity?"
+    },
+    "modelTypes": {
+      "title": "Model types",
+      "help": "Select every API this model supports.",
+      "required": "Select at least one model type.",
+      "chat_completions": "Chat completions",
+      "embeddings": "Embeddings",
+      "images_generations": "Image generation"
     }
   },
   "logs": {
