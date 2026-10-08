@@ -68,6 +68,10 @@
 }
 .request-diagnostics :is(.btn, .nb-btn) {
   align-self: start;
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .diagnostic-filters :is(.btn, .nb-btn) {
   align-self: end;

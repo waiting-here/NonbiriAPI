@@ -360,6 +360,9 @@ fieldset.ops-field-grid {
   .ops-actions > :is(.btn, .nb-btn),
   .ops-page .card > :is(.btn, .nb-btn) {
     width: 100%;
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   .ops-page .card > :is(.btn, .nb-btn),

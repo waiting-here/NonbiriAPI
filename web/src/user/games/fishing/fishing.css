@@ -57,6 +57,9 @@
 .fishing-stage[data-phase='result'] .fishing-stage__ripples {
   animation: fishing-ripple 1.8s ease-out infinite;
 }
+.fishing-controls {
+  grid-template-columns: minmax(0, 1fr);
+}
 .fishing-controls fieldset {
   min-width: 0;
   margin: 0;
@@ -110,7 +113,19 @@
 }
 .fishing-totals dt,
 .fishing-totals dd {
+  min-width: 0;
   margin: 0;
+}
+.fishing-totals > div:has(.game-wallets) {
+  flex-direction: column;
+  gap: var(--nb-space-2);
+}
+.fishing-totals .game-wallets {
+  container-type: inline-size;
+  width: 100%;
+}
+.fishing-totals .game-wallets dd {
+  font-size: clamp(var(--nb-font-size-xs), 4cqi, var(--nb-font-size-md));
 }
 .fishing-start {
   width: 100%;

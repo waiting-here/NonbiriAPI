@@ -306,7 +306,7 @@
     container-type: inline-size;
   }
   .game-page :is(.nb-page-header__actions, .duel-actions) > .game-wallets dd {
-    font-size: clamp(var(--nb-font-size-xs), 5cqi, var(--nb-font-size-md));
+    font-size: clamp(var(--nb-font-size-xs), 4cqi, var(--nb-font-size-md));
   }
   .game-page .nb-page-header__actions > .game-wallets {
     flex-basis: 100%;
