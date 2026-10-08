@@ -25,10 +25,7 @@ export function LakePeriodsPage() {
       <PageHeader
         title={text('垂钓手记 · 历史期次', 'Lake Notes · past periods')}
         icon="games"
-        description={text(
-          '保留原活动的期次记录。游戏开放与兑换在小游戏配置中管理。',
-          'Past activity periods are kept here. Manage availability and exchanges in game settings.',
-        )}
+        description={lakeText('periodHistoryDescription')}
         back={<Link to="/games">{text('返回游戏配置', 'Back to game settings')}</Link>}
       />
       {session.error || periods.error ? (

@@ -2314,6 +2314,7 @@
         "opensIn": "Opens in",
         "noPrediction": "Settlement in progress…",
         "contributeOnce": "Contribute once",
+        "limitReached": "Daily limit reached",
         "contributionAccepted": "Contribution accepted. Count:",
         "lastResultEyebrow": "Latest result",
         "lastResultTitle": "Your result",

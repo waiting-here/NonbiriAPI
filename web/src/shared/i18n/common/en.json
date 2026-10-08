@@ -332,7 +332,7 @@
           "cancelled": "Cancelled",
           "pending": "Pending"
         },
-        "charge": "Charge",
+        "charge": "Charge (credits)",
         "request": "Request",
         "callerResult": "Caller result",
         "callerError": "Caller error",
@@ -581,7 +581,7 @@
         "noLimit": "No limit",
         "noSample": "No sample",
         "notReviewed": "Not reviewed",
-        "open": "Open",
+        "open": "Actions",
         "openReview": "Review",
         "orderedBindings": "Service connection order",
         "owner": "Owner",
@@ -1645,7 +1645,7 @@
       "stateLabel": "State",
       "table": {
         "draftTitle": "Draft title",
-        "open": "Open",
+        "open": "Actions",
         "publication": "Publication",
         "severity": "Severity",
         "state": "State",

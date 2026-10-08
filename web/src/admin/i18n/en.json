@@ -35,7 +35,7 @@
       "noActivity": "No activity rows",
       "noActivityBody": "No activity has been recorded yet.",
       "reportsTitle": "Credential reports",
-      "nonTerminalReports": "Non-terminal total",
+      "nonTerminalReports": "Non-terminal",
       "pendingIndexing": "Indexing",
       "pendingReview": "Review",
       "approvedProcessing": "Processing",
@@ -366,14 +366,14 @@
       "pools": {
         "allStates": "All pool states",
         "allTypes": "All pool types",
-        "adjust": "Adjust",
+        "adjust": "Actions",
         "balance": "Balance",
         "emptyBody": "No shared pools are available.",
         "emptyTitle": "No pools",
         "filterState": "Pool state",
         "filterType": "Pool type",
         "period": "Period",
-        "select": "Select",
+        "select": "Adjust balance",
         "singleton": "Ongoing shared pool",
         "unboundPeriod": "Not yet bound to a period",
         "title": "Shared pools",
@@ -499,7 +499,7 @@
         "indexing": "Indexing",
         "processing": "Processing",
         "review": "Review",
-        "title": "Non-terminal badge"
+        "title": "Non-terminal"
       },
       "decisionAction": {
         "approve": "Approved deletion",
@@ -855,7 +855,8 @@
       "next": "Next",
       "cancelHelp": "Cancelling stops gameplay and exchanges for this period and preserves entry, receipts and profiles.",
       "publishHelp": "Publishing lets users participate during this period's opening times and pay the configured entry fee.",
-      "withdrawalHelp": "Removing publication stops gameplay and exchanges for this period. Existing entries, receipts and profiles are kept."
+      "withdrawalHelp": "Removing publication stops gameplay and exchanges for this period. Existing entries, receipts and profiles are kept.",
+      "periodHistoryDescription": "Past activity periods are kept here. Manage availability and exchanges in game settings."
     },
     "fatfish": {
       "workspace": {

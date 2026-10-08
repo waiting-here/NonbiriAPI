@@ -452,7 +452,11 @@ export function ThursdayCard({
         >
           {mutation.isPending || mutation.isReconciling
             ? t('common.working')
-            : t('user.activities.thursday.contributeOnce')}
+            : t(
+                current && limitReached
+                  ? 'user.activities.thursday.limitReached'
+                  : 'user.activities.thursday.contributeOnce',
+              )}
         </button>
       </div>
     </Card>

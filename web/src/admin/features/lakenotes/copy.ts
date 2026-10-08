@@ -14,6 +14,7 @@ const keys = {
   umbrellaHelp: 'admin.lakeNotes.umbrellaHelp',
   saveAvailability: 'admin.lakeNotes.saveAvailability',
   periods: 'admin.lakeNotes.periods',
+  periodHistoryDescription: 'admin.lakeNotes.periodHistoryDescription',
   newPeriod: 'admin.lakeNotes.newPeriod',
   edit: 'admin.lakeNotes.edit',
   name: 'admin.lakeNotes.name',
