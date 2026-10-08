@@ -343,15 +343,30 @@ async function assertHomeLayout(
   const previews = await page.locator('.home-announcement-preview').evaluateAll((elements) =>
     elements.map((element) => {
       const style = getComputedStyle(element);
+      const blocks = [
+        ...element.querySelectorAll('h1, h2, h3, h4, h5, h6, p, li, pre, blockquote'),
+      ].slice(0, 2);
+      const lineStyles = blocks.length ? blocks.map((block) => getComputedStyle(block)) : [style];
       return {
-        maxBlockSize: Number.parseFloat(style.maxBlockSize),
-        clientHeight: element.clientHeight,
-        scrollHeight: element.scrollHeight,
+        clamp: style.webkitLineClamp,
+        height: element.getBoundingClientRect().height,
+        lineHeight: Math.max(...lineStyles.map((line) => Number.parseFloat(line.lineHeight))),
+        blockGap: Math.max(
+          0,
+          ...lineStyles.flatMap((line) => [
+            Number.parseFloat(line.marginBlockStart),
+            Number.parseFloat(line.marginBlockEnd),
+          ]),
+        ),
       };
     }),
   );
   for (const preview of previews) {
-    expect(preview.maxBlockSize).toBeLessThanOrEqual(120.1);
+    expect(preview.clamp).toBe('2');
+    expect(preview.lineHeight).toBeGreaterThan(0);
+    expect(preview.height).toBeGreaterThan(0);
+    // Rich-text headings can have a different line height and a paragraph gap.
+    expect(preview.height).toBeLessThanOrEqual(preview.lineHeight * 2 + preview.blockGap + 1);
   }
   await assertNoSensitiveBrowserPersistence(page, [EPHEMERAL_MARKER]);
   consoleGuard.assertNone();

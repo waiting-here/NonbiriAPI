@@ -544,6 +544,7 @@ test('administrator activities route reads the singleton and unbound Thursday po
           id: `pol_${'P'.repeat(21)}A`,
           pool_type: 'thursday',
           period_id: null,
+          period_date: null,
           state: 'open',
           revision: '1',
           balance: '0',

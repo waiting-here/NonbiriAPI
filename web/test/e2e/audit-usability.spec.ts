@@ -266,7 +266,7 @@ test('inactivity settings validate, preview exact human-readable amounts and sav
   await page.getByLabel('Inactive days', { exact: true }).fill('30');
   await page.getByLabel('Interval', { exact: true }).fill('7');
   await page
-    .getByRole('group', { name: 'General credits', exact: true })
+    .getByRole('region', { name: 'General credits', exact: true })
     .getByLabel('Decay this currency')
     .check();
   await page.getByLabel('Decay per period', { exact: true }).fill('1.25');

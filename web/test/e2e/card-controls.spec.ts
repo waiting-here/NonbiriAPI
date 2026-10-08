@@ -65,7 +65,7 @@ for (const [lang, width, theme] of [
     await page.keyboard.press('Space');
     await expect(selected).toHaveAttribute('aria-pressed', 'true');
     const input = page.locator('.bj-queue input');
-    await expect(input).toHaveValue('2000');
+    await expect(input).toHaveValue('2,000');
     expect(writes).toHaveLength(0);
     for (const box of await quick.getByRole('button').evaluateAll((nodes) =>
       nodes.map((node) => {
@@ -92,7 +92,7 @@ for (const [lang, width, theme] of [
     await expect.poll(() => writes.length).toBe(1);
     expect(writes[0]).toEqual({ stake: '2000', config_hash: 'c'.repeat(64) });
     await expect(quick.getByRole('button')).toHaveCount(1);
-    await expect(input).toHaveValue('2000');
+    await expect(input).toHaveValue('2,000');
     home.config.quick_stakes = [];
     await expect(quick).toHaveCount(0);
     expect(writes).toHaveLength(1);
