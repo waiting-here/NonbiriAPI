@@ -147,15 +147,16 @@
 }
 .rps-modes {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
   gap: 0.75rem;
 }
 .rps-modes > button {
+  container-type: inline-size;
   display: grid;
   grid-template-columns: 4.5rem minmax(0, 1fr);
   gap: 0.5rem;
   min-width: 0;
-  padding: 0.85rem;
+  padding: 0.75rem;
   border: 1px solid var(--nb-color-border);
   border-radius: 0.8rem;
   background: var(--nb-color-surface);
@@ -165,9 +166,18 @@
 .rps-modes > button > :not(.game-hero) {
   grid-column: 2;
 }
+.rps-modes > button > span:has(.game-money) {
+  grid-column: 1 / -1;
+}
+.rps-modes .game-money {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 0.25em;
+  font-size: clamp(var(--nb-font-size-xs), 4cqi, var(--nb-font-size-md));
+}
 .rps-modes .game-hero {
   grid-column: 1;
-  grid-row: 1 / span 6;
+  grid-row: 1 / span 2;
   width: 4.5rem;
   height: 4.5rem;
   border-radius: 0.65rem;
@@ -261,6 +271,22 @@
   }
   .rps-match__heading {
     display: grid;
+  }
+}
+@media (width < 40rem) {
+  .rps-result dl:not(.game-wallets) {
+    container-type: inline-size;
+  }
+  .rps-result dl:not(.game-wallets) > div {
+    flex-direction: column;
+    gap: var(--nb-space-1);
+  }
+  .rps-result dd .game-money {
+    display: inline-flex;
+    flex-wrap: wrap;
+    column-gap: 0.25em;
+    max-width: 100%;
+    font-size: clamp(var(--nb-font-size-xs), 4cqi, var(--nb-font-size-md));
   }
 }
 @media (max-width: 480px) {

@@ -294,16 +294,8 @@
     grid-template-columns: minmax(2rem, 1fr) auto;
     font-size: 0.85rem;
   }
-  .linklink-page.is-playing > .page-header {
-    flex-direction: row;
-    align-items: center;
-    gap: 0.75rem;
-  }
   .linklink-page.is-playing > .page-header h1 {
     font-size: 1.65rem;
-  }
-  .linklink-page.is-playing .page-header-actions {
-    width: auto;
   }
   .linklink-board {
     margin-inline: auto;
