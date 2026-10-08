@@ -42,6 +42,7 @@ Each version entry describes its source and compatibility boundary; a release ta
 ### Fixed
 
 - Completed responses retain their successful result when a client disconnects during settlement. Final stream flush failures remain visible through the billing response wrapper.
+- Fishing checkpoints survive same-account session refreshes. Returning to a fishing page refreshes saved cast revisions before allowing play to resume.
 - Home game continuations accept Gwent, Steady Catch and Lake Notes records without rejecting the whole section.
 - Fishing and catch sessions drain pending checkpoints, save pauses before resuming, and recover correctly when their pages remount. Fishing storage failures now include bounded server diagnostics.
 - Thursday contribution counts stay together on one line, with readable adjacent amounts and units.
