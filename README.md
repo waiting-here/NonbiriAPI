@@ -9,7 +9,7 @@ The current development version is **1.0.0-rc.6**. See the [changelog](CHANGELOG
 ## Capabilities
 
 - `/v1/models`, `/v1/chat/completions`, `/v1/embeddings` and `/v1/images/generations` ingress, with OpenAI-compatible, Anthropic-compatible and AI SDK Gateway v3 connectors. Supported operations and protocol limits are defined in the [API contract](docs/api-contract.md).
-- Personal model names, discovery, routing, bounded request adaptation and a memory-only Debug Hub. Charity resources add donated keys, budgets, credit accounting and scoped steward management.
+- Personal model names, discovery, ordered/random/cache-balanced routing, bounded request adaptation and a memory-only Debug Hub. Charity resources add donated keys, budgets, credit accounting and scoped steward management.
 - Discord sign-in, a separate administrator station, bilingual responsive pages and configurable branding. Users can export or delete their accounts.
 - Optional check-ins, shared activities and nine games with server-authoritative settlement, recovery and privacy-aware rankings.
 - A shared outbound security boundary, encrypted upstream secrets, bounded diagnostics and retention controls. Request logs and credit details have a 30-day ordinary retention period; compacted balance and audit summaries preserve accounting continuity.

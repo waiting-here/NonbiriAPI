@@ -162,7 +162,7 @@ func validModelIdentity(provider, model string) bool {
 }
 
 func validRouteStrategy(strategy string) bool {
-	return strategy == "ordered" || strategy == "random"
+	return strategy == "ordered" || strategy == "random" || strategy == "cache_balanced"
 }
 
 func (r *Repository) CreateModel(ctx context.Context, userID int64, mutation ControlMutation, input CreateModelInput) (MutationResult[Model], error) {

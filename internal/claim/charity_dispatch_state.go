@@ -20,15 +20,16 @@ type affinityRecord struct {
 }
 
 type routingReceipt struct {
-	attemptID     string
-	physicalID    []byte
-	endpointKeyID int64
-	userID        sql.NullInt64
-	modelID       sql.NullInt64
-	revision      int64
-	state         string
-	dispatchedAt  sql.NullInt64
-	previous      *affinityRecord
+	attemptID       string
+	physicalID      []byte
+	endpointKeyID   int64
+	userID          sql.NullInt64
+	modelID         sql.NullInt64
+	personalModelID sql.NullInt64
+	revision        int64
+	state           string
+	dispatchedAt    sql.NullInt64
+	previous        *affinityRecord
 }
 
 func readRoutingReceiptTx(ctx context.Context, tx *sql.Tx, attemptID string) (routingReceipt, error) {
@@ -36,12 +37,12 @@ func readRoutingReceiptTx(ctx context.Context, tx *sql.Tx, attemptID string) (ro
 	var previousID sql.NullString
 	var previousKey, previousRevision, previousDispatch, previousExpiry sql.NullInt64
 	var previousPhysical []byte
-	err := tx.QueryRowContext(ctx, `SELECT attempt_id,physical_id,endpoint_key_id,user_id,model_id,
+	err := tx.QueryRowContext(ctx, `SELECT attempt_id,physical_id,endpoint_key_id,user_id,model_id,personal_model_id,
 routing_revision,state,dispatched_at,previous_attempt_id,previous_endpoint_key_id,
 previous_physical_id,previous_routing_revision,previous_dispatched_at,previous_expires_at
 FROM charity_dispatch_receipts WHERE attempt_id=?`, attemptID).Scan(
 		&receipt.attemptID, &receipt.physicalID, &receipt.endpointKeyID,
-		&receipt.userID, &receipt.modelID, &receipt.revision, &receipt.state, &receipt.dispatchedAt,
+		&receipt.userID, &receipt.modelID, &receipt.personalModelID, &receipt.revision, &receipt.state, &receipt.dispatchedAt,
 		&previousID, &previousKey, &previousPhysical, &previousRevision, &previousDispatch, &previousExpiry)
 	if err != nil {
 		return routingReceipt{}, err
@@ -81,6 +82,8 @@ func cleanupRoutingLimitedTx(ctx context.Context, tx *sql.Tx, at int64, limit in
 	}{
 		{`DELETE FROM charity_key_affinities WHERE (user_id,model_id) IN
 (SELECT user_id,model_id FROM charity_key_affinities WHERE expires_at<=? ORDER BY expires_at LIMIT ?)`, []any{at}},
+		{`DELETE FROM personal_key_affinities WHERE (user_id,model_id) IN
+(SELECT user_id,model_id FROM personal_key_affinities WHERE expires_at<=? ORDER BY expires_at LIMIT ?)`, []any{at}},
 		{`DELETE FROM charity_dispatch_buckets WHERE (physical_id,dispatched_at) IN
 (SELECT physical_id,dispatched_at FROM charity_dispatch_buckets WHERE dispatched_at<=? ORDER BY dispatched_at LIMIT ?)`, []any{at - 300}},
 		{`DELETE FROM charity_dispatch_receipts WHERE attempt_id IN
@@ -110,21 +113,22 @@ func hasRoutingCleanupWorkTx(ctx context.Context, tx *sql.Tx, at int64) (bool, e
 	var more int
 	err := tx.QueryRowContext(ctx, `SELECT
 EXISTS(SELECT 1 FROM charity_key_affinities WHERE expires_at<=? LIMIT 1)
+OR EXISTS(SELECT 1 FROM personal_key_affinities WHERE expires_at<=? LIMIT 1)
 OR EXISTS(SELECT 1 FROM charity_dispatch_buckets WHERE dispatched_at<=? LIMIT 1)
 OR EXISTS(SELECT 1 FROM charity_dispatch_receipts r
 LEFT JOIN dispatch_claims c ON c.id=r.attempt_id
 WHERE r.expires_at<=? AND (c.id IS NULL OR c.state IN ('committed','released')) LIMIT 1)`,
-		at, at-300, at).Scan(&more)
+		at, at, at-300, at).Scan(&more)
 	if err != nil {
 		return false, fmt.Errorf("claim: check remaining charity routing cleanup: %w", err)
 	}
 	return more != 0, nil
 }
 
-func currentAffinityTx(ctx context.Context, tx *sql.Tx, userID, modelID int64) (*affinityRecord, error) {
+func currentAffinityTx(ctx context.Context, tx *sql.Tx, userID, modelID int64, personal bool) (*affinityRecord, error) {
 	var record affinityRecord
 	err := tx.QueryRowContext(ctx, `SELECT attempt_id,endpoint_key_id,physical_id,routing_revision,dispatched_at,expires_at
-FROM charity_key_affinities WHERE user_id=? AND model_id=?`, userID, modelID).Scan(
+FROM `+affinityTable(personal)+` WHERE user_id=? AND model_id=?`, userID, modelID).Scan(
 		&record.attemptID, &record.endpointKeyID, &record.physicalID, &record.revision,
 		&record.dispatchedAt, &record.expiresAt)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -166,12 +170,14 @@ AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions x WHERE x.endpoint_key_id=
 	return string(physical[:]) == string(record.physicalID), nil
 }
 
-func markCharityDispatchTx(ctx context.Context, tx *sql.Tx, attemptID string, at int64) error {
+func markRoutingDispatchTx(ctx context.Context, tx *sql.Tx, attemptID string, at int64) error {
 	receipt, err := readRoutingReceiptTx(ctx, tx, attemptID)
 	if err != nil {
 		return fmt.Errorf("claim: read physical dispatch reservation: %w", err)
 	}
-	if receipt.state != "reserved" || receipt.dispatchedAt.Valid || !receipt.userID.Valid || !receipt.modelID.Valid {
+	modelID := receipt.associationModelID()
+	table := affinityTable(receipt.personalModelID.Valid)
+	if receipt.state != "reserved" || receipt.dispatchedAt.Valid {
 		return ErrInvariant
 	}
 	if err := cleanupRoutingTx(ctx, tx, at); err != nil {
@@ -200,22 +206,27 @@ WHERE physical_id=? AND dispatched_at=?`, receipt.physicalID, at)
 	if err != nil {
 		return fmt.Errorf("claim: count physical dispatch: %w", err)
 	}
-	var revision int64
-	var ttl int
-	var strategy string
-	err = tx.QueryRowContext(ctx, `SELECT s.revision,s.affinity_ttl_seconds,m.strategy
-FROM charity_routing_settings s JOIN charity_model_routing m ON m.model_id=s.model_id
-WHERE s.model_id=?`, receipt.modelID.Int64).Scan(&revision, &ttl, &strategy)
+	revision, ttl, strategy, err := routingSettingsTx(ctx, tx, receipt)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("claim: read dispatch routing configuration: %w", err)
 	}
 	var previous *affinityRecord
-	if err == nil && strategy == "cache_balanced" && revision == receipt.revision {
-		current, err := currentAffinityTx(ctx, tx, receipt.userID.Int64, receipt.modelID.Int64)
+	associate := err == nil && receipt.userID.Valid && modelID.Valid && strategy == "cache_balanced" && revision == receipt.revision
+	if associate && receipt.personalModelID.Valid {
+		associate, err = validRoutingAffinityTx(ctx, tx, receipt, &affinityRecord{
+			endpointKeyID: receipt.endpointKeyID, physicalID: receipt.physicalID,
+			revision: revision, expiresAt: at + int64(ttl),
+		}, revision, at)
 		if err != nil {
 			return err
 		}
-		valid, err := validAffinityTx(ctx, tx, current, revision, at)
+	}
+	if associate {
+		current, err := currentAffinityTx(ctx, tx, receipt.userID.Int64, modelID.Int64, receipt.personalModelID.Valid)
+		if err != nil {
+			return err
+		}
+		valid, err := validRoutingAffinityTx(ctx, tx, receipt, current, revision, at)
 		if err != nil {
 			return err
 		}
@@ -227,21 +238,21 @@ WHERE s.model_id=?`, receipt.modelID.Int64).Scan(&revision, &ttl, &strategy)
 			if err := tx.QueryRowContext(ctx, `SELECT affinities FROM charity_routing_capacity WHERE id=1`).Scan(&siteCount); err != nil {
 				return fmt.Errorf("claim: read association capacity: %w", err)
 			}
-			if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM charity_key_affinities WHERE user_id=?`, receipt.userID.Int64).Scan(&userCount); err != nil {
+			if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM `+table+` WHERE user_id=?`, receipt.userID.Int64).Scan(&userCount); err != nil {
 				return fmt.Errorf("claim: read user association capacity: %w", err)
 			}
 			if siteCount >= 200_000 || userCount >= 1_000 {
 				return ErrRoutingBusy
 			}
-			_, err = tx.ExecContext(ctx, `INSERT INTO charity_key_affinities
+			_, err = tx.ExecContext(ctx, `INSERT INTO `+table+`
 (user_id,model_id,endpoint_key_id,physical_id,attempt_id,routing_revision,dispatched_at,expires_at)
-VALUES(?,?,?,?,?,?,?,?)`, receipt.userID.Int64, receipt.modelID.Int64, receipt.endpointKeyID,
+VALUES(?,?,?,?,?,?,?,?)`, receipt.userID.Int64, modelID.Int64, receipt.endpointKeyID,
 				receipt.physicalID, attemptID, revision, at, at+int64(ttl))
 		} else {
-			_, err = tx.ExecContext(ctx, `UPDATE charity_key_affinities
+			_, err = tx.ExecContext(ctx, `UPDATE `+table+`
 SET endpoint_key_id=?,physical_id=?,attempt_id=?,routing_revision=?,dispatched_at=?,expires_at=?
 WHERE user_id=? AND model_id=?`, receipt.endpointKeyID, receipt.physicalID, attemptID,
-				revision, at, at+int64(ttl), receipt.userID.Int64, receipt.modelID.Int64)
+				revision, at, at+int64(ttl), receipt.userID.Int64, modelID.Int64)
 		}
 		if err != nil {
 			return fmt.Errorf("claim: refresh charity association: %w", err)
@@ -265,7 +276,7 @@ WHERE attempt_id=? AND state='reserved'`, at, at+300, priorID, priorKey,
 // RevokeUndelivered is called only when a local failure proves that no
 // connector Attempt was invoked. It never runs for an upstream HTTP failure.
 func (s *Service) RevokeUndelivered(ctx context.Context, handle Handle) error {
-	if s == nil || s.db == nil || ctx == nil || !validHandle(handle) || handle.purpose != PurposeCharity {
+	if s == nil || s.db == nil || ctx == nil || !validHandle(handle) || handle.purpose == PurposeDiscovery {
 		return ErrInvalidInput
 	}
 	at, err := s.nowUnix()
@@ -350,35 +361,35 @@ WHERE previous_attempt_id=?`, priorID, priorKey, priorPhysical, priorRevision,
 		priorDispatch, priorExpiry, attemptID); err != nil {
 		return fmt.Errorf("claim: splice undelivered association: %w", err)
 	}
-	if receipt.userID.Valid && receipt.modelID.Valid {
-		current, err := currentAffinityTx(ctx, tx, receipt.userID.Int64, receipt.modelID.Int64)
+	modelID := receipt.associationModelID()
+	table := affinityTable(receipt.personalModelID.Valid)
+	if receipt.userID.Valid && modelID.Valid {
+		current, err := currentAffinityTx(ctx, tx, receipt.userID.Int64, modelID.Int64, receipt.personalModelID.Valid)
 		if err != nil {
 			return err
 		}
 		if current != nil && current.attemptID == attemptID {
-			var currentRevision int64
-			err := tx.QueryRowContext(ctx, `SELECT revision FROM charity_routing_settings WHERE model_id=?`,
-				receipt.modelID.Int64).Scan(&currentRevision)
+			currentRevision, _, strategy, err := routingSettingsTx(ctx, tx, receipt)
 			if err != nil && !errors.Is(err, sql.ErrNoRows) {
 				return fmt.Errorf("claim: read association revision for revoke: %w", err)
 			}
 			valid := false
-			if err == nil {
-				valid, err = validAffinityTx(ctx, tx, receipt.previous, currentRevision, at)
+			if err == nil && strategy == "cache_balanced" {
+				valid, err = validRoutingAffinityTx(ctx, tx, receipt, receipt.previous, currentRevision, at)
 				if err != nil {
 					return err
 				}
 			}
 			if valid {
-				_, err = tx.ExecContext(ctx, `UPDATE charity_key_affinities
+				_, err = tx.ExecContext(ctx, `UPDATE `+table+`
 SET endpoint_key_id=?,physical_id=?,attempt_id=?,routing_revision=?,dispatched_at=?,expires_at=?
 WHERE user_id=? AND model_id=? AND attempt_id=?`, receipt.previous.endpointKeyID,
 					receipt.previous.physicalID, receipt.previous.attemptID, receipt.previous.revision,
 					receipt.previous.dispatchedAt, receipt.previous.expiresAt,
-					receipt.userID.Int64, receipt.modelID.Int64, attemptID)
+					receipt.userID.Int64, modelID.Int64, attemptID)
 			} else {
-				_, err = tx.ExecContext(ctx, `DELETE FROM charity_key_affinities
-WHERE user_id=? AND model_id=? AND attempt_id=?`, receipt.userID.Int64, receipt.modelID.Int64, attemptID)
+				_, err = tx.ExecContext(ctx, `DELETE FROM `+table+`
+WHERE user_id=? AND model_id=? AND attempt_id=?`, receipt.userID.Int64, modelID.Int64, attemptID)
 			}
 			if err != nil {
 				return fmt.Errorf("claim: restore undelivered association: %w", err)
@@ -389,7 +400,7 @@ WHERE user_id=? AND model_id=? AND attempt_id=?`, receipt.userID.Int64, receipt.
 }
 
 func revokeAfterCredentialFailure(s *Service, handle Handle) error {
-	if handle.purpose != PurposeCharity {
+	if handle.purpose == PurposeDiscovery {
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)

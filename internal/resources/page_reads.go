@@ -144,7 +144,7 @@ func (r *Repository) ListModelsPage(ctx context.Context, userID int64, page pagi
 
 func (r *Repository) FilterModelsPage(ctx context.Context, userID int64, filters ModelPageFilters, page pagination.Request) (Page[Model], error) {
 	if !validateFreeText(filters.Query, 0, 512) || (filters.Provider != "" && !validPersonalModelProvider(filters.Provider)) ||
-		!optionalChoice(filters.RouteStrategy, "ordered", "random") ||
+		(filters.RouteStrategy != "" && !validRouteStrategy(filters.RouteStrategy)) ||
 		!optionalChoice(filters.ConnectionState, "available", "unavailable", "unconfigured") {
 		return Page[Model]{}, ErrInvalidRequest
 	}

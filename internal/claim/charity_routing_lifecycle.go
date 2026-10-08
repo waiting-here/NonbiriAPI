@@ -9,7 +9,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
 )
 
-// CharityRoutingLifecycle owns only local routing state. Physical dispatch
+// CharityRoutingLifecycle owns local personal and charity routing state. Physical dispatch
 // buckets are intentionally independent of caller deletion until their own
 // 300-second window expires.
 type CharityRoutingLifecycle struct{ db *sql.DB }
@@ -28,7 +28,10 @@ func (owner *CharityRoutingLifecycle) PrepareDelete(ctx context.Context, tx *sql
 	if _, err := tx.ExecContext(ctx, `DELETE FROM charity_key_affinities WHERE user_id=?`, request.UserID); err != nil {
 		return nil, fmt.Errorf("claim: delete caller charity associations: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE charity_dispatch_receipts SET user_id=NULL WHERE user_id=?`, request.UserID); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM personal_key_affinities WHERE user_id=?`, request.UserID); err != nil {
+		return nil, fmt.Errorf("claim: delete caller personal associations: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE charity_dispatch_receipts SET user_id=NULL,personal_model_id=NULL WHERE user_id=?`, request.UserID); err != nil {
 		return nil, fmt.Errorf("claim: unlink caller routing receipts: %w", err)
 	}
 	return nil, nil

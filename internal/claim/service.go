@@ -181,7 +181,11 @@ func (s *Service) Claim(ctx context.Context, input ClaimInput) (Handle, error) {
 	}
 	var handle Handle
 	if len(input.BalancedCandidates) > 0 {
-		handle, err = s.claimBalancedTx(ctx, tx, claimID, at, input)
+		if input.Purpose == PurposeCharity {
+			handle, err = s.claimBalancedTx(ctx, tx, claimID, at, input)
+		} else {
+			handle, err = s.claimPersonalBalancedTx(ctx, tx, claimID, at, input)
+		}
 	} else {
 		handle, err = s.claimTx(ctx, tx, claimID, at, input)
 	}
@@ -328,6 +332,11 @@ WHERE k.id=?`, input.Candidate.EndpointKeyID).Scan(
 	if input.Purpose != PurposeCharity && target.ownerUserID != input.ActorUserID {
 		return Handle{}, ErrNotFound
 	}
+	if input.PersonalModelID > 0 {
+		if err := validatePersonalBindingTx(ctx, tx, input); err != nil {
+			return Handle{}, err
+		}
+	}
 
 	reservation := CharityReservation{}
 	donationKey := any(nil)
@@ -381,6 +390,10 @@ VALUES(?,?,?,?,?,?,?,?,?,'claimed',?,?,?,?,?,?,?,?,?)`,
 			return Handle{}, fmt.Errorf("claim: reserve recurring limits: %w", err)
 		}
 		if err := reserveCharityDispatchTx(ctx, tx, claimID, input, target.secretRefID, target.secretBaseURL, at); err != nil {
+			return Handle{}, err
+		}
+	} else if input.PersonalModelID > 0 {
+		if err := reservePersonalDispatchTx(ctx, tx, claimID, input, target.secretRefID, target.secretBaseURL, at); err != nil {
 			return Handle{}, err
 		}
 	}
@@ -505,7 +518,13 @@ WHERE c.id=?`, handle.claimID).Scan(&stateText, &requestID, &attemptSeq, &purpos
 			clear(encrypted)
 			return nil, s.quotaCapacityFailure(ctx, tx, at, err)
 		}
-		if err := markCharityDispatchTx(ctx, tx, handle.claimID, at); err != nil {
+		if err := markRoutingDispatchTx(ctx, tx, handle.claimID, at); err != nil {
+			clear(contextID)
+			clear(encrypted)
+			return nil, err
+		}
+	} else if handle.purpose == PurposeSelf || handle.purpose == PurposeDebugLive {
+		if err := markPersonalDispatchTx(ctx, tx, handle.claimID, at); err != nil {
 			clear(contextID)
 			clear(encrypted)
 			return nil, err
@@ -659,16 +678,19 @@ func validClaimInput(input ClaimInput) bool {
 		return false
 	}
 	balanced := len(input.BalancedCandidates) > 0
-	if input.Purpose != PurposeCharity && input.OutputTokenFloor != 0 {
+	if input.PersonalModelID < 0 || (input.Purpose == PurposeCharity && input.PersonalModelID != 0) ||
+		(input.Purpose != PurposeCharity && input.OutputTokenFloor != 0) {
 		return false
 	}
 	if balanced {
-		if input.Purpose != PurposeCharity || len(input.BalancedCandidates) > MaxAttempts ||
-			input.DonationKeyID != 0 {
+		if len(input.BalancedCandidates) > MaxAttempts || input.DonationKeyID != 0 ||
+			(input.Purpose != PurposeCharity && input.PersonalModelID == 0) {
 			return false
 		}
 		for _, candidate := range input.BalancedCandidates {
-			if candidate.DonationKeyID <= 0 || !validCandidate(candidate.Candidate) || candidate.OutputTokenFloor < 0 || candidate.OutputTokenFloor > 2147483647 {
+			if !validCandidate(candidate.Candidate) || candidate.OutputTokenFloor < 0 || candidate.OutputTokenFloor > 2147483647 ||
+				(input.Purpose == PurposeCharity && candidate.DonationKeyID <= 0) ||
+				(input.Purpose != PurposeCharity && (candidate.DonationKeyID != 0 || candidate.OutputTokenFloor != 0)) {
 				return false
 			}
 		}
@@ -677,7 +699,7 @@ func validClaimInput(input ClaimInput) bool {
 	}
 	switch input.Purpose {
 	case PurposeSelf, PurposeDebugLive:
-		return !balanced && input.DonationKeyID == 0
+		return input.DonationKeyID == 0
 	case PurposeCharity:
 		return balanced || input.DonationKeyID > 0
 	default:
