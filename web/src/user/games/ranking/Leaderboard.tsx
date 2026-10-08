@@ -154,7 +154,7 @@ function RankingPanel({
         ) : null}
         <button
           type="button"
-          className="btn btn-secondary"
+          className="nb-btn nb-btn--secondary"
           disabled={!owner || query.isFetching}
           onClick={() => void query.refetch()}
         >
@@ -216,7 +216,7 @@ function RankingPanel({
                       meLabel={text('ranking.me')}
                     />
                   </td>
-                  <td>{formatCredits(row.amount)}</td>
+                  <td data-unit={text('ranking.credits')}>{formatCredits(row.amount)}</td>
                 </tr>
               ))}
             </tbody>
@@ -227,7 +227,7 @@ function RankingPanel({
         <nav className="rank-actions" aria-label={text('ranking.charityLeaderboardPages')}>
           <button
             type="button"
-            className="btn btn-secondary"
+            className="nb-btn nb-btn--secondary"
             disabled={data.pagination.page === '1' || query.isFetching}
             onClick={() => setPage((BigInt(data.pagination!.page) - 1n).toString())}
           >
@@ -238,7 +238,7 @@ function RankingPanel({
           </span>
           <button
             type="button"
-            className="btn btn-secondary"
+            className="nb-btn nb-btn--secondary"
             disabled={data.pagination.page === data.pagination.total_pages || query.isFetching}
             onClick={() => setPage((BigInt(data.pagination!.page) + 1n).toString())}
           >

@@ -1,3 +1,4 @@
+import { Tabs } from '@shared/components/ui/Tabs';
 import { RecordsHeader } from '../components/RecordsHeader';
 import { Link } from 'react-router';
 import { useSearchState } from '@shared/operations/useSearchState';
@@ -30,6 +31,15 @@ const RESOURCE_LABEL_KEYS: Record<Issue['resource_kind'], string> = {
   endpoint: 'user.issues.resources.endpoint',
   endpoint_key: 'user.issues.resources.endpoint_key',
   model: 'user.issues.resourceKind.model',
+};
+
+const DETAIL_LABEL_KEYS: Readonly<Record<string, string>> = {
+  auth: 'user.issues.detail.auth',
+  rate_limit: 'user.issues.detail.rateLimit',
+  timeout: 'user.issues.detail.timeout',
+  protocol: 'user.issues.detail.protocol',
+  transport: 'user.issues.detail.transport',
+  interrupted: 'user.issues.detail.interrupted',
 };
 
 export function IssuesPage() {
@@ -81,26 +91,15 @@ export function IssuesPage() {
             : undefined
         }
       />
-      <div className="ops-tabs" role="tablist" aria-label={t('user.issues.stateLabel')}>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={state === 'current'}
-          className={`btn ${state === 'current' ? 'btn-primary' : 'btn-secondary'}`}
-          onClick={() => selectState('current')}
-        >
-          {t('user.issues.currentTab')}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={state === 'closed'}
-          className={`btn ${state === 'closed' ? 'btn-primary' : 'btn-secondary'}`}
-          onClick={() => selectState('closed')}
-        >
-          {t('user.issues.closedTab')}
-        </button>
-      </div>
+      <Tabs
+        label={t('user.issues.stateLabel')}
+        value={state}
+        onChange={selectState}
+        tabs={[
+          { value: 'current', label: t('user.issues.currentTab') },
+          { value: 'closed', label: t('user.issues.closedTab') },
+        ]}
+      />
       {session.error ? (
         <ErrorState error={session.error} onRetry={() => void session.refetch()} />
       ) : session.isPending || (issues.isPending && !pageData) ? (
@@ -138,7 +137,13 @@ export function IssuesPage() {
                       danger={issue.state === 'current'}
                     />
                   </div>
-                  {issue.safe_detail ? <p>{issue.safe_detail}</p> : null}
+                  {issue.safe_detail ? (
+                    <p>
+                      {Object.hasOwn(DETAIL_LABEL_KEYS, issue.safe_detail)
+                        ? t(DETAIL_LABEL_KEYS[issue.safe_detail])
+                        : issue.safe_detail}
+                    </p>
+                  ) : null}
                   <dl className="nb-facts nb-facts--inline">
                     <dt>{t('user.issues.resourceType')}</dt>
                     <dd>{t(RESOURCE_LABEL_KEYS[issue.resource_kind])}</dd>
@@ -157,7 +162,7 @@ export function IssuesPage() {
                   </dl>
                   {issue.deep_link ? (
                     <Link
-                      className="btn btn-secondary"
+                      className="nb-btn nb-btn--secondary"
                       to={
                         issue.deep_link.route_id === 'endpoint-detail'
                           ? `/endpoints/${encodeURIComponent(issue.deep_link.resource_id)}`

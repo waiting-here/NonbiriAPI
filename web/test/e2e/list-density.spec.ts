@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import { expect, test, type Page } from './test';
+import { numberedPage, numberedResponse } from './numbered-fixtures';
 import { ADMIN_ORIGIN, USER_ORIGIN } from './ports';
 import {
   assertResponsiveOperationTables,
@@ -9,7 +9,7 @@ import {
   mockRoleSession,
   userSession,
 } from './support';
-import { numberedPage, numberedResponse } from './numbered-fixtures';
+import { expect, test, type Page } from './test';
 
 type Locale = 'en' | 'zh';
 const NOW = 1_800_000_000;
@@ -80,6 +80,7 @@ function publicModel(index: number) {
   const provider = 'Provider-' + 'p'.repeat(index === 2 ? 50 : 4);
   const model = `model-${index}-` + 'm'.repeat(index === 2 ? 50 : 4);
   return {
+    model_types: ['chat_completions', 'embeddings'],
     id: String(index),
     provider,
     model,
@@ -675,6 +676,7 @@ test('many personal endpoints, keys and models preserve cross-page selections wi
   let submitted: Record<string, unknown> | undefined;
   let savedBindings: Array<Record<string, unknown>> = [];
   const model = {
+    model_types: ['chat_completions', 'embeddings'],
     id: '7',
     provider: 'provider',
     model: 'personal',
@@ -835,6 +837,7 @@ test('many personal endpoints, keys and models preserve cross-page selections wi
 });
 
 const managedModel = {
+  model_types: ['chat_completions', 'embeddings'],
   id: '7',
   route_strategy: 'expiry_weighted',
   provider: 'provider',

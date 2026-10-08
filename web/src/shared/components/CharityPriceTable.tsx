@@ -123,9 +123,6 @@ export function CharityPriceTable({
             </div>
           ))}
         </dl>
-        <span className="nb-sub">
-          {t(mode === 'per_token' ? 'user.charity.tokenUnit' : 'user.charity.requestUnit')}
-        </span>
       </div>
     );
 
@@ -205,8 +202,7 @@ export function CharityPriceTable({
         </table>
       </div>
       <p className="muted charity-price-note">
-        {t(mode === 'per_token' ? 'user.charity.tokenUnit' : 'user.charity.requestUnit')}
-        {' '}
+        {t(mode === 'per_token' ? 'user.charity.tokenUnit' : 'user.charity.requestUnit')}{' '}
         {t('user.charity.billingHelp')}
       </p>
     </div>

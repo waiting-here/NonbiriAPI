@@ -177,7 +177,7 @@ export function AccountLanguageForm({ user }: { user: UserProfile }) {
       {pendingIntent ? (
         <button
           type="button"
-          className="btn btn-secondary"
+          className="nb-btn nb-btn--secondary"
           disabled={operation.isPending}
           onClick={() => operation.mutate(pendingIntent)}
         >
@@ -387,7 +387,7 @@ export function AccountLifecyclePanel({
         ) : null}
         <div className="core-row-actions">
           {execute.isPending && intent === 'export' ? (
-            <button type="button" className="btn btn-secondary" onClick={cancel}>
+            <button type="button" className="nb-btn nb-btn--secondary" onClick={cancel}>
               {t('common.cancel')}
             </button>
           ) : (
@@ -395,7 +395,7 @@ export function AccountLifecyclePanel({
           )}
           <button
             type="button"
-            className="btn btn-secondary"
+            className="nb-btn nb-btn--secondary"
             disabled={!adapter.capabilities.exportAccount || busy}
             onClick={() => begin('export')}
           >
@@ -431,7 +431,7 @@ export function AccountLifecyclePanel({
           {intent === 'delete' && unknown ? (
             <button
               type="button"
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               disabled={busy}
               onClick={() => void authority.run(null).catch(() => undefined)}
             >
@@ -442,7 +442,7 @@ export function AccountLifecyclePanel({
           )}
           <button
             type="button"
-            className="btn btn-danger-outline"
+            className="nb-btn btn-danger-outline"
             disabled={
               !adapter.capabilities.deleteAccount ||
               busy ||
@@ -491,7 +491,7 @@ export function AccountWorkspace({
         title={t('account.title')}
         description={t('account.description')}
         actions={
-          <Link className="btn btn-secondary" to="/credits">
+          <Link className="nb-btn nb-btn--secondary" to="/credits">
             {t('home.creditHistory')}
           </Link>
         }

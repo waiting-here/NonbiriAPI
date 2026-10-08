@@ -35,7 +35,7 @@
   outline: 3px solid var(--nb-color-focus); outline-offset: 2px;
 }
 .fatfish-player__music-credit { overflow-wrap: anywhere; }
-.fatfish-player__music-credit a { color: var(--nb-color-link); }
+.fatfish-player__music-credit a { color: var(--nb-color-accent); }
 .fatfish-player__music p { flex-basis: 100%; color: var(--nb-color-danger); }
 .fatfish-canvas {
   display: block; width: 100%; height: auto; aspect-ratio: 736 / 816;
@@ -124,7 +124,7 @@
   border-color: #a8885c; color: #fff2d8;
 }
 [data-theme='dark'] .fatfish-canvas { border-color: #b6956b; box-shadow: 0 5px 0 #0004, 0 14px 26px #0007; }
-@media (max-width: 480px) {
+@media (width <= 32rem) {
   .fatfish-player { padding: .55rem; gap: .7rem; }
   .fatfish-player__controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .fatfish-player__stat { padding: .35rem .2rem; }

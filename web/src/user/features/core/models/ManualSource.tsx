@@ -1,12 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { OutcomeNote } from '@shared/components/ui';
+import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
+import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef, useState } from 'react';
 import { createManualEntries } from '../api';
-import { coreKeys, invalidateResourceDependents } from '../queries';
-import { readResourceResult, resourceStatus } from '../resourceOperation';
-import { isOutcomeUnknown } from '../request';
 import { useCoreCopy } from '../copy';
+import { coreKeys, invalidateResourceDependents } from '../queries';
+import { isOutcomeUnknown } from '../request';
+import { readResourceResult, resourceStatus } from '../resourceOperation';
 import { useModelText } from './copy';
 
 export function ManualSource({
@@ -166,7 +166,7 @@ export function ManualSource({
       />
       <button
         type="button"
-        className="btn btn-secondary"
+        className="nb-btn nb-btn--secondary"
         disabled={busy || !keyId || (!hasAttempt && !upstreamModel)}
         onClick={() => void create()}
       >

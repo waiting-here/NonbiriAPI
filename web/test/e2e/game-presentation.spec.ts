@@ -1298,7 +1298,9 @@ test('game sound uses one real AudioContext per mounted game, remembers each gam
           ?.contexts ?? [],
     );
   await page.goto(`${USER_ORIGIN}/games/rps`);
-  await expect(page.getByRole('button', { name: 'Sound off' })).toBeVisible();
+  await page.getByRole('button', { name: 'Sound', exact: true }).click();
+  await expect(page.getByRole('menuitemcheckbox', { name: 'Sound off' })).toBeVisible();
+  await page.keyboard.press('Escape');
   expect(
     await page.evaluate(
       () =>
@@ -1306,7 +1308,8 @@ test('game sound uses one real AudioContext per mounted game, remembers each gam
           .length,
     ),
   ).toBe(0);
-  await page.getByRole('button', { name: 'Sound off' }).click();
+  await page.getByRole('button', { name: 'Sound', exact: true }).click();
+  await page.getByRole('menuitemcheckbox', { name: 'Sound off' }).click();
   await expect
     .poll(() =>
       page.evaluate(
@@ -1385,7 +1388,9 @@ test('game sound uses one real AudioContext per mounted game, remembers each gam
   await page.getByRole('link', { name: 'Back to game center' }).click();
   await expect(page).toHaveURL(/\/games$/);
   await page.locator('a[href="/games/linklink"]').click();
-  await expect(page.getByRole('button', { name: 'Sound off' })).toBeVisible();
+  await page.getByRole('button', { name: 'Sound', exact: true }).click();
+  await expect(page.getByRole('menuitemcheckbox', { name: 'Sound off' })).toBeVisible();
+  await page.keyboard.press('Escape');
   await expect
     .poll(() =>
       page.evaluate(
@@ -1395,7 +1400,8 @@ test('game sound uses one real AudioContext per mounted game, remembers each gam
       ),
     )
     .toBe(1);
-  await page.getByRole('button', { name: 'Sound off' }).click();
+  await page.getByRole('button', { name: 'Sound', exact: true }).click();
+  await page.getByRole('menuitemcheckbox', { name: 'Sound off' }).click();
   await expect
     .poll(() =>
       page.evaluate(
@@ -1463,8 +1469,11 @@ test('game sound uses one real AudioContext per mounted game, remembers each gam
   await page.getByRole('link', { name: 'Back to game center' }).click();
   await expect(page).toHaveURL(/\/games$/);
   await page.locator('a[href="/games/fishing"]').click();
-  await expect(page.getByRole('button', { name: 'Sound off' })).toBeVisible();
-  await page.getByRole('button', { name: 'Sound off' }).click();
+  await page.getByRole('button', { name: 'Sound', exact: true }).click();
+  await expect(page.getByRole('menuitemcheckbox', { name: 'Sound off' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Sound', exact: true }).click();
+  await page.getByRole('menuitemcheckbox', { name: 'Sound off' }).click();
   await expect
     .poll(() =>
       page.evaluate(
@@ -1531,7 +1540,9 @@ test('game sound uses one real AudioContext per mounted game, remembers each gam
     .poll(() => readAudioContexts().then((contexts) => contexts[fishingContextIndex].closeCalls))
     .toBe(1);
   await page.locator('a[href="/games/rps"]').click();
-  await expect(page.getByRole('button', { name: 'Sound on' })).toBeVisible();
+  await page.getByRole('button', { name: 'Sound', exact: true }).click();
+  await expect(page.getByRole('menuitemcheckbox', { name: 'Sound on' })).toBeVisible();
+  await page.keyboard.press('Escape');
   await saveJsonArtifact('game-audio-cue-metrics.json', await readAudioContexts());
   expect([...consoleErrors].sort()).toEqual(
     [
@@ -1580,7 +1591,8 @@ test('a real AudioContext resume refusal leaves the authoritative game action us
     },
   });
   await page.goto(`${USER_ORIGIN}/games/rps`);
-  await page.getByRole('button', { name: 'Sound off' }).click();
+  await page.getByRole('button', { name: 'Sound', exact: true }).click();
+  await page.getByRole('menuitemcheckbox', { name: 'Sound off' }).click();
   await expect
     .poll(() =>
       page.evaluate(

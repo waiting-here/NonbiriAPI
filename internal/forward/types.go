@@ -17,6 +17,7 @@ import (
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/debug"
+	"github.com/waiting-here/NonbiriAPI/internal/modeltype"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
 	"github.com/waiting-here/NonbiriAPI/internal/transportpolicy"
@@ -47,6 +48,7 @@ type CallerKeyResolver interface {
 
 // PersonalPreflight contains candidate-free owner-scoped logical facts.
 type PersonalPreflight struct {
+	ModelTypes       modeltype.Set
 	TransportRule    transportpolicy.Rule
 	RolePolicy       rolepolicy.Policy
 	ModelID          int64
@@ -63,6 +65,7 @@ type PersonalPreflight struct {
 
 // CharityPreflight contains candidate-free charity policy and price facts.
 type CharityPreflight struct {
+	ModelTypes       modeltype.Set
 	TransportRule    transportpolicy.Rule
 	RolePolicy       rolepolicy.Policy
 	Revision         int64
@@ -77,6 +80,7 @@ type CharityPreflight struct {
 // CharityRequestPolicy contains no physical candidates or credentials.
 // Exclusions are frozen before optional request fields are interpreted.
 type CharityRequestPolicy struct {
+	ModelTypes            modeltype.Set
 	TransportRule         transportpolicy.Rule
 	RolePolicy            rolepolicy.Policy
 	Revision              int64
@@ -138,6 +142,7 @@ type CharityRouter interface {
 	RequestPolicy(context.Context, int64, string, int64) (CharityRequestPolicy, error)
 	Preflight(context.Context, int64, string, *openai.ChatRequest, int64) (CharityPreflight, error)
 	PreflightEmbedding(context.Context, int64, string, *openai.EmbeddingRequest, int64) (CharityPreflight, error)
+	PreflightImage(context.Context, int64, string, *openai.ImageRequest, int64) (CharityPreflight, error)
 	Snapshot(context.Context, int64, int64, int64, []connectorcontract.Type) (CharitySnapshot, error)
 	ReserveForOutput(context.Context, int64, int64, int64) (int64, error)
 	ListAvailableModels(context.Context, int64, int64, int) ([]ListedModel, error)

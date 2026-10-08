@@ -127,6 +127,18 @@
   text-transform: uppercase;
 }
 
+.nb-page-header__back a:not(.game-back-link) {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--nb-space-1);
+  font-size: var(--nb-font-size-sm);
+  color: var(--nb-color-text-muted);
+  text-decoration: none;
+  min-height: 32px;
+}
+.nb-page-header__back a:not(.game-back-link)::before { content: '←' / ''; }
+.nb-page-header__back a:not(.game-back-link):hover { color: var(--nb-color-accent); }
+
 .page-description {
   margin-bottom: 0;
   color: var(--nb-color-text-muted);
@@ -340,77 +352,6 @@
   margin-top: 1rem;
 }
 
-.btn {
-  display: inline-flex;
-  min-height: 2.45rem;
-  align-items: center;
-  justify-content: center;
-  gap: 0.35rem;
-  border: 1px solid transparent;
-  border-radius: var(--nb-radius-sm);
-  padding: 0.55rem 0.85rem;
-  font-size: 0.9rem;
-  font-weight: 720;
-  line-height: 1.2;
-  text-decoration: none;
-  transition:
-    background-color var(--nb-transition),
-    border-color var(--nb-transition),
-    color var(--nb-transition),
-    transform var(--nb-transition);
-}
-
-.btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-}
-
-.btn-primary {
-  background: var(--nb-color-accent);
-  color: var(--nb-color-accent-contrast);
-}
-
-.btn-primary:hover:not(:disabled) {
-  filter: brightness(1.06);
-}
-
-.btn-secondary {
-  background: var(--nb-color-surface);
-  border-color: var(--nb-color-border-strong);
-  color: var(--nb-color-text);
-}
-
-.btn-secondary:hover:not(:disabled) {
-  background: var(--nb-color-surface-alt);
-}
-
-.btn-danger {
-  background: var(--nb-color-danger);
-  color: var(--nb-color-on-danger);
-}
-
-.btn-quiet {
-  min-height: 2.45rem;
-  padding: 0.55rem 0.85rem;
-  background: transparent;
-  border: 1px solid var(--nb-color-border);
-  color: var(--nb-color-text-muted);
-}
-
-.btn-quiet:hover:not(:disabled) {
-  background: var(--nb-color-surface-alt);
-  border-color: var(--nb-color-border-strong);
-  color: var(--nb-color-text);
-}
-
-.btn-link {
-  min-height: auto;
-  padding: 0;
-  background: none;
-  border: 0;
-  color: var(--nb-color-accent);
-  font-weight: 700;
-}
-
 .lang-switcher {
   display: inline-flex;
   overflow: hidden;
@@ -597,16 +538,19 @@
   border-radius: var(--nb-radius-sm);
 }
 
-.log-table .btn,
+.log-table :is(.btn, .nb-btn),
 .log-table [data-column='result'] {
   overflow-wrap: normal;
 }
 
 table {
   width: 100%;
-  min-width: 60rem;
   border-collapse: collapse;
   font-size: 0.88rem;
+}
+
+:where(.table-wrap) > table {
+  min-width: 60rem;
 }
 
 caption {
@@ -816,11 +760,11 @@ tr:first-child td {
   gap: 0.45rem;
 }
 
-.filter-bar .filter-actions .btn {
+.filter-bar .filter-actions :is(.btn, .nb-btn) {
   min-height: 2.45rem;
 }
 
-@media (max-width: 40rem) {
+@media (width <= 40rem) {
   .filter-bar {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -834,7 +778,7 @@ tr:first-child td {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .filter-bar .filter-actions .btn {
+  .filter-bar .filter-actions :is(.btn, .nb-btn) {
     width: 100%;
   }
 }
@@ -911,7 +855,7 @@ tr:first-child td {
   overflow-wrap: anywhere;
 }
 
-@media (max-width: 52rem) {
+@media (width < 64rem) {
   .mobile-menu-btn {
     display: inline-flex !important;
     order: 2;
@@ -938,7 +882,7 @@ tr:first-child td {
   }
 }
 
-@media (max-width: 38rem) {
+@media (width <= 40rem) {
   .site-header {
     padding-inline: 0.8rem;
   }
@@ -971,8 +915,8 @@ tr:first-child td {
     flex-direction: column-reverse;
   }
 
-  .form-actions .btn,
-  .dialog-actions .btn {
+  .form-actions :is(.btn, .nb-btn),
+  .dialog-actions :is(.btn, .nb-btn) {
     width: 100%;
   }
 }
@@ -988,7 +932,7 @@ tr:first-child td {
   grid-column: 1 / -1;
 }
 
-.quick-ranges .btn {
+.quick-ranges :is(.btn, .nb-btn) {
   min-height: 2.45rem;
 }
 
@@ -1104,7 +1048,7 @@ tr:first-child td {
 .log-attempt-diagnostic {
   white-space: pre-wrap;
 }
-@media (max-width: 38rem) {
+@media (width <= 40rem) {
   .log-attempt dl > div {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1115,12 +1059,19 @@ tr:first-child td {
 
 .log-detail-diagnostics {
   display: grid;
+  min-width: 0;
   gap: 0.5rem;
   justify-items: start;
   padding: 0.75rem;
   border: 1px solid var(--nb-color-border);
   border-radius: var(--nb-radius-sm);
   background: var(--nb-color-surface-alt);
+}
+
+.log-detail-diagnostics > .nb-btn {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
 }
 
 .log-detail-diagnostics h3 {
@@ -1147,7 +1098,7 @@ tr:first-child td {
   border: 0;
 }
 
-@media (max-width: 38rem) {
+@media (width <= 40rem) {
   .log-detail-row {
     grid-template-columns: 1fr;
   }

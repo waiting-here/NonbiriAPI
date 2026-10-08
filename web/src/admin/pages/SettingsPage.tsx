@@ -264,6 +264,7 @@ function SettingField({
   };
   const parsed = parsedDraft(entry, draft, t);
   const dirty = Boolean(drafts[entry.key]) && (parsed.error !== null || parsed.value !== value);
+  const differsFromDefault = (parsed.error === null ? parsed.value : value) !== entry.raw_default;
   const locale = catalogLocale(language);
   const inputID = 'site-setting-' + entry.key;
   const change = (text: string) => onEdit(entry.key, { ...draft, text });
@@ -355,6 +356,9 @@ function SettingField({
             <label htmlFor={inputID}>{entry.title[locale]}</label>
           )}
         </h3>
+        {differsFromDefault ? (
+          <span className="nb-badge nb-badge--warn">{t('admin.settings.modified')}</span>
+        ) : null}
         <p>{entry.description[locale]}</p>
       </div>
       <div className="nb-setting__control">
@@ -421,6 +425,23 @@ function SettingField({
           </details>
         </div>
 
+        {differsFromDefault && (entry.raw_default !== null || entry.null_writable) ? (
+          <button
+            type="button"
+            className="nb-btn nb-btn--ghost"
+            disabled={busy}
+            onClick={() =>
+              onEdit(entry.key, {
+                ...draft,
+                text: entry.raw_default === null ? '' : String(entry.raw_default),
+                isNull: entry.raw_default === null,
+              })
+            }
+          >
+            {t('admin.settings.restoreDefault')}
+          </button>
+        ) : null}
+
         {entry.null_writable ? (
           <label className="checkbox-label">
             <input
@@ -443,14 +464,10 @@ function SettingField({
         {dirty ? (
           <button
             type="button"
-            className="btn btn-quiet"
+            className="nb-btn nb-btn--ghost"
             disabled={busy}
             onClick={() => onReset(entry.key)}
           >
-            <span className="nb-badge nb-badge--warn">
-              {t('admin.settings.modified', { defaultValue: 'Modified' })}
-            </span>{' '}
-            ·{' '}
             {t('admin.settings.original', {
               defaultValue: 'Previously {{value}}',
               value: scalar(draft.original),

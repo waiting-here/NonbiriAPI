@@ -1,3 +1,4 @@
+import { SimplePager } from '@shared/operations/SimplePager';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Fold, DataTable, Tabs } from '@shared/components/ui';
@@ -82,7 +83,7 @@ function AuditErrorState({
       <div>
         <h2>{t('账务审计无法加载', 'Accounting audit unavailable')}</h2>
         <p>{message}</p>
-        <button type="button" className="btn btn-secondary" onClick={onRetry}>
+        <button type="button" className="nb-btn nb-btn--secondary" onClick={onRetry}>
           {t('重试', 'Retry')}
         </button>
       </div>
@@ -342,7 +343,7 @@ function ChannelDetails({
             render: (channel) => (
               <>
                 <button
-                  className="btn btn-secondary"
+                  className="nb-btn nb-btn--secondary"
                   onClick={() => select(channel.kind, channel.channel)}
                 >
                   {channelLabel(channel.channel, t)}
@@ -453,24 +454,15 @@ function LedgerDetails({ filter }: { readonly filter: AuditFilter }) {
       {q.data.data.length === 0 && (
         <p>{t('该区间没有账本操作。', 'There are no ledger operations in this interval.')}</p>
       )}
-      <div className="audit-actions">
-        <button
-          className="btn btn-secondary"
-          disabled={cursors.length === 0}
-          onClick={() => setCursors((v) => v.slice(0, -1))}
-        >
-          {t('上一页', 'Previous')}
-        </button>
-        <button
-          className="btn btn-secondary"
-          disabled={!q.data.next_cursor}
-          onClick={() => {
-            if (q.data.next_cursor) setCursors((v) => [...v, q.data.next_cursor!]);
-          }}
-        >
-          {t('下一页', 'Next')}
-        </button>
-      </div>
+      <SimplePager
+        page={cursors.length + 1}
+        hasMore={Boolean(q.data.next_cursor)}
+        onPrev={() => setCursors((v) => v.slice(0, -1))}
+        onNext={() => {
+          if (q.data.next_cursor) setCursors((v) => [...v, q.data.next_cursor!]);
+        }}
+        labels={{ previous: t('上一页', 'Previous'), next: t('下一页', 'Next') }}
+      />
     </>
   );
 }
@@ -579,11 +571,11 @@ export function EconomyAuditPage() {
               <option value="day">{t('日（最多366个）', 'Day (up to 366)')}</option>
             </select>
           </label>
-          <button className="btn btn-primary" type="submit" disabled={!ready}>
+          <button className="nb-btn nb-btn--primary" type="submit" disabled={!ready}>
             {t('应用', 'Apply')}
           </button>
           <button
-            className="btn btn-secondary"
+            className="nb-btn nb-btn--secondary"
             type="button"
             onClick={() => void summary.refetch()}
           >
@@ -632,7 +624,7 @@ export function EconomyAuditPage() {
         <div className="audit-actions">
           {filter.kind && (
             <button
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               onClick={() => setFilter((v) => ({ ...v, kind: undefined, channel: undefined }))}
             >
               {t('清除操作筛选', 'Clear operation filter')}: {filter.kind}

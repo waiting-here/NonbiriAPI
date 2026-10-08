@@ -42,19 +42,19 @@
   padding: 1rem;
   margin-block: 1rem;
 }
-.duel-finance dl {
+.duel-finance > dl {
   display: grid;
   gap: 1rem;
   margin: 1rem 0;
 }
-.duel-finance dl > div {
+.duel-finance > dl > div {
   min-width: 0;
 }
-.duel-finance dt {
+.duel-finance > dl > div > dt {
   font-size: 0.85rem;
   opacity: 0.8;
 }
-.duel-finance dd {
+.duel-finance > dl > div > dd {
   margin: 0.4rem 0;
   overflow-wrap: anywhere;
 }

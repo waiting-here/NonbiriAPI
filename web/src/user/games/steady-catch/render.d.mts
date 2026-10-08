@@ -1,7 +1,8 @@
 import type { Phrase, State } from './engine';
 export interface RenderEvent {
-  kind: 'catch' | 'hit' | 'prop';
+  kind: 'catch' | 'hit' | 'prop' | 'miss';
   text?: string;
+  x?: number;
 }
 export function createRenderer(
   canvas: HTMLCanvasElement,

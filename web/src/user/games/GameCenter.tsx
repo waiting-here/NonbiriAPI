@@ -67,6 +67,7 @@ function cardState(
     return {
       state: count > 0 ? 'open' : 'closed',
       detail: String(count),
+      total: values.length,
     };
   }
   const game = snapshot[kind];
@@ -88,12 +89,19 @@ function GameCard({ card }: { card: CenterCard }) {
       : text('presentation.unavailable');
   const detail =
     card.id === 'lakenotes'
-      ? text('center.free')
+      ? ''
       : card.id === 'fishing' || card.id === 'blackjack' || card.id === 'steadycatch'
         ? text('center.from', { amount: card.detail })
-        : card.id === 'linklink'
-          ? text('center.specs', { count: card.detail })
-          : text('center.modes', { count: card.detail, total: card.total ?? 0 });
+        : text(card.detail === String(card.total) ? 'center.modesAll' : 'center.modes', {
+            count: card.detail,
+          });
+  const reward = text(
+    card.id === 'lakenotes'
+      ? 'center.free'
+      : card.id === 'linklink' || card.id === 'steadycatch'
+        ? 'center.firstClearReward'
+        : 'center.winCredits',
+  );
   return (
     <Link
       className={`card game-center-card game-center-card--${card.id}${card.state !== 'open' ? ' is-closed' : ''}`}
@@ -109,8 +117,13 @@ function GameCard({ card }: { card: CenterCard }) {
         <h2>{text(card.title)}</h2>
         <p>{text(card.body)}</p>
         <div className="game-card-foot">
-          <span>{card.state !== 'maintenance' ? detail : ''}</span>
-          <span>{text(card.state === 'open' ? 'presentation.enter' : 'presentation.learn')}</span>
+          <span className="game-card-meta">
+            {card.state === 'open' && detail ? <span>{detail}</span> : null}
+            <span className="nb-badge nb-badge--plain">{reward}</span>
+          </span>
+          <span className="nb-btn nb-btn--sm nb-btn--secondary" aria-hidden="true">
+            {text(card.state === 'open' ? 'presentation.enter' : 'presentation.learn')}
+          </span>
         </div>
       </div>
     </Link>

@@ -261,20 +261,13 @@ func (r *Runtime) completeLogin(w http.ResponseWriter, req *http.Request, login 
 		return
 	}
 	if exists {
-		var member *GuildMember
-		if guild, guildErr := r.registrationGuild(req.Context()); guildErr == nil {
-			resolved, memberErr := memberFor(req.Context(), login, guild)
-			if memberErr == nil {
-				resolved.Avatar = dereference(discordGuildAvatarURL(guild, login.Identity.ID, resolved.Avatar))
-				member = &resolved
-			}
-		}
-		token, expiry, err := r.refreshExistingUser(req.Context(), userID, login.Identity, member)
+		membership := r.existingLoginMembership(req.Context(), login)
+		token, expiry, err := r.refreshExistingUser(req.Context(), userID, login.Identity, membership)
 		if err != nil {
 			if r.redirectForbiddenLogin(w, req, err) {
 				return
 			}
-			r.writeSessionFailure(w, err)
+			writeAuthFailure(w, err)
 			return
 		}
 		clearDenialCookie(w)
@@ -310,7 +303,7 @@ func (r *Runtime) completeLogin(w http.ResponseWriter, req *http.Request, login 
 		return
 	}
 	if errors.Is(err, errIdentityConflict) && userID > 0 {
-		token, expiry, err = r.refreshExistingUser(req.Context(), userID, login.Identity, &member)
+		token, expiry, err = r.refreshExistingUser(req.Context(), userID, login.Identity, &discordMembership{guild: guild, member: &member})
 	}
 	if err != nil {
 		if r.redirectForbiddenLogin(w, req, err) {

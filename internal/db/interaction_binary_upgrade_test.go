@@ -106,6 +106,9 @@ func verifyReleasedStorageUpgrade(t *testing.T, source, expectedSourceManifest s
 	assertRetainedManifest(t, prior, expectedSourceManifest)
 	before := interactionTableDigests(t, prior, sourceManifest, false)
 	wantConfig := upgradeSiteConfig(t, prior)
+	if _, exists := wantConfig["discord_registered_user_gate_exempt"]; !exists {
+		wantConfig["discord_registered_user_gate_exempt"] = upgradeSetting{Value: "0"}
+	}
 	preserveManagementConfig := expectedSourceManifest == managementAndGamesManifestHash
 	var biddingSettings *[2]int64
 	for _, table := range sourceManifest.Tables {
@@ -185,7 +188,17 @@ func verifyReleasedStorageUpgrade(t *testing.T, source, expectedSourceManifest s
 				}
 			}
 			if got := upgradeSiteConfig(t, database); !reflect.DeepEqual(got, wantConfig) {
-				t.Errorf("configuration differs from preserved source plus declared game defaults (rows %d, want %d)", len(got), len(wantConfig))
+				t.Errorf("configuration differs from preserved source plus declared defaults (rows %d, want %d)", len(got), len(wantConfig))
+			}
+		}
+		for table, predicate := range map[string]string{
+			"users":          "discord_gate_policy<>'inherit'",
+			"models":         "model_types<>3",
+			"charity_models": "model_types<>3",
+		} {
+			var changed int
+			if err := database.QueryRow("SELECT count(*) FROM " + table + " WHERE " + predicate).Scan(&changed); err != nil || changed != 0 {
+				t.Fatal("upgraded account or model defaults differ", table, changed, err)
 			}
 		}
 		if biddingSettings != nil {
@@ -425,7 +438,7 @@ func TestManagementSourceUpgradePreservesConfiguredGamesAndLakeV2(t *testing.T) 
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = source.Close() })
-	hostileMustExec(t, source, "PRAGMA foreign_keys=OFF;"+preGwentAIFixture+"PRAGMA foreign_keys=ON;")
+	hostileMustExec(t, source, "PRAGMA foreign_keys=OFF;"+strings.TrimPrefix(managementAndGamesStorageSchema(), generationTwoSchema)+"PRAGMA foreign_keys=ON;")
 	hostileMustExec(t, source, "INSERT INTO sqlite_sequence(name,seq) VALUES('game_duel_anonymous',77),('game_ai_queue',41)")
 	assertRetainedManifest(t, source, managementAndGamesManifestHash)
 	if err := source.Close(); err != nil {

@@ -8,8 +8,8 @@ NonbiriAPI 是可自行部署的 AI API 端点管理平台，提供 OpenAI-compa
 
 ## 主要能力
 
-- 提供 `/v1/models`、`/v1/chat/completions` 和 `/v1/embeddings`，可连接 OpenAI-compatible、Anthropic-compatible 和 AI SDK Gateway v3 上游。支持的操作与协议边界见 [API 契约](docs/api-contract.md)。
-- 支持个人模型命名、发现、路由、有限的请求适配及仅驻留内存的 Debug Hub。公益资源支持密钥捐赠、使用预算、积分结算与分级协管。
+- 提供 `/v1/models`、`/v1/chat/completions`、`/v1/embeddings` 和 `/v1/images/generations`，可连接 OpenAI-compatible、Anthropic-compatible 和 AI SDK Gateway v3 上游。支持的操作与协议边界见 [API 契约](docs/api-contract.md)。
+- 支持个人模型命名、发现、顺序／随机／综合优化负载均衡路由、有限的请求适配及仅驻留内存的 Debug Hub。公益资源支持密钥捐赠、使用预算、积分结算与分级协管。
 - Discord 登录、独立管理员站、中英双语响应式页面和站点外观配置；用户可导出数据或删除账号。
 - 可选的签到、共享活动及九款小游戏，结算和恢复由服务端控制，榜单遵循隐私设置。
 - 统一出站安全策略、上游凭据加密、有限诊断与留存清理。请求日志和积分明细通常保留 30 天；压缩后的余额基线与审计汇总保持账务连续。
@@ -55,7 +55,7 @@ curl https://api.example.com/v1/chat/completions \
   -d '{"model":"provider/model","messages":[{"role":"user","content":"Hello"}]}'
 ```
 
-通过 `/v1/models` 查看可用名称，使用 `/v1/embeddings` 调用支持向量生成的模型。上游地址应包含其 API 版本，例如 `https://provider.example/v1`。浏览器调用使用 Bearer CallerKey 和 `credentials: 'omit'`。不要将密钥放入 URL 或共享日志。
+通过 `/v1/models` 查看可用名称，使用 `/v1/embeddings` 或 `/v1/images/generations` 调用已启用对应类型的模型。新建模型默认只启用聊天补全，可在模型设置中多选接口类型；旧模型保留聊天补全和向量化。图像生成目前支持 OpenAI-compatible 上游。上游地址应包含其 API 版本，例如 `https://provider.example/v1`。浏览器调用使用 Bearer CallerKey 和 `credentials: 'omit'`。不要将密钥放入 URL 或共享日志。
 
 [API 契约](docs/api-contract.md) 说明流式响应、错误、计费、CORS、连接器差异及个人自动化接口。[协管自动化说明](docs/steward-automation.md) 介绍由管理员提供的接入指南。
 

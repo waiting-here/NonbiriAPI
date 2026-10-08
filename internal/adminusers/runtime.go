@@ -57,6 +57,7 @@ type userRow struct {
 	requests, uncached, cacheWrite, cacheRead, output, unknown []byte
 	revision                                                   []byte
 	lang                                                       string
+	discordGatePolicy                                          string
 	createdAt, updatedAt                                       int64
 }
 
@@ -127,13 +128,13 @@ SELECT id,discord_id,username,avatar,guild_nick,guild_avatar_url,is_banned,banne
  charity_suspended_until,endpoint_limit,rpm_limit,concurrency_limit,game_profile_public,
  donation_credit_mag,level,auto_level,total_requests,total_uncached_input_tokens,
  total_cache_write_input_tokens,total_cache_read_input_tokens,total_output_tokens,
- total_unknown_usage_requests,revision,lang,created_at,updated_at
+ total_unknown_usage_requests,revision,lang,created_at,updated_at,discord_gate_policy
 FROM users WHERE id=? AND is_admin=0`, userID).Scan(
 		&row.id, &row.discordID, &row.username, &row.avatar, &row.guildNick, &row.guildAvatarURL,
 		&row.isBanned, &row.bannedReason, &row.bannedUntil, &row.charityUntil, &row.endpointLimit,
 		&row.rpmLimit, &row.concurrencyLimit, &row.gamePublic, &row.donation, &row.manualLevel,
 		&row.autoLevel, &row.requests, &row.uncached, &row.cacheWrite, &row.cacheRead, &row.output,
-		&row.unknown, &row.revision, &row.lang, &row.createdAt, &row.updatedAt,
+		&row.unknown, &row.revision, &row.lang, &row.createdAt, &row.updatedAt, &row.discordGatePolicy,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return userRow{}, ErrNotFound
@@ -226,7 +227,8 @@ func projectUser(ctx context.Context, tx *sql.Tx, row userRow, config projection
 		ID: strconv.FormatInt(row.id, 10), DiscordID: nullStringPointer(row.discordID),
 		Username: row.username, AvatarURL: discordAvatarURL(row.discordID.String, row.avatar),
 		GuildNick: stringPointer(row.guildNick), GuildAvatarURL: stringPointer(row.guildAvatarURL),
-		IsAdmin: false, IsBanned: activeBan, BannedReason: bannedReason, BannedUntil: bannedUntil, AutomaticReason: automaticReason,
+		DiscordGatePolicy: row.discordGatePolicy,
+		IsAdmin:           false, IsBanned: activeBan, BannedReason: bannedReason, BannedUntil: bannedUntil, AutomaticReason: automaticReason,
 		CharitySuspendedUntil: futurePointer(row.charityUntil, now),
 		EndpointLimit:         nullableIntString(row.endpointLimit), EffectiveEndpointLimit: effectiveLimit(row.endpointLimit, config.endpointDefault),
 		RPMLimit: nullableIntString(row.rpmLimit), EffectiveRPMLimit: effectiveLimit(row.rpmLimit, config.rpmDefault),
@@ -729,6 +731,14 @@ func (service *Service) profile(ctx context.Context, adminID, userID int64, role
 	if !validNow(now) {
 		return MutationResult[AdminUser]{}, ErrUnavailable
 	}
+	if input.DiscordGatePolicySet {
+		if role != roleAdmin {
+			return MutationResult[AdminUser]{}, ErrForbidden
+		}
+		if !db.ValidDiscordGatePolicy(input.DiscordGatePolicy) {
+			return MutationResult[AdminUser]{}, ErrInvalidRequest
+		}
+	}
 	var lockedDiscord string
 	if role == roleSteward && input.LevelSet && input.Level != nil && *input.Level == 6 {
 		return MutationResult[AdminUser]{}, ErrForbidden
@@ -779,12 +789,14 @@ UPDATE users SET
  concurrency_limit=CASE WHEN ? THEN ? ELSE concurrency_limit END,
  lang=CASE WHEN ? THEN ? ELSE lang END,
  level=CASE WHEN ? THEN ? ELSE level END,
+ discord_gate_policy=CASE WHEN ? THEN ? ELSE discord_gate_policy END,
  revision=?,updated_at=?
 WHERE id=? AND is_admin=0 AND revision=?`,
 		input.EndpointLimitSet, nullableIntValue(input.EndpointLimit),
 		input.RPMLimitSet, nullableIntValue(input.RPMLimit),
 		input.ConcurrencySet, nullableIntValue(input.Concurrency),
 		input.LangSet, input.Lang, input.LevelSet, nullableIntValueFromInt(input.Level),
+		input.DiscordGatePolicySet, input.DiscordGatePolicy,
 		db.EncodeU128(next), now, userID, row.revision)
 	if err != nil {
 		return MutationResult[AdminUser]{}, classifyDatabaseError("update user profile", err)

@@ -28,7 +28,23 @@ var preManagementAndGamesFixture string
 //go:embed testdata/pre_gwent_ai.sql
 var preGwentAIFixture string
 
-func managementAndGamesStorageSchema() string { return generationTwoSchema + preGwentAIFixture }
+//go:embed testdata/pre_discord_gate.sql
+var preDiscordGateFixture string
+
+//go:embed testdata/pre_model_types.sql
+var preModelTypesFixture string
+
+//go:embed testdata/pre_personal_balanced_routing.sql
+var prePersonalBalancedRoutingFixture string
+
+func modelTypesAndImagesStorageSchema() string {
+	return generationTwoSchema + prePersonalBalancedRoutingFixture
+}
+func discordGateStorageSchema() string {
+	return modelTypesAndImagesStorageSchema() + preModelTypesFixture
+}
+func gwentAIStorageSchema() string            { return discordGateStorageSchema() + preDiscordGateFixture }
+func managementAndGamesStorageSchema() string { return gwentAIStorageSchema() + preGwentAIFixture }
 func aiPlayersStorageSchema() string {
 	return managementAndGamesStorageSchema() + preManagementAndGamesFixture
 }
@@ -83,6 +99,9 @@ func supportedSourceFixture(t *testing.T) *sql.DB {
 
 func TestSupportedReleasedSchemaIdentity(t *testing.T) {
 	for _, source := range []struct{ schema, manifest string }{
+		{modelTypesAndImagesStorageSchema(), modelTypesAndImagesManifestHash},
+		{discordGateStorageSchema(), discordGateManifestHash},
+		{gwentAIStorageSchema(), gwentAIManifestHash},
 		{managementAndGamesStorageSchema(), managementAndGamesManifestHash},
 		{aiPlayersStorageSchema(), aiPlayersManifestHash},
 		{preLedgerRetentionSchema(), preLedgerRetentionManifestHash},

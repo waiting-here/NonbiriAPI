@@ -4,7 +4,7 @@
   margin-inline: auto;
 }
 
-@media (min-width: 70rem) {
+@media (width >= 80rem) {
   .economy-model-workspace {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem);
@@ -366,7 +366,7 @@
   margin-bottom: var(--nb-space-4);
 }
 
-@media (max-width: 720px) {
+@media (width <= 48rem) {
   .economy-capability-grid,
   .economy-activities-grid,
   .economy-limit-grid,

@@ -4,7 +4,7 @@ import { OnboardingCard } from './OnboardingCard';
 import { GameWallets } from './GameWallets';
 import type { GamesSnapshot } from './types';
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
-import { Link } from 'react-router';
+import { GameToolbar, type ToolItem } from './GameToolbar';
 import { PageHeader } from '@shared/components/States';
 import { useGameCopy } from '../copy';
 import type { GameSoundControl } from './useGameSound';
@@ -16,6 +16,7 @@ export function GameHeader({
   onRules,
   rankingsAvailable = false,
   children,
+  tools = [],
 }: {
   readonly wallets?: Pick<GamesSnapshot, 'balance' | 'gameBalance' | 'onboarding'>;
   readonly game: 'fishing' | 'linklink' | 'rps';
@@ -23,6 +24,7 @@ export function GameHeader({
   readonly onRules: () => void;
   readonly rankingsAvailable?: boolean;
   readonly children?: ReactNode;
+  readonly tools?: readonly ToolItem[];
 }) {
   const { text } = useGameCopy();
   const duelText = useDuelText();
@@ -34,31 +36,33 @@ export function GameHeader({
         actions={
           <>
             {wallets ? <GameWallets wallets={wallets} /> : null}
-            <GameHeaderTool icon="?" label={text('common.rulesButton')} onClick={onRules} />
-            <GameHeaderTool
-              icon="♪"
-              label={text(sound.enabled ? 'fishing.sound.on' : 'fishing.sound.off')}
-              aria-pressed={sound.enabled}
-              onClick={sound.toggle}
+            <GameToolbar
+              sound={{
+                ...sound,
+                labelOn: text('fishing.sound.on'),
+                labelOff: text('fishing.sound.off'),
+              }}
+              items={[
+                { id: 'rules', label: text('common.rulesButton'), icon: 'help', onClick: onRules },
+                {
+                  id: 'credits',
+                  label: text('presentation.creditHistory'),
+                  icon: 'credits',
+                  to: '/credits',
+                },
+                ...(rankingsAvailable
+                  ? [
+                      {
+                        id: 'rankings',
+                        label: duelText('ranking.leaderboards'),
+                        icon: 'trophy' as const,
+                        href: '#game-rankings',
+                      },
+                    ]
+                  : []),
+                ...tools,
+              ]}
             />
-            <Link
-              className="btn btn-secondary game-header-tool"
-              to="/credits"
-              aria-label={text('presentation.creditHistory')}
-              title={text('presentation.creditHistory')}
-            >
-              <span aria-hidden="true">◷</span>
-            </Link>
-            {rankingsAvailable ? (
-              <a
-                className="btn btn-secondary game-header-tool"
-                href="#game-rankings"
-                aria-label={duelText('ranking.leaderboards')}
-                title={duelText('ranking.leaderboards')}
-              >
-                <span aria-hidden="true">▥</span>
-              </a>
-            ) : null}
             {children}
           </>
         }
@@ -76,7 +80,7 @@ export function GameHeaderTool({
   return (
     <button
       type="button"
-      className="btn btn-secondary game-header-tool"
+      className="nb-btn nb-btn--secondary game-header-tool"
       aria-label={label}
       title={label}
       {...props}

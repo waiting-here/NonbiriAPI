@@ -177,7 +177,7 @@ function EndpointList({ user }: { user: UserProfile }) {
                         </span>
                         <span className="nb-row__main">
                           <span className="nb-row__title">
-                            <strong>{name}</strong>
+                            <strong title={name}>{name}</strong>
                             <span
                               className={`nb-badge nb-badge--${item.browse?.state === 'available' ? 'ok' : 'warn'}`}
                             >

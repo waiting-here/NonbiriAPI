@@ -15,6 +15,7 @@ import {
 } from '../features/operations/adminPages';
 import { useAdminSession } from '../data';
 import '@shared/operations/operations.css';
+import './endpoints.css';
 
 interface EndpointUsersPanelProps {
   account: string;
@@ -238,7 +239,7 @@ function EndpointsPageContent({ account, scopeReady, sessionError }: EndpointsPa
               onChange={(event) => setUserDraft(event.target.value)}
             />
           </label>
-          <button className="btn btn-secondary" type="submit">
+          <button className="nb-btn nb-btn--secondary" type="submit">
             {t('common.applyFilter')}
           </button>
           <label className="ops-form-field">
@@ -265,7 +266,7 @@ function EndpointsPageContent({ account, scopeReady, sessionError }: EndpointsPa
             </select>
           </label>
           <button
-            className="btn btn-quiet"
+            className="nb-btn nb-btn--ghost"
             type="button"
             onClick={() => {
               setDraft('');
@@ -277,34 +278,46 @@ function EndpointsPageContent({ account, scopeReady, sessionError }: EndpointsPa
             {t('common.resetFilter')}
           </button>
         </form>
-        <div className="ops-toolbar">
-          <span>{t('admin.endpoints.selected', { count: selected.length })}</span>
-          <select
-            aria-label={t('admin.endpoints.tags')}
-            value={editTag}
-            onChange={(event) => setEditTag(event.target.value)}
-            disabled={tags.isPending}
-          >
-            <option value="abusive_third_party">{t('admin.endpoints.abusive_third_party')}</option>
-            <option value="community_charity">{t('admin.endpoints.community_charity')}</option>
-          </select>
-          <button
-            className="btn btn-secondary"
-            type="button"
-            disabled={!selected.length || tags.isPending || result.isFetching}
-            onClick={() => tags.mutate(true)}
-          >
-            {t('admin.endpoints.addTag')}
-          </button>
-          <button
-            className="btn btn-quiet"
-            type="button"
-            disabled={!selected.length || tags.isPending || result.isFetching}
-            onClick={() => tags.mutate(false)}
-          >
-            {t('admin.endpoints.removeTag')}
-          </button>
-        </div>
+        <fieldset
+          className="endpoint-batch"
+          disabled={!selected.length || tags.isPending || result.isFetching}
+        >
+          <legend>{t('admin.endpoints.selected', { count: selected.length })}</legend>
+          {!selected.length ? (
+            <p className="field-help">{t('admin.endpoints.selectForBatch')}</p>
+          ) : null}
+          <div className="nb-toolbar">
+            <label className="nb-field">
+              <span>{t('admin.endpoints.tags')}</span>
+              <select
+                value={editTag}
+                onChange={(event) => setEditTag(event.target.value)}
+                disabled={tags.isPending}
+              >
+                <option value="abusive_third_party">
+                  {t('admin.endpoints.abusive_third_party')}
+                </option>
+                <option value="community_charity">{t('admin.endpoints.community_charity')}</option>
+              </select>
+            </label>
+            <button
+              className="nb-btn nb-btn--secondary"
+              type="button"
+              disabled={!selected.length || tags.isPending || result.isFetching}
+              onClick={() => tags.mutate(true)}
+            >
+              {t('admin.endpoints.addTag')}
+            </button>
+            <button
+              className="nb-btn nb-btn--ghost"
+              type="button"
+              disabled={!selected.length || tags.isPending || result.isFetching}
+              onClick={() => tags.mutate(false)}
+            >
+              {t('admin.endpoints.removeTag')}
+            </button>
+          </div>
+        </fieldset>
         {tags.error ? (
           <ErrorState error={tags.error} />
         ) : tags.isSuccess ? (
@@ -402,7 +415,7 @@ function EndpointsPageContent({ account, scopeReady, sessionError }: EndpointsPa
                           <td data-label={t('admin.endpoints.keys')}>{group.key_count}</td>
                           <td className="ops-cell-wide" data-label={t('admin.endpoints.expand')}>
                             <button
-                              className="btn btn-secondary"
+                              className="nb-btn nb-btn--secondary"
                               type="button"
                               aria-expanded={open}
                               disabled={!scopeReady || result.isFetching}

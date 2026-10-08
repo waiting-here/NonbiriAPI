@@ -111,7 +111,12 @@ describe('activity cards', () => {
     vi.mocked(economyQueries.useClaimWelfare).mockReturnValue(claimMutation as never);
     vi.mocked(economyQueries.useContributeThursday).mockReturnValue(contributionMutation as never);
     let snapshot: ActivitiesSnapshot = {
-      loan: { enabled: false, available: false, reason: 'disabled', tiers: ['10000', '100000', '1000000'] },
+      loan: {
+        enabled: false,
+        available: false,
+        reason: 'disabled',
+        tiers: ['10000', '100000', '1000000'],
+      },
       master: { enabled: true, available: true, reason: 'available' },
       welfare: { ...welfare, state: 'available', poolBalance: '10' },
       thursday,
@@ -168,6 +173,25 @@ describe('activity cards', () => {
     expect(screen.getByRole('button', { name: actionName })).toBeEnabled();
     expect(screen.getAllByText(activityCopy.mutationReconciled)).toHaveLength(2);
   });
+
+  it.each(['en', 'zh'] as const)(
+    'explains exhausted contributions without sending a new action in %s',
+    async (locale) => {
+      const view = await renderWithProviders(
+        <ThursdayCard
+          thursday={{ ...thursday, current: { ...thursday.current!, myCount: '3' } }}
+          masterAvailable
+        />,
+        { station: 'user', role: 'user', locale },
+      );
+      const button = screen.getByRole('button', {
+        name: locale === 'zh' ? '今日次数已用完' : 'Daily limit reached',
+      });
+      expect(button).toBeDisabled();
+      await view.user.click(button);
+      expect(contributionMutation.mutateAsync).not.toHaveBeenCalled();
+    },
+  );
 
   it('disables a zero welfare award without consuming an intent', async () => {
     await renderWithProviders(<WelfareCard welfare={welfare} masterAvailable />, {

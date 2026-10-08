@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+import { formatCount } from '@shared/utils/formatNumber';
 import { useId } from 'react';
 import { parameterLabel, usePictureBookText } from './copy';
 import {
@@ -19,6 +21,7 @@ function ParameterField({
   readonly onChange: (value: string) => void;
 }) {
   const t = usePictureBookText();
+  const { t: copy } = useTranslation();
   const id = useId();
   const label = parameterLabel(rule.key, t);
   if (rule.dimensions && !rule.enum) {
@@ -121,12 +124,10 @@ function ParameterField({
       ) : null}
       {rule.max_length !== undefined ? (
         <small>
-          {t('长度上限', 'Length limit')}: {rule.max_length}{' '}
+          {t('长度上限', 'Length limit')}: {formatCount(rule.max_length).exact}{' '}
           {rule.length_unit === 'utf8_bytes' || !rule.length_unit
-            ? t('UTF-8字节', 'UTF-8 bytes')
-            : rule.length_unit === 'unicode_scalars'
-              ? t('Unicode字符', 'Unicode characters')
-              : t('UTF-16单位', 'UTF-16 units')}
+            ? copy('common.picturebook.lengthBytes')
+            : copy('common.picturebook.lengthCharacters')}
         </small>
       ) : null}
     </div>

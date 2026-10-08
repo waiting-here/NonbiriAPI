@@ -38,6 +38,11 @@ export class CatchSession {
   active = false;
   busy = false;
   error: unknown = null;
+  countdown: number | null = null;
+  previewX: number | null = null;
+  private countdownRun = 0;
+  private countdownTimer: ReturnType<typeof setTimeout> | null = null;
+  private finishCountdownWait: (() => void) | null = null;
   private listeners = new Set<() => void>();
   private inputs: Input[] = [];
   private collections: CollectionEvent[] = [];
@@ -78,7 +83,7 @@ export class CatchSession {
     this.direction = 0;
   }
   move(direction: number) {
-    if (direction === 0) this.target = this.state.x;
+    if (direction === 0) this.target = this.previewX ?? this.state.x;
     this.direction = direction;
   }
   takeCollections() {
@@ -91,6 +96,20 @@ export class CatchSession {
   }
 
   frame() {
+    if (this.countdown !== null) {
+      const x = this.previewX ?? this.state.x;
+      this.previewX = Math.max(
+        55000,
+        Math.min(
+          545000,
+          x +
+            (this.direction
+              ? this.direction * 9000
+              : Math.max(-15000, Math.min(15000, this.target - x))),
+        ),
+      );
+      return;
+    }
     if (!this.active || this.error || this.terminal) return;
     const now = this.clock();
     const desired = Math.min(
@@ -124,6 +143,41 @@ export class CatchSession {
     }
   }
 
+  async beginCountdown(beats: 2 | 3 = 3) {
+    if (this.busy || this.error || this.terminal || this.active) return;
+    this.cancelCountdown();
+    const run = this.countdownRun;
+    this.previewX = this.state.x;
+    for (let beat: number = beats; beat >= (beats === 3 ? 0 : 1); beat--) {
+      this.countdown = beat;
+      this.notify();
+      await new Promise<void>((resolve) => {
+        this.finishCountdownWait = resolve;
+        this.countdownTimer = setTimeout(resolve, beat === 0 ? 350 : 600);
+      });
+      if (run !== this.countdownRun) return;
+      this.countdownTimer = null;
+      this.finishCountdownWait = null;
+    }
+    this.countdown = null;
+    this.previewX = null;
+    this.target = this.state.x;
+    this.direction = 0;
+    this.notify();
+    await this.resume();
+  }
+
+  cancelCountdown() {
+    this.countdownRun++;
+    if (this.countdownTimer !== null) clearTimeout(this.countdownTimer);
+    this.countdownTimer = null;
+    this.finishCountdownWait?.();
+    this.finishCountdownWait = null;
+    this.countdown = null;
+    this.previewX = null;
+    this.notify();
+  }
+
   async resume() {
     if (this.busy || this.error || this.terminal) return;
     if (this.authority.status === 'playing') {
@@ -151,6 +205,7 @@ export class CatchSession {
   }
 
   async pause() {
+    this.cancelCountdown();
     this.active = false;
     this.pauseWanted = true;
     this.direction = 0;
@@ -161,6 +216,7 @@ export class CatchSession {
 
   async abandon() {
     if (this.busy || this.error || this.terminal) return;
+    this.cancelCountdown();
     this.active = false;
     this.pauseWanted = false;
     this.inputs = [];

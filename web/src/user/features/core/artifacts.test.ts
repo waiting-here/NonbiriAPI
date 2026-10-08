@@ -40,8 +40,8 @@ describe('core integration descriptors', () => {
 describe('core narrow viewport and untrusted-text boundary', () => {
   it('keeps the 390px layout single-column with 44px coarse-pointer targets', () => {
     const css = workspaceFile('src/user/features/core/core.css');
-    expect(css).toMatch(/@media \(max-width: 26rem\)/);
-    expect(css).toMatch(/@media \(pointer: coarse\), \(max-width: 26rem\)/);
+    expect(css).toMatch(/@media \(width <= 32rem\)/);
+    expect(css).toMatch(/@media \(pointer: coarse\), \(width <= 32rem\)/);
     expect(css).toMatch(/min-block-size:\s*2\.75rem/);
     expect(css).toMatch(/overflow-wrap:\s*anywhere/);
     expect(css).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\)/);

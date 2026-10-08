@@ -281,7 +281,15 @@ for (const scenario of [
           name: `${locale === 'zh' ? '导出' : 'Export'} ${format.toUpperCase()}`,
         });
         await expect(link).toBeVisible();
-        await expect(link).toHaveAttribute('href', `${path}/export.${format}?status=200`);
+        const exportURL = new URL((await link.getAttribute('href'))!, origin);
+        expect(exportURL.pathname).toBe(`${path}/export.${format}`);
+        expect(Object.fromEntries(exportURL.searchParams)).toEqual({
+          status: '200',
+          from: restored.get('from'),
+          to: restored.get('to'),
+        });
+        expect(Number(restored.get('from'))).toBeGreaterThan(0);
+        expect(Number(restored.get('to')) - Number(restored.get('from'))).toBe(86_400);
         await expect(link).toHaveAttribute('download', '');
         await link.click({ trial: true });
         const bounds = await link.boundingBox();
@@ -313,11 +321,17 @@ test('ordinary charity log detail exposes no attempt list or attempt pagination'
   page,
 }) => {
   const { origin, guard } = await prepare(page, 'user', 'en', 390);
-  await mockJson(page, {
-    origin,
-    method: 'GET',
-    path: '/api/logs?page=1&page_size=20',
-    body: { data: [row('user', 1, true)], next_cursor: null, pagination: windowFor(1, 1, 20) },
+  await page.route('**/api/logs?**', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.origin !== origin || url.pathname !== '/api/logs') return route.fallback();
+    expect(route.request().method()).toBe('GET');
+    expect(url.searchParams.get('page')).toBe('1');
+    expect(url.searchParams.get('page_size')).toBe('20');
+    expect(Number(url.searchParams.get('from'))).toBeGreaterThan(0);
+    expect(Number(url.searchParams.get('to')) - Number(url.searchParams.get('from'))).toBe(86_400);
+    await route.fulfill({
+      json: { data: [row('user', 1, true)], next_cursor: null, pagination: windowFor(1, 1, 20) },
+    });
   });
   await mockJson(page, {
     origin,

@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
-import { useDuelText } from './copy';
+import { useTranslation } from 'react-i18next';
 export function DuelDialog({
   title,
   onClose,
@@ -13,7 +13,7 @@ export function DuelDialog({
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const titleID = useId();
-  const text = useDuelText();
+  const { t } = useTranslation();
   useEffect(() => {
     const previous = document.activeElement;
     const node = dialog.current;
@@ -52,8 +52,8 @@ export function DuelDialog({
     >
       <header>
         <h2 id={titleID}>{title}</h2>
-        <button type="button" className="btn btn-secondary" onClick={onClose} autoFocus>
-          {text('common.close')}
+        <button type="button" className="nb-btn nb-btn--secondary" onClick={onClose} autoFocus>
+          {t('common.close')}
         </button>
       </header>
       <div className="duel-dialog__body">{children}</div>

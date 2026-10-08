@@ -1,16 +1,16 @@
+import { CancelledError, QueryClient } from '@tanstack/react-query';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { CancelledError, QueryClient } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
-import { canonicalCandidateFilters } from './normalizers';
 import { userKeys } from '../../data';
+import { canonicalCandidateFilters } from './normalizers';
 import {
   applyBindingsResponse,
   applyManualUpdateToCache,
   clearCoreAccountQueries,
   clearCoreUserSession,
-  coreSessionAccountId,
   coreKeys,
+  coreSessionAccountId,
   fetchCoreSession,
   invalidateResourceDependents,
   normalizeCoreSessionBoundary,
@@ -19,6 +19,7 @@ import {
 import type { Binding, Model, Page } from './types';
 
 const model = (id: string, revision = '0'): Model => ({
+  model_types: ['chat_completions', 'embeddings'],
   id,
   provider: 'provider',
   model: `model-${id}`,

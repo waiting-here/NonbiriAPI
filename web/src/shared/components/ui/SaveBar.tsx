@@ -1,3 +1,4 @@
+import { Button } from '@shared/components/ui/Button';
 import { type ReactNode } from 'react';
 
 export function SaveBar({
@@ -29,22 +30,22 @@ export function SaveBar({
         {scope ? <> · {scope}</> : null}
       </span>
       <span className="nb-savebar__actions">
-        <button
+        <Button
           type="button"
-          className="nb-btn nb-btn--secondary"
+
           disabled={busy}
           onClick={onDiscard}
         >
           {discardLabel}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
-          className="nb-btn nb-btn--primary"
+          variant="primary"
           disabled={busy || saveDisabled}
           onClick={onSave}
         >
           {saveLabel}
-        </button>
+        </Button>
       </span>
     </div>
   );

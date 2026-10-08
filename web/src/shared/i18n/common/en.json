@@ -262,10 +262,8 @@
     "page": "Page {{page}}",
     "previous": "Previous",
     "next": "Next",
-    "pageSize": "Rows per page",
     "filterFromAria": "Filter by start time",
     "filterToAria": "Filter by end time",
-    "jumpToPage": "Go to page",
     "copied": "Copied",
     "copy": "Copy",
     "copyValue": "Copy {{label}}",
@@ -324,7 +322,9 @@
           "charityChatCompletions": "Charity chat completions",
           "openaiEmbeddings": "Personal embedding",
           "charityEmbeddings": "Charity embedding",
-          "modelDiscovery": "Model check"
+          "modelDiscovery": "Model check",
+          "openaiImagesGenerations": "Personal image generation",
+          "charityImagesGenerations": "Charity image generation"
         },
         "resultValue": {
           "success": "Success",
@@ -332,10 +332,10 @@
           "cancelled": "Cancelled",
           "pending": "Pending"
         },
-        "charge": "Charge",
+        "charge": "Charge (credits)",
         "request": "Request",
         "callerResult": "Caller result",
-        "callerError": "Caller error",
+        "callerError": "Diagnostic code",
         "endpointKeyId": "Endpoint key ID",
         "usageTotalMismatch": "Usage total mismatch",
         "usageTotalMismatchExplanation": "The upstream-reported total differs from the sum of valid usage components. Billing uses those components.",
@@ -396,7 +396,8 @@
             "failed": "Failed ({{status}})"
           },
           "storageHistoryHelp": "Lifetime totals do not decrease when records expire. Missing bodies cannot be recovered. Browse retained records from the last 30 days below. Capacity counts raw bodies only, excluding database pages, indexes and WAL.",
-          "storageRecords": "Browse missing records"
+          "storageRecords": "Browse missing records",
+          "images": "Image generation"
         }
       },
       "charity": {
@@ -471,7 +472,7 @@
         "namingHelp": "Provider and model define the API name used on this site. Choose your own labels, then select the actual upstream models in service connections.",
         "namePreview": "API model name preview",
         "routeStrategy": "Routing strategy",
-        "operationHelp": "Your client's API path selects chat completions or embeddings. Connect a service model that supports that operation. Tool-call flattening and store=false apply only to chat completions.",
+        "operationHelp": "The upstream model must also support each selected API. Tool flattening, message-role and transport settings apply only to chat completions.",
         "embeddingBillingHelp": "An embedding batch counts as one successful request. Token pricing uses the uncached input price for all inputs; vector dimensions add no output tokens.",
         "embeddingQuotaHelp": "A successful embedding batch uses one call from the donation limit. Its token usage is the total input tokens, with no output tokens for vector dimensions.",
         "routeOrdered": "Connection order",
@@ -581,7 +582,7 @@
         "noLimit": "No limit",
         "noSample": "No sample",
         "notReviewed": "Not reviewed",
-        "open": "Open",
+        "open": "Actions",
         "openReview": "Review",
         "orderedBindings": "Service connection order",
         "owner": "Owner",
@@ -650,7 +651,8 @@
         "batchFailureReset": "Reset failure streaks",
         "failureStrategy": "Failure strategy",
         "quotaReserve": "Quota and reserve",
-        "adaptationSettings": "Request adaptation"
+        "adaptationSettings": "Request adaptation",
+        "imageBillingHelp": "Generating several images in one request counts as one call. Missing usage follows the model’s reservation settlement rule."
       },
       "management": {
         "details": "Technical details",
@@ -715,6 +717,12 @@
         "empty": "No sizes are available for this model. Choose another model or ask an administrator to add size prices.",
         "reselect": "Choose an available size again; your prompt and other inputs have been kept.",
         "pairHelp": "Each option is an available width and height pair."
+      },
+      "lengthBytes": "bytes",
+      "lengthCharacters": "characters",
+      "units": {
+        "paper": "paper",
+        "brushes": "brushes"
       }
     },
     "lakeNotes": {
@@ -1285,6 +1293,10 @@
         "confirmTicketAndStart": "Confirm ticket and start",
         "thisTabCannotContinuePlayingWaitFor": "This tab cannot continue playing. Wait for expiry or abandon the challenge.",
         "abandonChallenge": "Abandon challenge",
+        "noOpenPeriodsTitle": "No open periods yet",
+        "noOpenPeriodsBody": "Activities will appear here when they open.",
+        "noChallengeHistoryTitle": "No challenge records yet",
+        "noChallengeHistoryBody": "Complete a challenge to see its result here.",
         "periods": "Periods",
         "open2": "Open",
         "endedOrPaused": "Ended or paused",
@@ -1374,6 +1386,14 @@
     },
     "inactivity": {
       "activityRules": "Which actions count as activity?"
+    },
+    "modelTypes": {
+      "title": "Model types",
+      "help": "Select every API this model supports.",
+      "required": "Select at least one model type.",
+      "chat_completions": "Chat completions",
+      "embeddings": "Embeddings",
+      "images_generations": "Image generation"
     }
   },
   "logs": {
@@ -1550,6 +1570,11 @@
       "gameBalance": "Game credits",
       "language": "Language",
       "languageDefault": "Site default",
+      "discordGatePolicy": "Discord sign-in checks",
+      "discordGateHelp": "Choose whether this user must join the configured server and hold the required role. Applies at the next sign-in; bans still prevent access.",
+      "discordGateInherit": "Follow site setting",
+      "discordGateRequire": "Require server and role checks",
+      "discordGateExempt": "Exempt from server and role checks",
       "limitInvalid": "Use whole numbers: endpoints 0–10000, RPM 1–4096, concurrency 1–100000. Leave blank to use the default.",
       "readOnly": "Your account and other stewards can be viewed here. Their settings cannot be changed.",
       "view": "View",
@@ -1563,7 +1588,7 @@
       "tabPenalties": "Penalties",
       "exactFilters": "Exact filters",
       "saveProfile": "Save settings",
-      "profileResult": "Limits and language",
+      "profileResult": "Account settings",
       "levelResult": "Manual level",
       "viewLogs": "View logs",
       "dangerTitle": "Dangerous actions",
@@ -1645,7 +1670,7 @@
       "stateLabel": "State",
       "table": {
         "draftTitle": "Draft title",
-        "open": "Open",
+        "open": "Actions",
         "publication": "Publication",
         "severity": "Severity",
         "state": "State",

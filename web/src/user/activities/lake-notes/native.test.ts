@@ -4,7 +4,9 @@ import { cleanup, render } from '@testing-library/react';
 import { NativeLake } from './NativeLake';
 import { mountLake, type LakeBridge } from './native.mjs';
 import html from './native.html?raw';
-import { initialProfile } from './rules';
+import { initialProfile, RULES_ID, start, step } from './rules';
+import type { ControllerSnapshot } from './controller';
+import type { CastResult } from './api';
 import { nativeEnglish } from './native-language';
 
 function fixture(language: 'zh' | 'en' = 'zh') {
@@ -120,4 +122,63 @@ test('an English to Chinese remount restores static original copy and replaces l
   (view.container.querySelector('#startButton') as HTMLButtonElement).click();
   expect(chinese.start).toHaveBeenCalledOnce();
   expect(bridge.start).not.toHaveBeenCalled();
+});
+
+test('a lost terminal save exposes the existing retry action instead of an endless saving overlay', () => {
+  const { root, bridge, game, profile } = fixture();
+  const prediction = start(profile, () => 0, 1);
+  for (let tick = 0; tick < 240; tick++) step(prediction.profile, prediction.cast, false);
+  const cast: CastResult['cast'] = {
+    id: 'lnc_AAAAAAAAAAAAAAAAAAAAAA',
+    rules_id: RULES_ID,
+    generation: '1',
+    revision: '1',
+    ack_tick: prediction.cast.tick,
+    phase: 'playing',
+    paused: false,
+    readonly: false,
+    state: structuredClone(prediction.cast),
+    profile_revision: '1',
+  };
+  const result: CastResult = {
+    cast,
+    profile: {
+      readonly: false,
+      revision: '1',
+      rules_id: RULES_ID,
+      profile,
+      cast,
+      wallet: { general_milli: '0', game_milli: '0' },
+      settings: {
+        revision: '1',
+        enabled: true,
+        exchanges: {
+          coins_to_general: { enabled: false, source_amount: '', target_amount: '' },
+          general_to_coins: { enabled: false, source_amount: '', target_amount: '' },
+          coins_to_game: { enabled: false, source_amount: '', target_amount: '' },
+          game_to_coins: { enabled: false, source_amount: '', target_amount: '' },
+        },
+      },
+    },
+  };
+  prediction.cast.phase = 'failed';
+  let snapshot: ControllerSnapshot = { result, status: 'saving', error: null };
+  bridge.snapshot = () => snapshot;
+  bridge.projection = () => prediction;
+  bridge.blocked = () => true;
+  game.refresh();
+  const button = root.querySelector<HTMLButtonElement>('#overlayButton')!;
+  expect(root.querySelector('#overlayTitle')).toHaveTextContent('confirming');
+  expect(button).toBeDisabled();
+
+  snapshot = { result, status: 'unknown', error: new Error('response lost') };
+  game.refresh();
+  expect(root.querySelector('#overlayTitle')).not.toHaveTextContent('confirming');
+  expect(root.querySelector('#overlayText')).toHaveTextContent('saveUnknown');
+  expect(button).toHaveTextContent('retry');
+  expect(button).toBeEnabled();
+  button.click();
+  expect(bridge.resume).toHaveBeenCalledOnce();
+  expect(bridge.start).not.toHaveBeenCalled();
+  game.dispose();
 });

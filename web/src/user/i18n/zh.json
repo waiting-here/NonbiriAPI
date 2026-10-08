@@ -41,7 +41,8 @@
       "introAddressBody": "在客户端中连接公益模型和自己的服务。",
       "introGames": "小游戏和活动",
       "introGamesBody": "签到、参加活动或玩小游戏。",
-      "checkinRules": "奖励与余额条件"
+      "claimedToday": "今日已签",
+      "availableTomorrow": "明天可领"
     },
     "steward": {
       "donationsTitle": "捐赠审核队列",
@@ -146,7 +147,12 @@
       "moreSource": "{{name}} 的来源操作",
       "dirtyCount": "已修改 {{count}} 项",
       "discard": "放弃修改",
-      "deleteHelp": "客户端将无法再使用 {{name}}。来源服务和密钥不受影响。"
+      "deleteHelp": "客户端将无法再使用 {{name}}。来源服务和密钥不受影响。",
+      "searchPlaceholder": "模型名或调用名",
+      "status": "状态",
+      "actions": "操作",
+      "balancedSummary": "综合优化负载均衡",
+      "balancedHelp": "优先复用同用户、同模型在 5 分钟内使用的来源；其余选择近期负载较低的来源。"
     },
     "games": {
       "nav": "游戏",
@@ -335,7 +341,8 @@
           "inCarriedPool": "奖池累计",
           "discarded2": "丢弃",
           "awardedToYou": "归你所有",
-          "awardedToOpponent": "归对手所有"
+          "awardedToOpponent": "归对手所有",
+          "viewPlayedHistory": "查看出牌过程"
         },
         "blackjack": {
           "blackjackTableRules": "二十一点 · 桌规",
@@ -1028,7 +1035,8 @@
           "qUICKTUTORIAL": "快速模式 · 教学",
           "waitingForYouNoCountdown": "等待你的操作，无倒计时",
           "roundResolved": "本轮结算完成",
-          "completeTheHighlightedStepsForThisTeaching": "请按高亮步骤完成本轮教学方案。"
+          "completeTheHighlightedStepsForThisTeaching": "请按高亮步骤完成本轮教学方案。",
+          "targetRounds": "目标 {{likes}} 赞 · {{rounds}} 轮"
         },
         "ranking": {
           "stayAnonymousOnTheTrueCharityLeaderboard": "在真·慈善榜中匿名",
@@ -1207,7 +1215,7 @@
           "retry": "重试",
           "loading": "正在读取游戏状态…",
           "credits": "积分",
-          "open": "开放",
+          "open": "开放中",
           "partial": "部分开放",
           "closed": "关闭",
           "maintenance": "维护中",
@@ -1255,7 +1263,7 @@
           "details": "查看开放状态",
           "from": "{{amount}} 积分起",
           "specs": "3 种棋盘开放 {{count}} 种",
-          "modes": "{{total}} 种模式开放 {{count}} 种",
+          "modes": "{{count}} 种模式可玩",
           "learn": "学习、记录与进行中的对局",
           "gwent": {
             "title": "AI 昆特牌",
@@ -1269,7 +1277,10 @@
           "lakenotes": {
             "title": "垂钓手记",
             "body": "在四处水域收集渔获、升级装备，写下你的垂钓故事。"
-          }
+          },
+          "modesAll": "{{count}} 种模式",
+          "firstClearReward": "首通奖励",
+          "winCredits": "可赢积分"
         },
         "fishing": {
           "eyebrow": "池塘垂钓",
@@ -1393,10 +1404,10 @@
           "title": "三人同桌，一决胜负",
           "description": "三人同桌，石头剪刀布。看准局势，亮出你的下一手。",
           "tutorial": {
-            "title": "这张桌子怎么玩",
             "1": "选择快速、标准或生死斗，凑齐三人即可开局。",
             "2": "倒计时结束前选好手势，大家同时揭晓。",
             "3": "请先在本页查看完整结果，之后才能加入下一局猜拳。",
+            "title": "这张桌子怎么玩",
             "next": "下一步",
             "skip": "暂时跳过",
             "finish": "进入大厅",
@@ -1597,10 +1608,13 @@
         "activityWallet": "去活动领游戏积分 →",
         "unavailable": "未开放",
         "test": "测试",
-        "learn": "查看规则和记录 →",
-        "enter": "进入 →",
+        "learn": "查看",
+        "enter": "进入",
         "rankings": "排行榜 · 近 7×24 小时",
         "calculation": "怎么计算",
+        "soundControls": "声音",
+        "moreTools": "更多",
+        "tools": "游戏工具",
         "cost": "本次花费",
         "stepMode": "1 · 模式",
         "stepRole": "2 · 角色",
@@ -1630,7 +1644,9 @@
           "openaiChatCompletions": "OpenAI-Compatible 聊天补全",
           "charityChatCompletions": "公益聊天补全",
           "openaiEmbeddings": "自用向量嵌入",
-          "charityEmbeddings": "公益向量嵌入"
+          "charityEmbeddings": "公益向量嵌入",
+          "openaiImagesGenerations": "自用图像生成",
+          "charityImagesGenerations": "公益图像生成"
         },
         "trace": {
           "capturing": "采集中",
@@ -1791,7 +1807,15 @@
         "endpoint": "服务"
       },
       "resourceType": "相关",
-      "closedResourceUnavailable": "相关的服务或密钥已经删除，这个问题已关闭。"
+      "closedResourceUnavailable": "相关的服务或密钥已经删除，这个问题已关闭。",
+      "detail": {
+        "auth": "服务密钥验证失败",
+        "rateLimit": "服务请求过于频繁",
+        "timeout": "服务响应超时",
+        "protocol": "服务返回了无法识别的回复",
+        "transport": "无法连接到服务",
+        "interrupted": "服务请求已中断"
+      }
     },
     "report": {
       "nav": "举报泄露凭据",
@@ -2025,7 +2049,9 @@
           "level_denied": "本人等级不允许",
           "no_usable_key": "当前没有可用公益资源",
           "available": "当前可用"
-        }
+        },
+        "searchPlaceholder": "模型名或公开说明",
+        "pricingHelp": "价格以积分显示；按次模型按计费请求结算，Token 价格按每百万 Token 计算。"
       },
       "donationDetailTitle": "捐赠详情",
       "donationDetailDescription": "查看捐赠、审核和资源的当前状态。",
@@ -2046,6 +2072,7 @@
         "available": "至少有一个公益模型当前可用。"
       },
       "availableModels": "可用公益模型",
+      "modelSearchPlaceholder": "模型名",
       "searchModels": "搜索模型名称",
       "pricingFilter": "计价方式",
       "allPricing": "全部计价方式",
@@ -2094,6 +2121,7 @@
       "reselectAfterConflict": "可用资源已变化，请检查刷新后的列表并重新选择密钥。",
       "ownerPages": {
         "search": "搜索捐赠描述或 ID",
+        "searchPlaceholder": "捐赠说明或 ID",
         "status": "审核状态",
         "clear": "清空搜索",
         "invalidSearch": "请输入最多 128 个字符，不含控制字符。",
@@ -2314,6 +2342,7 @@
         "opensIn": "距离开放",
         "noPrediction": "结算正在进行……",
         "contributeOnce": "投入一次",
+        "limitReached": "今日次数已用完",
         "contributionAccepted": "投入已接受，当前次数：",
         "lastResultEyebrow": "最近结果",
         "lastResultTitle": "你的结果",
@@ -2685,7 +2714,8 @@
       "accountPresentation.fontHint": "调整界面文字大小。",
       "accountPresentation.exportBody": "导出前需要 Discord 再次确认，完成后会自动返回并下载。",
       "accountPresentation.exportAction": "导出…",
-      "accountPresentation.deleteAction": "删除账户…"
+      "accountPresentation.deleteAction": "删除账户…",
+      "models.cacheBalanced": "综合优化负载均衡"
     },
     "lakeNotes": {
       "exchangeAvailable": "垂钓免费入场。金币兑换已开放，可查看下方兑换。",
@@ -2700,7 +2730,7 @@
       "closed": "游戏暂未开放，已有存档保留。",
       "entryUnknown": "入场结果尚未确认，请重试入场。",
       "retry": "重试同一次操作",
-      "saved": "已保存",
+      "saved": "进度已自动保存。",
       "saving": "保存中",
       "reconnecting": "连接中断，已暂停。将从最后保存的进度接续。",
       "checkSaved": "查看已保存进度",
@@ -2805,7 +2835,7 @@
       "treasureReward": "宝箱奖励：{{coins}} 金币 · {{bait}} ×{{count}}",
       "debrisReward": "捞起{{item}}",
       "exchangeHeading": "金币与站内积分兑换",
-      "exchangeHelp": "按管理员设置兑换金币和积分，确认前请核对数量。",
+      "exchangeHelp": "兑换比率 {{source}} {{sourceUnit}} : {{target}} {{targetUnit}}，预览后确认数量。",
       "direction": "兑换方向",
       "batches": "兑换份数",
       "quote": "预览兑换",
@@ -3391,7 +3421,9 @@
       "ledgerEntry": "垂钓手记：期次入场",
       "ledgerExchange": "垂钓手记：金币与积分兑换",
       "buyBatch": "购买 {{count}} 个 · {{cost}} 金币",
-      "bitePreparation": "鱼上钩了，准备控竿"
+      "bitePreparation": "鱼上钩了，准备控竿",
+      "saveHelp": "存档随账号同步，换设备后可继续。",
+      "previewFirst": "请先预览兑换。"
     },
     "quickstart": {
       "title": "接入自用服务",
@@ -3557,7 +3589,8 @@
       "done": "完成",
       "apiKeyLink": "在「API 接入」创建或查看",
       "retryDiscovery": "重试读取",
-      "manualName": "手动输入模型名"
+      "manualName": "手动输入模型名",
+      "searchPlaceholder": "名称、地址或备注"
     },
     "records": {
       "title": "记录",

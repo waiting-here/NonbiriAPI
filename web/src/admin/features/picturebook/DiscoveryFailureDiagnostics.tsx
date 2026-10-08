@@ -101,7 +101,7 @@ function OperationDiagnostics({ operationID }: { readonly operationID: string })
   return (
     <section aria-label={t('保留的图片服务发现诊断', 'Retained image discovery diagnostics')}>
       <button
-        className="btn btn-secondary"
+        className="nb-btn nb-btn--secondary"
         type="button"
         disabled={busy || detailBusy !== null}
         onClick={() => void load()}
@@ -135,7 +135,7 @@ function OperationDiagnostics({ operationID }: { readonly operationID: string })
               )
             ) : item.save_state === 'saved' ? (
               <button
-                className="btn btn-secondary"
+                className="nb-btn nb-btn--secondary"
                 type="button"
                 disabled={busy || detailBusy !== null}
                 onClick={() => void loadDetail(item.id)}

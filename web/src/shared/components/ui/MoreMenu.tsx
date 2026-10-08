@@ -7,15 +7,30 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react';
+import { Link } from 'react-router';
+
+export interface MoreMenuItem {
+  label: ReactNode;
+  onSelect?: () => void;
+  danger?: boolean;
+  disabled?: boolean;
+  checked?: boolean;
+  ariaLabel?: string;
+  title?: string;
+  to?: string;
+  href?: string;
+}
 
 export function MoreMenu({
   label,
   items,
+  trigger,
+  triggerClassName,
 }: {
   label: string;
-  items: readonly (
-    { label: ReactNode; onSelect: () => void; danger?: boolean; disabled?: boolean } | 'separator'
-  )[];
+  items: readonly (MoreMenuItem | 'separator')[];
+  trigger?: ReactNode;
+  triggerClassName?: string;
 }) {
   const ref = useRef<HTMLDetailsElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -54,7 +69,9 @@ export function MoreMenu({
       menu.style.top = `${Math.max(8, Math.min(top, height - bounds.height - 8))}px`;
     };
     position();
-    menu.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')?.focus();
+    menu
+      .querySelector<HTMLElement>('[role^="menuitem"]:not(:disabled):not([aria-disabled="true"])')
+      ?.focus();
     window.addEventListener('resize', position);
     window.addEventListener('scroll', position, true);
     return () => {
@@ -65,7 +82,9 @@ export function MoreMenu({
   }, [open]);
   const enabledItems = () =>
     Array.from(
-      ref.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') ?? [],
+      ref.current?.querySelectorAll<HTMLElement>(
+        '[role^="menuitem"]:not(:disabled):not([aria-disabled="true"])',
+      ) ?? [],
     );
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key === 'Escape' && ref.current?.open) {
@@ -105,14 +124,15 @@ export function MoreMenu({
       }}
     >
       <summary
-        className="nb-btn nb-btn--secondary nb-btn--sm"
+        className={['nb-btn nb-btn--secondary', triggerClassName ?? 'nb-btn--sm'].join(' ')}
+        title={label}
         role="button"
         aria-label={label}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={menuId}
       >
-        <span aria-hidden="true">⋯</span>
+        {trigger ?? <span aria-hidden="true">⋯</span>}
       </summary>
       <div
         ref={menuRef}
@@ -123,25 +143,38 @@ export function MoreMenu({
         role="menu"
         aria-label={label}
       >
-        {items.map((item, index) =>
-          item === 'separator' ? (
-            <hr key={`sep-${index}`} role="separator" />
-          ) : (
-            <button
-              key={index}
-              type="button"
-              role="menuitem"
-              disabled={item.disabled}
-              className={item.danger ? 'is-danger' : undefined}
-              onClick={() => {
-                close();
-                item.onSelect();
-              }}
-            >
-              {item.label}
-            </button>
-          ),
-        )}
+        {items.map((item, index) => {
+          if (item === 'separator') return <hr key={`sep-${index}`} role="separator" />;
+          const props = {
+            role: item.checked === undefined ? 'menuitem' : 'menuitemcheckbox',
+            'aria-label': item.ariaLabel,
+            'aria-checked': item.checked,
+            title: item.title,
+            className: item.danger ? 'is-danger' : undefined,
+            onClick: (event: React.MouseEvent) => {
+              if (item.disabled) {
+                event.preventDefault();
+                return;
+              }
+              close();
+              item.onSelect?.();
+            },
+            children: item.label,
+          };
+          if (item.to || item.href) {
+            const linkProps = {
+              ...props,
+              'aria-disabled': item.disabled || undefined,
+              tabIndex: item.disabled ? -1 : undefined,
+            };
+            return item.to ? (
+              <Link key={index} {...linkProps} to={item.to} />
+            ) : (
+              <a key={index} {...linkProps} href={item.href} />
+            );
+          }
+          return <button key={index} type="button" {...props} disabled={item.disabled} />;
+        })}
       </div>
     </details>
   );

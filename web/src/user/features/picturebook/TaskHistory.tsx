@@ -1,3 +1,6 @@
+import { ResourceCost } from './ResourceCost';
+import { ExactCount } from '../core/components';
+import { SimplePager } from '@shared/operations/SimplePager';
 import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { limitedActivityKeys } from '../limitedactivities/queries';
@@ -40,32 +43,34 @@ export function TaskDetail({ id, account }: { readonly id: string; readonly acco
           ) : null}
           <dl className="picturebook-facts">
             <dt>{t('请求张数', 'Requested images')}</dt>
-            <dd>{task.n}</dd>
+            <dd>
+              <ExactCount value={String(task.n)} />
+            </dd>
             <dt>
               {task.billing_state === 'reserved'
                 ? t('已预扣', 'Reserved')
                 : t('实际收费', 'Charged')}
             </dt>
             <dd>
-              {task.charge.paper} {t('草稿纸', 'paper')} + {task.charge.brush}{' '}
-              {t('画笔', 'brushes')}
+              <ResourceCost value={task.charge} />
             </dd>
             <dt>{t('已退款', 'Refunded')}</dt>
             <dd>
-              {task.refund.paper} {t('草稿纸', 'paper')} + {task.refund.brush}{' '}
-              {t('画笔', 'brushes')}
+              <ResourceCost value={task.refund} />
             </dd>
             {task.queue_position !== null ? (
               <>
                 <dt>{t('当前排队位置', 'Queue position')}</dt>
-                <dd>{task.queue_position}</dd>
+                <dd>
+                  <ExactCount value={String(task.queue_position)} />
+                </dd>
               </>
             ) : null}
           </dl>
           {task.error_code ? <p>{taskErrorLabel(task.error_code, t)}</p> : null}
           {task.status === 'queued' || cancel.uncertain ? (
             <button
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               disabled={cancel.pending}
               onClick={() => void cancel.run(cancel.input ?? task.id)}
             >
@@ -123,38 +128,30 @@ export function TaskHistory({
         {query.data?.data.map((task) => (
           <article className="picturebook-card" key={task.id}>
             <p>
-              {formatDateTime(task.created_at)} · {taskStatusLabel(task.status, t)} · {task.n}{' '}
-              {t('张', 'images')}
+              {formatDateTime(task.created_at)} · {taskStatusLabel(task.status, t)} ·{' '}
+              <ExactCount value={String(task.n)} /> {t('张', 'images')}
             </p>
-            <button className="btn btn-secondary" onClick={() => onSelect(task.id)}>
+            <button className="nb-btn nb-btn--secondary" onClick={() => onSelect(task.id)}>
               {t('查看任务', 'View task')}
             </button>
           </article>
         ))}
       </div>
-      <div className="picturebook-actions">
-        <button
-          className="btn btn-secondary"
-          disabled={page === 0 || query.isFetching}
-          onClick={() => setPage((value) => value - 1)}
-        >
-          {t('上一页', 'Previous')}
-        </button>
-        <button
-          className="btn btn-secondary"
-          disabled={!query.data?.next_cursor || query.isFetching}
-          onClick={() => {
-            if (!query.data?.next_cursor) return;
-            setCursors((values) => [
-              ...values.slice(0, page + 1),
-              query.data.next_cursor ?? undefined,
-            ]);
-            setPage((value) => value + 1);
-          }}
-        >
-          {t('下一页', 'Next')}
-        </button>
-      </div>
+      <SimplePager
+        page={page + 1}
+        hasMore={Boolean(query.data?.next_cursor)}
+        disabled={query.isFetching}
+        onPrev={() => setPage((value) => value - 1)}
+        onNext={() => {
+          if (!query.data?.next_cursor) return;
+          setCursors((values) => [
+            ...values.slice(0, page + 1),
+            query.data.next_cursor ?? undefined,
+          ]);
+          setPage((value) => value + 1);
+        }}
+        labels={{ previous: t('上一页', 'Previous'), next: t('下一页', 'Next') }}
+      />
     </Card>
   );
 }

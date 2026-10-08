@@ -174,7 +174,8 @@ describe('beta.1 game pages', () => {
       route: '/games/linklink',
     });
     await waitFor(() => expect(screen.getAllByRole('gridcell')[0]).toBeEnabled());
-    await view.user.click(screen.getByRole('button', { name: 'Sound off' }));
+    await view.user.click(screen.getByRole('button', { name: 'Sound' }));
+    await view.user.click(screen.getByRole('menuitemcheckbox', { name: 'Sound off' }));
     expect(audio.play).not.toHaveBeenCalled();
     const next = {
       ...initial,
@@ -242,7 +243,8 @@ describe('beta.1 game pages', () => {
       route: '/games/fishing',
     });
     await screen.findByRole('list', { name: /Your catch is ready|收获已揭晓/ });
-    await view.user.click(screen.getByRole('button', { name: 'Sound off' }));
+    await view.user.click(screen.getByRole('button', { name: 'Sound' }));
+    await view.user.click(screen.getByRole('menuitemcheckbox', { name: 'Sound off' }));
     expect(audio.play).not.toHaveBeenCalled();
     const batch = 'fb_AAAAAAAAAAAAAAAAAAAAAQ';
     act(() =>
@@ -293,7 +295,8 @@ describe('beta.1 game pages', () => {
     act(replace);
     await waitFor(() => expect(audio.play.mock.calls).toEqual([['fishing_epic']]));
     act(replace);
-    await view.user.click(screen.getByRole('button', { name: 'Sound on' }));
+    await view.user.click(screen.getByRole('button', { name: 'Sound' }));
+    await view.user.click(screen.getByRole('menuitemcheckbox', { name: 'Sound on' }));
     const mutedBatch = 'fb_AAAAAAAAAAAAAAAAAAAAAw';
     act(() =>
       view.queryClient.setQueryData(
@@ -327,7 +330,8 @@ describe('beta.1 game pages', () => {
       ),
     );
     await screen.findByRole('list', { name: /Your catch is ready|收获已揭晓/ });
-    await view.user.click(screen.getByRole('button', { name: 'Sound off' }));
+    await view.user.click(screen.getByRole('button', { name: 'Sound' }));
+    await view.user.click(screen.getByRole('menuitemcheckbox', { name: 'Sound off' }));
     expect(audio.play.mock.calls).toEqual([['fishing_epic']]);
   });
 
@@ -345,7 +349,10 @@ describe('beta.1 game pages', () => {
     expect(screen.getByRole('heading', { name: 'Pond fishing' })).toBeInTheDocument();
     expect(screen.getAllByText('Open')).toHaveLength(2);
     expect(rendered.container.querySelectorAll('.game-center-card.is-closed')).toHaveLength(7);
-    expect(screen.getByText('0 of 2 modes open')).toBeInTheDocument();
+    expect(screen.getAllByText('Playable modes: 2')).toHaveLength(2);
+    expect(
+      rendered.container.querySelector('.game-center-card--likes .game-card-meta'),
+    ).not.toHaveTextContent('modes');
     expect(rendered.container.querySelectorAll('a.game-center-card')).toHaveLength(9);
     expect(rendered.container.querySelector('a.game-center-card button')).toBeNull();
     expect(screen.getAllByRole('link')).toHaveLength(10);
@@ -388,10 +395,18 @@ describe('beta.1 game pages', () => {
         body: { error: { code: 'maintenance', message: 'maintenance' } },
       },
     ]);
-    await renderWithProviders(<GameCenter />, { station: 'user', route: '/games', role: 'user' });
+    const rendered = await renderWithProviders(<GameCenter />, {
+      station: 'user',
+      route: '/games',
+      role: 'user',
+    });
     expect(await screen.findAllByText('Not open')).toHaveLength(9);
     expect(screen.queryByRole('link', { name: 'Enter game' })).not.toBeInTheDocument();
-    expect(screen.getAllByRole('link', { name: /View rules and records/ })).toHaveLength(9);
+    expect(rendered.container.querySelectorAll('a.game-center-card')).toHaveLength(9);
+    expect(screen.getByRole('link', { name: /Pond fishing/ })).toHaveAttribute(
+      'href',
+      '/games/fishing',
+    );
   });
 
   it('keeps each game’s rules entry available during maintenance', async () => {

@@ -1,8 +1,10 @@
+import { Button } from '@shared/components/ui/Button';
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import {
   Affix,
   DataTable,
+  Field,
   Fold,
   OutcomeNote,
   Segmented,
@@ -58,6 +60,7 @@ interface UserDraft {
   concurrencyLimit: string;
   level: string;
   lang: '' | 'zh' | 'en';
+  discordGatePolicy: AdminUser['discord_gate_policy'];
   economyTarget: 'balance' | 'game_balance' | 'donation_credit';
   economyDirection: 'increase' | 'decrease';
   economyAmount: string;
@@ -88,6 +91,7 @@ const draftFor = (user: AdminUser): UserDraft => ({
   concurrencyLimit: user.concurrency_limit ?? '',
   level: user.level.manual === null ? '' : String(user.level.manual),
   lang: user.lang,
+  discordGatePolicy: user.discord_gate_policy,
   economyTarget: 'balance',
   economyDirection: 'increase',
   economyAmount: '',
@@ -197,7 +201,8 @@ function UserAuthority({
     endpoint !== baseline.endpoint_limit ||
     rpm !== baseline.rpm_limit ||
     concurrency !== baseline.concurrency_limit ||
-    draft.lang !== baseline.lang;
+    draft.lang !== baseline.lang ||
+    (role === 'admin' && draft.discordGatePolicy !== baseline.discord_gate_policy);
   const levelChanged = (draft.level ? Number(draft.level) : null) !== baseline.level.manual;
   const profileBusy = coordinating || profile.isPending || manualLevel.isPending;
   const saveLimits = async () => {
@@ -208,6 +213,9 @@ function UserAuthority({
       rpm_limit: rpm,
       concurrency_limit: concurrency,
       ...(draft.lang ? { lang: draft.lang } : {}),
+      ...(role === 'admin' && draft.discordGatePolicy !== baseline.discord_gate_policy
+        ? { discord_gate_policy: draft.discordGatePolicy }
+        : {}),
     };
     const levelBody = { mode: 'profile', level: draft.level ? Number(draft.level) : null };
     let revision = baseline.revision;
@@ -243,9 +251,9 @@ function UserAuthority({
       <Card>
         <div className="ops-actions">
           <h2>{user.username}</h2>
-          <button className="nb-btn nb-btn--quiet" type="button" onClick={onClose}>
+          <Button variant="ghost" type="button" onClick={onClose}>
             {t('management.users.backToList')}
-          </button>
+          </Button>
         </div>
         <dl className="nb-facts nb-facts--inline user-identity">
           <dt>{t('management.users.userId')}</dt>
@@ -418,20 +426,43 @@ function UserAuthority({
                   <option value="en">English</option>
                 </select>
               </label>
+              {role === 'admin' ? (
+                <Field
+                  label={t('management.users.discordGatePolicy')}
+                  help={t('management.users.discordGateHelp')}
+                >
+                  {(field) => (
+                    <select
+                      {...field}
+                      value={draft.discordGatePolicy}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          discordGatePolicy: event.target.value as UserDraft['discordGatePolicy'],
+                        })
+                      }
+                    >
+                      <option value="inherit">{t('management.users.discordGateInherit')}</option>
+                      <option value="require">{t('management.users.discordGateRequire')}</option>
+                      <option value="exempt">{t('management.users.discordGateExempt')}</option>
+                    </select>
+                  )}
+                </Field>
+              ) : null}
               {invalidLimits ? (
                 <p className="field-error" role="alert">
                   {t('management.users.limitInvalid')}
                 </p>
               ) : null}
               <div className="nb-actions user-save-actions">
-                <button
-                  className="nb-btn nb-btn--primary"
+                <Button
+                  variant="primary"
                   type="button"
                   disabled={profileBusy || invalidLimits || (!profileChanged && !levelChanged)}
                   onClick={() => void saveLimits()}
                 >
                   {t('management.users.saveProfile')}
-                </button>
+                </Button>
               </div>
               {[
                 { label: 'management.users.profileResult', operation: profile },
@@ -511,8 +542,8 @@ function UserAuthority({
                   <small className="user-field-hint">{t('management.users.reasonRequired')}</small>
                 </label>
               </div>
-              <button
-                className="nb-btn nb-btn--primary"
+              <Button
+                variant="primary"
                 type="button"
                 disabled={
                   patch.isPending ||
@@ -534,7 +565,7 @@ function UserAuthority({
                 }
               >
                 {t('management.users.economySubmit')}
-              </button>
+              </Button>
             </Card>
           </section>
           <section
@@ -572,16 +603,16 @@ function UserAuthority({
               </div>
               <div className="ops-actions">
                 {user.is_banned ? (
-                  <button
-                    className="nb-btn nb-btn--danger-outline"
+                  <Button
+                    variant="danger-outline"
                     type="button"
                     onClick={() => setConfirm('unban')}
                   >
                     {t('management.users.unban')}
-                  </button>
+                  </Button>
                 ) : (
-                  <button
-                    className="nb-btn nb-btn--danger-outline"
+                  <Button
+                    variant="danger-outline"
                     type="button"
                     disabled={
                       !draft.banReason.trim() ||
@@ -591,7 +622,7 @@ function UserAuthority({
                     onClick={() => setConfirm('ban')}
                   >
                     {t('management.users.ban')}
-                  </button>
+                  </Button>
                 )}
               </div>
               {mutationError && !economyConfirm ? <ErrorState error={mutationError} /> : null}
@@ -601,8 +632,8 @@ function UserAuthority({
             <h2>{t('management.users.dangerTitle')}</h2>
             <div className="user-danger-row">
               <p>{t('management.users.banConsequence')}</p>
-              <button
-                className="nb-btn nb-btn--danger-outline"
+              <Button
+                variant="danger-outline"
                 type="button"
                 onClick={() => {
                   if (user.is_banned) setConfirm('unban');
@@ -613,7 +644,7 @@ function UserAuthority({
                 }}
               >
                 {t(user.is_banned ? 'management.users.unbanAction' : 'management.users.banAction')}
-              </button>
+              </Button>
             </div>
             {renderDeletion ? (
               <div className="user-danger-row">
@@ -1085,13 +1116,13 @@ export function UserManagement({
                   {accountLabels.discordInvalid}
                 </p>
               ) : null}
-              <button
-                className="btn btn-secondary"
+              <Button
+
                 type="submit"
                 disabled={invalidUserIDDraft || invalidDiscordIDDraft}
               >
                 {t('common.applyFilter')}
-              </button>
+              </Button>
             </form>
           </Card>
           <Card>
@@ -1227,13 +1258,13 @@ export function UserManagement({
               body={t('management.users.selectUserBody')}
             />
           ) : !selected || detailUnavailable || detail.isPending || detail.error ? (
-            <button
-              className="nb-btn nb-btn--quiet user-detail-back"
+            <Button
+              variant="ghost" className="user-detail-back"
               type="button"
               onClick={closeUser}
             >
               {t('management.users.backToList')}
-            </button>
+            </Button>
           ) : null}
           {scopeReady &&
           !sessionError &&

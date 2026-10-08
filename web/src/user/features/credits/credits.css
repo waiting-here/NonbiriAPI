@@ -10,11 +10,6 @@
   gap: 0.5rem 1rem;
   padding-bottom: 1.25rem;
 }
-.credit-history__overview strong {
-  font-size: clamp(1.5rem, 3vw, 2rem);
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
-}
 .credit-history__overview small {
   flex-basis: 100%;
   color: var(--nb-color-text-muted);
@@ -69,11 +64,15 @@
   font-variant-numeric: tabular-nums;
   font-weight: 700;
 }
-.credit-history__amount.is-income {
+.credit-change.is-income {
   color: var(--nb-color-success);
 }
-.credit-history__amount.is-expense {
-  color: var(--nb-color-text);
+.credit-change.is-expense {
+  color: var(--nb-color-danger);
+}
+.credit-change {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 .credit-history__pagination,
 .credit-history__pagination nav,
@@ -96,12 +95,12 @@
 .credit-history__pagination nav span {
   font-variant-numeric: tabular-nums;
 }
-@media (max-width: 900px) {
+@media (width <= 64rem) {
   .credit-history__filters {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-@media (max-width: 560px) {
+@media (width <= 40rem) {
   .credit-history__filters {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -161,12 +160,11 @@
 }
 .credit-history__filters > .nb-seg {
   justify-self: start;
-  flex-wrap: wrap;
 }
 .credit-history__filter-actions {
   align-items: center;
 }
-@media (max-width: 48rem) {
+@media (width <= 48rem) {
   .credit-history__overview.nb-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -174,16 +172,13 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-@media (max-width: 30rem) {
+@media (width <= 32rem) {
   .credit-history__advanced {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 
-.credit-history__balance--long strong {
-  font-size: 1.125rem;
-}
-@media (max-width: 48rem) {
+@media (width <= 48rem) {
   .credit-history__balance--long {
     grid-column: 1 / -1;
   }

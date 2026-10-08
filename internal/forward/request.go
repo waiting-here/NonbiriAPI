@@ -17,6 +17,7 @@ type validatedRequest struct {
 	operation         contract.Operation
 	chat              *openai.ChatRequest
 	embedding         *openai.EmbeddingRequest
+	image             *openai.ImageRequest
 	Model             string
 	Stream            bool
 	roleSnapshot      *rolepolicy.Policy
@@ -45,6 +46,13 @@ func embeddingRequest(request *openai.EmbeddingRequest) *validatedRequest {
 	return &validatedRequest{operation: contract.OperationEmbeddings, embedding: request, Model: request.Model}
 }
 
+func imageRequest(request *openai.ImageRequest) *validatedRequest {
+	if request == nil {
+		return nil
+	}
+	return &validatedRequest{operation: contract.OperationImagesGenerations, image: request, Model: request.Model, Stream: request.Stream}
+}
+
 func decodeRequest(body io.Reader, operation contract.Operation, limit int64) (*validatedRequest, error) {
 	switch operation {
 	case contract.OperationChatCompletions:
@@ -53,6 +61,9 @@ func decodeRequest(body io.Reader, operation contract.Operation, limit int64) (*
 	case contract.OperationEmbeddings:
 		request, err := openai.DecodeEmbeddingRequest(body, limit)
 		return embeddingRequest(request), err
+	case contract.OperationImagesGenerations:
+		request, err := openai.DecodeImageRequest(body, limit)
+		return imageRequest(request), err
 	default:
 		return nil, openai.ErrInvalidRequest
 	}
@@ -64,9 +75,11 @@ func (r *validatedRequest) valid() bool {
 	}
 	switch r.operation {
 	case contract.OperationChatCompletions:
-		return r.chat != nil && r.embedding == nil && r.Model == r.chat.Model && r.Stream == r.chat.Stream
+		return r.chat != nil && r.embedding == nil && r.image == nil && r.Model == r.chat.Model && r.Stream == r.chat.Stream
 	case contract.OperationEmbeddings:
-		return r.chat == nil && r.embedding != nil && r.Model == r.embedding.Model && !r.Stream
+		return r.chat == nil && r.embedding != nil && r.image == nil && r.Model == r.embedding.Model && !r.Stream
+	case contract.OperationImagesGenerations:
+		return r.chat == nil && r.embedding == nil && r.image != nil && r.Model == r.image.Model && r.Stream == r.image.Stream
 	default:
 		return false
 	}
@@ -78,6 +91,7 @@ func (r *validatedRequest) Clear() {
 	}
 	r.chat.Clear()
 	r.embedding.Clear()
+	r.image.Clear()
 	*r = validatedRequest{}
 }
 
@@ -88,6 +102,8 @@ func (r *validatedRequest) CloneForAttempt() *validatedRequest {
 	var result *validatedRequest
 	if r.chat != nil {
 		result = chatRequest(r.chat.CloneForAttempt())
+	} else if r.image != nil {
+		result = imageRequest(r.image.CloneForAttempt())
 	} else {
 		result = embeddingRequest(r.embedding.CloneForAttempt())
 	}
@@ -109,6 +125,8 @@ func (r *validatedRequest) excludeFields(fields []string) error {
 	var err error
 	if r.chat != nil {
 		err = r.chat.ExcludeFields(fields)
+	} else if r.image != nil {
+		err = r.image.ExcludeFields(fields)
 	} else {
 		err = r.embedding.ExcludeFields(fields)
 	}
@@ -119,12 +137,15 @@ func (r *validatedRequest) excludeFields(fields []string) error {
 }
 
 func (r *validatedRequest) supports(registry *connector.Registry, kind contract.Type) bool {
-	return r.valid() && (r.chat == nil || r.chat.SupportsRolePassthrough(string(kind))) && registry.SupportsOperationRequest(kind, r.operation, r.chat, r.embedding)
+	return r.valid() && (r.chat == nil || r.chat.SupportsRolePassthrough(string(kind))) && registry.SupportsOperationRequest(kind, r.operation, r.chat, r.embedding, r.image)
 }
 
 func (r *validatedRequest) bodyLimit() int64 {
 	if r.chat != nil {
 		return r.chat.RequestBodyLimit()
+	}
+	if r.image != nil {
+		return r.image.RequestBodyLimit()
 	}
 	return r.embedding.RequestBodyLimit()
 }
@@ -136,5 +157,5 @@ func (r *validatedRequest) checkTarget(registry *connector.Registry, target cont
 	if r.chat != nil && !r.chat.SupportsRolePassthrough(string(target.Type())) {
 		return &contract.RequestRejection{Stage: "role preflight", Field: "messages", Reason: "role cannot be passed through to this connector"}
 	}
-	return registry.CheckTargetRequest(target, r.operation, r.chat, r.embedding, policy)
+	return registry.CheckTargetRequest(target, r.operation, r.chat, r.embedding, policy, r.image)
 }

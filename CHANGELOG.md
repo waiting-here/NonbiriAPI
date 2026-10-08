@@ -8,6 +8,9 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Added
 
+- OpenAI-compatible image generation at `/v1/images/generations`, including bounded image streams and existing charity settlement. Personal and charity models can select chat, embeddings and image generation separately; unsupported operations reject before upstream dispatch without increasing key failures. Existing models retain chat and embeddings, while new models default to chat.
+- Administrator controls for registered users' Discord server and role checks, with a default-required global policy and per-user inherit/require/exempt choices. Bans and account restrictions still apply.
+- Cache-balanced routing for personal models, using a 300-second owner/model affinity and physical-key load shared with charity calls. Ordered and random calls contribute actual dispatch counts without changing their selection order.
 - Steady Catch with keyboard and touch controls, 134 meme entries, a configurable ticket and first-clear reward, and rolling scoreboards. It starts disabled with both amounts set to zero.
 - AI Gwent with four factions, server-authoritative native Go rules, deck building, timed decisions and timeout play. Player matches use a configurable shared prize pool; rolling win rankings and private Elo records are separate from payments. The game starts disabled.
 - Administrator-only endpoint tags, bulk tag changes and filtering by tag or site user ID. Raw-error storage now lists missing records and distinguishes read, queue and storage failures.
@@ -18,6 +21,9 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Changed
 
+- Shared controls, pagination, exact amount displays, responsive tables and terminology are consistent across both stations. Model forms expose supported operations; administration pages simplify defaults, alerts and log filtering.
+- Steady Catch adds preparation countdowns, miss and combo feedback, clearer hazards, a cloud companion, round collections and richer results. Mobile play and help use less space while preserving the existing game rules and payment behavior.
+- Account export v14 includes the current Discord sign-in policy and personal model operation types while preserving earlier safe projections.
 - Gwent, Lake Notes and Steady Catch restore their supplied original interfaces, artwork, menus and interactions. Gwent includes all 16 standard deck presets, local custom decks and free AI spectator demonstrations; account games keep server-authoritative progress and settlement.
 - Cyber Loan stays first in permanent activities, spans the desktop row and shows its rules without expanding a panel. All nine games provide a consistent return link, and games without per-game credit rewards show that fact beside entry controls.
 - Administrator and steward request logs explain preflight rejections with safe field and validation details; older records explicitly report when details were not recorded.
@@ -41,6 +47,7 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Fixed
 
+- Lake Notes bounds result confirmation requests and offers an in-page retry when the outcome is uncertain, so a stalled confirmation no longer requires reloading the whole page.
 - Completed responses retain their successful result when a client disconnects during settlement. Final stream flush failures remain visible through the billing response wrapper.
 - Fishing checkpoints survive same-account session refreshes. Returning to a fishing page refreshes saved cast revisions before allowing play to resume.
 - Home game continuations accept Gwent, Steady Catch and Lake Notes records without rejecting the whole section.

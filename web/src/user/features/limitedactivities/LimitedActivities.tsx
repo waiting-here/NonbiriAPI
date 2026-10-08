@@ -21,6 +21,7 @@ import { formatDateTime } from '@shared/utils/datetime';
 import { useUserSession } from '../../data';
 import { UserPageGate } from '../../components/UserPageGate';
 import { economySessionRequest } from '../economy/queries';
+import { ExactCredits, ExactCount } from '../core/components';
 import '@shared/limitedactivities/limited.css';
 import pictureBookCover from '@shared/limitedactivities/picture-book-cover.webp';
 import { limitedActivityKeys } from './queries';
@@ -178,16 +179,22 @@ function ExchangePanel({
       {wallet.data ? (
         <dl className="limited-facts">
           <dt>{text('common.generalCredits')}</dt>
-          <dd>{wallet.data.general}</dd>
+          <dd>
+            <ExactCredits value={wallet.data.general} />
+          </dd>
           <dt>{text('common.sketchPaper')}</dt>
-          <dd>{wallet.data.sketch_paper}</dd>
+          <dd>
+            <ExactCount value={wallet.data.sketch_paper} />
+          </dd>
           <dt>{text('common.paintBrushes')}</dt>
-          <dd>{wallet.data.sketch_brush}</dd>
+          <dd>
+            <ExactCount value={wallet.data.sketch_brush} />
+          </dd>
         </dl>
       ) : null}
       <p>
-        {text('common.brushesRemainingAcrossTheSite')}: {supply.brush_remaining} /{' '}
-        {supply.brush_cap}
+        {text('common.brushesRemainingAcrossTheSite')}:{' '}
+        <ExactCount value={supply.brush_remaining} /> / <ExactCount value={supply.brush_cap} />
       </p>
       <p>{text('common.exchangeGeneralCreditsForActivityCurrencyExchanges')}</p>
       <form
@@ -221,14 +228,15 @@ function ExchangePanel({
           </label>
         </fieldset>
         <p>
-          {text('common.generalCreditsCharged')}: <output>{cost ?? '—'}</output>
+          {text('common.generalCreditsCharged')}:{' '}
+          <output>{cost === null ? '—' : <ExactCredits value={cost} />}</output>
         </p>
         {uncertain ? (
           <p role="status">{text('common.thePreviousResultIsUnconfirmedRetryThe')}</p>
         ) : null}
         {operation.error ? <ErrorState error={operation.error} /> : null}
         <button
-          className="btn btn-primary"
+          className="nb-btn nb-btn--primary"
           type="submit"
           disabled={
             operation.isPending ||

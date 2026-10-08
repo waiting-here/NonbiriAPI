@@ -1,3 +1,4 @@
+import { SimplePager } from '@shared/operations/SimplePager';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
@@ -25,10 +26,7 @@ export function LakePeriodsPage() {
       <PageHeader
         title={text('垂钓手记 · 历史期次', 'Lake Notes · past periods')}
         icon="games"
-        description={text(
-          '保留原活动的期次记录。游戏开放与兑换在小游戏配置中管理。',
-          'Past activity periods are kept here. Manage availability and exchanges in game settings.',
-        )}
+        description={lakeText('periodHistoryDescription')}
         back={<Link to="/games">{text('返回游戏配置', 'Back to game settings')}</Link>}
       />
       {session.error || periods.error ? (
@@ -57,23 +55,13 @@ export function LakePeriodsPage() {
               ))}
             </div>
           )}
-          <div className="lake-period-actions">
-            <button
-              className="btn btn-secondary"
-              disabled={page === 1}
-              onClick={() => setPage((p) => p - 1)}
-            >
-              {lakeText('previous')}
-            </button>
-            <span>{page}</span>
-            <button
-              className="btn btn-secondary"
-              disabled={!periods.data.has_more}
-              onClick={() => setPage((p) => p + 1)}
-            >
-              {lakeText('next')}
-            </button>
-          </div>
+          <SimplePager
+            page={page}
+            hasMore={periods.data.has_more}
+            onPrev={() => setPage((p) => p - 1)}
+            onNext={() => setPage((p) => p + 1)}
+            labels={{ previous: lakeText('previous'), next: lakeText('next') }}
+          />
         </Card>
       )}
     </div>

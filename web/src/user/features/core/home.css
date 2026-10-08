@@ -123,9 +123,6 @@
   margin: 0;
   font-size: var(--nb-font-size-sm);
 }
-.home-page .core-checkin-card .nb-fold {
-  margin: 0;
-}
 .home-page .home-announcements .home-announcement-list {
   gap: 0;
 }
@@ -154,9 +151,17 @@
 }
 .home-page .home-announcement-preview {
   grid-column: 1;
-  max-height: 2.9em;
+  max-height: none;
+  align-self: start;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
   font-size: var(--nb-font-size-sm);
   color: var(--nb-color-text-muted);
+}
+.home-page .home-announcement-preview p {
+  margin-block: 0;
 }
 .home-page .home-announcement-preview::after {
   content: none;
@@ -252,15 +257,15 @@
 .api-access-page .personal-automation-guide th {
   overflow-wrap: anywhere;
 }
-@media (max-width: 56rem) {
+@media (width <= 64rem) {
   .home-page .home-hero {
     grid-template-columns: minmax(0, 1fr);
   }
 }
-@media (max-width: 48rem) {
+@media (width <= 48rem) {
   .home-page button,
-  .home-page .home-announcement-card__actions .btn,
-  .api-access-page .btn {
+  .home-page .home-announcement-card__actions :is(.btn, .nb-btn),
+  .api-access-page :is(.btn, .nb-btn) {
     min-height: 40px;
   }
   .home-wallet > .nb-between > a,
@@ -304,7 +309,7 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
-@media (max-width: 32rem) {
+@media (width <= 32rem) {
   .home-page .core-checkin-grid {
     grid-template-columns: minmax(0, 1fr);
   }

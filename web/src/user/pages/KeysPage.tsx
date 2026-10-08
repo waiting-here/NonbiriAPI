@@ -111,7 +111,8 @@ function ClientInstructions() {
             </div>
           </dl>
           <p className="nb-small nb-muted api-paths">
-            <code>/v1/chat/completions</code> · <code>/v1/embeddings</code>
+            <code>/v1/chat/completions</code> · <code>/v1/embeddings</code> ·{' '}
+            <code>/v1/images/generations</code>
             <br />
             {t('user.core.keys.supportedPaths')} <code>/v1/models</code>
           </p>

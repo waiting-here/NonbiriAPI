@@ -717,8 +717,10 @@ test('administrator check-in choice persists and both cards follow real daily el
     await generalButton.click();
     await expect(general).toContainText('Checked in');
     await expect(game).toContainText('Other check-in claimed');
-    await expect(generalButton).toBeDisabled();
-    await expect(gameButton).toBeDisabled();
+    await expect(generalButton).toHaveCount(0);
+    await expect(general.getByText('Claimed today', { exact: true })).toBeVisible();
+    await expect(gameButton).toHaveCount(0);
+    await expect(game.getByText('Available tomorrow', { exact: true })).toBeVisible();
     const claimedGeneral = await (await api(user, '/api/checkin')).json();
     const blockedGame = await (await api(user, '/api/checkin/game')).json();
     expect(claimedGeneral.checked_in_today).toBe(true);
@@ -729,18 +731,21 @@ test('administrator check-in choice persists and both cards follow real daily el
     expect(blocked.status()).toBe(409);
     expect((await blocked.json()).error.code).toBe('already_checked_in');
     await page.reload();
-    await expect(gameButton).toBeDisabled();
+    await expect(gameButton).toHaveCount(0);
+    await expect(game.getByText('Available tomorrow', { exact: true })).toBeVisible();
 
     await choice.uncheck();
     await settingsPage.getByRole('button', { name: 'Save all changes', exact: true }).click();
     await expect(settingsPage.getByText('Settings saved.', { exact: true })).toBeVisible();
     await page.reload();
     await expect(page.locator('.core-checkin-choice-note')).toHaveCount(0);
-    await expect(generalButton).toBeDisabled();
+    await expect(generalButton).toHaveCount(0);
+    await expect(general.getByText('Claimed today', { exact: true })).toBeVisible();
     await expect(gameButton).toBeEnabled();
     await gameButton.click();
     await expect(game).toContainText('Checked in');
-    await expect(gameButton).toBeDisabled();
+    await expect(gameButton).toHaveCount(0);
+    await expect(game.getByText('Claimed today', { exact: true })).toBeVisible();
     const claimedGame = await (await api(user, '/api/checkin/game')).json();
     expect(claimedGame.checked_in_today).toBe(true);
     expect(Number(claimedGame.balance) - Number(beforeGame.balance)).toBe(2);

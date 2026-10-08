@@ -4,6 +4,10 @@
   overflow-wrap: anywhere;
 }
 
+.game-page > #game-rankings {
+  min-width: 0;
+}
+
 @media (min-width: 40rem) {
   .game-page > .nb-page-header {
     flex-wrap: wrap;
@@ -72,7 +76,7 @@
   margin: 0;
   color: var(--nb-color-text-muted);
 }
-.game-center-card__body .btn {
+.game-center-card__body :is(.btn, .nb-btn) {
   margin-top: auto;
   align-self: flex-start;
 }
@@ -90,6 +94,13 @@
 }
 .game-card-detail {
   font-variant-numeric: tabular-nums;
+}
+.game-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--nb-space-2);
+  min-width: 0;
 }
 
 .game-footnote {
@@ -133,6 +144,7 @@
 }
 
 .game-money {
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
   font-weight: 700;
 }
@@ -267,20 +279,43 @@
 .game-wallets {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem 1.25rem;
-  align-items: baseline;
+  gap: var(--nb-space-2) var(--nb-space-5);
+  align-items: start;
+  margin: 0;
 }
-.game-wallets > span {
-  display: block;
-  max-width: 100%;
+.game-wallets > div {
   min-width: 0;
 }
-.game-wallets .game-money__unit {
+.game-wallets dt {
+  font-size: var(--nb-font-size-xs);
+  color: var(--nb-color-text-muted);
+}
+.game-wallets dd {
+  margin: 0;
   white-space: nowrap;
 }
 
+@media (width < 40rem) {
+  .game-page .duel-actions:has(> .game-wallets) {
+    min-width: 0;
+    width: 100%;
+  }
+  .game-page :is(.nb-page-header__actions, .duel-actions) > .game-wallets {
+    width: 100%;
+    min-width: 0;
+    container-type: inline-size;
+  }
+  .game-page :is(.nb-page-header__actions, .duel-actions) > .game-wallets dd {
+    font-size: clamp(var(--nb-font-size-xs), 4cqi, var(--nb-font-size-md));
+  }
+  .game-page .nb-page-header__actions > .game-wallets {
+    flex-basis: 100%;
+    text-align: start;
+  }
+}
+
 @media (max-width: 540px) {
-  .game-center-card__body .btn {
+  .game-center-card__body :is(.btn, .nb-btn) {
     width: 100%;
     justify-content: center;
   }
@@ -417,6 +452,33 @@
     aspect-ratio: auto;
     min-height: 7rem;
   }
+  .game-center-card--fishing .game-hero {
+    object-position: 30% 40%;
+  }
+  .game-center-card--linklink .game-hero,
+  .game-center-card--rps .game-hero,
+  .game-center-card--steadycatch .game-hero {
+    object-position: center;
+  }
+  .game-center-card--bidding .game-hero,
+  .game-center-card--likes .game-hero {
+    object-position: 30% center;
+  }
+  .game-center-card--blackjack .game-hero {
+    object-position: 50% 40%;
+  }
+  .game-center-card--gwent .game-gwent-hero {
+    height: 100%;
+    aspect-ratio: auto;
+    grid-template-columns: 1fr;
+  }
+  .game-center-card--gwent .game-gwent-hero img:not(:first-child) {
+    display: none;
+  }
+  .game-center-card--gwent .game-gwent-hero span {
+    font-size: var(--nb-font-size-xs);
+    letter-spacing: 0.08em;
+  }
   .game-center-card__hero > .nb-badge {
     top: var(--nb-space-2);
     right: auto;
@@ -438,12 +500,21 @@
   }
   .game-card-foot {
     font-size: var(--nb-font-size-xs);
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .game-card-foot > .nb-btn {
+    align-self: end;
+    white-space: nowrap;
+  }
+  .game-card-meta {
+    gap: var(--nb-space-1);
   }
 }
 
 .game-actionbar {
   display: flex;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 1rem;
   width: 100%;
@@ -452,6 +523,7 @@
   display: grid;
   gap: 0.15rem;
   min-width: 0;
+  white-space: nowrap;
   font-size: var(--nb-text-xs);
 }
 .game-actionbar__cost strong {
@@ -496,10 +568,18 @@
   }
 }
 @media (max-width: 39.999rem) {
+  html:has(.game-actionbar) {
+    scroll-padding-bottom: calc(var(--game-actionbar-h, 4.5rem) + var(--nb-space-8));
+  }
+  .game-page :is(input, select, textarea) {
+    scroll-margin-bottom: var(--nb-space-4);
+  }
   .game-page:has(.game-actionbar),
   .bidding-game:has(.game-actionbar),
   .likes-game:has(.game-actionbar) {
-    padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+    padding-bottom: calc(
+      var(--game-actionbar-h, 4.5rem) + env(safe-area-inset-bottom) + var(--nb-space-4)
+    );
   }
   .game-actionbar {
     position: fixed;
@@ -620,6 +700,77 @@
   color: var(--nb-color-accent);
   background: var(--nb-color-surface-muted);
 }
-.game-gwent-hero { display: grid; grid-template-columns: repeat(4, 1fr); position: relative; aspect-ratio: 2; overflow: hidden; background: #16352f; }
-.game-gwent-hero img { width: 100%; height: 100%; object-fit: cover; }
-.game-gwent-hero span { position: absolute; bottom: 0; inset-inline: 0; padding: .6rem; background: linear-gradient(transparent, #09251feb); color: #fff; font-size: 1.5rem; font-weight: 800; letter-spacing: .18em; text-align: center; }
+.game-gwent-hero {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  position: relative;
+  aspect-ratio: 2;
+  overflow: hidden;
+  background: #16352f;
+}
+.game-gwent-hero img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.game-gwent-hero span {
+  position: absolute;
+  bottom: 0;
+  inset-inline: 0;
+  padding: 0.6rem;
+  background: linear-gradient(transparent, #09251feb);
+  color: #fff;
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-align: center;
+}
+
+.game-toolbar {
+  min-width: 0;
+  max-width: 100%;
+}
+.game-toolbar__items {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--nb-space-2);
+}
+.game-toolbar .game-toolbar__button {
+  min-width: 40px;
+  min-height: 40px;
+  padding: var(--nb-space-2);
+  font-size: var(--nb-font-size-sm);
+  text-decoration: none;
+}
+.game-toolbar__button .nb-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+.game-toolbar__button[aria-disabled='true'] {
+  color: var(--nb-color-text-subtle);
+  background: var(--nb-color-surface-muted);
+  border-color: var(--nb-color-border);
+  cursor: not-allowed;
+}
+.game-toolbar__label {
+  display: none;
+}
+.game-toolbar .nb-more__menu :is(button, a) {
+  display: flex;
+  align-items: center;
+  gap: var(--nb-space-2);
+}
+.game-toolbar .nb-more__menu [aria-checked='true'] {
+  color: var(--nb-color-accent);
+  background: var(--nb-color-accent-quiet);
+}
+@media (min-width: 64rem) {
+  .game-toolbar__label {
+    display: inline;
+  }
+  .game-toolbar .game-toolbar__button {
+    padding-inline: var(--nb-space-3);
+  }
+}

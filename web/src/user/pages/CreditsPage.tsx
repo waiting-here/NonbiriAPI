@@ -1,3 +1,4 @@
+import { CreditChange } from '../features/credits/CreditChange';
 import { useTranslation } from 'react-i18next';
 import { Segmented, Fold } from '@shared/components/ui';
 import { RecordsHeader } from '../components/RecordsHeader';
@@ -15,6 +16,7 @@ import { formatDateTime } from '@shared/utils/datetime';
 import { UserPageGate } from '../components/UserPageGate';
 import { useUserSession } from '../data';
 import { coreSessionMatchesAccount } from '../features/core/queries';
+import { ExactCredits, ExactCount } from '../features/core/components';
 import {
   HISTORY_ASSET_FILTERS,
   HISTORY_CATEGORIES,
@@ -136,7 +138,7 @@ function CreditHistory({
       <RecordsHeader
         description={copy.description}
         actions={
-          <button type="button" className="btn btn-secondary" disabled={busy} onClick={url.refresh}>
+          <button type="button" className="nb-btn nb-btn--secondary" disabled={busy} onClick={url.refresh}>
             {copy.refresh}
           </button>
         }
@@ -144,17 +146,25 @@ function CreditHistory({
       <Card>
         <div className="nb-stats credit-history__overview" aria-label={copy.asset}>
           {[
-            [copy.balance, history.isError ? '—' : (data?.current_balance ?? '—')],
-            [copy.game, history.isError ? '—' : (data?.game_balance ?? '—')],
-            [copy.sketch_paper, wallet.isError ? '—' : (wallet.data?.sketch_paper ?? '—')],
-            [copy.sketch_brush, wallet.isError ? '—' : (wallet.data?.sketch_brush ?? '—')],
-          ].map(([label, value]) => (
+            [copy.balance, history.isError ? '—' : (data?.current_balance ?? '—'), 'credits'],
+            [copy.game, history.isError ? '—' : (data?.game_balance ?? '—'), 'credits'],
+            [copy.sketch_paper, wallet.isError ? '—' : (wallet.data?.sketch_paper ?? '—'), 'count'],
+            [copy.sketch_brush, wallet.isError ? '—' : (wallet.data?.sketch_brush ?? '—'), 'count'],
+          ].map(([label, value, type]) => (
             <div
               className={`nb-stat${value.length > 12 ? ' credit-history__balance--long' : ''}`}
               key={label}
             >
               <span>{label}</span>
-              <strong>{value}</strong>
+              <strong>
+                {value === '—' ? (
+                  value
+                ) : type === 'count' ? (
+                  <ExactCount value={value} />
+                ) : (
+                  <ExactCredits value={value} />
+                )}
+              </strong>
             </div>
           ))}
         </div>
@@ -218,10 +228,10 @@ function CreditHistory({
             </div>
           </Fold>
           <div className="credit-history__filter-actions">
-            <button className="btn btn-primary" disabled={busy || !timeReady}>
+            <button className="nb-btn nb-btn--primary" disabled={busy || !timeReady}>
               {copy.apply}
             </button>
-            <button className="btn btn-secondary" type="button" disabled={busy} onClick={reset}>
+            <button className="nb-btn nb-btn--secondary" type="button" disabled={busy} onClick={reset}>
               {copy.reset}
             </button>
           </div>
@@ -266,9 +276,9 @@ function CreditHistory({
                           <td data-label={copy.asset}>{copy[entry.asset_type]}</td>
                           <td
                             data-label={copy.change}
-                            className={`credit-history__amount ${entry.delta.startsWith('-') ? 'is-expense' : 'is-income'}`}
+                            className="credit-history__amount"
                           >
-                            {entry.delta.startsWith('-') ? entry.delta : `+${entry.delta}`}
+                            <CreditChange value={entry.delta} />
                           </td>
                           <td data-label={copy.category}>{reason(entry)}</td>
                           {data.data.some((row) => row.request_id !== null) ? (

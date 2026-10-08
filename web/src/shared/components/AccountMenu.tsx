@@ -1,3 +1,4 @@
+import { Button } from '@shared/components/ui/Button';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
@@ -93,20 +94,20 @@ export function AccountMenu({
           <div className="nb-account-menu__actions">
             {languageControl}
             <ThemeToggle />
-            <Link className="nb-button nb-button--ghost nb-button--small" to={accountHref} onClick={() => { setOpen(false); triggerRef.current?.focus(); }}>
+            <Link className="nb-btn nb-btn--ghost nb-btn--sm" to={accountHref} onClick={() => { setOpen(false); triggerRef.current?.focus(); }}>
               <Icon name="account" />
               {station === 'admin' ? t('admin.settings.nav') : t('user.account.nav')}
             </Link>
             {station === 'user' && steward ? (
-              <Link className="nb-button nb-button--ghost nb-button--small" to={routePath('user', 'steward')} onClick={() => { setOpen(false); triggerRef.current?.focus(); }}>
+              <Link className="nb-btn nb-btn--ghost nb-btn--sm" to={routePath('user', 'steward')} onClick={() => { setOpen(false); triggerRef.current?.focus(); }}>
                 <Icon name="steward" />
                 {t('user.steward.nav')}
               </Link>
             ) : null}
-            <button type="button" className="nb-button nb-button--secondary nb-button--small" onClick={onSignOut} disabled={working}>
+            <Button type="button" size="sm" onClick={onSignOut} disabled={working}>
               <Icon name="logout" />
               {working ? t('common.working') : signOutLabel}
-            </button>
+            </Button>
           </div>
         </div>
       ) : null}

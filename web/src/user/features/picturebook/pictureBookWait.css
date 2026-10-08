@@ -9,7 +9,7 @@
   width: min(100%, 24rem);
   aspect-ratio: 16 / 9;
   overflow: hidden;
-  border-radius: var(--nb-radius-sm, 0.6rem);
+  border-radius: var(--nb-radius-sm);
 }
 .picturebook-wait__frames img {
   position: absolute;

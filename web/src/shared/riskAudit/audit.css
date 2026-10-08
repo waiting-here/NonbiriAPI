@@ -1,10 +1,10 @@
 .audit-page form > label,
 .audit-details > label {
   display: grid;
-  gap: var(--space-2, 0.5rem);
+  gap: var(--nb-space-2);
   min-width: 0;
 }
-.audit-page form > .btn {
+.audit-page form > :is(.btn, .nb-btn) {
   justify-self: start;
 }
 .audit-tabs {
@@ -21,7 +21,7 @@
   padding-inline: 0.35rem;
   font-weight: 600;
 }
-.audit-condition > .btn {
+.audit-condition > :is(.btn, .nb-btn) {
   align-self: end;
   justify-self: start;
 }
@@ -52,7 +52,7 @@
 .audit-page .ops-kv > div {
   display: contents;
 }
-.audit-page td .btn {
+.audit-page td :is(.btn, .nb-btn) {
   white-space: nowrap;
 }
 .audit-page label:has(input[type='checkbox']) {
@@ -60,15 +60,15 @@
   align-items: center;
   gap: 0.5rem;
 }
-.audit-page .btn {
+.audit-page :is(.btn, .nb-btn) {
   max-width: 100%;
   white-space: normal;
 }
 .audit-page .ops-table {
   min-width: 48rem;
 }
-@media (max-width: 600px) {
-  .audit-tabs .btn {
+@media (width <= 40rem) {
+  .audit-tabs :is(.btn, .nb-btn) {
     flex: 1 1 40%;
   }
   .audit-page .ops-kv {

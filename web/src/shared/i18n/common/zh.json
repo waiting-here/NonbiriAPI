@@ -262,10 +262,8 @@
     "page": "第 {{page}} 页",
     "previous": "上一页",
     "next": "下一页",
-    "pageSize": "每页条目数",
     "filterFromAria": "按开始时间筛选",
     "filterToAria": "按结束时间筛选",
-    "jumpToPage": "跳转页码",
     "copied": "已复制",
     "copy": "复制",
     "copyValue": "复制{{label}}",
@@ -324,7 +322,9 @@
           "charityChatCompletions": "公益聊天补全",
           "openaiEmbeddings": "自用向量嵌入",
           "charityEmbeddings": "公益向量嵌入",
-          "modelDiscovery": "模型检查"
+          "modelDiscovery": "模型检查",
+          "openaiImagesGenerations": "自用图像生成",
+          "charityImagesGenerations": "公益图像生成"
         },
         "resultValue": {
           "success": "成功",
@@ -332,10 +332,10 @@
           "cancelled": "已取消",
           "pending": "处理中"
         },
-        "charge": "扣费",
+        "charge": "扣费（积分）",
         "request": "请求",
         "callerResult": "调用方结果",
-        "callerError": "调用方错误",
+        "callerError": "诊断代码",
         "endpointKeyId": "端点密钥 ID",
         "usageTotalMismatch": "用量总数不一致",
         "usageTotalMismatchExplanation": "上游报告的总数与有效用量分项之和不同；计费使用这些分项。",
@@ -396,7 +396,8 @@
             "failed": "失败（{{status}}）"
           },
           "storageHistoryHelp": "累计数不会随记录到期减少。未保存的原文无法补回；下方可查询最近30天内仍在保留期的记录。容量仅计原文，不含数据库页、索引和 WAL。",
-          "storageRecords": "查看未保存记录"
+          "storageRecords": "查看未保存记录",
+          "images": "图像生成"
         }
       },
       "charity": {
@@ -471,7 +472,7 @@
         "namingHelp": "服务商和模型名称用于定义站内 API 调用名，可自行填写。实际调用的上游模型在下方服务连接中选择。",
         "namePreview": "调用模型名预览",
         "routeStrategy": "调度策略",
-        "operationHelp": "调用方选择的 API 路径决定执行聊天补全或向量嵌入，请连接支持对应操作的上游模型。展平工具调用与 store=false 策略仅作用于聊天补全。",
+        "operationHelp": "所选接口还需上游模型支持。展平工具调用、消息角色和传输设置仅用于聊天补全。",
         "embeddingBillingHelp": "Embedding 批量输入按一次成功请求计次；按 Token 计费时，全部输入使用未缓存输入价格，向量维度不计为输出 Token。",
         "embeddingQuotaHelp": "一次成功的 Embedding 批量请求只占用一次捐赠调用额度；Token 用量为全部输入之和，向量维度不占输出 Token。",
         "routeOrdered": "按连接顺序",
@@ -581,7 +582,7 @@
         "noLimit": "不设上限",
         "noSample": "暂无样本",
         "notReviewed": "尚未审核",
-        "open": "打开",
+        "open": "操作",
         "openReview": "审核",
         "orderedBindings": "服务连接顺序",
         "owner": "所有者",
@@ -650,7 +651,8 @@
         "batchFailureReset": "重置连续失败",
         "failureStrategy": "失败策略",
         "quotaReserve": "额度与预留",
-        "adaptationSettings": "请求适配"
+        "adaptationSettings": "请求适配",
+        "imageBillingHelp": "图像一次请求生成多张仍计一次；未返回用量时，沿用模型的预留结算规则。"
       },
       "management": {
         "details": "技术详情",
@@ -715,6 +717,12 @@
         "empty": "此模型暂无可选尺寸，请选择其他模型或联系管理员补充尺寸价格。",
         "reselect": "请重新选择可用尺寸；提示词和其他输入已保留。",
         "pairHelp": "每个选项是一组可用的宽度和高度。"
+      },
+      "lengthBytes": "字节",
+      "lengthCharacters": "字",
+      "units": {
+        "paper": "草稿纸",
+        "brushes": "画笔"
       }
     },
     "lakeNotes": {
@@ -1285,6 +1293,10 @@
         "confirmTicketAndStart": "确认门票并开始",
         "thisTabCannotContinuePlayingWaitFor": "本标签页无法继续游玩；可以等待到期或放弃。",
         "abandonChallenge": "放弃挑战",
+        "noOpenPeriodsTitle": "还没有开放的期次",
+        "noOpenPeriodsBody": "活动开放后会在这里出现。",
+        "noChallengeHistoryTitle": "还没有挑战记录",
+        "noChallengeHistoryBody": "完成一次挑战后，结果会出现在这里。",
         "periods": "期次",
         "open2": "进行中",
         "endedOrPaused": "已结束或暂停",
@@ -1374,6 +1386,14 @@
     },
     "inactivity": {
       "activityRules": "哪些操作算活跃？"
+    },
+    "modelTypes": {
+      "title": "模型类型",
+      "help": "选择此模型支持的接口，可多选。",
+      "required": "请至少选择一种模型类型。",
+      "chat_completions": "聊天补全",
+      "embeddings": "向量化",
+      "images_generations": "图像生成"
     }
   },
   "logs": {
@@ -1400,7 +1420,7 @@
     "routeKind": "请求类型",
     "endpointBaseUrl": "端点地址",
     "upstreamModel": "所用模型",
-    "tokens": "token 用量",
+    "tokens": "Token 用量",
     "errorCode": "错误码",
     "diag": "诊断信息",
     "usageUnknown": "用量未知",
@@ -1550,6 +1570,11 @@
       "gameBalance": "游戏积分",
       "language": "语言",
       "languageDefault": "站点默认",
+      "discordGatePolicy": "Discord 登录条件",
+      "discordGateHelp": "选择此用户是否须加入指定服务器并持有所需身份组。下次登录时生效，封禁仍会阻止访问。",
+      "discordGateInherit": "跟随全局设置",
+      "discordGateRequire": "核验服务器与身份组",
+      "discordGateExempt": "免于服务器与身份组核验",
       "limitInvalid": "请输入整数：端点 0～10000、RPM 1～4096、并发 1～100000；留空使用默认值。",
       "readOnly": "本人和其他协管的账户可在此查看，不能修改设置。",
       "view": "查看",
@@ -1563,7 +1588,7 @@
       "tabPenalties": "处罚记录",
       "exactFilters": "精确筛选",
       "saveProfile": "保存设置",
-      "profileResult": "限额与语言",
+      "profileResult": "账户设置",
       "levelResult": "手动等级",
       "viewLogs": "查看日志",
       "dangerTitle": "危险操作",
@@ -1645,7 +1670,7 @@
       "stateLabel": "状态",
       "table": {
         "draftTitle": "草稿标题",
-        "open": "打开",
+        "open": "操作",
         "publication": "发布信息",
         "severity": "严重度",
         "state": "状态",

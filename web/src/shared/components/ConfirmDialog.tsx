@@ -1,3 +1,4 @@
+import { Button } from '@shared/components/ui/Button';
 import { useCallback, useEffect, useId, useRef, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -150,15 +151,15 @@ export function ConfirmDialog({
         <div className="dialog-title-row">
           <h2 id={titleId}>{title}</h2>
           {showClose ? (
-            <button
+            <Button
               type="button"
-              className="btn btn-quiet dialog-close"
+              variant="ghost" className="dialog-close"
               aria-label={t('common.close')}
               disabled={busy}
               onClick={onCancel}
             >
               ×
-            </button>
+            </Button>
           ) : null}
         </div>
         <div id={descriptionId} className="dialog-description">
@@ -166,23 +167,23 @@ export function ConfirmDialog({
         </div>
         {children ? <div className="dialog-body">{children}</div> : null}
         <div className="dialog-actions nb-dialog-actions">
-          <button
+          <Button
             ref={cancelRef}
             type="button"
-            className="btn btn-secondary"
+
             onClick={onCancel}
             disabled={busy}
           >
             {cancelLabel ?? t('common.cancel')}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            className={`btn ${danger ? 'btn-danger' : 'btn-primary'}`}
+            variant={danger ? 'danger' : 'primary'}
             onClick={onConfirm}
             disabled={busy || confirmDisabled}
           >
             {busy ? t('common.working') : confirmLabel}
-          </button>
+          </Button>
         </div>
       </section>
     </div>

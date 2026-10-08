@@ -1,5 +1,5 @@
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { charityKeys } from '@shared/operations/charity';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { useLocation, useNavigate } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
@@ -193,6 +193,7 @@ function installBindingNavigation(
   const root = role === 'admin' ? '/admin/api' : '/api/steward';
   const previousFetch = globalThis.fetch;
   const models = Array.from({ length: 21 }, (_, index) => ({
+    model_types: ['chat_completions', 'embeddings'],
     route_strategy: 'expiry_weighted',
     id: String(index + 1),
     provider: 'Provider',
@@ -415,6 +416,7 @@ describe('managed donation page integration', () => {
 
   it('keeps a selected model outside the current page and search, including browser return', async () => {
     const models = Array.from({ length: 21 }, (_, index) => ({
+      model_types: ['chat_completions', 'embeddings'],
       route_strategy: 'expiry_weighted',
       id: String(index + 1),
       provider: 'Provider',

@@ -1,3 +1,4 @@
+import { Button } from '@shared/components/ui/Button';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -96,9 +97,9 @@ export function HistoryDialog({
     >
       <header>
         <h2 id={id}>{title}</h2>
-        <button className="btn btn-secondary" onClick={onClose} autoFocus>
+        <Button  onClick={onClose} autoFocus>
           {text('关闭', 'Close')}
-        </button>
+        </Button>
       </header>
       {children}
     </dialog>
@@ -211,9 +212,9 @@ export function LoanHistory({
     text = useLoanText();
   return (
     <>
-      <button className="btn btn-secondary" onClick={() => setOpen(true)}>
+      <Button  onClick={() => setOpen(true)}>
         {text('借款明细', 'Loan history')}
-      </button>
+      </Button>
       {open ? (
         <HistoryDialog title={text('借款明细', 'Loan history')} onClose={() => setOpen(false)}>
           <LoanHistoryContent role={role} account={account} userID={userID} />

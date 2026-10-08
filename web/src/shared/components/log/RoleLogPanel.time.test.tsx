@@ -1,6 +1,7 @@
+import { renderHistoricalLogs as renderWithProviders } from '../../../../test/unit/logSupport';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { installJsonFetchFixtures, renderWithProviders } from '../../../../test/unit/support';
+import { installJsonFetchFixtures } from '../../../../test/unit/support';
 import { RoleLogPanel } from './RoleLogPanel';
 import type { LogRole } from './data';
 

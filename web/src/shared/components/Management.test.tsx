@@ -17,6 +17,7 @@ const userFixture = (id = '7', level = 1): AdminUser => ({
   guild_nick: null,
   guild_avatar_url: null,
   is_admin: false,
+  discord_gate_policy: 'inherit',
   is_banned: false,
   banned_reason: '',
   banned_until: null,
@@ -56,7 +57,15 @@ function session(level = 6) {
   const user = userFixture('9', level);
   const fields = Object.fromEntries(
     Object.entries(user).filter(
-      ([key]) => !['discord_id', 'is_admin', 'banned_reason', 'level', 'revision'].includes(key),
+      ([key]) =>
+        ![
+          'discord_id',
+          'discord_gate_policy',
+          'is_admin',
+          'banned_reason',
+          'level',
+          'revision',
+        ].includes(key),
     ),
   );
   return {
@@ -116,6 +125,53 @@ afterEach(() => {
 });
 
 describe('shared account management', () => {
+  it('saves each administrator Discord sign-in policy and restores it after reopening', async () => {
+    let target = userFixture();
+    const calls = install((call) => {
+      if (call.path === '/admin/api/session') return { admin: { username: 'fixture-admin' } };
+      if (call.path.startsWith('/admin/api/users?')) return page([target]);
+      if (call.path === '/admin/api/users/7' && call.method === 'GET') return target;
+      if (call.path === '/admin/api/users/7' && call.method === 'PATCH') {
+        target = {
+          ...target,
+          discord_gate_policy: call.body.discord_gate_policy as AdminUser['discord_gate_policy'],
+          revision: String(BigInt(target.revision) + 1n),
+        };
+        return target;
+      }
+      throw new Error('Unexpected request ' + call.path);
+    });
+    const view = await renderWithProviders(<UsersPage />, {
+      station: 'admin',
+      role: 'admin',
+      route: '/users?user=7',
+    });
+    await view.user.click(await screen.findByRole('tab', { name: 'Limits and level' }));
+    expect(screen.getByLabelText('Discord sign-in checks')).toHaveValue('inherit');
+    expect(screen.getByText(/Applies at the next sign-in/)).toBeVisible();
+    for (const [index, policy] of (['require', 'exempt', 'inherit'] as const).entries()) {
+      await view.user.selectOptions(screen.getByLabelText('Discord sign-in checks'), policy);
+      await view.user.click(screen.getByRole('button', { name: 'Save settings' }));
+      await waitFor(() =>
+        expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(index + 1),
+      );
+      const write = calls.filter((call) => call.method === 'PATCH')[index];
+      expect(write.body).toMatchObject({
+        mode: 'profile',
+        discord_gate_policy: policy,
+        expected_revision: String(index + 1),
+      });
+      expect(write.headers.get('Idempotency-Key')).toBeTruthy();
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Save settings' })).toBeDisabled(),
+      );
+      await view.user.click(screen.getByRole('button', { name: 'Back to list' }));
+      await view.user.click(await screen.findByRole('button', { name: 'member-7' }));
+      await view.user.click(await screen.findByRole('tab', { name: 'Limits and level' }));
+      expect(screen.getByLabelText('Discord sign-in checks')).toHaveValue(policy);
+    }
+  });
+
   it.each(['admin', 'steward'] as const)(
     'confirms one credit adjustment and sends nothing on cancel for %s',
     async (role) => {
@@ -232,6 +288,8 @@ describe('shared account management', () => {
       });
       expect(write.headers.get('Idempotency-Key')).toBeTruthy();
       if (role === 'steward') {
+        expect(screen.queryByLabelText('Discord sign-in checks')).not.toBeInTheDocument();
+        expect(write.body).not.toHaveProperty('discord_gate_policy');
         expect(
           within(screen.getByLabelText('Set level')).getByRole('option', { name: '5' }),
         ).toBeEnabled();
@@ -327,9 +385,7 @@ describe('shared account management', () => {
         writes[1].headers.get('Idempotency-Key'),
       );
       expect(
-        await within(screen.getByRole('region', { name: 'Limits and language' })).findByText(
-          'Saved.',
-        ),
+        await within(screen.getByRole('region', { name: 'Account settings' })).findByText('Saved.'),
       ).toBeVisible();
       expect(
         await within(screen.getByRole('region', { name: 'Manual level' })).findByText(
@@ -387,7 +443,7 @@ describe('shared account management', () => {
     await view.user.click(save);
     await waitFor(() => expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(2));
     await waitFor(() => expect(save).toBeDisabled());
-    for (const name of ['Limits and language', 'Manual level'])
+    for (const name of ['Account settings', 'Manual level'])
       expect(within(screen.getByRole('region', { name })).getByText(/Saved, but/)).toBeVisible();
     refreshFails = false;
     readsCurrent = true;
@@ -428,7 +484,7 @@ describe('shared account management', () => {
       resolveProfile({ ...userFixture(), endpoint_limit: '99', revision: '2' }),
     );
     expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(1);
-    expect(screen.queryByRole('region', { name: 'Limits and language' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Account settings' })).toBeNull();
   });
 
   it('resets page and selection when effective level changes', async () => {

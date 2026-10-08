@@ -73,6 +73,8 @@ func (s *Service) RecordRejectionTx(ctx context.Context, tx *sql.Tx, user int64,
 	if fact.Path == "/v1/models" {
 		route = "model_discovery"
 		model = ""
+	} else if fact.Path == "/v1/images/generations" {
+		route = "openai_images_generations"
 	} else if fact.Path == "/v1/embeddings" {
 		route = "openai_embeddings"
 	}

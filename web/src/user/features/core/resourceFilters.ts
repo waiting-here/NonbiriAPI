@@ -30,7 +30,7 @@ const choices: Partial<Record<keyof ResourceFilters, readonly string[]>> = {
   enabled: ['true', 'false'],
   donated: ['true', 'false'],
   suspension_state: ['none', 'security_processing'],
-  route_strategy: ['ordered', 'random'],
+  route_strategy: ['ordered', 'random', 'cache_balanced'],
   connection_state: ['available', 'unavailable', 'unconfigured'],
 };
 

@@ -1,4 +1,4 @@
-import { expect, test } from './test';
+import { numberedResponse } from './numbered-fixtures';
 import { ADMIN_ORIGIN, USER_ORIGIN } from './ports';
 import {
   collectConsoleViolations,
@@ -7,7 +7,7 @@ import {
   mockRoleSession,
   userSession,
 } from './support';
-import { numberedResponse } from './numbered-fixtures';
+import { expect, test } from './test';
 
 test('user management separates identifiers and copies Discord IDs exactly at desktop and mobile sizes', async ({
   page,
@@ -41,6 +41,7 @@ test('user management separates identifiers and copies Discord IDs exactly at de
     id: '7',
     discord_id: '1234567890123456789',
     is_admin: false,
+    discord_gate_policy: 'inherit',
     banned_reason: '',
     level: { manual: null, automatic: 1, effective: 1, display_name: 'Lv1' },
     revision: '1',
@@ -200,6 +201,7 @@ for (const locale of ['en', 'zh'] as const) {
       route.fulfill({ json: numberedResponse([], '1', 20) }),
     );
     const model = {
+      model_types: ['chat_completions', 'embeddings'],
       id: '1',
       provider: 'Example',
       model: 'chat',

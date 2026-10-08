@@ -93,10 +93,12 @@ for (const { width, locale } of viewports) {
     ).toBeVisible();
     await expect(
       general.getByRole('button', { name: locale === 'zh' ? '立即签到' : 'Check in' }),
-    ).toBeDisabled();
+    ).toHaveCount(0);
     await expect(
       game.getByRole('button', { name: locale === 'zh' ? '立即签到' : 'Check in' }),
-    ).toBeDisabled();
+    ).toHaveCount(0);
+    await expect(general.getByText(locale === 'zh' ? '今日已签' : 'Claimed today')).toBeVisible();
+    await expect(game.getByText(locale === 'zh' ? '明天可领' : 'Available tomorrow')).toBeVisible();
     await expect(page.locator('.core-checkin-grid > .core-card')).toHaveCount(2);
 
     const layout = await page.evaluate(() => ({

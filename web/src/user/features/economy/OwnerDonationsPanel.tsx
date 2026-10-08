@@ -171,6 +171,7 @@ function OwnerDonationsAccount({ accountID, enabled }: { accountID: string; enab
           <span>{t('user.charity.ownerPages.search')}</span>
           <input
             type="search"
+            placeholder={t('user.charity.ownerPages.searchPlaceholder')}
             maxLength={256}
             value={shownDraft.value}
             aria-invalid={shownDraft.invalid}
@@ -190,12 +191,12 @@ function OwnerDonationsAccount({ accountID, enabled }: { accountID: string; enab
             ))}
           </select>
         </label>
-        <button type="submit" className="btn btn-secondary">
+        <button type="submit" className="nb-btn nb-btn--secondary">
           {t('common.search')}
         </button>
         <button
           type="button"
-          className="btn btn-quiet"
+          className="nb-btn nb-btn--ghost"
           onClick={() => {
             setDraft({ source: '', value: '', invalid: false });
             setFilter('donation_q', '');
@@ -243,7 +244,7 @@ function OwnerDonationsAccount({ accountID, enabled }: { accountID: string; enab
         <section className="ops-subcard" aria-label={t('user.charity.ownerPages.keys')}>
           <div className="item-header">
             <h3>{t('user.charity.donationNumber', { id: expanded })}</h3>
-            <button type="button" className="btn btn-quiet" onClick={() => select('')}>
+            <button type="button" className="nb-btn nb-btn--ghost" onClick={() => select('')}>
               {t('common.close')}
             </button>
           </div>
@@ -331,11 +332,11 @@ function DonationSummary({
       </div>
       <div className="donation-summary-actions">
         {disabled ? (
-          <span className="btn btn-quiet" aria-disabled="true">
+          <span className="nb-btn nb-btn--ghost" aria-disabled="true">
             {t('user.charity.openDonationDetail')}
           </span>
         ) : (
-          <Link className="btn btn-quiet" to={`/charity/donations/${item.id}`} state={{ returnTo }}>
+          <Link className="nb-btn nb-btn--ghost" to={`/charity/donations/${item.id}`} state={{ returnTo }}>
             {t('user.charity.openDonationDetail')}
           </Link>
         )}

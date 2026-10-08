@@ -92,7 +92,7 @@
   color: var(--nb-color-warning);
   font-weight: 650;
 }
-@media (max-width: 600px) {
+@media (width <= 40rem) {
   .economy-audit .audit-filters label {
     width: 100%;
   }

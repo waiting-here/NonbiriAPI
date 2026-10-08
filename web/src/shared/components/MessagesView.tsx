@@ -1,3 +1,4 @@
+import { SimplePager } from '@shared/operations/SimplePager';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -65,25 +66,13 @@ export function MessagesView({ messages }: { messages: readonly unknown[] }) {
         })}
       </ol>
       {pages > 1 ? (
-        <nav className="nb-message-pagination" aria-label={t('common.pagination')}>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            disabled={shownPage === 1}
-            onClick={() => setPage(shownPage - 1)}
-          >
-            {t('common.previous')}
-          </button>
-          <span>{t('common.page', { page: shownPage })}</span>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            disabled={shownPage === pages}
-            onClick={() => setPage(shownPage + 1)}
-          >
-            {t('common.next')}
-          </button>
-        </nav>
+        <SimplePager
+          page={shownPage}
+          hasMore={shownPage < pages}
+          onPrev={() => setPage(shownPage - 1)}
+          onNext={() => setPage(shownPage + 1)}
+          labels={{ previous: t('common.previous'), next: t('common.next') }}
+        />
       ) : null}
     </section>
   );

@@ -163,7 +163,7 @@ export function LoanCard({
           </label>
           <div className="loan-actions">
             <button
-              className="btn btn-primary"
+              className="nb-btn nb-btn--primary"
               disabled={!available || busy || quote !== null}
               onClick={() => {
                 setReceipt(null);
@@ -175,7 +175,7 @@ export function LoanCard({
               {text('我要借款', 'Get a loan')}
             </button>
             {uncertain && !dialogOpen ? (
-              <button className="btn btn-primary" onClick={() => setDialogOpen(true)}>
+              <button className="nb-btn nb-btn--primary" onClick={() => setDialogOpen(true)}>
                 {text('核对这笔借款', 'Check this loan')}
               </button>
             ) : null}

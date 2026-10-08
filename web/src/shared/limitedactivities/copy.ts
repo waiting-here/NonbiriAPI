@@ -129,6 +129,10 @@ const keys = {
   'common.thisTabCannotContinuePlayingWaitFor':
     'common.limitedActivities.common.thisTabCannotContinuePlayingWaitFor',
   'common.abandonChallenge': 'common.limitedActivities.common.abandonChallenge',
+  'common.noOpenPeriodsTitle': 'common.limitedActivities.common.noOpenPeriodsTitle',
+  'common.noOpenPeriodsBody': 'common.limitedActivities.common.noOpenPeriodsBody',
+  'common.noChallengeHistoryTitle': 'common.limitedActivities.common.noChallengeHistoryTitle',
+  'common.noChallengeHistoryBody': 'common.limitedActivities.common.noChallengeHistoryBody',
   'common.periods': 'common.limitedActivities.common.periods',
   'common.open2': 'common.limitedActivities.common.open2',
   'common.endedOrPaused': 'common.limitedActivities.common.endedOrPaused',

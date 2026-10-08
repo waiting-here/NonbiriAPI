@@ -111,7 +111,7 @@ func (hub *Hub) DecideAfterAdmission(ctx context.Context, input CaptureInput) (C
 		!utf8.ValidString(input.Model) || utf8.RuneCountInString(input.Model) > 512 ||
 		(input.MediaType != "" && !safeMediaType(input.MediaType)) ||
 		(input.Charity != input.RouteKind.IsCharity()) ||
-		(input.Stream && input.RouteKind.Operation() != RouteOpenAIChat.Operation()) {
+		(input.Stream && input.RouteKind.Operation() == RouteOpenAIEmbeddings.Operation()) {
 		return CaptureDecision{}, ErrInvalid
 	}
 	language := normalizeLanguage(input.Language)

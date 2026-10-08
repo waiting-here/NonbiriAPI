@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 
+	"github.com/waiting-here/NonbiriAPI/internal/modeltype"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
 	"github.com/waiting-here/NonbiriAPI/internal/transportpolicy"
 )
@@ -55,6 +56,7 @@ type UserExport struct {
 	GuildNick                 *string `json:"guild_nick"`
 	GuildAvatarURL            *string `json:"guild_avatar_url"`
 	Lang                      string  `json:"lang"`
+	DiscordGatePolicy         string  `json:"discord_gate_policy"`
 	IsBanned                  bool    `json:"is_banned"`
 	BannedUntil               *int64  `json:"banned_until"`
 	CharitySuspendedUntil     *int64  `json:"charity_suspended_until"`
@@ -153,6 +155,7 @@ type CatalogPairExport struct {
 }
 
 type ModelExport struct {
+	ModelTypes       modeltype.Set        `json:"model_types"`
 	TransportRule    transportpolicy.Rule `json:"transport_rule"`
 	RolePolicy       rolepolicy.Policy    `json:"role_policy"`
 	ID               string               `json:"id"`

@@ -49,7 +49,7 @@ export function CoreErrorPanel({
         <strong>{t('common.errorTitle')}</strong>
         <p>{body}</p>
         {onRetry ? (
-          <button type="button" className="btn btn-secondary" onClick={onRetry}>
+          <button type="button" className="nb-btn nb-btn--secondary" onClick={onRetry}>
             {t('common.retry')}
           </button>
         ) : null}
@@ -173,7 +173,7 @@ export function SafeCopyValue({ value, label }: { value: string; label: string }
       <code className="core-mono">{value}</code>
       <button
         type="button"
-        className="btn btn-quiet core-copy-value__button"
+        className="nb-btn nb-btn--ghost core-copy-value__button"
         aria-label={`${t('common.copy')} ${label}`}
         onClick={() => {
           void copyText(value).then((ok) => setCopied(ok));

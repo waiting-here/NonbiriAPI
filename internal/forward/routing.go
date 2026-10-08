@@ -59,7 +59,7 @@ func orderCandidates(strategy string, candidates []RouteCandidate) ([]RouteCandi
 	switch strategy {
 	case "ordered":
 		return ordered, nil
-	case "random":
+	case "random", "cache_balanced":
 		var seed [16]byte
 		if _, err := crand.Read(seed[:]); err != nil {
 			return nil, ErrInternal

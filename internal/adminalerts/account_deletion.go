@@ -167,12 +167,12 @@ func RecordAccountDeletionTx(ctx context.Context, tx *sql.Tx, before *DeletionBe
 func deletionBlacklistNote(before *DeletionBefore, negative bool) string {
 	if !*before.Ban.ActiveAtDeletion {
 		if negative && *before.CharityPause.ActiveAtDeletion {
-			return "Self-deletion while subject to an active penalty and with outstanding credit debt."
+			return "删号时仍有生效中的处罚，且有积分负债。"
 		}
 		if negative {
-			return "Self-deletion with outstanding credit debt."
+			return "删号时仍有未结清的积分负债。"
 		}
-		return "Self-deletion while subject to an active penalty."
+		return "删号时仍有生效中的处罚。"
 	}
 	prefix := "试图通过删号逃避处罚"
 	suffix := ""

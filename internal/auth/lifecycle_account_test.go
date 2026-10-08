@@ -23,7 +23,7 @@ func TestLifecycleIdentityUsesFrozenDecisionAndClosedFields(t *testing.T) {
 	}
 	decisionNow := authTestNow + 50
 	if _, err := fixture.store.DB().Exec(`
-UPDATE users SET is_banned=1,banned_reason='HOSTILE-BAN-REASON',banned_until=? WHERE id=?`, decisionNow+10, userID); err != nil {
+UPDATE users SET is_banned=1,banned_reason='HOSTILE-BAN-REASON',banned_until=?,discord_gate_policy='exempt' WHERE id=?`, decisionNow+10, userID); err != nil {
 		t.Fatal(err)
 	}
 	fixture.clock.Add(24 * 60 * 60 * 1e9)
@@ -42,7 +42,7 @@ UPDATE users SET is_banned=1,banned_reason='HOSTILE-BAN-REASON',banned_until=? W
 	if !identity.IsBanned || identity.BannedUntil == nil || *identity.BannedUntil != decisionNow+10 {
 		t.Fatalf("identity did not use frozen decision time: %+v", identity)
 	}
-	if identity.ID == "" || identity.Username == "" || usage.TotalRequests == "" || usage.TotalPromptTokens == "" {
+	if identity.ID == "" || identity.Username == "" || identity.DiscordGatePolicy != "exempt" || usage.TotalRequests == "" || usage.TotalPromptTokens == "" {
 		t.Fatalf("incomplete lifecycle projection: identity=%+v usage=%+v", identity, usage)
 	}
 	encoded, err := json.Marshal(struct {

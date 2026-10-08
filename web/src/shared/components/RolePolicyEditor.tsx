@@ -1,3 +1,4 @@
+import { Button } from '@shared/components/ui/Button';
 import { useEffect, useId, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import '@shared/operations/operations.css';
@@ -121,9 +122,9 @@ export function RolePolicyEditor({ value, onChange, disabled, idPrefix }: RolePo
                   </select>
                 </label>
               </div>
-              <button
+              <Button
                 type="button"
-                className="btn btn-quiet"
+                variant="ghost"
                 onClick={() => {
                   pendingFocus.current = Math.min(index, value.rules.length - 2);
                   onChange({
@@ -133,7 +134,7 @@ export function RolePolicyEditor({ value, onChange, disabled, idPrefix }: RolePo
                 }}
               >
                 {t('common.rolePolicy.removeRule', { number: index + 1 })}
-              </button>
+              </Button>
               {error?.row === index ? (
                 <p className="field-error" role="alert">
                   {t(errorKeys[error.kind])}
@@ -145,10 +146,10 @@ export function RolePolicyEditor({ value, onChange, disabled, idPrefix }: RolePo
         <p id={`${id}-name-help`} className="muted">
           {t('common.rolePolicy.nameHelp')}
         </p>
-        <button
+        <Button
           ref={addButton}
           type="button"
-          className="btn btn-secondary"
+
           disabled={value.rules.length >= 32}
           onClick={() => {
             pendingFocus.current = value.rules.length;
@@ -156,7 +157,7 @@ export function RolePolicyEditor({ value, onChange, disabled, idPrefix }: RolePo
           }}
         >
           {t('common.rolePolicy.addRule')}
-        </button>
+        </Button>
         {error?.kind === 'count' ? (
           <p className="field-error" role="alert">
             {t(errorKeys.count)}

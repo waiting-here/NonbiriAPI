@@ -111,12 +111,12 @@ func TestDeletionProtectionSourcesAndOriginalPenaltyMatrix(t *testing.T) {
 					if !slices.Equal(reasons, wantCodes) || !slices.Equal(snapshot.BlacklistReasonCodes, wantCodes) {
 						t.Fatalf("reasons=%v", reasons)
 					}
-					wantNote := "Self-deletion while subject to an active penalty."
+					wantNote := "删号时仍有生效中的处罚。"
 					if state.debt {
-						wantNote = "Self-deletion with outstanding credit debt."
+						wantNote = "删号时仍有未结清的积分负债。"
 					}
 					if activePenalty && state.debt {
-						wantNote = "Self-deletion while subject to an active penalty and with outstanding credit debt."
+						wantNote = "删号时仍有生效中的处罚，且有积分负债。"
 					}
 					if activeBan {
 						wantNote = "试图通过删号逃避处罚\n封禁原因：" + originalReason

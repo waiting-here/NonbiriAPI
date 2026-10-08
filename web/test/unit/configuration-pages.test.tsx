@@ -1,11 +1,7 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { useAdminSession } from '../../src/admin/data';
 import { describe, expect, test, vi, type Mock } from 'vitest';
-import { SettingsPage } from '../../src/admin/pages/SettingsPage';
-import { GamesPage } from '../../src/admin/pages/GamesPage';
-import { UsersPage } from '../../src/admin/pages/UsersPage';
-import { normalizeAdminUser } from '../../src/admin/data';
+import { normalizeAdminUser, useAdminSession } from '../../src/admin/data';
 import {
   normalizeSiteConfigCatalogEntry,
   type SiteConfigCatalogEntry,
@@ -16,25 +12,29 @@ import {
   type ActiveCounts,
   type GamesConfig,
 } from '../../src/admin/features/operations/economy';
-import {
-  normalizeCharityModel,
-  normalizeDonationKey,
-  normalizeDonation,
-  normalizeEndpointKey,
-  normalizeUpstreamModel,
-  normalizePlatformModel,
-  normalizeUserSummary,
-} from '../../src/user/data';
-import { normalizeEndpoint as normalizeCoreEndpoint } from '../../src/user/features/core/normalizers';
+import { GamesPage } from '../../src/admin/pages/GamesPage';
+import { SettingsPage } from '../../src/admin/pages/SettingsPage';
+import { UsersPage } from '../../src/admin/pages/UsersPage';
 import {
   normalizeManagementCharityModel,
   normalizeManagementDonation,
   normalizeManagementDonationKey,
 } from '../../src/shared/charityManagement';
-import { HomePage } from '../../src/user/pages/HomePage';
-import { CharityPage } from '../../src/user/pages/CharityPage';
-import { installJsonFetchFixtures, renderWithProviders } from './support';
 import { positiveDecimalIDNumber } from '../../src/shared/query/normalize';
+import {
+  normalizeCharityModel,
+  normalizeDonation,
+  normalizeDonationKey,
+  normalizeEndpointKey,
+  normalizePlatformModel,
+  normalizeUpstreamModel,
+  normalizeUserSummary,
+} from '../../src/user/data';
+import { normalizeEndpoint as normalizeCoreEndpoint } from '../../src/user/features/core/normalizers';
+import { CharityPage } from '../../src/user/pages/CharityPage';
+import { HomePage } from '../../src/user/pages/HomePage';
+import { duelConfigFixture } from '../duelConfigFixture';
+import { installJsonFetchFixtures, renderWithProviders } from './support';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -860,6 +860,7 @@ describe('admin per-user limit explanations', () => {
       guild_nick: null,
       guild_avatar_url: null,
       is_admin: false,
+      discord_gate_policy: 'inherit',
       is_banned: false,
       banned_reason: '',
       banned_until: null,
@@ -1470,6 +1471,7 @@ function endpointKeyFixture(
 
 function platformModelFixture(id: unknown, overrides: Record<string, unknown> = {}) {
   return {
+    model_types: ['chat_completions', 'embeddings'],
     id,
     provider: 'fixture-provider',
     model: 'fixture-model',
@@ -1793,4 +1795,3 @@ describe('B1 and U3-U5 additive wire normalizers', () => {
     ).toBe('9007199254740991');
   });
 });
-import { duelConfigFixture } from '../duelConfigFixture';

@@ -221,7 +221,7 @@ export function WelfareCard({
       <div className="form-actions">
         <button
           type="button"
-          className="btn btn-primary"
+          className="nb-btn nb-btn--primary"
           disabled={!canClaim || mutation.isPending || mutation.isReconciling}
           onClick={() => void claim()}
         >
@@ -446,13 +446,17 @@ export function ThursdayCard({
       <div className="form-actions">
         <button
           type="button"
-          className="btn btn-primary"
+          className="nb-btn nb-btn--primary"
           disabled={!canContribute || mutation.isPending || mutation.isReconciling}
           onClick={() => void contribute()}
         >
           {mutation.isPending || mutation.isReconciling
             ? t('common.working')
-            : t('user.activities.thursday.contributeOnce')}
+            : t(
+                current && limitReached
+                  ? 'user.activities.thursday.limitReached'
+                  : 'user.activities.thursday.contributeOnce',
+              )}
         </button>
       </div>
     </Card>

@@ -1,10 +1,12 @@
 import { BiddingLobby, AIMatchInfo, AIActionLog } from './AIPlayers';
 import { useAIText } from '@shared/aiPlayers';
-import { GameHeaderTool } from '../common/GameHeader';
+import { GameToolbar } from '../common/GameToolbar';
+import { GameMoney } from '../common/GameMoney';
 import { GameBackLink } from '../common/GameBackLink';
 import { GameActionBar } from '../common/GameActionBar';
 import { useCallback, useState } from 'react';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
+import { Fold } from '@shared/components/ui/Fold';
 import { GameWallets } from '../common/GameWallets';
 import { Leaderboard } from '../ranking/Leaderboard';
 import { LeaderboardTabs } from '../ranking/LeaderboardTabs';
@@ -28,7 +30,6 @@ import { BiddingRoundView, PlayedHistory } from './HistoryView';
 import { biddingAudioFacts } from './audioFacts';
 import { useArcadeAudio } from '../common/audio/useArcadeAudio';
 import { useSnapshotAudioFacts } from '../common/audio/useSnapshotAudioFacts';
-import { ArcadeAudioControls } from '../common/audio/ArcadeAudioControls';
 import { BiddingPresentation } from './BiddingPresentation';
 import '../games.css';
 import '../common/duel/duel.css';
@@ -98,27 +99,30 @@ export function BiddingGame({
         </div>
         <div className="duel-actions">
           <GameWallets wallets={wallets} />
-          <ArcadeAudioControls compact sound={audio.sound} unavailable={audio.unavailable} />
-          <GameHeaderTool
-            icon="?"
-            label={text('bidding.rules')}
-            type="button"
-            onClick={() => setRules(true)}
+          <GameToolbar
+            sound={audio.sound}
+            audioUnavailable={audio.unavailable}
+            items={[
+              {
+                id: 'rules',
+                label: text('bidding.rules'),
+                icon: 'help',
+                onClick: () => setRules(true),
+              },
+              {
+                id: 'history',
+                label: text('bidding.gameHistory'),
+                icon: 'history',
+                onClick: () => setHistory(true),
+              },
+              {
+                id: 'rankings',
+                label: text('ranking.leaderboards'),
+                icon: 'trophy',
+                href: '#game-rankings',
+              },
+            ]}
           />
-          <GameHeaderTool
-            icon="◷"
-            label={text('bidding.gameHistory')}
-            type="button"
-            onClick={() => setHistory(true)}
-          />
-          <a
-            className="btn btn-secondary game-header-tool"
-            href="#game-rankings"
-            aria-label={text('ranking.leaderboards')}
-            title={text('ranking.leaderboards')}
-          >
-            <span aria-hidden="true">▥</span>
-          </a>
         </div>
       </header>
       {onboarding && <OnboardingCard game="bidding" progress={onboarding} />}
@@ -239,15 +243,16 @@ export function BiddingGame({
           <div className="duel-actions">
             <button
               type="button"
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               disabled={duel.blocked}
               onClick={() => setSurrender(true)}
             >
               {text('bidding.surrender')}
             </button>
-            <small>
-              {text('bidding.yourEntry')}: <GamePayment payment={current.payment} />
-            </small>
+            <div>
+              <span>{text('bidding.yourEntry')}</span>
+              <GamePayment payment={current.payment} />
+            </div>
           </div>
         </div>
       ) : queue ? (
@@ -274,7 +279,7 @@ export function BiddingGame({
           <div className="duel-actions">
             <button
               type="button"
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               disabled={duel.blocked}
               onClick={() => duel.run({ kind: 'cancel', id: queue.id, revision: queue.revision })}
             >
@@ -284,19 +289,6 @@ export function BiddingGame({
         </section>
       ) : (
         <>
-          {home?.latestResult && (
-            <section className="bid-result">
-              <DuelFinance result={home.latestResult} />
-              {home.latestResult.view && (
-                <>
-                  <PlayedHistory view={home.latestResult.view} you={home.latestResult.you} />
-                  {home.latestResult.view.rewards.some((card) => card.status === 'discarded') && (
-                    <p className="bid-carry">{text('bidding.theFinalRoundTiedTheRemainingPool')}</p>
-                  )}
-                </>
-              )}
-            </section>
-          )}
           <BiddingLobby
             blocked={duel.blocked}
             onStart={duel.run}
@@ -329,10 +321,10 @@ export function BiddingGame({
                 ))}
               </div>
               {selected && <DuelTerms mode={selected} />}
-              <GameActionBar cost={formatCredits(selected?.ticket ?? '0')}>
+              <GameActionBar cost={<GameMoney value={selected?.ticket ?? '0'} />}>
                 <button
                   type="button"
-                  className="btn btn-primary"
+                  className="nb-btn nb-btn--primary"
                   disabled={duel.blocked || !!unavailable || !enough}
                   onClick={() => duel.run({ kind: 'queue', mode, termsHash: selected.termsHash })}
                 >
@@ -345,6 +337,19 @@ export function BiddingGame({
               </GameActionBar>
             </section>
           </BiddingLobby>
+          {home?.latestResult && (
+            <section className="bid-result">
+              <DuelFinance result={home.latestResult} />
+              {home.latestResult.view && (
+                <Fold title={text('bidding.viewPlayedHistory')}>
+                  <PlayedHistory view={home.latestResult.view} you={home.latestResult.you} />
+                  {home.latestResult.view.rewards.some((card) => card.status === 'discarded') && (
+                    <p className="bid-carry">{text('bidding.theFinalRoundTiedTheRemainingPool')}</p>
+                  )}
+                </Fold>
+              )}
+            </section>
+          )}
         </>
       )}
       {rules && <BiddingRules onClose={closeRules} />}

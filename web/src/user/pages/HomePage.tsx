@@ -8,7 +8,6 @@ import {
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
-import { Fold } from '@shared/components/ui';
 import { ApiAddressCopy, markOnboarding, useOnboardingFlag } from '../features/core/onboarding';
 import { useNumberedModels } from '../features/core/modelNumberedQueries';
 import { useCharityCatalog } from '../features/economy/catalog';
@@ -47,7 +46,8 @@ const pageCopyKeys = {
   'user.home.apiAccess': 'user.home.apiAccess',
   'user.home.calls': 'user.home.calls',
   'user.home.charity': 'user.home.charity',
-  'user.home.checkinRules': 'user.home.checkinRules',
+  'user.home.claimedToday': 'user.home.claimedToday',
+  'user.home.availableTomorrow': 'user.home.availableTomorrow',
   'user.home.clientGuide': 'user.home.clientGuide',
   'user.home.clientHelp': 'user.home.clientHelp',
   'user.home.clientStep': 'user.home.clientStep',
@@ -447,21 +447,22 @@ function CheckinCard({
         !outcomeUnknown &&
         !status.isPending &&
         displayedAuthority ? (
-          <button
-            type="button"
-            className="nb-btn nb-btn--primary"
-            disabled={
-              checkedIn ||
-              blockedByOtherCheckin ||
-              mutation.isPending ||
-              status.isFetching ||
-              status.error !== null ||
-              capReached
-            }
-            onClick={() => void submit()}
-          >
-            {mutation.isPending ? t('common.working') : t('home.checkin.submit')}
-          </button>
+          checkedIn || blockedByOtherCheckin ? (
+            <span className={checkedIn ? 'nb-badge nb-badge--ok' : 'nb-badge'}>
+              {text(checkedIn ? 'user.home.claimedToday' : 'user.home.availableTomorrow')}
+            </span>
+          ) : (
+            <button
+              type="button"
+              className="nb-btn nb-btn--primary"
+              disabled={
+                mutation.isPending || status.isFetching || status.error !== null || capReached
+              }
+              onClick={() => void submit()}
+            >
+              {mutation.isPending ? t('common.working') : t('home.checkin.submit')}
+            </button>
+          )
         ) : null}
       </div>
       {capability.state === 'unavailable' ? (
@@ -473,7 +474,7 @@ function CheckinCard({
             <p>{t('common.outcomeUnknown')}</p>
             <button
               type="button"
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               disabled={reconciling}
               onClick={() => void refreshAuthority()}
             >
@@ -503,38 +504,13 @@ function CheckinCard({
               <ExactCredits value={displayedAuthority.award_max} />
             </span>
           </p>
-          <Fold title={text('user.home.checkinRules')} plain>
-            <div className="core-metrics">
-              <div className="core-metric">
-                <span>{t(asset === 'game' ? 'home.gameBalance' : 'home.balance')}</span>
-                <strong>
-                  <ExactCredits value={committed?.result.balance ?? displayedAuthority.balance} />
-                </strong>
-              </div>
-              <div className="core-metric">
-                <span>{t('home.checkin.awardRange')}</span>
-                <strong>
-                  <ExactCredits value={displayedAuthority.award_min} />–
-                  <ExactCredits value={displayedAuthority.award_max} />
-                </strong>
-              </div>
-              <div className="core-metric">
-                <span>{t('home.checkin.threshold')}</span>
-                <strong>
-                  {displayedAuthority.balance_cap === '0' ? (
-                    t('home.checkin.thresholdNone')
-                  ) : (
-                    <ExactCredits value={displayedAuthority.balance_cap} />
-                  )}
-                </strong>
-              </div>
-            </div>
-          </Fold>
           {blockedByOtherCheckin ? (
             <p className="core-status-message">{t('home.checkin.otherChosenHint')}</p>
           ) : null}
           {displayedAuthority.balance_cap !== '0' ? (
-            <p className="core-muted">{t('home.checkin.thresholdHint')}</p>
+            <p className="core-muted">
+              {t('home.checkin.threshold')} <ExactCredits value={displayedAuthority.balance_cap} />
+            </p>
           ) : null}
           {committed ? (
             <p className="core-status-message" role="status">
@@ -551,7 +527,7 @@ function CheckinCard({
                 <p>{t('home.checkinRefreshFailed')}</p>
                 <button
                   type="button"
-                  className="btn btn-secondary"
+                  className="nb-btn nb-btn--secondary"
                   disabled={status.isFetching}
                   onClick={() => void status.refetch()}
                 >

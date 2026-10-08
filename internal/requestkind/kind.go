@@ -11,11 +11,15 @@ const (
 	CharityChat       Kind = "charity_chat_completions"
 	OpenAIEmbeddings  Kind = "openai_embeddings"
 	CharityEmbeddings Kind = "charity_embeddings"
+	OpenAIImages      Kind = "openai_images_generations"
+	CharityImages     Kind = "charity_images_generations"
 	Discovery         Kind = "model_discovery"
 )
 
-func (k Kind) IsSelf() bool      { return k == OpenAIChat || k == OpenAIEmbeddings }
-func (k Kind) IsCharity() bool   { return k == CharityChat || k == CharityEmbeddings }
+func (k Kind) IsSelf() bool { return k == OpenAIChat || k == OpenAIEmbeddings || k == OpenAIImages }
+func (k Kind) IsCharity() bool {
+	return k == CharityChat || k == CharityEmbeddings || k == CharityImages
+}
 func (k Kind) IsModelCall() bool { return k.IsSelf() || k.IsCharity() }
 func (k Kind) Valid() bool       { return k.IsModelCall() || k == Discovery }
 func (k Kind) Operation() contract.Operation {
@@ -24,6 +28,8 @@ func (k Kind) Operation() contract.Operation {
 		return contract.OperationChatCompletions
 	case OpenAIEmbeddings, CharityEmbeddings:
 		return contract.OperationEmbeddings
+	case OpenAIImages, CharityImages:
+		return contract.OperationImagesGenerations
 	default:
 		return ""
 	}
@@ -41,6 +47,11 @@ func ForOperation(operation contract.Operation, charity bool) Kind {
 			return CharityEmbeddings
 		}
 		return OpenAIEmbeddings
+	case contract.OperationImagesGenerations:
+		if charity {
+			return CharityImages
+		}
+		return OpenAIImages
 	default:
 		return ""
 	}
@@ -52,6 +63,8 @@ func OperationForPath(path string) contract.Operation {
 		return contract.OperationChatCompletions
 	case "/v1/embeddings":
 		return contract.OperationEmbeddings
+	case "/v1/images/generations":
+		return contract.OperationImagesGenerations
 	default:
 		return ""
 	}

@@ -1,11 +1,12 @@
-import { type ReactElement, type ReactNode } from 'react';
-import { screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@shared/query/http';
-import { installJsonFetchFixtures, renderWithProviders } from '../../../../test/unit/support';
+import { screen, waitFor, within } from '@testing-library/react';
+import { type ReactElement, type ReactNode } from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installNativeDialog } from '../../../../test/unit/nativeDialog';
+import { installJsonFetchFixtures, renderWithProviders } from '../../../../test/unit/support';
 import userEn from '../../i18n/en.json';
 import { CharityPage } from '../../pages/CharityPage';
+import * as catalogModule from './catalog';
 import {
   CharityCapabilityPanel,
   DonationCard,
@@ -15,7 +16,6 @@ import {
   DonationKeyPanel,
 } from './CharityPanels';
 import * as economyQueries from './queries';
-import * as catalogModule from './catalog';
 import type { CharityCapability, Donation, DonationKey, EndpointKeyChoice } from './types';
 
 installNativeDialog();
@@ -183,6 +183,7 @@ const CHARITY_OPEN: CharityCapability = {
   state: 'available',
   models: [
     {
+      modelTypes: ['chat_completions', 'embeddings'],
       id: '7',
       provider: 'provider',
       model: 'charity-model',

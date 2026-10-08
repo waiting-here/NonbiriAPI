@@ -56,7 +56,7 @@
   padding: var(--nb-space-3);
   border-bottom: 1px solid var(--nb-color-border);
 }
-@media (max-width: 48rem) {
+@media (width <= 48rem) {
   .records-tabs {
     gap: var(--nb-space-4);
   }
@@ -87,7 +87,7 @@
   white-space: normal;
   overflow-wrap: anywhere;
 }
-@media (max-width: 48rem) {
+@media (width <= 48rem) {
   .records-debug-results table,
   .records-debug-results tbody {
     display: block;

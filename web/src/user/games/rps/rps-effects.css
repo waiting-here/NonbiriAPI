@@ -444,16 +444,10 @@
 }
 @media (max-width: 480px) {
   .rps-page.is-playing > .page-header {
-    flex-direction: row;
-    align-items: center;
-    gap: 0.75rem;
     margin-bottom: 0;
   }
   .rps-page.is-playing > .page-header h1 {
     font-size: 1.65rem;
-  }
-  .rps-page.is-playing .page-header-actions {
-    width: auto;
   }
   .rps-match__status {
     padding: 0.75rem;

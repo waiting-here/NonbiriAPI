@@ -26,6 +26,7 @@ const welfarePool: Pool = {
   id: `pol_${'C'.repeat(21)}A`,
   pool_type: 'welfare',
   period_id: null,
+  period_date: null,
   state: 'open',
   revision: '3',
   balance: '50',
@@ -283,9 +284,10 @@ describe('pool adjustment confirmation', () => {
       id: previousPeriod.current_pool_id,
       pool_type: 'thursday',
       period_id: previousPeriod.id,
+      period_date: previousPeriod.period_key,
     });
     const view = await renderActivities();
-    await view.user.click(await screen.findByRole('button', { name: 'Select' }));
+    await view.user.click(await screen.findByRole('button', { name: 'Adjust balance' }));
     expect(screen.getByRole('option', { name: 'Decrease' })).toBeDisabled();
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     expect(writes).toHaveLength(0);
@@ -297,7 +299,7 @@ describe('pool adjustment confirmation', () => {
       const writes = installActivities(null, true, welfarePool);
       const view = await renderActivities();
       expect(screen.queryByRole('columnheader', { name: 'Revision' })).not.toBeInTheDocument();
-      await view.user.click(await screen.findByRole('button', { name: 'Select' }));
+      await view.user.click(await screen.findByRole('button', { name: 'Adjust balance' }));
       await view.user.selectOptions(screen.getByLabelText('Direction'), direction);
       await view.user.type(screen.getByLabelText('Amount (credits)'), '2.5');
       await view.user.type(screen.getByLabelText('Reason'), 'Correct pool balance');

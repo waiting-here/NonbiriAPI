@@ -118,6 +118,8 @@ func buildGenerationTwoConfigCatalog() map[string]generationTwoConfigSpec {
 	}
 
 	catalog := map[string]generationTwoConfigSpec{
+		"discord_registered_user_gate_exempt": boolSpec("0"),
+
 		"site_name":                        textSpec("", 256, true),
 		"site_logo_url":                    textSpec("", 2048, true),
 		"legal_privacy_override_zh":        multilineSpec("", generationTwoMaxLegalBytes),

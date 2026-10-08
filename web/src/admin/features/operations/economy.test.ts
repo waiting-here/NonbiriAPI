@@ -9,33 +9,51 @@ import {
   type Period,
 } from './economy';
 
-const fixture = JSON.parse(readFileSync(resolve(process.cwd(), '..', 'internal/game/fishing/runtime/testdata/contracts/games-config.json'), 'utf8')) as unknown;
+const fixture = JSON.parse(
+  readFileSync(
+    resolve(
+      process.cwd(),
+      '..',
+      'internal/game/fishing/runtime/testdata/contracts/games-config.json',
+    ),
+    'utf8',
+  ),
+) as unknown;
 
 describe('administrator game configuration wire', () => {
   it('accepts the canonical Go fixture and emits no read-only queue capacity', () => {
     const config = normalizeGamesConfig(fixture);
     expect(config.rps.modes.quick.pumps_bp.thursday).toBe(100);
-    const patch = gamesConfigPatch(config) as { rps: { modes: Record<string, Record<string, unknown>> } };
+    const patch = gamesConfigPatch(config) as {
+      rps: { modes: Record<string, Record<string, unknown>> };
+    };
     expect(patch.rps.modes.quick).not.toHaveProperty('queue_capacity');
     expect(patch.rps.modes.quick.pumps_bp).toEqual({ platform: 100, welfare: 100, thursday: 100 });
   });
 
   it('rejects the Thursday-only next_pool field on RPS', () => {
-    const hostile = structuredClone(fixture) as { rps: { modes: { quick: { pumps_bp: Record<string, unknown> } } } };
+    const hostile = structuredClone(fixture) as {
+      rps: { modes: { quick: { pumps_bp: Record<string, unknown> } } };
+    };
     hostile.rps.modes.quick.pumps_bp = { platform: 100, welfare: 100, next_pool: 100 };
     expect(() => normalizeGamesConfig(hostile)).toThrow(/pool split/i);
   });
 });
 
 describe('Thursday mutation revision selection', () => {
-  const period = (state: Period['state'], revision: string): Period => ({ state, revision } as Period);
+  const period = (state: Period['state'], revision: string): Period =>
+    ({ state, revision }) as Period;
 
   it('uses only a configured period revision', () => {
-    expect(thursdayMutationRevision({ revision: '7' } as never, period('configured', '3'))).toBe('3');
+    expect(thursdayMutationRevision({ revision: '7' } as never, period('configured', '3'))).toBe(
+      '3',
+    );
   });
 
   it('uses activities authority for configuration_error or no period', () => {
-    expect(thursdayMutationRevision({ revision: '7' } as never, period('configuration_error', '3'))).toBe('7');
+    expect(
+      thursdayMutationRevision({ revision: '7' } as never, period('configuration_error', '3')),
+    ).toBe('7');
     expect(thursdayMutationRevision({ revision: '7' } as never, null)).toBe('7');
     expect(thursdayMutationRevision(undefined, null)).toBeNull();
   });
@@ -46,6 +64,7 @@ describe('shared pool wire', () => {
     id: `pol_${'A'.repeat(22)}`,
     pool_type: 'thursday',
     period_id: null,
+    period_date: null,
     state: 'open',
     revision: '1',
     balance: '0',
@@ -55,19 +74,40 @@ describe('shared pool wire', () => {
 
   it('accepts the unbound open Thursday pool reserved for the next period', () => {
     expect(normalizePool(openPool)).toEqual(openPool);
-    expect(normalizePool({
-      ...openPool,
-      period_id: `thu_${'B'.repeat(21)}A`,
-    }).period_id).toBe(`thu_${'B'.repeat(21)}A`);
+    expect(
+      normalizePool({
+        ...openPool,
+        period_id: `thu_${'B'.repeat(21)}A`,
+        period_date: '2026-10-08',
+      }).period_id,
+    ).toBe(`thu_${'B'.repeat(21)}A`);
   });
 
   it('keeps welfare pools unbound and open pools without a close time', () => {
     expect(normalizePool({ ...openPool, pool_type: 'welfare' }).period_id).toBeNull();
-    expect(() => normalizePool({
-      ...openPool,
-      pool_type: 'welfare',
-      period_id: `thu_${'B'.repeat(21)}A`,
-    })).toThrow(/pool state/i);
+    expect(() =>
+      normalizePool({
+        ...openPool,
+        pool_type: 'welfare',
+        period_id: `thu_${'B'.repeat(21)}A`,
+        period_date: '2026-10-08',
+      }),
+    ).toThrow(/pool state/i);
     expect(() => normalizePool({ ...openPool, closed_at: 2 })).toThrow(/pool state/i);
+  });
+
+  it.each(['2026-02-30', '2026-10-8', null, undefined])(
+    'rejects an invalid or absent date for a bound pool: %s',
+    (period_date) => {
+      expect(() =>
+        normalizePool({ ...openPool, period_id: `thu_${'B'.repeat(21)}A`, period_date }),
+      ).toThrow(/pool period date/i);
+    },
+  );
+
+  it('rejects a date without a bound period', () => {
+    expect(() => normalizePool({ ...openPool, period_date: '2026-10-08' })).toThrow(
+      /pool period date/i,
+    );
   });
 });

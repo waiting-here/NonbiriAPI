@@ -48,11 +48,11 @@ test('admin level and period editors remain usable at desktop and mobile widths'
     window.dispatchEvent(event);
     return event.defaultPrevented;
   })).toBe(true);
-  await page.getByRole('button', { name: 'Periods and nodes' }).click();
+  await page.getByRole('tab', { name: 'Periods and nodes' }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'Stay here' }).click();
   await expect(page.getByRole('heading', { name: 'Level directory' })).toBeVisible();
   await expect(page.getByLabel('Title')).toHaveValue('Unsaved example');
-  await page.getByRole('button', { name: 'Periods and nodes' }).click();
+  await page.getByRole('tab', { name: 'Periods and nodes' }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'Leave page' }).click();
   await expect(page.getByRole('heading', { name: 'Period directory' })).toBeVisible();
   await page.getByRole('button', { name: /Autumn period · draft/ }).click();

@@ -104,6 +104,50 @@ function LocationProbe() {
 }
 
 describe('user issues page', () => {
+  it.each(['en', 'zh'] as const)(
+    'translates known safe reasons and keeps unknown text in %s',
+    async (locale) => {
+      const details = [
+        'auth',
+        'rate_limit',
+        'timeout',
+        'protocol',
+        'transport',
+        'interrupted',
+        'new upstream reason',
+      ];
+      installJsonFetchFixtures([
+        { method: 'GET', path: '/api/session', body: session() },
+        {
+          method: 'GET',
+          path: '/api/issues?state=current&page=1&page_size=20',
+          body: page(details.map((safe_detail, index) => issue(String(index), { safe_detail }))),
+        },
+      ]);
+      await renderWithProviders(<IssuesPage />, { station: 'user', role: 'user', locale });
+      const labels =
+        locale === 'zh'
+          ? [
+              '服务密钥验证失败',
+              '服务请求过于频繁',
+              '服务响应超时',
+              '服务返回了无法识别的回复',
+              '无法连接到服务',
+              '服务请求已中断',
+            ]
+          : [
+              'The service rejected the key.',
+              'The service received too many requests.',
+              'The service took too long to respond.',
+              'The service returned an unreadable response.',
+              'The service could not be reached.',
+              'The service request was interrupted.',
+            ];
+      for (const label of labels) expect(await screen.findByText(label)).toBeVisible();
+      expect(screen.getByText('new upstream reason')).toBeVisible();
+    },
+  );
+
   it('shows the session authorization failure without requesting private issues', async () => {
     const fetchMock = installJsonFetchFixtures([
       { method: 'GET', path: '/api/session', body: {}, status: 401 },

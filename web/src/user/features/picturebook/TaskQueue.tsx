@@ -40,7 +40,7 @@ export function TaskQueue({
             <ul>
               {query.data.own.map((task) => (
                 <li key={task.task_id}>
-                  <button className="btn btn-secondary" onClick={() => onSelect(task.task_id)}>
+                  <button className="nb-btn nb-btn--secondary" onClick={() => onSelect(task.task_id)}>
                     {task.position === null
                       ? t('查看执行中的任务', 'View running task')
                       : t('查看排队任务，位置 ', 'View queued task, position ') + task.position}

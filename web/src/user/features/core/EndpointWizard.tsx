@@ -290,7 +290,7 @@ export function EndpointWizard({
       <section className="core-card core-wizard" aria-labelledby="endpoint-wizard-title">
         <div className="core-card__header">
           <h2 id="endpoint-wizard-title">{t('endpoints.wizardTitle')}</h2>
-          <button type="button" className="btn btn-secondary" onClick={close}>
+          <button type="button" className="nb-btn nb-btn--secondary" onClick={close}>
             {t('common.cancel')}
           </button>
         </div>
@@ -304,7 +304,7 @@ export function EndpointWizard({
       <section className="core-card core-wizard" aria-labelledby="endpoint-wizard-title">
         <div className="core-card__header">
           <h2 id="endpoint-wizard-title">{t('endpoints.wizardTitle')}</h2>
-          <button type="button" className="btn btn-secondary" onClick={close}>
+          <button type="button" className="nb-btn nb-btn--secondary" onClick={close}>
             {t('common.cancel')}
           </button>
         </div>
@@ -320,7 +320,7 @@ export function EndpointWizard({
     <section className="core-card core-wizard" aria-labelledby="endpoint-wizard-title">
       <div className="core-card__header">
         <h2 id="endpoint-wizard-title">{t('endpoints.wizardTitle')}</h2>
-        <button type="button" className="btn btn-secondary" onClick={close}>
+        <button type="button" className="nb-btn nb-btn--secondary" onClick={close}>
           {endpoint ? t('endpoints.finishLater') : t('common.cancel')}
         </button>
       </div>
@@ -409,7 +409,7 @@ export function EndpointWizard({
             <span />
             <button
               type="button"
-              className="btn btn-primary"
+              className="nb-btn nb-btn--primary"
               disabled={
                 hasEndpointAttempt ||
                 (selectedSource === 'mainstream'
@@ -475,7 +475,7 @@ export function EndpointWizard({
           <div className="core-form-actions">
             <button
               type="button"
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               disabled={busy || hasEndpointAttempt}
               onClick={() => setStep(0)}
             >
@@ -483,7 +483,7 @@ export function EndpointWizard({
             </button>
             <button
               type="submit"
-              className="btn btn-primary"
+              className="nb-btn nb-btn--primary"
               disabled={busy || !preview || previewError}
             >
               {busy
@@ -516,7 +516,7 @@ export function EndpointWizard({
             <div className="core-row-actions">
               <button
                 type="button"
-                className="btn btn-secondary"
+                className="nb-btn nb-btn--secondary"
                 disabled={busy || hasDiscoveryAttempt}
                 onClick={() => {
                   dispatchSecret({ type: 'clear-secret', accountId, pageInstanceId });
@@ -538,7 +538,7 @@ export function EndpointWizard({
               {step === 3 ? (
                 <button
                   type="button"
-                  className="btn btn-secondary"
+                  className="nb-btn nb-btn--secondary"
                   disabled={busy || hasDiscoveryAttempt}
                   onClick={close}
                 >
@@ -635,7 +635,7 @@ export function EndpointWizard({
           {error ? <CoreErrorPanel error={error} compact /> : null}
           <div className="core-form-actions">
             <span />
-            <button type="submit" className="btn btn-primary" disabled={busy}>
+            <button type="submit" className="nb-btn nb-btn--primary" disabled={busy}>
               {busy
                 ? t('common.working')
                 : hasKeyAttempt
@@ -654,7 +654,7 @@ export function EndpointWizard({
             <span />
             <button
               type="button"
-              className="btn btn-primary"
+              className="nb-btn nb-btn--primary"
               disabled={busy}
               onClick={() => void checkModels()}
             >
@@ -681,11 +681,11 @@ export function EndpointWizard({
             />
           ) : null}
           <div className="core-form-actions">
-            <button type="button" className="btn btn-secondary" onClick={close}>
+            <button type="button" className="nb-btn nb-btn--secondary" onClick={close}>
               {t('endpoints.finish')}
             </button>
             <Link
-              className="btn btn-primary"
+              className="nb-btn nb-btn--primary"
               to={CORE_ROUTE_PATHS.models}
               onClick={() => dispatchSecret({ type: 'leave', accountId, pageInstanceId })}
             >

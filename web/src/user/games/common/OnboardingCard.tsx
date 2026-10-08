@@ -88,7 +88,7 @@ export function OnboardingCard({
             action={
               <button
                 type="button"
-                className="btn btn-quiet"
+                className="nb-btn nb-btn--ghost"
                 aria-label={t('common.close')}
                 onClick={() => setDismissed(true)}
               >

@@ -1,5 +1,5 @@
 .fatfish-page { display: grid; gap: 1.4rem; min-width: 0; }
-.fatfish-page .btn { min-height: 2.75rem; }
+.fatfish-page :is(.btn, .nb-btn) { min-height: 2.75rem; }
 .fatfish-page .fatfish-periods {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 13rem), 1fr)); gap: .65rem;
 }
@@ -71,7 +71,7 @@
 .fatfish-page .fatfish-board strong { margin-left: auto; }
 .fatfish-page .fatfish-history code, .fatfish-page .fatfish-history span { overflow-wrap: anywhere; }
 .fatfish-page .fatfish-condition--met { color: var(--nb-color-success); }
-@media (max-width: 640px) {
+@media (width <= 40rem) {
   .fatfish-page .fatfish-map-controls, .fatfish-page .fatfish-map-viewport { display: none; }
   .fatfish-page .fatfish-facts { grid-template-columns: minmax(0, 1fr); }
   .fatfish-page .fatfish-facts dd { margin-bottom: .4rem; }

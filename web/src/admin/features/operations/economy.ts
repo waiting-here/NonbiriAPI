@@ -60,6 +60,7 @@ export interface Pool {
   id: string;
   pool_type: 'welfare' | 'thursday';
   period_id: string | null;
+  period_date: string | null;
   state: 'open' | 'closed';
   revision: string;
   balance: string;
@@ -70,13 +71,32 @@ export interface Pool {
 export function normalizePool(value: unknown): Pool {
   const root = record(
     value,
-    ['id', 'pool_type', 'period_id', 'state', 'revision', 'balance', 'created_at', 'closed_at'],
+    [
+      'id',
+      'pool_type',
+      'period_id',
+      'period_date',
+      'state',
+      'revision',
+      'balance',
+      'created_at',
+      'closed_at',
+    ],
     'shared pool',
   );
   const type = oneOf(root.pool_type, ['welfare', 'thursday'] as const, 'pool type');
   const state = oneOf(root.state, ['open', 'closed'] as const, 'pool state');
   const period =
     root.period_id === null ? null : opaqueID(root.period_id, 'thu_', 'pool period id');
+  const periodDate = nullableString(root.period_date, 'pool period date');
+  if (
+    periodDate !== null &&
+    (!/^\d{4}-\d{2}-\d{2}$/.test(periodDate) ||
+      !Number.isFinite(Date.parse(`${periodDate}T00:00:00Z`)) ||
+      new Date(`${periodDate}T00:00:00Z`).toISOString().slice(0, 10) !== periodDate)
+  )
+    invalidResponse('pool period date');
+  if ((period === null) !== (periodDate === null)) invalidResponse('pool period date');
   const closed = nullableUnixSecond(root.closed_at, 'pool close time');
   if ((type === 'welfare' && period !== null) || (state === 'open') !== (closed === null))
     invalidResponse('pool state');
@@ -84,6 +104,7 @@ export function normalizePool(value: unknown): Pool {
     id: opaqueID(root.id, 'pol_', 'pool id'),
     pool_type: type,
     period_id: period,
+    period_date: periodDate,
     state,
     revision: decimal(root.revision, 'pool revision', { positive: true }),
     balance: amount(root.balance, 'pool balance', false),

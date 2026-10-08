@@ -25,6 +25,7 @@ type LifecycleIdentity struct {
 	GuildNick                 *string
 	GuildAvatarURL            *string
 	Lang                      string
+	DiscordGatePolicy         string
 	IsBanned                  bool
 	BannedUntil               *int64
 	CharitySuspendedUntil     *int64
@@ -99,8 +100,8 @@ func (r *Runtime) ExportLifecycleIdentity(
 		EffectiveLevel: user.EffectiveLevel, LevelDisplayName: user.LevelDisplayName,
 		GameProfilePublic: user.GameProfilePublic, CharityProfilePublic: user.CharityProfilePublic, CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt,
 	}
-	if err := tx.QueryRowContext(ctx, `SELECT donation_credit_achieved_at FROM users WHERE id=?`, userID).Scan(&identity.DonationCreditAchievedAt); err != nil {
-		return LifecycleIdentity{}, LifecycleUsage{}, fmt.Errorf("auth: export donation achievement: %w", err)
+	if err := tx.QueryRowContext(ctx, `SELECT donation_credit_achieved_at,discord_gate_policy FROM users WHERE id=?`, userID).Scan(&identity.DonationCreditAchievedAt, &identity.DiscordGatePolicy); err != nil {
+		return LifecycleIdentity{}, LifecycleUsage{}, fmt.Errorf("auth: export account settings: %w", err)
 	}
 	usage := LifecycleUsage{
 		TotalRequests:              user.Usage.TotalRequests,

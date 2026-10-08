@@ -276,11 +276,11 @@ func (s *Service) releaseClaimWithOriginTx(ctx context.Context, tx *sql.Tx, reco
 		if callbackCtx == nil || callbackTx == nil {
 			return ErrInvariant
 		}
-		if record.purpose == PurposeCharity {
-			if _, err := callbackTx.ExecContext(callbackCtx, `DELETE FROM charity_dispatch_receipts
+		if _, err := callbackTx.ExecContext(callbackCtx, `DELETE FROM charity_dispatch_receipts
 WHERE attempt_id=? AND state='reserved'`, record.claimID); err != nil {
-				return fmt.Errorf("claim: release physical dispatch reservation: %w", err)
-			}
+			return fmt.Errorf("claim: release physical dispatch reservation: %w", err)
+		}
+		if record.purpose == PurposeCharity {
 			if err := s.charity.ReleaseUndispatched(callbackCtx, callbackTx, CharityRelease{
 				RequestID:     record.requestID,
 				ClaimID:       record.claimID,
@@ -926,7 +926,7 @@ func validPersistedRequest(request Request) bool {
 		return false
 	}
 	switch request.Route {
-	case RouteOpenAIChat, RouteCharityChat, RouteOpenAIEmbeddings, RouteCharityEmbeddings:
+	case RouteOpenAIChat, RouteCharityChat, RouteOpenAIEmbeddings, RouteCharityEmbeddings, RouteOpenAIImages, RouteCharityImages:
 	case RouteDiscovery:
 		if request.AttemptLimit != 1 {
 			return false

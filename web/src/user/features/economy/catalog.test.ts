@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { installJsonFetchFixtures } from '../../../../test/unit/support';
 import {
   canonicalCharityCatalogSearch,
   DEFAULT_CHARITY_CATALOG_FILTERS,
@@ -7,7 +8,6 @@ import {
   readCharityCatalogUrlState,
   writeCharityCatalogFilters,
 } from './catalog';
-import { installJsonFetchFixtures } from '../../../../test/unit/support';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -17,6 +17,7 @@ const SERVER_NOW = 1_800_000_000;
 
 function catalogModel(overrides: Record<string, unknown> = {}) {
   return {
+    model_types: ['chat_completions', 'embeddings'],
     id: '1',
     provider: 'provider',
     model: 'model',
@@ -70,6 +71,7 @@ describe('charity catalog normalizer', () => {
       pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
     });
     expect(result.models[0]).toMatchObject({
+      modelTypes: ['chat_completions', 'embeddings'],
       id: '1',
       fullName: '[公益]provider/model',
       publicDescription: '<b>plain</b>\nsecond line',

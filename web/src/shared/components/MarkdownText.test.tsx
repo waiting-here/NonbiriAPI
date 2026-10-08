@@ -3,6 +3,16 @@ import { describe, expect, it } from 'vitest';
 import { MarkdownText } from './MarkdownText';
 
 describe('MarkdownText', () => {
+  it('uses legal heading levels without changing other markdown contexts', () => {
+    const { rerender } = render(
+      <MarkdownText headingShift={0}>{'# Data\n\n## Retention\n\n### Records'}</MarkdownText>,
+    );
+    expect(screen.getByRole('heading', { name: 'Data', level: 2 })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Retention', level: 2 })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Records', level: 3 })).toBeInTheDocument();
+    rerender(<MarkdownText>{'# Data'}</MarkdownText>);
+    expect(screen.getByRole('heading', { name: 'Data', level: 3 })).toBeInTheDocument();
+  });
   it('renders headings, lists, emphasis, code and tables as readable elements', () => {
     const { container } = render(
       <MarkdownText>

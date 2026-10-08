@@ -85,6 +85,7 @@ func (adapter *AccountResources) ExportIdentity(
 			ID: identity.ID, Username: identity.Username, Avatar: identity.Avatar, AvatarURL: identity.AvatarURL,
 			GuildNick: identity.GuildNick, GuildAvatarURL: identity.GuildAvatarURL, Lang: identity.Lang,
 			IsBanned: identity.IsBanned, BannedUntil: identity.BannedUntil,
+			DiscordGatePolicy:     identity.DiscordGatePolicy,
 			CharitySuspendedUntil: identity.CharitySuspendedUntil,
 			EndpointLimit:         identity.EndpointLimit, EffectiveEndpointLimit: identity.EffectiveEndpointLimit,
 			RPMLimit: identity.RPMLimit, EffectiveRPMLimit: identity.EffectiveRPMLimit,
@@ -168,7 +169,7 @@ func (adapter *AccountResources) ExportResources(
 			RolePolicy: model.RolePolicy.Clone(),
 			ID:         model.ID, Provider: model.Provider, Model: model.Model, FullName: model.FullName,
 			RouteStrategy: model.RouteStrategy, SilentRetry: model.SilentRetry,
-			TransportRule: model.TransportRule, FlattenToolCalls: model.FlattenToolCalls, CreatedAt: model.CreatedAt, UpdatedAt: model.UpdatedAt,
+			ModelTypes: model.ModelTypes.Clone(), TransportRule: model.TransportRule, FlattenToolCalls: model.FlattenToolCalls, CreatedAt: model.CreatedAt, UpdatedAt: model.UpdatedAt,
 			Bindings: make([]lifecycle.BindingExport, 0, len(model.Bindings)),
 		}
 		for _, binding := range model.Bindings {

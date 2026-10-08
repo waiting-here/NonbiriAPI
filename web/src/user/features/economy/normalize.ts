@@ -1,6 +1,8 @@
-import { isActivityLiterature } from '@shared/utils/activityLiterature';
-import { ApiError } from '@shared/query/http';
+import { normalizeModelTypes } from '@shared/modelTypes';
 import { normalizeCharitySuccess } from '@shared/operations/charitySuccess';
+import { normalizeLoanView } from '@shared/operations/loans';
+import { ApiError } from '@shared/query/http';
+import { isActivityLiterature } from '@shared/utils/activityLiterature';
 import type {
   ActivitiesMaster,
   ActivitiesSnapshot,
@@ -9,9 +11,9 @@ import type {
   CharityCapabilityTokenPrices,
   CursorPage,
   Donation,
-  DonationKeySource,
   DonationKey,
   DonationKeyEndedReason,
+  DonationKeySource,
   DonationKeyState,
   DonationReviewResult,
   DonationStatus,
@@ -347,7 +349,7 @@ export function normalizeCharityCapabilityModel(value: unknown): CharityCapabili
   const item = record(
     value,
     'charity model',
-    ['id', 'provider', 'model', 'full_name', 'pricing', 'discount'],
+    ['id', 'provider', 'model', 'full_name', 'model_types', 'pricing', 'discount'],
     ['recent_success'],
   );
   const provider = charityModelName(item.provider, 'charity model provider');
@@ -423,6 +425,7 @@ export function normalizeCharityCapabilityModel(value: unknown): CharityCapabili
     provider,
     model,
     fullName,
+    modelTypes: normalizeModelTypes(item.model_types),
     ...(item.recent_success === undefined
       ? {}
       : { recentSuccess: normalizeCharitySuccess(item.recent_success) }),
@@ -1164,4 +1167,3 @@ export function isDimensionExhausted(
     : (value: unknown) => BigInt(decimal(value, 'usage dimension'));
   return parse(used) + parse(inflight) >= parse(limit);
 }
-import { normalizeLoanView } from '@shared/operations/loans';

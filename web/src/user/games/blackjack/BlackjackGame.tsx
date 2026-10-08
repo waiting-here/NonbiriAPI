@@ -1,4 +1,5 @@
-import { GameHeaderTool } from '../common/GameHeader';
+import { GameToolbar } from '../common/GameToolbar';
+import { GameMoney } from '../common/GameMoney';
 import { GameBackLink } from '../common/GameBackLink';
 import { GameActionBar } from '../common/GameActionBar';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -25,7 +26,6 @@ import { BlackjackBoard, BlackjackSettlement, emoteText } from './Table';
 import { blackjackAudioFacts } from './audioFacts';
 import { useArcadeAudio } from '../common/audio/useArcadeAudio';
 import { useSnapshotAudioFacts } from '../common/audio/useSnapshotAudioFacts';
-import { ArcadeAudioControls } from '../common/audio/ArcadeAudioControls';
 import '../games.css';
 import '../common/duel/duel.css';
 import '../bidding/bidding.css';
@@ -133,7 +133,7 @@ function History({ close }: { readonly close: () => void }) {
       <p>{text('blackjack.yourSettledTablesFromTheLast30')}</p>
       {selected ? (
         <>
-          <button className="btn btn-secondary" onClick={() => setSelected(null)}>
+          <button className="nb-btn nb-btn--secondary" onClick={() => setSelected(null)}>
             {text('blackjack.backToList')}
           </button>
           {detail.isPending ? (
@@ -167,7 +167,7 @@ function History({ close }: { readonly close: () => void }) {
                 {page.data.items.map((h) => (
                   <button
                     key={h.id}
-                    className="btn btn-secondary"
+                    className="nb-btn nb-btn--secondary"
                     onClick={() => setSelected(h.id)}
                   >
                     <span>{new Date(h.started_at * 1000).toLocaleString()}</span>
@@ -184,14 +184,14 @@ function History({ close }: { readonly close: () => void }) {
           )}
           <nav className="duel-actions" aria-label={text('blackjack.historyPages')}>
             <button
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               disabled={cursors.length === 1}
               onClick={() => setCursors((v) => v.slice(0, -1))}
             >
               {text('blackjack.previous')}
             </button>
             <button
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               disabled={!page.data?.next_cursor}
               onClick={() => {
                 if (page.data?.next_cursor) setCursors((v) => [...v, page.data.next_cursor]);
@@ -218,6 +218,7 @@ function QueueForm({
 }) {
   const text = useDuelText();
   const [stake, setStake] = useState(config.default_stake);
+  const [editingStake, setEditingStake] = useState(false);
   let selected: bigint | null = null;
   let valid = false;
   try {
@@ -243,20 +244,19 @@ function QueueForm({
       <label>
         {text('blackjack.baseStake')}
         <input
-          type="number"
+          type="text"
           inputMode="decimal"
-          min={config.min_stake}
-          max={config.max_stake}
-          step={config.stake_step}
-          value={stake}
+          value={editingStake || selected === null ? stake : formatCredits(stake)}
+          onFocus={() => setEditingStake(true)}
+          onBlur={() => setEditingStake(false)}
           onChange={(e) => setStake(e.target.value)}
           disabled={blocked}
           aria-invalid={!valid}
         />
       </label>
-      <GameActionBar cost={stake}>
+      <GameActionBar cost={selected === null ? '—' : <GameMoney value={stake} />}>
         <button
-          className="btn btn-primary"
+          className="nb-btn nb-btn--primary"
           type="submit"
           disabled={blocked || !accepting || !valid || !current}
         >
@@ -273,7 +273,7 @@ function QueueForm({
             <button
               key={amount}
               type="button"
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               disabled={blocked}
               aria-pressed={selected === creditsToMilli(amount)}
               onClick={() => setStake(amount)}
@@ -334,7 +334,7 @@ export function BlackjackGame() {
                 <button
                   key={action}
                   type="button"
-                  className={`btn ${action === 'hit' ? 'btn-primary' : 'btn-secondary'}`}
+                  className={`nb-btn ${action === 'hit' ? 'nb-btn--primary' : 'nb-btn--secondary'}`}
                   disabled={game.blocked || own.pending || remaining === 0}
                   onClick={() => {
                     const h = home.table?.fact.cards?.seats.find((s) => s.number === own.seat)
@@ -380,25 +380,20 @@ export function BlackjackGame() {
           </div>
           <div className="duel-actions">
             {snapshot.data && <GameWallets wallets={snapshot.data} />}
-            <GameHeaderTool
-              icon="?"
-              label={text('bidding.rules')}
-              onClick={() => setPanel('rules')}
+            <GameToolbar
+              sound={sound}
+              audioUnavailable={audio.unavailable}
+              items={[
+                { id: 'rules', label: text('bidding.rules'), icon: 'help', onClick: () => setPanel('rules') },
+                {
+                  id: 'history',
+                  label: text('blackjack.history'),
+                  icon: 'history',
+                  onClick: () => setPanel('history'),
+                },
+                { id: 'rankings', label: text('ranking.leaderboards'), icon: 'trophy', href: '#game-rankings' },
+              ]}
             />
-            <GameHeaderTool
-              icon="◷"
-              label={text('blackjack.history')}
-              onClick={() => setPanel('history')}
-            />
-            <ArcadeAudioControls compact sound={sound} unavailable={audio.unavailable} />
-            <a
-              className="btn btn-secondary game-header-tool"
-              href="#game-rankings"
-              aria-label={text('ranking.leaderboards')}
-              title={text('ranking.leaderboards')}
-            >
-              <span aria-hidden="true">▥</span>
-            </a>
           </div>
         </header>
         {snapshot.data && (
@@ -495,7 +490,7 @@ export function BlackjackGame() {
                   {own.state !== 'playing' && (
                     <button
                       type="button"
-                      className="btn btn-secondary"
+                      className="nb-btn nb-btn--secondary"
                       disabled={game.blocked || (own.state === 'seated' && remaining === 0)}
                       onClick={() => game.run({ kind: 'leave', id: own.id })}
                     >
@@ -539,7 +534,7 @@ export function BlackjackGame() {
               <div className="bj-emotes" role="group" aria-label={text('blackjack.presetEmotes')}>
                 {BLACKJACK_EMOTES.map((emote) => (
                   <button
-                    className="btn btn-secondary"
+                    className="nb-btn nb-btn--secondary"
                     key={emote}
                     disabled={game.blocked}
                     onClick={() => {
@@ -555,7 +550,7 @@ export function BlackjackGame() {
         )}
         {!!game.error && <ErrorState error={game.error} />}
         {game.uncertain && (
-          <button className="btn btn-primary" disabled={game.pending} onClick={game.retry}>
+          <button className="nb-btn nb-btn--primary" disabled={game.pending} onClick={game.retry}>
             {text('blackjack.confirmPreviousAction')}
           </button>
         )}

@@ -1,6 +1,5 @@
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { expect, test, type Page } from './test';
 import { USER_ORIGIN } from './ports';
 import {
   assertNoSensitiveBrowserPersistence,
@@ -10,6 +9,7 @@ import {
   mockPublicConfig,
   mockRoleSession,
 } from './support';
+import { expect, test, type Page } from './test';
 
 const NOW = 1_800_000_000;
 const EVIDENCE_DIR = process.env.NONBIRI_VISUAL_DIR
@@ -70,6 +70,7 @@ const MODEL_DEFINITIONS: ReadonlyArray<
 
 function capabilityModel(id: string, model: string): JSONRecord {
   return {
+    model_types: ['chat_completions', 'embeddings'],
     id,
     provider: 'provider',
     model,
@@ -127,6 +128,7 @@ function catalogCapability(fixture: CatalogFixture): JSONRecord {
   return {
     state: 'available',
     models: fixture.models.map(({ id, provider, model, full_name, pricing, discount }) => ({
+      model_types: ['chat_completions', 'embeddings'],
       id,
       provider,
       model,

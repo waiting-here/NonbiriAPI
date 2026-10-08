@@ -80,6 +80,7 @@ export interface AdminUser {
   avatar_url: string | null;
   guild_nick: string | null;
   guild_avatar_url: string | null;
+  discord_gate_policy: 'inherit' | 'require' | 'exempt';
   is_admin: boolean;
   is_banned: boolean;
   banned_reason: string;
@@ -240,6 +241,7 @@ export function normalizeAdminUser(value: unknown): AdminUser {
     'avatar_url',
     'guild_nick',
     'guild_avatar_url',
+    'discord_gate_policy',
     'is_admin',
     'is_banned',
     'banned_reason',
@@ -288,6 +290,11 @@ export function normalizeAdminUser(value: unknown): AdminUser {
     avatar_url: nullableString(root.avatar_url, 'avatar URL'),
     guild_nick: nullableString(root.guild_nick, 'guild nickname'),
     guild_avatar_url: nullableString(root.guild_avatar_url, 'guild avatar URL'),
+    discord_gate_policy: oneOf(
+      root.discord_gate_policy,
+      ['inherit', 'require', 'exempt'] as const,
+      'Discord gate policy',
+    ),
     is_admin: boolean(root.is_admin, 'administrator marker'),
     is_banned: isBanned,
     banned_reason: bannedReason,
@@ -498,7 +505,11 @@ export function getDeletionDuelAborts(
           const result: DeletionDuelAbort = {
             id: decimalID(row.id, 'duel abort id'),
             discord_id: string(row.discord_id, 'duel abort Discord id', { ascii: true }),
-            game_key: oneOf(row.game_key, ['bidding', 'likes', 'gwent'] as const, 'duel abort game'),
+            game_key: oneOf(
+              row.game_key,
+              ['bidding', 'likes', 'gwent'] as const,
+              'duel abort game',
+            ),
             match_id: string(row.match_id, 'duel abort match id', { min: 1 }),
             former_user_id: decimalID(row.former_user_id, 'duel abort former user id'),
             reason: oneOf(

@@ -53,6 +53,23 @@ it('is independent of rendering frequency and does not mutate acknowledged state
   }
 });
 
+it('reports every missed phrase without changing server-equivalent state', () => {
+  for (const scenario of scenarios) {
+    const events: CollectionEvent[] = [];
+    const before = newGame(scenario.seed);
+    const until = scenario.states.at(-1)!.tick;
+    const actual = advance(before, scenario.inputs, until, phrases, (event) => events.push(event));
+    expect(events.filter((event) => event.kind === 'miss')).toHaveLength(actual.missed);
+    expect(actual).toEqual(advance(before, scenario.inputs, until, phrases));
+    expect(actual).toEqual(scenario.states.at(-1));
+    for (const event of events.filter((event) => event.kind === 'miss')) {
+      expect(event.combo).toBe(0);
+      expect(event.hpDelta).toBe(0);
+      expect(event.points).toBe(0);
+    }
+  }
+});
+
 it.each([
   { combo: 0, double: false, points: [10, 20] },
   { combo: 3, double: true, points: [20, 80] },

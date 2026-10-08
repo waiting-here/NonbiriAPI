@@ -97,9 +97,9 @@
 }
 .economy-activities-page .limited-entry__action {
   color: var(--nb-color-accent);
-  font-size: var(--nb-text-sm);
+  font-size: var(--nb-font-size-sm);
 }
-@media (max-width: 39.999rem) {
+@media (width < 40rem) {
   .economy-activities-page a.limited-entry {
     grid-template-columns: 7rem minmax(0, 1fr);
   }

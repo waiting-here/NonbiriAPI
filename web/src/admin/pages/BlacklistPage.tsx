@@ -507,7 +507,7 @@ export function BlacklistManagement({
             <h2>
               {label.events}: {selected}
             </h2>
-            <button type="button" className="nb-btn nb-btn--quiet" onClick={() => setSelected('')}>
+            <button type="button" className="nb-btn nb-btn--ghost" onClick={() => setSelected('')}>
               {t('common.blacklist.close')}
             </button>
           </div>

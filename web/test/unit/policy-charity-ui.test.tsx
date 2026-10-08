@@ -1,9 +1,9 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { useEffect, type ReactNode } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Route, Routes } from 'react-router';
 import { describe, expect, test, vi } from 'vitest';
-import { CharityManagement } from '../../src/shared/components/CharityManagement';
+import { useAdminSession } from '../../src/admin/data';
 import {
   beginManagementSessionRequest,
   charityManagementKeys,
@@ -12,23 +12,22 @@ import {
   isStationSessionChanged,
   noteManagementSessionSuccess,
   stationSessionWrite,
-  useManagementCapability,
   useCreateManagedModel,
   useManagementBindings,
+  useManagementCapability,
 } from '../../src/shared/charityManagement';
-import { useAdminSession } from '../../src/admin/data';
-import { CharityPage } from '../../src/user/pages/CharityPage';
-import { useUserSession } from '../../src/user/data';
-import { EndpointsPage } from '../../src/user/pages/EndpointsPage';
+import { CharityManagement } from '../../src/shared/components/CharityManagement';
+import { roleLogKeys } from '../../src/shared/components/log/data';
+import { charityKeys } from '../../src/shared/operations/charity';
+import { ApiError } from '../../src/shared/query/http';
+import { userKeys, useUserSession } from '../../src/user/data';
+import { coreKeys } from '../../src/user/features/core/queries';
+import { operationsKeys } from '../../src/user/features/operations/data';
 import { UserLayout } from '../../src/user/layouts/UserLayout';
+import { CharityPage } from '../../src/user/pages/CharityPage';
+import { EndpointsPage } from '../../src/user/pages/EndpointsPage';
 import { ModelsPage } from '../../src/user/pages/ModelsPage';
 import { StewardPage } from '../../src/user/pages/StewardPage';
-import { coreKeys } from '../../src/user/features/core/queries';
-import { userKeys } from '../../src/user/data';
-import { ApiError } from '../../src/shared/query/http';
-import { charityKeys } from '../../src/shared/operations/charity';
-import { roleLogKeys } from '../../src/shared/components/log/data';
-import { operationsKeys } from '../../src/user/features/operations/data';
 import {
   assertNoSensitiveQueryCache,
   installJsonFetchFixtures,
@@ -89,6 +88,7 @@ const endpoint = {
 };
 
 const model = {
+  model_types: ['chat_completions', 'embeddings'],
   id: 3,
   provider: 'provider',
   model: 'model',
@@ -130,6 +130,7 @@ const coreEndpointKey = {
 };
 
 const coreModel = {
+  model_types: ['chat_completions', 'embeddings'],
   id: '3',
   provider: 'provider',
   model: 'model',
@@ -263,6 +264,7 @@ const managedModel = {
 };
 
 const managedModelFixture = {
+  model_types: ['chat_completions', 'embeddings'],
   id: '7',
   provider: 'provider',
   model: 'charity-model',
@@ -1348,6 +1350,7 @@ describe('experimental policy and charity controls', () => {
     await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() =>
       expect(lastBody(fetchMock, 'PATCH', '/api/models/3')).toEqual({
+        model_types: ['chat_completions', 'embeddings'],
         provider: 'provider',
         model: 'model',
         route_strategy: 'ordered',
@@ -1432,6 +1435,7 @@ describe('experimental policy and charity controls', () => {
       server_now: 1_788_100_000,
       models: [
         {
+          model_types: ['chat_completions', 'embeddings'],
           id: '7',
           provider: 'provider',
           model: 'charity-model',

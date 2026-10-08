@@ -281,7 +281,7 @@ describe('production account lifecycle adapter', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
-  it.each([12, 13])(
+  it.each([12, 13, 14])(
     'downloads a v%s attachment and rejects a version mismatch in its filename',
     async (version) => {
       const document = {

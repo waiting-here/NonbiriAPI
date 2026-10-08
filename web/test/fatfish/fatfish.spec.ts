@@ -714,7 +714,7 @@ test('a local season publishes explicitly and the original user tab resumes, set
     const adminPage = await administrator.newPage();
     adminPage.on('dialog', (dialog) => void dialog.accept());
     await adminPage.goto(fixture().admin_url + '/limited-activities/fat-fish');
-    await adminPage.getByRole('button', { name: 'Periods and nodes', exact: true }).click();
+    await adminPage.getByRole('tab', { name: 'Periods and nodes', exact: true }).click();
     await adminPage.getByRole('button', { name: 'New period', exact: true }).click();
     const periodEditor = adminPage.locator('.fatfish-period-editor');
     const periodInput = {

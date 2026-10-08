@@ -8,8 +8,8 @@ The current development version is **1.0.0-rc.6**. See the [changelog](CHANGELOG
 
 ## Capabilities
 
-- `/v1/models`, `/v1/chat/completions` and `/v1/embeddings` ingress, with OpenAI-compatible, Anthropic-compatible and AI SDK Gateway v3 connectors. Supported operations and protocol limits are defined in the [API contract](docs/api-contract.md).
-- Personal model names, discovery, routing, bounded request adaptation and a memory-only Debug Hub. Charity resources add donated keys, budgets, credit accounting and scoped steward management.
+- `/v1/models`, `/v1/chat/completions`, `/v1/embeddings` and `/v1/images/generations` ingress, with OpenAI-compatible, Anthropic-compatible and AI SDK Gateway v3 connectors. Supported operations and protocol limits are defined in the [API contract](docs/api-contract.md).
+- Personal model names, discovery, ordered/random/cache-balanced routing, bounded request adaptation and a memory-only Debug Hub. Charity resources add donated keys, budgets, credit accounting and scoped steward management.
 - Discord sign-in, a separate administrator station, bilingual responsive pages and configurable branding. Users can export or delete their accounts.
 - Optional check-ins, shared activities and nine games with server-authoritative settlement, recovery and privacy-aware rankings.
 - A shared outbound security boundary, encrypted upstream secrets, bounded diagnostics and retention controls. Request logs and credit details have a 30-day ordinary retention period; compacted balance and audit summaries preserve accounting continuity.
@@ -55,7 +55,7 @@ curl https://api.example.com/v1/chat/completions \
   -d '{"model":"provider/model","messages":[{"role":"user","content":"Hello"}]}'
 ```
 
-Use `/v1/models` to list available names and `/v1/embeddings` for supported embedding models. Upstream base URLs include their API version, for example `https://provider.example/v1`. Browser clients use a Bearer CallerKey with `credentials: 'omit'`. Keep keys out of URLs and shared logs.
+Use `/v1/models` to list available names and call `/v1/embeddings` or `/v1/images/generations` for models configured to support those operations. Existing platform models retain chat and embeddings; new models enable chat by default. Model settings can enable multiple operation types. Image generation currently uses OpenAI-compatible upstreams. Upstream base URLs include their API version, for example `https://provider.example/v1`. Browser clients use a Bearer CallerKey with `credentials: 'omit'`. Keep keys out of URLs and shared logs.
 
 The [API contract](docs/api-contract.md) covers streaming, errors, billing, CORS, connector differences and personal automation. [Steward automation](docs/steward-automation.md) describes the administrator-provided integration guide.
 

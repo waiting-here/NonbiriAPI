@@ -46,7 +46,7 @@ func New(ctx context.Context, user int64, method, path string) (context.Context,
 	return context.WithValue(ctx, key{}, a), id, nil
 }
 func ValidRoute(method, path string) bool {
-	return method == "GET" && path == "/v1/models" || method == "POST" && (path == "/v1/chat/completions" || path == "/v1/embeddings")
+	return method == "GET" && path == "/v1/models" || method == "POST" && (path == "/v1/chat/completions" || path == "/v1/embeddings" || path == "/v1/images/generations")
 }
 func get(ctx context.Context) *attempt {
 	if ctx == nil {

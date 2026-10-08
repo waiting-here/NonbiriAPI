@@ -1,13 +1,16 @@
-import { Fold } from '@shared/components/ui';
-import { RecordsHeader } from '../components/RecordsHeader';
-import { useMemo, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { MessagesView, MessageField } from '@shared/components/MessagesView';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
+import { MessageField, MessagesView } from '@shared/components/MessagesView';
 import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
+import { Fold } from '@shared/components/ui';
+import '@shared/operations/operations.css';
+import { isEmbeddingRoute } from '@shared/operations/requestKind';
 import { ApiError } from '@shared/query/http';
 import { formatDateTime } from '@shared/utils/datetime';
-import { isEmbeddingRoute } from '@shared/operations/requestKind';
+import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { RecordsHeader } from '../components/RecordsHeader';
+import '../features/debug/debug-v2.css';
+import { useDebugV2 } from '../features/debug/useDebugV2';
 import type { DebugObserverStatus } from '../features/debug/v2stream';
 import {
   safeRequestJSON,
@@ -18,9 +21,6 @@ import {
   type DebugTrace,
   type Presence,
 } from '../features/debug/v2types';
-import { useDebugV2 } from '../features/debug/useDebugV2';
-import '../features/debug/debug-v2.css';
-import '@shared/operations/operations.css';
 
 const PARAMETER_ORDER = [
   'model',
@@ -45,6 +45,8 @@ const ROUTE_LABEL_KEYS = {
   charity_chat_completions: 'user.debug.state.route.charityChatCompletions',
   openai_embeddings: 'user.debug.state.route.openaiEmbeddings',
   charity_embeddings: 'user.debug.state.route.charityEmbeddings',
+  openai_images_generations: 'user.debug.state.route.openaiImagesGenerations',
+  charity_images_generations: 'user.debug.state.route.charityImagesGenerations',
 } as const satisfies Record<DebugTrace['request']['route_kind'], string>;
 
 const TRACE_STATE_LABEL_KEYS = {
@@ -335,7 +337,7 @@ export function DebugPage() {
         actions={
           !session.active ? (
             <button
-              className="btn btn-primary"
+              className="nb-btn nb-btn--primary"
               type="button"
               disabled={debug.mutating}
               onClick={() => void debug.start()}
@@ -414,17 +416,17 @@ export function DebugPage() {
           <h2>{t('user.debug.operations.title')}</h2>
           <div className="ops-debug-actions">
             {debug.observer === 'disconnected' ? (
-              <button className="btn btn-secondary" type="button" onClick={debug.connect}>
+              <button className="nb-btn nb-btn--secondary" type="button" onClick={debug.connect}>
                 {t('user.debug.operations.attachObserver')}
               </button>
             ) : (
-              <button className="btn btn-secondary" type="button" onClick={debug.disconnect}>
+              <button className="nb-btn nb-btn--secondary" type="button" onClick={debug.disconnect}>
                 {t('user.debug.operations.disconnectObserver')}
               </button>
             )}
             {session.mode === 'dry' ? (
               <button
-                className="btn btn-secondary"
+                className="nb-btn nb-btn--secondary"
                 type="button"
                 disabled={debug.mutating}
                 onClick={() => setConfirmation('live')}
@@ -433,7 +435,7 @@ export function DebugPage() {
               </button>
             ) : (
               <button
-                className="btn btn-secondary"
+                className="nb-btn nb-btn--secondary"
                 type="button"
                 disabled={debug.mutating}
                 onClick={() => void debug.setMode('dry', session.revision)}
@@ -442,7 +444,7 @@ export function DebugPage() {
               </button>
             )}
             <button
-              className="btn btn-danger"
+              className="nb-btn nb-btn--danger"
               type="button"
               disabled={debug.mutating}
               onClick={() => setConfirmation('stop')}
@@ -450,7 +452,7 @@ export function DebugPage() {
               {t('user.debug.operations.stop')}
             </button>
             <button
-              className="btn btn-danger"
+              className="nb-btn nb-btn--danger"
               type="button"
               disabled={debug.mutating}
               onClick={() => setConfirmation('replace')}

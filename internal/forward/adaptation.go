@@ -136,6 +136,8 @@ func prepareAdaptedAttempt(request *validatedRequest, connectorType connectorcon
 	var logical []byte
 	if request.chat != nil {
 		logical, err = request.chat.LogicalBody()
+	} else if request.image != nil {
+		logical, err = request.image.LogicalBody()
 	} else {
 		logical, err = request.embedding.LogicalBody()
 	}

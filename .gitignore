@@ -112,6 +112,9 @@ i18n.json
 !web/public/assets/fatfish/character/expressions.png
 !web/public/assets/lake-notes/*.webp
 !web/public/assets/lake-notes/cover.png
+!web/public/assets/steady-catch/cloud-calm.webp
+!web/public/assets/steady-catch/cloud-happy.webp
+!web/public/assets/steady-catch/cloud-worried.webp
 
 # ===== Go =====
 

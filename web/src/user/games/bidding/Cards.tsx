@@ -106,7 +106,7 @@ export function BiddingControls({
           <div className="duel-actions">
             <button
               type="button"
-              className="btn btn-primary"
+              className="nb-btn nb-btn--primary"
               disabled={blocked || locked}
               onClick={() => onAction({ kind: 'joker', use: true })}
             >
@@ -114,7 +114,7 @@ export function BiddingControls({
             </button>
             <button
               type="button"
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               disabled={blocked || locked}
               onClick={() => onAction({ kind: 'joker', use: false })}
             >
@@ -179,7 +179,7 @@ export function BiddingControls({
         </span>
         <button
           type="button"
-          className="btn btn-primary"
+          className="nb-btn nb-btn--primary"
           disabled={
             blocked ||
             locked ||

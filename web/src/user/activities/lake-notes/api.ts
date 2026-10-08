@@ -1,6 +1,6 @@
 import { decoded, idempotentOptions } from '@shared/operations/api';
 import { invalidResponse } from '@shared/operations/wire';
-import { apiFetch, type ApiRequestOptions } from '@shared/query/http';
+import { ApiError, apiFetch, type ApiRequestOptions } from '@shared/query/http';
 import { base, type Direction, type LakeSettings } from '@shared/lakenotes/api';
 import { RULES_ID, type Profile, type Cast, type Action } from './rules';
 
@@ -84,10 +84,28 @@ export const decodeCastResult = (value: unknown): CastResult => {
   const result = value as CastResult;
   return { cast: decodeCast(result.cast), profile: decodeProfile(result.profile) };
 };
+async function castRequest(path: string, options?: ApiRequestOptions): Promise<CastResult> {
+  const deadline = new AbortController();
+  const timer = setTimeout(() => deadline.abort(), 15_000);
+  const signal = options?.signal
+    ? AbortSignal.any([options.signal, deadline.signal])
+    : deadline.signal;
+  try {
+    return await decoded(path, decodeCastResult, { ...options, signal });
+  } catch (error) {
+    // A timed-out save can already be committed. Keep the same request intent
+    // so recovery reads its receipt instead of starting another cast.
+    if (deadline.signal.aborted && !options?.signal?.aborted)
+      throw new ApiError('network_error', 'The saved result could not be confirmed in time.', 0);
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 export const getProfile = (options?: ApiRequestOptions) =>
   decoded(base + '/profile', decodeProfile, options);
 export const getCast = (id: string, options?: ApiRequestOptions) =>
-  decoded(base + '/casts/' + encodeURIComponent(id), decodeCastResult, options);
+  castRequest(base + '/casts/' + encodeURIComponent(id), options);
 export const act = (input: ActionInput, key: string, options?: ApiRequestOptions) =>
   decoded(
     base + '/actions',
@@ -102,11 +120,7 @@ export const startCast = (
   key: string,
   options?: ApiRequestOptions,
 ) =>
-  decoded(
-    base + '/casts',
-    decodeCastResult,
-    idempotentOptions(key, { ...options, method: 'POST', json: input }),
-  );
+  castRequest(base + '/casts', idempotentOptions(key, { ...options, method: 'POST', json: input }));
 export const controlCast = (
   id: string,
   action: 'pause' | 'resume',
@@ -114,9 +128,8 @@ export const controlCast = (
   key: string,
   options?: ApiRequestOptions,
 ) =>
-  decoded(
+  castRequest(
     base + '/casts/' + encodeURIComponent(id) + '/' + action,
-    decodeCastResult,
     idempotentOptions(key, { ...options, method: 'POST', json: input }),
   );
 export const checkpoint = (
@@ -125,9 +138,8 @@ export const checkpoint = (
   key: string,
   options?: ApiRequestOptions,
 ) =>
-  decoded(
+  castRequest(
     base + '/casts/' + encodeURIComponent(id) + '/checkpoint',
-    decodeCastResult,
     idempotentOptions(key, { ...options, method: 'POST', json: input }),
   );
 export interface ExchangeReceipt extends Quote {

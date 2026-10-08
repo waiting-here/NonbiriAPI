@@ -55,7 +55,7 @@ func (*gatewayConnector) Capabilities() contract.CapabilitySet { return gatewayC
 func (c *gatewayConnector) Attempt(ctx context.Context, input AttemptInput) contract.AttemptResult {
 	defer input.Credential.Clear()
 	result := contract.AttemptResult{Failure: contract.FailureInternal, Diagnostic: "gateway attempt unavailable"}
-	if c == nil || c.adapter == nil || ctx == nil || input.Sink == nil || !input.validOperation() || input.Target.Type() != c.Type() {
+	if c == nil || c.adapter == nil || ctx == nil || input.Sink == nil || !input.validOperation() || input.Operation == contract.OperationImagesGenerations || input.Target.Type() != c.Type() {
 		return result
 	}
 	if input.Policy.ForceStoreFalse {

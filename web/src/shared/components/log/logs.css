@@ -4,6 +4,9 @@
 .log-table .nb-table {
   min-width: 0;
 }
+.log-table .nb-table th {
+  text-transform: none;
+}
 .log-table .nb-table td {
   max-width: 18rem;
   overflow-wrap: anywhere;
@@ -43,6 +46,9 @@
 .log-filters .nb-chip button {
   min-width: 2.5rem;
   min-height: 2.5rem;
+}
+.log-export {
+  margin-inline-start: auto;
 }
 .log-export[open] .nb-more__menu {
   position: absolute;

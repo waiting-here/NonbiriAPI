@@ -57,8 +57,10 @@ type RouteKind = requestkind.Kind
 const (
 	RouteOpenAIChat        = requestkind.OpenAIChat
 	RouteOpenAIEmbeddings  = requestkind.OpenAIEmbeddings
+	RouteOpenAIImages      = requestkind.OpenAIImages
 	RouteCharityChat       = requestkind.CharityChat
 	RouteCharityEmbeddings = requestkind.CharityEmbeddings
+	RouteCharityImages     = requestkind.CharityImages
 	RouteDiscovery         = requestkind.Discovery
 )
 
@@ -173,6 +175,8 @@ type ClaimInput struct {
 	Candidate        Candidate
 	DonationKeyID    int64
 	OutputTokenFloor int64
+	// PersonalModelID associates routed personal attempts with their owner-scoped model.
+	PersonalModelID int64
 	// BalancedCandidates are already weighted into a random order by the
 	// routing snapshot. Claim chooses among them inside its write transaction.
 	BalancedCandidates []BalancedCandidate

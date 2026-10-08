@@ -40,6 +40,7 @@ for (const scenario of [
       username: 'Managed member',
       discord_id: null,
       is_admin: false,
+      discord_gate_policy: 'inherit',
       banned_reason: '',
       level: { manual: null, automatic: 1, effective: 1, display_name: 'Lv1' },
       revision: '1',

@@ -1,3 +1,4 @@
+import { SimplePager } from '@shared/operations/SimplePager';
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { stationSessionWrite } from '@shared/charityManagement';
@@ -70,7 +71,7 @@ function RecoveryAction({
       ) : null}
       {operation.error ? <ErrorState error={operation.error} /> : null}
       <button
-        className="btn btn-primary"
+        className="nb-btn nb-btn--primary"
         type="submit"
         disabled={operation.pending || (!operation.uncertain && (!confirmed || !reason.trim()))}
       >
@@ -131,27 +132,19 @@ export function RecoveryPanel({ account }: { readonly account: string }) {
       {query.data?.data.length === 0 ? (
         <p>{t('尚未配置服务。', 'No service configured yet.')}</p>
       ) : null}
-      <div className="picturebook-actions">
-        <button
-          className="btn btn-secondary"
-          disabled={!page || query.isFetching}
-          onClick={() => setPage((value) => value - 1)}
-        >
-          {t('上一页', 'Previous')}
-        </button>
-        <button
-          className="btn btn-secondary"
-          disabled={!query.data?.next_cursor || query.isFetching}
-          onClick={() => {
-            if (query.data?.next_cursor) {
-              setCursors((old) => [...old.slice(0, page + 1), query.data.next_cursor ?? undefined]);
-              setPage((value) => value + 1);
-            }
-          }}
-        >
-          {t('下一页', 'Next')}
-        </button>
-      </div>
+      <SimplePager
+        page={page + 1}
+        hasMore={Boolean(query.data?.next_cursor)}
+        disabled={query.isFetching}
+        onPrev={() => setPage((value) => value - 1)}
+        onNext={() => {
+          if (query.data?.next_cursor) {
+            setCursors((old) => [...old.slice(0, page + 1), query.data.next_cursor ?? undefined]);
+            setPage((value) => value + 1);
+          }
+        }}
+        labels={{ previous: t('上一页', 'Previous'), next: t('下一页', 'Next') }}
+      />
     </Card>
   );
 }

@@ -31,6 +31,8 @@ import (
 
 // Known site_config keys (the authoritative set enforced by the handler).
 const (
+	KeyDiscordRegisteredUserGateExempt = "discord_registered_user_gate_exempt"
+
 	KeySiteName                  = "site_name"
 	KeySiteLogoURL               = "site_logo_url"
 	KeyLegalPrivacyOverrideZh    = "legal_privacy_override_zh"
@@ -257,6 +259,8 @@ func mustDefaultFishingMultiplier(species string) int {
 // knownSiteConfig maps every exact known key to its typed spec.
 var knownSiteConfig = func() map[string]keySpec {
 	known := map[string]keySpec{
+		KeyDiscordRegisteredUserGateExempt: {kind: kindBool, def: 0},
+
 		KeySiteName:                      {kind: kindText, allowEmpty: false, max: maxSiteNameBytes},
 		KeySiteLogoURL:                   {kind: kindText, allowEmpty: true, max: maxSiteLogoURLBytes},
 		KeyLegalPrivacyOverrideZh:        {kind: kindMultilineText, allowEmpty: true, max: maxLegalOverrideBytes},

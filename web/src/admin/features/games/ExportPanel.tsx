@@ -35,7 +35,7 @@ export function ExportPanel({
               )}
         </p>
       )}
-      <a className="btn btn-primary" href={historyDownloadURL(game, dataset, selection)} download>
+      <a className="nb-btn nb-btn--primary" href={historyDownloadURL(game, dataset, selection)} download>
         {t('下载 ZIP', 'Download ZIP')}
       </a>
     </section>

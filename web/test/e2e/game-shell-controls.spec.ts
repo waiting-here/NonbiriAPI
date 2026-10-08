@@ -48,6 +48,7 @@ for (const width of [1440, 768, 390])
         const url = new URL(route.request().url()),
           path = url.pathname;
         if (path === '/api/games') return route.fulfill({ json: snapshot });
+        if (path.includes('/randomness/')) return route.fulfill({ json: { proof: null } });
         if (path.endsWith('/catalog')) return route.fulfill({ json: catalogWire() });
         if (path === '/api/games/likes/loadouts')
           return route.fulfill({ json: { capacity: 10, slots: [] } });
@@ -304,8 +305,8 @@ for (const width of [1440, 768, 390])
           await expect(page.locator('.activity-slot[open]')).toHaveCount(0);
           await slots.first().locator(':scope > summary').click();
           await expect(slots.first()).toHaveAttribute('open', '');
-          await expect(loan.locator('.loan-actions .btn-primary')).toBeDisabled();
-          await expect(slots.first().locator('.economy-welfare-card .btn-primary')).toBeDisabled();
+          await expect(loan.locator('.loan-actions .nb-btn--primary')).toBeDisabled();
+          await expect(slots.first().locator('.economy-welfare-card .nb-btn--primary')).toBeDisabled();
           await slots.first().locator(':scope > summary').click();
         }
         expect(
@@ -382,13 +383,19 @@ for (const scenario of [
     });
     await page.goto(`${USER_ORIGIN}/games/likes`);
     const header = page.locator('.likes-heading');
-    await expect(header.locator('.game-header-tool')).toHaveCount(7);
-    const sound = header.locator('button[aria-pressed]').first();
-    await expect(sound).toHaveAttribute('aria-label', /.+/);
-    const pressed = await sound.getAttribute('aria-pressed');
+    await expect(header.locator('.game-toolbar__button')).toHaveCount(5);
+    const sound = header.getByRole('button', {name: scenario.locale === 'zh' ? '声音' : 'Sound', exact: true});
     await sound.focus();
     await sound.press('Space');
-    await expect(sound).toHaveAttribute('aria-pressed', pressed === 'true' ? 'false' : 'true');
+    const toggle = page.getByRole('menuitemcheckbox').first();
+    await expect(toggle).toBeFocused();
+    const checked = await toggle.getAttribute('aria-checked');
+    await toggle.press('Space');
+    await expect(sound).toBeFocused();
+    await sound.press('Space');
+    await expect(page.getByRole('menuitemcheckbox').first()).toHaveAttribute('aria-checked', checked === 'true' ? 'false' : 'true');
+    await page.keyboard.press('Escape');
+    await expect(sound).toBeFocused();
     const rules = header.getByRole('button', {
       name: scenario.locale === 'zh' ? '规则' : 'Rules',
       exact: true,

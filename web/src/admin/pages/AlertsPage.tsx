@@ -336,6 +336,20 @@ export function AlertsPage() {
       kinds: ['registration_rejected', 'account_deleted'],
     },
   ] satisfies { label: string; kinds: AdminAlert['kind'][] }[];
+  const kindDescriptions: Record<AdminAlert['kind'], string> = {
+    fetch_failed: t('admin.alerts.kindDescription.fetchFailed'),
+    forward_error: t('admin.alerts.kindDescription.forwardError'),
+    registration_rejected: t('admin.alerts.kindDescription.registrationRejected'),
+    maintenance_enabled: t('admin.alerts.kindDescription.maintenanceEnabled'),
+    donation_failure_disabled: t('admin.alerts.kindDescription.donationFailureDisabled'),
+    issue_projection_incomplete: t('admin.alerts.kindDescription.issueProjectionIncomplete'),
+    report_retry_exhausted: t('admin.alerts.kindDescription.reportRetryExhausted'),
+    fishing_retry_exhausted: t('admin.alerts.kindDescription.fishingRetryExhausted'),
+    rps_terminal_retrying: t('admin.alerts.kindDescription.rpsTerminalRetrying'),
+    worker_checkpoint_failed: t('admin.alerts.kindDescription.workerCheckpointFailed'),
+    invariant_violation: t('admin.alerts.kindDescription.invariantViolation'),
+    account_deleted: t('admin.alerts.kindDescription.accountDeleted'),
+  };
   const pageData = result.data;
   const busy = session.isFetching || result.isFetching;
   const actionDisabled = busy || result.isPlaceholderData || mutation.isPending || bulk.isPending;
@@ -355,7 +369,7 @@ export function AlertsPage() {
             <h2>
               {copy.details} #{focusedID}
             </h2>
-            <button className="btn btn-quiet" type="button" onClick={() => focusAlert(null)}>
+            <button className="nb-btn nb-btn--ghost" type="button" onClick={() => focusAlert(null)}>
               {copy.close}
             </button>
             {returnTo ? <Link to={returnTo}>{copy.back}</Link> : null}
@@ -367,11 +381,9 @@ export function AlertsPage() {
           ) : detail.data ? (
             <div className="ops-stack">
               <p>
-                {kindLabels[detail.data.alert.kind]} ·{' '}
-                {detail.data.alert.kind === 'maintenance_enabled'
-                  ? copy.facts
-                  : detail.data.alert.message}
+                {kindLabels[detail.data.alert.kind]} · {kindDescriptions[detail.data.alert.kind]}
               </p>
+              <p className="alert-original-message">{detail.data.alert.message}</p>
               <dl className="ops-kv">
                 <dt>{copy.occurred}</dt>
                 <dd>{formatDateTime(detail.data.alert.created_at)}</dd>
@@ -418,7 +430,7 @@ export function AlertsPage() {
                         {path ? <Link to={path}>{copy.open}</Link> : null}{' '}
                         {target.available && isDiagnosticTarget(target.kind, target.id) ? (
                           <button
-                            className="btn btn-secondary"
+                            className="nb-btn nb-btn--secondary"
                             type="button"
                             onClick={() => focusTarget(target)}
                           >
@@ -427,7 +439,7 @@ export function AlertsPage() {
                         ) : null}{' '}
                         {issueUser ? (
                           <button
-                            className="btn btn-secondary"
+                            className="nb-btn nb-btn--secondary"
                             type="button"
                             onClick={() => focusTarget(target, 'issue_user')}
                           >
@@ -447,7 +459,7 @@ export function AlertsPage() {
                       {selectedTarget.id}
                     </h3>
                     <button
-                      className="btn btn-quiet"
+                      className="nb-btn nb-btn--ghost"
                       type="button"
                       onClick={() => focusTarget(null)}
                     >
@@ -589,7 +601,7 @@ export function AlertsPage() {
           </label>
           {selected.length > 0 ? (
             <button
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               type="button"
               disabled={actionDisabled}
               onClick={() => bulk.mutate(selected)}
@@ -646,31 +658,33 @@ export function AlertsPage() {
                     header: t('admin.alerts.message'),
                     mobileLabel: t('admin.alerts.message'),
                     cell: 'meta',
-                    render: (alert) =>
-                      alert.account_deletion ? (
-                        <Fold plain title={t('admin.alerts.presentation.deletionSnapshot')}>
-                          <p>{t('admin.alerts.deletionSnapshot')}</p>
-                          <dl className="ops-kv alert-deletion-facts">
-                            <dt>Discord ID</dt>
-                            <dd>{alert.account_deletion.discord_id || '—'}</dd>
-                            <dt>{t('admin.alerts.deletedUser')}</dt>
-                            <dd>{alert.account_deletion.user_id}</dd>
-                            <dt>{t('admin.alerts.generalBalance')}</dt>
-                            <dd>{alert.account_deletion.general_balance}</dd>
-                            <dt>{t('admin.alerts.gameBalance')}</dt>
-                            <dd>{alert.account_deletion.game_balance}</dd>
-                            <dt>{t('admin.alerts.donationCredit')}</dt>
-                            <dd>{alert.account_deletion.donation_credit}</dd>
-                            <dt>{t('admin.alerts.sketchAssets')}</dt>
-                            <dd>
-                              {alert.account_deletion.sketch_paper} /{' '}
-                              {alert.account_deletion.sketch_brush}
-                            </dd>
-                          </dl>
-                        </Fold>
-                      ) : (
-                        alert.message
-                      ),
+                    render: (alert) => (
+                      <div>
+                        <p className="alert-description">{kindDescriptions[alert.kind]}</p>
+                        {alert.account_deletion ? (
+                          <Fold plain title={t('admin.alerts.presentation.deletionSnapshot')}>
+                            <p>{t('admin.alerts.deletionSnapshot')}</p>
+                            <dl className="ops-kv alert-deletion-facts">
+                              <dt>Discord ID</dt>
+                              <dd>{alert.account_deletion.discord_id || '—'}</dd>
+                              <dt>{t('admin.alerts.deletedUser')}</dt>
+                              <dd>{alert.account_deletion.user_id}</dd>
+                              <dt>{t('admin.alerts.generalBalance')}</dt>
+                              <dd>{alert.account_deletion.general_balance}</dd>
+                              <dt>{t('admin.alerts.gameBalance')}</dt>
+                              <dd>{alert.account_deletion.game_balance}</dd>
+                              <dt>{t('admin.alerts.donationCredit')}</dt>
+                              <dd>{alert.account_deletion.donation_credit}</dd>
+                              <dt>{t('admin.alerts.sketchAssets')}</dt>
+                              <dd>
+                                {alert.account_deletion.sketch_paper} /{' '}
+                                {alert.account_deletion.sketch_brush}
+                              </dd>
+                            </dl>
+                          </Fold>
+                        ) : null}
+                      </div>
+                    ),
                   },
                   {
                     key: 'subject',
@@ -709,7 +723,7 @@ export function AlertsPage() {
                     render: (alert) => (
                       <div className="alert-actions">
                         <button
-                          className="btn btn-secondary"
+                          className="nb-btn nb-btn--secondary"
                           type="button"
                           onClick={() => focusAlert(alert.id)}
                         >

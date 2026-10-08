@@ -71,9 +71,6 @@ export function LogResultBadge({ row }: { row: RoleLogRow }) {
       <span className={`nb-badge nb-badge--${result.tone}`}>
         {t(logResultCopyKey(row.role, result.key), { status: row.caller_status ?? '—' })}
       </span>
-      {row.role !== 'user' && row.caller_error_code ? (
-        <span className="nb-sub mono">{row.caller_error_code}</span>
-      ) : null}
     </span>
   );
 }

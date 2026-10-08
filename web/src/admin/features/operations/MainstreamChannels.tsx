@@ -1,4 +1,5 @@
 import { EndpointTransportNotice } from '@shared/components/EndpointTransportNotice';
+import { CopyValue } from '@shared/components/CopyValue';
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchState } from '@shared/operations/useSearchState';
@@ -215,7 +216,7 @@ function ChannelForm({
       ) : null}
       {error ? <ErrorState error={error} /> : null}
       <div className="ops-actions">
-        <button className="btn btn-primary" type="submit" disabled={!canEdit || busy}>
+        <button className="nb-btn nb-btn--primary" type="submit" disabled={!canEdit || busy}>
           {busy
             ? t('common.working')
             : t(
@@ -225,7 +226,12 @@ function ChannelForm({
               )}
         </button>
         {onCancel ? (
-          <button className="btn btn-secondary" type="button" disabled={busy} onClick={onCancel}>
+          <button
+            className="nb-btn nb-btn--secondary"
+            type="button"
+            disabled={busy}
+            onClick={onCancel}
+          >
             {t('common.cancel')}
           </button>
         ) : null}
@@ -484,7 +490,7 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
   const newChannelAction = (
     <button
       type="button"
-      className="btn btn-primary"
+      className="nb-btn nb-btn--primary"
       disabled={!canWrite}
       onClick={() => {
         setCreating(true);
@@ -586,8 +592,15 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
                       mobileLabel: t('admin.mainstreamChannels.table.baseUrl'),
                       cell: 'meta',
                       render: (channel) => (
-                        <span className="channel-base-url" title={channel.base_url}>
-                          {channel.base_url}
+                        <span className="channel-url-row">
+                          <span className="channel-base-url" title={channel.base_url}>
+                            {channel.base_url}
+                          </span>
+                          <CopyValue
+                            value={channel.base_url}
+                            label={t('admin.mainstreamChannels.table.baseUrl')}
+                            showValue={false}
+                          />
                         </span>
                       ),
                     },
@@ -622,7 +635,7 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
                       render: (channel) => (
                         <button
                           type="button"
-                          className="btn btn-secondary"
+                          className="nb-btn nb-btn--secondary"
                           disabled={
                             busy ||
                             !scopeReady ||
@@ -741,7 +754,7 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
                       <h3>{t('admin.mainstreamChannels.retire.title')}</h3>
                       <p>{t('admin.mainstreamChannels.retire.description')}</p>
                       <button
-                        className="btn btn-danger"
+                        className="nb-btn nb-btn--danger"
                         type="button"
                         disabled={!canWrite || retire.isPending || patch.isPending}
                         onClick={() => setRetireTarget(selectedChannel)}

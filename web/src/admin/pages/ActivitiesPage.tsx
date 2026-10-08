@@ -639,7 +639,7 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
               </dl>
               {period.state === 'settling' ? (
                 <button
-                  className="btn btn-danger"
+                  className="nb-btn nb-btn--danger"
                   type="button"
                   disabled={!scopeReady || resume.isPending}
                   onClick={() => resume.mutate({ id: period.id, revision: period.revision })}
@@ -785,7 +785,7 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
               ) : null}
               {savePeriod.error ? <ErrorState error={savePeriod.error} /> : null}
               <button
-                className="btn btn-primary"
+                className="nb-btn nb-btn--primary"
                 type="button"
                 disabled={
                   !scopeReady ||
@@ -802,7 +802,7 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
               {periodOverride ? (
                 <button
                   type="button"
-                  className="btn btn-secondary"
+                  className="nb-btn nb-btn--secondary"
                   disabled={!scopeReady || savePeriod.isPending}
                   onClick={() => setPeriodOverride(null)}
                 >
@@ -900,13 +900,16 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
                     header: t('admin.activities.pools.period'),
                     mobileLabel: t('admin.activities.pools.period'),
                     cell: 'meta',
-                    render: (pool) =>
-                      pool.period_id ??
-                      t(
-                        pool.pool_type === 'welfare'
-                          ? 'admin.activities.pools.singleton'
-                          : 'admin.activities.pools.unboundPeriod',
-                      ),
+                    render: (pool) => (
+                      <span title={pool.period_id ?? undefined}>
+                        {pool.period_date ??
+                          t(
+                            pool.pool_type === 'welfare'
+                              ? 'admin.activities.pools.singleton'
+                              : 'admin.activities.pools.unboundPeriod',
+                          )}
+                      </span>
+                    ),
                   },
                   {
                     key: 'balance',
@@ -927,7 +930,7 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
                     align: 'action',
                     render: (pool) => (
                       <button
-                        className="btn btn-secondary"
+                        className="nb-btn nb-btn--secondary"
                         type="button"
                         disabled={!scopeReady || pool.state !== 'open'}
                         onClick={() => {
@@ -1025,7 +1028,11 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
           {adjust.error ? <ErrorState error={adjust.error} /> : null}
           <div className="ops-actions">
             <button
-              className={adjustment.direction === 'decrease' ? 'btn btn-danger' : 'btn btn-primary'}
+              className={
+                adjustment.direction === 'decrease'
+                  ? 'nb-btn nb-btn--danger'
+                  : 'nb-btn nb-btn--primary'
+              }
               type="button"
               disabled={adjustmentBlocked || currentPoolDecreaseBlocked}
               onClick={() => {
@@ -1036,7 +1043,7 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
               {t('admin.activities.adjustment.apply')}
             </button>
             <button
-              className="btn btn-link"
+              className="nb-btn nb-btn--link"
               type="button"
               disabled={adjust.isPending}
               onClick={() =>

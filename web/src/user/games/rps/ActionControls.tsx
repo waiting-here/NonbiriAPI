@@ -79,7 +79,7 @@ export function ActionControls({
         <div className="game-state-actions">
           <button
             type="button"
-            className="btn btn-secondary"
+            className="nb-btn nb-btn--secondary"
             disabled={blocked}
             onClick={() =>
               onAction({ action: 'dealer_decision', payload: { decision: 'no_raise' } })
@@ -114,7 +114,7 @@ export function ActionControls({
               >
                 <button
                   type="button"
-                  className="btn btn-secondary"
+                  className="nb-btn nb-btn--secondary"
                   disabled={blocked}
                   onClick={() => adjust(-base)}
                 >
@@ -122,7 +122,7 @@ export function ActionControls({
                 </button>
                 <button
                   type="button"
-                  className="btn btn-secondary"
+                  className="nb-btn nb-btn--secondary"
                   disabled={blocked}
                   onClick={() => adjust(base)}
                 >
@@ -130,7 +130,7 @@ export function ActionControls({
                 </button>
                 <button
                   type="button"
-                  className="btn btn-secondary"
+                  className="nb-btn nb-btn--secondary"
                   disabled={blocked}
                   onClick={() => adjust('maximum')}
                 >
@@ -141,7 +141,7 @@ export function ActionControls({
               </div>
               <button
                 type="button"
-                className="btn btn-primary"
+                className="nb-btn nb-btn--primary"
                 disabled={blocked || !raiseValid}
                 onClick={() =>
                   onAction({
@@ -170,7 +170,7 @@ export function ActionControls({
       <div className="game-state-actions">
         <button
           type="button"
-          className="btn btn-primary"
+          className="nb-btn nb-btn--primary"
           disabled={blocked || !callKnown}
           onClick={() => onAction({ action: 'follower_decision', payload: { decision: 'call' } })}
         >
@@ -178,7 +178,7 @@ export function ActionControls({
         </button>
         <button
           type="button"
-          className="btn btn-secondary"
+          className="nb-btn nb-btn--secondary"
           disabled={blocked || !callKnown}
           onClick={() =>
             onAction({ action: 'follower_decision', payload: { decision: 'surrender' } })

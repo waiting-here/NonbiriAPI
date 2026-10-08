@@ -49,7 +49,7 @@
 .account-activity__heading h2 {
   margin: 0;
 }
-@media (max-width: 48rem) {
+@media (width <= 48rem) {
   .account-workspace .core-card {
     padding: var(--nb-space-4);
   }
@@ -76,7 +76,7 @@
   white-space: nowrap;
 }
 
-@media (max-width: 48rem) {
+@media (width <= 48rem) {
   .account-workspace.core-stack {
     gap: var(--nb-space-4);
   }

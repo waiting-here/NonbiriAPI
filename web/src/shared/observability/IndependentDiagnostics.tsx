@@ -169,7 +169,7 @@ function ScopedDiagnostics({ role, storage }: { role: DiagnosticRole; storage?: 
             <option value="720">{words('Last 30 days', '最近30天')}</option>
           </select>
         </label>
-        <button className="btn btn-primary" type="submit" disabled={busy}>
+        <button className="nb-btn nb-btn--primary" type="submit" disabled={busy}>
           {words('Search diagnostics', '查询诊断')}
         </button>
       </form>
@@ -213,7 +213,7 @@ function ScopedDiagnostics({ role, storage }: { role: DiagnosticRole; storage?: 
       </div>
       {page?.next_before && (
         <button
-          className="btn btn-secondary"
+          className="nb-btn nb-btn--secondary"
           type="button"
           disabled={busy}
           onClick={() => void load(true)}
@@ -279,7 +279,7 @@ function Detail({
     <div>
       {!detail && (
         <button
-          className="btn btn-secondary"
+          className="nb-btn nb-btn--secondary"
           type="button"
           disabled={busy}
           onClick={() => void load()}

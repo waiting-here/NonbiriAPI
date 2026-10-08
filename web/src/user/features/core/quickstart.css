@@ -99,7 +99,7 @@
 .quickstart .nb-between > label {
   max-width: 16rem;
 }
-@media (max-width: 48rem) {
+@media (width <= 48rem) {
   .quickstart {
     padding: var(--nb-space-4);
   }

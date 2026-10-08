@@ -41,7 +41,8 @@
       "introAddressBody": "Connect charity models and your own services in your client.",
       "introGames": "Games and activities",
       "introGamesBody": "Check in, join activities or play games.",
-      "checkinRules": "Rewards and balance conditions"
+      "claimedToday": "Claimed today",
+      "availableTomorrow": "Available tomorrow"
     },
     "steward": {
       "donationsTitle": "Donation review queue",
@@ -146,7 +147,12 @@
       "moreSource": "Source actions for {{name}}",
       "dirtyCount": "{{count}} changes",
       "discard": "Discard changes",
-      "deleteHelp": "Clients will no longer be able to use {{name}}. Source services and keys remain unchanged."
+      "deleteHelp": "Clients will no longer be able to use {{name}}. Source services and keys remain unchanged.",
+      "searchPlaceholder": "Model name or call name",
+      "status": "Status",
+      "actions": "Actions",
+      "balancedSummary": "Optimized load balancing",
+      "balancedHelp": "Reuse a source recently used by the same user and model for up to 5 minutes; otherwise prefer sources with less recent load."
     },
     "games": {
       "nav": "Games",
@@ -335,7 +341,8 @@
           "inCarriedPool": "In carried pool",
           "discarded2": "Discarded",
           "awardedToYou": "Awarded to you",
-          "awardedToOpponent": "Awarded to opponent"
+          "awardedToOpponent": "Awarded to opponent",
+          "viewPlayedHistory": "View played cards"
         },
         "blackjack": {
           "blackjackTableRules": "Blackjack · Table rules",
@@ -1028,7 +1035,8 @@
           "qUICKTUTORIAL": "QUICK · TUTORIAL",
           "waitingForYouNoCountdown": "Waiting for you · no countdown",
           "roundResolved": "Round resolved",
-          "completeTheHighlightedStepsForThisTeaching": "Complete the highlighted steps for this teaching plan."
+          "completeTheHighlightedStepsForThisTeaching": "Complete the highlighted steps for this teaching plan.",
+          "targetRounds": "Target {{likes}} likes · {{rounds}} rounds"
         },
         "ranking": {
           "stayAnonymousOnTheTrueCharityLeaderboard": "Stay anonymous on the True Charity leaderboard",
@@ -1255,7 +1263,7 @@
           "details": "View availability",
           "from": "From {{amount}} credits",
           "specs": "{{count}} of 3 board sizes open",
-          "modes": "{{count}} of {{total}} modes open",
+          "modes": "Playable modes: {{count}}",
           "learn": "Learn, history and ongoing games",
           "gwent": {
             "title": "AI Gwent",
@@ -1269,7 +1277,10 @@
           "lakenotes": {
             "title": "Lake Notes",
             "body": "Collect fish across four waters, upgrade your gear, and fill your fishing journal."
-          }
+          },
+          "modesAll": "Modes: {{count}}",
+          "firstClearReward": "First-clear reward",
+          "winCredits": "Win credits"
         },
         "fishing": {
           "eyebrow": "Pond fishing",
@@ -1393,10 +1404,10 @@
           "title": "Three players, one showdown",
           "description": "Three players, three gestures. Read the table and make your move.",
           "tutorial": {
-            "title": "How this table works",
             "1": "Choose quick, standard, or deathmatch. The game begins when three players join.",
             "2": "Pick a gesture before the timer runs out. Everyone reveals their choice together.",
             "3": "View the complete result here before joining another RPS match.",
+            "title": "How this table works",
             "next": "Next",
             "skip": "Skip for now",
             "finish": "Enter the lobby",
@@ -1597,10 +1608,13 @@
         "activityWallet": "Get game credits from activities →",
         "unavailable": "Not open",
         "test": "Test",
-        "learn": "View rules and records →",
-        "enter": "Enter →",
+        "learn": "View",
+        "enter": "Enter",
         "rankings": "Rankings · Last 7×24 hours",
         "calculation": "How it is calculated",
+        "soundControls": "Sound",
+        "moreTools": "More",
+        "tools": "Game tools",
         "cost": "Cost this time",
         "stepMode": "1 · Mode",
         "stepRole": "2 · Character",
@@ -1630,7 +1644,9 @@
           "openaiChatCompletions": "OpenAI-Compatible chat completions",
           "charityChatCompletions": "Charity chat completions",
           "openaiEmbeddings": "Personal embedding",
-          "charityEmbeddings": "Charity embedding"
+          "charityEmbeddings": "Charity embedding",
+          "openaiImagesGenerations": "Personal image generation",
+          "charityImagesGenerations": "Charity image generation"
         },
         "trace": {
           "capturing": "Capturing",
@@ -1791,7 +1807,15 @@
         "endpoint": "Service"
       },
       "resourceType": "Related",
-      "closedResourceUnavailable": "The related service or key was deleted. This issue is closed."
+      "closedResourceUnavailable": "The related service or key was deleted. This issue is closed.",
+      "detail": {
+        "auth": "The service rejected the key.",
+        "rateLimit": "The service received too many requests.",
+        "timeout": "The service took too long to respond.",
+        "protocol": "The service returned an unreadable response.",
+        "transport": "The service could not be reached.",
+        "interrupted": "The service request was interrupted."
+      }
     },
     "report": {
       "nav": "Report leaked credential",
@@ -2025,7 +2049,9 @@
           "level_denied": "Your level is not allowed",
           "no_usable_key": "No usable charity resource",
           "available": "Available now"
-        }
+        },
+        "searchPlaceholder": "Model name or public description",
+        "pricingHelp": "Prices are in credits. Request prices apply per billable request; token prices are per million tokens."
       },
       "donationDetailTitle": "Donation details",
       "donationDetailDescription": "Review the current donation, review, and resource status.",
@@ -2046,6 +2072,7 @@
         "available": "At least one charity model is currently available."
       },
       "availableModels": "Available charity models",
+      "modelSearchPlaceholder": "Model name",
       "searchModels": "Search model names",
       "pricingFilter": "Pricing method",
       "allPricing": "All pricing methods",
@@ -2094,6 +2121,7 @@
       "reselectAfterConflict": "The available resources changed. Review the refreshed list and select the keys again.",
       "ownerPages": {
         "search": "Search donation description or ID",
+        "searchPlaceholder": "Donation description or ID",
         "status": "Review status",
         "clear": "Clear search",
         "invalidSearch": "Enter up to 128 characters without control characters.",
@@ -2314,6 +2342,7 @@
         "opensIn": "Opens in",
         "noPrediction": "Settlement in progress…",
         "contributeOnce": "Contribute once",
+        "limitReached": "Daily limit reached",
         "contributionAccepted": "Contribution accepted. Count:",
         "lastResultEyebrow": "Latest result",
         "lastResultTitle": "Your result",
@@ -2685,7 +2714,8 @@
       "accountPresentation.fontHint": "Adjust interface text size.",
       "accountPresentation.exportBody": "Confirm again with Discord; you will return here automatically and download your export.",
       "accountPresentation.exportAction": "Export…",
-      "accountPresentation.deleteAction": "Delete account…"
+      "accountPresentation.deleteAction": "Delete account…",
+      "models.cacheBalanced": "Optimized load balancing"
     },
     "lakeNotes": {
       "exchangeAvailable": "Fishing is free. Coin exchange is available below.",
@@ -2700,7 +2730,7 @@
       "closed": "The game is closed. Your progress is saved.",
       "entryUnknown": "Entry is unconfirmed. Try entering again.",
       "retry": "Retry the same action",
-      "saved": "Saved",
+      "saved": "Progress saved automatically.",
       "saving": "Saving",
       "reconnecting": "Connection interrupted; fishing is paused. Resume from the last saved point.",
       "checkSaved": "Check saved progress",
@@ -2805,7 +2835,7 @@
       "treasureReward": "Chest reward: {{coins}} coins · {{bait}} ×{{count}}",
       "debrisReward": "Recovered {{item}}",
       "exchangeHeading": "Exchange coins and site credits",
-      "exchangeHelp": "Exchange coins and credits at the configured rates. Check the amounts before confirming.",
+      "exchangeHelp": "Exchange rate: {{source}} {{sourceUnit}} : {{target}} {{targetUnit}}. Preview the amounts before confirming.",
       "direction": "Direction",
       "batches": "Number of batches",
       "quote": "Preview exchange",
@@ -3391,7 +3421,9 @@
       "ledgerEntry": "Lake Notes: period entry",
       "ledgerExchange": "Lake Notes: coin and credit exchange",
       "buyBatch": "Buy {{count}} · {{cost}} coins",
-      "bitePreparation": "Fish hooked. Get ready!"
+      "bitePreparation": "Fish hooked. Get ready!",
+      "saveHelp": "Your save follows your account across devices.",
+      "previewFirst": "Preview the exchange first."
     },
     "quickstart": {
       "title": "Connect your service",
@@ -3557,7 +3589,8 @@
       "done": "Done",
       "apiKeyLink": "Create or view it in API access",
       "retryDiscovery": "Retry loading models",
-      "manualName": "Enter a model name manually"
+      "manualName": "Enter a model name manually",
+      "searchPlaceholder": "Name, address, or note"
     },
     "records": {
       "title": "Records",

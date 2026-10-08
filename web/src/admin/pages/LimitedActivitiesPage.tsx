@@ -1,3 +1,4 @@
+import './limited-activities.css';
 import { useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -189,7 +190,7 @@ function ConfigForm({ detail }: { readonly detail: ActivityDetail }) {
           ) : null}
           {formError || save.error ? <ErrorState error={formError ?? save.error} /> : null}
           {saved ? <p role="status">{text('common.settingsSaved')}</p> : null}
-          <button className="btn btn-primary" type="submit" disabled={save.isPending}>
+          <button className="nb-btn nb-btn--primary" type="submit" disabled={save.isPending}>
             {uncertain ? text('common.retrySave') : text('common.saveSettings')}
           </button>
         </form>
@@ -265,7 +266,7 @@ export function LimitedActivitiesPage({
         icon="activities"
       />
       {session.data?.admin && !session.error && !pictureBook ? (
-        <div className="nb-grid nb-grid--3">
+        <div className="limited-activities-grid">
           {[
             {
               title: copy('喵帕斯的绘本', 'Nyanpasu’s picture book'),
@@ -289,7 +290,7 @@ export function LimitedActivitiesPage({
                 <div className="nb-stack">
                   {status(entry.query)}
                   <p>{entry.description}</p>
-                  <Link className="btn btn-secondary" to={entry.to}>
+                  <Link className="nb-btn nb-btn--secondary" to={entry.to}>
                     {copy('设置', 'Settings')}
                   </Link>
                 </div>

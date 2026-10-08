@@ -1,3 +1,4 @@
+import { Button } from '@shared/components/ui/Button';
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -128,9 +129,9 @@ export function FailureResetControl({
       {!job ? (
         <>
           <div className="form-actions">
-            <button
+            <Button
               type="button"
-              className="btn btn-quiet"
+              variant="ghost"
               disabled={disabled || !choices.length}
               onClick={() =>
                 setChosen(
@@ -140,15 +141,15 @@ export function FailureResetControl({
               }
             >
               {t('common.failureReset.selectPage')}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className="btn btn-quiet"
+              variant="ghost"
               disabled={!chosen.size}
               onClick={() => setChosen(new Map())}
             >
               {t('common.failureReset.clear')}
-            </button>
+            </Button>
           </div>
           <div className="failure-reset-choices">
             {choices.map((choice) => (
@@ -171,22 +172,22 @@ export function FailureResetControl({
             ))}
           </div>
           <div className="form-actions">
-            <button
+            <Button
               type="button"
-              className="btn btn-secondary"
+
               disabled={disabled || !chosen.size}
               onClick={() => begin(Array.from(chosen.values(), (choice) => choice.target))}
             >
               {t('common.failureReset.selected', { count: chosen.size })}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className="btn btn-secondary"
+
               disabled={disabled}
               onClick={() => begin([selection])}
             >
               {t('common.failureReset.all')}
-            </button>
+            </Button>
           </div>
         </>
       ) : (
@@ -207,19 +208,19 @@ export function FailureResetControl({
           {job.phase === 'paused' ? <p>{t('common.failureReset.resumeHelp')}</p> : null}
           <div className="form-actions">
             {working ? (
-              <button type="button" className="btn btn-quiet" onClick={() => job.stop()}>
+              <Button type="button" variant="ghost" onClick={() => job.stop()}>
                 {t('common.cancel')}
-              </button>
+              </Button>
             ) : null}
             {job.phase === 'paused' ? (
-              <button type="button" className="btn btn-secondary" onClick={() => void job.resume()}>
+              <Button type="button"  onClick={() => void job.resume()}>
                 {t('common.failureReset.resume')}
-              </button>
+              </Button>
             ) : null}
             {!working ? (
-              <button
+              <Button
                 type="button"
-                className="btn btn-quiet"
+                variant="ghost"
                 onClick={() => {
                   active.current = null;
                   setJob(null);
@@ -228,7 +229,7 @@ export function FailureResetControl({
                 }}
               >
                 {t('common.failureReset.newSelection')}
-              </button>
+              </Button>
             ) : null}
           </div>
           {counts && counts.skipped > 0 ? (

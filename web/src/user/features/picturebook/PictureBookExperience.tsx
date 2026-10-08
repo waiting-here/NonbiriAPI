@@ -55,7 +55,7 @@ function Experience({ account }: { readonly account: string }) {
       ) : null}
       {models.hasNextPage ? (
         <button
-          className="btn btn-secondary"
+          className="nb-btn nb-btn--secondary"
           disabled={models.isFetchingNextPage}
           onClick={() => void models.fetchNextPage()}
         >

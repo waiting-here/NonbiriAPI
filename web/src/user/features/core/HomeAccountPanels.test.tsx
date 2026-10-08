@@ -198,12 +198,16 @@ describe('home independent capability states', () => {
     });
     expect(screen.queryByText(/Choose one check-in each site day/)).not.toBeInTheDocument();
     await view.user.click(gameButton);
-    await waitFor(() => expect(gameButton).toBeDisabled());
+    await waitFor(() =>
+      expect(within(card('Game-credit check-in')).getByText('Claimed today')).toBeVisible(),
+    );
     expect(generalButton).toBeEnabled();
     expect(general.submit).not.toHaveBeenCalled();
     expect(game.submit).toHaveBeenCalledTimes(1);
     await view.user.click(generalButton);
-    await waitFor(() => expect(generalButton).toBeDisabled());
+    await waitFor(() =>
+      expect(within(card('General-credit check-in')).getByText('Claimed today')).toBeVisible(),
+    );
     expect(general.submit).toHaveBeenCalledTimes(1);
     expect(game.submit).toHaveBeenCalledTimes(1);
     await waitFor(() =>
@@ -285,7 +289,8 @@ describe('home independent capability states', () => {
     await waitFor(() => {
       expect(within(generalCard).getByText('Checked in')).toBeVisible();
       expect(within(gameCard).getByText('Other check-in claimed')).toBeVisible();
-      expect(within(gameCard).getByRole('button', { name: 'Check in' })).toBeDisabled();
+      expect(within(gameCard).queryByRole('button', { name: 'Check in' })).not.toBeInTheDocument();
+      expect(within(gameCard).getByText('Available tomorrow')).toBeVisible();
     });
     expect(within(gameCard).queryByText('Checked in')).not.toBeInTheDocument();
     expect(general.load).toHaveBeenCalledTimes(2);
@@ -345,7 +350,8 @@ describe('home independent capability states', () => {
 
     await waitFor(() => {
       expect(within(gameCard).getByText('Other check-in claimed')).toBeVisible();
-      expect(within(gameCard).getByRole('button', { name: 'Check in' })).toBeDisabled();
+      expect(within(gameCard).queryByRole('button', { name: 'Check in' })).not.toBeInTheDocument();
+      expect(within(gameCard).getByText('Available tomorrow')).toBeVisible();
     });
     expect(gameSubmit).toHaveBeenCalledTimes(1);
     expect(generalLoad).toHaveBeenCalledTimes(2);
@@ -497,7 +503,8 @@ describe('home independent capability states', () => {
     });
 
     expect(await screen.findByText('Checked in')).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Check in' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Check in' })).not.toBeInTheDocument();
+    expect(screen.getByText('Claimed today')).toBeVisible();
     expect(submit).toHaveBeenCalledTimes(1);
   });
 
@@ -581,13 +588,13 @@ describe('home independent capability states', () => {
     const rendered = await renderHomeDashboard(lowerLevel, adapters);
 
     expect(await screen.findByRole('button', { name: 'Check in' })).toBeDisabled();
-    expect(screen.getByText(/applies to every level/i)).toBeVisible();
+    expect(screen.getByText('Check-in threshold (credits)')).toHaveTextContent('10');
 
     rendered.rerender(
       <HomeDashboard user={{ ...lowerLevel, effective_level: 3 as const }} adapters={adapters} />,
     );
     expect(screen.getByRole('button', { name: 'Check in' })).toBeDisabled();
-    expect(screen.getByText(/applies to every level/i)).toBeVisible();
+    expect(screen.getByText('Check-in threshold (credits)')).toHaveTextContent('10');
   });
 
   it('keeps a committed receipt visible when its follow-up GET fails and retries only the read', async () => {
