@@ -1,3 +1,4 @@
+import { SimplePager } from '@shared/operations/SimplePager';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ErrorState, LoadingState } from '@shared/components/States';
@@ -75,8 +76,13 @@ function VersionShelf({ levelID, onPlay }: { levelID: string; onPlay(version: Ve
       <ul>{versions.data?.items.map((item) => <li key={item.id}>
         <button type="button" onClick={() => setVersionID(item.id)}>{text('version')} {item.version_number} · {item.playtest_summary?.best_stars ?? 0}★</button>
       </li>)}</ul>
-      <button type="button" disabled={page <= 1} onClick={() => setPage(page - 1)}>{text('previous')}</button>
-      <button type="button" disabled={!versions.data?.has_more} onClick={() => setPage(page + 1)}>{text('next')}</button>
+      <SimplePager
+        page={page}
+        hasMore={Boolean(versions.data?.has_more)}
+        onPrev={() => setPage(page - 1)}
+        onNext={() => setPage(page + 1)}
+        labels={{ previous: text('previous'), next: text('next') }}
+      />
     </>}
     {versionID ? <div>
       {version.isPending ? <LoadingState /> : version.error ? <ErrorState error={version.error} /> : <details><summary>{text('version_details')}</summary><code>{version.data?.content_hash}</code></details>}
@@ -301,8 +307,13 @@ export function LevelManager() {
       <button type="button" onClick={() => switchTo(null)}>{text('new_level')}</button>
       {list.isPending ? <LoadingState /> : list.error ? <ErrorState error={list.error} onRetry={() => void list.refetch()} /> : <>
         <ul>{list.data?.items.map((item) => <li key={item.id}><button type="button" onClick={() => switchTo(item.id)}>{item.title} · r{item.revision}</button></li>)}</ul>
-        <button type="button" disabled={page <= 1} onClick={() => setPage(page - 1)}>{text('previous')}</button>
-        <button type="button" disabled={!list.data?.has_more} onClick={() => setPage(page + 1)}>{text('next')}</button>
+        <SimplePager
+          page={page}
+          hasMore={Boolean(list.data?.has_more)}
+          onPrev={() => setPage(page - 1)}
+          onNext={() => setPage(page + 1)}
+          labels={{ previous: text('previous'), next: text('next') }}
+        />
       </>}
     </aside>
     {selectedID && detail.isPending ? <LoadingState /> : selectedID && detail.error ? <ErrorState error={detail.error} onRetry={() => void detail.refetch()} /> :

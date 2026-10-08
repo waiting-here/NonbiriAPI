@@ -228,7 +228,7 @@ function ExchangePanel({
         ) : null}
         {operation.error ? <ErrorState error={operation.error} /> : null}
         <button
-          className="btn btn-primary"
+          className="nb-btn nb-btn--primary"
           type="submit"
           disabled={
             operation.isPending ||

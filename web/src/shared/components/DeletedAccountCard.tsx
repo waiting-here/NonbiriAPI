@@ -1,3 +1,4 @@
+import { Button } from '@shared/components/ui/Button';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useLocation } from 'react-router';
@@ -55,9 +56,9 @@ export function DeletedAccountCard({
       <Card>
         <div className="ops-actions">
           <h2>{label.deleted}</h2>
-          <button type="button" className="btn btn-quiet" onClick={onClose}>
+          <Button type="button" variant="ghost" onClick={onClose}>
             {label.close}
-          </button>
+          </Button>
         </div>
         <dl className="ops-kv">
           <dt>{label.formerID}</dt>
@@ -125,17 +126,17 @@ export function DeletedAccountCard({
             </ul>
           )}
           <div className="ops-actions">
-            <button
+            <Button
               type="button"
-              className="btn btn-secondary"
+
               disabled={abortPage <= 1 || aborts.isFetching}
               onClick={() => setAbortPage(abortPage - 1)}
             >
               {label.previous}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className="btn btn-secondary"
+
               disabled={
                 !aborts.data ||
                 BigInt(aborts.data.pagination.page) >= BigInt(aborts.data.pagination.total_pages) ||
@@ -144,7 +145,7 @@ export function DeletedAccountCard({
               onClick={() => setAbortPage(abortPage + 1)}
             >
               {label.next}
-            </button>
+            </Button>
           </div>
         </Card>
       ) : null}

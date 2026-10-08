@@ -1,3 +1,4 @@
+import { Button } from '@shared/components/ui/Button';
 import { rejectionDescriptionKeys } from './rejectionDescriptions';
 import {
   useCallback,
@@ -920,7 +921,7 @@ function ScopedRoleLogPanel({
         <h2>{title}</h2>
         {!invalidKeyFilter && (
           <details className="nb-more log-export">
-            <summary className="btn btn-secondary">
+            <summary className="nb-btn nb-btn--secondary">
               {t('common.operations.logs.presentation.export')} ▾
             </summary>
             <div className="nb-more__menu">
@@ -964,13 +965,13 @@ function ScopedRoleLogPanel({
               rows={pageData.data}
               rowKey={(row) => row.id}
               actions={(row) => (
-                <button
+                <Button
                   type="button"
-                  className="btn btn-secondary"
+
                   onClick={() => openDetail(row.id)}
                 >
                   {t('logs.details')}
-                </button>
+                </Button>
               )}
             />
           )}

@@ -113,7 +113,7 @@ export default function GatewayCapabilitiesSection() {
       <div className="card-title-row ops-toolbar">
         <h2>{t('gatewayCapabilities.title')}</h2>
         <button
-          className="btn btn-secondary"
+          className="nb-btn nb-btn--secondary"
           type="button"
           disabled={operation.isPending || list.isPending || Boolean(list.error)}
           onClick={() => open(null)}
@@ -137,7 +137,7 @@ export default function GatewayCapabilitiesSection() {
                 </div>
                 <div className="ops-actions">
                   <button
-                    className="btn btn-secondary"
+                    className="nb-btn nb-btn--secondary"
                     type="button"
                     disabled={operation.isPending}
                     onClick={() => open(row)}
@@ -146,7 +146,7 @@ export default function GatewayCapabilitiesSection() {
                     {t('common.edit')}
                   </button>
                   <button
-                    className="btn btn-danger"
+                    className="nb-btn nb-btn--danger"
                     type="button"
                     disabled={operation.isPending}
                     onClick={() => {
@@ -347,11 +347,11 @@ export default function GatewayCapabilitiesSection() {
           </details>
           {!deleteTarget ? feedback : null}
           <div className="ops-actions">
-            <button className="btn btn-primary" type="submit" disabled={operation.isPending}>
+            <button className="nb-btn nb-btn--primary" type="submit" disabled={operation.isPending}>
               {t(operation.isPending ? 'common.working' : 'common.save')}
             </button>
             <button
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               type="button"
               disabled={operation.isPending}
               onClick={() => {

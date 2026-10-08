@@ -709,12 +709,12 @@ export function DonationResourcePicker({
           onChange={(event) => dispatchEndpointSearchDraft({ value: event.target.value })}
         />
       </label>
-      <button type="submit" className="btn btn-secondary" disabled={!enabled || disabled}>
+      <button type="submit" className="nb-btn nb-btn--secondary" disabled={!enabled || disabled}>
         {t('common.search')}
       </button>
       <button
         type="button"
-        className="btn btn-quiet"
+        className="nb-btn nb-btn--ghost"
         disabled={!enabled || disabled || (!endpointSearchDraft && !endpointSearch)}
         onClick={() => {
           dispatchEndpointSearchDraft({ value: '' });
@@ -745,12 +745,12 @@ export function DonationResourcePicker({
           onChange={(event) => dispatchKeySearchDraft({ value: event.target.value })}
         />
       </label>
-      <button type="submit" className="btn btn-secondary" disabled={!enabled || disabled}>
+      <button type="submit" className="nb-btn nb-btn--secondary" disabled={!enabled || disabled}>
         {t('common.search')}
       </button>
       <button
         type="button"
-        className="btn btn-quiet"
+        className="nb-btn nb-btn--ghost"
         disabled={!enabled || disabled || (!keySearchDraft && !keySearch)}
         onClick={() => {
           dispatchKeySearchDraft({ value: '' });
@@ -795,7 +795,7 @@ export function DonationResourcePicker({
           {rawActiveEndpointId ? (
             <button
               type="button"
-              className="btn btn-quiet"
+              className="nb-btn nb-btn--ghost"
               disabled={!enabled || disabled}
               onClick={closeEndpoint}
             >
@@ -1022,7 +1022,7 @@ export function DonationResourcePicker({
                   </div>
                   <button
                     type="button"
-                    className="btn btn-quiet"
+                    className="nb-btn nb-btn--ghost"
                     disabled={!enabled || disabled || !sessionMatches}
                     onClick={() => removeSelected(choice.key.id)}
                   >

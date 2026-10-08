@@ -105,7 +105,7 @@ export function MaintenancePanel({
       {mayAct ? <>
         <label className="ops-form-field"><span>{t('common.operations.maintenance.reasonLabel')}</span><textarea rows={4} value={reason} onChange={(event) => { if (transition.isSuccess) transition.reset(); setReason(event.target.value); }} /><small>{t('common.operations.maintenance.reasonHelp')}</small></label>
         {!reasonOK && reason.length > 0 ? <p className="field-error" role="alert">{t('common.operations.maintenance.reasonInvalid')}</p> : null}
-        <button className="btn btn-danger" type="button" disabled={!reasonOK || transition.isPending} onClick={() => { transition.reset(); setConfirmation(action); }}>{actionLabel}</button>
+        <button className="nb-btn nb-btn--danger" type="button" disabled={!reasonOK || transition.isPending} onClick={() => { transition.reset(); setConfirmation(action); }}>{actionLabel}</button>
       </> : null}
       <ConfirmDialog
         open={confirmation !== null}

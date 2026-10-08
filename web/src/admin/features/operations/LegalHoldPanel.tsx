@@ -653,7 +653,7 @@ function LegalHoldSessionPanel({
                           data-label={t('admin.legalHolds.table.detail')}
                         >
                           <button
-                            className="btn btn-secondary"
+                            className="nb-btn nb-btn--secondary"
                             type="button"
                             disabled={busy}
                             onClick={() => setSelected(hold.id)}
@@ -687,7 +687,7 @@ function LegalHoldSessionPanel({
             <>
               <div className="dialog-title-row">
                 <h3>{t('admin.legalHolds.detail.title')}</h3>
-                <button className="btn btn-quiet" type="button" onClick={closeDetail}>
+                <button className="nb-btn nb-btn--ghost" type="button" onClick={closeDetail}>
                   {t('admin.legalHolds.actions.close')}
                 </button>
               </div>
@@ -744,7 +744,7 @@ function LegalHoldSessionPanel({
                     />
                   </label>
                   <button
-                    className="btn btn-danger"
+                    className="nb-btn nb-btn--danger"
                     type="button"
                     disabled={
                       !releaseDraft.reason.trim() ||
@@ -843,7 +843,7 @@ function LegalHoldSessionPanel({
           <ErrorState error={elevationError} />
         ) : null}
         <button
-          className="btn btn-danger"
+          className="nb-btn nb-btn--danger"
           type="button"
           disabled={
             !createDraft.object_ref.trim() ||

@@ -169,7 +169,7 @@ test('management diagnostics use shared buttons and recover without refreshing',
   await page.goto(ADMIN_ORIGIN + '/logs');
   const section = page.getByRole('region', { name: 'Discovery and activity diagnostics' });
   const button = section.getByRole('button', { name: 'Search diagnostics' });
-  await expect(button).toHaveClass(/btn-primary/);
+  await expect(button).toHaveClass(/nb-btn--primary/);
   await button.focus();
   await page.keyboard.press('Enter');
   await expect(section.getByRole('alert')).toBeVisible();
@@ -181,7 +181,7 @@ test('management diagnostics use shared buttons and recover without refreshing',
     expect(
       await section
         .locator('button')
-        .evaluateAll((nodes) => nodes.every((n) => n.classList.contains('btn'))),
+        .evaluateAll((nodes) => nodes.every((n) => n.classList.contains('nb-btn'))),
     ).toBe(true);
     expect(await section.evaluate((n) => n.scrollWidth <= n.clientWidth + 1)).toBe(true);
   }

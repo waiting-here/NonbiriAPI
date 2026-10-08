@@ -141,7 +141,7 @@ function RequestView({
           {t('common.audit.openRequest')}
         </Link>
         {inspect ? (
-          <button className="btn btn-secondary" onClick={() => inspect(item.user_id)}>
+          <button className="nb-btn nb-btn--secondary" onClick={() => inspect(item.user_id)}>
             {c.inspect} {item.user_id}
           </button>
         ) : null}
@@ -318,7 +318,7 @@ function UserModelFilter({
         {c.model}
         <input maxLength={512} value={model} onChange={(event) => setModel(event.target.value)} />
       </label>
-      <button className="btn btn-secondary">{c.apply}</button>
+      <button className="nb-btn nb-btn--secondary">{c.apply}</button>
     </form>
   );
 }
@@ -384,7 +384,7 @@ function UserDetail({ userID, back, ...scope }: Scope & { userID: string; back: 
   }, [query.data, watermark, setParams]);
   return (
     <div className="ops-stack">
-      <button className="btn btn-secondary" onClick={back}>
+      <button className="nb-btn nb-btn--secondary" onClick={back}>
         {c.back}
       </button>
       <h2>
@@ -500,7 +500,7 @@ function Users({ inspect, ...scope }: Scope & { inspect: (id: string) => void })
               <strong>
                 {c.user}: {value.user_id}
               </strong>
-              <button className="btn btn-secondary" onClick={() => inspect(value.user_id)}>
+              <button className="nb-btn nb-btn--secondary" onClick={() => inspect(value.user_id)}>
                 {c.inspect}
               </button>
             </div>
@@ -533,7 +533,7 @@ function IPs({ inspect, ...scope }: Scope & { inspect: (id: string) => void }) {
             <h3>{c.related}</h3>
             {ip.associations.map((a) => (
               <p key={a.user_id + a.call_kind}>
-                <button className="btn btn-secondary" onClick={() => inspect(a.user_id)}>
+                <button className="nb-btn nb-btn--secondary" onClick={() => inspect(a.user_id)}>
                   {a.user_id}
                 </button>{' '}
                 · {a.call_kind} · {c.count}: {a.requests} · {c.dispatched}: {a.dispatched} ·{' '}
@@ -767,7 +767,7 @@ function RuleEditor({
             ).map(([name, field, operator, match]) => (
               <button
                 key={name}
-                className="btn btn-secondary"
+                className="nb-btn nb-btn--secondary"
                 type="button"
                 disabled={busy}
                 onClick={() =>
@@ -782,14 +782,14 @@ function RuleEditor({
               </button>
             ))}
             <button
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               type="button"
               onClick={() => setValue((v) => ({ ...v, conditions: emptyRule().conditions }))}
             >
               {c.uaTemplate}
             </button>
             <button
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               type="button"
               onClick={() =>
                 setValue((v) => ({
@@ -966,7 +966,7 @@ function RuleEditor({
             </>
           )}
           <button
-            className="btn btn-secondary"
+            className="nb-btn nb-btn--secondary"
             type="button"
             disabled={value.conditions.length < 2}
             onClick={() =>
@@ -978,7 +978,7 @@ function RuleEditor({
         </fieldset>
       ))}
       <button
-        className="btn btn-secondary"
+        className="nb-btn nb-btn--secondary"
         type="button"
         disabled={value.conditions.length >= 8}
         onClick={() =>
@@ -1020,10 +1020,10 @@ function RuleEditor({
         </label>
       </details>
       <div className="ops-actions">
-        <button className="btn btn-primary" disabled={busy || !validDuration}>
+        <button className="nb-btn nb-btn--primary" disabled={busy || !validDuration}>
           {c.save}
         </button>
-        <button className="btn btn-secondary" type="button" disabled={busy} onClick={cancel}>
+        <button className="nb-btn nb-btn--secondary" type="button" disabled={busy} onClick={cancel}>
           {c.cancel}
         </button>
       </div>
@@ -1137,7 +1137,7 @@ function Rules({ role, scopeKey, c }: Scope) {
       ) : (
         <>
           <button
-            className="btn btn-secondary"
+            className="nb-btn nb-btn--secondary"
             onClick={() => {
               mutation.reset();
               setEditing('new');
@@ -1185,7 +1185,7 @@ function Rules({ role, scopeKey, c }: Scope) {
                     {rule.updated_by_user_id ?? ''}
                   </p>
                   <button
-                    className="btn btn-secondary"
+                    className="nb-btn nb-btn--secondary"
                     disabled={mutation.isPending || (role !== 'admin' && rule.auto_ban != null)}
                     onClick={() => {
                       mutation.reset();
@@ -1195,7 +1195,7 @@ function Rules({ role, scopeKey, c }: Scope) {
                     {c.edit}
                   </button>
                   <button
-                    className="btn btn-secondary"
+                    className="nb-btn nb-btn--secondary"
                     disabled={mutation.isPending || (role !== 'admin' && rule.auto_ban != null)}
                     onClick={() => mutation.mutate({ rule })}
                   >
@@ -1299,7 +1299,7 @@ function ConfigForm({
       {readonly ? (
         <p>{c.adminOnly}</p>
       ) : (
-        <button className="btn btn-primary" disabled={busy}>
+        <button className="nb-btn nb-btn--primary" disabled={busy}>
           {c.save}
         </button>
       )}
@@ -1495,7 +1495,7 @@ function Access({ role, scopeKey, c, filters }: Scope) {
             </select>
           </label>
         </div>
-        <button className="btn btn-secondary">{c.apply}</button>
+        <button className="nb-btn nb-btn--secondary">{c.apply}</button>
       </form>
       {summary.error ? (
         <ErrorState error={summary.error} onRetry={() => void summary.refetch()} />
@@ -1839,7 +1839,7 @@ function RiskBody({ role, scopeKey }: { role: RiskRole; scopeKey: string }) {
               </div>
               <div className="ops-actions">
                 <button
-                  className="btn btn-primary"
+                  className="nb-btn nb-btn--primary"
                   disabled={
                     range === 'custom' &&
                     (timeDraftValue(draft.from) == null || timeDraftValue(draft.to) == null)
@@ -1848,7 +1848,7 @@ function RiskBody({ role, scopeKey }: { role: RiskRole; scopeKey: string }) {
                   {c.apply}
                 </button>
                 <button
-                  className="btn btn-secondary"
+                  className="nb-btn nb-btn--secondary"
                   type="button"
                   onClick={() =>
                     void client.invalidateQueries({ queryKey: ['risk', role, scopeKey] })

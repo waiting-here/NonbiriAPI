@@ -165,12 +165,13 @@ function CatalogFilters({
               <span>{t('user.charity.catalog.search')}</span>
               <input
                 type="search"
+                placeholder={t('user.charity.catalog.searchPlaceholder')}
                 value={queryDraft}
                 maxLength={MAX_QUERY_BYTES}
                 onChange={(event) => setQueryDraft(boundQueryDraft(event.target.value))}
               />
             </label>
-            <button type="submit" className="btn btn-secondary">
+            <button type="submit" className="nb-btn nb-btn--secondary">
               {t('common.search')}
             </button>
           </div>
@@ -337,7 +338,7 @@ export function CharityCatalogPanel({ accountID, enabled = true }: { accountID: 
                 filter.allowedForMe === 'true' || filter.currentlyAvailable === 'true' ? (
                   <button
                     type="button"
-                    className="btn btn-secondary"
+                    className="nb-btn nb-btn--secondary"
                     onClick={() => updateFilter({ allowedForMe: 'all', currentlyAvailable: 'all' })}
                   >
                     {t('user.charity.presentation.showAll')}

@@ -1,3 +1,4 @@
+import { Button } from '@shared/components/ui/Button';
 import { useTranslation } from 'react-i18next';
 import { Link, useRouteError } from 'react-router';
 import { Icon, type IconName } from './Icon';
@@ -66,13 +67,13 @@ export function RouteErrorPage({ station = 'user', authenticated = false }: { st
           ? 'warning'
           : 'error';
   const recovery = kind === 'maintenance' ? null : kind === '403' || kind === '404' ? (
-    <Link className="nb-button nb-button--secondary" to={routePath(station, station === 'admin' ? 'admin-home' : 'home')}>
+    <Link className="nb-btn nb-btn--secondary" to={routePath(station, station === 'admin' ? 'admin-home' : 'home')}>
       {t('common.backHome')}
     </Link>
   ) : (
-    <button type="button" className="btn btn-primary nb-button nb-button--primary" onClick={() => window.location.reload()}>
+    <Button type="button" variant="primary" onClick={() => window.location.reload()}>
       {t('common.reload')}
-    </button>
+    </Button>
   );
   const body = (
     <section className="page nb-standalone-state" data-error-kind={kind}>

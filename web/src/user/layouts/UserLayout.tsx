@@ -256,7 +256,7 @@ export function UserLayout() {
           <button
             ref={menuButtonRef}
             type="button"
-            className="btn btn-secondary mobile-menu-btn nb-menu-button"
+            className="nb-btn nb-btn--secondary mobile-menu-btn nb-menu-button"
             aria-expanded={menuOpen}
             aria-controls="user-navigation"
             aria-label={t(menuOpen ? 'shell.closeMenu' : 'shell.openMenu')}
@@ -297,7 +297,7 @@ export function UserLayout() {
             <div className="nb-user-drawer-actions">
               <div className="nb-user-drawer-actions__identity">{displayName}</div>
               <Link
-                className="nb-button nb-button--ghost nb-button--small"
+                className="nb-btn nb-btn--ghost nb-btn--sm"
                 to={USER_ACCOUNT_PATH}
                 onClick={closeMenu}
               >
@@ -306,7 +306,7 @@ export function UserLayout() {
               </Link>
               {showStewardEntry ? (
                 <Link
-                  className="nb-button nb-button--ghost nb-button--small"
+                  className="nb-btn nb-btn--ghost nb-btn--sm"
                   to={USER_STEWARD_PATH}
                   onClick={closeMenu}
                 >
@@ -317,7 +317,7 @@ export function UserLayout() {
               <ThemeToggle />
               <button
                 type="button"
-                className="nb-button nb-button--secondary"
+                className="nb-btn nb-btn--secondary"
                 onClick={() => {
                   closeMenu();
                   logout.mutate();
@@ -362,7 +362,7 @@ export function UserLayout() {
           {!signedIn ? <LanguageSwitcher /> : null}
           {!signedIn ? <ThemeToggle /> : null}
           {!signedIn && showSignIn ? (
-            <a className="btn btn-primary" href="/api/auth/discord/start">
+            <a className="nb-btn nb-btn--primary" href="/api/auth/discord/start">
               {t('common.signIn')}
             </a>
           ) : null}

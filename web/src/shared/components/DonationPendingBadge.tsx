@@ -1,3 +1,4 @@
+import { Button } from '@shared/components/ui/Button';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -70,15 +71,15 @@ export function DonationPendingBadge({
         </span>
       </Link>
       {badge.error ? (
-        <button
+        <Button
           type="button"
-          className="btn btn-quiet"
+          variant="ghost"
           disabled={badge.isFetching}
           onClick={() => void badge.refetch()}
           aria-label={t('common.donationHandling.badgeRetry')}
         >
           {t('common.retry')}
-        </button>
+        </Button>
       ) : null}
     </span>
   );

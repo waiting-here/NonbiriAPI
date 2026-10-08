@@ -1,3 +1,4 @@
+import { Button } from '@shared/components/ui/Button';
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -487,27 +488,27 @@ function CharityBindingPickerBody({
   return (
     <div className="ops-binding-picker">
       <nav className="ops-actions" aria-label={t('common.operations.charity.bindingCandidates')}>
-        <button
+        <Button
           type="button"
-          className="btn btn-quiet"
+          variant="ghost"
           aria-current={!selectedSource ? 'step' : undefined}
           disabled={interactionBlocked}
           onClick={clearSource}
         >
           {t('common.operations.charity.chooseSource')}
-        </button>
+        </Button>
         {selectedSource ? (
           <>
             <span aria-hidden="true">/</span>
-            <button
+            <Button
               type="button"
-              className="btn btn-quiet"
+              variant="ghost"
               aria-current={!selectedKey ? 'step' : undefined}
               disabled={interactionBlocked}
               onClick={clearKey}
             >
               {t('common.operations.charity.chooseKey')}
-            </button>
+            </Button>
           </>
         ) : null}
         {selectedKey ? (
@@ -543,13 +544,13 @@ function CharityBindingPickerBody({
                   </span>
                 ) : null}
               </label>
-              <button
+              <Button
                 type="submit"
-                className="btn btn-secondary"
+
                 disabled={interactionBlocked || !sourceQueryValid}
               >
                 {t('common.search')}
-              </button>
+              </Button>
             </form>
             <label>
               <span>{t('common.operations.charity.sourceScope')}</span>
@@ -667,13 +668,13 @@ function CharityBindingPickerBody({
                       </span>
                     ) : null}
                   </label>
-                  <button
+                  <Button
                     type="submit"
-                    className="btn btn-secondary"
+
                     disabled={interactionBlocked || !keyQueryValid}
                   >
                     {t('common.search')}
-                  </button>
+                  </Button>
                 </form>
               </div>
               {sourceKeys.isPending ? (
@@ -804,13 +805,13 @@ function CharityBindingPickerBody({
                       </span>
                     ) : null}
                   </label>
-                  <button
+                  <Button
                     type="submit"
-                    className="btn btn-secondary"
+
                     disabled={interactionBlocked || !candidateQueryValid}
                   >
                     {t('common.search')}
-                  </button>
+                  </Button>
                 </form>
                 <label>
                   <span>{t('common.operations.charity.candidateSourceFilter')}</span>
@@ -923,9 +924,9 @@ function CharityBindingPickerBody({
                   {entry.note} · {entry.source.display_head}…{entry.source.display_tail}
                 </span>
               </div>
-              <button
+              <Button
                 type="button"
-                className="btn btn-quiet"
+                variant="ghost"
                 disabled={interactionBlocked}
                 onClick={() => {
                   const next = { ...selected };
@@ -934,7 +935,7 @@ function CharityBindingPickerBody({
                 }}
               >
                 {t('common.operations.charity.remove')}
-              </button>
+              </Button>
             </li>
           ))}
         </ul>

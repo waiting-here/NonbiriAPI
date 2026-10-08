@@ -47,7 +47,7 @@ export function RawStorageSummary({ role }: { role: DiagnosticRole }) {
         </small>
         <p>{t('common.operations.logs.presentation.storageHistoryHelp')}</p>
         <button
-          className="btn btn-secondary"
+          className="nb-btn nb-btn--secondary"
           type="button"
           aria-expanded={showRecords}
           onClick={() => setShowRecords(!showRecords)}

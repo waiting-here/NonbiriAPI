@@ -443,7 +443,7 @@ function SettingField({
         {dirty ? (
           <button
             type="button"
-            className="btn btn-quiet"
+            className="nb-btn nb-btn--ghost"
             disabled={busy}
             onClick={() => onReset(entry.key)}
           >

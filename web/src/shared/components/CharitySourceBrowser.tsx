@@ -1,3 +1,4 @@
+import { Button } from '@shared/components/ui/Button';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDetailNavigation } from '@shared/operations/useDetailNavigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -441,24 +442,24 @@ function KeySummary({
       </section>
       <RecurringSummary keyValue={keyValue} />
       <div className="ops-actions charity-source-browser__actions">
-        <button
+        <Button
           type="button"
-          className="btn btn-secondary"
+
           disabled={disabled}
           onClick={() => onOpenDonation(keyValue.donation_id)}
         >
           {t('common.operations.charity.sourceBrowser.manageDonation', {
             id: keyValue.donation_id,
           })}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
-          className="btn btn-primary"
+          variant="primary"
           disabled={disabled}
           onClick={() => onOpenDonation(keyValue.donation_id, keyValue.key_id)}
         >
           {t('common.operations.charity.sourceBrowser.manageKey', { id: keyValue.key_id })}
-        </button>
+        </Button>
       </div>
     </article>
   );
@@ -818,9 +819,9 @@ export function CharitySourceBrowser({
           <p>{t('common.operations.charity.sourceBrowser.description')}</p>
         </div>
         {sourceKey ? (
-          <button type="button" className="btn btn-quiet" onClick={clearSource}>
+          <Button type="button" variant="ghost" onClick={clearSource}>
             {t('common.operations.charity.sourceBrowser.backToSources')}
-          </button>
+          </Button>
         ) : null}
       </header>
       <div className="charity-source-browser__filters">
@@ -861,20 +862,20 @@ export function CharitySourceBrowser({
               </span>
             ) : null}
           </label>
-          <button type="submit" className="btn btn-secondary">
+          <Button type="submit" >
             {t('common.operations.charity.sourceBrowser.applySearch')}
-          </button>
+          </Button>
           {sourceSearch.value ? (
-            <button
+            <Button
               type="button"
-              className="btn btn-quiet"
+              variant="ghost"
               onClick={() => {
                 setSourceSearchDraft('');
                 updateSearch(SOURCE_QUERY_PARAM, '', true, true);
               }}
             >
               {t('common.operations.charity.sourceBrowser.clearSearch')}
-            </button>
+            </Button>
           ) : null}
           <label>
             <span>{t('common.operations.charity.sourceBrowser.scope')}</span>
@@ -970,9 +971,9 @@ export function CharitySourceBrowser({
             <div className="charity-source-browser__missing" role="status">
               <h3>{t('common.operations.charity.sourceBrowser.sourceMissing')}</h3>
               <p>{t('common.operations.charity.sourceBrowser.sourceMissingBody')}</p>
-              <button type="button" className="btn btn-secondary" onClick={clearSource}>
+              <Button type="button"  onClick={clearSource}>
                 {t('common.operations.charity.sourceBrowser.backToSources')}
-              </button>
+              </Button>
             </div>
           ) : (
             <>
@@ -980,9 +981,9 @@ export function CharitySourceBrowser({
                 <div>
                   <h3>{selectedSourceTitle}</h3>
                 </div>
-                <button type="button" className="btn btn-quiet" onClick={clearSource}>
+                <Button type="button" variant="ghost" onClick={clearSource}>
                   {t('common.operations.charity.sourceBrowser.backToSources')}
-                </button>
+                </Button>
               </header>
               <form
                 className="ops-toolbar"
@@ -1021,20 +1022,20 @@ export function CharitySourceBrowser({
                     </span>
                   ) : null}
                 </label>
-                <button type="submit" className="btn btn-secondary">
+                <Button type="submit" >
                   {t('common.operations.charity.sourceBrowser.applySearch')}
-                </button>
+                </Button>
                 {keySearch.value ? (
-                  <button
+                  <Button
                     type="button"
-                    className="btn btn-quiet"
+                    variant="ghost"
                     onClick={() => {
                       setKeySearchDraft('');
                       updateSearch(KEY_QUERY_PARAM, '', false, true);
                     }}
                   >
                     {t('common.operations.charity.sourceBrowser.clearSearch')}
-                  </button>
+                  </Button>
                 ) : null}
                 <label>
                   <span>{t('common.operations.charity.sourceBrowser.idleFilter')}</span>

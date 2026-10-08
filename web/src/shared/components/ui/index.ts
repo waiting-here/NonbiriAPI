@@ -12,3 +12,4 @@ export * from './Tabs';
 export * from './DataTable';
 export * from './FilterBar';
 export * from './OutcomeNote';
+export * from './Button';

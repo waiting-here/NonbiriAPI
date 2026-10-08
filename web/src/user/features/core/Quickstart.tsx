@@ -565,7 +565,7 @@ export function Quickstart({
       {stopped ? (
         <div className="quickstart-notice" role="status">
           <p>{text('stopped')}</p>
-          <button className="btn btn-primary" type="button" onClick={() => void resume()}>
+          <button className="nb-btn nb-btn--primary" type="button" onClick={() => void resume()}>
             {text('continue')}
           </button>
         </div>
@@ -584,7 +584,7 @@ export function Quickstart({
           <div className="core-row-actions">
             <button
               type="button"
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               disabled={operation.isPending || reading}
               onClick={() => void checkResult()}
             >
@@ -615,7 +615,7 @@ export function Quickstart({
             </>
           ) : null}
           {receipt?.status === 'expired' ? (
-            <button type="button" className="btn btn-secondary" onClick={leave}>
+            <button type="button" className="nb-btn nb-btn--secondary" onClick={leave}>
               {text('useExistingRecovery')}
             </button>
           ) : null}
@@ -635,7 +635,7 @@ export function Quickstart({
           {text('savedRefresh')}{' '}
           <button
             type="button"
-            className="btn btn-secondary"
+            className="nb-btn nb-btn--secondary"
             onClick={() => void operation.refresh()}
           >
             {core('common.refresh')}
@@ -828,7 +828,7 @@ export function Quickstart({
               <div className="core-row-actions">
                 <button
                   type="button"
-                  className="btn btn-secondary"
+                  className="nb-btn nb-btn--secondary"
                   disabled={locked}
                   aria-pressed={keyMode === 'new'}
                   onClick={() => setKeyMode('new')}
@@ -837,7 +837,7 @@ export function Quickstart({
                 </button>
                 <button
                   type="button"
-                  className="btn btn-secondary"
+                  className="nb-btn nb-btn--secondary"
                   disabled={locked}
                   aria-pressed={keyMode === 'existing'}
                   onClick={() => {
@@ -897,7 +897,7 @@ export function Quickstart({
                   ) : null}
                   <button
                     type="submit"
-                    className="btn btn-primary"
+                    className="nb-btn nb-btn--primary"
                     disabled={locked || !ownership || !secret}
                   >
                     {text('addKey')}
@@ -934,7 +934,7 @@ export function Quickstart({
                             </strong>
                             <button
                               type="button"
-                              className="btn btn-secondary"
+                              className="nb-btn nb-btn--secondary"
                               disabled={locked || !item.enabled || item.suspension_state !== 'none'}
                               onClick={() => {
                                 setKeyId(item.id);

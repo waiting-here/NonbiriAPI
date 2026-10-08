@@ -335,7 +335,7 @@ export function DebugPage() {
         actions={
           !session.active ? (
             <button
-              className="btn btn-primary"
+              className="nb-btn nb-btn--primary"
               type="button"
               disabled={debug.mutating}
               onClick={() => void debug.start()}
@@ -414,17 +414,17 @@ export function DebugPage() {
           <h2>{t('user.debug.operations.title')}</h2>
           <div className="ops-debug-actions">
             {debug.observer === 'disconnected' ? (
-              <button className="btn btn-secondary" type="button" onClick={debug.connect}>
+              <button className="nb-btn nb-btn--secondary" type="button" onClick={debug.connect}>
                 {t('user.debug.operations.attachObserver')}
               </button>
             ) : (
-              <button className="btn btn-secondary" type="button" onClick={debug.disconnect}>
+              <button className="nb-btn nb-btn--secondary" type="button" onClick={debug.disconnect}>
                 {t('user.debug.operations.disconnectObserver')}
               </button>
             )}
             {session.mode === 'dry' ? (
               <button
-                className="btn btn-secondary"
+                className="nb-btn nb-btn--secondary"
                 type="button"
                 disabled={debug.mutating}
                 onClick={() => setConfirmation('live')}
@@ -433,7 +433,7 @@ export function DebugPage() {
               </button>
             ) : (
               <button
-                className="btn btn-secondary"
+                className="nb-btn nb-btn--secondary"
                 type="button"
                 disabled={debug.mutating}
                 onClick={() => void debug.setMode('dry', session.revision)}
@@ -442,7 +442,7 @@ export function DebugPage() {
               </button>
             )}
             <button
-              className="btn btn-danger"
+              className="nb-btn nb-btn--danger"
               type="button"
               disabled={debug.mutating}
               onClick={() => setConfirmation('stop')}
@@ -450,7 +450,7 @@ export function DebugPage() {
               {t('user.debug.operations.stop')}
             </button>
             <button
-              className="btn btn-danger"
+              className="nb-btn nb-btn--danger"
               type="button"
               disabled={debug.mutating}
               onClick={() => setConfirmation('replace')}

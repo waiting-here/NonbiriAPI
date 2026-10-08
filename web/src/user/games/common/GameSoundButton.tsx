@@ -6,7 +6,7 @@ export function GameSoundButton({ sound }: { readonly sound: GameSoundControl })
   return (
     <button
       type="button"
-      className="btn btn-secondary"
+      className="nb-btn nb-btn--secondary"
       aria-pressed={sound.enabled}
       onClick={sound.toggle}
     >

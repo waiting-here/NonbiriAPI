@@ -271,7 +271,7 @@ function SummaryCard({
           <dd>{text('linklink.summary.seconds', { seconds: remaining })}</dd>
         </div>
       </dl>
-      <button type="button" className="btn btn-primary" onClick={onNew}>
+      <button type="button" className="nb-btn nb-btn--primary" onClick={onNew}>
         {text('linklink.summary.new')}
       </button>
     </Card>
@@ -664,7 +664,7 @@ export function LinkLinkGame() {
           {state.rulesVersion === 2 ? (
             <button
               type="button"
-              className="btn btn-primary linklink-hint"
+              className="nb-btn nb-btn--primary linklink-hint"
               disabled={
                 mutationState !== 'idle' ||
                 lease !== 'active' ||
@@ -687,7 +687,7 @@ export function LinkLinkGame() {
           ) : null}
           <button
             type="button"
-            className="btn btn-secondary linklink-abandon"
+            className="nb-btn nb-btn--secondary linklink-abandon"
             disabled={mutationState !== 'idle' || lease !== 'active'}
             onClick={() => setAbandonReview(true)}
           >
@@ -764,7 +764,7 @@ export function LinkLinkGame() {
           <GameActionBar cost={<GameMoney value={spec?.price ?? '0'} />}>
             <button
               type="button"
-              className="btn btn-primary"
+              className="nb-btn nb-btn--primary"
               disabled={!canStart || mutationState !== 'idle'}
               onClick={() => setReview(true)}
             >
@@ -811,14 +811,14 @@ export function LinkLinkGame() {
             <div className="game-state-actions">
               <button
                 type="button"
-                className="btn btn-secondary"
+                className="nb-btn nb-btn--secondary"
                 onClick={() => setAbandonReview(false)}
               >
                 {text('linklink.keep')}
               </button>
               <button
                 type="button"
-                className="btn btn-danger"
+                className="nb-btn nb-btn--danger"
                 disabled={mutationState !== 'idle' || lease !== 'active'}
                 onClick={() =>
                   void execute({
@@ -839,13 +839,13 @@ export function LinkLinkGame() {
         <div className="game-inline-notice game-inline-notice--warning" role="alert">
           <p>{text('common.responseUnknown')}</p>
           <div className="game-state-actions">
-            <button type="button" className="btn btn-secondary" onClick={() => void reconcile()}>
+            <button type="button" className="nb-btn nb-btn--secondary" onClick={() => void reconcile()}>
               {text('common.retry')}
             </button>
             {mutation ? (
               <button
                 type="button"
-                className="btn btn-primary"
+                className="nb-btn nb-btn--primary"
                 onClick={() => void execute(mutation)}
               >
                 {text('fishing.unknown.replay')}

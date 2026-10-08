@@ -1,3 +1,4 @@
+import { Tabs } from '@shared/components/ui/Tabs';
 import { RecordsHeader } from '../components/RecordsHeader';
 import { Link } from 'react-router';
 import { useSearchState } from '@shared/operations/useSearchState';
@@ -81,26 +82,15 @@ export function IssuesPage() {
             : undefined
         }
       />
-      <div className="ops-tabs" role="tablist" aria-label={t('user.issues.stateLabel')}>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={state === 'current'}
-          className={`btn ${state === 'current' ? 'btn-primary' : 'btn-secondary'}`}
-          onClick={() => selectState('current')}
-        >
-          {t('user.issues.currentTab')}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={state === 'closed'}
-          className={`btn ${state === 'closed' ? 'btn-primary' : 'btn-secondary'}`}
-          onClick={() => selectState('closed')}
-        >
-          {t('user.issues.closedTab')}
-        </button>
-      </div>
+      <Tabs
+        label={t('user.issues.stateLabel')}
+        value={state}
+        onChange={selectState}
+        tabs={[
+          { value: 'current', label: t('user.issues.currentTab') },
+          { value: 'closed', label: t('user.issues.closedTab') },
+        ]}
+      />
       {session.error ? (
         <ErrorState error={session.error} onRetry={() => void session.refetch()} />
       ) : session.isPending || (issues.isPending && !pageData) ? (
@@ -157,7 +147,7 @@ export function IssuesPage() {
                   </dl>
                   {issue.deep_link ? (
                     <Link
-                      className="btn btn-secondary"
+                      className="nb-btn nb-btn--secondary"
                       to={
                         issue.deep_link.route_id === 'endpoint-detail'
                           ? `/endpoints/${encodeURIComponent(issue.deep_link.resource_id)}`

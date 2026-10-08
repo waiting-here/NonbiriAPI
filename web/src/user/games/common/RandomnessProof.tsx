@@ -119,7 +119,7 @@ function ProofPanel({
       ) : query.isError ? (
         <p role="status">
           {text('common.theProofIsTemporarilyUnavailable')}{' '}
-          <button type="button" className="btn btn-secondary" onClick={() => void refetch()}>
+          <button type="button" className="nb-btn nb-btn--secondary" onClick={() => void refetch()}>
             {text('common.retry')}
           </button>
         </p>
@@ -150,14 +150,14 @@ function ProofPanel({
             {p.seed && (
               <button
                 type="button"
-                className="btn btn-primary"
+                className="nb-btn nb-btn--primary"
                 disabled={verification === 'busy'}
                 onClick={() => void verify()}
               >
                 {verification === 'busy' ? text('common.verifying') : text('common.verifyLocally')}
               </button>
             )}
-            <button type="button" className="btn btn-secondary" onClick={() => save(p)}>
+            <button type="button" className="nb-btn nb-btn--secondary" onClick={() => save(p)}>
               {p.seed ? text('common.downloadProof') : text('common.saveCommitment')}
             </button>
           </div>

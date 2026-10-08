@@ -130,7 +130,7 @@ function AdminLogin({
               )
             ) : null}
             {error ? <ErrorState error={error} /> : null}
-            <button type="submit" className="btn btn-primary" disabled={busy}>
+            <button type="submit" className="nb-btn nb-btn--primary" disabled={busy}>
               {busy ? t('common.working') : t('admin.shell.login')}
             </button>
           </form>
@@ -330,7 +330,7 @@ export function AdminLayout() {
         <button
           type="button"
           ref={menuButtonRef}
-          className="btn btn-secondary mobile-menu-btn admin-menu-btn nb-menu-button"
+          className="nb-btn nb-btn--secondary mobile-menu-btn admin-menu-btn nb-menu-button"
           aria-expanded={menuOpen}
           aria-controls="admin-navigation"
           aria-label={t(menuOpen ? 'shell.closeMenu' : 'shell.openMenu')}

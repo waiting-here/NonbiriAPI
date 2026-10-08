@@ -215,7 +215,7 @@ function ChannelForm({
       ) : null}
       {error ? <ErrorState error={error} /> : null}
       <div className="ops-actions">
-        <button className="btn btn-primary" type="submit" disabled={!canEdit || busy}>
+        <button className="nb-btn nb-btn--primary" type="submit" disabled={!canEdit || busy}>
           {busy
             ? t('common.working')
             : t(
@@ -225,7 +225,7 @@ function ChannelForm({
               )}
         </button>
         {onCancel ? (
-          <button className="btn btn-secondary" type="button" disabled={busy} onClick={onCancel}>
+          <button className="nb-btn nb-btn--secondary" type="button" disabled={busy} onClick={onCancel}>
             {t('common.cancel')}
           </button>
         ) : null}
@@ -484,7 +484,7 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
   const newChannelAction = (
     <button
       type="button"
-      className="btn btn-primary"
+      className="nb-btn nb-btn--primary"
       disabled={!canWrite}
       onClick={() => {
         setCreating(true);
@@ -622,7 +622,7 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
                       render: (channel) => (
                         <button
                           type="button"
-                          className="btn btn-secondary"
+                          className="nb-btn nb-btn--secondary"
                           disabled={
                             busy ||
                             !scopeReady ||
@@ -741,7 +741,7 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
                       <h3>{t('admin.mainstreamChannels.retire.title')}</h3>
                       <p>{t('admin.mainstreamChannels.retire.description')}</p>
                       <button
-                        className="btn btn-danger"
+                        className="nb-btn nb-btn--danger"
                         type="button"
                         disabled={!canWrite || retire.isPending || patch.isPending}
                         onClick={() => setRetireTarget(selectedChannel)}

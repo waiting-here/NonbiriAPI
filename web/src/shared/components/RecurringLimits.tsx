@@ -1,3 +1,4 @@
+import { Button } from '@shared/components/ui/Button';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -538,25 +539,25 @@ function RuleCard({
         </button>
         {editable ? (
           <div className="recurring-limits__rule-actions">
-            <button
+            <Button
               type="button"
-              className="btn btn-secondary"
+
               disabled={disabled || index === 0}
               onClick={() => onMove(-1)}
             >
               {copy.moveUp}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className="btn btn-secondary"
+
               disabled={disabled || index === total - 1}
               onClick={() => onMove(1)}
             >
               {copy.moveDown}
-            </button>
-            <button type="button" className="btn btn-danger" disabled={disabled} onClick={onDelete}>
+            </Button>
+            <Button type="button" variant="danger" disabled={disabled} onClick={onDelete}>
               {copy.remove}
-            </button>
+            </Button>
           </div>
         ) : null}
       </div>
@@ -867,12 +868,12 @@ function ConflictPanel({
         </div>
       </div>
       <div className="recurring-limits__conflict-actions">
-        <button type="button" className="btn btn-secondary" onClick={onUseCurrent}>
+        <Button type="button"  onClick={onUseCurrent}>
           {copy.useCurrent}
-        </button>
-        <button type="button" className="btn btn-quiet" onClick={onKeepDraft}>
+        </Button>
+        <Button type="button" variant="ghost" onClick={onKeepDraft}>
           {copy.keepDraft}
-        </button>
+        </Button>
       </div>
     </aside>
   );
@@ -1425,14 +1426,14 @@ export function RecurringLimits({
       <div className="recurring-limits__toolbar">
         <span>{copy.ruleCount(draftRules.length)}</span>
         {editable ? (
-          <button
+          <Button
             type="button"
-            className="btn btn-secondary"
+
             disabled={save.isPending || unresolvedCommand || draftRules.length >= MAX_RULES}
             onClick={addRule}
           >
             {copy.addRule}
-          </button>
+          </Button>
         ) : null}
       </div>
       {draftRules.length >= MAX_RULES ? (
@@ -1480,14 +1481,14 @@ export function RecurringLimits({
           {zones.error ? (
             <div role="alert">
               <p className="field-error">{copy.timeZoneUnavailable}</p>
-              <button
+              <Button
                 type="button"
-                className="btn btn-secondary"
+
                 disabled={zones.isFetching}
                 onClick={() => void zones.refetch()}
               >
                 {copy.retryTimeZones}
-              </button>
+              </Button>
             </div>
           ) : null}
           {validationError ? (
@@ -1519,14 +1520,14 @@ export function RecurringLimits({
             <aside className="recurring-limits__unknown" role="alert">
               <strong>{copy.conflictTitle}</strong>
               <p>{copy.authorityUnavailable}</p>
-              <button
+              <Button
                 type="button"
-                className="btn btn-secondary"
+
                 disabled={save.isPending || read.isFetching}
                 onClick={() => void retryAuthorityRead()}
               >
                 {copy.retryAuthority}
-              </button>
+              </Button>
             </aside>
           ) : null}
           {authoritySyncPending ? (
@@ -1538,28 +1539,28 @@ export function RecurringLimits({
             <aside className="recurring-limits__unknown" role="alert">
               <strong>{copy.authoritySyncTitle}</strong>
               <p>{copy.authoritySyncUnavailable}</p>
-              <button
+              <Button
                 type="button"
-                className="btn btn-secondary"
+
                 disabled={save.isPending || read.isFetching || authoritySyncPending}
                 onClick={() => void retryAuthoritySync()}
               >
                 {copy.retryAuthority}
-              </button>
+              </Button>
             </aside>
           ) : null}
           {unknownScope === scope ? (
             <aside className="recurring-limits__unknown" role="alert">
               <strong>{copy.unknownTitle}</strong>
               <p>{copy.unknownBody}</p>
-              <button
+              <Button
                 type="button"
-                className="btn btn-secondary"
+
                 disabled={save.isPending}
                 onClick={retryOriginal}
               >
                 {copy.retryOriginal}
-              </button>
+              </Button>
             </aside>
           ) : null}
           {mutationError &&
@@ -1574,9 +1575,9 @@ export function RecurringLimits({
             </p>
           ) : null}
           <div className="recurring-limits__save-row">
-            <button
+            <Button
               type="submit"
-              className="btn btn-primary"
+              variant="primary"
               disabled={
                 save.isPending ||
                 !dirty ||
@@ -1588,16 +1589,16 @@ export function RecurringLimits({
               }
             >
               {save.isPending ? copy.saving : copy.save}
-            </button>
+            </Button>
             {dirty ? (
-              <button
+              <Button
                 type="button"
-                className="btn btn-quiet"
+                variant="ghost"
                 disabled={save.isPending || unresolvedCommand}
                 onClick={discardChanges}
               >
                 {copy.discardChanges}
-              </button>
+              </Button>
             ) : null}
             {!dirty && !save.isPending ? (
               <span className="recurring-limits__hint">{copy.noChanges}</span>

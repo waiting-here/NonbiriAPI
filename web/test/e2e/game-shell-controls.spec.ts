@@ -304,8 +304,8 @@ for (const width of [1440, 768, 390])
           await expect(page.locator('.activity-slot[open]')).toHaveCount(0);
           await slots.first().locator(':scope > summary').click();
           await expect(slots.first()).toHaveAttribute('open', '');
-          await expect(loan.locator('.loan-actions .btn-primary')).toBeDisabled();
-          await expect(slots.first().locator('.economy-welfare-card .btn-primary')).toBeDisabled();
+          await expect(loan.locator('.loan-actions .nb-btn--primary')).toBeDisabled();
+          await expect(slots.first().locator('.economy-welfare-card .nb-btn--primary')).toBeDisabled();
           await slots.first().locator(':scope > summary').click();
         }
         expect(

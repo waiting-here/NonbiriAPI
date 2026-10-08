@@ -1,3 +1,4 @@
+import { Button } from '@shared/components/ui/Button';
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useRetainedOperation } from '../../admin/features/operations/useRetainedOperation';
@@ -83,20 +84,20 @@ export function DonationHandlingControl({
         <>
           <ErrorState error={process.error} />
           <p>{t('common.donationHandling.conflictHint')}</p>
-          <button type="button" className="btn btn-secondary" onClick={() => void refresh()}>
+          <Button type="button"  onClick={() => void refresh()}>
             {t('common.refresh')}
-          </button>
+          </Button>
         </>
       ) : null}
       {handling.state === 'pending' ? (
-        <button
+        <Button
           type="button"
-          className="btn btn-primary"
+          variant="primary"
           disabled={process.isPending}
           onClick={() => process.mutate({ revision: handling.revision })}
         >
           {t('common.donationHandling.process')}
-        </button>
+        </Button>
       ) : null}
     </section>
   );

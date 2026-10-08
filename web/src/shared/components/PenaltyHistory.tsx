@@ -1,3 +1,4 @@
+import { Button } from '@shared/components/ui/Button';
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -226,9 +227,9 @@ function Evidence({
   const data = query.data;
   return (
     <>
-      <button className="btn btn-secondary" onClick={onBack}>
+      <Button  onClick={onBack}>
         {text('返回处理记录', 'Back to actions')}
-      </button>
+      </Button>
       <h3>{text('当时依据', 'Evidence at the time')}</h3>
       {query.isPending ? (
         <LoadingState />
@@ -347,9 +348,9 @@ function CaseHistory({
     );
   return (
     <>
-      <button className="btn btn-secondary" onClick={onBack}>
+      <Button  onClick={onBack}>
         {text('返回处罚列表', 'Back to penalties')}
-      </button>
+      </Button>
       {query.isPending ? (
         <LoadingState />
       ) : query.error ? (
@@ -382,9 +383,9 @@ function CaseHistory({
                 id={a.request_id}
                 available={a.request_log_available}
               />
-              <button className="btn btn-secondary" onClick={() => setAction(a)}>
+              <Button  onClick={() => setAction(a)}>
                 {text('查看当时依据', 'View evidence')} ({a.evidence_count})
-              </button>
+              </Button>
             </article>
           ))}
           <Pagination
@@ -482,9 +483,9 @@ function PenaltyList({ scope }: { scope: Scope }) {
             query.data.data.map((c) => (
               <article className="loan-record" key={c.id}>
                 <PenaltyFacts value={c} />
-                <button className="btn btn-secondary" onClick={() => setCaseID(c.id)}>
+                <Button  onClick={() => setCaseID(c.id)}>
                   {text('查看处理记录', 'View actions')}
-                </button>
+                </Button>
               </article>
             ))
           )}
@@ -501,9 +502,9 @@ export function PenaltyHistory({ inline = false, ...scope }: Scope & { inline?: 
     return <PenaltyList key={`${scope.role}:${scope.account}:${scope.userID}`} scope={scope} />;
   return (
     <>
-      <button className="btn btn-secondary" onClick={() => setOpen(true)}>
+      <Button  onClick={() => setOpen(true)}>
         {text('自动处罚记录', 'Automatic penalties')}
-      </button>
+      </Button>
       {open ? (
         <HistoryDialog
           title={text('自动处罚记录', 'Automatic penalties')}

@@ -65,7 +65,7 @@
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
 }
 
-.core-checkin-card > .btn {
+.core-checkin-card > :is(.btn, .nb-btn) {
   inline-size: 100%;
 }
 
@@ -640,8 +640,8 @@
     display: none;
   }
 
-  .core-form-actions > .btn,
-  .core-row-actions > .btn {
+  .core-form-actions > :is(.btn, .nb-btn),
+  .core-row-actions > :is(.btn, .nb-btn) {
     flex: 1 1 10rem;
   }
 }
@@ -676,10 +676,10 @@
     max-inline-size: 100%;
   }
 
-  .core-row-actions > .btn,
-  .core-form-actions > .btn,
+  .core-row-actions > :is(.btn, .nb-btn),
+  .core-form-actions > :is(.btn, .nb-btn),
   .core-order-controls,
-  .core-order-controls > .btn {
+  .core-order-controls > :is(.btn, .nb-btn) {
     flex: 1 1 100%;
     inline-size: 100%;
   }
@@ -690,7 +690,7 @@
 }
 
 @media (pointer: coarse), (max-width: 26rem) {
-  .core-page .btn,
+  .core-page :is(.btn, .nb-btn),
   .core-page button,
   .core-page input,
   .core-page select,

@@ -52,7 +52,7 @@ export function DuelDialog({
     >
       <header>
         <h2 id={titleID}>{title}</h2>
-        <button type="button" className="btn btn-secondary" onClick={onClose} autoFocus>
+        <button type="button" className="nb-btn nb-btn--secondary" onClick={onClose} autoFocus>
           {text('common.close')}
         </button>
       </header>

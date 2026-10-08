@@ -15,7 +15,7 @@ export function NotFoundPage({ station = 'user' }: { station?: 'user' | 'admin' 
         <div>
           <h1>{t('common.notFoundTitle')}</h1>
           <p>{t('common.notFoundBody')}</p>
-          <Link className="nb-button nb-button--secondary" to={routePath(station, station === 'admin' ? 'admin-home' : 'home')}><span>{t('common.backHome')}</span></Link>
+          <Link className="nb-btn nb-btn--secondary" to={routePath(station, station === 'admin' ? 'admin-home' : 'home')}><span>{t('common.backHome')}</span></Link>
         </div>
       </div>
     </section>

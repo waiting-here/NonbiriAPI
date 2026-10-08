@@ -1,3 +1,4 @@
+import { Button } from '@shared/components/ui/Button';
 import { useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { TimeInput } from '@shared/components/TimeInput';
@@ -167,10 +168,10 @@ export function LogFilters({ station, fields, state, onApply }: LogFiltersProps)
     >
       <div className="quick-ranges" role="group" aria-label={t('logs.quickRanges')}>
         {QUICK_RANGES.map((range) => (
-          <button
+          <Button
             key={range.key}
             type="button"
-            className="btn btn-secondary"
+
             aria-pressed={
               state.fromUnix !== undefined &&
               state.toUnix !== undefined &&
@@ -182,16 +183,16 @@ export function LogFilters({ station, fields, state, onApply }: LogFiltersProps)
             }}
           >
             {t(range.key)}
-          </button>
+          </Button>
         ))}
-        <button
+        <Button
           type="button"
-          className="btn btn-secondary"
+
           aria-expanded={expanded}
           onClick={() => setExpanded(true)}
         >
           {t('common.operations.logs.presentation.customTime')}
-        </button>
+        </Button>
       </div>
       <div className="nb-filter__row">
         {renderFields(primary)}
@@ -200,7 +201,7 @@ export function LogFilters({ station, fields, state, onApply }: LogFiltersProps)
           open={expanded}
           onToggle={(event) => setExpanded(event.currentTarget.open)}
         >
-          <summary className="btn btn-secondary">
+          <summary className="nb-btn nb-btn--secondary">
             {t('common.operations.logs.presentation.more')}
             {count ? ` · ${count}` : ''}
           </summary>
@@ -224,12 +225,12 @@ export function LogFilters({ station, fields, state, onApply }: LogFiltersProps)
             />
           </div>
         </details>
-        <button type="submit" className="btn btn-primary" disabled={!timeReady}>
+        <Button type="submit" variant="primary" disabled={!timeReady}>
           {t('common.applyFilter')}
-        </button>
-        <button type="button" className="btn btn-link" onClick={reset}>
+        </Button>
+        <Button type="button" variant="link" onClick={reset}>
           {t('common.resetFilter')}
-        </button>
+        </Button>
       </div>
       {Object.entries(state.filters).some(([, value]) => Boolean(value)) ? (
         <div className="nb-chips">

@@ -159,7 +159,7 @@ export function AIPlayers({
               </small>
               <button
                 type="button"
-                className="btn btn-primary"
+                className="nb-btn nb-btn--primary"
                 disabled={
                   blocked ||
                   !query.data.enabled ||

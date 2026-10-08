@@ -1,3 +1,4 @@
+import { SimplePager } from '@shared/operations/SimplePager';
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { useBlocker } from 'react-router';
 import { useTranslation } from 'react-i18next';
@@ -197,7 +198,7 @@ const Catalog = forwardRef<
           )}
         </p>
         <button
-          className="btn btn-primary"
+          className="nb-btn nb-btn--primary"
           disabled={
             discovery.pending ||
             reloading ||
@@ -393,7 +394,7 @@ const Catalog = forwardRef<
             </p>
             <div className="picturebook-actions">
               <button
-                className="btn btn-primary"
+                className="nb-btn nb-btn--primary"
                 type="button"
                 disabled={locked}
                 onClick={() => {
@@ -403,14 +404,14 @@ const Catalog = forwardRef<
                 {t('保存并切换', 'Save and switch')}
               </button>
               <button
-                className="btn btn-secondary"
+                className="nb-btn nb-btn--secondary"
                 type="button"
                 onClick={() => setPendingSelection(null)}
               >
                 {t('继续编辑', 'Continue editing')}
               </button>
               <button
-                className="btn btn-secondary"
+                className="nb-btn nb-btn--secondary"
                 type="button"
                 disabled={locked || refreshActive || upstreamLocked}
                 onClick={() => {
@@ -471,7 +472,7 @@ const Catalog = forwardRef<
               </p>
             ) : null}
             <button
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               type="button"
               disabled={
                 !batchIDs.length ||
@@ -520,40 +521,29 @@ const Catalog = forwardRef<
           </div>
         ) : null}
         <div className="picturebook-actions">
-          <button
-            className="btn btn-secondary"
-            disabled={filter.page <= 1 || locked || models.isFetching}
-            onClick={() =>
+          <SimplePager
+            page={filter.page}
+            hasMore={Boolean(models.data && filter.page * filter.page_size < models.data.total)}
+            disabled={locked || models.isFetching}
+            onPrev={() =>
               setFilter((current) => ({
                 ...current,
                 page: current.page - 1,
                 catalog_revision: models.data?.revision,
               }))
             }
-          >
-            {t('上一页', 'Previous')}
-          </button>
-          <button
-            className="btn btn-secondary"
-            disabled={
-              !models.data ||
-              filter.page * filter.page_size >= models.data.total ||
-              locked ||
-              models.isFetching
-            }
-            onClick={() =>
+            onNext={() =>
               setFilter((current) => ({
                 ...current,
                 page: current.page + 1,
                 catalog_revision: models.data?.revision,
               }))
             }
-          >
-            {t('下一页', 'Next')}
-          </button>
+            labels={{ previous: t('上一页', 'Previous'), next: t('下一页', 'Next') }}
+          />
           {selected ? (
             <button
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               disabled={locked || refreshActive || upstreamLocked || models.isFetching}
               onClick={async () => {
                 await reloadModels([selected.id]);
@@ -679,7 +669,7 @@ export function AdminContent({
             </p>
             <div className="picturebook-actions">
               <button
-                className="btn btn-primary"
+                className="nb-btn nb-btn--primary"
                 type="button"
                 disabled={savingDrafts}
                 onClick={() => void leaveAfterSave()}
@@ -687,7 +677,7 @@ export function AdminContent({
                 {t('保存并离开', 'Save and leave')}
               </button>
               <button
-                className="btn btn-secondary"
+                className="nb-btn nb-btn--secondary"
                 type="button"
                 disabled={savingDrafts || modelLocked || upstreamLocked}
                 onClick={discardAndLeave}
@@ -695,7 +685,7 @@ export function AdminContent({
                 {t('放弃草稿并离开', 'Discard drafts and leave')}
               </button>
               <button
-                className="btn btn-secondary"
+                className="nb-btn nb-btn--secondary"
                 type="button"
                 disabled={savingDrafts}
                 onClick={() => blocker.reset()}

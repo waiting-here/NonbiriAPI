@@ -189,7 +189,7 @@ function ConfigForm({ detail }: { readonly detail: ActivityDetail }) {
           ) : null}
           {formError || save.error ? <ErrorState error={formError ?? save.error} /> : null}
           {saved ? <p role="status">{text('common.settingsSaved')}</p> : null}
-          <button className="btn btn-primary" type="submit" disabled={save.isPending}>
+          <button className="nb-btn nb-btn--primary" type="submit" disabled={save.isPending}>
             {uncertain ? text('common.retrySave') : text('common.saveSettings')}
           </button>
         </form>
@@ -289,7 +289,7 @@ export function LimitedActivitiesPage({
                 <div className="nb-stack">
                   {status(entry.query)}
                   <p>{entry.description}</p>
-                  <Link className="btn btn-secondary" to={entry.to}>
+                  <Link className="nb-btn nb-btn--secondary" to={entry.to}>
                     {copy('设置', 'Settings')}
                   </Link>
                 </div>

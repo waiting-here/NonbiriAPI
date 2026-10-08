@@ -67,7 +67,7 @@ function ActivitiesContent() {
         description={t('user.activities.description')}
         icon="activities"
         actions={
-          <Link className="btn btn-secondary" to="/credits">
+          <Link className="nb-btn nb-btn--secondary" to="/credits">
             {t('user.activities.presentation.records')}
           </Link>
         }

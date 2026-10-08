@@ -107,7 +107,7 @@ export function ClientScans({
         <div className="ops-actions">
           <button
             type="button"
-            className="btn btn-primary"
+            className="nb-btn nb-btn--primary"
             disabled={
               start.isPending ||
               start.outcome === 'unknown' ||
@@ -124,7 +124,7 @@ export function ClientScans({
           {running(scan) && (
             <button
               type="button"
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               disabled={cancel.isPending || cancel.outcome === 'unknown'}
               onClick={() => cancel.mutate(id)}
             >
@@ -132,13 +132,13 @@ export function ClientScans({
             </button>
           )}
           {active && active.id !== id && (
-            <button type="button" className="btn btn-secondary" onClick={() => select(active)}>
+            <button type="button" className="nb-btn nb-btn--secondary" onClick={() => select(active)}>
               {t('common.auditScans.openActiveScan')}
             </button>
           )}
           <button
             type="button"
-            className="btn btn-secondary"
+            className="nb-btn nb-btn--secondary"
             onClick={() => {
               void client.invalidateQueries({ queryKey: prefix });
             }}

@@ -1,8 +1,9 @@
+import { SimplePager } from '@shared/operations/SimplePager';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router';
-import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { useActivityText } from '@shared/limitedactivities/copy';
 import { FatFishCanvas, FatFishPlayer } from '@shared/fatfish/FatFishPlayer';
 import {
@@ -384,7 +385,7 @@ function Content({ account }: { account: string }) {
               {activeController.snapshot().phase === 'prepared' ? (
                 <button
                   type="button"
-                  className="btn btn-primary"
+                  className="nb-btn nb-btn--primary"
                   disabled={working}
                   onClick={() => void doStart()}
                 >
@@ -398,7 +399,7 @@ function Content({ account }: { account: string }) {
               <p>{text('common.thisTabCannotContinuePlayingWaitFor')}</p>
               <button
                 type="button"
-                className="btn btn-secondary"
+                className="nb-btn nb-btn--secondary"
                 disabled={working}
                 onClick={() => void abandonReadOnly(active)}
               >
@@ -414,6 +415,9 @@ function Content({ account }: { account: string }) {
           <LoadingState />
         ) : periods.error ? (
           <ErrorState error={periods.error} onRetry={() => void periods.refetch()} />
+        ) : null}
+        {periods.data && periods.data.items.length === 0 && page === 1 ? (
+          <EmptyState title={text('common.noOpenPeriodsTitle')} body={text('common.noOpenPeriodsBody')} />
         ) : null}
         <div className="fatfish-periods">
           {periods.data?.items.map((item) => (
@@ -436,19 +440,13 @@ function Content({ account }: { account: string }) {
             </button>
           ))}
         </div>
-        <div className="fatfish-pager">
-          <button type="button" disabled={page <= 1} onClick={() => setPage(page - 1)}>
-            {text('common.previous')}
-          </button>
-          <span>{page}</span>
-          <button
-            type="button"
-            disabled={!periods.data?.has_more}
-            onClick={() => setPage(page + 1)}
-          >
-            {text('common.next')}
-          </button>
-        </div>
+        <SimplePager
+          page={page}
+          hasMore={Boolean(periods.data?.has_more)}
+          onPrev={() => setPage(page - 1)}
+          onNext={() => setPage(page + 1)}
+          labels={{ previous: text('common.previous'), next: text('common.next') }}
+        />
       </section>
       {periodID ? (
         <section>
@@ -586,7 +584,7 @@ function Content({ account }: { account: string }) {
               node.data.revision ? (
                 <button
                   type="button"
-                  className="btn btn-primary"
+                  className="nb-btn nb-btn--primary"
                   disabled={working}
                   onClick={() => void doUnlock()}
                 >
@@ -596,7 +594,7 @@ function Content({ account }: { account: string }) {
               {!active && period.data && canEnter(period.data) && node.data.progress.unlocked ? (
                 <button
                   type="button"
-                  className="btn btn-primary"
+                  className="nb-btn nb-btn--primary"
                   disabled={working || !!playSupportError}
                   onClick={() => void doPrepare()}
                 >
@@ -656,23 +654,13 @@ function Content({ account }: { account: string }) {
                 </li>
               ))}
             </ol>
-            <div className="fatfish-pager">
-              <button
-                type="button"
-                disabled={boardPage <= 1}
-                onClick={() => setBoardPage(boardPage - 1)}
-              >
-                {text('common.previous')}
-              </button>
-              <span>{boardPage}</span>
-              <button
-                type="button"
-                disabled={!board.data || boardPage * board.data.page_size >= board.data.total}
-                onClick={() => setBoardPage(boardPage + 1)}
-              >
-                {text('common.next')}
-              </button>
-            </div>
+            <SimplePager
+              page={boardPage}
+              hasMore={Boolean(board.data && boardPage * board.data.page_size < board.data.total)}
+              onPrev={() => setBoardPage(boardPage - 1)}
+              onNext={() => setBoardPage(boardPage + 1)}
+              labels={{ previous: text('common.previous'), next: text('common.next') }}
+            />
           </section>
         </section>
       ) : null}
@@ -682,6 +670,9 @@ function Content({ account }: { account: string }) {
           <LoadingState />
         ) : history.error ? (
           <ErrorState error={history.error} onRetry={() => void history.refetch()} />
+        ) : null}
+        {history.data && history.data.items.length === 0 && historyPage === 1 ? (
+          <EmptyState title={text('common.noChallengeHistoryTitle')} body={text('common.noChallengeHistoryBody')} />
         ) : null}
         <ol className="fatfish-history">
           {history.data?.items.map((item) => (
@@ -701,23 +692,13 @@ function Content({ account }: { account: string }) {
             </li>
           ))}
         </ol>
-        <div className="fatfish-pager">
-          <button
-            type="button"
-            disabled={historyPage <= 1}
-            onClick={() => setHistoryPage(historyPage - 1)}
-          >
-            {text('common.previous')}
-          </button>
-          <span>{historyPage}</span>
-          <button
-            type="button"
-            disabled={!history.data?.has_more}
-            onClick={() => setHistoryPage(historyPage + 1)}
-          >
-            {text('common.next')}
-          </button>
-        </div>
+        <SimplePager
+          page={historyPage}
+          hasMore={Boolean(history.data?.has_more)}
+          onPrev={() => setHistoryPage(historyPage - 1)}
+          onNext={() => setHistoryPage(historyPage + 1)}
+          labels={{ previous: text('common.previous'), next: text('common.next') }}
+        />
       </section>
     </div>
   );

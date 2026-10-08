@@ -259,8 +259,8 @@
 }
 @media (max-width: 48rem) {
   .home-page button,
-  .home-page .home-announcement-card__actions .btn,
-  .api-access-page .btn {
+  .home-page .home-announcement-card__actions :is(.btn, .nb-btn),
+  .api-access-page :is(.btn, .nb-btn) {
     min-height: 40px;
   }
   .home-wallet > .nb-between > a,

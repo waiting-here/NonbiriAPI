@@ -42,7 +42,7 @@ export function GameHeader({
               onClick={sound.toggle}
             />
             <Link
-              className="btn btn-secondary game-header-tool"
+              className="nb-btn nb-btn--secondary game-header-tool"
               to="/credits"
               aria-label={text('presentation.creditHistory')}
               title={text('presentation.creditHistory')}
@@ -51,7 +51,7 @@ export function GameHeader({
             </Link>
             {rankingsAvailable ? (
               <a
-                className="btn btn-secondary game-header-tool"
+                className="nb-btn nb-btn--secondary game-header-tool"
                 href="#game-rankings"
                 aria-label={duelText('ranking.leaderboards')}
                 title={duelText('ranking.leaderboards')}
@@ -76,7 +76,7 @@ export function GameHeaderTool({
   return (
     <button
       type="button"
-      className="btn btn-secondary game-header-tool"
+      className="nb-btn nb-btn--secondary game-header-tool"
       aria-label={label}
       title={label}
       {...props}

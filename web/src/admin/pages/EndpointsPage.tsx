@@ -238,7 +238,7 @@ function EndpointsPageContent({ account, scopeReady, sessionError }: EndpointsPa
               onChange={(event) => setUserDraft(event.target.value)}
             />
           </label>
-          <button className="btn btn-secondary" type="submit">
+          <button className="nb-btn nb-btn--secondary" type="submit">
             {t('common.applyFilter')}
           </button>
           <label className="ops-form-field">
@@ -265,7 +265,7 @@ function EndpointsPageContent({ account, scopeReady, sessionError }: EndpointsPa
             </select>
           </label>
           <button
-            className="btn btn-quiet"
+            className="nb-btn nb-btn--ghost"
             type="button"
             onClick={() => {
               setDraft('');
@@ -289,7 +289,7 @@ function EndpointsPageContent({ account, scopeReady, sessionError }: EndpointsPa
             <option value="community_charity">{t('admin.endpoints.community_charity')}</option>
           </select>
           <button
-            className="btn btn-secondary"
+            className="nb-btn nb-btn--secondary"
             type="button"
             disabled={!selected.length || tags.isPending || result.isFetching}
             onClick={() => tags.mutate(true)}
@@ -297,7 +297,7 @@ function EndpointsPageContent({ account, scopeReady, sessionError }: EndpointsPa
             {t('admin.endpoints.addTag')}
           </button>
           <button
-            className="btn btn-quiet"
+            className="nb-btn nb-btn--ghost"
             type="button"
             disabled={!selected.length || tags.isPending || result.isFetching}
             onClick={() => tags.mutate(false)}
@@ -402,7 +402,7 @@ function EndpointsPageContent({ account, scopeReady, sessionError }: EndpointsPa
                           <td data-label={t('admin.endpoints.keys')}>{group.key_count}</td>
                           <td className="ops-cell-wide" data-label={t('admin.endpoints.expand')}>
                             <button
-                              className="btn btn-secondary"
+                              className="nb-btn nb-btn--secondary"
                               type="button"
                               aria-expanded={open}
                               disabled={!scopeReady || result.isFetching}

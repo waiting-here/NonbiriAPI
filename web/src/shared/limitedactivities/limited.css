@@ -49,7 +49,7 @@
 .limited-entry__status {
   font-weight: 600;
 }
-.limited-entry__copy .btn {
+.limited-entry__copy :is(.btn, .nb-btn) {
   margin-top: 0.4rem;
 }
 @media (max-width: 640px) {

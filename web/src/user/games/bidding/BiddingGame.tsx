@@ -112,7 +112,7 @@ export function BiddingGame({
             onClick={() => setHistory(true)}
           />
           <a
-            className="btn btn-secondary game-header-tool"
+            className="nb-btn nb-btn--secondary game-header-tool"
             href="#game-rankings"
             aria-label={text('ranking.leaderboards')}
             title={text('ranking.leaderboards')}
@@ -239,7 +239,7 @@ export function BiddingGame({
           <div className="duel-actions">
             <button
               type="button"
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               disabled={duel.blocked}
               onClick={() => setSurrender(true)}
             >
@@ -275,7 +275,7 @@ export function BiddingGame({
           <div className="duel-actions">
             <button
               type="button"
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               disabled={duel.blocked}
               onClick={() => duel.run({ kind: 'cancel', id: queue.id, revision: queue.revision })}
             >
@@ -333,7 +333,7 @@ export function BiddingGame({
               <GameActionBar cost={formatCredits(selected?.ticket ?? '0')}>
                 <button
                   type="button"
-                  className="btn btn-primary"
+                  className="nb-btn nb-btn--primary"
                   disabled={duel.blocked || !!unavailable || !enough}
                   onClick={() => duel.run({ kind: 'queue', mode, termsHash: selected.termsHash })}
                 >

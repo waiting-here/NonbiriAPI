@@ -1,3 +1,4 @@
+import { Button } from '@shared/components/ui/Button';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -62,29 +63,29 @@ export function CharityRolePolicyForm({
         disabled={save.isPending || unknown}
       />
       <div className="ops-actions">
-        <button
+        <Button
           type="button"
-          className="btn btn-primary"
+          variant="primary"
           disabled={save.isPending || unknown || Boolean(policy.error)}
           onClick={() => {
             if (policy.policy) save.mutate({ id: model.id, revision, policy: policy.policy });
           }}
         >
           {t('common.operations.charity.saveModel')}
-        </button>
+        </Button>
         {unknown && save.variables ? (
-          <button
+          <Button
             type="button"
-            className="btn btn-secondary"
+
             disabled={save.isPending}
             onClick={() => save.mutate(save.variables!)}
           >
             {t('common.operations.charity.retrySavedModel')}
-          </button>
+          </Button>
         ) : null}
-        <button
+        <Button
           type="button"
-          className="btn btn-secondary"
+
           disabled={save.isPending || unknown}
           onClick={() => {
             setDraft(draftFromRolePolicy(model.role_policy));
@@ -93,7 +94,7 @@ export function CharityRolePolicyForm({
           }}
         >
           {t('common.operations.charity.reloadModel')}
-        </button>
+        </Button>
       </div>
       {save.error ? <ErrorState error={save.error} /> : null}
       {save.isSuccess ? <p role="status">{t('common.rolePolicy.saved')}</p> : null}

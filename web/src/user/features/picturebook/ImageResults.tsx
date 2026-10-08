@@ -85,7 +85,7 @@ export function ImageResults({
         </p>
       ) : null}
       {task.result_available && images.length < task.images.length ? (
-        <button className="btn btn-primary" disabled={loading} onClick={retryCollection}>
+        <button className="nb-btn nb-btn--primary" disabled={loading} onClick={retryCollection}>
           {loading
             ? t('正在领取图片', 'Collecting images')
             : t('领取并预览原图', 'Collect and preview originals')}
@@ -123,7 +123,7 @@ export function ImageResults({
                 MiB
               </span>
               <a
-                className="btn btn-secondary"
+                className="nb-btn nb-btn--secondary"
                 href={url}
                 download={
                   'picture-' +

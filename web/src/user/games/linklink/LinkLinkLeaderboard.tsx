@@ -44,7 +44,7 @@ export function LinkLinkLeaderboard({
         </label>
         <button
           type="button"
-          className="btn btn-secondary"
+          className="nb-btn nb-btn--secondary"
           disabled={query.isFetching}
           onClick={() => void query.refetch()}
         >

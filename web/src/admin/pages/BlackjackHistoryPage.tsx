@@ -1,3 +1,4 @@
+import { SimplePager } from '@shared/operations/SimplePager';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
@@ -34,7 +35,7 @@ function Detail({
   });
   return (
     <Card>
-      <button className="btn btn-secondary" onClick={back}>
+      <button className="nb-btn nb-btn--secondary" onClick={back}>
         {t('返回列表', 'Back to list')}
       </button>
       {detail.isPending ? (
@@ -115,15 +116,13 @@ export function BlackjackHistoryPage() {
   return (
     <main className="page ops-page">
       <PageHeader
+        back={<Link to="/games">{t('返回游戏配置', 'Back to game settings')}</Link>}
         title={t('二十一点历史与导出', 'Blackjack history and exports')}
         description={t(
           '近期保留30天；长期匿名资料不含账号、原局编号、绝对时间和付款来源。',
           'Recent history lasts 30 days. Anonymous records omit accounts, original table IDs, absolute times and payment sources.',
         )}
       />
-      <Link className="btn btn-secondary" to="/games">
-        {t('返回游戏管理', 'Back to game settings')}
-      </Link>
       <Card>
         <label>
           {t('资料范围', 'Dataset')}{' '}
@@ -153,7 +152,7 @@ export function BlackjackHistoryPage() {
               <div className="bj-history-list">
                 {page.data.items.map((h) => (
                   <button
-                    className="btn btn-secondary"
+                    className="nb-btn nb-btn--secondary"
                     key={h.id}
                     onClick={() => setSelected(h.id)}
                   >
@@ -170,24 +169,15 @@ export function BlackjackHistoryPage() {
               {!page.data.items.length && <p>{t('暂无记录。', 'No records.')}</p>}
             </>
           )}
-          <div className="ops-actions">
-            <button
-              className="btn btn-secondary"
-              disabled={cursors.length === 1}
-              onClick={() => setCursors((v) => v.slice(0, -1))}
-            >
-              {t('上一页', 'Previous')}
-            </button>
-            <button
-              className="btn btn-secondary"
-              disabled={!page.data?.next_cursor}
-              onClick={() => {
-                if (page.data?.next_cursor) setCursors((v) => [...v, page.data.next_cursor]);
-              }}
-            >
-              {t('下一页', 'Next')}
-            </button>
-          </div>
+          <SimplePager
+            page={cursors.length}
+            hasMore={Boolean(page.data?.next_cursor)}
+            onPrev={() => setCursors((v) => v.slice(0, -1))}
+            onNext={() => {
+              if (page.data?.next_cursor) setCursors((v) => [...v, page.data.next_cursor]);
+            }}
+            labels={{ previous: t('上一页', 'Previous'), next: t('下一页', 'Next') }}
+          />
         </Card>
       )}
       <Card>

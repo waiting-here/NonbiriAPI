@@ -380,7 +380,7 @@ export function LikesGame(context: DuelLobbyContext) {
             onClick={() => setTutorial(true)}
           />
           <Link
-            className="btn btn-secondary game-header-tool"
+            className="nb-btn nb-btn--secondary game-header-tool"
             to="/games#game-rankings"
             aria-label={t('user.games.presentation.overallRankings')}
             title={t('user.games.presentation.overallRankings')}

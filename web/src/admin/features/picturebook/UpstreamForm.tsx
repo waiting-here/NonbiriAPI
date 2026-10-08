@@ -145,7 +145,7 @@ export const UpstreamForm = forwardRef<
         {save.error ? <ErrorState error={save.error} /> : null}
         <div className="picturebook-actions">
           <button
-            className="btn btn-primary"
+            className="nb-btn nb-btn--primary"
             type="submit"
             disabled={save.pending || saved || disabled}
           >
@@ -154,7 +154,7 @@ export const UpstreamForm = forwardRef<
               : t('保存服务配置', 'Save service settings')}
           </button>
           <button
-            className="btn btn-secondary"
+            className="nb-btn nb-btn--secondary"
             type="button"
             disabled={save.locked || dirty || disabled}
             onClick={onReload}
@@ -163,7 +163,7 @@ export const UpstreamForm = forwardRef<
           </button>
           {dirty ? (
             <button
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--secondary"
               type="button"
               disabled={save.locked || disabled}
               onClick={discardDraft}
