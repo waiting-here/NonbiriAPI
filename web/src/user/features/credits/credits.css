@@ -95,12 +95,12 @@
 .credit-history__pagination nav span {
   font-variant-numeric: tabular-nums;
 }
-@media (max-width: 900px) {
+@media (width <= 64rem) {
   .credit-history__filters {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-@media (max-width: 560px) {
+@media (width <= 40rem) {
   .credit-history__filters {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -164,7 +164,7 @@
 .credit-history__filter-actions {
   align-items: center;
 }
-@media (max-width: 48rem) {
+@media (width <= 48rem) {
   .credit-history__overview.nb-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -172,13 +172,13 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-@media (max-width: 30rem) {
+@media (width <= 32rem) {
   .credit-history__advanced {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 
-@media (max-width: 48rem) {
+@media (width <= 48rem) {
   .credit-history__balance--long {
     grid-column: 1 / -1;
   }

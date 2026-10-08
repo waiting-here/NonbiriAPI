@@ -15,7 +15,7 @@
   min-width: 0;
 }
 
-@media (min-width: 64rem) {
+@media (width >= 64rem) {
   .nb-user-shell__main > .nb-page {
     width: 100%;
     max-width: none;
@@ -128,7 +128,7 @@
   border-top: 1px solid var(--nb-color-border);
 }
 
-@media (min-width: 64rem) {
+@media (width >= 64rem) {
   .nb-user-header .nb-brand__name {
     max-width: clamp(5rem, 10vw, 14rem);
   }
@@ -142,13 +142,13 @@
   }
 }
 
-@media (min-width: 64rem) and (max-width: 71.999rem) {
+@media (width >= 64rem) and (width < 80rem) {
   .nb-user-header .nb-user-header__nav-link > .nb-icon {
     display: none;
   }
 }
 
-@media (max-width: 63.999rem) {
+@media (width < 64rem) {
   .nb-user-header {
     grid-template-columns: minmax(0, 1fr) auto auto;
     /* A backdrop filter makes fixed descendants relative to the header,
@@ -242,14 +242,14 @@
   }
 }
 
-@media (max-width: 30rem) {
+@media (width <= 32rem) {
   .nb-user-header {
     gap: var(--nb-space-3);
     padding-inline: var(--nb-space-3);
   }
 }
 
-@media (max-width: 80rem) {
+@media (width <= 80rem) {
   .nb-user-header .donation-pending-badge a > span:first-child {
     position: absolute;
     width: 1px;

@@ -11,7 +11,7 @@
   overflow-wrap: anywhere;
 }
 .admin-duel-id {
-  font-family: var(--nb-font-mono, monospace);
+  font-family: var(--nb-font-mono);
   font-size: 0.85rem;
   overflow-wrap: anywhere;
 }
@@ -59,7 +59,7 @@
   border-top: 1px solid var(--nb-color-border);
   margin-top: 0.5rem;
 }
-@media (max-width: 600px) {
+@media (width <= 40rem) {
   .admin-duel-facts > div {
     grid-template-columns: minmax(0, 1fr);
     gap: 0.15rem;

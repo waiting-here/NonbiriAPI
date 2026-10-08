@@ -516,7 +516,7 @@ for (const width of [390, 1440]) {
     expect(
       (writes[0].definition as { parameters: { hand_value: number } }).parameters.hand_value,
     ).toBe(0.95);
-    await page.getByRole('link', { name: 'Back to game configuration', exact: true }).click();
+    await page.getByRole('link', { name: 'Back to game settings', exact: true }).click();
     errors.assertNone();
   });
 }

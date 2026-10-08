@@ -87,6 +87,7 @@
 }
 .settings-content .nb-setting__control {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--nb-space-1);
   min-width: 0;
   align-content: start;
@@ -96,6 +97,12 @@
   :is(input:not([type='checkbox']):not([type='radio']), textarea, select) {
   width: 100%;
   min-width: 0;
+}
+.settings-content .nb-setting__control > .nb-btn {
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+  white-space: normal;
 }
 .settings-content .nb-setting__control details {
   font-size: 0.75rem;
@@ -148,7 +155,7 @@
 .settings-feedback:empty {
   display: none;
 }
-@media (max-width: 64rem) {
+@media (width <= 64rem) {
   .nb-settings {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -175,7 +182,7 @@
     white-space: nowrap;
   }
 }
-@media (max-width: 48rem) {
+@media (width <= 48rem) {
   .settings-content .nb-setting {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -225,14 +232,14 @@
 .settings-content .setting-info p {
   margin: var(--nb-space-2) 0;
 }
-@media (max-width: 48rem), (pointer: coarse) {
+@media (width <= 48rem), (pointer: coarse) {
   .settings-content .setting-info summary {
     min-height: 2.5rem;
     min-width: 2.5rem;
   }
 }
 
-@media (min-width: 48.01rem) {
+@media (width > 48rem) {
   .settings-content .nb-setting {
     padding-block: var(--nb-space-1);
   }

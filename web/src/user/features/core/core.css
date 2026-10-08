@@ -69,7 +69,7 @@
   inline-size: 100%;
 }
 
-@media (max-width: 32rem) {
+@media (width <= 32rem) {
   .core-checkin-grid > .core-checkin-card {
     padding: var(--nb-space-3);
   }
@@ -83,7 +83,7 @@
   }
 }
 
-@media (max-width: 359px) {
+@media (width <= 32rem) {
   .core-checkin-grid {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -614,7 +614,7 @@
   border-radius: var(--nb-radius-pill);
 }
 
-@media (max-width: 44rem) {
+@media (width <= 48rem) {
   .core-field-grid,
   .core-detail-list > div,
   .core-selector__sources {
@@ -646,7 +646,7 @@
   }
 }
 
-@media (max-width: 26rem) {
+@media (width <= 32rem) {
   .core-page {
     inline-size: 100%;
   }
@@ -689,7 +689,7 @@
   }
 }
 
-@media (pointer: coarse), (max-width: 26rem) {
+@media (pointer: coarse), (width <= 32rem) {
   .core-page :is(.btn, .nb-btn),
   .core-page button,
   .core-page input,
@@ -1137,7 +1137,7 @@
 .models-workspace .nb-panel .nb-panel__head .nb-seg {
   flex-wrap: wrap;
 }
-@media (max-width: 47.999rem) {
+@media (width < 48rem) {
   .models-workspace .model-editor .core-field-grid {
     grid-template-columns: minmax(0, 1fr);
   }

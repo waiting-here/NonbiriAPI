@@ -88,7 +88,7 @@
   max-width: 6rem;
   height: 0.65rem;
 }
-@media (max-width: 560px) {
+@media (width <= 40rem) {
   .ai-condition {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

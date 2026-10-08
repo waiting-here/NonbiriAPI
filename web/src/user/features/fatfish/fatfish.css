@@ -71,7 +71,7 @@
 .fatfish-page .fatfish-board strong { margin-left: auto; }
 .fatfish-page .fatfish-history code, .fatfish-page .fatfish-history span { overflow-wrap: anywhere; }
 .fatfish-page .fatfish-condition--met { color: var(--nb-color-success); }
-@media (max-width: 640px) {
+@media (width <= 40rem) {
   .fatfish-page .fatfish-map-controls, .fatfish-page .fatfish-map-viewport { display: none; }
   .fatfish-page .fatfish-facts { grid-template-columns: minmax(0, 1fr); }
   .fatfish-page .fatfish-facts dd { margin-bottom: .4rem; }

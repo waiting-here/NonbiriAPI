@@ -545,9 +545,12 @@
 
 table {
   width: 100%;
-  min-width: 60rem;
   border-collapse: collapse;
   font-size: 0.88rem;
+}
+
+:where(.table-wrap) > table {
+  min-width: 60rem;
 }
 
 caption {
@@ -761,7 +764,7 @@ tr:first-child td {
   min-height: 2.45rem;
 }
 
-@media (max-width: 40rem) {
+@media (width <= 40rem) {
   .filter-bar {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -852,7 +855,7 @@ tr:first-child td {
   overflow-wrap: anywhere;
 }
 
-@media (max-width: 52rem) {
+@media (width < 64rem) {
   .mobile-menu-btn {
     display: inline-flex !important;
     order: 2;
@@ -879,7 +882,7 @@ tr:first-child td {
   }
 }
 
-@media (max-width: 38rem) {
+@media (width <= 40rem) {
   .site-header {
     padding-inline: 0.8rem;
   }
@@ -1045,7 +1048,7 @@ tr:first-child td {
 .log-attempt-diagnostic {
   white-space: pre-wrap;
 }
-@media (max-width: 38rem) {
+@media (width <= 40rem) {
   .log-attempt dl > div {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1095,7 +1098,7 @@ tr:first-child td {
   border: 0;
 }
 
-@media (max-width: 38rem) {
+@media (width <= 40rem) {
   .log-detail-row {
     grid-template-columns: 1fr;
   }

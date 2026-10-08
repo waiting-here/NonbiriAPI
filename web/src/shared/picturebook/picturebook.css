@@ -65,7 +65,7 @@
   overflow-wrap: anywhere;
 }
 .picturebook-notice {
-  border-inline-start: 0.2rem solid var(--accent, #7c6fe6);
+  border-inline-start: 0.2rem solid var(--nb-color-accent);
   padding-inline-start: 1rem;
 }
 .picturebook-prewrap {
@@ -116,7 +116,7 @@
 }
 
 .picturebook-discovery-error {
-  border: 1px solid var(--nb-color-danger, #b43e52);
+  border: 1px solid var(--nb-color-danger);
   border-radius: var(--nb-radius-sm);
   padding: 1rem;
   overflow-wrap: anywhere;
