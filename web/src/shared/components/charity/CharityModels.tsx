@@ -107,7 +107,7 @@ function modelDraft(model?: CharityModel): ModelDraft {
     rolePolicy: draftFromRolePolicy(model?.role_policy),
     isMainstream: model?.is_mainstream ?? false,
     excluded: (model?.excluded_request_fields ?? []).join(', '),
-    routeStrategy: model?.route_strategy ?? 'expiry_weighted',
+    routeStrategy: model?.route_strategy ?? 'cache_balanced',
     affinityTTLSeconds: model?.affinity_ttl_seconds ?? 300,
     provider: model?.provider ?? '',
     model: model?.model ?? '',
@@ -315,9 +315,9 @@ function ModelForm({
   const setPrice = (side: 'userPrices' | 'donorRewards', field: keyof TokenPrices, value: string) =>
     setDraft({ ...draft, [side]: { ...draft[side], [field]: value } });
   const copy = charityControlCopy(i18n.language);
-  return (
-    <Card className="charity-model-editor">
-      <h3>{model ? model.full_name : t(charityCopyKey(role, 'newModel'))}</h3>
+  const content = (
+    <>
+      {model ? <h3>{model.full_name}</h3> : null}
       <p>{t('common.operations.charity.namingHelp')}</p>
       <p className="ops-model-preview">
         <span>{t('common.operations.charity.namePreview')}</span>
@@ -813,6 +813,17 @@ function ModelForm({
           }}
         />
       ) : null}
+    </>
+  );
+  return (
+    <Card className="charity-model-editor">
+      {model ? (
+        content
+      ) : (
+        <Fold title={t(charityCopyKey(role, 'newModel'))} defaultOpen plain>
+          {content}
+        </Fold>
+      )}
     </Card>
   );
 }
