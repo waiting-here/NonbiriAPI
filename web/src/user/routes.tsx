@@ -86,6 +86,10 @@ export const router = createBrowserRouter([
         lazy: async () => ({ Component: (await import('./pages/ActivitiesPage')).ActivitiesPage }),
       },
       {
+        path: pathFor('gacha'),
+        lazy: async () => ({ Component: (await import('./activities/gacha/GachaPage')).GachaPage }),
+      },
+      {
         path: pathFor('picture-book'),
         lazy: async () => ({
           Component: (await import('./pages/PictureBookActivityPage')).PictureBookActivityPage,

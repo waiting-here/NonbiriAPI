@@ -12,6 +12,7 @@ import {
 } from '../features/economy/ActivitiesPanels';
 import { useActivities, useActivityAccountEvents } from '../features/economy/queries';
 import { LoanCard } from '../features/economy/LoanCard';
+import { GachaEntry } from '../activities/gacha/GachaEntry';
 import { LimitedActivitiesSection } from '../features/limitedactivities/LimitedActivities';
 import '../features/economy/economy.css';
 import '../features/economy/activities.css';
@@ -72,6 +73,7 @@ function ActivitiesContent() {
           </Link>
         }
       />
+      <GachaEntry />
       <LimitedActivitiesSection hideEmpty />
       <h2>{t('common.activities.permanent')}</h2>
       {activities.isPending && !activities.data ? <LoadingState /> : null}

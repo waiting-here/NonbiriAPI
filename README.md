@@ -4,7 +4,7 @@
 
 NonbiriAPI is a self-hosted AI API endpoint manager and OpenAI-compatible gateway. Each user manages their own endpoints, encrypted credentials, discovered models and routing, then calls personal or shared charity models with a revocable CallerKey.
 
-The current source prerelease is **1.0.0-rc.6**. See the [changelog](CHANGELOG.md) and [release](https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-rc.6). All releases provide source code only. Linux/amd64 is the supported production target.
+The current development version is **1.0.0-rc.7**. See the [changelog](CHANGELOG.md); the latest published source release is [1.0.0-rc.6](https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-rc.6). All releases provide source code only. Linux/amd64 is the supported production target.
 
 ## Capabilities
 
@@ -13,6 +13,8 @@ The current source prerelease is **1.0.0-rc.6**. See the [changelog](CHANGELOG.m
 - Discord sign-in, a separate administrator station, bilingual responsive pages and configurable branding. Users can export or delete their accounts.
 - Optional check-ins, shared activities and nine games with server-authoritative settlement, recovery and privacy-aware rankings.
 - A shared outbound security boundary, encrypted upstream secrets, bounded diagnostics and retention controls. Request logs and credit details have a 30-day ordinary retention period; compacted balance and audit summaries preserve accounting continuity.
+
+[The Gacha Simulator](docs/gacha.md) adds 55 collectible cards, animated SSR illustrations, permanent and scheduled limited pools, a shard shop and theme memories.
 
 ## Build and run
 
@@ -42,7 +44,7 @@ set +a
 
 Fresh databases start in maintenance with public features closed. Review the instance's legal pages and settings before accepting users. See [configuration](docs/configuration.md) for startup variables and online controls, and [deployment](docs/deployment.md) for systemd, proxy, backup and restore procedures.
 
-rc.6 supports fresh databases, the final rc.5 schema and registered rc.6 schemas. Older or unknown databases are rejected. The [compatibility section](docs/deployment.md#database-compatibility-and-version-changes) identifies the supported source and rollback requirements.
+rc.7 supports fresh databases, the final rc.5 schema and registered rc.6 schemas. Older or unknown databases are rejected. The [compatibility section](docs/deployment.md#database-compatibility-and-version-changes) identifies the supported source and rollback requirements.
 
 ## Call the API
 
@@ -93,6 +95,7 @@ The race gate needs a working C compiler. CI also covers real browsers, licenses
 | Gateway models and cache controls | [Gateway controls](docs/gateway-model-controls.md) |
 | Games and verifiable randomness | [Duel games](docs/duel-games.md), [AI players](docs/ai-players.md), [Blackjack](docs/blackjack.md), [randomness](docs/game-randomness.md) |
 | New game modules | [Steady Catch](docs/steady-catch.md), [AI Gwent](docs/ai-gwent.md), [Lake Notes](docs/lake-notes.md) |
+| Card collection activity | [The Gacha Simulator](docs/gacha.md) |
 | Picture-book activity | [Activity guide](docs/image-activity.md) |
 | Exports, deletion and retained records | [Data lifecycle](docs/data-lifecycle-checklist.md) |
 | Offline integrity and accounting audit | [Maintenance verification](docs/api-contract.md#10-maintenance-recovery-and-retention) |

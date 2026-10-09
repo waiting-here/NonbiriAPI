@@ -1,5 +1,6 @@
 import { isActivityLiterature } from '@shared/utils/activityLiterature';
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { useTranslation } from 'react-i18next';
@@ -497,6 +498,9 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
           ) : undefined
         }
       />
+      <Link className="nb-btn nb-btn--secondary" to="/activities/gacha">
+        {t('admin.activities.gacha', { defaultValue: '真·抽卡模拟器' })}
+      </Link>
       {sessionError ? (
         <ErrorState error={sessionError} />
       ) : config.error ? (

@@ -425,7 +425,8 @@
       "title": "Activities and pools",
       "units": {
         "credits": "credits"
-      }
+      },
+      "gacha": "The Gacha Simulator"
     },
     "mainstreamChannels": {
       "nav": "Mainstream channels",

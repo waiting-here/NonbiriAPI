@@ -64,6 +64,8 @@ const (
 	KindActivityExchange     Kind = "activity_exchange"
 	KindLakeEntry            Kind = "lake_entry"
 	KindLakeExchange         Kind = "lake_exchange"
+	KindGachaTicketPurchase  Kind = "gacha_ticket_purchase"
+	KindGachaThemeReward     Kind = "gacha_theme_reward"
 	KindImageReserve         Kind = "image_reserve"
 	KindImageSettle          Kind = "image_settle"
 	KindImageRefund          Kind = "image_refund"

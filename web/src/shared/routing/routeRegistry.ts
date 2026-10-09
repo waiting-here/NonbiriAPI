@@ -123,6 +123,13 @@ export const USER_ROUTE_DESCRIPTORS = [
     labelKey: 'user.games.nav',
   }),
   user({
+    id: 'gacha',
+    path: '/activities/gacha',
+    access: 'user',
+    layout: 'game',
+    registered: true,
+  }),
+  user({
     id: 'picture-book',
     path: '/activities/picture-book',
     access: 'user',
@@ -299,6 +306,13 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
     navGroup: 'content',
     icon: 'activities',
     labelKey: 'common.activities.limited',
+  }),
+  admin({
+    id: 'admin-gacha',
+    path: '/activities/gacha',
+    access: 'admin',
+    layout: 'wide',
+    registered: true,
   }),
   admin({
     id: 'admin-lake-notes',

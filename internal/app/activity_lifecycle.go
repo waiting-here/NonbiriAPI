@@ -3,9 +3,11 @@ package app
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/gacha"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
 	"github.com/waiting-here/NonbiriAPI/internal/imageactivity"
 	"github.com/waiting-here/NonbiriAPI/internal/inactivity"
@@ -83,11 +85,16 @@ func (a *activityRuntime) ExportGovernance(ctx context.Context, tx *sql.Tx, r li
 			OperationID: exchange.OperationID, LedgerSeq: exchange.LedgerSeq, CreatedAt: exchange.CreatedAt,
 		})
 	}
-	return out, nil
+	cards, err := a.gacha.ExportUserTx(ctx, tx, r.UserID, a.now().Unix(), r.Limit)
+	if err != nil {
+		return out, activityExportError(err)
+	}
+	out.Gacha, err = json.Marshal(cards)
+	return out, err
 }
 
 func activityExportError(err error) error {
-	if errors.Is(err, limitedactivities.ErrExportLimit) || errors.Is(err, imageactivity.ErrExportLimit) || errors.Is(err, inactivity.ErrTooLarge) {
+	if errors.Is(err, limitedactivities.ErrExportLimit) || errors.Is(err, imageactivity.ErrExportLimit) || errors.Is(err, inactivity.ErrTooLarge) || errors.Is(err, gacha.ErrExportLimit) {
 		return lifecycle.ErrTooLarge
 	}
 	return err
@@ -99,6 +106,10 @@ func (a *activityRuntime) PrepareDelete(ctx context.Context, tx *sql.Tx, r lifec
 		return nil, err
 	}
 	if _, err = a.lake.PrepareDeleteTx(ctx, tx, r.UserID, r.DecisionNow); err != nil {
+		f.Abort()
+		return nil, err
+	}
+	if err = a.gacha.DeleteUserTx(ctx, tx, r.UserID); err != nil {
 		f.Abort()
 		return nil, err
 	}
@@ -166,5 +177,15 @@ func (a *activityRuntime) Retain(ctx context.Context, _ int64, limit int, deadli
 	lake, err := a.lakeHost.RetainModule(ctx, game.LakeNotesID, now, limit-r.Processed, deadline)
 	r.Processed += lake.Processed
 	r.More = r.More || lake.More
+	if err != nil {
+		return r, err
+	}
+	if r.Processed == limit || time.Until(deadline) <= 0 {
+		r.More = true
+		return r, nil
+	}
+	cards, err := a.gacha.Retain(ctx, now, limit-r.Processed, deadline)
+	r.Processed += cards.Processed
+	r.More = r.More || cards.More
 	return r, err
 }

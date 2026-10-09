@@ -1,6 +1,6 @@
 # NonbiriAPI HTTP API Contract
 
-- Status: **v1.0.0-rc.6 source prerelease**. Check an instance's deployed build before using new routes.
+- Status: **v1.0.0-rc.7 development source**. Check an instance's deployed build before using new routes.
 - Scope: the OpenAI-compatible ingress routes are `GET /v1/models`, `POST /v1/chat/completions`, `POST /v1/embeddings`, and `POST /v1/images/generations`. Chat supports OpenAI-compatible, Anthropic-compatible and native AI SDK Gateway v3 upstreams; embeddings support OpenAI-compatible and the strict Gateway text subset; image generation supports OpenAI-compatible upstreams. There is no public Anthropic-native or rerank API.
 - Authority: this document reflects the current source route registry, strict request/response types, stable error catalog, and contract tests. A future wire change requires a changelog entry; undocumented database fields never enter an API response automatically. The session-authenticated picture-book activity has its own configuration and accounting, separate from the public image-generation model route.
 - Release boundary: new source behavior is listed in the [changelog](../CHANGELOG.md). This document does not assert that an instance has deployed it.
@@ -88,7 +88,7 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`). rc.6 accepts fresh databases, final rc.5 and registered rc.6 schemas; unknown or partial structures are rejected before source writes. Supported additive upgrades preserve identities, balances, settled charges, saved games, configuration and legal overrides. Startup checks identity, schema, configuration and credentials and recovers unfinished work. Full historical audits use `maintenance verify`. See [deployment compatibility](deployment.md#database-compatibility-and-version-changes) for the exact source and complete-snapshot rollback requirements.
 
-Current account export `schema_version=14` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v14.json`. SQLite remains Generation 2. See §9 for current and historical safe projections.
+Current account export `schema_version=15` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v15.json`. SQLite remains Generation 2. See §9 for current and historical safe projections.
 
 ### 1.5 Display time context
 
@@ -1111,9 +1111,9 @@ Account deletion is synchronous. It revokes credentials, removes private project
 
 Deletion keeps a separate minimum security projection for administrator and current level-6 steward review. Its original site/Discord IDs, known registration/deletion times and level, deletion source, then-effective ban and charity-pause state, four settled-before-zero wallet amounts, donation credit and automatic blacklist outcome are read-only; unavailable historical facts remain null or `unknown`, never inferred from a later account. It has no automatic expiry and is excluded from self-service export. The same Discord identity can retain minimum used-reward/once-only qualification and unexpired violation or rate-window facts after deletion, so re-registration does not reset them; those facts do not restore an old account, game progress, manual level or resource limits. A self-deletion that actually aborts an active Bidding Duel or Turn-based Battle match creates an administrator-only minimal event, cleared 90 days after it occurred. Blacklist entries and append-only reasons remain until an administrator removes the entry. Contact the instance operator for applicable rights requests; a new account cannot retrieve another account's historical management record through export.
 
-### Current export schema 13
+### Current export schema 15
 
-The current attachment is `nonbiriapi-account-export-v14.json`, with `schema_version:14`. Version 14 adds the user's `discord_gate_policy` and each personal model's `model_types`, and accepts `cache_balanced` as a personal `route_strategy`. The schema-11 section above describes retained historical fields. Current personal models also include `role_policy` and `transport_rule`; saved Likes preset names are currently omitted from the account export. `lake_notes` contains `rules_id,profile_revision,profile,casts,entries,exchanges`, excluding private encounter/reward randomness and internal checkpoints. Safe cast entries include identity, nullable source period, rules/generation/revision, acknowledged tick, phase/pause and public motion state. Entry/exchange receipts retain exact amounts and financial references.
+The current attachment is `nonbiriapi-account-export-v15.json`, with `schema_version:15`. Version 15 adds `gacha`: personal ticket/shard balances, collection, pity, claims, retained transactions and draw records, without internal retry-key digests. Version 14 adds the user's `discord_gate_policy` and each personal model's `model_types`, and accepts `cache_balanced` as a personal `route_strategy`. The schema-11 section above describes retained historical fields. Current personal models also include `role_policy` and `transport_rule`; saved Likes preset names are currently omitted from the account export. `lake_notes` contains `rules_id,profile_revision,profile,casts,entries,exchanges`, excluding private encounter/reward randomness and internal checkpoints. Safe cast entries include identity, nullable source period, rules/generation/revision, acknowledged tick, phase/pause and public motion state. Entry/exchange receipts retain exact amounts and financial references.
 
 `steadycatch` contains the owner's first-clear status, retained sessions and accepted replay inputs. `gwent` uses the duel export with owner-only competitive results and the current Elo aggregate. Neither adds access to another player's private state. See [Steady Catch](steady-catch.md), [AI Gwent](ai-gwent.md) and the [lifecycle checklist](data-lifecycle-checklist.md) for routes and retention.
 
@@ -1345,3 +1345,7 @@ Model-discovery status (`GET /admin/api/limited-activities/picture-book/models/r
 ### AI challenge extensions
 
 Bidding Duel adds session-authenticated AI offers, preferences and unpaid admission, plus administrator-only player/strategy configuration and previews. Exact routes, DTOs, bounds and errors are specified in [AI players](ai-players.md). Existing duel state and history add optional `economy`, `ai` and `action_sources`; round records add `sources`. `mode=ai` uses `economy=ai_challenge`. Bot profiles have `kind=ai`; administrative participants have `kind=bot`. Free terminal records have an empty operation ID and ledger sequence `0`; pagination uses a separate persistent history order. Old signed history cursors must be restarted after this upgrade. Export v13 adds the AI families under the player's `bidding.ai`, with no private strategy or AI seed.
+
+## Collectible-card activity
+
+The session-authenticated card activity uses `/api/gacha/state`, `/api/gacha/history` and `/api/gacha/actions`; administrator configuration uses `/admin/api/gacha`. See [The Gacha Simulator](gacha.md#records-and-http-access) for transaction, retry, revision and retention semantics.

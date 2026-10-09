@@ -586,7 +586,7 @@ CREATE TABLE credit_accounts (
 );
 CREATE TABLE credit_capacity (id INTEGER PRIMARY KEY CHECK(id=1), last_ledger_seq INTEGER NOT NULL CHECK(last_ledger_seq BETWEEN 0 AND 9223372036854775807), reserved_future_rows BLOB NOT NULL CHECK(typeof(reserved_future_rows)='blob' AND length(reserved_future_rows)=16), revision BLOB NOT NULL CHECK(typeof(revision)='blob' AND length(revision)=16));
 CREATE TABLE credit_operations (
- id TEXT NOT NULL PRIMARY KEY CHECK(typeof(id)='text' AND length(id)=25 AND substr(id,1,3)='op_' AND substr(id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')), ledger_seq INTEGER NOT NULL UNIQUE CHECK(ledger_seq BETWEEN 1 AND 9223372036854775807), kind TEXT NOT NULL CHECK(kind IN ('admin_user_adjustment','admin_pool_adjustment','account_delete_zero','checkin_award','game_onboarding_reward','activity_loan','image_reserve','image_settle','image_refund','image_delete_finalize','activity_exchange','inactivity_decay','fatfish_unlock','fatfish_ticket','fatfish_reward','fatfish_refund','lake_entry','lake_exchange','anti_abuse_penalty','welfare_claim','thursday_contribution','thursday_payout','forward_reserve','forward_settle','forward_release','charity_reserve','charity_settle','charity_release','donor_reward','thursday_finalize','fishing_reserve','fishing_settle','fishing_release','linklink_entry','rps_queue_reserve','rps_queue_release','rps_session_start','rps_round_cut','rps_terminal','duel_queue_reserve','duel_queue_release','duel_session_start','duel_terminal','ai_ticket','ai_terminal','catch_ticket','catch_refund','catch_reward','blackjack_reserve','blackjack_settle','blackjack_release')), source_type TEXT NOT NULL CHECK(source_type IN ('image_task','operation','logical_request','dispatch_claim','period','fishing_batch','linklink_session','rps_queue','rps_session','duel_queue','duel_session','catch_session','blackjack_payment')), source_id TEXT NOT NULL, source_seq BLOB NOT NULL CHECK(typeof(source_seq)='blob' AND length(source_seq)=16), actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, donation_credit_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, donation_credit_delta_sign INTEGER NOT NULL CHECK(donation_credit_delta_sign IN (-1,0,1)), donation_credit_delta_mag BLOB NOT NULL CHECK(typeof(donation_credit_delta_mag)='blob' AND length(donation_credit_delta_mag)=16), donation_credit_after BLOB CHECK(donation_credit_after IS NULL OR (typeof(donation_credit_after)='blob' AND length(donation_credit_after)=16)), reason TEXT CHECK(reason IS NULL OR (typeof(reason)='text' AND length(reason) BETWEEN 1 AND 1024 AND length(CAST(reason AS BLOB))<=4096)), created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), compacted INTEGER NOT NULL DEFAULT 0 CHECK(compacted IN (0,1)), UNIQUE(kind,source_type,source_id,source_seq), CHECK((donation_credit_delta_sign=0 AND hex(donation_credit_delta_mag)='00000000000000000000000000000000') OR (donation_credit_delta_sign<>0 AND hex(donation_credit_delta_mag)<>'00000000000000000000000000000000')), CHECK((donation_credit_user_id IS NULL AND donation_credit_delta_sign=0 AND donation_credit_after IS NULL) OR (donation_credit_user_id IS NOT NULL AND kind IN ('admin_user_adjustment','donor_reward'))), CHECK((donation_credit_delta_sign=0 OR kind IN ('admin_user_adjustment','donor_reward'))), CHECK((reason IS NULL OR kind IN ('admin_user_adjustment','admin_pool_adjustment','anti_abuse_penalty'))), CHECK((source_type='operation' AND length(source_id)=25 AND substr(source_id,1,3)='op_' AND substr(source_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='image_task' AND length(source_id)=26 AND substr(source_id,1,4)='img_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='logical_request' AND length(source_id)=26 AND substr(source_id,1,4)='req_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='dispatch_claim' AND length(source_id)=26 AND substr(source_id,1,4)='clm_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='period' AND length(source_id)=26 AND substr(source_id,1,4)='thu_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='fishing_batch' AND length(source_id)=25 AND substr(source_id,1,3)='fb_' AND substr(source_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='catch_session' AND length(source_id)=25 AND substr(source_id,1,3)='sc_' AND substr(source_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='linklink_session' AND length(source_id)=25 AND substr(source_id,1,3)='ll_' AND substr(source_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='rps_queue' AND length(source_id)=27 AND substr(source_id,1,5)='rpsq_' AND substr(source_id,6) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='blackjack_payment' AND length(source_id)=26 AND substr(source_id,1,4)='bjp_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='duel_queue' AND length(source_id)=27 AND substr(source_id,1,5) IN ('bidq_','likq_','gwtq_') AND substr(source_id,6) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='duel_session' AND length(source_id)=26 AND substr(source_id,1,4) IN ('bid_','lik_','gwt_') AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='rps_session' AND length(source_id)=26 AND substr(source_id,1,4)='rps_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w'))), CHECK((kind IN ('admin_user_adjustment','admin_pool_adjustment','account_delete_zero','checkin_award','game_onboarding_reward','activity_loan','activity_exchange','inactivity_decay','fatfish_unlock','fatfish_ticket','fatfish_reward','fatfish_refund','lake_entry','lake_exchange','anti_abuse_penalty','welfare_claim','thursday_contribution','thursday_payout') AND source_type='operation' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('forward_reserve','forward_settle','forward_release','charity_reserve','charity_settle','charity_release') AND source_type='logical_request' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('image_reserve','image_settle','image_refund','image_delete_finalize') AND source_type='image_task' AND hex(source_seq)='00000000000000000000000000000000') OR (kind='donor_reward' AND source_type='dispatch_claim' AND hex(source_seq)='00000000000000000000000000000000') OR (kind='thursday_finalize' AND source_type='period' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('fishing_reserve','fishing_settle','fishing_release') AND source_type='fishing_batch' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('catch_ticket','catch_refund','catch_reward') AND source_type='catch_session' AND hex(source_seq)='00000000000000000000000000000000') OR (kind='linklink_entry' AND source_type='linklink_session' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('rps_queue_reserve','rps_queue_release') AND source_type='rps_queue' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('rps_session_start','rps_terminal') AND source_type='rps_session' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('blackjack_reserve','blackjack_settle','blackjack_release') AND source_type='blackjack_payment' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('duel_queue_reserve','duel_queue_release') AND source_type='duel_queue' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('duel_session_start','duel_terminal','ai_ticket','ai_terminal') AND source_type='duel_session' AND hex(source_seq)='00000000000000000000000000000000') OR (kind='rps_round_cut' AND source_type='rps_session' AND hex(source_seq)<>'00000000000000000000000000000000'))
+ id TEXT NOT NULL PRIMARY KEY CHECK(typeof(id)='text' AND length(id)=25 AND substr(id,1,3)='op_' AND substr(id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')), ledger_seq INTEGER NOT NULL UNIQUE CHECK(ledger_seq BETWEEN 1 AND 9223372036854775807), kind TEXT NOT NULL CHECK(kind IN ('admin_user_adjustment','admin_pool_adjustment','account_delete_zero','checkin_award','game_onboarding_reward','activity_loan','image_reserve','image_settle','image_refund','image_delete_finalize','activity_exchange','inactivity_decay','fatfish_unlock','fatfish_ticket','fatfish_reward','fatfish_refund','lake_entry','lake_exchange','gacha_ticket_purchase','gacha_theme_reward','anti_abuse_penalty','welfare_claim','thursday_contribution','thursday_payout','forward_reserve','forward_settle','forward_release','charity_reserve','charity_settle','charity_release','donor_reward','thursday_finalize','fishing_reserve','fishing_settle','fishing_release','linklink_entry','rps_queue_reserve','rps_queue_release','rps_session_start','rps_round_cut','rps_terminal','duel_queue_reserve','duel_queue_release','duel_session_start','duel_terminal','ai_ticket','ai_terminal','catch_ticket','catch_refund','catch_reward','blackjack_reserve','blackjack_settle','blackjack_release')), source_type TEXT NOT NULL CHECK(source_type IN ('image_task','operation','logical_request','dispatch_claim','period','fishing_batch','linklink_session','rps_queue','rps_session','duel_queue','duel_session','catch_session','blackjack_payment')), source_id TEXT NOT NULL, source_seq BLOB NOT NULL CHECK(typeof(source_seq)='blob' AND length(source_seq)=16), actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, donation_credit_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, donation_credit_delta_sign INTEGER NOT NULL CHECK(donation_credit_delta_sign IN (-1,0,1)), donation_credit_delta_mag BLOB NOT NULL CHECK(typeof(donation_credit_delta_mag)='blob' AND length(donation_credit_delta_mag)=16), donation_credit_after BLOB CHECK(donation_credit_after IS NULL OR (typeof(donation_credit_after)='blob' AND length(donation_credit_after)=16)), reason TEXT CHECK(reason IS NULL OR (typeof(reason)='text' AND length(reason) BETWEEN 1 AND 1024 AND length(CAST(reason AS BLOB))<=4096)), created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), compacted INTEGER NOT NULL DEFAULT 0 CHECK(compacted IN (0,1)), UNIQUE(kind,source_type,source_id,source_seq), CHECK((donation_credit_delta_sign=0 AND hex(donation_credit_delta_mag)='00000000000000000000000000000000') OR (donation_credit_delta_sign<>0 AND hex(donation_credit_delta_mag)<>'00000000000000000000000000000000')), CHECK((donation_credit_user_id IS NULL AND donation_credit_delta_sign=0 AND donation_credit_after IS NULL) OR (donation_credit_user_id IS NOT NULL AND kind IN ('admin_user_adjustment','donor_reward','gacha_theme_reward'))), CHECK((donation_credit_delta_sign=0 OR kind IN ('admin_user_adjustment','donor_reward','gacha_theme_reward'))), CHECK((reason IS NULL OR kind IN ('admin_user_adjustment','admin_pool_adjustment','anti_abuse_penalty'))), CHECK((source_type='operation' AND length(source_id)=25 AND substr(source_id,1,3)='op_' AND substr(source_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='image_task' AND length(source_id)=26 AND substr(source_id,1,4)='img_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='logical_request' AND length(source_id)=26 AND substr(source_id,1,4)='req_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='dispatch_claim' AND length(source_id)=26 AND substr(source_id,1,4)='clm_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='period' AND length(source_id)=26 AND substr(source_id,1,4)='thu_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='fishing_batch' AND length(source_id)=25 AND substr(source_id,1,3)='fb_' AND substr(source_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='catch_session' AND length(source_id)=25 AND substr(source_id,1,3)='sc_' AND substr(source_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='linklink_session' AND length(source_id)=25 AND substr(source_id,1,3)='ll_' AND substr(source_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='rps_queue' AND length(source_id)=27 AND substr(source_id,1,5)='rpsq_' AND substr(source_id,6) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='blackjack_payment' AND length(source_id)=26 AND substr(source_id,1,4)='bjp_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='duel_queue' AND length(source_id)=27 AND substr(source_id,1,5) IN ('bidq_','likq_','gwtq_') AND substr(source_id,6) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='duel_session' AND length(source_id)=26 AND substr(source_id,1,4) IN ('bid_','lik_','gwt_') AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='rps_session' AND length(source_id)=26 AND substr(source_id,1,4)='rps_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w'))), CHECK((kind IN ('admin_user_adjustment','admin_pool_adjustment','account_delete_zero','checkin_award','game_onboarding_reward','activity_loan','activity_exchange','inactivity_decay','fatfish_unlock','fatfish_ticket','fatfish_reward','fatfish_refund','lake_entry','lake_exchange','gacha_ticket_purchase','gacha_theme_reward','anti_abuse_penalty','welfare_claim','thursday_contribution','thursday_payout') AND source_type='operation' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('forward_reserve','forward_settle','forward_release','charity_reserve','charity_settle','charity_release') AND source_type='logical_request' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('image_reserve','image_settle','image_refund','image_delete_finalize') AND source_type='image_task' AND hex(source_seq)='00000000000000000000000000000000') OR (kind='donor_reward' AND source_type='dispatch_claim' AND hex(source_seq)='00000000000000000000000000000000') OR (kind='thursday_finalize' AND source_type='period' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('fishing_reserve','fishing_settle','fishing_release') AND source_type='fishing_batch' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('catch_ticket','catch_refund','catch_reward') AND source_type='catch_session' AND hex(source_seq)='00000000000000000000000000000000') OR (kind='linklink_entry' AND source_type='linklink_session' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('rps_queue_reserve','rps_queue_release') AND source_type='rps_queue' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('rps_session_start','rps_terminal') AND source_type='rps_session' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('blackjack_reserve','blackjack_settle','blackjack_release') AND source_type='blackjack_payment' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('duel_queue_reserve','duel_queue_release') AND source_type='duel_queue' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('duel_session_start','duel_terminal','ai_ticket','ai_terminal') AND source_type='duel_session' AND hex(source_seq)='00000000000000000000000000000000') OR (kind='rps_round_cut' AND source_type='rps_session' AND hex(source_seq)<>'00000000000000000000000000000000'))
 ) WITHOUT ROWID;
 CREATE INDEX idx_credit_operations_source ON credit_operations(source_type,source_id,source_seq);
 CREATE INDEX idx_credit_operations_created ON credit_operations(created_at,ledger_seq);
@@ -5061,7 +5061,7 @@ CREATE TABLE economy_audit_buckets (
  asset_type TEXT NOT NULL CHECK(asset_type IN ('general','game','sketch_paper','sketch_brush')),
  kind TEXT NOT NULL CHECK(typeof(kind)='text' AND length(kind) BETWEEN 1 AND 64 AND kind NOT GLOB '*[^a-z0-9_]*'),
  source_type TEXT NOT NULL CHECK(typeof(source_type)='text' AND length(source_type) BETWEEN 1 AND 32 AND source_type NOT GLOB '*[^a-z0-9_]*'),
- channel TEXT NOT NULL CHECK(channel IN ('admin','account','checkin','welfare','thursday','api','charity','donation','fishing','linklink','rps','bidding','likes','gwent','steadycatch','blackjack','onboarding','loan','picture_book','inactivity','penalty','fat_fish','lake_notes','unclassified')),
+ channel TEXT NOT NULL CHECK(channel IN ('admin','account','checkin','welfare','thursday','api','charity','donation','fishing','linklink','rps','bidding','likes','gwent','steadycatch','blackjack','onboarding','loan','picture_book','inactivity','penalty','fat_fish','lake_notes','gacha','unclassified')),
  bucket TEXT NOT NULL CHECK(bucket IN ('hour','day')),
  bucket_start INTEGER NOT NULL CHECK(typeof(bucket_start)='integer' AND bucket_start BETWEEN -86400 AND 253402300799),
  offset_minutes INTEGER NOT NULL CHECK(typeof(offset_minutes)='integer' AND offset_minutes BETWEEN -720 AND 840 AND offset_minutes%30=0),
@@ -6518,7 +6518,7 @@ CREATE TABLE schema_state (
 ) STRICT;
 INSERT INTO credit_compaction(id,through_seq,details_before,sweep_at,sweep_after_seq) VALUES(1,0,0,0,0);
 INSERT INTO game_blackjack_clock(id,observed_at) VALUES(1,0);
-INSERT INTO schema_state(id,version) VALUES(1,8);
+INSERT INTO schema_state(id,version) VALUES(1,9);
 
 CREATE TABLE game_ai_settings (
  game_key TEXT PRIMARY KEY NOT NULL,
@@ -6716,3 +6716,98 @@ CREATE TABLE game_catch_inputs (
  controls_json TEXT NOT NULL CHECK(json_valid(controls_json) AND length(controls_json)<=65536),
  PRIMARY KEY(session_id,until_tick)
 );
+
+CREATE TABLE gacha_settings (
+ id INTEGER PRIMARY KEY CHECK(id=1),
+ revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 9007199254740991),
+ rules TEXT NOT NULL CHECK(json_valid(rules) AND length(rules)<=2048),
+ shop TEXT NOT NULL CHECK(json_valid(shop) AND length(shop)<=4096)
+) STRICT;
+CREATE TABLE gacha_pools (
+ id TEXT PRIMARY KEY CHECK(length(id)=25 AND substr(id,1,3)='gp_'),
+ config TEXT NOT NULL CHECK(json_valid(config) AND length(config)<=32768),
+ revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 9007199254740991),
+ created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799)
+) STRICT;
+CREATE TABLE gacha_presets (
+ id TEXT PRIMARY KEY CHECK(length(id) BETWEEN 1 AND 64),
+ name TEXT NOT NULL CHECK(length(name) BETWEEN 1 AND 80),
+ config TEXT NOT NULL CHECK(json_valid(config) AND length(config)<=32768),
+ revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 9007199254740991)
+) STRICT;
+CREATE TABLE gacha_config_events (
+ seq INTEGER PRIMARY KEY AUTOINCREMENT,
+ actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+ target TEXT NOT NULL CHECK(length(target) BETWEEN 1 AND 80),
+ revision INTEGER NOT NULL,
+ config TEXT NOT NULL CHECK(json_valid(config) AND length(config)<=32768),
+ created_at INTEGER NOT NULL
+) STRICT;
+CREATE TABLE gacha_profiles (
+ user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+ permanent INTEGER NOT NULL DEFAULT 0 CHECK(permanent BETWEEN 0 AND 9007199254740991),
+ limited INTEGER NOT NULL DEFAULT 0 CHECK(limited BETWEEN 0 AND 9007199254740991),
+ n_shards INTEGER NOT NULL DEFAULT 0 CHECK(n_shards BETWEEN 0 AND 9007199254740991),
+ r_shards INTEGER NOT NULL DEFAULT 0 CHECK(r_shards BETWEEN 0 AND 9007199254740991),
+ sr_shards INTEGER NOT NULL DEFAULT 0 CHECK(sr_shards BETWEEN 0 AND 9007199254740991),
+ ssr_shards INTEGER NOT NULL DEFAULT 0 CHECK(ssr_shards BETWEEN 0 AND 9007199254740991),
+ newcomer INTEGER NOT NULL DEFAULT 1 CHECK(newcomer IN (0,1)),
+ checked_day TEXT NOT NULL DEFAULT '' CHECK(length(checked_day) IN (0,10)),
+ month TEXT NOT NULL CHECK(length(month)=7),
+ monthly_permanent INTEGER NOT NULL DEFAULT 0 CHECK(monthly_permanent BETWEEN 0 AND 9007199254740991),
+ monthly_limited INTEGER NOT NULL DEFAULT 0 CHECK(monthly_limited BETWEEN 0 AND 9007199254740991),
+ entered_at INTEGER NOT NULL,
+ updated_at INTEGER NOT NULL
+) STRICT;
+CREATE TABLE gacha_owned (
+ user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ card_id TEXT NOT NULL CHECK(length(card_id) BETWEEN 1 AND 80),
+ obtained_at INTEGER NOT NULL,
+ source TEXT NOT NULL CHECK(source IN ('draw','shop')),
+ PRIMARY KEY(user_id,card_id)
+) STRICT, WITHOUT ROWID;
+CREATE TABLE gacha_pity (
+ user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ group_id TEXT NOT NULL CHECK(group_id='permanent' OR length(group_id)=64),
+ sr INTEGER NOT NULL CHECK(sr BETWEEN 0 AND 100),
+ ssr INTEGER NOT NULL CHECK(ssr BETWEEN 0 AND 1000),
+ sr_limit INTEGER NOT NULL CHECK(sr_limit BETWEEN 1 AND 100),
+ ssr_limit INTEGER NOT NULL CHECK(ssr_limit BETWEEN 1 AND 1000),
+ sr_featured INTEGER NOT NULL CHECK(sr_featured IN (0,1)),
+ ssr_featured INTEGER NOT NULL CHECK(ssr_featured IN (0,1)),
+ PRIMARY KEY(user_id,group_id)
+) STRICT, WITHOUT ROWID;
+CREATE TABLE gacha_claims (
+ user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ kind TEXT NOT NULL CHECK(kind IN ('theme','card')),
+ target TEXT NOT NULL CHECK(length(target) BETWEEN 1 AND 80),
+ created_at INTEGER NOT NULL,
+ PRIMARY KEY(user_id,kind,target)
+) STRICT, WITHOUT ROWID;
+CREATE TABLE gacha_operations (
+ id TEXT PRIMARY KEY CHECK(length(id)=25 AND substr(id,1,3)='op_'),
+ user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+ key_hash BLOB CHECK(key_hash IS NULL OR length(key_hash)=32),
+ request_hash BLOB CHECK(request_hash IS NULL OR length(request_hash)=32),
+ action TEXT NOT NULL CHECK(action IN ('enter','check-in','draw','buy','redeem','claim')),
+ delta TEXT NOT NULL CHECK(json_valid(delta) AND length(delta)<=4096),
+ balance_after TEXT NOT NULL CHECK(json_valid(balance_after) AND length(balance_after)<=4096),
+ credit_operation_id TEXT UNIQUE REFERENCES credit_operations(id),
+ created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799)
+) STRICT;
+CREATE UNIQUE INDEX idx_gacha_operation_key ON gacha_operations(user_id,key_hash) WHERE user_id IS NOT NULL;
+CREATE INDEX idx_gacha_operation_user ON gacha_operations(user_id,created_at,id);
+CREATE TABLE gacha_draws (
+ operation_id TEXT PRIMARY KEY REFERENCES gacha_operations(id) ON DELETE CASCADE,
+ user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ receipt TEXT NOT NULL CHECK(json_valid(receipt) AND length(receipt)<=16384),
+ rules TEXT NOT NULL CHECK(json_valid(rules) AND length(rules)<=2048),
+ roster TEXT NOT NULL CHECK(json_valid(roster) AND length(roster)<=65536),
+ catalog_version INTEGER NOT NULL,
+ created_at INTEGER NOT NULL
+) STRICT;
+CREATE INDEX idx_gacha_draw_retention ON gacha_draws(created_at);
+CREATE INDEX idx_gacha_draw_user ON gacha_draws(user_id,created_at DESC,operation_id DESC);
+INSERT INTO gacha_settings(id,revision,rules,shop) VALUES(1,1,'{"weights":[5500,3500,900,100],"sr_pity":10,"ssr_pity":60,"sr_featured":5000,"ssr_featured":5000,"sr_guarantee":true,"ssr_guarantee":true}','{"permanent_price":"10000","limited_price":"10000","n_ticket":20,"r_ticket":10,"sr_ticket":5,"ssr_tickets":1,"permanent_cap":20,"limited_cap":10,"sr_card":10,"ssr_card":3,"chibi_n":30,"chibi_r":15,"revision":1}');
+INSERT INTO gacha_presets(id,name,config,revision) VALUES('summer','夏夜花火','{"id":"","name":"夏夜花火","cover":"i","kind":"limited","group":"","rules":{"weights":[5500,3500,900,100],"sr_pity":10,"ssr_pity":60,"sr_featured":5000,"ssr_featured":5000,"sr_guarantee":true,"ssr_guarantee":true},"featured":["h-chatgpt","h-claude","h-glm","h-deepseek","h-gemini","i-chatgpt","i-claude","i-glm","i-deepseek","i-gemini"],"starts_at":null,"ends_at":null,"paused":false,"published":false,"revision":0}',1);
+INSERT INTO gacha_presets(id,name,config,revision) VALUES('theatre','童话剧场','{"id":"","name":"童话剧场","cover":"j","kind":"limited","group":"","rules":{"weights":[5500,3500,900,100],"sr_pity":10,"ssr_pity":60,"sr_featured":5000,"ssr_featured":5000,"sr_guarantee":true,"ssr_guarantee":true},"featured":["h-chatgpt","h-claude","h-glm","h-deepseek","h-gemini","j-chatgpt","j-claude","j-glm","j-deepseek","j-gemini"],"starts_at":null,"ends_at":null,"paused":false,"published":false,"revision":0}',1);

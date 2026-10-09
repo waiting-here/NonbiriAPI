@@ -1,6 +1,6 @@
 # Data Lifecycle Checklist (Generation 2 export / delete / retention / privacy)
 
-> Status: **v1.0.0-rc.6 source prerelease** — this checklist describes the
+> Status: **v1.0.0-rc.7 development** — this checklist describes the
 > release's export, deletion, retention, and privacy boundary. Source publication does
 > not itself upgrade an instance; deployment status is specific to each operator.
 >
@@ -12,7 +12,7 @@ family. The registered routes, export builder, deletion coordinator, retention w
 and bilingual privacy text are covered by their implementation and contract tests.
 Schema presence alone never creates a route or expands a response.
 
-Current account export schema 14 retains earlier safe projections and adds `user.discord_gate_policy` and personal-model `model_types`, including the new `cache_balanced` routing value. Its filename is `nonbiriapi-account-export-v14.json`; SQLite `user_version` remains 2. The schema-11 rows remain historical coverage for fields still retained. This does not assert that any particular instance has been upgraded.
+Current account export schema 15 retains earlier safe projections and adds `gacha`, including balances, owned cards, guarantees, claims, activity journals and draw details within 180 days. Its filename is `nonbiriapi-account-export-v15.json`; SQLite `user_version` remains 2. The schema-11 rows remain historical coverage for fields still retained. This does not assert that any particular instance has been upgraded.
 
 Donated keys include the current U128 failure-disable threshold in owner, management and safe export projections. It follows the parent key/donation lifecycle and adds no retention window. Policy edits add no-secret donation review facts, retained under the existing donation-review policy; account deletion removes actor links. A zero threshold preserves error counting but never disables a key for errors. Expiry, withdrawal, bans, manual switches and quota limits remain effective.
 
@@ -244,3 +244,13 @@ The snapshot and account retirement share one transaction after required domain 
 | `game_ai_queue`, bot/challenge/policy/version/settings tables | Own queue terms through game state; no administrative policy export | Waiting is unpaid, limited to 64 entries and 120 seconds. Failed receipts expire after 120 seconds. Bot/challenge IDs and immutable versions remain administrative configuration; disable preserves references. |
 
 AI callbacks, cancellation, financial settlement, memory extraction and deletion share the game's authoritative transaction. AI games do not create original PvP ranking or newcomer-task facts. Free games use a history sequence without fabricating ledger operations.
+
+## Card collection activity
+
+`gacha_profiles`, `gacha_owned`, `gacha_pity` and `gacha_claims` store six integer activity balances, welcome/check-in state, monthly ticket redemption counts, first acquisition times, pool-group guarantees and once-only claims. These account-owned records persist for the account lifetime and are included in safe export. Deletion removes them atomically with account closure.
+
+`gacha_draws` stores results, rule and roster snapshots, catalog version and pool name for 180 days. History uses owner-scoped cursor pages; expiry also applies to export and retry receipts before physical cleanup. Removing details does not reset collections or permit another charge or reward.
+
+`gacha_operations` retains the activity balance journal and durable idempotency receipt independently of draw details. Exports omit request/key hashes. Account deletion clears user links and retry hashes while preserving de-identified balance facts and credit-operation links. Credit entries follow their existing 30-day compaction policy; referenced compacted operations keep only minimal headers.
+
+`gacha_settings`, `gacha_pools` and `gacha_presets` are administrator configuration. `gacha_config_events` preserves revisions and clears deleted actor links. Public state omits drafts. The activity collects no device identifiers, IP addresses, prompts, upstream keys or private image uploads.

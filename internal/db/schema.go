@@ -31,3 +31,6 @@ var modelTypesAndImagesSQL string
 
 //go:embed migrations/0008_personal_balanced_routing.sql
 var personalBalancedRoutingSQL string
+
+//go:embed migrations/0009_gacha.sql
+var gachaSQL string

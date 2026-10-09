@@ -68,6 +68,10 @@ func ClassifyForAudit(kind Kind, sourceID string) AuditClassification {
 		channel, behavior = "onboarding", "reward"
 	case KindActivityLoan:
 		channel, behavior = "loan", "exchange"
+	case KindGachaTicketPurchase:
+		channel, behavior = "gacha", "exchange"
+	case KindGachaThemeReward:
+		channel, behavior = "gacha", "reward"
 	case KindLakeEntry:
 		channel, behavior = "lake_notes", "fee"
 	case KindLakeExchange:

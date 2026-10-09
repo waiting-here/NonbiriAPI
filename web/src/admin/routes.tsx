@@ -39,6 +39,12 @@ export const router = createBrowserRouter([
         }),
       },
       {
+        path: pathFor('admin-gacha'),
+        lazy: async () => ({
+          Component: (await import('./pages/GachaSettingsPage')).GachaSettingsPage,
+        }),
+      },
+      {
         path: pathFor('admin-lake-notes'),
         lazy: async () => ({
           Component: (await import('./features/lakenotes/LakePeriodsPage')).LakePeriodsPage,

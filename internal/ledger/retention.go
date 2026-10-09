@@ -192,6 +192,7 @@ var retainedOperationReferences = [][2]string{
 	{"activity_exchange_receipts", "operation_id"}, {"inactivity_runs", "ledger_operation_id"},
 	{"fatfish_challenges", "ticket_operation_id"}, {"fatfish_challenges", "refund_operation_id"},
 	{"fatfish_progress", "unlock_operation_id"}, {"fatfish_reward_claims", "operation_id"}, {"fatfish_financial_receipts", "operation_id"},
+	{"gacha_operations", "credit_operation_id"},
 	{"lake_notes_entitlements", "ledger_operation_id"}, {"lake_notes_exchange_receipts", "ledger_operation_id"},
 }
 

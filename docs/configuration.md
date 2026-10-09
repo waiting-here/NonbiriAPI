@@ -248,3 +248,7 @@ Image download origins apply only when an image provider returns a URL. For a re
 The adapter describes three stages: `discovery` selects the model-list endpoint and JSON fields, `submit` maps a generation request, and `response` identifies returned images. For `{"data":[{"id":"image-model"}]}`, use `items_pointer=/data` and `id_pointer=/id`. A request path beginning with `/` starts at the host root; other paths append to the configured base path. Save changes before refreshing the catalog.
 
 Failed discovery displays a dedicated explanation and, while its diagnostic record remains within ordinary retention, the upstream HTTP status. Authentication, missing endpoints, rate limits, redirects, timeouts, oversized catalogs and invalid model-list responses have distinct guidance. The response-body contents remain separate from the refresh status. A completed failure can start a new refresh; an uncertain acceptance retains its original retry key.
+
+## Card collection activity
+
+The Gacha Simulator is permanently available to eligible signed-in users when the site is operational and its timezone is configured. Its dedicated administrator page uses `GET/POST /admin/api/gacha` for rules, prices, quotas, pools and saved presets. The generic activity master switch does not close this permanent collection activity. Only published limited pools use schedules; installation does not publish a limited pool automatically. See [the activity guide](gacha.md).

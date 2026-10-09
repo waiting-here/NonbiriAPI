@@ -216,3 +216,6 @@ nonbiriapi.service
 tmp/
 .cache/
 draft/
+
+# Published collectible-card illustrations and animation layers.
+!web/public/assets/gacha/**/*.webp

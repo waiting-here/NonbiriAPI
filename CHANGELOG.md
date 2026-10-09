@@ -4,6 +4,22 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## [1.0.0-rc.7] - Unreleased
+
+### Added
+
+- The Gacha Simulator with 55 cards across eleven themes, fifteen animated SSR illustrations, five covers, unlockable group illustrations and dedicated sound effects.
+- A permanent pool and concurrent scheduled limited pools, configurable probabilities and hard guarantees, and cross-period progress shared by pools with identical rules.
+- Standard and limited tickets, game-credit-first standard exchanges, general-credit-only limited exchanges, a one-time ten-ticket welcome gift with a first-ten-pull SSR guarantee, and daily activity check-ins.
+- Duplicate-to-shard conversion, a mystery shop, limited-card redemptions during pool availability and shop-exclusive chibi cards. Theme completion grants tickets and cumulative donation credit without spendable credit income.
+- Administrator pool, probability, price, quota and reusable preset controls. Opened pools retain accepted rules; permanent-pool changes protect current guarantee progress.
+- A standalone activity preview with separate sample data, new-account and full-collection modes.
+
+### Changed
+
+- Database schema revision 9 adds transactional collection, guarantee and activity-journal storage while preserving supported predecessor data and existing legal overrides. Account export schema 15 includes the user's collection activity.
+- Draw details last 180 days. Collection and reward eligibility persist for the account lifetime; activity journals and credit-ledger retention are independent. Account deletion removes personal state and de-identifies retained accounting facts.
+
 ## [1.0.0-rc.6] - 2026-10-09
 
 This source prerelease supports fresh databases, the final rc.5 schema and registered rc.6 schemas. SQLite remains Generation 2 and account exports use schema 14. Build from the tagged source; no official prebuilt binaries are provided. See the deployment guide for exact upgrade and complete-snapshot restore requirements.

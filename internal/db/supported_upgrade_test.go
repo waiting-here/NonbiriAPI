@@ -37,8 +37,13 @@ var preModelTypesFixture string
 //go:embed testdata/pre_personal_balanced_routing.sql
 var prePersonalBalancedRoutingFixture string
 
+//go:embed testdata/pre_gacha.sql
+var preGachaFixture string
+
+func personalBalancedRoutingStorageSchema() string { return generationTwoSchema + preGachaFixture }
+
 func modelTypesAndImagesStorageSchema() string {
-	return generationTwoSchema + prePersonalBalancedRoutingFixture
+	return personalBalancedRoutingStorageSchema() + prePersonalBalancedRoutingFixture
 }
 func discordGateStorageSchema() string {
 	return modelTypesAndImagesStorageSchema() + preModelTypesFixture
@@ -99,6 +104,7 @@ func supportedSourceFixture(t *testing.T) *sql.DB {
 
 func TestSupportedReleasedSchemaIdentity(t *testing.T) {
 	for _, source := range []struct{ schema, manifest string }{
+		{personalBalancedRoutingStorageSchema(), personalBalancedRoutingManifestHash},
 		{modelTypesAndImagesStorageSchema(), modelTypesAndImagesManifestHash},
 		{discordGateStorageSchema(), discordGateManifestHash},
 		{gwentAIStorageSchema(), gwentAIManifestHash},

@@ -49,7 +49,8 @@ var storageSchema = schemaRegistry{
 		{version: 5, manifest: gwentAIManifestHash, sql: gwentAISQL},
 		{version: 6, manifest: discordGateManifestHash, sql: discordGateSQL},
 		{version: 7, manifest: modelTypesAndImagesManifestHash, sql: modelTypesAndImagesSQL},
-		{version: 8, manifest: PinnedGenerationTwoManifestHash, sql: personalBalancedRoutingSQL},
+		{version: 8, manifest: personalBalancedRoutingManifestHash, sql: personalBalancedRoutingSQL},
+		{version: 9, manifest: PinnedGenerationTwoManifestHash, sql: gachaSQL},
 	},
 	bridges: preReleaseSchemaBridges(),
 }
