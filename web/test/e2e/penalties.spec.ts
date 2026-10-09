@@ -220,11 +220,9 @@ for (const { role, width } of logExportScenarios) {
     expect(exportURL.pathname).toBe(path + '/export.json');
     expect(Object.fromEntries(exportURL.searchParams)).toEqual({
       phase: 'pre_handler',
-      from: activeFilters.get('from'),
-      to: activeFilters.get('to'),
     });
-    expect(Number(activeFilters.get('from'))).toBeGreaterThan(0);
-    expect(Number(activeFilters.get('to')) - Number(activeFilters.get('from'))).toBe(86_400);
+    expect(activeFilters.has('from')).toBe(false);
+    expect(activeFilters.has('to')).toBe(false);
     await exportLink.click({ trial: true });
     const exportBounds = (await exportLink.boundingBox())!;
     expect(exportBounds.x).toBeGreaterThanOrEqual(0);

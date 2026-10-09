@@ -9,8 +9,10 @@ import (
 	"reflect"
 	"testing"
 
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
+	"github.com/waiting-here/NonbiriAPI/internal/modeltype"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
@@ -238,7 +240,7 @@ func TestCatalogFilteredPagesUseCompleteCollectionAndStrictQueries(t *testing.T)
 			t.Fatalf("filtered last page: %+v", value)
 		}
 	}
-	for _, query := range []string{"allowed_level=0", "allowed_level=7", "allowed_level=01", "allowed_level=1&allowed_level=2", "allowed_level=", "currently_available=1", "currently_available=", "currently_available=true&currently_available=false"} {
+	for _, query := range []string{"allowed_level=0", "allowed_level=7", "allowed_level=01", "allowed_level=1&allowed_level=2", "allowed_level=", "currently_available=1", "currently_available=", "currently_available=true&currently_available=false", "model_type=", "model_type=unknown", "model_type=embeddings&model_type=chat_completions"} {
 		response := httptest.NewRecorder()
 		(&httpAPI{service: env.service}).capability(response, httptest.NewRequest(http.MethodGet, routeCapability+"?view=catalog&"+query, nil), UserPrincipal{UserID: env.caller})
 		if response.Code != 400 {
@@ -246,13 +248,89 @@ func TestCatalogFilteredPagesUseCompleteCollectionAndStrictQueries(t *testing.T)
 		}
 	}
 	response := httptest.NewRecorder()
-	(&httpAPI{service: env.service}).capability(response, httptest.NewRequest(http.MethodGet, routeCapability+"?view=catalog&allowed_level=3&allowed_for_me=true&currently_available=true&page=3&page_size=10", nil), UserPrincipal{UserID: env.caller})
+	(&httpAPI{service: env.service}).capability(response, httptest.NewRequest(http.MethodGet, routeCapability+"?view=catalog&allowed_level=3&allowed_for_me=true&currently_available=true&model_type=chat_completions&page=3&page_size=10", nil), UserPrincipal{UserID: env.caller})
 	if response.Code != 200 {
 		t.Fatalf("combined HTTP query: %d %s", response.Code, response.Body)
 	}
 	level = 7
 	if _, err := env.service.Catalog(context.Background(), env.caller, filter, pagination.Default()); !errors.Is(err, ErrInvalidRequest) {
 		t.Fatalf("invalid repository level: %v", err)
+	}
+}
+
+func TestCatalogModelTypeFiltersUseCompleteMatchingSetAndIntersect(t *testing.T) {
+	env := newRoutingTestEnv(t)
+	env.seedUser(t, true, nil)
+
+	create := func(seed byte, name string, types modeltype.Set) {
+		t.Helper()
+		input := testModelCreate()
+		input.Model = name
+		input.ModelTypes = types
+		result, err := env.service.CreateAdmin(context.Background(), routingMutation(t, seed,
+			http.MethodPost, routeAdminModels, nil, map[string]any{"name": name}), input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.Value.Model != name {
+			t.Fatalf("created model = %q, want %q", result.Value.Model, name)
+		}
+	}
+	create('a', "needle-chat", modeltype.Set{connectorcontract.OperationChatCompletions})
+	create('b', "needle-embedding", modeltype.Set{connectorcontract.OperationEmbeddings})
+	create('c', "needle-image", modeltype.Set{connectorcontract.OperationImagesGenerations})
+	create('d', "needle-chat-embedding", modeltype.Set{connectorcontract.OperationChatCompletions, connectorcontract.OperationEmbeddings})
+	create('e', "needle-embedding-image", modeltype.Set{connectorcontract.OperationEmbeddings, connectorcontract.OperationImagesGenerations})
+	create('f', "other-embedding", modeltype.Set{connectorcontract.OperationEmbeddings})
+	for index := 0; index < 8; index++ {
+		create(byte('g'+index), fmt.Sprintf("needleembedding%02d", index), modeltype.Set{connectorcontract.OperationEmbeddings})
+	}
+
+	for _, test := range []struct {
+		name      string
+		operation connectorcontract.Operation
+		count     string
+	}{
+		{name: "chat", operation: connectorcontract.OperationChatCompletions, count: "2"},
+		{name: "embeddings", operation: connectorcontract.OperationEmbeddings, count: "12"},
+		{name: "images", operation: connectorcontract.OperationImagesGenerations, count: "2"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			page, err := env.service.Catalog(context.Background(), env.caller,
+				CatalogFilter{ModelType: &test.operation}, pagination.Request{Page: 99, Size: 10})
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantPage := "1"
+			if test.count == "12" {
+				wantPage = "2"
+			}
+			if page.Pagination.TotalItems != test.count || page.Pagination.Page != wantPage {
+				t.Fatalf("filtered metadata = %+v, want total %s page %s", page.Pagination, test.count, wantPage)
+			}
+			for _, model := range page.Models {
+				if !model.ModelTypes.Supports(test.operation) {
+					t.Fatalf("type filter returned non-matching model: %+v", model)
+				}
+			}
+		})
+	}
+
+	embeddings := connectorcontract.OperationEmbeddings
+	combined, err := env.service.Catalog(context.Background(), env.caller,
+		CatalogFilter{Query: "needle", ModelType: &embeddings}, pagination.Request{Page: 2, Size: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if combined.Pagination.TotalItems != "11" || combined.Pagination.Page != "2" || len(combined.Models) != 1 ||
+		combined.Models[0].Model != "needleembedding07" {
+		t.Fatalf("combined query and type filter = %+v", combined)
+	}
+
+	invalid := connectorcontract.Operation("unknown")
+	if _, err := env.service.Catalog(context.Background(), env.caller,
+		CatalogFilter{ModelType: &invalid}, pagination.Default()); !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("invalid type filter error = %v", err)
 	}
 }
 

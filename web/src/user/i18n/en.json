@@ -2021,6 +2021,8 @@
       "catalog": {
         "title": "Charity model catalog",
         "search": "Search model name or public description",
+        "typeFilter": "Model type",
+        "typeAll": "All model types",
         "levelFilter": "Allowed for level",
         "levelAll": "Any level",
         "accessFilter": "Your access",
@@ -2245,7 +2247,8 @@
         "removeAccess": "Remove access filter",
         "removeAvailability": "Remove availability filter",
         "removeLevel": "Remove level filter",
-        "filteredEmpty": "Access or availability filters are active. Remove them to see more models.",
+        "removeModelType": "Remove model type filter",
+        "filteredEmpty": "Active catalog filters are hiding models. Clear them to see more.",
         "showAll": "Show all models",
         "status": "Status",
         "chooseKeys": "Choose keys to donate",

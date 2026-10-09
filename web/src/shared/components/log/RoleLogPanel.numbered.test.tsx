@@ -511,7 +511,7 @@ describe('numbered role log panel', () => {
 
   it('does not expose the management mismatch filter or badge to ordinary users', async () => {
     const row = userCharityRow(31);
-    installJsonFetchFixtures([
+    const fetchMock = installJsonFetchFixtures([
       timeZoneFixture('/api/time-zones'),
       {
         method: 'GET',
@@ -525,6 +525,9 @@ describe('numbered role log panel', () => {
       route: '/logs?page=1&page_size=20',
     });
     await screen.findByRole('button', { name: 'Details' });
+    expect(fetchMock.mock.calls.map(([path]) => String(path))).toContain(
+      '/api/logs?page=1&page_size=20',
+    );
     expect(screen.queryByRole('combobox', { name: 'Usage total' })).toBeNull();
     expect(screen.queryByText('Usage total mismatch')).toBeNull();
   });

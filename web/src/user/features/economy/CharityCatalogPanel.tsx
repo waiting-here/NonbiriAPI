@@ -11,6 +11,7 @@ import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { type PageSize } from '@shared/operations/pageNumbers';
+import { MODEL_TYPES } from '@shared/modelTypes';
 import {
   canonicalCharityCatalogSearch,
   charityCatalogFilterKey,
@@ -23,6 +24,7 @@ import {
   type CatalogAvailabilityFilter,
   type CatalogFilter,
   type CatalogLevelFilter,
+  type CatalogModelTypeFilter,
   type CatalogModel,
 } from './catalog';
 import './catalog.css';
@@ -107,6 +109,7 @@ function CatalogFilters({
   onAccessChange,
   onLevelChange,
   onAvailabilityChange,
+  onModelTypeChange,
   onClear,
 }: {
   filter: CatalogFilter;
@@ -114,11 +117,22 @@ function CatalogFilters({
   onAccessChange: (value: CatalogAccessFilter) => void;
   onLevelChange: (value: CatalogLevelFilter) => void;
   onAvailabilityChange: (value: CatalogAvailabilityFilter) => void;
+  onModelTypeChange: (value: CatalogModelTypeFilter) => void;
   onClear: () => void;
 }) {
   const { t } = useTranslation();
   const [queryDraft, setQueryDraft] = useState(filter.query);
   const chips = [
+    ...(filter.modelType === 'all'
+      ? []
+      : [
+          {
+            key: 'model-type',
+            label: t(`common.modelTypes.${filter.modelType}`),
+            removeLabel: t('user.charity.presentation.removeModelType'),
+            onRemove: () => onModelTypeChange('all'),
+          },
+        ]),
     ...(filter.allowedForMe === 'all'
       ? []
       : [
@@ -186,6 +200,22 @@ function CatalogFilters({
         onSubmit={() => onQuerySubmit(queryDraft)}
         secondary={
           <>
+            <label>
+              <span>{t('user.charity.catalog.typeFilter')}</span>
+              <select
+                value={filter.modelType}
+                onChange={(event) =>
+                  onModelTypeChange(event.target.value as CatalogModelTypeFilter)
+                }
+              >
+                <option value="all">{t('user.charity.catalog.typeAll')}</option>
+                {MODEL_TYPES.map((modelType) => (
+                  <option key={modelType} value={modelType}>
+                    {t(`common.modelTypes.${modelType}`)}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label>
               <span>{t('user.charity.catalog.accessFilter')}</span>
               <select
@@ -303,13 +333,24 @@ export function CharityCatalogPanel({
   const changeLevel = (allowedLevel: CatalogLevelFilter) => updateFilter({ allowedLevel });
   const changeAvailability = (currentlyAvailable: CatalogAvailabilityFilter) =>
     updateFilter({ currentlyAvailable });
+  const changeModelType = (modelType: CatalogModelTypeFilter) => updateFilter({ modelType });
   const clearFilters = () =>
-    updateFilter({ allowedForMe: 'all', currentlyAvailable: 'all', allowedLevel: 'all' });
+    updateFilter({
+      allowedForMe: 'all',
+      currentlyAvailable: 'all',
+      allowedLevel: 'all',
+      modelType: 'all',
+    });
   const changePageSize = (pageSize: PageSize) => {
     setExpanded(new Set());
     pager.setPageSize(pageSize);
   };
   const priceCount = pageData?.models.length ?? 0;
+  const hasCatalogFilters =
+    filter.allowedForMe !== 'all' ||
+    filter.allowedLevel !== 'all' ||
+    filter.currentlyAvailable !== 'all' ||
+    filter.modelType !== 'all';
   const changePage = (page: string) => {
     setExpanded(new Set());
     pager.setPage(page);
@@ -326,6 +367,7 @@ export function CharityCatalogPanel({
         onAccessChange={changeAccess}
         onLevelChange={changeLevel}
         onAvailabilityChange={changeAvailability}
+        onModelTypeChange={changeModelType}
         onClear={clearFilters}
       />
       {catalog.isPending && !pageData ? (
@@ -339,16 +381,16 @@ export function CharityCatalogPanel({
             <EmptyState
               title={t('user.charity.catalog.emptyTitle')}
               body={
-                filter.allowedForMe === 'true' || filter.currentlyAvailable === 'true'
+                hasCatalogFilters
                   ? t('user.charity.presentation.filteredEmpty')
                   : t('user.charity.catalog.emptyBody')
               }
               action={
-                filter.allowedForMe === 'true' || filter.currentlyAvailable === 'true' ? (
+                hasCatalogFilters ? (
                   <button
                     type="button"
                     className="nb-btn nb-btn--secondary"
-                    onClick={() => updateFilter({ allowedForMe: 'all', currentlyAvailable: 'all' })}
+                    onClick={clearFilters}
                   >
                     {t('user.charity.presentation.showAll')}
                   </button>

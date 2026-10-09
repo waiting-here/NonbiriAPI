@@ -12,7 +12,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/charityaccess"
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/modeltype"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
@@ -39,13 +41,15 @@ type CatalogFilter struct {
 	AllowedForMe       *bool
 	AllowedLevel       *int
 	CurrentlyAvailable *bool
+	ModelType          *connectorcontract.Operation
 }
 
 func (s *Service) Catalog(ctx context.Context, userID int64, filter CatalogFilter, page pagination.Request) (Catalog, error) {
 	if s == nil || s.db == nil || ctx == nil || userID <= 0 || !page.Valid() ||
 		!utf8.ValidString(filter.Query) || utf8.RuneCountInString(filter.Query) > 128 ||
 		len(filter.Query) > 512 || strings.ContainsRune(filter.Query, 0) ||
-		(filter.AllowedLevel != nil && (*filter.AllowedLevel < 1 || *filter.AllowedLevel > 6)) {
+		(filter.AllowedLevel != nil && (*filter.AllowedLevel < 1 || *filter.AllowedLevel > 6)) ||
+		(filter.ModelType != nil && !filter.ModelType.Valid()) {
 		return Catalog{}, ErrInvalidRequest
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -95,6 +99,14 @@ CROSS JOIN (SELECT ? AS decision_now,? AS token_reserve,? AS charity_enabled) cx
 	if filter.Query != "" {
 		from += ` AND (instr(lower(cm.full_name),lower(?))>0 OR instr(lower(a.public_description),lower(?))>0)`
 		args = append(args, filter.Query, filter.Query)
+	}
+	if filter.ModelType != nil {
+		mask, maskErr := (modeltype.Set{*filter.ModelType}).Mask()
+		if maskErr != nil {
+			return Catalog{}, ErrInvalidRequest
+		}
+		from += ` AND (cm.model_types & ?)<>0`
+		args = append(args, mask)
 	}
 	if filter.AllowedForMe != nil {
 		from += ` AND ((a.allowed_level_mask & ?)<>0)=?`
@@ -212,7 +224,7 @@ func (api *httpAPI) catalog(writer http.ResponseWriter, request *http.Request, p
 	if !ok {
 		return
 	}
-	if !exactQuery(values, "view", "page", "page_size", "q", "allowed_for_me", "allowed_level", "currently_available") || values.Get("view") != "catalog" {
+	if !exactQuery(values, "view", "page", "page_size", "q", "allowed_for_me", "allowed_level", "currently_available", "model_type") || values.Get("view") != "catalog" {
 		writeRoutingError(writer, ErrInvalidRequest)
 		return
 	}
@@ -234,6 +246,18 @@ func (api *httpAPI) catalog(writer http.ResponseWriter, request *http.Request, p
 		return
 	}
 	filter := CatalogFilter{Query: values.Get("q"), AllowedForMe: allowed, CurrentlyAvailable: available}
+	if entries, present := values["model_type"]; present {
+		if len(entries) != 1 {
+			writeRoutingError(writer, ErrInvalidRequest)
+			return
+		}
+		modelType := connectorcontract.Operation(entries[0])
+		if !modelType.Valid() {
+			writeRoutingError(writer, ErrInvalidRequest)
+			return
+		}
+		filter.ModelType = &modelType
+	}
 	if entries, present := values["allowed_level"]; present {
 		if len(entries) != 1 || len(entries[0]) != 1 || entries[0][0] < '1' || entries[0][0] > '6' {
 			writeRoutingError(writer, ErrInvalidRequest)
