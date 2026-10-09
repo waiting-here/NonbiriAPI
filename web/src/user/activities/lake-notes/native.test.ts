@@ -124,61 +124,108 @@ test('an English to Chinese remount restores static original copy and replaces l
   expect(bridge.start).not.toHaveBeenCalled();
 });
 
-test('a lost terminal save exposes the existing retry action instead of an endless saving overlay', () => {
-  const { root, bridge, game, profile } = fixture();
-  const prediction = start(profile, () => 0, 1);
-  for (let tick = 0; tick < 240; tick++) step(prediction.profile, prediction.cast, false);
-  const cast: CastResult['cast'] = {
-    id: 'lnc_AAAAAAAAAAAAAAAAAAAAAA',
-    rules_id: RULES_ID,
-    generation: '1',
-    revision: '1',
-    ack_tick: prediction.cast.tick,
-    phase: 'playing',
-    paused: false,
-    readonly: false,
-    state: structuredClone(prediction.cast),
-    profile_revision: '1',
-  };
-  const result: CastResult = {
-    cast,
-    profile: {
-      readonly: false,
-      revision: '1',
+test.each(['fish', 'debris'] as const)(
+  'a lost %s terminal save exposes retry instead of an endless saving overlay',
+  (encounter) => {
+    const { root, bridge, game, profile } = fixture();
+    if (encounter === 'debris')
+      profile.records.lake_carp = {
+        caught: '1',
+        maxLength: 30,
+        bestQuality: 0,
+        perfectCount: '0',
+      };
+    const prediction = start(profile, () => 0, 1);
+    const waiting = structuredClone(prediction.cast);
+    for (let tick = 0; tick < 240; tick++) step(prediction.profile, prediction.cast, false);
+    const cast: CastResult['cast'] = {
+      id: 'lnc_AAAAAAAAAAAAAAAAAAAAAA',
       rules_id: RULES_ID,
-      profile,
+      generation: '1',
+      revision: '1',
+      ack_tick: encounter === 'debris' ? waiting.tick : prediction.cast.tick,
+      phase: encounter === 'debris' ? 'waiting' : 'playing',
+      paused: false,
+      readonly: false,
+      state: encounter === 'debris' ? waiting : structuredClone(prediction.cast),
+      profile_revision: '1',
+    };
+    const result: CastResult = {
       cast,
-      wallet: { general_milli: '0', game_milli: '0' },
-      settings: {
+      profile: {
+        readonly: false,
         revision: '1',
-        enabled: true,
-        exchanges: {
-          coins_to_general: { enabled: false, source_amount: '', target_amount: '' },
-          general_to_coins: { enabled: false, source_amount: '', target_amount: '' },
-          coins_to_game: { enabled: false, source_amount: '', target_amount: '' },
-          game_to_coins: { enabled: false, source_amount: '', target_amount: '' },
+        rules_id: RULES_ID,
+        profile,
+        cast,
+        wallet: { general_milli: '0', game_milli: '0' },
+        settings: {
+          revision: '1',
+          enabled: true,
+          exchanges: {
+            coins_to_general: { enabled: false, source_amount: '', target_amount: '' },
+            general_to_coins: { enabled: false, source_amount: '', target_amount: '' },
+            coins_to_game: { enabled: false, source_amount: '', target_amount: '' },
+            game_to_coins: { enabled: false, source_amount: '', target_amount: '' },
+          },
         },
       },
-    },
-  };
-  prediction.cast.phase = 'failed';
-  let snapshot: ControllerSnapshot = { result, status: 'saving', error: null };
-  bridge.snapshot = () => snapshot;
-  bridge.projection = () => prediction;
-  bridge.blocked = () => true;
-  game.refresh();
-  const button = root.querySelector<HTMLButtonElement>('#overlayButton')!;
-  expect(root.querySelector('#overlayTitle')).toHaveTextContent('confirming');
-  expect(button).toBeDisabled();
+    };
+    if (encounter === 'fish') prediction.cast.phase = 'failed';
+    else {
+      expect(prediction.cast.result?.debris).toBeTruthy();
+      expect(prediction.cast.fish).toBeUndefined();
+    }
+    const drawFrame = () => {
+      const schedule = vi.mocked(requestAnimationFrame);
+      const next = schedule.mock.lastCall![0];
+      schedule.mockClear();
+      next(performance.now() + 20);
+      expect(schedule).toHaveBeenCalledOnce();
+    };
+    let snapshot: ControllerSnapshot = { result, status: 'saving', error: null };
+    bridge.snapshot = () => snapshot;
+    bridge.projection = () => prediction;
+    bridge.blocked = () => true;
+    drawFrame();
+    const button = root.querySelector<HTMLButtonElement>('#overlayButton')!;
+    expect(root.querySelector('#overlayTitle')).toHaveTextContent('confirming');
+    expect(button).toBeDisabled();
 
-  snapshot = { result, status: 'unknown', error: new Error('response lost') };
-  game.refresh();
-  expect(root.querySelector('#overlayTitle')).not.toHaveTextContent('confirming');
-  expect(root.querySelector('#overlayText')).toHaveTextContent('saveUnknown');
-  expect(button).toHaveTextContent('retry');
-  expect(button).toBeEnabled();
-  button.click();
-  expect(bridge.resume).toHaveBeenCalledOnce();
-  expect(bridge.start).not.toHaveBeenCalled();
-  game.dispose();
-});
+    snapshot = { result, status: 'unknown', error: new Error('response lost') };
+    drawFrame();
+    expect(root.querySelector('#overlayTitle')).not.toHaveTextContent('confirming');
+    expect(root.querySelector('#overlayText')).toHaveTextContent('saveUnknown');
+    expect(button).toHaveTextContent('retry');
+    expect(button).toBeEnabled();
+    button.click();
+    expect(bridge.resume).toHaveBeenCalledOnce();
+    expect(bridge.start).not.toHaveBeenCalled();
+
+    if (encounter === 'debris') {
+      // Once confirmed, the same mounted game must render the authoritative
+      // debris result and allow another cast without refreshing the page.
+      const confirmed: CastResult = {
+        cast: {
+          ...cast,
+          phase: 'success',
+          ack_tick: prediction.cast.tick,
+          state: structuredClone(prediction.cast),
+          profile_revision: '2',
+        },
+        profile: { ...result.profile, revision: '2', profile: prediction.profile },
+      };
+      confirmed.profile.cast = confirmed.cast;
+      bridge.profile = () => confirmed.profile.profile;
+      bridge.revision = () => '2';
+      snapshot = { result: confirmed, status: 'terminal', error: null };
+      bridge.blocked = () => false;
+      drawFrame();
+      expect(root.querySelector('#overlayTitle')).toHaveTextContent('捞起一份杂物');
+      expect(button).toBeEnabled();
+      button.click();
+      expect(bridge.start).toHaveBeenCalledOnce();
+    }
+    game.dispose();
+  },
+);
