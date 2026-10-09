@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { installJsonFetchFixtures } from '../../../../test/unit/support';
 import {
+  type CatalogModelTypeFilter,
   canonicalCharityCatalogSearch,
   DEFAULT_CHARITY_CATALOG_FILTERS,
   getCharityCatalog,
@@ -205,7 +206,7 @@ describe('charity catalog request', () => {
     const fetchMock = installJsonFetchFixtures([
       {
         method: 'GET',
-        path: '/api/charity/models?view=catalog&page=2&page_size=50&q=public&allowed_for_me=false&allowed_level=3&currently_available=true',
+        path: '/api/charity/models?view=catalog&page=2&page_size=50&q=public&allowed_for_me=false&allowed_level=3&currently_available=true&model_type=embeddings',
         body: catalogPage(
           [catalogModel({ id: '2', model: 'other', full_name: '[公益]provider/other' })],
           {
@@ -224,10 +225,11 @@ describe('charity catalog request', () => {
       allowedForMe: 'false',
       allowedLevel: '3',
       currentlyAvailable: 'true',
+      modelType: 'embeddings',
     });
     expect(result.pagination.page).toBe('2');
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/charity/models?view=catalog&page=2&page_size=50&q=public&allowed_for_me=false&allowed_level=3&currently_available=true',
+      '/api/charity/models?view=catalog&page=2&page_size=50&q=public&allowed_for_me=false&allowed_level=3&currently_available=true&model_type=embeddings',
       expect.objectContaining({ signal: undefined }),
     );
   });
@@ -247,6 +249,7 @@ describe('charity catalog request', () => {
       allowedForMe: 'all',
       allowedLevel: 'all',
       currentlyAvailable: 'all',
+      modelType: 'all',
     });
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/charity/models?view=catalog&page=1&page_size=20',
@@ -264,6 +267,7 @@ describe('charity catalog request', () => {
         allowedForMe: 'all',
         allowedLevel: 'all',
         currentlyAvailable: 'all',
+        modelType: 'all',
       }),
     ).rejects.toMatchObject({ code: 'invalid_request', status: 400 });
     await expect(
@@ -274,6 +278,18 @@ describe('charity catalog request', () => {
         allowedForMe: 'all',
         allowedLevel: 'all',
         currentlyAvailable: 'all',
+        modelType: 'all',
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_request', status: 400 });
+    await expect(
+      getCharityCatalog({
+        page: '1',
+        pageSize: 20,
+        query: '',
+        allowedForMe: 'all',
+        allowedLevel: 'all',
+        currentlyAvailable: 'all',
+        modelType: 'unknown' as CatalogModelTypeFilter,
       }),
     ).rejects.toMatchObject({ code: 'invalid_request', status: 400 });
     expect(fetchMock).not.toHaveBeenCalled();
@@ -290,7 +306,7 @@ describe('charity catalog URL filters', () => {
       DEFAULT_CHARITY_CATALOG_FILTERS,
     );
     expect(explicit.toString()).toBe(
-      'tab=models&allowed_for_me=true&allowed_level=all&currently_available=true',
+      'tab=models&allowed_for_me=true&allowed_level=all&currently_available=true&model_type=all',
     );
     expect(readCharityCatalogUrlState(explicit)).toMatchObject({
       filters: DEFAULT_CHARITY_CATALOG_FILTERS,
@@ -300,14 +316,14 @@ describe('charity catalog URL filters', () => {
 
   it('normalizes duplicate and non-canonical filter values without touching route context', () => {
     const raw = new URLSearchParams(
-      'tab=models&page=3&allowed_for_me=false&allowed_for_me=true&allowed_level=03&currently_available=TRUE&q=',
+      'tab=models&page=3&allowed_for_me=false&allowed_for_me=true&allowed_level=03&currently_available=TRUE&q=&model_type=bad&model_type=embeddings',
     );
     expect(readCharityCatalogUrlState(raw)).toMatchObject({
       filters: DEFAULT_CHARITY_CATALOG_FILTERS,
       needsNormalization: true,
     });
     expect(canonicalCharityCatalogSearch(raw).toString()).toBe(
-      'tab=models&page=3&allowed_for_me=true&allowed_level=all&currently_available=true',
+      'tab=models&page=3&allowed_for_me=true&allowed_level=all&currently_available=true&model_type=all',
     );
   });
 
@@ -317,9 +333,10 @@ describe('charity catalog URL filters', () => {
       allowedForMe: 'false',
       allowedLevel: '3',
       currentlyAvailable: 'all',
+      modelType: 'embeddings',
     });
     expect(next.toString()).toBe(
-      'tab=models&page=4&q=needle&allowed_for_me=false&allowed_level=3&currently_available=all',
+      'tab=models&page=4&q=needle&allowed_for_me=false&allowed_level=3&currently_available=all&model_type=embeddings',
     );
   });
 });

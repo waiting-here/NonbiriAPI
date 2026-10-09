@@ -247,7 +247,7 @@ for (const scenario of cases) {
       await expect(page.getByTestId('model-source-search')).toBeFocused();
       expect(state.creates[0]).toMatchObject({
         model_types: ['chat_completions'],
-        route_strategy: 'ordered',
+        route_strategy: 'cache_balanced',
         silent_retry: false,
         flatten_tool_calls: false,
         transport_rule: 'passthrough',

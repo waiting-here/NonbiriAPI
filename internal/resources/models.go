@@ -184,7 +184,7 @@ func (r *Repository) CreateModel(ctx context.Context, userID int64, mutation Con
 		input.TransportRule = transportpolicy.Passthrough
 	}
 	if input.RouteStrategy == "" {
-		input.RouteStrategy = "ordered"
+		input.RouteStrategy = "cache_balanced"
 	}
 	if r == nil || userID <= 0 || mutation.Route != routeModels || mutation.Method != http.MethodPost || !mutationPathIDs(mutation) || mutation.Query != "" ||
 		!input.TransportRule.Valid() || !validModelIdentity(input.Provider, input.Model) || !validRouteStrategy(input.RouteStrategy) {

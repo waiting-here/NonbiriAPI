@@ -2,12 +2,53 @@ package resources
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"net/http"
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/routing"
 )
+
+func TestPersonalModelHTTPStrategyDefaultsAndPatchOmission(t *testing.T) {
+	environment := newResourceTestEnvironment(t)
+	owner := environment.seedUser(t, "model-defaults")
+	registrar := &resourceTestRegistrar{}
+	if err := RegisterRoutes(registrar, environment.repository); err != nil {
+		t.Fatal(err)
+	}
+	principal := UserPrincipal{UserID: owner}
+	for index, strategy := range []string{"", "ordered", "random", "cache_balanced"} {
+		t.Run(fmt.Sprintf("strategy-%s", strategy), func(t *testing.T) {
+			body := map[string]any{"provider": "defaults", "model": fmt.Sprint(index)}
+			want := strategy
+			if strategy == "" {
+				want = "cache_balanced"
+			} else {
+				body["route_strategy"] = strategy
+			}
+			raw, err := json.Marshal(body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			response := resourceHTTPCall(t, registrar.handlers["POST "+routeModels], principal,
+				http.MethodPost, routeModels, string(raw), resourceTestKey(byte('a'+index)), nil)
+			var created Model
+			if response.Code != http.StatusCreated || json.Unmarshal(response.Body.Bytes(), &created) != nil || created.RouteStrategy != want {
+				t.Fatalf("create response: %d %s", response.Code, response.Body.String())
+			}
+			response = resourceHTTPCall(t, registrar.handlers["PATCH "+routeModel], principal,
+				http.MethodPatch, "/api/models/"+created.ID, `{"expected_revision":"1","silent_retry":true}`,
+				resourceTestKey(byte('e'+index)), map[string]string{"id": created.ID})
+			var patched Model
+			if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &patched) != nil || patched.RouteStrategy != want || !patched.SilentRetry {
+				t.Fatalf("patch omission changed strategy: %d %s", response.Code, response.Body.String())
+			}
+		})
+	}
+}
 
 func TestPersonalBalancedStrategyCreatePatchFilterAndPreflight(t *testing.T) {
 	environment := newResourceTestEnvironment(t)

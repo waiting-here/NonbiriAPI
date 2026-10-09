@@ -72,6 +72,54 @@ afterEach(() => {
 });
 
 describe('user endpoint list page', () => {
+  it('updates mainstream badges from the current browse projection', async () => {
+    let categories = ['subscription', 'api_platform'];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: string | URL | Request) => {
+        const path = new URL(String(input), window.location.origin).pathname;
+        if (path === '/api/session') return Promise.resolve(jsonResponse(session));
+        if (path === '/api/endpoints')
+          return Promise.resolve(
+            jsonResponse(
+              endpointPage(
+                [
+                  {
+                    ...endpoint(1),
+                    origin: { kind: 'custom' },
+                    browse: {
+                      model_count: '0',
+                      available_key_count: '1',
+                      state: 'available',
+                      mainstream_categories: categories,
+                    },
+                  },
+                ],
+                '1',
+                20,
+                1,
+              ),
+            ),
+          );
+        throw new Error(`Unexpected request: ${path}`);
+      }),
+    );
+    const rendered = await renderWithProviders(<EndpointsPage />, {
+      station: 'user',
+      role: 'user',
+      route: '/endpoints',
+    });
+    expect(await screen.findByText('Mainstream subscription')).toBeVisible();
+    expect(screen.getByText('Mainstream API platform')).toBeVisible();
+    categories = [];
+    await rendered.queryClient.invalidateQueries();
+    await waitFor(() =>
+      expect(screen.queryByText('Mainstream subscription')).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByText('Mainstream API platform')).not.toBeInTheDocument();
+    expect(screen.getByText('endpoint-1')).toBeVisible();
+  });
+
   it('requests numbered pages, keeps the old page while busy, and remembers page size', async () => {
     const firstPage = Array.from({ length: 20 }, (_, index) => endpoint(index + 1));
     const secondPage = [endpoint(21)];

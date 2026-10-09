@@ -161,7 +161,7 @@ describe('resource browse summary normalizers', () => {
     const key = normalizeEndpointKey({ ...OLD_KEY, browse: keyBrowse() });
     const model = normalizeModel({ ...OLD_MODEL, browse: modelBrowse() });
 
-    expect(endpoint.browse).toEqual(endpointBrowse());
+    expect(endpoint.browse).toEqual({ ...endpointBrowse(), mainstream_categories: [] });
     expect(key.browse).toEqual({ ...keyBrowse(), preview: [BASE_BINDING] });
     expect(model.browse).toEqual({ ...modelBrowse(), preview: [BASE_BINDING] });
   });

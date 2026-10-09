@@ -21,6 +21,9 @@ function mount(search = '') {
         <button onClick={() => patch({ fromUnix: undefined, toUnix: undefined, page: 1 })}>
           Clear
         </button>
+        <button onClick={() => patch({ fromUnix: now - 3_600, toUnix: now, page: 1 })}>
+          Set range
+        </button>
         <button onClick={() => navigate(-1)}>Back</button>
         <button onClick={() => navigate(1)}>Forward</button>
       </>
@@ -44,20 +47,18 @@ function mount(search = '') {
 const query = () => new URLSearchParams(screen.getByTestId('query').textContent ?? '');
 afterEach(() => vi.restoreAllMocks());
 
-describe('initial log time range', () => {
-  it('uses the last 24 hours for the first request and replaces the initial URL', async () => {
-    vi.spyOn(Date, 'now').mockReturnValue(now * 1_000);
+describe('log time range', () => {
+  it('leaves the initial request unbounded when the URL has no time range', () => {
     const { observations } = mount('?model=demo&page=3&anchor=keep');
-    await waitFor(() => expect(query().get('from')).toBe(String(now - 86_400)));
-    expect(query().get('to')).toBe(String(now));
+    expect(query().has('from')).toBe(false);
+    expect(query().has('to')).toBe(false);
     expect(query().get('model')).toBe('demo');
     expect(query().get('page')).toBe('3');
     expect(query().get('anchor')).toBe('keep');
-    expect(
-      observations.every((state) => state.fromUnix === now - 86_400 && state.toUnix === now),
-    ).toBe(true);
+    expect(observations.every((state) => state.fromUnix === undefined && state.toUnix === undefined))
+      .toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Back' }));
-    expect(await screen.findByText('Before logs')).toBeVisible();
+    expect(screen.getByText('Before logs')).toBeVisible();
   });
 
   it.each(['?from=123&to=456', '?from=123', '?to=456', '?from=&to='])(
@@ -75,13 +76,18 @@ describe('initial log time range', () => {
   it('keeps a cleared range through browser back and forward', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(now * 1_000);
     mount();
+    expect(query().has('from')).toBe(false);
+    expect(query().has('to')).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Set range' }));
     await waitFor(() => expect(query().get('to')).toBe(String(now)));
+    expect(query().get('from')).toBe(String(now - 3_600));
     fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
     await waitFor(() => expect(query().has('from')).toBe(false));
     expect(query().has('to')).toBe(false);
     expect(JSON.parse(screen.getByTestId('range').textContent!)).not.toHaveProperty('fromUnix');
     fireEvent.click(screen.getByRole('button', { name: 'Back' }));
-    await waitFor(() => expect(query().get('from')).toBe(String(now - 86_400)));
+    await waitFor(() => expect(query().get('from')).toBe(String(now - 3_600)));
+    expect(query().get('to')).toBe(String(now));
     fireEvent.click(screen.getByRole('button', { name: 'Forward' }));
     await waitFor(() => expect(query().has('from')).toBe(false));
     expect(query().has('to')).toBe(false);

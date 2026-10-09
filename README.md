@@ -4,7 +4,7 @@
 
 NonbiriAPI is a self-hosted AI API endpoint manager and OpenAI-compatible gateway. Each user manages their own endpoints, encrypted credentials, discovered models and routing, then calls personal or shared charity models with a revocable CallerKey.
 
-The current development version is **1.0.0-rc.6**. See the [changelog](CHANGELOG.md) and [latest release](https://github.com/waiting-here/NonbiriAPI/releases/latest). All releases provide source code only. Linux/amd64 is the supported production target.
+The current source prerelease is **1.0.0-rc.6**. See the [changelog](CHANGELOG.md) and [release](https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-rc.6). All releases provide source code only. Linux/amd64 is the supported production target.
 
 ## Capabilities
 
@@ -16,7 +16,7 @@ The current development version is **1.0.0-rc.6**. See the [changelog](CHANGELOG
 
 ## Build and run
 
-Build requirements: **Go 1.26.6**, **Node.js ≥22.22.3**, **npm 12.0.1**, and Bash for repository scripts. Windows development uses Git Bash. The finished binary embeds both React stations and uses pure-Go SQLite; it needs no Node.js runtime.
+Build requirements: **Go 1.26.9**, **Node.js ≥22.22.3**, **npm 12.0.1**, and Bash for repository scripts. Windows development uses Git Bash. The finished binary embeds both React stations and uses pure-Go SQLite; it needs no Node.js runtime.
 
 ```sh
 npm --prefix web ci

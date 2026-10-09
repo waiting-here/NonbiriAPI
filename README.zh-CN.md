@@ -4,7 +4,7 @@
 
 NonbiriAPI 是可自行部署的 AI API 端点管理平台，提供 OpenAI-compatible 调用入口。每位用户可以管理自己的端点、加密凭据、模型发现与路由，并用可撤销的 CallerKey 调用个人或公益模型。
 
-当前开发版本为 **1.0.0-rc.6**。版本变化见 [CHANGELOG](CHANGELOG.md)，已发布版本见 [Releases](https://github.com/waiting-here/NonbiriAPI/releases/latest)。所有版本仅发布源代码。生产环境支持 Linux/amd64。
+当前源码预发布版本为 **1.0.0-rc.6**。版本变化见 [CHANGELOG](CHANGELOG.md)，源码见 [Release](https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-rc.6)。所有版本仅发布源代码。生产环境支持 Linux/amd64。
 
 ## 主要能力
 
@@ -16,7 +16,7 @@ NonbiriAPI 是可自行部署的 AI API 端点管理平台，提供 OpenAI-compa
 
 ## 构建与启动
 
-构建需要 **Go 1.26.6**、**Node.js ≥22.22.3**、**npm 12.0.1**；仓库脚本使用 Bash，Windows 开发使用 Git Bash。最终程序内嵌两套 React 站点，使用纯 Go SQLite，运行时无需 Node.js。
+构建需要 **Go 1.26.9**、**Node.js ≥22.22.3**、**npm 12.0.1**；仓库脚本使用 Bash，Windows 开发使用 Git Bash。最终程序内嵌两套 React 站点，使用纯 Go SQLite，运行时无需 Node.js。
 
 ```sh
 npm --prefix web ci

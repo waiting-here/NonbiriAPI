@@ -348,6 +348,64 @@ const charityModel = (start: number, end: number): CharityModel => ({
 const siteDateTime = (epoch: number) => `${new Date(epoch * 1_000).toISOString().slice(0, 19)}.000`;
 
 describe('CharityManagement corrective controls', () => {
+  it.each(['admin', 'steward'] as const)(
+    'keeps the new model draft while folded and defaults balanced routing for %s',
+    async (frame) => {
+      const writes: Record<string, unknown>[] = [];
+      vi.stubGlobal(
+        'fetch',
+        vi.fn<typeof fetch>(async (input, init) => {
+          const url = new URL(String(input), 'https://example.test');
+          const path = url.pathname.replace('/api/steward/', '/admin/api/');
+          const method = init?.method ?? 'GET';
+          if (method === 'GET' && path === '/admin/api/session') return jsonResponse(adminSession);
+          if (method === 'GET' && path === '/api/session') return jsonResponse(stewardSession);
+          if (method === 'GET' && path.endsWith('/time-context'))
+            return jsonResponse(siteTimeContext);
+          if (method === 'GET' && path.endsWith('/time-zones'))
+            return jsonResponse({ version: 'go1.26.6-zoneinfo', zones: ['UTC'] });
+          if (method === 'GET' && /\/(donations|charity-models|donation-sources)$/.test(path))
+            return jsonResponse(numberedPage([], url));
+          if (method === 'POST' && path === '/admin/api/charity-models') {
+            const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+            writes.push(body);
+            return jsonResponse({ ...charityModel(10, 20), ...body });
+          }
+          throw new Error(`Unexpected request: ${method} ${path}`);
+        }),
+      );
+      const view = await renderWithProviders(<SessionBackedManagement frame={frame} />, {
+        station: frame === 'admin' ? 'admin' : 'user',
+        role: frame === 'admin' ? 'admin' : 'user',
+      });
+      await view.user.click(await screen.findByRole('tab', { name: /Charity models and/ }));
+      const title = screen.getByText('Add charity model', { selector: 'strong' });
+      const disclosure = title.closest('details')!;
+      expect(disclosure).toHaveAttribute('open');
+      const strategy = screen.getByRole('combobox', { name: /Routing strategy/ });
+      expect(strategy).toHaveValue('cache_balanced');
+      await view.user.type(screen.getByLabelText('Provider'), 'saved-prefix');
+      await view.user.type(screen.getByLabelText('Model'), 'saved-model');
+      await view.user.selectOptions(strategy, 'ordered');
+      await view.user.click(title);
+      await waitFor(() => expect(disclosure).not.toHaveAttribute('open'));
+      expect(writes).toHaveLength(0);
+      await view.user.click(title);
+      await waitFor(() => expect(disclosure).toHaveAttribute('open'));
+      expect(screen.getByLabelText('Provider')).toHaveValue('saved-prefix');
+      expect(screen.getByLabelText('Model')).toHaveValue('saved-model');
+      expect(strategy).toHaveValue('ordered');
+      await view.user.selectOptions(strategy, 'cache_balanced');
+      await view.user.click(screen.getByRole('button', { name: 'Add charity model' }));
+      await waitFor(() => expect(writes).toHaveLength(1));
+      expect(writes[0]).toMatchObject({
+        provider: 'saved-prefix',
+        model: 'saved-model',
+        route_strategy: 'cache_balanced',
+      });
+    },
+  );
+
   it.each([false, true])(
     'offers model cache defaults only for an entirely Gateway binding set (mixed=%s)',
     async (mixed) => {

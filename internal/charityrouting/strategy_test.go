@@ -6,10 +6,77 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 )
+
+func TestCharityModelHTTPStrategyDefaultsAndPatchOmission(t *testing.T) {
+	for _, role := range []roleKind{roleAdmin, roleSteward} {
+		t.Run(string(role), func(t *testing.T) {
+			environment := newRoutingTestEnv(t)
+			environment.seedUser(t, true, nil)
+			actor := environment.seedUser(t, false, pointerInt64(6))
+			api := &httpAPI{service: environment.service}
+			for index, strategy := range []string{"", RouteOrdered, RouteRandom, RouteExpiryWeighted, RouteCacheBalanced} {
+				input := testModelCreate()
+				input.Model = fmt.Sprint(index)
+				input.RouteStrategy = strategy
+				raw, err := json.Marshal(input)
+				if err != nil {
+					t.Fatal(err)
+				}
+				route := routeAdminModels
+				if role == roleSteward {
+					route = routeStewardModels
+				}
+				request := httptest.NewRequest(http.MethodPost, route, bytes.NewReader(raw))
+				request.Header.Set("Idempotency-Key", fmt.Sprintf("%022d", index+1))
+				response := httptest.NewRecorder()
+				api.createModel(response, request, role, actor)
+				var created AdminCharityModel
+				want := strategy
+				if want == "" {
+					want = RouteCacheBalanced
+				}
+				if response.Code != http.StatusCreated || json.Unmarshal(response.Body.Bytes(), &created) != nil || created.RouteStrategy != want {
+					t.Fatalf("create response: %d %s", response.Code, response.Body.String())
+				}
+				request = httptest.NewRequest(http.MethodPatch, route+"/"+created.ID,
+					bytes.NewBufferString(`{"expected_revision":"1","enabled":false}`))
+				request.SetPathValue("id", created.ID)
+				request.Header.Set("Idempotency-Key", fmt.Sprintf("%022d", index+6))
+				response = httptest.NewRecorder()
+				if role == roleSteward {
+					api.patchStewardModel(response, request, UserPrincipal{UserID: actor})
+				} else {
+					api.patchAdminModel(response, request)
+				}
+				var patched AdminCharityModel
+				if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &patched) != nil || patched.RouteStrategy != want || patched.Enabled {
+					t.Fatalf("patch omission changed strategy: %d %s", response.Code, response.Body.String())
+				}
+			}
+		})
+	}
+}
+
+func TestCharityLegacyStrategyFallbackRemainsExpiryWeighted(t *testing.T) {
+	environment := newRoutingTestEnv(t)
+	environment.seedUser(t, true, nil)
+	created := environment.createModel(t, 'a')
+	modelID, _ := parsePositiveID(created.ID)
+	if _, err := environment.store.DB().Exec(`DELETE FROM charity_model_routing WHERE model_id=?`, modelID); err != nil {
+		t.Fatal(err)
+	}
+	patch := ModelPatch{ExpectedRevision: created.Revision, Enabled: pointerBool(false)}
+	result, err := environment.service.PatchAdmin(context.Background(), modelID,
+		routingMutation(t, 'b', http.MethodPatch, routeAdminModel, []int64{modelID}, patch), patch)
+	if err != nil || result.Value.RouteStrategy != RouteExpiryWeighted || defaultRouteStrategy("") != RouteExpiryWeighted {
+		t.Fatalf("legacy routing fallback changed: %+v %v", result.Value, err)
+	}
+}
 
 func TestRoutingStrategiesPersistAndControlSnapshots(t *testing.T) {
 	environment := newRoutingTestEnv(t)
@@ -17,8 +84,8 @@ func TestRoutingStrategiesPersistAndControlSnapshots(t *testing.T) {
 	owner := environment.seedUser(t, false, nil)
 	model := environment.createModel(t, 'a')
 	modelID, _ := parsePositiveID(model.ID)
-	if model.RouteStrategy != RouteExpiryWeighted {
-		t.Fatal("existing default changed")
+	if model.RouteStrategy != RouteCacheBalanced {
+		t.Fatal("new model did not use balanced routing")
 	}
 	var selections []BindingSelection
 	var ids []int64

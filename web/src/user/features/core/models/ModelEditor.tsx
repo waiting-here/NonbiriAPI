@@ -95,7 +95,7 @@ export function ModelEditor({
   const [provider, setProvider] = useState(initial?.provider ?? '');
   const [modelName, setModelName] = useState(initial?.model ?? '');
   const [strategy, setStrategy] = useState<RouteStrategy>(
-    initialStrategy ?? initial?.route_strategy ?? 'ordered',
+    initialStrategy ?? initial?.route_strategy ?? 'cache_balanced',
   );
   const [modelTypes, setModelTypes] = useState<ModelType[]>(
     initial?.model_types ?? ['chat_completions'],

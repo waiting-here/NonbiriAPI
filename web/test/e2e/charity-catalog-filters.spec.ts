@@ -20,6 +20,7 @@ type JSONRecord = Record<string, unknown>;
 type BrowserContext = Parameters<typeof installURLPersistenceObserver>[0];
 
 interface CatalogFixtureModel extends JSONRecord {
+  model_types: readonly string[];
   id: string;
   provider: string;
   model: string;
@@ -69,8 +70,9 @@ const MODEL_DEFINITIONS: ReadonlyArray<
 ];
 
 function capabilityModel(id: string, model: string): JSONRecord {
+  const modelTypes = modelTypesForID(id);
   return {
-    model_types: ['chat_completions', 'embeddings'],
+    model_types: modelTypes,
     id,
     provider: 'provider',
     model,
@@ -89,6 +91,11 @@ function capabilityModel(id: string, model: string): JSONRecord {
       end_at: NOW + 3_600,
     },
   };
+}
+
+function modelTypesForID(id: string): string[] {
+  const types = ['chat_completions', 'embeddings', 'images_generations'] as const;
+  return [types[(Number(id) - 1) % types.length]];
 }
 
 function catalogModel(
@@ -127,15 +134,17 @@ function createCatalogFixture(): CatalogFixture {
 function catalogCapability(fixture: CatalogFixture): JSONRecord {
   return {
     state: 'available',
-    models: fixture.models.map(({ id, provider, model, full_name, pricing, discount }) => ({
-      model_types: ['chat_completions', 'embeddings'],
-      id,
-      provider,
-      model,
-      full_name,
-      pricing,
-      discount,
-    })),
+    models: fixture.models.map(
+      ({ id, provider, model, full_name, pricing, discount, model_types }) => ({
+        model_types,
+        id,
+        provider,
+        model,
+        full_name,
+        pricing,
+        discount,
+      }),
+    ),
     donation_intake: 'open',
     server_now: NOW,
   };
@@ -157,6 +166,8 @@ function matchesCatalogRequest(model: CatalogFixtureModel, url: URL): boolean {
   const currentlyAvailable = url.searchParams.get('currently_available');
   if (currentlyAvailable === 'true' && !model.currently_available) return false;
   if (currentlyAvailable === 'false' && model.currently_available) return false;
+  const modelType = url.searchParams.get('model_type');
+  if (modelType && modelType !== 'all' && !model.model_types.includes(modelType)) return false;
   return true;
 }
 
@@ -446,7 +457,9 @@ test('catalog filters use a counted complete sample and restore URL-backed state
     .getByRole('button', { name: 'Next', exact: true })
     .click();
   await expect(page.getByText('[公益]provider/model-11', { exact: true })).toBeVisible();
-  await expect(page).toHaveURL(/page=2&page_size=10/);
+  await expect(page).toHaveURL(
+    (url) => url.searchParams.get('page') === '2' && url.searchParams.get('page_size') === '10',
+  );
   expect(fixture.requests.at(-1)).toBe('/api/charity/models?view=catalog&page=2&page_size=10');
   await page.reload();
   await expect(page.getByText('[公益]provider/model-11', { exact: true })).toBeVisible();
@@ -458,6 +471,68 @@ test('catalog filters use a counted complete sample and restore URL-backed state
 
   await assertNoHorizontalOverflow(page);
   await assertNoSensitiveBrowserPersistence(page, [setup.forbiddenToken]);
+  setup.consoleGuard.assertNone();
+});
+
+test('model type filters combine with search and reset pagination', async ({ context, page }) => {
+  const fixture = createCatalogFixture();
+  const setup = await installCatalogFixture(
+    context,
+    page,
+    fixture,
+    'en',
+    'light',
+    1_280,
+    'catalog-type-filters-ephemeral',
+  );
+  await page.goto(`${USER_ORIGIN}/charity`);
+
+  await openFilters(page);
+  const modelType = page.getByRole('combobox', { name: 'Model type', exact: true });
+  const search = page.getByRole('searchbox', { name: 'Search model name or public description' });
+  const pageSize = page.getByRole('combobox', { name: 'Items per page', exact: true });
+  await modelType.selectOption('all');
+  await search.fill('model');
+  await search.press('Enter');
+  await pageSize.selectOption('10');
+  await page
+    .getByRole('navigation', { name: 'Pagination', exact: true })
+    .getByRole('button', { name: 'Next', exact: true })
+    .click();
+  await expect(page).toHaveURL(/page=2&page_size=10/);
+
+  await openFilters(page);
+  for (const operation of ['chat_completions', 'embeddings', 'images_generations']) {
+    await modelType.selectOption(operation);
+    await expect(modelType).toHaveValue(operation);
+    await expect(search).toHaveValue('model');
+    await expect(page).toHaveURL(
+      (url) => url.searchParams.get('page') === '1' && url.searchParams.get('page_size') === '10',
+    );
+    await expect
+      .poll(() => {
+        const lastRequest = fixture.requests.at(-1);
+        return lastRequest
+          ? new URL(lastRequest, USER_ORIGIN).searchParams.get('model_type')
+          : null;
+      })
+      .toBe(operation);
+    const request = new URL(fixture.requests.at(-1)!, USER_ORIGIN);
+    expect(request.searchParams.get('q')).toBe('model');
+    expect(request.searchParams.get('model_type')).toBe(operation);
+    expect(request.searchParams.get('page')).toBe('1');
+    const expected = fixture.models.filter(
+      (model) =>
+        model.model_types.includes(operation) &&
+        model.level_allowed &&
+        model.currently_available &&
+        `${model.full_name} ${model.public_description}`.toLowerCase().includes('model'),
+    );
+    const visible = page.locator('.charity-model-name code');
+    await expect(visible).toHaveCount(expected.length);
+    await expect(visible).toHaveText(expected.map((model) => model.full_name));
+  }
+
   setup.consoleGuard.assertNone();
 });
 
@@ -486,12 +561,14 @@ for (const locale of ['en', 'zh'] as const) {
                 level: '某等级可访问',
                 access: '本人访问权限',
                 availability: '当前是否可用',
+                modelType: '模型类型',
                 applied: '已应用',
               }
             : {
                 level: 'Allowed for level',
                 access: 'Your access',
                 availability: 'Currently available',
+                modelType: 'Model type',
                 applied: 'Applied',
               };
         const level = page.getByRole('combobox', { name: copy.level, exact: true });
@@ -500,16 +577,24 @@ for (const locale of ['en', 'zh'] as const) {
           name: copy.availability,
           exact: true,
         });
+        const modelType = page.getByRole('combobox', {
+          name: copy.modelType,
+          exact: true,
+        });
         await expect(page.locator('.charity-model-name').first()).toBeVisible();
         await openFilters(page);
         await expect(level).toHaveValue('all');
         await expect(access).toHaveValue('true');
         await expect(availability).toHaveValue('true');
+        await expect(modelType).toHaveValue('all');
         await assertAppliedPresentation(page, 2);
 
+        await modelType.selectOption('images_generations');
+        await expect(modelType).toHaveValue('images_generations');
+        await assertAppliedPresentation(page, 3);
         await level.selectOption('3');
         await expect(level).toHaveValue('3');
-        await assertAppliedPresentation(page, 3);
+        await assertAppliedPresentation(page, 4);
         await assertNoHorizontalOverflow(page);
         await expect(page.locator('html')).toHaveAttribute(
           'lang',

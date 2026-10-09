@@ -114,6 +114,7 @@ describe('personal model role editor', () => {
     await view.user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(f.writes).toHaveLength(1));
     expect(f.writes[0].model_types).toEqual(['chat_completions']);
+    expect(f.writes[0].route_strategy).toBe('cache_balanced');
     expect(f.writes[0].role_policy).toEqual({ default_action: 'native', rules: {} });
     await waitFor(() =>
       expect(screen.getByRole('searchbox', { name: 'Add sources' })).toHaveFocus(),
@@ -137,6 +138,7 @@ describe('personal model role editor', () => {
       expected_revision: original.revision,
       role_policy: { default_action: 'reject', rules: { developer: 'system', critic: 'user' } },
     });
+    expect(f.writes[0].route_strategy).toBe(original.route_strategy);
     await waitFor(() =>
       expect(
         screen.queryByRole('group', { name: 'Message role handling' }),

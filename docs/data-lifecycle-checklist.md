@@ -1,6 +1,6 @@
 # Data Lifecycle Checklist (Generation 2 export / delete / retention / privacy)
 
-> Status: **current source with Unreleased rc.6 changes** — this checklist describes the
+> Status: **v1.0.0-rc.6 source prerelease** — this checklist describes the
 > release's export, deletion, retention, and privacy boundary. Source publication does
 > not itself upgrade an instance; deployment status is specific to each operator.
 >
