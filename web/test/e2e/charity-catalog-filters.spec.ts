@@ -457,7 +457,9 @@ test('catalog filters use a counted complete sample and restore URL-backed state
     .getByRole('button', { name: 'Next', exact: true })
     .click();
   await expect(page.getByText('[公益]provider/model-11', { exact: true })).toBeVisible();
-  await expect(page).toHaveURL(/page=2&page_size=10/);
+  await expect(page).toHaveURL(
+    (url) => url.searchParams.get('page') === '2' && url.searchParams.get('page_size') === '10',
+  );
   expect(fixture.requests.at(-1)).toBe('/api/charity/models?view=catalog&page=2&page_size=10');
   await page.reload();
   await expect(page.getByText('[公益]provider/model-11', { exact: true })).toBeVisible();
@@ -499,11 +501,14 @@ test('model type filters combine with search and reset pagination', async ({ con
     .click();
   await expect(page).toHaveURL(/page=2&page_size=10/);
 
+  await openFilters(page);
   for (const operation of ['chat_completions', 'embeddings', 'images_generations']) {
     await modelType.selectOption(operation);
     await expect(modelType).toHaveValue(operation);
     await expect(search).toHaveValue('model');
-    await expect(page).toHaveURL(/page=1&page_size=10/);
+    await expect(page).toHaveURL(
+      (url) => url.searchParams.get('page') === '1' && url.searchParams.get('page_size') === '10',
+    );
     await expect
       .poll(() => {
         const lastRequest = fixture.requests.at(-1);
@@ -525,7 +530,7 @@ test('model type filters combine with search and reset pagination', async ({ con
     );
     const visible = page.locator('.charity-model-name code');
     await expect(visible).toHaveCount(expected.length);
-    expect(await visible.allTextContents()).toEqual(expected.map((model) => model.full_name));
+    await expect(visible).toHaveText(expected.map((model) => model.full_name));
   }
 
   setup.consoleGuard.assertNone();
