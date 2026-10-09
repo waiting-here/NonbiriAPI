@@ -23,6 +23,8 @@ This source prerelease supports fresh databases, the final rc.5 schema and regis
 
 ### Changed
 
+- Require Go 1.26.9 for builds, incorporating standard-library HTTP and TLS security fixes.
+
 - New personal and charity models default to cache-balanced routing. Existing strategies and omitted PATCH fields retain their saved settings.
 - Request logs open without a preset time window. The charity model directory filters by supported operation type, and the new charity model form can collapse while preserving its draft.
 - Service overview badges follow the current enabled mainstream subscription and API-platform channel configuration, including manually entered matching addresses.

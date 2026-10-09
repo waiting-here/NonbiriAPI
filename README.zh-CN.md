@@ -16,7 +16,7 @@ NonbiriAPI 是可自行部署的 AI API 端点管理平台，提供 OpenAI-compa
 
 ## 构建与启动
 
-构建需要 **Go 1.26.6**、**Node.js ≥22.22.3**、**npm 12.0.1**；仓库脚本使用 Bash，Windows 开发使用 Git Bash。最终程序内嵌两套 React 站点，使用纯 Go SQLite，运行时无需 Node.js。
+构建需要 **Go 1.26.9**、**Node.js ≥22.22.3**、**npm 12.0.1**；仓库脚本使用 Bash，Windows 开发使用 Git Bash。最终程序内嵌两套 React 站点，使用纯 Go SQLite，运行时无需 Node.js。
 
 ```sh
 npm --prefix web ci
