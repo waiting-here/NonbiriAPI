@@ -135,6 +135,9 @@ func (s *Service) create(ctx context.Context, role roleKind, actorUserID int64, 
 	if input.TransportRule == "" {
 		input.TransportRule = transportpolicy.Passthrough
 	}
+	if input.RouteStrategy == "" {
+		input.RouteStrategy = RouteCacheBalanced
+	}
 	prices, err := validateModelCreate(input)
 	if s == nil || ctx == nil || err != nil {
 		return resources.MutationResult[AdminCharityModel]{}, ErrInvalidRequest
