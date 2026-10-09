@@ -234,6 +234,8 @@ const keys = {
   'endpoints.manualImpactUnknown': 'user.core.endpoints.manualImpactUnknown',
   'endpoints.manualImpactTooMany': 'user.core.endpoints.manualImpactTooMany',
   'browse.modelCount': 'user.core.browse.modelCount',
+  'endpoints.category.subscription': 'user.core.endpoints.category.subscription',
+  'endpoints.category.api_platform': 'user.core.endpoints.category.api_platform',
   'browse.keyCount': 'user.core.browse.keyCount',
   'browse.availableConnections': 'user.core.browse.availableConnections',
   'browse.allConnections': 'user.core.browse.allConnections',

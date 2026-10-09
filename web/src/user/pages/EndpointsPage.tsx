@@ -178,6 +178,11 @@ function EndpointList({ user }: { user: UserProfile }) {
                         <span className="nb-row__main">
                           <span className="nb-row__title">
                             <strong title={name}>{name}</strong>
+                            {item.browse?.mainstream_categories?.map((category) => (
+                              <span className="nb-badge" key={category}>
+                                {t(`endpoints.category.${category}`)}
+                              </span>
+                            ))}
                             <span
                               className={`nb-badge nb-badge--${item.browse?.state === 'available' ? 'ok' : 'warn'}`}
                             >

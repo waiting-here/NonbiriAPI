@@ -93,6 +93,7 @@ export interface EndpointBrowse {
   model_count: string;
   available_key_count: string;
   state: EndpointBrowseState;
+  mainstream_categories?: ('subscription' | 'api_platform')[];
 }
 
 export interface EndpointKeyBrowse {

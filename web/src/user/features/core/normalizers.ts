@@ -822,7 +822,7 @@ function normalizeEndpointBrowse(
   const record = exactRecord(
     value,
     ['model_count', 'available_key_count', 'state'],
-    [],
+    ['mainstream_categories'],
     'endpoint browse summary',
   );
   const modelCount = browseCount(record.model_count, 'endpoint browse model count');
@@ -849,6 +849,20 @@ function normalizeEndpointBrowse(
     model_count: modelCount,
     available_key_count: availableKeyCount,
     state,
+    mainstream_categories:
+      record.mainstream_categories === undefined
+        ? []
+        : boundedArray(
+            record.mainstream_categories,
+            (category) => {
+              if (category !== 'subscription' && category !== 'api_platform') {
+                invalid('endpoint mainstream category');
+              }
+              return category;
+            },
+            'endpoint mainstream categories',
+            2,
+          ),
   };
 }
 

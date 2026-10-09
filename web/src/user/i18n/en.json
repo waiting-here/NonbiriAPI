@@ -2508,6 +2508,8 @@
       "endpoints.originCustom": "Custom address",
       "endpoints.originMainstream": "Common services: {{name}}",
       "endpoints.mainstream": "Common services",
+      "endpoints.category.subscription": "Mainstream subscription",
+      "endpoints.category.api_platform": "Mainstream API platform",
       "endpoints.custom": "Custom address",
       "endpoints.channel": "Channel",
       "endpoints.baseUrl": "Service address",

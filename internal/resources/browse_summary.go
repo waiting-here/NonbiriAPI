@@ -11,9 +11,10 @@ import (
 // Browse projections are attached only to numbered collections. Existing
 // cursor and mutation responses retain their original resource shape.
 type EndpointBrowse struct {
-	ModelCount        string `json:"model_count"`
-	AvailableKeyCount string `json:"available_key_count"`
-	State             string `json:"state"`
+	ModelCount           string   `json:"model_count"`
+	AvailableKeyCount    string   `json:"available_key_count"`
+	State                string   `json:"state"`
+	MainstreamCategories []string `json:"mainstream_categories"`
 }
 
 type EndpointKeyBrowse struct {
@@ -111,11 +112,17 @@ func bindingPreviewTx(ctx context.Context, tx *sql.Tx, scope, order string, args
 
 func endpointBrowseTx(ctx context.Context, tx *sql.Tx, userID int64, endpoint Endpoint) (*EndpointBrowse, error) {
 	var modelCount, availableKeys int64
+	var subscription, apiPlatform bool
 	err := tx.QueryRowContext(ctx, `SELECT
 (SELECT COUNT(DISTINCT b.model_id)`+ownedBindingJoin+ownedBindingScope+` AND e.id=?),
 (SELECT COUNT(*) FROM endpoint_keys k WHERE k.endpoint_id=? AND k.enabled=1
- AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=k.id))`,
-		userID, userID, endpoint.ID, endpoint.ID).Scan(&modelCount, &availableKeys)
+ AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=k.id)),
+EXISTS(SELECT 1 FROM mainstream_channels WHERE state='active' AND enabled=1
+ AND connector_type=? AND canonical_base_url=? AND category='subscription'),
+EXISTS(SELECT 1 FROM mainstream_channels WHERE state='active' AND enabled=1
+ AND connector_type=? AND canonical_base_url=? AND category='api_platform')`,
+		userID, userID, endpoint.ID, endpoint.ID,
+		endpoint.ConnectorType, endpoint.BaseURL, endpoint.ConnectorType, endpoint.BaseURL).Scan(&modelCount, &availableKeys, &subscription, &apiPlatform)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +135,15 @@ func endpointBrowseTx(ctx context.Context, tx *sql.Tx, userID int64, endpoint En
 	} else if availableKeys == 0 {
 		state = "no_usable_key"
 	}
-	return &EndpointBrowse{ModelCount: strconv.FormatInt(modelCount, 10), AvailableKeyCount: strconv.FormatInt(availableKeys, 10), State: state}, nil
+	// Current channel matches are independent of the endpoint's creation snapshot.
+	categories := make([]string, 0, 2)
+	if subscription {
+		categories = append(categories, mainstreamChannelCategorySubscription)
+	}
+	if apiPlatform {
+		categories = append(categories, mainstreamChannelCategoryAPIPlatform)
+	}
+	return &EndpointBrowse{ModelCount: strconv.FormatInt(modelCount, 10), AvailableKeyCount: strconv.FormatInt(availableKeys, 10), State: state, MainstreamCategories: categories}, nil
 }
 
 func endpointKeyBrowseTx(ctx context.Context, tx *sql.Tx, userID, endpointID int64, key EndpointKey) (*EndpointKeyBrowse, error) {

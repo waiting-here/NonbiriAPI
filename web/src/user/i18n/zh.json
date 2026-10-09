@@ -2508,6 +2508,8 @@
       "endpoints.originCustom": "自填地址",
       "endpoints.originMainstream": "常用服务：{{name}}",
       "endpoints.mainstream": "常用服务",
+      "endpoints.category.subscription": "主流订阅",
+      "endpoints.category.api_platform": "主流 API 平台",
       "endpoints.custom": "自填地址",
       "endpoints.channel": "渠道",
       "endpoints.baseUrl": "服务地址",
