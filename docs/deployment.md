@@ -192,7 +192,7 @@ This fallback also covers proxy timeouts or invalid upstream responses before re
 
 ## Database compatibility and version changes
 
-rc.6 accepts a fresh database, the final rc.5 schema at commit `8949a3d6e5b3d7536549f42a4c597393fccab62a`, and registered rc.6 schemas. The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`); account exports use schema 12. Compatibility is checked against the complete structural manifest. Earlier releases, partial schemas and unknown intermediate states are rejected without repair.
+rc.6 accepts a fresh database, the final rc.5 schema at commit `8949a3d6e5b3d7536549f42a4c597393fccab62a`, and registered rc.6 schemas. The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`); account exports use schema 14. Compatibility is checked against the complete structural manifest. Earlier releases, partial schemas and unknown intermediate states are rejected without repair.
 
 The upgrade adds ledger-compaction storage, history-query indexes, an explicit migration version and Lake Notes save-format versions. It preserves accounts, credentials, balances, donations, saved game rules, configuration and instance legal overrides. Six-hour maintenance compacts expired credit details into balance baselines and audit totals before removing them. Necessary settlement, legal-hold and idempotency evidence follows its business lifecycle.
 

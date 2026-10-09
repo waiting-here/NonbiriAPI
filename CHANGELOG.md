@@ -4,7 +4,9 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
-## [1.0.0-rc.6] - Unreleased
+## [1.0.0-rc.6] - 2026-10-09
+
+This source prerelease supports fresh databases, the final rc.5 schema and registered rc.6 schemas. SQLite remains Generation 2 and account exports use schema 14. Build from the tagged source; no official prebuilt binaries are provided. See the deployment guide for exact upgrade and complete-snapshot restore requirements.
 
 ### Added
 
@@ -21,6 +23,9 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Changed
 
+- New personal and charity models default to cache-balanced routing. Existing strategies and omitted PATCH fields retain their saved settings.
+- Request logs open without a preset time window. The charity model directory filters by supported operation type, and the new charity model form can collapse while preserving its draft.
+- Service overview badges follow the current enabled mainstream subscription and API-platform channel configuration, including manually entered matching addresses.
 - Shared controls, pagination, exact amount displays, responsive tables and terminology are consistent across both stations. Model forms expose supported operations; administration pages simplify defaults, alerts and log filtering.
 - Steady Catch adds preparation countdowns, miss and combo feedback, clearer hazards, a cloud companion, round collections and richer results. Mobile play and help use less space while preserving the existing game rules and payment behavior.
 - Account export v14 includes the current Discord sign-in policy and personal model operation types while preserving earlier safe projections.

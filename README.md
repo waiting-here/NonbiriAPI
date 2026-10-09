@@ -4,7 +4,7 @@
 
 NonbiriAPI is a self-hosted AI API endpoint manager and OpenAI-compatible gateway. Each user manages their own endpoints, encrypted credentials, discovered models and routing, then calls personal or shared charity models with a revocable CallerKey.
 
-The current development version is **1.0.0-rc.6**. See the [changelog](CHANGELOG.md) and [latest release](https://github.com/waiting-here/NonbiriAPI/releases/latest). All releases provide source code only. Linux/amd64 is the supported production target.
+The current source prerelease is **1.0.0-rc.6**. See the [changelog](CHANGELOG.md) and [release](https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-rc.6). All releases provide source code only. Linux/amd64 is the supported production target.
 
 ## Capabilities
 

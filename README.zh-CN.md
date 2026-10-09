@@ -4,7 +4,7 @@
 
 NonbiriAPI 是可自行部署的 AI API 端点管理平台，提供 OpenAI-compatible 调用入口。每位用户可以管理自己的端点、加密凭据、模型发现与路由，并用可撤销的 CallerKey 调用个人或公益模型。
 
-当前开发版本为 **1.0.0-rc.6**。版本变化见 [CHANGELOG](CHANGELOG.md)，已发布版本见 [Releases](https://github.com/waiting-here/NonbiriAPI/releases/latest)。所有版本仅发布源代码。生产环境支持 Linux/amd64。
+当前源码预发布版本为 **1.0.0-rc.6**。版本变化见 [CHANGELOG](CHANGELOG.md)，源码见 [Release](https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-rc.6)。所有版本仅发布源代码。生产环境支持 Linux/amd64。
 
 ## 主要能力
 
