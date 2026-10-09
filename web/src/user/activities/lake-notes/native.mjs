@@ -3208,8 +3208,12 @@ export function mountLake(root, bridge) {
         ui.treasureFill.style.width = `${this.treasure.progress * 100}%`;
         ui.treasureValue.textContent = `${Math.round(this.treasure.progress * 100)}%`;
       }
+      // Debris has no fish while its result is awaiting confirmation.
       const hit =
-        active && this.fish.y >= this.barY - halfBar && this.fish.y <= this.barY + halfBar;
+        active &&
+        this.fish !== null &&
+        this.fish.y >= this.barY - halfBar &&
+        this.fish.y <= this.barY + halfBar;
       ui.catchBar.classList.toggle('hit', hit);
       ui.holdButton.classList.toggle('pressed', active && this.input.held);
       ui.controls.classList.toggle('covered', !ui.overlay.hidden);

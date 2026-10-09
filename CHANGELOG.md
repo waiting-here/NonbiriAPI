@@ -47,6 +47,8 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Fixed
 
+- Lake Notes keeps rendering while a debris catch awaits confirmation, so the result and retry controls remain usable without reloading the page.
+
 - Lake Notes bounds result confirmation requests and offers an in-page retry when the outcome is uncertain, so a stalled confirmation no longer requires reloading the whole page.
 - Completed responses retain their successful result when a client disconnects during settlement. Final stream flush failures remain visible through the billing response wrapper.
 - Fishing checkpoints survive same-account session refreshes. Returning to a fishing page refreshes saved cast revisions before allowing play to resume.
