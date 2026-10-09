@@ -69,6 +69,7 @@ function catalogPath(
   allowedForMe = 'true',
   allowedLevel = '',
   currentlyAvailable = 'true',
+  modelType = '',
 ): string {
   const params = new URLSearchParams({ view: 'catalog', page, page_size: String(pageSize) });
   if (query) params.set('q', query);
@@ -77,6 +78,7 @@ function catalogPath(
   if (currentlyAvailable && currentlyAvailable !== 'all') {
     params.set('currently_available', currentlyAvailable);
   }
+  if (modelType && modelType !== 'all') params.set('model_type', modelType);
   return `/api/charity/models?${params.toString()}`;
 }
 
@@ -238,7 +240,7 @@ describe('charity catalog panel', () => {
     expect(screen.getByLabelText('Your access')).toHaveValue('true');
     expect(screen.getByLabelText('Currently available')).toHaveValue('true');
     expect(screen.getByLabelText('Current catalog URL')).toHaveTextContent(
-      'allowed_for_me=true&allowed_level=3&currently_available=true&page=1',
+      'allowed_for_me=true&allowed_level=3&currently_available=true&model_type=all&page=1',
     );
 
     await rendered.user.selectOptions(screen.getByLabelText('Your access'), 'false');
@@ -262,7 +264,7 @@ describe('charity catalog panel', () => {
     expect(screen.getByLabelText('Your access')).toHaveValue('all');
     expect(screen.getByLabelText('Currently available')).toHaveValue('all');
     expect(screen.getByLabelText('Current catalog URL')).toHaveTextContent(
-      'allowed_for_me=all&allowed_level=all&currently_available=all&page=1',
+      'allowed_for_me=all&allowed_level=all&currently_available=all&model_type=all&page=1',
     );
     expect(fetchMock.mock.calls.map(([input]) => String(input))).toContain(catalogPath());
     expect(fetchMock.mock.calls.map(([input]) => String(input))).toContain(
@@ -305,6 +307,86 @@ describe('charity catalog panel', () => {
     expect(screen.getByText('That page is no longer available. Showing page 1.')).toBeVisible();
   });
 
+  it('filters model types on the server and resets to the first page', async () => {
+    const secondPageModel = catalogModel('21', 'page-two', { model_types: ['chat_completions'] });
+    const multiTypeModel = catalogModel('22', 'chat-and-image', {
+      model_types: ['chat_completions', 'images_generations'],
+    });
+    const fetchMock = installJsonFetchFixtures([
+      {
+        method: 'GET',
+        path: catalogPath('2', 20, 'needle'),
+        body: catalogPage([secondPageModel], {
+          page: '2',
+          page_size: 20,
+          total_items: '21',
+          total_pages: '2',
+        }),
+      },
+      {
+        method: 'GET',
+        path: catalogPath('1', 20, 'needle', 'true', '', 'true', 'images_generations'),
+        body: catalogPage([multiTypeModel]),
+      },
+    ]);
+    const rendered = await renderWithProviders(
+      <>
+        <CharityCatalogPanel accountID="7" />
+        <SearchProbe />
+      </>,
+      { station: 'user', role: 'user', route: '/charity?tab=models&page=2&q=needle' },
+    );
+    expect(await screen.findByText('[公益]provider/page-two')).toBeVisible();
+    await rendered.user.click(screen.getByText(/^Filters/, { selector: 'summary' }));
+    await rendered.user.selectOptions(screen.getByLabelText('Model type'), 'images_generations');
+
+    expect(await screen.findByText('[公益]provider/chat-and-image')).toBeVisible();
+    expect(screen.queryByText('[公益]provider/page-two')).toBeNull();
+    expect(screen.getByLabelText('Current catalog URL')).toHaveTextContent(
+      'q=needle&allowed_for_me=true',
+    );
+    expect(screen.getByLabelText('Current catalog URL')).toHaveTextContent(
+      'model_type=images_generations&page=1',
+    );
+    expect(fetchMock.mock.calls.map(([input]) => String(input))).toEqual([
+      catalogPath('2', 20, 'needle'),
+      catalogPath('1', 20, 'needle', 'true', '', 'true', 'images_generations'),
+    ]);
+  });
+
+  it('clears a model type filter from the empty catalog recovery action', async () => {
+    const model = catalogModel('1', 'chat model', { model_types: ['chat_completions'] });
+    const fetchMock = installJsonFetchFixtures([
+      {
+        method: 'GET',
+        path: catalogPath('1', 20, '', 'true', '', 'true', 'images_generations'),
+        body: catalogPage([]),
+      },
+      {
+        method: 'GET',
+        path: catalogPath('1', 20, '', 'all', 'all', 'all'),
+        body: catalogPage([model]),
+      },
+    ]);
+    const rendered = await renderWithProviders(<CharityCatalogPanel accountID="7" />, {
+      station: 'user',
+      role: 'user',
+      route: '/charity?model_type=images_generations',
+    });
+
+    expect(
+      await screen.findByText('Active catalog filters are hiding models. Clear them to see more.'),
+    ).toBeVisible();
+    await rendered.user.click(screen.getByRole('button', { name: 'Show all models' }));
+
+    expect(await screen.findByText('[公益]provider/chat model')).toBeVisible();
+    expect(screen.getByLabelText('Model type')).toHaveValue('all');
+    expect(fetchMock.mock.calls.map(([input]) => String(input))).toEqual([
+      catalogPath('1', 20, '', 'true', '', 'true', 'images_generations'),
+      catalogPath('1', 20, '', 'all', 'all', 'all'),
+    ]);
+  });
+
   it('keeps the three filter labels and applied state readable in Chinese', async () => {
     installJsonFetchFixtures([
       { method: 'GET', path: catalogPath(), body: catalogPage([catalogModel('1', '中文')]) },
@@ -315,6 +397,8 @@ describe('charity catalog panel', () => {
       locale: 'zh',
     });
     expect(await screen.findByText('[公益]provider/中文')).toBeVisible();
+    expect(screen.getByLabelText('模型类型')).toHaveValue('all');
+    expect(screen.getByRole('option', { name: '全部类型' })).toBeInTheDocument();
     expect(screen.getByLabelText('某等级可访问')).toHaveValue('all');
     expect(screen.getByLabelText('本人访问权限')).toHaveValue('true');
     expect(screen.getByLabelText('当前是否可用')).toHaveValue('true');

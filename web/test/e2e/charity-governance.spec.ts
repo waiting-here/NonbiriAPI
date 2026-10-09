@@ -789,8 +789,8 @@ test('level-six stewardship shows the shared owner projection and caller identit
     const params = new URLSearchParams(query);
     expect(params.get('page')).toBe('1');
     expect(params.get('page_size')).toBe('20');
-    expect(Number(params.get('from'))).toBeGreaterThan(0);
-    expect(Number(params.get('to')) - Number(params.get('from'))).toBe(86_400);
+    expect(params.has('from')).toBe(false);
+    expect(params.has('to')).toBe(false);
   }
   const copyButton = page.getByRole('button', { name: 'Copy Discord ID', exact: true }).first();
   await copyButton.click();

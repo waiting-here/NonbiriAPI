@@ -18,6 +18,7 @@ import {
   unixSecond,
 } from '@shared/operations/wire';
 import { ApiError, apiFetch, isForbidden, isUnauthorized } from '@shared/query/http';
+import { MODEL_TYPES, type ModelType } from '@shared/modelTypes';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { normalizeCharityCapabilityModel } from './normalize';
@@ -29,12 +30,14 @@ export type CatalogAvailability =
 export type CatalogAccessFilter = 'all' | 'true' | 'false';
 export type CatalogLevelFilter = 'all' | '1' | '2' | '3' | '4' | '5' | '6';
 export type CatalogAvailabilityFilter = CatalogAccessFilter;
+export type CatalogModelTypeFilter = 'all' | ModelType;
 
 export interface CharityCatalogUrlFilters {
   query: string;
   allowedForMe: CatalogAccessFilter;
   allowedLevel: CatalogLevelFilter;
   currentlyAvailable: CatalogAvailabilityFilter;
+  modelType: CatalogModelTypeFilter;
 }
 
 export interface CatalogFilter {
@@ -44,6 +47,7 @@ export interface CatalogFilter {
   allowedForMe: CatalogAccessFilter;
   allowedLevel: CatalogLevelFilter;
   currentlyAvailable: CatalogAvailabilityFilter;
+  modelType: CatalogModelTypeFilter;
 }
 
 export interface CatalogModel extends CharityCapabilityModel {
@@ -74,6 +78,7 @@ export const charityCatalogKeys = {
       filter.allowedForMe,
       filter.allowedLevel,
       filter.currentlyAvailable,
+      filter.modelType,
       filter.page,
       filter.pageSize,
     ] as const,
@@ -84,6 +89,7 @@ export const DEFAULT_CHARITY_CATALOG_FILTERS: CharityCatalogUrlFilters = {
   allowedForMe: 'true',
   allowedLevel: 'all',
   currentlyAvailable: 'true',
+  modelType: 'all',
 };
 
 const CATALOG_URL_FILTER_NAMES = {
@@ -91,6 +97,7 @@ const CATALOG_URL_FILTER_NAMES = {
   allowedForMe: 'allowed_for_me',
   allowedLevel: 'allowed_level',
   currentlyAvailable: 'currently_available',
+  modelType: 'model_type',
 } as const;
 
 const CATALOG_AVAILABILITIES: readonly CatalogAvailability[] = [
@@ -152,6 +159,13 @@ function catalogLevel(value: CatalogLevelFilter): CatalogLevelFilter {
   return value;
 }
 
+function catalogModelType(value: CatalogModelTypeFilter): CatalogModelTypeFilter {
+  if (value !== 'all' && !(MODEL_TYPES as readonly string[]).includes(value)) {
+    invalidRequest('catalog model type filter');
+  }
+  return value;
+}
+
 function normalizedFilter(filter: CatalogFilter): CatalogFilter {
   return {
     page: catalogPage(filter.page),
@@ -160,6 +174,7 @@ function normalizedFilter(filter: CatalogFilter): CatalogFilter {
     allowedForMe: catalogAccess(filter.allowedForMe),
     allowedLevel: catalogLevel(filter.allowedLevel),
     currentlyAvailable: catalogAccess(filter.currentlyAvailable),
+    modelType: catalogModelType(filter.modelType),
   };
 }
 
@@ -221,6 +236,20 @@ function readCatalogLevelParam(params: URLSearchParams): {
   return { value: 'all', needsNormalization: true };
 }
 
+function readCatalogModelTypeParam(params: URLSearchParams): {
+  value: CatalogModelTypeFilter;
+  needsNormalization: boolean;
+} {
+  const single = readSingleSearchParam(params, CATALOG_URL_FILTER_NAMES.modelType);
+  if (single.value === undefined) {
+    return { value: 'all', needsNormalization: single.needsNormalization };
+  }
+  if (single.value === 'all' || (MODEL_TYPES as readonly string[]).includes(single.value)) {
+    return { value: single.value as CatalogModelTypeFilter, needsNormalization: false };
+  }
+  return { value: 'all', needsNormalization: true };
+}
+
 export interface CharityCatalogUrlState {
   filters: CharityCatalogUrlFilters;
   needsNormalization: boolean;
@@ -247,18 +276,21 @@ export function readCharityCatalogUrlState(params: URLSearchParams): CharityCata
     CATALOG_URL_FILTER_NAMES.currentlyAvailable,
     DEFAULT_CHARITY_CATALOG_FILTERS.currentlyAvailable,
   );
+  const modelType = readCatalogModelTypeParam(params);
   return {
     filters: {
       query,
       allowedForMe: allowedForMe.value,
       allowedLevel: allowedLevel.value,
       currentlyAvailable: currentlyAvailable.value,
+      modelType: modelType.value,
     },
     needsNormalization:
       queryNeedsNormalization ||
       allowedForMe.needsNormalization ||
       allowedLevel.needsNormalization ||
-      currentlyAvailable.needsNormalization,
+      currentlyAvailable.needsNormalization ||
+      modelType.needsNormalization,
   };
 }
 
@@ -278,6 +310,8 @@ export function canonicalCharityCatalogSearch(params: URLSearchParams): URLSearc
     next.set(CATALOG_URL_FILTER_NAMES.allowedLevel, state.filters.allowedLevel);
     next.delete(CATALOG_URL_FILTER_NAMES.currentlyAvailable);
     next.set(CATALOG_URL_FILTER_NAMES.currentlyAvailable, state.filters.currentlyAvailable);
+    next.delete(CATALOG_URL_FILTER_NAMES.modelType);
+    next.set(CATALOG_URL_FILTER_NAMES.modelType, state.filters.modelType);
   }
   return next;
 }
@@ -293,12 +327,14 @@ export function writeCharityCatalogFilters(
     allowedForMe: catalogAccess(filters.allowedForMe),
     allowedLevel: catalogLevel(filters.allowedLevel),
     currentlyAvailable: catalogAccess(filters.currentlyAvailable),
+    modelType: catalogModelType(filters.modelType),
   };
   const values: [string, string][] = [
     [CATALOG_URL_FILTER_NAMES.query, normalized.query],
     [CATALOG_URL_FILTER_NAMES.allowedForMe, normalized.allowedForMe],
     [CATALOG_URL_FILTER_NAMES.allowedLevel, normalized.allowedLevel],
     [CATALOG_URL_FILTER_NAMES.currentlyAvailable, normalized.currentlyAvailable],
+    [CATALOG_URL_FILTER_NAMES.modelType, normalized.modelType],
   ];
   for (const [name, value] of values) {
     next.delete(name);
@@ -313,6 +349,7 @@ export function charityCatalogFilterKey(filters: CharityCatalogUrlFilters): stri
     filters.allowedForMe,
     filters.allowedLevel,
     filters.currentlyAvailable,
+    filters.modelType,
   ].join('\u001f');
 }
 
@@ -460,6 +497,7 @@ export async function getCharityCatalog(
   if (normalized.currentlyAvailable !== 'all') {
     query.set('currently_available', normalized.currentlyAvailable);
   }
+  if (normalized.modelType !== 'all') query.set('model_type', normalized.modelType);
   const result = normalizeCharityCatalog(
     await apiFetch<unknown>(`/api/charity/models?${query.toString()}`, { signal }),
   );

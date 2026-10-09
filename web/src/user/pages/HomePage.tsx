@@ -250,6 +250,7 @@ function OnboardingChecklist({
       allowedForMe: 'true',
       allowedLevel: 'all',
       currentlyAvailable: 'all',
+      modelType: 'all',
     },
     enabled,
   );

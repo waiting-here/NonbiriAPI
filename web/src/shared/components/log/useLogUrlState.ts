@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useLocation } from 'react-router';
+import { useCallback, useMemo } from 'react';
 import { useSearchState } from '@shared/operations/useSearchState';
 
 // URL-backed state for the shared log screens. Page, page size, text filters,
@@ -78,34 +77,9 @@ export function useLogUrlState(
   ) => void;
 } {
   const [searchParams, setSearchParams] = useSearchState();
-  const location = useLocation();
-  const [initialRange] = useState(() => {
-    if (searchParams.has('from') || searchParams.has('to')) return null;
-    const to = Math.floor(Date.now() / 1_000);
-    const params = new URLSearchParams(searchParams);
-    params.set('from', String(to - 86_400));
-    params.set('to', String(to));
-    return { locationKey: location.key, params };
-  });
-  const effectiveParams =
-    initialRange?.locationKey === location.key ? initialRange.params : searchParams;
-
-  useEffect(() => {
-    if (initialRange?.locationKey !== location.key) return;
-    setSearchParams(
-      (previous) => {
-        if (previous.has('from') || previous.has('to')) return previous;
-        previous.set('from', initialRange.params.get('from')!);
-        previous.set('to', initialRange.params.get('to')!);
-        return previous;
-      },
-      { replace: true },
-    );
-  }, [initialRange, location.key, setSearchParams]);
-
   const state = useMemo(
-    () => parseState(effectiveParams, textParams, defaultPageSize),
-    [effectiveParams, textParams, defaultPageSize],
+    () => parseState(searchParams, textParams, defaultPageSize),
+    [searchParams, textParams, defaultPageSize],
   );
 
   const patch = useCallback(

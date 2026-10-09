@@ -177,6 +177,8 @@ for (const scenario of [
       expect(route.request().method()).toBe('GET');
       expect(url.searchParams.has('cursor')).toBe(false);
       expect(url.searchParams.has('limit')).toBe(false);
+      expect(url.searchParams.has('from')).toBe(false);
+      expect(url.searchParams.has('to')).toBe(false);
       requests.push(url);
       let body: unknown;
       if (url.pathname === path) {
@@ -285,11 +287,9 @@ for (const scenario of [
         expect(exportURL.pathname).toBe(`${path}/export.${format}`);
         expect(Object.fromEntries(exportURL.searchParams)).toEqual({
           status: '200',
-          from: restored.get('from'),
-          to: restored.get('to'),
         });
-        expect(Number(restored.get('from'))).toBeGreaterThan(0);
-        expect(Number(restored.get('to')) - Number(restored.get('from'))).toBe(86_400);
+        expect(restored.has('from')).toBe(false);
+        expect(restored.has('to')).toBe(false);
         await expect(link).toHaveAttribute('download', '');
         await link.click({ trial: true });
         const bounds = await link.boundingBox();
@@ -327,8 +327,8 @@ test('ordinary charity log detail exposes no attempt list or attempt pagination'
     expect(route.request().method()).toBe('GET');
     expect(url.searchParams.get('page')).toBe('1');
     expect(url.searchParams.get('page_size')).toBe('20');
-    expect(Number(url.searchParams.get('from'))).toBeGreaterThan(0);
-    expect(Number(url.searchParams.get('to')) - Number(url.searchParams.get('from'))).toBe(86_400);
+    expect(url.searchParams.has('from')).toBe(false);
+    expect(url.searchParams.has('to')).toBe(false);
     await route.fulfill({
       json: { data: [row('user', 1, true)], next_cursor: null, pagination: windowFor(1, 1, 20) },
     });
