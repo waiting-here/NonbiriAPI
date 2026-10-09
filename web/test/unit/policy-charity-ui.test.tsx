@@ -1995,8 +1995,8 @@ describe('experimental policy and charity controls', () => {
         }),
       );
 
-      const createHeading = screen.getByRole('heading', { name: 'Add charity model' });
-      const createForm = createHeading.closest('.card');
+      const createSummary = screen.getByText('Add charity model', { selector: 'summary strong' });
+      const createForm = createSummary.closest('.card');
       if (!(createForm instanceof HTMLElement))
         throw new Error('Missing charity model creation form');
       await rendered.user.type(within(createForm).getByLabelText('Provider'), 'new-provider');
