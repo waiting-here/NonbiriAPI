@@ -39,7 +39,7 @@ The first eleven themes each have five cards: ChatGPT, Claude, GLM, DeepSeek and
 | 星月神话 · ChatGPT | SP | Limited |
 | 逍遥游 · DeepSeek | SP | Limited |
 
-The catalogue shows all 57 cards and collection status. Owned cards open a full illustration and show the first acquisition time. SSR and SP illustrations have a looping animation, pause control and static fallback. Draws reveal automatically in order, with full-screen SSR and SP scenes. Skip reaches the complete results without another request. Ten-pull results show all ten cards, with an animated shard conversion for duplicates. Sound effects, music, supported-device vibration and reduced motion have separate controls.
+The catalogue shows all 57 cards and collection status. Owned cards open a full illustration and show the first acquisition time. SSR and SP illustrations have a looping animation, pause control and static fallback. N and R draws reveal automatically in order. SR, SSR and SP encounters wait for a click or the Continue button while their artwork keeps moving; SSR and SP use full-screen scenes. Skip reaches the complete results without another request. Ten-pull results show all ten cards, with an animated shard conversion for duplicates. Sound effects, music, supported-device vibration and reduced motion have separate controls.
 
 Completing a theme immediately unlocks its horizontal illustration: all five cards for an ordinary theme, or its single card for an SP theme. Claim its reward separately, once per account: one standard ticket for a permanent theme or one limited ticket for another theme, plus ten cumulative donation credit. Published themes keep their original membership. New cards use new themes; new permanent cards join all applicable pools without resetting progress.
 

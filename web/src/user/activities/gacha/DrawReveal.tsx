@@ -79,6 +79,7 @@ export function DrawReveal({
     'N',
   );
   const complete = phase === 'results';
+  const waiting = phase === 'reveal' && rank[card.rarity] >= rank.SR;
   const skip = () => {
     navigator.vibrate?.(0);
     audio.stopEffects();
@@ -86,6 +87,7 @@ export function DrawReveal({
     setPaused(false);
   };
   const advance = () => {
+    setPaused(false);
     if (phase === 'summon') {
       setPhase('reveal');
       return;
@@ -140,6 +142,7 @@ export function DrawReveal({
           : t('星光回应了你的期待', 'The stars have answered')
       }
       onClose={complete ? onClose : skip}
+      onSurfaceClick={waiting ? advance : undefined}
       closeLabel={complete ? t('关闭结果', 'Close results') : t('跳过演出', 'Skip animation')}
       className={
         'gacha-cinema gacha-cinema--' +
@@ -148,7 +151,7 @@ export function DrawReveal({
         (paused || hidden ? ' is-paused' : '')
       }
     >
-      {!complete && (
+      {!complete && !waiting && (
         <SceneClock
           key={'clock-' + scene}
           milliseconds={phase === 'summon' ? 2550 : duration[card.rarity]}
@@ -313,20 +316,29 @@ export function DrawReveal({
                 ' / ' +
                 receipt.items.length +
                 ' · ' +
-                t('自动播放', 'Playing automatically')}
+                (waiting
+                  ? t('点击任意位置继续', 'Click anywhere to continue')
+                  : t('自动播放', 'Playing automatically'))}
           </span>
           <div>
-            <Button
-              variant="ghost"
-              onClick={() => {
-                audio.stopEffects();
-                setPaused(!paused);
-                navigator.vibrate?.(0);
-              }}
-            >
-              <Icon name={paused ? 'play' : 'pause'} />
-              {paused ? t('继续播放', 'Resume') : t('暂停', 'Pause')}
-            </Button>
+            {waiting ? (
+              <Button variant="ghost" onClick={advance}>
+                <Icon name="play" />
+                {t('继续', 'Continue')}
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  audio.stopEffects();
+                  setPaused(!paused);
+                  navigator.vibrate?.(0);
+                }}
+              >
+                <Icon name={paused ? 'play' : 'pause'} />
+                {paused ? t('继续播放', 'Resume') : t('暂停', 'Pause')}
+              </Button>
+            )}
             <Button variant="ghost" onClick={skip}>
               {t('跳过 · 查看全部', 'Skip · view all')}
             </Button>

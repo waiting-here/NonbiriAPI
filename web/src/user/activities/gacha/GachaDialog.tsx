@@ -6,12 +6,14 @@ export function GachaDialog({
   title,
   children,
   onClose,
+  onSurfaceClick,
   className = '',
   closeLabel = '关闭',
 }: {
   title: string;
   children: ReactNode;
   onClose: () => void;
+  onSurfaceClick?: () => void;
   className?: string;
   closeLabel?: string;
 }) {
@@ -43,7 +45,14 @@ export function GachaDialog({
         handler.current();
       }}
       onClick={(event) => {
-        if (event.target === event.currentTarget) handler.current();
+        if (onSurfaceClick) {
+          if (
+            event.target instanceof Element &&
+            !event.target.closest('button, a, input, select, textarea, [role="button"]')
+          ) {
+            onSurfaceClick();
+          }
+        } else if (event.target === event.currentTarget) handler.current();
       }}
     >
       <div className="gacha-dialog__inner">

@@ -54,7 +54,10 @@ it('automatically reveals in order, pauses remaining time and ends with every re
   advance(600);
   expect(document.querySelector('[data-card-id="l-chatgpt"]')).toBeInTheDocument();
   expect(vibrate).toHaveBeenCalledWith([65, 75, 110, 100, 160]);
-  advance(5400);
+  advance(60000);
+  expect(screen.getByText('2 / 2 · Click anywhere to continue')).toBeVisible();
+  expect(document.querySelector('.gacha-cinema')).not.toHaveClass('is-paused');
+  fireEvent.click(document.querySelector('.gacha-cinema__caption')!);
   expect(screen.getByRole('region', { name: 'All draw results' })).toBeVisible();
   expect(screen.getByLabelText('Converted to 1 SSR shard')).toBeVisible();
   expect(document.querySelectorAll('.gacha-cinema__result')).toHaveLength(2);
@@ -117,4 +120,45 @@ it('hidden tabs preserve progress and reduced motion goes directly to results wi
   expect(screen.getByRole('region', { name: 'All draw results' })).toBeVisible();
   expect(vibrate).not.toHaveBeenCalled();
   expect(cue).not.toHaveBeenCalled();
+});
+
+it.each(['e-chatgpt', 'g-chatgpt', 'l-chatgpt'])(
+  'holds %s for a click, then resumes lower-rarity playback',
+  (cardID) => {
+    render(
+      <DrawReveal
+        receipt={{
+          ...receipt,
+          items: [{ card_id: cardID, duplicate: false, guarantee: 'none' }, receipt.items[0]],
+        }}
+        preferences={preferences}
+        audio={audio}
+        english
+        onClose={vi.fn()}
+      />,
+    );
+    advance(2550);
+    advance(60000);
+    expect(document.querySelector('[data-card-id="' + cardID + '"]')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(document.querySelector('[data-card-id="a-chatgpt"]')).toBeVisible();
+    advance(1000);
+    expect(screen.getByRole('region', { name: 'All draw results' })).toBeVisible();
+  },
+);
+
+it('skip during a rare encounter shows all cards without advancing twice', () => {
+  render(
+    <DrawReveal
+      receipt={{ ...receipt, items: [receipt.items[1], receipt.items[0]] }}
+      preferences={preferences}
+      audio={audio}
+      english
+      onClose={vi.fn()}
+    />,
+  );
+  advance(2550);
+  fireEvent.click(screen.getByRole('button', { name: 'Skip · view all' }));
+  advance(60000);
+  expect(document.querySelectorAll('.gacha-cinema__result')).toHaveLength(2);
 });
