@@ -152,7 +152,8 @@
       "status": "Status",
       "actions": "Actions",
       "balancedSummary": "Optimized load balancing",
-      "balancedHelp": "Reuse a source recently used by the same user and model for up to 5 minutes; otherwise prefer sources with less recent load."
+      "balancedHelp": "Reuse a source recently used by the same user and model for up to 5 minutes; otherwise prefer sources with less recent load.",
+      "providerPlaceholder": "e.g. openai; leave blank for all"
     },
     "games": {
       "nav": "Games",
@@ -2451,7 +2452,7 @@
       "home.creditHistory": "Credit history",
       "home.donationCredit": "Total donation rewards",
       "home.level": "Level",
-      "home.levelValue": "Lv{{level}} · {{name}}",
+      "home.levelValue": "{{level}} · {{name}}",
       "home.usageTitle": "Lifetime usage",
       "home.requests": "Requests",
       "home.promptTokens": "Prompt tokens",
@@ -2724,7 +2725,9 @@
       "accountPresentation.exportBody": "Confirm again with Discord; you will return here automatically and download your export.",
       "accountPresentation.exportAction": "Export…",
       "accountPresentation.deleteAction": "Delete account…",
-      "models.cacheBalanced": "Optimized load balancing"
+      "models.cacheBalanced": "Optimized load balancing",
+      "keys.charityModelExample": "[公益]provider/model-name",
+      "keys.ownModelExample": "my/model-name"
     },
     "lakeNotes": {
       "exchangeAvailable": "Fishing is free. Coin exchange is available below.",

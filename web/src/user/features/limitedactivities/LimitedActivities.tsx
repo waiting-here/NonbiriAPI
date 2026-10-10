@@ -218,6 +218,7 @@ function ExchangePanel({
           <label>
             {text('common.quantity')}
             <input
+              className="limited-exchange-quantity"
               value={quantity}
               inputMode="numeric"
               pattern="[1-9][0-9]*"

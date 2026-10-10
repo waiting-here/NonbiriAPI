@@ -152,7 +152,8 @@
       "status": "状态",
       "actions": "操作",
       "balancedSummary": "综合优化负载均衡",
-      "balancedHelp": "优先复用同用户、同模型在 5 分钟内使用的来源；其余选择近期负载较低的来源。"
+      "balancedHelp": "优先复用同用户、同模型在 5 分钟内使用的来源；其余选择近期负载较低的来源。",
+      "providerPlaceholder": "例如 openai；留空不限"
     },
     "games": {
       "nav": "游戏",
@@ -2451,7 +2452,7 @@
       "home.creditHistory": "积分记录",
       "home.donationCredit": "累计捐赠回馈",
       "home.level": "等级",
-      "home.levelValue": "等级 {{level}} · {{name}}",
+      "home.levelValue": "{{level}} · {{name}}",
       "home.usageTitle": "累计用量",
       "home.requests": "请求数",
       "home.promptTokens": "提示 Token",
@@ -2724,7 +2725,9 @@
       "accountPresentation.exportBody": "导出前需要 Discord 再次确认，完成后会自动返回并下载。",
       "accountPresentation.exportAction": "导出…",
       "accountPresentation.deleteAction": "删除账户…",
-      "models.cacheBalanced": "综合优化负载均衡"
+      "models.cacheBalanced": "综合优化负载均衡",
+      "keys.charityModelExample": "[公益]服务商/模型名",
+      "keys.ownModelExample": "my/模型名"
     },
     "lakeNotes": {
       "exchangeAvailable": "垂钓免费入场。金币兑换已开放，可查看下方兑换。",

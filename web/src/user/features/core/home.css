@@ -314,3 +314,13 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.home-page .nb-page-header h1 {
+  text-wrap: balance;
+}
+.home-checklist-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--nb-space-2);
+}

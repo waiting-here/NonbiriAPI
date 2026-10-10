@@ -111,7 +111,7 @@ export function CredentialReportPage() {
                 </select>
               </label>
               <label className="ops-form-field">{t('user.report.baseUrlLabel')}
-                <input type="url" required maxLength={4096} value={baseURL} onChange={(event) => { intentKey.current = null; setBaseURL(event.target.value); }} autoComplete="url" />
+                <input type="url" placeholder="https://api.example.com/v1" required maxLength={4096} value={baseURL} onChange={(event) => { intentKey.current = null; setBaseURL(event.target.value); }} autoComplete="url" />
               </label>
               <label className="ops-form-field">{t('user.report.secretLabel')}
                 <textarea className="ops-secret" required rows={4} value={secret} onChange={(event) => { intentKey.current = null; setSecret(event.target.value); }} autoComplete="off" spellCheck={false} />
