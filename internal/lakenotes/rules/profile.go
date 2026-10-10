@@ -54,6 +54,7 @@ type Profile struct {
 	SelectedBait       string            `json:"selectedBait,omitempty"`
 	Basket             []Catch           `json:"basket"`
 	Records            map[string]Record `json:"records"`
+	CollectionClaims   map[string]int64  `json:"collectionClaims,omitempty"`
 	NextCatchID        uint64            `json:"nextCatchId"`
 	SavedLoadouts      [3]*Loadout       `json:"savedLoadouts"`
 	DebrisStock        map[string]int    `json:"debrisStock"`

@@ -78,6 +78,7 @@ export interface Profile {
   selectedBait?: string;
   basket: Catch[];
   records: Record<string, RecordEntry>;
+  collectionClaims?: Record<string, number>;
   nextCatchId: number;
   savedLoadouts: (Loadout | null)[];
   debrisStock: Record<string, number>;

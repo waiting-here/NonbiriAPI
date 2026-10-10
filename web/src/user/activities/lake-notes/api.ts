@@ -104,6 +104,12 @@ async function castRequest(path: string, options?: ApiRequestOptions): Promise<C
 }
 export const getProfile = (options?: ApiRequestOptions) =>
   decoded(base + '/profile', decodeProfile, options);
+export const claimCollection = (location: string, key: string, options?: ApiRequestOptions) =>
+  decoded(
+    base + '/collection-claims',
+    decodeProfile,
+    idempotentOptions(key, { ...options, method: 'POST', json: { location } }),
+  );
 export const getCast = (id: string, options?: ApiRequestOptions) =>
   castRequest(base + '/casts/' + encodeURIComponent(id), options);
 export const act = (input: ActionInput, key: string, options?: ApiRequestOptions) =>

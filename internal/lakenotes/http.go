@@ -172,6 +172,8 @@ func safeOperation(r *http.Request) string {
 		return "start_cast"
 	case baseRoute + "/actions":
 		return "profile_action"
+	case baseRoute + "/collection-claims":
+		return "collection_claim"
 	case baseRoute + "/exchange":
 		return "exchange"
 	case baseRoute + "/exchange/quote":
@@ -244,6 +246,14 @@ func RegisterRoutes(users resources.UserRouteRegistrar, continuation resources.C
 		path string
 		fn   postFn
 	}{
+		{"/collection-claims", func(r *http.Request, user int64, k string) (any, error) {
+			var in CollectionInput
+			if e := decode(r, &in, "location"); e != nil {
+				return nil, e
+			}
+			out, e := s.ClaimCollection(r.Context(), user, k, in)
+			return out.Value, e
+		}},
 		{"/exchange", func(r *http.Request, user int64, k string) (any, error) {
 			var in ExchangeInput
 			if e := decode(r, &in, "direction", "quantity", "expected_settings_revision", "expected_profile_revision"); e != nil {
