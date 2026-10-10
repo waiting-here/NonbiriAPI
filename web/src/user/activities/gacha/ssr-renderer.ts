@@ -1,3 +1,5 @@
+import { backdropShader, paintSPAtmosphere, spScenes } from './sp-motion';
+
 type MotionConfig = {
   background: string;
   hero: string;
@@ -59,6 +61,7 @@ export async function renderSSR(
   paused?: () => boolean,
 ) {
   const cfg = configFor(id);
+  const scene = spScenes[id];
   const [background, hero, half, closed, cloud] = await Promise.all([
     load(cfg.background),
     load(cfg.hero),
@@ -95,11 +98,14 @@ export async function renderSSR(
   compile(
     gl.FRAGMENT_SHADER,
     `precision highp float;
-varying vec2 uv;uniform sampler2D tex0,tex1,tex2;uniform float phase,blink,hasHalf;uniform vec4 eyes;uniform vec2 pivot,eyeSize;
+varying vec2 uv;uniform sampler2D tex0,tex1,tex2,tex3;uniform float phase,blink,hasHalf,strength,scene,backgroundPass;uniform vec4 eyes;uniform vec2 pivot,eyeSize;
 float bump(vec2 p,vec2 c,vec2 r){return exp(-dot((p-c)/r,(p-c)/r)*2.);}
 float eye(vec2 p,vec2 c){return 1.-smoothstep(.70,1.,length((p-c)/eyeSize));}
+${backdropShader}
 void main(){
- vec2 p=uv;float s=1.3;float upper=1.-smoothstep(pivot.y-.09,pivot.y+.16,p.y);float angle=.0028*sin(phase)*upper*s;
+ if(backgroundPass>.5){gl_FragColor=backdrop(uv);return;}
+ vec2 p=uv;float s=strength;
+ if(scene>.5)p+=vec2(.0035*sin(phase),.0025*sin(phase+.4));float upper=1.-smoothstep(pivot.y-.09,pivot.y+.16,p.y);float angle=.0028*sin(phase)*upper*s;
  vec2 q=p-pivot;p=vec2(q.x*cos(angle)-q.y*sin(angle),q.x*sin(angle)+q.y*cos(angle))+pivot;
  float body=bump(p,pivot+vec2(0.,.08),vec2(.27,.28));p.y+=.0015*sin(phase*2.)*body*s;
  p.x-=(p.x-pivot.x)*.006*sin(phase*2.)*body*s;
@@ -127,7 +133,7 @@ void main(){
   const attr = gl.getAttribLocation(program, 'a');
   gl.enableVertexAttribArray(attr);
   gl.vertexAttribPointer(attr, 2, gl.FLOAT, false, 0, 0);
-  const textures = [hero, half ?? hero, closed ?? hero].map((image, i) => {
+  const textures = [hero, half ?? hero, closed ?? hero, background].map((image, i) => {
     const texture = gl.createTexture();
     gl.activeTexture(gl.TEXTURE0 + i);
     gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -155,6 +161,12 @@ void main(){
     id.startsWith('g-') ? 0.025 : 0.021,
   );
   gl.uniform1f(gl.getUniformLocation(program, 'hasHalf'), cfg.half ? 1 : 0);
+  gl.uniform1f(
+    gl.getUniformLocation(program, 'strength'),
+    scene === 'wandering' ? 2.25 : scene ? 2.05 : 1.3,
+  );
+  gl.uniform1f(gl.getUniformLocation(program, 'scene'), scene === 'celestial' ? 1 : scene ? 2 : 0);
+  const backgroundPass = gl.getUniformLocation(program, 'backgroundPass');
   const phase = gl.getUniformLocation(program, 'phase'),
     blink = gl.getUniformLocation(program, 'blink');
   let stopped = false,
@@ -182,19 +194,27 @@ void main(){
       raf = requestAnimationFrame(frame);
       return;
     }
-    time = frozenTime ?? (time + Math.min(at - last, 100) / 1000) % 10;
+    time = (frozenTime ?? time + Math.min(at - last, 100) / 1000) % 10;
     last = at;
     const p = (time / 10) * Math.PI * 2,
       w = canvas.width,
       h = canvas.height;
-    ctx!.drawImage(
-      background,
-      -w * 0.008 + Math.sin(p) * w * 0.003,
-      -h * 0.008,
-      w * 1.016,
-      h * 1.016,
-    );
     gl!.uniform1f(phase, p);
+    if (scene) {
+      gl!.uniform1f(backgroundPass, 1);
+      gl!.drawArrays(gl!.TRIANGLES, 0, 6);
+      ctx!.drawImage(layer, 0, 0);
+      paintSPAtmosphere(ctx!, scene, p, w, h);
+    } else
+      ctx!.drawImage(
+        background,
+        -w * 0.008 + Math.sin(p) * w * 0.003,
+        -h * 0.008,
+        w * 1.016,
+        h * 1.016,
+      );
+    gl!.uniform1f(phase, p);
+    gl!.uniform1f(backgroundPass, 0);
     gl!.uniform1f(blink, blinkAt(time));
     gl!.drawArrays(gl!.TRIANGLES, 0, 6);
     if (cfg.pilot)

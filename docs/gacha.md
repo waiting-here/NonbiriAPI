@@ -39,7 +39,7 @@ The first eleven themes each have five cards: ChatGPT, Claude, GLM, DeepSeek and
 | 星月神话 · ChatGPT | SP | Limited |
 | 逍遥游 · DeepSeek | SP | Limited |
 
-The catalogue shows all 57 cards and collection status. Owned cards open a full illustration and show the first acquisition time. SSR and SP illustrations have a looping animation, pause control and static fallback. N and R draws reveal automatically in order. SR, SSR and SP encounters wait for a click or the Continue button while their artwork keeps moving; SSR and SP use full-screen scenes. Skip reaches the complete results without another request. Ten-pull results show all ten cards, with an animated shard conversion for duplicates. Sound effects, music, supported-device vibration and reduced motion have separate controls.
+The catalogue shows all 57 cards and collection status. Owned cards open a full illustration and show the first acquisition time. SSR and SP illustrations have a looping animation, pause control and static fallback. SP also animates its background in coordination with the character. N and R draws reveal automatically in order. SR, SSR and SP encounters wait for a click or the Continue button while their artwork keeps moving; SSR and SP use full-screen scenes. Skip reaches the complete results without another request. Ten-pull results show all ten cards, with an animated shard conversion for duplicates. Sound effects, music, supported-device vibration and reduced motion have separate controls.
 
 Completing a theme immediately unlocks its horizontal illustration: all five cards for an ordinary theme, or its single card for an SP theme. Claim its reward separately, once per account: one standard ticket for a permanent theme or one limited ticket for another theme, plus ten cumulative donation credit. Published themes keep their original membership. New cards use new themes; new permanent cards join all applicable pools without resetting progress.
 
@@ -121,3 +121,5 @@ Example action bodies:
 From `web/`, run `npm run dev:gacha`, or `npm run build:gacha` followed by `npm run preview:gacha`. Production activity components use isolated browser-local sample data. Only this activity is included, with fresh-account and complete-collection modes, light/dark themes, unlockable appearances, SSR/SP presentation samples and Chinese/English text. The preview does not connect to a live account or spend real site credits.
 
 See the [artwork and audio notices](../web/public/assets/gacha/NOTICE.md).
+
+New cards follow the [card artwork and presentation standard](gacha-art.md), including their rarity-specific animation, theme illustration and SP appearance requirements.
