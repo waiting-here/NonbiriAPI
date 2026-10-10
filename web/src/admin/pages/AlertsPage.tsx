@@ -691,7 +691,7 @@ export function AlertsPage() {
                     header: t('admin.alerts.subject'),
                     mobileLabel: t('admin.alerts.subject'),
                     cell: 'meta',
-                    render: (alert) => alert.subject_user_id ?? '—',
+                    render: (alert) => alert.subject_user_id === null ? '—' : t('admin.alerts.subjectUser', { id: alert.subject_user_id }),
                   },
                   {
                     key: 'created',

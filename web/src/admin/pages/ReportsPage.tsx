@@ -23,6 +23,7 @@ import {
 } from '../features/operations/reports';
 import { reportPageKeys, useReportsPage } from '../features/operations/reportPages';
 import '@shared/operations/operations.css';
+import './reports.css';
 
 function selectedStatus(values: string[]): string {
   return values.length === 1 && REPORT_STATUSES.includes(values[0] as ReportStatus)
@@ -131,7 +132,7 @@ export function ReportsPage() {
         </Card>
       </div>
       <Card>
-        <label className="ops-form-field">
+        <label className="ops-form-field reports-status-filter">
           <span>{t('admin.reports.filter.status')}</span>
           <select
             value={status}

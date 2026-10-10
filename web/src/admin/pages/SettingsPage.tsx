@@ -267,6 +267,10 @@ function SettingField({
   const differsFromDefault = (parsed.error === null ? parsed.value : value) !== entry.raw_default;
   const locale = catalogLocale(language);
   const inputID = 'site-setting-' + entry.key;
+  const levelThreshold = /^level_threshold_([234])_milli$/.exec(entry.key);
+  const title = levelThreshold
+    ? t('admin.settings.levelThreshold', { level: levelThreshold[1] })
+    : entry.title[locale];
   const change = (text: string) => onEdit(entry.key, { ...draft, text });
   let preview: string | null = null;
   if (
@@ -304,7 +308,7 @@ function SettingField({
     entry.type === 'boolean' ? (
       <div className="setting-toggle">
         <Toggle
-          label={entry.title[locale]}
+          label={title}
           checked={draft.text === 'true'}
           disabled={busy || draft.isNull}
           onChange={(checked) => change(String(checked))}
@@ -312,7 +316,7 @@ function SettingField({
       </div>
     ) : entry.type === 'enum' && entry.allowed_values.length <= 4 ? (
       <Segmented
-        label={entry.title[locale]}
+        label={title}
         value={draft.text}
         disabled={busy || draft.isNull}
         options={entry.allowed_values.map((value) => ({ value, label: enumValueLabel(t, value) }))}
@@ -351,9 +355,9 @@ function SettingField({
         <h3>
           {entry.type === 'boolean' ||
           (entry.type === 'enum' && entry.allowed_values.length <= 4) ? (
-            entry.title[locale]
+            title
           ) : (
-            <label htmlFor={inputID}>{entry.title[locale]}</label>
+            <label htmlFor={inputID}>{title}</label>
           )}
         </h3>
         {differsFromDefault ? (
@@ -717,7 +721,12 @@ export function SettingsPage() {
     () => ({
       charity_model_pricing: t('admin.settings.charityModelPricing'),
       ...Object.fromEntries(
-        (authority.data?.catalog ?? []).map((entry) => [entry.key, entry.title[locale]]),
+        (authority.data?.catalog ?? []).map((entry) => {
+          const threshold = /^level_threshold_([234])_milli$/.exec(entry.key);
+          return [entry.key, threshold
+            ? t('admin.settings.levelThreshold', { level: threshold[1] })
+            : entry.title[locale]];
+        }),
       ),
     }),
     [authority.data, locale, t],

@@ -18,8 +18,8 @@ export function ExportPanel({
       <h3>{t('下载历史数据', 'Download history')}</h3>
       <p>
         {t(
-          '下载一个 ZIP，内含 UTF-8 NDJSON 数据和完整性清单。可在浏览器中查看进度或取消下载。',
-          'Download one ZIP containing UTF-8 NDJSON records and a completion manifest. Your browser manages download progress and cancellation.',
+          '下载数据压缩包，内含逐行 JSON 记录和完整性清单。可在浏览器中查看进度或取消下载。',
+          'Download a ZIP of records, one JSON object per line, with a completion manifest. Your browser manages download progress and cancellation.',
         )}
       </p>
       {dataset === 'anonymous' && (

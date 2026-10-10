@@ -201,7 +201,7 @@ function EndpointsPageContent({ account, scopeReady, sessionError }: EndpointsPa
       />
       <Card>
         <form
-          className="ops-toolbar"
+          className="ops-toolbar endpoint-filters"
           role="search"
           onSubmit={(event) => {
             event.preventDefault();
@@ -219,6 +219,7 @@ function EndpointsPageContent({ account, scopeReady, sessionError }: EndpointsPa
             <input
               type="search"
               value={draft}
+              placeholder={t('admin.endpoints.searchPlaceholder')}
               aria-label={t('admin.endpoints.searchAria')}
               aria-invalid={queryError ? 'true' : undefined}
               aria-describedby={queryError ? 'endpoint-query-error' : undefined}
@@ -236,12 +237,10 @@ function EndpointsPageContent({ account, scopeReady, sessionError }: EndpointsPa
               inputMode="numeric"
               pattern="[1-9][0-9]*"
               value={userDraft}
+              placeholder={t('admin.endpoints.userPlaceholder')}
               onChange={(event) => setUserDraft(event.target.value)}
             />
           </label>
-          <button className="nb-btn nb-btn--secondary" type="submit">
-            {t('common.applyFilter')}
-          </button>
           <label className="ops-form-field">
             <span>{t('admin.endpoints.tags')}</span>
             <select
@@ -265,18 +264,23 @@ function EndpointsPageContent({ account, scopeReady, sessionError }: EndpointsPa
               <option value="community_charity">{t('admin.endpoints.community_charity')}</option>
             </select>
           </label>
-          <button
-            className="nb-btn nb-btn--ghost"
-            type="button"
-            onClick={() => {
-              setDraft('');
-              setUserDraft('');
-              setQueryError(null);
-              commitFilter('', '', true);
-            }}
-          >
-            {t('common.resetFilter')}
-          </button>
+          <div className="endpoint-filter-actions">
+            <button className="nb-btn nb-btn--secondary" type="submit">
+              {t('common.applyFilter')}
+            </button>
+            <button
+              className="nb-btn nb-btn--ghost"
+              type="button"
+              onClick={() => {
+                setDraft('');
+                setUserDraft('');
+                setQueryError(null);
+                commitFilter('', '', true);
+              }}
+            >
+              {t('common.resetFilter')}
+            </button>
+          </div>
         </form>
         <fieldset
           className="endpoint-batch"

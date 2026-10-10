@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
-import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { useAdminSession } from '../data';
 import { useGameAdminText } from '../features/games/copy';
@@ -17,6 +17,7 @@ import { BlackjackBoard, BlackjackSettlement } from '../../user/games/blackjack/
 import '../../user/games/bidding/bidding.css';
 import '../../user/games/blackjack/blackjack.css';
 import '@shared/operations/operations.css';
+import './history.css';
 
 function Detail({
   dataset,
@@ -126,7 +127,7 @@ export function BlackjackHistoryPage() {
         )}
       />
       <Card>
-        <label>
+        <label className="ops-form-field admin-history-filter">
           {t('资料范围', 'Dataset')}{' '}
           <select
             value={dataset}
@@ -172,7 +173,9 @@ export function BlackjackHistoryPage() {
                   </button>
                 ))}
               </div>
-              {!page.data.items.length && <p>{t('暂无记录。', 'No records.')}</p>}
+              {!page.data.items.length && (
+                <EmptyState title={text('admin.gameHistory.emptyTitle')} body={text('admin.gameHistory.emptyBody')} />
+              )}
             </>
           )}
           <SimplePager

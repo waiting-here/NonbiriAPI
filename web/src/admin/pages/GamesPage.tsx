@@ -1,4 +1,5 @@
 import { LakeFields, lakeWire } from '../features/lakenotes/LakeFields';
+import './games.css';
 import { useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
@@ -626,7 +627,7 @@ export function GamesPage() {
   const initialConfigFailure = !config.data && config.error;
 
   return (
-    <div className="page ops-page">
+    <div className="page ops-page admin-games-page">
       <PageHeader
         title={t('admin.games.title')}
         description={duelText(
@@ -636,7 +637,7 @@ export function GamesPage() {
         actions={
           <>
             <Link className="nb-btn nb-btn--secondary" to="/games/ai">
-              {duelText('AI 玩家与策略', 'AI players and strategies')}
+              {t('admin.games.aiPlayersTitle')}
             </Link>
             {config.data?.bidding && config.data.likes ? (
               <Link className="nb-btn nb-btn--secondary" to="/games/history">

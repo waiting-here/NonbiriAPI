@@ -1033,7 +1033,7 @@
       "hours": "Shared IP window (hours)",
       "accounts": "Shared IP account threshold",
       "adminOnly": "Only administrators can change thresholds.",
-      "configHelp": "Risk is assessed using total user occupancy and the limits recorded at that time. Restarts, gaps, pending settlements, and changed or unknown limits break the chain.",
+      "configHelp": "Risk uses total user occupancy and the limit at the time. Restarts, missing records, unsettled requests, or changed or unknown limits restart the consecutive exceedance count.",
       "comparison": "Same-model comparison",
       "thisUser": "This user",
       "others": "Other users",
@@ -1180,7 +1180,8 @@
       "actorAutomatic": "Automatic",
       "actorUnknown": "Unknown",
       "all": "All",
-      "close": "Close"
+      "close": "Close",
+      "searchPlaceholder": "Discord ID or first note"
     },
     "diagnostics": {
       "sourceDetailsAreUnavailable": "Source details are unavailable.",
@@ -1625,7 +1626,8 @@
       "unbanAction": "Unban…",
       "banConsequence": "Banning stops this user from using the platform.",
       "deleteConsequence": "Delete the account and user data. Your administrator password is required again.",
-      "reasonRequired": "Required. Explain the adjustment; the user can see this reason."
+      "reasonRequired": "Required. Explain the adjustment; the user can see this reason.",
+      "levelValue": "Level {{level}}"
     },
     "announcements": {
       "nav": "Announcements",

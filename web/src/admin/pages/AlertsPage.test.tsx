@@ -784,7 +784,7 @@ it('does not open a stale user target from a crafted projection diagnostic URL',
     locale: 'en',
     route: '/alerts?resolved=false&alert_id=80&target_kind=issue_user&target_id=42',
   });
-  expect(await screen.findByText(/User #42/)).toBeVisible();
+  expect(await screen.findByText(/User #42/, { selector: 'li' })).toBeVisible();
   expect(screen.queryByRole('button', { name: 'Issue projection' })).toBeNull();
   expect(screen.queryByRole('heading', { name: /Exact object diagnostic/ })).toBeNull();
   expect(fetchMock.mock.calls.map(([input]) => String(input))).not.toContain(
