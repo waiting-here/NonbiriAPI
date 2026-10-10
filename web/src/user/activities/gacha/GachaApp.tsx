@@ -11,7 +11,7 @@ import { Icon } from '@shared/components/Icon';
 import { PageHeader } from '@shared/components/States';
 import { formatDateTime } from '@shared/utils/datetime';
 import { formatCredits, creditsToMilli } from '../../games/common/strict';
-import { cards, cardById, themes, themeById, rarities } from './catalog';
+import { cards, cardById, themes, themeById, rarities, isRare } from './catalog';
 import { Artwork } from './Artwork';
 import { CardTile } from './CardTile';
 import { Collection } from './Collection';
@@ -31,6 +31,8 @@ import type {
   Ticket,
 } from './types';
 import './gacha.css';
+import { useOptionalAppearance } from '../../appearance/context';
+import { AppearanceButton } from '../../appearance/AppearanceButton';
 
 type Page = 'pools' | 'collection' | 'shop';
 type PendingAction = { input: Action; key: string; message: string };
@@ -82,6 +84,7 @@ export function GachaApp({
   english?: boolean;
   back?: ReactNode;
 }) {
+  const appearance = useOptionalAppearance();
   const t = (zh: string, en: string) => (english ? en : zh);
   const [state, setState] = useState<Snapshot | null>(null),
     [page, setPage] = useState<Page>('pools');
@@ -107,6 +110,7 @@ export function GachaApp({
     return {
       music: false,
       sound: true,
+      vibration: true,
       reduced: matchMedia('(prefers-reduced-motion: reduce)').matches,
     };
   });
@@ -204,6 +208,7 @@ export function GachaApp({
       if (!mounted.current) return;
       remember(null);
       accept(result.snapshot);
+      appearance?.refresh();
       if (result.draw) setDraw(result.draw);
       else {
         setNotice(
@@ -293,7 +298,7 @@ export function GachaApp({
     pool.kind === 'limited'
       ? pool.featured
           .map((id) => cardById[id])
-          .sort((a, b) => Number(b.rarity === 'SSR') - Number(a.rarity === 'SSR'))
+          .sort((a, b) => Number(isRare(b.rarity)) - Number(isRare(a.rarity)))
       : cards.filter((c) => c.theme === 'g');
   const hero =
     highlighted[heroIndex % highlighted.length] ?? cards.find((c) => c.id === 'g-chatgpt')!;
@@ -342,6 +347,7 @@ export function GachaApp({
         className="gacha-page-header"
         actions={
           <div className="gacha-header-actions">
+            <AppearanceButton />
             <Button
               variant="ghost"
               aria-label={t('规则', 'Rules')}
@@ -577,6 +583,15 @@ export function GachaApp({
                     <small>{t('抽', 'pulls')}</small>
                   </strong>
                 </div>
+                {pool.kind === 'limited' && (pool.rules.ssr_guarantee_misses ?? 1) > 1 && (
+                  <p className="gacha-special-progress">
+                    {t('SP 大保底：连续未中 ', 'SP guarantee: consecutive misses ')}
+                    <strong>
+                      {pity.ssr_misses ?? 0} / {pool.rules.ssr_guarantee_misses}
+                    </strong>
+                    {t(' · 与普通限定池独立', ' · independent of regular limited pools')}
+                  </p>
+                )}
                 {pool.kind === 'limited' && (pity.sr_featured || pity.ssr_featured) && (
                   <p>
                     {[pity.sr_featured && 'SR', pity.ssr_featured && 'SSR']
@@ -647,15 +662,17 @@ export function GachaApp({
                 <h3>{t('有些美好，要一起才完整', 'Some memories need everyone')}</h3>
                 <p>
                   {t(
-                    '集齐一个主题，解锁五人合照与特别回馈。',
-                    'Complete a theme to unlock a group illustration and rewards.',
+                    '集齐一个主题，解锁主题插画与特别回馈。',
+                    'Complete a theme to unlock its illustration and rewards.',
                   )}
                 </p>
               </div>
               <Button onClick={() => setPage('collection')}>
                 <Icon name="book" />
                 {t('翻开收藏册', 'Open your collection')}
-                <span>{Object.keys(state.owned).length} / 55</span>
+                <span>
+                  {Object.keys(state.owned).length} / {cards.length}
+                </span>
               </Button>
             </div>
           </>
@@ -747,7 +764,7 @@ export function GachaApp({
               {formatDateTime(state.owned[card.id].at)}
             </p>
           )}
-          {state.owned[card.id] && card.rarity === 'SSR' && !preferences.reduced && (
+          {state.owned[card.id] && isRare(card.rarity) && !preferences.reduced && (
             <Button onClick={() => setMotion(!motion)}>
               <Icon name={motion ? 'pause' : 'play'} />
               {motion ? t('暂停动态', 'Pause animation') : t('播放动态', 'Play animation')}
@@ -762,7 +779,7 @@ export function GachaApp({
           onClose={() => setGroup(null)}
           className="gacha-group-view"
         >
-          <img src={group.art} alt={t(group.name + '五人合照', group.name_en + ' group memory')} />
+          <img src={group.art} alt={t(group.name + '主题插画', group.name_en + ' group memory')} />
           <p>{t(group.tagline, group.tagline_en)}</p>
         </GachaDialog>
       )}
@@ -883,26 +900,38 @@ export function GachaApp({
             checked={preferences.reduced}
             onChange={(reduced) => setPreferences((p) => ({ ...p, reduced }))}
           />
+          <Toggle
+            label={t('设备振动', 'Device vibration')}
+            checked={preferences.vibration !== false}
+            onChange={(vibration) => setPreferences((p) => ({ ...p, vibration }))}
+          />
+          <p>
+            {t(
+              '在支持振动的设备和浏览器上播放短提示。',
+              'Short feedback on supported devices and browsers.',
+            )}
+          </p>
           <Fold title={t('试听专用音效', 'Listen to reveal sounds')}>
             <div className="gacha-sound-grid">
-              {(['gather', 'spread', 'N', 'R', 'SR', 'SSR', 'spotlight', 'theme'] as const).map(
-                (cue, i) => (
-                  <Button key={cue} onClick={() => audio.cue(cue, true)}>
-                    {
-                      [
-                        t('星光汇聚', 'Gather'),
-                        t('卡阵展开', 'Spread'),
-                        'N',
-                        'R',
-                        'SR',
-                        'SSR',
-                        t('SSR 特写', 'Spotlight'),
-                        t('主题解锁', 'Theme unlock'),
-                      ][i]
-                    }
-                  </Button>
-                ),
-              )}
+              {(
+                ['gather', 'spread', 'N', 'R', 'SR', 'SSR', 'spotlight', 'theme', 'SP'] as const
+              ).map((cue, i) => (
+                <Button key={cue} onClick={() => audio.cue(cue, true)}>
+                  {
+                    [
+                      t('星光汇聚', 'Gather'),
+                      t('卡阵展开', 'Spread'),
+                      'N',
+                      'R',
+                      'SR',
+                      'SSR',
+                      t('SSR 特写', 'Spotlight'),
+                      t('主题解锁', 'Theme unlock'),
+                      'SP',
+                    ][i]
+                  }
+                </Button>
+              ))}
             </div>
           </Fold>
         </GachaDialog>
@@ -963,13 +992,21 @@ export function GachaApp({
                     {probability / 100}% {t('为本池限定。', 'is featured. ')}
                     {guarantee
                       ? t(
-                          '抽到常驻后，下次同档必为限定。',
-                          'A permanent hit guarantees the next hit is featured.',
+                          '连续 ' +
+                            (rarity === 'SSR'
+                              ? Math.max(1, pool.rules.ssr_guarantee_misses ?? 1)
+                              : 1) +
+                            ' 次未中限定后，下次同档必为限定。',
+                          'After ' +
+                            (rarity === 'SSR'
+                              ? Math.max(1, pool.rules.ssr_guarantee_misses ?? 1)
+                              : 1) +
+                            ' consecutive misses, the next hit is featured.',
                         )
                       : t('未开启下次限定保证。', 'No next-hit featured guarantee.')}{' '}
                     {t(
-                      '本池没有该档限定时，已有保证状态保持不变。',
-                      'A pool without this featured rarity preserves its existing flag.',
+                      '本池没有该档限定时，已有保证进度保持不变。SP 与 SSR 共用初始出率、小保底及 SSR 碎片，限定占比、未中次数与兑换价以当前配置为准。',
+                      'A pool without this featured rarity preserves progress. SP uses the SSR rarity roll, hard pity and shards; featured share, misses and exchange price follow this configuration.',
                     )}
                   </p>
                 );

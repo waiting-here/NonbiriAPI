@@ -12,16 +12,19 @@ import (
 var ErrInvalid = errors.New("gacha: invalid input")
 
 type Rules struct {
-	Weights      [4]int `json:"weights"`
-	SRPity       int    `json:"sr_pity"`
-	SSRPity      int    `json:"ssr_pity"`
-	SRFeatured   int    `json:"sr_featured"`
-	SSRFeatured  int    `json:"ssr_featured"`
-	SRGuarantee  bool   `json:"sr_guarantee"`
-	SSRGuarantee bool   `json:"ssr_guarantee"`
+	Weights            [4]int `json:"weights"`
+	SRPity             int    `json:"sr_pity"`
+	SSRPity            int    `json:"ssr_pity"`
+	SRFeatured         int    `json:"sr_featured"`
+	SSRFeatured        int    `json:"ssr_featured"`
+	SRGuarantee        bool   `json:"sr_guarantee"`
+	SSRGuarantee       bool   `json:"ssr_guarantee"`
+	SSRGuaranteeMisses int    `json:"ssr_guarantee_misses,omitempty"`
 }
 
-func DefaultRules() Rules { return Rules{[4]int{5500, 3500, 900, 100}, 10, 60, 5000, 5000, true, true} }
+func DefaultRules() Rules {
+	return Rules{[4]int{5500, 3500, 900, 100}, 10, 60, 5000, 5000, true, true, 0}
+}
 func (r Rules) Validate() error {
 	total := 0
 	for _, n := range r.Weights {
@@ -31,12 +34,16 @@ func (r Rules) Validate() error {
 		total += n
 	}
 	if total != 10000 || r.SRPity < 1 || r.SRPity > 100 || r.SSRPity < r.SRPity || r.SSRPity > 1000 ||
-		r.SRFeatured < 0 || r.SRFeatured > 10000 || r.SSRFeatured < 0 || r.SSRFeatured > 10000 {
+		r.SRFeatured < 0 || r.SRFeatured > 10000 || r.SSRFeatured < 0 || r.SSRFeatured > 10000 || r.SSRGuaranteeMisses < 0 || r.SSRGuaranteeMisses > 2 {
 		return ErrInvalid
 	}
 	return nil
 }
+func (r Rules) missLimit() int { return max(1, r.SSRGuaranteeMisses) }
 func (r Rules) Group() string {
+	if r.SSRGuaranteeMisses == 1 {
+		r.SSRGuaranteeMisses = 0
+	}
 	b, _ := json.Marshal(r)
 	d := sha256.Sum256(b)
 	return hex.EncodeToString(d[:])
@@ -49,6 +56,7 @@ type Pity struct {
 	SSRLimit    int  `json:"ssr_limit"`
 	SRFeatured  bool `json:"sr_featured"`
 	SSRFeatured bool `json:"ssr_featured"`
+	SSRMisses   int  `json:"ssr_misses"`
 }
 
 func freshPity(r Rules) Pity { return Pity{SRLimit: r.SRPity, SSRLimit: r.SSRPity} }
@@ -123,14 +131,14 @@ func drawOne(r Rules, previous Pity, featured []string, random randomSource, new
 			if !ok || card.Source != "limited" {
 				return item, p, ErrInvalid
 			}
-			if card.Rarity == rarity {
+			if card.Rarity.Tier() == rarity {
 				selected = append(selected, card)
 			}
 		}
 		if len(selected) > 0 {
 			flag, probability, enabled := p.SRFeatured, r.SRFeatured, r.SRGuarantee
 			if rarity == SSR {
-				flag, probability, enabled = p.SSRFeatured, r.SSRFeatured, r.SSRGuarantee
+				flag, probability, enabled = p.SSRFeatured || p.SSRMisses >= r.missLimit(), r.SSRFeatured, r.SSRGuarantee
 			}
 			hit := enabled && flag
 			if !hit {
@@ -146,7 +154,12 @@ func drawOne(r Rules, previous Pity, featured []string, random randomSource, new
 			if rarity == SR {
 				p.SRFeatured = enabled && !hit
 			} else {
-				p.SSRFeatured = enabled && !hit
+				if hit || !enabled {
+					p.SSRMisses = 0
+				} else {
+					p.SSRMisses = min(r.missLimit(), p.SSRMisses+1)
+				}
+				p.SSRFeatured = enabled && p.SSRMisses >= r.missLimit()
 			}
 		}
 	}

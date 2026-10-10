@@ -34,3 +34,6 @@ var personalBalancedRoutingSQL string
 
 //go:embed migrations/0009_gacha.sql
 var gachaSQL string
+
+//go:embed migrations/0010_user_appearance.sql
+var userAppearanceSQL string

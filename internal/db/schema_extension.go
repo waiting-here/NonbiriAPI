@@ -50,7 +50,8 @@ var storageSchema = schemaRegistry{
 		{version: 6, manifest: discordGateManifestHash, sql: discordGateSQL},
 		{version: 7, manifest: modelTypesAndImagesManifestHash, sql: modelTypesAndImagesSQL},
 		{version: 8, manifest: personalBalancedRoutingManifestHash, sql: personalBalancedRoutingSQL},
-		{version: 9, manifest: PinnedGenerationTwoManifestHash, sql: gachaSQL},
+		{version: 9, manifest: gachaManifestHash, sql: gachaSQL},
+		{version: 10, manifest: PinnedGenerationTwoManifestHash, sql: userAppearanceSQL},
 	},
 	bridges: preReleaseSchemaBridges(),
 }

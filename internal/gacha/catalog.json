@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "characters": [
     "ChatGPT",
     "Claude",
@@ -117,6 +117,28 @@
       "tagline": "小小的身影，大大的陪伴。",
       "tagline_en": "Little companions with a whole lot of heart.",
       "art": "/assets/gacha/groups/k.webp"
+    },
+    {
+      "id": "l",
+      "name": "星月神话",
+      "name_en": "A Myth of Moon and Stars",
+      "rarity": "SP",
+      "source": "limited",
+      "tagline": "纵然星轨更迭，仍循着你的光而来。",
+      "tagline_en": "Across the turning stars, I find my way to your light.",
+      "art": "/assets/gacha/groups/l.webp",
+      "appearance": "celestial"
+    },
+    {
+      "id": "m",
+      "name": "逍遥游",
+      "name_en": "Wandering Free",
+      "rarity": "SP",
+      "source": "limited",
+      "tagline": "天地辽阔，与你同游。",
+      "tagline_en": "The world is wide. Let us wander together.",
+      "art": "/assets/gacha/groups/m.webp",
+      "appearance": "wandering"
     }
   ],
   "cards": [
@@ -724,6 +746,30 @@
       "source": "shop",
       "art": "/assets/gacha/cards/k-gemini.webp",
       "thumb": "/assets/gacha/thumbs/k-gemini.webp"
+    },
+    {
+      "id": "l-chatgpt",
+      "theme": "l",
+      "character": "ChatGPT",
+      "name": "星月神话·ChatGPT",
+      "name_en": "A Myth of Moon and Stars · ChatGPT",
+      "rarity": "SP",
+      "source": "limited",
+      "art": "/assets/gacha/cards/l-chatgpt.webp",
+      "thumb": "/assets/gacha/thumbs/l-chatgpt.webp",
+      "appearance": "celestial"
+    },
+    {
+      "id": "m-deepseek",
+      "theme": "m",
+      "character": "DeepSeek",
+      "name": "逍遥游·DeepSeek",
+      "name_en": "Wandering Free · DeepSeek",
+      "rarity": "SP",
+      "source": "limited",
+      "art": "/assets/gacha/cards/m-deepseek.webp",
+      "thumb": "/assets/gacha/thumbs/m-deepseek.webp",
+      "appearance": "wandering"
     }
   ]
 }

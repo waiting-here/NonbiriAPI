@@ -1,7 +1,7 @@
 import { Button } from '@shared/components/ui/Button';
 import { Icon } from '@shared/components/Icon';
 import { Panel, PanelHead, PanelBody } from '@shared/components/ui/Panel';
-import { cards, rarities } from './catalog';
+import { cards, rarities, tierOf } from './catalog';
 import { poolOpen } from './rules';
 import { CardTile } from './CardTile';
 import type { Action, Card, Snapshot } from './types';
@@ -182,6 +182,8 @@ export function Shop({
             s.sr_card +
             ' SR · SSR: ' +
             s.ssr_card +
+            ' SSR · SP: ' +
+            s.sp_card +
             t(' SSR 碎片 · 每卡仅兑换一次', ' SSR shards · once per card'),
         },
       ].map((section) => (
@@ -197,11 +199,16 @@ export function Shop({
               )
               .map((card) => {
                 const owned = !!state.owned[card.id],
-                  cost = card.rarity === 'SSR' ? s.ssr_card : s.sr_card;
+                  cost =
+                    card.rarity === 'SP'
+                      ? s.sp_card
+                      : tierOf(card.rarity) === 'SSR'
+                        ? s.ssr_card
+                        : s.sr_card;
                 const insufficient =
                   card.source === 'shop'
                     ? state.fragments.N < s.chibi_n || state.fragments.R < s.chibi_r
-                    : state.fragments[card.rarity] < cost;
+                    : state.fragments[tierOf(card.rarity)] < cost;
                 return (
                   <div className="gacha-shop-card" key={card.id}>
                     <CardTile

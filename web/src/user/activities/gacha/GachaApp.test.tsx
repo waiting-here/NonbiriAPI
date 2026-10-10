@@ -47,6 +47,7 @@ function snapshot(): Snapshot {
       limited_cap: 10,
       sr_card: 10,
       ssr_card: 3,
+      sp_card: 9,
       chibi_n: 30,
       chibi_r: 15,
       revision: 1,
@@ -95,7 +96,7 @@ it('retries a lost draw response with the original operation after remounting', 
   first.unmount();
   render(<GachaApp port={port} />);
   fireEvent.click(await screen.findByRole('button', { name: '重试原操作' }));
-  expect(await screen.findByRole('dialog', { name: '星光回应了你的期待' })).toBeVisible();
+  expect(await screen.findByRole('dialog', { name: '此次相遇' })).toBeVisible();
   expect(keys).toHaveLength(2);
   expect(keys[0]).toBe(keys[1]);
   expect(state.tickets.permanent).toBe(0);

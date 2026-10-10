@@ -1,4 +1,5 @@
-import { cards, cardById, themes } from '../user/activities/gacha/catalog';
+import type { AppearancePort } from '../user/appearance/context';
+import { cards, cardById, themes, tierOf, themeById } from '../user/activities/gacha/catalog';
 import {
   defaultRules,
   drawOne,
@@ -16,6 +17,7 @@ import type {
 } from '../user/activities/gacha/types';
 
 interface Saved {
+  appearance?: string;
   state: Snapshot;
   entered: boolean;
   day: string;
@@ -23,7 +25,7 @@ interface Saved {
   receipts: Record<string, { input: string; result: Outcome }>;
   history: DrawReceipt[];
 }
-const storageKey = 'nb.gacha.local-preview.v1';
+const storageKey = 'nb.gacha.local-preview.v2';
 const now = () => Math.floor(Date.now() / 1000);
 const day = () =>
   new Intl.DateTimeFormat('en-CA', {
@@ -72,14 +74,18 @@ function initial(): Saved {
       donation: '0',
       pools: [
         common,
-        ...(['i', 'j'] as const).map((theme) => ({
+        ...(['i', 'j', 'l', 'm'] as const).map((theme) => ({
           ...common,
           id: theme,
-          name: theme === 'i' ? '夏夜花火' : '童话剧场',
-          name_en: theme === 'i' ? 'Summer fireworks' : 'Fairytale theatre',
+          name: themeById[theme].name,
+          name_en: themeById[theme].name_en,
           cover: theme,
           kind: 'limited' as const,
-          group: 'featured',
+          group: theme === 'l' || theme === 'm' ? 'special' : 'featured',
+          rules:
+            theme === 'l' || theme === 'm'
+              ? { ...defaultRules, ssr_featured: 1500, ssr_guarantee_misses: 2 }
+              : { ...defaultRules },
           starts_at: at - 3600,
           ends_at: at + 30 * 86400,
           featured: cards.filter((c) => c.theme === theme || c.theme === 'h').map((c) => c.id),
@@ -96,6 +102,7 @@ function initial(): Saved {
         limited_cap: 10,
         sr_card: 10,
         ssr_card: 3,
+        sp_card: 9,
         chibi_n: 30,
         chibi_r: 15,
         revision: 1,
@@ -183,7 +190,7 @@ function run(input: Action, key: string): Outcome {
         );
         state.pity[pool.group] = result.pity;
         result.item.duplicate = !!state.owned[result.item.card_id];
-        if (result.item.duplicate) state.fragments[cardById[result.item.card_id].rarity]++;
+        if (result.item.duplicate) state.fragments[tierOf(cardById[result.item.card_id].rarity)]++;
         else state.owned[result.item.card_id] = { at: now(), source: 'draw' };
         draw.items.push(result.item);
       }
@@ -241,7 +248,14 @@ function run(input: Action, key: string): Outcome {
         offer?.spend ??
         (card.source === 'shop'
           ? { N: state.shop.chibi_n, R: state.shop.chibi_r }
-          : { [card.rarity]: card.rarity === 'SR' ? state.shop.sr_card : state.shop.ssr_card });
+          : {
+              [tierOf(card.rarity)]:
+                card.rarity === 'SR'
+                  ? state.shop.sr_card
+                  : card.rarity === 'SP'
+                    ? state.shop.sp_card
+                    : state.shop.ssr_card,
+            });
       if (
         Object.entries(spend).some(
           ([rarity, count]) => state.fragments[rarity as keyof typeof state.fragments] < count,
@@ -318,3 +332,28 @@ export function resetPreview(mode: 'new' | 'collection') {
   }
   save(data);
 }
+
+function appearanceState() {
+  const unlocked = [
+    'default',
+    ...cards
+      .filter((card) => card.appearance && memory.state.owned[card.id])
+      .map((card) => card.appearance!),
+  ];
+  return {
+    selected: unlocked.includes(memory.appearance ?? '') ? memory.appearance! : 'default',
+    unlocked,
+    updated_at: null,
+  };
+}
+export const localAppearancePort: AppearancePort = {
+  scope: 'preview',
+  async load() {
+    return appearanceState();
+  },
+  async select(selected) {
+    if (!appearanceState().unlocked.includes(selected)) throw new Error('appearance-locked');
+    save({ ...memory, appearance: selected });
+    return appearanceState();
+  },
+};

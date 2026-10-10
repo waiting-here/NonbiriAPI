@@ -7,6 +7,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/appearance"
 	"github.com/waiting-here/NonbiriAPI/internal/gacha"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
 	"github.com/waiting-here/NonbiriAPI/internal/imageactivity"
@@ -90,6 +91,14 @@ func (a *activityRuntime) ExportGovernance(ctx context.Context, tx *sql.Tx, r li
 		return out, activityExportError(err)
 	}
 	out.Gacha, err = json.Marshal(cards)
+	if err != nil {
+		return out, err
+	}
+	skin, err := a.appearance.ExportUserTx(ctx, tx, r.UserID)
+	if err != nil {
+		return out, err
+	}
+	out.Appearance, err = json.Marshal(skin)
 	return out, err
 }
 
@@ -106,6 +115,10 @@ func (a *activityRuntime) PrepareDelete(ctx context.Context, tx *sql.Tx, r lifec
 		return nil, err
 	}
 	if _, err = a.lake.PrepareDeleteTx(ctx, tx, r.UserID, r.DecisionNow); err != nil {
+		f.Abort()
+		return nil, err
+	}
+	if err = appearance.DeleteUserTx(ctx, tx, r.UserID); err != nil {
 		f.Abort()
 		return nil, err
 	}

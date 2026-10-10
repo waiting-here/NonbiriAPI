@@ -23,10 +23,10 @@ func TestStorageContractsCompatibilityRegistryIsDetachedAndClosed(t *testing.T) 
 		}
 		seen[hash] = true
 	}
-	if len(seen) != 11 || !seen[personalBalancedRoutingManifestHash] || !seen[modelTypesAndImagesManifestHash] || !seen[discordGateManifestHash] || !seen[gwentAIManifestHash] || !seen[managementAndGamesManifestHash] || !seen[aiPlayersManifestHash] || !seen[preLedgerRetentionManifestHash] || !seen[preQueryIndexesManifestHash] || !seen[preStorageVersionManifestHash] || !seen[baselineManifestHash] || !seen[terminalReservationIndexesManifestHash] {
+	if len(seen) != 12 || !seen[gachaManifestHash] || !seen[personalBalancedRoutingManifestHash] || !seen[modelTypesAndImagesManifestHash] || !seen[discordGateManifestHash] || !seen[gwentAIManifestHash] || !seen[managementAndGamesManifestHash] || !seen[aiPlayersManifestHash] || !seen[preLedgerRetentionManifestHash] || !seen[preQueryIndexesManifestHash] || !seen[preStorageVersionManifestHash] || !seen[baselineManifestHash] || !seen[terminalReservationIndexesManifestHash] {
 		t.Fatal("deployed source missing")
 	}
-	if descriptor.SchemaVersion != 9 || !reflect.DeepEqual(descriptor.SourceSchemaVersions, []int{1, 2, 3, 4, 5, 6, 7, 8}) {
+	if descriptor.SchemaVersion != 10 || !reflect.DeepEqual(descriptor.SourceSchemaVersions, []int{1, 2, 3, 4, 5, 6, 7, 8, 9}) {
 		t.Fatal("unexpected stable schema history")
 	}
 	descriptor.SourceManifestHashes[0] = "unknown"

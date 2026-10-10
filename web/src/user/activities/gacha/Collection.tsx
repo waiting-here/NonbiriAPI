@@ -5,7 +5,7 @@ import { FilterBar } from '@shared/components/ui/FilterBar';
 import { Tabs } from '@shared/components/ui/Tabs';
 import { Icon } from '@shared/components/Icon';
 import { CardTile } from './CardTile';
-import { cards, characters, rarities, themes } from './catalog';
+import { cards, characters, displayRarities, themes } from './catalog';
 import type { Action, Card, Snapshot, Theme } from './types';
 
 export function Collection({
@@ -54,7 +54,7 @@ export function Collection({
         onChange={setView}
         tabs={[
           { value: 'cards', label: t('卡牌图鉴', 'Cards') },
-          { value: 'themes', label: t('主题合照', 'Theme memories') },
+          { value: 'themes', label: t('主题回忆', 'Theme memories') },
         ]}
       />
       {view === 'cards' ? (
@@ -96,7 +96,7 @@ export function Collection({
                   {(props) => (
                     <select {...props} value={rarity} onChange={(e) => setRarity(e.target.value)}>
                       <option value="">{t('全部稀有度', 'All rarities')}</option>
-                      {rarities.map((r) => (
+                      {displayRarities.map((r) => (
                         <option key={r}>{r}</option>
                       ))}
                     </select>
@@ -170,14 +170,16 @@ export function Collection({
                   {!complete && (
                     <span>
                       <Icon name="shield" />
-                      {t('集齐后解锁合照', 'Complete the theme to reveal')}
-                      <strong>{collected} / 5</strong>
+                      {t('集齐后解锁插画', 'Complete the theme to reveal')}
+                      <strong>
+                        {collected} / {members.length}
+                      </strong>
                     </span>
                   )}
                   {complete && (
                     <span className="gacha-theme__unlocked">
                       <Icon name="spark" />
-                      {t('欣赏合照', 'View memory')}
+                      {t('欣赏插画', 'View memory')}
                     </span>
                   )}
                 </button>
@@ -192,6 +194,14 @@ export function Collection({
                   </span>
                   <h3>{t(theme.name, theme.name_en)}</h3>
                   <p>{t(theme.tagline, theme.tagline_en)}</p>
+                  {theme.appearance && (
+                    <p className="gacha-appearance-reward">
+                      <Icon name="spark" />
+                      {complete
+                        ? t('主题装扮已解锁', 'Appearance unlocked')
+                        : t('获得即解锁同名站点装扮', 'Collect to unlock its site appearance')}
+                    </p>
+                  )}
                   <div className="gacha-theme__members">
                     {members.map((c) => (
                       <button
@@ -231,7 +241,7 @@ export function Collection({
                         ? t('已领取', 'Claimed')
                         : complete
                           ? t('领取奖励', 'Claim reward')
-                          : t('待集齐', 'Collect all five')}
+                          : t('待集齐', 'Complete the theme')}
                     </Button>
                   </div>
                 </div>

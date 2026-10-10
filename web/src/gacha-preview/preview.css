@@ -5,57 +5,54 @@ body,
   margin: 0;
 }
 .gacha-preview {
-  background: #e7eee7;
+  background: var(--nb-color-bg);
   min-height: 100dvh;
 }
-.gacha-preview[data-theme='dark'] {
-  background: #0b211e;
-}
 .gacha-preview main {
-  padding: 28px clamp(16px, 4vw, 64px) 40px;
+  padding: var(--nb-space-7) clamp(16px, 4vw, 64px) var(--nb-space-10);
 }
 .gacha-preview-controls {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  background: #102f2b;
-  color: #ddd6ba;
-  padding: 8px 24px;
-  font: 12px var(--nb-font-sans);
-}
-.gacha-preview-controls > span {
-  letter-spacing: 0.05em;
+  flex-wrap: wrap;
+  gap: var(--nb-space-4);
+  background: var(--nb-color-surface);
+  color: var(--nb-color-text);
+  padding: var(--nb-space-2) var(--nb-space-6);
+  font-size: var(--nb-font-size-xs);
+  border-bottom: 1px solid var(--nb-color-border);
 }
 .gacha-preview-controls > div {
   display: flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: var(--nb-space-2);
 }
-.gacha-preview-controls button {
-  background: transparent;
-  border: 1px solid #61745c;
-  color: #eee5cd;
-  border-radius: 4px;
-  padding: 6px 10px;
-  min-height: 32px;
+.gacha-preview-controls > div > button {
+  background: var(--nb-color-surface);
+  border: 1px solid var(--nb-color-border);
+  color: var(--nb-color-text);
+  border-radius: var(--nb-radius-sm);
+  padding: var(--nb-space-2) var(--nb-space-3);
+  min-height: 40px;
   font: inherit;
   cursor: pointer;
+  white-space: nowrap;
 }
-.gacha-preview-controls button:hover {
-  background: #315443;
+.gacha-preview-controls > div > button:hover {
+  background: var(--nb-color-accent-soft);
 }
 @media (width < 48rem) {
   .gacha-preview main {
-    padding: 16px 12px 24px;
+    padding: var(--nb-space-4) var(--nb-space-3) var(--nb-space-6);
   }
   .gacha-preview-controls {
     flex-direction: column;
-    gap: 8px;
-    padding: 8px;
+    gap: var(--nb-space-2);
+    padding: var(--nb-space-2);
   }
   .gacha-preview-controls > div {
-    flex-wrap: wrap;
     justify-content: center;
   }
 }

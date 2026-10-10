@@ -262,6 +262,14 @@ export async function mockRoleSession(
     });
     return;
   }
+  if (station === 'user') {
+    await mockJson(page, {
+      origin,
+      method: 'GET',
+      path: '/api/appearance',
+      body: { selected: 'default', unlocked: ['default'], updated_at: null },
+    });
+  }
   if (station === 'admin' || role === 'level5' || role === 'level6') {
     await mockJson(page, {
       origin,

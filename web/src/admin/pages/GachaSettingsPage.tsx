@@ -56,6 +56,8 @@ function Field({
 type Draft = { pool: Pool; preset?: Preset };
 const covers = [
   ['permanent', '永续智能', 'Perpetual intelligence'],
+  ['l', '星月神话', 'A Myth of Moon and Stars'],
+  ['m', '逍遥游', 'Wandering Free'],
   ['h', '万象化身', 'Myriad incarnations'],
   ['i', '夏夜花火', 'Summer fireworks'],
   ['j', '童话剧场', 'Fairytale theatre'],
@@ -169,13 +171,30 @@ function RulesFields({
                   }
                 />
               </Field>
+              {tier === 'ssr' && (
+                <Field label={t('触发保证前最多未中次数', 'Misses before guaranteed featured hit')}>
+                  <select
+                    value={Math.max(1, value.ssr_guarantee_misses ?? 1)}
+                    onChange={(e) =>
+                      onChange({
+                        ...value,
+                        ssr_guarantee_misses: Number(e.target.value) === 1 ? 0 : 2,
+                      })
+                    }
+                  >
+                    <option value="1">
+                      {t('一次：下次 SSR 必中', 'One: next SSR is featured')}
+                    </option>
+                    <option value="2">
+                      {t('两次：第三次 SSR 必中', 'Two: third SSR is featured')}
+                    </option>
+                  </select>
+                </Field>
+              )}
               <Toggle
                 label={
                   tier.toUpperCase() +
-                  t(
-                    ' 抽到常驻后，下次同档必为限定',
-                    ' permanent hit guarantees the next is featured',
-                  )
+                  t(' 连续未中后的限定保证', ' featured guarantee after consecutive misses')
                 }
                 checked={value[tier === 'sr' ? 'sr_guarantee' : 'ssr_guarantee']}
                 onChange={(checked) =>
@@ -230,6 +249,7 @@ function SettingsForm({
     ['limited_cap', '每月限定券合计上限', 'Monthly limited ticket limit'],
     ['sr_card', '兑换限定 SR 所需 SR 碎片', 'SR shards per limited SR card'],
     ['ssr_card', '兑换限定 SSR 所需 SSR 碎片', 'SSR shards per limited SSR card'],
+    ['sp_card', '兑换限定 SP 所需 SSR 碎片', 'SSR shards per limited SP card'],
     ['chibi_n', 'Q 版卡所需 N 碎片', 'N shards per chibi card'],
     ['chibi_r', 'Q 版卡所需 R 碎片', 'R shards per chibi card'],
   ];

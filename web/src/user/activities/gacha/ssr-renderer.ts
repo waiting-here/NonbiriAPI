@@ -9,6 +9,8 @@ type MotionConfig = {
 };
 const base = '/assets/gacha/motion/';
 const eyeCenters: Record<string, [number, number, number, number]> = {
+  'l-chatgpt': [0.402, 0.161, 0.485, 0.139],
+  'm-deepseek': [0.501, 0.131, 0.571, 0.111],
   'g-claude': [0.408, 0.169, 0.505, 0.146],
   'g-glm': [0.506, 0.195, 0.602, 0.165],
   'g-deepseek': [0.291, 0.233, 0.402, 0.253],
@@ -50,7 +52,12 @@ function load(src: string) {
     image.src = src;
   });
 }
-export async function renderSSR(canvas: HTMLCanvasElement, id: string, frozenTime?: number) {
+export async function renderSSR(
+  canvas: HTMLCanvasElement,
+  id: string,
+  frozenTime?: number,
+  paused?: () => boolean,
+) {
   const cfg = configFor(id);
   const [background, hero, half, closed, cloud] = await Promise.all([
     load(cfg.background),
@@ -170,6 +177,11 @@ void main(){
   };
   function frame(at: number) {
     if (stopped) return;
+    if (paused?.() && frozenTime === undefined) {
+      last = at;
+      raf = requestAnimationFrame(frame);
+      return;
+    }
     time = frozenTime ?? (time + Math.min(at - last, 100) / 1000) % 10;
     last = at;
     const p = (time / 10) * Math.PI * 2,

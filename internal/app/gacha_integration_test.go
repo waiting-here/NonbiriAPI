@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/waiting-here/NonbiriAPI/internal/appearance"
 	"github.com/waiting-here/NonbiriAPI/internal/elevation"
 	"github.com/waiting-here/NonbiriAPI/internal/gacha"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
@@ -21,6 +22,16 @@ func TestGachaRootSessionCSRFReplayExportAndDeletion(t *testing.T) {
 		t.Fatal(err)
 	}
 	user := f.users[0]
+	// Reading appearance does not enter the activity or grant welcome tickets.
+	fresh := f.call("GET", "/api/appearance", nil, user.Cookie, false)
+	if fresh["selected"] != "default" || len(fresh["unlocked"].([]any)) != 1 {
+		t.Fatal(fresh)
+	}
+	var profiles int
+	if err := f.store.DB().QueryRow("SELECT count(*) FROM gacha_profiles").Scan(&profiles); err != nil || profiles != 0 {
+		t.Fatal("appearance granted activity rewards", profiles, err)
+	}
+
 	request := func(key, body string) *http.Request {
 		r, _ := http.NewRequest("POST", "http://"+f.cfg.UserHost+"/api/gacha/actions", strings.NewReader(body))
 		r.Host = f.cfg.UserHost
@@ -91,6 +102,49 @@ func TestGachaRootSessionCSRFReplayExportAndDeletion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Both acquisition sources unlock an appearance without switching it.
+	for _, card := range []struct{ id, source string }{{"l-chatgpt", "draw"}, {"m-deepseek", "shop"}} {
+		if _, err := f.store.DB().Exec("INSERT INTO gacha_owned(user_id,card_id,obtained_at,source) VALUES(?,?,1800000000,?)", userID, card.id, card.source); err != nil {
+			t.Fatal(err)
+		}
+	}
+	unlocked := f.call("GET", "/api/appearance", nil, user.Cookie, false)
+	if unlocked["selected"] != "default" || len(unlocked["unlocked"].([]any)) != 3 {
+		t.Fatal(unlocked)
+	}
+	choose := func(cookie *http.Cookie, body, origin string) *httptest.ResponseRecorder {
+		return testApplicationRequest(t, f.app.Load().handler, "POST", f.cfg.UserHost, "/api/appearance", body, []*http.Cookie{cookie}, map[string]string{"Content-Type": "application/json", "Origin": origin})
+	}
+	origin := "http://" + f.cfg.UserHost
+	for _, id := range []string{"celestial", "wandering"} {
+		selected := choose(user.Cookie, `{"selected":"`+id+`"}`, origin)
+		if selected.Code != http.StatusOK {
+			t.Fatal(selected.Code, selected.Body.String())
+		}
+	}
+	if _, err := f.store.DB().Exec("UPDATE user_appearance SET updated_at=1800000000 WHERE user_id=?", userID); err != nil {
+		t.Fatal(err)
+	}
+	repeat := choose(user.Cookie, `{"selected":"wandering"}`, origin)
+	var repeated appearance.State
+	if err := json.Unmarshal(repeat.Body.Bytes(), &repeated); err != nil || repeated.UpdatedAt == nil || *repeated.UpdatedAt != 1800000000 {
+		t.Fatal(repeat.Body.String(), err)
+	}
+	if locked := choose(f.users[1].Cookie, `{"selected":"celestial"}`, origin); locked.Code != http.StatusForbidden {
+		t.Fatal("another account used locked appearance", locked.Code)
+	}
+	for _, body := range []string{`{"selected":"unknown"}`, `{"selected":"default","user_id":1}`, `{"selected":"default","selected":"wandering"}`, `{"selected":null}`} {
+		if bad := choose(user.Cookie, body, origin); bad.Code != http.StatusBadRequest {
+			t.Fatal("ambiguous appearance selection", bad.Code)
+		}
+	}
+	if bad := choose(user.Cookie, `{"selected":"default"}`, "https://untrusted.example"); bad.Code != http.StatusForbidden {
+		t.Fatal("appearance CSRF accepted", bad.Code)
+	}
+	otherAppearance := f.call("GET", "/api/appearance", nil, f.users[1].Cookie, false)
+	if otherAppearance["selected"] != "default" || len(otherAppearance["unlocked"].([]any)) != 1 {
+		t.Fatal("cross-account appearance", otherAppearance)
+	}
 	binding := sha256.Sum256([]byte(user.Cookie.Value))
 	lifecycleCall := func(path, body string) []byte {
 		t.Helper()
@@ -110,6 +164,10 @@ func TestGachaRootSessionCSRFReplayExportAndDeletion(t *testing.T) {
 	if err = json.Unmarshal(lifecycleCall("/api/account/export", ""), &document); err != nil {
 		t.Fatal(err)
 	}
+	var appearanceExport appearance.State
+	if err := json.Unmarshal(document.Appearance, &appearanceExport); err != nil || appearanceExport.Selected != "wandering" || len(appearanceExport.Unlocked) != 3 {
+		t.Fatal("appearance export", appearanceExport, err)
+	}
 	var exported gacha.UserExport
 	if err = json.Unmarshal(document.Gacha, &exported); err != nil || len(exported.Draws) != 1 || len(exported.Operations) != 3 || exported.Balance[0] != 1 || len(exported.Owned) == 0 {
 		t.Fatal(exported, err)
@@ -118,7 +176,7 @@ func TestGachaRootSessionCSRFReplayExportAndDeletion(t *testing.T) {
 		t.Fatal("export leaked recovery hashes")
 	}
 	lifecycleCall("/api/account/delete", `{"confirm":"DELETE"}`)
-	for _, table := range []string{"gacha_profiles", "gacha_pity", "gacha_owned", "gacha_claims", "gacha_draws"} {
+	for _, table := range []string{"user_appearance", "gacha_profiles", "gacha_pity", "gacha_owned", "gacha_claims", "gacha_draws"} {
 		var count int
 		if err = f.store.DB().QueryRow("SELECT count(*) FROM "+table+" WHERE user_id=?", userID).Scan(&count); err != nil || count != 0 {
 			t.Fatal(table, count, err)
@@ -127,6 +185,9 @@ func TestGachaRootSessionCSRFReplayExportAndDeletion(t *testing.T) {
 	var count int
 	if err = f.store.DB().QueryRow("SELECT count(*) FROM gacha_operations WHERE user_id IS NULL AND key_hash IS NULL AND request_hash IS NULL").Scan(&count); err != nil || count != 3 {
 		t.Fatal(count, err)
+	}
+	if late := choose(user.Cookie, `{"selected":"default"}`, origin); late.Code != http.StatusUnauthorized {
+		t.Fatal("deleted account changed appearance", late.Code)
 	}
 	if late := f.request("POST", "/api/gacha/actions", map[string]string{"action": "enter"}, user.Cookie, false); late.Code != http.StatusUnauthorized {
 		t.Fatal("deleted account admitted", late.Code)

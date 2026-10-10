@@ -1,4 +1,5 @@
-export type Rarity = 'N' | 'R' | 'SR' | 'SSR';
+export type DrawTier = 'N' | 'R' | 'SR' | 'SSR';
+export type Rarity = DrawTier | 'SP';
 export type Ticket = 'permanent' | 'limited';
 export type Source = Ticket | 'shop';
 export interface Card {
@@ -11,6 +12,7 @@ export interface Card {
   source: Source;
   art: string;
   thumb: string;
+  appearance?: string;
 }
 export interface Theme {
   id: string;
@@ -20,6 +22,7 @@ export interface Theme {
   source: Source;
   tagline: string;
   tagline_en: string;
+  appearance?: string;
   art: string;
 }
 export interface Rules {
@@ -30,6 +33,7 @@ export interface Rules {
   ssr_featured: number;
   sr_guarantee: boolean;
   ssr_guarantee: boolean;
+  ssr_guarantee_misses?: number;
 }
 export interface Pity {
   sr: number;
@@ -38,6 +42,7 @@ export interface Pity {
   ssr_limit: number;
   sr_featured: boolean;
   ssr_featured: boolean;
+  ssr_misses?: number;
 }
 export interface Pool {
   id: string;
@@ -66,6 +71,7 @@ export interface ShopSettings {
   limited_cap: number;
   sr_card: number;
   ssr_card: number;
+  sp_card: number;
   chibi_n: number;
   chibi_r: number;
   revision: number;
@@ -84,7 +90,7 @@ export interface DrawReceipt {
 }
 export interface Snapshot {
   tickets: Record<Ticket, number>;
-  fragments: Record<Rarity, number>;
+  fragments: Record<DrawTier, number>;
   credits: { general: string; game: string };
   owned: Record<string, { at: number; source: string }>;
   pity: Record<string, Pity>;
@@ -125,6 +131,7 @@ export interface Preferences {
   music: boolean;
   sound: boolean;
   reduced: boolean;
+  vibration?: boolean;
 }
 
 export interface Preset {

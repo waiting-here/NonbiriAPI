@@ -88,7 +88,7 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`). rc.6 accepts fresh databases, final rc.5 and registered rc.6 schemas; unknown or partial structures are rejected before source writes. Supported additive upgrades preserve identities, balances, settled charges, saved games, configuration and legal overrides. Startup checks identity, schema, configuration and credentials and recovers unfinished work. Full historical audits use `maintenance verify`. See [deployment compatibility](deployment.md#database-compatibility-and-version-changes) for the exact source and complete-snapshot rollback requirements.
 
-Current account export `schema_version=15` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v15.json`. SQLite remains Generation 2. See §9 for current and historical safe projections.
+Current account export `schema_version=16` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v16.json`. SQLite remains Generation 2. See §9 for current and historical safe projections.
 
 ### 1.5 Display time context
 
@@ -1113,7 +1113,7 @@ Deletion keeps a separate minimum security projection for administrator and curr
 
 ### Current export schema 15
 
-The current attachment is `nonbiriapi-account-export-v15.json`, with `schema_version:15`. Version 15 adds `gacha`: personal ticket/shard balances, collection, pity, claims, retained transactions and draw records, without internal retry-key digests. Version 14 adds the user's `discord_gate_policy` and each personal model's `model_types`, and accepts `cache_balanced` as a personal `route_strategy`. The schema-11 section above describes retained historical fields. Current personal models also include `role_policy` and `transport_rule`; saved Likes preset names are currently omitted from the account export. `lake_notes` contains `rules_id,profile_revision,profile,casts,entries,exchanges`, excluding private encounter/reward randomness and internal checkpoints. Safe cast entries include identity, nullable source period, rules/generation/revision, acknowledged tick, phase/pause and public motion state. Entry/exchange receipts retain exact amounts and financial references.
+The current attachment is `nonbiriapi-account-export-v16.json`, with `schema_version:16`. Version 16 adds `appearance:{selected,unlocked,updated_at}`, deriving unlocked designs from permanent collection ownership. Version 15 adds `gacha`: personal ticket/shard balances, collection, pity, claims, retained transactions and draw records, without internal retry-key digests. Version 14 adds the user's `discord_gate_policy` and each personal model's `model_types`, and accepts `cache_balanced` as a personal `route_strategy`. The schema-11 section above describes retained historical fields. Current personal models also include `role_policy` and `transport_rule`; saved Likes preset names are currently omitted from the account export. `lake_notes` contains `rules_id,profile_revision,profile,casts,entries,exchanges`, excluding private encounter/reward randomness and internal checkpoints. Safe cast entries include identity, nullable source period, rules/generation/revision, acknowledged tick, phase/pause and public motion state. Entry/exchange receipts retain exact amounts and financial references.
 
 `steadycatch` contains the owner's first-clear status, retained sessions and accepted replay inputs. `gwent` uses the duel export with owner-only competitive results and the current Elo aggregate. Neither adds access to another player's private state. See [Steady Catch](steady-catch.md), [AI Gwent](ai-gwent.md) and the [lifecycle checklist](data-lifecycle-checklist.md) for routes and retention.
 
@@ -1304,7 +1304,7 @@ lasts 30 days; accounting follows ledger retention and account export schema 12.
 
 ### Lake Notes API
 
-Lake Notes is a permanent free minigame with four independently configured exchanges. Fresh installations start closed; an open legacy activity stays available after upgrade, with all exchanges initially disabled. See [game settings and API](lake-notes.md).
+Lake Notes is a permanent free minigame with four independently configured exchanges. Completing a location’s collection enables a manual, once-per-account claim of 50 cumulative donation credits, with no spendable credit or coin reward. `POST /api/games/lake-notes/collection-claims` accepts `{location}` with the normal session, CSRF and idempotency controls; permanent `profile.collectionClaims` is exported and deleted with the account. Fresh installations start closed; an open legacy activity stays available after upgrade, with all exchanges initially disabled. See [game settings and API](lake-notes.md).
 
 ### Account protection and historical records
 
@@ -1348,4 +1348,4 @@ Bidding Duel adds session-authenticated AI offers, preferences and unpaid admiss
 
 ## Collectible-card activity
 
-The session-authenticated card activity uses `/api/gacha/state`, `/api/gacha/history` and `/api/gacha/actions`; administrator configuration uses `/admin/api/gacha`. See [The Gacha Simulator](gacha.md#records-and-http-access) for transaction, retry, revision and retention semantics.
+The session-authenticated card activity uses `/api/gacha/state`, `/api/gacha/history` and `/api/gacha/actions`; administrator configuration uses `/admin/api/gacha`. User site cosmetics use `GET/POST /api/appearance` and server-validated collection unlocks. See [The Gacha Simulator](gacha.md#records-and-http-access) for transaction, retry, revision and retention semantics.

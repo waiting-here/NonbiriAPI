@@ -87,6 +87,7 @@ export const HISTORY_KINDS = [
   'lake_exchange',
   'gacha_ticket_purchase',
   'gacha_theme_reward',
+  'lake_collection_reward',
   'fatfish_unlock',
   'fatfish_ticket',
   'fatfish_reward',

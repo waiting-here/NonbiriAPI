@@ -156,6 +156,7 @@ func Descriptor() game.ModuleDescriptor {
 		{Station: "user", Method: "POST", Pattern: "/api/games/lake-notes/exchange/quote"},
 		{Station: "user", Method: "POST", Pattern: "/api/games/lake-notes/exchange"},
 		{Station: "user", Method: "POST", Pattern: "/api/games/lake-notes/actions"},
+		{Station: "user", Method: "POST", Pattern: "/api/games/lake-notes/collection-claims"},
 		{Station: "user", Method: "POST", Pattern: "/api/games/lake-notes/casts"},
 		{Station: "user", Method: "POST", Pattern: "/api/games/lake-notes/casts/{id}/checkpoint"},
 		{Station: "user", Method: "POST", Pattern: "/api/games/lake-notes/casts/{id}/pause", Continuation: true},

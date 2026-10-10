@@ -232,7 +232,7 @@ func readOwned(ctx context.Context, tx *sql.Tx, user int64) (map[string]Owned, e
 }
 func readPity(ctx context.Context, tx *sql.Tx, user int64) (map[string]Pity, error) {
 	out := map[string]Pity{}
-	rows, err := tx.QueryContext(ctx, "SELECT group_id,sr,ssr,sr_limit,ssr_limit,sr_featured,ssr_featured FROM gacha_pity WHERE user_id=?", user)
+	rows, err := tx.QueryContext(ctx, "SELECT group_id,sr,ssr,sr_limit,ssr_limit,sr_featured,ssr_featured,ssr_misses FROM gacha_pity WHERE user_id=?", user)
 	if err != nil {
 		return nil, err
 	}
@@ -240,7 +240,7 @@ func readPity(ctx context.Context, tx *sql.Tx, user int64) (map[string]Pity, err
 	for rows.Next() {
 		var id string
 		var p Pity
-		if err = rows.Scan(&id, &p.SR, &p.SSR, &p.SRLimit, &p.SSRLimit, &p.SRFeatured, &p.SSRFeatured); err != nil {
+		if err = rows.Scan(&id, &p.SR, &p.SSR, &p.SRLimit, &p.SSRLimit, &p.SRFeatured, &p.SSRFeatured, &p.SSRMisses); err != nil {
 			return nil, err
 		}
 		out[id] = p
@@ -248,9 +248,9 @@ func readPity(ctx context.Context, tx *sql.Tx, user int64) (map[string]Pity, err
 	return out, rows.Err()
 }
 func savePity(ctx context.Context, tx *sql.Tx, user int64, group string, p Pity) error {
-	_, err := tx.ExecContext(ctx, `INSERT INTO gacha_pity(user_id,group_id,sr,ssr,sr_limit,ssr_limit,sr_featured,ssr_featured) VALUES(?,?,?,?,?,?,?,?)
- ON CONFLICT(user_id,group_id) DO UPDATE SET sr=excluded.sr,ssr=excluded.ssr,sr_limit=excluded.sr_limit,ssr_limit=excluded.ssr_limit,sr_featured=excluded.sr_featured,ssr_featured=excluded.ssr_featured`,
-		user, group, p.SR, p.SSR, p.SRLimit, p.SSRLimit, p.SRFeatured, p.SSRFeatured)
+	_, err := tx.ExecContext(ctx, `INSERT INTO gacha_pity(user_id,group_id,sr,ssr,sr_limit,ssr_limit,sr_featured,ssr_featured,ssr_misses) VALUES(?,?,?,?,?,?,?,?,?)
+ ON CONFLICT(user_id,group_id) DO UPDATE SET sr=excluded.sr,ssr=excluded.ssr,sr_limit=excluded.sr_limit,ssr_limit=excluded.ssr_limit,sr_featured=excluded.sr_featured,ssr_featured=excluded.ssr_featured,ssr_misses=excluded.ssr_misses`,
+		user, group, p.SR, p.SSR, p.SRLimit, p.SSRLimit, p.SRFeatured, p.SSRFeatured, p.SSRMisses)
 	return err
 }
 func (s *Service) snapshot(ctx context.Context, tx *sql.Tx, user, at int64) (Snapshot, error) {

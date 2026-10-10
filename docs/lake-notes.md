@@ -10,6 +10,10 @@ Administrators configure `lakenotes` through `PATCH /admin/api/games/config`, us
 
 Quote before confirming. The quote contains settings and profile revisions. Changed rates or balances require a fresh quote. Closing the game or enabling maintenance pauses casts and stops exchanges while preserving progress. Coins and credits have no cash redemption or user-to-user transfer.
 
+## Collection rewards
+
+Complete a location’s fish collection, then claim 50 cumulative donation credits from its collection tab. Each location can be claimed once per account, including collections completed before this feature became available. Rewards do not grant spendable credits or coins. Catches remain recorded after fish are sold. The server commits the reward, automatic membership progression and permanent claim together.
+
 ## Session API
 
 Routes use the cookie session at `/api/games/lake-notes`. Mutations require the existing Origin/CSRF boundary and an `Idempotency-Key`.
@@ -18,6 +22,7 @@ Routes use the cookie session at `/api/games/lake-notes`. Mutations require the 
 | --- | --- |
 | `GET /profile` | `readonly,revision,rules_id,profile,wallet,settings,cast` |
 | `GET /rules` | Rule identity and compiled catalog |
+| `POST /collection-claims` | `{location:"lake"|"river"|"coast"|"jungle"}`; returns the updated profile view; incomplete or already-claimed locations return 409 |
 | `POST /actions` | Typed `action`, action fields and `expected_profile_revision`; `buy_bait` accepts optional integer `quantity` (default 1, maximum 999), purchasing the affordable available amount |
 | `POST /exchange/quote` | `direction,quantity`; returns exact lots, totals, `settings_revision,profile_revision` |
 | `POST /exchange` | Quote inputs plus `expected_settings_revision,expected_profile_revision` |
@@ -33,5 +38,7 @@ Past periods are read-only at `GET /admin/api/games/lake-notes/periods?page=1&pa
 ## Recovery and data
 
 Replay lasts 24 hours and rechecks account authorization. Retry the original request after a lost response; reload state after a conflict. A profile and current or paused cast follow the account lifetime. Terminal summaries last 30 days; minimal identities needed by live replay receipts remain until those expire.
+
+Permanent `profile.collectionClaims` maps claimed location IDs to Unix timestamps. It survives temporary receipt expiry, is included in account export and is removed with the account. Adding fish later does not reset a claimed reward.
 
 Account export includes the safe profile, casts and entry/exchange receipts. Private encounter/reward randomness and internal checkpoints are excluded. Deletion removes personal game data and links; settled anonymous ledger facts follow the site's financial retention policy.

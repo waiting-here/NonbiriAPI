@@ -6,13 +6,14 @@ const notes: Record<Cue, number[]> = {
   N: [659.25],
   R: [659.25, 987.77],
   SR: [523.25, 659.25, 783.99],
+  SP: [196, 293.66, 392, 493.88, 587.33, 783.99, 987.77, 1174.66, 1567.98],
   SSR: [261.63, 523.25, 659.25, 783.99, 1046.5, 1318.51],
   spotlight: [261.63, 392, 523.25, 783.99, 1046.5],
   theme: [523.25, 659.25, 783.99, 1046.5, 1318.51, 1567.98],
 };
 export function scheduleCue(ctx: BaseAudioContext, cue: Cue, start = ctx.currentTime) {
   const sources: AudioScheduledSourceNode[] = [];
-  const tail = cue === 'SSR' || cue === 'theme' || cue === 'spotlight' ? 1.5 : 0.7;
+  const tail = cue === 'SSR' || cue === 'SP' || cue === 'theme' || cue === 'spotlight' ? 1.5 : 0.7;
   function tone(frequency: number, at: number, volume: number, duration: number, pan: number) {
     const osc = ctx.createOscillator(),
       gain = ctx.createGain(),
@@ -54,7 +55,13 @@ export function scheduleCue(ctx: BaseAudioContext, cue: Cue, start = ctx.current
         );
     }
   });
-  if (cue === 'gather' || cue === 'spread' || cue === 'SSR' || cue === 'spotlight') {
+  if (
+    cue === 'gather' ||
+    cue === 'spread' ||
+    cue === 'SSR' ||
+    cue === 'SP' ||
+    cue === 'spotlight'
+  ) {
     const length = cue === 'gather' ? 1.22 : cue === 'spread' ? 0.4 : 0.8;
     const buffer = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * length), ctx.sampleRate);
     const data = buffer.getChannelData(0);
@@ -86,7 +93,7 @@ export function scheduleCue(ctx: BaseAudioContext, cue: Cue, start = ctx.current
       gain.disconnect();
     };
   }
-  if (cue === 'SSR' || cue === 'spotlight') {
+  if (cue === 'SSR' || cue === 'SP' || cue === 'spotlight') {
     tone(130.815, start, 0.15, 0.8, 0);
     tone(196, start, 0.065, 1.15, -0.12);
   }
@@ -120,8 +127,7 @@ export class GachaAudio {
       source.addEventListener('ended', () => this.effects.delete(source), { once: true });
     }
   }
-  pause() {
-    this.bgm?.pause();
+  stopEffects() {
     this.effects.forEach((source) => {
       try {
         source.stop();
@@ -130,6 +136,10 @@ export class GachaAudio {
       }
     });
     this.effects.clear();
+  }
+  pause() {
+    this.bgm?.pause();
+    this.stopEffects();
   }
   dispose() {
     this.pause();

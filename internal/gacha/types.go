@@ -63,13 +63,14 @@ type ShopSettings struct {
 	LimitedCap     int64  `json:"limited_cap"`
 	SRCard         int64  `json:"sr_card"`
 	SSRCard        int64  `json:"ssr_card"`
+	SPCard         int64  `json:"sp_card"`
 	ChibiN         int64  `json:"chibi_n"`
 	ChibiR         int64  `json:"chibi_r"`
 	Revision       int64  `json:"revision"`
 }
 
 func defaultShop() ShopSettings {
-	return ShopSettings{"10000", "10000", 20, 10, 5, 1, 20, 10, 10, 3, 30, 15, 1}
+	return ShopSettings{"10000", "10000", 20, 10, 5, 1, 20, 10, 10, 3, 9, 30, 15, 1}
 }
 
 type Owned struct {

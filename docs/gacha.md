@@ -21,7 +21,7 @@ Purchases are one-way. The exchange dialog shows the price and accepts 1–100 t
 
 ## Cards and collection
 
-Each theme has five cards: ChatGPT, Claude, GLM, DeepSeek and Gemini.
+The first eleven themes each have five cards: ChatGPT, Claude, GLM, DeepSeek and Gemini. Each SP theme contains one character card.
 
 | Theme | Rarity | Acquisition |
 | --- | --- | --- |
@@ -36,10 +36,12 @@ Each theme has five cards: ChatGPT, Claude, GLM, DeepSeek and Gemini.
 | 夏夜花火 | SSR | Limited |
 | 童话剧场 | SSR | Limited |
 | 口袋应援团 | SR | Shop only |
+| 星月神话 · ChatGPT | SP | Limited |
+| 逍遥游 · DeepSeek | SP | Limited |
 
-The catalogue shows all 55 cards and collection status. Owned cards open a full illustration and show the first acquisition time. SSR illustrations have a looping animation, pause control and static fallback. Sound effects, music and reduced motion have separate controls.
+The catalogue shows all 57 cards and collection status. Owned cards open a full illustration and show the first acquisition time. SSR and SP illustrations have a looping animation, pause control and static fallback. Draws reveal automatically in order, with full-screen SSR and SP scenes. Skip reaches the complete results without another request. Ten-pull results show all ten cards, with an animated shard conversion for duplicates. Sound effects, music, supported-device vibration and reduced motion have separate controls.
 
-Collecting all five cards in a theme immediately unlocks its group illustration. Claim its reward separately, once per account: one standard ticket for a permanent theme or one limited ticket for another theme, plus ten cumulative donation credit. Published themes keep their original five cards. New cards use new themes; new permanent cards join all applicable pools without resetting progress.
+Completing a theme immediately unlocks its horizontal illustration: all five cards for an ordinary theme, or its single card for an SP theme. Claim its reward separately, once per account: one standard ticket for a permanent theme or one limited ticket for another theme, plus ten cumulative donation credit. Published themes keep their original membership. New cards use new themes; new permanent cards join all applicable pools without resetting progress.
 
 ## Rates and guarantees
 
@@ -49,13 +51,15 @@ Default long-run consolidated rates including hard pity are approximately N 51.3
 
 In limited pools, the default featured share within each SR/SSR tier is 50%. A permanent hit makes the next hit of that same tier featured. SR and SSR guarantees are independent. A pool without featured cards of a particular tier preserves that tier's guarantee. Selection is uniform within the chosen rarity and permanent/featured group.
 
-Limited pools with exactly the same rate and guarantee rules share counters and featured guarantees across periods. Different rules have independent progress. Names, artwork and selected limited cards do not define the group. The permanent pool has independent counters.
+The two SP templates keep the 1% SSR-tier base rate and sixty-pull hard pity. An SSR-tier result has a 15% chance to be the featured SP. After two consecutive permanent SSR results, the next SSR-tier result is guaranteed to be the featured SP; an earlier SP resets the miss count. SR and lower results do not reset it. These templates share a separate rule group from the ordinary 50% featured SSR pools. From empty progress, the SP guarantee requires at most 180 pulls. SP is a display rarity, not a fifth initial probability tier.
+
+Limited pools with exactly the same rate and guarantee rules, including the miss threshold, share counters and featured guarantees across periods. Different rules have independent progress. Names, artwork and selected limited cards do not define the group. The permanent pool has independent counters.
 
 Changing permanent rules preserves progress. A closer pity threshold takes effect immediately; a farther threshold cannot postpone the protected current cycle. The next cycle uses the new threshold.
 
 ## Mystery shop
 
-Each duplicate card grants one shard of its rarity. Default permanent offers are:
+Each duplicate card grants one shard of its rarity. Duplicate SP cards grant one SSR shard; there is no separate SP shard. Default permanent offers are:
 
 | Cost | Reward | Limit |
 | --- | --- | --- |
@@ -65,21 +69,27 @@ Each duplicate card grants one shard of its rarity. Default permanent offers are
 | 1 SSR shard | 2 limited tickets | Same combined limit; room for both tickets is required |
 | 30 N + 15 R shards | One 口袋应援团 card | Once per card; unavailable if owned |
 
-While a limited pool is open, its limited SR cards cost ten SR shards each and SSR cards cost three SSR shards each. A card shared by multiple open pools appears once. It remains available while at least one containing pool is open. Paused, future and ended pools do not make cards available. Offers are once per card and unavailable for owned cards, including on reruns. Redemptions do not alter pity.
+While a limited pool is open, its limited SR cards cost ten SR shards each and SSR cards cost three SSR shards each. SP cards cost nine SSR shards each. A card shared by multiple open pools appears once. It remains available while at least one containing pool is open. Paused, future and ended pools do not make cards available. Offers are once per card and unavailable for owned cards, including on reruns. Redemptions do not alter pity.
 
 Price and monthly-cap changes affect future exchanges. They do not refund past purchases, reclaim rewards or reset usage.
 
 ## Administration
 
-Administrators may publish any number of limited pools and reuse saved templates. Initial templates combine 夏夜花火 or 童话剧场 with the five 万象化身 cards. Templates do not automatically publish pools.
+Administrators may publish any number of limited pools and reuse saved templates. Initial templates combine 夏夜花火, 童话剧场, 星月神话 or 逍遥游 with the five 万象化身 cards. Templates do not automatically publish pools.
 
 A pool has a name, built-in cover, schedule, featured card selection and rules. Once opened, its start time, rules and roster are fixed. Administrators may rename it, change its cover, pause/resume it or extend its end time. Different configurations use new pools.
 
-Base probabilities use 0.01% increments and total 100%. The SR threshold is 1–100; SSR is at least the SR threshold and at most 1,000. Consolidated probabilities are calculated from the actual hard-pity algorithm. Ticket prices, shard prices and monthly limits are configurable.
+Base probabilities use 0.01% increments and total 100%. The SR threshold is 1–100; SSR is at least the SR threshold and at most 1,000. Consolidated probabilities are calculated from the actual hard-pity algorithm. The SSR featured guarantee supports one or two consecutive misses. Ticket prices, shard prices, separate SSR/SP card prices and monthly limits are configurable.
+
+## Site appearance
+
+Obtaining an SP card by drawing or shop redemption immediately unlocks its matching appearance. It remains available after the pool ends. The site does not select it automatically: choose **Appearance** in the user site and apply an unlocked design. The existing light, dark or system preference chooses its matching palette and background. Each design preserves page layout and provides responsive background cropping; game scenes retain their own style.
+
+The selected appearance is saved per account. Unlocks derive from owned cards, independently of draw-history expiry. Reading or selecting an appearance grants no tickets or activity rewards.
 
 ## Records and HTTP access
 
-Draw history retains the most recent 180 days. Collection, first-acquisition times, pity and claimed/redeemed states remain while the account exists. Ticket/shard accounting remains independently of draw-detail expiry. Account export schema 15 includes these records. Deletion removes personal activity state and clears user and retry-key associations from retained accounting/configuration events.
+Draw history retains the most recent 180 days. Collection, first-acquisition times, pity and claimed/redeemed states remain while the account exists. Ticket/shard accounting remains independently of draw-detail expiry. Account export schema 16 includes these records and the appearance selection, unlocked designs and selection timestamp. Deletion removes personal activity state and clears user and retry-key associations from retained accounting/configuration events.
 
 These routes use station sessions and existing same-origin checks; they are not CallerKey automation endpoints:
 
@@ -88,10 +98,14 @@ These routes use station sessions and existing same-origin checks; they are not 
 | GET | `/api/gacha/state` | Personal balances, collection, pity, pools and prices |
 | GET | `/api/gacha/history?cursor=…` | Personal draw history, 50 receipts per page |
 | POST | `/api/gacha/actions` | Enter, check in, draw, buy, redeem or claim |
+| GET | `/api/appearance` | Selected and unlocked personal appearances |
+| POST | `/api/appearance` | Replace selection with an unlocked appearance |
 | GET | `/admin/api/gacha` | Administrator configuration |
 | POST | `/admin/api/gacha` | Save settings, a pool or a template |
 
-POST requires `Idempotency-Key`. Retry uncertain operations with the same key and identical body. Confirmed retries never repeat charges or rewards. Expired draw receipts report completion without a new draw. Price-dependent actions include the displayed `revision`; administrator edits include `expected_revision`. Unknown fields and oversized bodies are rejected.
+Gacha POST routes require `Idempotency-Key`. Retry uncertain operations with the same key and identical body. Confirmed retries never repeat charges or rewards. Expired draw receipts report completion without a new draw. Price-dependent actions include the displayed `revision`; administrator edits include `expected_revision`. Unknown fields and oversized bodies are rejected.
+
+Appearance POST accepts only `{"selected":"default"}`, `{"selected":"celestial"}` or `{"selected":"wandering"}`, with a 1 KiB body limit. It is an idempotent desired-state update and does not require an idempotency key. Both appearance routes return `selected,unlocked,updated_at`, reject query parameters and use `Cache-Control: no-store`. Locked designs are forbidden; malformed or unknown selections are invalid requests.
 
 Example action bodies:
 
@@ -104,6 +118,6 @@ Example action bodies:
 
 ## Standalone local preview
 
-From `web/`, run `npm run dev:gacha`, or `npm run build:gacha` followed by `npm run preview:gacha`. Production activity components use isolated browser-local sample data. Only this activity is included, with fresh-account and complete-collection modes, light/dark themes and Chinese/English text. The preview does not connect to a live account or spend real site credits.
+From `web/`, run `npm run dev:gacha`, or `npm run build:gacha` followed by `npm run preview:gacha`. Production activity components use isolated browser-local sample data. Only this activity is included, with fresh-account and complete-collection modes, light/dark themes, unlockable appearances, SSR/SP presentation samples and Chinese/English text. The preview does not connect to a live account or spend real site credits.
 
 See the [artwork and audio notices](../web/public/assets/gacha/NOTICE.md).

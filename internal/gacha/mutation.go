@@ -8,6 +8,7 @@ import (
 	"errors"
 	"math/big"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
@@ -261,7 +262,7 @@ func (s *Service) draw(ctx context.Context, tx *sql.Tx, user, at int64, id strin
 		_, item.Duplicate = owned[card.ID]
 		if item.Duplicate {
 			for index, r := range rarities {
-				if r == card.Rarity {
+				if r == card.Rarity.Tier() {
 					p.Balance[index+2]++
 					break
 				}
@@ -273,7 +274,7 @@ func (s *Service) draw(ctx context.Context, tx *sql.Tx, user, at int64, id strin
 			}
 			owned[card.ID] = Owned{at, "draw"}
 		}
-		hasSSR = hasSSR || card.Rarity == SSR
+		hasSSR = hasSSR || card.Rarity.Tier() == SSR
 		result.Items = append(result.Items, item)
 	}
 	if welcome {
@@ -411,7 +412,9 @@ func redeem(ctx context.Context, tx *sql.Tx, user, at int64, product string, sho
 			}
 			if card.Rarity == SR {
 				spend[2] = shop.SRCard
-			} else if card.Rarity == SSR {
+			} else if card.Rarity == SP {
+				spend[3] = shop.SPCard
+			} else if card.Rarity.Tier() == SSR {
 				spend[3] = shop.SSRCard
 			} else {
 				return ErrInvalid
@@ -485,7 +488,7 @@ func claim(ctx context.Context, tx *sql.Tx, user, at int64, id, themeID string, 
 	if _, err = ledger.Apply(ctx, tx, plan); err != nil {
 		return err
 	}
-	if err = promote(ctx, tx, user, at); err != nil {
+	if err = authz.PromoteDonationLevelTx(ctx, tx, user, at); err != nil {
 		return err
 	}
 	_, err = tx.ExecContext(ctx, "INSERT INTO gacha_claims(user_id,kind,target,created_at) VALUES(?,'theme',?,?)", user, themeID, at)

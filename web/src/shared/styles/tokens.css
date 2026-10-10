@@ -31,7 +31,11 @@
   --nb-color-accent-quiet: #f1f5ff;
   --nb-color-brand-start: #2563eb;
   --nb-color-brand-end: #7c3aed;
-  --nb-brand-gradient: linear-gradient(135deg, var(--nb-color-brand-start), var(--nb-color-brand-end));
+  --nb-brand-gradient: linear-gradient(
+    135deg,
+    var(--nb-color-brand-start),
+    var(--nb-color-brand-end)
+  );
   --nb-color-success: #138a5b;
   --nb-color-success-soft: #e5f7ee;
   --nb-color-warning: #aa6800;
@@ -58,8 +62,9 @@
   --nb-space-16: 4rem;
 
   /* Typography */
-  --nb-font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --nb-font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --nb-font-sans:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --nb-font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
   --nb-font-size-xs: 0.75rem;
   --nb-font-size-sm: 0.875rem;
   --nb-font-size-md: 1rem;
@@ -186,4 +191,86 @@
   :root:not([data-theme]) {
     color-scheme: dark;
   }
+}
+
+/* Account cosmetics share all dimensions with the default appearance. */
+:root[data-appearance='celestial'] {
+  --nb-color-bg: #edf3ef;
+  --nb-color-surface: #fbfdf9ed;
+  --nb-color-surface-raised: #ffffff;
+  --nb-color-surface-muted: #eaf1e9;
+  --nb-color-surface-emphasis: #dee9df;
+  --nb-color-surface-alt: #f4f8f2;
+  --nb-color-text: #1e3935;
+  --nb-color-text-muted: #53695e;
+  --nb-color-text-subtle: #657867;
+  --nb-color-border: #c3d6c6;
+  --nb-color-border-strong: #8eae9c;
+  --nb-color-accent: #296b57;
+  --nb-color-accent-hover: #1e5845;
+  --nb-color-accent-soft: #dfecdf;
+  --nb-color-accent-quiet: #f1f7ec;
+  --nb-color-accent-contrast: #ffffff;
+  --nb-appearance-image: url('/assets/gacha/appearances/celestial-light.webp');
+  --nb-elevation-1: 0 3px 16px #59775512;
+}
+:root[data-appearance='celestial'][data-theme='dark'] {
+  --nb-color-bg: #0b142b;
+  --nb-color-surface: #122139ed;
+  --nb-color-surface-raised: #1a2d43;
+  --nb-color-surface-muted: #192a40;
+  --nb-color-surface-emphasis: #203a48;
+  --nb-color-surface-alt: #142b3c;
+  --nb-color-text: #e2efea;
+  --nb-color-text-muted: #a9c2bc;
+  --nb-color-text-subtle: #91afa4;
+  --nb-color-border: #35524f;
+  --nb-color-border-strong: #59796a;
+  --nb-color-accent: #a8d7b3;
+  --nb-color-accent-hover: #c9ebc8;
+  --nb-color-accent-soft: #233f3e;
+  --nb-color-accent-quiet: #172f34;
+  --nb-color-accent-contrast: #102a26;
+  --nb-appearance-image: url('/assets/gacha/appearances/celestial-dark.webp');
+  --nb-elevation-1: 0 3px 16px #020d2240;
+}
+:root[data-appearance='wandering'] {
+  --nb-color-bg: #e9f3f3;
+  --nb-color-surface: #fbfefced;
+  --nb-color-surface-raised: #ffffff;
+  --nb-color-surface-muted: #e7f1f1;
+  --nb-color-surface-emphasis: #d9ebec;
+  --nb-color-surface-alt: #f0f8f8;
+  --nb-color-text: #173b46;
+  --nb-color-text-muted: #4d6c74;
+  --nb-color-text-subtle: #5f7980;
+  --nb-color-border: #b9d3d7;
+  --nb-color-border-strong: #81adb8;
+  --nb-color-accent: #176777;
+  --nb-color-accent-hover: #0e5361;
+  --nb-color-accent-soft: #d9edf0;
+  --nb-color-accent-quiet: #eef8f8;
+  --nb-color-accent-contrast: #ffffff;
+  --nb-appearance-image: url('/assets/gacha/appearances/wandering-light.webp');
+  --nb-elevation-1: 0 3px 16px #3f7b8212;
+}
+:root[data-appearance='wandering'][data-theme='dark'] {
+  --nb-color-bg: #071e2a;
+  --nb-color-surface: #102c39ed;
+  --nb-color-surface-raised: #183a47;
+  --nb-color-surface-muted: #16333f;
+  --nb-color-surface-emphasis: #204653;
+  --nb-color-surface-alt: #153641;
+  --nb-color-text: #dff2f5;
+  --nb-color-text-muted: #a0c3cf;
+  --nb-color-text-subtle: #8aacb7;
+  --nb-color-border: #315b69;
+  --nb-color-border-strong: #507f8d;
+  --nb-color-accent: #8bd7e6;
+  --nb-color-accent-hover: #bcebf2;
+  --nb-color-accent-soft: #204752;
+  --nb-color-accent-quiet: #15343e;
+  --nb-color-accent-contrast: #12303a;
+  --nb-appearance-image: url('/assets/gacha/appearances/wandering-dark.webp');
+  --nb-elevation-1: 0 3px 16px #01101740;
 }

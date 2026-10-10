@@ -29,3 +29,17 @@ func NewLakeExchange(meta Meta, wallet, external int64, asset Asset, delta Amoun
 	}
 	return p, nil
 }
+
+// NewLakeCollectionReward adds donation credit without issuing spendable credits.
+// Location eligibility and its permanent claim belong to the caller's transaction.
+func NewLakeCollectionReward(meta Meta, wallet int64) (Plan, error) {
+	if meta.ActorUserID <= 0 || wallet <= 0 {
+		return Plan{}, ErrInvalidPlan
+	}
+	p, err := operationPlan(meta, KindLakeCollectionReward)
+	if err != nil {
+		return Plan{}, err
+	}
+	p.spec.donation = &donationChange{userID: meta.ActorUserID, accountID: wallet, delta: AmountFromMilli(50000)}
+	return p, nil
+}

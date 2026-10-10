@@ -196,7 +196,7 @@ func validatePlan(plan Plan) error {
 		}
 	}
 	if spec.donation != nil {
-		if spec.donation.userID <= 0 || spec.donation.accountID <= 0 || spec.kind != KindAdminUserAdjustment && spec.kind != KindDonorReward && spec.kind != KindGachaThemeReward {
+		if spec.donation.userID <= 0 || spec.donation.accountID <= 0 || spec.kind != KindAdminUserAdjustment && spec.kind != KindDonorReward && spec.kind != KindGachaThemeReward && spec.kind != KindLakeCollectionReward {
 			return ErrInvalidPlan
 		}
 	}
@@ -389,7 +389,7 @@ func validateConservation(kind Kind, entries []entrySpec) error {
 	if len(entries) == 1 || len(entries) > 255 {
 		return ErrInvalidPlan
 	}
-	if len(entries) == 0 && kind != KindAdminUserAdjustment && kind != KindAntiAbusePenalty && kind != KindAccountDeleteZero && kind != KindGachaThemeReward {
+	if len(entries) == 0 && kind != KindAdminUserAdjustment && kind != KindAntiAbusePenalty && kind != KindAccountDeleteZero && kind != KindGachaThemeReward && kind != KindLakeCollectionReward {
 		return ErrInvalidPlan
 	}
 	totals := assetTotals()
@@ -680,7 +680,7 @@ FROM credit_entries WHERE operation_id=? ORDER BY line_no`, operationID)
 	if err := rows.Err(); err != nil {
 		return Result{}, classifySQLError("iterate ledger entries", err)
 	}
-	if !conserved(totals) || len(result.Entries) == 1 || len(result.Entries) == 0 && result.Kind != KindAdminUserAdjustment && result.Kind != KindAntiAbusePenalty && result.Kind != KindAccountDeleteZero && result.Kind != KindGachaThemeReward {
+	if !conserved(totals) || len(result.Entries) == 1 || len(result.Entries) == 0 && result.Kind != KindAdminUserAdjustment && result.Kind != KindAntiAbusePenalty && result.Kind != KindAccountDeleteZero && result.Kind != KindGachaThemeReward && result.Kind != KindLakeCollectionReward {
 		return Result{}, ErrInvariant
 	}
 	return result, nil

@@ -1,0 +1,32 @@
+[
+  {
+    "id": "default",
+    "name": "悠哉日常",
+    "name_en": "Nonbiri",
+    "description": "熟悉的清爽界面。",
+    "description_en": "The familiar, clear interface.",
+    "unlock": ""
+  },
+  {
+    "id": "celestial",
+    "name": "星月神话",
+    "name_en": "A Myth of Moon and Stars",
+    "description": "星轨更迭，仍与你相逢。",
+    "description_en": "Through the turning stars, we meet again.",
+    "unlock": "card:l-chatgpt",
+    "card": "l-chatgpt",
+    "light": "/assets/gacha/appearances/celestial-light.webp",
+    "dark": "/assets/gacha/appearances/celestial-dark.webp"
+  },
+  {
+    "id": "wandering",
+    "name": "逍遥游",
+    "name_en": "Wandering Free",
+    "description": "天地辽阔，与你同游。",
+    "description_en": "The world is wide. Let us wander together.",
+    "unlock": "card:m-deepseek",
+    "card": "m-deepseek",
+    "light": "/assets/gacha/appearances/wandering-light.webp",
+    "dark": "/assets/gacha/appearances/wandering-dark.webp"
+  }
+]

@@ -1,4 +1,4 @@
-import { cardById, cards, rarities } from './catalog';
+import { cardById, cards, rarities, tierOf } from './catalog';
 import type { DrawItem, Pity, Pool, Rules } from './types';
 
 export const defaultRules: Rules = {
@@ -18,6 +18,7 @@ export function freshPity(rules: Rules): Pity {
     ssr_limit: rules.ssr_pity,
     sr_featured: false,
     ssr_featured: false,
+    ssr_misses: 0,
   };
 }
 export function poolOpen(pool: Pool, now: number) {
@@ -65,18 +66,26 @@ export function drawOne(
       }
     }
   }
-  let candidates = cards.filter((card) => card.source === 'permanent' && card.rarity === rarity);
+  let candidates = cards.filter(
+    (card) => card.source === 'permanent' && tierOf(card.rarity) === rarity,
+  );
   if (pool.kind === 'limited' && (rarity === 'SR' || rarity === 'SSR')) {
     const featured = pool.featured
       .map((id) => cardById[id])
-      .filter((card) => card?.rarity === rarity);
+      .filter((card) => card && tierOf(card.rarity) === rarity);
     if (featured.length) {
       const flag = rarity === 'SR' ? 'sr_featured' : 'ssr_featured';
       const enabled = rarity === 'SR' ? pool.rules.sr_guarantee : pool.rules.ssr_guarantee;
       const probability = rarity === 'SR' ? pool.rules.sr_featured : pool.rules.ssr_featured;
-      const hit = (enabled && pity[flag]) || random(10000) < probability;
+      const limit = Math.max(1, pool.rules.ssr_guarantee_misses ?? 1);
+      const guaranteed =
+        rarity === 'SSR' ? pity.ssr_featured || (pity.ssr_misses ?? 0) >= limit : pity.sr_featured;
+      const hit = (enabled && guaranteed) || random(10000) < probability;
       if (hit) candidates = featured;
-      pity[flag] = enabled && !hit;
+      if (rarity === 'SSR') {
+        pity.ssr_misses = hit || !enabled ? 0 : Math.min(limit, (pity.ssr_misses ?? 0) + 1);
+        pity.ssr_featured = enabled && pity.ssr_misses >= limit;
+      } else pity[flag] = enabled && !hit;
     }
   }
   const card = candidates[random(candidates.length)];
