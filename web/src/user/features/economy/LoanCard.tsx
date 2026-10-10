@@ -17,6 +17,7 @@ import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { ApiError } from '@shared/query/http';
 import { economyKeys, economySessionRequest } from './queries';
 import './loanPromo.css';
+import { formatCredits } from '../../games/common/strict';
 
 export function LoanCard({
   loan,
@@ -147,33 +148,37 @@ export function LoanCard({
                 : text('当前无法借款。', 'Borrowing is currently unavailable.')}
             </p>
           ) : null}
-          <label className="loan-promo__amount">
-            {text('借款额度', 'Loan amount')}{' '}
-            <select
-              value={tier}
-              disabled={!available || busy || quote !== null}
-              onChange={(event) => setTier(event.target.value as '1' | '2' | '3')}
-            >
-              {loan.tiers.map((value, index) => (
-                <option value={String(index + 1)} key={value}>
-                  {value} {text('悠哉积分', 'Nonbiri credits')}
-                </option>
-              ))}
-            </select>
-          </label>
+          {available ? (
+            <label className="loan-promo__amount">
+              {text('借款额度', 'Loan amount')}{' '}
+              <select
+                value={tier}
+                disabled={!available || busy || quote !== null}
+                onChange={(event) => setTier(event.target.value as '1' | '2' | '3')}
+              >
+                {loan.tiers.map((value, index) => (
+                  <option value={String(index + 1)} key={value}>
+                    {formatCredits(value)} {text('悠哉积分', 'Nonbiri credits')}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <div className="loan-actions">
-            <button
-              className="nb-btn nb-btn--primary"
-              disabled={!available || busy || quote !== null}
-              onClick={() => {
-                setReceipt(null);
-                setConflict(false);
-                borrow.reset();
-                request.mutate();
-              }}
-            >
-              {text('我要借款', 'Get a loan')}
-            </button>
+            {available ? (
+              <button
+                className="nb-btn nb-btn--primary"
+                disabled={!available || busy || quote !== null}
+                onClick={() => {
+                  setReceipt(null);
+                  setConflict(false);
+                  borrow.reset();
+                  request.mutate();
+                }}
+              >
+                {text('我要借款', 'Get a loan')}
+              </button>
+            ) : null}
             {uncertain && !dialogOpen ? (
               <button className="nb-btn nb-btn--primary" onClick={() => setDialogOpen(true)}>
                 {text('核对这笔借款', 'Check this loan')}

@@ -131,7 +131,7 @@ for (const scenario of [
     expect(writes).toHaveLength(1);
     await expect(
       page.getByRole('button', { name: zh ? '我要借款' : 'Get a loan', exact: true }),
-    ).toBeDisabled();
+    ).toHaveCount(0);
     await page.getByRole('button', { name: zh ? '借款明细' : 'Loan history', exact: true }).click();
     const history = page.getByRole('dialog');
     await expect(history.locator('.loan-facts dt')).toHaveCount(5);

@@ -223,7 +223,7 @@ function RankingPanel({
           </table>
         </div>
       )}
-      {data?.pagination && (
+      {data?.pagination && data.pagination.total_pages !== '1' && (
         <nav className="rank-actions" aria-label={text('ranking.charityLeaderboardPages')}>
           <button
             type="button"

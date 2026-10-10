@@ -10,6 +10,7 @@ import type { ResourceFilterControl } from './useResourceFilters';
 const pageCopyKeys = {
   'user.services.searchPlaceholder': 'user.services.searchPlaceholder',
   'user.models.searchPlaceholder': 'user.models.searchPlaceholder',
+  'user.models.providerPlaceholder': 'user.models.providerPlaceholder',
   'user.services.filters': 'user.services.filters',
   'user.services.removeFilter': 'user.services.removeFilter',
 } as const;
@@ -261,6 +262,7 @@ function ResourceFilterForm({ control }: { control: ResourceFilterControl }) {
               <span>{t('models.provider')}</span>
               <input
                 value={provider}
+                placeholder={ui('user.models.providerPlaceholder')}
                 aria-invalid={invalid}
                 onChange={(event) => setProvider(event.target.value)}
               />

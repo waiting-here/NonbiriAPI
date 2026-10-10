@@ -199,7 +199,7 @@ function EconomyCard({ accountId }: { accountId: string }) {
             <div>
               <dt>{t('home.level')}</dt>
               <dd>
-                {me.data.user.level_display_name === `Lv${me.data.user.effective_level}`
+                {new RegExp(`^Lv\\.?\\s*${me.data.user.effective_level}$`, 'i').test(me.data.user.level_display_name)
                   ? me.data.user.level_display_name
                   : t('home.levelValue', {
                       level: me.data.user.effective_level,
@@ -325,8 +325,8 @@ function OnboardingChecklist({
           </li>
         </ol>
       ) : null}
-      <p className="nb-small nb-muted">
-        {!complete ? t('user.home.collapseHelp') : null}{' '}
+      <p className="nb-small nb-muted home-checklist-footer">
+        {!complete ? <span>{t('user.home.collapseHelp')}</span> : null}
         <button
           className="nb-btn nb-btn--ghost nb-btn--sm"
           type="button"

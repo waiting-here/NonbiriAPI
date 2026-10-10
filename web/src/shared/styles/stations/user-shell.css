@@ -250,14 +250,14 @@
 }
 
 @media (width <= 80rem) {
-  .nb-user-header .donation-pending-badge a > span:first-child {
+  .nb-user-header .nb-account-trigger__name {
     position: absolute;
     width: 1px;
     height: 1px;
     overflow: hidden;
     clip-path: inset(50%);
+    white-space: nowrap;
   }
-
   .nb-user-header .donation-pending-badge a {
     justify-content: center;
     min-width: 2.5rem;

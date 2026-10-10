@@ -118,7 +118,7 @@ html[data-appearance='celestial'] .nb-page-header,
 html[data-appearance='wandering'] .nb-page-header {
   background: var(--nb-color-surface);
   border-radius: var(--nb-radius-sm);
-  box-shadow: 0 0 0 var(--nb-space-3) var(--nb-color-surface);
+  padding: var(--nb-space-4);
 }
 
 @media (width < 64rem) {
@@ -129,4 +129,12 @@ html[data-appearance='wandering'] .nb-page-header {
   html[data-appearance='wandering'] .nb-user-header {
     backdrop-filter: none;
   }
+}
+
+html:is([data-appearance='celestial'], [data-appearance='wandering']) :is(.nb-tabs, .nb-user-shell__footer) {
+  background: var(--nb-color-surface);
+}
+html:is([data-appearance='celestial'], [data-appearance='wandering']) .nb-tabs {
+  padding-inline: var(--nb-space-3);
+  border-radius: var(--nb-radius-sm);
 }
