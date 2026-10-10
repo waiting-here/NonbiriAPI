@@ -387,7 +387,7 @@
   display: none;
 }
 .fatfish-admin .fatfish-editor-body {
-  grid-template-columns: minmax(9rem, 0.75fr) minmax(0, 3fr) minmax(13rem, 1.05fr);
+  grid-template-columns: minmax(11rem, 0.9fr) minmax(0, 3fr) minmax(13rem, 1.05fr);
   gap: 0.75rem;
 }
 .fatfish-admin .fatfish-editor-body > * {
