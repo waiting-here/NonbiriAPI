@@ -467,7 +467,7 @@ function Users({ inspect, ...scope }: Scope & { inspect: (id: string) => void })
     <div className="ops-stack">
       <Card>
         <p>{c.configHelp}</p>
-        <label>
+        <label className="audit-signal-filter">
           {c.signal}
           <select
             value={signalFilter}

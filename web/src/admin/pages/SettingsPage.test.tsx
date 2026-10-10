@@ -210,11 +210,11 @@ describe('site settings discovery and saving', () => {
   it('keeps independent form drafts when switching groups or searching', async () => {
     const view = await renderWithProviders(<SettingsPage />, { station: 'admin', role: 'admin' });
     await screen.findByLabelText('Response wait');
-    await view.user.click(screen.getByRole('button', { name: 'Gateway model capabilities' }));
+    await view.user.click(screen.getByRole('button', { name: 'Model capabilities (Gateway)' }));
     await view.user.type(screen.getByRole('textbox', { name: 'Gateway draft' }), 'saved locally');
     await view.user.click(screen.getByRole('button', { name: 'Limits' }));
     expect(screen.getByLabelText('Gateway draft')).not.toBeVisible();
-    await view.user.click(screen.getByRole('button', { name: 'Gateway model capabilities' }));
+    await view.user.click(screen.getByRole('button', { name: 'Model capabilities (Gateway)' }));
     await view.user.type(screen.getByRole('searchbox'), 'Response wait');
     expect(screen.getByLabelText('Gateway draft')).not.toBeVisible();
     await view.user.clear(screen.getByRole('searchbox'));

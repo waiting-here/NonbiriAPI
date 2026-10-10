@@ -65,7 +65,7 @@
       "risk": "防滥用审计",
       "economy": "积分审计",
       "openRequest": "查看原请求证据",
-      "userIPsTab": "同一身份的多个IP",
+      "userIPsTab": "同一身份的多个 IP",
       "userIPsTitle": "扫描同一身份的IP变化",
       "userIPsHelp": "按Discord身份查看滑动时间窗内不同IP的峰值。只统计来源身份和可信IP均可确认的请求；重新注册的账号仍按同一Discord身份合并。共享网络或更换IP并不直接证明违规。",
       "userIPWindow": "同一身份IP统计时间窗（小时）",
@@ -1033,7 +1033,7 @@
       "hours": "共享 IP 窗口（小时）",
       "accounts": "共享 IP 账号数阈值",
       "adminOnly": "仅管理员可修改阈值。",
-      "configHelp": "依据用户总占用及当时的额度判断风险。重启、缺口、未结算请求及变化或未知的额度都会中断连续命中链。",
+      "configHelp": "按用户总占用和当时的额度判断风险。服务重启、记录不全、请求未结算或额度变化、不明确时，连续超限次数重新计算。",
       "comparison": "同模型对照",
       "thisUser": "当前用户",
       "others": "其他用户",
@@ -1180,7 +1180,8 @@
       "actorAutomatic": "系统自动",
       "actorUnknown": "未知",
       "all": "全部",
-      "close": "关闭"
+      "close": "关闭",
+      "searchPlaceholder": "Discord ID 或首次说明"
     },
     "diagnostics": {
       "sourceDetailsAreUnavailable": "来源详情暂不可用。",
@@ -1625,7 +1626,8 @@
       "unbanAction": "解除封禁…",
       "banConsequence": "封禁会停止该用户使用平台。",
       "deleteConsequence": "删除账户和用户数据；需要再次验证管理员密码。",
-      "reasonRequired": "必填；说明调整原因，用户可见。"
+      "reasonRequired": "必填；说明调整原因，用户可见。",
+      "levelValue": "等级 {{level}}"
     },
     "announcements": {
       "nav": "公告",

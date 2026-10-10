@@ -42,6 +42,8 @@ const keys = {
   retry: 'admin.lakeNotes.retry',
   invalid: 'admin.lakeNotes.invalid',
   empty: 'admin.lakeNotes.empty',
+  emptyTitle: 'admin.lakeNotes.emptyTitle',
+  emptyBody: 'admin.lakeNotes.emptyBody',
   previous: 'admin.lakeNotes.previous',
   next: 'admin.lakeNotes.next',
   cancelHelp: 'admin.lakeNotes.cancelHelp',

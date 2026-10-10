@@ -2,7 +2,7 @@ import { SimplePager } from '@shared/operations/SimplePager';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { getPeriods, unitsToNatural } from '@shared/lakenotes/api';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { useAdminSession } from '../../data';
@@ -36,7 +36,11 @@ export function LakePeriodsPage() {
       ) : (
         <Card>
           {!periods.data.items.length ? (
-            <p>{lakeText('empty')}</p>
+            <EmptyState
+              title={lakeText('emptyTitle')}
+              body={lakeText('emptyBody')}
+              action={<Link className="nb-btn nb-btn--secondary" to="/games">{lakeText('back')}</Link>}
+            />
           ) : (
             <div className="lake-period-list">
               {periods.data.items.map((p) => (

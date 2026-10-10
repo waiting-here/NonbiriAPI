@@ -16,8 +16,8 @@
   margin: 0;
   background: var(--nb-color-surface);
 }
-.inactivity-panel legend {
-  padding-inline: var(--nb-space-2);
+.inactivity-config-title {
+  margin: 0;
   font-size: var(--nb-font-size-md);
   font-weight: var(--nb-font-weight-semibold);
 }

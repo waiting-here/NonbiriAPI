@@ -168,6 +168,20 @@ describe('administrator paged operation pages', () => {
     },
   );
 
+  it('formats exact account balances and uses the configured level name', async () => {
+    installFetch((url) => {
+      if (url.pathname === '/admin/api/users')
+        return page([{ ...adminUser, balance: '8007199254740.123', discord_id: '123456789012345678',
+          level: { ...adminUser.level, display_name: 'Trusted steward' } }], '1', 20);
+      return ancillaryResponse(url);
+    });
+    await renderWithProviders(<UsersPage />, { station: 'admin', role: 'admin', locale: 'en', route: '/users' });
+    expect(await screen.findByText('8,007,199,254,740.123')).toBeVisible();
+    expect(screen.getByText('Trusted steward')).toBeVisible();
+    expect(screen.getByText(/1234…5678/)).toHaveAttribute('title', '123456789012345678');
+    expect(screen.queryByText('8007199254740.123')).not.toBeInTheDocument();
+  });
+
   it('closes a previously loaded user editor when the list loses authority', async () => {
     let denied = false;
     installFetch((url) => {

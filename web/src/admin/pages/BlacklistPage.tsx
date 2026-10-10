@@ -343,6 +343,7 @@ export function BlacklistManagement({
             <span>{label.search}</span>
             <input
               value={search}
+              placeholder={t('common.blacklist.searchPlaceholder')}
               onChange={(event) => setSearch(event.target.value)}
               maxLength={512}
             />
@@ -380,7 +381,7 @@ export function BlacklistManagement({
             </div>
           </Fold>
           <button className="nb-btn nb-btn--secondary" disabled={busy} type="submit">
-            {label.applySearch}
+            {t('common.applyFilter')}
           </button>
         </form>
         {sessionError ? (

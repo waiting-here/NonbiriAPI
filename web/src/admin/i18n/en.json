@@ -23,10 +23,10 @@
       "usageTitle": "Site usage",
       "endpointsTitle": "Endpoint overview",
       "requests": "Requests",
-      "unknownUsage": "Unknown-usage requests",
+      "unknownUsage": "Requests with unavailable usage",
       "promptTokens": "Prompt tokens",
       "activityTitle": "Product activity",
-      "activityDisabled": "Activity aggregation disabled",
+      "activityDisabled": "Product activity statistics are disabled. Daily check-in and game activity records are unavailable.",
       "latestDay": "Latest day",
       "productActive": "Product active",
       "gameActive": "Game active",
@@ -35,7 +35,7 @@
       "noActivity": "No activity rows",
       "noActivityBody": "No activity has been recorded yet.",
       "reportsTitle": "Credential reports",
-      "nonTerminalReports": "Non-terminal",
+      "nonTerminalReports": "Open reports",
       "pendingIndexing": "Indexing",
       "pendingReview": "Review",
       "approvedProcessing": "Processing",
@@ -59,7 +59,7 @@
       "endpointCount": "Endpoints",
       "keys": "Keys",
       "enabledCount": "Enabled endpoints",
-      "expand": "User entries",
+      "expand": "Actions",
       "showUsers": "Show users",
       "hideUsers": "Hide users",
       "empty": "No endpoint records",
@@ -81,7 +81,8 @@
       "addTag": "Add tag",
       "removeTag": "Remove tag",
       "tagsSaved": "Tags updated",
-      "selectForBatch": "Select services below to change their tags."
+      "selectForBatch": "Select services below to change their tags.",
+      "userPlaceholder": "Site user ID"
     },
     "alerts": {
       "nav": "Alerts",
@@ -106,7 +107,7 @@
         "registrationRejected": "Registration rejected",
         "maintenanceEnabled": "Maintenance enabled",
         "donationFailureDisabled": "Donation disabled after failures",
-        "issueProjectionIncomplete": "Issue details incomplete",
+        "issueProjectionIncomplete": "Incomplete alert information",
         "reportRetryExhausted": "Report retries exhausted",
         "fishingRetryExhausted": "Fishing recovery retries exhausted",
         "rpsTerminalRetrying": "RPS terminal recovery retrying",
@@ -146,7 +147,8 @@
         "workerCheckpointFailed": "A background task could not save its progress. Open the details.",
         "invariantViolation": "A system data check found an inconsistency that needs review.",
         "accountDeleted": "An account was deleted. Its deletion snapshot is available in the details."
-      }
+      },
+      "subjectUser": "User #{{id}}"
     },
     "settings": {
       "nav": "Site settings",
@@ -155,7 +157,7 @@
       "booleanValue": "Boolean setting",
       "numberValue": "Numeric setting",
       "textValue": "Text setting",
-      "notConfigured": "not configured (null)",
+      "notConfigured": "Not configured",
       "catalogDefault": "Default",
       "catalogEffective": "Effective fallback",
       "catalogRange": "Hard range",
@@ -170,7 +172,7 @@
       "enumValue": "Enumerated setting",
       "enumValues": {
         "disabled": "Disabled",
-        "empty": "Empty value (\"\")",
+        "empty": "Empty",
         "en": "English",
         "enabled": "Enabled",
         "levelGated": "Level 3 and above",
@@ -227,7 +229,7 @@
       "searchHelp": "Find a setting by name or purpose",
       "modified": "Modified",
       "original": "Previously {{value}}",
-      "gatewayGroup": "Gateway model capabilities",
+      "gatewayGroup": "Model capabilities (Gateway)",
       "legalHoldGroup": "Legal holds",
       "maintenanceGroup": "Maintenance mode",
       "gameRewardRange": "Game check-in reward",
@@ -241,7 +243,8 @@
       "otherConfiguration": "Other configuration",
       "confirmationHint": "Settings requiring care will be confirmed before saving.",
       "confirmTitle": "Save settings requiring care?",
-      "restoreDefault": "Restore default"
+      "restoreDefault": "Restore default",
+      "levelThreshold": "Level {{level}} auto-promotion threshold"
     },
     "games": {
       "nav": "Games",
@@ -329,7 +332,8 @@
         "modeRequiresStake": "To enable {{mode}}, enable Rock Paper Scissors and set a positive base stake.",
         "changedElsewhere": "Game settings changed elsewhere. Your draft is retained; restore the latest settings before editing again.",
         "feeRange": "{{field}} must be between 0 and 99.99%, with at most two decimal places."
-      }
+      },
+      "aiPlayersTitle": "AI players and strategies"
     },
     "activities": {
       "nav": "Activities",
@@ -453,7 +457,7 @@
         "category": "Category",
         "connector": "API format",
         "baseUrl": "API base URL",
-        "enabled": "Available for adding services",
+        "enabled": "Status",
         "updated": "Updated",
         "actions": "Actions"
       },
@@ -516,7 +520,7 @@
         "indexing": "Indexing",
         "processing": "Processing",
         "review": "Review",
-        "title": "Non-terminal"
+        "title": "Open reports"
       },
       "decisionAction": {
         "approve": "Approved deletion",
@@ -873,7 +877,9 @@
       "cancelHelp": "Cancelling stops gameplay and exchanges for this period and preserves entry, receipts and profiles.",
       "publishHelp": "Publishing lets users participate during this period's opening times and pay the configured entry fee.",
       "withdrawalHelp": "Removing publication stops gameplay and exchanges for this period. Existing entries, receipts and profiles are kept.",
-      "periodHistoryDescription": "Past activity periods are kept here. Manage availability and exchanges in game settings."
+      "periodHistoryDescription": "Past activity periods are kept here. Manage availability and exchanges in game settings.",
+      "emptyTitle": "No past periods",
+      "emptyBody": "Past period records will appear here. Manage game availability and exchanges in game settings."
     },
     "fatfish": {
       "workspace": {
@@ -1104,7 +1110,9 @@
         "matched": "Matched",
         "mismatch": "Mismatch",
         "incomplete": "Incomplete coverage",
-        "periods": "Time details ({{count}} periods)"
+        "periods": "Time details ({{count}} periods)",
+        "coverage": "Statistics details",
+        "watermarkHelp": "Last ledger entry included in statistics / current ledger entry"
       },
       "keyboardTitle": "Keyboard controls",
       "keyboardHelp": "Use Left and Right to select a time bucket, Home and End for the first and last. The table also lists exact amounts."
@@ -1114,7 +1122,9 @@
       "firstPlayer": "first player",
       "secondPlayer": "second player",
       "anonymousMatch": "Anonymous match",
-      "players": "Players: {{count}}"
+      "players": "Players: {{count}}",
+      "emptyTitle": "No match records",
+      "emptyBody": "No records in this dataset yet. Try another dataset."
     }
   },
   "user": {

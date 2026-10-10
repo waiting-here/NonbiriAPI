@@ -91,33 +91,50 @@ function AuditErrorState({
   );
 }
 
-function Coverage({ meta }: { readonly meta: Metadata }) {
+function Coverage({
+  meta,
+  compact = false,
+}: {
+  readonly meta: Metadata;
+  readonly compact?: boolean;
+}) {
+  const { t: copy } = useTranslation();
   const t = useEconomyText();
   const c = meta.coverage;
   return (
     <div className="audit-coverage" role="status">
-      <p>
-        {t(
-          '逐笔明细保留30天；更早的记录保留小时和日汇总。',
-          'Transaction details are retained for 30 days; older records remain as hourly and daily totals.',
-        )}
-      </p>
-      {meta.range_adjusted && (
+      {!compact && (
         <p>
-          {t('历史范围已对齐整点', 'Historical range aligned to whole hours')}:{' '}
-          {time(meta.from, meta.offset_minutes)} – {time(meta.to, meta.offset_minutes)}
+          {t(
+            '逐笔明细保留30天；更早的记录保留小时和日汇总。',
+            'Transaction details are retained for 30 days; older records remain as hourly and daily totals.',
+          )}
         </p>
       )}
-      <p>
-        {t('业务时区', 'Site time zone')} {zone(meta.offset_minutes)} ·{' '}
-        {t('账本水位', 'Ledger watermark')} {meta.projected_seq} / {meta.ledger_seq} ·{' '}
-        {t('快照', 'Snapshot')} {time(meta.snapshot_at, meta.offset_minutes)}
-      </p>
-      <p>
-        {c.first_occurred_at === null
-          ? t('尚无已处理的账本记录。', 'No ledger records have been processed yet.')
-          : `${t('统计记录起于', 'Records begin at')} ${time(c.first_occurred_at, meta.offset_minutes)} · #${c.first_ledger_seq}`}
-      </p>
+      <Fold
+        plain
+        title={copy('admin.economyAudit.presentation.coverage')}
+        defaultOpen={!compact}
+      >
+        {meta.range_adjusted && (
+          <p>
+            {t('历史范围已对齐整点', 'Historical range aligned to whole hours')}:{' '}
+            {time(meta.from, meta.offset_minutes)} – {time(meta.to, meta.offset_minutes)}
+          </p>
+        )}
+        <p>
+          {t('业务时区', 'Site time zone')} {zone(meta.offset_minutes)} ·{' '}
+          <span title={copy('admin.economyAudit.presentation.watermarkHelp')}>
+            {t('账本水位', 'Ledger watermark')} {meta.projected_seq} / {meta.ledger_seq}
+          </span>{' '}
+          · {t('快照', 'Snapshot')} {time(meta.snapshot_at, meta.offset_minutes)}
+        </p>
+        <p>
+          {c.first_occurred_at === null
+            ? t('尚无已处理的账本记录。', 'No ledger records have been processed yet.')
+            : `${t('统计记录起于', 'Records begin at')} ${time(c.first_occurred_at, meta.offset_minutes)} · #${c.first_ledger_seq}`}
+        </p>
+      </Fold>
       {c.status === 'catching_up' && (
         <p>
           {t(
@@ -274,7 +291,7 @@ function Trend({ filter }: { readonly filter: AuditFilter }) {
   if (q.error) return <AuditErrorState error={q.error} onRetry={() => void q.refetch()} />;
   return (
     <>
-      <Coverage meta={q.data.metadata} />
+      <Coverage meta={q.data.metadata} compact />
       {q.data.metadata.coverage.status !== 'catching_up' && (
         <>
           <EconomyTrendChart series={q.data} />
@@ -330,7 +347,7 @@ function ChannelDetails({
   if (q.error) return <AuditErrorState error={q.error} onRetry={() => void q.refetch()} />;
   return (
     <>
-      <Coverage meta={q.data.metadata} />
+      <Coverage meta={q.data.metadata} compact />
       <DataTable
         caption={t('点击渠道查看对应分录', 'Open a channel to inspect its ledger entries')}
         rows={q.data.data}
@@ -394,7 +411,7 @@ function LedgerDetails({ filter }: { readonly filter: AuditFilter }) {
   if (q.error) return <AuditErrorState error={q.error} onRetry={() => void q.refetch()} />;
   return (
     <>
-      <Coverage meta={q.data.metadata} />
+      <Coverage meta={q.data.metadata} compact />
       <p>
         {t(
           '每页最多100笔；每个币种的分录独立展示。',
