@@ -1,11 +1,13 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { GachaApp } from './GachaApp';
+import { themes } from './catalog';
 import { defaultRules, consolidatedRates } from './rules';
 import type { GachaPort, Outcome, Snapshot } from './types';
 
 function snapshot(): Snapshot {
   return {
+    visible_themes: themes.map((theme) => theme.id),
     tickets: { permanent: 10, limited: 0 },
     fragments: { N: 0, R: 0, SR: 0, SSR: 0 },
     credits: { general: '10000', game: '10000' },
@@ -130,7 +132,8 @@ it('does not reveal a late result or reuse pending work for a different account'
   };
   render(<GachaApp port={next} />);
   await screen.findByRole('button', { name: /十次召唤/ });
-  complete({ snapshot: { ...state, tickets: { permanent: 0, limited: 0 } } });
+  complete({ snapshot: { ...state, visible_themes: themes.map((theme) => theme.id),
+    tickets: { permanent: 0, limited: 0 } } });
   await waitFor(() => expect(next.act).toHaveBeenCalledTimes(1));
   expect(vi.mocked(next.act).mock.calls[0][0]).toEqual({ action: 'enter' });
   expect(screen.queryByRole('button', { name: '重试原操作' })).not.toBeInTheDocument();

@@ -29,7 +29,9 @@ export function Collection({
     [character, setCharacter] = useState(''),
     [rarity, setRarity] = useState(''),
     [owned, setOwned] = useState('');
-  const filtered = cards.filter(
+  const visibleThemes = themes.filter((theme) => state.visible_themes.includes(theme.id));
+  const visibleCards = cards.filter((card) => state.visible_themes.includes(card.theme));
+  const filtered = visibleCards.filter(
     (c) =>
       (c.name + c.name_en).toLowerCase().includes(search.toLowerCase()) &&
       (!character || c.character === character) &&
@@ -44,7 +46,7 @@ export function Collection({
           <h2>{t('每一次相遇，都值得珍藏', 'Every encounter is worth keeping')}</h2>
         </div>
         <p>
-          <strong>{Object.keys(state.owned).length}</strong> / {cards.length}{' '}
+          <strong>{Object.keys(state.owned).length}</strong> / {visibleCards.length}{' '}
           {t('已收集', 'collected')}
         </p>
       </div>
@@ -148,7 +150,7 @@ export function Collection({
         </>
       ) : (
         <div className="gacha-themes">
-          {themes.map((theme) => {
+          {visibleThemes.map((theme) => {
             const members = cards.filter((c) => c.theme === theme.id),
               collected = members.filter((c) => state.owned[c.id]).length;
             const complete = collected === members.length,

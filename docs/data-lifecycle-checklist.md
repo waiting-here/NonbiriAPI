@@ -253,7 +253,7 @@ AI callbacks, cancellation, financial settlement, memory extraction and deletion
 
 `gacha_operations` retains the activity balance journal and durable idempotency receipt independently of draw details. Exports omit request/key hashes. Account deletion clears user links and retry hashes while preserving de-identified balance facts and credit-operation links. Credit entries follow their existing 30-day compaction policy; referenced compacted operations keep only minimal headers.
 
-`gacha_settings`, `gacha_pools` and `gacha_presets` are administrator configuration. `gacha_config_events` preserves revisions and clears deleted actor links. Public state omits drafts. The activity collects no device identifiers, IP addresses, prompts, upstream keys or private image uploads.
+`gacha_settings`, `gacha_pools` and `gacha_presets` are administrator configuration. `gacha_config_events` preserves revisions and clears deleted actor links. Public state omits drafts. Configuration history also determines whether limited-card themes have ever opened; the entry display switch is stored in the existing settings JSON. The activity collects no device identifiers, IP addresses, prompts, upstream keys or private image uploads.
 
 `user_appearance` stores the selected site cosmetic and its update time. Available cosmetics derive from permanent card ownership; no duplicate unlock ledger is needed. Export includes the selection and available designs. Account deletion removes the row in the same transaction as collection data. Reading appearance grants no activity rewards. The browser retains light/dark/system and sound/motion/vibration preferences; the server remains authoritative for cosmetic access.
 

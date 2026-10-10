@@ -1,6 +1,6 @@
 # The Gacha Simulator
 
-The activity entry, permanent pool, catalogue and mystery shop stay open. Limited pools have individual schedules. Open **Activities → The Gacha Simulator**; administrators configure it from **Activity management**. Site login, account restrictions and maintenance still apply.
+The activity entry is hidden by default. Administrators can show it from the activity settings. This display switch does not stop scheduled pools or disable the activity URL. The permanent pool, catalogue and mystery shop stay open. Limited pools have individual schedules. Open **Activities → The Gacha Simulator**; administrators configure it from **Activity management**. Site login, account restrictions and maintenance still apply.
 
 Cards are cosmetic collectibles. They cannot be transferred, traded, sold or converted into credits. Collection rewards grant tickets and cumulative donation credit; donation credit is not a spendable balance.
 
@@ -89,19 +89,24 @@ The selected appearance is saved per account. Unlocks derive from owned cards, i
 
 ## Records and HTTP access
 
-Draw history retains the most recent 180 days. Collection, first-acquisition times, pity and claimed/redeemed states remain while the account exists. Ticket/shard accounting remains independently of draw-detail expiry. Account export schema 16 includes these records and the appearance selection, unlocked designs and selection timestamp. Deletion removes personal activity state and clears user and retry-key associations from retained accounting/configuration events.
+Draw history retains the most recent 180 days. Collection, first-acquisition times, pity and claimed/redeemed states remain while the account exists. Ticket/shard accounting remains independently of draw-detail expiry. Account export schema 17 includes these records and the appearance selection, unlocked designs and selection timestamp. Deletion removes personal activity state and clears user and retry-key associations from retained accounting/configuration events.
 
 These routes use station sessions and existing same-origin checks; they are not CallerKey automation endpoints:
 
 | Method | Route | Purpose |
 | --- | --- | --- |
-| GET | `/api/gacha/state` | Personal balances, collection, pity, pools and prices |
+| GET | `/api/gacha/entry` | Entry visibility and whether this account has visited; no welcome reward is granted |
+| GET | `/api/gacha/state` | Personal balances, collection, visible themes, pity, pools and prices |
 | GET | `/api/gacha/history?cursor=…` | Personal draw history, 50 receipts per page |
 | POST | `/api/gacha/actions` | Enter, check in, draw, buy, redeem or claim |
 | GET | `/api/appearance` | Selected and unlocked personal appearances |
 | POST | `/api/appearance` | Replace selection with an unlocked appearance |
 | GET | `/admin/api/gacha` | Administrator configuration |
 | POST | `/admin/api/gacha` | Save settings, a pool or a template |
+
+Themes consisting entirely of limited cards stay hidden until a pool containing their cards has opened. Past openings continue to count after a pool ends or is paused; already owned cards remain visible. Scheduled pools paused before opening do not reveal their themes.
+
+Administrator settings accept an optional `entry_enabled` boolean, alongside rules, shop and the expected revision. Omitting it preserves the current switch; new installations default to false.
 
 Gacha POST routes require `Idempotency-Key`. Retry uncertain operations with the same key and identical body. Confirmed retries never repeat charges or rewards. Expired draw receipts report completion without a new draw. Price-dependent actions include the displayed `revision`; administrator edits include `expected_revision`. Unknown fields and oversized bodies are rejected.
 

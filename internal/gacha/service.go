@@ -286,6 +286,10 @@ func (s *Service) snapshot(ctx context.Context, tx *sql.Tx, user, at int64) (Sna
 	if err != nil {
 		return out, err
 	}
+	out.VisibleThemes, err = readVisibleThemes(ctx, tx, at, out.Owned)
+	if err != nil {
+		return out, err
+	}
 	out.Pity, err = readPity(ctx, tx, user)
 	if err != nil {
 		return out, err

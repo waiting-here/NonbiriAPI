@@ -89,6 +89,7 @@ export interface DrawReceipt {
   items: DrawItem[];
 }
 export interface Snapshot {
+  visible_themes: string[];
   tickets: Record<Ticket, number>;
   fragments: Record<DrawTier, number>;
   credits: { general: string; game: string };
@@ -141,6 +142,7 @@ export interface Preset {
   revision: number;
 }
 export interface Configuration {
+  entry_enabled: boolean;
   rules: Rules;
   shop: ShopSettings;
   pools: Pool[];
@@ -150,6 +152,6 @@ export interface Configuration {
   time_zone: string;
 }
 export type AdminInput =
-  | { kind: 'settings'; expected_revision: number; rules: Rules; shop: ShopSettings }
+  | { kind: 'settings'; expected_revision: number; rules: Rules; shop: ShopSettings; entry_enabled?: boolean }
   | { kind: 'pool'; expected_revision: number; pool: Pool }
   | { kind: 'preset'; expected_revision: number; preset: Preset };

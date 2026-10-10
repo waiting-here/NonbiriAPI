@@ -251,7 +251,7 @@ Failed discovery displays a dedicated explanation and, while its diagnostic reco
 
 ## Card collection activity
 
-The Gacha Simulator is permanently available to eligible signed-in users when the site is operational and its timezone is configured. Its dedicated administrator page uses `GET/POST /admin/api/gacha` for rules, prices, quotas, pools and saved presets. The generic activity master switch does not close this permanent collection activity. Only published limited pools use schedules; installation does not publish a limited pool automatically. See [the activity guide](gacha.md).
+The Gacha Simulator entry is hidden by default and can be shown in its administrator settings. The display switch does not disable the activity URL. Eligible signed-in users can use the activity when the site is operational and its timezone is configured. Its dedicated administrator page uses `GET/POST /admin/api/gacha` for rules, prices, quotas, pools and saved presets. The generic activity master switch does not close this permanent collection activity. Only published limited pools use schedules; installation does not publish a limited pool automatically. See [the activity guide](gacha.md).
 
 ## Managed charity session headers
 

@@ -2,7 +2,6 @@ import { useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
-import { Icon } from '@shared/components/Icon';
 import { UserPageGate } from '../../components/UserPageGate';
 import { useUserSession } from '../../data';
 import { GachaApp } from './GachaApp';
@@ -19,7 +18,6 @@ function AccountActivity({ account }: { account: string }) {
       english={english}
       back={
         <Link className="nb-btn nb-btn--ghost" to="/activities">
-          <Icon name="arrow-left" />
           {english ? 'Back to activities' : '返回活动'}
         </Link>
       }

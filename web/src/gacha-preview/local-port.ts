@@ -61,6 +61,7 @@ function initial(): Saved {
     receipts: {},
     history: [],
     state: {
+      visible_themes: [...new Set(cards.map((card) => card.theme))],
       tickets: { permanent: 0, limited: 0 },
       fragments: { N: 0, R: 0, SR: 0, SSR: 0 },
       credits: { general: '10000000', game: '10000000' },
@@ -115,7 +116,7 @@ function initial(): Saved {
 function read(): Saved {
   try {
     const raw = localStorage.getItem(storageKey);
-    if (raw) return JSON.parse(raw) as Saved;
+    if (raw) { const saved = JSON.parse(raw) as Saved; saved.state.visible_themes = [...new Set(cards.map((card) => card.theme))]; return saved; }
   } catch {
     /* The preview remains available without browser storage. */
   }

@@ -21,6 +21,16 @@ func RegisterRoutes(users limitedactivities.UserRouteRegistrar, admins limitedac
 	if users == nil || admins == nil || s == nil {
 		return ErrInvalid
 	}
+	if err := users.RegisterUserRoute(http.MethodGet, "/api/gacha/entry", func(w http.ResponseWriter, r *http.Request, p limitedactivities.UserPrincipal) {
+		if !empty(r, false) {
+			writeError(w, ErrInvalid)
+			return
+		}
+		out, err := s.Entry(r.Context(), p.UserID)
+		respond(w, out, err)
+	}); err != nil {
+		return err
+	}
 	if err := users.RegisterUserRoute(http.MethodGet, "/api/gacha/state", func(w http.ResponseWriter, r *http.Request, p limitedactivities.UserPrincipal) {
 		if !empty(r, false) {
 			writeError(w, ErrInvalid)

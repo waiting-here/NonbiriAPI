@@ -72,6 +72,10 @@ func (s *Service) configuration(ctx context.Context, tx *sql.Tx, at int64) (Conf
 	var out Configuration
 	var err error
 	out.ServerTime = at
+	out.EntryEnabled, err = readEntryEnabled(ctx, tx)
+	if err != nil {
+		return out, err
+	}
 	out.Rules, out.Shop, out.Revision, err = readSettings(ctx, tx)
 	if err != nil {
 		return out, err
@@ -172,7 +176,18 @@ func (s *Service) AdminSave(ctx context.Context, actor int64, key string, input 
 			return out, e
 		}
 		shop.Revision = revision
-		r, e := tx.ExecContext(ctx, "UPDATE gacha_settings SET rules=?,shop=?,revision=? WHERE id=1 AND revision=?", jsonText(input.Rules), jsonText(shop), revision, input.ExpectedRevision)
+		entryEnabled, e := readEntryEnabled(ctx, tx)
+		if e != nil {
+			return out, e
+		}
+		if input.EntryEnabled != nil {
+			entryEnabled = *input.EntryEnabled
+		}
+		storedShop := struct {
+			ShopSettings
+			EntryEnabled bool `json:"entry_enabled"`
+		}{shop, entryEnabled}
+		r, e := tx.ExecContext(ctx, "UPDATE gacha_settings SET rules=?,shop=?,revision=? WHERE id=1 AND revision=?", jsonText(input.Rules), jsonText(storedShop), revision, input.ExpectedRevision)
 		if e != nil {
 			return out, e
 		}
@@ -184,11 +199,12 @@ func (s *Service) AdminSave(ctx context.Context, actor int64, key string, input 
 			input.Rules.SRPity, input.Rules.SRPity, input.Rules.SSRPity, input.Rules.SSRPity)
 		target = "settings"
 		stored = struct {
-			Rules Rules        `json:"rules"`
-			Shop  ShopSettings `json:"shop"`
-		}{*input.Rules, shop}
+			Rules        Rules        `json:"rules"`
+			Shop         ShopSettings `json:"shop"`
+			EntryEnabled bool         `json:"entry_enabled"`
+		}{*input.Rules, shop, entryEnabled}
 	case "pool":
-		if input.Pool == nil || input.Rules != nil || input.Shop != nil || input.Preset != nil {
+		if input.Pool == nil || input.EntryEnabled != nil || input.Rules != nil || input.Shop != nil || input.Preset != nil {
 			return out, ErrInvalid
 		}
 		pool, e := validatePool(*input.Pool)
@@ -223,7 +239,7 @@ func (s *Service) AdminSave(ctx context.Context, actor int64, key string, input 
 		target = pool.ID
 		stored = pool
 	case "preset":
-		if input.Preset == nil || input.Rules != nil || input.Shop != nil || input.Pool != nil {
+		if input.Preset == nil || input.EntryEnabled != nil || input.Rules != nil || input.Shop != nil || input.Pool != nil {
 			return out, ErrInvalid
 		}
 		p := *input.Preset

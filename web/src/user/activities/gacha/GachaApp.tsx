@@ -32,7 +32,6 @@ import type {
 } from './types';
 import './gacha.css';
 import { useOptionalAppearance } from '../../appearance/context';
-import { AppearanceButton } from '../../appearance/AppearanceButton';
 
 type Page = 'pools' | 'collection' | 'shop';
 type PendingAction = { input: Action; key: string; message: string };
@@ -347,7 +346,6 @@ export function GachaApp({
         className="gacha-page-header"
         actions={
           <div className="gacha-header-actions">
-            <AppearanceButton />
             <Button
               variant="ghost"
               aria-label={t('规则', 'Rules')}
@@ -426,7 +424,7 @@ export function GachaApp({
                 <small>{t('常驻券', 'Standard')}</small>
                 <strong>{state.tickets.permanent.toLocaleString()}</strong>
               </span>
-              <b>+</b>
+              <b>{t('兑换', 'Get')}</b>
             </Button>
             <Button
               variant="ghost"
@@ -441,7 +439,7 @@ export function GachaApp({
                 <small>{t('限定券', 'Limited')}</small>
                 <strong>{state.tickets.limited.toLocaleString()}</strong>
               </span>
-              <b>+</b>
+              <b>{t('兑换', 'Get')}</b>
             </Button>
           </div>
         </div>
@@ -970,7 +968,7 @@ export function GachaApp({
           <p>
             {t('含保底的长期综合概率：', 'Long-run rates including pity: ') +
               rarities
-                .map((rarity, index) => rarity + ' ' + (pool.rates[index] * 100).toFixed(4) + '%')
+                .map((rarity, index) => rarity + ' ' + Number((pool.rates[index] * 100).toFixed(2)) + '%')
                 .join(' · ')}
           </p>
           {pool.kind === 'limited' && (
@@ -991,26 +989,17 @@ export function GachaApp({
                     {rarity} · {t('抽中该档后，', 'After a hit of this rarity, ')}
                     {probability / 100}% {t('为本池限定。', 'is featured. ')}
                     {guarantee
-                      ? t(
-                          '连续 ' +
-                            (rarity === 'SSR'
-                              ? Math.max(1, pool.rules.ssr_guarantee_misses ?? 1)
-                              : 1) +
-                            ' 次未中限定后，下次同档必为限定。',
-                          'After ' +
-                            (rarity === 'SSR'
-                              ? Math.max(1, pool.rules.ssr_guarantee_misses ?? 1)
-                              : 1) +
-                            ' consecutive misses, the next hit is featured.',
-                        )
-                      : t('未开启下次限定保证。', 'No next-hit featured guarantee.')}{' '}
-                    {t(
-                      '本池没有该档限定时，已有保证进度保持不变。SP 与 SSR 共用初始出率、小保底及 SSR 碎片，限定占比、未中次数与兑换价以当前配置为准。',
-                      'A pool without this featured rarity preserves progress. SP uses the SSR rarity roll, hard pity and shards; featured share, misses and exchange price follow this configuration.',
-                    )}
+                      ? (rarity === 'SSR' && (pool.rules.ssr_guarantee_misses ?? 1) > 1
+                        ? t('连续两次未中限定后，下次同档必为限定。', 'After two consecutive misses, the next hit is featured.')
+                        : t('未中限定后，下次同档必为限定。', 'After a miss, the next hit is featured.'))
+                      : t('未开启下次限定保证。', 'No next-hit featured guarantee.')}
                   </p>
                 );
               })}
+              <p>{t(
+                '本池没有某档限定时，该档保证进度保持不变。SP 与 SSR 共用初始出率、小保底及 SSR 碎片，限定占比、未中次数与兑换价以当前配置为准。',
+                'A pool without a featured rarity preserves that guarantee. SP uses the SSR rarity roll, hard pity and shards; featured share, misses and exchange price follow this configuration.',
+              )}</p>
             </>
           )}
           <Fold title={t('新手、签到与碎片', 'Welcome gifts, check-in and shards')}>

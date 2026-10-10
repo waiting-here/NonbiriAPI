@@ -49,6 +49,7 @@ export function createGachaPort(client: QueryClient, account: string): GachaPort
       });
       void client.invalidateQueries({ queryKey: ['user', 'session'] });
       void client.invalidateQueries({ queryKey: ['user', 'credits'] });
+      void client.invalidateQueries({ queryKey: ['user', 'gacha-entry'] });
       return confirmed;
     },
   };
