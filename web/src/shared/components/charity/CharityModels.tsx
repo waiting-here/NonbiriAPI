@@ -1409,6 +1409,7 @@ export function ModelsPanel({
             <span>{t('common.operations.charity.searchModels')}</span>
             <input
               maxLength={256}
+              placeholder={t("common.operations.logs.presentation.modelPlaceholder")}
               aria-invalid={!validManagementSearch(queryDraft)}
               value={queryDraft}
               onChange={(event) => setQueryDraft(event.target.value)}

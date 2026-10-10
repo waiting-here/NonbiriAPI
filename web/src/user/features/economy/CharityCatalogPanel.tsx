@@ -176,6 +176,7 @@ function CatalogFilters({
   return (
     <div className="economy-catalog-filters">
       <FilterBar
+        secondaryAlwaysVisible
         search={
           <div className="economy-catalog-search">
             <label>

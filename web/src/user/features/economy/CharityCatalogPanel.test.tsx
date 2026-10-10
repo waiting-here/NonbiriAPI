@@ -137,7 +137,9 @@ describe('charity catalog panel', () => {
       },
     );
     await screen.findByText('22 items');
-    fireEvent.click(screen.getByText(/^Filters/, { selector: 'summary' }));
+    expect(screen.getByLabelText('Currently available')).toBeVisible();
+    expect(screen.queryByText(/^Filters/, { selector: 'summary' })).not.toBeInTheDocument();
+
     act(() => {
       fireEvent.change(screen.getByLabelText('Currently available'), { target: { value: 'all' } });
       fireEvent.change(screen.getByLabelText('Items per page'), { target: { value: '10' } });
@@ -233,7 +235,6 @@ describe('charity catalog panel', () => {
       { station: 'user', role: 'user' },
     );
     await screen.findByText('[公益]provider/initial');
-    await rendered.user.click(screen.getByText(/^Filters/, { selector: 'summary' }));
 
     await rendered.user.selectOptions(screen.getByLabelText('Allowed for level'), '3');
     expect(await screen.findByText('[公益]provider/level-3')).toBeVisible();
@@ -337,7 +338,7 @@ describe('charity catalog panel', () => {
       { station: 'user', role: 'user', route: '/charity?tab=models&page=2&q=needle' },
     );
     expect(await screen.findByText('[公益]provider/page-two')).toBeVisible();
-    await rendered.user.click(screen.getByText(/^Filters/, { selector: 'summary' }));
+
     await rendered.user.selectOptions(screen.getByLabelText('Model type'), 'images_generations');
 
     expect(await screen.findByText('[公益]provider/chat-and-image')).toBeVisible();
@@ -561,7 +562,6 @@ describe('charity catalog panel', () => {
     fireEvent.submit(search.closest('form')!);
     expect(await screen.findByText('[公益]provider/needle')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Previous' })).toBeNull();
-    await rendered.user.click(screen.getByText(/^Filters/, { selector: 'summary' }));
 
     fireEvent.change(screen.getByLabelText('Your access'), { target: { value: 'false' } });
     expect(await screen.findByText('[公益]provider/denied')).toBeVisible();

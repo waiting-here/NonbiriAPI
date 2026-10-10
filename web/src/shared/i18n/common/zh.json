@@ -136,11 +136,11 @@
     },
     "refresh": "刷新",
     "donationHandling": {
-      "title": "公共待办",
-      "filter": "待办状态",
-      "all": "全部待办状态",
+      "title": "捐赠待办",
+      "filter": "处理状态",
+      "all": "全部处理状态",
       "search": "搜索公开说明或捐赠 ID",
-      "applySearch": "搜索",
+      "applySearch": "应用筛选",
       "searchInvalid": "搜索内容最多 128 个字符。",
       "process": "标记为已处理",
       "idle": "闲置中 · 尚无模型绑定",
@@ -159,7 +159,7 @@
         "closed": "已关闭"
       },
       "help": {
-        "legacy": "既有捐赠不进入公共待办。",
+        "legacy": "既有捐赠不进入捐赠待办。",
         "pending": "管理员和协管共用此待办。审核、编辑或绑定不会自动标记为已处理。",
         "processed": "此捐赠已为所有管理者标记为已处理。",
         "closed": "此捐赠已结束，已自动退出待办。"
@@ -175,7 +175,8 @@
         "expired": "已到期",
         "member_removed": "全部密钥已移除",
         "account_deleted": "账号已删除"
-      }
+      },
+      "searchPlaceholder": "公开说明关键词或捐赠 ID"
     },
     "pageControls": {
       "size": "每页条数",
@@ -212,7 +213,7 @@
       "readOnly": "所有者配置（只读）",
       "hint": "0 表示不限制。自用和公益模型调用共用额度。RPM 统计最近 60 秒发出的请求，流式请求占用并发直至结束。达到上限后会尝试其他可用连接。"
     },
-    "itemId": "条目 ID",
+    "itemId": "捐赠 #{{id}}",
     "choices": {
       "filterPage": "筛选本页",
       "count": "显示 {{count}} / {{total}} 项",
@@ -370,14 +371,14 @@
           "chat": "聊天",
           "embeddings": "向量",
           "models": "读取模型列表",
-          "usage": "入 {{input}} · 出 {{output}}",
+          "usage": "输入 {{input}} · 输出 {{output}}",
           "cacheRead": "缓存读 {{tokens}}",
           "cacheWrite": "缓存写 {{tokens}}",
           "duration": "耗时",
           "seconds": "{{seconds}} 秒",
           "storage": "错误原文存储",
           "storageSummary": "已用 {{used}} / {{budget}} MiB · 历史累计 {{count}} 条未保存",
-          "storageFailures": "累计容量不足 {{capacity}} 条，读取或保存失败 {{count}} 条；当前可查 {{current}} 条。",
+          "storageFailures": "容量不足累计 {{capacity}} 条，读写失败累计 {{count}} 条；当前仍可查询 {{current}} 条缺失记录。",
           "retryHint": "稍后重试，或在模型里添加第二个来源。",
           "keyHint": "检查这个服务的密钥是否有效。",
           "rateHint": "服务商限制了频率，稍后再试。",
@@ -395,9 +396,13 @@
             "cancelled": "已取消",
             "failed": "失败（{{status}}）"
           },
-          "storageHistoryHelp": "累计数不会随记录到期减少。未保存的原文无法补回；下方可查询最近30天内仍在保留期的记录。容量仅计原文，不含数据库页、索引和 WAL。",
+          "storageHistoryHelp": "累计数量包含已到期记录。缺失的原文无法补回；可查询最近 30 天内仍在保留期的记录。容量只计算原文，不含数据库索引等开销。",
           "storageRecords": "查看未保存记录",
-          "images": "图像生成"
+          "images": "图像生成",
+          "modelPlaceholder": "例如 provider/model",
+          "userPlaceholder": "站内用户 ID",
+          "upstreamPlaceholder": "上游实际模型名",
+          "actions": "操作"
         }
       },
       "charity": {
@@ -428,7 +433,7 @@
           "physicalLimits": "物理并发与 RPM",
           "charityLimits": "公益限量",
           "bindingStatus": "模型绑定",
-          "handling": "公共待办",
+          "handling": "捐赠待办",
           "scope": "来源范围",
           "active": "当前有效来源",
           "all": "全部留存来源",

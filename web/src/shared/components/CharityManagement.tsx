@@ -1420,6 +1420,7 @@ function DonationsPanel({
                     <span>{t('common.donationHandling.search')}</span>
                     <input
                       type="search"
+                      placeholder={t("common.donationHandling.searchPlaceholder")}
                       value={queryDraft}
                       aria-invalid={!queryValid}
                       onChange={(event) => setQueryDraft(event.target.value)}
@@ -1621,7 +1622,7 @@ function DonationsPanel({
                             ),
                           ].join(' · ')}
                         >
-                          {t('common.itemId')} · {item.id} ·{' '}
+                          {t('common.itemId', { id: item.id })} ·{' '}
                           {item.sources[0] ? safeSourceLabel(item.sources[0], t) : '—'}
                           {BigInt(item.source_count) > 1n
                             ? ' · ' +

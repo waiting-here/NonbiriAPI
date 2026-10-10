@@ -7,6 +7,7 @@ export function FilterBar({
   ariaLabel,
   secondary,
   secondaryLabel,
+  secondaryAlwaysVisible = false,
   activeCount,
   chips,
   onClearAll,
@@ -18,6 +19,7 @@ export function FilterBar({
   ariaLabel?: string;
   secondary?: ReactNode;
   secondaryLabel: string;
+  secondaryAlwaysVisible?: boolean;
   activeCount: number;
   chips?: readonly { key: string; label: ReactNode; onRemove: () => void; removeLabel: string }[];
   onClearAll?: () => void;
@@ -43,7 +45,7 @@ export function FilterBar({
     >
       <div className="nb-filter__row">
         <div className="nb-filter__search">{search}</div>
-        {secondary ? (
+        {secondary && !secondaryAlwaysVisible ? (
           <details
             className="nb-filter__more"
             open={open}
@@ -67,6 +69,9 @@ export function FilterBar({
           </details>
         ) : null}
       </div>
+      {secondary && secondaryAlwaysVisible ? (
+        <div className="nb-filter__fields">{secondary}</div>
+      ) : null}
       {chips && chips.length ? (
         <div className="nb-chips">
           {chips.map((chip) => (

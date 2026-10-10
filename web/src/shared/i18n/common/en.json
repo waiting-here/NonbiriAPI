@@ -136,11 +136,11 @@
     },
     "refresh": "Refresh",
     "donationHandling": {
-      "title": "Shared follow-up",
-      "filter": "Follow-up status",
-      "all": "All follow-up states",
+      "title": "Donation follow-up",
+      "filter": "Handling status",
+      "all": "All handling states",
       "search": "Search public description or donation ID",
-      "applySearch": "Search",
+      "applySearch": "Apply filters",
       "searchInvalid": "Use at most 128 characters for this search.",
       "process": "Mark as processed",
       "idle": "Idle · no model bindings",
@@ -159,7 +159,7 @@
         "closed": "Closed"
       },
       "help": {
-        "legacy": "Existing donations do not enter the shared follow-up queue.",
+        "legacy": "Existing donations do not enter donation follow-up.",
         "pending": "Administrators and stewards share this queue. Reviewing, editing or binding a donation does not mark it as processed.",
         "processed": "This donation has been processed for everyone.",
         "closed": "This donation ended and was removed from the pending queue."
@@ -175,7 +175,8 @@
         "expired": "expired",
         "member_removed": "all keys removed",
         "account_deleted": "account deleted"
-      }
+      },
+      "searchPlaceholder": "Public description or donation ID"
     },
     "pageControls": {
       "size": "Items per page",
@@ -212,7 +213,7 @@
       "readOnly": "Owner's limits (read only)",
       "hint": "0 means unlimited. Personal and charity model calls share these limits. RPM counts requests dispatched in the last 60 seconds; streaming occupies concurrency until it ends. When full, the next available connection is tried."
     },
-    "itemId": "Item ID",
+    "itemId": "Donation #{{id}}",
     "choices": {
       "filterPage": "Filter this page",
       "count": "{{count}} / {{total}} shown",
@@ -370,14 +371,14 @@
           "chat": "Chat",
           "embeddings": "Embeddings",
           "models": "Model listing",
-          "usage": "In {{input}} · Out {{output}}",
+          "usage": "Input {{input}} · output {{output}}",
           "cacheRead": "Cache read {{tokens}}",
           "cacheWrite": "Cache write {{tokens}}",
           "duration": "Duration",
           "seconds": "{{seconds}} seconds",
           "storage": "Error text storage",
           "storageSummary": "{{used}} / {{budget}} MiB used · {{count}} bodies omitted over time",
-          "storageFailures": "Lifetime totals: {{capacity}} over budget, {{count}} read or storage failures. {{current}} records currently available.",
+          "storageFailures": "{{capacity}} omitted for capacity, {{count}} read/write failures in total; {{current}} missing records remain queryable.",
           "retryHint": "Retry later, or add a second source to the model.",
           "keyHint": "Check that this service key is valid.",
           "rateHint": "The provider limited the rate. Try again later.",
@@ -395,9 +396,13 @@
             "cancelled": "Cancelled",
             "failed": "Failed ({{status}})"
           },
-          "storageHistoryHelp": "Lifetime totals do not decrease when records expire. Missing bodies cannot be recovered. Browse retained records from the last 30 days below. Capacity counts raw bodies only, excluding database pages, indexes and WAL.",
+          "storageHistoryHelp": "Lifetime totals include expired records. Missing originals cannot be recovered; retained records from the last 30 days remain queryable. Capacity counts original content only, excluding database overhead.",
           "storageRecords": "Browse missing records",
-          "images": "Image generation"
+          "images": "Image generation",
+          "modelPlaceholder": "e.g. provider/model",
+          "userPlaceholder": "Site user ID",
+          "upstreamPlaceholder": "Exact upstream model name",
+          "actions": "Actions"
         }
       },
       "charity": {
@@ -428,7 +433,7 @@
           "physicalLimits": "Physical concurrency and RPM",
           "charityLimits": "Charity limits",
           "bindingStatus": "Model bindings",
-          "handling": "Public follow-up",
+          "handling": "Donation follow-up",
           "scope": "Source scope",
           "active": "Active sources",
           "all": "All retained sources",
