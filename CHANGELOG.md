@@ -8,6 +8,8 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Added
 
+- Optional charity-model long-context prices and an independent one-time extra-long penalty based on reported input, including cached tokens. Alternate prices keep existing discounts; penalties do not affect donor rewards.
+
 - The Gacha Simulator with 57 cards across thirteen themes, fifteen animated SSR and two animated SP illustrations, seven covers, unlockable group illustrations and dedicated sound effects.
 - A permanent pool and concurrent scheduled limited pools, configurable probabilities and hard guarantees, and cross-period progress shared by pools with identical rules.
 - Standard and limited tickets, game-credit-first standard exchanges, general-credit-only limited exchanges, a one-time ten-ticket welcome gift with a first-ten-pull SSR guarantee, and daily activity check-ins.
@@ -20,7 +22,7 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Changed
 
-- Database schema revision 10 adds transactional collection, guarantee and activity-journal storage while preserving supported predecessor data and existing legal overrides. Account export schema 16 includes the user's collection activity and appearance.
+- Database schema revision 11 adds transactional collection, guarantee and activity-journal storage while preserving supported predecessor data and existing legal overrides. Account export schema 16 includes the user's collection activity and appearance.
 
 ### Fixed
 

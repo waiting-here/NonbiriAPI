@@ -195,7 +195,7 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,0,?,?)`,
 	}
 	excluded, _ := openai.NormalizeExcludedRequestFields(input.ExcludedRequestFields)
 	encodedExcluded, _ := json.Marshal(excluded)
-	if _, err := tx.ExecContext(ctx, `UPDATE charity_models SET is_mainstream=?,excluded_request_fields=?,transport_rule=?,model_types=? WHERE id=?`, input.IsMainstream, string(encodedExcluded), input.TransportRule, input.ModelTypes, modelID); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE charity_models SET is_mainstream=?,excluded_request_fields=?,transport_rule=?,model_types=?,context_pricing=? WHERE id=?`, input.IsMainstream, string(encodedExcluded), input.TransportRule, input.ModelTypes, prices.contextPricing, modelID); err != nil {
 		return resources.MutationResult[AdminCharityModel]{}, err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO charity_model_stats(model_id) VALUES(?)`, modelID); err != nil {
@@ -345,6 +345,7 @@ func (s *Service) patch(ctx context.Context, role roleKind, actorUserID, modelID
 		updated.mode = input.Pricing.Mode
 		updated.requestUser, updated.requestReward = prices.requestUser, prices.requestReward
 		updated.user, updated.reward = prices.user, prices.reward
+		updated.contextPricing = prices.contextPricing
 	}
 	if input.Discount != nil {
 		if !validDiscountPatch(*input.Discount) {
@@ -416,7 +417,7 @@ revision=revision+1,updated_at=? WHERE id=? AND revision=?`,
 			return resources.MutationResult[AdminCharityModel]{}, err
 		}
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE charity_models SET is_mainstream=?,excluded_request_fields=?,transport_rule=?,model_types=? WHERE id=?`, updated.isMainstream, updated.excludedFields, updated.transportRule, updated.modelTypes, modelID); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE charity_models SET is_mainstream=?,excluded_request_fields=?,transport_rule=?,model_types=?,context_pricing=? WHERE id=?`, updated.isMainstream, updated.excludedFields, updated.transportRule, updated.modelTypes, updated.contextPricing, modelID); err != nil {
 		return resources.MutationResult[AdminCharityModel]{}, err
 	}
 	if input.TokenReserveCredits != nil {
@@ -651,6 +652,7 @@ func listModelsQuery(ctx context.Context, queryer modelQueryer, query string, en
 }
 
 type storedModel struct {
+	contextPricing                   string
 	modelTypes                       modeltype.Set
 	transportRule                    transportpolicy.Rule
 	rolePolicy                       string
@@ -674,11 +676,11 @@ request_user_price,request_donor_reward,uncached_user_price,cache_write_user_pri
 uncached_donor_reward,cache_write_donor_reward,cache_read_donor_reward,output_donor_reward,
 discount_percent,discount_start_at,discount_end_at,discount_enabled,flatten_tool_calls,revision,binding_revision,
 (SELECT allowed_level_mask FROM charity_model_access WHERE model_id=charity_models.id),
-(SELECT public_description FROM charity_model_access WHERE model_id=charity_models.id),is_mainstream,excluded_request_fields,role_policy,transport_rule,model_types
+(SELECT public_description FROM charity_model_access WHERE model_id=charity_models.id),is_mainstream,excluded_request_fields,role_policy,transport_rule,model_types,context_pricing
 FROM charity_models WHERE id=?`, modelID).Scan(&value.id, &value.provider, &value.model, &value.enabled, &value.mode,
 		&value.requestUser, &value.requestReward, &value.user[0], &value.user[1], &value.user[2], &value.user[3],
 		&value.reward[0], &value.reward[1], &value.reward[2], &value.reward[3], &value.discountPercent,
-		&value.discountStart, &value.discountEnd, &value.discountEnabled, &value.flatten, &value.revision, &value.bindingRevision, &value.allowedMask, &value.publicDescription, &value.isMainstream, &value.excludedFields, &value.rolePolicy, &value.transportRule, &value.modelTypes)
+		&value.discountStart, &value.discountEnd, &value.discountEnabled, &value.flatten, &value.revision, &value.bindingRevision, &value.allowedMask, &value.publicDescription, &value.isMainstream, &value.excludedFields, &value.rolePolicy, &value.transportRule, &value.modelTypes, &value.contextPricing)
 	if errors.Is(err, sql.ErrNoRows) {
 		return storedModel{}, ErrNotFound
 	}
@@ -713,7 +715,7 @@ COALESCE((SELECT strategy FROM charity_model_routing WHERE model_id=cm.id),'expi
 (SELECT affinity_ttl_seconds FROM charity_routing_settings WHERE model_id=cm.id),
 (SELECT allowed_level_mask FROM charity_model_access WHERE model_id=cm.id),
 (SELECT public_description FROM charity_model_access WHERE model_id=cm.id),
-(SELECT amount_milli FROM charity_model_token_reserves WHERE model_id=cm.id),cm.is_mainstream,cm.excluded_request_fields,cm.role_policy,cm.transport_rule,cm.model_types
+(SELECT amount_milli FROM charity_model_token_reserves WHERE model_id=cm.id),cm.is_mainstream,cm.excluded_request_fields,cm.role_policy,cm.transport_rule,cm.model_types,cm.context_pricing
 FROM charity_models cm LEFT JOIN charity_model_stats s ON s.model_id=cm.id WHERE cm.id=?`
 
 type rowScanner interface{ Scan(...any) error }
@@ -729,12 +731,12 @@ func scanAdminModel(row rowScanner) (AdminCharityModel, error) {
 	var affinityTTL sql.NullInt64
 	var samples, successes int
 	var mask int
-	var excluded, encodedPolicy string
+	var excluded, encodedPolicy, contextPricing string
 	err := row.Scan(&id, &value.Provider, &value.Model, &value.FullName, &enabled, &mode,
 		&requestUser, &requestReward, &user[0], &user[1], &user[2], &user[3],
 		&reward[0], &reward[1], &reward[2], &reward[3], &discountEnabled, &value.Discount.Percent,
 		&start, &end, &flatten, &revision, &bindingRevision, &bindingCount, &samples, &successes,
-		&value.CreatedAt, &value.UpdatedAt, &value.RouteStrategy, &affinityTTL, &mask, &value.PublicDescription, &tokenReserve, &value.IsMainstream, &excluded, &encodedPolicy, &value.TransportRule, &value.ModelTypes)
+		&value.CreatedAt, &value.UpdatedAt, &value.RouteStrategy, &affinityTTL, &mask, &value.PublicDescription, &tokenReserve, &value.IsMainstream, &excluded, &encodedPolicy, &value.TransportRule, &value.ModelTypes, &contextPricing)
 	if errors.Is(err, sql.ErrNoRows) {
 		return AdminCharityModel{}, ErrNotFound
 	}
@@ -800,6 +802,9 @@ func scanAdminModel(row rowScanner) (AdminCharityModel, error) {
 	} else {
 		return AdminCharityModel{}, ErrInvariant
 	}
+	if err := adminContextPricing(&value.Pricing, contextPricing); err != nil {
+		return AdminCharityModel{}, err
+	}
 	value.RollingSuccess.SampleCount = strconv.Itoa(samples)
 	value.RollingSuccess.SuccessCount = strconv.Itoa(successes)
 	if samples > 0 {
@@ -823,6 +828,7 @@ func stewardModel(value AdminCharityModel) StewardCharityModel {
 			CacheReadInput: value.Pricing.DonorRewards.CacheReadInput, Output: value.Pricing.DonorRewards.Output,
 		}
 	}
+	stewardContextPricing(value.Pricing, &pricing)
 	return StewardCharityModel{
 		ModelTypes: value.ModelTypes.Clone(), TransportRule: value.TransportRule, RolePolicy: value.RolePolicy.Clone(),
 		IsMainstream: value.IsMainstream, ExcludedRequestFields: append([]string{}, value.ExcludedRequestFields...),
@@ -843,6 +849,7 @@ func stewardModel(value AdminCharityModel) StewardCharityModel {
 }
 
 type validatedPricing struct {
+	contextPricing             string
 	requestUser, requestReward int64
 	user, reward               [4]int64
 }
@@ -943,6 +950,11 @@ func nullIntPointer(value sql.NullInt64) *int64 {
 
 func validatePricing(input PricingInput) (validatedPricing, error) {
 	var out validatedPricing
+	context, err := validateContextPricing(input)
+	if err != nil {
+		return out, err
+	}
+	out.contextPricing = context.Encode()
 	switch input.Mode {
 	case "per_request":
 		if input.UserPrice == nil || input.DonorReward == nil || input.UserPrices != nil || input.DonorRewards != nil {

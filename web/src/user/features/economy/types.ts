@@ -8,7 +8,7 @@ export interface CharityCapabilityTokenPrices {
   output: string;
 }
 
-export type CharityCapabilityPricing =
+export type CharityBasePricing =
   | {
       mode: 'per_request';
       userPriceMilli: string;
@@ -19,6 +19,11 @@ export type CharityCapabilityPricing =
       userPricesMilli: CharityCapabilityTokenPrices;
       discountedUserPricesMilli: CharityCapabilityTokenPrices;
     };
+
+export type CharityCapabilityPricing = CharityBasePricing & {
+  longContext?: CharityBasePricing & { inputThreshold: string };
+  contextPenalty?: { inputThreshold: string; fineMilli: string };
+};
 
 export interface CharityCapabilityDiscount {
   enabled: boolean;

@@ -78,11 +78,13 @@ type CapabilityTokenPrices struct {
 }
 
 type CapabilityPricing struct {
-	Mode                      string                 `json:"mode"`
-	UserPriceMilli            *string                `json:"user_price_milli"`
-	DiscountedUserPriceMilli  *string                `json:"discounted_user_price_milli"`
-	UserPricesMilli           *CapabilityTokenPrices `json:"user_prices_milli"`
-	DiscountedUserPricesMilli *CapabilityTokenPrices `json:"discounted_user_prices_milli"`
+	LongContext               *CapabilityLongContext    `json:"long_context,omitempty"`
+	ContextPenalty            *CapabilityContextPenalty `json:"context_penalty,omitempty"`
+	Mode                      string                    `json:"mode"`
+	UserPriceMilli            *string                   `json:"user_price_milli"`
+	DiscountedUserPriceMilli  *string                   `json:"discounted_user_price_milli"`
+	UserPricesMilli           *CapabilityTokenPrices    `json:"user_prices_milli"`
+	DiscountedUserPricesMilli *CapabilityTokenPrices    `json:"discounted_user_prices_milli"`
 }
 
 type CapabilityDiscount struct {
@@ -118,11 +120,13 @@ type AdminTokenPrices struct {
 }
 
 type AdminPricing struct {
-	Mode         string            `json:"mode"`
-	UserPrice    *string           `json:"user_price,omitempty"`
-	DonorReward  *string           `json:"donor_reward,omitempty"`
-	UserPrices   *AdminTokenPrices `json:"user_prices,omitempty"`
-	DonorRewards *AdminTokenPrices `json:"donor_rewards,omitempty"`
+	LongContext    *AdminLongContext    `json:"long_context,omitempty"`
+	ContextPenalty *AdminContextPenalty `json:"context_penalty,omitempty"`
+	Mode           string               `json:"mode"`
+	UserPrice      *string              `json:"user_price,omitempty"`
+	DonorReward    *string              `json:"donor_reward,omitempty"`
+	UserPrices     *AdminTokenPrices    `json:"user_prices,omitempty"`
+	DonorRewards   *AdminTokenPrices    `json:"donor_rewards,omitempty"`
 }
 
 type AdminDiscount struct {
@@ -175,11 +179,13 @@ type StewardTokenPrices struct {
 }
 
 type StewardPricing struct {
-	Mode         string              `json:"mode"`
-	UserPrice    *string             `json:"user_price,omitempty"`
-	DonorReward  *string             `json:"donor_reward,omitempty"`
-	UserPrices   *StewardTokenPrices `json:"user_prices,omitempty"`
-	DonorRewards *StewardTokenPrices `json:"donor_rewards,omitempty"`
+	LongContext    *StewardLongContext    `json:"long_context,omitempty"`
+	ContextPenalty *StewardContextPenalty `json:"context_penalty,omitempty"`
+	Mode           string                 `json:"mode"`
+	UserPrice      *string                `json:"user_price,omitempty"`
+	DonorReward    *string                `json:"donor_reward,omitempty"`
+	UserPrices     *StewardTokenPrices    `json:"user_prices,omitempty"`
+	DonorRewards   *StewardTokenPrices    `json:"donor_rewards,omitempty"`
 }
 
 type StewardDiscount struct {
@@ -296,11 +302,13 @@ type TokenPricesInput struct {
 }
 
 type PricingInput struct {
-	Mode         string            `json:"mode"`
-	UserPrice    *string           `json:"user_price,omitempty"`
-	DonorReward  *string           `json:"donor_reward,omitempty"`
-	UserPrices   *TokenPricesInput `json:"user_prices,omitempty"`
-	DonorRewards *TokenPricesInput `json:"donor_rewards,omitempty"`
+	LongContext    *LongContextInput    `json:"long_context,omitempty"`
+	ContextPenalty *ContextPenaltyInput `json:"context_penalty,omitempty"`
+	Mode           string               `json:"mode"`
+	UserPrice      *string              `json:"user_price,omitempty"`
+	DonorReward    *string              `json:"donor_reward,omitempty"`
+	UserPrices     *TokenPricesInput    `json:"user_prices,omitempty"`
+	DonorRewards   *TokenPricesInput    `json:"donor_rewards,omitempty"`
 }
 
 type DiscountInput struct {

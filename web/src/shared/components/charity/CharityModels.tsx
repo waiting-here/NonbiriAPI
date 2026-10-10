@@ -1,3 +1,4 @@
+import { ContextPricingFields } from './ContextPricingFields';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { ModelTypesField, ModelTypesSummary } from '@shared/components/ModelTypesField';
 import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
@@ -69,6 +70,13 @@ import {
 } from './managementFields';
 
 interface ModelDraft {
+  longEnabled: boolean;
+  longThreshold: string;
+  longRequest: string;
+  longPrices: TokenPrices;
+  penaltyEnabled: boolean;
+  penaltyThreshold: string;
+  penaltyFine: string;
   modelTypes: ModelType[];
   transportRule: TransportRule;
   rolePolicy: RolePolicyDraft;
@@ -102,6 +110,13 @@ const zeroPrices = (): TokenPrices => ({
 
 function modelDraft(model?: CharityModel): ModelDraft {
   return {
+    longEnabled: Boolean(model?.pricing.long_context),
+    longThreshold: model?.pricing.long_context?.input_threshold ?? '',
+    longRequest: model?.pricing.long_context?.user_price ?? '0',
+    longPrices: model?.pricing.long_context?.user_prices ?? zeroPrices(),
+    penaltyEnabled: Boolean(model?.pricing.context_penalty),
+    penaltyThreshold: model?.pricing.context_penalty?.input_threshold ?? '',
+    penaltyFine: model?.pricing.context_penalty?.fine ?? '0',
     modelTypes: model ? [...model.model_types] : ['chat_completions'],
     transportRule: model?.transport_rule ?? 'passthrough',
     rolePolicy: draftFromRolePolicy(model?.role_policy),
@@ -149,10 +164,29 @@ function modelBody(
     enabled: draft.enabled,
     allowed_levels: MODEL_LEVELS.filter((level) => draft.allowedLevels.includes(level)),
     public_description: normalizePublicDescriptionInput(draft.publicDescription),
-    pricing:
-      draft.mode === 'per_request'
+    pricing: {
+      ...(draft.mode === 'per_request'
         ? { mode: 'per_request', user_price: draft.requestUser, donor_reward: draft.requestDonor }
-        : { mode: 'per_token', user_prices: draft.userPrices, donor_rewards: draft.donorRewards },
+        : { mode: 'per_token', user_prices: draft.userPrices, donor_rewards: draft.donorRewards }),
+      ...(draft.longEnabled
+        ? {
+            long_context: {
+              input_threshold: draft.longThreshold,
+              ...(draft.mode === 'per_request'
+                ? { user_price: draft.longRequest }
+                : { user_prices: draft.longPrices }),
+            },
+          }
+        : {}),
+      ...(draft.penaltyEnabled
+        ? {
+            context_penalty: {
+              input_threshold: draft.penaltyThreshold,
+              fine: draft.penaltyFine,
+            },
+          }
+        : {}),
+    },
     discount: {
       enabled: draft.discountEnabled,
       percent: draft.discountPercent,
@@ -176,6 +210,7 @@ type ModelValidation =
   | 'modelLevels'
   | 'publicDescription'
   | 'modelPrices'
+  | 'contextThreshold'
   | 'tokenReserveCredits'
   | 'affinityTTLSeconds'
   | 'discountPercent'
@@ -213,6 +248,16 @@ function modelDraftError(draft: ModelDraft): ModelValidation | null {
     draft.mode === 'per_request'
       ? [draft.requestUser, draft.requestDonor]
       : [...Object.values(draft.userPrices), ...Object.values(draft.donorRewards)];
+  if (draft.longEnabled)
+    prices.push(
+      ...(draft.mode === 'per_request' ? [draft.longRequest] : Object.values(draft.longPrices)),
+    );
+  if (draft.penaltyEnabled) prices.push(draft.penaltyFine);
+  if (
+    (draft.longEnabled && !/^[1-9][0-9]*$/.test(draft.longThreshold)) ||
+    (draft.penaltyEnabled && !/^[1-9][0-9]*$/.test(draft.penaltyThreshold))
+  )
+    return 'contextThreshold';
   if (prices.some((value) => !validAmount(value))) {
     return 'modelPrices';
   }
@@ -664,6 +709,11 @@ function ModelForm({
           </>
         )}
       </fieldset>
+      <ContextPricingFields
+        value={draft}
+        role={role}
+        onChange={(fields) => setDraft((current) => ({ ...current, ...fields }))}
+      />
       <details className="ops-advanced" ref={discountDisclosure}>
         <summary>
           <strong>{copy.discountSettings}</strong>

@@ -51,7 +51,8 @@ var storageSchema = schemaRegistry{
 		{version: 7, manifest: modelTypesAndImagesManifestHash, sql: modelTypesAndImagesSQL},
 		{version: 8, manifest: personalBalancedRoutingManifestHash, sql: personalBalancedRoutingSQL},
 		{version: 9, manifest: gachaManifestHash, sql: gachaSQL},
-		{version: 10, manifest: PinnedGenerationTwoManifestHash, sql: userAppearanceSQL},
+		{version: 10, manifest: userAppearanceManifestHash, sql: userAppearanceSQL},
+		{version: 11, manifest: PinnedGenerationTwoManifestHash, sql: contextPricingSQL},
 	},
 	bridges: preReleaseSchemaBridges(),
 }

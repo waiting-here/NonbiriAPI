@@ -1,3 +1,4 @@
+import { contextPriceProps } from './contextPrices';
 import { ModelTypesSummary } from '@shared/components/ModelTypesField';
 import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react';
 import { Link } from 'react-router';
@@ -198,6 +199,7 @@ export function CharityCapabilityPanel({ capability }: { capability: CharityCapa
                   <ModelTypesSummary value={model.modelTypes} />
                 </div>
                 <CharityPriceTable
+                  {...contextPriceProps(model.pricing, t)}
                   mode={model.pricing.mode}
                   rows={rows}
                   serverNow={capability.serverNow}
@@ -445,7 +447,11 @@ export function DonationComposer({
           closeLabel={t('common.close')}
           busy={mutation.isPending}
           footer={
-            <button type="button" className="nb-btn nb-btn--primary" onClick={() => setPickerOpen(false)}>
+            <button
+              type="button"
+              className="nb-btn nb-btn--primary"
+              onClick={() => setPickerOpen(false)}
+            >
               {t('user.charity.presentation.selectionDone')}
             </button>
           }

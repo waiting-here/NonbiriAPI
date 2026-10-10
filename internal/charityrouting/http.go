@@ -262,11 +262,13 @@ type tokenPricesWire struct {
 }
 
 type pricingWire struct {
-	Mode         requiredField[string]          `json:"mode"`
-	UserPrice    requiredField[string]          `json:"user_price"`
-	DonorReward  requiredField[string]          `json:"donor_reward"`
-	UserPrices   requiredField[tokenPricesWire] `json:"user_prices"`
-	DonorRewards requiredField[tokenPricesWire] `json:"donor_rewards"`
+	LongContext    nullableField[longContextWire]    `json:"long_context"`
+	ContextPenalty nullableField[contextPenaltyWire] `json:"context_penalty"`
+	Mode           requiredField[string]             `json:"mode"`
+	UserPrice      requiredField[string]             `json:"user_price"`
+	DonorReward    requiredField[string]             `json:"donor_reward"`
+	UserPrices     requiredField[tokenPricesWire]    `json:"user_prices"`
+	DonorRewards   requiredField[tokenPricesWire]    `json:"donor_rewards"`
 }
 
 func parseTokenPrices(wire tokenPricesWire) (*TokenPricesInput, map[string]any, error) {
@@ -308,6 +310,9 @@ func parsePricing(wire pricingWire) (PricingInput, map[string]any, error) {
 		}
 	default:
 		return PricingInput{}, nil, ErrInvalidRequest
+	}
+	if err := parseContextPricing(wire, &input, canonical); err != nil {
+		return PricingInput{}, nil, err
 	}
 	return input, canonical, nil
 }

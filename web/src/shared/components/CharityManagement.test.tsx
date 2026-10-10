@@ -954,6 +954,21 @@ describe('CharityManagement corrective controls', () => {
       target: { value: '86400' },
     });
 
+    await view.user.click(
+      editor.getByText('Long context and excess-context penalty', { exact: true }),
+    );
+    await view.user.click(editor.getByRole('switch', { name: 'Enable long-context prices' }));
+    fireEvent.change(editor.getByLabelText('Long-context threshold (input tokens)'), {
+      target: { value: '100000' },
+    });
+    fireEvent.change(editor.getByLabelText('Long-context price per request (credits)'), {
+      target: { value: '8' },
+    });
+    await view.user.click(editor.getByRole('switch', { name: 'Enable excess-context penalty' }));
+    fireEvent.change(editor.getByLabelText('Penalty threshold (input tokens)'), {
+      target: { value: '200000' },
+    });
+    fireEvent.change(editor.getByLabelText('One-time fine (credits)'), { target: { value: '50' } });
     await view.user.click(editor.getByRole('button', { name: 'Save model' }));
 
     await waitFor(() => expect(patchBodies).toHaveLength(1));
@@ -970,7 +985,13 @@ describe('CharityManagement corrective controls', () => {
       enabled: true,
       allowed_levels: [1, 2, 3, 4, 5],
       public_description: '',
-      pricing: { mode: 'per_request', user_price: '1', donor_reward: '0' },
+      pricing: {
+        mode: 'per_request',
+        user_price: '1',
+        donor_reward: '0',
+        long_context: { input_threshold: '100000', user_price: '8' },
+        context_penalty: { input_threshold: '200000', fine: '50' },
+      },
       discount: { enabled: true, percent: 10, start_at: start, end_at: end },
       transport_rule: 'passthrough',
       flatten_tool_calls: false,

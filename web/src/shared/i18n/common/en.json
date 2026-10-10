@@ -643,7 +643,8 @@
           "modelPrices": "Every price must be an exact non-negative credit amount with at most three decimal places.",
           "tokenReserveCredits": "Reserve 0.001–9,000,000,000,000 credits, with up to three decimal places.",
           "discountPercent": "Discount percent must be an integer from 0 through 100.",
-          "discountDates": "Discount dates must be valid and the end must be later than the start."
+          "discountDates": "Discount dates must be valid and the end must be later than the start.",
+          "contextThreshold": "Enter a positive whole number of input tokens."
         },
         "discountSummary": "Enabled at {{percent}}% of the regular price",
         "batchActions": "Batch actions",
@@ -652,7 +653,24 @@
         "failureStrategy": "Failure strategy",
         "quotaReserve": "Quota and reserve",
         "adaptationSettings": "Request adaptation",
-        "imageBillingHelp": "Generating several images in one request counts as one call. Missing usage follows the model’s reservation settlement rule."
+        "imageBillingHelp": "Generating several images in one request counts as one call. Missing usage follows the model’s reservation settlement rule.",
+        "context": {
+          "settings": "Long context and excess-context penalty",
+          "help": "Thresholds use reported total input tokens, including cache reads and writes. Each rule applies independently.",
+          "long": "Enable long-context prices",
+          "longHelp": "At the threshold, all input and output use these prices with the usual discount. Donor rewards stay unchanged.",
+          "longThreshold": "Long-context threshold (input tokens)",
+          "requestPrice": "Long-context price per request (credits)",
+          "penalty": "Enable excess-context penalty",
+          "penaltyHelp": "At the threshold, charge one extra fine per request. No discount or additional donor reward applies.",
+          "penaltyThreshold": "Penalty threshold (input tokens)",
+          "fine": "One-time fine (credits)",
+          "longNotice": "Long context: input ≥ {{threshold}} tokens",
+          "penaltyNotice": "Context penalty: input ≥ {{threshold}} tokens",
+          "fineNote": "Extra {{amount}} credits per request, without a discount",
+          "longAvailable": "Long-context prices available; expand to view",
+          "usageHelp": "Thresholds use only reported usage, including cache reads and writes."
+        }
       },
       "management": {
         "details": "Technical details",

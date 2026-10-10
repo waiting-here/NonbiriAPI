@@ -1,3 +1,4 @@
+import { formatCount } from '@shared/utils/formatNumber';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Amount, formatAmount } from '@shared/components/Amount';
@@ -14,6 +15,8 @@ export interface CharityPriceRow {
 
 export interface CharityPriceTableProps {
   compact?: boolean;
+  longContext?: { inputThreshold: string; rows: CharityPriceRow[] };
+  contextPenalty?: { inputThreshold: string; fineMilli: string };
   mode: 'per_request' | 'per_token';
   rows: CharityPriceRow[];
   serverNow: number;
@@ -70,6 +73,8 @@ export function CharityPriceTable({
   serverNow,
   discount,
   compact = false,
+  longContext,
+  contextPenalty,
 }: CharityPriceTableProps) {
   const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
@@ -102,6 +107,18 @@ export function CharityPriceTable({
       </span>
     ) : null;
 
+  const contextKey = 'common.operations.charity.context.';
+  const penaltyNote = contextPenalty && (
+    <p className="nb-sub charity-context-note">
+      <strong>
+        {t(contextKey + 'penaltyNotice', {
+          threshold: formatCount(contextPenalty.inputThreshold).display,
+        })}
+      </strong>
+      <span>{t(contextKey + 'fineNote', { amount: formatAmount(contextPenalty.fineMilli) })}</span>
+    </p>
+  );
+
   if (compact)
     return (
       <div className="charity-prices-compact">
@@ -123,6 +140,8 @@ export function CharityPriceTable({
             </div>
           ))}
         </dl>
+        {longContext && <p className="nb-sub">{t(contextKey + 'longAvailable')}</p>}
+        {penaltyNote}
       </div>
     );
 
@@ -167,40 +186,61 @@ export function CharityPriceTable({
               {showRewards ? <th scope="col">{t('user.charity.donorReward')}</th> : null}
             </tr>
           </thead>
-          <tbody>
-            {rows.map((row) => {
-              const current = active ? row.discountedUserMilli : undefined;
-              return (
-                <tr key={row.label}>
-                  <th scope="row">{row.label}</th>
-                  <td>
-                    {active && current !== undefined && current !== row.userMilli ? (
-                      <span className="charity-price-pair">
-                        <s className="charity-original">
-                          <ExactAmount
-                            value={row.userMilli}
-                            label={t('user.charity.originalPrice')}
-                          />
-                        </s>
-                        <strong className="charity-current">
-                          <ExactAmount value={current} label={t('user.charity.currentPrice')} />
-                        </strong>
-                      </span>
-                    ) : (
-                      <ExactAmount value={row.userMilli} label={t('user.charity.userPrice')} />
-                    )}
-                  </td>
-                  {showRewards && row.rewardMilli !== undefined ? (
-                    <td>
-                      <ExactAmount value={row.rewardMilli} label={t('user.charity.donorReward')} />
-                    </td>
-                  ) : null}
+          {[
+            { rows, threshold: undefined },
+            ...(longContext
+              ? [{ rows: longContext.rows, threshold: longContext.inputThreshold }]
+              : []),
+          ].map((group, index) => (
+            <tbody key={index}>
+              {group.threshold && (
+                <tr className="charity-context-heading">
+                  <th scope="rowgroup" colSpan={showRewards ? 3 : 2}>
+                    {t(contextKey + 'longNotice', {
+                      threshold: formatCount(group.threshold).display,
+                    })}
+                  </th>
                 </tr>
-              );
-            })}
-          </tbody>
+              )}
+              {group.rows.map((row) => {
+                const current = active ? row.discountedUserMilli : undefined;
+                return (
+                  <tr key={row.label}>
+                    <th scope="row">{row.label}</th>
+                    <td>
+                      {active && current !== undefined && current !== row.userMilli ? (
+                        <span className="charity-price-pair">
+                          <s className="charity-original">
+                            <ExactAmount
+                              value={row.userMilli}
+                              label={t('user.charity.originalPrice')}
+                            />
+                          </s>
+                          <strong className="charity-current">
+                            <ExactAmount value={current} label={t('user.charity.currentPrice')} />
+                          </strong>
+                        </span>
+                      ) : (
+                        <ExactAmount value={row.userMilli} label={t('user.charity.userPrice')} />
+                      )}
+                    </td>
+                    {showRewards && row.rewardMilli !== undefined ? (
+                      <td>
+                        <ExactAmount
+                          value={row.rewardMilli}
+                          label={t('user.charity.donorReward')}
+                        />
+                      </td>
+                    ) : null}
+                  </tr>
+                );
+              })}
+            </tbody>
+          ))}
         </table>
       </div>
+      {penaltyNote}
+      {(longContext || contextPenalty) && <p className="nb-sub">{t(contextKey + 'usageHelp')}</p>}
       <p className="muted charity-price-note">
         {t(mode === 'per_token' ? 'user.charity.tokenUnit' : 'user.charity.requestUnit')}{' '}
         {t('user.charity.billingHelp')}

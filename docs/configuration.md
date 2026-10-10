@@ -252,3 +252,7 @@ Failed discovery displays a dedicated explanation and, while its diagnostic reco
 ## Card collection activity
 
 The Gacha Simulator is permanently available to eligible signed-in users when the site is operational and its timezone is configured. Its dedicated administrator page uses `GET/POST /admin/api/gacha` for rules, prices, quotas, pools and saved presets. The generic activity master switch does not close this permanent collection activity. Only published limited pools use schedules; installation does not publish a limited pool automatically. See [the activity guide](gacha.md).
+
+## Charity context prices
+
+Charity model pricing can enable independent input thresholds for full long-context prices and a one-time extra-long penalty. Both default off and follow existing pricing permissions. See [configuration and billing behavior](charity-context-pricing.md).

@@ -643,7 +643,8 @@
           "modelPrices": "每项价格都必须是精确的非负积分金额，最多三位小数。",
           "tokenReserveCredits": "预留积分范围：0.001～9,000,000,000,000，最多三位小数。",
           "discountPercent": "折扣百分比必须是 0 至 100 的整数。",
-          "discountDates": "折扣日期必须有效，且结束时间必须晚于开始时间。"
+          "discountDates": "折扣日期必须有效，且结束时间必须晚于开始时间。",
+          "contextThreshold": "门槛请填写大于 0 的整数 token 数。"
         },
         "discountSummary": "已启用，价格为原价的 {{percent}}%",
         "batchActions": "批量操作",
@@ -652,7 +653,24 @@
         "failureStrategy": "失败策略",
         "quotaReserve": "额度与预留",
         "adaptationSettings": "请求适配",
-        "imageBillingHelp": "图像一次请求生成多张仍计一次；未返回用量时，沿用模型的预留结算规则。"
+        "imageBillingHelp": "图像一次请求生成多张仍计一次；未返回用量时，沿用模型的预留结算规则。",
+        "context": {
+          "settings": "长上下文与超长惩罚",
+          "help": "门槛按上游返回的输入 token 总数计算，包含缓存读写。两项规则可分别触发。",
+          "long": "启用长上下文价格",
+          "longHelp": "达到门槛后，全部输入和输出改用以下价格，沿用折扣；捐赠者回馈不变。",
+          "longThreshold": "长上下文门槛（输入 token）",
+          "requestPrice": "长上下文单次价格（积分）",
+          "penalty": "启用超长惩罚",
+          "penaltyHelp": "达到门槛后，每个请求额外收取一次罚款，不打折，不增加捐赠者回馈。",
+          "penaltyThreshold": "超长惩罚门槛（输入 token）",
+          "fine": "一次性罚款（积分）",
+          "longNotice": "长上下文：输入 ≥ {{threshold}} token",
+          "penaltyNotice": "超长惩罚：输入 ≥ {{threshold}} token",
+          "fineNote": "每次额外 {{amount}} 积分，不打折",
+          "longAvailable": "含长上下文价格，展开查看",
+          "usageHelp": "仅以上游返回的用量判断门槛，包含缓存读写。"
+        }
       },
       "management": {
         "details": "技术详情",

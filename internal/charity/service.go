@@ -78,6 +78,7 @@ func (s *Service) PrepareEndpointKeyDeletion(
 }
 
 type frozenPricing struct {
+	contextPricing              string
 	mode                        string
 	discount                    int
 	requestUser, requestReward  int64
@@ -128,14 +129,14 @@ request_user_price_milli,request_donor_reward_milli,
 uncached_user_price_milli,cache_write_user_price_milli,cache_read_user_price_milli,output_user_price_milli,
 uncached_donor_reward_milli,cache_write_donor_reward_milli,cache_read_donor_reward_milli,output_donor_reward_milli,
 token_reserve_milli,user_reserved_milli,original_charge_milli,user_charge_milli,donor_reward_total_mag,
-created_at,updated_at)
+created_at,updated_at,context_pricing)
 VALUES(?,?,?,?,'reserved',?,
-?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,?,?,?)`,
+?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,?,?,?,?)`,
 		input.RequestID, input.UserID, input.CharityModelID, input.ModelSnapshot, pricing.mode, pricing.discount,
 		pricing.requestUser, pricing.requestReward,
 		pricing.uncachedUser, pricing.writeUser, pricing.readUser, pricing.outputUser,
 		pricing.uncachedReward, pricing.writeReward, pricing.readReward, pricing.outputReward,
-		pricing.tokenReserve, input.ReservedMilli, zero, input.AcceptedAt, input.AcceptedAt)
+		pricing.tokenReserve, input.ReservedMilli, zero, input.AcceptedAt, input.AcceptedAt, pricing.contextPricing)
 	if err != nil {
 		return fmt.Errorf("charity: persist request reservation: %w", err)
 	}
@@ -159,11 +160,11 @@ func readAcceptancePricing(ctx context.Context, tx *sql.Tx, modelID, at int64) (
 	err := tx.QueryRowContext(ctx, `SELECT pricing_mode,enabled,discount_percent,discount_enabled,
 discount_start_at,discount_end_at,request_user_price,request_donor_reward,
 uncached_user_price,cache_write_user_price,cache_read_user_price,output_user_price,
-uncached_donor_reward,cache_write_donor_reward,cache_read_donor_reward,output_donor_reward
+uncached_donor_reward,cache_write_donor_reward,cache_read_donor_reward,output_donor_reward,context_pricing
 FROM charity_models WHERE id=?`, modelID).Scan(
 		&p.mode, &enabled, &p.discount, &discountEnabled, &start, &end,
 		&p.requestUser, &p.requestReward, &p.uncachedUser, &p.writeUser, &p.readUser, &p.outputUser,
-		&p.uncachedReward, &p.writeReward, &p.readReward, &p.outputReward)
+		&p.uncachedReward, &p.writeReward, &p.readReward, &p.outputReward, &p.contextPricing)
 	if errors.Is(err, sql.ErrNoRows) {
 		return frozenPricing{}, claim.ErrNotFound
 	}
@@ -172,6 +173,9 @@ FROM charity_models WHERE id=?`, modelID).Scan(
 	}
 	if enabled != 1 || (p.mode != "per_request" && p.mode != "per_token") || p.discount < 0 || p.discount > 100 {
 		return frozenPricing{}, claim.ErrNotFound
+	}
+	if _, err := credits.DecodeContextPricing(p.contextPricing); err != nil {
+		return frozenPricing{}, claim.ErrInvariant
 	}
 	if discountEnabled != 1 || start.Valid && at < start.Int64 || end.Valid && at >= end.Int64 {
 		p.discount = 100
@@ -630,7 +634,7 @@ func (s *Service) PrepareAttempt(ctx context.Context, tx *sql.Tx, input claim.Ch
 
 func prepareAttempt(ctx context.Context, tx *sql.Tx, input claim.CharityAttemptInput) (claim.CharityActual, error) {
 	input = normalizeAttemptInput(input)
-	var state, mode string
+	var state, mode, contextPricing string
 	var key, receiver sql.NullInt64
 	var requestUser, requestReward int64
 	var uncachedUser, writeUser, readUser, outputUser int64
@@ -639,14 +643,14 @@ func prepareAttempt(ctx context.Context, tx *sql.Tx, input claim.CharityAttemptI
 	err := tx.QueryRowContext(ctx, `SELECT u.state,u.donation_key_id,c.receiver_user_id,u.tokens_reserved,
 cr.pricing_mode,cr.request_user_price_milli,cr.request_donor_reward_milli,
 cr.uncached_user_price_milli,cr.cache_write_user_price_milli,cr.cache_read_user_price_milli,cr.output_user_price_milli,
-cr.uncached_donor_reward_milli,cr.cache_write_donor_reward_milli,cr.cache_read_donor_reward_milli,cr.output_donor_reward_milli
+cr.uncached_donor_reward_milli,cr.cache_write_donor_reward_milli,cr.cache_read_donor_reward_milli,cr.output_donor_reward_milli,cr.context_pricing
 FROM donation_usage_reservations u
 JOIN dispatch_claims c ON c.id=u.claim_id
 JOIN charity_reservations cr ON cr.logical_request_id=c.logical_request_id
 WHERE u.claim_id=? AND c.logical_request_id=?`, input.ClaimID, input.RequestID).Scan(
 		&state, &key, &receiver, &reservedTokens, &mode, &requestUser, &requestReward,
 		&uncachedUser, &writeUser, &readUser, &outputUser,
-		&uncachedReward, &writeReward, &readReward, &outputReward)
+		&uncachedReward, &writeReward, &readReward, &outputReward, &contextPricing)
 	if errors.Is(err, sql.ErrNoRows) {
 		return claim.CharityActual{}, claim.ErrNotFound
 	}
@@ -663,6 +667,18 @@ WHERE u.claim_id=? AND c.logical_request_id=?`, input.ClaimID, input.RequestID).
 		return claim.CharityActual{}, nil
 	}
 
+	usage := credits.TokenUsage{
+		UncachedInput: input.Usage.UncachedInputTokens, CacheWriteInput: input.Usage.CacheWriteInputTokens,
+		CacheReadInput: input.Usage.CacheReadInputTokens, Output: input.Usage.OutputTokens,
+	}
+	policy, err := credits.DecodeContextPricing(contextPricing)
+	if err != nil {
+		return claim.CharityActual{}, claim.ErrInvariant
+	}
+	prices := credits.TokenPrices{UncachedInput: uncachedUser, CacheWriteInput: writeUser, CacheReadInput: readUser, Output: outputUser}
+	if input.Usage.Present {
+		requestUser, prices = policy.SelectPrices(usage, requestUser, prices)
+	}
 	if mode == "per_request" {
 		reward := requestReward
 		if input.SuppressReward || input.UsageUnknown {
@@ -681,13 +697,7 @@ FROM charity_reservations cr WHERE cr.logical_request_id=?`, input.RequestID).Sc
 		}
 		return claim.CharityActual{PriceMilli: reserve, RewardMilli: 0}, nil
 	}
-	usage := credits.TokenUsage{
-		UncachedInput: input.Usage.UncachedInputTokens, CacheWriteInput: input.Usage.CacheWriteInputTokens,
-		CacheReadInput: input.Usage.CacheReadInputTokens, Output: input.Usage.OutputTokens,
-	}
-	price, err := credits.PriceTokenUsage(usage, credits.TokenPrices{
-		UncachedInput: uncachedUser, CacheWriteInput: writeUser, CacheReadInput: readUser, Output: outputUser,
-	})
+	price, err := credits.PriceTokenUsage(usage, prices)
 	if err != nil || !validMoney(price) {
 		return claim.CharityActual{}, claim.ErrInvariant
 	}
@@ -1181,27 +1191,32 @@ WHERE c.logical_request_id=? AND u.state='committed' AND u.calls_actual=1)`, req
 	if !started {
 		return 0, 0, nil
 	}
-	var mode string
+	var mode, contextPricing string
 	var discount int
 	var requestPrice, reserved int64
 	var p0, p1, p2, p3, u0, u1, u2, u3 int64
 	var unknown int
 	err := tx.QueryRowContext(ctx, `SELECT pricing_mode,discount_percent,request_user_price_milli,user_reserved_milli,
 uncached_user_price_milli,cache_write_user_price_milli,cache_read_user_price_milli,output_user_price_milli,
-usage_uncached_input_tokens,cache_write_input_tokens,cache_read_input_tokens,usage_output_tokens,usage_unknown
+usage_uncached_input_tokens,cache_write_input_tokens,cache_read_input_tokens,usage_output_tokens,usage_unknown,context_pricing
 FROM charity_reservations WHERE logical_request_id=?`, requestID).Scan(
-		&mode, &discount, &requestPrice, &reserved, &p0, &p1, &p2, &p3, &u0, &u1, &u2, &u3, &unknown)
+		&mode, &discount, &requestPrice, &reserved, &p0, &p1, &p2, &p3, &u0, &u1, &u2, &u3, &unknown, &contextPricing)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, 0, claim.ErrNotFound
 	}
 	if err != nil {
 		return 0, 0, fmt.Errorf("charity: calculate request charge: %w", err)
 	}
+	policy, err := credits.DecodeContextPricing(contextPricing)
+	if err != nil {
+		return 0, 0, claim.ErrInvariant
+	}
+	usage := credits.TokenUsage{UncachedInput: u0, CacheWriteInput: u1, CacheReadInput: u2, Output: u3}
+	requestPrice, prices := policy.SelectPrices(usage, requestPrice,
+		credits.TokenPrices{UncachedInput: p0, CacheWriteInput: p1, CacheReadInput: p2, Output: p3})
 	original := requestPrice
 	if mode == "per_token" {
-		original, err = credits.PriceTokenUsage(credits.TokenUsage{
-			UncachedInput: u0, CacheWriteInput: u1, CacheReadInput: u2, Output: u3,
-		}, credits.TokenPrices{UncachedInput: p0, CacheWriteInput: p1, CacheReadInput: p2, Output: p3})
+		original, err = credits.PriceTokenUsage(usage, prices)
 		if err != nil {
 			return 0, 0, claim.ErrInvariant
 		}
@@ -1217,6 +1232,17 @@ FROM charity_reservations WHERE logical_request_id=?`, requestID).Scan(
 	}
 	if unknown == 1 && charge > reserved {
 		charge = reserved
+	}
+	// The fine is applied once, after the discount and any conservative cap.
+	// It never contributes to donor rewards or donation-key usage.
+	fine := policy.Fine(usage)
+	original, err = credits.Add(original, fine)
+	if err != nil {
+		return 0, 0, claim.ErrInvariant
+	}
+	charge, err = credits.Add(charge, fine)
+	if err != nil {
+		return 0, 0, claim.ErrInvariant
 	}
 	return original, charge, nil
 }

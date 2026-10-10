@@ -37,3 +37,6 @@ var gachaSQL string
 
 //go:embed migrations/0010_user_appearance.sql
 var userAppearanceSQL string
+
+//go:embed migrations/0011_context_pricing.sql
+var contextPricingSQL string
