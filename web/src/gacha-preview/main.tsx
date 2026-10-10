@@ -1,4 +1,4 @@
-import { StrictMode, useState } from 'react';
+import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
@@ -16,13 +16,21 @@ import { AppearanceButton } from '../user/appearance/AppearanceButton';
 import { appearanceKey } from '../user/appearance/context';
 import { localPort, localAppearancePort, resetPreview } from './local-port';
 import './preview.css';
+import { sampleReceipt, previewPreferences, type Scenario } from './scenarios';
 
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 function Preview() {
   const [revision, setRevision] = useState(0);
-  const [english, setEnglish] = useState(false);
-  const [demo, setDemo] = useState<DrawReceipt | null>(null);
+  const [english, setEnglish] = useState(new URLSearchParams(location.search).get('lang') === 'en');
+  const [demo, setDemo] = useState<DrawReceipt | null>(() => {
+    const run = new URLSearchParams(location.search).get('run');
+    return run && ['ten', 'plain', 'ssr', 'sp2', 'n'].includes(run)
+      ? sampleReceipt(run as Scenario)
+      : null;
+  });
+  const [demoPreferences, setDemoPreferences] = useState(previewPreferences);
   const [audio] = useState(() => new GachaAudio());
+  useEffect(() => () => audio.dispose(), [audio]);
   const query = useQueryClient();
   const { i18n } = useTranslation();
   const reset = (mode: 'new' | 'collection') => {
@@ -30,27 +38,9 @@ function Preview() {
     void query.invalidateQueries({ queryKey: appearanceKey('preview') });
     setRevision((v) => v + 1);
   };
-  const play = (rarity: 'SSR' | 'SP') => {
-    audio.cue('gather', true);
-    const ids = [
-      'a-chatgpt',
-      'b-glm',
-      'd-claude',
-      rarity === 'SSR' ? 'i-chatgpt' : 'l-chatgpt',
-      'a-deepseek',
-      'e-gemini',
-      'c-chatgpt',
-      'f-glm',
-      rarity === 'SSR' ? 'j-deepseek' : 'm-deepseek',
-      'b-gemini',
-    ];
-    setDemo({
-      id: 'preview-' + crypto.randomUUID(),
-      pool_id: 'preview',
-      pool_name: english ? 'Presentation sample' : '演出样片',
-      created_at: Math.floor(Date.now() / 1000),
-      items: ids.map((card_id) => ({ card_id, duplicate: true, guarantee: 'none' })),
-    });
+  const play = (scenario: Scenario) => {
+    setDemoPreferences(previewPreferences());
+    setDemo(sampleReceipt(scenario));
   };
   return (
     <BrowserRouter>
@@ -65,8 +55,12 @@ function Preview() {
               <button onClick={() => reset('collection')}>
                 {english ? 'Full collection' : '完整收藏体验'}
               </button>
-              <button onClick={() => play('SSR')}>{english ? 'SSR animation' : 'SSR 演出'}</button>
-              <button onClick={() => play('SP')}>{english ? 'SP animation' : 'SP 演出'}</button>
+              <button onClick={() => play('ten')}>
+                {english ? 'SSR + SP ten-pull' : 'SSR＋SP 十连'}
+              </button>
+              <button onClick={() => play('plain')}>{english ? 'SR ten-pull' : 'SR 十连'}</button>
+              <button onClick={() => play('n')}>{english ? 'N single' : 'N 单抽'}</button>
+              <button onClick={() => play('sp2')}>{english ? 'SP reunion' : 'SP 重逢'}</button>
               <AppearanceButton />
               <ThemeToggle />
               <button
@@ -85,12 +79,8 @@ function Preview() {
           {demo && (
             <DrawReveal
               receipt={demo}
-              preferences={{
-                music: false,
-                sound: true,
-                vibration: true,
-                reduced: matchMedia('(prefers-reduced-motion: reduce)').matches,
-              }}
+              key={demo.id}
+              preferences={demoPreferences}
               audio={audio}
               english={english}
               onClose={() => {

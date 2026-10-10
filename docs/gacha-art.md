@@ -51,3 +51,14 @@ Acquisition unlocks the appearance immediately, including shop redemption. Selec
 Review the original, thumbnail, close-up and complete theme together. Inspect faces, hands, accessories, character identity, layer edges and crop safety. Watch a complete animation loop and its seam at normal speed; inspect motion on a phone-sized card, including pause and static fallback.
 
 Check the production components at desktop and phone sizes, in light and dark modes. Review readable rarity, SR-or-higher hold, skip, duplicate conversion, theme unlock and SP appearance selection. Asset availability, automated checks and a still screenshot do not replace watching the actual motion.
+
+
+## Copy
+
+Every card has its own bilingual character voice. Use an established personality and at most one gentle joke, ending with companionship or support. Familiar motifs include DeepSeek's rice and bashful warmth, GLM's computing budget, Gemini's multimodal curiosity, ChatGPT's gentle invitations, and Claude's careful revisions. Never belittle users or other models.
+
+N/R lines are light and everyday; SR sounds more thoughtful; SSR is solemn. SP begins solemnly, then leaves a soft, unfinished hint of affection without a direct confession. Keep every line suitable for all ages. Each paragraph is at most 40 Chinese characters or 110 English characters and occupies no more than three lines in the phone close-up. Review both languages and the actual narrow-screen wrapping before adoption.
+
+Keep voices in the presentation catalogue, separate from theme taglines. Show individual lines in SR focus, SSR/SP close-ups and owned-card appreciation; use theme taglines for theme memories. New SP encounters include a short prelude and a delayed second paragraph. Reunions use a distinct line without replaying the prelude. New voices require editorial approval before final adoption.
+
+Ten-pulls share one card board and reveal in receipt order. SR focuses within the board; SSR/SP charge before their full-screen close-up. Optional card-back hints apply only to SR and higher. Turning hints off keeps the portal neutral and all unrevealed backs identical. Pausing or hiding the page retains scene time and freezes artwork; skipping and reduced motion show the unchanged complete receipt without another draw.

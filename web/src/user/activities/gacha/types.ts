@@ -133,6 +133,7 @@ export interface Preferences {
   sound: boolean;
   reduced: boolean;
   vibration?: boolean;
+  cardBackTell?: boolean;
 }
 
 export interface Preset {
@@ -152,6 +153,12 @@ export interface Configuration {
   time_zone: string;
 }
 export type AdminInput =
-  | { kind: 'settings'; expected_revision: number; rules: Rules; shop: ShopSettings; entry_enabled?: boolean }
+  | {
+      kind: 'settings';
+      expected_revision: number;
+      rules: Rules;
+      shop: ShopSettings;
+      entry_enabled?: boolean;
+    }
   | { kind: 'pool'; expected_revision: number; pool: Pool }
   | { kind: 'preset'; expected_revision: number; preset: Preset };

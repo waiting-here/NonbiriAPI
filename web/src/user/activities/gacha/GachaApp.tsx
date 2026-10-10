@@ -17,6 +17,7 @@ import { CardTile } from './CardTile';
 import { Collection } from './Collection';
 import { Shop, TicketIcon } from './Shop';
 import { DrawReveal } from './DrawReveal';
+import { voiceLines } from './voice';
 import { GachaDialog } from './GachaDialog';
 import { GachaAudio } from './audio';
 import { freshPity, poolOpen } from './rules';
@@ -102,7 +103,7 @@ export function GachaApp({
   const [preferences, setPreferences] = useState<Preferences>(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('nb.gacha.preferences') ?? 'null');
-      if (saved) return saved;
+      if (saved) return { cardBackTell: true, ...saved };
     } catch {
       /* Use accessible defaults. */
     }
@@ -110,6 +111,7 @@ export function GachaApp({
       music: false,
       sound: true,
       vibration: true,
+      cardBackTell: true,
       reduced: matchMedia('(prefers-reduced-motion: reduce)').matches,
     };
   });
@@ -320,6 +322,13 @@ export function GachaApp({
     creditsToMilli(state.credits.general) > 0n ? creditsToMilli(state.credits.general) : 0n;
   const currentTime = state.server_time + Math.max(0, Math.floor((clock - receivedAt) / 1000));
   const currentState = { ...state, server_time: currentTime };
+  const repeatPool = draw && state.pools.find((value) => value.id === draw.pool_id);
+  const repeatQuantity = draw?.items.length === 10 ? 10 : 1;
+  const canRepeat =
+    !busy &&
+    repeatPool &&
+    poolOpen(repeatPool, currentTime) &&
+    state.tickets[repeatPool.kind] >= repeatQuantity;
   const recovery =
     pendingState && !working ? (
       <Note tone="warn">
@@ -718,6 +727,14 @@ export function GachaApp({
           audio={audio}
           english={english}
           onClose={() => setDraw(null)}
+          onAgain={
+            canRepeat
+              ? () => {
+                  setDraw(null);
+                  void act({ action: 'draw', pool_id: draw.pool_id, quantity: repeatQuantity });
+                }
+              : undefined
+          }
         />
       )}
       {card && (
@@ -756,6 +773,13 @@ export function GachaApp({
                     )
                   : t('限定卡牌 · 当前暂无获取途径', 'Limited card · not currently available')}
           </p>
+          {state.owned[card.id] && (
+            <p className="gacha-owned-voice">
+              {voiceLines(card.id, english).map((line, i) => (
+                <span key={i}>{line}</span>
+              ))}
+            </p>
+          )}
           {state.owned[card.id] && (
             <p>
               {t('初次相遇：', 'First collected: ')}
@@ -890,10 +914,19 @@ export function GachaApp({
             }}
           />
           <Toggle
+            label={t('卡背预示', 'Card-back hints')}
+            description={t(
+              'SR 及以上卡背泛起稀有度光芒。关闭后，揭晓前所有卡背相同。',
+              'SR and higher card backs glow with their rarity. Turn off to keep every back the same until revealed.',
+            )}
+            checked={preferences.cardBackTell !== false}
+            onChange={(cardBackTell) => setPreferences((p) => ({ ...p, cardBackTell }))}
+          />
+          <Toggle
             label={t('减弱动效', 'Reduce motion')}
             description={t(
-              '简化抽卡演出，SSR 使用静态卡面。',
-              'Simpler reveals and static SSR artwork.',
+              '直接展示抽卡结果，SSR／SP 使用静态卡面。',
+              'Show results immediately with static SSR/SP artwork.',
             )}
             checked={preferences.reduced}
             onChange={(reduced) => setPreferences((p) => ({ ...p, reduced }))}
@@ -968,7 +1001,10 @@ export function GachaApp({
           <p>
             {t('含保底的长期综合概率：', 'Long-run rates including pity: ') +
               rarities
-                .map((rarity, index) => rarity + ' ' + Number((pool.rates[index] * 100).toFixed(2)) + '%')
+                .map(
+                  (rarity, index) =>
+                    rarity + ' ' + Number((pool.rates[index] * 100).toFixed(2)) + '%',
+                )
                 .join(' · ')}
           </p>
           {pool.kind === 'limited' && (
@@ -989,17 +1025,25 @@ export function GachaApp({
                     {rarity} · {t('抽中该档后，', 'After a hit of this rarity, ')}
                     {probability / 100}% {t('为本池限定。', 'is featured. ')}
                     {guarantee
-                      ? (rarity === 'SSR' && (pool.rules.ssr_guarantee_misses ?? 1) > 1
-                        ? t('连续两次未中限定后，下次同档必为限定。', 'After two consecutive misses, the next hit is featured.')
-                        : t('未中限定后，下次同档必为限定。', 'After a miss, the next hit is featured.'))
+                      ? rarity === 'SSR' && (pool.rules.ssr_guarantee_misses ?? 1) > 1
+                        ? t(
+                            '连续两次未中限定后，下次同档必为限定。',
+                            'After two consecutive misses, the next hit is featured.',
+                          )
+                        : t(
+                            '未中限定后，下次同档必为限定。',
+                            'After a miss, the next hit is featured.',
+                          )
                       : t('未开启下次限定保证。', 'No next-hit featured guarantee.')}
                   </p>
                 );
               })}
-              <p>{t(
-                '本池没有某档限定时，该档保证进度保持不变。SP 与 SSR 共用初始出率、小保底及 SSR 碎片，限定占比、未中次数与兑换价以当前配置为准。',
-                'A pool without a featured rarity preserves that guarantee. SP uses the SSR rarity roll, hard pity and shards; featured share, misses and exchange price follow this configuration.',
-              )}</p>
+              <p>
+                {t(
+                  '本池没有某档限定时，该档保证进度保持不变。SP 与 SSR 共用初始出率、小保底及 SSR 碎片，限定占比、未中次数与兑换价以当前配置为准。',
+                  'A pool without a featured rarity preserves that guarantee. SP uses the SSR rarity roll, hard pity and shards; featured share, misses and exchange price follow this configuration.',
+                )}
+              </p>
             </>
           )}
           <Fold title={t('新手、签到与碎片', 'Welcome gifts, check-in and shards')}>

@@ -132,10 +132,64 @@ it('does not reveal a late result or reuse pending work for a different account'
   };
   render(<GachaApp port={next} />);
   await screen.findByRole('button', { name: /十次召唤/ });
-  complete({ snapshot: { ...state, visible_themes: themes.map((theme) => theme.id),
-    tickets: { permanent: 0, limited: 0 } } });
+  complete({
+    snapshot: {
+      ...state,
+      visible_themes: themes.map((theme) => theme.id),
+      tickets: { permanent: 0, limited: 0 },
+    },
+  });
   await waitFor(() => expect(next.act).toHaveBeenCalledTimes(1));
   expect(vi.mocked(next.act).mock.calls[0][0]).toEqual({ action: 'enter' });
   expect(screen.queryByRole('button', { name: '重试原操作' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: /十次召唤/ })).toBeEnabled();
 });
+
+it.each([false, true])(
+  'offers repeat draws only with tickets and an open original pool (paused=%s)',
+  async (paused) => {
+    const state = snapshot(),
+      keys: string[] = [];
+    state.tickets.permanent = 20;
+    const port: GachaPort = {
+      scope: 'user:repeat-' + paused,
+      load: async () => structuredClone(state),
+      history: async () => ({ items: [] }),
+      act: vi.fn(async (input, key) => {
+        if (input.action !== 'draw') return { snapshot: structuredClone(state) };
+        keys.push(key);
+        expect(input).toEqual({ action: 'draw', pool_id: 'permanent', quantity: 10 });
+        state.tickets.permanent -= 10;
+        state.pools[0].paused = paused;
+        return {
+          snapshot: structuredClone(state),
+          draw: {
+            id: key,
+            pool_id: 'permanent',
+            pool_name: '永续智能',
+            created_at: state.server_time,
+            items: Array.from({ length: 10 }, () => ({
+              card_id: 'a-chatgpt',
+              duplicate: true,
+              guarantee: 'none' as const,
+            })),
+          },
+        };
+      }),
+    };
+    render(<GachaApp port={port} />);
+    fireEvent.click(await screen.findByRole('button', { name: /十次召唤/ }));
+    await screen.findByRole('dialog', { name: '此次相遇' });
+    if (paused) {
+      expect(screen.queryByRole('button', { name: '再来一次' })).not.toBeInTheDocument();
+      expect(keys).toHaveLength(1);
+    } else {
+      fireEvent.click(screen.getByRole('button', { name: '再来一次' }));
+      await waitFor(() => expect(keys).toHaveLength(2));
+      await screen.findByRole('dialog', { name: '此次相遇' });
+      expect(keys[1]).not.toBe(keys[0]);
+      expect(state.tickets.permanent).toBe(0);
+      expect(screen.queryByRole('button', { name: '再来一次' })).not.toBeInTheDocument();
+    }
+  },
+);

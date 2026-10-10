@@ -19,7 +19,7 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Standard and limited tickets, game-credit-first standard exchanges, general-credit-only limited exchanges, a one-time ten-ticket welcome gift with a first-ten-pull SSR guarantee, and daily activity check-ins.
 - Duplicate-to-shard conversion, a mystery shop, limited-card redemptions during pool availability and shop-exclusive chibi cards. Theme completion grants tickets and cumulative donation credit without spendable credit income.
 - Administrator pool, probability, price, quota and reusable preset controls. Opened pools retain accepted rules; permanent-pool changes protect current guarantee progress.
-- Full-screen automatic draw scenes, skippable ten-card results, animated duplicate conversion and optional device vibration.
+- A shared ten-card reveal board with SR focus, full-screen SSR/SP close-ups, first-encounter SP preludes, bilingual character lines, skippable results, animated duplicate conversion and optional card-back hints and device vibration.
 - Two SP cards with matching light/dark site appearances, unlocked on acquisition and selected per account. Their separate rule group uses a 15% featured share within the SSR tier and a guarantee after two misses; direct redemption costs nine SSR shards.
 - A manual, once-per-location Lake Notes collection reward of 50 cumulative donation credits, including previously completed collections, without spendable credit or coin rewards.
 - A standalone activity preview with separate sample data, new-account and full-collection modes, appearances and SSR/SP presentation samples.

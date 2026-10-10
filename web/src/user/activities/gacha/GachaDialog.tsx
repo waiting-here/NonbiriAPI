@@ -27,11 +27,8 @@ export function GachaDialog({
     if (!node) return;
     const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     node.showModal();
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
     return () => {
       node.close();
-      document.body.style.overflow = previous;
       active?.focus();
     };
   }, []);
@@ -42,6 +39,7 @@ export function GachaDialog({
       aria-label={title}
       onCancel={(event) => {
         event.preventDefault();
+        event.stopPropagation();
         handler.current();
       }}
       onClick={(event) => {
