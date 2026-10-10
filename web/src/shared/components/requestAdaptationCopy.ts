@@ -1,78 +1,99 @@
-import { useCallback } from 'react';
-import { useTranslation } from 'react-i18next';
+import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
 
-export type RequestAdaptationCopyKey =
-  | 'title'
-  | 'description'
-  | 'openaiSupport'
-  | 'convertedSupport'
-  | 'allSupport'
-  | 'inherited'
-  | 'sourceModel'
-  | 'sourceBinding'
-  | 'revision'
-  | 'forwardHeaders'
-  | 'fixedHeaders'
-  | 'bodyDefaults'
-  | 'bodyForced'
-  | 'nativePaths'
-  | 'listHelp'
-  | 'bodyHelp'
-  | 'fixedHelp'
-  | 'mode'
-  | 'replace'
-  | 'inherit'
-  | 'name'
-  | 'value'
-  | 'action'
-  | 'keep'
-  | 'change'
-  | 'clear'
-  | 'add'
-  | 'empty'
-  | 'masked'
-  | 'effective'
-  | 'save'
-  | 'saved'
-  | 'loading'
-  | 'loadError'
-  | 'stale'
-  | 'saveError'
-  | 'unknown'
-  | 'conflict'
-  | 'invalidJSON'
-  | 'duplicate'
-  | 'refresh'
-  | 'readOnly'
-  | 'example';
-const serviceKeys = new Set<RequestAdaptationCopyKey>([
-  'title',
-  'description',
-  'forwardHeaders',
-  'fixedHeaders',
-  'bodyDefaults',
-  'bodyForced',
-  'nativePaths',
-  'listHelp',
-  'bodyHelp',
-  'fixedHelp',
-  'save',
-  'saved',
-  'loading',
-  'loadError',
-  'example',
-]);
+const editorKeys = {
+  title: 'requestAdaptation.editor.title',
+  description: 'requestAdaptation.editor.description',
+  openaiSupport: 'requestAdaptation.editor.openaiSupport',
+  convertedSupport: 'requestAdaptation.editor.convertedSupport',
+  allSupport: 'requestAdaptation.editor.allSupport',
+  inherited: 'requestAdaptation.editor.inherited',
+  sourceModel: 'requestAdaptation.editor.sourceModel',
+  sourceBinding: 'requestAdaptation.editor.sourceBinding',
+  revision: 'requestAdaptation.editor.revision',
+  forwardHeaders: 'requestAdaptation.editor.forwardHeaders',
+  fixedHeaders: 'requestAdaptation.editor.fixedHeaders',
+  bodyDefaults: 'requestAdaptation.editor.bodyDefaults',
+  bodyForced: 'requestAdaptation.editor.bodyForced',
+  nativePaths: 'requestAdaptation.editor.nativePaths',
+  listHelp: 'requestAdaptation.editor.listHelp',
+  bodyHelp: 'requestAdaptation.editor.bodyHelp',
+  fixedHelp: 'requestAdaptation.editor.fixedHelp',
+  mode: 'requestAdaptation.editor.mode',
+  replace: 'requestAdaptation.editor.replace',
+  inherit: 'requestAdaptation.editor.inherit',
+  name: 'requestAdaptation.editor.name',
+  value: 'requestAdaptation.editor.value',
+  action: 'requestAdaptation.editor.action',
+  keep: 'requestAdaptation.editor.keep',
+  change: 'requestAdaptation.editor.change',
+  clear: 'requestAdaptation.editor.clear',
+  add: 'requestAdaptation.editor.add',
+  empty: 'requestAdaptation.editor.empty',
+  masked: 'requestAdaptation.editor.masked',
+  effective: 'requestAdaptation.editor.effective',
+  save: 'requestAdaptation.editor.save',
+  saved: 'requestAdaptation.editor.saved',
+  loading: 'requestAdaptation.editor.loading',
+  loadError: 'requestAdaptation.editor.loadError',
+  stale: 'requestAdaptation.editor.stale',
+  saveError: 'requestAdaptation.editor.saveError',
+  unknown: 'requestAdaptation.editor.unknown',
+  conflict: 'requestAdaptation.editor.conflict',
+  invalidJSON: 'requestAdaptation.editor.invalidJSON',
+  duplicate: 'requestAdaptation.editor.duplicate',
+  refresh: 'requestAdaptation.editor.refresh',
+  readOnly: 'requestAdaptation.editor.readOnly',
+  example: 'requestAdaptation.editor.example',
+} as const;
+const serviceKeys = {
+  openaiSupport: 'requestAdaptation.editor.openaiSupport',
+  convertedSupport: 'requestAdaptation.editor.convertedSupport',
+  allSupport: 'requestAdaptation.editor.allSupport',
+  inherited: 'requestAdaptation.editor.inherited',
+  sourceModel: 'requestAdaptation.editor.sourceModel',
+  sourceBinding: 'requestAdaptation.editor.sourceBinding',
+  revision: 'requestAdaptation.editor.revision',
+  mode: 'requestAdaptation.editor.mode',
+  replace: 'requestAdaptation.editor.replace',
+  inherit: 'requestAdaptation.editor.inherit',
+  name: 'requestAdaptation.editor.name',
+  value: 'requestAdaptation.editor.value',
+  action: 'requestAdaptation.editor.action',
+  keep: 'requestAdaptation.editor.keep',
+  change: 'requestAdaptation.editor.change',
+  clear: 'requestAdaptation.editor.clear',
+  add: 'requestAdaptation.editor.add',
+  empty: 'requestAdaptation.editor.empty',
+  masked: 'requestAdaptation.editor.masked',
+  effective: 'requestAdaptation.editor.effective',
+  stale: 'requestAdaptation.editor.stale',
+  saveError: 'requestAdaptation.editor.saveError',
+  unknown: 'requestAdaptation.editor.unknown',
+  conflict: 'requestAdaptation.editor.conflict',
+  invalidJSON: 'requestAdaptation.editor.invalidJSON',
+  duplicate: 'requestAdaptation.editor.duplicate',
+  refresh: 'requestAdaptation.editor.refresh',
+  readOnly: 'requestAdaptation.editor.readOnly',
+  title: 'requestAdaptation.service.title',
+  description: 'requestAdaptation.service.description',
+  forwardHeaders: 'requestAdaptation.service.forwardHeaders',
+  fixedHeaders: 'requestAdaptation.service.fixedHeaders',
+  bodyDefaults: 'requestAdaptation.service.bodyDefaults',
+  bodyForced: 'requestAdaptation.service.bodyForced',
+  nativePaths: 'requestAdaptation.service.nativePaths',
+  listHelp: 'requestAdaptation.service.listHelp',
+  bodyHelp: 'requestAdaptation.service.bodyHelp',
+  fixedHelp: 'requestAdaptation.service.fixedHelp',
+  save: 'requestAdaptation.service.save',
+  saved: 'requestAdaptation.service.saved',
+  loading: 'requestAdaptation.service.loading',
+  loadError: 'requestAdaptation.service.loadError',
+  example: 'requestAdaptation.service.example',
+} as const;
+export type RequestAdaptationCopyKey = keyof typeof editorKeys;
 
 export function useRequestAdaptationCopy(endpoint = false) {
-  const { t } = useTranslation();
-  return useCallback(
-    (key: RequestAdaptationCopyKey) =>
-      t(
-        'requestAdaptation.' +
-          (endpoint && serviceKeys.has(key) ? 'service' : 'editor') +
-          '.' +
-          key,
-      ),
-    [t, endpoint],
-  );
+  const editor = useRegisteredCopy(editorKeys);
+  const service = useRegisteredCopy(serviceKeys);
+  return endpoint ? service.t : editor.t;
 }

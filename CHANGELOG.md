@@ -26,7 +26,10 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Changed
 
-- Database schema revision 13 adds transactional collection, guarantee and activity-journal storage, frozen context prices and temporary managed-header sessions and personal-model request configuration while preserving supported predecessor data and existing legal overrides. Account export schema 16 includes the user's collection activity and appearance.
+- The Fat Fish editor groups creation tools, canvas modes and properties, explains unfinished requirements, previews invalid geometry and fish collisions, and supports precise headings, viewport placement, zoom and touch navigation.
+- Charity catalog filters remain visible. Both stations improve request-log labels, exact credit amounts, mobile controls, empty states and appearance contrast.
+- The gacha activity entry starts hidden and can be enabled by administrators. Limited-only themes stay hidden until a pool has opened or the user owns one of their cards.
+- Database schema revision 13 adds transactional collection, guarantee and activity-journal storage, frozen context prices and temporary managed-header sessions and personal-model request configuration while preserving supported predecessor data and existing legal overrides. Account export schema 17 includes the user's collection activity, appearance and safe personal request-configuration projections.
 
 ### Fixed
 

@@ -16,6 +16,8 @@ The current development version is **1.0.0-rc.7**. See the [changelog](CHANGELOG
 
 [The Gacha Simulator](docs/gacha.md) adds 57 collectible cards, animated SSR/SP illustrations and unlockable site appearances, permanent and scheduled limited pools, a shard shop and theme memories.
 
+The administrator [Fat Fish editor](docs/fatfish-editor.md) supports level design, validation and free playtesting before publication.
+
 ## Build and run
 
 Build requirements: **Go 1.26.9**, **Node.js ≥22.22.3**, **npm 12.0.1**, and Bash for repository scripts. Windows development uses Git Bash. The finished binary embeds both React stations and uses pure-Go SQLite; it needs no Node.js runtime.

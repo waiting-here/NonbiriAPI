@@ -692,7 +692,7 @@
         "details": "技术详情",
         "optionalPrices": "可选尺寸价格",
         "sizePricesSummary": "{{tiers}} 个档位，{{sizes}} 个精确尺寸",
-        "loanTier": "借款额度（积分）",
+        "loanTier": "第 {{tier}} 档",
         "feeHelp": "三项合计须小于 100%；0 表示不收取该项费用。",
         "periodActions": "更改期次状态",
         "periodActionHelp": "确认对该期次执行“{{action}}”。这会改变用户是否可以开始或继续参与。"

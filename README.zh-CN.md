@@ -102,3 +102,5 @@ race 检查需要可用的 C 编译器。CI 还覆盖真实浏览器、许可证
 部署者须按实际运营情况修改内置隐私政策和服务条款。独立上游各自适用其数据政策；`store:false` 无法保证零留存。受限的原始错误诊断可能包含上游回显的内容，权限、留存和法律保留例外见生命周期文档。
 
 漏洞请按 [SECURITY.md](SECURITY.md) 报告。项目代码采用 [AGPL-3.0](LICENSE)；署名与素材许可见 [NOTICE](NOTICE)、[前端声明](web/THIRD_PARTY_NOTICES.md) 和 [音频署名](web/src/shared/assets/game-audio/NOTICE.md)。
+
+关卡设计与试玩参见[饲养大肥鱼编辑器说明](docs/fatfish-editor.md)。

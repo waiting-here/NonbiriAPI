@@ -88,7 +88,7 @@ function LoanConfiguration({
         <fieldset className="nb-grid nb-grid--3" disabled={disabled}>
           <legend>{text('借款额度', 'Loan amounts')}</legend>
           {config.loan_tiers.map((value, index) => (
-            <Field key={index} label={`${t('common.operations.management.loanTier')} ${index + 1}`}>
+            <Field key={index} label={t('common.operations.management.loanTier', { tier: index + 1 })}>
               {(props) => (
                 <Affix
                   {...props}
@@ -788,6 +788,7 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
                 </p>
               ) : null}
               {savePeriod.error ? <ErrorState error={savePeriod.error} /> : null}
+              {!validPositiveAmount(periodDraft.entry) && <p id="period-entry-hint" className="muted">{text('请填写大于 0 的门票积分后保存排期。', 'Enter a ticket price greater than 0 before scheduling.')}</p>}
               <button
                 className="nb-btn nb-btn--primary"
                 type="button"
@@ -799,6 +800,7 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
                   Boolean(literatureError) ||
                   !validPositiveAmount(periodDraft.entry)
                 }
+                aria-describedby={!validPositiveAmount(periodDraft.entry) ? 'period-entry-hint' : undefined}
                 onClick={submitPeriod}
               >
                 {text('保存并排期', 'Save and schedule')}

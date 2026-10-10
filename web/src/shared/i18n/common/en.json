@@ -692,7 +692,7 @@
         "details": "Technical details",
         "optionalPrices": "Optional size prices",
         "sizePricesSummary": "{{tiers}} tiers, {{sizes}} exact sizes",
-        "loanTier": "Loan amount (credits)",
+        "loanTier": "Tier {{tier}}",
         "feeHelp": "The three fees must total less than 100%; 0 means no fee for that item.",
         "periodActions": "Change period status",
         "periodActionHelp": "Confirm “{{action}}” for this period. This changes whether users can start or continue participating."
