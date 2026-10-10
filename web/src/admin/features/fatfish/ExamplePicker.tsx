@@ -49,8 +49,8 @@ export function ExamplePicker({ onImport }: { onImport(value: ImportedDraft): vo
       <label>{text('example_level')}<select aria-label={text('example_level')} value={selected?.id ?? ''} onChange={(event) => setSelectedID(event.target.value)}>
         {manifest.data?.map((example) => <option key={example.id} value={example.id}>{example.title}</option>)}
       </select></label>
-      {selected ? <><button type="button" onClick={() => void choose(selected)}>{selected.title}</button>
-        <button type="button" onClick={() => void download(selected)}>{text('download_json')} · {selected.title}</button></> : null}
+      {selected ? <><button type="button" onClick={() => void choose(selected)}>{text('load_example')}</button>
+        <button type="button" onClick={() => void download(selected)}>{text('download_json')}</button></> : null}
     </div>}
     {error ? <ErrorState error={error} /> : null}
   </div>;

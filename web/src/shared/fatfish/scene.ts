@@ -119,7 +119,7 @@ function drawTool(ctx: CanvasRenderingContext2D, polygon: Polygon, position: Poi
   ctx.lineWidth = selected ? 2.3 : .8; ctx.stroke();
 }
 export function drawFatFishScene(ctx: CanvasRenderingContext2D, level: Level, state?: EngineState | null,
-  art?: FatFishArt | null, selectedTool?: number | null): void {
+  art?: FatFishArt | null, selectedTool?: number | null, bowlLabel?: (required: number, capacity: number) => string): void {
   ctx.clearRect(-128, -128, 736, 816);
   ctx.fillStyle = '#dae7df';
   ctx.fillRect(-128, -128, 736, 816);
@@ -144,8 +144,6 @@ export function drawFatFishScene(ctx: CanvasRenderingContext2D, level: Level, st
     ctx.shadowColor = 'transparent'; ctx.lineWidth = 2; ctx.strokeStyle = '#71979a'; ctx.stroke();
   }
   ctx.restore();
-  ctx.save(); ctx.fillStyle = '#66897f'; ctx.font = '600 11px system-ui'; ctx.textAlign = 'center';
-  ctx.fillText('TOOL WORKSPACE', width / 2, -91); ctx.restore();
   level.directions.forEach((item) => drawShape(ctx, item.polygon, '#62b9c535', '#2d7486',
     art?.icons.get('rice-arrow'), 0, 0, 52, 52, item.heading * Math.PI * 2 / 4096));
   level.solids.forEach((item) => {
@@ -174,7 +172,7 @@ export function drawFatFishScene(ctx: CanvasRenderingContext2D, level: Level, st
     ctx.strokeStyle = full ? '#8b9d9a' : '#75a991';
     ctx.lineWidth = 1; ctx.setLineDash([4, 4]); ctx.stroke(); ctx.setLineDash([]);
     ctx.fillStyle = '#3e6263'; ctx.font = '600 11px system-ui'; ctx.textAlign = 'center';
-    ctx.fillText(`${count}/${item.capacity}`, cx, cy + box.height / 2 + 15);
+    ctx.fillText(bowlLabel ? bowlLabel(item.required, item.capacity) : count + '/' + item.capacity, cx, cy + box.height / 2 + 15);
     ctx.restore();
   });
   level.switches.forEach((item) => {

@@ -20,7 +20,7 @@ describe('Fat Fish example picker', () => {
       ? reply(manifest({ id: 'first', title: 'First example', url: path, content_hash: contentHash(level) }))
       : reply(level)));
     const view = await renderWithProviders(<ExamplePicker onImport={onImport} />, { station: 'admin', role: 'admin' });
-    await view.user.click(await screen.findByRole('button', { name: 'First example' }));
+    await view.user.click(await screen.findByRole('button', { name: 'Load into draft' }));
     await waitFor(() => expect(onImport).toHaveBeenCalledWith({ title: 'First example', description: '', level, pendingFishCount: 0 }));
     const createObjectURL = vi.fn(() => 'blob:example');
     const revokeObjectURL = vi.fn();
@@ -28,7 +28,7 @@ describe('Fat Fish example picker', () => {
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL });
     let downloaded = '';
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) { downloaded = this.download; });
-    await view.user.click(screen.getByRole('button', { name: 'Download JSON · First example' }));
+    await view.user.click(screen.getByRole('button', { name: 'Download JSON' }));
     await waitFor(() => expect(click).toHaveBeenCalledTimes(1));
     expect(downloaded).toBe('first.fatfish.json');
     expect(createObjectURL).toHaveBeenCalledTimes(1);
