@@ -644,7 +644,8 @@
           "tokenReserveCredits": "Reserve 0.001–9,000,000,000,000 credits, with up to three decimal places.",
           "discountPercent": "Discount percent must be an integer from 0 through 100.",
           "discountDates": "Discount dates must be valid and the end must be later than the start.",
-          "contextThreshold": "Enter a positive whole number of input tokens."
+          "contextThreshold": "Enter a positive whole number of input tokens.",
+          "sessionHeaders": "Enter a header name and an idle lifetime of 1–86,400 seconds."
         },
         "discountSummary": "Enabled at {{percent}}% of the regular price",
         "batchActions": "Batch actions",
@@ -670,6 +671,16 @@
           "fineNote": "Extra {{amount}} credits per request, without a discount",
           "longAvailable": "Long-context prices available; expand to view",
           "usageHelp": "Thresholds use only reported usage, including cache reads and writes."
+        },
+        "sessionHeaders": {
+          "title": "Managed session headers",
+          "help": "Reuse a random value for the same user and model. Idle time begins when all requests finish, helping upstream cache reuse. Managed values override fixed and forwarded headers with the same name.",
+          "name": "Header {{n}} name",
+          "idle": "Idle expiry (seconds)",
+          "format": "Random value format",
+          "hex": "32 lowercase hexadecimal characters",
+          "remove": "Remove header {{n}}",
+          "add": "Add managed header"
         }
       },
       "management": {

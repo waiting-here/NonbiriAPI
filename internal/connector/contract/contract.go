@@ -158,6 +158,8 @@ func (Target) LogValue() slog.Value {
 // Additional fields belong here only when their policy implementation needs
 // them; the initial projection carries the existing origin-scoped identifier.
 type AttemptPolicy struct {
+	ManagedHeaders    http.Header
+	OnRequestSent     func()
 	GatewayModel      *gatewaypolicy.Model
 	SafetyIdentifier  string
 	ForceStoreFalse   bool

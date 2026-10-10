@@ -21,13 +21,13 @@ function contextRows(pricing: CharityBasePricing, t: (key: string) => string): C
     ];
   return (
     [
-      ['uncachedInput', 'uncachedInputPrice'],
-      ['cacheWriteInput', 'cacheWriteInputPrice'],
-      ['cacheReadInput', 'cacheReadInputPrice'],
-      ['output', 'outputPrice'],
+      ['uncachedInput', 'user.charity.uncachedInputPrice'],
+      ['cacheWriteInput', 'user.charity.cacheWriteInputPrice'],
+      ['cacheReadInput', 'user.charity.cacheReadInputPrice'],
+      ['output', 'user.charity.outputPrice'],
     ] as const
   ).map(([key, label]) => ({
-    label: t('user.charity.' + label),
+    label: t(label),
     userMilli: pricing.userPricesMilli[key],
     discountedUserMilli: pricing.discountedUserPricesMilli[key],
   }));

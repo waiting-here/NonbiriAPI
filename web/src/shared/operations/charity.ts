@@ -656,7 +656,13 @@ export function normalizeStewardDonation(value: unknown): StewardDonation {
   };
 }
 
+export interface SessionHeader {
+  name: string;
+  idle_seconds: number;
+  format: 'uuid_v4' | 'hex_32';
+}
 export interface CharityModel {
+  session_headers?: SessionHeader[];
   model_types: import('@shared/modelTypes').ModelType[];
   transport_rule: TransportRule;
   role_policy?: RolePolicy;
@@ -761,6 +767,7 @@ function normalizeModel(value: unknown, label: string): CharityModel {
       'is_mainstream',
       'excluded_request_fields',
       'role_policy',
+      'session_headers',
     ],
     label,
     required,
@@ -869,7 +876,19 @@ function normalizeModel(value: unknown, label: string): CharityModel {
     (percent !== null && !/^(0|[1-9][0-9]?|100)(\.[0-9]{1,2})?$/.test(percent))
   )
     invalidResponse(`${label} success percent`);
+  const sessionHeaders =
+    root.session_headers === undefined
+      ? []
+      : array(root.session_headers, label + ' session headers', 16).map((v) => {
+          const entry = record(v, ['name', 'idle_seconds', 'format'], label + ' session header');
+          return {
+            name: string(entry.name, label + ' header name', { min: 1 }),
+            idle_seconds: integer(entry.idle_seconds, label + ' header idle', 1, 86400),
+            format: oneOf(entry.format, ['uuid_v4', 'hex_32'] as const, label + ' header format'),
+          };
+        });
   return {
+    session_headers: sessionHeaders,
     id: decimalID(root.id, `${label} id`),
     provider,
     is_mainstream:

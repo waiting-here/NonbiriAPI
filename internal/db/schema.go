@@ -40,3 +40,6 @@ var userAppearanceSQL string
 
 //go:embed migrations/0011_context_pricing.sql
 var contextPricingSQL string
+
+//go:embed migrations/0012_session_headers.sql
+var sessionHeadersSQL string

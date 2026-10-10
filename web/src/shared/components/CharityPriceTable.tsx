@@ -107,15 +107,18 @@ export function CharityPriceTable({
       </span>
     ) : null;
 
-  const contextKey = 'common.operations.charity.context.';
   const penaltyNote = contextPenalty && (
     <p className="nb-sub charity-context-note">
       <strong>
-        {t(contextKey + 'penaltyNotice', {
+        {t('common.operations.charity.context.penaltyNotice', {
           threshold: formatCount(contextPenalty.inputThreshold).display,
         })}
       </strong>
-      <span>{t(contextKey + 'fineNote', { amount: formatAmount(contextPenalty.fineMilli) })}</span>
+      <span>
+        {t('common.operations.charity.context.fineNote', {
+          amount: formatAmount(contextPenalty.fineMilli),
+        })}
+      </span>
     </p>
   );
 
@@ -140,7 +143,9 @@ export function CharityPriceTable({
             </div>
           ))}
         </dl>
-        {longContext && <p className="nb-sub">{t(contextKey + 'longAvailable')}</p>}
+        {longContext && (
+          <p className="nb-sub">{t('common.operations.charity.context.longAvailable')}</p>
+        )}
         {penaltyNote}
       </div>
     );
@@ -196,7 +201,7 @@ export function CharityPriceTable({
               {group.threshold && (
                 <tr className="charity-context-heading">
                   <th scope="rowgroup" colSpan={showRewards ? 3 : 2}>
-                    {t(contextKey + 'longNotice', {
+                    {t('common.operations.charity.context.longNotice', {
                       threshold: formatCount(group.threshold).display,
                     })}
                   </th>
@@ -240,7 +245,9 @@ export function CharityPriceTable({
         </table>
       </div>
       {penaltyNote}
-      {(longContext || contextPenalty) && <p className="nb-sub">{t(contextKey + 'usageHelp')}</p>}
+      {(longContext || contextPenalty) && (
+        <p className="nb-sub">{t('common.operations.charity.context.usageHelp')}</p>
+      )}
       <p className="muted charity-price-note">
         {t(mode === 'per_token' ? 'user.charity.tokenUnit' : 'user.charity.requestUnit')}{' '}
         {t('user.charity.billingHelp')}

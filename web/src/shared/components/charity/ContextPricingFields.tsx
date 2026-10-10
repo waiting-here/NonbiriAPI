@@ -26,20 +26,22 @@ export function ContextPricingFields({
   onChange: (fields: Partial<ContextDraft>) => void;
 }) {
   const { t } = useTranslation();
-  const key = 'common.operations.charity.context.';
   return (
-    <Fold title={t(key + 'settings')} defaultOpen={value.longEnabled || value.penaltyEnabled}>
+    <Fold
+      title={t('common.operations.charity.context.settings')}
+      defaultOpen={value.longEnabled || value.penaltyEnabled}
+    >
       <div className="nb-form">
-        <p className="nb-sub">{t(key + 'help')}</p>
+        <p className="nb-sub">{t('common.operations.charity.context.help')}</p>
         <Toggle
-          label={t(key + 'long')}
-          description={t(key + 'longHelp')}
+          label={t('common.operations.charity.context.long')}
+          description={t('common.operations.charity.context.longHelp')}
           checked={value.longEnabled}
           onChange={(longEnabled) => onChange({ longEnabled })}
         />
         {value.longEnabled && (
           <div className="nb-grid nb-grid--2">
-            <Field label={t(key + 'longThreshold')}>
+            <Field label={t('common.operations.charity.context.longThreshold')}>
               {(props) => (
                 <input
                   {...props}
@@ -50,7 +52,7 @@ export function ContextPricingFields({
               )}
             </Field>
             {value.mode === 'per_request' ? (
-              <Field label={t(key + 'requestPrice')}>
+              <Field label={t('common.operations.charity.context.requestPrice')}>
                 {(props) => (
                   <input
                     {...props}
@@ -79,14 +81,14 @@ export function ContextPricingFields({
           </div>
         )}
         <Toggle
-          label={t(key + 'penalty')}
-          description={t(key + 'penaltyHelp')}
+          label={t('common.operations.charity.context.penalty')}
+          description={t('common.operations.charity.context.penaltyHelp')}
           checked={value.penaltyEnabled}
           onChange={(penaltyEnabled) => onChange({ penaltyEnabled })}
         />
         {value.penaltyEnabled && (
           <div className="nb-grid nb-grid--2">
-            <Field label={t(key + 'penaltyThreshold')}>
+            <Field label={t('common.operations.charity.context.penaltyThreshold')}>
               {(props) => (
                 <input
                   {...props}
@@ -96,7 +98,7 @@ export function ContextPricingFields({
                 />
               )}
             </Field>
-            <Field label={t(key + 'fine')}>
+            <Field label={t('common.operations.charity.context.fine')}>
               {(props) => (
                 <input
                   {...props}

@@ -256,3 +256,9 @@ AI callbacks, cancellation, financial settlement, memory extraction and deletion
 `gacha_settings`, `gacha_pools` and `gacha_presets` are administrator configuration. `gacha_config_events` preserves revisions and clears deleted actor links. Public state omits drafts. The activity collects no device identifiers, IP addresses, prompts, upstream keys or private image uploads.
 
 `user_appearance` stores the selected site cosmetic and its update time. Available cosmetics derive from permanent card ownership; no duplicate unlock ledger is needed. Export includes the selection and available designs. Account deletion removes the row in the same transaction as collection data. Reading appearance grants no activity rewards. The browser retains light/dark/system and sound/motion/vibration preferences; the server remains authoritative for cosmetic access.
+
+## Managed upstream session headers
+
+`charity_header_sessions` and `charity_header_uses` hold temporary upstream correlation values, excluded from account-content exports, public configuration and logs. Charity consumption remains in its existing aggregate. User/model deletion cascades both tables; completion updates only surviving matching values and cannot recreate deleted data.
+
+Active logical requests retain their value. Sent completion extends the configured idle lifetime, default 300 seconds; expired inactive values use bounded cleanup. Startup recovery releases unfinished uses. These values are never authentication credentials. Configuration uses existing model-management authority. See [managed headers](charity-session-headers.md).

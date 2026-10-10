@@ -475,7 +475,8 @@ func (service *Service) preflight(ctx context.Context, userID int64, request *va
 		}
 		// Ingress has authenticated the caller, resolved model access, and
 		// parsed the request. Client restrictions must run before content,
-		// balance, candidate availability, or Debug capture can reject it.
+		// balance, candidate availability, outbound transformations, or Debug
+		// capture. The guard uses the immutable original ingress source.
 		if service.charityGuard != nil {
 			guarded, guardErr := service.charityGuard.CheckCharityCall(ctx, userID, request.Model, now)
 			if guardErr != nil {
@@ -886,7 +887,7 @@ func (service *Service) runAttempts(
 		if prepared != nil {
 			policy.AdditionalHeaders = prepared.headers.Clone()
 			policy.NativeExtensions = prepared.native
-			policy.HasAdaptation = prepared.active
+			policy.HasAdaptation = prepared.active || len(policy.ManagedHeaders) > 0
 		}
 		if request.chat == nil {
 			policy.ForceStoreFalse, policy.FlattenToolCalls = false, false

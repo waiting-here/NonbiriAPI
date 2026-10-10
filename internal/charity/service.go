@@ -24,6 +24,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
+	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
 )
 
 const (
@@ -1141,6 +1142,9 @@ user_charge_milli=?,finalized_at=?,updated_at=? WHERE logical_request_id=? AND s
 		return fmt.Errorf("charity: finalize request reservation: %w", err)
 	}
 	if err := requireOne(result); err != nil {
+		return err
+	}
+	if err := sessionheader.Finish(ctx, tx, input.RequestID, input.CompletedAt); err != nil {
 		return err
 	}
 	if input.Disposition == claim.AccountingCommit {

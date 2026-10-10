@@ -969,10 +969,18 @@ describe('CharityManagement corrective controls', () => {
       target: { value: '200000' },
     });
     fireEvent.change(editor.getByLabelText('One-time fine (credits)'), { target: { value: '50' } });
+    await view.user.click(editor.getByText('Managed session headers', { exact: true }));
+    await view.user.click(editor.getByRole('button', { name: 'Add managed header' }));
+    expect(patchBodies).toHaveLength(0);
+    fireEvent.change(editor.getByLabelText('Header 1 name'), { target: { value: 'X-Session-ID' } });
+    expect(editor.getByLabelText('Idle expiry (seconds)')).toHaveValue(300);
+    await view.user.selectOptions(editor.getByLabelText('Random value format'), 'hex_32');
+
     await view.user.click(editor.getByRole('button', { name: 'Save model' }));
 
     await waitFor(() => expect(patchBodies).toHaveLength(1));
     expect(patchBodies[0]).toEqual({
+      session_headers: [{ name: 'X-Session-ID', idle_seconds: 300, format: 'hex_32' }],
       model_types: ['chat_completions', 'embeddings'],
       role_policy: { default_action: 'native', rules: {} },
       is_mainstream: false,

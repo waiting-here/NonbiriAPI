@@ -48,7 +48,7 @@ func TestGachaUpgradePreservesLedgerAndAuditBuckets(t *testing.T) {
  FROM credit_operations,economy_audit_buckets WHERE id=?`, id, id).Scan(&kind, &entries, &buckets, &issued, &income, &version, &profiles); err != nil {
 			t.Fatal(err)
 		}
-		if kind != "admin_user_adjustment" || entries != 1 || buckets != 1 || issued != "100" || income != "100" || version != 10 || profiles != 0 {
+		if kind != "admin_user_adjustment" || entries != 1 || buckets != 1 || issued != "100" || income != "100" || version != len(storageSchema.versions) || profiles != 0 {
 			t.Fatal(kind, entries, buckets, issued, income, version, profiles)
 		}
 		var foreignKeys int

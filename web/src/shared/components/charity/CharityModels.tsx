@@ -1,3 +1,5 @@
+import { SessionHeaderFields } from './SessionHeaderFields';
+import type { SessionHeader } from '@shared/operations/charity';
 import { ContextPricingFields } from './ContextPricingFields';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { ModelTypesField, ModelTypesSummary } from '@shared/components/ModelTypesField';
@@ -70,6 +72,7 @@ import {
 } from './managementFields';
 
 interface ModelDraft {
+  sessionHeaders: SessionHeader[];
   longEnabled: boolean;
   longThreshold: string;
   longRequest: string;
@@ -110,6 +113,7 @@ const zeroPrices = (): TokenPrices => ({
 
 function modelDraft(model?: CharityModel): ModelDraft {
   return {
+    sessionHeaders: model?.session_headers?.map((v) => ({ ...v })) ?? [],
     longEnabled: Boolean(model?.pricing.long_context),
     longThreshold: model?.pricing.long_context?.input_threshold ?? '',
     longRequest: model?.pricing.long_context?.user_price ?? '0',
@@ -153,6 +157,7 @@ function modelBody(
   const rolePolicy = buildRolePolicy(draft.rolePolicy);
   if (rolePolicy.error) throw new Error('Role fields are not ready');
   const body = {
+    session_headers: draft.sessionHeaders.map((v) => ({ ...v, name: v.name.trim() })),
     model_types: draft.modelTypes,
     transport_rule: draft.transportRule,
     role_policy: rolePolicy.policy,
@@ -210,6 +215,7 @@ type ModelValidation =
   | 'modelLevels'
   | 'publicDescription'
   | 'modelPrices'
+  | 'sessionHeaders'
   | 'contextThreshold'
   | 'tokenReserveCredits'
   | 'affinityTTLSeconds'
@@ -217,6 +223,16 @@ type ModelValidation =
   | 'discountDates';
 
 function modelDraftError(draft: ModelDraft): ModelValidation | null {
+  if (
+    draft.sessionHeaders.some(
+      (v) =>
+        !v.name.trim() ||
+        !Number.isInteger(v.idle_seconds) ||
+        v.idle_seconds < 1 ||
+        v.idle_seconds > 86400,
+    )
+  )
+    return 'sessionHeaders';
   if (!draft.modelTypes.length) return 'modelTypes';
   if (buildRolePolicy(draft.rolePolicy).error) return 'rolePolicy';
   if (
@@ -709,6 +725,10 @@ function ModelForm({
           </>
         )}
       </fieldset>
+      <SessionHeaderFields
+        value={draft.sessionHeaders}
+        onChange={(sessionHeaders) => setDraft((value) => ({ ...value, sessionHeaders }))}
+      />
       <ContextPricingFields
         value={draft}
         role={role}

@@ -46,7 +46,14 @@ var preUserAppearanceFixture string
 //go:embed testdata/pre_context_pricing.sql
 var preContextPricingFixture string
 
-func userAppearanceStorageSchema() string { return generationTwoSchema + preContextPricingFixture }
+//go:embed testdata/pre_session_headers.sql
+var preSessionHeadersFixture string
+
+func contextPricingStorageSchema() string { return generationTwoSchema + preSessionHeadersFixture }
+
+func userAppearanceStorageSchema() string {
+	return contextPricingStorageSchema() + preContextPricingFixture
+}
 
 func gachaStorageSchema() string                   { return userAppearanceStorageSchema() + preUserAppearanceFixture }
 func personalBalancedRoutingStorageSchema() string { return gachaStorageSchema() + preGachaFixture }
@@ -114,6 +121,7 @@ func supportedSourceFixture(t *testing.T) *sql.DB {
 func TestSupportedReleasedSchemaIdentity(t *testing.T) {
 	for _, source := range []struct{ schema, manifest string }{
 		{userAppearanceStorageSchema(), userAppearanceManifestHash},
+		{contextPricingStorageSchema(), contextPricingManifestHash},
 		{gachaStorageSchema(), gachaManifestHash},
 		{personalBalancedRoutingStorageSchema(), personalBalancedRoutingManifestHash},
 		{modelTypesAndImagesStorageSchema(), modelTypesAndImagesManifestHash},

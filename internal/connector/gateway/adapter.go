@@ -17,6 +17,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/connector/tooltext"
 	"github.com/waiting-here/NonbiriAPI/internal/gatewaypolicy"
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
+	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
 	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
 
@@ -108,7 +109,7 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, w http.ResponseWriter, 
 	if err != nil {
 		return result
 	}
-	if requestadaptation.ApplyAddedHeaders(request.Header, policy.AdditionalHeaders) != nil {
+	if requestadaptation.ApplyAddedHeaders(request.Header, policy.AdditionalHeaders) != nil || sessionheader.Apply(request, policy.ManagedHeaders, policy.OnRequestSent) != nil {
 		return result
 	}
 	plain, cipher, ok := credential.Take()
@@ -154,7 +155,7 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, w http.ResponseWriter, 
 	}
 	clear(label)
 	errorContext := upstreamerror.Context{BaseURL: target.BaseURL(), PrivateModel: target.UpstreamModel(), ContainsSecret: errorGuard.ContainsBytes}
-	if policy.HasAdaptation {
+	if policy.HasAdaptation || len(policy.ManagedHeaders) > 0 {
 		errorContext.ContainsSecret = func(value []byte) bool { return len(value) != 0 }
 	}
 	setRequestHeaders(request, plain)

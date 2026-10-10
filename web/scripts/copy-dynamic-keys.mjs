@@ -138,6 +138,15 @@ const dynamicCopyKeys = [
       'The validator exposes this exact finite error code; no prefix or wildcard is registered.',
     ),
   ),
+  ...['contextThreshold', 'sessionHeaders'].map((code) =>
+    entry(
+      'common',
+      'common.operations.charity.validation.' + code,
+      charityModels,
+      't(`common.operations.charity.validation.${validationError}`)',
+      'Model validation returns this finite configuration error code.',
+    ),
+  ),
   // Common donation-key terminal reasons are mapped from a closed wire union.
   ...[
     'common.operations.charity.endedReasonValue.withdrawn',

@@ -644,7 +644,8 @@
           "tokenReserveCredits": "预留积分范围：0.001～9,000,000,000,000，最多三位小数。",
           "discountPercent": "折扣百分比必须是 0 至 100 的整数。",
           "discountDates": "折扣日期必须有效，且结束时间必须晚于开始时间。",
-          "contextThreshold": "门槛请填写大于 0 的整数 token 数。"
+          "contextThreshold": "门槛请填写大于 0 的整数 token 数。",
+          "sessionHeaders": "请填写请求头名称，闲置时间为 1–86,400 秒。"
         },
         "discountSummary": "已启用，价格为原价的 {{percent}}%",
         "batchActions": "批量操作",
@@ -670,6 +671,16 @@
           "fineNote": "每次额外 {{amount}} 积分，不打折",
           "longAvailable": "含长上下文价格，展开查看",
           "usageHelp": "仅以上游返回的用量判断门槛，包含缓存读写。"
+        },
+        "sessionHeaders": {
+          "title": "会话请求头代管",
+          "help": "为同一用户与模型复用随机会话值；全部请求结束后开始闲置计时，有助于上游缓存复用。代管值覆盖同名固定和透传头。",
+          "name": "请求头 {{n}} 名称",
+          "idle": "闲置过期时间（秒）",
+          "format": "随机值格式",
+          "hex": "32 位小写十六进制",
+          "remove": "移除请求头 {{n}}",
+          "add": "添加代管请求头"
         }
       },
       "management": {

@@ -303,6 +303,15 @@ func applyBodyEdits(previous map[string]json.RawMessage, edits map[string]ValueE
 }
 
 func ValidHeaderName(name string) bool {
+	return validHeaderName(name, false)
+}
+
+// ValidManagedHeaderName permits a generated session identifier, never caller session forwarding.
+func ValidManagedHeaderName(name string) bool {
+	return validHeaderName(name, true)
+}
+
+func validHeaderName(name string, managed bool) bool {
 	if name == "" || len(name) > MaxHeaderNameBytes || !utf8.ValidString(name) {
 		return false
 	}
@@ -316,7 +325,7 @@ func ValidHeaderName(name string) bool {
 	lower := strings.ToLower(name)
 	if strings.HasPrefix(lower, "proxy-") || strings.HasPrefix(lower, "x-forwarded-") ||
 		strings.HasPrefix(lower, "anthropic-") || strings.HasPrefix(lower, "ai-") ||
-		strings.Contains(lower, "csrf") || strings.Contains(lower, "session") || strings.Contains(lower, "caller-key") {
+		strings.Contains(lower, "csrf") || (!managed && strings.Contains(lower, "session")) || strings.Contains(lower, "caller-key") {
 		return false
 	}
 	switch lower {
