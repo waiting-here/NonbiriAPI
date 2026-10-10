@@ -190,7 +190,8 @@ func readReceipt(ctx context.Context, tx *sql.Tx, requestID string, userID, now 
 }
 
 // CheckCharityCall requires a validated, classified real charity model call.
-// The caller invokes it after routing snapshot and before claim acceptance.
+// The caller invokes it after ingress authentication, model access, and parsing,
+// before content, credit, candidate, and Debug admission.
 // A Banned decision becomes a generic account-ban response to the caller.
 func (s *Service) CheckCharityCall(parent context.Context, userID int64, model string, decisionNow int64) (Decision, error) {
 	if s == nil || parent == nil || userID <= 0 || decisionNow < 0 || decisionNow > maxUnixSecond-receiptLifetime || requestattempt.Kind(parent) != "charity" {
