@@ -20,7 +20,8 @@ func testStore(t *testing.T) (*Store, *sql.DB) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := database.Exec(`CREATE TABLE endpoints(id INTEGER PRIMARY KEY,user_id INTEGER NOT NULL) STRICT`); err != nil {
+	if _, err := database.Exec(`CREATE TABLE endpoints(id INTEGER PRIMARY KEY,user_id INTEGER NOT NULL) STRICT;
+CREATE TABLE models(id INTEGER PRIMARY KEY,user_id INTEGER NOT NULL) STRICT`); err != nil {
 		t.Fatal(err)
 	}
 	_, err = database.Exec(`CREATE TABLE request_adaptation_audits (
@@ -34,7 +35,7 @@ UNIQUE(scope,resource_id,revision)) STRICT`)
 	t.Cleanup(func() { _ = database.Close() })
 	_, err = database.Exec(`CREATE TABLE request_adaptations (
 	 id INTEGER PRIMARY KEY, scope TEXT NOT NULL,
-	 endpoint_id INTEGER UNIQUE, model_id INTEGER UNIQUE, binding_id INTEGER UNIQUE,
+	 endpoint_id INTEGER UNIQUE, personal_model_id INTEGER UNIQUE, model_id INTEGER UNIQUE, binding_id INTEGER UNIQUE,
 	 revision INTEGER NOT NULL, secret_context BLOB NOT NULL, secret_ciphertext TEXT NOT NULL,
 	 structure_json TEXT NOT NULL, actor_user_id INTEGER, updated_at INTEGER NOT NULL
 	) STRICT`)

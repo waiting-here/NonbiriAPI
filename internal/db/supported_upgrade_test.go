@@ -49,7 +49,13 @@ var preContextPricingFixture string
 //go:embed testdata/pre_session_headers.sql
 var preSessionHeadersFixture string
 
-func contextPricingStorageSchema() string { return generationTwoSchema + preSessionHeadersFixture }
+//go:embed testdata/pre_personal_adaptation.sql
+var prePersonalAdaptationFixture string
+
+func sessionHeadersStorageSchema() string { return generationTwoSchema + prePersonalAdaptationFixture }
+func contextPricingStorageSchema() string {
+	return sessionHeadersStorageSchema() + preSessionHeadersFixture
+}
 
 func userAppearanceStorageSchema() string {
 	return contextPricingStorageSchema() + preContextPricingFixture
@@ -121,6 +127,7 @@ func supportedSourceFixture(t *testing.T) *sql.DB {
 func TestSupportedReleasedSchemaIdentity(t *testing.T) {
 	for _, source := range []struct{ schema, manifest string }{
 		{userAppearanceStorageSchema(), userAppearanceManifestHash},
+		{sessionHeadersStorageSchema(), sessionHeadersManifestHash},
 		{contextPricingStorageSchema(), contextPricingManifestHash},
 		{gachaStorageSchema(), gachaManifestHash},
 		{personalBalancedRoutingStorageSchema(), personalBalancedRoutingManifestHash},

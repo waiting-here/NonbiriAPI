@@ -139,3 +139,121 @@ func (api *httpAPI) putEndpointAdaptation(writer http.ResponseWriter, request *h
 	}
 	writeMutation(writer, result)
 }
+
+func (r *Repository) GetModelAdaptation(ctx context.Context, userID, modelID int64) (requestadaptation.Projection, error) {
+	if r == nil || r.adaptations == nil || ctx == nil || userID <= 0 || modelID <= 0 {
+		return requestadaptation.Projection{}, ErrInvalidRequest
+	}
+	tx, err := beginTx(ctx, r.db)
+	if err != nil {
+		return requestadaptation.Projection{}, err
+	}
+	defer tx.Rollback()
+	if _, err := getModelTx(ctx, tx, userID, modelID); err != nil {
+		return requestadaptation.Projection{}, err
+	}
+	snapshot, err := r.adaptations.LoadTx(ctx, tx, requestadaptation.Ref{Scope: requestadaptation.ScopePersonalModel, ID: modelID})
+	if err != nil {
+		return requestadaptation.Projection{}, resourceAdaptationError(err)
+	}
+	defer snapshot.Clear()
+	projection := snapshot.Projection()
+	if err := tx.Commit(); err != nil {
+		return requestadaptation.Projection{}, ErrUnavailable
+	}
+	return projection, nil
+}
+
+func (r *Repository) PutModelAdaptation(ctx context.Context, userID, modelID int64, mutation ControlMutation, patch requestadaptation.Patch) (MutationResult[requestadaptation.Projection], error) {
+	if r == nil || r.adaptations == nil || ctx == nil || userID <= 0 || modelID <= 0 || mutation.Method != http.MethodPut || mutation.Route != routeModelAdaptation || !mutationPathIDs(mutation, modelID) || mutation.Query != "" {
+		return MutationResult[requestadaptation.Projection]{}, ErrInvalidRequest
+	}
+	now, err := r.nowUnix()
+	if err != nil {
+		return MutationResult[requestadaptation.Projection]{}, err
+	}
+	tx, err := r.beginAuthorizedTx(ctx, userID)
+	if err != nil {
+		return MutationResult[requestadaptation.Projection]{}, err
+	}
+	committed := false
+	defer finishTx(tx, &committed)
+	decision, err := beginControlMutation(ctx, tx, userID, mutation, now)
+	if err != nil {
+		return MutationResult[requestadaptation.Projection]{}, err
+	}
+	if decision.Kind == idempotency.Replay {
+		return replayMutation[requestadaptation.Projection](decision)
+	}
+	if _, err := getModelTx(ctx, tx, userID, modelID); err != nil {
+		return MutationResult[requestadaptation.Projection]{}, err
+	}
+	ref := requestadaptation.Ref{Scope: requestadaptation.ScopePersonalModel, ID: modelID}
+	previous, err := r.adaptations.LoadTx(ctx, tx, ref)
+	if err != nil {
+		return MutationResult[requestadaptation.Projection]{}, resourceAdaptationError(err)
+	}
+	defer previous.Clear()
+	previousRevision, _ := parseDecimalID(previous.Revision)
+	if previousRevision != patch.ExpectedRevision {
+		return MutationResult[requestadaptation.Projection]{}, ErrConflict
+	}
+	next, err := requestadaptation.ApplyPatch(previous.Document, patch, ref.Scope)
+	if err != nil {
+		return MutationResult[requestadaptation.Projection]{}, resourceAdaptationError(err)
+	}
+	defer next.Clear()
+	projection, err := r.adaptations.SaveTx(ctx, tx, ref, patch.ExpectedRevision, next, userID, now)
+	if err != nil {
+		return MutationResult[requestadaptation.Projection]{}, resourceAdaptationError(err)
+	}
+	out, err := finishJSONMutation(ctx, tx, decision, http.StatusOK, projection)
+	if err != nil {
+		return MutationResult[requestadaptation.Projection]{}, err
+	}
+	if err := commitTx(tx, &committed); err != nil {
+		return MutationResult[requestadaptation.Projection]{}, err
+	}
+	return out, nil
+}
+
+func (api *httpAPI) getModelAdaptation(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
+	modelID, ok := parsePathID(writer, request, "id")
+	if !ok || !requireEmptyQuery(writer, request) || !requireNoBody(writer, request) {
+		return
+	}
+	projection, err := api.repository.GetModelAdaptation(request.Context(), principal.UserID, modelID)
+	if err != nil {
+		writeResourceError(writer, err)
+		return
+	}
+	writeJSON(writer, http.StatusOK, projection)
+}
+
+func (api *httpAPI) putModelAdaptation(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
+	modelID, ok := parsePathID(writer, request, "id")
+	if !ok || !requireEmptyQuery(writer, request) {
+		return
+	}
+	data, err := io.ReadAll(io.LimitReader(request.Body, requestadaptation.MaxConfigurationBytes+1))
+	if err != nil || len(data) > requestadaptation.MaxConfigurationBytes {
+		writeResourceError(writer, ErrInvalidRequest)
+		return
+	}
+	defer clear(data)
+	patch, err := requestadaptation.ParsePatch(data)
+	if err != nil {
+		writeResourceError(writer, resourceAdaptationError(err))
+		return
+	}
+	mutation, ok := controlMutation(writer, request, routeModelAdaptation, []int64{modelID}, json.RawMessage(data))
+	if !ok {
+		return
+	}
+	result, err := api.repository.PutModelAdaptation(request.Context(), principal.UserID, modelID, mutation, patch)
+	if err != nil {
+		writeResourceError(writer, err)
+		return
+	}
+	writeMutation(writer, result)
+}

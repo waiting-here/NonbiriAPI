@@ -8,7 +8,9 @@ import (
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/modelname"
+	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/requestbody"
+	"github.com/waiting-here/NonbiriAPI/internal/routing"
 )
 
 func (s *Service) ingressPolicy(ctx context.Context, user int64, model string) (CharityRequestPolicy, int64, error) {
@@ -53,6 +55,19 @@ func (s *Service) decodeEnvelope(ctx context.Context, user int64, body []byte, e
 	filtered := body
 	var policy CharityRequestPolicy
 	var now int64
+	var personal PersonalPreflight
+	var adaptation *requestadaptation.Snapshot
+	if !charity && s.adaptations != nil {
+		personal, adaptation, err = s.personalIngressPolicy(ctx, user, envelope.Model)
+		if err != nil {
+			return nil, nil, false, err
+		}
+		defer adaptation.Clear()
+		filtered, err = envelope.WithoutFields(adaptation.Document.ExcludedRequestFields)
+		if err != nil {
+			return nil, nil, false, err
+		}
+	}
 	if charity {
 		policy, now, err = s.ingressPolicy(ctx, user, envelope.Model)
 		if err != nil {
@@ -72,11 +87,17 @@ func (s *Service) decodeEnvelope(ctx context.Context, user int64, body []byte, e
 		request.policyRevision = policy.Revision
 		request.transportRule = policy.TransportRule
 	}
+	if err == nil && adaptation != nil {
+		err = request.excludeFields(adaptation.Document.ExcludedRequestFields)
+		request.policyModelID = personal.ModelID
+		pinned := adaptation.Clone()
+		request.personalAdaptation = &pinned
+	}
 	if err != nil {
 		if request != nil {
 			request.Clear()
 		}
-		if charity {
+		if charity || adaptation != nil {
 			clear(filtered)
 		}
 		return nil, nil, charity, err
@@ -88,7 +109,10 @@ func (s *Service) decodeEnvelope(ctx context.Context, user int64, body []byte, e
 // bind policy once; callers that need exclusions applied before decoding use
 // the HTTP ingress boundary above.
 func (s *Service) bindDirectPolicy(ctx context.Context, user int64, request *validatedRequest, body []byte) (*validatedRequest, []byte, func(), error) {
-	if !modelname.IsCharity(request.Model) || request.policyModelID != 0 {
+	if !modelname.IsCharity(request.Model) {
+		return s.bindDirectPersonalPolicy(ctx, user, request, body)
+	}
+	if request.policyModelID != 0 {
 		return request, body, nil, nil
 	}
 	policy, now, err := s.ingressPolicy(ctx, user, request.Model)
@@ -126,6 +150,73 @@ func (s *Service) bindDirectPolicy(ctx context.Context, user int64, request *val
 	return copy, filtered, func() {
 		copy.Clear()
 		if len(policy.ExcludedRequestFields) > 0 {
+			clear(filtered)
+		}
+	}, nil
+}
+
+func (s *Service) personalIngressPolicy(ctx context.Context, user int64, model string) (PersonalPreflight, *requestadaptation.Snapshot, error) {
+	s.lifecycle.RLock()
+	defer s.lifecycle.RUnlock()
+	if s.closed {
+		return PersonalPreflight{}, nil, ErrClosed
+	}
+	policy, err := s.personal.Preflight(ctx, user, model)
+	if err != nil {
+		return policy, nil, err
+	}
+	if policy.ModelID <= 0 || policy.OwnerUserID != user {
+		return policy, nil, routing.ErrNotFound
+	}
+	ref := requestadaptation.Ref{Scope: requestadaptation.ScopePersonalModel, ID: policy.ModelID}
+	snapshots, err := s.adaptations.LoadMany(ctx, []requestadaptation.Ref{ref})
+	if err != nil {
+		return policy, nil, err
+	}
+	snapshot, ok := snapshots[ref]
+	if !ok {
+		snapshot = requestadaptation.Snapshot{Document: requestadaptation.Empty(ref.Scope), Revision: "0"}
+	}
+	return policy, &snapshot, nil
+}
+
+func (s *Service) bindDirectPersonalPolicy(ctx context.Context, user int64, request *validatedRequest, body []byte) (*validatedRequest, []byte, func(), error) {
+	if s.adaptations == nil || request.personalAdaptation != nil {
+		return request, body, nil, nil
+	}
+	policy, snapshot, err := s.personalIngressPolicy(ctx, user, request.Model)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	copy := request.CloneForAttempt()
+	copy.personalAdaptation = snapshot
+	copy.policyModelID = policy.ModelID
+	fields := snapshot.Document.ExcludedRequestFields
+	if err := copy.excludeFields(fields); err != nil {
+		copy.Clear()
+		return nil, nil, nil, err
+	}
+	filtered := body
+	if len(fields) > 0 {
+		envelope, err := openai.DecodeRequestEnvelope(bytes.NewReader(body), request.bodyLimit(), request.operation)
+		if err != nil {
+			copy.Clear()
+			return nil, nil, nil, err
+		}
+		defer envelope.Clear()
+		if envelope.Model != request.Model {
+			copy.Clear()
+			return nil, nil, nil, routing.ErrNotFound
+		}
+		filtered, err = envelope.WithoutFields(fields)
+		if err != nil {
+			copy.Clear()
+			return nil, nil, nil, err
+		}
+	}
+	return copy, filtered, func() {
+		copy.Clear()
+		if len(fields) > 0 {
 			clear(filtered)
 		}
 	}, nil

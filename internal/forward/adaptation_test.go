@@ -51,6 +51,9 @@ func TestPersonalAdaptationFrozenBeforeClaimAndAppliedToAttempt(t *testing.T) {
 	ref := requestadaptation.Ref{Scope: requestadaptation.ScopeEndpoint, ID: fixture.personal.snapshot.Candidates[0].EndpointID}
 	loads := 0
 	fixture.service.adaptations = adaptationReaderFunc(func(refs []requestadaptation.Ref) map[requestadaptation.Ref]requestadaptation.Snapshot {
+		if len(refs) == 1 && refs[0].Scope == requestadaptation.ScopePersonalModel {
+			return map[requestadaptation.Ref]requestadaptation.Snapshot{refs[0]: {Document: requestadaptation.Empty(refs[0].Scope), Revision: "0"}}
+		}
 		loads++
 		if len(refs) != 1 || refs[0] != ref {
 			t.Fatalf("snapshot refs: %+v", refs)

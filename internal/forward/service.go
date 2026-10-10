@@ -519,6 +519,9 @@ func (service *Service) preflight(ctx context.Context, userID int64, request *va
 	if err != nil {
 		return logicalAdmission{}, request, nil, err
 	}
+	if request.policyModelID != 0 && request.policyModelID != value.ModelID {
+		return logicalAdmission{}, request, nil, routing.ErrNotFound
+	}
 	if !value.ModelTypes.Supports(request.operation) {
 		return logicalAdmission{}, request, nil, unsupportedModelType()
 	}
@@ -563,6 +566,10 @@ func prepareModelPolicy(request *validatedRequest, admission logicalAdmission) (
 	policy := admission.rolePolicy.Clone()
 	copy.roleSnapshot = &policy
 	copy.excluded = append([]string(nil), request.excluded...)
+	if request.personalAdaptation != nil {
+		snapshot := request.personalAdaptation.Clone()
+		copy.personalAdaptation = &snapshot
+	}
 	return admission, copy, copy.Clear, nil
 }
 

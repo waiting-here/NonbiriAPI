@@ -28,13 +28,16 @@ type InteractionExport struct {
 }
 
 type RequestAdaptationExport struct {
-	EndpointID           string                  `json:"endpoint_id"`
-	Revision             string                  `json:"revision"`
-	ForwardHeaders       []string                `json:"forward_headers"`
-	FixedHeaders         []AdaptationValueExport `json:"fixed_headers"`
-	BodyDefaults         []AdaptationValueExport `json:"body_defaults"`
-	BodyForced           []AdaptationValueExport `json:"body_forced"`
-	NativeExtensionPaths []string                `json:"native_extension_paths"`
+	EndpointID            string                  `json:"endpoint_id,omitempty"`
+	ModelID               string                  `json:"model_id,omitempty"`
+	ExcludedRequestFields []string                `json:"excluded_request_fields,omitempty"`
+	Modes                 map[string]string       `json:"modes"`
+	Revision              string                  `json:"revision"`
+	ForwardHeaders        []string                `json:"forward_headers"`
+	FixedHeaders          []AdaptationValueExport `json:"fixed_headers"`
+	BodyDefaults          []AdaptationValueExport `json:"body_defaults"`
+	BodyForced            []AdaptationValueExport `json:"body_forced"`
+	NativeExtensionPaths  []string                `json:"native_extension_paths"`
 }
 
 type AdaptationValueExport struct {

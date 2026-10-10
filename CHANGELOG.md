@@ -8,6 +8,8 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Added
 
+- Personal-model parameter exclusions and encrypted header/body overrides, with per-section service inheritance and form examples.
+
 - Managed charity-model session headers with persistent per-user reuse, configurable idle expiry and UUID or hexadecimal values. Concurrent requests and retries preserve their session; protected upstream headers retain authority.
 
 - Optional charity-model long-context prices and an independent one-time extra-long penalty based on reported input, including cached tokens. Alternate prices keep existing discounts; penalties do not affect donor rewards.
@@ -24,9 +26,11 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Changed
 
-- Database schema revision 12 adds transactional collection, guarantee and activity-journal storage, frozen context prices and temporary managed-header sessions while preserving supported predecessor data and existing legal overrides. Account export schema 16 includes the user's collection activity and appearance.
+- Database schema revision 13 adds transactional collection, guarantee and activity-journal storage, frozen context prices and temporary managed-header sessions and personal-model request configuration while preserving supported predecessor data and existing legal overrides. Account export schema 16 includes the user's collection activity and appearance.
 
 ### Fixed
+
+- Gateway provider warnings no longer abort valid responses. Stream protocol failures retain a bounded rejected-event diagnostic under existing private-log permissions.
 
 - Donation-only reward records can retain anonymous accounting facts after account deletion, while new rewards still require a live recipient.
 - Charity client auto-ban checks now precede short-content, credit-balance, candidate-availability and Debug capture admission, so an early business rejection cannot bypass a matching restriction.

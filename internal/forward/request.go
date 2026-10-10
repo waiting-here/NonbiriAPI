@@ -7,6 +7,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
+	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
 	"github.com/waiting-here/NonbiriAPI/internal/transportpolicy"
 )
@@ -14,18 +15,19 @@ import (
 // validatedRequest owns exactly one protocol snapshot. Metadata and capability
 // checks cannot cause a chat policy to read or transform embedding input.
 type validatedRequest struct {
-	operation         contract.Operation
-	chat              *openai.ChatRequest
-	embedding         *openai.EmbeddingRequest
-	image             *openai.ImageRequest
-	Model             string
-	Stream            bool
-	roleSnapshot      *rolepolicy.Policy
-	transportRule     transportpolicy.Rule
-	policyRevision    int64
-	policyModelID     int64
-	policyDecisionNow int64
-	excluded          []string
+	operation          contract.Operation
+	chat               *openai.ChatRequest
+	embedding          *openai.EmbeddingRequest
+	image              *openai.ImageRequest
+	Model              string
+	Stream             bool
+	roleSnapshot       *rolepolicy.Policy
+	transportRule      transportpolicy.Rule
+	policyRevision     int64
+	policyModelID      int64
+	policyDecisionNow  int64
+	personalAdaptation *requestadaptation.Snapshot
+	excluded           []string
 }
 
 func (*validatedRequest) String() string       { return "[redacted forward request]" }
@@ -89,6 +91,7 @@ func (r *validatedRequest) Clear() {
 	if r == nil {
 		return
 	}
+	r.personalAdaptation.Clear()
 	r.chat.Clear()
 	r.embedding.Clear()
 	r.image.Clear()
@@ -111,6 +114,10 @@ func (r *validatedRequest) CloneForAttempt() *validatedRequest {
 	if r.roleSnapshot != nil {
 		policy := r.roleSnapshot.Clone()
 		result.roleSnapshot = &policy
+	}
+	if r.personalAdaptation != nil {
+		snapshot := r.personalAdaptation.Clone()
+		result.personalAdaptation = &snapshot
 	}
 	result.policyRevision = r.policyRevision
 	result.transportRule = r.transportRule

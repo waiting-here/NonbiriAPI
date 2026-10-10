@@ -60,6 +60,16 @@ func ParsePatch(data []byte) (Patch, error) {
 			return Patch{}, ErrInvalid
 		}
 		switch name {
+		case "excluded_request_fields":
+			var fields []string
+			if json.Unmarshal(raw, &fields) != nil || fields == nil {
+				return Patch{}, ErrInvalid
+			}
+			fields, err := NormalizeExcludedRequestFields(fields)
+			if err != nil {
+				return Patch{}, err
+			}
+			patch.ExcludedRequestFields = &fields
 		case "expected_revision":
 			var text string
 			if json.Unmarshal(raw, &text) != nil || text == "" || len(text) > 19 || len(text) > 1 && text[0] == '0' {
@@ -194,6 +204,7 @@ func parseMapEdit(raw []byte) (MapEdit, error) {
 
 func cloneDocument(d Document) Document {
 	out := d
+	out.ExcludedRequestFields = append([]string(nil), d.ExcludedRequestFields...)
 	out.ForwardHeaders.Values = append([]string{}, d.ForwardHeaders.Values...)
 	out.NativeExtensionPaths.Values = append([]string{}, d.NativeExtensionPaths.Values...)
 	out.FixedHeaders.Values = make(map[string]string, len(d.FixedHeaders.Values))
@@ -214,10 +225,17 @@ func cloneBody(values map[string]json.RawMessage) map[string]json.RawMessage {
 }
 
 func ApplyPatch(previous Document, patch Patch, scope Scope) (Document, error) {
-	if scope != ScopeEndpoint && scope != ScopeCharityModel && scope != ScopeBinding {
+	if scope != ScopePersonalModel && scope != ScopeEndpoint && scope != ScopeCharityModel && scope != ScopeBinding {
 		return Document{}, ErrInvalid
 	}
 	out := cloneDocument(previous)
+	if patch.ExcludedRequestFields != nil {
+		if scope != ScopePersonalModel {
+			out.Clear()
+			return Document{}, ErrInvalid
+		}
+		out.ExcludedRequestFields = append([]string{}, (*patch.ExcludedRequestFields)...)
+	}
 	if patch.ForwardHeaders != nil {
 		out.ForwardHeaders = ListSection{Mode: patch.ForwardHeaders.Mode, Values: append([]string{}, patch.ForwardHeaders.Values...)}
 	}
@@ -417,12 +435,21 @@ func validPaths(paths []string) bool {
 }
 
 func ValidateDocument(d Document, scope Scope) error {
-	if scope != ScopeEndpoint && scope != ScopeCharityModel && scope != ScopeBinding {
+	if scope != ScopePersonalModel && scope != ScopeEndpoint && scope != ScopeCharityModel && scope != ScopeBinding {
+		return ErrInvalid
+	}
+	if len(d.ExcludedRequestFields) != 0 && scope != ScopePersonalModel {
+		return ErrInvalid
+	}
+	if _, err := NormalizeExcludedRequestFields(d.ExcludedRequestFields); err != nil {
+		return err
+	}
+	if ExcludedConflict(d, d.ExcludedRequestFields) {
 		return ErrInvalid
 	}
 	modes := []Mode{d.ForwardHeaders.Mode, d.FixedHeaders.Mode, d.BodyDefaults.Mode, d.BodyForced.Mode, d.NativeExtensionPaths.Mode}
 	for _, mode := range modes {
-		if mode != ModeReplace && (scope != ScopeBinding || mode != ModeInherit) {
+		if mode != ModeReplace && ((scope != ScopeBinding && scope != ScopePersonalModel) || mode != ModeInherit) {
 			return ErrInvalid
 		}
 	}
