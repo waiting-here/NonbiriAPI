@@ -56,6 +56,8 @@ func TestOriginalFullGameConformance(t *testing.T) {
 		t.Fatal("fixture identity")
 	}
 	for _, v := range fixture.Vectors {
+		// The collection receipt protocol preserves these original physics vectors.
+		v.FinalCast.RulesID = RulesID
 		t.Run(v.Name, func(t *testing.T) {
 			rng := &sequenceRandom{Values: v.Samples}
 			p, c, e := Start(v.Profile, rng, v.Seed)

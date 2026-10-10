@@ -12,7 +12,7 @@ import {
 import { directions, directionUnits, unitsToNatural, type Direction } from '@shared/lakenotes/api';
 import { formatCredits } from '../../games/common/strict';
 import { UserPageGate } from '../../components/UserPageGate';
-import { useUserSession } from '../../data';
+import { useUserSession, userKeys } from '../../data';
 import { economySessionRequest } from '../../features/economy/queries';
 import { type Action } from './rules';
 import { LakeController } from './controller';
@@ -21,6 +21,7 @@ import { nativeEnglish } from './native-language';
 import { useLakeCopy, type LakeText } from './copy';
 import {
   act,
+  claimCollection,
   checkpoint,
   controlCast,
   controlInput,
@@ -258,6 +259,20 @@ function LakeContent({ account }: { account: string }) {
       controller.adopt({ profile: view, cast: view.cast });
   }, [query.data, controller]);
   const update = (view: ProfileView) => client.setQueryData(lakeKeys(account), view);
+  const collection = useRetainedOperation(
+    async (location: string, key, context) => {
+      const result = await claimCollection(location, key, { signal: context.signal });
+      await context.commit(async () => {
+        update(result);
+        await client.invalidateQueries({ queryKey: userKeys.me });
+      });
+      return result;
+    },
+    async (_input, error, context) => {
+      if (!error || !responseOutcomeUnknown(error)) await context.commit(() => query.refetch());
+    },
+    ['user', 'lake-notes'],
+  );
   const action = useRetainedOperation(
     async (input: Parameters<typeof act>[0], key, context) => {
       const result = await act(input, key, { signal: context.signal });
@@ -309,6 +324,8 @@ function LakeContent({ account }: { account: string }) {
   const view = query.data,
     unfinished = Boolean(view.cast && !terminalPhase(view.cast.phase));
   const locked =
+    collection.isPending ||
+    collection.outcome === 'unknown' ||
     query.isFetching ||
     action.isPending ||
     action.outcome === 'unknown' ||
@@ -352,6 +369,9 @@ function LakeContent({ account }: { account: string }) {
           held: (held) => controller.setHeld(held),
           tick: () => controller.tick(),
           act: onAction,
+          claimCollection: async (location) => {
+            if (!blocked) return collection.mutateAsync(location);
+          },
           start: () => {
             if (!blocked)
               control.mutate({ kind: 'start', expected_profile_revision: view.revision });
@@ -367,6 +387,19 @@ function LakeContent({ account }: { account: string }) {
         }}
       />
       <div className="lake-platform-controls">
+        {collection.error ? <ErrorState error={collection.error} /> : null}
+        {collection.outcome === 'unknown' ? (
+          <button
+            type="button"
+            className="nb-btn nb-btn--secondary"
+            onClick={() => {
+              if (collection.variables) collection.mutate(collection.variables);
+            }}
+            disabled={collection.isPending}
+          >
+            {text('retry')}
+          </button>
+        ) : null}
         <p className="lake-save-note">
           {text('saveHelp')}{' '}
           <span role="status">

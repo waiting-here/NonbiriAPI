@@ -35,6 +35,7 @@ type Config struct {
 	Gate       AdmissionGate
 	Keys       KeyDeriver
 	Activity   func(context.Context, *sql.Tx, int64, int64) error
+	Reward     func(context.Context, *sql.Tx, int64, string, int64) error
 	Now        func() time.Time
 	Random     rules.Random53
 	MotionSeed func() (uint32, error)

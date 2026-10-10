@@ -31,6 +31,7 @@ type Service struct {
 	gate         AdmissionGate
 	keys         KeyDeriver
 	activity     func(context.Context, *sql.Tx, int64, int64) error
+	reward       func(context.Context, *sql.Tx, int64, string, int64) error
 	now          func() time.Time
 	random       rules.Random53
 	seed         func() (uint32, error)
@@ -53,7 +54,7 @@ func New(c Config) (*Service, error) {
 	if c.MotionSeed == nil {
 		c.MotionSeed = rules.SampleMotionSeed
 	}
-	return &Service{database: c.Database, users: c.Users, admins: c.Admins, gate: c.Gate, keys: c.Keys, activity: c.Activity, now: c.Now, random: c.Random, seed: c.MotionSeed, budgetUsers: map[int64]int{}}, nil
+	return &Service{database: c.Database, users: c.Users, admins: c.Admins, gate: c.Gate, keys: c.Keys, activity: c.Activity, reward: c.Reward, now: c.Now, random: c.Random, seed: c.MotionSeed, budgetUsers: map[int64]int{}}, nil
 }
 func revision(s string, zero bool) (int64, error) {
 	n, e := strconv.ParseInt(s, 10, 64)

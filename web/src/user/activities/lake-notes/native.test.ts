@@ -4,7 +4,7 @@ import { cleanup, render } from '@testing-library/react';
 import { NativeLake } from './NativeLake';
 import { mountLake, type LakeBridge } from './native.mjs';
 import html from './native.html?raw';
-import { initialProfile, RULES_ID, start, step } from './rules';
+import { catalog, initialProfile, RULES_ID, start, step } from './rules';
 import type { ControllerSnapshot } from './controller';
 import type { CastResult } from './api';
 import { nativeEnglish } from './native-language';
@@ -46,6 +46,41 @@ afterEach(() => {
   document.body.replaceChildren();
   vi.unstubAllGlobals();
 });
+test.each(['zh', 'en'] as const)(
+  'collection reward follows caught records and permanent claims (%s)',
+  async (language) => {
+    const { root, profile, bridge, game } = fixture(language);
+    bridge.claimCollection = vi.fn(async (location) => {
+      profile.collectionClaims = { [location]: 1800000000 };
+    });
+    (root.querySelector('#catalogButton') as HTMLButtonElement).click();
+    let button = root.querySelector('.catalog-reward button') as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    for (const fish of catalog.FISH_TYPES.filter((fish) => fish.location === 'lake')) {
+      profile.records[fish.kind] = {
+        caught: '1',
+        maxLength: fish.length[0],
+        bestQuality: 0,
+        perfectCount: '0',
+      };
+    }
+    bridge.revision = () => '2';
+    game.refresh();
+    button = root.querySelector('.catalog-reward button') as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    expect(root.querySelector('.catalog-reward')?.textContent).toContain(
+      language === 'en' ? '50 donation credit' : '50 捐赠回馈',
+    );
+    button.click();
+    await vi.waitFor(() => expect(bridge.claimCollection).toHaveBeenCalledWith('lake'));
+    game.refresh();
+    button = root.querySelector('.catalog-reward button') as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(button.textContent).toBe(language === 'en' ? 'Claimed' : '已领取');
+    expect(profile.coins).toBe('0');
+    game.dispose();
+  },
+);
 test('original journal exposes complete equipment presets and sends account actions', () => {
   const { root, bridge, game, profile } = fixture();
   (root.querySelector('#shopButton') as HTMLButtonElement).click();
