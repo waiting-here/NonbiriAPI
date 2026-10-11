@@ -46,8 +46,16 @@ for (const language of ['en', 'zh'] as const) {
     await page.getByRole('button', { name: text.draw_hole, exact: true }).click();
     const stage = page.locator('.fatfish-level-map');
     await stage.scrollIntoViewIfNeeded();
-    const box = await stage.boundingBox(); if (!box) throw new Error('Stage is not visible');
-    const click = async (x: number, y: number) => page.mouse.click(box.x + (x + 128) * box.width / 736, box.y + (y + 128) * box.height / 816);
+    const click = async (x: number, y: number) => {
+      await stage.scrollIntoViewIfNeeded();
+      const point = await stage.evaluate((node, target) => {
+        const matrix = (node as SVGSVGElement).getScreenCTM();
+        if (!matrix) throw new Error('Stage is not visible');
+        const point = new DOMPoint(target.x, target.y).matrixTransform(matrix);
+        return { x: point.x, y: point.y };
+      }, { x, y });
+      await page.mouse.click(point.x, point.y);
+    };
     await click(228, 272); await click(252, 272); await click(252, 288); await click(228, 288);
     await page.getByRole('button', { name: text.finish_contour, exact: true }).click();
     await expect(page.getByRole('group', { name: text.hole + ' 1', exact: true })).toBeVisible();
@@ -86,9 +94,11 @@ for (const language of ['en', 'zh'] as const) {
     await expect(hole.getByLabel('X', { exact: true }).first()).toHaveValue('232');
 
     await page.getByRole('button', { name: text.draw_outer_contour, exact: true }).click();
+    await page.getByLabel(text.title, { exact: true }).scrollIntoViewIfNeeded();
     await click(10, 10); await click(20, 20);
     await expect(page.getByRole('button', { name: text.save_draft, exact: true })).toBeDisabled();
     await stage.press('Escape');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
     await page.getByLabel(text.title, { exact: true }).fill('Gesture level');
     await page.getByRole('button', { name: text.save_draft, exact: true }).click();
     await expect.poll(() => draft).not.toBeNull();
