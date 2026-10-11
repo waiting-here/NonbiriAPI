@@ -33,7 +33,10 @@ const nextStep = {
   unconfigured: 'common.nextUnconfigured',
   open: 'common.nextOpen',
 } as const;
-export function LimitedActivitiesSection({ hideEmpty = false }: { hideEmpty?: boolean } = {}) {
+export function LimitedActivitiesSection({
+  hideEmpty = false,
+  children,
+}: { hideEmpty?: boolean; children?: ReactNode } = {}) {
   const text = useActivityText(),
     session = useUserSession(),
     client = useQueryClient(),
@@ -43,7 +46,7 @@ export function LimitedActivitiesSection({ hideEmpty = false }: { hideEmpty?: bo
     queryFn: () => economySessionRequest(client, getDirectory, account),
     enabled: !!account && !session.error && !session.isFetching,
   });
-  if (hideEmpty && query.data?.length === 0 && !query.error) return null;
+  if (hideEmpty && query.data?.length === 0 && !query.error && !children) return null;
   return (
     <section aria-labelledby="limited-activities-heading">
       <h2 id="limited-activities-heading">{text('common.limitedTimeActivities')}</h2>
@@ -52,7 +55,9 @@ export function LimitedActivitiesSection({ hideEmpty = false }: { hideEmpty?: bo
       ) : query.error ? (
         <ErrorState error={query.error} onRetry={() => void query.refetch()} />
       ) : null}
-      {query.data?.length === 0 ? <p>{text('common.noLimitedTimeActivitiesAreListed')}</p> : null}
+      {query.data?.length === 0 && !children ? (
+        <p>{text('common.noLimitedTimeActivitiesAreListed')}</p>
+      ) : null}
       <div className="limited-grid">
         {query.data?.map((activity) => {
           const isBook = activity.key === 'picture-book';
@@ -104,6 +109,7 @@ export function LimitedActivitiesSection({ hideEmpty = false }: { hideEmpty?: bo
             </Link>
           );
         })}
+        {children}
       </div>
     </section>
   );

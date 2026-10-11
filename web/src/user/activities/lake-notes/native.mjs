@@ -2876,8 +2876,8 @@ export function mountLake(root, bridge) {
       const progress = createElement('p');
       progress.textContent =
         bridge.language === 'en'
-          ? `Collection ${collected}/${locationFish.length} · 50 donation credit`
-          : `图鉴 ${collected}/${locationFish.length} · 50 捐赠回馈`;
+          ? `Collection ${collected}/${locationFish.length} · 50 donation credit + 100,000 game credits`
+          : `图鉴 ${collected}/${locationFish.length} · 50 捐赠回馈＋100,000 游戏悠哉积分`;
       const claim = createElement('button');
       claim.type = 'button';
       claim.className = 'nb-btn nb-btn--secondary';

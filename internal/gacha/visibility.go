@@ -6,9 +6,20 @@ import (
 	"encoding/json"
 )
 
+type PoolEntry struct {
+	ID       string   `json:"id"`
+	Name     string   `json:"name"`
+	NameEN   string   `json:"name_en,omitempty"`
+	Cover    string   `json:"cover"`
+	Featured []string `json:"featured"`
+	StartsAt int64    `json:"starts_at"`
+	EndsAt   int64    `json:"ends_at"`
+}
+
 type Entry struct {
-	Enabled bool `json:"enabled"`
-	Entered bool `json:"entered"`
+	Enabled bool        `json:"enabled"`
+	Entered bool        `json:"entered"`
+	Pools   []PoolEntry `json:"pools"`
 }
 
 func readEntryEnabled(ctx context.Context, tx *sql.Tx) (bool, error) {
@@ -18,7 +29,7 @@ func readEntryEnabled(ctx context.Context, tx *sql.Tx) (bool, error) {
 }
 
 func (s *Service) Entry(ctx context.Context, user int64) (Entry, error) {
-	var out Entry
+	out := Entry{Pools: []PoolEntry{}}
 	at, err := s.now()
 	if err != nil {
 		return out, err
@@ -38,7 +49,37 @@ func (s *Service) Entry(ctx context.Context, user int64) (Entry, error) {
 	if err = tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM gacha_profiles WHERE user_id=?)", user).Scan(&out.Entered); err != nil {
 		return out, err
 	}
+	if out.Enabled {
+		out.Pools, err = readPoolEntries(ctx, tx, at)
+		if err != nil {
+			return out, err
+		}
+	}
 	return out, tx.Commit()
+}
+
+func readPoolEntries(ctx context.Context, tx *sql.Tx, at int64) ([]PoolEntry, error) {
+	out := []PoolEntry{}
+	rows, err := tx.QueryContext(ctx, "SELECT config FROM gacha_pools ORDER BY created_at,id")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var raw string
+		var pool Pool
+		if err = rows.Scan(&raw); err != nil {
+			return nil, err
+		}
+		if err = json.Unmarshal([]byte(raw), &pool); err != nil {
+			return nil, err
+		}
+		if pool.Kind == "limited" && pool.Open(at) {
+			out = append(out, PoolEntry{ID: pool.ID, Name: pool.Name, NameEN: pool.NameEN, Cover: pool.Cover,
+				Featured: pool.Featured, StartsAt: *pool.StartsAt, EndsAt: *pool.EndsAt})
+		}
+	}
+	return out, rows.Err()
 }
 
 // Each configuration applies from its save time until the next revision.

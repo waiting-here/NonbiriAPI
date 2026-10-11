@@ -80,16 +80,18 @@ export function GachaApp({
   port,
   english = false,
   back,
+  initialPoolId = 'permanent',
 }: {
   port: GachaPort;
   english?: boolean;
   back?: ReactNode;
+  initialPoolId?: string;
 }) {
   const appearance = useOptionalAppearance();
   const t = (zh: string, en: string) => (english ? en : zh);
   const [state, setState] = useState<Snapshot | null>(null),
     [page, setPage] = useState<Page>('pools');
-  const [poolId, setPoolId] = useState('permanent'),
+  const [poolId, setPoolId] = useState(initialPoolId),
     [heroIndex, setHeroIndex] = useState(0);
   const [dialog, setDialog] = useState<Dialog>(null),
     [card, setCard] = useState<Card | null>(null),
@@ -712,8 +714,8 @@ export function GachaApp({
         <footer className="gacha-footer">
           <p>
             {t(
-              '卡牌仅供收藏，没有常规积分收益，不能交易或兑换积分。',
-              'Cards are for collection only. No regular credit rewards, trading or cash-out.',
+              '卡牌仅供收藏，不能交易或兑换积分。抽卡没有常规积分收益，集齐主题可领取一次性奖励。',
+              'Cards are collectibles and cannot be traded or redeemed for credits. Draws have no regular credit income; complete themes for one-time rewards.',
             )}
           </p>
           <span>NONBIRI · COLLECT A LITTLE JOY</span>
@@ -1068,8 +1070,8 @@ export function GachaApp({
           <Fold title={t('收集与记录', 'Collection and records')}>
             <p>
               {t(
-                '卡牌仅供收藏，无积分返还或交易功能。集齐主题自动解锁合照，票券与 10 捐赠回馈手动领取一次。抽卡逐条明细保留 180 天，收藏、保底和领取状态在账号存在期间长期保留。',
-                'Cards are collectibles with no credit redemption or trading. A complete theme unlocks its illustration immediately; claim its ticket and 10 donation credit once. Draw details are kept for 180 days. Collection, pity and claim status remain while your account exists.',
+                '卡牌仅供收藏，无积分返还或交易功能。集齐主题自动解锁插画，可手动领取一次票券、10 捐赠回馈和 10,000 悠哉积分；常驻主题发放游戏积分，其他主题发放通用积分。抽卡逐条明细保留 180 天，收藏、保底和领取状态在账号存在期间长期保留。',
+                'Cards are collectibles with no credit redemption or trading. A complete theme unlocks its illustration immediately; claim its ticket, 10 donation credit and 10,000 credits once. Permanent themes grant game credits; all other themes grant general credits. Draw details are kept for 180 days. Collection, pity and claim status remain while your account exists.',
               )}
             </p>
           </Fold>

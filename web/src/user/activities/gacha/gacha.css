@@ -1677,13 +1677,15 @@
 }
 
 .gacha-entry {
+  grid-column: 1 / -1;
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  border-radius: 1.4rem;
-  min-height: 260px;
-  background: #e6efe8;
-  color: #153d33;
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-lg);
+  min-height: 16rem;
+  background: var(--nb-color-surface);
+  color: var(--nb-color-text);
 }
 .gacha-entry > img {
   position: absolute;
@@ -1699,34 +1701,42 @@
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: linear-gradient(90deg, #f5f7edfa, #f5f7ede8 30%, #f5f7ed00 78%);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--nb-color-surface) 98%, transparent),
+    color-mix(in srgb, var(--nb-color-surface) 95%, transparent) 35%,
+    color-mix(in srgb, var(--nb-color-surface) 5%, transparent) 85%
+  );
 }
 .gacha-entry > div {
-  padding: 2rem 2.4rem;
-  width: min(590px, 65%);
+  padding: var(--nb-space-8);
+  width: min(37rem, 65%);
 }
 .gacha-entry span {
-  font-size: 0.75rem;
-  letter-spacing: 0.13em;
-  font-weight: 700;
+  font-size: var(--nb-font-size-sm);
+  font-weight: var(--nb-font-weight-semibold);
 }
 .gacha-entry h2 {
-  font-family: var(--font-display, serif);
-  font-size: 2.1rem;
-  margin: 0.5rem 0;
+  font-size: var(--nb-font-size-2xl);
+  margin: var(--nb-space-2) 0;
 }
 .gacha-entry p {
   line-height: 1.8;
-  margin-bottom: 1.3rem;
+  margin-bottom: var(--nb-space-5);
 }
-@media (max-width: 620px) {
+.gacha-theme__credits {
+  white-space: nowrap;
+}
+@media (width < 40rem) {
   .gacha-entry > div {
-    width: 95%;
-    padding: 1.5rem;
+    width: 100%;
+    padding: var(--nb-space-5);
   }
   .gacha-entry::before {
-    background: linear-gradient(90deg, #f5f7edf5, #f5f7eddb 65%, #f5f7ed70);
+    background: color-mix(in srgb, var(--nb-color-surface) 88%, transparent);
   }
+}
+@media (max-width: 620px) {
   .gacha-page-header {
     padding-block: 0.75rem;
     gap: 0.45rem;
@@ -1819,40 +1829,6 @@
 }
 .gacha-special-progress strong {
   font-size: var(--nb-font-size-md);
-}
-
-.gacha-entry .nb-btn--primary {
-  background: #315d4f;
-  border-color: #315d4f;
-  color: #fff;
-}
-.gacha-entry .nb-btn--primary:hover {
-  background: #254b3f;
-  border-color: #254b3f;
-}
-[data-theme='dark'] .gacha-entry {
-  background: #18372f;
-  color: #eef5ec;
-}
-[data-theme='dark'] .gacha-entry::before {
-  background: linear-gradient(90deg, #142f28fa, #142f28e8 35%, #142f281c 90%);
-}
-[data-theme='dark'] .gacha-entry > img {
-  filter: brightness(0.7);
-}
-[data-theme='dark'] .gacha-entry .nb-btn--primary {
-  background: #bdd6c3;
-  border-color: #bdd6c3;
-  color: #17382c;
-}
-[data-theme='dark'] .gacha-entry .nb-btn--primary:hover {
-  background: #d4e5d7;
-  border-color: #d4e5d7;
-}
-@media (width < 40rem) {
-  [data-theme='dark'] .gacha-entry::before {
-    background: linear-gradient(90deg, #142f28f5, #142f28df 65%, #142f2890);
-  }
 }
 
 html:has(.gacha-dialog[open]) {

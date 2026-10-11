@@ -30,16 +30,19 @@ func NewLakeExchange(meta Meta, wallet, external int64, asset Asset, delta Amoun
 	return p, nil
 }
 
-// NewLakeCollectionReward adds donation credit without issuing spendable credits.
+// NewLakeCollectionReward grants game credits and cumulative donation credit.
 // Location eligibility and its permanent claim belong to the caller's transaction.
-func NewLakeCollectionReward(meta Meta, wallet int64) (Plan, error) {
-	if meta.ActorUserID <= 0 || wallet <= 0 {
+func NewLakeCollectionReward(meta Meta, wallets AccountPair, external int64) (Plan, error) {
+	if meta.ActorUserID <= 0 || !wallets.valid() || external <= 0 {
 		return Plan{}, ErrInvalidPlan
 	}
 	p, err := operationPlan(meta, KindLakeCollectionReward)
 	if err != nil {
 		return Plan{}, err
 	}
-	p.spec.donation = &donationChange{userID: meta.ActorUserID, accountID: wallet, delta: AmountFromMilli(50000)}
+	credits := AmountFromMilli(100000000)
+	p = p.add(roleForAsset(userRole(wallets.Game), Game), credits).
+		add(roleForAsset(externalRole(external), Game), negate(credits))
+	p.spec.donation = &donationChange{userID: meta.ActorUserID, accountID: wallets.General, delta: AmountFromMilli(50000)}
 	return p, nil
 }

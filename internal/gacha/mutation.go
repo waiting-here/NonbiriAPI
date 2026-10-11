@@ -481,7 +481,20 @@ func claim(ctx context.Context, tx *sql.Tx, user, at int64, id, themeID string, 
 	if err != nil {
 		return err
 	}
-	plan, err := ledger.NewGachaThemeReward(ledger.Meta{OperationID: id, ActorUserID: user, CreatedAt: at}, general.ID)
+	game, err := ledger.UserAssetAccount(ctx, tx, user, ledger.Game)
+	if err != nil {
+		return err
+	}
+	asset := ledger.General
+	if theme.Source == "permanent" {
+		asset = ledger.Game
+	}
+	external, err := ledger.CodedAssetAccount(ctx, tx, "external", asset)
+	if err != nil {
+		return err
+	}
+	plan, err := ledger.NewGachaThemeReward(ledger.Meta{OperationID: id, ActorUserID: user, CreatedAt: at},
+		ledger.AccountPair{General: general.ID, Game: game.ID}, external.ID, asset)
 	if err != nil {
 		return err
 	}

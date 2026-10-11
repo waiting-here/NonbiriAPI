@@ -12,7 +12,7 @@ Quote before confirming. The quote contains settings and profile revisions. Chan
 
 ## Collection rewards
 
-Complete a location’s fish collection, then claim 50 cumulative donation credits from its collection tab. Each location can be claimed once per account, including collections completed before this feature became available. Rewards do not grant spendable credits or coins. Catches remain recorded after fish are sold. The server commits the reward, automatic membership progression and permanent claim together.
+Complete a location’s fish collection, then claim 50 cumulative donation credits and 100,000 game credits from its collection tab. Each location can be claimed once per account, including collections completed before this feature became available. The reward does not grant general credits, fishing coins or XP. Catches remain recorded after fish are sold. The server commits the reward, automatic membership progression and permanent claim together.
 
 ## Session API
 

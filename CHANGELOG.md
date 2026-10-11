@@ -20,11 +20,11 @@ Each version entry describes its source and compatibility boundary; a release ta
 - The Gacha Simulator with 57 cards across thirteen themes, fifteen animated SSR and two animated SP illustrations, seven covers, unlockable group illustrations and dedicated sound effects.
 - A permanent pool and concurrent scheduled limited pools, configurable probabilities and hard guarantees, and cross-period progress shared by pools with identical rules.
 - Standard and limited tickets, game-credit-first standard exchanges, general-credit-only limited exchanges, a one-time ten-ticket welcome gift with a first-ten-pull SSR guarantee, and daily activity check-ins.
-- Duplicate-to-shard conversion, a mystery shop, limited-card redemptions during pool availability and shop-exclusive chibi cards. Theme completion grants tickets and cumulative donation credit without spendable credit income.
+- Duplicate-to-shard conversion, a mystery shop, limited-card redemptions during pool availability and shop-exclusive chibi cards. Theme completion grants tickets and ten cumulative donation credit, plus 10,000 game credits for permanent themes or 10,000 general credits for all other themes.
 - Administrator pool, probability, price, quota and reusable preset controls. Opened pools retain accepted rules; permanent-pool changes protect current guarantee progress.
 - A shared ten-card reveal board with SR focus, full-screen SSR/SP close-ups, first-encounter SP preludes, bilingual character lines, skippable results, animated duplicate conversion and optional card-back hints and device vibration.
 - Two SP cards with matching light/dark site appearances, unlocked on acquisition and selected per account. Their separate rule group uses a 15% featured share within the SSR tier and a guarantee after two misses; direct redemption costs nine SSR shards.
-- A manual, once-per-location Lake Notes collection reward of 50 cumulative donation credits, including previously completed collections, without spendable credit or coin rewards.
+- A manual, once-per-location Lake Notes collection reward of 50 cumulative donation credits and 100,000 game credits, including previously completed collections.
 - A standalone activity preview with separate sample data, new-account and full-collection modes, appearances and SSR/SP presentation samples.
 
 ### Changed
@@ -33,11 +33,12 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Enhanced card artwork reaches 2560×3840 and landscape art 3840×2160, loaded responsively for large displays. Light and dark appearance panels combine soft edges with readable central surfaces.
 - The Fat Fish editor groups creation tools, canvas modes and properties, explains unfinished requirements, previews invalid geometry and fish collisions, and supports precise headings, viewport placement, zoom and touch navigation.
 - Charity catalog filters remain visible. Both stations improve request-log labels, exact credit amounts, mobile controls, empty states and appearance contrast.
-- The gacha activity entry starts hidden and can be enabled by administrators. Limited-only themes stay hidden until a pool has opened or the user owns one of their cards.
+- The gacha activity entrances start hidden and can be enabled by administrators. The permanent banner sits below Cyber Loan; each currently open limited pool gets its own scheduled entrance and direct link. Limited-only themes stay hidden until a pool has opened or the user owns one of their cards.
 - Database schema revision 14 adds transactional collection, guarantee and activity-journal storage, frozen context prices, temporary managed-header sessions, personal-model request configuration and safe request-mode/automatic-action facts while preserving supported predecessor data and existing legal overrides. Account export schema 17 includes the user's collection activity, appearance and safe personal request-configuration projections.
 
 ### Fixed
 
+- SSR/SP card blinks follow individual eyelid contours without crossfading the surrounding face. Card animation now uses the same phase-preserving 60 Hz cadence as appearance wallpapers.
 - Personal model requests remain available when general credits are negative; charity balance checks remain in effect.
 - Gateway provider warnings no longer abort valid responses. Stream protocol failures retain a bounded rejected-event diagnostic under existing private-log permissions.
 

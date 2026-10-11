@@ -12,7 +12,8 @@ import {
 } from '../features/economy/ActivitiesPanels';
 import { useActivities, useActivityAccountEvents } from '../features/economy/queries';
 import { LoanCard } from '../features/economy/LoanCard';
-import { GachaEntry } from '../activities/gacha/GachaEntry';
+import { GachaEntry, GachaPoolEntries } from '../activities/gacha/GachaEntry';
+import { useGachaEntry } from '../activities/gacha/entry';
 import { LimitedActivitiesSection } from '../features/limitedactivities/LimitedActivities';
 import '../features/economy/economy.css';
 import '../features/economy/activities.css';
@@ -54,6 +55,7 @@ function ActivitiesContent() {
   const { t } = useTranslation();
   const session = useUserSession();
   const activities = useActivities();
+  const gacha = useGachaEntry();
   const accountID = session.data?.user.id;
   const stream = useActivityAccountEvents(
     Boolean(activities.data && accountID && !session.isFetching && !session.error),
@@ -73,8 +75,11 @@ function ActivitiesContent() {
           </Link>
         }
       />
-      <GachaEntry />
-      <LimitedActivitiesSection hideEmpty />
+      <LimitedActivitiesSection hideEmpty>
+        {gacha.data?.enabled && gacha.data.pools.length > 0 ? (
+          <GachaPoolEntries pools={gacha.data.pools} />
+        ) : null}
+      </LimitedActivitiesSection>
       <h2>{t('common.activities.permanent')}</h2>
       {activities.isPending && !activities.data ? <LoadingState /> : null}
       {activities.error && !activities.data ? (
@@ -95,6 +100,7 @@ function ActivitiesContent() {
               loan={activities.data.loan}
               masterAvailable={activities.data.master.available}
             />
+            {gacha.data?.enabled && <GachaEntry />}
             <ActivitySlot
               title={t('user.activities.welfare.title')}
               available={activities.data.master.available}

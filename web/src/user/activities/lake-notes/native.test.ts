@@ -69,7 +69,7 @@ test.each(['zh', 'en'] as const)(
     button = root.querySelector('.catalog-reward button') as HTMLButtonElement;
     expect(button.disabled).toBe(false);
     expect(root.querySelector('.catalog-reward')?.textContent).toContain(
-      language === 'en' ? '50 donation credit' : '50 捐赠回馈',
+      language === 'en' ? '50 donation credit + 100,000 game credits' : '50 捐赠回馈＋100,000 游戏悠哉积分',
     );
     button.click();
     await vi.waitFor(() => expect(bridge.claimCollection).toHaveBeenCalledWith('lake'));
