@@ -8,10 +8,11 @@ import { TaskScans } from './TaskScans';
 import { TimeInput } from '@shared/components/TimeInput';
 import { TimeContextNotice } from '@shared/components/TimeContext';
 import { createTimeDraft, timeDraftValue } from '@shared/time';
+import { formatCount } from '@shared/utils/formatNumber';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { sourceFlagLabel, sourceQualityLabel } from '@shared/observability/sourceLabels';
 import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
-import { Tabs, Fold, Note } from '@shared/components/ui';
+import { Tabs, Fold, Note, DataTable } from '@shared/components/ui';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { PagePagination } from '@shared/operations/PagePagination';
@@ -549,9 +550,93 @@ function IPs({ inspect, ...scope }: Scope & { inspect: (id: string) => void }) {
     </div>
   );
 }
-function UserIPWindows(scope: Scope) {
+function UserIPWindows({ userID, ...scope }: Scope & { userID?: string }) {
   const { t } = useTranslation();
   const stamp = useStamp();
+  if (userID !== undefined && !/^[1-9][0-9]{0,18}$/.test(userID)) {
+    return <Note tone="bad">{t('common.audit.invalidTargetUser')}</Note>;
+  }
+  if (userID !== undefined) {
+    return (
+      <div className="ops-stack">
+        <Note>{t('common.audit.userIPHistoryHelp')}</Note>
+        <TaskScans<SharedIP>
+          role={scope.role}
+          scopeKey={scope.scopeKey}
+          filters={scope.filters}
+          kind="user_ips"
+          userID={userID}
+          renderItem={(item) => (
+            <Card key={item.ip}>
+              <h3 className="mono audit-ip-address">{item.ip}</h3>
+              <dl className="nb-facts nb-facts--inline">
+                <dt>{scope.c.count}</dt>
+                <dd>{formatCount(item.requests).display}</dd>
+                <dt>{scope.c.first}</dt>
+                <dd>{stamp(item.first_seen)}</dd>
+                <dt>{scope.c.last}</dt>
+                <dd>{stamp(item.last_seen)}</dd>
+              </dl>
+              <DataTable
+                caption={t('common.audit.ipCalls')}
+                rows={item.associations}
+                rowKey={(row) => row.call_kind}
+                columns={[
+                  {
+                    key: 'kind',
+                    header: scope.c.kind,
+                    cell: 'title',
+                    render: (row) =>
+                      (
+                        ({
+                          self: scope.c.self,
+                          charity: scope.c.charity,
+                          unclassified: scope.c.unclassified,
+                        }) as Record<string, string>
+                      )[row.call_kind] ?? row.call_kind,
+                  },
+                  {
+                    key: 'count',
+                    header: scope.c.count,
+                    cell: 'meta',
+                    mobileLabel: scope.c.count,
+                    align: 'num',
+                    render: (row) => formatCount(row.requests).display,
+                  },
+                  {
+                    key: 'dispatched',
+                    header: scope.c.dispatched,
+                    cell: 'meta',
+                    mobileLabel: scope.c.dispatched,
+                    align: 'num',
+                    render: (row) => formatCount(row.dispatched).display,
+                  },
+                  {
+                    key: 'rejected',
+                    header: scope.c.rejected,
+                    cell: 'meta',
+                    mobileLabel: scope.c.rejected,
+                    align: 'num',
+                    render: (row) => formatCount(row.rejected).display,
+                  },
+                ]}
+              />
+              <Link
+                to={queryPath(scope.role === 'admin' ? '/logs' : '/steward', {
+                  tab: scope.role === 'steward' ? 'logs' : undefined,
+                  user_id: userID,
+                  from: item.first_seen,
+                  to: item.last_seen + 1,
+                })}
+              >
+                {t('common.audit.openLogs')}
+              </Link>
+            </Card>
+          )}
+        />
+      </div>
+    );
+  }
   return (
     <div className="ops-stack">
       <p>{t('common.audit.userIPsHelp')}</p>
@@ -1625,6 +1710,7 @@ function RiskBody({ role, scopeKey }: { role: RiskRole; scopeKey: string }) {
   ).includes(rawTab)
     ? (rawTab as Tab)
     : 'users';
+  const ipUser = params.get('audit_ip_user') ?? undefined;
   const selectedUser = /^[1-9][0-9]{0,18}$/.test(params.get('audit_user') ?? '')
     ? params.get('audit_user')!
     : '';
@@ -1732,7 +1818,22 @@ function RiskBody({ role, scopeKey }: { role: RiskRole; scopeKey: string }) {
   if (authorityError) return <ErrorState error={authorityError} />;
   return (
     <div className="page ops-page audit-page">
-      <PageHeader title={c.title} description={c.description} />
+      <PageHeader
+        title={c.title}
+        description={c.description}
+        back={
+          ipUser ? (
+            <Link
+              to={queryPath(role === 'admin' ? '/users' : '/steward', {
+                tab: role === 'steward' ? 'users' : undefined,
+                user: ipUser,
+              })}
+            >
+              {t('common.audit.backToProfile')}
+            </Link>
+          ) : undefined
+        }
+      />
       <Card>
         <Note>{t('common.audit.presentation.note')}</Note>
         <Fold plain title={t('common.audit.presentation.basis')}>
@@ -1876,7 +1977,7 @@ function RiskBody({ role, scopeKey }: { role: RiskRole; scopeKey: string }) {
         ) : tab === 'ips' ? (
           <IPs {...scope} inspect={setSelectedUser} />
         ) : tab === 'user_ips' ? (
-          <UserIPWindows {...scope} />
+          <UserIPWindows key={ipUser ?? 'all'} {...scope} userID={ipUser} />
         ) : tab === 'clients' ? (
           <Clients {...scope} inspect={setSelectedUser} />
         ) : tab === 'rules' ? (

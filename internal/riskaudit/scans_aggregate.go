@@ -38,7 +38,8 @@ func (r *Repository) processAggregateScanBatch(ctx context.Context, tx *sql.Tx, 
 			err = startIPGroup(ctx, tx, &scan, &checkpoint)
 		}
 		if errors.Is(err, sql.ErrNoRows) {
-			_, err = tx.ExecContext(ctx, `UPDATE risk_client_scans SET state='completed',checkpoint_json=`+scanCheckpointWithoutIdentitySQL+`,updated_at=?,failures=0 WHERE id=?`, now, scan.ID)
+			changed := scan.UserID != 0 && scan.Scanned < scan.Candidates
+			_, err = tx.ExecContext(ctx, `UPDATE risk_client_scans SET state='completed',changed=CASE WHEN ? THEN 1 ELSE changed END,checkpoint_json=`+scanCheckpointWithoutIdentitySQL+`,updated_at=?,failures=0 WHERE id=?`, changed, now, scan.ID)
 			if err != nil {
 				return false, err
 			}
@@ -73,6 +74,11 @@ func (r *Repository) processAggregateScanBatch(ctx context.Context, tx *sql.Tx, 
 	if scan.State != "limited" {
 		scan.State = "running"
 	} else {
+		if scan.UserID != 0 && checkpoint.SourceID != 0 {
+			if _, err = tx.ExecContext(ctx, `UPDATE risk_client_scans SET coverage_json=json_set(coverage_json,'$.last_source_at',?,'$.last_source_id',?) WHERE id=?`, checkpoint.SourceAt, checkpoint.SourceID, scan.ID); err != nil {
+				return false, err
+			}
+		}
 		checkpoint.PendingUser, checkpoint.AfterUser = 0, 0
 		checkpoint.PendingIP, checkpoint.AfterIP = "", ""
 		checkpoint.SourceAt, checkpoint.SourceID = 0, 0
@@ -183,7 +189,7 @@ func processUserGroup(ctx context.Context, tx *sql.Tx, scan *ClientScan, checkpo
 func startIPGroup(ctx context.Context, tx *sql.Tx, scan *ClientScan, checkpoint *scanCheckpoint) error {
 	var ip string
 	var firstSource int64
-	err := tx.QueryRowContext(ctx, `SELECT s.effective_ip,s.request_log_id FROM request_source_facts s JOIN request_logs l ON l.id=s.request_log_id WHERE effective_ip>? AND occurred_at>=? AND occurred_at<? AND source_id<=? AND l.origin_user_id IS NOT NULL AND l.origin_discord_id IS NOT NULL AND kind IN ('self','charity','unclassified') AND (?='total' OR kind=?) AND ip_quality IN ('direct_peer','trusted_forwarded') ORDER BY effective_ip,occurred_at,request_log_id LIMIT 1`, checkpoint.AfterIP, scan.From, scan.To, scan.upperSource, scan.Kind, scan.Kind).Scan(&ip, &firstSource)
+	err := tx.QueryRowContext(ctx, `SELECT s.effective_ip,s.request_log_id FROM request_source_facts s JOIN request_logs l ON l.id=s.request_log_id WHERE effective_ip>? AND occurred_at>=? AND occurred_at<? AND source_id<=? AND l.origin_user_id IS NOT NULL AND ((?=0 AND l.origin_discord_id IS NOT NULL) OR l.origin_user_id=?) AND kind IN ('self','charity','unclassified') AND (?='total' OR kind=?) AND ip_quality IN ('direct_peer','trusted_forwarded') ORDER BY effective_ip,occurred_at,request_log_id LIMIT 1`, checkpoint.AfterIP, scan.From, scan.To, scan.upperSource, scan.UserID, scan.UserID, scan.Kind, scan.Kind).Scan(&ip, &firstSource)
 	if err != nil {
 		return err
 	}
@@ -203,7 +209,7 @@ func processIPGroup(ctx context.Context, tx *sql.Tx, scan *ClientScan, checkpoin
 	if checkpoint.IPSummary == nil || checkpoint.IPSummary.IP != checkpoint.PendingIP {
 		return false, ErrUnavailable
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT s.request_log_id,s.source_id,s.occurred_at,l.origin_user_id,s.kind,EXISTS(SELECT 1 FROM dispatch_claims dc WHERE dc.logical_request_id=l.logical_request_id AND dc.dispatched_at IS NOT NULL),COALESCE(l.caller_result_class,'') FROM request_source_facts s JOIN request_logs l ON l.id=s.request_log_id WHERE s.effective_ip=? AND s.occurred_at>=? AND s.occurred_at<? AND s.source_id<=? AND l.origin_user_id IS NOT NULL AND l.origin_discord_id IS NOT NULL AND s.kind IN ('self','charity','unclassified') AND (?='total' OR s.kind=?) AND s.ip_quality IN ('direct_peer','trusted_forwarded') AND (s.occurred_at>? OR (s.occurred_at=? AND s.source_id>?)) ORDER BY s.occurred_at,s.source_id LIMIT ?`, checkpoint.PendingIP, scan.From, scan.To, scan.upperSource, scan.Kind, scan.Kind, checkpoint.SourceAt, checkpoint.SourceAt, checkpoint.SourceID, ScanBatchSize)
+	rows, err := tx.QueryContext(ctx, `SELECT s.request_log_id,s.source_id,s.occurred_at,l.origin_user_id,s.kind,EXISTS(SELECT 1 FROM dispatch_claims dc WHERE dc.logical_request_id=l.logical_request_id AND dc.dispatched_at IS NOT NULL),COALESCE(l.caller_result_class,'') FROM request_source_facts s JOIN request_logs l ON l.id=s.request_log_id WHERE s.effective_ip=? AND s.occurred_at>=? AND s.occurred_at<? AND s.source_id<=? AND l.origin_user_id IS NOT NULL AND ((?=0 AND l.origin_discord_id IS NOT NULL) OR l.origin_user_id=?) AND s.kind IN ('self','charity','unclassified') AND (?='total' OR s.kind=?) AND s.ip_quality IN ('direct_peer','trusted_forwarded') AND (s.occurred_at>? OR (s.occurred_at=? AND s.source_id>?)) ORDER BY s.occurred_at,s.source_id LIMIT ?`, checkpoint.PendingIP, scan.From, scan.To, scan.upperSource, scan.UserID, scan.UserID, scan.Kind, scan.Kind, checkpoint.SourceAt, checkpoint.SourceAt, checkpoint.SourceID, ScanBatchSize)
 	if err != nil {
 		return false, err
 	}
@@ -279,10 +285,12 @@ func processIPGroup(ctx context.Context, tx *sql.Tx, scan *ClientScan, checkpoin
 	if scan.Scanned >= MaxScanCandidates || len(items) == ScanBatchSize {
 		return false, nil
 	}
-	if err = tx.QueryRowContext(ctx, `SELECT count(DISTINCT l.origin_discord_id) FROM risk_scan_result_sources c JOIN request_logs l ON l.id=c.request_log_id WHERE c.scan_id=? AND c.row_no=?`, scan.ID, scan.Matched+1).Scan(&checkpoint.IPSummary.Users); err != nil {
+	if scan.UserID != 0 {
+		checkpoint.IPSummary.Users = 1
+	} else if err = tx.QueryRowContext(ctx, `SELECT count(DISTINCT l.origin_discord_id) FROM risk_scan_result_sources c JOIN request_logs l ON l.id=c.request_log_id WHERE c.scan_id=? AND c.row_no=?`, scan.ID, scan.Matched+1).Scan(&checkpoint.IPSummary.Users); err != nil {
 		return false, err
 	}
-	if checkpoint.IPSummary.Users >= checkpoint.Config.SharedIPUsers {
+	if scan.UserID != 0 || checkpoint.IPSummary.Users >= checkpoint.Config.SharedIPUsers {
 		body, err := json.Marshal(checkpoint.IPSummary)
 		if err != nil || len(body) > 16384 {
 			return false, ErrUnavailable
@@ -380,20 +388,22 @@ func (r *Repository) TaskResults(ctx context.Context, actor Actor, id string, pa
 			items = append(items, item)
 		}
 		out.Items = items
-	case "shared_ips":
+	case "shared_ips", "user_ips":
+		if scan.ScanKind == "user_ips" && scan.UserID == 0 {
+			items := make([]UserIPs, 0, len(raw))
+			for _, body := range raw {
+				var item UserIPs
+				if json.Unmarshal([]byte(body), &item) != nil {
+					return TaskResults{}, ErrUnavailable
+				}
+				items = append(items, item)
+			}
+			out.Items = items
+			break
+		}
 		items := make([]SharedIP, 0, len(raw))
 		for _, body := range raw {
 			var item SharedIP
-			if json.Unmarshal([]byte(body), &item) != nil {
-				return TaskResults{}, ErrUnavailable
-			}
-			items = append(items, item)
-		}
-		out.Items = items
-	case "user_ips":
-		items := make([]UserIPs, 0, len(raw))
-		for _, body := range raw {
-			var item UserIPs
 			if json.Unmarshal([]byte(body), &item) != nil {
 				return TaskResults{}, ErrUnavailable
 			}
