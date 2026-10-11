@@ -172,7 +172,7 @@ test('administrator submits user, blacklist and announcement list filters', asyn
     await page.getByText(commonEn.management.users.exactFilters, { exact: true }).click();
     await page.getByLabel(commonEn.common.blacklist.actorKind).selectOption('admin');
     await page
-      .getByRole('button', { name: commonEn.common.blacklist.applySearch, exact: true })
+      .getByRole('button', { name: commonEn.common.applyFilter, exact: true })
       .click();
     await expect(
       page.locator('.nb-table tbody').getByText(discordID, { exact: true }),
