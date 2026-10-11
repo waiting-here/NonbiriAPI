@@ -268,7 +268,7 @@
 }
 .linklink-modal {
   position: fixed;
-  z-index: 30;
+  z-index: var(--nb-z-dialog);
   inset: 0;
   display: grid;
   place-items: center;

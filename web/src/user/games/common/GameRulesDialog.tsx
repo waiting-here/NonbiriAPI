@@ -1,3 +1,4 @@
+import { OverlayPortal } from '@shared/components/OverlayPortal';
 import { useEffect, useId, useRef } from 'react';
 import '../games.css';
 
@@ -60,49 +61,51 @@ export function GameRulesDialog({
   if (!open) return null;
 
   return (
-    <div
-      className="game-rules-modal"
-      role="presentation"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
+    <OverlayPortal>
       <div
-        className="card game-rules-modal__panel"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleID}
-        aria-describedby={bodyID}
+        className="game-rules-modal"
+        role="presentation"
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) onClose();
+        }}
       >
-        <div className="game-rules-modal__heading">
-          <h2 id={titleID}>{title}</h2>
-          <button
-            ref={closeRef}
-            type="button"
-            className="nb-btn nb-btn--secondary game-rules-modal__close"
-            onClick={onClose}
-          >
-            {closeLabel}
-          </button>
-        </div>
-        <div id={bodyID} className="game-rules-modal__body">
-          {sections.map((section) => (
-            <section className="game-rules-modal__section" key={section.title}>
-              <h3>{section.title}</h3>
-              {section.paragraphs?.map((paragraph) => (
-                <p key={paragraph}>{paragraph}</p>
-              ))}
-              {section.items?.length ? (
-                <ul>
-                  {section.items.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-              ) : null}
-            </section>
-          ))}
+        <div
+          className="card game-rules-modal__panel"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleID}
+          aria-describedby={bodyID}
+        >
+          <div className="game-rules-modal__heading">
+            <h2 id={titleID}>{title}</h2>
+            <button
+              ref={closeRef}
+              type="button"
+              className="nb-btn nb-btn--secondary game-rules-modal__close"
+              onClick={onClose}
+            >
+              {closeLabel}
+            </button>
+          </div>
+          <div id={bodyID} className="game-rules-modal__body">
+            {sections.map((section) => (
+              <section className="game-rules-modal__section" key={section.title}>
+                <h3>{section.title}</h3>
+                {section.paragraphs?.map((paragraph) => (
+                  <p key={paragraph}>{paragraph}</p>
+                ))}
+                {section.items?.length ? (
+                  <ul>
+                    {section.items.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </section>
+            ))}
+          </div>
         </div>
       </div>
-    </div>
+    </OverlayPortal>
   );
 }

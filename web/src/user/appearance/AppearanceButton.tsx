@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { Button } from '@shared/components/ui/Button';
@@ -31,94 +30,86 @@ export function AppearanceButton() {
         <Icon name="spark" />
         <span className="nb-appearance-control__label">{t('user.appearance.title')}</span>
       </Button>
-      {createPortal(
-        <ConfirmDialog
-          open={open}
-          title={t('user.appearance.title')}
-          description={t('user.appearance.description')}
-          confirmLabel={t('user.appearance.apply')}
-          cancelLabel={t('common.close')}
-          confirmDisabled={!available || appearance.pending || !!appearance.error}
-          busy={appearance.saving}
-          onCancel={() => setOpen(false)}
-          onConfirm={() => {
-            setError(null);
-            void appearance.select(choice).then(() => setOpen(false), setError);
-          }}
+      <ConfirmDialog
+        open={open}
+        title={t('user.appearance.title')}
+        description={t('user.appearance.description')}
+        confirmLabel={t('user.appearance.apply')}
+        cancelLabel={t('common.close')}
+        confirmDisabled={!available || appearance.pending || !!appearance.error}
+        busy={appearance.saving}
+        onCancel={() => setOpen(false)}
+        onConfirm={() => {
+          setError(null);
+          void appearance.select(choice).then(() => setOpen(false), setError);
+        }}
+      >
+        <ThemeToggle />
+        {appearance.pending ? <LoadingState /> : null}
+        {appearance.error ? (
+          <ErrorState error={appearance.error} onRetry={appearance.refresh} />
+        ) : null}
+        {error ? <ErrorState error={error} /> : null}
+        <div
+          className="nb-appearance-options"
+          role="radiogroup"
+          aria-label={t('user.appearance.title')}
         >
-          <ThemeToggle />
-          {appearance.pending ? <LoadingState /> : null}
-          {appearance.error ? (
-            <ErrorState error={appearance.error} onRetry={appearance.refresh} />
-          ) : null}
-          {error ? <ErrorState error={error} /> : null}
-          <div
-            className="nb-appearance-options"
-            role="radiogroup"
-            aria-label={t('user.appearance.title')}
-          >
-            {appearances
-              .filter(
-                (item) =>
-                  appearance.state.unlocked.includes(item.id) ||
-                  appearance.state.visible?.includes(item.id),
-              )
-              .map((item) => {
-                const unlocked = appearance.state.unlocked.includes(item.id);
-                return (
-                  <label
-                    key={item.id}
-                    className="nb-appearance-option"
-                    data-selected={choice === item.id}
-                    data-locked={!unlocked}
-                  >
-                    <input
-                      type="radio"
-                      name="appearance"
-                      value={item.id}
-                      checked={choice === item.id}
-                      disabled={!unlocked || appearance.saving}
-                      onChange={() => setChoice(item.id)}
-                    />
-                    <span className="nb-appearance-option__image" data-design={item.id}>
-                      {'light' in item && (
-                        <>
-                          <img
-                            className="nb-appearance-light"
-                            src={item.light}
-                            alt=""
-                            loading="lazy"
-                          />
-                          <img
-                            className="nb-appearance-dark"
-                            src={item.dark}
-                            alt=""
-                            loading="lazy"
-                          />
-                        </>
-                      )}
-                      {item.id === 'default' && <Icon name="spark" />}
-                    </span>
-                    <span className="nb-appearance-option__copy">
-                      <strong>{english ? item.name_en : item.name}</strong>
-                      <span>{english ? item.description_en : item.description}</span>
-                      <small>
-                        {unlocked
-                          ? t(
-                              choice === item.id
-                                ? 'user.appearance.chosen'
-                                : 'user.appearance.available',
-                            )
-                          : t('user.appearance.locked')}
-                      </small>
-                    </span>
-                  </label>
-                );
-              })}
-          </div>
-        </ConfirmDialog>,
-        document.body,
-      )}
+          {appearances
+            .filter(
+              (item) =>
+                appearance.state.unlocked.includes(item.id) ||
+                appearance.state.visible?.includes(item.id),
+            )
+            .map((item) => {
+              const unlocked = appearance.state.unlocked.includes(item.id);
+              return (
+                <label
+                  key={item.id}
+                  className="nb-appearance-option"
+                  data-selected={choice === item.id}
+                  data-locked={!unlocked}
+                >
+                  <input
+                    type="radio"
+                    name="appearance"
+                    value={item.id}
+                    checked={choice === item.id}
+                    disabled={!unlocked || appearance.saving}
+                    onChange={() => setChoice(item.id)}
+                  />
+                  <span className="nb-appearance-option__image" data-design={item.id}>
+                    {'light' in item && (
+                      <>
+                        <img
+                          className="nb-appearance-light"
+                          src={item.light}
+                          alt=""
+                          loading="lazy"
+                        />
+                        <img className="nb-appearance-dark" src={item.dark} alt="" loading="lazy" />
+                      </>
+                    )}
+                    {item.id === 'default' && <Icon name="spark" />}
+                  </span>
+                  <span className="nb-appearance-option__copy">
+                    <strong>{english ? item.name_en : item.name}</strong>
+                    <span>{english ? item.description_en : item.description}</span>
+                    <small>
+                      {unlocked
+                        ? t(
+                            choice === item.id
+                              ? 'user.appearance.chosen'
+                              : 'user.appearance.available',
+                          )
+                        : t('user.appearance.locked')}
+                    </small>
+                  </span>
+                </label>
+              );
+            })}
+        </div>
+      </ConfirmDialog>
     </div>
   );
 }
