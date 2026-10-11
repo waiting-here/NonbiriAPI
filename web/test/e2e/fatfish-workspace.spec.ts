@@ -27,6 +27,10 @@ for (const language of ['en', 'zh'] as const) {
     await page.getByRole('button', { name: text.add + ' ' + text.fixed_obstacle, exact: true }).click();
     await page.getByText(text.advanced_contours_and_holes, { exact: true }).click();
     const contour = page.getByRole('group', { name: text.outer_contour, exact: true });
+    for (const [index, point] of [[216, 260], [264, 260], [264, 300], [216, 300]].entries()) {
+      await contour.getByLabel('X', { exact: true }).nth(index).fill(String(point[0]));
+      await contour.getByLabel('Y', { exact: true }).nth(index).fill(String(point[1]));
+    }
     await contour.getByLabel('X', { exact: true }).first().fill('216.015625');
     await expect(contour.getByLabel('X', { exact: true }).first()).toHaveValue('216.015625');
     await page.getByRole('button', { name: text.edit_vertices, exact: true }).click();
@@ -64,6 +68,7 @@ for (const language of ['en', 'zh'] as const) {
     await page.mouse.move(insertedBox.x + insertedBox.width / 2, insertedBox.y + insertedBox.height / 2 + 8 * holeBox.height / 816);
     await page.mouse.up();
     await expect(hole.getByLabel('X', { exact: true })).toHaveCount(5);
+    await inserted.click();
     await stage.press('Delete');
     await expect(hole.getByLabel('X', { exact: true })).toHaveCount(4);
     await page.getByLabel(text.move_selected_hole, { exact: true }).check();
@@ -230,7 +235,7 @@ test('draft playtest prepares one version, starts manually, and automatically pe
   });
   await page.goto(ADMIN_ORIGIN + '/limited-activities/fat-fish');
   await page.getByLabel(text.title, { exact: true }).fill('Playtest level');
-  await page.getByText(text.duration_speed_and_star_thresholds, { exact: true }).click();
+  await expect(page.getByRole('heading', { name: text.level_settings, exact: true })).toBeVisible();
   await page.getByLabel(text.duration_seconds, { exact: true }).fill('10');
   await page.getByRole('button', { name: text.playtest_this_level, exact: true }).click();
   await expect(page.getByRole('button', { name: text.start_playtest, exact: true })).toBeVisible();

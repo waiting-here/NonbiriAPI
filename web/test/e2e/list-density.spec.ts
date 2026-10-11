@@ -608,7 +608,7 @@ for (const locale of ['en', 'zh'] as const) {
       .getByRole('button', { name: locale === 'zh' ? '搜索' : 'Search', exact: true })
       .click();
     await expect(cards).toHaveCount(12);
-    await page.locator('.economy-catalog-filters summary').click();
+    await expect(page.locator('.economy-catalog-filters .nb-filter__more')).toHaveCount(0);
     await page
       .getByRole('combobox', {
         name: locale === 'zh' ? '本人访问权限' : 'Your access',
@@ -1101,7 +1101,7 @@ for (const role of ['admin', 'steward'] as const)
     const reviewOverflows: { width: number; cells: unknown[] }[] = [];
     const descriptionCell = reviewRow.locator('td[data-cell="title"]');
     const identifier = descriptionCell.locator('.charity-donation-meta');
-    await expect(identifier).toContainText('Item ID · 9');
+    await expect(identifier).toContainText('Donation #9');
     await expect(identifier).toHaveAttribute('title', /9.*https:\/\/example\.test\/v1/);
     await expect(descriptionCell.getByText(donation.description, { exact: true })).toBeVisible();
     await expect(identifier).toHaveAttribute('title', '9 · https://example.test/v1');

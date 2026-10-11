@@ -457,7 +457,7 @@ test('admin pending badge opens the shared queue and processing survives refresh
   await page.reload();
   await expect(page).toHaveURL(`${ADMIN_ORIGIN}/charity?handling=pending&donation_id=7`);
   await page.locator('.charity-donations .nb-filter__more summary').click();
-  await expect(page.getByRole('combobox', { name: 'Follow-up status', exact: true })).toHaveValue(
+  await expect(page.getByRole('combobox', { name: 'Handling status', exact: true })).toHaveValue(
     'pending',
   );
   await expect(page.getByRole('heading', { name: 'Donation review', exact: true })).toBeVisible();
@@ -468,12 +468,12 @@ test('admin pending badge opens the shared queue and processing survives refresh
   await expect(page.getByRole('button', { name: 'Review', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Return to list', exact: true }).click();
   await expect(page).toHaveURL(`${ADMIN_ORIGIN}/charity?handling=pending`);
-  await expect(page.getByRole('combobox', { name: 'Follow-up status', exact: true })).toHaveValue(
+  await expect(page.getByRole('combobox', { name: 'Handling status', exact: true })).toHaveValue(
     'pending',
   );
   await expect(page.getByText('No donations', { exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Donation review', exact: true })).toHaveCount(0);
-  await page.getByRole('combobox', { name: 'Follow-up status', exact: true }).selectOption('');
+  await page.getByRole('combobox', { name: 'Handling status', exact: true }).selectOption('');
   await expect(
     page.locator('.nb-table tbody').getByText('Synthetic pending donation', { exact: true }),
   ).toBeVisible();
@@ -618,7 +618,7 @@ test('user catalog searches, filters levels, paginates, and expands plain descri
     '/api/charity/models?view=catalog&page=1&page_size=50&q=needle&allowed_for_me=true&currently_available=true',
   );
 
-  await page.locator('.economy-catalog-filters summary').click();
+  await expect(page.getByRole('combobox', { name: '本人访问权限', exact: true })).toBeVisible();
   await page.getByRole('combobox', { name: '本人访问权限', exact: true }).selectOption('false');
   await expect(page.getByText('[公益]provider/denied', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '[公益]provider/denied', exact: true }).click();
