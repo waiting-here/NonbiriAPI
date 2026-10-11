@@ -1,3 +1,4 @@
+import { portraitFlex } from './wallpaper-portrait';
 import { decorationGlints, meteorAccent } from './wallpaper-accents';
 import {
   blinkAt,
@@ -16,7 +17,7 @@ import { wallpaperFragment, wallpaperVertex } from './wallpaper-shaders';
 export type { WallpaperScene, WallpaperTheme } from './wallpaper-animation';
 export type WallpaperQuality = 'standard' | 'high';
 
-function grid(columns: number, rows: number) {
+function grid(columns: number, rows: number, flex?: (p: [number, number]) => [number, number]) {
   const vertices: number[] = [];
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < columns; x++) {
@@ -24,7 +25,15 @@ function grid(columns: number, rows: number) {
         right = (x + 1) / columns;
       const top = y / rows,
         bottom = (y + 1) / rows;
-      vertices.push(left, top, right, top, left, bottom, left, bottom, right, top, right, bottom);
+      for (const p of [
+        [left, top],
+        [right, top],
+        [left, bottom],
+        [left, bottom],
+        [right, top],
+        [right, bottom],
+      ] as [number, number][])
+        vertices.push(...p, ...(flex?.(p) ?? [0, 0]));
     }
   }
   return new Float32Array(vertices);
@@ -86,9 +95,11 @@ export async function renderWallpaper(
     previous = performance.now();
   let quad: WebGLBuffer,
     mesh: WebGLBuffer,
+    portraitMesh: WebGLBuffer,
     meshCount = 0;
   let bound: WebGLBuffer | undefined,
-    point = 0;
+    point = 0,
+    flex = 0;
   let layoutWidth = 0,
     layoutHeight = 0,
     layoutDensity = 0;
@@ -156,10 +167,11 @@ export async function renderWallpaper(
     tint: [number, number, number] = [1, 1, 1],
     screen = false,
   ) {
-    const geometry = kind === 1 || kind === 3 ? mesh : quad;
+    const geometry = kind === 1 ? portraitMesh : kind === 3 ? mesh : quad;
     if (bound !== geometry) {
       gl!.bindBuffer(gl!.ARRAY_BUFFER, geometry);
-      gl!.vertexAttribPointer(point, 2, gl!.FLOAT, false, 0, 0);
+      gl!.vertexAttribPointer(point, 2, gl!.FLOAT, false, 16, 0);
+      gl!.vertexAttribPointer(flex, 2, gl!.FLOAT, false, 16, 8);
       bound = geometry;
     }
     gl!.activeTexture(gl!.TEXTURE0);
@@ -170,7 +182,7 @@ export async function renderWallpaper(
     gl!.uniform1f(uniform('planet'), index === 5 ? 1 : 0);
     gl!.uniform4f(uniform('rect'), ...rect);
     gl!.uniform3f(uniform('tint'), ...tint);
-    gl!.drawArrays(gl!.TRIANGLES, 0, geometry === mesh ? meshCount : 6);
+    gl!.drawArrays(gl!.TRIANGLES, 0, geometry === quad ? 6 : meshCount);
   }
   function frame(now: number) {
     if (stopped || document.hidden) return;
@@ -249,11 +261,14 @@ export async function renderWallpaper(
       return buffer;
     }
     quad = upload(grid(1, 1));
-    const vertices = grid(96, 54);
+    const vertices = grid(128, 72);
     mesh = upload(vertices);
-    meshCount = vertices.length / 2;
+    meshCount = vertices.length / 4;
+    portraitMesh = upload(grid(128, 72, (p) => portraitFlex(id, p)));
     point = gl.getAttribLocation(program, 'point');
     gl.enableVertexAttribArray(point);
+    flex = gl.getAttribLocation(program, 'flex');
+    gl.enableVertexAttribArray(flex);
     gl.activeTexture(gl.TEXTURE0);
     for (const image of images) {
       const texture = gl.createTexture();

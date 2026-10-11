@@ -13,7 +13,7 @@ vec2 turn(vec2 p,vec2 pivot,float angle) {
 `;
 
 export const wallpaperVertex = `
-attribute vec2 point;
+attribute vec2 point, flex;
 varying vec2 uv;
 uniform vec2 crop, offset;
 uniform vec4 rect, eyes;
@@ -23,22 +23,10 @@ void main() {
   uv=point;
   vec2 p=point;
   if(kind>.5 && kind<1.5) {
-    vec2 face=(eyes.xy+eyes.zw)*.5;
-    vec2 neck=face+vec2(0.,.12);
-    float head=1.-smoothstep(neck.y-.045,neck.y+.12,p.y);
-    p=turn(p,neck,.0075*sin(time*.71)*head);
-    float torso=field(point,neck+vec2(0.,.17),vec2(.15,.25));
-    p.y-=.0024*sin(time*1.48)*torso;
-    // Delayed sway grows towards the free ends, leaving the face and hands intact.
-    float faceMask=1.-field(point,face,vec2(.072,.10));
-    float hair=smoothstep(face.y+.04,face.y+.29,point.y)
-      *(1.-smoothstep(face.y+.42,face.y+.64,point.y));
-    float side=smoothstep(face.x+.018,face.x+.10,point.x);
-    float hand=1.-field(point,face+vec2(-.03,.37),vec2(.06,.08));
-    p.x+=.010*sin(time*.88-point.y*4.6)*hair*side*faceMask*hand;
-    p.y+=.0035*sin(time*.88-point.y*4.6-.8)*hair*side*faceMask*hand;
-    float hem=smoothstep(.62,.97,point.y)*smoothstep(.54,.81,point.x);
-    p.x+=.008*sin(time*.73-point.y*5.2)*hem;
+    // The fitted body stays rigid. Free ends sway as coherent regions,
+    // with their roots pinned by the authored vertex weights.
+    p+=vec2(.0065*sin(time*.88),.003*sin(time*.88-.45))*flex.x;
+    p+=vec2(.008*sin(time*.73-.65),.0035*sin(time*.73-1.05))*flex.y;
   } else if(kind>2.5 && kind<3.5) {
     float stroke=time*1.08;
     // Tail-stock bending leads the flukes; fins trail the power stroke.

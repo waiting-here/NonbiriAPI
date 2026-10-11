@@ -23,6 +23,7 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Duplicate-to-shard conversion, a mystery shop, limited-card redemptions during pool availability and shop-exclusive chibi cards. Theme completion grants tickets and ten cumulative donation credit, plus 10,000 game credits for permanent themes or 10,000 general credits for all other themes.
 - Administrator pool, probability, price, quota and reusable preset controls. Opened pools retain accepted rules; permanent-pool changes protect current guarantee progress.
 - A shared ten-card reveal board with SR focus, full-screen SSR/SP close-ups, first-encounter SP preludes, bilingual character lines, skippable results, animated duplicate conversion and optional card-back hints and device vibration.
+- A background appreciation control for non-default user-site appearances, with page-state preservation and keyboard return.
 - Two SP cards with matching light/dark site appearances, unlocked on acquisition and selected per account. Their separate rule group uses a 15% featured share within the SSR tier and a guarantee after two misses; direct redemption costs nine SSR shards.
 - A manual, once-per-location Lake Notes collection reward of 50 cumulative donation credits and 100,000 game credits, including previously completed collections.
 - A standalone activity preview with separate sample data, new-account and full-collection modes, appearances and SSR/SP presentation samples.
@@ -38,6 +39,7 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Fixed
 
+- Wallpaper portraits keep their faces, bodies and limbs fixed; only individually marked hair ends and loose fabric sway.
 - SSR/SP card blinks follow individual eyelid contours without crossfading the surrounding face. Card animation now uses the same phase-preserving 60 Hz cadence as appearance wallpapers.
 - Personal model requests remain available when general credits are negative; charity balance checks remain in effect.
 - Gateway provider warnings no longer abort valid responses. Stream protocol failures retain a bounded rejected-event diagnostic under existing private-log permissions.

@@ -3617,6 +3617,8 @@
       "cancelled": "Cancelled"
     },
     "appearance": {
+      "viewBackground": "View animated background",
+      "restorePage": "Return to page",
       "title": "Appearance",
       "description": "SP cards unlock matching appearances. Colors and backgrounds change while the page layout stays familiar.",
       "apply": "Apply appearance",

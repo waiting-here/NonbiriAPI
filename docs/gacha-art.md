@@ -49,7 +49,7 @@ Pool covers use independent compositions and safe desktop/mobile crops. They do 
 
 ## SP site appearances
 
-Each SP card includes one unlockable site appearance with coordinated light and dark variants, two finished animated background compositions, responsive cropping and modest UI styling. Preserve layout, text and form readability, keyboard focus and state contrast. Game scenes retain their own visual identity.
+Each SP card includes one unlockable site appearance with coordinated light and dark variants, two finished animated background compositions, responsive cropping and modest UI styling. Preserve layout, text and form readability, keyboard focus and state contrast. Game scenes retain their own visual identity. Non-default appearances provide a top-bar appreciation control that hides the interface without discarding page state. Keep an accessible return control, support Escape, restore focus and respect reduced-motion preferences.
 
 Build large wallpaper scenes from complete background plates and separately composited characters, open/closed eyes, clouds and moving objects. Reconstruct scenery hidden behind a moving object so it can travel across the viewport without dragging or revealing a hole. Celestial scenes use layered clouds, orbiting celestial bodies, drifting stars and water currents; wandering scenes also include a complete whale travelling across the screen with coordinated fin and tail movement.
 
@@ -58,6 +58,8 @@ Keep scene depth explicit: distant stars and meteors, opaque celestial bodies, a
 Keep water highlights inside their owning scenery material and depth mask. Do not repaint opaque rectangles of the background after moving objects. Verify overlap while creatures cross every water region and while celestial bodies cross clouds and ornaments, including wide desktop and tall phone crops.
 
 Use brief, infrequent meteors and low-intensity light travelling along actual star decorations. Confine a light breeze to nearby foliage tips, with stems and masonry anchored. Keep these accents quieter than the characters. Creature translation should feel unhurried on both desktop and phone, with a coherent, independent swimming stroke.
+
+Keep the wallpaper portrait rigid except for explicitly authored free hair and trailing fabric. Use finite regions with zero weight outside, feathered edges and pinned roots; review the weight overlay on every illustration. Faces, hands, limbs and fitted clothes must stay fixed. Broad body fields and travelling sine waves create a rubbery silhouette even at low amplitude. Breathing or head turns require separate anatomical constraints before adoption.
 
 Large-scene motion must follow the depicted object. Keep scenery, architecture and celestial silhouettes rigid. Move cloud layers independently; confine flowing highlights to authored water regions. Articulate a swimming creature through its tail stock, flukes and fins with a shared stroke and delayed follow-through. Wrap travelling objects only after their entire silhouette, including the motion envelope, has left the viewport.
 
