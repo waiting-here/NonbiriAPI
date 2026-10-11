@@ -63,7 +63,7 @@
   line-height: 1;
   width: 1.5rem;
   height: 1.5rem;
-  min-height: 0;
+  min-height: var(--nb-space-10);
   padding: 0;
   margin-inline: -0.45rem;
   border: 0;
