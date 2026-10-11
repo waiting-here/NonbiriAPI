@@ -131,10 +131,29 @@ html[data-appearance='wandering'] .nb-page-header {
   }
 }
 
-html:is([data-appearance='celestial'], [data-appearance='wandering']) :is(.nb-tabs, .nb-user-shell__footer) {
+html:is([data-appearance='celestial'], [data-appearance='wandering'])
+  :is(.nb-tabs, .nb-user-shell__footer) {
   background: var(--nb-color-surface);
 }
 html:is([data-appearance='celestial'], [data-appearance='wandering']) .nb-tabs {
   padding-inline: var(--nb-space-3);
   border-radius: var(--nb-radius-sm);
+}
+
+.nb-appearance-backdrop {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0;
+}
+.nb-appearance-backdrop[data-ready='true'] {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nb-appearance-backdrop {
+    display: none;
+  }
 }

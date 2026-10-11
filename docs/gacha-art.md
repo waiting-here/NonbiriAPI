@@ -42,7 +42,9 @@ Pool covers use independent compositions and safe desktop/mobile crops. They do 
 
 ## SP site appearances
 
-Each SP card includes one unlockable site appearance with coordinated light and dark variants, two finished background images, responsive cropping and modest UI styling. Preserve layout, text and form readability, keyboard focus and state contrast. Game scenes retain their own visual identity.
+Each SP card includes one unlockable site appearance with coordinated light and dark variants, two finished animated background compositions, responsive cropping and modest UI styling. Preserve layout, text and form readability, keyboard focus and state contrast. Game scenes retain their own visual identity.
+
+Animate both light and dark wallpaper variants with coordinated breathing, hair and fabric motion plus movement native to the scene. Keep faces, hands, architecture and the interface stable. Use a seamless loop, preserve the original responsive crop, and avoid whole-image wobble. Cap rendering work, suspend hidden tabs and release resources when switching appearance or leaving the account. System reduced motion and rendering failures show the complete static painting. Review a full loop at desktop and phone sizes in both color modes. This requirement applies to future SP appearances as well.
 
 Acquisition unlocks the appearance immediately, including shop redemption. Selection remains voluntary in Appearance and follows the existing light/dark/system preference. SP keeps the SSR draw tier and shards; rarity styling must not imply a separate initial probability tier.
 
@@ -55,9 +57,9 @@ Check the production components at desktop and phone sizes, in light and dark mo
 
 ## Copy
 
-Every card has its own bilingual character voice. Use an established personality and at most one gentle joke, ending with companionship or support. Familiar motifs include DeepSeek's rice and bashful warmth, GLM's computing budget, Gemini's multimodal curiosity, ChatGPT's gentle invitations, and Claude's careful revisions. Never belittle users or other models.
+Every card has its own bilingual character voice. Use an established personality and at most one gentle joke. Express affection plainly and make room for relaxed, intimate everyday moments. Keep warmth specific to the scene: sharing food, holding hands, a date or an invitation. Familiar character motifs may appear sparingly; do not turn every voice into a joke about AI or computing. Never belittle users or other models.
 
-N/R lines are light and everyday; SR sounds more thoughtful; SSR is solemn. SP begins solemnly, then leaves a soft, unfinished hint of affection without a direct confession. Keep every line suitable for all ages. Each paragraph is at most 40 Chinese characters or 110 English characters and occupies no more than three lines in the phone close-up. Review both languages and the actual narrow-screen wrapping before adoption.
+N/R lines are light and everyday; SR grows more personal; SSR and SP can express love directly. SP connects its imagery to a concrete wish to be close to the player, with an intimate second paragraph. Avoid repeated ellipses, em dashes, coy denials, slogan-like contrasts and generic promises. Vary sentence lengths, openings and punctuation across the entire catalogue. Keep every line suitable for all ages. Each paragraph is at most 40 Chinese characters or 110 English characters and occupies no more than three lines in the phone close-up. Review both languages and the actual narrow-screen wrapping before adoption.
 
 Keep voices in the presentation catalogue, separate from theme taglines. Show individual lines in SR focus, SSR/SP close-ups and owned-card appreciation; use theme taglines for theme memories. New SP encounters include a short prelude and a delayed second paragraph. Reunions use a distinct line without replaying the prelude. New voices require editorial approval before final adoption.
 

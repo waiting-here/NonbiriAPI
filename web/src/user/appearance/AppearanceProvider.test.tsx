@@ -1,10 +1,17 @@
 import { act, render, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { AppearanceProvider } from './AppearanceProvider';
 import type { AppearancePort, AppearanceState } from './context';
 
+afterEach(() => vi.unstubAllGlobals());
+
 it('keeps selections account-scoped and clears cosmetics when leaving the user session', async () => {
+  vi.stubGlobal('matchMedia', () => ({
+    matches: true,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  }));
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   const first: AppearancePort = {
     scope: 'first',

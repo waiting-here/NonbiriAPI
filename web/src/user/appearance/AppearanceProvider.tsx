@@ -12,6 +12,7 @@ import {
   type AppearancePort,
   type AppearanceState,
 } from './context';
+import { AppearanceBackdrop } from './AppearanceBackdrop';
 import './appearance.css';
 
 const defaults: AppearanceState = { selected: 'default', unlocked: ['default'], updated_at: null };
@@ -64,6 +65,7 @@ export function AppearanceProvider({
           : null
       }
     >
+      <AppearanceBackdrop selected={state.selected} />
       {children}
     </AppearanceContext>
   );
