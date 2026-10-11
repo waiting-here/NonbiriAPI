@@ -11,6 +11,8 @@ import (
 
 var ErrInvalid = errors.New("gacha: invalid input")
 
+const maxSRPity = 100
+
 type Rules struct {
 	Weights            [4]int `json:"weights"`
 	SRPity             int    `json:"sr_pity"`
@@ -33,7 +35,7 @@ func (r Rules) Validate() error {
 		}
 		total += n
 	}
-	if total != 10000 || r.SRPity < 1 || r.SRPity > 100 || r.SSRPity < r.SRPity || r.SSRPity > 1000 ||
+	if total != 10000 || r.SRPity < 1 || r.SRPity > maxSRPity || r.SSRPity < r.SRPity || r.SSRPity > 1000 ||
 		r.SRFeatured < 0 || r.SRFeatured > 10000 || r.SSRFeatured < 0 || r.SSRFeatured > 10000 || r.SSRGuaranteeMisses < 0 || r.SSRGuaranteeMisses > 2 {
 		return ErrInvalid
 	}
@@ -188,11 +190,12 @@ func ConsolidatedRates(r Rules) ([4]float64, error) {
 	if err := r.Validate(); err != nil {
 		return rewards, err
 	}
-	alive := make([]float64, r.SRPity)
+	var states [2][maxSRPity]float64
+	alive, next := states[0][:r.SRPity], states[1][:r.SRPity]
 	alive[0] = 1
 	duration := 0.0
 	for draw := 1; draw <= r.SSRPity; draw++ {
-		next := make([]float64, r.SRPity)
+		clear(next)
 		for sr, mass := range alive {
 			if mass == 0 {
 				continue
@@ -215,7 +218,7 @@ func ConsolidatedRates(r Rules) ([4]float64, error) {
 				next[sr+1] += mass * (rates[0] + rates[1])
 			}
 		}
-		alive = next
+		alive, next = next, alive
 	}
 	for i := range rewards {
 		rewards[i] /= duration

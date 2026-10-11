@@ -120,3 +120,31 @@ func TestCatalogCardAndThemeIntegrity(t *testing.T) {
 		}
 	}
 }
+
+func TestConsolidatedRateLimits(t *testing.T) {
+	r := DefaultRules()
+	r.Weights = [4]int{10000, 0, 0, 0}
+	r.SRPity, r.SSRPity = 100, 1000
+	rates, err := ConsolidatedRates(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Each 1,000-draw cycle contains nine SR guarantees and one SSR.
+	want := [4]float64{.99, 0, .009, .001}
+	for i, rate := range rates {
+		if math.Abs(rate-want[i]) > 1e-12 {
+			t.Fatalf("rate %d: %v", i, rate)
+		}
+	}
+	for _, limit := range []int{0, 101, int(^uint(0) >> 1)} {
+		invalid := r
+		invalid.SRPity = limit
+		if _, err := ConsolidatedRates(invalid); err != ErrInvalid {
+			t.Fatalf("SR limit %d accepted: %v", limit, err)
+		}
+	}
+	r.SSRPity = 1001
+	if _, err := ConsolidatedRates(r); err != ErrInvalid {
+		t.Fatalf("excessive SSR limit accepted: %v", err)
+	}
+}
