@@ -1,7 +1,7 @@
-import type { Rect, WallpaperScene, WallpaperTheme } from './wallpaper-animation';
+import type { WallpaperScene, WallpaperTheme } from './wallpaper-animation';
 
-export type EyelidProfile = { bounds: Rect; rows: [number[], number[]] };
-export const eyelidProfileWidth = 48;
+import type { EyelidProfile } from '@shared/animation/illustration';
+export { eyelidProfileWidth } from '@shared/animation/illustration';
 
 // Per-eye UV contours follow the painted lashes. Rows store coverage bounds,
 // open lash edges and closed lash edges, without displacing the surrounding face.

@@ -43,7 +43,7 @@ Keep loops continuous in both position and velocity. Preserve a complete static 
 
 Ordinary themes contain the established five-character set with a common rarity and art direction. Every SP theme contains one character card; obtaining that card completes its theme. Published membership is immutable; additions belong to new themes.
 
-Every theme has a separate 16:9 appreciation illustration. Ordinary themes use a coherent group scene based on the five approved portraits; SP uses a dedicated scene for its single character. Do not substitute a row of portrait crops. Show a blurred preview and collection progress before completion; show the full clear illustration immediately on completion. Ticket and donation-credit rewards are claimed separately.
+Every theme has a separate 16:9 appreciation illustration. Ordinary themes use a coherent group scene based on the five approved portraits; SP uses a dedicated scene for its single character. Do not substitute a row of portrait crops. Show a blurred preview and collection progress before completion; show the full clear illustration immediately on completion. Ticket, credit and donation-credit rewards are claimed separately.
 
 Pool covers use independent compositions and safe desktop/mobile crops. They do not expose the complete locked appreciation illustration or bake configurable pool names into the image.
 
@@ -87,3 +87,11 @@ N/R lines are light and everyday; SR grows more personal; SSR and SP can express
 Keep voices in the presentation catalogue, separate from theme taglines. Show individual lines in SR focus, SSR/SP close-ups and owned-card appreciation; use theme taglines for theme memories. New SP encounters include a short prelude and a delayed second paragraph. Reunions use a distinct line without replaying the prelude. New voices require editorial approval before final adoption.
 
 Ten-pulls share one card board and reveal in receipt order. SR focuses within the board; SSR/SP charge before their full-screen close-up. Optional card-back hints apply only to SR and higher. Turning hints off keeps the portal neutral and all unrevealed backs identical. Pausing or hiding the page retains scene time and freezes artwork; skipping and reduced motion show the unchanged complete receipt without another draw.
+
+### Eyelids and animation timing
+
+SSR and SP card eyes have separate contours calibrated to their open and closed layers. Animate the lash ribbon while keeping the iris and surrounding face at fixed source coordinates; do not blend an oval face patch. Keep glasses, hair roots and nearby ornaments outside the moving eyelid. Validate the open, partial and closed poses for every new card, at normal playback speed as well as enlarged.
+
+Cards and appearance wallpapers share the blink envelope and phase-preserving frame cadence. Use elapsed time, preserve fractional frame budgets, pause while hidden and avoid a jump on resume. Check the actual painted frame rate in a regular browser. A smooth timing curve does not compensate for a low refresh rate or misaligned artwork.
+
+For layered scenery, establish the far-to-near order before adding motion. Apply water highlights inside their own scenery layers, preserve rigid architecture and celestial silhouettes, and inspect overlap at both extremes of the movement. Static fallback and high-resolution variants must use the same accepted composition.

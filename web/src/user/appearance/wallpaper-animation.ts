@@ -26,38 +26,7 @@ export const portraits: Record<WallpaperScene, Record<WallpaperTheme, Portrait>>
   },
 };
 
-const smooth = (value: number) => {
-  const t = Math.max(0, Math.min(1, value));
-  return t * t * (3 - 2 * t);
-};
-
-/** A quick closure and slower release, with enough intermediate eyelid poses. */
-export function blinkAt(seconds: number): number {
-  const cycle = seconds % 17.6;
-  for (const start of [2.2, 7.4, 13.1]) {
-    const t = cycle - start;
-    if (t >= 0 && t < 0.13) return smooth(t / 0.13);
-    if (t >= 0.13 && t < 0.175) return 1;
-    if (t >= 0.175 && t < 0.415) return 1 - smooth((t - 0.175) / 0.24);
-  }
-  return 0;
-}
-
-/** Keep the fractional frame budget instead of rounding every frame up to a vsync. */
-export class PaintCadence {
-  private next = -Infinity;
-  constructor(private readonly interval = 1000 / 60) {}
-  reset() {
-    this.next = -Infinity;
-  }
-  due(now: number): boolean {
-    if (now + 0.5 < this.next) return false;
-    if (!Number.isFinite(this.next) || now - this.next > this.interval * 2)
-      this.next = now + this.interval;
-    else this.next += this.interval;
-    return true;
-  }
-}
+export { blinkAt, PaintCadence } from '@shared/animation/illustration';
 
 export const whaleCycleSeconds = 112;
 
