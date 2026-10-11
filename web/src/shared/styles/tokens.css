@@ -211,7 +211,6 @@
   --nb-color-accent-soft: #dfecdf;
   --nb-color-accent-quiet: #f1f7ec;
   --nb-color-accent-contrast: #ffffff;
-  --nb-appearance-image: url('/assets/gacha/appearances/celestial-light.webp');
   --nb-elevation-1: 0 3px 16px #59775512;
 }
 :root[data-appearance='celestial'][data-theme='dark'] {
@@ -231,7 +230,6 @@
   --nb-color-accent-soft: #233f3e;
   --nb-color-accent-quiet: #172f34;
   --nb-color-accent-contrast: #102a26;
-  --nb-appearance-image: url('/assets/gacha/appearances/celestial-dark.webp');
   --nb-elevation-1: 0 3px 16px #020d2240;
 }
 :root[data-appearance='wandering'] {
@@ -251,7 +249,6 @@
   --nb-color-accent-soft: #d9edf0;
   --nb-color-accent-quiet: #eef8f8;
   --nb-color-accent-contrast: #ffffff;
-  --nb-appearance-image: url('/assets/gacha/appearances/wandering-light.webp');
   --nb-elevation-1: 0 3px 16px #3f7b8212;
 }
 :root[data-appearance='wandering'][data-theme='dark'] {
@@ -271,6 +268,22 @@
   --nb-color-accent-soft: #204752;
   --nb-color-accent-quiet: #15343e;
   --nb-color-accent-contrast: #12303a;
-  --nb-appearance-image: url('/assets/gacha/appearances/wandering-dark.webp');
   --nb-elevation-1: 0 3px 16px #01101740;
+}
+
+/* Diffuse edges let the painting tint surfaces without competing with text. */
+:root:is([data-appearance='celestial'], [data-appearance='wandering']) {
+  --nb-appearance-glass-edge: color-mix(in srgb, var(--nb-color-surface-raised) 52%, transparent);
+  --nb-appearance-glass-core: color-mix(in srgb, var(--nb-color-surface-raised) 86%, transparent);
+  --nb-appearance-glass-line: color-mix(in srgb, var(--nb-color-surface-raised) 35%, transparent);
+  --nb-appearance-glass-shadow: color-mix(in srgb, var(--nb-color-accent) 16%, transparent);
+  --nb-appearance-glass-glow: color-mix(in srgb, var(--nb-color-surface-raised) 24%, transparent);
+  --nb-appearance-glass-divider: color-mix(in srgb, var(--nb-color-border) 50%, transparent);
+}
+:root:is([data-appearance='celestial'], [data-appearance='wandering'])[data-theme='dark'] {
+  --nb-appearance-glass-edge: color-mix(in srgb, var(--nb-color-surface) 78%, transparent);
+  --nb-appearance-glass-core: color-mix(in srgb, var(--nb-color-surface) 96%, transparent);
+  --nb-appearance-glass-line: color-mix(in srgb, var(--nb-color-border) 50%, transparent);
+  --nb-appearance-glass-shadow: color-mix(in srgb, var(--nb-color-bg) 62%, transparent);
+  --nb-appearance-glass-glow: color-mix(in srgb, var(--nb-color-surface) 15%, transparent);
 }

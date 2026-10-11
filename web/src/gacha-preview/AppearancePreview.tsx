@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { Button } from '@shared/components/ui/Button';
+import { PageHeader } from '@shared/components/States';
+import { Segmented } from '@shared/components/ui/Segmented';
 import { DataTable } from '@shared/components/ui/DataTable';
 import { Field } from '@shared/components/ui/Field';
 import { Note } from '@shared/components/ui/Note';
@@ -29,17 +31,13 @@ export function AppearancePreview({ english }: { english: boolean }) {
   const close = () => setDialog(false);
   return (
     <div className="nb-page appearance-preview">
-      <header className="nb-page-header">
-        <div>
-          <h1>{copy('主题装扮与页面可读性', 'Appearance and readability')}</h1>
-          <p>
-            {copy(
-              '切换主题与明暗模式，试试表单、列表和弹窗。',
-              'Compare themes and color modes with forms, lists, and dialogs.',
-            )}
-          </p>
-        </div>
-      </header>
+      <PageHeader
+        title={copy('主题装扮与页面可读性', 'Appearance and readability')}
+        description={copy(
+          '切换主题与明暗模式，试试表单、列表和弹窗。',
+          'Compare themes and color modes with forms, lists, and dialogs.',
+        )}
+      />
       <Panel>
         <PanelHead
           title={copy('选择装扮', 'Choose an appearance')}
@@ -49,22 +47,19 @@ export function AppearancePreview({ english }: { english: boolean }) {
           )}
         />
         <PanelBody>
-          <div className="nb-inline appearance-preview__choices">
-            {appearances.map((item) => (
-              <Button
-                key={item.id}
-                variant={appearance?.state.selected === item.id ? 'primary' : 'secondary'}
-                aria-pressed={appearance?.state.selected === item.id}
-                disabled={appearance?.saving}
-                onClick={() => {
-                  setError(null);
-                  void appearance?.select(item.id).catch(setError);
-                }}
-              >
-                {english ? item.name_en : item.name}
-              </Button>
-            ))}
-          </div>
+          <Segmented
+            label={copy('选择装扮', 'Choose an appearance')}
+            value={appearance?.state.selected ?? 'default'}
+            options={appearances.map((item) => ({
+              value: item.id,
+              label: english ? item.name_en : item.name,
+            }))}
+            disabled={appearance?.saving}
+            onChange={(id) => {
+              setError(null);
+              void appearance?.select(id).catch(setError);
+            }}
+          />
           {error ? (
             <Note tone="bad">
               {copy('切换失败，请重试。', 'Could not switch. Please try again.')}

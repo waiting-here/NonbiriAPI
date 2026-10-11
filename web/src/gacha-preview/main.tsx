@@ -22,6 +22,7 @@ import { sampleReceipt, previewPreferences, type Scenario } from './scenarios';
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 function Preview() {
   const [revision, setRevision] = useState(0);
+  const [backgroundOnly, setBackgroundOnly] = useState(false);
   const [appearanceView, setAppearanceView] = useState(
     new URLSearchParams(location.search).get('view') === 'appearance',
   );
@@ -73,6 +74,20 @@ function Preview() {
                     ? 'Appearance preview'
                     : '装扮可读性预览'}
               </button>
+              {appearanceView && (
+                <button
+                  className="nb-btn nb-btn--secondary"
+                  onClick={() => setBackgroundOnly((v) => !v)}
+                >
+                  {backgroundOnly
+                    ? english
+                      ? 'Show components'
+                      : '显示页面组件'
+                    : english
+                      ? 'View background'
+                      : '欣赏动态背景'}
+                </button>
+              )}
               {!appearanceView && (
                 <>
                   <button onClick={() => reset('new')}>
@@ -103,7 +118,7 @@ function Preview() {
               </button>
             </div>
           </aside>
-          <main>
+          <main hidden={appearanceView && backgroundOnly}>
             {appearanceView ? (
               <AppearancePreview english={english} />
             ) : (

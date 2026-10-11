@@ -1,3 +1,4 @@
+import { artSourceSet } from './art-resolution';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Button } from '@shared/components/ui/Button';
 import { Icon } from '@shared/components/Icon';
@@ -317,7 +318,16 @@ export function DrawReveal({
             data-card-id={card.id}
             data-rarity={card.rarity}
           >
-            <img className="gacha-cinema__scenery" src={themeById[card.theme].art} alt="" />
+            <img
+              className="gacha-cinema__scenery"
+              src={themeById[card.theme].art}
+              srcSet={artSourceSet(
+                themeById[card.theme].art,
+                ['l', 'm'].includes(card.theme) ? 1600 : 1672,
+              )}
+              sizes="100vw"
+              alt=""
+            />
             <div className="gacha-cinema__halo" aria-hidden="true">
               <i />
               <i />

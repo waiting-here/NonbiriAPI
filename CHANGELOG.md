@@ -29,7 +29,8 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Changed
 
-- Card voices use more varied, directly affectionate dialogue. SP site wallpapers animate character and scene details in both color modes, with static reduced-motion fallback.
+- Card voices use more varied, directly affectionate dialogue. SP site wallpapers animate separate characters, clouds, water, celestial bodies and a screen-crossing whale, with static reduced-motion fallback.
+- Enhanced card artwork reaches 2560×3840 and landscape art 3840×2160, loaded responsively for large displays. Light and dark appearance panels combine soft edges with readable central surfaces.
 - The Fat Fish editor groups creation tools, canvas modes and properties, explains unfinished requirements, previews invalid geometry and fish collisions, and supports precise headings, viewport placement, zoom and touch navigation.
 - Charity catalog filters remain visible. Both stations improve request-log labels, exact credit amounts, mobile controls, empty states and appearance contrast.
 - The gacha activity entry starts hidden and can be enabled by administrators. Limited-only themes stay hidden until a pool has opened or the user owns one of their cards.

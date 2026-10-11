@@ -982,7 +982,7 @@
   margin: 0 auto var(--nb-space-5);
 }
 .gacha-spotlight {
-  width: min(540px, calc(100vw - 24px));
+  width: min(calc(100vw - 24px), max(540px, calc((100dvh - 290px) * 2 / 3 + 26px)));
 }
 .gacha-spotlight .gacha-dialog__inner {
   padding: var(--nb-space-3);
@@ -1027,7 +1027,7 @@
   font-size: var(--nb-font-size-xs);
 }
 .gacha-group-view {
-  width: min(1100px, calc(100vw - 24px));
+  width: min(92vw, calc(75dvh * 16 / 9 + 48px));
 }
 .gacha-group-view img {
   display: block;

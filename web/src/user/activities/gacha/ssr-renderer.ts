@@ -1,4 +1,5 @@
 import { backdropShader, paintSPAtmosphere, spScenes } from './sp-motion';
+import { highResolutionArt } from './art-resolution';
 
 type MotionConfig = {
   background: string;
@@ -59,15 +60,17 @@ export async function renderSSR(
   id: string,
   frozenTime?: number,
   paused?: () => boolean,
+  highResolution = false,
 ) {
   const cfg = configFor(id);
   const scene = spScenes[id];
+  const image = (src: string) => load(highResolution ? highResolutionArt(src) : src);
   const [background, hero, half, closed, cloud] = await Promise.all([
-    load(cfg.background),
-    load(cfg.hero),
-    cfg.half ? load(cfg.half) : null,
-    cfg.closed ? load(cfg.closed) : null,
-    cfg.cloud ? load(cfg.cloud) : null,
+    image(cfg.background),
+    image(cfg.hero),
+    cfg.half ? image(cfg.half) : null,
+    cfg.closed ? image(cfg.closed) : null,
+    cfg.cloud ? image(cfg.cloud) : null,
   ]);
   const ctx = canvas.getContext('2d', { alpha: false });
   const layer = document.createElement('canvas');
@@ -172,7 +175,28 @@ void main(){
   let stopped = false,
     raf = 0,
     time = 0,
-    last = performance.now();
+    last = performance.now(),
+    painted = -Infinity,
+    initialized = false;
+  const resize = () => {
+    const rect = canvas.getBoundingClientRect();
+    const width = Math.max(1, rect.width || canvas.width);
+    const density = Math.min(window.devicePixelRatio || 1, 2560 / width);
+    const nextWidth = Math.round(width * density);
+    const nextHeight = Math.round(nextWidth * 1.5);
+    if (canvas.width === nextWidth && canvas.height === nextHeight) return;
+    canvas.width = nextWidth;
+    canvas.height = nextHeight;
+    layer.width = canvas.width;
+    layer.height = canvas.height;
+    gl.viewport(0, 0, layer.width, layer.height);
+    painted = -Infinity;
+    if (initialized && frozenTime !== undefined) frame(performance.now());
+  };
+  const observer = new ResizeObserver(resize);
+  observer.observe(canvas);
+  window.addEventListener('resize', resize);
+  resize();
   const smooth = (x: number) => {
     x = Math.max(0, Math.min(1, x));
     return x * x * (3 - 2 * x);
@@ -189,13 +213,19 @@ void main(){
   };
   function frame(at: number) {
     if (stopped) return;
-    if (paused?.() && frozenTime === undefined) {
+    const isPaused = paused?.() && frozenTime === undefined;
+    if (isPaused && painted !== -Infinity) {
       last = at;
       raf = requestAnimationFrame(frame);
       return;
     }
-    time = (frozenTime ?? time + Math.min(at - last, 100) / 1000) % 10;
+    time = (frozenTime ?? (isPaused ? time : time + Math.min(at - last, 100) / 1000)) % 10;
     last = at;
+    if (frozenTime === undefined && at - painted < 1000 / 30) {
+      raf = requestAnimationFrame(frame);
+      return;
+    }
+    painted = at;
     const p = (time / 10) * Math.PI * 2,
       w = canvas.width,
       h = canvas.height;
@@ -246,11 +276,14 @@ void main(){
     }
   };
   document.addEventListener('visibilitychange', visibility);
+  initialized = true;
   frame(last);
   return () => {
     stopped = true;
     cancelAnimationFrame(raf);
     document.removeEventListener('visibilitychange', visibility);
+    observer.disconnect();
+    window.removeEventListener('resize', resize);
     textures.forEach((t) => gl.deleteTexture(t));
     gl.deleteBuffer(buffer);
     gl.deleteProgram(program);

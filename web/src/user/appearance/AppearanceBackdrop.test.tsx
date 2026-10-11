@@ -59,3 +59,30 @@ it('releases a late renderer after leaving the account appearance', async () => 
   expect(stop).toHaveBeenCalledOnce();
   expect(view.container.querySelector('canvas')).toBeNull();
 });
+
+it('replaces texture quality when crossing the display threshold without restarting on every resize', async () => {
+  motionPreference();
+  vi.stubGlobal('innerWidth', 1440);
+  vi.stubGlobal('innerHeight', 900);
+  vi.stubGlobal('devicePixelRatio', 1);
+  const stop = vi.fn();
+  vi.mocked(renderWallpaper).mockResolvedValue(stop);
+  const view = render(<AppearanceBackdrop selected="celestial" />);
+  await waitFor(() => expect(renderWallpaper).toHaveBeenCalledTimes(1));
+  expect(vi.mocked(renderWallpaper).mock.calls[0][4]).toBe('standard');
+  await act(async () => {
+    vi.stubGlobal('innerWidth', 3840);
+    vi.stubGlobal('innerHeight', 2160);
+    window.dispatchEvent(new Event('resize'));
+  });
+  await waitFor(() => expect(renderWallpaper).toHaveBeenCalledTimes(2));
+  expect(vi.mocked(renderWallpaper).mock.calls[0][3].aborted).toBe(true);
+  expect(stop).toHaveBeenCalledOnce();
+  expect(vi.mocked(renderWallpaper).mock.calls[1][4]).toBe('high');
+  await act(async () => {
+    vi.stubGlobal('innerWidth', 2560);
+    window.dispatchEvent(new Event('resize'));
+  });
+  expect(renderWallpaper).toHaveBeenCalledTimes(2);
+  view.unmount();
+});

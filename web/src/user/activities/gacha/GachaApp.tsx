@@ -1,3 +1,4 @@
+import { artSourceSet } from './art-resolution';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@shared/components/ui/Button';
 import { Tabs } from '@shared/components/ui/Tabs';
@@ -492,6 +493,11 @@ export function GachaApp({
               <img
                 className="gacha-banner__back"
                 src={'/assets/gacha/covers/' + pool.cover + '.webp'}
+                srcSet={artSourceSet(
+                  '/assets/gacha/covers/' + pool.cover + '.webp',
+                  ['l', 'm'].includes(pool.cover) ? 1600 : 1672,
+                )}
+                sizes="(width < 80rem) 100vw, 80rem"
                 alt=""
               />
               <div className="gacha-banner__haze" />
@@ -801,7 +807,12 @@ export function GachaApp({
           onClose={() => setGroup(null)}
           className="gacha-group-view"
         >
-          <img src={group.art} alt={t(group.name + '主题插画', group.name_en + ' group memory')} />
+          <img
+            src={group.art}
+            srcSet={artSourceSet(group.art, ['l', 'm'].includes(group.id) ? 1600 : 1672)}
+            sizes="90vw"
+            alt={t(group.name + '主题插画', group.name_en + ' group memory')}
+          />
           <p>{t(group.tagline, group.tagline_en)}</p>
         </GachaDialog>
       )}

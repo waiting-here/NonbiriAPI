@@ -11,6 +11,12 @@ This standard applies to every existing and future Gacha Simulator card. Rarity 
 - All rarities require finished composition, expressive faces, sound anatomy, clean edges, coherent lighting and distinct outfits. Keep important features readable in thumbnails.
 - Retain references, source images, layered animation inputs, authoring parameters, licensing and adoption status in the maintained asset library. Ship optimized derivatives with applicable notices.
 
+## High-resolution delivery
+
+Target 2560 × 3840 portrait derivatives and 3840 × 2160 landscape derivatives for desktop appreciation, including animation layers. Keep native masters and enhancement settings separately. Enhanced derivatives improve display clarity but must not be described as new native detail. Inspect faces, fine jewelry, patterned cloth, transparent edges and painted textures before adoption; reject oversharpening and invented features.
+
+Use responsive image candidates for full illustrations and pool covers. Continue using small static thumbnails in lists. Size animation canvases to the displayed physical pixels, with a bounded resolution budget, so playback does not reduce a sharp still to a low-resolution canvas. Load the larger textures only when the display needs them. Review both static and animated artwork in a 3840 × 2160 viewport.
+
 ## Rarity requirements
 
 | Rarity | Artwork | Draw presentation |
@@ -44,7 +50,11 @@ Pool covers use independent compositions and safe desktop/mobile crops. They do 
 
 Each SP card includes one unlockable site appearance with coordinated light and dark variants, two finished animated background compositions, responsive cropping and modest UI styling. Preserve layout, text and form readability, keyboard focus and state contrast. Game scenes retain their own visual identity.
 
+Build large wallpaper scenes from complete background plates and separately composited characters, open/closed eyes, clouds and moving objects. Reconstruct scenery hidden behind a moving object so it can travel across the viewport without dragging or revealing a hole. Celestial scenes use layered clouds, orbiting celestial bodies, drifting stars and water currents; wandering scenes also include a complete whale travelling across the screen with coordinated fin and tail movement.
+
 Animate both light and dark wallpaper variants with coordinated breathing, hair and fabric motion plus movement native to the scene. Keep faces, hands, architecture and the interface stable. Use a seamless loop, preserve the original responsive crop, and avoid whole-image wobble. Cap rendering work, suspend hidden tabs and release resources when switching appearance or leaving the account. System reduced motion and rendering failures show the complete static painting. Review a full loop at desktop and phone sizes in both color modes. This requirement applies to future SP appearances as well.
+
+Keep the same component structure in light and dark appearances. Use softly tinted, blurred surfaces with diffuse edges and a more opaque reading area; inputs, statuses, dialogs and keyboard focus must remain distinct over every part of the moving scene. Review forms, tables and dialogs while the brightest and darkest background regions pass behind them.
 
 Acquisition unlocks the appearance immediately, including shop redemption. Selection remains voluntary in Appearance and follows the existing light/dark/system preference. SP keeps the SSR draw tier and shards; rarity styling must not imply a separate initial probability tier.
 
