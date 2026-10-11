@@ -87,3 +87,7 @@
   width: 100%;
   max-width: 20rem;
 }
+
+.audit-ip-address {
+  overflow-wrap: anywhere;
+}

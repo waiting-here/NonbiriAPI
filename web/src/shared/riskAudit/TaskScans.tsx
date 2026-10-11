@@ -19,6 +19,7 @@ export function TaskScans<T>({
   filters,
   kind,
   signal = '',
+  userID,
   renderItem,
 }: {
   role: RiskRole;
@@ -26,6 +27,7 @@ export function TaskScans<T>({
   filters: Filters;
   kind: Exclude<TaskKind, 'client_hits'>;
   signal?: '' | 'rpm' | 'concurrency';
+  userID?: string;
   renderItem: (item: T) => ReactNode;
 }) {
   const { t } = useTranslation();
@@ -40,7 +42,7 @@ export function TaskScans<T>({
   const size = isPageSize(rawSize) && rawSize !== 10 ? rawSize : 20;
   const [token, setToken] = useState(() => crypto.randomUUID());
   const client = useQueryClient();
-  const key = ['risk', role, scopeKey, 'tasks', kind];
+  const key = ['risk', role, scopeKey, 'tasks', kind, userID ?? 'all'];
   const recent = useQuery({
     queryKey: [...key, 'recent'],
     queryFn: ({ signal: abort }) => riskAPI(role).recentTasks(abort),
@@ -50,13 +52,15 @@ export function TaskScans<T>({
   const task = useQuery({
     queryKey: [...key, id, page, size],
     enabled: !!id,
-    queryFn: ({ signal: abort }) => riskAPI(role).taskResults<T>(id, kind, page, size, abort),
+    queryFn: ({ signal: abort }) =>
+      riskAPI(role).taskResults<T>(id, kind, page, size, abort, userID),
     refetchInterval: (q) => (running(q.state.data?.scan) ? 1500 : false),
     ...options,
   });
   const input = useMemo(
     () => ({
       request_token: token,
+      user_id: userID,
       kind,
       call_kind: String(filters.kind ?? 'total'),
       signal: kind === 'users' ? signal : undefined,
@@ -65,7 +69,7 @@ export function TaskScans<T>({
       lookback_hours:
         filters.lookback_hours === undefined ? undefined : Number(filters.lookback_hours),
     }),
-    [token, kind, filters.from, filters.to, filters.kind, filters.lookback_hours, signal],
+    [token, kind, userID, filters.from, filters.to, filters.kind, filters.lookback_hours, signal],
   );
   const select = (scan: TaskScan) =>
     setParams((previous) => {
@@ -81,6 +85,10 @@ export function TaskScans<T>({
       if (kind === 'users') {
         if (scan.signal) next.set('audit_signal', scan.signal);
         else next.delete('audit_signal');
+      }
+      if (kind === 'user_ips') {
+        if (scan.user_id) next.set('audit_ip_user', scan.user_id);
+        else next.delete('audit_ip_user');
       }
       next.set(prefix + 'scan', scan.id);
       next.set(prefix + 'page', '1');
@@ -106,7 +114,8 @@ export function TaskScans<T>({
     refresh,
     authorityRoot,
   );
-  const visible = recent.data?.filter((item) => item.kind === kind) ?? [];
+  const visible =
+    recent.data?.filter((item) => item.kind === kind && item.user_id === userID) ?? [];
   const scan = task.data?.scan;
   const statuses: Record<TaskScan['state'], string> = {
     queued: t('common.auditScans.queued'),
@@ -130,13 +139,15 @@ export function TaskScans<T>({
       concurrency: t('common.auditScans.highConcurrency'),
     })[value] ?? value;
   const frozenLabel = (value: TaskScan) =>
-    `${callKindLabel(value.call_kind)} · ${kind === 'users' ? `${signalLabel(value.signal)} · ` : ''}${formatDateTime(value.from)} – ${formatDateTime(value.to)}`;
+    `${value.user_id ? `${t('common.audit.selectedAccount', { user: value.user_id })} · ` : ''}${callKindLabel(value.call_kind)} · ${kind === 'users' ? `${signalLabel(value.signal)} · ` : ''}${formatDateTime(value.from)} – ${formatDateTime(value.to)}`;
   return (
     <div className="ops-stack">
       <Card>
         <h2>
           {kind === 'user_ips'
-            ? t('common.audit.userIPsTitle')
+            ? userID
+              ? t('common.audit.userIPHistoryTitle', { user: userID })
+              : t('common.audit.userIPsTitle')
             : kind === 'users'
               ? t('common.auditScans.scanUserSummaries')
               : t('common.auditScans.scanSharedIps')}

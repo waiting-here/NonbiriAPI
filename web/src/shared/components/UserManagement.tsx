@@ -349,6 +349,16 @@ function UserAuthority({
             >
               {t('management.users.viewLogs')}
             </Link>
+            <Link
+              className="nb-btn nb-btn--secondary"
+              to={
+                role === 'admin'
+                  ? `/risk-audit?audit_tab=user_ips&audit_ip_user=${user.id}`
+                  : `/steward?tab=risk&audit_tab=user_ips&audit_ip_user=${user.id}`
+              }
+            >
+              {t('common.audit.inspectUserIPs')}
+            </Link>
             <LoanHistory role={role} account={account} userID={user.id} />
           </div>
         </Card>

@@ -39,6 +39,7 @@ export interface ScanInput {
 export type TaskKind = 'client_hits' | 'users' | 'shared_ips' | 'user_ips';
 export interface TaskScan extends Omit<ClientScan, 'kind'> {
   kind: TaskKind;
+  user_id?: string;
   call_kind: string;
   signal: string;
   filter_revision: number;
@@ -53,6 +54,7 @@ export interface TaskScan extends Omit<ClientScan, 'kind'> {
 }
 export interface TaskInput extends Omit<ScanInput, 'kind'> {
   kind: TaskKind;
+  user_id?: string;
   call_kind?: string;
   signal?: '' | 'rpm' | 'concurrency';
 }
@@ -129,6 +131,7 @@ function taskScan(value: unknown): TaskScan {
   return {
     ...base,
     kind: base.kind as TaskKind,
+    user_id: o.user_id === undefined ? undefined : id(o.user_id),
     call_kind: text(o.call_kind, 32),
     signal: text(o.signal ?? '', 20),
     filter_revision: num(o.filter_revision),
@@ -731,6 +734,7 @@ export function riskAPI(role: RiskRole) {
       page: string,
       size: PageSize,
       signal?: AbortSignal,
+      userID?: string,
     ): Promise<TaskResults<T>> => {
       const decode = (
         kind === 'users'
@@ -738,7 +742,9 @@ export function riskAPI(role: RiskRole) {
           : kind === 'shared_ips'
             ? sharedIP
             : kind === 'user_ips'
-              ? userIPs
+              ? userID
+                ? sharedIP
+                : userIPs
               : request
       ) as (v: unknown) => T;
       const output = taskResults(
@@ -754,7 +760,7 @@ export function riskAPI(role: RiskRole) {
         size,
         decode,
       );
-      if (output.scan.kind !== kind) return invalid();
+      if (output.scan.kind !== kind || output.scan.user_id !== userID) return invalid();
       return output;
     },
     cancelTask: async (scanID: string, signal?: AbortSignal) =>
