@@ -21,6 +21,7 @@ export function AppearanceButton() {
     <div className="nb-appearance-control">
       <Button
         variant="ghost"
+        title={t('user.appearance.title')}
         onClick={() => {
           setChoice(appearance.state.selected);
           setError(null);
@@ -28,7 +29,7 @@ export function AppearanceButton() {
         }}
       >
         <Icon name="spark" />
-        {t('user.appearance.title')}
+        <span className="nb-appearance-control__label">{t('user.appearance.title')}</span>
       </Button>
       {createPortal(
         <ConfirmDialog
