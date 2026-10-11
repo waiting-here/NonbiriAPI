@@ -80,14 +80,19 @@ func TestLakeCollectionRootLedgerPromotionReplayAndLifecycle(t *testing.T) {
 	if _, err = f.store.DB().Exec("DROP TRIGGER reject_collection_test"); err != nil {
 		t.Fatal(err)
 	}
+	// Claims use the current request time, independently of profile setup.
+	f.offset.Add(1)
 	for _, location := range []string{"lake", "river", "coast", "jungle"} {
 		key := "first-" + location
+		claimStarted := f.now().Unix()
 		result := claim(location, key, origin, user.Cookie)
+		claimFinished := f.now().Unix()
 		var view lakenotes.ProfileView
 		if result.Code != http.StatusOK || json.Unmarshal(result.Body.Bytes(), &view) != nil {
 			t.Fatal(location, result.Code, result.Body.String())
 		}
-		if view.Profile.CollectionClaims[location] != at || view.Wallet != before.Wallet || view.Profile.Coins != before.Profile.Coins {
+		claimedAt := view.Profile.CollectionClaims[location]
+		if claimedAt < claimStarted || claimedAt > claimFinished || view.Wallet != before.Wallet || view.Profile.Coins != before.Profile.Coins {
 			t.Fatal("incorrect reward", view)
 		}
 		if replay := claim(location, key, origin, user.Cookie); replay.Code != http.StatusOK {
