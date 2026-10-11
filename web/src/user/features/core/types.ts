@@ -502,7 +502,7 @@ export type LifecycleIntent = 'export' | 'delete';
 
 export interface AccountExportAttachment {
   blob: Blob;
-  schemaVersion: 11 | 12 | 13 | 14;
+  schemaVersion: 11 | 12 | 13 | 14 | 15 | 16;
 }
 
 export type AccountAuthority = 'active' | 'deleted';

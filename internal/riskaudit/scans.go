@@ -29,17 +29,39 @@ const (
 
 var scanTokenPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{16,64}$`)
 
+// ScanUserID rejects a supplied empty or zero target instead of widening it to
+// the whole-site scan. An omitted field retains the existing scan behavior.
+type ScanUserID int64
+
+func (id ScanUserID) MarshalJSON() ([]byte, error) {
+	return json.Marshal(strconv.FormatInt(int64(id), 10))
+}
+
+func (id *ScanUserID) UnmarshalJSON(raw []byte) error {
+	var value string
+	if json.Unmarshal(raw, &value) != nil {
+		return ErrInvalid
+	}
+	parsed, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || parsed <= 0 || strconv.FormatInt(parsed, 10) != value {
+		return ErrInvalid
+	}
+	*id = ScanUserID(parsed)
+	return nil
+}
+
 // A request token makes a repeated creation safe after a lost HTTP response.
 // Relative windows resolve once, when the first creation commits.
 type ScanInput struct {
-	RequestToken  string `json:"request_token"`
-	From          int64  `json:"from,omitempty"`
-	To            int64  `json:"to,omitempty"`
-	LookbackHours int64  `json:"lookback_hours,omitempty"`
-	Kind          string `json:"kind,omitempty"`
-	Model         string `json:"model,omitempty"`
-	ScanKind      string `json:"scan_kind,omitempty"`
-	Signal        string `json:"signal,omitempty"`
+	RequestToken  string     `json:"request_token"`
+	From          int64      `json:"from,omitempty"`
+	To            int64      `json:"to,omitempty"`
+	LookbackHours int64      `json:"lookback_hours,omitempty"`
+	Kind          string     `json:"kind,omitempty"`
+	Model         string     `json:"model,omitempty"`
+	ScanKind      string     `json:"scan_kind,omitempty"`
+	Signal        string     `json:"signal,omitempty"`
+	UserID        ScanUserID `json:"user_id,omitempty"`
 }
 
 type ClientScan struct {
@@ -59,6 +81,7 @@ type ClientScan struct {
 	RuleCount       int    `json:"rule_count"`
 	ScanKind        string `json:"scan_kind"`
 	Signal          string `json:"signal,omitempty"`
+	UserID          int64  `json:"user_id,omitempty,string"`
 	FilterRevision  int64  `json:"filter_revision"`
 	Changed         bool   `json:"changed"`
 	Coverage        string `json:"coverage"`
@@ -93,7 +116,7 @@ type scanCheckpoint struct {
 	IPSummary      *SharedIP `json:"ip_summary,omitempty"`
 }
 
-const scanCommonColumns = `id,user_id,admin,state,reason,from_at,to_at,call_kind,model,upper_log_id,after_at,after_log_id,candidates,scanned,matched,created_at,updated_at,expires_at,kind,filter_revision,checkpoint_json,coverage_json,changed,upper_source_id,after_source_id`
+const scanCommonColumns = `id,user_id,admin,state,reason,from_at,to_at,call_kind,model,upper_log_id,after_at,after_log_id,candidates,scanned,matched,created_at,updated_at,expires_at,kind,filter_revision,checkpoint_json,coverage_json,changed,upper_source_id,after_source_id,query_json`
 const scanColumns = scanCommonColumns + `,rules_json`
 const scanMetaColumns = scanCommonColumns + `,json_array_length(rules_json)`
 
@@ -111,14 +134,19 @@ func readScanRow(row scanner, hydrate bool) (ClientScan, error) {
 	if !hydrate {
 		ruleValue = &out.RuleCount
 	}
-	var coverage string
-	err := row.Scan(&out.ID, &out.owner, &out.admin, &out.State, &out.Reason, &out.From, &out.To, &out.Kind, &out.Model, &out.upper, &out.afterAt, &out.afterID, &out.Candidates, &out.Scanned, &out.Matched, &out.CreatedAt, &out.UpdatedAt, &out.ExpiresAt, &out.ScanKind, &out.FilterRevision, &out.checkpoint, &coverage, &out.Changed, &out.upperSource, &out.afterSource, ruleValue)
+	var coverage, query string
+	err := row.Scan(&out.ID, &out.owner, &out.admin, &out.State, &out.Reason, &out.From, &out.To, &out.Kind, &out.Model, &out.upper, &out.afterAt, &out.afterID, &out.Candidates, &out.Scanned, &out.Matched, &out.CreatedAt, &out.UpdatedAt, &out.ExpiresAt, &out.ScanKind, &out.FilterRevision, &out.checkpoint, &coverage, &out.Changed, &out.upperSource, &out.afterSource, &query, ruleValue)
 	if errors.Is(err, sql.ErrNoRows) {
 		return out, ErrNotFound
 	}
 	if err != nil {
 		return out, err
 	}
+	var input ScanInput
+	if len(query) > 4096 || json.Unmarshal([]byte(query), &input) != nil || input.UserID < 0 {
+		return out, ErrUnavailable
+	}
+	out.UserID = int64(input.UserID)
 	out.Coverage = "complete"
 	if out.State == "queued" || out.State == "running" {
 		out.Coverage = "partial"
@@ -178,7 +206,8 @@ func (r *Repository) CreateScan(ctx context.Context, actor Actor, input ScanInpu
 	if input.ScanKind != "client_hits" && input.ScanKind != "users" && input.ScanKind != "shared_ips" && input.ScanKind != "user_ips" ||
 		(input.Signal != "" && input.Signal != "rpm" && input.Signal != "concurrency") ||
 		(input.ScanKind != "users" && input.Signal != "") ||
-		(input.ScanKind != "client_hits" && input.Model != "") {
+		(input.ScanKind != "client_hits" && input.Model != "") ||
+		input.UserID < 0 || (input.UserID != 0 && input.ScanKind != "user_ips") {
 		return ClientScan{}, ErrInvalid
 	}
 	if input.Kind == "" {
@@ -201,6 +230,15 @@ func (r *Repository) CreateScan(ctx context.Context, actor Actor, input ScanInpu
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return ClientScan{}, err
+	}
+	if input.UserID != 0 {
+		var exists bool
+		if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE id=?)`, input.UserID).Scan(&exists); err != nil {
+			return ClientScan{}, err
+		}
+		if !exists {
+			return ClientScan{}, ErrNotFound
+		}
 	}
 	now := r.now().Unix()
 	config, err := readConfig(ctx, tx)
@@ -261,7 +299,11 @@ func (r *Repository) CreateScan(ctx context.Context, actor Actor, input ScanInpu
 	case "shared_ips":
 		err = tx.QueryRowContext(ctx, `SELECT count(*) FROM request_source_facts s JOIN request_logs l ON l.id=s.request_log_id WHERE s.occurred_at>=? AND s.occurred_at<? AND s.source_id<=? AND l.origin_discord_id IS NOT NULL AND l.origin_user_id IS NOT NULL AND s.kind IN ('self','charity','unclassified') AND (?='total' OR s.kind=?) AND s.ip_quality IN ('direct_peer','trusted_forwarded')`, w.From, w.To, upperSource, w.Kind, w.Kind).Scan(&total)
 	case "user_ips":
-		err = tx.QueryRowContext(ctx, `SELECT count(*) FROM request_source_facts s JOIN request_logs l ON l.id=s.request_log_id WHERE s.occurred_at>=? AND s.occurred_at<? AND s.source_id<=? AND l.origin_discord_id IS NOT NULL AND l.origin_user_id IS NOT NULL AND s.kind IN ('self','charity','unclassified') AND (?='total' OR s.kind=?) AND s.ip_quality IN ('direct_peer','trusted_forwarded')`, max(int64(0), w.From-int64(config.UserIPWindowHours)*3600), w.To, upperSource, w.Kind, w.Kind).Scan(&total)
+		if input.UserID != 0 {
+			err = tx.QueryRowContext(ctx, `SELECT count(*) FROM request_source_facts s JOIN request_logs l ON l.id=s.request_log_id WHERE l.origin_user_id=? AND s.occurred_at>=? AND s.occurred_at<? AND s.source_id<=? AND s.kind IN ('self','charity','unclassified') AND (?='total' OR s.kind=?) AND s.ip_quality IN ('direct_peer','trusted_forwarded')`, input.UserID, w.From, w.To, upperSource, w.Kind, w.Kind).Scan(&total)
+		} else {
+			err = tx.QueryRowContext(ctx, `SELECT count(*) FROM request_source_facts s JOIN request_logs l ON l.id=s.request_log_id WHERE s.occurred_at>=? AND s.occurred_at<? AND s.source_id<=? AND l.origin_discord_id IS NOT NULL AND l.origin_user_id IS NOT NULL AND s.kind IN ('self','charity','unclassified') AND (?='total' OR s.kind=?) AND s.ip_quality IN ('direct_peer','trusted_forwarded')`, max(int64(0), w.From-int64(config.UserIPWindowHours)*3600), w.To, upperSource, w.Kind, w.Kind).Scan(&total)
+		}
 	}
 	if err != nil {
 		return ClientScan{}, err
@@ -279,7 +321,16 @@ func (r *Repository) CreateScan(ctx context.Context, actor Actor, input ScanInpu
 		return ClientScan{}, err
 	}
 	coverage := `{}`
-	if input.ScanKind == "user_ips" || input.ScanKind == "shared_ips" {
+	if input.UserID != 0 {
+		var excluded bool
+		err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM request_logs l LEFT JOIN request_source_facts s ON s.request_log_id=l.id WHERE (l.origin_user_id=? OR (l.origin_user_id IS NULL AND l.user_id=?)) AND l.route_kind<>'model_discovery' AND ((s.request_log_id IS NULL AND l.started_at>=? AND l.started_at<?) OR (s.occurred_at>=? AND s.occurred_at<? AND s.source_id<=? AND s.kind IN ('self','charity','unclassified') AND (?='total' OR s.kind=?) AND (l.origin_user_id IS NULL OR s.ip_quality NOT IN ('direct_peer','trusted_forwarded')))))`, input.UserID, input.UserID, w.From, w.To, w.From, w.To, upperSource, w.Kind, w.Kind).Scan(&excluded)
+		if err != nil {
+			return ClientScan{}, err
+		}
+		if excluded {
+			coverage = `{"partial":true,"reason":"identity_or_ip_unavailable"}`
+		}
+	} else if input.ScanKind == "user_ips" || input.ScanKind == "shared_ips" {
 		prefix := w.From
 		if input.ScanKind == "user_ips" {
 			prefix = max(int64(0), prefix-int64(config.UserIPWindowHours)*3600)
@@ -587,7 +638,7 @@ func (r *Repository) ProcessScanBatch(ctx context.Context) (progress bool, resul
 		}
 		return true, tx.Commit()
 	}
-	if scan.ScanKind == "user_ips" {
+	if scan.ScanKind == "user_ips" && scan.UserID == 0 {
 		return r.processUserIPsBatch(ctx, tx, scan, now)
 	}
 	if scan.ScanKind != "client_hits" {

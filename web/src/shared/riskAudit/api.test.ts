@@ -345,3 +345,66 @@ it('sends an explicit unbind only when requested', async () => {
     .catch(() => undefined);
   expect(fetcher.mock.calls[1][1].json).toHaveProperty('auto_ban', null);
 });
+
+it.each(['admin', 'steward'] as const)(
+  'keeps the selected account immutable in IP audit results for %s',
+  async (role) => {
+    const userID = '9007199254740993';
+    const scan = {
+      ...completedScan,
+      kind: 'user_ips',
+      user_id: userID,
+      call_kind: 'total',
+      status: 'completed',
+      scanned_candidates: '257',
+      filter_revision: 1,
+      changed: false,
+      coverage: 'complete',
+      matched: 1,
+    };
+    const item = {
+      ip: '2001:db8::1',
+      users: 1,
+      requests: 2,
+      first_seen: 1800000000,
+      last_seen: 1800000010,
+      associations_truncated: false,
+      associations: [
+        {
+          user_id: userID,
+          call_kind: 'self',
+          first_seen: 1800000000,
+          last_seen: 1800000010,
+          requests: 2,
+          dispatched: 1,
+          rejected: 1,
+        },
+      ],
+    };
+    const result = {
+      scan,
+      items: [item],
+      page: '1',
+      page_size: 20,
+      total_items: '1',
+      total_pages: '1',
+      coverage: 'complete',
+    };
+    fetcher.mockResolvedValue(result);
+    await expect(
+      riskAPI(role).taskResults(scan.id, 'user_ips', '1', 20, undefined, userID),
+    ).resolves.toMatchObject({ scan: { user_id: userID }, items: [item] });
+    fetcher.mockResolvedValue({ ...result, scan: { ...scan, user_id: '7' } });
+    await expect(
+      riskAPI(role).taskResults(scan.id, 'user_ips', '1', 20, undefined, userID),
+    ).rejects.toMatchObject({ code: 'invalid_response' });
+    fetcher.mockResolvedValue(scan);
+    await riskAPI(role).createTask({
+      request_token: 'target_ip_operation_01',
+      kind: 'user_ips',
+      user_id: userID,
+      lookback_hours: 24,
+    });
+    expect(fetcher.mock.calls.at(-1)?.[1].json.user_id).toBe(userID);
+  },
+);

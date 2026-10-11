@@ -80,3 +80,14 @@
   border: 1px solid var(--nb-color-border);
   padding: 1rem;
 }
+
+.audit-signal-filter {
+  display: grid;
+  gap: var(--nb-space-2);
+  width: 100%;
+  max-width: 20rem;
+}
+
+.audit-ip-address {
+  overflow-wrap: anywhere;
+}

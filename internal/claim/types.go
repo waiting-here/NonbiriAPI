@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"errors"
 	"log/slog"
+	"net/http"
 	"sync"
 	"time"
 
@@ -221,8 +222,10 @@ func (Handle) LogValue() slog.Value {
 // state commits. TakeCredential transfers that handle exactly once to one
 // connector; Clear is the required backstop for every pre-connector path.
 type Dispatch struct {
-	handle       Handle
-	dispatchedAt int64
+	managedHeaders http.Header
+	onRequestSent  func()
+	handle         Handle
+	dispatchedAt   int64
 
 	mu         sync.Mutex
 	credential *connectorcontract.ShortLivedSecret
@@ -247,7 +250,10 @@ func (d *Dispatch) Policy() connectorcontract.AttemptPolicy {
 	if d == nil {
 		return connectorcontract.AttemptPolicy{}
 	}
-	return d.handle.Policy()
+	policy := d.handle.Policy()
+	policy.ManagedHeaders = d.managedHeaders.Clone()
+	policy.OnRequestSent = d.onRequestSent
+	return policy
 }
 
 func (d *Dispatch) DispatchedAt() int64 {
@@ -427,6 +433,11 @@ type RequestAccounting struct {
 	RemainingRows uint16
 	Destination   SettlementDestination
 	Disposition   AccountingDisposition
+}
+
+// CharitySessionHeaders selects generated values after dispatch authorization.
+type CharitySessionHeaders interface {
+	SessionHeaders(context.Context, *sql.Tx, CharityDispatch) (http.Header, error)
 }
 
 // Charity owns donation membership, expiry, three-dimensional reservation,

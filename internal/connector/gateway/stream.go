@@ -78,7 +78,13 @@ func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *h
 		}
 		return nil
 	}
+	currentEvent := ""
+	captured := false
 	failure := func(message string, detail upstreamerror.Detail) contract.AttemptResult {
+		if !captured {
+			captureStreamFailure(ctx, response, message, currentEvent, started, terminal, len(texts), len(tools))
+			captured = true
+		}
 		result := upstreamFailure(message, response.StatusCode)
 		result.Committed, result.Usage, result.ErrorDetail = committed, usage, detail
 		if committed {
@@ -148,6 +154,7 @@ func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *h
 			}
 			event = value
 		}
+		currentEvent = event.Data
 		if terminal || event.Event != "" && event.Event != "message" || len(event.Data) == 0 {
 			return failure("upstream stream event order was invalid", upstreamerror.Detail{})
 		}
@@ -159,8 +166,11 @@ func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *h
 		var delta map[string]any
 		switch kind {
 		case "stream-start":
-			if started || len(texts) > 0 || len(tools) > 0 || !warningsOK(part["warnings"]) {
-				return failure("upstream stream options were not honored", upstreamerror.Detail{})
+			if started || len(texts) > 0 || len(tools) > 0 {
+				return failure("upstream stream start was out of order", upstreamerror.Detail{})
+			}
+			if !warningsOK(part["warnings"]) {
+				return failure("upstream stream warnings were malformed", upstreamerror.Detail{})
 			}
 			started = true
 		case "response-metadata":
@@ -272,6 +282,7 @@ func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *h
 			}
 			terminal = true
 		case "error":
+			captured = true
 			upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), []byte(event.Data))
 			return contract.UpstreamFailed(failure("upstream stream reported an error", errorContext.Parse([]byte(event.Data))), contract.OriginUpstreamResponse)
 		default:
@@ -285,6 +296,7 @@ func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *h
 				return sinkFailure(committed, usage)
 			}
 		}
+		currentEvent = ""
 	}
 	if ctx.Err() != nil {
 		result := contract.ReadFailed(canceled(), ctx.Err(), ctx)

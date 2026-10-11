@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import games from './testdata/full-game.json';
 import actions from './testdata/actions.json';
 import {
+  RULES_ID,
   advance,
   advanceClock,
   advanceContracts,
@@ -45,7 +46,10 @@ describe('Lake Notes source conformance', () => {
       }
       expect(hash.digest('hex'), vector.name).toBe(vector.hash);
       expect(JSON.parse(JSON.stringify(profile)), vector.name).toEqual(vector.finalProfile);
-      expect(JSON.parse(JSON.stringify(cast)), vector.name).toEqual(vector.finalCast);
+      expect(JSON.parse(JSON.stringify(cast)), vector.name).toEqual({
+        ...vector.finalCast,
+        rules_id: RULES_ID,
+      });
       expect(terminal(cast)).toBe(true);
       if (cast.reward) {
         const again = resolveTreasure(profile, cast, () => {
@@ -77,6 +81,7 @@ describe('Lake Notes source conformance', () => {
       expect(() => parseAmount(amount)).toThrow();
     expect(parseAmount('340282366920938463463374607431768211455')).toBe((1n << 128n) - 1n);
     const terminalCast = structuredClone(games.vectors[0].finalCast) as Cast;
+    terminalCast.rules_id = RULES_ID;
     expect(() => validateCast(terminalCast)).not.toThrow();
   });
   it('claims earned current-day and cross-day quests exactly once without generating a board', () => {

@@ -99,18 +99,19 @@ func (service *Service) freezeAdaptations(ctx context.Context, request *validate
 			binding := snapshots[requestadaptation.Ref{Scope: requestadaptation.ScopeBinding, ID: candidate.BindingID}]
 			effective = requestadaptation.Effective(model, binding)
 		} else {
-			effective = snapshots[requestadaptation.Ref{Scope: requestadaptation.ScopeEndpoint, ID: candidate.EndpointID}]
+			endpoint := snapshots[requestadaptation.Ref{Scope: requestadaptation.ScopeEndpoint, ID: candidate.EndpointID}]
+			model := requestadaptation.Snapshot{Document: requestadaptation.Empty(requestadaptation.ScopePersonalModel), Revision: "0"}
+			if request.personalAdaptation != nil {
+				model = *request.personalAdaptation
+			}
+			effective = requestadaptation.EffectivePersonal(endpoint, model)
 		}
 		if requestadaptation.ValidateDocument(effective.Document, requestadaptation.ScopeEndpoint) != nil || requestadaptation.ExcludedConflict(effective.Document, request.excluded) {
-			if plan.charity {
-				effective.Clear()
-			}
+			effective.Clear()
 			return requestadaptation.ErrConflict
 		}
 		prepared, err := prepareAdaptedAttempt(request, candidate.ConnectorType, effective.Document, inbound)
-		if plan.charity {
-			effective.Clear()
-		}
+		effective.Clear()
 		if err != nil {
 			return err
 		}

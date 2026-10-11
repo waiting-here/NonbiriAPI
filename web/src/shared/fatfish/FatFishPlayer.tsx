@@ -67,6 +67,7 @@ export function FatFishCanvas({
   state,
   selectedTool,
   decorative = false,
+  bowlLabel,
   keyboardHelpID,
   onPointerDown,
   onPointerMove,
@@ -78,6 +79,7 @@ export function FatFishCanvas({
   state?: EngineState | null;
   selectedTool?: number | null;
   decorative?: boolean;
+  bowlLabel?: (required: number, capacity: number) => string;
   keyboardHelpID?: string;
   onPointerDown?: (point: Point, event: React.PointerEvent<HTMLCanvasElement>) => boolean | void;
   onPointerMove?: (point: Point, event: React.PointerEvent<HTMLCanvasElement>) => void;
@@ -126,9 +128,9 @@ export function FatFishCanvas({
       const sx = pixels.width / width,
         sy = pixels.height / height;
       ctx.setTransform(sx, 0, 0, sy, 128 * sx, 128 * sy);
-      drawFatFishScene(ctx, normalized, state, art, selectedTool);
+      drawFatFishScene(ctx, normalized, state, art, selectedTool, bowlLabel);
     }
-  }, [normalized, state, art, selectedTool, pixels]);
+  }, [normalized, state, art, selectedTool, pixels, bowlLabel]);
   const point = (event: React.PointerEvent<HTMLCanvasElement>): Point => {
     const rect = event.currentTarget.getBoundingClientRect();
     return workspacePoint(event.clientX, event.clientY, rect);

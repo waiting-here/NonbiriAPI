@@ -571,7 +571,7 @@ func (s *Service) Capability(ctx context.Context, userID, decisionNow int64) (Ca
 	rows, err := tx.QueryContext(ctx, `SELECT id,provider,model,full_name,pricing_mode,
 request_user_price,uncached_user_price,cache_write_user_price,cache_read_user_price,output_user_price,
 discount_enabled,discount_percent,discount_start_at,discount_end_at,
-(SELECT allowed_level_mask FROM charity_model_access WHERE model_id=charity_models.id),model_types FROM charity_models
+(SELECT allowed_level_mask FROM charity_model_access WHERE model_id=charity_models.id),model_types,context_pricing FROM charity_models
 WHERE enabled=1 ORDER BY id`)
 	if err != nil {
 		return Capability{}, fmt.Errorf("charity routing: read capability models: %w", err)
@@ -582,7 +582,7 @@ WHERE enabled=1 ORDER BY id`)
 	for rows.Next() {
 		var model CapabilityModel
 		var id int64
-		var mode string
+		var mode, contextPricing string
 		var requestPrice int64
 		var tokenPrices [4]int64
 		var discountEnabled int
@@ -590,7 +590,7 @@ WHERE enabled=1 ORDER BY id`)
 		var discountStart, discountEnd sql.NullInt64
 		if err := rows.Scan(&id, &model.Provider, &model.Model, &model.FullName, &mode,
 			&requestPrice, &tokenPrices[0], &tokenPrices[1], &tokenPrices[2], &tokenPrices[3],
-			&discountEnabled, &model.Discount.Percent, &discountStart, &discountEnd, &mask, &model.ModelTypes); err != nil {
+			&discountEnabled, &model.Discount.Percent, &discountStart, &discountEnd, &mask, &model.ModelTypes, &contextPricing); err != nil {
 			_ = rows.Close()
 			return Capability{}, fmt.Errorf("charity routing: scan capability model: %w", err)
 		}
@@ -606,6 +606,10 @@ WHERE enabled=1 ORDER BY id`)
 		}
 		model.Pricing, err = capabilityPricing(mode, requestPrice, tokenPrices, model.Discount.Percent)
 		if err != nil {
+			_ = rows.Close()
+			return Capability{}, err
+		}
+		if err := capabilityContextPricing(&model.Pricing, contextPricing, model.Discount.Percent); err != nil {
 			_ = rows.Close()
 			return Capability{}, err
 		}

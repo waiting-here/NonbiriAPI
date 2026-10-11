@@ -526,6 +526,9 @@ func normalizeExportDocument(document *ExportDocument) {
 		document.RequestAdaptations = []RequestAdaptationExport{}
 	}
 	for i := range document.RequestAdaptations {
+		if document.RequestAdaptations[i].Modes == nil {
+			document.RequestAdaptations[i].Modes = map[string]string{}
+		}
 		item := &document.RequestAdaptations[i]
 		if item.ForwardHeaders == nil {
 			item.ForwardHeaders = []string{}

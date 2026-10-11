@@ -954,10 +954,33 @@ describe('CharityManagement corrective controls', () => {
       target: { value: '86400' },
     });
 
+    await view.user.click(
+      editor.getByText('Long context and excess-context penalty', { exact: true }),
+    );
+    await view.user.click(editor.getByRole('switch', { name: 'Enable long-context prices' }));
+    fireEvent.change(editor.getByLabelText('Long-context threshold (input tokens)'), {
+      target: { value: '100000' },
+    });
+    fireEvent.change(editor.getByLabelText('Long-context price per request (credits)'), {
+      target: { value: '8' },
+    });
+    await view.user.click(editor.getByRole('switch', { name: 'Enable excess-context penalty' }));
+    fireEvent.change(editor.getByLabelText('Penalty threshold (input tokens)'), {
+      target: { value: '200000' },
+    });
+    fireEvent.change(editor.getByLabelText('One-time fine (credits)'), { target: { value: '50' } });
+    await view.user.click(editor.getByText('Managed session headers', { exact: true }));
+    await view.user.click(editor.getByRole('button', { name: 'Add managed header' }));
+    expect(patchBodies).toHaveLength(0);
+    fireEvent.change(editor.getByLabelText('Header 1 name'), { target: { value: 'X-Session-ID' } });
+    expect(editor.getByLabelText('Idle expiry (seconds)')).toHaveValue(300);
+    await view.user.selectOptions(editor.getByLabelText('Random value format'), 'hex_32');
+
     await view.user.click(editor.getByRole('button', { name: 'Save model' }));
 
     await waitFor(() => expect(patchBodies).toHaveLength(1));
     expect(patchBodies[0]).toEqual({
+      session_headers: [{ name: 'X-Session-ID', idle_seconds: 300, format: 'hex_32' }],
       model_types: ['chat_completions', 'embeddings'],
       role_policy: { default_action: 'native', rules: {} },
       is_mainstream: false,
@@ -970,7 +993,13 @@ describe('CharityManagement corrective controls', () => {
       enabled: true,
       allowed_levels: [1, 2, 3, 4, 5],
       public_description: '',
-      pricing: { mode: 'per_request', user_price: '1', donor_reward: '0' },
+      pricing: {
+        mode: 'per_request',
+        user_price: '1',
+        donor_reward: '0',
+        long_context: { input_threshold: '100000', user_price: '8' },
+        context_penalty: { input_threshold: '200000', fine: '50' },
+      },
       discount: { enabled: true, percent: 10, start_at: start, end_at: end },
       transport_rule: 'passthrough',
       flatten_tool_calls: false,

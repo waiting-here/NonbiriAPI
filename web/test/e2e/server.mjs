@@ -299,6 +299,10 @@ async function serveStation(request, response, station) {
   }
   const url = new URL(request.url ?? '/', 'http://127.0.0.1');
   if (isAPIPath(url.pathname)) {
+    if (request.method === 'GET' && url.pathname === '/api/gacha/entry') {
+      send(response, 200, 'application/json', JSON.stringify({ enabled: false, entered: false }));
+      return;
+    }
     if (request.method === 'GET' && url.pathname === '/api/games/bidding/ai') {
       send(response, 200, 'application/json', JSON.stringify({ enabled: false, bots: [] }));
       return;
@@ -320,26 +324,27 @@ async function serveStation(request, response, station) {
       return;
     }
     // Unrelated layout/navigation fixtures use an empty, valid projection for
-    // the request-adaptation editor added to endpoint and charity-model details.
+    // the request-adaptation editor in endpoint, personal-model and charity-model details.
     // Tests for adaptation itself intercept these exact reads with their own data.
     if (
       request.method === 'GET' &&
-      (/^\/api\/endpoints\/[1-9][0-9]*\/request-adaptation$/.test(url.pathname) ||
+      (/^\/api\/(endpoints|models)\/[1-9][0-9]*\/request-adaptation$/.test(url.pathname) ||
         /^\/(?:admin\/api|api\/steward)\/charity-models\/[1-9][0-9]*\/request-adaptation$/.test(
           url.pathname,
         ))
     ) {
+      const mode = url.pathname.startsWith('/api/models/') ? 'inherit' : 'replace';
       send(
         response,
         200,
         'application/json',
         JSON.stringify({
           revision: '0',
-          forward_headers: { mode: 'replace', values: [] },
-          fixed_headers: { mode: 'replace', values: {} },
-          body_defaults: { mode: 'replace', values: {} },
-          body_forced: { mode: 'replace', values: {} },
-          native_extension_paths: { mode: 'replace', values: [] },
+          forward_headers: { mode, values: [] },
+          fixed_headers: { mode, values: {} },
+          body_defaults: { mode, values: {} },
+          body_forced: { mode, values: {} },
+          native_extension_paths: { mode, values: [] },
         }),
       );
       return;

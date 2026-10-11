@@ -353,18 +353,6 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 	if plan.charity {
 		decisionNow := plan.decisionNow
 		acceptInput.CharityDecisionNow = &decisionNow
-		if service.charityGuard != nil {
-			guarded, guardErr := service.charityGuard.CheckCharityCall(parent, userID, plan.fullName, decisionNow)
-			if guardErr != nil || guarded.Banned {
-				if guardErr != nil {
-					guardErr = claim.ErrDependencyUnavailable
-				} else {
-					guardErr = &accountBannedError{until: guarded.Until}
-				}
-				service.writePreAcceptanceFailure(parent, writer, suppressor, decision.Trace, guardErr, true, language)
-				return
-			}
-		}
 	}
 	accepted, err := service.claims.Accept(executionContext, acceptInput)
 	if err != nil {
@@ -485,6 +473,19 @@ func (service *Service) preflight(ctx context.Context, userID int64, request *va
 		if err != nil {
 			return logicalAdmission{charity: true}, request, nil, err
 		}
+		// Ingress has authenticated the caller, resolved model access, and
+		// parsed the request. Client restrictions must run before content,
+		// balance, candidate availability, outbound transformations, or Debug
+		// capture. The guard uses the immutable original ingress source.
+		if service.charityGuard != nil {
+			guarded, guardErr := service.charityGuard.CheckCharityCall(ctx, userID, request.Model, now)
+			if guardErr != nil {
+				return logicalAdmission{charity: true}, request, nil, claim.ErrDependencyUnavailable
+			}
+			if guarded.Banned {
+				return logicalAdmission{charity: true}, request, nil, &accountBannedError{until: guarded.Until}
+			}
+		}
 		var value CharityPreflight
 		if request.operation == connectorcontract.OperationEmbeddings {
 			value, err = service.charity.PreflightEmbedding(ctx, userID, request.Model, request.embedding, now)
@@ -517,6 +518,9 @@ func (service *Service) preflight(ctx context.Context, userID int64, request *va
 	value, err := service.personal.Preflight(ctx, userID, request.Model)
 	if err != nil {
 		return logicalAdmission{}, request, nil, err
+	}
+	if request.policyModelID != 0 && request.policyModelID != value.ModelID {
+		return logicalAdmission{}, request, nil, routing.ErrNotFound
 	}
 	if !value.ModelTypes.Supports(request.operation) {
 		return logicalAdmission{}, request, nil, unsupportedModelType()
@@ -562,6 +566,10 @@ func prepareModelPolicy(request *validatedRequest, admission logicalAdmission) (
 	policy := admission.rolePolicy.Clone()
 	copy.roleSnapshot = &policy
 	copy.excluded = append([]string(nil), request.excluded...)
+	if request.personalAdaptation != nil {
+		snapshot := request.personalAdaptation.Clone()
+		copy.personalAdaptation = &snapshot
+	}
 	return admission, copy, copy.Clear, nil
 }
 
@@ -886,7 +894,7 @@ func (service *Service) runAttempts(
 		if prepared != nil {
 			policy.AdditionalHeaders = prepared.headers.Clone()
 			policy.NativeExtensions = prepared.native
-			policy.HasAdaptation = prepared.active
+			policy.HasAdaptation = prepared.active || len(policy.ManagedHeaders) > 0
 		}
 		if request.chat == nil {
 			policy.ForceStoreFalse, policy.FlattenToolCalls = false, false

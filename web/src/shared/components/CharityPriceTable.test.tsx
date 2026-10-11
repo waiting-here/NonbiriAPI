@@ -94,3 +94,24 @@ describe('charity offer boundaries', () => {
     expect(screen.getByLabelText('Original price: 4.936')).toBeVisible();
   });
 });
+
+it('shows full long-context prices with the offer and an undiscounted independent fine', async () => {
+  await renderWithProviders(
+    <CharityPriceTable
+      mode="per_request"
+      rows={rows}
+      serverNow={NOW}
+      discount={{ enabled: true, percent: 50 }}
+      longContext={{
+        inputThreshold: '100000',
+        rows: [{ label: 'Long request', userMilli: '300000', discountedUserMilli: '150000' }],
+      }}
+      contextPenalty={{ inputThreshold: '200000', fineMilli: '50000' }}
+    />,
+    { station: 'user', role: 'user', locale: 'en' },
+  );
+  expect(screen.getByText('Long context: input ≥ 100,000 tokens')).toBeVisible();
+  expect(screen.getByLabelText('Offer price: 150')).toBeVisible();
+  expect(screen.getByText('Context penalty: input ≥ 200,000 tokens')).toBeVisible();
+  expect(screen.getByText('Extra 50 credits per request, without a discount')).toBeVisible();
+});

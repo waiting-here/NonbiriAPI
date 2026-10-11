@@ -1,7 +1,7 @@
 import { Button } from '@shared/components/ui/Button';
 import { clearStationSession } from '@shared/charityManagement';
 import { Card, EmptyState, ErrorState, LoadingState } from '@shared/components/States';
-import { useDisplayTimeContext } from '@shared/components/timeContextValue';
+import { formatCredits } from '../../../user/games/common/strict';
 import { Fold, Note } from '@shared/components/ui';
 import { RawStorageSummary } from '@shared/observability/RawStorageSummary';
 import { AttemptErrors, RequestSource } from '@shared/observability/RequestDiagnostics';
@@ -74,19 +74,11 @@ function requestFrom(detail: NumberedRoleLogDetail): RoleLogRow {
   return detail.request;
 }
 
-function ShortLogTime({ at }: { at: number }) {
-  const context = useDisplayTimeContext();
+function LogTime({ at }: { at: number }) {
   const full = useDateTimeFormatter()(at);
-  const [nowAt] = useState(Date.now);
-  const shift = context.mode === 'site' ? (context.offset_minutes ?? 0) * 60_000 : 0;
-  const date = new Date(at * 1000 + shift),
-    now = new Date(nowAt + shift);
-  const year = context.mode === 'site' ? date.getUTCFullYear() : date.getFullYear();
-  const currentYear = context.mode === 'site' ? now.getUTCFullYear() : now.getFullYear();
-  const short = year === currentYear ? full.replace(`${year}/`, '').replace(`/${year}`, '') : full;
   return (
     <time dateTime={new Date(at * 1000).toISOString()} title={full}>
-      {short}
+      {full}
     </time>
   );
 }
@@ -481,6 +473,7 @@ function ScopedRoleLogPanel({
         name: 'model',
         label: t('common.model'),
         ariaLabel: t('common.model'),
+        placeholder: t('common.operations.logs.presentation.modelPlaceholder'),
         maxLength: 133,
       });
     if (role !== 'user')
@@ -488,6 +481,7 @@ function ScopedRoleLogPanel({
         name: 'user_id',
         label: t('common.userId'),
         ariaLabel: t('common.userId'),
+        placeholder: t('common.operations.logs.presentation.userPlaceholder'),
         inputType: 'number',
         maxLength: 39,
       });
@@ -517,6 +511,7 @@ function ScopedRoleLogPanel({
         name: 'upstream_model',
         label: t('logs.upstreamModel'),
         ariaLabel: t('logs.upstreamModel'),
+        placeholder: t('common.operations.logs.presentation.upstreamPlaceholder'),
         maxLength: 512,
       });
       values.push({
@@ -600,21 +595,27 @@ function ScopedRoleLogPanel({
             ? 'common.operations.logs.presentation.images'
             : 'common.operations.logs.presentation.chat',
     );
-  const modelCell = (row: RoleLogRow) => (
-    <>
-      <span className="mono">{'model' in row ? row.model : (row.charity_model ?? '—')}</span>
-      <span className="nb-sub">
-        {row.route_kind === 'model_discovery'
-          ? ''
-          : t(
-              row.route_kind.startsWith('charity_')
-                ? 'common.operations.logs.presentation.charity'
-                : 'common.operations.logs.presentation.personal',
-            ) + ' · '}
-        {routeSummary(row.route_kind)}
-      </span>
-    </>
-  );
+  const modelCell = (row: RoleLogRow) => {
+    const model = 'model' in row ? row.model : row.charity_model;
+    const kind =
+      row.route_kind === 'model_discovery'
+        ? routeSummary(row.route_kind)
+        : t(
+            row.route_kind.startsWith('charity_')
+              ? 'common.operations.logs.presentation.charity'
+              : 'common.operations.logs.presentation.personal',
+          ) +
+          ' · ' +
+          routeSummary(row.route_kind);
+    return model ? (
+      <>
+        <span className="mono">{model}</span>
+        <span className="nb-sub">{kind}</span>
+      </>
+    ) : (
+      <span>{kind}</span>
+    );
+  };
   const usageCell = (row: RoleLogRow) => {
     if (row.usage.usage_unknown) return '—';
     const input = (
@@ -646,13 +647,37 @@ function ScopedRoleLogPanel({
       </span>
     );
   };
+  const requestMode = (row: RoleLogRow) =>
+    t(
+      row.requested_streaming == null
+        ? 'common.operations.logs.facts.unknown'
+        : row.requested_streaming
+          ? 'common.operations.logs.facts.streaming'
+          : 'common.operations.logs.facts.nonStreaming',
+    );
+  const actionLabels = {
+    short_content_deduction: t('common.operations.logs.facts.short_content_deduction'),
+    short_content_ban: t('common.operations.logs.facts.short_content_ban'),
+    short_content_suspension: t('common.operations.logs.facts.short_content_suspension'),
+    rpm_ban: t('common.operations.logs.facts.rpm_ban'),
+    client_rule_ban: t('common.operations.logs.facts.client_rule_ban'),
+    context_penalty: t('common.operations.logs.facts.context_penalty'),
+  };
+  const actionText = (row: RoleLogRow) =>
+    row.automatic_actions == null
+      ? t('common.operations.logs.facts.unknown')
+      : row.automatic_actions.length === 0
+        ? t('common.operations.logs.facts.noActions')
+        : row.automatic_actions
+            .map((action) => actionLabels[action])
+            .join(' · ');
   const columns: LogColumn<RoleLogRow>[] = [
     {
       key: 'time',
       header: t('logs.time'),
       cell: 'meta',
       align: 'nowrap',
-      render: (row) => <ShortLogTime at={row.started_at} />,
+      render: (row) => <LogTime at={row.started_at} />,
     },
     ...(role !== 'user'
       ? [
@@ -691,13 +716,27 @@ function ScopedRoleLogPanel({
       cell: 'status',
       render: (row) => <LogResultBadge row={row} />,
     },
+    {
+      key: 'request-facts',
+      header: t('common.operations.logs.facts.title'),
+      cell: 'meta',
+      render: (row) =>
+        row.route_kind.startsWith('charity_') ? (
+          <>
+            <span>{requestMode(row)}</span>
+            <span className="nb-sub">{actionText(row)}</span>
+          </>
+        ) : (
+          '—'
+        ),
+    },
     { key: 'usage', header: t('logs.tokens'), cell: 'meta', align: 'num', render: usageCell },
     {
       key: 'charge',
       header: t('common.operations.logs.charge'),
       cell: 'meta',
       align: 'num',
-      render: (row) => <span className="mono">{row.usage.charge}</span>,
+      render: (row) => <span className="nb-amount">{formatCredits(row.usage.charge)}</span>,
     },
   ];
 
@@ -765,6 +804,18 @@ function ScopedRoleLogPanel({
                   }),
           },
           { label: t('logs.routeKind'), value: routeLabel(detailRequest.route_kind) },
+          ...(detailRequest.route_kind.startsWith('charity_')
+            ? [
+                {
+                  label: t('common.operations.logs.facts.mode'),
+                  value: requestMode(detailRequest),
+                },
+                {
+                  label: t('common.operations.logs.facts.actions'),
+                  value: actionText(detailRequest),
+                },
+              ]
+            : []),
           {
             label: t('logs.phase'),
             value: t(
@@ -841,7 +892,7 @@ function ScopedRoleLogPanel({
             : []),
           {
             label: t('common.operations.logs.charge'),
-            value: <span className="mono">{detailRequest.usage.charge}</span>,
+            value: <span className="nb-amount">{formatCredits(detailRequest.usage.charge)}</span>,
           },
           ...('attempts' in detailData
             ? [

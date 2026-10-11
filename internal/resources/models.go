@@ -20,6 +20,7 @@ import (
 )
 
 const (
+	routeModelAdaptation   = "/api/models/{id}/request-adaptation"
 	routeModels            = "/api/models"
 	routeModel             = "/api/models/{id}"
 	routeBindingCandidates = "/api/models/{id}/binding-candidates"
@@ -403,6 +404,9 @@ func (r *Repository) DeleteModel(ctx context.Context, userID, modelID int64, mut
 	deleted, _ := result.RowsAffected()
 	if deleted != 1 {
 		return MutationResult[struct{}]{}, ErrConflict
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM request_adaptation_audits WHERE scope='personal_model' AND resource_id=?", modelID); err != nil {
+		return MutationResult[struct{}]{}, ErrUnavailable
 	}
 	out, err := finishEmptyMutation(ctx, tx, decision, http.StatusNoContent)
 	if err != nil {

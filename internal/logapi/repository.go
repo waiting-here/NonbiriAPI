@@ -362,6 +362,8 @@ func optionalInt64(value *int64) string {
 }
 
 type commonLogRecord struct {
+	requestedStreaming                                          sql.NullBool
+	automaticActions                                            sql.NullInt64
 	rejectionDetail                                             *requestattempt.RejectionDetail
 	origin                                                      OriginIdentity
 	charityModel                                                *string
@@ -394,6 +396,7 @@ func scanCommon(scanner rowScanner, extra ...any) (commonLogRecord, error) {
 		&record.uncached, &record.cacheWrite, &record.cacheRead, &record.output,
 		&record.usageUnknown, &record.usageTotalMismatch, &record.attemptCount, &record.chargeMagnitude,
 		&record.rejectionStage, &record.rejectionReason, &record.requestMethod, &record.requestPath,
+		&record.requestedStreaming, &record.automaticActions,
 	}
 	targets = append(targets, extra...)
 	if err := scanner.Scan(targets...); err != nil {

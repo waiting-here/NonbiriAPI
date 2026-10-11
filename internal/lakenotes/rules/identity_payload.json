@@ -19,16 +19,17 @@
     "internal/lakenotes/rules/catalog.go": "3e36764f7d7a8bcbbf7a9899f506c7e1129107688d018825c0f6334df1b406fa",
     "internal/lakenotes/rules/doc.go": "a6025efd001d355971422efc45f8434517b8b712a1627a47a98baab9df1345ad",
     "internal/lakenotes/rules/fish.go": "c30b6bf043f4e2bb44f68fbae39f5cb448f12dde666808e4bb695e3e897908e7",
-    "internal/lakenotes/rules/profile.go": "7c5a8e9564302fecbeae58ddfb5b7e789e1fe05cdaae5d3efe5973fef857d56b",
+    "internal/lakenotes/rules/profile.go": "bac2567fbf325ddb26f0671b98659e95de3b6656072bbeb86c65f5ef98820baf",
     "internal/lakenotes/rules/random.go": "0cbfbc9f01a39393f5aeac229661fcee3b93b0b697a857d2dcd8b5e17cd0173d",
     "internal/lakenotes/rules/state.go": "d705a59d4231a9b0159350ac8eeea6be99cd132baaa3f027510b0e2fd591e6a2",
-    "internal/lakenotes/rules/validate.go": "103b260c46a542861c6631bfd16ed0fb6ca75673f056844cf82a9af537ead2fd",
+    "internal/lakenotes/rules/validate.go": "28615e9539cc759dc7f2724f8bba23e3f9c872c41298a8e7cb5978975958d31b",
     "web/src/user/activities/lake-notes/rules/actions.ts": "e1427c8c84dba8e359b43e47ccae55c094b64f59ac07f70202b5ca30a51f0739",
     "web/src/user/activities/lake-notes/rules/cast.ts": "ad89b74e7af77fa3d0573dc3ae40a2d3b3f9f7fb3a70f9e65d60f9493ed32e8c",
     "web/src/user/activities/lake-notes/rules/catalog.ts": "f8df3d476aa23157fa394e8223c96f9b92b149416de8500c30e93e61c4bb87da",
     "web/src/user/activities/lake-notes/rules/index.ts": "f9bed903220db996e4e39970c7ac571ea8be391da9ccedf22ed76fb5b8d189da",
     "web/src/user/activities/lake-notes/rules/profile.ts": "3e41e1bc8f5c92c6eadcea0c5f45593d6168e5c5a071c685c07945daadca5468",
     "web/src/user/activities/lake-notes/rules/state.ts": "6a47f36a37604c436a4f7de53394b33e2cc4471d5606915d7a2c730b85aeae03",
-    "web/src/user/activities/lake-notes/rules/types.ts": "5c55684e1e2cabec36ed4d2b65d435a4bd77ee86868b27d467c80b747767adb8"
+    "web/src/user/activities/lake-notes/rules/types.ts": "c0ed330c98a43132775c0989fa8adb0ac363285ba8c4cb7a70ab242c967d57c6",
+    "internal/lakenotes/rules/collection.go": "8aa387ccddc52a8b87c50f8a43ee576d7cb38b4938698511cc0665f6474e271e"
   }
 }

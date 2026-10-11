@@ -7,6 +7,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/charityaccess"
 	"github.com/waiting-here/NonbiriAPI/internal/modeltype"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
+	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
 	"github.com/waiting-here/NonbiriAPI/internal/transportpolicy"
 )
 
@@ -262,11 +263,13 @@ type tokenPricesWire struct {
 }
 
 type pricingWire struct {
-	Mode         requiredField[string]          `json:"mode"`
-	UserPrice    requiredField[string]          `json:"user_price"`
-	DonorReward  requiredField[string]          `json:"donor_reward"`
-	UserPrices   requiredField[tokenPricesWire] `json:"user_prices"`
-	DonorRewards requiredField[tokenPricesWire] `json:"donor_rewards"`
+	LongContext    nullableField[longContextWire]    `json:"long_context"`
+	ContextPenalty nullableField[contextPenaltyWire] `json:"context_penalty"`
+	Mode           requiredField[string]             `json:"mode"`
+	UserPrice      requiredField[string]             `json:"user_price"`
+	DonorReward    requiredField[string]             `json:"donor_reward"`
+	UserPrices     requiredField[tokenPricesWire]    `json:"user_prices"`
+	DonorRewards   requiredField[tokenPricesWire]    `json:"donor_rewards"`
 }
 
 func parseTokenPrices(wire tokenPricesWire) (*TokenPricesInput, map[string]any, error) {
@@ -309,6 +312,9 @@ func parsePricing(wire pricingWire) (PricingInput, map[string]any, error) {
 	default:
 		return PricingInput{}, nil, ErrInvalidRequest
 	}
+	if err := parseContextPricing(wire, &input, canonical); err != nil {
+		return PricingInput{}, nil, err
+	}
 	return input, canonical, nil
 }
 
@@ -331,22 +337,23 @@ func parseDiscount(wire discountWire) (DiscountInput, map[string]any, error) {
 }
 
 type modelCreateWire struct {
-	ModelTypes            requiredField[modeltype.Set]        `json:"model_types"`
-	TransportRule         requiredField[transportpolicy.Rule] `json:"transport_rule"`
-	RolePolicy            requiredField[rolepolicy.Policy]    `json:"role_policy"`
-	IsMainstream          requiredField[bool]                 `json:"is_mainstream"`
-	ExcludedRequestFields requiredField[[]string]             `json:"excluded_request_fields"`
-	TokenReserveCredits   nullableField[string]               `json:"token_reserve_credits"`
-	AllowedLevels         requiredField[[]int]                `json:"allowed_levels"`
-	PublicDescription     requiredField[string]               `json:"public_description"`
-	RouteStrategy         requiredField[string]               `json:"route_strategy"`
-	AffinityTTLSeconds    requiredField[int]                  `json:"affinity_ttl_seconds"`
-	Provider              requiredField[string]               `json:"provider"`
-	Model                 requiredField[string]               `json:"model"`
-	Enabled               requiredField[bool]                 `json:"enabled"`
-	Pricing               requiredField[pricingWire]          `json:"pricing"`
-	Discount              requiredField[discountWire]         `json:"discount"`
-	FlattenToolCalls      requiredField[bool]                 `json:"flatten_tool_calls"`
+	SessionHeaders        requiredField[[]sessionheader.Config] `json:"session_headers"`
+	ModelTypes            requiredField[modeltype.Set]          `json:"model_types"`
+	TransportRule         requiredField[transportpolicy.Rule]   `json:"transport_rule"`
+	RolePolicy            requiredField[rolepolicy.Policy]      `json:"role_policy"`
+	IsMainstream          requiredField[bool]                   `json:"is_mainstream"`
+	ExcludedRequestFields requiredField[[]string]               `json:"excluded_request_fields"`
+	TokenReserveCredits   nullableField[string]                 `json:"token_reserve_credits"`
+	AllowedLevels         requiredField[[]int]                  `json:"allowed_levels"`
+	PublicDescription     requiredField[string]                 `json:"public_description"`
+	RouteStrategy         requiredField[string]                 `json:"route_strategy"`
+	AffinityTTLSeconds    requiredField[int]                    `json:"affinity_ttl_seconds"`
+	Provider              requiredField[string]                 `json:"provider"`
+	Model                 requiredField[string]                 `json:"model"`
+	Enabled               requiredField[bool]                   `json:"enabled"`
+	Pricing               requiredField[pricingWire]            `json:"pricing"`
+	Discount              requiredField[discountWire]           `json:"discount"`
+	FlattenToolCalls      requiredField[bool]                   `json:"flatten_tool_calls"`
 }
 
 func parseModelCreate(wire modelCreateWire) (ModelCreate, map[string]any, error) {
@@ -365,6 +372,14 @@ func parseModelCreate(wire modelCreateWire) (ModelCreate, map[string]any, error)
 		Pricing: pricing, Discount: discount, FlattenToolCalls: wire.FlattenToolCalls.Value}
 	canonical := map[string]any{"provider": input.Provider, "model": input.Model, "enabled": input.Enabled,
 		"pricing": pricingJSON, "discount": discountJSON, "flatten_tool_calls": input.FlattenToolCalls}
+	if wire.SessionHeaders.Set {
+		values, err := sessionheader.Normalize(wire.SessionHeaders.Value)
+		if err != nil {
+			return ModelCreate{}, nil, ErrInvalidRequest
+		}
+		input.SessionHeaders = values
+		canonical["session_headers"] = values
+	}
 	if wire.IsMainstream.Set {
 		input.IsMainstream = wire.IsMainstream.Value
 		canonical["is_mainstream"] = input.IsMainstream
@@ -507,23 +522,24 @@ func parseDiscountPatch(wire discountPatchWire) (*DiscountPatchInput, map[string
 }
 
 type modelPatchWire struct {
-	ModelTypes            requiredField[modeltype.Set]        `json:"model_types"`
-	TransportRule         requiredField[transportpolicy.Rule] `json:"transport_rule"`
-	RolePolicy            requiredField[rolepolicy.Policy]    `json:"role_policy"`
-	IsMainstream          requiredField[bool]                 `json:"is_mainstream"`
-	ExcludedRequestFields requiredField[[]string]             `json:"excluded_request_fields"`
-	TokenReserveCredits   nullableField[string]               `json:"token_reserve_credits"`
-	AllowedLevels         requiredField[[]int]                `json:"allowed_levels"`
-	PublicDescription     requiredField[string]               `json:"public_description"`
-	RouteStrategy         requiredField[string]               `json:"route_strategy"`
-	AffinityTTLSeconds    requiredField[int]                  `json:"affinity_ttl_seconds"`
-	ExpectedRevision      requiredField[string]               `json:"expected_revision"`
-	Provider              requiredField[string]               `json:"provider"`
-	Model                 requiredField[string]               `json:"model"`
-	Enabled               requiredField[bool]                 `json:"enabled"`
-	Pricing               requiredField[pricingWire]          `json:"pricing"`
-	Discount              requiredField[discountPatchWire]    `json:"discount"`
-	FlattenToolCalls      requiredField[bool]                 `json:"flatten_tool_calls"`
+	SessionHeaders        requiredField[[]sessionheader.Config] `json:"session_headers"`
+	ModelTypes            requiredField[modeltype.Set]          `json:"model_types"`
+	TransportRule         requiredField[transportpolicy.Rule]   `json:"transport_rule"`
+	RolePolicy            requiredField[rolepolicy.Policy]      `json:"role_policy"`
+	IsMainstream          requiredField[bool]                   `json:"is_mainstream"`
+	ExcludedRequestFields requiredField[[]string]               `json:"excluded_request_fields"`
+	TokenReserveCredits   nullableField[string]                 `json:"token_reserve_credits"`
+	AllowedLevels         requiredField[[]int]                  `json:"allowed_levels"`
+	PublicDescription     requiredField[string]                 `json:"public_description"`
+	RouteStrategy         requiredField[string]                 `json:"route_strategy"`
+	AffinityTTLSeconds    requiredField[int]                    `json:"affinity_ttl_seconds"`
+	ExpectedRevision      requiredField[string]                 `json:"expected_revision"`
+	Provider              requiredField[string]                 `json:"provider"`
+	Model                 requiredField[string]                 `json:"model"`
+	Enabled               requiredField[bool]                   `json:"enabled"`
+	Pricing               requiredField[pricingWire]            `json:"pricing"`
+	Discount              requiredField[discountPatchWire]      `json:"discount"`
+	FlattenToolCalls      requiredField[bool]                   `json:"flatten_tool_calls"`
 }
 
 func parseModelPatch(wire modelPatchWire) (ModelPatch, map[string]any, error) {
@@ -535,6 +551,14 @@ func parseModelPatch(wire modelPatchWire) (ModelPatch, map[string]any, error) {
 	}
 	input := ModelPatch{ExpectedRevision: wire.ExpectedRevision.Value}
 	canonical := map[string]any{"expected_revision": wire.ExpectedRevision.Value}
+	if wire.SessionHeaders.Set {
+		values, err := sessionheader.Normalize(wire.SessionHeaders.Value)
+		if err != nil {
+			return ModelPatch{}, nil, ErrInvalidRequest
+		}
+		input.SessionHeaders = &values
+		canonical["session_headers"] = values
+	}
 	if wire.IsMainstream.Set {
 		input.IsMainstream = &wire.IsMainstream.Value
 		canonical["is_mainstream"] = wire.IsMainstream.Value

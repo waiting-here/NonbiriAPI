@@ -1,6 +1,7 @@
 import { Button } from '@shared/components/ui/Button';
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
+import { routePath } from '@shared/routing/routeRegistry';
 import {
   Affix,
   DataTable,
@@ -33,6 +34,7 @@ import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { isForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { accountCopy, accountHistoryCopy } from './accountCopy';
+import { formatCredits } from '../../user/games/common/strict';
 import { DeletedAccountCard } from './DeletedAccountCard';
 import {
   banManagedUser,
@@ -347,6 +349,16 @@ function UserAuthority({
               }
             >
               {t('management.users.viewLogs')}
+            </Link>
+            <Link
+              className="nb-btn nb-btn--secondary"
+              to={
+                role === 'admin'
+                  ? routePath('admin', 'admin-risk-audit') + `?audit_tab=user_ips&audit_ip_user=${user.id}`
+                  : `/steward?tab=risk&audit_tab=user_ips&audit_ip_user=${user.id}`
+              }
+            >
+              {t('common.audit.inspectUserIPs')}
             </Link>
             <LoanHistory role={role} account={account} userID={user.id} />
           </div>
@@ -1075,37 +1087,37 @@ export function UserManagement({
                       <option value="deleted">{accountLabels.deletedAccounts}</option>
                     </select>
                   </label>
+                  <label>
+                    <span>{t('management.users.filterStatus')}</span>
+                    <select
+                      value={banned}
+                      onChange={(event) =>
+                        commitListState(query, event.target.value as typeof banned, level, userIDDraft)
+                      }
+                    >
+                      <option value="">{t('common.all')}</option>
+                      <option value="false">{t('management.users.active')}</option>
+                      <option value="true">{t('management.users.banned')}</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>{t('management.users.level')}</span>
+                    <select
+                      value={level}
+                      onChange={(event) =>
+                        commitListState(query, banned, event.target.value, userIDDraft)
+                      }
+                    >
+                      <option value="">{t('common.all')}</option>
+                      {[1, 2, 3, 4, 5, 6].map((value) => (
+                        <option key={value} value={value}>
+                          {value}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                 </div>
               </Fold>
-              <label>
-                <span>{t('management.users.filterStatus')}</span>
-                <select
-                  value={banned}
-                  onChange={(event) =>
-                    commitListState(query, event.target.value as typeof banned, level, userIDDraft)
-                  }
-                >
-                  <option value="">{t('common.all')}</option>
-                  <option value="false">{t('management.users.active')}</option>
-                  <option value="true">{t('management.users.banned')}</option>
-                </select>
-              </label>
-              <label>
-                <span>{t('management.users.level')}</span>
-                <select
-                  value={level}
-                  onChange={(event) =>
-                    commitListState(query, banned, event.target.value, userIDDraft)
-                  }
-                >
-                  <option value="">{t('common.all')}</option>
-                  {[1, 2, 3, 4, 5, 6].map((value) => (
-                    <option key={value} value={value}>
-                      {value}
-                    </option>
-                  ))}
-                </select>
-              </label>
               {invalidUserIDDraft ? (
                 <p className="field-error" role="alert">
                   {t('management.users.userIdInvalid')}
@@ -1127,7 +1139,7 @@ export function UserManagement({
           </Card>
           <Card>
             <h2>{t('management.users.listTitle')}</h2>
-            {accountState !== 'active' ? <p>{accountHistoryCopy(t).coverage}</p> : null}
+            {accountState === 'deleted' ? <p>{accountHistoryCopy(t).coverage}</p> : null}
             {invalidCommittedUserID || invalidCommittedDiscordID ? (
               <p role="status">
                 {invalidCommittedUserID
@@ -1186,7 +1198,7 @@ export function UserManagement({
                             >
                               {deleted ? accountLabels.deleted : entry.user.username}
                             </button>
-                            <span>
+                            <span title={discord ?? undefined}>
                               #{id ?? accountLabels.unknown} ·{' '}
                               {discord
                                 ? `${discord.slice(0, 4)}…${discord.slice(-4)}`
@@ -1200,11 +1212,12 @@ export function UserManagement({
                       key: 'level',
                       header: t('management.users.level'),
                       cell: 'meta',
-                      mobileLabel: t('management.users.level'),
                       render: (entry) =>
                         entry.account_state === 'deleted'
-                          ? (entry.deleted.effective_level ?? accountLabels.unknown)
-                          : entry.user.level.effective,
+                          ? entry.deleted.effective_level === null
+                            ? accountLabels.unknown
+                            : t('management.users.levelValue', { level: entry.deleted.effective_level })
+                          : entry.user.level.display_name || t('management.users.levelValue', { level: entry.user.level.effective }),
                     },
                     {
                       key: 'status',
@@ -1231,10 +1244,14 @@ export function UserManagement({
                       cell: 'meta',
                       align: 'num',
                       mobileLabel: t('management.users.creditsBalance'),
-                      render: (entry) =>
-                        entry.account_state === 'deleted'
-                          ? (entry.deleted.general_balance ?? accountLabels.unknown)
-                          : entry.user.balance,
+                      render: (entry) => {
+                        const balance = entry.account_state === 'deleted'
+                          ? entry.deleted.general_balance
+                          : entry.user.balance;
+                        return balance === null
+                          ? accountLabels.unknown
+                          : <span className="nb-amount">{formatCredits(balance)}</span>;
+                      },
                     },
                   ]}
                 />

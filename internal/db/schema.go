@@ -31,3 +31,21 @@ var modelTypesAndImagesSQL string
 
 //go:embed migrations/0008_personal_balanced_routing.sql
 var personalBalancedRoutingSQL string
+
+//go:embed migrations/0009_gacha.sql
+var gachaSQL string
+
+//go:embed migrations/0010_user_appearance.sql
+var userAppearanceSQL string
+
+//go:embed migrations/0011_context_pricing.sql
+var contextPricingSQL string
+
+//go:embed migrations/0012_session_headers.sql
+var sessionHeadersSQL string
+
+//go:embed migrations/0013_personal_adaptation.sql
+var personalAdaptationSQL string
+
+//go:embed migrations/0014_request_facts.sql
+var requestFactsSQL string

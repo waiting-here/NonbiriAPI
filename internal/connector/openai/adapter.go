@@ -18,6 +18,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
+	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
 	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
 
@@ -244,7 +245,7 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWri
 	if err != nil {
 		return result
 	}
-	if requestadaptation.ApplyAddedHeaders(httpRequest.Header, policy.AdditionalHeaders) != nil {
+	if requestadaptation.ApplyAddedHeaders(httpRequest.Header, policy.AdditionalHeaders) != nil || sessionheader.Apply(httpRequest, policy.ManagedHeaders, policy.OnRequestSent) != nil {
 		return result
 	}
 	httpRequest.Header.Set("Content-Type", "application/json")
@@ -271,7 +272,7 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWri
 			return scanner.Contains(value)
 		},
 	}
-	if policy.HasAdaptation {
+	if policy.HasAdaptation || len(policy.ManagedHeaders) > 0 {
 		// Configured values may be echoed by an upstream error. Suppress the
 		// optional raw diagnostic instead of trying to infer every nesting.
 		errorContext.ContainsSecret = func(value []byte) bool { return len(value) != 0 }

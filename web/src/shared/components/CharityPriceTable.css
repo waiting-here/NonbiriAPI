@@ -29,3 +29,15 @@
   white-space: normal;
   overflow-wrap: anywhere;
 }
+
+.charity-context-note {
+  display: grid;
+  gap: var(--nb-space-1);
+}
+.charity-context-heading {
+  background: var(--nb-color-surface-muted);
+}
+
+.charity-context-heading th {
+  text-transform: none;
+}

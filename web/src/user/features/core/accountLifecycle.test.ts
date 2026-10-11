@@ -281,13 +281,17 @@ describe('production account lifecycle adapter', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
-  it.each([12, 13, 14])(
+  it.each([12, 13, 14, 15, 16])(
     'downloads a v%s attachment and rejects a version mismatch in its filename',
     async (version) => {
       const document = {
         ...exportDocument(),
         schema_version: version,
+        ...(version === 16
+          ? { appearance: { selected: 'default', unlocked: ['default'], updated_at: null } }
+          : {}),
         lake_notes: { server_projection: true },
+        ...(version >= 15 ? { gacha: { collection: [{ card_id: 'g-chatgpt' }] } } : {}),
       };
       const fetchMock = vi
         .fn<typeof fetch>()

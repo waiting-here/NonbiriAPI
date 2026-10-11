@@ -1,0 +1,133 @@
+.gacha-admin-page {
+  display: grid;
+  gap: 1rem;
+}
+.gacha-admin-page form {
+  display: grid;
+  gap: 1rem;
+}
+.gacha-admin-fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+  display: grid;
+  gap: 1rem;
+}
+.gacha-admin-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.gacha-admin-help {
+  color: var(--nb-color-text-muted);
+}
+.gacha-admin-invalid {
+  color: var(--nb-color-danger);
+}
+.gacha-admin-covers {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+.gacha-admin-covers button {
+  padding: 0;
+  overflow: hidden;
+  border: 2px solid transparent;
+  border-radius: 0.65rem;
+  background: var(--nb-color-surface);
+  color: var(--nb-color-text);
+}
+.gacha-admin-covers button[aria-pressed='true'] {
+  border-color: var(--nb-color-accent);
+}
+.gacha-admin-covers img {
+  width: 100%;
+  aspect-ratio: 16/9;
+  object-fit: cover;
+}
+.gacha-admin-covers span {
+  display: block;
+  padding: 0.5rem;
+}
+.gacha-admin-dialog {
+  --g-ink: var(--nb-color-text);
+  --g-paper: var(--nb-color-surface);
+  --g-gold: var(--nb-color-border-strong);
+  width: min(1000px, 95vw);
+  max-width: 1000px;
+}
+.gacha-admin-dialog form {
+  display: grid;
+  gap: 1rem;
+}
+.gacha-admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.gacha-admin-pools {
+  display: grid;
+  gap: 1rem;
+}
+.gacha-admin-pools article {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--nb-color-border);
+}
+.gacha-admin-pools article > img {
+  width: 100%;
+  aspect-ratio: 16/9;
+  object-fit: cover;
+  border-radius: 0.6rem;
+}
+.gacha-admin-roster header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.gacha-admin-roster > div {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+.gacha-admin-roster label {
+  display: grid;
+  gap: 0.4rem;
+}
+.gacha-admin-roster label img {
+  width: 100%;
+  aspect-ratio: 2/3;
+  object-fit: cover;
+  border-radius: 0.5rem;
+}
+.gacha-admin-roster label span {
+  display: flex;
+  gap: 0.3rem;
+  align-items: center;
+}
+.gacha-admin-feedback {
+  position: fixed;
+  z-index: 1200;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(640px, 90vw);
+}
+@media (max-width: 600px) {
+  .gacha-admin-grid {
+    grid-template-columns: 1fr;
+  }
+  .gacha-admin-covers {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .gacha-admin-pools article {
+    grid-template-columns: 1fr;
+  }
+  .gacha-admin-roster > div {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

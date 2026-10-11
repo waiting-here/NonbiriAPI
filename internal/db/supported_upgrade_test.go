@@ -37,8 +37,36 @@ var preModelTypesFixture string
 //go:embed testdata/pre_personal_balanced_routing.sql
 var prePersonalBalancedRoutingFixture string
 
+//go:embed testdata/pre_gacha.sql
+var preGachaFixture string
+
+//go:embed testdata/pre_user_appearance.sql
+var preUserAppearanceFixture string
+
+//go:embed testdata/pre_context_pricing.sql
+var preContextPricingFixture string
+
+//go:embed testdata/pre_session_headers.sql
+var preSessionHeadersFixture string
+
+//go:embed testdata/pre_personal_adaptation.sql
+var prePersonalAdaptationFixture string
+
+func personalAdaptationStorageSchema() string { return generationTwoSchema + "ALTER TABLE request_logs DROP COLUMN automatic_actions; ALTER TABLE request_logs DROP COLUMN requested_streaming; UPDATE schema_state SET version=13;" }
+func sessionHeadersStorageSchema() string { return personalAdaptationStorageSchema() + prePersonalAdaptationFixture }
+func contextPricingStorageSchema() string {
+	return sessionHeadersStorageSchema() + preSessionHeadersFixture
+}
+
+func userAppearanceStorageSchema() string {
+	return contextPricingStorageSchema() + preContextPricingFixture
+}
+
+func gachaStorageSchema() string                   { return userAppearanceStorageSchema() + preUserAppearanceFixture }
+func personalBalancedRoutingStorageSchema() string { return gachaStorageSchema() + preGachaFixture }
+
 func modelTypesAndImagesStorageSchema() string {
-	return generationTwoSchema + prePersonalBalancedRoutingFixture
+	return personalBalancedRoutingStorageSchema() + prePersonalBalancedRoutingFixture
 }
 func discordGateStorageSchema() string {
 	return modelTypesAndImagesStorageSchema() + preModelTypesFixture
@@ -99,6 +127,11 @@ func supportedSourceFixture(t *testing.T) *sql.DB {
 
 func TestSupportedReleasedSchemaIdentity(t *testing.T) {
 	for _, source := range []struct{ schema, manifest string }{
+		{userAppearanceStorageSchema(), userAppearanceManifestHash},
+		{sessionHeadersStorageSchema(), sessionHeadersManifestHash},
+		{contextPricingStorageSchema(), contextPricingManifestHash},
+		{gachaStorageSchema(), gachaManifestHash},
+		{personalBalancedRoutingStorageSchema(), personalBalancedRoutingManifestHash},
 		{modelTypesAndImagesStorageSchema(), modelTypesAndImagesManifestHash},
 		{discordGateStorageSchema(), discordGateManifestHash},
 		{gwentAIStorageSchema(), gwentAIManifestHash},

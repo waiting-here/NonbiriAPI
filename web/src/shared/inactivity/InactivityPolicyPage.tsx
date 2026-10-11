@@ -259,8 +259,8 @@ function Editor({
           if (validate()) void perform(save);
         }}
       >
-        <fieldset disabled={pending}>
-          <legend>{zh ? '政策配置' : 'Policy configuration'}</legend>
+        <fieldset disabled={pending} aria-label={zh ? "政策配置" : "Policy configuration"}>
+          <h2 className="inactivity-config-title">{zh ? '政策配置' : 'Policy configuration'}</h2>
           <label>
             {zh ? '执行时刻（选填）' : 'Execution time (optional)'}
             <input

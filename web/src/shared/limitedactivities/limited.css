@@ -106,3 +106,8 @@
   align-items: center;
   gap: 0.75rem;
 }
+
+.limited-form .limited-exchange-quantity {
+  width: 100%;
+  max-width: 16rem;
+}

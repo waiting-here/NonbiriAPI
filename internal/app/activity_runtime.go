@@ -11,11 +11,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/appearance"
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/fatfish"
+	"github.com/waiting-here/NonbiriAPI/internal/gacha"
 	gamebuiltin "github.com/waiting-here/NonbiriAPI/internal/game/builtin"
 	gamehost "github.com/waiting-here/NonbiriAPI/internal/game/host"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
@@ -30,6 +32,8 @@ import (
 
 type activityRuntime struct {
 	limited     *limitedactivities.Service
+	gacha       *gacha.Service
+	appearance  *appearance.Service
 	images      *imageactivity.Service
 	fish        *fatfish.Service
 	lake        *lakenotes.Service
@@ -112,6 +116,28 @@ func newActivityRuntime(store *db.Store, vault *secret.Vault, sessions *auth.Run
 	a.fish, err = fatfish.New(fatfish.Config{
 		DB: store.DB(), Users: users, Admins: roles, Gate: admission,
 		Identity: sessions.IdentityContinuity(), Keys: vault, Now: now,
+	})
+	if err != nil {
+		_ = a.Close()
+		return nil, err
+	}
+	a.gacha, err = gacha.New(gacha.Config{
+		Database: store.DB(), Users: users, Admins: roles, Gate: admission,
+		Keys: vault, Activity: activeActivityRecorder{}, Now: now,
+	})
+	if err != nil {
+		_ = a.Close()
+		return nil, err
+	}
+	a.appearance, err = appearance.New(appearance.Config{Database: store.DB(), Users: users, Gate: admission, Now: now,
+		Unlock: func(ctx context.Context, tx *sql.Tx, user int64, key string) (bool, error) {
+			if !strings.HasPrefix(key, "card:") {
+				return false, nil
+			}
+			var owned bool
+			err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM gacha_owned WHERE user_id=? AND card_id=?)", user, strings.TrimPrefix(key, "card:")).Scan(&owned)
+			return owned, err
+		},
 	})
 	if err != nil {
 		_ = a.Close()
@@ -311,6 +337,12 @@ func (a *activityRuntime) RegisterRoutes(sessions *auth.Runtime) error {
 		return err
 	}
 	if err := fatfish.RegisterAdminRoutes(f, a.fish); err != nil {
+		return err
+	}
+	if err := appearance.RegisterRoutes(l, a.appearance); err != nil {
+		return err
+	}
+	if err := gacha.RegisterRoutes(l, l, a.gacha); err != nil {
 		return err
 	}
 	if err := limitedactivities.RegisterRoutes(l, l, a.limited); err != nil {

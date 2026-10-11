@@ -143,7 +143,12 @@ func (f *fixture) enqueueGwentAI(bot duel.AIBot, deck gwentengine.Deck) duel.Que
 }
 func (f *fixture) completeGwentAI() *duel.ResultSummary {
 	f.t.Helper()
-	deadline := time.Now().Add(15 * time.Second)
+	// A full game spans many asynchronous commits. Bound a stalled decision
+	// separately from total game duration so race instrumentation does not
+	// make a progressing game fail the same budget as a single stuck window.
+	deadline := time.Now().Add(time.Minute)
+	progressDeadline := time.Now().Add(15 * time.Second)
+	var last *duel.State
 	for time.Now().Before(deadline) {
 		f.tick()
 		home := f.read(0)
@@ -154,6 +159,12 @@ func (f *fixture) completeGwentAI() *duel.ResultSummary {
 			f.t.Fatal("lost Gwent session")
 		}
 		v := home.Current
+		if last == nil || v.Revision != last.Revision {
+			progressDeadline = time.Now().Add(15 * time.Second)
+		} else if time.Now().After(progressDeadline) {
+			f.t.Fatalf("Gwent AI stalled: revision=%s round=%d phase=%s locked=%v", v.Revision, v.Round, v.Phase, v.Locked)
+		}
+		last = v
 		if v.Locked[v.You] {
 			time.Sleep(2 * time.Millisecond)
 			continue
@@ -216,7 +227,7 @@ func (f *fixture) completeGwentAI() *duel.ResultSummary {
 			f.t.Fatal(err)
 		}
 	}
-	f.t.Fatal("Gwent AI did not complete")
+	f.t.Fatalf("Gwent AI did not complete: last state=%+v", last)
 	return nil
 }
 func TestGwentAIFreeQueueFrozenDeckFirstClearAndRepeatedWin(t *testing.T) {

@@ -371,53 +371,44 @@ export function normalizeCharityCapabilityModel(value: unknown): CharityCapabili
     invalid('charity model discount window');
   }
 
-  const pricing = record(item.pricing, 'charity model pricing', [
-    'mode',
-    'user_price_milli',
-    'discounted_user_price_milli',
-    'user_prices_milli',
-    'discounted_user_prices_milli',
-  ]);
-  let normalizedPricing: CharityCapabilityModel['pricing'];
-  if (pricing.mode === 'per_request') {
-    if (pricing.user_prices_milli !== null || pricing.discounted_user_prices_milli !== null) {
-      invalid('charity model request pricing');
-    }
-    const userPriceMilli = capabilityMilli(pricing.user_price_milli, 'charity model request price');
-    const discountedUserPriceMilli = capabilityMilli(
-      pricing.discounted_user_price_milli,
-      'charity model discounted request price',
-    );
-    requireDiscountProjection(
-      userPriceMilli,
-      discountedUserPriceMilli,
-      discountPercent,
-      'charity model discounted request price',
-    );
-    normalizedPricing = { mode: 'per_request', userPriceMilli, discountedUserPriceMilli };
-  } else if (pricing.mode === 'per_token') {
-    if (pricing.user_price_milli !== null || pricing.discounted_user_price_milli !== null) {
-      invalid('charity model token pricing');
-    }
-    const userPricesMilli = normalizeCapabilityTokenPrices(
-      pricing.user_prices_milli,
-      'charity model token prices',
-    );
-    const discountedUserPricesMilli = normalizeCapabilityTokenPrices(
-      pricing.discounted_user_prices_milli,
-      'charity model discounted token prices',
-    );
-    for (const key of ['uncachedInput', 'cacheWriteInput', 'cacheReadInput', 'output'] as const) {
-      requireDiscountProjection(
-        userPricesMilli[key],
-        discountedUserPricesMilli[key],
-        discountPercent,
-        `charity model discounted ${key} price`,
-      );
-    }
-    normalizedPricing = { mode: 'per_token', userPricesMilli, discountedUserPricesMilli };
-  } else {
-    invalid('charity model pricing mode');
+  const pricing = record(
+    item.pricing,
+    'charity model pricing',
+    [
+      'mode',
+      'user_price_milli',
+      'discounted_user_price_milli',
+      'user_prices_milli',
+      'discounted_user_prices_milli',
+    ],
+    ['long_context', 'context_penalty'],
+  );
+  const normalizedPricing: CharityCapabilityModel['pricing'] = normalizeBasePricing(
+    pricing,
+    discountPercent,
+  );
+  if (pricing.long_context != null) {
+    const long = record(pricing.long_context, 'long context pricing', [
+      'input_threshold',
+      'user_price_milli',
+      'discounted_user_price_milli',
+      'user_prices_milli',
+      'discounted_user_prices_milli',
+    ]);
+    normalizedPricing.longContext = {
+      ...normalizeBasePricing({ ...long, mode: pricing.mode }, discountPercent),
+      inputThreshold: positiveContextThreshold(long.input_threshold),
+    };
+  }
+  if (pricing.context_penalty != null) {
+    const penalty = record(pricing.context_penalty, 'context penalty', [
+      'input_threshold',
+      'fine_milli',
+    ]);
+    normalizedPricing.contextPenalty = {
+      inputThreshold: positiveContextThreshold(penalty.input_threshold),
+      fineMilli: capabilityMilli(penalty.fine_milli, 'context fine'),
+    };
   }
 
   return {
@@ -1166,4 +1157,59 @@ export function isDimensionExhausted(
     ? amountToMilli
     : (value: unknown) => BigInt(decimal(value, 'usage dimension'));
   return parse(used) + parse(inflight) >= parse(limit);
+}
+
+function normalizeBasePricing(
+  pricing: UnknownRecord,
+  discountPercent: number,
+): import('./types').CharityBasePricing {
+  let normalizedPricing: import('./types').CharityBasePricing;
+  if (pricing.mode === 'per_request') {
+    if (pricing.user_prices_milli !== null || pricing.discounted_user_prices_milli !== null) {
+      invalid('charity model request pricing');
+    }
+    const userPriceMilli = capabilityMilli(pricing.user_price_milli, 'charity model request price');
+    const discountedUserPriceMilli = capabilityMilli(
+      pricing.discounted_user_price_milli,
+      'charity model discounted request price',
+    );
+    requireDiscountProjection(
+      userPriceMilli,
+      discountedUserPriceMilli,
+      discountPercent,
+      'charity model discounted request price',
+    );
+    normalizedPricing = { mode: 'per_request', userPriceMilli, discountedUserPriceMilli };
+  } else if (pricing.mode === 'per_token') {
+    if (pricing.user_price_milli !== null || pricing.discounted_user_price_milli !== null) {
+      invalid('charity model token pricing');
+    }
+    const userPricesMilli = normalizeCapabilityTokenPrices(
+      pricing.user_prices_milli,
+      'charity model token prices',
+    );
+    const discountedUserPricesMilli = normalizeCapabilityTokenPrices(
+      pricing.discounted_user_prices_milli,
+      'charity model discounted token prices',
+    );
+    for (const key of ['uncachedInput', 'cacheWriteInput', 'cacheReadInput', 'output'] as const) {
+      requireDiscountProjection(
+        userPricesMilli[key],
+        discountedUserPricesMilli[key],
+        discountPercent,
+        `charity model discounted ${key} price`,
+      );
+    }
+    normalizedPricing = { mode: 'per_token', userPricesMilli, discountedUserPricesMilli };
+  } else {
+    invalid('charity model pricing mode');
+  }
+
+  return normalizedPricing;
+}
+
+function positiveContextThreshold(value: unknown): string {
+  if (typeof value !== 'string' || !/^[1-9][0-9]{0,18}$/.test(value) || BigInt(value) > MAX_INT64)
+    invalid('input threshold');
+  return value;
 }

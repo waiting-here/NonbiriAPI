@@ -133,7 +133,7 @@ func New(options Options) (*Runtime, error) {
 	}
 	factories := map[string]host.Factory{
 		game.LakeNotesID: func(shared host.Services) (*host.Module, error) {
-			service, err := lakenotes.New(lakenotes.Config{Database: shared.Database, Users: shared.UserAuthorizer, Admins: shared.AdminAuthorizer, Gate: lakeAdmission{options.Continuation, shared.Now}, Keys: options.Vault, Now: shared.Now,
+			service, err := lakenotes.New(lakenotes.Config{Database: shared.Database, Users: shared.UserAuthorizer, Admins: shared.AdminAuthorizer, Gate: lakeAdmission{options.Continuation, shared.Now}, Keys: options.Vault, Now: shared.Now, Reward: lakeCollectionReward,
 				Activity: func(ctx context.Context, tx *sql.Tx, user, at int64) error {
 					return inactivity.RecordActiveTx(ctx, tx, inactivity.ActiveEvent{UserID: user, At: at, Kind: "game", Fresh: true})
 				},

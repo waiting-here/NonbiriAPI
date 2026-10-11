@@ -2868,6 +2868,47 @@ export function mountLake(root, bridge) {
         ui.catalogTabs.append(tab);
       }
       ui.catalogItems.replaceChildren();
+      const locationFish = FISH_TYPES.filter((fish) => fish.location === this.catalogLocation);
+      const collected = locationFish.filter((fish) => records[fish.kind]?.caught > 0).length;
+      const claimed = Object.hasOwn(this.profile.collectionClaims ?? {}, this.catalogLocation);
+      const reward = createElement('div');
+      reward.className = 'catalog-reward';
+      const progress = createElement('p');
+      progress.textContent =
+        bridge.language === 'en'
+          ? `Collection ${collected}/${locationFish.length} · 50 donation credit`
+          : `图鉴 ${collected}/${locationFish.length} · 50 捐赠回馈`;
+      const claim = createElement('button');
+      claim.type = 'button';
+      claim.className = 'nb-btn nb-btn--secondary';
+      claim.textContent =
+        bridge.language === 'en'
+          ? claimed
+            ? 'Claimed'
+            : collected === locationFish.length
+              ? 'Claim reward'
+              : 'Collection incomplete'
+          : claimed
+            ? '已领取'
+            : collected === locationFish.length
+              ? '领取奖励'
+              : '图鉴未完成';
+      claim.disabled =
+        claimed || collected !== locationFish.length || bridge.blocked() || !bridge.claimCollection;
+      claim.addEventListener('click', async () => {
+        claim.disabled = true;
+        try {
+          await bridge.claimCollection(this.catalogLocation);
+          if (!stopped) {
+            syncProfile();
+            refreshMenus();
+          }
+        } catch {
+          /* The host displays request errors and retained retries. */
+        }
+      });
+      reward.append(progress, claim);
+      ui.catalogItems.append(reward);
       for (const fish of FISH_TYPES.filter((fish) => fish.location === this.catalogLocation).sort(
         (a, b) => RARITIES[a.rarity].rank - RARITIES[b.rarity].rank,
       )) {
@@ -3493,8 +3534,13 @@ export function mountLake(root, bridge) {
       );
   }
   let confirmedProfile = structuredClone(game.profile),
-    profileRevision = '';
+    profileRevision = '',
+    collectionBlocked = bridge.blocked();
   function syncCast() {
+    if (collectionBlocked !== bridge.blocked()) {
+      collectionBlocked = bridge.blocked();
+      if (!ui.catalogModal.hidden) game.renderCatalog();
+    }
     const current = bridge.snapshot();
     const result = current.result;
     const projection = bridge.projection();

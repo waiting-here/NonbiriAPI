@@ -4,6 +4,47 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## [1.0.0-rc.7] - Unreleased
+
+### Added
+
+- Charity request logs and exports show the original caller mode and actual automatic penalties, with an explicit unknown state for old records.
+- Administrators and level-6 stewards can open a selected account’s retained call-IP audit from its profile, including accounts with only one observed IP.
+
+- Personal-model parameter exclusions and encrypted header/body overrides, with per-section service inheritance and form examples.
+
+- Managed charity-model session headers with persistent per-user reuse, configurable idle expiry and UUID or hexadecimal values. Concurrent requests and retries preserve their session; protected upstream headers retain authority.
+
+- Optional charity-model long-context prices and an independent one-time extra-long penalty based on reported input, including cached tokens. Alternate prices keep existing discounts; penalties do not affect donor rewards.
+
+- The Gacha Simulator with 57 cards across thirteen themes, fifteen animated SSR and two animated SP illustrations, seven covers, unlockable group illustrations and dedicated sound effects.
+- A permanent pool and concurrent scheduled limited pools, configurable probabilities and hard guarantees, and cross-period progress shared by pools with identical rules.
+- Standard and limited tickets, game-credit-first standard exchanges, general-credit-only limited exchanges, a one-time ten-ticket welcome gift with a first-ten-pull SSR guarantee, and daily activity check-ins.
+- Duplicate-to-shard conversion, a mystery shop, limited-card redemptions during pool availability and shop-exclusive chibi cards. Theme completion grants tickets and cumulative donation credit without spendable credit income.
+- Administrator pool, probability, price, quota and reusable preset controls. Opened pools retain accepted rules; permanent-pool changes protect current guarantee progress.
+- A shared ten-card reveal board with SR focus, full-screen SSR/SP close-ups, first-encounter SP preludes, bilingual character lines, skippable results, animated duplicate conversion and optional card-back hints and device vibration.
+- Two SP cards with matching light/dark site appearances, unlocked on acquisition and selected per account. Their separate rule group uses a 15% featured share within the SSR tier and a guarantee after two misses; direct redemption costs nine SSR shards.
+- A manual, once-per-location Lake Notes collection reward of 50 cumulative donation credits, including previously completed collections, without spendable credit or coin rewards.
+- A standalone activity preview with separate sample data, new-account and full-collection modes, appearances and SSR/SP presentation samples.
+
+### Changed
+
+- Card voices use more varied, directly affectionate dialogue. SP site wallpapers animate separate characters, clouds, water, celestial bodies and a screen-crossing whale, with static reduced-motion fallback.
+- Enhanced card artwork reaches 2560×3840 and landscape art 3840×2160, loaded responsively for large displays. Light and dark appearance panels combine soft edges with readable central surfaces.
+- The Fat Fish editor groups creation tools, canvas modes and properties, explains unfinished requirements, previews invalid geometry and fish collisions, and supports precise headings, viewport placement, zoom and touch navigation.
+- Charity catalog filters remain visible. Both stations improve request-log labels, exact credit amounts, mobile controls, empty states and appearance contrast.
+- The gacha activity entry starts hidden and can be enabled by administrators. Limited-only themes stay hidden until a pool has opened or the user owns one of their cards.
+- Database schema revision 14 adds transactional collection, guarantee and activity-journal storage, frozen context prices, temporary managed-header sessions, personal-model request configuration and safe request-mode/automatic-action facts while preserving supported predecessor data and existing legal overrides. Account export schema 17 includes the user's collection activity, appearance and safe personal request-configuration projections.
+
+### Fixed
+
+- Personal model requests remain available when general credits are negative; charity balance checks remain in effect.
+- Gateway provider warnings no longer abort valid responses. Stream protocol failures retain a bounded rejected-event diagnostic under existing private-log permissions.
+
+- Donation-only reward records can retain anonymous accounting facts after account deletion, while new rewards still require a live recipient.
+- Charity client auto-ban checks now precede short-content, credit-balance, candidate-availability and Debug capture admission, so an early business rejection cannot bypass a matching restriction.
+- Draw details last 180 days. Collection and reward eligibility persist for the account lifetime; activity journals and credit-ledger retention are independent. Account deletion removes personal state and de-identifies retained accounting facts.
+
 ## [1.0.0-rc.6] - 2026-10-09
 
 This source prerelease supports fresh databases, the final rc.5 schema and registered rc.6 schemas. SQLite remains Generation 2 and account exports use schema 14. Build from the tagged source; no official prebuilt binaries are provided. See the deployment guide for exact upgrade and complete-snapshot restore requirements.

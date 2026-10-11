@@ -65,7 +65,14 @@
       "risk": "防滥用审计",
       "economy": "积分审计",
       "openRequest": "查看原请求证据",
-      "userIPsTab": "同一身份的多个IP",
+      "userIPsTab": "同一身份的多个 IP",
+      "inspectUserIPs": "审计此用户的 IP",
+      "userIPHistoryTitle": "用户 {{user}} 的 IP 记录",
+      "selectedAccount": "用户 {{user}}",
+      "userIPHistoryHelp": "只列此账号的可信调用 IP，扫描不触发处罚。",
+      "ipCalls": "此 IP 的调用",
+      "invalidTargetUser": "所选用户编号无效。请返回用户资料，重新打开审计。",
+      "backToProfile": "返回用户资料",
       "userIPsTitle": "扫描同一身份的IP变化",
       "userIPsHelp": "按Discord身份查看滑动时间窗内不同IP的峰值。只统计来源身份和可信IP均可确认的请求；重新注册的账号仍按同一Discord身份合并。共享网络或更换IP并不直接证明违规。",
       "userIPWindow": "同一身份IP统计时间窗（小时）",
@@ -136,11 +143,11 @@
     },
     "refresh": "刷新",
     "donationHandling": {
-      "title": "公共待办",
-      "filter": "待办状态",
-      "all": "全部待办状态",
+      "title": "捐赠待办",
+      "filter": "处理状态",
+      "all": "全部处理状态",
       "search": "搜索公开说明或捐赠 ID",
-      "applySearch": "搜索",
+      "applySearch": "应用筛选",
       "searchInvalid": "搜索内容最多 128 个字符。",
       "process": "标记为已处理",
       "idle": "闲置中 · 尚无模型绑定",
@@ -159,7 +166,7 @@
         "closed": "已关闭"
       },
       "help": {
-        "legacy": "既有捐赠不进入公共待办。",
+        "legacy": "既有捐赠不进入捐赠待办。",
         "pending": "管理员和协管共用此待办。审核、编辑或绑定不会自动标记为已处理。",
         "processed": "此捐赠已为所有管理者标记为已处理。",
         "closed": "此捐赠已结束，已自动退出待办。"
@@ -175,7 +182,8 @@
         "expired": "已到期",
         "member_removed": "全部密钥已移除",
         "account_deleted": "账号已删除"
-      }
+      },
+      "searchPlaceholder": "公开说明关键词或捐赠 ID"
     },
     "pageControls": {
       "size": "每页条数",
@@ -212,7 +220,7 @@
       "readOnly": "所有者配置（只读）",
       "hint": "0 表示不限制。自用和公益模型调用共用额度。RPM 统计最近 60 秒发出的请求，流式请求占用并发直至结束。达到上限后会尝试其他可用连接。"
     },
-    "itemId": "条目 ID",
+    "itemId": "捐赠 #{{id}}",
     "choices": {
       "filterPage": "筛选本页",
       "count": "显示 {{count}} / {{total}} 项",
@@ -370,14 +378,14 @@
           "chat": "聊天",
           "embeddings": "向量",
           "models": "读取模型列表",
-          "usage": "入 {{input}} · 出 {{output}}",
+          "usage": "输入 {{input}} · 输出 {{output}}",
           "cacheRead": "缓存读 {{tokens}}",
           "cacheWrite": "缓存写 {{tokens}}",
           "duration": "耗时",
           "seconds": "{{seconds}} 秒",
           "storage": "错误原文存储",
           "storageSummary": "已用 {{used}} / {{budget}} MiB · 历史累计 {{count}} 条未保存",
-          "storageFailures": "累计容量不足 {{capacity}} 条，读取或保存失败 {{count}} 条；当前可查 {{current}} 条。",
+          "storageFailures": "容量不足累计 {{capacity}} 条，读写失败累计 {{count}} 条；当前仍可查询 {{current}} 条缺失记录。",
           "retryHint": "稍后重试，或在模型里添加第二个来源。",
           "keyHint": "检查这个服务的密钥是否有效。",
           "rateHint": "服务商限制了频率，稍后再试。",
@@ -395,9 +403,28 @@
             "cancelled": "已取消",
             "failed": "失败（{{status}}）"
           },
-          "storageHistoryHelp": "累计数不会随记录到期减少。未保存的原文无法补回；下方可查询最近30天内仍在保留期的记录。容量仅计原文，不含数据库页、索引和 WAL。",
+          "storageHistoryHelp": "累计数量包含已到期记录。缺失的原文无法补回；可查询最近 30 天内仍在保留期的记录。容量只计算原文，不含数据库索引等开销。",
           "storageRecords": "查看未保存记录",
-          "images": "图像生成"
+          "images": "图像生成",
+          "modelPlaceholder": "例如 provider/model",
+          "userPlaceholder": "站内用户 ID",
+          "upstreamPlaceholder": "上游实际模型名",
+          "actions": "操作"
+        },
+        "facts": {
+          "title": "请求方式／自动处罚",
+          "mode": "用户请求方式",
+          "actions": "自动处罚",
+          "unknown": "未记录",
+          "streaming": "流式",
+          "nonStreaming": "非流式",
+          "noActions": "未触发处罚",
+          "short_content_deduction": "短请求扣分",
+          "short_content_ban": "短请求自动封禁",
+          "short_content_suspension": "短请求暂停公益",
+          "rpm_ban": "RPM 超限自动封禁",
+          "client_rule_ban": "客户端命中自动封禁",
+          "context_penalty": "超长上下文罚款"
         }
       },
       "charity": {
@@ -428,7 +455,7 @@
           "physicalLimits": "物理并发与 RPM",
           "charityLimits": "公益限量",
           "bindingStatus": "模型绑定",
-          "handling": "公共待办",
+          "handling": "捐赠待办",
           "scope": "来源范围",
           "active": "当前有效来源",
           "all": "全部留存来源",
@@ -643,7 +670,9 @@
           "modelPrices": "每项价格都必须是精确的非负积分金额，最多三位小数。",
           "tokenReserveCredits": "预留积分范围：0.001～9,000,000,000,000，最多三位小数。",
           "discountPercent": "折扣百分比必须是 0 至 100 的整数。",
-          "discountDates": "折扣日期必须有效，且结束时间必须晚于开始时间。"
+          "discountDates": "折扣日期必须有效，且结束时间必须晚于开始时间。",
+          "contextThreshold": "门槛请填写大于 0 的整数 token 数。",
+          "sessionHeaders": "请填写请求头名称，闲置时间为 1–86,400 秒。"
         },
         "discountSummary": "已启用，价格为原价的 {{percent}}%",
         "batchActions": "批量操作",
@@ -652,13 +681,40 @@
         "failureStrategy": "失败策略",
         "quotaReserve": "额度与预留",
         "adaptationSettings": "请求适配",
-        "imageBillingHelp": "图像一次请求生成多张仍计一次；未返回用量时，沿用模型的预留结算规则。"
+        "imageBillingHelp": "图像一次请求生成多张仍计一次；未返回用量时，沿用模型的预留结算规则。",
+        "context": {
+          "settings": "长上下文与超长惩罚",
+          "help": "门槛按上游返回的输入 token 总数计算，包含缓存读写。两项规则可分别触发。",
+          "long": "启用长上下文价格",
+          "longHelp": "达到门槛后，全部输入和输出改用以下价格，沿用折扣；捐赠者回馈不变。",
+          "longThreshold": "长上下文门槛（输入 token）",
+          "requestPrice": "长上下文单次价格（积分）",
+          "penalty": "启用超长惩罚",
+          "penaltyHelp": "达到门槛后，每个请求额外收取一次罚款，不打折，不增加捐赠者回馈。",
+          "penaltyThreshold": "超长惩罚门槛（输入 token）",
+          "fine": "一次性罚款（积分）",
+          "longNotice": "长上下文：输入 ≥ {{threshold}} token",
+          "penaltyNotice": "超长惩罚：输入 ≥ {{threshold}} token",
+          "fineNote": "每次额外 {{amount}} 积分，不打折",
+          "longAvailable": "含长上下文价格，展开查看",
+          "usageHelp": "仅以上游返回的用量判断门槛，包含缓存读写。"
+        },
+        "sessionHeaders": {
+          "title": "会话请求头代管",
+          "help": "为同一用户与模型复用随机会话值；全部请求结束后开始闲置计时，有助于上游缓存复用。代管值覆盖同名固定和透传头。",
+          "name": "请求头 {{n}} 名称",
+          "idle": "闲置过期时间（秒）",
+          "format": "随机值格式",
+          "hex": "32 位小写十六进制",
+          "remove": "移除请求头 {{n}}",
+          "add": "添加代管请求头"
+        }
       },
       "management": {
         "details": "技术详情",
         "optionalPrices": "可选尺寸价格",
         "sizePricesSummary": "{{tiers}} 个档位，{{sizes}} 个精确尺寸",
-        "loanTier": "借款额度（积分）",
+        "loanTier": "第 {{tier}} 档",
         "feeHelp": "三项合计须小于 100%；0 表示不收取该项费用。",
         "periodActions": "更改期次状态",
         "periodActionHelp": "确认对该期次执行“{{action}}”。这会改变用户是否可以开始或继续参与。"
@@ -1004,7 +1060,7 @@
       "hours": "共享 IP 窗口（小时）",
       "accounts": "共享 IP 账号数阈值",
       "adminOnly": "仅管理员可修改阈值。",
-      "configHelp": "依据用户总占用及当时的额度判断风险。重启、缺口、未结算请求及变化或未知的额度都会中断连续命中链。",
+      "configHelp": "按用户总占用和当时的额度判断风险。服务重启、记录不全、请求未结算或额度变化、不明确时，连续超限次数重新计算。",
       "comparison": "同模型对照",
       "thisUser": "当前用户",
       "others": "其他用户",
@@ -1151,7 +1207,8 @@
       "actorAutomatic": "系统自动",
       "actorUnknown": "未知",
       "all": "全部",
-      "close": "关闭"
+      "close": "关闭",
+      "searchPlaceholder": "Discord ID 或首次说明"
     },
     "diagnostics": {
       "sourceDetailsAreUnavailable": "来源详情暂不可用。",
@@ -1596,7 +1653,8 @@
       "unbanAction": "解除封禁…",
       "banConsequence": "封禁会停止该用户使用平台。",
       "deleteConsequence": "删除账户和用户数据；需要再次验证管理员密码。",
-      "reasonRequired": "必填；说明调整原因，用户可见。"
+      "reasonRequired": "必填；说明调整原因，用户可见。",
+      "levelValue": "等级 {{level}}"
     },
     "announcements": {
       "nav": "公告",
@@ -1749,6 +1807,77 @@
       "help": "仅用于 Gateway。调用者的根、文本或工具缓存标记优先；缓存是否命中由上游决定。保存后默认值不再显示，可保留或重新选择。",
       "inherited": "自动缓存默认值随主体缺省值一起继承；选择“在此设置”会替换整个缺省值分区。",
       "custom": "下方自定义条目"
+    },
+    "editor": {
+      "title": "请求头与请求主体",
+      "description": "仅配置当前连接器支持的字段。保存后配置值不会再次显示。",
+      "openaiSupport": "OpenAI 兼容聊天与向量调用会保留其他有界 JSON 字段。客户端字段不受上游支持时，请先明确排除，再在此配置替代字段。",
+      "convertedSupport": "Anthropic 和 Gateway 会转换受支持的 OpenAI 字段。其他客户端字段仅在下方声明路径后才进入原生请求。",
+      "allSupport": "这些设置应用于每个符合条件的连接。OpenAI 兼容请求会保留有界扩展；Anthropic 和 Gateway 需要明确声明原生扩展路径。",
+      "inherited": "继承自公益模型",
+      "sourceModel": "模型设置",
+      "sourceBinding": "连接设置",
+      "revision": "配置修订",
+      "forwardHeaders": "透传的客户端请求头",
+      "fixedHeaders": "固定出站请求头",
+      "bodyDefaults": "请求主体缺省值（仅缺失时补入）",
+      "bodyForced": "请求主体强制值",
+      "nativePaths": "已声明的原生扩展路径",
+      "listHelp": "每行一个名称或 JSON Pointer；重复或不安全的条目会被拒绝。",
+      "bodyHelp": "路径填 /temperature，值填 0.7。文字值需加 JSON 双引号，例如 /reasoning_effort 对应 \"low\"；嵌套字段可填 /thinking/budget_tokens 对应 4096。缺省值只补缺失字段，强制值会覆盖已有字段。",
+      "fixedHelp": "名称填 User-Agent 等请求头名称，不加 / 或冒号；值直接填 MyClient/1.0 等文字，不加引号。在防滥用检查后覆盖透传的同名值，保存后隐藏。",
+      "mode": "配置来源",
+      "replace": "在此设置",
+      "inherit": "继承模型",
+      "name": "请求头或路径",
+      "value": "值",
+      "action": "编辑",
+      "keep": "保留已存值",
+      "change": "替换值",
+      "clear": "移除值",
+      "add": "添加字段",
+      "empty": "尚未配置条目。",
+      "masked": "已存值已隐藏",
+      "effective": "实际生效设置",
+      "save": "保存请求适配",
+      "saved": "请求适配已保存。",
+      "loading": "正在加载请求适配…",
+      "loadError": "无法加载请求适配。",
+      "stale": "显示的设置未能刷新，可能已过期。请先成功刷新，再保存。",
+      "saveError": "无法保存请求适配。请检查字段，刷新后重试。",
+      "unknown": "保存结果暂不确定，请先刷新后再重试。",
+      "conflict": "配置已发生变化，请刷新后重新编辑。",
+      "invalidJSON": "请为每个替换的主体字段输入合法 JSON 值。",
+      "duplicate": "同一分区中的名称或路径不可重复。",
+      "refresh": "刷新配置",
+      "readOnly": "当前角色只能查看此配置。",
+      "example": "填入示例"
+    },
+    "service": {
+      "title": "请求改写",
+      "description": "给这个服务添加请求头和参数。保存后配置值仍会隐藏。",
+      "forwardHeaders": "允许客户端传过来的请求头",
+      "fixedHeaders": "固定添加的请求头",
+      "bodyDefaults": "请求参数默认值（客户端没填时补上）",
+      "bodyForced": "请求参数固定值（总是覆盖）",
+      "nativePaths": "允许保留的额外参数",
+      "listHelp": "每行一个请求头名称或 /参数路径。",
+      "bodyHelp": "路径填 /temperature，值填 0.7。文字值需加 JSON 双引号，例如 /reasoning_effort 对应 \"low\"；嵌套字段可填 /thinking/budget_tokens 对应 4096。缺省值只补缺失字段，强制值会覆盖已有字段。",
+      "fixedHelp": "名称填 User-Agent 等请求头名称，不加 / 或冒号；值直接填 MyClient/1.0 等文字，不加引号。在防滥用检查后覆盖透传的同名值，保存后隐藏。",
+      "save": "保存请求改写",
+      "saved": "请求改写已保存。",
+      "loading": "正在加载请求改写…",
+      "loadError": "无法加载请求改写。",
+      "example": "填入示例"
+    },
+    "personal": {
+      "personalDescription": "这些规则只用于当前模型。每个分区默认沿用实际选中服务的配置；选择“在此设置”会替换整个分区，留空则关闭此模型的该项改写。",
+      "inheritEndpoint": "继承所选服务",
+      "inheritedEndpoint": "使用每次请求实际选中服务的配置。",
+      "excluded": "排除客户端参数",
+      "excludedHelp": "每行一个顶层参数名，如 temperature 或 max_tokens，不加 /。这些参数会在可选参数解析前移除；请勿同时在缺省值、强制值或原生扩展中配置同一参数，也需检查继承的服务配置。模型、输入内容和响应协议等必要字段不可排除。",
+      "headerListHelp": "每行一个请求头名称，如 X-Client-Version，不加 /、冒号或值。只透传列出的客户端请求头。",
+      "nativeListHelp": "每行一个参数路径，如 /thinking。使用 Anthropic 或 Gateway 时，允许该额外 JSON 字段进入上游原生请求；字段和值仍需得到该上游支持。"
     }
   }
 }

@@ -4,15 +4,17 @@ import { GwentAIAdmin } from '../features/games/GwentAI';
 import { Link } from 'react-router';
 import { PageHeader } from '@shared/components/States';
 import { useAIText } from '@shared/aiPlayers';
+import { useTranslation } from 'react-i18next';
 import { AIPlayersAdmin } from '../features/games/AIPlayers';
 
 export function AIPlayersPage() {
   const t = useAIText();
+  const { t: text } = useTranslation();
   const [game, setGame] = useState<'bidding' | 'gwent'>('bidding');
   return (
     <div className="page ops-page">
       <PageHeader
-        title={t('AI 玩家与挑战', 'AI players and challenges')}
+        title={text('admin.games.aiPlayersTitle')}
         back={<Link to="/games">{t('返回游戏配置', 'Back to game settings')}</Link>}
       />
       <Tabs

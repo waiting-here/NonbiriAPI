@@ -1,3 +1,4 @@
+import { contextPriceProps } from './contextPrices';
 import { ModelTypesSummary } from '@shared/components/ModelTypesField';
 import { formatLevelRanges } from '@shared/utils/levels';
 import { useEffect, useState } from 'react';
@@ -175,6 +176,7 @@ function CatalogFilters({
   return (
     <div className="economy-catalog-filters">
       <FilterBar
+        secondaryAlwaysVisible
         search={
           <div className="economy-catalog-search">
             <label>
@@ -387,11 +389,7 @@ export function CharityCatalogPanel({
               }
               action={
                 hasCatalogFilters ? (
-                  <button
-                    type="button"
-                    className="nb-btn nb-btn--secondary"
-                    onClick={clearFilters}
-                  >
+                  <button type="button" className="nb-btn nb-btn--secondary" onClick={clearFilters}>
                     {t('user.charity.presentation.showAll')}
                   </button>
                 ) : undefined
@@ -446,6 +444,7 @@ export function CharityCatalogPanel({
                   cell: 'meta',
                   render: (model) => (
                     <CharityPriceTable
+                      {...contextPriceProps(model.pricing, t)}
                       compact
                       mode={model.pricing.mode}
                       rows={priceRows(model, t)}
@@ -490,6 +489,7 @@ export function CharityCatalogPanel({
                   >
                     {model.publicDescription ? <p>{model.publicDescription}</p> : null}
                     <CharityPriceTable
+                      {...contextPriceProps(model.pricing, t)}
                       mode={model.pricing.mode}
                       rows={priceRows(model, t)}
                       serverNow={pageData.serverNow}

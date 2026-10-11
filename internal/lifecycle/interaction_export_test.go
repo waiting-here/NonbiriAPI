@@ -49,7 +49,7 @@ func TestInteractionExportFailureRollsBackPriorDomainWrites(t *testing.T) {
 
 func TestInteractionExportUsesExplicitSafeFields(t *testing.T) {
 	assertClosedJSONKeys(t, InteractionExport{}, "request_adaptations", "continuity", "fat_fish")
-	assertClosedJSONKeys(t, RequestAdaptationExport{}, "endpoint_id", "revision", "forward_headers", "fixed_headers", "body_defaults", "body_forced", "native_extension_paths")
+	assertClosedJSONKeys(t, RequestAdaptationExport{EndpointID: "1", ModelID: "1", ExcludedRequestFields: []string{"temperature"}}, "endpoint_id", "model_id", "excluded_request_fields", "modes", "revision", "forward_headers", "fixed_headers", "body_defaults", "body_forced", "native_extension_paths")
 	assertClosedJSONKeys(t, AdaptationValueExport{}, "path", "has_value")
 	assertClosedJSONKeys(t, ContinuityEligibilityExport{}, "kind", "scope", "window", "state", "expires_at")
 	assertClosedJSONKeys(t, FatFishExport{}, "summaries", "progress")

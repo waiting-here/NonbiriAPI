@@ -68,7 +68,9 @@ function ParameterField({
     );
   }
   return (
-    <div className="picturebook-field">
+    <div
+      className={`picturebook-field${rule.type === 'integer' || rule.type === 'number' ? ' picturebook-field--number' : ''}`}
+    >
       <label htmlFor={id}>
         <span>
           {label}

@@ -18,6 +18,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/connector/tooltext"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
+	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
 	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
 
@@ -215,7 +216,7 @@ func (a *Adapter) attempt(ctx context.Context, writer http.ResponseWriter, targe
 	if err != nil {
 		return result
 	}
-	if requestadaptation.ApplyAddedHeaders(httpRequest.Header, policy.AdditionalHeaders) != nil {
+	if requestadaptation.ApplyAddedHeaders(httpRequest.Header, policy.AdditionalHeaders) != nil || sessionheader.Apply(httpRequest, policy.ManagedHeaders, policy.OnRequestSent) != nil {
 		return result
 	}
 	httpRequest.Header.Set("Content-Type", "application/json")
@@ -272,7 +273,7 @@ func (a *Adapter) attempt(ctx context.Context, writer http.ResponseWriter, targe
 			return scanner.Contains(value)
 		},
 	}
-	if policy.HasAdaptation {
+	if policy.HasAdaptation || len(policy.ManagedHeaders) > 0 {
 		errorContext.ContainsSecret = func(value []byte) bool { return len(value) != 0 }
 	}
 	httpRequest.Header.Set("X-Api-Key", string(target.credential.apiKey))

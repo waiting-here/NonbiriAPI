@@ -11,6 +11,7 @@ export interface LakeBridge {
   held(held: boolean): void;
   tick(): void;
   act(action: Action): Promise<unknown>;
+  claimCollection?(location: string): Promise<unknown>;
   start(): void;
   resume(): void;
   pause(): void;

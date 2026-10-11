@@ -9,14 +9,15 @@ import (
 )
 
 type taskScanInput struct {
-	RequestToken  string `json:"request_token"`
-	From          int64  `json:"from,omitempty"`
-	To            int64  `json:"to,omitempty"`
-	LookbackHours int64  `json:"lookback_hours,omitempty"`
-	Kind          string `json:"kind"`
-	CallKind      string `json:"call_kind,omitempty"`
-	Model         string `json:"model,omitempty"`
-	Signal        string `json:"signal,omitempty"`
+	RequestToken  string     `json:"request_token"`
+	From          int64      `json:"from,omitempty"`
+	To            int64      `json:"to,omitempty"`
+	LookbackHours int64      `json:"lookback_hours,omitempty"`
+	Kind          string     `json:"kind"`
+	CallKind      string     `json:"call_kind,omitempty"`
+	Model         string     `json:"model,omitempty"`
+	Signal        string     `json:"signal,omitempty"`
+	UserID        ScanUserID `json:"user_id,omitempty"`
 }
 
 func taskScanView(scan ClientScan) any {
@@ -59,7 +60,7 @@ func serveScans(repository *Repository, action string, actor Actor, w http.Respo
 				err = ErrInvalid
 			} else {
 				var scan ClientScan
-				scan, err = repository.CreateScan(ctx, actor, ScanInput{RequestToken: input.RequestToken, From: input.From, To: input.To, LookbackHours: input.LookbackHours, Kind: input.CallKind, Model: input.Model, ScanKind: input.Kind, Signal: input.Signal})
+				scan, err = repository.CreateScan(ctx, actor, ScanInput{RequestToken: input.RequestToken, From: input.From, To: input.To, LookbackHours: input.LookbackHours, Kind: input.CallKind, Model: input.Model, ScanKind: input.Kind, Signal: input.Signal, UserID: input.UserID})
 				output = taskScanView(scan)
 			}
 		}

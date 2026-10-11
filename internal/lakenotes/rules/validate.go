@@ -12,6 +12,11 @@ func ceilProduct(a, b int, c float64) float64 {
 // ValidateProfile accepts only compiled identifiers and bounded structured server state.
 // It does not authorize importing a profile from a browser.
 func ValidateProfile(p Profile) error {
+	for location, at := range p.CollectionClaims {
+		if len(location) == 0 || len(location) > 128 || at < 0 || at > 253402300799 {
+			return ErrInvalid
+		}
+	}
 	for _, n := range []Amount{p.Coins, p.XP, p.TrashRecovered, p.TreasureOpened, p.CompletedContracts, p.Streak} {
 		if _, e := ParseAmount(string(n)); e != nil {
 			return e

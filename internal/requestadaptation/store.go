@@ -66,6 +66,8 @@ func (s *Store) contextFor(ref Ref) ([]byte, secret.GenerationTwoEndpointKeyCont
 
 func refColumn(scope Scope) string {
 	switch scope {
+	case ScopePersonalModel:
+		return "personal_model_id"
 	case ScopeEndpoint:
 		return "endpoint_id"
 	case ScopeCharityModel:
@@ -93,8 +95,9 @@ func project(d Document, revision int64, sources [5]Scope) Projection {
 		return out
 	}
 	return Projection{
-		Revision:       strconv.FormatInt(revision, 10),
-		ForwardHeaders: list(d.ForwardHeaders, sources[0]), FixedHeaders: headers,
+		ExcludedRequestFields: append([]string(nil), d.ExcludedRequestFields...),
+		Revision:              strconv.FormatInt(revision, 10),
+		ForwardHeaders:        list(d.ForwardHeaders, sources[0]), FixedHeaders: headers,
 		BodyDefaults: body(d.BodyDefaults, sources[2]), BodyForced: body(d.BodyForced, sources[3]),
 		NativeExtensionPaths: list(d.NativeExtensionPaths, sources[4]),
 	}
@@ -268,7 +271,7 @@ func (s *Store) SaveTx(ctx context.Context, tx *sql.Tx, ref Ref, expectedRevisio
 		}
 	}
 	role := "admin"
-	if ref.Scope == ScopeEndpoint {
+	if ref.Scope == ScopeEndpoint || ref.Scope == ScopePersonalModel {
 		role = "owner"
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO request_adaptation_audits(
@@ -280,7 +283,10 @@ VALUES(?,?,?,?,?,?,?)`, ref.Scope, ref.ID, actorID, role, revision, string(chang
 }
 
 func changedPartitions(before, after Document) []string {
-	changed := make([]string, 0, 5)
+	changed := make([]string, 0, 6)
+	if !reflect.DeepEqual(before.ExcludedRequestFields, after.ExcludedRequestFields) {
+		changed = append(changed, "excluded_request_fields")
+	}
 	if !reflect.DeepEqual(before.ForwardHeaders, after.ForwardHeaders) {
 		changed = append(changed, "forward_headers")
 	}
@@ -302,29 +308,37 @@ func changedPartitions(before, after Document) []string {
 // Effective uses complete-partition replacement; charity bindings never
 // inherit the donor's endpoint rules.
 func Effective(model, binding Snapshot) Snapshot {
+	return effectivePartitions(model, binding, ScopeCharityModel, ScopeBinding)
+}
+
+func EffectivePersonal(endpoint, model Snapshot) Snapshot {
+	return effectivePartitions(endpoint, model, ScopeEndpoint, ScopePersonalModel)
+}
+
+func effectivePartitions(model, binding Snapshot, parentScope, childScope Scope) Snapshot {
 	out := Snapshot{Document: cloneDocument(model.Document), Revision: model.Revision + "/" + binding.Revision}
 	for i := range out.Sources {
-		out.Sources[i] = ScopeCharityModel
+		out.Sources[i] = parentScope
 	}
 	if binding.Document.ForwardHeaders.Mode == ModeReplace {
 		out.Document.ForwardHeaders = ListSection{Mode: ModeReplace, Values: append([]string{}, binding.Document.ForwardHeaders.Values...)}
-		out.Sources[0] = ScopeBinding
+		out.Sources[0] = childScope
 	}
 	if binding.Document.FixedHeaders.Mode == ModeReplace {
 		out.Document.FixedHeaders = HeaderSection{Mode: ModeReplace, Values: cloneHeaders(binding.Document.FixedHeaders.Values)}
-		out.Sources[1] = ScopeBinding
+		out.Sources[1] = childScope
 	}
 	if binding.Document.BodyDefaults.Mode == ModeReplace {
 		out.Document.BodyDefaults = BodySection{Mode: ModeReplace, Values: cloneBody(binding.Document.BodyDefaults.Values)}
-		out.Sources[2] = ScopeBinding
+		out.Sources[2] = childScope
 	}
 	if binding.Document.BodyForced.Mode == ModeReplace {
 		out.Document.BodyForced = BodySection{Mode: ModeReplace, Values: cloneBody(binding.Document.BodyForced.Values)}
-		out.Sources[3] = ScopeBinding
+		out.Sources[3] = childScope
 	}
 	if binding.Document.NativeExtensionPaths.Mode == ModeReplace {
 		out.Document.NativeExtensionPaths = ListSection{Mode: ModeReplace, Values: append([]string{}, binding.Document.NativeExtensionPaths.Values...)}
-		out.Sources[4] = ScopeBinding
+		out.Sources[4] = childScope
 	}
 	return out
 }

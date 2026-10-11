@@ -18,6 +18,8 @@ import { SHELL_DRAWER_MEDIA_QUERY } from '@shared/styles/tokens';
 import { useUserSession } from '../data';
 import { clearManagementSession } from '@shared/charityManagement';
 import { USER_PRIMARY_NAV } from '../navigation';
+import { AccountAppearance } from '../appearance/AppearanceProvider';
+import { AppearanceButton } from '../appearance/AppearanceButton';
 
 const USER_ACCOUNT_PATH = routePath('user', 'account');
 const USER_STEWARD_PATH = routePath('user', 'steward');
@@ -122,6 +124,7 @@ export function UserLayout() {
     const firstLink = navRef.current?.querySelector<HTMLElement>('a[href], button:not([disabled])');
     firstLink?.focus({ preventScroll: true });
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.target instanceof Element && event.target.closest('[aria-modal="true"]')) return;
       if (event.key === 'Escape') {
         event.preventDefault();
         closeMenu();
@@ -241,164 +244,168 @@ export function UserLayout() {
   }
 
   return (
-    <div className="nb-user-shell">
-      <a className="skip-link" href="#main">
-        {t('shell.skipToContent')}
-      </a>
-      <header className="site-header user-header nb-user-header">
-        <Brand
-          href={routePath('user', 'home')}
-          siteName={siteName}
-          siteLogoURL={siteLogoURL}
-          className="brand"
-        />
-        {signedIn ? (
-          <button
-            ref={menuButtonRef}
-            type="button"
-            className="nb-btn nb-btn--secondary mobile-menu-btn nb-menu-button"
-            aria-expanded={menuOpen}
-            aria-controls="user-navigation"
-            aria-label={t(menuOpen ? 'shell.closeMenu' : 'shell.openMenu')}
-            onClick={() => setMenuOpen((open) => !open)}
+    <AccountAppearance account={profile?.id}>
+      <div className="nb-user-shell">
+        <a className="skip-link" href="#main">
+          {t('shell.skipToContent')}
+        </a>
+        <header className="site-header user-header nb-user-header">
+          <Brand
+            href={routePath('user', 'home')}
+            siteName={siteName}
+            siteLogoURL={siteLogoURL}
+            className="brand"
+          />
+          {signedIn ? (
+            <button
+              ref={menuButtonRef}
+              type="button"
+              className="nb-btn nb-btn--secondary mobile-menu-btn nb-menu-button"
+              aria-expanded={menuOpen}
+              aria-controls="user-navigation"
+              aria-label={t(menuOpen ? 'shell.closeMenu' : 'shell.openMenu')}
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              <Icon name={menuOpen ? 'close' : 'menu'} />
+            </button>
+          ) : null}
+          <nav
+            ref={navRef}
+            id="user-navigation"
+            className={`site-nav nb-user-header__nav ${menuOpen ? 'is-open' : ''}`}
+            aria-label={t('user.shell.navLabel')}
           >
-            <Icon name={menuOpen ? 'close' : 'menu'} />
-          </button>
-        ) : null}
-        <nav
-          ref={navRef}
-          id="user-navigation"
-          className={`site-nav nb-user-header__nav ${menuOpen ? 'is-open' : ''}`}
-          aria-label={t('user.shell.navLabel')}
-        >
-          <ul className="nb-user-header__nav-list">
-            {navItems.map((item) => (
-              <li key={item.key}>
-                <NavLink
-                  className="nb-user-header__nav-link"
-                  data-active={item.key === 'logs' && recordsOpen ? 'true' : undefined}
-                  to={item.to}
-                  end={item.end}
-                  onClick={closeMenu}
-                >
-                  {item.icon ? <Icon name={item.icon} /> : null}
-                  {item.labelKey
-                    ? t(item.labelKey, {
-                        defaultValue: item.fallbackLabelKey
-                          ? t(item.fallbackLabelKey)
-                          : item.labelKey,
-                      })
-                    : t(`user.${item.key}.nav`)}
-                </NavLink>
-              </li>
-            ))}
-          </ul>
-          {signedIn && menuOpen ? (
-            <div className="nb-user-drawer-actions">
-              <div className="nb-user-drawer-actions__identity">{displayName}</div>
-              <Link
-                className="nb-btn nb-btn--ghost nb-btn--sm"
-                to={USER_ACCOUNT_PATH}
-                onClick={closeMenu}
-              >
-                <Icon name="account" />
-                {t('user.account.nav')}
-              </Link>
-              {showStewardEntry ? (
+            <ul className="nb-user-header__nav-list">
+              {navItems.map((item) => (
+                <li key={item.key}>
+                  <NavLink
+                    className="nb-user-header__nav-link"
+                    data-active={item.key === 'logs' && recordsOpen ? 'true' : undefined}
+                    to={item.to}
+                    end={item.end}
+                    onClick={closeMenu}
+                  >
+                    {item.icon ? <Icon name={item.icon} /> : null}
+                    {item.labelKey
+                      ? t(item.labelKey, {
+                          defaultValue: item.fallbackLabelKey
+                            ? t(item.fallbackLabelKey)
+                            : item.labelKey,
+                        })
+                      : t(`user.${item.key}.nav`)}
+                  </NavLink>
+                </li>
+              ))}
+            </ul>
+            {signedIn && menuOpen ? (
+              <div className="nb-user-drawer-actions">
+                <div className="nb-user-drawer-actions__identity">{displayName}</div>
                 <Link
                   className="nb-btn nb-btn--ghost nb-btn--sm"
-                  to={USER_STEWARD_PATH}
+                  to={USER_ACCOUNT_PATH}
                   onClick={closeMenu}
                 >
-                  <Icon name="steward" />
-                  {t('user.steward.nav')}
+                  <Icon name="account" />
+                  {t('user.account.nav')}
                 </Link>
-              ) : null}
-              <ThemeToggle />
-              <button
-                type="button"
-                className="nb-btn nb-btn--secondary"
-                onClick={() => {
-                  closeMenu();
-                  logout.mutate();
-                }}
-                disabled={logout.isPending}
-              >
-                <Icon name="logout" />
-                {logout.isPending ? t('common.working') : t('common.signOut')}
-              </button>
-            </div>
+                {showStewardEntry ? (
+                  <Link
+                    className="nb-btn nb-btn--ghost nb-btn--sm"
+                    to={USER_STEWARD_PATH}
+                    onClick={closeMenu}
+                  >
+                    <Icon name="steward" />
+                    {t('user.steward.nav')}
+                  </Link>
+                ) : null}
+                <AppearanceButton />
+                <ThemeToggle />
+                <button
+                  type="button"
+                  className="nb-btn nb-btn--secondary"
+                  onClick={() => {
+                    closeMenu();
+                    logout.mutate();
+                  }}
+                  disabled={logout.isPending}
+                >
+                  <Icon name="logout" />
+                  {logout.isPending ? t('common.working') : t('common.signOut')}
+                </button>
+              </div>
+            ) : null}
+          </nav>
+          {signedIn && menuOpen ? (
+            <button
+              type="button"
+              className="nb-user-drawer-overlay"
+              aria-label={t('shell.closeMenu')}
+              onClick={closeMenu}
+            />
           ) : null}
-        </nav>
-        {signedIn && menuOpen ? (
-          <button
-            type="button"
-            className="nb-user-drawer-overlay"
-            aria-label={t('shell.closeMenu')}
-            onClick={closeMenu}
-          />
+          <div
+            className={`site-actions nb-user-header__actions ${signedIn ? 'nb-user-header__actions--signed-in' : 'nb-user-header__actions--anonymous'}`}
+          >
+            {signedIn && showStewardEntry && profile ? (
+              <DonationPendingBadge
+                key={profile.id}
+                role="steward"
+                accountID={profile.id}
+                onNavigate={closeMenu}
+              />
+            ) : null}
+            {signedIn ? <AppearanceButton /> : null}
+            {signedIn ? (
+              <AccountMenu
+                displayName={displayName}
+                avatarURL={profileAvatar}
+                signOutLabel={t('common.signOut')}
+                working={logout.isPending}
+                steward={showStewardEntry}
+                onSignOut={() => logout.mutate()}
+              />
+            ) : null}
+            {!signedIn ? <LanguageSwitcher /> : null}
+            {!signedIn ? <ThemeToggle /> : null}
+            {!signedIn && showSignIn ? (
+              <a className="nb-btn nb-btn--primary" href="/api/auth/discord/start">
+                {t('common.signIn')}
+              </a>
+            ) : null}
+          </div>
+        </header>
+        {logout.error ? (
+          <div className="shell-error nb-shell-status">
+            {isApiError(logout.error) ? (
+              <p className="field-error" role="alert">
+                {logout.error.message}
+              </p>
+            ) : (
+              <ErrorState error={logout.error} />
+            )}
+          </div>
         ) : null}
-        <div
-          className={`site-actions nb-user-header__actions ${signedIn ? 'nb-user-header__actions--signed-in' : 'nb-user-header__actions--anonymous'}`}
-        >
-          {signedIn && showStewardEntry && profile ? (
-            <DonationPendingBadge
-              key={profile.id}
-              role="steward"
-              accountID={profile.id}
-              onNavigate={closeMenu}
-            />
-          ) : null}
-          {signedIn ? (
-            <AccountMenu
-              displayName={displayName}
-              avatarURL={profileAvatar}
-              signOutLabel={t('common.signOut')}
-              working={logout.isPending}
-              steward={showStewardEntry}
-              onSignOut={() => logout.mutate()}
-            />
-          ) : null}
-          {!signedIn ? <LanguageSwitcher /> : null}
-          {!signedIn ? <ThemeToggle /> : null}
-          {!signedIn && showSignIn ? (
-            <a className="nb-btn nb-btn--primary" href="/api/auth/discord/start">
-              {t('common.signIn')}
-            </a>
-          ) : null}
-        </div>
-      </header>
-      {logout.error ? (
-        <div className="shell-error nb-shell-status">
-          {isApiError(logout.error) ? (
-            <p className="field-error" role="alert">
-              {logout.error.message}
-            </p>
-          ) : (
-            <ErrorState error={logout.error} />
-          )}
-        </div>
-      ) : null}
-      <main id="main" className="user-main nb-user-shell__main" tabIndex={-1}>
-        {/* A same-tab account switch must remount every route-local form,
+        <main id="main" className="user-main nb-user-shell__main" tabIndex={-1}>
+          {/* A same-tab account switch must remount every route-local form,
             mutation observer, and transient secret/result state. */}
-        <Outlet key={profile?.id ?? 'signed-out'} />
-      </main>
-      <div className="site-footer nb-user-shell__footer">
-        <PageFooter
-          copyright={t('common.copyright', { year: new Date().getFullYear() })}
-          links={
-            <>
-              {signedIn ? (
-                <Link to={USER_ANNOUNCEMENTS_PATH}>{t('user.announcements.nav')}</Link>
-              ) : null}
-              <Link to={USER_REPORT_PATH}>{t('user.report.nav')}</Link>
-              <Link to={USER_PRIVACY_PATH}>{t('user.legal.privacy.nav')}</Link>
-              <Link to={USER_TERMS_PATH}>{t('user.legal.terms.nav')}</Link>
-            </>
-          }
-        />
+          <Outlet key={profile?.id ?? 'signed-out'} />
+        </main>
+        <div className="site-footer nb-user-shell__footer">
+          <PageFooter
+            copyright={t('common.copyright', { year: new Date().getFullYear() })}
+            links={
+              <>
+                {signedIn ? (
+                  <Link to={USER_ANNOUNCEMENTS_PATH}>{t('user.announcements.nav')}</Link>
+                ) : null}
+                <Link to={USER_REPORT_PATH}>{t('user.report.nav')}</Link>
+                <Link to={USER_PRIVACY_PATH}>{t('user.legal.privacy.nav')}</Link>
+                <Link to={USER_TERMS_PATH}>{t('user.legal.terms.nav')}</Link>
+              </>
+            }
+          />
+        </div>
       </div>
-    </div>
+    </AccountAppearance>
   );
 }

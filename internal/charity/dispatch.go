@@ -5,10 +5,12 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/http"
 
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
+	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
 )
 
 func (s *Service) PrepareDispatch(ctx context.Context, tx *sql.Tx, input claim.CharityDispatch) error {
@@ -50,4 +52,13 @@ WHERE cr.logical_request_id=? AND cr.user_id=? AND lr.user_id=?
 		return err
 	}
 	return donationquota.Reconcile(ctx, tx, input.ClaimID, input.DispatchedAt)
+}
+
+// SessionHeaders is called only after PrepareDispatch has authorized the send.
+func (s *Service) SessionHeaders(ctx context.Context, tx *sql.Tx, input claim.CharityDispatch) (http.Header, error) {
+	var model int64
+	if err := tx.QueryRowContext(ctx, "SELECT charity_model_id FROM charity_reservations WHERE logical_request_id=? AND user_id=?", input.RequestID, input.ActorUserID).Scan(&model); err != nil {
+		return nil, err
+	}
+	return sessionheader.Acquire(ctx, tx, input.RequestID, input.ActorUserID, model, input.DispatchedAt)
 }

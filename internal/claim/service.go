@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/http"
 	"reflect"
+	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -16,6 +18,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
+	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
 )
 
 const maxUnixSecond = int64(253402300799)
@@ -495,6 +498,7 @@ WHERE c.id=?`, handle.claimID).Scan(&stateText, &requestID, &attemptSeq, &purpos
 		clear(encrypted)
 		return nil, ErrInvariant
 	}
+	var managedHeaders http.Header
 	if RouteKind(requestRoute).IsCharity() {
 		if !callerID.Valid {
 			clear(contextID)
@@ -517,6 +521,14 @@ WHERE c.id=?`, handle.claimID).Scan(&stateText, &requestID, &attemptSeq, &purpos
 			clear(contextID)
 			clear(encrypted)
 			return nil, s.quotaCapacityFailure(ctx, tx, at, err)
+		}
+		if provider, ok := s.charity.(CharitySessionHeaders); ok {
+			managedHeaders, err = provider.SessionHeaders(ctx, tx, CharityDispatch{RequestID: requestID, ClaimID: handle.claimID, ActorUserID: callerID.Int64, DispatchedAt: at})
+			if err != nil {
+				clear(contextID)
+				clear(encrypted)
+				return nil, err
+			}
 		}
 		if err := markRoutingDispatchTx(ctx, tx, handle.claimID, at); err != nil {
 			clear(contextID)
@@ -568,7 +580,20 @@ SET state='dispatched',dispatched_at=? WHERE id=? AND state='claimed'`, at, hand
 		return nil, errors.Join(ErrCredentialUnavailable, revokeAfterCredentialFailure(s, handle))
 	}
 	credential := connectorcontract.NewShortLivedSecret(plaintext, encrypted)
+	var sent func()
+	if len(managedHeaders) > 0 {
+		var once sync.Once
+		sent = func() {
+			once.Do(func() {
+				checkpoint, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+				defer cancel()
+				// A failed cache checkpoint may shorten reuse; it cannot change billing.
+				_ = sessionheader.MarkSent(checkpoint, s.db, requestID)
+			})
+		}
+	}
 	return &Dispatch{
+		managedHeaders: managedHeaders, onRequestSent: sent,
 		handle:       handle,
 		dispatchedAt: at,
 		credential:   credential,
@@ -590,10 +615,10 @@ type targetRow struct {
 
 func (s *Service) ensureRequestLogTx(ctx context.Context, tx *sql.Tx, requestID string) error {
 	result, err := tx.ExecContext(ctx, `INSERT INTO request_logs(
-logical_request_id,user_id,model,route_kind,started_at)
-SELECT r.id,r.user_id,r.model_snapshot,r.route_kind,r.created_at
+logical_request_id,user_id,model,route_kind,started_at,requested_streaming,automatic_actions)
+SELECT r.id,r.user_id,r.model_snapshot,r.route_kind,r.created_at,?,0
 FROM logical_requests r JOIN users u ON u.id=r.user_id WHERE r.id=?
-ON CONFLICT(logical_request_id) DO NOTHING`, requestID)
+ON CONFLICT(logical_request_id) DO NOTHING`, requestattempt.RequestedStreaming(ctx), requestID)
 	if err != nil {
 		return fmt.Errorf("claim: ensure request log: %w", err)
 	}

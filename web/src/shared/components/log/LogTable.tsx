@@ -30,7 +30,7 @@ export function LogTable<Row>({ caption, columns, rows, rowKey, actions }: LogTa
   if (actions)
     dataColumns.push({
       key: 'actions',
-      header: t('logs.details'),
+      header: t('common.operations.logs.presentation.actions'),
       cell: 'action',
       align: 'action',
       render: actions,

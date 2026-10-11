@@ -442,7 +442,7 @@ export function AccountLifecyclePanel({
           )}
           <button
             type="button"
-            className="nb-btn btn-danger-outline"
+            className="nb-btn nb-btn--danger-outline"
             disabled={
               !adapter.capabilities.deleteAccount ||
               busy ||

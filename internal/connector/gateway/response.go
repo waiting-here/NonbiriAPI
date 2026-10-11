@@ -165,12 +165,42 @@ func finishReason(raw []byte) (string, error) {
 		return "", errResponse
 	}
 }
+
+// Provider warnings describe degraded or unsupported settings, not a failed
+// generation. Validate their v3 shape without rejecting usable responses.
 func warningsOK(raw []byte) bool {
 	if len(raw) == 0 {
 		return true
 	}
 	var values []json.RawMessage
-	return json.Unmarshal(raw, &values) == nil && values != nil && len(values) == 0
+	if json.Unmarshal(raw, &values) != nil || values == nil {
+		return false
+	}
+	for _, raw := range values {
+		warning, err := parseObject(raw)
+		kind, ok := text(warning["type"])
+		if err != nil || !ok {
+			return false
+		}
+		switch kind {
+		case "unsupported", "compatibility":
+			if _, ok := text(warning["feature"]); !ok {
+				return false
+			}
+			if details, exists := warning["details"]; exists {
+				if _, ok := text(details); !ok {
+					return false
+				}
+			}
+		case "other":
+			if _, ok := text(warning["message"]); !ok {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
 }
 func responseID() string {
 	var value [12]byte

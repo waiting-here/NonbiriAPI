@@ -252,7 +252,7 @@ func TestStreamTerminalOrderingToolsAndUnknownUsage(t *testing.T) {
 		{"truncated-tool", sse(append(append([]string{}, toolParts[:4]...), toolParts[5])...), false},
 		{"mismatched-tool", strings.Replace(sse(toolParts...), `hi\"}"}`, `bad\"}"}`, 1), false},
 		{"error", sse(textParts[1], textParts[2], `{"type":"error","error":{"message":"secret detail"}}`), false},
-		{"unsupported-setting", sse(`{"type":"stream-start","warnings":[{"type":"unsupported","feature":"temperature"}]}`, textParts[1], textParts[3], textParts[4]), false},
+		{"unsupported-setting", sse(`{"type":"stream-start","warnings":[{"type":"unsupported","feature":"temperature"}]}`, textParts[1], textParts[3], textParts[4]), true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

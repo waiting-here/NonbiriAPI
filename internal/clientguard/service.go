@@ -190,7 +190,8 @@ func readReceipt(ctx context.Context, tx *sql.Tx, requestID string, userID, now 
 }
 
 // CheckCharityCall requires a validated, classified real charity model call.
-// The caller invokes it after routing snapshot and before claim acceptance.
+// The caller invokes it after ingress authentication, model access, and parsing,
+// before content, credit, candidate, and Debug admission.
 // A Banned decision becomes a generic account-ban response to the caller.
 func (s *Service) CheckCharityCall(parent context.Context, userID int64, model string, decisionNow int64) (Decision, error) {
 	if s == nil || parent == nil || userID <= 0 || decisionNow < 0 || decisionNow > maxUnixSecond-receiptLifetime || requestattempt.Kind(parent) != "charity" {
@@ -379,6 +380,9 @@ func (s *Service) CheckCharityCall(parent context.Context, userID int64, model s
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO client_rule_ban_receipts(request_id,user_id,rules_json,banned_until,created_at,expires_at) VALUES(?,?,?,?,?,?)`, requestID, userID, string(rulesJSON), end, decisionNow, decisionNow+receiptLifetime); err != nil {
 		return Decision{}, fmt.Errorf("%w: store receipt: %v", ErrUnavailable, err)
+	}
+	if err := requestattempt.AutomaticActionsTx(ctx, tx, requestID, requestattempt.ActionClientBan); err != nil {
+		return Decision{}, err
 	}
 	if err := tx.Commit(); err != nil {
 		return Decision{}, ErrUnavailable

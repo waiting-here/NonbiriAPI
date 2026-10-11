@@ -1,46 +1,93 @@
-.fatfish-admin { max-width: 1600px; min-width: 0; }
-.fatfish-admin .fatfish-manager { display: grid; gap: 1rem; min-width: 0; }
+.fatfish-admin {
+  max-width: 1600px;
+  min-width: 0;
+}
+.fatfish-admin .fatfish-manager {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
 .fatfish-admin .fatfish-directory {
-  display: flex; flex-wrap: wrap; align-items: center; gap: .5rem;
-  min-width: 0; padding: .75rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 0.75rem;
   border: 1px solid var(--nb-color-border);
   border-radius: var(--nb-radius-md);
   background: var(--nb-color-surface-muted);
 }
-.fatfish-admin .fatfish-directory h2 { margin: 0 .5rem 0 0; }
-.fatfish-admin .fatfish-directory ul, .fatfish-admin .fatfish-shelf ul,
-.fatfish-admin .fatfish-node-list { list-style: none; margin: 0; padding: 0; }
+.fatfish-admin .fatfish-directory h2 {
+  margin: 0 0.5rem 0 0;
+}
+.fatfish-admin .fatfish-directory ul,
+.fatfish-admin .fatfish-shelf ul,
+.fatfish-admin .fatfish-node-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
 .fatfish-admin .fatfish-directory ul {
-  display: flex; flex: 1 1 14rem; flex-wrap: wrap; gap: .5rem;
+  display: flex;
+  flex: 1 1 14rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
   min-width: 0;
 }
-.fatfish-admin .fatfish-directory li, .fatfish-admin .fatfish-shelf li,
-.fatfish-admin .fatfish-node-list li { min-width: 0; }
-.fatfish-admin .fatfish-directory li button { max-width: 18rem; text-align: left; }
-.fatfish-admin .fatfish-node-list button { width: 100%; text-align: left; }
-.fatfish-admin .fatfish-editor, .fatfish-admin .fatfish-period-editor,
-.fatfish-admin .fatfish-toolbar, .fatfish-admin .fatfish-playtest,
-.fatfish-admin .fatfish-version-picker { min-width: 0; overflow-wrap: anywhere; }
-.fatfish-admin .fatfish-tabs, .fatfish-admin .fatfish-actions {
-  display: flex; flex-wrap: wrap; align-items: center; gap: .5rem;
-  margin: .75rem 0;
+.fatfish-admin .fatfish-directory li,
+.fatfish-admin .fatfish-shelf li,
+.fatfish-admin .fatfish-node-list li {
+  min-width: 0;
+}
+.fatfish-admin .fatfish-directory li button {
+  max-width: 18rem;
+  text-align: left;
+}
+.fatfish-admin .fatfish-node-list button {
+  width: 100%;
+  text-align: left;
+}
+.fatfish-admin .fatfish-editor,
+.fatfish-admin .fatfish-period-editor,
+.fatfish-admin .fatfish-toolbar,
+.fatfish-admin .fatfish-playtest,
+.fatfish-admin .fatfish-version-picker {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.fatfish-admin .fatfish-tabs,
+.fatfish-admin .fatfish-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
 }
 .fatfish-admin button {
-  min-height: 2.75rem; padding: .55rem .8rem;
+  min-height: 2.75rem;
+  padding: 0.55rem 0.8rem;
   border: 1px solid var(--nb-color-border-strong);
   border-radius: var(--nb-radius-sm);
   background: var(--nb-color-surface);
   color: var(--nb-color-text);
-  font: inherit; font-weight: 600; line-height: 1.25;
-  overflow-wrap: anywhere; cursor: pointer;
-  transition: background-color var(--nb-transition), border-color var(--nb-transition);
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  transition:
+    background-color var(--nb-transition),
+    border-color var(--nb-transition);
 }
 .fatfish-admin button:hover:not(:disabled) {
   background: var(--nb-color-surface-emphasis);
   border-color: var(--nb-color-accent);
 }
-.fatfish-admin button:focus-visible, .fatfish-admin :is(input, select, textarea):focus-visible {
-  outline: 2px solid var(--nb-color-focus); outline-offset: 2px;
+.fatfish-admin button:focus-visible,
+.fatfish-admin :is(input, select, textarea):focus-visible {
+  outline: 2px solid var(--nb-color-focus);
+  outline-offset: 2px;
   box-shadow: var(--nb-focus-ring);
 }
 .fatfish-admin button:disabled {
@@ -49,132 +96,590 @@
   border-color: var(--nb-color-border);
   cursor: not-allowed;
 }
-.fatfish-admin .fatfish-tabs button[aria-current="page"]:not(:disabled),
-.fatfish-admin .fatfish-directory > button:first-of-type:not(:disabled),
-.fatfish-admin .fatfish-toolbar > .fatfish-actions:has(.fatfish-file) > button:last-child:not(:disabled),
+.fatfish-admin .fatfish-tabs button[aria-current='page']:not(:disabled),
+.fatfish-admin .fatfish-primary:not(:disabled),
 .fatfish-admin .fatfish-period-editor > .fatfish-actions > button:first-of-type:not(:disabled) {
   border-color: var(--nb-color-accent);
   background: var(--nb-color-accent);
   color: var(--nb-color-accent-contrast);
 }
-.fatfish-admin .fatfish-tabs button[aria-current="page"]:hover:not(:disabled),
-.fatfish-admin .fatfish-directory > button:first-of-type:hover:not(:disabled),
-.fatfish-admin .fatfish-toolbar > .fatfish-actions:has(.fatfish-file) > button:last-child:hover:not(:disabled),
-.fatfish-admin .fatfish-period-editor > .fatfish-actions > button:first-of-type:hover:not(:disabled) {
+.fatfish-admin .fatfish-tabs button[aria-current='page']:hover:not(:disabled),
+.fatfish-admin .fatfish-primary:hover:not(:disabled),
+.fatfish-admin
+  .fatfish-period-editor
+  > .fatfish-actions
+  > button:first-of-type:hover:not(:disabled) {
   background: var(--nb-color-accent-hover);
 }
 .fatfish-admin .fatfish-fields {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
-  gap: .75rem; margin: .75rem 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
+  gap: 0.75rem;
+  margin: 0.75rem 0;
 }
-.fatfish-admin .fatfish-fields label, .fatfish-admin .fatfish-inspector label,
-.fatfish-admin .fatfish-version-picker label, .fatfish-admin .fatfish-condition label {
-  display: grid; gap: .3rem; min-width: 0;
+.fatfish-admin .fatfish-fields label,
+.fatfish-admin .fatfish-inspector label,
+.fatfish-admin .fatfish-version-picker label,
+.fatfish-admin .fatfish-condition label {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
 }
-.fatfish-admin .fatfish-fields label:has(> input[type="checkbox"]),
-.fatfish-admin .fatfish-actions label:has(> input[type="checkbox"]) {
-  display: flex; flex-wrap: wrap; align-items: center; gap: .45rem;
+.fatfish-admin .fatfish-fields label:has(> input[type='checkbox']),
+.fatfish-admin .fatfish-actions label:has(> input[type='checkbox']) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
 }
-.fatfish-admin .fatfish-fields input, .fatfish-admin .fatfish-fields textarea,
-.fatfish-admin .fatfish-inspector input, .fatfish-admin .fatfish-inspector select,
-.fatfish-admin .fatfish-version-picker select, .fatfish-admin .fatfish-condition select,
+.fatfish-admin .fatfish-fields input,
+.fatfish-admin .fatfish-fields textarea,
+.fatfish-admin .fatfish-inspector input,
+.fatfish-admin .fatfish-inspector select,
+.fatfish-admin .fatfish-version-picker select,
+.fatfish-admin .fatfish-condition select,
 .fatfish-admin .fatfish-condition input {
-  max-width: 100%; min-width: 0;
-  color: var(--nb-color-text); background: var(--nb-color-surface);
+  max-width: 100%;
+  min-width: 0;
+  color: var(--nb-color-text);
+  background: var(--nb-color-surface);
   border-color: var(--nb-color-border-strong);
 }
-.fatfish-admin :is(input:not([type="checkbox"]):not([type="file"]), select, textarea) { min-height: 2.75rem; }
-.fatfish-admin input[type="checkbox"] { min-width: 1.1rem; min-height: 1.1rem; accent-color: var(--nb-color-accent); }
-.fatfish-admin .fatfish-fields textarea { min-height: 5rem; }
-.fatfish-admin .fatfish-file { display: inline-grid; gap: .3rem; min-width: 0; }
-.fatfish-admin input[type="file"] { max-width: 100%; overflow: hidden; }
-.fatfish-admin input[type="file"]::file-selector-button {
-  min-height: 2.75rem; margin-right: .5rem; padding: .5rem .75rem;
-  border: 1px solid var(--nb-color-border-strong); border-radius: var(--nb-radius-sm);
-  background: var(--nb-color-surface); color: var(--nb-color-text); cursor: pointer;
+.fatfish-admin :is(input:not([type='checkbox']):not([type='file']), select, textarea) {
+  min-height: 2.75rem;
+}
+.fatfish-admin input[type='checkbox'] {
+  min-width: 1.1rem;
+  min-height: 1.1rem;
+  accent-color: var(--nb-color-accent);
+}
+.fatfish-admin .fatfish-fields textarea {
+  min-height: 5rem;
+}
+.fatfish-admin .fatfish-file {
+  display: inline-grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+.fatfish-admin input[type='file'] {
+  max-width: 100%;
+  overflow: hidden;
+}
+.fatfish-admin input[type='file']::file-selector-button {
+  min-height: 2.75rem;
+  margin-right: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--nb-color-border-strong);
+  border-radius: var(--nb-radius-sm);
+  background: var(--nb-color-surface);
+  color: var(--nb-color-text);
+  cursor: pointer;
 }
 .fatfish-admin .fatfish-examples > .fatfish-actions {
-  display: flex; flex-wrap: wrap; align-items: end; gap: .5rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.5rem;
 }
-.fatfish-admin .fatfish-level-settings { margin: .65rem 0; }
-.fatfish-admin .fatfish-level-settings summary { cursor: pointer; color: var(--nb-color-text-muted); margin-bottom: .45rem; }
-.fatfish-admin .fatfish-toolbar > .fatfish-fields { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
+.fatfish-admin .fatfish-level-settings {
+  margin: 0.65rem 0;
+}
+.fatfish-admin .fatfish-level-settings summary {
+  cursor: pointer;
+  color: var(--nb-color-text-muted);
+  margin-bottom: 0.45rem;
+}
+.fatfish-admin .fatfish-toolbar > .fatfish-fields {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+}
 .fatfish-admin .fatfish-examples > .fatfish-actions > .fatfish-actions {
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: .5rem; margin: 0; min-width: 0;
-  padding: .5rem; border: 1px solid var(--nb-color-border);
-  border-radius: var(--nb-radius-sm); background: var(--nb-color-surface-alt);
-}
-.fatfish-admin .fatfish-editor-body {
-  display: grid; grid-template-columns: minmax(0, 3fr) minmax(240px, 1fr);
-  align-items: start; gap: 1rem; min-width: 0;
-}
-.fatfish-admin .fatfish-level-stage {
-  position: relative; width: 100%; aspect-ratio: 736 / 816;
-  overflow: hidden; border: 2px solid var(--nb-color-border-strong);
-  border-radius: var(--nb-radius-md); background: #f4f0e5;
-}
-.fatfish-admin .fatfish-level-stage .fatfish-canvas {
-  display: block; width: 100%; height: 100%; margin: 0;
-  border: 0; border-radius: 0; box-shadow: none;
-}
-.fatfish-admin .fatfish-level-map {
-  position: absolute; inset: 0; display: block; width: 100%; height: 100%;
-  border: 0; border-radius: 0; touch-action: none; background: transparent;
-}
-.fatfish-admin .fatfish-inspector {
-  max-height: 740px; overflow-y: auto; min-width: 0; padding: .75rem;
-  border: 1px solid var(--nb-color-border); border-radius: var(--nb-radius-sm);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin: 0;
+  min-width: 0;
+  padding: 0.5rem;
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-sm);
   background: var(--nb-color-surface-alt);
 }
-.fatfish-admin .fatfish-tool-palette { display: flex; flex-wrap: wrap; gap: .5rem; }
-.fatfish-admin .fatfish-tool-palette button { display: flex; align-items: center; gap: .4rem; min-height: 3.5rem; }
-.fatfish-admin .fatfish-tool-palette img { width: 3rem; height: 3rem; object-fit: contain; }
-.fatfish-admin .fatfish-inspector fieldset { margin: .75rem 0; border: 1px solid var(--nb-color-border); }
-.fatfish-admin .fatfish-coordinate, .fatfish-admin .fatfish-vertex {
-  display: flex; align-items: end; flex-wrap: wrap; gap: .4rem; margin: .25rem 0;
+.fatfish-admin .fatfish-editor-body {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(240px, 1fr);
+  align-items: start;
+  gap: 1rem;
+  min-width: 0;
 }
-.fatfish-admin .fatfish-coordinate input { width: 5rem; }
+.fatfish-admin .fatfish-level-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 736 / 816;
+  overflow: hidden;
+  border: 2px solid var(--nb-color-border-strong);
+  border-radius: var(--nb-radius-md);
+  background: #f4f0e5;
+}
+.fatfish-admin .fatfish-level-stage .fatfish-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.fatfish-admin .fatfish-level-map {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  touch-action: none;
+  background: transparent;
+}
+.fatfish-admin .fatfish-inspector {
+  max-height: 740px;
+  overflow-y: auto;
+  min-width: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-sm);
+  background: var(--nb-color-surface-alt);
+}
+.fatfish-admin .fatfish-tool-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.fatfish-admin .fatfish-tool-palette button {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 3.5rem;
+}
+.fatfish-admin .fatfish-tool-palette img {
+  width: 3rem;
+  height: 3rem;
+  object-fit: contain;
+}
+.fatfish-admin .fatfish-inspector fieldset {
+  margin: 0.75rem 0;
+  border: 1px solid var(--nb-color-border);
+}
+.fatfish-admin .fatfish-coordinate,
+.fatfish-admin .fatfish-vertex {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.25rem 0;
+}
+.fatfish-admin .fatfish-coordinate input {
+  width: 5rem;
+}
 .fatfish-admin .fatfish-error {
-  display: block; margin: .5rem 0; text-align: left;
-  border-color: var(--nb-color-danger); background: var(--nb-color-danger-soft);
+  display: block;
+  margin: 0.5rem 0;
+  text-align: left;
+  border-color: var(--nb-color-danger);
+  background: var(--nb-color-danger-soft);
   color: var(--nb-color-danger);
 }
-.fatfish-admin .fatfish-shelf, .fatfish-admin .fatfish-graph-preview,
+.fatfish-admin .fatfish-shelf,
+.fatfish-admin .fatfish-graph-preview,
 .fatfish-admin .fatfish-node-editor {
-  margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--nb-color-border);
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--nb-color-border);
 }
 .fatfish-admin .fatfish-node-map svg {
-  width: 100%; max-width: 800px; height: auto; aspect-ratio: 8 / 5;
-  border: 1px solid var(--nb-color-border-strong); border-radius: var(--nb-radius-sm);
+  width: 100%;
+  max-width: 800px;
+  height: auto;
+  aspect-ratio: 8 / 5;
+  border: 1px solid var(--nb-color-border-strong);
+  border-radius: var(--nb-radius-sm);
   touch-action: none;
 }
 .fatfish-admin .fatfish-node-list {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
-  gap: .5rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: 0.5rem;
 }
 .fatfish-admin .fatfish-condition {
-  margin: .5rem 0; padding: .5rem .75rem;
-  border-left: 3px solid var(--nb-color-info); background: var(--nb-color-info-soft);
+  margin: 0.5rem 0;
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid var(--nb-color-info);
+  background: var(--nb-color-info-soft);
 }
-.fatfish-admin .fatfish-condition-children { margin-left: 1rem; }
-.fatfish-admin code, .fatfish-admin [role="status"] { overflow-wrap: anywhere; word-break: break-word; }
+.fatfish-admin .fatfish-condition-children {
+  margin-left: 1rem;
+}
+.fatfish-admin code,
+.fatfish-admin [role='status'] {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 @media (width <= 64rem) {
-  .fatfish-admin .fatfish-editor-body { grid-template-columns: minmax(0, 1fr); }
-  .fatfish-admin .fatfish-inspector { max-height: none; }
-  .fatfish-admin .fatfish-node-map svg { min-width: 0; }
+  .fatfish-admin .fatfish-editor-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .fatfish-admin .fatfish-inspector {
+    max-height: none;
+  }
+  .fatfish-admin .fatfish-node-map svg {
+    min-width: 0;
+  }
 }
 @media (width <= 40rem) {
-  .fatfish-admin .fatfish-directory { align-items: stretch; }
-  .fatfish-admin .fatfish-directory h2 { width: 100%; }
-  .fatfish-admin .fatfish-directory ul { flex-basis: 100%; }
-  .fatfish-admin .fatfish-directory li, .fatfish-admin .fatfish-directory li button { width: 100%; max-width: none; }
-  .fatfish-admin .fatfish-fields, .fatfish-admin .fatfish-toolbar > .fatfish-fields { grid-template-columns: minmax(0, 1fr); }
-  .fatfish-admin .fatfish-examples > .fatfish-actions { grid-template-columns: minmax(0, 1fr); }
+  .fatfish-admin .fatfish-directory {
+    align-items: stretch;
+  }
+  .fatfish-admin .fatfish-directory h2 {
+    width: 100%;
+  }
+  .fatfish-admin .fatfish-directory ul {
+    flex-basis: 100%;
+  }
+  .fatfish-admin .fatfish-directory li,
+  .fatfish-admin .fatfish-directory li button {
+    width: 100%;
+    max-width: none;
+  }
+  .fatfish-admin .fatfish-fields,
+  .fatfish-admin .fatfish-toolbar > .fatfish-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .fatfish-admin .fatfish-examples > .fatfish-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
+.fatfish-node-map code {
+  overflow-wrap: anywhere;
+}
+.fatfish-node-map li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.fatfish-node-map svg {
+  touch-action: none;
+}
+.fatfish-editor-workspace circle[aria-label] {
+  cursor: grab;
+}
 
-.fatfish-node-map code { overflow-wrap: anywhere; }
-.fatfish-node-map li { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
-.fatfish-node-map svg { touch-action: none; }
-.fatfish-editor-workspace circle[aria-label] { cursor: grab; }
+/* The editor uses the same controls at every width; geometry tools need a desktop canvas. */
+.fatfish-admin .fatfish-editor-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.fatfish-admin .fatfish-editor-heading h2 {
+  margin: 0;
+}
+.fatfish-admin .fatfish-mobile-only {
+  display: none;
+}
+.fatfish-admin .fatfish-editor-body {
+  grid-template-columns: minmax(11rem, 0.9fr) minmax(0, 3fr) minmax(13rem, 1.05fr);
+  gap: 0.75rem;
+}
+.fatfish-admin .fatfish-editor-body > * {
+  min-width: 0;
+}
+.fatfish-admin .fatfish-palette {
+  padding: 0.75rem;
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-md);
+  background: var(--nb-color-surface-alt);
+}
+.fatfish-admin .fatfish-palette h3 {
+  margin: 0 0 0.5rem;
+  font-size: var(--nb-font-size-sm);
+  color: var(--nb-color-text-muted);
+}
+.fatfish-admin .fatfish-palette section + section {
+  margin-top: 1rem;
+}
+.fatfish-admin .fatfish-palette-buttons,
+.fatfish-admin .fatfish-tool-palette {
+  display: grid;
+  gap: 0.4rem;
+}
+.fatfish-admin .fatfish-tool-palette img {
+  width: 1.8rem;
+  height: 1.8rem;
+}
+.fatfish-admin .fatfish-tool-palette button {
+  min-height: 2.75rem;
+  font-size: var(--nb-font-size-sm);
+}
+.fatfish-admin .fatfish-canvas-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  padding: 0.5rem;
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-sm);
+  background: var(--nb-color-surface);
+}
+.fatfish-admin .fatfish-canvas-toolbar .fatfish-actions {
+  margin: 0;
+  gap: 0.35rem;
+}
+.fatfish-admin .fatfish-canvas-toolbar button {
+  padding: 0.4rem 0.6rem;
+  font-size: var(--nb-font-size-sm);
+}
+.fatfish-admin .fatfish-canvas-toolbar label {
+  font-size: var(--nb-font-size-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.fatfish-admin .fatfish-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+.fatfish-admin .fatfish-modes [aria-pressed='true'],
+.fatfish-admin .fatfish-heading [aria-pressed='true'],
+.fatfish-admin .fatfish-palette [aria-pressed='true'],
+.fatfish-admin .fatfish-directory [aria-current='page'] {
+  background: var(--nb-color-accent-soft);
+  color: var(--nb-color-accent);
+  border-color: var(--nb-color-accent);
+}
+.fatfish-admin .fatfish-canvas-wrap {
+  position: relative;
+  margin-top: 0.6rem;
+}
+.fatfish-admin .fatfish-editor-viewport {
+  width: 100%;
+  max-height: 70vh;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border-radius: var(--nb-radius-md);
+}
+.fatfish-admin .fatfish-level-stage {
+  max-width: none;
+  flex-shrink: 0;
+}
+.fatfish-admin .fatfish-workbench-label {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  top: 3.5%;
+  transform: translateX(-50%);
+  color: #3c6558;
+  font-size: var(--nb-font-size-sm);
+  pointer-events: none;
+}
+.fatfish-admin .fatfish-placement-notice {
+  position: absolute;
+  z-index: 3;
+  top: 0.5rem;
+  left: 0.5rem;
+  right: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--nb-color-accent);
+  border-radius: var(--nb-radius-sm);
+  background: var(--nb-color-surface);
+  box-shadow: var(--nb-shadow-sm);
+}
+.fatfish-admin .fatfish-level-map:focus-visible {
+  outline: 3px solid var(--nb-color-focus);
+  outline-offset: -4px;
+}
+.fatfish-admin .fatfish-level-map[data-mode='move'] {
+  cursor: grab;
+}
+.fatfish-admin
+  .fatfish-level-map:is(
+    [data-mode='vertices'],
+    [data-mode='outer'],
+    [data-mode='hole'],
+    [data-mode='place']
+  ) {
+  cursor: crosshair;
+}
+.fatfish-admin .fatfish-object-label,
+.fatfish-admin .fatfish-object-label text {
+  fill: #183f49;
+  stroke: #ffffffed;
+  stroke-width: 3px;
+  paint-order: stroke;
+  font: 600 12px system-ui;
+  pointer-events: none;
+}
+.fatfish-admin .fatfish-cursor-hint {
+  font: 600 13px system-ui;
+  fill: #163b4c;
+  stroke: #fff;
+  stroke-width: 4px;
+  paint-order: stroke;
+}
+.fatfish-admin .fatfish-cursor-hint.is-error {
+  fill: #a71731;
+}
+.fatfish-admin .fatfish-heading {
+  min-width: 0;
+  margin: 0.75rem 0;
+  padding: 0.5rem;
+  border: 1px solid var(--nb-color-border);
+}
+.fatfish-admin .fatfish-heading-buttons {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+.fatfish-admin .fatfish-heading-buttons button {
+  padding: 0.3rem;
+  font-size: 1.1rem;
+}
+.fatfish-admin .fatfish-heading label {
+  display: grid;
+  gap: 0.25rem;
+  font-size: var(--nb-font-size-sm);
+}
+.fatfish-admin .fatfish-heading input {
+  width: 100%;
+  min-width: 0;
+}
+.fatfish-admin .fatfish-shortcuts {
+  margin-top: 0.65rem;
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-sm);
+}
+.fatfish-admin .fatfish-bottom-bar {
+  position: sticky;
+  bottom: 0.5rem;
+  z-index: 6;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  margin-top: 0.75rem;
+  background: var(--nb-color-surface);
+  border: 1px solid var(--nb-color-border-strong);
+  border-radius: var(--nb-radius-md);
+  box-shadow: var(--nb-shadow-md);
+}
+.fatfish-admin .fatfish-readiness {
+  flex: 1 1 16rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.65rem;
+  font-size: var(--nb-font-size-sm);
+}
+.fatfish-admin .fatfish-readiness strong {
+  color: var(--nb-color-accent);
+}
+.fatfish-admin .fatfish-readiness button {
+  border: 0;
+  background: none;
+  padding: 0.2rem 0;
+  text-align: left;
+  font-size: inherit;
+  color: var(--nb-color-danger);
+  min-height: 2rem;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+.fatfish-admin .fatfish-readiness details {
+  color: var(--nb-color-text-muted);
+}
+.fatfish-admin .fatfish-bottom-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.fatfish-admin .fatfish-danger,
+.fatfish-admin .nb-more__menu .is-danger {
+  background: transparent;
+  border-color: var(--nb-color-danger);
+  color: var(--nb-color-danger);
+}
+.fatfish-admin .fatfish-settings-fold {
+  margin-top: 0.75rem;
+}
+@media (width < 64rem) {
+  .fatfish-admin .fatfish-editor-body {
+    grid-template-columns: minmax(0, 2fr) minmax(13rem, 1fr);
+  }
+  .fatfish-admin .fatfish-palette {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: start;
+  }
+  .fatfish-admin .fatfish-palette section + section {
+    margin-top: 0;
+  }
+  .fatfish-admin .fatfish-palette-buttons,
+  .fatfish-admin .fatfish-tool-palette {
+    display: flex;
+    flex-wrap: wrap;
+  }
+  .fatfish-admin .fatfish-palette .fatfish-heading {
+    max-width: 14rem;
+    margin: 0;
+  }
+}
+@media (width < 40rem) {
+  .fatfish-admin .fatfish-editor-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .fatfish-admin .fatfish-editor-body .fatfish-palette {
+    order: 2;
+  }
+  .fatfish-admin .fatfish-mobile-only {
+    display: block;
+  }
+  .fatfish-admin .fatfish-geometry-mode,
+  .fatfish-admin .fatfish-desktop-only {
+    display: none;
+  }
+  .fatfish-admin .fatfish-bottom-bar {
+    gap: 0.4rem;
+    bottom: 0;
+    padding: 0.5rem;
+  }
+  .fatfish-admin .fatfish-bottom-actions {
+    flex-wrap: nowrap;
+    width: 100%;
+  }
+  .fatfish-admin .fatfish-bottom-actions > button {
+    flex: 1;
+    font-size: var(--nb-font-size-sm);
+  }
+  .fatfish-admin .fatfish-readiness {
+    flex-basis: 100%;
+    max-height: 8rem;
+    overflow: auto;
+  }
+  .fatfish-admin .fatfish-readiness strong {
+    font-size: var(--nb-font-size-sm);
+  }
+  .fatfish-admin .fatfish-editor-heading > .nb-more {
+    display: none;
+  }
+  .fatfish-admin .fatfish-placement-notice {
+    font-size: var(--nb-font-size-sm);
+  }
+}

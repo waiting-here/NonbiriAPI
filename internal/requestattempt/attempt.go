@@ -20,16 +20,18 @@ type Fact struct {
 	Status                                 int
 	Code                                   string
 	Detail                                 *RejectionDetail
+	RequestedStreaming                     *bool
 }
 
 type Recorder func(context.Context, int64, Fact) error
 type key struct{}
 type attempt struct {
-	mu      sync.Mutex
-	user    int64
-	fact    Fact
-	kind    atomic.Uint32
-	handled bool
+	mu        sync.Mutex
+	user      int64
+	fact      Fact
+	kind      atomic.Uint32
+	streaming atomic.Uint32
+	handled   bool
 }
 
 // New is called only after a CallerKey has been verified. It accepts the exact
@@ -143,6 +145,7 @@ func Snapshot(ctx context.Context, id, model, stage, reason string, status int, 
 		defer a.mu.Unlock()
 		f.Method, f.Path = a.fact.Method, a.fact.Path
 		f.Detail = a.fact.Detail
+		f.RequestedStreaming = RequestedStreaming(ctx)
 		if model == "" {
 			f.Model = a.fact.Model
 		}
@@ -182,6 +185,7 @@ func (w *writer) BeforeHTTPError(status int, code string) error {
 		return errors.New("rejection recorder unavailable")
 	}
 	f := a.fact
+	f.RequestedStreaming = RequestedStreaming(w.ctx)
 	f.Status, f.Code = status, code
 	if f.Reason == "" {
 		f.Reason = Reason(code)

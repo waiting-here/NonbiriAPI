@@ -94,8 +94,8 @@ func IsCapturing(ctx context.Context) bool {
 	return sink != nil
 }
 
-// CaptureEvent captures only an explicit protocol error or an already rejected
-// non-stream response. Successful stream chunks must never call this function.
+// CaptureEvent captures only explicit errors or locally rejected responses and
+// protocol events. Successful stream chunks must never call this function.
 func CaptureEvent(ctx context.Context, status int, contentType string, payload []byte) {
 	event := Event{status: status, contentType: contentType, body: payload}
 	if len(payload) > MaxRawBodyBytes {

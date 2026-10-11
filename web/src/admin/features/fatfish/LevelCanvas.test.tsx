@@ -17,7 +17,7 @@ describe('continuous level workbench', () => {
     const level = blankLevel(), commit = vi.fn(), select = vi.fn();
     for (const id of [10, 11]) level.tools.push({ id, resource_key: 'barrier', polygon: toolPolygon('barrier'), x: unit(100), y: unit(624), placed: true });
     await renderWithProviders(<LevelCanvas level={level} selected={{ kind: 'tools', id: 10 }} grid={false} onSelect={select} onCommit={commit} />, { station: 'admin', role: 'admin' });
-    const svg = screen.getByLabelText('Fat Fish level map');
+    const svg = screen.getByLabelText('Level canvas');
     vi.spyOn(svg, 'getBoundingClientRect').mockReturnValue({ left: -128, top: -128, width: 736, height: 816 } as DOMRect);
     Object.assign(svg, { setPointerCapture: vi.fn() });
     pointer(svg, 'pointerdown', 100, 624); pointer(svg, 'pointermove', 150, 600); pointer(svg, 'pointerup', 150, 600);
@@ -34,10 +34,10 @@ describe('continuous level workbench', () => {
     level.tools.push({ id: 10, resource_key: 'memory', polygon: toolPolygon('memory'), x: unit(100), y: unit(624), placed: true });
     await renderWithProviders(<><input aria-label="Unrelated field" /><LevelCanvas level={level} selected={{ kind: 'tools', id: 10 }} grid onSelect={select} onCommit={commit}
       onDelete={remove} onUndo={undo} onRedo={redo} onCancelPlacement={cancel} /></>, { station: 'admin', role: 'admin' });
-    const svg = screen.getByLabelText('Fat Fish level map');
+    const svg = screen.getByLabelText('Level canvas');
     expect(svg).toHaveAttribute('tabindex', '0');
     fireEvent.keyDown(svg, { key: 'ArrowRight' });
-    expect(commit.mock.calls[0][0].tools[0].x).toBe(unit(105));
+    expect(commit.mock.calls[0][0].tools[0].x).toBe(unit(108));
     fireEvent.keyDown(svg, { key: 'ArrowUp', shiftKey: true });
     expect(commit.mock.calls[1][0].tools[0].y).toBe(unit(623));
     fireEvent.keyDown(screen.getByLabelText('Unrelated field'), { key: 'z', ctrlKey: true });
@@ -54,7 +54,7 @@ describe('continuous level workbench', () => {
     const level = blankLevel(), commit = vi.fn();
     level.tools.push({ id: 10, resource_key: 'barrier', polygon: toolPolygon('barrier'), x: unit(100), y: unit(624), placed: false });
     await renderWithProviders(<LevelCanvas level={level} selected={null} grid={false} onSelect={() => {}} onCommit={commit} />, { station: 'admin', role: 'admin' });
-    const svg = screen.getByLabelText('Fat Fish level map');
+    const svg = screen.getByLabelText('Level canvas');
     vi.spyOn(svg, 'getBoundingClientRect').mockReturnValue({ left: -128, top: -128, width: 736, height: 816 } as DOMRect);
     Object.assign(svg, { setPointerCapture: vi.fn() });
     pointer(svg, 'pointerdown', 100, 624);
@@ -74,11 +74,21 @@ describe('continuous level workbench', () => {
     const level = blankLevel(), commit = vi.fn();
     level.tools.push({ id: 10, resource_key: 'memory', polygon: toolPolygon('memory'), x: unit(100), y: unit(624), placed: false });
     await renderWithProviders(<LevelCanvas level={level} selected={null} grid={false} onSelect={() => {}} onCommit={commit} />, { station: 'admin', role: 'admin' });
-    const svg = screen.getByLabelText('Fat Fish level map');
+    const svg = screen.getByLabelText('Level canvas');
     vi.spyOn(svg, 'getBoundingClientRect').mockReturnValue({ left: -128, top: -128, width: 736, height: 816 } as DOMRect);
     Object.assign(svg, { setPointerCapture: vi.fn() });
     pointer(svg, 'pointerdown', 100, 624); pointer(svg, 'pointermove', 200, 300);
     pointer(svg, 'pointercancel', 200, 300); pointer(svg, 'pointerup', 200, 300);
     expect(commit).not.toHaveBeenCalled();
   });
+});
+
+it('does not delete the object when vertex mode has no selected vertex', async () => {
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+  const remove = vi.fn(), level = blankLevel();
+  const view = await renderWithProviders(<LevelCanvas level={level} selected={{ kind: 'bowls', id: 2 }} grid onSelect={() => {}} onCommit={() => {}} onDelete={remove} />, { station: 'admin', role: 'admin' });
+  await view.user.click(screen.getByRole('button', { name: 'Edit vertices' }));
+  fireEvent.keyDown(screen.getByLabelText('Level canvas'), { key: 'Delete' });
+  expect(remove).not.toHaveBeenCalled();
+  expect(screen.getByRole('status')).toHaveTextContent('Select a vertex first');
 });

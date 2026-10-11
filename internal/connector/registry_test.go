@@ -208,12 +208,14 @@ func TestDefaultRegistryFiltersByProtocolFidelity(t *testing.T) {
 	}
 }
 
-func TestLegacyOpenAIDriverCannotSilentlyIgnoreExperimentalPolicies(t *testing.T) {
+func TestLegacyOpenAIDriverCannotSilentlyIgnoreOutboundPolicies(t *testing.T) {
 	driver := &legacyOpenAIPolicyDriver{}
 	protocol := &openAIConnector{driver: driver}
 	for _, policy := range []connectorcontract.AttemptPolicy{
 		{ForceStoreFalse: true},
 		{FlattenToolCalls: true},
+		{ManagedHeaders: http.Header{"X-Session-ID": {"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}},
+		{OnRequestSent: func() {}},
 	} {
 		credential := connectorcontract.NewShortLivedSecret([]byte("secret"), []byte("cipher"))
 		result := protocol.Attempt(context.Background(), AttemptInput{
@@ -266,6 +268,28 @@ func TestAnthropicConnectorRejectsOpenAIOnlyPoliciesBeforeCredentialTake(t *test
 		}
 		if _, _, ok := credential.Take(); ok {
 			t.Fatalf("policy=%+v credential remained takeable after rejection", policy)
+		}
+	}
+}
+
+func TestLegacyAnthropicDriverCannotIgnoreManagedHeaders(t *testing.T) {
+	driver := &legacyAnthropicPolicyDriver{}
+	protocol := &anthropicConnector{driver: driver}
+	for _, policy := range []connectorcontract.AttemptPolicy{
+		{ManagedHeaders: http.Header{"X-Session-ID": {"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}},
+		{OnRequestSent: func() {}},
+	} {
+		credential := connectorcontract.NewShortLivedSecret([]byte("secret"), []byte("cipher"))
+		result := protocol.Attempt(t.Context(), AttemptInput{
+			Operation:  connectorcontract.OperationChatCompletions,
+			Target:     connectorcontract.NewTarget(connectorcontract.TypeAnthropicCompatible, "https://upstream.example", "up/model"),
+			Credential: credential, Ingress: &openai.ChatRequest{Model: "p/m"}, Policy: policy, Sink: httptest.NewRecorder(),
+		})
+		if result.Failure != connectorcontract.FailureInternal || result.Diagnostic != "connector policy unsupported" || driver.calls.Load() != 0 {
+			t.Fatalf("policy ignored: %+v, calls=%d", result, driver.calls.Load())
+		}
+		if _, _, ok := credential.Take(); ok {
+			t.Fatal("credential remained available")
 		}
 	}
 }

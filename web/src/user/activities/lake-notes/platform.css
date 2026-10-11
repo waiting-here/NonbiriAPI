@@ -37,3 +37,14 @@
   position: relative;
   z-index: var(--nb-z-overlay);
 }
+.lake-original .catalog-reward {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--nb-space-2);
+  margin-bottom: var(--nb-space-3);
+}
+.lake-original .catalog-reward p {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}

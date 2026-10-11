@@ -66,6 +66,13 @@
       "economy": "Credit economy audit",
       "openRequest": "View original request evidence",
       "userIPsTab": "Multiple IPs for one identity",
+      "inspectUserIPs": "Audit IPs for this user",
+      "userIPHistoryTitle": "IP history for user {{user}}",
+      "selectedAccount": "User {{user}}",
+      "userIPHistoryHelp": "Lists only trusted call IPs for this account. Scanning applies no penalties.",
+      "ipCalls": "Calls from this IP",
+      "invalidTargetUser": "The selected user ID is invalid. Return to the user profile and open the audit again.",
+      "backToProfile": "Back to user profile",
       "userIPsTitle": "Scan IP changes for one identity",
       "userIPsHelp": "Review the peak number of distinct IPs for each Discord identity within a sliding window. Only requests with known original identity and trusted IP evidence are counted. Re-registered accounts are grouped under the same Discord identity. Shared networks or IP changes do not establish misuse.",
       "userIPWindow": "IP window for one identity (hours)",
@@ -136,11 +143,11 @@
     },
     "refresh": "Refresh",
     "donationHandling": {
-      "title": "Shared follow-up",
-      "filter": "Follow-up status",
-      "all": "All follow-up states",
+      "title": "Donation follow-up",
+      "filter": "Handling status",
+      "all": "All handling states",
       "search": "Search public description or donation ID",
-      "applySearch": "Search",
+      "applySearch": "Apply filters",
       "searchInvalid": "Use at most 128 characters for this search.",
       "process": "Mark as processed",
       "idle": "Idle · no model bindings",
@@ -159,7 +166,7 @@
         "closed": "Closed"
       },
       "help": {
-        "legacy": "Existing donations do not enter the shared follow-up queue.",
+        "legacy": "Existing donations do not enter donation follow-up.",
         "pending": "Administrators and stewards share this queue. Reviewing, editing or binding a donation does not mark it as processed.",
         "processed": "This donation has been processed for everyone.",
         "closed": "This donation ended and was removed from the pending queue."
@@ -175,7 +182,8 @@
         "expired": "expired",
         "member_removed": "all keys removed",
         "account_deleted": "account deleted"
-      }
+      },
+      "searchPlaceholder": "Public description or donation ID"
     },
     "pageControls": {
       "size": "Items per page",
@@ -212,7 +220,7 @@
       "readOnly": "Owner's limits (read only)",
       "hint": "0 means unlimited. Personal and charity model calls share these limits. RPM counts requests dispatched in the last 60 seconds; streaming occupies concurrency until it ends. When full, the next available connection is tried."
     },
-    "itemId": "Item ID",
+    "itemId": "Donation #{{id}}",
     "choices": {
       "filterPage": "Filter this page",
       "count": "{{count}} / {{total}} shown",
@@ -370,14 +378,14 @@
           "chat": "Chat",
           "embeddings": "Embeddings",
           "models": "Model listing",
-          "usage": "In {{input}} · Out {{output}}",
+          "usage": "Input {{input}} · output {{output}}",
           "cacheRead": "Cache read {{tokens}}",
           "cacheWrite": "Cache write {{tokens}}",
           "duration": "Duration",
           "seconds": "{{seconds}} seconds",
           "storage": "Error text storage",
           "storageSummary": "{{used}} / {{budget}} MiB used · {{count}} bodies omitted over time",
-          "storageFailures": "Lifetime totals: {{capacity}} over budget, {{count}} read or storage failures. {{current}} records currently available.",
+          "storageFailures": "{{capacity}} omitted for capacity, {{count}} read/write failures in total; {{current}} missing records remain queryable.",
           "retryHint": "Retry later, or add a second source to the model.",
           "keyHint": "Check that this service key is valid.",
           "rateHint": "The provider limited the rate. Try again later.",
@@ -395,9 +403,28 @@
             "cancelled": "Cancelled",
             "failed": "Failed ({{status}})"
           },
-          "storageHistoryHelp": "Lifetime totals do not decrease when records expire. Missing bodies cannot be recovered. Browse retained records from the last 30 days below. Capacity counts raw bodies only, excluding database pages, indexes and WAL.",
+          "storageHistoryHelp": "Lifetime totals include expired records. Missing originals cannot be recovered; retained records from the last 30 days remain queryable. Capacity counts original content only, excluding database overhead.",
           "storageRecords": "Browse missing records",
-          "images": "Image generation"
+          "images": "Image generation",
+          "modelPlaceholder": "e.g. provider/model",
+          "userPlaceholder": "Site user ID",
+          "upstreamPlaceholder": "Exact upstream model name",
+          "actions": "Actions"
+        },
+        "facts": {
+          "title": "Request mode / automatic actions",
+          "mode": "Caller request mode",
+          "actions": "Automatic actions",
+          "unknown": "Not recorded",
+          "streaming": "Streaming",
+          "nonStreaming": "Non-streaming",
+          "noActions": "No penalty",
+          "short_content_deduction": "Short-request deduction",
+          "short_content_ban": "Short-request ban",
+          "short_content_suspension": "Charity access suspended",
+          "rpm_ban": "RPM-limit ban",
+          "client_rule_ban": "Client-rule ban",
+          "context_penalty": "Extra-long context fine"
         }
       },
       "charity": {
@@ -428,7 +455,7 @@
           "physicalLimits": "Physical concurrency and RPM",
           "charityLimits": "Charity limits",
           "bindingStatus": "Model bindings",
-          "handling": "Public follow-up",
+          "handling": "Donation follow-up",
           "scope": "Source scope",
           "active": "Active sources",
           "all": "All retained sources",
@@ -643,7 +670,9 @@
           "modelPrices": "Every price must be an exact non-negative credit amount with at most three decimal places.",
           "tokenReserveCredits": "Reserve 0.001–9,000,000,000,000 credits, with up to three decimal places.",
           "discountPercent": "Discount percent must be an integer from 0 through 100.",
-          "discountDates": "Discount dates must be valid and the end must be later than the start."
+          "discountDates": "Discount dates must be valid and the end must be later than the start.",
+          "contextThreshold": "Enter a positive whole number of input tokens.",
+          "sessionHeaders": "Enter a header name and an idle lifetime of 1–86,400 seconds."
         },
         "discountSummary": "Enabled at {{percent}}% of the regular price",
         "batchActions": "Batch actions",
@@ -652,13 +681,40 @@
         "failureStrategy": "Failure strategy",
         "quotaReserve": "Quota and reserve",
         "adaptationSettings": "Request adaptation",
-        "imageBillingHelp": "Generating several images in one request counts as one call. Missing usage follows the model’s reservation settlement rule."
+        "imageBillingHelp": "Generating several images in one request counts as one call. Missing usage follows the model’s reservation settlement rule.",
+        "context": {
+          "settings": "Long context and excess-context penalty",
+          "help": "Thresholds use reported total input tokens, including cache reads and writes. Each rule applies independently.",
+          "long": "Enable long-context prices",
+          "longHelp": "At the threshold, all input and output use these prices with the usual discount. Donor rewards stay unchanged.",
+          "longThreshold": "Long-context threshold (input tokens)",
+          "requestPrice": "Long-context price per request (credits)",
+          "penalty": "Enable excess-context penalty",
+          "penaltyHelp": "At the threshold, charge one extra fine per request. No discount or additional donor reward applies.",
+          "penaltyThreshold": "Penalty threshold (input tokens)",
+          "fine": "One-time fine (credits)",
+          "longNotice": "Long context: input ≥ {{threshold}} tokens",
+          "penaltyNotice": "Context penalty: input ≥ {{threshold}} tokens",
+          "fineNote": "Extra {{amount}} credits per request, without a discount",
+          "longAvailable": "Long-context prices available; expand to view",
+          "usageHelp": "Thresholds use only reported usage, including cache reads and writes."
+        },
+        "sessionHeaders": {
+          "title": "Managed session headers",
+          "help": "Reuse a random value for the same user and model. Idle time begins when all requests finish, helping upstream cache reuse. Managed values override fixed and forwarded headers with the same name.",
+          "name": "Header {{n}} name",
+          "idle": "Idle expiry (seconds)",
+          "format": "Random value format",
+          "hex": "32 lowercase hexadecimal characters",
+          "remove": "Remove header {{n}}",
+          "add": "Add managed header"
+        }
       },
       "management": {
         "details": "Technical details",
         "optionalPrices": "Optional size prices",
         "sizePricesSummary": "{{tiers}} tiers, {{sizes}} exact sizes",
-        "loanTier": "Loan amount (credits)",
+        "loanTier": "Tier {{tier}}",
         "feeHelp": "The three fees must total less than 100%; 0 means no fee for that item.",
         "periodActions": "Change period status",
         "periodActionHelp": "Confirm “{{action}}” for this period. This changes whether users can start or continue participating."
@@ -1004,7 +1060,7 @@
       "hours": "Shared IP window (hours)",
       "accounts": "Shared IP account threshold",
       "adminOnly": "Only administrators can change thresholds.",
-      "configHelp": "Risk is assessed using total user occupancy and the limits recorded at that time. Restarts, gaps, pending settlements, and changed or unknown limits break the chain.",
+      "configHelp": "Risk uses total user occupancy and the limit at the time. Restarts, missing records, unsettled requests, or changed or unknown limits restart the consecutive exceedance count.",
       "comparison": "Same-model comparison",
       "thisUser": "This user",
       "others": "Other users",
@@ -1151,7 +1207,8 @@
       "actorAutomatic": "Automatic",
       "actorUnknown": "Unknown",
       "all": "All",
-      "close": "Close"
+      "close": "Close",
+      "searchPlaceholder": "Discord ID or first note"
     },
     "diagnostics": {
       "sourceDetailsAreUnavailable": "Source details are unavailable.",
@@ -1596,7 +1653,8 @@
       "unbanAction": "Unban…",
       "banConsequence": "Banning stops this user from using the platform.",
       "deleteConsequence": "Delete the account and user data. Your administrator password is required again.",
-      "reasonRequired": "Required. Explain the adjustment; the user can see this reason."
+      "reasonRequired": "Required. Explain the adjustment; the user can see this reason.",
+      "levelValue": "Level {{level}}"
     },
     "announcements": {
       "nav": "Announcements",
@@ -1749,6 +1807,77 @@
       "help": "For Gateway only. Caller cache marks on the request, text or tools take priority. The provider decides cache hits. Saved defaults stay hidden; keep them or choose again.",
       "inherited": "The cache default inherits with the body defaults. Choosing “Set here” replaces the entire defaults section.",
       "custom": "Custom field below"
+    },
+    "editor": {
+      "title": "Request headers and body",
+      "description": "Configure only fields supported by the selected connector. Saved values are hidden after saving.",
+      "openaiSupport": "OpenAI-compatible chat and embeddings preserve other bounded JSON fields. Exclude an unsupported client field explicitly, then set any replacement field here.",
+      "convertedSupport": "Anthropic and Gateway convert supported OpenAI fields. Extra client fields reach the native request only when their paths are declared below.",
+      "allSupport": "These settings apply to each eligible connection. OpenAI-compatible requests preserve bounded extensions; Anthropic and Gateway require native extension paths to be declared.",
+      "inherited": "Inherited from the charity model",
+      "sourceModel": "Model setting",
+      "sourceBinding": "Connection setting",
+      "revision": "Configuration revision",
+      "forwardHeaders": "Client headers to forward",
+      "fixedHeaders": "Fixed outbound headers",
+      "bodyDefaults": "Body defaults (only when absent)",
+      "bodyForced": "Forced body values",
+      "nativePaths": "Declared native extension paths",
+      "listHelp": "One name or JSON Pointer per line. Duplicate or unsafe entries are rejected.",
+      "bodyHelp": "Path: /temperature; value: 0.7. Text requires JSON quotes, for example /reasoning_effort with \"low\". Nested paths use /thinking/budget_tokens with 4096. Defaults fill missing fields; forced values overwrite them.",
+      "fixedHelp": "Enter a header name such as User-Agent, with no leading slash or colon. Its value is plain text, for example MyClient/1.0. This overrides the forwarded value after abuse checks. Saved values are hidden.",
+      "mode": "Configuration source",
+      "replace": "Set here",
+      "inherit": "Inherit model",
+      "name": "Header or path",
+      "value": "Value",
+      "action": "Edit",
+      "keep": "Keep saved value",
+      "change": "Replace value",
+      "clear": "Remove value",
+      "add": "Add field",
+      "empty": "No entries configured.",
+      "masked": "Saved value is hidden",
+      "effective": "Effective setting",
+      "save": "Save request adaptation",
+      "saved": "Request adaptation saved.",
+      "loading": "Loading request adaptation…",
+      "loadError": "Could not load request adaptation.",
+      "stale": "The displayed settings could not be refreshed and may be stale. Refresh successfully before saving.",
+      "saveError": "Could not save request adaptation. Check the fields and retry after refreshing.",
+      "unknown": "The save outcome is uncertain. Refresh before trying again.",
+      "conflict": "The configuration changed. Refresh before editing again.",
+      "invalidJSON": "Enter a valid JSON value for each changed body field.",
+      "duplicate": "Names and paths must be unique within each section.",
+      "refresh": "Refresh configuration",
+      "readOnly": "This setting is read-only for your role.",
+      "example": "Try this example"
+    },
+    "service": {
+      "title": "Request rewriting",
+      "description": "Add headers and parameters for this service. Saved values remain hidden.",
+      "forwardHeaders": "Allowed client headers",
+      "fixedHeaders": "Headers added to requests",
+      "bodyDefaults": "Default parameters (when absent)",
+      "bodyForced": "Fixed parameters (always override)",
+      "nativePaths": "Extra parameters to keep",
+      "listHelp": "One header name or /parameter path per line.",
+      "bodyHelp": "Path: /temperature; value: 0.7. Text requires JSON quotes, for example /reasoning_effort with \"low\". Nested paths use /thinking/budget_tokens with 4096. Defaults fill missing fields; forced values overwrite them.",
+      "fixedHelp": "Enter a header name such as User-Agent, with no leading slash or colon. Its value is plain text, for example MyClient/1.0. This overrides the forwarded value after abuse checks. Saved values are hidden.",
+      "save": "Save request rewriting",
+      "saved": "Request rewriting saved.",
+      "loading": "Loading request rewriting…",
+      "loadError": "Could not load request rewriting.",
+      "example": "Try this example"
+    },
+    "personal": {
+      "personalDescription": "These rules apply only to this model. Each section inherits the selected service by default. “Set here” replaces that entire section; an empty section turns it off for this model.",
+      "inheritEndpoint": "Inherit selected service",
+      "inheritedEndpoint": "Uses the service selected for each request.",
+      "excluded": "Client parameters to exclude",
+      "excludedHelp": "One top-level parameter name per line, such as temperature or max_tokens, without a slash. These fields are removed before optional parameter validation. Do not also set them in defaults, forced values or native extensions (including inherited service settings). Routing, input and response protocol fields cannot be excluded.",
+      "headerListHelp": "One header name per line, for example X-Client-Version. No slash, colon or value. Only listed client headers are forwarded.",
+      "nativeListHelp": "One parameter path per line, for example /thinking. For Anthropic or Gateway this permits that extra JSON field to enter the native upstream request. The field and value must be supported by that upstream."
     }
   }
 }

@@ -367,6 +367,25 @@ func (s *Service) record(parent context.Context, userID int64, charity bool, mod
 			return nil, err
 		}
 	}
+	actions := 0
+	if operationID != "" {
+		actions |= requestattempt.ActionShortDeduction
+	}
+	if banSeconds > 0 {
+		if charity {
+			actions |= requestattempt.ActionShortBan
+		} else {
+			actions |= requestattempt.ActionRPMBan
+		}
+	}
+	if suspendSeconds > 0 {
+		actions |= requestattempt.ActionShortSuspend
+	}
+	if actions != 0 {
+		if err := requestattempt.AutomaticActionsTx(ctx, tx, requestID, actions); err != nil {
+			return nil, err
+		}
+	}
 	if err := persistWindow(ctx, tx, key, &window, now); err != nil {
 		return nil, err
 	}

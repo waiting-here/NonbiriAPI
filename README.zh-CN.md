@@ -4,7 +4,7 @@
 
 NonbiriAPI 是可自行部署的 AI API 端点管理平台，提供 OpenAI-compatible 调用入口。每位用户可以管理自己的端点、加密凭据、模型发现与路由，并用可撤销的 CallerKey 调用个人或公益模型。
 
-当前源码预发布版本为 **1.0.0-rc.6**。版本变化见 [CHANGELOG](CHANGELOG.md)，源码见 [Release](https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-rc.6)。所有版本仅发布源代码。生产环境支持 Linux/amd64。
+当前开发版本为 **1.0.0-rc.7**。版本变化见 [CHANGELOG](CHANGELOG.md)，最近已发布源码为 [1.0.0-rc.6](https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-rc.6)。所有版本仅发布源代码。生产环境支持 Linux/amd64。
 
 ## 主要能力
 
@@ -13,6 +13,8 @@ NonbiriAPI 是可自行部署的 AI API 端点管理平台，提供 OpenAI-compa
 - Discord 登录、独立管理员站、中英双语响应式页面和站点外观配置；用户可导出数据或删除账号。
 - 可选的签到、共享活动及九款小游戏，结算和恢复由服务端控制，榜单遵循隐私设置。
 - 统一出站安全策略、上游凭据加密、有限诊断与留存清理。请求日志和积分明细通常保留 30 天；压缩后的余额基线与审计汇总保持账务连续。
+
+[《真·抽卡模拟器》](docs/gacha.md)提供 57 张收藏卡牌、SSR／SP 动态卡面与可解锁的站点装扮、常驻与限时奖池、碎片商店和主题合照。
 
 ## 构建与启动
 
@@ -42,7 +44,7 @@ set +a
 
 新数据库默认开启维护、关闭公共功能。接纳用户前，请检查实例法律页面与设置。[配置参考](docs/configuration.md) 说明启动变量和在线控制项；[部署指南](docs/deployment.md) 涵盖 systemd、代理、备份和恢复。
 
-rc.6 支持空白启动、最终 rc.5 数据库及已登记的 rc.6 数据库。更早或未知结构会被拒绝；具体来源与回退要求见 [数据库兼容性](docs/deployment.md#database-compatibility-and-version-changes)。
+rc.7 支持空白启动、最终 rc.5 数据库及已登记的 rc.6 数据库。更早或未知结构会被拒绝；具体来源与回退要求见 [数据库兼容性](docs/deployment.md#database-compatibility-and-version-changes)。
 
 ## 调用 API
 
@@ -100,3 +102,5 @@ race 检查需要可用的 C 编译器。CI 还覆盖真实浏览器、许可证
 部署者须按实际运营情况修改内置隐私政策和服务条款。独立上游各自适用其数据政策；`store:false` 无法保证零留存。受限的原始错误诊断可能包含上游回显的内容，权限、留存和法律保留例外见生命周期文档。
 
 漏洞请按 [SECURITY.md](SECURITY.md) 报告。项目代码采用 [AGPL-3.0](LICENSE)；署名与素材许可见 [NOTICE](NOTICE)、[前端声明](web/THIRD_PARTY_NOTICES.md) 和 [音频署名](web/src/shared/assets/game-audio/NOTICE.md)。
+
+关卡设计与试玩参见[饲养大肥鱼编辑器说明](docs/fatfish-editor.md)。

@@ -350,11 +350,9 @@ func (c *openAIConnector) Attempt(ctx context.Context, input AttemptInput) conne
 	if input.Operation == connectorcontract.OperationImagesGenerations {
 		return c.attemptImage(ctx, input)
 	}
-	// The two experimental policies are opt-in and must never silently fall
-	// back to the legacy driver seam. A legacy driver is compatible only when
-	// both policy bits are disabled; reject before taking the credential so a
-	// direct connector call cannot accidentally apply or ignore a policy.
-	if input.Policy.ForceStoreFalse || input.Policy.FlattenToolCalls {
+	// Policies must never silently fall back to a legacy driver. Reject
+	// before taking credentials when a required policy cannot be applied.
+	if input.Policy.ForceStoreFalse || input.Policy.FlattenToolCalls || len(input.Policy.ManagedHeaders) > 0 || input.Policy.OnRequestSent != nil {
 		if _, ok := c.driver.(OpenAIPolicyDriver); !ok {
 			input.Credential.Clear()
 			return connectorcontract.AttemptResult{Failure: connectorcontract.FailureInternal, Diagnostic: "connector policy unsupported"}
@@ -454,6 +452,13 @@ func (c *anthropicConnector) Attempt(ctx context.Context, input AttemptInput) co
 		input.Credential.Clear()
 		return connectorcontract.AttemptResult{Failure: connectorcontract.FailureInternal, Diagnostic: "connector policy incompatible"}
 	}
+	if len(input.Policy.ManagedHeaders) > 0 || input.Policy.OnRequestSent != nil {
+		if _, ok := c.driver.(AnthropicPolicyDriver); !ok {
+			input.Credential.Clear()
+			return connectorcontract.AttemptResult{Failure: connectorcontract.FailureInternal, Diagnostic: "connector policy unsupported"}
+		}
+	}
+
 	plaintext, ciphertext, ok := input.Credential.Take()
 	if !ok {
 		input.Credential.Clear()

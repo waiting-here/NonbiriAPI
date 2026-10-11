@@ -33,6 +33,17 @@ async function renderCard() {
 }
 
 describe('loan confirmation', () => {
+  it('keeps history available when borrowing controls are unavailable', async () => {
+    await renderWithProviders(
+      <LoanCard account="1" loan={{ ...view, available: false }} masterAvailable />,
+      { station: 'user', role: 'user' },
+    );
+    expect(screen.getByText('Borrowing is currently unavailable.')).toBeVisible();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Get a loan' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Loan history' })).toBeVisible();
+  });
+
   it('discloses fees only through the star, picks once per opening, and refreshes without borrowing', async () => {
     let quotes = 0,
       accepts = 0;

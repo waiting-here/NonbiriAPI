@@ -23,6 +23,7 @@ interface MapProjection {
   source?: string;
 }
 interface Projection {
+  excluded_request_fields?: string[];
   revision: string;
   forward_headers: ListProjection;
   fixed_headers: MapProjection;
@@ -49,6 +50,7 @@ interface MapDraft {
   rows: Row[];
 }
 interface Draft {
+  excluded: string;
   forward_headers: ListDraft;
   fixed_headers: MapDraft;
   body_defaults: MapDraft;
@@ -112,6 +114,9 @@ function parseProjection(value: unknown, effective = false): Projection {
     throw new Error('Invalid adaptation revision');
   return {
     revision: root.revision,
+    ...(Array.isArray(root.excluded_request_fields)
+      ? { excluded_request_fields: root.excluded_request_fields as string[] }
+      : {}),
     forward_headers: parseList(root.forward_headers),
     fixed_headers: parseMap(root.fixed_headers),
     body_defaults: parseMap(root.body_defaults),
@@ -140,6 +145,7 @@ function newDraft(view: Projection): Draft {
     })),
   });
   return {
+    excluded: (view.excluded_request_fields ?? []).join('\n'),
     forward_headers: {
       mode: view.forward_headers.mode,
       text: view.forward_headers.values.join('\n'),
@@ -211,6 +217,7 @@ function MapEditor({
   change,
   gatewayCacheDefaults = false,
   endpointScope = false,
+  inheritedHelp,
 }: {
   kind: MapKind;
   section: MapDraft;
@@ -218,6 +225,7 @@ function MapEditor({
   change: (next: MapDraft) => void;
   gatewayCacheDefaults?: boolean;
   endpointScope?: boolean;
+  inheritedHelp?: string;
 }) {
   const copy = useRequestAdaptationCopy(endpointScope);
   const { t } = useTranslation();
@@ -225,7 +233,7 @@ function MapEditor({
   if (section.mode === 'inherit')
     return (
       <>
-        <p>{copy('inherited')}</p>
+        <p>{inheritedHelp ?? copy('inherited')}</p>
         {gatewayCacheDefaults ? <p>{t('requestAdaptation.cache.inherited')}</p> : null}
       </>
     );
@@ -304,6 +312,7 @@ function MapEditor({
               <span>{copy('name')}</span>
               <input
                 value={row.name}
+                placeholder={kind === 'fixed_headers' ? 'User-Agent' : '/temperature'}
                 maxLength={512}
                 readOnly={row.existing || !editable}
                 onChange={(event) => changeRow(index, { ...row, name: event.target.value })}
@@ -338,6 +347,7 @@ function MapEditor({
                 ) : (
                   <textarea
                     value={row.value}
+                    placeholder={kind === 'body_defaults' ? '0.7' : '"low"'}
                     rows={2}
                     maxLength={65536}
                     disabled={!editable}
@@ -351,7 +361,7 @@ function MapEditor({
           </div>
         ),
       )}
-      {editable && endpointScope ? (
+      {editable ? (
         <Button
           type="button"
           variant="ghost"
@@ -406,14 +416,15 @@ export function RequestAdaptationEditor({
   onConfiguredCount,
 }: {
   url: string;
-  scope: 'endpoint' | 'charity-model' | 'binding';
+  scope: 'endpoint' | 'personal-model' | 'charity-model' | 'binding';
   connectorType?: string;
   editable: boolean;
   gatewayCacheDefaults?: boolean;
   onConfiguredCount?: (count: number) => void;
 }) {
   const { t } = useTranslation();
-  const copy = useRequestAdaptationCopy(scope === 'endpoint');
+  const copy = useRequestAdaptationCopy(scope === 'endpoint' || scope === 'personal-model');
+  const exclusionsID = useId();
   const [reload, setReload] = useState(0);
   const [view, setView] = useState<View | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -461,7 +472,8 @@ export function RequestAdaptationEditor({
           view.native_extension_paths.values.length +
           Object.keys(view.fixed_headers.values).length +
           Object.keys(view.body_defaults.values).length +
-          Object.keys(view.body_forced.values).length,
+          Object.keys(view.body_forced.values).length +
+          (view.excluded_request_fields?.length ?? 0),
       );
   }, [view, onConfiguredCount]);
 
@@ -479,6 +491,11 @@ export function RequestAdaptationEditor({
     let payload: Record<string, unknown>;
     try {
       payload = buildPayload(draft, view.revision, copy);
+      if (scope === 'personal-model')
+        payload.excluded_request_fields = draft.excluded
+          .split(/\r?\n/)
+          .map((x) => x.trim())
+          .filter(Boolean);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : copy('saveError'));
       return;
@@ -554,7 +571,11 @@ export function RequestAdaptationEditor({
           {copy('refresh')}
         </Button>
       </div>
-      <p>{copy('description')}</p>
+      <p>
+        {scope === 'personal-model'
+          ? t('requestAdaptation.personal.personalDescription')
+          : copy('description')}
+      </p>
       {scope === 'endpoint' ? (
         <Fold title={t('common.operations.management.details')} plain>
           {technicalDetails}
@@ -568,6 +589,21 @@ export function RequestAdaptationEditor({
       {!editable && view ? <p>{copy('readOnly')}</p> : null}
       {view && draft && !loading && !contextChanged ? (
         <form className="core-form" onSubmit={(event) => void save(event)}>
+          {scope === 'personal-model' ? (
+            <label>
+              <span id={exclusionsID}>{t('requestAdaptation.personal.excluded')}</span>
+              <textarea
+                rows={3}
+                aria-labelledby={exclusionsID}
+                aria-describedby={exclusionsID + "-help"}
+                value={draft.excluded}
+                disabled={!editable}
+                placeholder={'temperature\nmax_tokens'}
+                onChange={(event) => setDraft({ ...draft, excluded: event.target.value })}
+              />
+              <small id={exclusionsID + '-help'}>{t('requestAdaptation.personal.excludedHelp')}</small>
+            </label>
+          ) : null}
           {(
             [
               'forward_headers',
@@ -578,7 +614,7 @@ export function RequestAdaptationEditor({
             ] as const
           ).map((kind) => {
             const section = draft[kind];
-            const inherited = scope === 'binding';
+            const inherited = scope === 'binding' || scope === 'personal-model';
             const setMode = (next: Mode) => {
               if (kind === 'forward_headers' || kind === 'native_extension_paths')
                 updateList(kind, {
@@ -602,18 +638,32 @@ export function RequestAdaptationEditor({
                       disabled={!editable}
                       onChange={(event) => setMode(event.target.value as Mode)}
                     >
-                      <option value="inherit">{copy('inherit')}</option>
+                      <option value="inherit">
+                        {scope === 'personal-model'
+                          ? t('requestAdaptation.personal.inheritEndpoint')
+                          : copy('inherit')}
+                      </option>
                       <option value="replace">{copy('replace')}</option>
                     </select>
                   </label>
                 ) : null}
                 {kind === 'forward_headers' || kind === 'native_extension_paths' ? (
                   section.mode === 'inherit' ? (
-                    <p>{copy('inherited')}</p>
+                    <p>
+                      {scope === 'personal-model'
+                        ? t('requestAdaptation.personal.inheritedEndpoint')
+                        : copy('inherited')}
+                    </p>
                   ) : (
                     <div>
                       <label>
-                        <span>{copy('listHelp')}</span>
+                        <span>
+                          {t(
+                            kind === 'forward_headers'
+                              ? 'requestAdaptation.personal.headerListHelp'
+                              : 'requestAdaptation.personal.nativeListHelp',
+                          )}
+                        </span>
                         <textarea
                           value={(section as ListDraft).text}
                           rows={3}
@@ -624,7 +674,7 @@ export function RequestAdaptationEditor({
                           }
                         />
                       </label>
-                      {editable && scope === 'endpoint' ? (
+                      {editable ? (
                         <Button
                           type="button"
                           variant="ghost"
@@ -650,7 +700,12 @@ export function RequestAdaptationEditor({
                 ) : (
                   <MapEditor
                     kind={kind}
-                    endpointScope={scope === 'endpoint'}
+                    endpointScope={scope === 'endpoint' || scope === 'personal-model'}
+                    inheritedHelp={
+                      scope === 'personal-model'
+                        ? t('requestAdaptation.personal.inheritedEndpoint')
+                        : undefined
+                    }
                     section={section as MapDraft}
                     editable={editable}
                     gatewayCacheDefaults={

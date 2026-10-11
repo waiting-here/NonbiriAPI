@@ -29,7 +29,7 @@ export function RecordsHeader({
         {routes.map(([to, key]) => (
           <Link key={to} to={to} aria-current={pathname === to ? 'page' : undefined}>
             {t(key)}
-            {to === '/issues' && issueCount !== undefined ? (
+            {to === '/issues' && issueCount !== undefined && issueCount !== '0' ? (
               <span className="nb-badge">{issueCount}</span>
             ) : null}
           </Link>

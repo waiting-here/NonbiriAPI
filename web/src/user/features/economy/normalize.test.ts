@@ -882,3 +882,38 @@ describe('economy closed-wire normalizers', () => {
     ).toThrow();
   });
 });
+
+it('retains independent context thresholds and exact alternate prices', () => {
+  const model = capabilityModel();
+  const capability = normalizeCharityCapability({
+    state: 'available',
+    models: [
+      {
+        ...model,
+        pricing: {
+          ...model.pricing,
+          long_context: {
+            input_threshold: '100000',
+            user_price_milli: '9000',
+            discounted_user_price_milli: '7200',
+            user_prices_milli: null,
+            discounted_user_prices_milli: null,
+          },
+          context_penalty: { input_threshold: '200000', fine_milli: '50000' },
+        },
+      },
+    ],
+    donation_intake: 'open',
+    server_now: CAPABILITY_SERVER_NOW,
+  });
+  expect(capability.models[0].pricing.longContext).toEqual({
+    mode: 'per_request',
+    inputThreshold: '100000',
+    userPriceMilli: '9000',
+    discountedUserPriceMilli: '7200',
+  });
+  expect(capability.models[0].pricing.contextPenalty).toEqual({
+    inputThreshold: '200000',
+    fineMilli: '50000',
+  });
+});

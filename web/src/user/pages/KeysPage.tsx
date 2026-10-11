@@ -31,6 +31,8 @@ import '../features/core/home.css';
 const pageCopyKeys = {
   'user.core.keys.apiAddress': 'user.core.keys.apiAddress',
   'user.core.keys.charityModels': 'user.core.keys.charityModels',
+  'user.core.keys.charityModelExample': 'user.core.keys.charityModelExample',
+  'user.core.keys.ownModelExample': 'user.core.keys.ownModelExample',
   'user.core.keys.clientHelp': 'user.core.keys.clientHelp',
   'user.core.keys.clientKey': 'user.core.keys.clientKey',
   'user.core.keys.clientTitle': 'user.core.keys.clientTitle',
@@ -101,10 +103,10 @@ function ClientInstructions() {
               <dd>
                 <p>
                   <Link to="/charity">{t('user.core.keys.charityModels')}</Link> ·{' '}
-                  <code>[公益]…</code>
+                  <code>{t('user.core.keys.charityModelExample')}</code>
                 </p>
                 <p>
-                  <Link to="/models">{t('user.core.keys.ownModels')}</Link> · <code>my/…</code>
+                  <Link to="/models">{t('user.core.keys.ownModels')}</Link> · <code>{t('user.core.keys.ownModelExample')}</code>
                 </p>
                 <span className="nb-small nb-muted">{t('user.core.keys.copyModel')}</span>
               </dd>

@@ -45,7 +45,19 @@ export interface CallerIdentity {
   discord_id: string | null;
 }
 
+export const AUTOMATIC_ACTIONS = [
+  'short_content_deduction',
+  'short_content_ban',
+  'short_content_suspension',
+  'rpm_ban',
+  'client_rule_ban',
+  'context_penalty',
+] as const;
+export type AutomaticAction = (typeof AUTOMATIC_ACTIONS)[number];
+
 interface LogRowCommon {
+  requested_streaming?: boolean | null;
+  automatic_actions?: AutomaticAction[] | null;
   phase: 'handler' | 'pre_handler';
   rejection_stage: 'authorization' | 'flow' | 'preflight' | null;
   rejection_reason: string | null;
@@ -171,7 +183,7 @@ export interface LogFiltersValue {
 
 const ROUTE_KINDS = [...MODEL_CALL_ROUTES, 'model_discovery'] as const;
 const RESULT_CLASSES = ['success', 'failed', 'cancelled'] as const;
-const COMMON_ROW_FIELDS = [
+const REQUIRED_ROW_FIELDS = [
   'phase',
   'rejection_stage',
   'rejection_reason',
@@ -185,6 +197,11 @@ const COMMON_ROW_FIELDS = [
   'started_at',
   'completed_at',
   'usage',
+] as const;
+const COMMON_ROW_FIELDS = [
+  ...REQUIRED_ROW_FIELDS,
+  'requested_streaming',
+  'automatic_actions',
 ] as const;
 const ATTEMPT_FIELDS = [
   'attempt_seq',
@@ -343,6 +360,11 @@ function commonRow(root: WireRecord): LogRowCommon {
   }
   return {
     ...rejection(root),
+    requested_streaming:
+      root.requested_streaming == null
+        ? null
+        : boolean(root.requested_streaming, 'requested streaming'),
+    automatic_actions: normalizeAutomaticActions(root.automatic_actions),
     id: opaqueID(root.id, 'req_', 'request log id'),
     route_kind: oneOf(root.route_kind, ROUTE_KINDS, 'log route kind'),
     caller_result_class: resultClass,
@@ -356,7 +378,7 @@ function commonRow(root: WireRecord): LogRowCommon {
 
 export function normalizeUserLogRow(value: unknown): UserLogRow {
   const probe = record(value, [...COMMON_ROW_FIELDS, 'model', 'attempt_count'], 'user log row', [
-    ...COMMON_ROW_FIELDS,
+    ...REQUIRED_ROW_FIELDS,
     'model',
   ]);
   const common = commonRow(probe);
@@ -398,7 +420,7 @@ export function normalizeAdminLogRow(value: unknown): AdminLogRow {
       'usage_total_mismatch',
     ],
     'administrator log row',
-    [...COMMON_ROW_FIELDS, 'user_id', 'caller_identity', 'attempt_count', 'usage_total_mismatch'],
+    [...REQUIRED_ROW_FIELDS, 'user_id', 'caller_identity', 'attempt_count', 'usage_total_mismatch'],
   );
   const common = commonRow(root);
   const callerIdentity = normalizeCallerIdentity(root.caller_identity);
@@ -456,7 +478,7 @@ export function normalizeStewardLogRow(value: unknown): StewardLogRow {
       'usage_total_mismatch',
     ],
     'steward log row',
-    [...COMMON_ROW_FIELDS, 'user_id', 'caller_identity', 'attempt_count', 'usage_total_mismatch'],
+    [...REQUIRED_ROW_FIELDS, 'user_id', 'caller_identity', 'attempt_count', 'usage_total_mismatch'],
   );
   const common = commonRow(root);
   const callerIdentity = normalizeCallerIdentity(root.caller_identity);
@@ -702,4 +724,11 @@ export function validateLogFilter(role: LogRole, raw: Record<string, string>): L
   if (status && /^(?:[1-5][0-9]{2})$/.test(status)) result.status = status;
   if (role !== 'user' && raw.usage_total_mismatch === 'true') result.usage_total_mismatch = true;
   return result;
+}
+
+function normalizeAutomaticActions(value: unknown): AutomaticAction[] | null {
+  if (value == null) return null;
+  if (!Array.isArray(value) || value.length > AUTOMATIC_ACTIONS.length)
+    return invalidResponse('automatic actions');
+  return value.map((item) => oneOf(item, AUTOMATIC_ACTIONS, 'automatic action'));
 }

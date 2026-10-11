@@ -1,5 +1,6 @@
 import { isActivityLiterature } from '@shared/utils/activityLiterature';
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { useTranslation } from 'react-i18next';
@@ -87,7 +88,7 @@ function LoanConfiguration({
         <fieldset className="nb-grid nb-grid--3" disabled={disabled}>
           <legend>{text('借款额度', 'Loan amounts')}</legend>
           {config.loan_tiers.map((value, index) => (
-            <Field key={index} label={`${t('common.operations.management.loanTier')} ${index + 1}`}>
+            <Field key={index} label={t('common.operations.management.loanTier', { tier: index + 1 })}>
               {(props) => (
                 <Affix
                   {...props}
@@ -497,6 +498,9 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
           ) : undefined
         }
       />
+      <Link className="nb-btn nb-btn--secondary" to="/activities/gacha">
+        {t('admin.activities.gacha', { defaultValue: '真·抽卡模拟器' })}
+      </Link>
       {sessionError ? (
         <ErrorState error={sessionError} />
       ) : config.error ? (
@@ -784,6 +788,7 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
                 </p>
               ) : null}
               {savePeriod.error ? <ErrorState error={savePeriod.error} /> : null}
+              {!validPositiveAmount(periodDraft.entry) && <p id="period-entry-hint" className="muted">{text('请填写大于 0 的门票积分后保存排期。', 'Enter a ticket price greater than 0 before scheduling.')}</p>}
               <button
                 className="nb-btn nb-btn--primary"
                 type="button"
@@ -795,6 +800,7 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
                   Boolean(literatureError) ||
                   !validPositiveAmount(periodDraft.entry)
                 }
+                aria-describedby={!validPositiveAmount(periodDraft.entry) ? 'period-entry-hint' : undefined}
                 onClick={submitPeriod}
               >
                 {text('保存并排期', 'Save and schedule')}

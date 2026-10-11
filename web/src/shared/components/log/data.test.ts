@@ -368,3 +368,32 @@ it('accepts requested charity models only on management charity projections', ()
   }
   expect(() => normalizeUserLogRow({ ...userRow, charity_model: 'Public model' })).toThrow();
 });
+
+it('keeps recorded call mode and actual penalties separate from unknown history', () => {
+  for (const normalize of [normalizeAdminLogRow, normalizeStewardLogRow]) {
+    expect(
+      normalize({
+        ...charityStewardRow,
+        requested_streaming: true,
+        automatic_actions: ['rpm_ban', 'context_penalty'],
+      }),
+    ).toMatchObject({
+      requested_streaming: true,
+      automatic_actions: ['rpm_ban', 'context_penalty'],
+    });
+    expect(
+      normalize({ ...charityStewardRow, requested_streaming: false, automatic_actions: [] }),
+    ).toMatchObject({ requested_streaming: false, automatic_actions: [] });
+    expect(normalize(charityStewardRow)).toMatchObject({
+      requested_streaming: null,
+      automatic_actions: null,
+    });
+  }
+  expect(
+    normalizeUserLogRow({
+      ...userRow,
+      requested_streaming: true,
+      automatic_actions: ['client_rule_ban'],
+    }),
+  ).toMatchObject({ requested_streaming: true, automatic_actions: ['client_rule_ban'] });
+});

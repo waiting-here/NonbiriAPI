@@ -3,6 +3,7 @@ package lifecycle
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 )
 
 type GovernanceExporter interface {
@@ -16,6 +17,8 @@ type GovernanceExport struct {
 	ImageTasks        []ImageTaskExport     `json:"image_tasks"`
 	Inactivity        InactivityExport      `json:"inactivity"`
 	LakeNotes         LakeNotesExport       `json:"lake_notes"`
+	Appearance        json.RawMessage       `json:"appearance"`
+	Gacha             json.RawMessage       `json:"gacha"`
 }
 type ActivityWalletExport struct {
 	General string `json:"general"`

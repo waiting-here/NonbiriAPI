@@ -1,6 +1,6 @@
 {
   "name": "nonbiriapi-web",
-  "version": "1.0.0-rc.6",
+  "version": "1.0.0-rc.7",
   "private": true,
   "type": "module",
   "description": "NonbiriAPI web frontend: admin and user stations",
@@ -32,7 +32,10 @@
     "format:check": "prettier --check .",
     "clean": "node scripts/clean.mjs",
     "notices": "node scripts/gen-notices.mjs",
-    "hashes": "node scripts/gen-manifest.mjs"
+    "hashes": "node scripts/gen-manifest.mjs",
+    "dev:gacha": "vite --config vite.gacha.config.ts",
+    "build:gacha": "vite build --config vite.gacha.config.ts",
+    "preview:gacha": "vite preview --config vite.gacha.config.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "5.101.4",

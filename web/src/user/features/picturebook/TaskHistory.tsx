@@ -1,3 +1,4 @@
+import { TimeContextNotice } from '@shared/components/TimeContext';
 import { ResourceCost } from './ResourceCost';
 import { ExactCount } from '../core/components';
 import { SimplePager } from '@shared/operations/SimplePager';
@@ -111,7 +112,7 @@ export function TaskHistory({
   return (
     <Card>
       <h2>{t('近30天任务', 'Tasks from the last 30 days')}</h2>
-      <p className="field-help">{t('本地时间', 'Local time')}</p>
+      <TimeContextNotice station="user" />
       <p>
         {t(
           '任务记录不包含提示词或图片存档。兑换和收费流水可在账号导出中查看。',

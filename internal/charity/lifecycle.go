@@ -10,6 +10,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
+	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
 )
 
 const maxConsumerExportRows = 10_000
@@ -131,12 +132,20 @@ func (s *Service) CleanupTx(ctx context.Context, tx *sql.Tx, decisionNow int64, 
 	if s == nil || ctx == nil || tx == nil || !validTime(decisionNow) || limit < 1 || limit > 100 {
 		return 0, claim.ErrInvalidInput
 	}
+	sessionCount, err := sessionheader.Cleanup(ctx, tx, decisionNow, limit)
+	if err != nil {
+		return 0, err
+	}
+	if sessionCount == limit {
+		return sessionCount, nil
+	}
+	limit -= sessionCount
 	quotaCount, err := donationquota.Cleanup(ctx, tx, decisionNow, limit)
 	if err != nil {
 		return 0, err
 	}
 	if quotaCount == limit {
-		return quotaCount, nil
+		return sessionCount + quotaCount, nil
 	}
 	limit -= quotaCount
 	cutoff := decisionNow - terminalRetention
@@ -163,7 +172,7 @@ func (s *Service) CleanupTx(ctx context.Context, tx *sql.Tx, decisionNow int64, 
 		}
 		count += requestCount
 	}
-	return quotaCount + int(count), nil
+	return sessionCount + quotaCount + int(count), nil
 }
 
 func addConsumerExportValue(total, value *big.Int) error {

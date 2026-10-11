@@ -656,7 +656,13 @@ export function normalizeStewardDonation(value: unknown): StewardDonation {
   };
 }
 
+export interface SessionHeader {
+  name: string;
+  idle_seconds: number;
+  format: 'uuid_v4' | 'hex_32';
+}
 export interface CharityModel {
+  session_headers?: SessionHeader[];
   model_types: import('@shared/modelTypes').ModelType[];
   transport_rule: TransportRule;
   role_policy?: RolePolicy;
@@ -672,9 +678,13 @@ export interface CharityModel {
   allowed_levels: number[];
   public_description: string;
   token_reserve_credits: string | null;
-  pricing:
+  pricing: (
     | { mode: 'per_request'; user_price: string; donor_reward: string }
-    | { mode: 'per_token'; user_prices: TokenPrices; donor_rewards: TokenPrices };
+    | { mode: 'per_token'; user_prices: TokenPrices; donor_rewards: TokenPrices }
+  ) & {
+    long_context?: { input_threshold: string; user_price?: string; user_prices?: TokenPrices };
+    context_penalty?: { input_threshold: string; fine: string };
+  };
   discount: { enabled: boolean; percent: number; start_at: number | null; end_at: number | null };
   flatten_tool_calls: boolean;
   revision: string;
@@ -757,6 +767,7 @@ function normalizeModel(value: unknown, label: string): CharityModel {
       'is_mainstream',
       'excluded_request_fields',
       'role_policy',
+      'session_headers',
     ],
     label,
     required,
@@ -772,7 +783,15 @@ function normalizeModel(value: unknown, label: string): CharityModel {
   );
   const pricingRoot = record(
     root.pricing,
-    ['mode', 'user_price', 'donor_reward', 'user_prices', 'donor_rewards'],
+    [
+      'mode',
+      'user_price',
+      'donor_reward',
+      'user_prices',
+      'donor_rewards',
+      'long_context',
+      'context_penalty',
+    ],
     `${label} pricing`,
     ['mode'],
   );
@@ -809,6 +828,31 @@ function normalizeModel(value: unknown, label: string): CharityModel {
       donor_rewards: normalizeTokenPrices(pricingRoot.donor_rewards, `${label} donor rewards`),
     };
   }
+  if (pricingRoot.long_context != null) {
+    const long = record(
+      pricingRoot.long_context,
+      ['input_threshold', 'user_price', 'user_prices'],
+      'long context',
+      ['input_threshold'],
+    );
+    pricing.long_context = {
+      input_threshold: decimal(long.input_threshold, 'long context threshold'),
+      ...(mode === 'per_request'
+        ? { user_price: amount(long.user_price, 'long context price', false) }
+        : { user_prices: normalizeTokenPrices(long.user_prices, 'long context prices') }),
+    };
+  }
+  if (pricingRoot.context_penalty != null) {
+    const penalty = record(
+      pricingRoot.context_penalty,
+      ['input_threshold', 'fine'],
+      'context penalty',
+    );
+    pricing.context_penalty = {
+      input_threshold: decimal(penalty.input_threshold, 'penalty threshold'),
+      fine: amount(penalty.fine, 'context fine', false),
+    };
+  }
   const discount = record(
     root.discount,
     ['enabled', 'percent', 'start_at', 'end_at'],
@@ -832,7 +876,19 @@ function normalizeModel(value: unknown, label: string): CharityModel {
     (percent !== null && !/^(0|[1-9][0-9]?|100)(\.[0-9]{1,2})?$/.test(percent))
   )
     invalidResponse(`${label} success percent`);
+  const sessionHeaders =
+    root.session_headers === undefined
+      ? []
+      : array(root.session_headers, label + ' session headers', 16).map((v) => {
+          const entry = record(v, ['name', 'idle_seconds', 'format'], label + ' session header');
+          return {
+            name: string(entry.name, label + ' header name', { min: 1 }),
+            idle_seconds: integer(entry.idle_seconds, label + ' header idle', 1, 86400),
+            format: oneOf(entry.format, ['uuid_v4', 'hex_32'] as const, label + ' header format'),
+          };
+        });
   return {
+    session_headers: sessionHeaders,
     id: decimalID(root.id, `${label} id`),
     provider,
     is_mainstream:

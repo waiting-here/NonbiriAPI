@@ -248,3 +248,15 @@ Image download origins apply only when an image provider returns a URL. For a re
 The adapter describes three stages: `discovery` selects the model-list endpoint and JSON fields, `submit` maps a generation request, and `response` identifies returned images. For `{"data":[{"id":"image-model"}]}`, use `items_pointer=/data` and `id_pointer=/id`. A request path beginning with `/` starts at the host root; other paths append to the configured base path. Save changes before refreshing the catalog.
 
 Failed discovery displays a dedicated explanation and, while its diagnostic record remains within ordinary retention, the upstream HTTP status. Authentication, missing endpoints, rate limits, redirects, timeouts, oversized catalogs and invalid model-list responses have distinct guidance. The response-body contents remain separate from the refresh status. A completed failure can start a new refresh; an uncertain acceptance retains its original retry key.
+
+## Card collection activity
+
+The Gacha Simulator entry is hidden by default and can be shown in its administrator settings. The display switch does not disable the activity URL. Eligible signed-in users can use the activity when the site is operational and its timezone is configured. Its dedicated administrator page uses `GET/POST /admin/api/gacha` for rules, prices, quotas, pools and saved presets. The generic activity master switch does not close this permanent collection activity. Only published limited pools use schedules; installation does not publish a limited pool automatically. See [the activity guide](gacha.md).
+
+## Managed charity session headers
+
+Model settings may define random session headers, shared by the same user and model until idle expiry. UUID v4 and lowercase hexadecimal formats are available. See [configuration, reuse and lifecycle](charity-session-headers.md).
+
+## Charity context prices
+
+Charity model pricing can enable independent input thresholds for full long-context prices and a one-time extra-long penalty. Both default off and follow existing pricing permissions. See [configuration and billing behavior](charity-context-pricing.md).

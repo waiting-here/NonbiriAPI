@@ -1,4 +1,4 @@
-import { sameRolePolicy } from './models/policy';
+import { RequestAdaptationEditor } from '@shared/components/RequestAdaptationEditor';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { ModelTypesSummary } from '@shared/components/ModelTypesField';
 import { PageHeader } from '@shared/components/States';
@@ -241,18 +241,7 @@ function ModelDetail({
                 setEditing(model.data ?? null);
               }}
             />
-            <Fold
-              title={textModel('advanced')}
-              summary={textModel('advancedHelp')}
-              meta={textModel(
-                !model.data.silent_retry &&
-                  !model.data.flatten_tool_calls &&
-                  model.data.transport_rule === 'passthrough' &&
-                  sameRolePolicy(model.data.role_policy, { default_action: 'native', rules: {} })
-                  ? 'default'
-                  : 'customized',
-              )}
-            >
+            <Fold title={textModel('advanced')} summary={textModel('advancedHelp')}>
               <dl className="core-detail-list">
                 <div>
                   <dt>{t('models.silentRetry')}</dt>
@@ -271,6 +260,12 @@ function ModelDetail({
               {model.data.model_types.includes('chat_completions') ? (
                 <ModelRoleSummary policy={model.data.role_policy} />
               ) : null}
+              <RequestAdaptationEditor
+                key={model.data.id}
+                url={'/api/models/' + model.data.id + '/request-adaptation'}
+                scope="personal-model"
+                editable={!reconciliationRequired && !replayAttempt}
+              />
             </Fold>
           </>
         )}

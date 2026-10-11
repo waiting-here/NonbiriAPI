@@ -55,7 +55,7 @@ const scan = {
   changed: false,
   truncated_reason: '',
 };
-const selectedScanRoute = '/risk-audit?audit_users_scan=' + scanID;
+const selectedScanRoute = '/abuse-audit?audit_users_scan=' + scanID;
 function HistoryProbe() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -352,7 +352,9 @@ describe('Risk audit access and evidence presentation', () => {
     );
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
     await act(async () => completeRefresh(savedRules));
-    expect(await screen.findByText('Observed IP Matches any IP 192.0.2.1, 2001:db8::1')).toBeVisible();
+    expect(
+      await screen.findByText('Observed IP Matches any IP 192.0.2.1, 2001:db8::1'),
+    ).toBeVisible();
     await view.user.click(screen.getByRole('button', { name: 'Edit' }));
     const addresses = screen.getByRole('textbox', { name: 'IP addresses' });
     expect(addresses).toHaveValue('192.0.2.1\n2001:db8::1');
@@ -589,7 +591,7 @@ it('restores a saved aggregate scan’s frozen signal, call kind and time across
       station: 'admin',
       role: 'admin',
       locale: 'en',
-      route: '/risk-audit?audit_kind=self&audit_signal=concurrency&audit_model=current-model',
+      route: '/abuse-audit?audit_kind=self&audit_signal=concurrency&audit_model=current-model',
     },
   );
   await view.user.selectOptions(
@@ -663,4 +665,94 @@ it('restores the user model draft with the query on Back and Forward', async () 
   expect(screen.getByRole('textbox', { name: 'Model' })).toHaveValue('B');
   expect(api.user.mock.calls.map(([, filters]) => filters.model)).toContain('A');
   expect(api.user.mock.calls.map(([, filters]) => filters.model)).toContain('B');
+});
+
+it.each(['admin', 'steward'] as const)(
+  'starts and displays IP evidence only for the preselected account for %s',
+  async (role) => {
+    const userID = '7';
+    const target = { ...scan, kind: 'user_ips', user_id: userID };
+    const unrelated = { ...scan, kind: 'user_ips', id: 'scn_BBBBBBBBBBBBBBBBBBBBBQ' };
+    api.recentTasks.mockResolvedValue([target, unrelated]);
+    api.createTask.mockResolvedValue(target);
+    api.taskResults.mockResolvedValue({
+      scan: target,
+      items: [
+        {
+          ip: '203.0.113.7',
+          users: 1,
+          requests: 1200,
+          first_seen: 1,
+          last_seen: 2,
+          associations_truncated: false,
+          associations: [
+            {
+              user_id: userID,
+              call_kind: 'self',
+              requests: 1200,
+              dispatched: 1199,
+              rejected: 1,
+              first_seen: 1,
+              last_seen: 2,
+            },
+          ],
+        },
+      ],
+      page: '1',
+      page_size: 20,
+      total_items: '1',
+      total_pages: '1',
+      coverage: 'complete',
+    });
+    const view = await renderWithProviders(
+      <RiskAuditPanel role={role} scopeKey={role === 'admin' ? 'operator' : '6'} />,
+      {
+        station: role === 'admin' ? 'admin' : 'user',
+        role: role === 'admin' ? 'admin' : 'level6',
+        route:
+          (role === 'admin' ? '/abuse-audit?' : '/steward?tab=risk&') +
+          'audit_tab=user_ips&audit_ip_user=' +
+          userID,
+      },
+    );
+    view.queryClient.setQueryData(
+      role === 'admin' ? ['admin', 'session'] : ['user', 'session'],
+      role === 'admin'
+        ? { admin: { username: 'operator' } }
+        : { user: { id: '6', username: 'Steward', level: 6, effective_level: 6 } },
+    );
+    expect(await screen.findByRole('heading', { name: 'IP history for user 7' })).toBeVisible();
+    expect(api.user).not.toHaveBeenCalled();
+    const recent = screen.getByLabelText('Recent scans');
+    expect(within(recent).getAllByRole('option')).toHaveLength(2);
+    await view.user.click(screen.getByRole('button', { name: 'Start new scan' }));
+    await waitFor(() =>
+      expect(api.createTask).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: 'user_ips', user_id: userID }),
+        expect.any(AbortSignal),
+      ),
+    );
+    expect(await screen.findByRole('heading', { name: '203.0.113.7' })).toBeVisible();
+    expect(screen.getAllByText('1,200').length).toBe(2);
+    expect(api.taskResults.mock.calls[0][5]).toBe(userID);
+    const link = screen.getByRole('link', { name: 'View original requests in this window' });
+    expect(
+      new URL(link.getAttribute('href')!, 'https://example.test').searchParams.get('user_id'),
+    ).toBe(userID);
+    expect(screen.getByRole('link', { name: 'Back to user profile' })).toHaveAttribute(
+      'href',
+      role === 'admin' ? '/users?user=7' : '/steward?tab=users&user=7',
+    );
+  },
+);
+
+it('does not widen an invalid selected user to a whole-site scan', async () => {
+  await renderWithProviders(<RiskAuditPanel role="admin" scopeKey="operator" />, {
+    station: 'admin',
+    role: 'admin',
+    route: '/abuse-audit?audit_tab=user_ips&audit_ip_user=',
+  });
+  expect(await screen.findByText(/The selected user ID is invalid/)).toBeVisible();
+  expect(api.recentTasks).not.toHaveBeenCalled();
+  expect(api.createTask).not.toHaveBeenCalled();
 });
