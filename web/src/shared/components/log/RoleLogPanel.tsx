@@ -655,13 +655,21 @@ function ScopedRoleLogPanel({
           ? 'common.operations.logs.facts.streaming'
           : 'common.operations.logs.facts.nonStreaming',
     );
+  const actionLabels = {
+    short_content_deduction: t('common.operations.logs.facts.short_content_deduction'),
+    short_content_ban: t('common.operations.logs.facts.short_content_ban'),
+    short_content_suspension: t('common.operations.logs.facts.short_content_suspension'),
+    rpm_ban: t('common.operations.logs.facts.rpm_ban'),
+    client_rule_ban: t('common.operations.logs.facts.client_rule_ban'),
+    context_penalty: t('common.operations.logs.facts.context_penalty'),
+  };
   const actionText = (row: RoleLogRow) =>
     row.automatic_actions == null
       ? t('common.operations.logs.facts.unknown')
       : row.automatic_actions.length === 0
         ? t('common.operations.logs.facts.noActions')
         : row.automatic_actions
-            .map((action) => t('common.operations.logs.facts.' + action))
+            .map((action) => actionLabels[action])
             .join(' · ');
   const columns: LogColumn<RoleLogRow>[] = [
     {

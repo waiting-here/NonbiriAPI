@@ -198,7 +198,11 @@ const REQUIRED_ROW_FIELDS = [
   'completed_at',
   'usage',
 ] as const;
-const COMMON_ROW_FIELDS = [...REQUIRED_ROW_FIELDS, 'requested_streaming', 'automatic_actions'] as const;
+const COMMON_ROW_FIELDS = [
+  ...REQUIRED_ROW_FIELDS,
+  'requested_streaming',
+  'automatic_actions',
+] as const;
 const ATTEMPT_FIELDS = [
   'attempt_seq',
   'result_kind',
