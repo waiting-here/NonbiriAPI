@@ -132,7 +132,10 @@ func NewForwardReserve(meta Meta, requestID string, userAccountID, reserveAccoun
 		return Plan{}, err
 	}
 	plan = plan.add(userRole(userAccountID), negate(reserved)).add(reserveRole(reserveAccountID, "forward_reserve"), reserved)
-	return plan.requireAvailable(userAccountID), nil
+	if reserved.Sign() > 0 {
+		plan = plan.requireAvailable(userAccountID)
+	}
+	return plan, nil
 }
 
 func NewForwardSettle(meta Meta, requestID string, reserveAccountID, platformAccountID int64, destination SettlementDestination, reserved, actual Amount) (Plan, error) {
