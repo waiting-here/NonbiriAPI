@@ -69,10 +69,31 @@ uniform sampler2D art, closed, lids, foreground, cloudMatte;
 uniform vec2 crop, offset;
 uniform vec4 eyeBox1, eyeBox2;
 uniform vec4 rect, eyes;
+uniform vec4 waterfallRects[4];
+uniform int waterfallCount;
 uniform vec3 tint;
 uniform float time, kind, opacity, dark, screenSpace, blink, planet, celestial;
 ${geometry}
 float hash(vec2 p) { return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
+
+// Water highlights belong to the source scenery, including its depth masks.
+// Never repaint an opaque rectangular background tile over nearer objects.
+vec3 scenery(vec2 p) {
+  vec3 color=texture2D(art,p).rgb;
+  for(int i=0;i<4;i++) {
+    if(i>=waterfallCount) break;
+    vec4 box=waterfallRects[i];
+    vec2 local=(p-box.xy)/box.zw;
+    if(local.x<=0. || local.x>=1. || local.y<=0. || local.y>=1.) continue;
+    float edge=smoothstep(0.,.16,local.x)*(1.-smoothstep(.84,1.,local.x))
+      *smoothstep(0.,.08,local.y)*(1.-smoothstep(.85,1.,local.y));
+    float streak=sin(local.y*31.-time*5.5+sin(local.x*27.)*1.7);
+    float fine=sin(local.y*71.-time*11.3+local.x*43.);
+    float strength=(streak*.65+fine*.35)*.13*edge;
+    color=color*(1.+strength)+vec3(.015,.024,.03)*strength;
+  }
+  return color;
+}
 
 // Only the two close flower beds move. Their bases and the masonry stay anchored.
 float plants(vec2 p) {
@@ -135,7 +156,7 @@ void main() {
   if(kind<.5) {
     // The sky and architecture stay rigid; only the near flower beds sway.
     vec2 sampleAt=celestial>.5 ? plantUV(world) : world;
-    gl_FragColor=vec4(texture2D(art,sampleAt).rgb,1.); return;
+    gl_FragColor=vec4(scenery(sampleAt),1.); return;
   }
   if(kind>4.5 && kind<5.5) {
     vec2 stars=world*vec2(90.,50.)+vec2(time*.055,-time*.013);
@@ -149,23 +170,13 @@ void main() {
       *(.65+.22*sin(time*.65+seed*45.))*opacity);
     return;
   }
-  if(kind>5.5 && kind<6.5) {
-    vec3 original=texture2D(art,world).rgb;
-    float edge=smoothstep(0.,.16,uv.x)*(1.-smoothstep(.84,1.,uv.x))
-      *smoothstep(0.,.08,uv.y)*(1.-smoothstep(.85,1.,uv.y));
-    // Thin illuminated streaks travel down each isolated waterfall face.
-    float streak=sin(uv.y*31.-time*5.5+sin(uv.x*27.)*1.7);
-    float fine=sin(uv.y*71.-time*11.3+uv.x*43.);
-    float strength=(streak*.65+fine*.35)*.13*edge;
-    gl_FragColor=vec4(original*(1.+strength)+vec3(.015,.024,.03)*strength,1.); return;
-  }
   if((kind>6.5 && kind<7.5) || (kind>9.5 && kind<10.5)) {
     vec2 sampleAt=plantUV(world);
     // Use the registered extraction only as a depth matte. The original plate
     // supplies all colour/detail, avoiding duplicate outlines from repainting.
     float alpha=texture2D(foreground,sampleAt).a;
     if(kind>9.5) alpha*=smoothstep(.03,.28,plants(world));
-    gl_FragColor=vec4(texture2D(art,sampleAt).rgb,alpha); return;
+    gl_FragColor=vec4(scenery(sampleAt),alpha); return;
   }
   if(kind>10.5) {
     // Painted atmospheric clouds must also occlude the distant planets.

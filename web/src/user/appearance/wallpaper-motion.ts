@@ -208,7 +208,6 @@ export async function renderWallpaper(
         draw(0, 7, [0, 0, 1, 1]);
         for (const accent of decorationGlints(t, theme)) draw(0, 9, accent.rect, accent.opacity);
       }
-      for (const rect of waterfalls[scene][theme]) draw(0, 6, rect);
       draw(1, 1, portraits[scene][theme].rect);
       if (scene === 'celestial') draw(0, 10, [0, 0, 1, 1]);
       canvas.dataset.scene = id;
@@ -305,6 +304,13 @@ export async function renderWallpaper(
     gl.uniform1i(uniform('cloudMatte'), 4);
     gl.uniform1f(uniform('celestial'), scene === 'celestial' ? 1 : 0);
     gl.uniform1f(uniform('dark'), theme === 'dark' ? 1 : 0);
+    // Flow is part of the painted scenery, so it shares that scenery's depth.
+    const water = waterfalls[scene][theme];
+    gl.uniform1i(uniform('waterfallCount'), water.length);
+    gl.uniform4fv(
+      uniform('waterfallRects[0]'),
+      new Float32Array([...water.flat(), ...Array((4 - water.length) * 4).fill(0)]),
+    );
     resize();
     window.addEventListener('resize', resize);
     document.addEventListener('visibilitychange', visibility);

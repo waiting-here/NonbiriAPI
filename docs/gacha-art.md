@@ -55,6 +55,8 @@ Build large wallpaper scenes from complete background plates and separately comp
 
 Keep scene depth explicit: distant stars and meteors, opaque celestial bodies, atmospheric clouds, architecture and hanging ornaments, characters, then near plants where the composition calls for overlap. Painted clouds need the same foreground occlusion as moving cloud layers. Derive registered masks when a complete plate contains several depths; reuse its original colour detail so extraction does not add doubled edges. Inspect the full travel path behind arches, fine chains and translucent cloud edges.
 
+Keep water highlights inside their owning scenery material and depth mask. Do not repaint opaque rectangles of the background after moving objects. Verify overlap while creatures cross every water region and while celestial bodies cross clouds and ornaments, including wide desktop and tall phone crops.
+
 Use brief, infrequent meteors and low-intensity light travelling along actual star decorations. Confine a light breeze to nearby foliage tips, with stems and masonry anchored. Keep these accents quieter than the characters. Creature translation should feel unhurried on both desktop and phone, with a coherent, independent swimming stroke.
 
 Large-scene motion must follow the depicted object. Keep scenery, architecture and celestial silhouettes rigid. Move cloud layers independently; confine flowing highlights to authored water regions. Articulate a swimming creature through its tail stock, flukes and fins with a shared stroke and delayed follow-through. Wrap travelling objects only after their entire silhouette, including the motion envelope, has left the viewport.
