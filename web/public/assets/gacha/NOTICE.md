@@ -2,7 +2,7 @@
 
 The card illustrations, theme group illustrations, pool covers and animation layers are original project artwork derived from the project's established AI character designs. The activity contains 57 cards, 13 theme illustrations, seven covers, four site backgrounds and animation layers for 15 SSR and two SP cards. Illustration production used generative image tools with character, costume and composition references. These project assets are distributed under AGPL-3.0, to the extent rights apply.
 
-High-resolution WebP derivatives retain the established compositions and use image enhancement for large displays. They do not represent additional native source detail. The site wallpapers include independently composited characters, eye frames, scenery, clouds, celestial bodies and a travelling whale.
+High-resolution WebP derivatives retain the established compositions and use image enhancement for large displays. They do not represent additional native source detail. The site wallpapers include independently composited characters, eye frames, scenery, clouds, celestial bodies and a travelling whale. The celestial static backgrounds are composited from those same layers, including a complete shaded lunar disk.
 
 ChatGPT, Claude, GLM, DeepSeek and Gemini names identify the fictional character inspirations. Related names and marks belong to their respective holders. The activity is not affiliated with or endorsed by those holders.
 
