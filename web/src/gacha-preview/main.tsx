@@ -14,13 +14,17 @@ import type { DrawReceipt } from '../user/activities/gacha/types';
 import { AppearanceProvider } from '../user/appearance/AppearanceProvider';
 import { AppearanceButton } from '../user/appearance/AppearanceButton';
 import { appearanceKey } from '../user/appearance/context';
-import { localPort, localAppearancePort, resetPreview } from './local-port';
+import { localPort, localAppearancePort, appearancePreviewPort, resetPreview } from './local-port';
 import './preview.css';
+import { AppearancePreview } from './AppearancePreview';
 import { sampleReceipt, previewPreferences, type Scenario } from './scenarios';
 
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 function Preview() {
   const [revision, setRevision] = useState(0);
+  const [appearanceView, setAppearanceView] = useState(
+    new URLSearchParams(location.search).get('view') === 'appearance',
+  );
   const [english, setEnglish] = useState(new URLSearchParams(location.search).get('lang') === 'en');
   const [demo, setDemo] = useState<DrawReceipt | null>(() => {
     const run = new URLSearchParams(location.search).get('run');
@@ -44,23 +48,49 @@ function Preview() {
   };
   return (
     <BrowserRouter>
-      <AppearanceProvider port={localAppearancePort}>
+      <AppearanceProvider port={appearanceView ? appearancePreviewPort : localAppearancePort}>
         <div className="gacha-preview">
           <aside className="gacha-preview-controls" aria-label="预览控制">
             <span>
               {english ? 'LOCAL PREVIEW · independent sample data' : '本地预览 · 使用独立体验数据'}
             </span>
             <div>
-              <button onClick={() => reset('new')}>{english ? 'New account' : '新账号体验'}</button>
-              <button onClick={() => reset('collection')}>
-                {english ? 'Full collection' : '完整收藏体验'}
+              <button
+                onClick={() => {
+                  const next = !appearanceView;
+                  setAppearanceView(next);
+                  const url = new URL(location.href);
+                  if (next) url.searchParams.set('view', 'appearance');
+                  else url.searchParams.delete('view');
+                  history.replaceState(null, '', url);
+                }}
+              >
+                {appearanceView
+                  ? english
+                    ? 'Back to draws'
+                    : '返回抽卡预览'
+                  : english
+                    ? 'Appearance preview'
+                    : '装扮可读性预览'}
               </button>
-              <button onClick={() => play('ten')}>
-                {english ? 'SSR + SP ten-pull' : 'SSR＋SP 十连'}
-              </button>
-              <button onClick={() => play('plain')}>{english ? 'SR ten-pull' : 'SR 十连'}</button>
-              <button onClick={() => play('n')}>{english ? 'N single' : 'N 单抽'}</button>
-              <button onClick={() => play('sp2')}>{english ? 'SP reunion' : 'SP 重逢'}</button>
+              {!appearanceView && (
+                <>
+                  <button onClick={() => reset('new')}>
+                    {english ? 'New account' : '新账号体验'}
+                  </button>
+                  <button onClick={() => reset('collection')}>
+                    {english ? 'Full collection' : '完整收藏体验'}
+                  </button>
+                  <button onClick={() => play('ten')}>
+                    {english ? 'SSR + SP ten-pull' : 'SSR＋SP 十连'}
+                  </button>
+                  <button onClick={() => play('plain')}>
+                    {english ? 'SR ten-pull' : 'SR 十连'}
+                  </button>
+                  <button onClick={() => play('n')}>{english ? 'N single' : 'N 单抽'}</button>
+                  <button onClick={() => play('sp2')}>{english ? 'SP reunion' : 'SP 重逢'}</button>
+                </>
+              )}
               <AppearanceButton />
               <ThemeToggle />
               <button
@@ -74,7 +104,11 @@ function Preview() {
             </div>
           </aside>
           <main>
-            <GachaApp key={revision} port={localPort} english={english} />
+            {appearanceView ? (
+              <AppearancePreview english={english} />
+            ) : (
+              <GachaApp key={revision} port={localPort} english={english} />
+            )}
           </main>
           {demo && (
             <DrawReveal

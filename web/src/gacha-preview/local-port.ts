@@ -358,3 +358,17 @@ export const localAppearancePort: AppearancePort = {
     return appearanceState();
   },
 };
+
+
+let previewAppearance = 'celestial';
+export const appearancePreviewPort: AppearancePort = {
+  scope: 'preview-appearance',
+  async load() {
+    return { selected: previewAppearance, unlocked: ['default', 'celestial', 'wandering'], updated_at: null };
+  },
+  async select(selected) {
+    if (!['default', 'celestial', 'wandering'].includes(selected)) throw new Error('appearance-locked');
+    previewAppearance = selected;
+    return this.load();
+  },
+};
