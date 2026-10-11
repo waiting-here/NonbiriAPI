@@ -8,6 +8,9 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Added
 
+- Charity request logs and exports show the original caller mode and actual automatic penalties, with an explicit unknown state for old records.
+- Administrators and level-6 stewards can open a selected account’s retained call-IP audit from its profile, including accounts with only one observed IP.
+
 - Personal-model parameter exclusions and encrypted header/body overrides, with per-section service inheritance and form examples.
 
 - Managed charity-model session headers with persistent per-user reuse, configurable idle expiry and UUID or hexadecimal values. Concurrent requests and retries preserve their session; protected upstream headers retain authority.
@@ -26,13 +29,15 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Changed
 
+- Card voices use more varied, directly affectionate dialogue. SP site wallpapers animate character and scene details in both color modes, with static reduced-motion fallback.
 - The Fat Fish editor groups creation tools, canvas modes and properties, explains unfinished requirements, previews invalid geometry and fish collisions, and supports precise headings, viewport placement, zoom and touch navigation.
 - Charity catalog filters remain visible. Both stations improve request-log labels, exact credit amounts, mobile controls, empty states and appearance contrast.
 - The gacha activity entry starts hidden and can be enabled by administrators. Limited-only themes stay hidden until a pool has opened or the user owns one of their cards.
-- Database schema revision 13 adds transactional collection, guarantee and activity-journal storage, frozen context prices and temporary managed-header sessions and personal-model request configuration while preserving supported predecessor data and existing legal overrides. Account export schema 17 includes the user's collection activity, appearance and safe personal request-configuration projections.
+- Database schema revision 14 adds transactional collection, guarantee and activity-journal storage, frozen context prices, temporary managed-header sessions, personal-model request configuration and safe request-mode/automatic-action facts while preserving supported predecessor data and existing legal overrides. Account export schema 17 includes the user's collection activity, appearance and safe personal request-configuration projections.
 
 ### Fixed
 
+- Personal model requests remain available when general credits are negative; charity balance checks remain in effect.
 - Gateway provider warnings no longer abort valid responses. Stream protocol failures retain a bounded rejected-event diagnostic under existing private-log permissions.
 
 - Donation-only reward records can retain anonymous accounting facts after account deletion, while new rewards still require a live recipient.

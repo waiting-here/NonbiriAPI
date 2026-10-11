@@ -233,6 +233,10 @@ All routes in this section require a user session unless marked anonymous.
 
 Request-log and Debug `route_kind` values are `openai_chat_completions`, `charity_chat_completions`, `model_discovery`, `openai_embeddings`, `charity_embeddings`, `openai_images_generations`, and `charity_images_generations`; Debug accepts the six model-call kinds only. Log clients using a closed enum must accept these values. Existing model/status/time filters, pagination, role-specific projections and exports include all three model operations. Personal and charity records retain their corresponding privacy boundary; request logs do not store prompts, vectors or image contents.
 
+Request logs and JSON/CSV exports include nullable `requested_streaming` (the caller's validated original mode before upstream overrides) and nullable `automatic_actions`. Actions are `short_content_deduction`, `short_content_ban`, `short_content_suspension`, `rpm_ban`, `client_rule_ban` and `context_penalty`. The list records effects in the same transaction as their application; a matched rule or ordinary rejection alone is not a punishment. An empty array means no recorded automatic action; null means historical information is unavailable. Missing or invalid request bodies can leave the mode null. These safe facts share existing log access, export, deletion and retention rules and reveal no rule definitions or request body.
+
+Personal requests reserve no general credits and remain available with a negative general-credit balance. Their zero-value accounting lifecycle and resource limits still apply; charity admission retains its balance requirements.
+
 | Method and path | Request / response |
 | --- | --- |
 | `GET /api/config` | Anonymous safe bootstrap: site name/logo, donation notices, four legal overrides, authoritative locale, maintenance/registration state, announcement epoch. |
@@ -1240,6 +1244,18 @@ Risk signals include both personal and charity calls. RPM and concurrency are me
 Auxiliary observation preserves existing responses for exact user-host requests: `GET /v1/models`, `GET /dashboard/billing/subscription`, `GET /dashboard/billing/usage`, their `/v1/dashboard/billing/...` variants, `GET /v1/sub2api/billing`, and `HEAD /v1/chat/completions`. Only a valid CallerKey associates an event with its actual user and generation; rotation/revocation/deletion clears key attribution, and queued writes revalidate it. Unauthenticated, invalid or barred requests contribute only anonymous minute counts, without an IP/header identity record. No query, request body, cookie or Authorization value is captured. These probes do not refresh activity or consume user model-call RPM. The queue is capped at 4,096 and retained authenticated events at one million; dropped coverage is visible. Image background polling and model discovery likewise do not inflate a user's model-call count.
 
 Multi-address/shared-address scans use only canonical API sources with `direct_peer|trusted_forwarded` provenance, never `peer_fallback` or website sign-in addresses. Classified successes, failures, refusals and unclassified API observations remain distinct. Rolling windows include exact threshold endpoints; the selected scan interval remains `[from,to)`. A deleted account does not invalidate still-retained source references; true source expiry/hold release removes references and marks coverage changed. Same-Discord accounts count once on shared IPs. Tasks/results still expire after 24 hours and never issue penalties.
+
+### Selected-account call-IP audit
+
+Current administrators and level-6 stewards may start `POST {prefix}/abuse-audit/scans` with `kind: "user_ips"` and optional `user_id` as a canonical positive decimal string. For example:
+
+```json
+{"request_token":"example_target_ip_scan_01","kind":"user_ips","user_id":"123","lookback_hours":24,"call_kind":"total"}
+```
+
+The target must exist on first creation. Malformed IDs or a target on another scan kind return 400, an absent target 404, and reuse of a token with different conditions 409. Omission retains the existing site-wide identity/window scan.
+
+Targeted scans use the exact original account ID and the selected [from,to) interval. They list each trusted call IP even if only one is present, without merging re-registered accounts or applying multi-IP risk thresholds. Website sign-ins and untrusted fallback addresses are excluded. Results carry the target `user_id`; each item uses the existing shared-IP structure with `users: 1`, call counts, first/last times and per-call-kind associations. Existing task ownership, pagination, limits, 24-hour expiry, source retirement and partial/changed coverage apply. Missing source evidence is reported rather than guessed. Scanning applies no penalty.
 
 ## 12. Economy and inactivity administration
 
