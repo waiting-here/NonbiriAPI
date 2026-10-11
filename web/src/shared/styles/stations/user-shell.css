@@ -60,7 +60,8 @@
   gap: var(--nb-space-1);
   min-height: 2.65rem;
   border-radius: var(--nb-radius-md);
-  padding: var(--nb-space-2) clamp(var(--nb-space-1), 0.5vw, var(--nb-space-3));
+  padding: var(--nb-space-2)
+    clamp(var(--nb-space-1), calc(0.5vw - var(--nb-space-1)), var(--nb-space-3));
   color: var(--nb-color-text-muted);
   font-size: clamp(var(--nb-font-size-xs), 1.1vw, var(--nb-font-size-sm));
   font-weight: var(--nb-font-weight-semibold);
