@@ -265,10 +265,12 @@ async function assertAppliedPresentation(page: Page, count: number): Promise<voi
   }
 }
 
-async function openFilters(page: Page) {
-  const disclosure = page.locator('.economy-catalog-filters .nb-filter__more');
-  if (!(await disclosure.evaluate((element) => element.hasAttribute('open')))) {
-    await disclosure.locator('summary').click();
+async function assertFiltersVisible(page: Page) {
+  const filters = page.locator('.economy-catalog-filters');
+  await expect(filters).toBeVisible();
+  await expect(filters.locator('.nb-filter__more')).toHaveCount(0);
+  for (const control of await filters.getByRole('combobox').all()) {
+    await expect(control).toBeVisible();
   }
 }
 
@@ -355,12 +357,12 @@ test('catalog filters use a counted complete sample and restore URL-backed state
   const pageSize = page.getByRole('combobox', { name: 'Items per page', exact: true });
   const clear = page.getByRole('button', { name: 'Clear filters', exact: true });
   const defaults = async () => {
-    await openFilters(page);
+    await assertFiltersVisible(page);
     await level.selectOption('all');
     await access.selectOption('true');
     await availability.selectOption('true');
   };
-  await openFilters(page);
+  await assertFiltersVisible(page);
 
   await expect(page.locator('.charity-model-name')).toHaveCount(14);
   await expect(level).toHaveValue('all');
@@ -445,7 +447,7 @@ test('catalog filters use a counted complete sample and restore URL-backed state
   await expect(page).not.toHaveURL(/q=needle/);
   await expect(search).toHaveValue('');
   await expect(page.locator('.charity-model-name')).toHaveCount(14);
-  await openFilters(page);
+  await assertFiltersVisible(page);
   await access.selectOption('all');
   await expect(page.locator('.charity-model-name')).toHaveCount(20);
   await availability.selectOption('all');
@@ -487,7 +489,7 @@ test('model type filters combine with search and reset pagination', async ({ con
   );
   await page.goto(`${USER_ORIGIN}/charity`);
 
-  await openFilters(page);
+  await assertFiltersVisible(page);
   const modelType = page.getByRole('combobox', { name: 'Model type', exact: true });
   const search = page.getByRole('searchbox', { name: 'Search model name or public description' });
   const pageSize = page.getByRole('combobox', { name: 'Items per page', exact: true });
@@ -501,7 +503,7 @@ test('model type filters combine with search and reset pagination', async ({ con
     .click();
   await expect(page).toHaveURL(/page=2&page_size=10/);
 
-  await openFilters(page);
+  await assertFiltersVisible(page);
   for (const operation of ['chat_completions', 'embeddings', 'images_generations']) {
     await modelType.selectOption(operation);
     await expect(modelType).toHaveValue(operation);
@@ -582,7 +584,7 @@ for (const locale of ['en', 'zh'] as const) {
           exact: true,
         });
         await expect(page.locator('.charity-model-name').first()).toBeVisible();
-        await openFilters(page);
+        await assertFiltersVisible(page);
         await expect(level).toHaveValue('all');
         await expect(access).toHaveValue('true');
         await expect(availability).toHaveValue('true');

@@ -305,7 +305,18 @@ for (const width of [1440, 768, 390])
           await expect(page.locator('.activity-slot[open]')).toHaveCount(0);
           await slots.first().locator(':scope > summary').click();
           await expect(slots.first()).toHaveAttribute('open', '');
-          await expect(loan.locator('.loan-actions .nb-btn--primary')).toBeDisabled();
+          await expect(
+            loan.getByRole('button', {
+              name: locale === 'zh' ? '我要借款' : 'Get a loan',
+              exact: true,
+            }),
+          ).toHaveCount(0);
+          await expect(
+            loan.getByText(
+              locale === 'zh' ? '当前无法借款。' : 'Borrowing is currently unavailable.',
+              { exact: true },
+            ),
+          ).toBeVisible();
           await expect(slots.first().locator('.economy-welfare-card .nb-btn--primary')).toBeDisabled();
           await slots.first().locator(':scope > summary').click();
         }
