@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { blinkAt, celestialRects, PaintCadence, whaleRect } from './wallpaper-animation';
+import {
+  blinkAt,
+  celestialRects,
+  PaintCadence,
+  whaleCycleSeconds,
+  whaleRect,
+} from './wallpaper-animation';
 
 describe('wallpaper timing', () => {
   it.each([60, 90, 120, 144])('keeps an even 60 Hz budget on a %i Hz display', (rate) => {
@@ -39,7 +45,7 @@ describe('wallpaper timing', () => {
 });
 
 it('keeps the entire whale outside the viewport on either side of its wrap', () => {
-  const wrap = 84 * (1 - 0.19);
+  const wrap = whaleCycleSeconds * (1 - 0.19);
   for (const [w, h] of [
     [1440, 900],
     [390, 844],
@@ -61,4 +67,16 @@ it('keeps celestial bodies separated and continuous at the orbit seam', () => {
     end = celestialRects(420);
   for (let body = 0; body < 2; body++)
     for (let n = 0; n < 4; n++) expect(start[body][n]).toBeCloseTo(end[body][n], 10);
+});
+
+it('keeps a gentle whale crossing speed on both screen shapes', () => {
+  for (const [w, h] of [
+    [1440, 900],
+    [390, 844],
+  ]) {
+    const a = whaleRect(25, w, h),
+      b = whaleRect(26, w, h);
+    expect(a[0] - b[0]).toBeGreaterThan(0);
+    expect(a[0] - b[0]).toBeLessThan(0.036);
+  }
 });

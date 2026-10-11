@@ -59,7 +59,7 @@ export function AppearanceBackdrop({ selected }: { selected: string }) {
     };
   }, [selected, theme, quality]);
   if (selected !== 'celestial' && selected !== 'wandering') return null;
-  const revision = selected === 'celestial' || theme === 'light' ? '?v=5' : '';
+  const revision = selected === 'celestial' || theme === 'light' ? '?v=6' : '';
   const filename = selected + '-' + theme + '.webp' + revision;
   return (
     <>

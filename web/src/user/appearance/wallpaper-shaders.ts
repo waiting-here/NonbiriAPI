@@ -65,14 +65,26 @@ void main() {
 
 export const wallpaperFragment = `precision highp float;
 varying vec2 uv;
-uniform sampler2D art, closed, lids;
+uniform sampler2D art, closed, lids, foreground, cloudMatte;
 uniform vec2 crop, offset;
 uniform vec4 eyeBox1, eyeBox2;
 uniform vec4 rect, eyes;
 uniform vec3 tint;
-uniform float time, kind, opacity, dark, screenSpace, blink, planet;
+uniform float time, kind, opacity, dark, screenSpace, blink, planet, celestial;
 ${geometry}
 float hash(vec2 p) { return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
+
+// Only the two close flower beds move. Their bases and the masonry stay anchored.
+float plants(vec2 p) {
+  float left=field(p,vec2(.055,.94),vec2(.14,.15));
+  float right=field(p,vec2(.965,.965),vec2(.145,.16));
+  return max(left,right)*smoothstep(.72,.86,p.y);
+}
+vec2 plantUV(vec2 p) {
+  float tips=plants(p)*(1.-smoothstep(.975,1.015,p.y));
+  float breeze=sin(time*.68+p.y*4.2);
+  return p+vec2(.00165*breeze,.0007*sin(time*.68+p.x*3.1-.7))*tips;
+}
 
 // Each eye follows its painted contour. Only the lash ribbon is remapped;
 // iris, highlights and all surrounding skin retain their original coordinates.
@@ -121,8 +133,9 @@ vec4 eyelid(vec2 p,vec4 box,float row,vec4 original) {
 void main() {
   vec2 world=rect.xy+uv*rect.zw;
   if(kind<.5) {
-    // The complete plate is rigid: no warp can reach architecture or mountains.
-    gl_FragColor=vec4(texture2D(art,world).rgb,1.); return;
+    // The sky and architecture stay rigid; only the near flower beds sway.
+    vec2 sampleAt=celestial>.5 ? plantUV(world) : world;
+    gl_FragColor=vec4(texture2D(art,sampleAt).rgb,1.); return;
   }
   if(kind>4.5 && kind<5.5) {
     vec2 stars=world*vec2(90.,50.)+vec2(time*.055,-time*.013);
@@ -136,7 +149,7 @@ void main() {
       *(.65+.22*sin(time*.65+seed*45.))*opacity);
     return;
   }
-  if(kind>5.5) {
+  if(kind>5.5 && kind<6.5) {
     vec3 original=texture2D(art,world).rgb;
     float edge=smoothstep(0.,.16,uv.x)*(1.-smoothstep(.84,1.,uv.x))
       *smoothstep(0.,.08,uv.y)*(1.-smoothstep(.85,1.,uv.y));
@@ -145,6 +158,35 @@ void main() {
     float fine=sin(uv.y*71.-time*11.3+uv.x*43.);
     float strength=(streak*.65+fine*.35)*.13*edge;
     gl_FragColor=vec4(original*(1.+strength)+vec3(.015,.024,.03)*strength,1.); return;
+  }
+  if((kind>6.5 && kind<7.5) || (kind>9.5 && kind<10.5)) {
+    vec2 sampleAt=plantUV(world);
+    // Use the registered extraction only as a depth matte. The original plate
+    // supplies all colour/detail, avoiding duplicate outlines from repainting.
+    float alpha=texture2D(foreground,sampleAt).a;
+    if(kind>9.5) alpha*=smoothstep(.03,.28,plants(world));
+    gl_FragColor=vec4(texture2D(art,sampleAt).rgb,alpha); return;
+  }
+  if(kind>10.5) {
+    // Painted atmospheric clouds must also occlude the distant planets.
+    gl_FragColor=vec4(texture2D(art,world).rgb,texture2D(cloudMatte,world).a); return;
+  }
+  if(kind>7.5 && kind<8.5) {
+    // A tapered, diagonal trail with a quiet blue-white head.
+    vec2 q=uv-vec2(.18,.82);
+    vec2 direction=normalize(vec2(.78,-.65));
+    float along=dot(q,direction);
+    float across=abs(q.x*direction.y-q.y*direction.x);
+    float trail=exp(-across*175.)*exp(-max(0.,along)*5.)
+      *smoothstep(-.015,.015,along)*(1.-smoothstep(.85,1.,along));
+    float head=exp(-dot(q,q)*2300.);
+    gl_FragColor=vec4(.78,.87,1.,(trail+head)*opacity); return;
+  }
+  if(kind>8.5 && kind<9.5) {
+    vec2 q=(uv-.5)*2.;
+    float light=exp(-abs(q.x)*105.-abs(q.y)*7.)
+      +exp(-abs(q.y)*105.-abs(q.x)*7.)+exp(-dot(q,q)*13.)*.12;
+    gl_FragColor=vec4(1.,.9,.65,clamp(light,0.,1.)*opacity); return;
   }
   if(kind<1.5) {
     vec4 color=texture2D(art,uv);

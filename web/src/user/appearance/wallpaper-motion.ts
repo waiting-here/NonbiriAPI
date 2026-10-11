@@ -1,3 +1,4 @@
+import { decorationGlints, meteorAccent } from './wallpaper-accents';
 import {
   blinkAt,
   celestialRects,
@@ -49,13 +50,19 @@ export async function renderWallpaper(
     id + '-hero',
     id + '-closed',
     'cloud',
-    ...(scene === 'wandering' ? ['whale'] : ['moon', 'earth']),
+    ...(scene === 'wandering'
+      ? ['whale']
+      : ['moon', 'earth', id + '-foreground', ...(theme === 'light' ? [id + '-clouds'] : [])]),
   ];
   const images = await Promise.all(
     names.map(async (name) => {
       const image = new Image();
-      const revision = name.endsWith('-hero') || name.endsWith('-closed') ? '?v=3' : '';
-      image.src = prefix + name + '.webp' + revision;
+      const revision = name.endsWith('-hero') || name.endsWith('-closed') ? '?v=4' : '';
+      const directory =
+        name.endsWith('-foreground') || name.endsWith('-clouds')
+          ? '/assets/gacha/appearances/layers/'
+          : prefix;
+      image.src = directory + name + '.webp' + revision;
       await image.decode();
       return image;
     }),
@@ -176,13 +183,15 @@ export async function renderWallpaper(
       gl!.uniform1f(uniform('blink'), blinkAt(t));
       gl!.disable(gl!.BLEND);
       draw(0, 0, [0, 0, 1, 1]);
-      for (const rect of waterfalls[scene][theme]) draw(0, 6, rect);
       gl!.enable(gl!.BLEND);
       if (night) draw(0, 5, [0, 0, 1, 1], 0.7);
       if (scene === 'celestial') {
+        const meteor = night ? meteorAccent(t) : undefined;
+        if (meteor) draw(0, 8, meteor.rect, meteor.opacity);
         const [moon, earth] = celestialRects(t);
         draw(4, 4, moon);
         draw(5, 4, earth);
+        if (!night) draw(0, 11, [0, 0, 1, 1]);
       }
       const cloudTint: [number, number, number] = night ? [0.24, 0.38, 0.58] : [1, 1, 0.98];
       // Clouds translate at different depths; their painted contours do not ripple.
@@ -195,7 +204,14 @@ export async function renderWallpaper(
       }
       const near = ((t * 0.006 + 0.39) % 1.35) - 1.35;
       for (const x of [near, near + 1.35]) draw(3, 2, [x, 0.56, 1.4, 0.42], 0.2, cloudTint);
+      if (scene === 'celestial') {
+        draw(0, 7, [0, 0, 1, 1]);
+        for (const accent of decorationGlints(t, theme)) draw(0, 9, accent.rect, accent.opacity);
+      }
+      for (const rect of waterfalls[scene][theme]) draw(0, 6, rect);
       draw(1, 1, portraits[scene][theme].rect);
+      if (scene === 'celestial') draw(0, 10, [0, 0, 1, 1]);
+      canvas.dataset.scene = id;
       canvas.dataset.ready = 'true';
       paints++;
       if (now - reportAt >= 2000) {
@@ -281,6 +297,13 @@ export async function renderWallpaper(
       new Uint8Array(profiles.flatMap((profile) => profile.rows.flat())),
     );
     gl.uniform1i(uniform('lids'), 2);
+    gl.activeTexture(gl.TEXTURE3);
+    gl.bindTexture(gl.TEXTURE_2D, textures[scene === 'celestial' ? 6 : 0]);
+    gl.uniform1i(uniform('foreground'), 3);
+    gl.activeTexture(gl.TEXTURE4);
+    gl.bindTexture(gl.TEXTURE_2D, textures[scene === 'celestial' && theme === 'light' ? 7 : 0]);
+    gl.uniform1i(uniform('cloudMatte'), 4);
+    gl.uniform1f(uniform('celestial'), scene === 'celestial' ? 1 : 0);
     gl.uniform1f(uniform('dark'), theme === 'dark' ? 1 : 0);
     resize();
     window.addEventListener('resize', resize);

@@ -59,9 +59,11 @@ export class PaintCadence {
   }
 }
 
+export const whaleCycleSeconds = 112;
+
 export function whaleRect(t: number, width: number, height: number): Rect {
   const size = width < 640 ? 1.55 : 0.78;
-  const x = 1.18 - ((t / 84 + 0.19) % 1) * (2.36 + size);
+  const x = 1.18 - ((t / whaleCycleSeconds + 0.19) % 1) * (2.36 + size);
   const h = (((size * width) / height) * 9) / 16;
   return [x, 0.025 + 0.014 * Math.sin(t * 0.19), size, h];
 }
