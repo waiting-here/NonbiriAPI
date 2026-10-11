@@ -55,7 +55,7 @@ const scan = {
   changed: false,
   truncated_reason: '',
 };
-const selectedScanRoute = '/risk-audit?audit_users_scan=' + scanID;
+const selectedScanRoute = '/abuse-audit?audit_users_scan=' + scanID;
 function HistoryProbe() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -591,7 +591,7 @@ it('restores a saved aggregate scan’s frozen signal, call kind and time across
       station: 'admin',
       role: 'admin',
       locale: 'en',
-      route: '/risk-audit?audit_kind=self&audit_signal=concurrency&audit_model=current-model',
+      route: '/abuse-audit?audit_kind=self&audit_signal=concurrency&audit_model=current-model',
     },
   );
   await view.user.selectOptions(
@@ -710,7 +710,7 @@ it.each(['admin', 'steward'] as const)(
         station: role === 'admin' ? 'admin' : 'user',
         role: role === 'admin' ? 'admin' : 'level6',
         route:
-          (role === 'admin' ? '/risk-audit?' : '/steward?tab=risk&') +
+          (role === 'admin' ? '/abuse-audit?' : '/steward?tab=risk&') +
           'audit_tab=user_ips&audit_ip_user=' +
           userID,
       },
@@ -750,7 +750,7 @@ it('does not widen an invalid selected user to a whole-site scan', async () => {
   await renderWithProviders(<RiskAuditPanel role="admin" scopeKey="operator" />, {
     station: 'admin',
     role: 'admin',
-    route: '/risk-audit?audit_tab=user_ips&audit_ip_user=',
+    route: '/abuse-audit?audit_tab=user_ips&audit_ip_user=',
   });
   expect(await screen.findByText(/The selected user ID is invalid/)).toBeVisible();
   expect(api.recentTasks).not.toHaveBeenCalled();

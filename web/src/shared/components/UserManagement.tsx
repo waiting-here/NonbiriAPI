@@ -1,6 +1,7 @@
 import { Button } from '@shared/components/ui/Button';
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
+import { routePath } from '@shared/routing/routeRegistry';
 import {
   Affix,
   DataTable,
@@ -353,7 +354,7 @@ function UserAuthority({
               className="nb-btn nb-btn--secondary"
               to={
                 role === 'admin'
-                  ? `/risk-audit?audit_tab=user_ips&audit_ip_user=${user.id}`
+                  ? routePath('admin', 'admin-risk-audit') + `?audit_tab=user_ips&audit_ip_user=${user.id}`
                   : `/steward?tab=risk&audit_tab=user_ips&audit_ip_user=${user.id}`
               }
             >
