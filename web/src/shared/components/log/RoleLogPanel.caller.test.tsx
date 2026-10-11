@@ -427,3 +427,27 @@ it('shows the recorded validation reason in Chinese', async () => {
   expect(await screen.findByText('stream: 需要布尔值或 null')).toBeInTheDocument();
   view.unmount();
 });
+
+it.each(['admin', 'steward'] as const)(
+  '%s shows original mode and applied actions in the list and detail',
+  async (role) => {
+    const row = {
+      ...stewardRow(null),
+      requested_streaming: true,
+      automatic_actions: ['context_penalty'],
+    };
+    installFixtures(role, row);
+    const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role={role} />, {
+      station: role === 'admin' ? 'admin' : 'user',
+      role: role === 'admin' ? 'admin' : 'level6',
+    });
+    const mode = view.i18n.t('common.operations.logs.facts.streaming');
+    const action = view.i18n.t('common.operations.logs.facts.context_penalty');
+    expect(await screen.findByText(mode)).toBeVisible();
+    expect(screen.getByText(action)).toBeVisible();
+    await view.user.click(screen.getByRole('button', { name: 'Details' }));
+    const dialog = await screen.findByRole('region', { name: /Log details/ });
+    expect(within(dialog).getByText(mode)).toBeVisible();
+    expect(within(dialog).getByText(action)).toBeVisible();
+  },
+);

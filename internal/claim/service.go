@@ -615,10 +615,10 @@ type targetRow struct {
 
 func (s *Service) ensureRequestLogTx(ctx context.Context, tx *sql.Tx, requestID string) error {
 	result, err := tx.ExecContext(ctx, `INSERT INTO request_logs(
-logical_request_id,user_id,model,route_kind,started_at)
-SELECT r.id,r.user_id,r.model_snapshot,r.route_kind,r.created_at
+logical_request_id,user_id,model,route_kind,started_at,requested_streaming,automatic_actions)
+SELECT r.id,r.user_id,r.model_snapshot,r.route_kind,r.created_at,?,0
 FROM logical_requests r JOIN users u ON u.id=r.user_id WHERE r.id=?
-ON CONFLICT(logical_request_id) DO NOTHING`, requestID)
+ON CONFLICT(logical_request_id) DO NOTHING`, requestattempt.RequestedStreaming(ctx), requestID)
 	if err != nil {
 		return fmt.Errorf("claim: ensure request log: %w", err)
 	}

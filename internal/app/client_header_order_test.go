@@ -57,6 +57,18 @@ func TestClientGuardUsesOriginalHeadersBeforeOutboundOverrides(t *testing.T) {
 					f.exec(t, `UPDATE charity_models SET session_headers='[{"name":"user-agent","idle_seconds":300,"format":"uuid_v4"}]' WHERE id=?`, model)
 				}
 				status, body := f.post(t, "/v1/chat/completions", `{"model":"[公益]provider/per_request","messages":[{"role":"user","content":"Hello"}]}`)
+				var requestedStreaming bool
+				var actions int
+				if err := f.store.DB().QueryRow("SELECT requested_streaming,automatic_actions FROM request_logs ORDER BY started_at DESC LIMIT 1").Scan(&requestedStreaming, &actions); err != nil {
+					t.Fatal(err)
+				}
+				expectedActions := 0
+				if blocked {
+					expectedActions = 16
+				}
+				if requestedStreaming || actions != expectedActions {
+					t.Fatalf("request facts stream=%v actions=%d", requestedStreaming, actions)
+				}
 				var banned, receipts, sessions int
 				if err := f.store.DB().QueryRow(`SELECT is_banned,(SELECT count(*) FROM client_rule_ban_receipts),(SELECT count(*) FROM charity_header_sessions) FROM users WHERE id=?`, f.userID).Scan(&banned, &receipts, &sessions); err != nil {
 					t.Fatal(err)

@@ -152,6 +152,9 @@ func TestShortRejectionPenaltyLogAndRestrictionsCommitTogether(t *testing.T) {
 	if err != nil || result == nil || result.Actual != 2 || result.Minimum != 20 || !db.ValidateOpaqueID(result.RequestID, "req_") {
 		t.Fatalf("rejection=%+v err=%v", result, err)
 	}
+	if f.scalar("SELECT automatic_actions FROM request_logs WHERE logical_request_id=?", result.RequestID) != 7 {
+		t.Fatal("committed short-request actions missing")
+	}
 	page := f.history(user)
 	if page.CurrentBalance != "-0.007" || len(page.Data) != 1 || page.Data[0].RequestID == nil || *page.Data[0].RequestID != result.RequestID {
 		t.Fatalf("history=%+v", page)

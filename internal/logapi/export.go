@@ -180,7 +180,7 @@ func MarshalAdminCSV(rows []AdminLogRow) ([]byte, error) {
 		"output_tokens", "total_tokens", "usage_unknown", "usage_total_mismatch", "charge",
 		"caller_discord_nickname", "caller_discord_id",
 		"phase", "rejection_stage", "rejection_reason", "request_method", "request_path", "charity_model",
-		"origin_user_id", "origin_discord_id", "origin_deleted", "origin_unknown", "history_record_id", "rejection_field", "rejection_detail",
+		"origin_user_id", "origin_discord_id", "origin_deleted", "origin_unknown", "history_record_id", "rejection_field", "rejection_detail", "requested_streaming", "automatic_actions",
 	}
 	if err := writer.Write(header); err != nil {
 		return nil, ErrUnavailable
@@ -203,7 +203,7 @@ func MarshalAdminCSV(rows []AdminLogRow) ([]byte, error) {
 			strconv.FormatBool(row.UsageTotalMismatch), row.Usage.Charge,
 			csvString(nickname), csvString(discordID),
 			csvSafe(row.Phase), csvString(row.RejectionStage), csvString(row.RejectionReason), csvString(row.RequestMethod), csvString(row.RequestPath), csvString(row.CharityModel),
-			csvString(row.OriginIdentity.UserID), csvString(row.OriginIdentity.DiscordID), strconv.FormatBool(row.Deleted), strconv.FormatBool(row.Unknown), csvString(row.HistoryRecordID), csvSafe(rejectionField), csvSafe(rejectionReason),
+			csvString(row.OriginIdentity.UserID), csvString(row.OriginIdentity.DiscordID), strconv.FormatBool(row.Deleted), strconv.FormatBool(row.Unknown), csvString(row.HistoryRecordID), csvSafe(rejectionField), csvSafe(rejectionReason), csvBool(row.RequestedStreaming), csvActions(row.AutomaticActions),
 		}
 		if err := writer.Write(record); err != nil {
 			return nil, ErrUnavailable
@@ -259,4 +259,18 @@ func csvInt64(value *int64) string {
 		return ""
 	}
 	return strconv.FormatInt(*value, 10)
+}
+
+func csvBool(v *bool) string {
+	if v == nil {
+		return ""
+	}
+	return strconv.FormatBool(*v)
+}
+func csvActions(v []string) string {
+	if v == nil {
+		return ""
+	}
+	encoded, _ := json.Marshal(v)
+	return string(encoded)
 }

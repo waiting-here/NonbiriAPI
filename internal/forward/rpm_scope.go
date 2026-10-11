@@ -98,5 +98,6 @@ func prepareIngress(r *http.Request) *preparedIngress {
 		*p.failure = failureForError(err, false)
 		return p
 	}
+	requestattempt.Streaming(r.Context(), p.envelope.Stream)
 	return p
 }

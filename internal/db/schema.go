@@ -46,3 +46,6 @@ var sessionHeadersSQL string
 
 //go:embed migrations/0013_personal_adaptation.sql
 var personalAdaptationSQL string
+
+//go:embed migrations/0014_request_facts.sql
+var requestFactsSQL string

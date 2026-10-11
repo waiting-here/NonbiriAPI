@@ -381,6 +381,9 @@ func (s *Service) CheckCharityCall(parent context.Context, userID int64, model s
 	if _, err := tx.ExecContext(ctx, `INSERT INTO client_rule_ban_receipts(request_id,user_id,rules_json,banned_until,created_at,expires_at) VALUES(?,?,?,?,?,?)`, requestID, userID, string(rulesJSON), end, decisionNow, decisionNow+receiptLifetime); err != nil {
 		return Decision{}, fmt.Errorf("%w: store receipt: %v", ErrUnavailable, err)
 	}
+	if err := requestattempt.AutomaticActionsTx(ctx, tx, requestID, requestattempt.ActionClientBan); err != nil {
+		return Decision{}, err
+	}
 	if err := tx.Commit(); err != nil {
 		return Decision{}, ErrUnavailable
 	}

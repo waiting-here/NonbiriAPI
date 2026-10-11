@@ -403,6 +403,21 @@
           "userPlaceholder": "Site user ID",
           "upstreamPlaceholder": "Exact upstream model name",
           "actions": "Actions"
+        },
+        "facts": {
+          "title": "Request mode / automatic actions",
+          "mode": "Caller request mode",
+          "actions": "Automatic actions",
+          "unknown": "Not recorded",
+          "streaming": "Streaming",
+          "nonStreaming": "Non-streaming",
+          "noActions": "No penalty",
+          "short_content_deduction": "Short-request deduction",
+          "short_content_ban": "Short-request ban",
+          "short_content_suspension": "Charity access suspended",
+          "rpm_ban": "RPM-limit ban",
+          "client_rule_ban": "Client-rule ban",
+          "context_penalty": "Extra-long context fine"
         }
       },
       "charity": {

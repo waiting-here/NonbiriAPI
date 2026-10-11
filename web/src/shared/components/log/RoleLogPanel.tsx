@@ -647,6 +647,22 @@ function ScopedRoleLogPanel({
       </span>
     );
   };
+  const requestMode = (row: RoleLogRow) =>
+    t(
+      row.requested_streaming == null
+        ? 'common.operations.logs.facts.unknown'
+        : row.requested_streaming
+          ? 'common.operations.logs.facts.streaming'
+          : 'common.operations.logs.facts.nonStreaming',
+    );
+  const actionText = (row: RoleLogRow) =>
+    row.automatic_actions == null
+      ? t('common.operations.logs.facts.unknown')
+      : row.automatic_actions.length === 0
+        ? t('common.operations.logs.facts.noActions')
+        : row.automatic_actions
+            .map((action) => t('common.operations.logs.facts.' + action))
+            .join(' · ');
   const columns: LogColumn<RoleLogRow>[] = [
     {
       key: 'time',
@@ -691,6 +707,20 @@ function ScopedRoleLogPanel({
       header: t('common.operations.logs.result'),
       cell: 'status',
       render: (row) => <LogResultBadge row={row} />,
+    },
+    {
+      key: 'request-facts',
+      header: t('common.operations.logs.facts.title'),
+      cell: 'meta',
+      render: (row) =>
+        row.route_kind.startsWith('charity_') ? (
+          <>
+            <span>{requestMode(row)}</span>
+            <span className="nb-sub">{actionText(row)}</span>
+          </>
+        ) : (
+          '—'
+        ),
     },
     { key: 'usage', header: t('logs.tokens'), cell: 'meta', align: 'num', render: usageCell },
     {
@@ -766,6 +796,18 @@ function ScopedRoleLogPanel({
                   }),
           },
           { label: t('logs.routeKind'), value: routeLabel(detailRequest.route_kind) },
+          ...(detailRequest.route_kind.startsWith('charity_')
+            ? [
+                {
+                  label: t('common.operations.logs.facts.mode'),
+                  value: requestMode(detailRequest),
+                },
+                {
+                  label: t('common.operations.logs.facts.actions'),
+                  value: actionText(detailRequest),
+                },
+              ]
+            : []),
           {
             label: t('logs.phase'),
             value: t(

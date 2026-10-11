@@ -23,6 +23,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/credits"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
 )
@@ -1131,7 +1132,7 @@ WHERE c.logical_request_id=? AND u.state='reserved'`, input.RequestID).Scan(&non
 		return claim.ErrConflict
 	}
 
-	original, userCharge, err := calculateRequestChargeTx(ctx, tx, input.RequestID, input.Disposition)
+	original, userCharge, _, err := calculateRequestChargeTx(ctx, tx, input.RequestID, input.Disposition)
 	if err != nil {
 		return err
 	}
@@ -1159,7 +1160,10 @@ func (s *Service) RequestCharge(ctx context.Context, tx *sql.Tx, requestID strin
 		(disposition != claim.AccountingCommit && disposition != claim.AccountingRelease) {
 		return 0, claim.ErrInvalidInput
 	}
-	_, charge, err := calculateRequestChargeTx(ctx, tx, requestID, disposition)
+	_, charge, fine, err := calculateRequestChargeTx(ctx, tx, requestID, disposition)
+	if err == nil && fine > 0 {
+		err = requestattempt.AutomaticActionsTx(ctx, tx, requestID, requestattempt.ActionContextPenalty)
+	}
 	return charge, err
 }
 
@@ -1175,25 +1179,25 @@ func (s *Service) CalculateRequestCharge(ctx context.Context, requestID string, 
 		return 0, fmt.Errorf("charity: begin charge read: %w", err)
 	}
 	defer tx.Rollback()
-	_, charge, err := calculateRequestChargeTx(ctx, tx, requestID, disposition)
+	_, charge, _, err := calculateRequestChargeTx(ctx, tx, requestID, disposition)
 	if err != nil {
 		return 0, err
 	}
 	return charge, nil
 }
 
-func calculateRequestChargeTx(ctx context.Context, tx *sql.Tx, requestID string, disposition claim.AccountingDisposition) (int64, int64, error) {
+func calculateRequestChargeTx(ctx context.Context, tx *sql.Tx, requestID string, disposition claim.AccountingDisposition) (int64, int64, int64, error) {
 	if disposition == claim.AccountingRelease {
-		return 0, 0, nil
+		return 0, 0, 0, nil
 	}
 	var started bool
 	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM donation_usage_reservations u
 JOIN dispatch_claims c ON c.id=u.claim_id
 WHERE c.logical_request_id=? AND u.state='committed' AND u.calls_actual=1)`, requestID).Scan(&started); err != nil {
-		return 0, 0, fmt.Errorf("charity: read successful response evidence: %w", err)
+		return 0, 0, 0, fmt.Errorf("charity: read successful response evidence: %w", err)
 	}
 	if !started {
-		return 0, 0, nil
+		return 0, 0, 0, nil
 	}
 	var mode, contextPricing string
 	var discount int
@@ -1206,14 +1210,14 @@ usage_uncached_input_tokens,cache_write_input_tokens,cache_read_input_tokens,usa
 FROM charity_reservations WHERE logical_request_id=?`, requestID).Scan(
 		&mode, &discount, &requestPrice, &reserved, &p0, &p1, &p2, &p3, &u0, &u1, &u2, &u3, &unknown, &contextPricing)
 	if errors.Is(err, sql.ErrNoRows) {
-		return 0, 0, claim.ErrNotFound
+		return 0, 0, 0, claim.ErrNotFound
 	}
 	if err != nil {
-		return 0, 0, fmt.Errorf("charity: calculate request charge: %w", err)
+		return 0, 0, 0, fmt.Errorf("charity: calculate request charge: %w", err)
 	}
 	policy, err := credits.DecodeContextPricing(contextPricing)
 	if err != nil {
-		return 0, 0, claim.ErrInvariant
+		return 0, 0, 0, claim.ErrInvariant
 	}
 	usage := credits.TokenUsage{UncachedInput: u0, CacheWriteInput: u1, CacheReadInput: u2, Output: u3}
 	requestPrice, prices := policy.SelectPrices(usage, requestPrice,
@@ -1222,17 +1226,17 @@ FROM charity_reservations WHERE logical_request_id=?`, requestID).Scan(
 	if mode == "per_token" {
 		original, err = credits.PriceTokenUsage(usage, prices)
 		if err != nil {
-			return 0, 0, claim.ErrInvariant
+			return 0, 0, 0, claim.ErrInvariant
 		}
 		if unknown == 1 && original < reserved {
 			original = reserved
 		}
 	} else if mode != "per_request" {
-		return 0, 0, claim.ErrInvariant
+		return 0, 0, 0, claim.ErrInvariant
 	}
 	charge, err := credits.ApplyDiscountPercent(original, discount)
 	if err != nil {
-		return 0, 0, claim.ErrInvariant
+		return 0, 0, 0, claim.ErrInvariant
 	}
 	if unknown == 1 && charge > reserved {
 		charge = reserved
@@ -1242,13 +1246,13 @@ FROM charity_reservations WHERE logical_request_id=?`, requestID).Scan(
 	fine := policy.Fine(usage)
 	original, err = credits.Add(original, fine)
 	if err != nil {
-		return 0, 0, claim.ErrInvariant
+		return 0, 0, 0, claim.ErrInvariant
 	}
 	charge, err = credits.Add(charge, fine)
 	if err != nil {
-		return 0, 0, claim.ErrInvariant
+		return 0, 0, 0, claim.ErrInvariant
 	}
-	return original, charge, nil
+	return original, charge, fine, nil
 }
 
 func recordModelOutcome(ctx context.Context, tx *sql.Tx, requestID string, success bool, at int64) error {

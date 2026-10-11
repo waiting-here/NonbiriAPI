@@ -403,6 +403,21 @@
           "userPlaceholder": "站内用户 ID",
           "upstreamPlaceholder": "上游实际模型名",
           "actions": "操作"
+        },
+        "facts": {
+          "title": "请求方式／自动处罚",
+          "mode": "用户请求方式",
+          "actions": "自动处罚",
+          "unknown": "未记录",
+          "streaming": "流式",
+          "nonStreaming": "非流式",
+          "noActions": "未触发处罚",
+          "short_content_deduction": "短请求扣分",
+          "short_content_ban": "短请求自动封禁",
+          "short_content_suspension": "短请求暂停公益",
+          "rpm_ban": "RPM 超限自动封禁",
+          "client_rule_ban": "客户端命中自动封禁",
+          "context_penalty": "超长上下文罚款"
         }
       },
       "charity": {

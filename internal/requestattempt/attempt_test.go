@@ -63,3 +63,21 @@ func TestClaimedAndDebugInterceptedDoNotRecordAgain(t *testing.T) {
 		httperr.WriteError(w, httperr.New(code, "test"))
 	}
 }
+
+func TestOriginalStreamingModeSurvivesLaterAdaptation(t *testing.T) {
+	for _, original := range []bool{false, true} {
+		ctx, id, err := New(t.Context(), 7, "POST", "/v1/chat/completions")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if RequestedStreaming(ctx) != nil {
+			t.Fatal("unknown request mode was guessed")
+		}
+		Streaming(ctx, original)
+		Streaming(ctx, !original)
+		got := Snapshot(ctx, id, "model", "flow", "user_rpm", 429, "rate_limited")
+		if got.RequestedStreaming == nil || *got.RequestedStreaming != original {
+			t.Fatal(got)
+		}
+	}
+}

@@ -547,7 +547,7 @@ CREATE TABLE request_logs (
  error_code TEXT NOT NULL DEFAULT '' CHECK(typeof(error_code)='text' AND length(CAST(error_code AS BLOB))<=64 AND error_code NOT GLOB '*[^a-z0-9_]*'),
  error_diag TEXT NOT NULL DEFAULT '' CHECK(typeof(error_diag)='text' AND length(CAST(error_diag AS BLOB))<=4096),
  legal_hold_consumed INTEGER NOT NULL DEFAULT 0 CHECK(legal_hold_consumed IN (0,1)), rejection_stage TEXT CHECK(rejection_stage IS NULL OR rejection_stage IN ('authorization','flow','preflight')), rejection_reason TEXT CHECK(rejection_reason IS NULL OR rejection_reason IN ('unauthorized','forbidden','charity_suspended','feature_disabled','maintenance','invalid_request','not_found','unbound_model','insufficient_credits','user_rpm','global_rpm','shared_rpm','concurrency','content_too_short','payload_too_large','resource_limit_exceeded','service_unavailable')), request_method TEXT CHECK(request_method IS NULL OR request_method IN ('GET','POST')), request_path TEXT CHECK(request_path IS NULL OR request_path IN ('/v1/models','/v1/chat/completions','/v1/embeddings','/v1/images/generations')), usage_total_mismatch INTEGER NOT NULL DEFAULT 0
- CHECK(typeof(usage_total_mismatch)='integer' AND usage_total_mismatch IN (0,1)), origin_user_id INTEGER CHECK(origin_user_id IS NULL OR (typeof(origin_user_id)='integer' AND origin_user_id>0)), origin_discord_id TEXT CHECK(origin_discord_id IS NULL OR (typeof(origin_discord_id)='text' AND length(origin_discord_id) BETWEEN 1 AND 20 AND origin_discord_id NOT GLOB '*[^0-9]*' AND substr(origin_discord_id,1,1) BETWEEN '1' AND '9')),
+ CHECK(typeof(usage_total_mismatch)='integer' AND usage_total_mismatch IN (0,1)), origin_user_id INTEGER CHECK(origin_user_id IS NULL OR (typeof(origin_user_id)='integer' AND origin_user_id>0)), origin_discord_id TEXT CHECK(origin_discord_id IS NULL OR (typeof(origin_discord_id)='text' AND length(origin_discord_id) BETWEEN 1 AND 20 AND origin_discord_id NOT GLOB '*[^0-9]*' AND substr(origin_discord_id,1,1) BETWEEN '1' AND '9')), requested_streaming INTEGER CHECK(requested_streaming IN (0,1)), automatic_actions INTEGER CHECK(automatic_actions IS NULL OR (typeof(automatic_actions)='integer' AND automatic_actions BETWEEN 0 AND 63)),
  CHECK((caller_result_class IS NULL AND caller_status IS NULL AND caller_error_code IS NULL AND completed_at IS NULL AND status_code=0 AND error_code='') OR
        (caller_result_class='success' AND caller_status BETWEEN 200 AND 399 AND caller_error_code IS NULL AND completed_at IS NOT NULL) OR
        (caller_result_class='failed' AND caller_status BETWEEN 400 AND 599 AND caller_error_code IN ('internal','invalid_request','unauthorized','forbidden','not_found','conflict','method_not_allowed','rate_limited','payload_too_large','elevated_required','unbound_model','upstream','maintenance','service_unavailable','resource_limit_exceeded','resource_locked','debug_dry_run_intercepted','debug_live_result_captured','debug_live_cancelled','insufficient_credits','feature_disabled','charity_suspended','content_too_short','already_checked_in','checkin_cap_reached') AND completed_at IS NOT NULL) OR
@@ -6520,7 +6520,7 @@ CREATE TABLE schema_state (
 ) STRICT;
 INSERT INTO credit_compaction(id,through_seq,details_before,sweep_at,sweep_after_seq) VALUES(1,0,0,0,0);
 INSERT INTO game_blackjack_clock(id,observed_at) VALUES(1,0);
-INSERT INTO schema_state(id,version) VALUES(1,13);
+INSERT INTO schema_state(id,version) VALUES(1,14);
 
 CREATE TABLE game_ai_settings (
  game_key TEXT PRIMARY KEY NOT NULL,

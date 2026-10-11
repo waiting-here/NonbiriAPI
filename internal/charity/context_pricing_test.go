@@ -68,6 +68,17 @@ func TestContextPricingSettlement(t *testing.T) {
 			if _, err := rail.RecoverNonterminal(ctx, 100); err != nil {
 				t.Fatal(err)
 			}
+			var actions int
+			if err := e.store.DB().QueryRow("SELECT automatic_actions FROM request_logs WHERE logical_request_id=?", request.ID).Scan(&actions); err != nil {
+				t.Fatal(err)
+			}
+			wantAction := 0
+			if tc.penalty && tc.usage.Present && tc.usage.UncachedInputTokens+tc.usage.CacheWriteInputTokens+tc.usage.CacheReadInputTokens >= 10 {
+				wantAction = 32
+			}
+			if actions != wantAction {
+				t.Fatal("context fine action", actions, wantAction)
+			}
 			e.billingBalance(t, e.callerID, 10000-tc.charge)
 			e.billingBalance(t, e.donorID, 10000+tc.reward)
 			var price, original, charge, reward int64
