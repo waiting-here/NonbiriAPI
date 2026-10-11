@@ -77,11 +77,20 @@ func TestLakeCollectionRootLedgerPromotionReplayAndLifecycle(t *testing.T) {
 	if donation.Decimal() != "0" || operations != 0 {
 		t.Fatal("rolled-back claim leaked", donation.Decimal(), operations)
 	}
+	var rolledBack lakenotes.ProfileView
+	r = f.request("GET", base+"/profile", nil, user.Cookie, false)
+	if r.Code != http.StatusOK || json.Unmarshal(r.Body.Bytes(), &rolledBack) != nil || rolledBack.Wallet != before.Wallet {
+		t.Fatal("rolled-back claim changed wallet", r.Code, rolledBack.Wallet)
+	}
 	if _, err = f.store.DB().Exec("DROP TRIGGER reject_collection_test"); err != nil {
 		t.Fatal(err)
 	}
 	// Claims use the current request time, independently of profile setup.
 	f.offset.Add(1)
+	gameMilli, err := strconv.ParseInt(before.Wallet.GameMilli, 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, location := range []string{"lake", "river", "coast", "jungle"} {
 		key := "first-" + location
 		claimStarted := f.now().Unix()
@@ -92,8 +101,9 @@ func TestLakeCollectionRootLedgerPromotionReplayAndLifecycle(t *testing.T) {
 			t.Fatal(location, result.Code, result.Body.String())
 		}
 		claimedAt := view.Profile.CollectionClaims[location]
-		if claimedAt < claimStarted || claimedAt > claimFinished || view.Wallet != before.Wallet || view.Profile.Coins != before.Profile.Coins {
-			t.Fatal("incorrect reward", view)
+		gameMilli += 100000000
+		if claimedAt < claimStarted || claimedAt > claimFinished || view.Wallet.GeneralMilli != before.Wallet.GeneralMilli || view.Wallet.GameMilli != strconv.FormatInt(gameMilli, 10) || view.Profile.Coins != before.Profile.Coins {
+			t.Fatal("incorrect reward", location, claimedAt, view.Wallet, view.Profile.Coins)
 		}
 		if replay := claim(location, key, origin, user.Cookie); replay.Code != http.StatusOK {
 			t.Fatal(replay.Code, replay.Body.String())
@@ -107,7 +117,7 @@ func TestLakeCollectionRootLedgerPromotionReplayAndLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	donation, _ = db.DecodeU128(donationRaw)
-	if donation.Decimal() != "200000" || level != 4 || operations != 4 || entries != 0 {
+	if donation.Decimal() != "200000" || level != 4 || operations != 4 || entries != 8 {
 		t.Fatal(donation.Decimal(), level, operations, entries)
 	}
 	uid, _ := strconv.ParseInt(user.ID, 10, 64)
