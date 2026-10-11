@@ -2,30 +2,26 @@ export type Rect = [number, number, number, number];
 export type WallpaperScene = 'celestial' | 'wandering';
 export type WallpaperTheme = 'light' | 'dark';
 
-export type Portrait = { rect: Rect; eyes: Rect; eyeSize: [number, number] };
+export type Portrait = { rect: Rect; eyes: Rect };
 export const portraits: Record<WallpaperScene, Record<WallpaperTheme, Portrait>> = {
   wandering: {
     light: {
       rect: [0.245, 0.25, 0.8, 0.8],
       eyes: [0.739, 0.2, 0.775, 0.224],
-      eyeSize: [0.015, 0.017],
     },
     dark: {
       rect: [0.35, 0.254, 0.75, 0.75],
       eyes: [0.663, 0.243, 0.714, 0.191],
-      eyeSize: [0.018, 0.023],
     },
   },
   celestial: {
     light: {
       rect: [0.295, 0.277, 0.72, 0.72],
       eyes: [0.763, 0.16, 0.798, 0.181],
-      eyeSize: [0.014, 0.02],
     },
     dark: {
       rect: [0.357, 0.338, 0.675, 0.675],
       eyes: [0.752, 0.154, 0.796, 0.185],
-      eyeSize: [0.017, 0.022],
     },
   },
 };

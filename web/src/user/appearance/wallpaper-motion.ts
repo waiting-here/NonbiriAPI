@@ -9,6 +9,7 @@ import {
   type WallpaperScene,
   type WallpaperTheme,
 } from './wallpaper-animation';
+import { eyelidProfiles, eyelidProfileWidth } from './wallpaper-eyelids';
 import { wallpaperFragment, wallpaperVertex } from './wallpaper-shaders';
 
 export type { WallpaperScene, WallpaperTheme } from './wallpaper-animation';
@@ -42,7 +43,7 @@ export async function renderWallpaper(
   quality: WallpaperQuality = wallpaperQuality(),
 ): Promise<() => void> {
   const prefix = '/assets/gacha/appearances/layers/' + (quality === 'high' ? 'hires/' : '');
-  const id = scene + '-' + theme;
+  const id = `${scene}-${theme}` as const;
   const names = [
     id + '-background',
     id + '-hero',
@@ -53,7 +54,8 @@ export async function renderWallpaper(
   const images = await Promise.all(
     names.map(async (name) => {
       const image = new Image();
-      image.src = prefix + name + '.webp';
+      const revision = name.endsWith('-hero') || name.endsWith('-closed') ? '?v=3' : '';
+      image.src = prefix + name + '.webp' + revision;
       await image.decode();
       return image;
     }),
@@ -255,7 +257,30 @@ export async function renderWallpaper(
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, textures[2]);
     gl.uniform4f(uniform('eyes'), ...portraits[scene][theme].eyes);
-    gl.uniform2f(uniform('eyeSize'), ...portraits[scene][theme].eyeSize);
+    const profiles = eyelidProfiles[id];
+    gl.uniform4f(uniform('eyeBox1'), ...profiles[0].bounds);
+    gl.uniform4f(uniform('eyeBox2'), ...profiles[1].bounds);
+    const contours = gl.createTexture();
+    if (!contours) throw new Error('wallpaper-texture-unavailable');
+    textures.push(contours);
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, contours);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      gl.RGBA,
+      eyelidProfileWidth,
+      4,
+      0,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      new Uint8Array(profiles.flatMap((profile) => profile.rows.flat())),
+    );
+    gl.uniform1i(uniform('lids'), 2);
     gl.uniform1f(uniform('dark'), theme === 'dark' ? 1 : 0);
     resize();
     window.addEventListener('resize', resize);

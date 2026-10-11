@@ -1,3 +1,5 @@
+import { eyelidProfileWidth } from './wallpaper-eyelids';
+
 const geometry = `
 float field(vec2 p,vec2 center,vec2 radius) {
   vec2 q=(p-center)/radius;
@@ -53,6 +55,8 @@ void main() {
     p.y+=.013*sin(stroke-.3);
     p=turn(p,vec2(.30,.48),.014*sin(stroke+.55));
   }
+  // Leave room outside the solid disk for a freely fading light bloom.
+  if(kind>3.5 && kind<4.5) { p=(p-.5)*1.5+.5; uv=p; }
   vec2 position=rect.xy+p*rect.zw;
   if(screenSpace<.5) position=(position-offset)/crop;
   gl_Position=vec4(position.x*2.-1.,1.-position.y*2.,0.,1.);
@@ -61,37 +65,57 @@ void main() {
 
 export const wallpaperFragment = `precision highp float;
 varying vec2 uv;
-uniform sampler2D art, closed;
-uniform vec2 crop, offset, eyeSize;
+uniform sampler2D art, closed, lids;
+uniform vec2 crop, offset;
+uniform vec4 eyeBox1, eyeBox2;
 uniform vec4 rect, eyes;
 uniform vec3 tint;
 uniform float time, kind, opacity, dark, screenSpace, blink, planet;
 ${geometry}
 float hash(vec2 p) { return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
 
-// Geometrically compress the eye opening; never dissolve the open pupil away.
-vec4 eyelid(vec2 p,vec2 center,vec4 original) {
-  float slope=(eyes.w-eyes.y)/max(.02,eyes.z-eyes.x);
-  vec2 q=p-center;
-  q.y-=q.x*slope;
-  float across=abs(q.x)/eyeSize.x;
-  float patch=(1.-smoothstep(1.,1.4,across))
-    *(1.-smoothstep(2.,2.6,abs(q.y)/eyeSize.y));
-  if(patch<=0. || blink<=0.) return original;
-  float shape=sqrt(max(.04,1.-min(.96,across*across)));
-  float top=-eyeSize.y*shape, bottom=eyeSize.y*.72*shape;
-  float line=eyeSize.y*.1*shape;
-  float amount=blink*(1.-smoothstep(.8,1.4,across));
-  float upper=mix(top,line,amount), lower=mix(bottom,line,amount);
-  float edge=eyeSize.y*2.7;
-  float sourceY;
-  if(q.y<upper) sourceY=mix(-edge,top,(q.y+edge)/(upper+edge));
-  else if(q.y>lower) sourceY=mix(bottom,edge,(q.y-lower)/(edge-lower));
-  else sourceY=mix(top,bottom,(q.y-upper)/max(.00001,lower-upper));
-  vec2 source=p+vec2(0.,sourceY-q.y);
-  vec4 moving=texture2D(art,source);
-  moving=mix(moving,texture2D(closed,p),smoothstep(.82,1.,amount));
-  return mix(original,moving,patch);
+// Each eye follows its painted contour. Only the lash ribbon is remapped;
+// iris, highlights and all surrounding skin retain their original coordinates.
+vec4 eyelid(vec2 p,vec4 box,float row,vec4 original) {
+  if(blink<=0.) return original;
+  vec2 q=(p-box.xy)/box.zw;
+  if(q.x<=0. || q.x>=1. || q.y<=0. || q.y>=1.) return original;
+  float sampleX=(q.x*${eyelidProfileWidth - 1}.0+.5)/${eyelidProfileWidth}.0;
+  vec4 opened=texture2D(lids,vec2(sampleX,row));
+  vec3 shut=texture2D(lids,vec2(sampleX,row+.25)).rgb;
+  float edge=.012;
+  float coverage=smoothstep(opened.r,opened.r+edge,q.y)
+    *(1.-smoothstep(opened.g-edge,opened.g,q.y))
+    *smoothstep(0.,.035,q.x)*(1.-smoothstep(.965,1.,q.x));
+  coverage*=shut.z*smoothstep(0.,.075,blink);
+  if(coverage<=0.) return original;
+  float upper=mix(opened.b,shut.x,blink);
+  float lower=mix(opened.a,shut.y,blink);
+  float bottom=mix(opened.g,shut.y,blink*blink);
+  float aperture=smoothstep(lower-edge,lower+edge,q.y)
+    *(1.-smoothstep(bottom-edge,bottom,q.y))*(1.-smoothstep(.98,1.,blink));
+  vec4 resting=texture2D(closed,p);
+  // The final lash is drawn by the moving ribbon below. Keep it out of the
+  // fixed skin fill, otherwise two lash lines appear during partial closure.
+  vec2 skinAbove=vec2(p.x,box.y+max(0.,shut.x-.055)*box.w);
+  vec2 skinBelow=vec2(p.x,box.y+min(1.,shut.y+.055)*box.w);
+  float finalRibbon=smoothstep(shut.x-.025,shut.x,q.y)
+    *(1.-smoothstep(shut.y,shut.y+.025,q.y));
+  vec4 lidSkin=mix(texture2D(closed,skinAbove),texture2D(closed,skinBelow),
+    clamp((q.y-shut.x)/max(.005,shut.y-shut.x),0.,1.));
+  resting=mix(resting,lidSkin,finalRibbon);
+  // Fill the authored eye opening at fixed coordinates; colour similarity
+  // cannot distinguish an iris highlight from skin at full closure.
+  vec4 color=mix(original,resting,1.-aperture);
+  float ribbon=smoothstep(upper-edge,upper+edge,q.y)
+    *(1.-smoothstep(lower-edge,lower+edge,q.y));
+  float along=clamp((q.y-upper)/max(.005,lower-upper),0.,1.);
+  vec2 fromOpen=vec2(p.x,box.y+mix(opened.b,opened.a,along)*box.w);
+  vec2 fromClosed=vec2(p.x,box.y+mix(shut.x,shut.y,along)*box.w);
+  vec4 lash=mix(texture2D(art,fromOpen),texture2D(closed,fromClosed),blink);
+  color=mix(color,lash,ribbon);
+  color=mix(color,texture2D(closed,p),smoothstep(.96,1.,blink));
+  return mix(original,color,coverage);
 }
 
 void main() {
@@ -124,36 +148,40 @@ void main() {
   }
   if(kind<1.5) {
     vec4 color=texture2D(art,uv);
-    color=eyelid(uv,eyes.xy,color);
-    color=eyelid(uv,eyes.zw,color);
+    color=eyelid(uv,eyeBox1,.125,color);
+    color=eyelid(uv,eyeBox2,.625,color);
     gl_FragColor=color*vec4(tint,opacity); return;
   }
   vec4 color=texture2D(art,uv);
   if(kind>3.5) {
-    // Sample inside the painted atmosphere; the smooth rim is rendered separately.
-    color=texture2D(art,.5+(uv-.5)*mix(1.,.91,planet));
     vec2 q=(uv-.5)*2./.95;
     float radius=length(q);
     float z=sqrt(max(0.,1.-dot(q,q)));
     vec3 normal=vec3(q,z);
-    // The night-side is an opaque hemisphere, never a transparent crescent cutout.
     vec3 sun=normalize(vec3(-.91,-.34,mix(.65,-.30,dark)));
     float incidence=dot(normal,sun);
-    float day=smoothstep(-.035,.035,incidence);
+    float day=smoothstep(-.07,.09,incidence);
     float diffuse=max(0.,incidence);
+    // The source includes a painted halo. Sample the surface inside it, then
+    // light the sphere independently so the halo cannot become a solid shell.
+    color=texture2D(art,.5+(uv-.5)*mix(.84,.91,planet));
     if(planet<.5) {
-      color.rgb*=mix(vec3(.052,.066,.088),vec3(.23+.77*diffuse),day);
+      vec3 night=color.rgb*vec3(.075,.105,.16)+vec3(.008,.012,.025);
+      vec3 silver=color.rgb*(.72+.48*sqrt(diffuse));
+      color.rgb=mix(night,silver,day);
     } else {
       color.rgb*=mix(.16,.55+.45*diffuse,day);
     }
-    // Daytime atmospheric light softens distant bodies without making them transparent.
     color.rgb=mix(color.rgb,vec3(.64,.76,.88),(1.-dark)*(.22+.38*(1.-day)));
-    float disk=1.-smoothstep(.996,1.006,radius);
-    float halo=exp(-max(0.,radius-1.)*65.)*(.10+.08*day)
-      *(1.-smoothstep(1.025,1.052,radius));
-    vec3 glow=mix(vec3(.86,.83,.74),vec3(.46,.75,1.),planet);
-    color.rgb=mix(glow,color.rgb,disk);
-    color.a=max(disk,halo);
+    float disk=1.-smoothstep(.997,1.003,radius);
+    float outside=max(0.,radius-1.);
+    float litRim=pow(max(0.,dot(q/max(radius,.001),normalize(sun.xy))),1.5);
+    float halo=(.30*exp(-outside*20.)+.10*exp(-outside*6.5))
+      *litRim*(1.-smoothstep(1.35,1.55,radius));
+    vec3 glow=mix(vec3(1.,.86,.62),vec3(.46,.75,1.),planet);
+    float alpha=disk+halo*(1.-disk);
+    color.rgb=(color.rgb*disk+glow*halo*(1.-disk))/max(.0001,alpha);
+    color.a=alpha;
   }
   gl_FragColor=color*vec4(tint,opacity);
 }
