@@ -39,6 +39,7 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Fixed
 
+- Appearance settings hide unowned designs whose cards have never been offered, including future and never-open paused pools.
 - Wallpaper portraits keep their faces, bodies and limbs fixed; only individually marked hair ends and loose fabric sway.
 - SSR/SP card blinks follow individual eyelid contours without crossfading the surrounding face. Card animation now uses the same phase-preserving 60 Hz cadence as appearance wallpapers.
 - Personal model requests remain available when general credits are negative; charity balance checks remain in effect.

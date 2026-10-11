@@ -82,15 +82,27 @@ func readPoolEntries(ctx context.Context, tx *sql.Tx, at int64) ([]PoolEntry, er
 	return out, rows.Err()
 }
 
+// CardWasOfferedTx uses saved opening intervals, including completed pools.
+func (s *Service) CardWasOfferedTx(ctx context.Context, tx *sql.Tx, id string) (bool, error) {
+	card, ok := cardsByID[id]
+	if !ok {
+		return false, nil
+	}
+	if card.Source != "limited" {
+		return true, nil
+	}
+	at, err := s.now()
+	if err != nil {
+		return false, err
+	}
+	offered, err := readOfferedCards(ctx, tx, at)
+	return offered[id], err
+}
+
 // Each configuration applies from its save time until the next revision.
 // A scheduled pool paused before its opening time has never been open.
-func readVisibleThemes(ctx context.Context, tx *sql.Tx, at int64, owned map[string]Owned) ([]string, error) {
-	visible := map[string]bool{}
-	for id := range owned {
-		if card, ok := cardsByID[id]; ok {
-			visible[card.Theme] = true
-		}
-	}
+func readOfferedCards(ctx context.Context, tx *sql.Tx, at int64) (map[string]bool, error) {
+	offered := map[string]bool{}
 	rows, err := tx.QueryContext(ctx, `
   SELECT config FROM (
    SELECT config,created_at,lead(created_at,1,?) OVER (PARTITION BY target ORDER BY seq) AS next_at
@@ -112,13 +124,30 @@ func readVisibleThemes(ctx context.Context, tx *sql.Tx, at int64, owned map[stri
 			return nil, err
 		}
 		for _, id := range pool.Featured {
-			if card, ok := cardsByID[id]; ok {
-				visible[card.Theme] = true
+			if _, ok := cardsByID[id]; ok {
+				offered[id] = true
 			}
 		}
 	}
 	if err = rows.Err(); err != nil {
 		return nil, err
+	}
+	return offered, nil
+}
+
+func readVisibleThemes(ctx context.Context, tx *sql.Tx, at int64, owned map[string]Owned) ([]string, error) {
+	visible := map[string]bool{}
+	for id := range owned {
+		if card, ok := cardsByID[id]; ok {
+			visible[card.Theme] = true
+		}
+	}
+	offered, err := readOfferedCards(ctx, tx, at)
+	if err != nil {
+		return nil, err
+	}
+	for id := range offered {
+		visible[cardsByID[id].Theme] = true
 	}
 	out := []string{}
 	for _, theme := range catalog.Themes {

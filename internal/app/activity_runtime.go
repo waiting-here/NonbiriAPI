@@ -130,6 +130,12 @@ func newActivityRuntime(store *db.Store, vault *secret.Vault, sessions *auth.Run
 		return nil, err
 	}
 	a.appearance, err = appearance.New(appearance.Config{Database: store.DB(), Users: users, Gate: admission, Now: now,
+		Visible: func(ctx context.Context, tx *sql.Tx, key string) (bool, error) {
+			if !strings.HasPrefix(key, "card:") {
+				return false, nil
+			}
+			return a.gacha.CardWasOfferedTx(ctx, tx, strings.TrimPrefix(key, "card:"))
+		},
 		Unlock: func(ctx context.Context, tx *sql.Tx, user int64, key string) (bool, error) {
 			if !strings.HasPrefix(key, "card:") {
 				return false, nil

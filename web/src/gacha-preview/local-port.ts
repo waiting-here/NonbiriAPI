@@ -350,6 +350,7 @@ function appearanceState() {
   return {
     selected: unlocked.includes(memory.appearance ?? '') ? memory.appearance! : 'default',
     unlocked,
+    visible: ['default', 'celestial', 'wandering'],
     updated_at: null,
   };
 }

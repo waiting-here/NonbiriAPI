@@ -28,17 +28,34 @@ for (const design of ['celestial', 'wandering'])
           route.fulfill({ json: { enabled: false, entered: false, pools: [] } }),
         );
         let selected = 'default';
+        let unlocked = ['default'];
+        let visible = ['default'];
         await page.route('**/api/appearance', (route) => {
           expect(route.request().method()).toBe('GET');
           return route.fulfill({
-            json: { selected, unlocked: ['default', design], updated_at: null },
+            json: { selected, unlocked, visible, updated_at: null },
           });
         });
         await page.goto(USER_ORIGIN + '/activities');
         const trigger = page.getByRole('button', { name: '欣赏动态背景', exact: true });
         await expect(page.locator('.loan-card')).toBeVisible();
         await expect(trigger).toHaveCount(0);
+        const appearance = page.getByRole('button', { name: '外观', exact: true });
+        if (width < 1024) await page.getByRole('button', { name: '打开导航', exact: true }).click();
+        await appearance.click();
+        await expect(page.locator('.nb-appearance-option')).toHaveCount(1);
+        await expect(page.getByText('获得对应 SP 卡牌后解锁', { exact: true })).toHaveCount(0);
+        await page.getByRole('button', { name: '关闭', exact: true }).click();
+        visible = ['default', design];
+        await page.reload();
+        if (width < 1024) await page.getByRole('button', { name: '打开导航', exact: true }).click();
+        await appearance.click();
+        await expect(page.locator('.nb-appearance-option')).toHaveCount(2);
+        await expect(page.getByText('获得对应 SP 卡牌后解锁', { exact: true })).toBeVisible();
+        await expect(page.locator('.nb-appearance-option input:disabled')).toHaveCount(1);
+        await page.getByRole('button', { name: '关闭', exact: true }).click();
         selected = design;
+        unlocked = ['default', design];
         await page.reload();
         await expect(trigger).toBeVisible();
         const amount = page.locator('.loan-card select');

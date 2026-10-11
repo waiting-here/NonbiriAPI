@@ -3620,7 +3620,7 @@
       "viewBackground": "View animated background",
       "restorePage": "Return to page",
       "title": "Appearance",
-      "description": "SP cards unlock matching appearances. Colors and backgrounds change while the page layout stays familiar.",
+      "description": "Choose light, dark or system mode, or apply an unlocked appearance.",
       "apply": "Apply appearance",
       "available": "Unlocked",
       "chosen": "Selected",

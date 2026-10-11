@@ -87,6 +87,8 @@ Obtaining an SP card by drawing or shop redemption immediately unlocks its match
 
 With a non-default appearance selected, **View animated background** in the top bar hides the interface for appreciation. **Return to page** or Escape restores the page and its current input state. Reduced-motion preferences still apply.
 
+An appearance stays out of the selector until its card has been offered in an opened pool or the account owns it. Scheduling a future pool or pausing it before opening does not reveal the design. Previously offered appearances can remain visible as locked choices.
+
 The selected appearance is saved per account. Unlocks derive from owned cards, independently of draw-history expiry. Reading or selecting an appearance grants no tickets or activity rewards.
 
 ## Records and HTTP access
@@ -112,7 +114,7 @@ Administrator settings accept an optional `entry_enabled` boolean, alongside rul
 
 Gacha POST routes require `Idempotency-Key`. Retry uncertain operations with the same key and identical body. Confirmed retries never repeat charges or rewards. Expired draw receipts report completion without a new draw. Price-dependent actions include the displayed `revision`; administrator edits include `expected_revision`. Unknown fields and oversized bodies are rejected.
 
-Appearance POST accepts only `{"selected":"default"}`, `{"selected":"celestial"}` or `{"selected":"wandering"}`, with a 1 KiB body limit. It is an idempotent desired-state update and does not require an idempotency key. Both appearance routes return `selected,unlocked,updated_at`, reject query parameters and use `Cache-Control: no-store`. Locked designs are forbidden; malformed or unknown selections are invalid requests.
+Appearance POST accepts only `{"selected":"default"}`, `{"selected":"celestial"}` or `{"selected":"wandering"}`, with a 1 KiB body limit. It is an idempotent desired-state update and does not require an idempotency key. The visible catalogue is derived at read time and is excluded from account exports. Both appearance routes return `selected,unlocked,visible,updated_at`, reject query parameters and use `Cache-Control: no-store`. Locked designs are forbidden; malformed or unknown selections are invalid requests.
 
 Example action bodies:
 
