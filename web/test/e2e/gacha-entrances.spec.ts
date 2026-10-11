@@ -1,0 +1,181 @@
+import { resolve } from 'node:path';
+import { expect, test } from './test';
+import { collectConsoleViolations, mockPublicConfig, mockRoleSession } from './support';
+import { USER_ORIGIN } from './ports';
+import { loanActivity } from '../fixtures/loans';
+const defaultRules = {
+  weights: [5500, 3500, 900, 100],
+  sr_pity: 10,
+  ssr_pity: 60,
+  sr_featured: 5000,
+  ssr_featured: 5000,
+  sr_guarantee: true,
+  ssr_guarantee: true,
+};
+
+const now = 1_800_000_000;
+const entrances = [
+  {
+    id: 'gp_summer',
+    name: '夏夜花火',
+    name_en: 'Summer Fireworks',
+    cover: 'i',
+    featured: [
+      'i-chatgpt',
+      'i-claude',
+      'i-glm',
+      'i-deepseek',
+      'i-gemini',
+      'h-chatgpt',
+      'h-claude',
+      'h-glm',
+      'h-deepseek',
+      'h-gemini',
+    ],
+    starts_at: now - 86400,
+    ends_at: now + 86400,
+  },
+  {
+    id: 'gp_celestial',
+    name: '星月神话',
+    name_en: 'Celestial Myth',
+    cover: 'l',
+    featured: ['l-chatgpt'],
+    starts_at: now - 86400,
+    ends_at: now + 86400,
+  },
+];
+
+for (const theme of ['light', 'dark'] as const)
+  for (const width of [1440, 390]) {
+    test(`gacha entrances and direct pool navigation ${theme} ${width}`, async ({ page }) => {
+      const guard = collectConsoleViolations(page);
+      await page.setViewportSize({ width, height: 900 });
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await page.clock.setFixedTime(new Date(now * 1000));
+      await page.addInitScript(
+        ({ theme }) => {
+          localStorage.setItem('nb.lang', 'zh');
+          localStorage.setItem('nb.theme', theme);
+          localStorage.setItem(
+            'nb.gacha.preferences',
+            JSON.stringify({ music: false, sound: false, reduced: true }),
+          );
+        },
+        { theme },
+      );
+      await mockRoleSession(page, 'user', 'user');
+      await mockPublicConfig(page, 'user');
+      await page.route('**/api/events', (route) =>
+        route.fulfill({ contentType: 'text/event-stream', body: ': connected\n\n' }),
+      );
+      await page.route('**/api/activities', (route) => route.fulfill({ json: loanActivity() }));
+      await page.route('**/api/limited-activities', (route) => route.fulfill({ json: [] }));
+      let enabled = false;
+      await page.route('**/api/gacha/entry', (route) =>
+        route.fulfill({ json: { enabled, entered: false, pools: enabled ? entrances : [] } }),
+      );
+      const snapshot = {
+        visible_themes: ['a', 'g', 'i', 'l'],
+        tickets: { permanent: 10, limited: 10 },
+        fragments: { N: 0, R: 0, SR: 0, SSR: 0 },
+        credits: { general: '10000', game: '10000' },
+        owned: {},
+        pity: {},
+        newcomer: true,
+        checked_in: false,
+        claimed: [],
+        redeemed: [],
+        month_used: { permanent: 0, limited: 0 },
+        donation: '0',
+        server_time: now,
+        time_zone: 'UTC+08:00',
+        pools: [
+          {
+            id: 'permanent',
+            name: '永续智能',
+            kind: 'permanent',
+            cover: 'permanent',
+            featured: [],
+            starts_at: null,
+            ends_at: null,
+          },
+          ...entrances.map((pool) => ({ ...pool, kind: 'limited' })),
+        ].map((pool) => ({
+          ...pool,
+          group: pool.id,
+          rules: defaultRules,
+          paused: false,
+          published: true,
+          revision: 1,
+          rates: [0.51317544, 0.32656619, 0.13817568, 0.02208269],
+        })),
+        shop: {
+          permanent_price: '10000',
+          limited_price: '10000',
+          n_ticket: 20,
+          r_ticket: 10,
+          sr_ticket: 5,
+          ssr_tickets: 1,
+          permanent_cap: 20,
+          limited_cap: 10,
+          sr_card: 10,
+          ssr_card: 3,
+          sp_card: 9,
+          chibi_n: 30,
+          chibi_r: 15,
+          revision: 1,
+        },
+      };
+      await page.route('**/api/gacha/state', (route) => route.fulfill({ json: snapshot }));
+      let enters = 0;
+      await page.route('**/api/gacha/actions', (route) => {
+        expect(route.request().postDataJSON()).toEqual({ action: 'enter' });
+        enters++;
+        return route.fulfill({ json: { snapshot } });
+      });
+      await page.goto(USER_ORIGIN + '/activities');
+      await expect(page.locator('.loan-card')).toBeVisible();
+      await expect(page.locator('.gacha-entry, .gacha-pool-entry')).toHaveCount(0);
+      expect(enters).toBe(0);
+      enabled = true;
+      await page.reload();
+      const main = page.locator('.gacha-entry');
+      await expect(main).toBeVisible();
+      await expect(page.locator('.gacha-pool-entry')).toHaveCount(2);
+      const grid = (await page.locator('.economy-activities-grid').boundingBox())!;
+      const loan = (await page.locator('.loan-card').boundingBox())!;
+      const entry = (await main.boundingBox())!;
+      expect(entry.y).toBeGreaterThanOrEqual(loan.y + loan.height);
+      expect(Math.abs(entry.x - grid.x)).toBeLessThan(2);
+      expect(Math.abs(entry.width - grid.width)).toBeLessThan(2);
+      await expect(main.locator('img')).toHaveAttribute(
+        'src',
+        '/assets/gacha/covers/permanent.webp',
+      );
+      await expect(main).toContainText('捐赠回馈');
+      await expect(main).toContainText('主题装扮');
+      await expect(main).not.toContainText('限定奖池');
+      const special = page
+        .locator('.gacha-pool-entry')
+        .filter({ has: page.getByRole('heading', { name: '星月神话', exact: true }) });
+      await expect(special).toContainText('ChatGPT');
+      await expect(special.locator('.gacha-pool-entry__schedule')).toBeVisible();
+      await expect(special.locator('img')).toHaveAttribute('src', '/assets/gacha/covers/l.webp');
+      expect(enters).toBe(0);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      if (process.env.NONBIRI_VISUAL_DIR) {
+        await page.screenshot({
+          path: resolve(process.env.NONBIRI_VISUAL_DIR, `gacha-entries-${theme}-${width}.png`),
+          fullPage: true,
+        });
+      }
+      await special.click();
+      await expect(page).toHaveURL(USER_ORIGIN + '/activities/gacha?pool=gp_celestial');
+      await expect(page.locator('#gacha-pool-title')).toHaveText('星月神话');
+      expect(enters).toBe(1);
+      guard.assertNone();
+    });
+  }

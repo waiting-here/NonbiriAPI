@@ -1,8 +1,8 @@
 # The Gacha Simulator
 
-The activity entry is hidden by default. Administrators can show it from the activity settings. This display switch does not stop scheduled pools or disable the activity URL. The permanent pool, catalogue and mystery shop stay open. Limited pools have individual schedules. Open **Activities → The Gacha Simulator**; administrators configure it from **Activity management**. Site login, account restrictions and maintenance still apply.
+Activity entrances are hidden by default. Administrators can show them from the activity settings. This display switch does not stop scheduled pools or disable the activity URL. The permanent pool, catalogue and mystery shop stay open. Limited pools have individual schedules. When entrances are enabled, the main banner appears below Cyber Loan under permanent activities. Each open limited pool also appears under limited activities, with its cover, featured cards and opening dates, and links directly to that pool. Draft, paused, future and ended pools have no entrance. Open **Activities → The Gacha Simulator**; administrators configure it from **Activity management**. Site login, account restrictions and maintenance still apply.
 
-Cards are cosmetic collectibles. They cannot be transferred, traded, sold or converted into credits. Collection rewards grant tickets and cumulative donation credit; donation credit is not a spendable balance.
+Cards are cosmetic collectibles. They cannot be transferred, traded, sold or converted into credits. One-time theme completion rewards grant tickets, credits and cumulative donation credit. Donation credit itself is not a spendable balance.
 
 ## Getting started
 
@@ -41,7 +41,7 @@ The first eleven themes each have five cards: ChatGPT, Claude, GLM, DeepSeek and
 
 The catalogue shows all 57 cards and collection status. Owned cards open a full illustration and show the first acquisition time. SSR and SP illustrations have a looping animation, pause control and static fallback. SP also animates its background in coordination with the character. N and R draws reveal automatically in order. SR, SSR and SP encounters wait for a click or the Continue button while their artwork keeps moving; SSR and SP use full-screen scenes. Skip reaches the complete results without another request. Ten-pulls share one card board: five by two on desktop and four, four, two on phones. SR focuses within that board; SSR/SP charge before a full-screen close-up. New SP cards have a short prelude and a delayed second voice line; reunions use their own line. Results keep all ten cards visible and animate duplicate shard conversion. When enough tickets remain and the original pool is open, Draw again repeats the same quantity through the normal draw flow. Sound effects, music, supported-device vibration, card-back rarity hints and reduced motion have separate controls. Turning hints off keeps unrevealed backs identical. Pausing or hiding the page preserves remaining scene time. Owned-card appreciation includes bilingual character lines.
 
-Completing a theme immediately unlocks its horizontal illustration: all five cards for an ordinary theme, or its single card for an SP theme. Claim its reward separately, once per account: one standard ticket for a permanent theme or one limited ticket for another theme, plus ten cumulative donation credit. Published themes keep their original membership. New cards use new themes; new permanent cards join all applicable pools without resetting progress.
+Completing a theme immediately unlocks its horizontal illustration: all five cards for an ordinary theme, or its single card for an SP theme. Claim its reward separately, once per account: one standard ticket and 10,000 game credits for a permanent theme, or one limited ticket and 10,000 general credits for any other theme, including shop-only and SP themes. Every theme also grants ten cumulative donation credit. All reward components are granted together; retries cannot grant them twice. Published themes keep their original membership. New cards use new themes; new permanent cards join all applicable pools without resetting progress.
 
 ## Rates and guarantees
 
@@ -85,6 +85,10 @@ Base probabilities use 0.01% increments and total 100%. The SR threshold is 1–
 
 Obtaining an SP card by drawing or shop redemption immediately unlocks its matching appearance. It remains available after the pool ends. The site does not select it automatically: choose **Appearance** in the user site and apply an unlocked design. The existing light, dark or system preference chooses its matching palette and background. Each design preserves page layout and provides responsive background cropping; game scenes retain their own style.
 
+With a non-default appearance selected, **View animated background** in the top bar hides the interface for appreciation. **Return to page** or Escape restores the page and its current input state. Reduced-motion preferences still apply.
+
+An appearance stays out of the selector until its card has been offered in an opened pool or the account owns it. Scheduling a future pool or pausing it before opening does not reveal the design. Previously offered appearances can remain visible as locked choices.
+
 The selected appearance is saved per account. Unlocks derive from owned cards, independently of draw-history expiry. Reading or selecting an appearance grants no tickets or activity rewards.
 
 ## Records and HTTP access
@@ -95,7 +99,7 @@ These routes use station sessions and existing same-origin checks; they are not 
 
 | Method | Route | Purpose |
 | --- | --- | --- |
-| GET | `/api/gacha/entry` | Entry visibility and whether this account has visited; no welcome reward is granted |
+| GET | `/api/gacha/entry` | Entry visibility, currently open limited pool entrances and whether this account has visited; no welcome reward is granted |
 | GET | `/api/gacha/state` | Personal balances, collection, visible themes, pity, pools and prices |
 | GET | `/api/gacha/history?cursor=…` | Personal draw history, 50 receipts per page |
 | POST | `/api/gacha/actions` | Enter, check in, draw, buy, redeem or claim |
@@ -110,7 +114,7 @@ Administrator settings accept an optional `entry_enabled` boolean, alongside rul
 
 Gacha POST routes require `Idempotency-Key`. Retry uncertain operations with the same key and identical body. Confirmed retries never repeat charges or rewards. Expired draw receipts report completion without a new draw. Price-dependent actions include the displayed `revision`; administrator edits include `expected_revision`. Unknown fields and oversized bodies are rejected.
 
-Appearance POST accepts only `{"selected":"default"}`, `{"selected":"celestial"}` or `{"selected":"wandering"}`, with a 1 KiB body limit. It is an idempotent desired-state update and does not require an idempotency key. Both appearance routes return `selected,unlocked,updated_at`, reject query parameters and use `Cache-Control: no-store`. Locked designs are forbidden; malformed or unknown selections are invalid requests.
+Appearance POST accepts only `{"selected":"default"}`, `{"selected":"celestial"}` or `{"selected":"wandering"}`, with a 1 KiB body limit. It is an idempotent desired-state update and does not require an idempotency key. The visible catalogue is derived at read time and is excluded from account exports. Both appearance routes return `selected,unlocked,visible,updated_at`, reject query parameters and use `Cache-Control: no-store`. Locked designs are forbidden; malformed or unknown selections are invalid requests.
 
 Example action bodies:
 

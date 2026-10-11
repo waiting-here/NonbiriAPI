@@ -19,7 +19,15 @@ func lakeCollectionReward(ctx context.Context, tx *sql.Tx, user int64, location 
 	if err != nil {
 		return err
 	}
-	plan, err := ledger.NewLakeCollectionReward(ledger.Meta{OperationID: operation, ActorUserID: user, CreatedAt: at}, wallet.ID)
+	game, err := ledger.UserAssetAccount(ctx, tx, user, ledger.Game)
+	if err != nil {
+		return err
+	}
+	external, err := ledger.CodedAssetAccount(ctx, tx, "external", ledger.Game)
+	if err != nil {
+		return err
+	}
+	plan, err := ledger.NewLakeCollectionReward(ledger.Meta{OperationID: operation, ActorUserID: user, CreatedAt: at}, ledger.AccountPair{General: wallet.ID, Game: game.ID}, external.ID)
 	if err != nil {
 		return err
 	}

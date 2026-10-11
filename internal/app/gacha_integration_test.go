@@ -24,7 +24,7 @@ func TestGachaRootSessionCSRFReplayExportAndDeletion(t *testing.T) {
 	user := f.users[0]
 	// Reading appearance does not enter the activity or grant welcome tickets.
 	fresh := f.call("GET", "/api/appearance", nil, user.Cookie, false)
-	if fresh["selected"] != "default" || len(fresh["unlocked"].([]any)) != 1 {
+	if fresh["selected"] != "default" || len(fresh["unlocked"].([]any)) != 1 || len(fresh["visible"].([]any)) != 1 {
 		t.Fatal(fresh)
 	}
 	var profiles int
@@ -109,7 +109,7 @@ func TestGachaRootSessionCSRFReplayExportAndDeletion(t *testing.T) {
 		}
 	}
 	unlocked := f.call("GET", "/api/appearance", nil, user.Cookie, false)
-	if unlocked["selected"] != "default" || len(unlocked["unlocked"].([]any)) != 3 {
+	if unlocked["selected"] != "default" || len(unlocked["unlocked"].([]any)) != 3 || len(unlocked["visible"].([]any)) != 3 {
 		t.Fatal(unlocked)
 	}
 	choose := func(cookie *http.Cookie, body, origin string) *httptest.ResponseRecorder {
@@ -142,7 +142,7 @@ func TestGachaRootSessionCSRFReplayExportAndDeletion(t *testing.T) {
 		t.Fatal("appearance CSRF accepted", bad.Code)
 	}
 	otherAppearance := f.call("GET", "/api/appearance", nil, f.users[1].Cookie, false)
-	if otherAppearance["selected"] != "default" || len(otherAppearance["unlocked"].([]any)) != 1 {
+	if otherAppearance["selected"] != "default" || len(otherAppearance["unlocked"].([]any)) != 1 || len(otherAppearance["visible"].([]any)) != 1 {
 		t.Fatal("cross-account appearance", otherAppearance)
 	}
 	binding := sha256.Sum256([]byte(user.Cookie.Value))
@@ -165,7 +165,7 @@ func TestGachaRootSessionCSRFReplayExportAndDeletion(t *testing.T) {
 		t.Fatal(err)
 	}
 	var appearanceExport appearance.State
-	if err := json.Unmarshal(document.Appearance, &appearanceExport); err != nil || appearanceExport.Selected != "wandering" || len(appearanceExport.Unlocked) != 3 {
+	if err := json.Unmarshal(document.Appearance, &appearanceExport); err != nil || appearanceExport.Visible != nil || appearanceExport.Selected != "wandering" || len(appearanceExport.Unlocked) != 3 {
 		t.Fatal("appearance export", appearanceExport, err)
 	}
 	var exported gacha.UserExport

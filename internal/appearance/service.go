@@ -34,6 +34,7 @@ var catalog = func() []Definition {
 type State struct {
 	Selected  string   `json:"selected"`
 	Unlocked  []string `json:"unlocked"`
+	Visible   []string `json:"visible,omitempty"`
 	UpdatedAt *int64   `json:"updated_at"`
 }
 type Config struct {
@@ -41,12 +42,13 @@ type Config struct {
 	Users    limitedactivities.UserAuthorizer
 	Gate     limitedactivities.AdmissionGate
 	Unlock   func(context.Context, *sql.Tx, int64, string) (bool, error)
+	Visible  func(context.Context, *sql.Tx, string) (bool, error)
 	Now      func() time.Time
 }
 type Service struct{ config Config }
 
 func New(c Config) (*Service, error) {
-	if c.Database == nil || c.Users == nil || c.Gate == nil || c.Unlock == nil {
+	if c.Database == nil || c.Users == nil || c.Gate == nil || c.Unlock == nil || c.Visible == nil {
 		return nil, ErrInvalid
 	}
 	if c.Now == nil {
@@ -106,6 +108,33 @@ func (s *Service) ExportUserTx(ctx context.Context, tx *sql.Tx, user int64) (Sta
 	}
 	return out, nil
 }
+
+// Visibility is a catalogue projection, not part of the account export.
+func (s *Service) stateTx(ctx context.Context, tx *sql.Tx, user int64) (State, error) {
+	out, err := s.ExportUserTx(ctx, tx, user)
+	if err != nil {
+		return out, err
+	}
+	out.Visible = []string{}
+	for _, d := range catalog {
+		unlocked := false
+		for _, id := range out.Unlocked {
+			unlocked = unlocked || id == d.ID
+		}
+		visible := unlocked
+		if !visible {
+			visible, err = s.config.Visible(ctx, tx, d.Unlock)
+			if err != nil {
+				return out, err
+			}
+		}
+		if visible {
+			out.Visible = append(out.Visible, d.ID)
+		}
+	}
+	return out, nil
+}
+
 func (s *Service) State(ctx context.Context, user int64) (State, error) {
 	tx, err := s.config.Database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
@@ -115,7 +144,7 @@ func (s *Service) State(ctx context.Context, user int64) (State, error) {
 	if err = s.authorize(ctx, tx, user); err != nil {
 		return State{}, err
 	}
-	out, err := s.ExportUserTx(ctx, tx, user)
+	out, err := s.stateTx(ctx, tx, user)
 	if err != nil {
 		return out, err
 	}
@@ -142,7 +171,7 @@ func (s *Service) Select(ctx context.Context, user int64, selected string) (Stat
 	if err = s.config.Gate.AuthorizeUserActivity(ctx, tx, user); err != nil {
 		return State{}, err
 	}
-	out, err := s.ExportUserTx(ctx, tx, user)
+	out, err := s.stateTx(ctx, tx, user)
 	if err != nil {
 		return out, err
 	}

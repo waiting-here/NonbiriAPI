@@ -8,6 +8,8 @@ import { catalogWire } from '../../src/user/games/likes/testCatalog';
 for (const scenario of [
   { locale: 'en', theme: 'light', width: 1440 },
   { locale: 'zh', theme: 'dark', width: 390 },
+  { locale: 'en', theme: 'light', width: 390 },
+  { locale: 'zh', theme: 'dark', width: 1440 },
 ] as const) {
   test(`loan disclosure and history on ${scenario.locale} ${scenario.width}`, async ({ page }) => {
     const guard = collectConsoleViolations(page);
@@ -104,7 +106,7 @@ for (const scenario of [
     expect(box!.height).toBeLessThanOrEqual(40);
     if (process.env.NONBIRI_VISUAL_DIR) {
       await dialog.screenshot({
-        path: `${process.env.NONBIRI_VISUAL_DIR}/loan-confirm-${scenario.locale}.png`,
+        path: `${process.env.NONBIRI_VISUAL_DIR}/loan-confirm-${scenario.locale}-${scenario.width}.png`,
       });
     }
     await star.focus();

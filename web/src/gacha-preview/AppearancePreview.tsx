@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { createPortal } from 'react-dom';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { Button } from '@shared/components/ui/Button';
 import { PageHeader } from '@shared/components/States';
@@ -234,43 +233,37 @@ export function AppearancePreview({ english }: { english: boolean }) {
           </PanelBody>
         </Panel>
       </div>
-      {createPortal(
-        <ConfirmDialog
-          open={dialog}
-          title={copy('保存端点设置', 'Save endpoint settings')}
-          description={copy(
-            '这里展示实际用户站的弹窗、说明文字与按钮。背景继续播放，可检查内容是否清晰。',
-            'This uses the station’s dialog, description, and buttons. The background keeps playing so you can check readability.',
+      <ConfirmDialog
+        open={dialog}
+        title={copy('保存端点设置', 'Save endpoint settings')}
+        description={copy(
+          '这里展示实际用户站的弹窗、说明文字与按钮。背景继续播放，可检查内容是否清晰。',
+          'This uses the station’s dialog, description, and buttons. The background keeps playing so you can check readability.',
+        )}
+        confirmLabel={copy('保存示例', 'Save sample')}
+        onCancel={close}
+        onConfirm={() => {
+          setSaved(true);
+          close();
+        }}
+      >
+        <Field
+          label={copy('备注', 'Note')}
+          optional={copy('可选', 'Optional')}
+          help={copy(
+            '这段较浅的帮助文字也应该容易阅读。',
+            'This muted help text should also remain readable.',
           )}
-          confirmLabel={copy('保存示例', 'Save sample')}
-          onCancel={close}
-          onConfirm={() => {
-            setSaved(true);
-            close();
-          }}
         >
-          <Field
-            label={copy('备注', 'Note')}
-            optional={copy('可选', 'Optional')}
-            help={copy(
-              '这段较浅的帮助文字也应该容易阅读。',
-              'This muted help text should also remain readable.',
-            )}
-          >
-            {(props) => (
-              <textarea
-                {...props}
-                rows={3}
-                defaultValue={copy(
-                  '用于日常对话与写作。',
-                  'For everyday conversation and writing.',
-                )}
-              />
-            )}
-          </Field>
-        </ConfirmDialog>,
-        document.body,
-      )}
+          {(props) => (
+            <textarea
+              {...props}
+              rows={3}
+              defaultValue={copy('用于日常对话与写作。', 'For everyday conversation and writing.')}
+            />
+          )}
+        </Field>
+      </ConfirmDialog>
     </div>
   );
 }

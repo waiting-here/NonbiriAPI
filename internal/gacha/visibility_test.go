@@ -101,3 +101,59 @@ func TestLimitedThemeVisibilityUsesActualOpenIntervals(t *testing.T) {
 		t.Fatal("owned card hidden")
 	}
 }
+
+func TestPoolEntrancesRequireVisibilityAndCurrentOpenInterval(t *testing.T) {
+	f := newFixture(t)
+	now := f.at.Load()
+	expected := map[string]PoolEntry{}
+	for _, tc := range []struct {
+		name                       string
+		start, end                 int64
+		published, paused, visible bool
+	}{
+		{"Open", now, now + 200, true, false, true},
+		{"Also-open", now - 20, now + 100, true, false, true},
+		{"Future", now + 1, now + 200, true, false, false},
+		{"Ended", now - 20, now, true, false, false},
+		{"Paused", now - 20, now + 200, true, true, false},
+		{"Draft", now - 20, now + 200, false, false, false},
+	} {
+		id, err := db.GenerateOpaqueID("gp_")
+		if err != nil {
+			t.Fatal(err)
+		}
+		pool := Pool{ID: id, Name: tc.name, NameEN: "English " + tc.name, Kind: "limited", Cover: "i", Rules: DefaultRules(), Featured: []string{"i-chatgpt"}, StartsAt: &tc.start, EndsAt: &tc.end, Published: tc.published, Paused: tc.paused}
+		f.save(t, tc.name, AdminInput{Kind: "pool", Pool: &pool})
+		if tc.visible {
+			expected[id] = PoolEntry{ID: id, Name: tc.name, NameEN: pool.NameEN, Cover: "i", Featured: pool.Featured, StartsAt: tc.start, EndsAt: tc.end}
+		}
+	}
+	entry, err := f.s.Entry(t.Context(), f.user)
+	if err != nil || entry.Enabled || len(entry.Pools) != 0 {
+		t.Fatal(entry, err)
+	}
+	config, err := f.s.AdminConfig(t.Context(), f.admin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	enabled := true
+	f.save(t, "show-entrances", AdminInput{Kind: "settings", ExpectedRevision: config.Revision, Rules: &config.Rules, Shop: &config.Shop, EntryEnabled: &enabled})
+	entry, err = f.s.Entry(t.Context(), f.user)
+	if err != nil || !entry.Enabled || entry.Entered || len(entry.Pools) != len(expected) {
+		t.Fatal(entry, err)
+	}
+	for _, pool := range entry.Pools {
+		want, ok := expected[pool.ID]
+		if !ok || pool.Name != want.Name || pool.NameEN != want.NameEN || pool.Cover != want.Cover || pool.StartsAt != want.StartsAt || pool.EndsAt != want.EndsAt || !slices.Equal(pool.Featured, want.Featured) {
+			t.Fatal(pool, want)
+		}
+	}
+	if f.scalar(t, "SELECT count(*) FROM gacha_profiles") != 0 {
+		t.Fatal("directory granted welcome tickets")
+	}
+	f.at.Add(200)
+	entry, err = f.s.Entry(t.Context(), f.user)
+	if err != nil || len(entry.Pools) != 0 {
+		t.Fatal(entry, err)
+	}
+}

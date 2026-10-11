@@ -116,7 +116,11 @@ function initial(): Saved {
 function read(): Saved {
   try {
     const raw = localStorage.getItem(storageKey);
-    if (raw) { const saved = JSON.parse(raw) as Saved; saved.state.visible_themes = [...new Set(cards.map((card) => card.theme))]; return saved; }
+    if (raw) {
+      const saved = JSON.parse(raw) as Saved;
+      saved.state.visible_themes = [...new Set(cards.map((card) => card.theme))];
+      return saved;
+    }
   } catch {
     /* The preview remains available without browser storage. */
   }
@@ -288,6 +292,8 @@ function run(input: Action, key: string): Outcome {
       state.claimed.push(theme.id);
       state.tickets[theme.source === 'permanent' ? 'permanent' : 'limited']++;
       state.donation = String(BigInt(state.donation) + 10n);
+      const asset = theme.source === 'permanent' ? 'game' : 'general';
+      state.credits[asset] = String(BigInt(state.credits[asset]) + 10000n);
       break;
     }
   }
@@ -344,6 +350,7 @@ function appearanceState() {
   return {
     selected: unlocked.includes(memory.appearance ?? '') ? memory.appearance! : 'default',
     unlocked,
+    visible: ['default', 'celestial', 'wandering'],
     updated_at: null,
   };
 }
@@ -359,15 +366,19 @@ export const localAppearancePort: AppearancePort = {
   },
 };
 
-
 let previewAppearance = 'celestial';
 export const appearancePreviewPort: AppearancePort = {
   scope: 'preview-appearance',
   async load() {
-    return { selected: previewAppearance, unlocked: ['default', 'celestial', 'wandering'], updated_at: null };
+    return {
+      selected: previewAppearance,
+      unlocked: ['default', 'celestial', 'wandering'],
+      updated_at: null,
+    };
   },
   async select(selected) {
-    if (!['default', 'celestial', 'wandering'].includes(selected)) throw new Error('appearance-locked');
+    if (!['default', 'celestial', 'wandering'].includes(selected))
+      throw new Error('appearance-locked');
     previewAppearance = selected;
     return this.load();
   },

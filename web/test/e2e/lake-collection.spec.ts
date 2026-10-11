@@ -72,6 +72,7 @@ for (const width of [1440, 390])
       await page.locator('.lake-original #catalogButton').click();
       const reward = page.locator('.catalog-reward');
       await expect(reward).toContainText('50 捐赠回馈');
+      await expect(reward).toContainText('100,000 游戏悠哉积分');
       await expect(reward.getByRole('button', { name: '领取奖励' })).toBeEnabled();
       expect(claims).toBe(0);
       const folder = process.env.LAKE_COLLECTION_SCREENSHOTS || 'test-results/lake-collection';

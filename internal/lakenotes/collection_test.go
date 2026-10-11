@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"math/big"
 	"sync"
 	"testing"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/lakenotes/rules"
+	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 )
 
 func collectionFixture(t *testing.T) *fixture {
@@ -20,19 +20,27 @@ func collectionFixture(t *testing.T) *fixture {
 	f.enable(t)
 	f.profile(t)
 	f.service.reward = func(ctx context.Context, tx *sql.Tx, user int64, location string, at int64) error {
-		var raw []byte
-		if err := tx.QueryRowContext(ctx, "SELECT donation_credit_mag FROM users WHERE id=?", user).Scan(&raw); err != nil {
-			return err
-		}
-		value, err := db.DecodeU128(raw)
+		general, err := ledger.UserAssetAccount(ctx, tx, user, ledger.General)
 		if err != nil {
 			return err
 		}
-		next, err := db.U128FromBig(new(big.Int).Add(value.Big(), big.NewInt(50000)))
+		game, err := ledger.UserAssetAccount(ctx, tx, user, ledger.Game)
 		if err != nil {
 			return err
 		}
-		_, err = tx.ExecContext(ctx, "UPDATE users SET donation_credit_mag=? WHERE id=?", db.EncodeU128(next), user)
+		external, err := ledger.CodedAssetAccount(ctx, tx, "external", ledger.Game)
+		if err != nil {
+			return err
+		}
+		id, err := db.GenerateOpaqueID("op_")
+		if err != nil {
+			return err
+		}
+		plan, err := ledger.NewLakeCollectionReward(ledger.Meta{OperationID: id, ActorUserID: user, CreatedAt: at}, ledger.AccountPair{General: general.ID, Game: game.ID}, external.ID)
+		if err != nil {
+			return err
+		}
+		_, err = ledger.Apply(ctx, tx, plan)
 		return err
 	}
 	return f
@@ -82,8 +90,8 @@ func TestCollectionClaimPermanentAtomicAndAccountScoped(t *testing.T) {
 	if err != nil || result.Value.Profile.CollectionClaims["lake"] != testNow || donationValue(t, f) != "50000" {
 		t.Fatalf("claim: %+v %v", result, err)
 	}
-	if result.Value.Wallet != before.Wallet || result.Value.Profile.Coins != before.Profile.Coins || result.Value.Profile.XP != before.Profile.XP {
-		t.Fatal("collection awarded spendable currency or fishing XP")
+	if result.Value.Wallet.GeneralMilli != before.Wallet.GeneralMilli || result.Value.Wallet.GameMilli != "100000000" || result.Value.Profile.Coins != before.Profile.Coins || result.Value.Profile.XP != before.Profile.XP {
+		t.Fatal("collection reward credited the wrong asset or changed fishing progress")
 	}
 	replay, err := f.service.ClaimCollection(f.ctx(f.user), f.user, testKey(900), in)
 	if err != nil || !replay.Replayed {
@@ -98,7 +106,7 @@ func TestCollectionClaimPermanentAtomicAndAccountScoped(t *testing.T) {
 	if _, err = f.service.ClaimCollection(f.ctx(f.other), f.other, testKey(903), in); !errors.Is(err, ErrConflict) {
 		t.Fatalf("incomplete other: %v", err)
 	}
-	if donationValue(t, f) != "50000" {
+	if donationValue(t, f) != "50000" || f.profile(t).Wallet.GameMilli != "100000000" {
 		t.Fatal("reward duplicated")
 	}
 	f.tx(t, func(tx *sql.Tx) {
@@ -137,7 +145,7 @@ func TestCollectionRollbackAndQualification(t *testing.T) {
 	if _, err := f.service.ClaimCollection(f.ctx(f.user), f.user, testKey(911), in); !errors.Is(err, failed) {
 		t.Fatalf("rollback: %v", err)
 	}
-	if donationValue(t, f) != "0" || f.profile(t).Revision != before.Revision || len(f.profile(t).Profile.CollectionClaims) != 0 {
+	if f.profile(t).Wallet != before.Wallet || donationValue(t, f) != "0" || f.profile(t).Revision != before.Revision || len(f.profile(t).Profile.CollectionClaims) != 0 {
 		t.Fatal("transaction leaked reward or claim")
 	}
 	f.service.activity = nil

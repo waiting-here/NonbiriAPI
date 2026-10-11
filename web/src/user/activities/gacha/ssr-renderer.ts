@@ -1,10 +1,16 @@
+import {
+  blinkAt,
+  PaintCadence,
+  eyelidShader,
+  eyelidProfileWidth,
+} from '@shared/animation/illustration';
+import { cardEyelids } from './card-eyelids';
 import { backdropShader, paintSPAtmosphere, spScenes } from './sp-motion';
 import { highResolutionArt } from './art-resolution';
 
 type MotionConfig = {
   background: string;
   hero: string;
-  half?: string;
   closed?: string;
   cloud?: string;
   eyes?: [number, number, number, number];
@@ -34,7 +40,6 @@ function configFor(id: string): MotionConfig {
     return {
       background: base + id + '/garden.webp',
       hero: base + id + '/hero.webp',
-      half: base + id + '/half.webp',
       closed: base + id + '/closed.webp',
       cloud: base + id + '/cloud.webp',
       eyes: [0.429, 0.14, 0.522, 0.127],
@@ -65,10 +70,9 @@ export async function renderSSR(
   const cfg = configFor(id);
   const scene = spScenes[id];
   const image = (src: string) => load(highResolution ? highResolutionArt(src) : src);
-  const [background, hero, half, closed, cloud] = await Promise.all([
+  const [background, hero, closed, cloud] = await Promise.all([
     image(cfg.background),
     image(cfg.hero),
-    cfg.half ? image(cfg.half) : null,
     cfg.closed ? image(cfg.closed) : null,
     cfg.cloud ? image(cfg.cloud) : null,
   ]);
@@ -101,9 +105,9 @@ export async function renderSSR(
   compile(
     gl.FRAGMENT_SHADER,
     `precision highp float;
-varying vec2 uv;uniform sampler2D tex0,tex1,tex2,tex3;uniform float phase,blink,hasHalf,strength,scene,backgroundPass;uniform vec4 eyes;uniform vec2 pivot,eyeSize;
+varying vec2 uv;uniform sampler2D art,closed,lids,tex3;uniform float phase,blink,strength,scene,backgroundPass;uniform vec4 leftEye,rightEye;uniform vec2 pivot;
 float bump(vec2 p,vec2 c,vec2 r){return exp(-dot((p-c)/r,(p-c)/r)*2.);}
-float eye(vec2 p,vec2 c){return 1.-smoothstep(.70,1.,length((p-c)/eyeSize));}
+${eyelidShader}
 ${backdropShader}
 void main(){
  if(backgroundPass>.5){gl_FragColor=backdrop(uv);return;}
@@ -117,10 +121,9 @@ void main(){
  float hand=1.-bump(p,vec2(.87,.33),vec2(.20,.10));
  p.x+=.0058*sin(phase-p.y*6.)*hair*hand*s;p.y+=.0016*cos(phase-p.y*4.)*hair*hand*s;
  p.x+=.004*sin(phase*2.-p.y*5.)*side*smoothstep(.54,.86,p.y)*s;
- vec4 a=texture2D(tex0,p),b=texture2D(tex1,p),c=texture2D(tex2,p);
- float em=max(eye(p,eyes.xy),eye(p,eyes.zw));
- if(hasHalf<.5)b=mix(a,c,.5);
- gl_FragColor=mix(a,blink<.5?mix(a,b,blink*2.):mix(b,c,(blink-.5)*2.),em);
+ vec4 color=texture2D(art,p);
+ color=eyelid(p,leftEye,.125,color);
+ gl_FragColor=eyelid(p,rightEye,.625,color);
 }`,
   );
   gl.linkProgram(program);
@@ -136,7 +139,8 @@ void main(){
   const attr = gl.getAttribLocation(program, 'a');
   gl.enableVertexAttribArray(attr);
   gl.vertexAttribPointer(attr, 2, gl.FLOAT, false, 0, 0);
-  const textures = [hero, half ?? hero, closed ?? hero, background].map((image, i) => {
+  const textures = [hero, closed ?? hero, background].map((image, index) => {
+    const i = index === 2 ? 3 : index;
     const texture = gl.createTexture();
     gl.activeTexture(gl.TEXTURE0 + i);
     gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -145,25 +149,39 @@ void main(){
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-    gl.uniform1i(gl.getUniformLocation(program, 'tex' + i), i);
+    gl.uniform1i(gl.getUniformLocation(program, ['art', 'closed', '', 'tex3'][i]), i);
     return texture;
   });
-  gl.uniform4f(
-    gl.getUniformLocation(program, 'eyes'),
-    ...(cfg.eyes ?? ([-1, -1, -1, -1] as [number, number, number, number])),
+  const profiles = cardEyelids[id];
+  if (!profiles) throw new Error('eye-profile-unavailable');
+  const lids = gl.createTexture();
+  textures.push(lids);
+  gl.activeTexture(gl.TEXTURE2);
+  gl.bindTexture(gl.TEXTURE_2D, lids);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texImage2D(
+    gl.TEXTURE_2D,
+    0,
+    gl.RGBA,
+    eyelidProfileWidth,
+    4,
+    0,
+    gl.RGBA,
+    gl.UNSIGNED_BYTE,
+    new Uint8Array(profiles.flatMap((profile) => profile.rows.flat())),
   );
+  gl.uniform1i(gl.getUniformLocation(program, 'lids'), 2);
+  gl.uniform4f(gl.getUniformLocation(program, 'leftEye'), ...profiles[0].bounds);
+  gl.uniform4f(gl.getUniformLocation(program, 'rightEye'), ...profiles[1].bounds);
   const eyeData = cfg.eyes ?? [0.49, 0.14, 0.49, 0.14];
   gl.uniform2f(
     gl.getUniformLocation(program, 'pivot'),
     (eyeData[0] + eyeData[2]) / 2,
     (eyeData[1] + eyeData[3]) / 2 + 0.16,
   );
-  gl.uniform2f(
-    gl.getUniformLocation(program, 'eyeSize'),
-    id.startsWith('g-') ? 0.05 : 0.038,
-    id.startsWith('g-') ? 0.025 : 0.021,
-  );
-  gl.uniform1f(gl.getUniformLocation(program, 'hasHalf'), cfg.half ? 1 : 0);
   gl.uniform1f(
     gl.getUniformLocation(program, 'strength'),
     scene === 'wandering' ? 2.25 : scene ? 2.05 : 1.3,
@@ -176,8 +194,9 @@ void main(){
     raf = 0,
     time = 0,
     last = performance.now(),
-    painted = -Infinity,
+    painted = false,
     initialized = false;
+  const cadence = new PaintCadence();
   const resize = () => {
     const rect = canvas.getBoundingClientRect();
     const width = Math.max(1, rect.width || canvas.width);
@@ -190,42 +209,29 @@ void main(){
     layer.width = canvas.width;
     layer.height = canvas.height;
     gl.viewport(0, 0, layer.width, layer.height);
-    painted = -Infinity;
+    painted = false;
+    cadence.reset();
     if (initialized && frozenTime !== undefined) frame(performance.now());
   };
   const observer = new ResizeObserver(resize);
   observer.observe(canvas);
   window.addEventListener('resize', resize);
   resize();
-  const smooth = (x: number) => {
-    x = Math.max(0, Math.min(1, x));
-    return x * x * (3 - 2 * x);
-  };
-  const blinkAt = (t: number) => {
-    let value = 0;
-    for (const start of [2.15, 6.55]) {
-      const d = t - start;
-      if (d >= 0 && d < 0.1) value = Math.max(value, smooth(d / 0.1));
-      else if (d >= 0.1 && d < 0.15) value = 1;
-      else if (d >= 0.15 && d < 0.32) value = Math.max(value, 1 - smooth((d - 0.15) / 0.17));
-    }
-    return value;
-  };
   function frame(at: number) {
     if (stopped) return;
     const isPaused = paused?.() && frozenTime === undefined;
-    if (isPaused && painted !== -Infinity) {
+    if (isPaused && painted) {
       last = at;
       raf = requestAnimationFrame(frame);
       return;
     }
-    time = (frozenTime ?? (isPaused ? time : time + Math.min(at - last, 100) / 1000)) % 10;
+    time = frozenTime ?? (isPaused ? time : time + Math.min(at - last, 100) / 1000);
     last = at;
-    if (frozenTime === undefined && at - painted < 1000 / 30) {
+    if (frozenTime === undefined && !cadence.due(at)) {
       raf = requestAnimationFrame(frame);
       return;
     }
-    painted = at;
+    painted = true;
     const p = (time / 10) * Math.PI * 2,
       w = canvas.width,
       h = canvas.height;
@@ -272,6 +278,7 @@ void main(){
     cancelAnimationFrame(raf);
     if (!document.hidden && !stopped) {
       last = performance.now();
+      cadence.reset();
       if (frozenTime === undefined) raf = requestAnimationFrame(frame);
     }
   };

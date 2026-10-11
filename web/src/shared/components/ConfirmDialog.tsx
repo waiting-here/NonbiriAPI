@@ -1,3 +1,4 @@
+import { OverlayPortal } from './OverlayPortal';
 import { Button } from '@shared/components/ui/Button';
 import { useCallback, useEffect, useId, useRef, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -131,61 +132,64 @@ export function ConfirmDialog({
   if (!open) return null;
 
   return (
-    <div
-      className="dialog-backdrop nb-dialog-backdrop"
-      role="presentation"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !busy) onCancel();
-      }}
-    >
-      <section
-        ref={dialogRef}
-        className="dialog nb-dialog"
-        role="alertdialog"
-        aria-modal="true"
-        aria-busy={busy}
-        tabIndex={-1}
-        aria-labelledby={titleId}
-        aria-describedby={descriptionId}
+    <OverlayPortal>
+      <div
+        className="dialog-backdrop nb-dialog-backdrop"
+        role="presentation"
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget && !busy) onCancel();
+        }}
       >
-        <div className="dialog-title-row">
-          <h2 id={titleId}>{title}</h2>
-          {showClose ? (
+        <section
+          ref={dialogRef}
+          className="dialog nb-dialog"
+          role="alertdialog"
+          aria-modal="true"
+          aria-busy={busy}
+          tabIndex={-1}
+          aria-labelledby={titleId}
+          aria-describedby={descriptionId}
+        >
+          <div className="dialog-title-row">
+            <h2 id={titleId}>{title}</h2>
+            {showClose ? (
+              <Button
+                type="button"
+                variant="ghost"
+                className="dialog-close"
+                aria-label={t('common.close')}
+                disabled={busy}
+                onClick={onCancel}
+              >
+                ×
+              </Button>
+            ) : null}
+          </div>
+          <div id={descriptionId} className="dialog-description">
+            {description}
+          </div>
+          {children ? <div className="dialog-body">{children}</div> : null}
+          <div className="dialog-actions nb-dialog-actions">
+            <Button
+              ref={cancelRef}
+              type="button"
+
+              onClick={onCancel}
+              disabled={busy}
+            >
+              {cancelLabel ?? t('common.cancel')}
+            </Button>
             <Button
               type="button"
-              variant="ghost" className="dialog-close"
-              aria-label={t('common.close')}
-              disabled={busy}
-              onClick={onCancel}
+              variant={danger ? 'danger' : 'primary'}
+              onClick={onConfirm}
+              disabled={busy || confirmDisabled}
             >
-              ×
+              {busy ? t('common.working') : confirmLabel}
             </Button>
-          ) : null}
-        </div>
-        <div id={descriptionId} className="dialog-description">
-          {description}
-        </div>
-        {children ? <div className="dialog-body">{children}</div> : null}
-        <div className="dialog-actions nb-dialog-actions">
-          <Button
-            ref={cancelRef}
-            type="button"
-
-            onClick={onCancel}
-            disabled={busy}
-          >
-            {cancelLabel ?? t('common.cancel')}
-          </Button>
-          <Button
-            type="button"
-            variant={danger ? 'danger' : 'primary'}
-            onClick={onConfirm}
-            disabled={busy || confirmDisabled}
-          >
-            {busy ? t('common.working') : confirmLabel}
-          </Button>
-        </div>
-      </section>
-    </div>
+          </div>
+        </section>
+      </div>
+    </OverlayPortal>
   );
 }

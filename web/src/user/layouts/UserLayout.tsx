@@ -19,6 +19,7 @@ import { useUserSession } from '../data';
 import { clearManagementSession } from '@shared/charityManagement';
 import { USER_PRIMARY_NAV } from '../navigation';
 import { AccountAppearance } from '../appearance/AppearanceProvider';
+import { BackgroundViewButton } from '../appearance/BackgroundViewButton';
 import { AppearanceButton } from '../appearance/AppearanceButton';
 
 const USER_ACCOUNT_PATH = routePath('user', 'account');
@@ -354,6 +355,7 @@ export function UserLayout() {
                 onNavigate={closeMenu}
               />
             ) : null}
+            {signedIn ? <BackgroundViewButton key={location.key} /> : null}
             {signedIn ? <AppearanceButton /> : null}
             {signedIn ? (
               <AccountMenu

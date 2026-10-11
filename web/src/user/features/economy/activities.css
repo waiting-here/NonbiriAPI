@@ -92,7 +92,10 @@
   outline-offset: 3px;
 }
 .economy-activities-page .limited-entry__eyebrow,
-.economy-activities-page .limited-entry__copy > p:nth-last-of-type(1) {
+.economy-activities-page
+  .limited-entry:not(.gacha-pool-entry)
+  .limited-entry__copy
+  > p:nth-last-of-type(1) {
   display: none;
 }
 .economy-activities-page .limited-entry__action {
@@ -109,5 +112,12 @@
   }
   .economy-activities-page .limited-entry__copy {
     padding: 0.75rem;
+  }
+  .economy-activities-page a.gacha-pool-entry {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .economy-activities-page .gacha-pool-entry .limited-entry__cover {
+    aspect-ratio: 16 / 9;
+    height: auto;
   }
 }

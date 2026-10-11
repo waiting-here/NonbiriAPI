@@ -1,3 +1,4 @@
+import { OverlayPortal } from '@shared/components/OverlayPortal';
 import { Fold } from '@shared/components/ui/Fold';
 import { GameActionBar } from '../common/GameActionBar';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -799,47 +800,53 @@ export function LinkLinkGame() {
         </p>
       </ConfirmDialog>
       {abandonReview && state ? (
-        <div
-          className="linklink-modal"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="linklink-abandon-title"
-        >
-          <Card>
-            <h2 id="linklink-abandon-title">{text('linklink.abandonTitle')}</h2>
-            <p>{text('linklink.abandonBody')}</p>
-            <div className="game-state-actions">
-              <button
-                type="button"
-                className="nb-btn nb-btn--secondary"
-                onClick={() => setAbandonReview(false)}
-              >
-                {text('linklink.keep')}
-              </button>
-              <button
-                type="button"
-                className="nb-btn nb-btn--danger"
-                disabled={mutationState !== 'idle' || lease !== 'active'}
-                onClick={() =>
-                  void execute({
-                    kind: 'abandon',
-                    sessionID: state.sessionID,
-                    revision: state.revision,
-                    key: createIdempotencyKey(),
-                  })
-                }
-              >
-                {text('linklink.confirmAbandon')}
-              </button>
-            </div>
-          </Card>
-        </div>
+        <OverlayPortal>
+          <div
+            className="linklink-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="linklink-abandon-title"
+          >
+            <Card>
+              <h2 id="linklink-abandon-title">{text('linklink.abandonTitle')}</h2>
+              <p>{text('linklink.abandonBody')}</p>
+              <div className="game-state-actions">
+                <button
+                  type="button"
+                  className="nb-btn nb-btn--secondary"
+                  onClick={() => setAbandonReview(false)}
+                >
+                  {text('linklink.keep')}
+                </button>
+                <button
+                  type="button"
+                  className="nb-btn nb-btn--danger"
+                  disabled={mutationState !== 'idle' || lease !== 'active'}
+                  onClick={() =>
+                    void execute({
+                      kind: 'abandon',
+                      sessionID: state.sessionID,
+                      revision: state.revision,
+                      key: createIdempotencyKey(),
+                    })
+                  }
+                >
+                  {text('linklink.confirmAbandon')}
+                </button>
+              </div>
+            </Card>
+          </div>
+        </OverlayPortal>
       ) : null}
       {mutationState === 'unknown' ? (
         <div className="game-inline-notice game-inline-notice--warning" role="alert">
           <p>{text('common.responseUnknown')}</p>
           <div className="game-state-actions">
-            <button type="button" className="nb-btn nb-btn--secondary" onClick={() => void reconcile()}>
+            <button
+              type="button"
+              className="nb-btn nb-btn--secondary"
+              onClick={() => void reconcile()}
+            >
               {text('common.retry')}
             </button>
             {mutation ? (

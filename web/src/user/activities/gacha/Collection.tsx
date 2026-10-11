@@ -4,6 +4,7 @@ import { Field } from '@shared/components/ui/Field';
 import { FilterBar } from '@shared/components/ui/FilterBar';
 import { Tabs } from '@shared/components/ui/Tabs';
 import { Icon } from '@shared/components/Icon';
+import { ExactCredits } from '../../features/core/components';
 import { CardTile } from './CardTile';
 import { cards, characters, displayRarities, themes } from './catalog';
 import type { Action, Card, Snapshot, Theme } from './types';
@@ -227,6 +228,12 @@ export function Collection({
                           ? t('常驻券', 'standard ticket')
                           : t('限定券', 'limited ticket')}{' '}
                         + 10 {t('捐赠回馈', 'donation credit')}
+                      </strong>
+                      <strong className="gacha-theme__credits">
+                        + <ExactCredits value="10000" />{' '}
+                        {theme.source === 'permanent'
+                          ? t('游戏积分', 'game credits')
+                          : t('通用积分', 'general credits')}
                       </strong>
                     </span>
                     <Button

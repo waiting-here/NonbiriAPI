@@ -5,6 +5,7 @@ export const appearances = catalog;
 export interface AppearanceState {
   selected: string;
   unlocked: string[];
+  visible?: string[];
   updated_at: number | null;
 }
 export interface AppearancePort {

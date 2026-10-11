@@ -241,7 +241,7 @@
 }
 .rps-modal {
   position: fixed;
-  z-index: 35;
+  z-index: var(--nb-z-dialog);
   inset: 0;
   display: grid;
   place-items: center;
