@@ -12,16 +12,22 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/gatewaypolicy"
 )
 
-func TestGatewayCapabilitiesImportEditDeleteAndNoResurrection(t *testing.T) {
+func TestGatewayCapabilitiesCreateEditDeleteAndNoResurrection(t *testing.T) {
 	store := openGenerationTwoPublicConfigStore(t)
 	ctx := context.Background()
 	policies := gatewaypolicy.NewStore(store.DB())
-	legacy := `{"models":[{"base_url":"https://gateway.example/v3/ai/","model":"anthropic/model","adapter":"anthropic_always_adaptive","efforts":["high"],"max_output_tokens":128000,"storage":"reject"}]}`
-	if err := policies.Initialize(ctx, legacy, gatewaypolicy.Config{}); err != nil {
-		t.Fatal(err)
-	}
+
 	auth := &siteConfigTestFinalAuthorizer{}
 	repo := newSiteConfigTestRepository(t, store, auth)
+	entry := gatewaypolicy.Entry{BaseURL: "https://gateway.example/v3/ai/", Model: "anthropic/model"}
+	policiesConfig, err := gatewaypolicy.Parse("{\"models\":[{\"base_url\":\"https://gateway.example/v3/ai/\",\"model\":\"anthropic/model\",\"adapter\":\"anthropic_always_adaptive\",\"efforts\":[\"high\"],\"max_output_tokens\":128000,\"storage\":\"reject\"}]}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry.Policy = policiesConfig.Entries()[0].Policy
+	if _, err := repo.MutateGatewayModel(ctx, 1, 0, http.MethodPost, "gateway-capability-create-00000", GatewayModelInput{ExpectedRevision: "0", Entry: &entry}); err != nil {
+		t.Fatal(err)
+	}
 	list, err := repo.ReadGatewayModels(ctx, 1)
 	if err != nil || len(list.Data) != 1 {
 		t.Fatalf("import %+v %v", list, err)
@@ -59,13 +65,7 @@ func TestGatewayCapabilitiesImportEditDeleteAndNoResurrection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Restart must ignore even malformed retired environment values.
-	if err := policies.Initialize(ctx, "invalid stale environment", gatewaypolicy.Config{}); err != nil {
-		t.Fatal(err)
-	}
-	if err := policies.Initialize(ctx, legacy, gatewaypolicy.Config{}); err != nil {
-		t.Fatal(err)
-	}
+	policies = gatewaypolicy.NewStore(store.DB())
 	list, err = repo.ReadGatewayModels(ctx, 1)
 	if err != nil || len(list.Data) != 0 {
 		t.Fatalf("deleted profile resurrected: %+v %v", list, err)
@@ -97,21 +97,5 @@ func TestGatewayCapabilityHTTPRejectsUnknownFields(t *testing.T) {
 		if result.Code != http.StatusBadRequest {
 			t.Fatalf("status=%d body=%s", result.Code, result.Body.String())
 		}
-	}
-}
-
-func TestGatewayEmptyImportRemainsEmptyAfterEnvironmentChanges(t *testing.T) {
-	store := openGenerationTwoPublicConfigStore(t)
-	ctx := context.Background()
-	policies := gatewaypolicy.NewStore(store.DB())
-	if err := policies.Initialize(ctx, "", gatewaypolicy.Config{}); err != nil {
-		t.Fatal(err)
-	}
-	if err := gatewaypolicy.NewStore(store.DB()).Initialize(ctx, `{"models":[{"base_url":"https://g.example","model":"m","adapter":"openai_chat"}]}`, gatewaypolicy.Config{}); err != nil {
-		t.Fatal(err)
-	}
-	rows, err := gatewaypolicy.ReadRecords(ctx, store.DB())
-	if err != nil || len(rows) != 0 {
-		t.Fatalf("retired variable changed empty DB: %+v %v", rows, err)
 	}
 }

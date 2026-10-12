@@ -450,7 +450,7 @@ CREATE INDEX idx_charity_bindings_model ON charity_model_bindings(charity_model_
 CREATE TABLE charity_model_stats (model_id INTEGER PRIMARY KEY REFERENCES charity_models(id) ON DELETE CASCADE, next_slot INTEGER NOT NULL DEFAULT 0 CHECK(next_slot BETWEEN 0 AND 99), sample_count INTEGER NOT NULL DEFAULT 0 CHECK(sample_count BETWEEN 0 AND 100), success_count INTEGER NOT NULL DEFAULT 0 CHECK(success_count BETWEEN 0 AND 100)) STRICT;
 CREATE TABLE charity_model_outcomes (model_id INTEGER NOT NULL REFERENCES charity_models(id) ON DELETE CASCADE, slot INTEGER NOT NULL CHECK(slot BETWEEN 0 AND 99), success INTEGER NOT NULL CHECK(success IN (0,1)), created_at INTEGER NOT NULL, PRIMARY KEY(model_id,slot));
 CREATE TABLE idempotency_records (
- scope TEXT NOT NULL CHECK(scope IN ('credential_report','control_mutation','openai_chat_completions','charity_chat_completions','model_discovery','maintenance','announcement','activity','game_fishing','game_linklink','game_rps','game_bidding','game_likes','game_gwent','game_catch','game_blackjack','activity_loan','donation','lake_notes','personal_automation')), actor_scope_hash BLOB NOT NULL CHECK(typeof(actor_scope_hash)='blob' AND length(actor_scope_hash)=32), key_hash BLOB NOT NULL CHECK(typeof(key_hash)='blob' AND length(key_hash)=32), request_hash BLOB NOT NULL CHECK(typeof(request_hash)='blob' AND length(request_hash)=32), lookup_fingerprint BLOB CHECK(lookup_fingerprint IS NULL OR (typeof(lookup_fingerprint)='blob' AND length(lookup_fingerprint)=32)), state TEXT NOT NULL CHECK(state IN ('accepted','completed')), http_status INTEGER NOT NULL CHECK(http_status=0 OR http_status BETWEEN 100 AND 599), response_body BLOB NOT NULL CHECK(typeof(response_body)='blob' AND length(response_body)<=65536), created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), expires_at INTEGER NOT NULL CHECK(expires_at BETWEEN 0 AND 253402300799), PRIMARY KEY(scope,actor_scope_hash,key_hash), CHECK(expires_at>=created_at), CHECK((scope='credential_report' AND lookup_fingerprint IS NOT NULL AND expires_at=created_at+86400) OR (scope<>'credential_report' AND lookup_fingerprint IS NULL)), CHECK((state='accepted' AND http_status=0 AND length(response_body)=0) OR (state='completed' AND http_status BETWEEN 100 AND 599))
+ scope TEXT NOT NULL CHECK(scope IN ('credential_report','control_mutation','openai_chat_completions','charity_chat_completions','model_discovery','maintenance','announcement','activity','game_fishing','game_linklink','game_rps','game_bidding','game_likes','game_gwent','game_catch','game_blackjack','activity_loan','donation','lake_notes','personal_automation','reward_redemption')), actor_scope_hash BLOB NOT NULL CHECK(typeof(actor_scope_hash)='blob' AND length(actor_scope_hash)=32), key_hash BLOB NOT NULL CHECK(typeof(key_hash)='blob' AND length(key_hash)=32), request_hash BLOB NOT NULL CHECK(typeof(request_hash)='blob' AND length(request_hash)=32), lookup_fingerprint BLOB CHECK(lookup_fingerprint IS NULL OR (typeof(lookup_fingerprint)='blob' AND length(lookup_fingerprint)=32)), state TEXT NOT NULL CHECK(state IN ('accepted','completed')), http_status INTEGER NOT NULL CHECK(http_status=0 OR http_status BETWEEN 100 AND 599), response_body BLOB NOT NULL CHECK(typeof(response_body)='blob' AND length(response_body)<=65536), created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), expires_at INTEGER NOT NULL CHECK(expires_at BETWEEN 0 AND 253402300799), PRIMARY KEY(scope,actor_scope_hash,key_hash), CHECK(expires_at>=created_at), CHECK((scope='credential_report' AND lookup_fingerprint IS NOT NULL AND expires_at=created_at+86400) OR (scope<>'credential_report' AND lookup_fingerprint IS NULL)), CHECK((state='accepted' AND http_status=0 AND length(response_body)=0) OR (state='completed' AND http_status BETWEEN 100 AND 599))
 );
 CREATE INDEX idx_idempotency_expiry ON idempotency_records(expires_at);
 CREATE TABLE logical_requests (
@@ -586,7 +586,7 @@ CREATE TABLE credit_accounts (
 );
 CREATE TABLE credit_capacity (id INTEGER PRIMARY KEY CHECK(id=1), last_ledger_seq INTEGER NOT NULL CHECK(last_ledger_seq BETWEEN 0 AND 9223372036854775807), reserved_future_rows BLOB NOT NULL CHECK(typeof(reserved_future_rows)='blob' AND length(reserved_future_rows)=16), revision BLOB NOT NULL CHECK(typeof(revision)='blob' AND length(revision)=16));
 CREATE TABLE credit_operations (
- id TEXT NOT NULL PRIMARY KEY CHECK(typeof(id)='text' AND length(id)=25 AND substr(id,1,3)='op_' AND substr(id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')), ledger_seq INTEGER NOT NULL UNIQUE CHECK(ledger_seq BETWEEN 1 AND 9223372036854775807), kind TEXT NOT NULL CHECK(kind IN ('admin_user_adjustment','admin_pool_adjustment','account_delete_zero','checkin_award','game_onboarding_reward','activity_loan','image_reserve','image_settle','image_refund','image_delete_finalize','activity_exchange','inactivity_decay','fatfish_unlock','fatfish_ticket','fatfish_reward','fatfish_refund','lake_entry','lake_exchange','gacha_ticket_purchase','gacha_theme_reward','lake_collection_reward','reward_grant','anti_abuse_penalty','welfare_claim','thursday_contribution','thursday_payout','forward_reserve','forward_settle','forward_release','charity_reserve','charity_settle','charity_release','donor_reward','thursday_finalize','fishing_reserve','fishing_settle','fishing_release','linklink_entry','rps_queue_reserve','rps_queue_release','rps_session_start','rps_round_cut','rps_terminal','duel_queue_reserve','duel_queue_release','duel_session_start','duel_terminal','ai_ticket','ai_terminal','catch_ticket','catch_refund','catch_reward','blackjack_reserve','blackjack_settle','blackjack_release')), source_type TEXT NOT NULL CHECK(source_type IN ('image_task','operation','logical_request','dispatch_claim','period','fishing_batch','linklink_session','rps_queue','rps_session','duel_queue','duel_session','catch_session','blackjack_payment')), source_id TEXT NOT NULL, source_seq BLOB NOT NULL CHECK(typeof(source_seq)='blob' AND length(source_seq)=16), actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, donation_credit_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, donation_credit_delta_sign INTEGER NOT NULL CHECK(donation_credit_delta_sign IN (-1,0,1)), donation_credit_delta_mag BLOB NOT NULL CHECK(typeof(donation_credit_delta_mag)='blob' AND length(donation_credit_delta_mag)=16), donation_credit_after BLOB CHECK(donation_credit_after IS NULL OR (typeof(donation_credit_after)='blob' AND length(donation_credit_after)=16)), reason TEXT CHECK(reason IS NULL OR (typeof(reason)='text' AND length(reason) BETWEEN 1 AND 1024 AND length(CAST(reason AS BLOB))<=4096)), created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), compacted INTEGER NOT NULL DEFAULT 0 CHECK(compacted IN (0,1)), UNIQUE(kind,source_type,source_id,source_seq), CHECK((donation_credit_delta_sign=0 AND hex(donation_credit_delta_mag)='00000000000000000000000000000000') OR (donation_credit_delta_sign<>0 AND hex(donation_credit_delta_mag)<>'00000000000000000000000000000000')), CHECK((donation_credit_user_id IS NULL AND donation_credit_delta_sign=0 AND donation_credit_after IS NULL) OR (kind IN ('admin_user_adjustment','donor_reward','gacha_theme_reward','lake_collection_reward'))), CHECK((donation_credit_delta_sign=0 OR kind IN ('admin_user_adjustment','donor_reward','gacha_theme_reward','lake_collection_reward'))), CHECK((reason IS NULL OR kind IN ('admin_user_adjustment','admin_pool_adjustment','anti_abuse_penalty','reward_grant'))), CHECK((source_type='operation' AND length(source_id)=25 AND substr(source_id,1,3)='op_' AND substr(source_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='image_task' AND length(source_id)=26 AND substr(source_id,1,4)='img_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='logical_request' AND length(source_id)=26 AND substr(source_id,1,4)='req_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='dispatch_claim' AND length(source_id)=26 AND substr(source_id,1,4)='clm_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='period' AND length(source_id)=26 AND substr(source_id,1,4)='thu_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='fishing_batch' AND length(source_id)=25 AND substr(source_id,1,3)='fb_' AND substr(source_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='catch_session' AND length(source_id)=25 AND substr(source_id,1,3)='sc_' AND substr(source_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='linklink_session' AND length(source_id)=25 AND substr(source_id,1,3)='ll_' AND substr(source_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='rps_queue' AND length(source_id)=27 AND substr(source_id,1,5)='rpsq_' AND substr(source_id,6) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='blackjack_payment' AND length(source_id)=26 AND substr(source_id,1,4)='bjp_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='duel_queue' AND length(source_id)=27 AND substr(source_id,1,5) IN ('bidq_','likq_','gwtq_') AND substr(source_id,6) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='duel_session' AND length(source_id)=26 AND substr(source_id,1,4) IN ('bid_','lik_','gwt_') AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='rps_session' AND length(source_id)=26 AND substr(source_id,1,4)='rps_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w'))), CHECK((kind IN ('admin_user_adjustment','admin_pool_adjustment','account_delete_zero','checkin_award','game_onboarding_reward','activity_loan','activity_exchange','inactivity_decay','fatfish_unlock','fatfish_ticket','fatfish_reward','fatfish_refund','lake_entry','lake_exchange','gacha_ticket_purchase','gacha_theme_reward','lake_collection_reward','reward_grant','anti_abuse_penalty','welfare_claim','thursday_contribution','thursday_payout') AND source_type='operation' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('forward_reserve','forward_settle','forward_release','charity_reserve','charity_settle','charity_release') AND source_type='logical_request' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('image_reserve','image_settle','image_refund','image_delete_finalize') AND source_type='image_task' AND hex(source_seq)='00000000000000000000000000000000') OR (kind='donor_reward' AND source_type='dispatch_claim' AND hex(source_seq)='00000000000000000000000000000000') OR (kind='thursday_finalize' AND source_type='period' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('fishing_reserve','fishing_settle','fishing_release') AND source_type='fishing_batch' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('catch_ticket','catch_refund','catch_reward') AND source_type='catch_session' AND hex(source_seq)='00000000000000000000000000000000') OR (kind='linklink_entry' AND source_type='linklink_session' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('rps_queue_reserve','rps_queue_release') AND source_type='rps_queue' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('rps_session_start','rps_terminal') AND source_type='rps_session' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('blackjack_reserve','blackjack_settle','blackjack_release') AND source_type='blackjack_payment' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('duel_queue_reserve','duel_queue_release') AND source_type='duel_queue' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('duel_session_start','duel_terminal','ai_ticket','ai_terminal') AND source_type='duel_session' AND hex(source_seq)='00000000000000000000000000000000') OR (kind='rps_round_cut' AND source_type='rps_session' AND hex(source_seq)<>'00000000000000000000000000000000'))
+ id TEXT NOT NULL PRIMARY KEY CHECK(typeof(id)='text' AND length(id)=25 AND substr(id,1,3)='op_' AND substr(id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')), ledger_seq INTEGER NOT NULL UNIQUE CHECK(ledger_seq BETWEEN 1 AND 9223372036854775807), kind TEXT NOT NULL CHECK(typeof(kind)='text' AND length(kind) BETWEEN 1 AND 64 AND kind NOT GLOB '*[^a-z0-9_]*'), source_type TEXT NOT NULL CHECK(typeof(source_type)='text' AND length(source_type) BETWEEN 1 AND 64 AND source_type NOT GLOB '*[^a-z0-9_]*'), source_id TEXT NOT NULL, source_seq BLOB NOT NULL CHECK(typeof(source_seq)='blob' AND length(source_seq)=16), actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, donation_credit_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, donation_credit_delta_sign INTEGER NOT NULL CHECK(donation_credit_delta_sign IN (-1,0,1)), donation_credit_delta_mag BLOB NOT NULL CHECK(typeof(donation_credit_delta_mag)='blob' AND length(donation_credit_delta_mag)=16), donation_credit_after BLOB CHECK(donation_credit_after IS NULL OR (typeof(donation_credit_after)='blob' AND length(donation_credit_after)=16)), reason TEXT CHECK(reason IS NULL OR (typeof(reason)='text' AND length(reason) BETWEEN 1 AND 1024 AND length(CAST(reason AS BLOB))<=4096)), created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), compacted INTEGER NOT NULL DEFAULT 0 CHECK(compacted IN (0,1)), UNIQUE(kind,source_type,source_id,source_seq), CHECK((donation_credit_delta_sign=0 AND hex(donation_credit_delta_mag)='00000000000000000000000000000000') OR (donation_credit_delta_sign<>0 AND hex(donation_credit_delta_mag)<>'00000000000000000000000000000000'))
 ) WITHOUT ROWID;
 CREATE INDEX idx_credit_operations_source ON credit_operations(source_type,source_id,source_seq);
 CREATE INDEX idx_credit_operations_created ON credit_operations(created_at,ledger_seq);
@@ -821,12 +821,16 @@ CREATE INDEX idx_rps_rank_net ON game_rps_rank_aggregates(mode,net_profit_sign D
 CREATE TABLE site_config (key TEXT NOT NULL PRIMARY KEY, value TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL DEFAULT 0);
 CREATE TRIGGER idempotency_expiry_guard BEFORE INSERT ON idempotency_records
 WHEN typeof(NEW.created_at)<>'integer' OR typeof(NEW.expires_at)<>'integer' OR
-     NEW.created_at NOT BETWEEN 0 AND 253402300799-86400 OR NEW.expires_at<>NEW.created_at+86400
-BEGIN SELECT RAISE(ABORT,'idempotency records expire exactly 24 hours after creation'); END;
+     NEW.created_at NOT BETWEEN 0 AND 253402300799-86400 OR
+     (NEW.scope='reward_redemption' AND NEW.expires_at-NEW.created_at NOT BETWEEN 86400 AND 316224000) OR
+     (NEW.scope<>'reward_redemption' AND NEW.expires_at<>NEW.created_at+86400)
+BEGIN SELECT RAISE(ABORT,'idempotency expiry is outside its scope retention period'); END;
 CREATE TRIGGER idempotency_expiry_update_guard BEFORE UPDATE OF created_at,expires_at ON idempotency_records
 WHEN typeof(NEW.created_at)<>'integer' OR typeof(NEW.expires_at)<>'integer' OR
-     NEW.created_at NOT BETWEEN 0 AND 253402300799-86400 OR NEW.expires_at<>NEW.created_at+86400
-BEGIN SELECT RAISE(ABORT,'idempotency records expire exactly 24 hours after creation'); END;
+     NEW.created_at NOT BETWEEN 0 AND 253402300799-86400 OR
+     (NEW.scope='reward_redemption' AND NEW.expires_at-NEW.created_at NOT BETWEEN 86400 AND 316224000) OR
+     (NEW.scope<>'reward_redemption' AND NEW.expires_at<>NEW.created_at+86400)
+BEGIN SELECT RAISE(ABORT,'idempotency expiry is outside its scope retention period'); END;
 CREATE TRIGGER idempotency_identity_update_guard BEFORE UPDATE ON idempotency_records
 WHEN NEW.scope IS NOT OLD.scope OR NEW.actor_scope_hash IS NOT OLD.actor_scope_hash OR
      NEW.key_hash IS NOT OLD.key_hash OR NEW.request_hash IS NOT OLD.request_hash OR
@@ -4596,7 +4600,7 @@ WHEN NOT EXISTS(SELECT 1 FROM credit_operations o WHERE o.id=NEW.operation_id AN
 BEGIN SELECT RAISE(ABORT,'loan operation mismatch'); END;
 CREATE TABLE abuse_windows (
  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
- violation_kind TEXT NOT NULL CHECK(violation_kind IN ('rpm','short_content')),
+ violation_kind TEXT NOT NULL CHECK(violation_kind IN ('rpm','short_content','redemption_code')),
  ban_done INTEGER NOT NULL CHECK(ban_done IN (0,1)),
  suspend_done INTEGER NOT NULL CHECK(suspend_done IN (0,1)),
  next_event_seq INTEGER NOT NULL CHECK(next_event_seq>0),
@@ -4612,7 +4616,7 @@ CREATE TABLE abuse_window_events (
  content_chars INTEGER CHECK(content_chars IS NULL OR content_chars BETWEEN 0 AND 1048576), expires_at INTEGER CHECK(expires_at>occurred_at AND expires_at<=253402300799),
  PRIMARY KEY(user_id,violation_kind,seq), UNIQUE(request_id,violation_kind),
  FOREIGN KEY(user_id,violation_kind) REFERENCES abuse_windows(user_id,violation_kind) ON DELETE CASCADE,
- CHECK((violation_kind='rpm' AND content_chars IS NULL) OR (violation_kind='short_content' AND content_chars IS NOT NULL))
+ CHECK((violation_kind IN ('rpm','redemption_code') AND content_chars IS NULL) OR (violation_kind='short_content' AND content_chars IS NOT NULL))
 ) STRICT;
 CREATE INDEX idx_abuse_events_window ON abuse_window_events(user_id,violation_kind,occurred_at,seq);
 CREATE INDEX idx_abuse_events_expiry ON abuse_window_events(violation_kind,occurred_at,user_id,seq);
@@ -4620,7 +4624,7 @@ CREATE TABLE abuse_cases (
  id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='abc_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')),
  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
  kind TEXT NOT NULL CHECK(kind IN ('deduction','ban','charity_suspend')),
- reason_code TEXT NOT NULL CHECK(reason_code IN ('charity_rpm','charity_short_content')),
+ reason_code TEXT NOT NULL CHECK(reason_code IN ('charity_rpm','charity_short_content','redemption_code')),
  started_at INTEGER NOT NULL CHECK(started_at BETWEEN 0 AND 253402300799),
  ends_at INTEGER CHECK(ends_at IS NULL OR ends_at BETWEEN started_at AND 253402300799),
  ended_at INTEGER CHECK(ended_at IS NULL OR ended_at BETWEEN started_at AND 253402300799),
@@ -4642,7 +4646,7 @@ CREATE TABLE abuse_actions (
  actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
  previous_ends_at INTEGER CHECK(previous_ends_at IS NULL OR previous_ends_at BETWEEN 0 AND 253402300799),
  ends_at INTEGER CHECK(ends_at IS NULL OR ends_at BETWEEN 0 AND 253402300799),
- reason_code TEXT NOT NULL CHECK(reason_code IN ('charity_rpm','charity_short_content','manual_adjustment','manual_release','expired')),
+ reason_code TEXT NOT NULL CHECK(reason_code IN ('charity_rpm','charity_short_content','redemption_code','manual_adjustment','manual_release','expired')),
  rules_json TEXT NOT NULL CHECK(length(CAST(rules_json AS BLOB))<=4096 AND json_valid(rules_json) AND json_type(rules_json)='object'),
  statistics_json TEXT NOT NULL CHECK(length(CAST(statistics_json AS BLOB))<=4096 AND json_valid(statistics_json) AND json_type(statistics_json)='object'),
  evidence_count INTEGER NOT NULL CHECK(evidence_count BETWEEN 0 AND 4096),
@@ -4662,7 +4666,7 @@ CREATE TABLE abuse_evidence (
  ordinal INTEGER NOT NULL CHECK(ordinal BETWEEN 0 AND 4095),
  occurred_at INTEGER NOT NULL CHECK(occurred_at BETWEEN 0 AND 253402300799),
  request_id TEXT NOT NULL CHECK(length(request_id)=26 AND substr(request_id,1,4)='req_' AND substr(request_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(request_id,-1,1) IN ('A','Q','g','w')),
- violation_kind TEXT NOT NULL CHECK(violation_kind IN ('rpm','short_content')),
+ violation_kind TEXT NOT NULL CHECK(violation_kind IN ('rpm','short_content','redemption_code')),
  content_chars INTEGER CHECK(content_chars IS NULL OR content_chars BETWEEN 0 AND 1048576),
  PRIMARY KEY(action_seq,ordinal), UNIQUE(action_seq,request_id)
 ) STRICT;
@@ -5061,7 +5065,7 @@ CREATE TABLE economy_audit_buckets (
  asset_type TEXT NOT NULL CHECK(asset_type IN ('general','game','sketch_paper','sketch_brush')),
  kind TEXT NOT NULL CHECK(typeof(kind)='text' AND length(kind) BETWEEN 1 AND 64 AND kind NOT GLOB '*[^a-z0-9_]*'),
  source_type TEXT NOT NULL CHECK(typeof(source_type)='text' AND length(source_type) BETWEEN 1 AND 32 AND source_type NOT GLOB '*[^a-z0-9_]*'),
- channel TEXT NOT NULL CHECK(channel IN ('admin','account','checkin','welfare','thursday','api','charity','donation','fishing','linklink','rps','bidding','likes','gwent','steadycatch','blackjack','onboarding','loan','picture_book','inactivity','penalty','fat_fish','lake_notes','gacha','unclassified')),
+ channel TEXT NOT NULL CHECK(length(channel) BETWEEN 1 AND 64 AND channel NOT GLOB '*[^a-z0-9_]*'),
  bucket TEXT NOT NULL CHECK(bucket IN ('hour','day')),
  bucket_start INTEGER NOT NULL CHECK(typeof(bucket_start)='integer' AND bucket_start BETWEEN -86400 AND 253402300799),
  offset_minutes INTEGER NOT NULL CHECK(typeof(offset_minutes)='integer' AND offset_minutes BETWEEN -720 AND 840 AND offset_minutes%30=0),
@@ -5604,7 +5608,7 @@ CREATE TABLE identity_continuity_facts (
 CREATE INDEX idx_identity_facts_expiry ON identity_continuity_facts(expires_at,identity_key,kind,scope,window_key) WHERE expires_at IS NOT NULL;
 CREATE TABLE identity_window_events (
  identity_key BLOB NOT NULL CHECK(length(identity_key)=32),
- kind TEXT NOT NULL CHECK(kind IN ('user_rpm','report_frequency','game_start','abuse_rpm','abuse_short_content')),
+ kind TEXT NOT NULL CHECK(kind IN ('user_rpm','report_frequency','game_start','abuse_rpm','abuse_short_content','abuse_redemption_code')),
  scope TEXT NOT NULL CHECK(length(CAST(scope AS BLOB)) BETWEEN 1 AND 128),
  event_key TEXT NOT NULL CHECK(length(CAST(event_key AS BLOB)) BETWEEN 1 AND 128),
  occurred_at_ms INTEGER NOT NULL CHECK(occurred_at_ms BETWEEN 0 AND 253402300799000),
@@ -6520,7 +6524,7 @@ CREATE TABLE schema_state (
 ) STRICT;
 INSERT INTO credit_compaction(id,through_seq,details_before,sweep_at,sweep_after_seq) VALUES(1,0,0,0,0);
 INSERT INTO game_blackjack_clock(id,observed_at) VALUES(1,0);
-INSERT INTO schema_state(id,version) VALUES(1,16);
+INSERT INTO schema_state(id,version) VALUES(1,17);
 
 CREATE TABLE game_ai_settings (
  game_key TEXT PRIMARY KEY NOT NULL,
@@ -6814,8 +6818,6 @@ CREATE TABLE gacha_draws (
 CREATE INDEX idx_gacha_draw_retention ON gacha_draws(created_at);
 CREATE INDEX idx_gacha_draw_user ON gacha_draws(user_id,created_at DESC,operation_id DESC);
 INSERT INTO gacha_settings(id,revision,rules,shop) VALUES(1,1,'{"weights":[5500,3500,900,100],"sr_pity":10,"ssr_pity":60,"sr_featured":5000,"ssr_featured":5000,"sr_guarantee":true,"ssr_guarantee":true}','{"permanent_price":"10000","limited_price":"10000","n_ticket":20,"r_ticket":10,"sr_ticket":5,"ssr_tickets":1,"permanent_cap":20,"limited_cap":10,"sr_card":10,"ssr_card":3,"chibi_n":30,"chibi_r":15,"revision":1}');
-INSERT INTO gacha_presets(id,name,config,revision) VALUES('summer','夏夜花火','{"id":"","name":"夏夜花火","cover":"i","kind":"limited","group":"","rules":{"weights":[5500,3500,900,100],"sr_pity":10,"ssr_pity":60,"sr_featured":5000,"ssr_featured":5000,"sr_guarantee":true,"ssr_guarantee":true},"featured":["h-chatgpt","h-claude","h-glm","h-deepseek","h-gemini","i-chatgpt","i-claude","i-glm","i-deepseek","i-gemini"],"starts_at":null,"ends_at":null,"paused":false,"published":false,"revision":0}',1);
-INSERT INTO gacha_presets(id,name,config,revision) VALUES('theatre','童话剧场','{"id":"","name":"童话剧场","cover":"j","kind":"limited","group":"","rules":{"weights":[5500,3500,900,100],"sr_pity":10,"ssr_pity":60,"sr_featured":5000,"ssr_featured":5000,"sr_guarantee":true,"ssr_guarantee":true},"featured":["h-chatgpt","h-claude","h-glm","h-deepseek","h-gemini","j-chatgpt","j-claude","j-glm","j-deepseek","j-gemini"],"starts_at":null,"ends_at":null,"paused":false,"published":false,"revision":0}',1);
 
 CREATE TABLE user_appearance (
  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -6823,8 +6825,6 @@ CREATE TABLE user_appearance (
  updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799),
  moment TEXT NOT NULL DEFAULT 'cover:permanent' CHECK(length(moment) BETWEEN 1 AND 64)
 ) STRICT;
-INSERT INTO gacha_presets(id,name,config,revision) VALUES('celestial','星月神话','{"id":"","name":"星月神话","cover":"l","kind":"limited","group":"","rules":{"weights":[5500,3500,900,100],"sr_pity":10,"ssr_pity":60,"sr_featured":5000,"ssr_featured":1500,"sr_guarantee":true,"ssr_guarantee":true,"ssr_guarantee_misses":2},"featured":["h-chatgpt","h-claude","h-glm","h-deepseek","h-gemini","l-chatgpt"],"starts_at":null,"ends_at":null,"paused":false,"published":false,"revision":0}',1);
-INSERT INTO gacha_presets(id,name,config,revision) VALUES('wandering','逍遥游','{"id":"","name":"逍遥游","cover":"m","kind":"limited","group":"","rules":{"weights":[5500,3500,900,100],"sr_pity":10,"ssr_pity":60,"sr_featured":5000,"ssr_featured":1500,"sr_guarantee":true,"ssr_guarantee":true,"ssr_guarantee_misses":2},"featured":["h-chatgpt","h-claude","h-glm","h-deepseek","h-gemini","m-deepseek"],"starts_at":null,"ends_at":null,"paused":false,"published":false,"revision":0}',1);
 UPDATE gacha_settings SET shop=json_set(shop,'$.sp_card',9);
 
 CREATE TRIGGER credit_operation_donation_identity_guard BEFORE INSERT ON credit_operations
@@ -6892,3 +6892,6 @@ CREATE TABLE reward_claims (
 ) STRICT;
 CREATE INDEX idx_reward_claims_work ON reward_claims(status,id);
 CREATE INDEX idx_reward_claims_user ON reward_claims(user_id,id);
+
+CREATE INDEX idx_gacha_config_events_pool ON gacha_config_events(target,seq,created_at) WHERE substr(target,1,3)='gp_';
+CREATE INDEX idx_reward_redemption_attempts ON idempotency_records(actor_scope_hash,created_at) WHERE scope='reward_redemption';

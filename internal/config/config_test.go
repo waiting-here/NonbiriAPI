@@ -212,32 +212,14 @@ func TestTrustedProxyCIDRValidation(t *testing.T) {
 	})
 }
 
-func TestSMTPValidation(t *testing.T) {
-	t.Run("reserved when unset", func(t *testing.T) {
-		allEnvs(t)
-		c, err := Load()
-		if err != nil {
-			t.Fatalf("Load: %v", err)
-		}
-		closeLoadedVault(t, c)
-		if c.SMTP.Enabled {
-			t.Fatalf("SMTP should be disabled when no host is set")
-		}
-	})
-	t.Run("bad port", func(t *testing.T) {
-		allEnvs(t)
-		t.Setenv("NONBIRI_SMTP_HOST", "mail.example.com")
-		t.Setenv("NONBIRI_SMTP_PORT", "99999")
-		if _, err := Load(); err == nil {
-			t.Fatalf("Load accepted an out-of-range SMTP port")
-		}
-	})
-	t.Run("bad tls", func(t *testing.T) {
-		allEnvs(t)
-		t.Setenv("NONBIRI_SMTP_HOST", "mail.example.com")
-		t.Setenv("NONBIRI_SMTP_TLS", "bogus")
-		if _, err := Load(); err == nil {
-			t.Fatalf("Load accepted an invalid SMTP TLS mode")
-		}
-	})
+func TestRemovedEnvironmentVariablesAreIgnored(t *testing.T) {
+	allEnvs(t)
+	for _, key := range []string{"NONBIRI_GATEWAY_MODEL_CAPABILITIES", "NONBIRI_SMTP_HOST", "NONBIRI_SMTP_PORT", "NONBIRI_SMTP_USER", "NONBIRI_SMTP_PASS", "NONBIRI_SMTP_FROM", "NONBIRI_SMTP_TLS"} {
+		t.Setenv(key, "unused invalid value")
+	}
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	closeLoadedVault(t, cfg)
 }

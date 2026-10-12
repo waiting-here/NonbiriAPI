@@ -16,56 +16,43 @@ type GenerationTwoCompatibility struct {
 	SchemaHash           string   `json:"schema_hash"`
 	ManifestHash         string   `json:"manifest_hash"`
 	SchemaVersion        int      `json:"schema_version"`
+	MinimumSchemaVersion int      `json:"minimum_schema_version"`
 	SourceManifestHashes []string `json:"source_manifest_hashes"`
 	SourceSchemaVersions []int    `json:"source_schema_versions"`
 }
 
 // Data-only changes also advance version, even when manifest stays unchanged.
 type schemaMigration struct {
+	from     int
 	version  int
 	manifest string
 	sql      string
 	apply    func(context.Context, *sql.Tx) error
 }
 
-type schemaBridge struct {
-	manifest string
-	sql      string
-}
-
 type schemaRegistry struct {
+	baseline int
+	target   int
 	versions []schemaMigration
-	bridges  []schemaBridge
 }
 
-// Freeze the baseline and each successor at its first stable publication.
-// Fresh DDL can evolve; published migration steps remain immutable.
+const MinimumSchemaVersion = 17
+const CurrentSchemaVersion = 17
+
+// Only published stable versions belong to this append-only registry.
 var storageSchema = schemaRegistry{
+	baseline: MinimumSchemaVersion,
+	target:   CurrentSchemaVersion,
 	versions: []schemaMigration{
-		{version: 1, manifest: baselineManifestHash},
-		{version: 2, manifest: terminalReservationIndexesManifestHash, sql: terminalReservationIndexesSQL},
-		{version: 3, manifest: aiPlayersManifestHash, sql: aiPlayersSQL},
-		{version: 4, manifest: managementAndGamesManifestHash, sql: managementAndGamesSQL},
-		{version: 5, manifest: gwentAIManifestHash, sql: gwentAISQL},
-		{version: 6, manifest: discordGateManifestHash, sql: discordGateSQL},
-		{version: 7, manifest: modelTypesAndImagesManifestHash, sql: modelTypesAndImagesSQL},
-		{version: 8, manifest: personalBalancedRoutingManifestHash, sql: personalBalancedRoutingSQL},
-		{version: 9, manifest: gachaManifestHash, sql: gachaSQL},
-		{version: 10, manifest: userAppearanceManifestHash, sql: userAppearanceSQL},
-		{version: 11, manifest: contextPricingManifestHash, sql: contextPricingSQL},
-		{version: 12, manifest: sessionHeadersManifestHash, sql: sessionHeadersSQL},
-		{version: 13, manifest: personalAdaptationManifestHash, sql: personalAdaptationSQL},
-		{version: 14, manifest: requestFactsManifestHash, sql: requestFactsSQL},
-		{version: 15, manifest: rewardsManifestHash, sql: rewardsSQL},
-		{version: 16, manifest: PinnedGenerationTwoManifestHash, sql: heartMomentSQL},
+		{version: CurrentSchemaVersion, manifest: PinnedGenerationTwoManifestHash},
 	},
-	bridges: preReleaseSchemaBridges(),
 }
 
 func GenerationTwoCompatibilityDescriptor() GenerationTwoCompatibility {
 	out := GenerationTwoCompatibility{
 		SchemaHash: PinnedGenerationTwoSchemaHash, ManifestHash: PinnedGenerationTwoManifestHash,
-		SchemaVersion: len(storageSchema.versions), SourceManifestHashes: []string{}, SourceSchemaVersions: []int{},
+		SchemaVersion: storageSchema.target, MinimumSchemaVersion: storageSchema.baseline,
+		SourceManifestHashes: []string{}, SourceSchemaVersions: []int{},
 	}
 	seen := map[string]bool{}
 	add := func(hash string) {
@@ -73,9 +60,6 @@ func GenerationTwoCompatibilityDescriptor() GenerationTwoCompatibility {
 			out.SourceManifestHashes = append(out.SourceManifestHashes, hash)
 			seen[hash] = true
 		}
-	}
-	for _, bridge := range storageSchema.bridges {
-		add(bridge.manifest)
 	}
 	for _, version := range storageSchema.versions[:len(storageSchema.versions)-1] {
 		add(version.manifest)
@@ -85,7 +69,7 @@ func GenerationTwoCompatibilityDescriptor() GenerationTwoCompatibility {
 }
 
 func (registry schemaRegistry) validate() error {
-	if len(registry.versions) == 0 {
+	if len(registry.versions) == 0 || registry.baseline < 1 || registry.versions[0].version != registry.baseline || registry.versions[len(registry.versions)-1].version != registry.target {
 		return errors.New("schema baseline is missing")
 	}
 	validHash := func(value string) bool {
@@ -93,29 +77,27 @@ func (registry schemaRegistry) validate() error {
 		return err == nil && len(raw) == 32 && hex.EncodeToString(raw) == value
 	}
 	for i, step := range registry.versions {
-		if step.version != i+1 || !validHash(step.manifest) ||
-			i == 0 && (step.sql != "" || step.apply != nil) ||
-			i > 0 && step.sql == "" && step.apply == nil {
+		if !validHash(step.manifest) ||
+			i == 0 && (step.from != 0 || step.sql != "" || step.apply != nil) ||
+			i > 0 && (step.from != registry.versions[i-1].version || step.version <= step.from || step.sql == "" && step.apply == nil) {
 			return errors.New("schema migration chain is incomplete")
 		}
-	}
-	seen := map[string]bool{}
-	for _, bridge := range registry.bridges {
-		if !validHash(bridge.manifest) || bridge.sql == "" || seen[bridge.manifest] {
-			return errors.New("invalid prerelease schema bridge")
-		}
-		seen[bridge.manifest] = true
 	}
 	return nil
 }
 
 type schemaPlan struct {
-	bridge *schemaBridge
 	steps  []schemaMigration
 	target schemaMigration
 }
 
-func (plan schemaPlan) needed() bool { return plan.bridge != nil || len(plan.steps) != 0 }
+type startupSchemaPlanKey struct{}
+type startupSchemaPlan struct {
+	plan  schemaPlan
+	ready bool
+}
+
+func (plan schemaPlan) needed() bool { return len(plan.steps) != 0 }
 
 func (registry schemaRegistry) plan(ctx context.Context, q queryer) (schemaPlan, error) {
 	var plan schemaPlan
@@ -128,29 +110,17 @@ func (registry schemaRegistry) plan(ctx context.Context, q queryer) (schemaPlan,
 	}
 	hash := generationManifestDigest(manifest)
 	plan.target = registry.versions[len(registry.versions)-1]
-	versioned := false
-	for _, table := range manifest.Tables {
-		versioned = versioned || table.Name == "schema_state"
-	}
-	if !versioned {
-		for i := range registry.bridges {
-			if registry.bridges[i].manifest == hash {
-				plan.bridge = &registry.bridges[i]
-				plan.steps = registry.versions[1:]
-				return plan, nil
-			}
-		}
-		return plan, errors.New("unrecognized prerelease schema")
-	}
 	version, err := readSchemaVersion(ctx, q)
 	if err != nil {
 		return plan, err
 	}
-	if version < 1 || version > len(registry.versions) || registry.versions[version-1].manifest != hash {
-		return plan, errors.New("unsupported schema version or manifest")
+	for i, source := range registry.versions {
+		if source.version == version && source.manifest == hash {
+			plan.steps = registry.versions[i+1:]
+			return plan, nil
+		}
 	}
-	plan.steps = registry.versions[version:]
-	return plan, nil
+	return plan, errors.New("unsupported schema version or manifest")
 }
 
 func readSchemaVersion(ctx context.Context, q queryer) (int, error) {
@@ -163,11 +133,6 @@ func (plan schemaPlan) apply(ctx context.Context, tx *sql.Tx) error {
 	if !plan.needed() {
 		return nil
 	}
-	if plan.bridge != nil {
-		if _, err := tx.ExecContext(ctx, plan.bridge.sql); err != nil {
-			return fmt.Errorf("initialize stable storage: %w", err)
-		}
-	}
 	for _, step := range plan.steps {
 		if step.sql != "" {
 			if _, err := tx.ExecContext(ctx, step.sql); err != nil {
@@ -179,7 +144,7 @@ func (plan schemaPlan) apply(ctx context.Context, tx *sql.Tx) error {
 				return fmt.Errorf("migrate data to %d: %w", step.version, err)
 			}
 		}
-		result, err := tx.ExecContext(ctx, "UPDATE schema_state SET version=? WHERE id=1 AND version=?", step.version, step.version-1)
+		result, err := tx.ExecContext(ctx, "UPDATE schema_state SET version=? WHERE id=1 AND version=?", step.version, step.from)
 		if err != nil {
 			return err
 		}
@@ -202,6 +167,10 @@ func (plan schemaPlan) apply(ctx context.Context, tx *sql.Tx) error {
 }
 
 func currentSchemaPlan(ctx context.Context, q queryer) (schemaPlan, error) {
+	cache, _ := ctx.Value(startupSchemaPlanKey{}).(*startupSchemaPlan)
+	if cache != nil && cache.ready {
+		return cache.plan, nil
+	}
 	if GenerationTwoSchemaHash() != PinnedGenerationTwoSchemaHash {
 		return schemaPlan{}, errors.New("generation-two schema hash drift")
 	}
@@ -212,7 +181,11 @@ func currentSchemaPlan(ctx context.Context, q queryer) (schemaPlan, error) {
 	if len(storageSchema.versions) == 0 || storageSchema.versions[len(storageSchema.versions)-1].manifest != expected {
 		return schemaPlan{}, errors.New("schema registry target differs from fresh storage")
 	}
-	return storageSchema.plan(ctx, q)
+	plan, err := storageSchema.plan(ctx, q)
+	if err == nil && cache != nil {
+		cache.plan, cache.ready = plan, true
+	}
+	return plan, err
 }
 
 func generationTwoExtensionNeeded(ctx context.Context, q queryer) (bool, error) {
@@ -233,6 +206,9 @@ func extendGenerationTwoTransaction(ctx context.Context, tx *sql.Tx) error {
 }
 
 func upgradeStartupSchema(ctx context.Context, database *sql.DB, secrets secret.GenerationTwoContextCodec) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	needed, err := generationTwoExtensionNeeded(ctx, database)
 	if err != nil || !needed {
 		return err
@@ -253,7 +229,7 @@ func upgradeStartupSchema(ctx context.Context, database *sql.DB, secrets secret.
 		if err := validateSourceConfig(ctx, tx); err != nil {
 			return err
 		}
-		return validateEndpointKeyEnvelopes(ctx, tx, secrets)
+		return validateDatabaseMaterial(ctx, tx, secrets)
 	})
 }
 

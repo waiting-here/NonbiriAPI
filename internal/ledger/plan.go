@@ -114,7 +114,7 @@ func newPlan(meta Meta, kind Kind, typ sourceType, sourceID string, sourceSeq db
 	if !ok || wantType != typ {
 		return Plan{}, ErrInvalidPlan
 	}
-	if kind == KindRPSRoundCut {
+	if operationRules[kind].positiveSequence {
 		if sourceSeq.Big().Sign() <= 0 {
 			return Plan{}, ErrInvalidPlan
 		}
@@ -130,44 +130,6 @@ func newPlan(meta Meta, kind Kind, typ sourceType, sourceID string, sourceSeq db
 		requireNonnegative: make(map[int64]struct{}),
 		requireZeroAfter:   make(map[int64]struct{}),
 	}}, nil
-}
-
-func sourceTypeForKind(kind Kind) (sourceType, bool) {
-	switch kind {
-	case KindRewardGrant, KindAdminUserAdjustment, KindAdminPoolAdjustment, KindAccountDeleteZero,
-		KindCheckinAward, KindAntiAbusePenalty, KindWelfareClaim,
-		KindThursdayContribution, KindThursdayPayout, KindGameOnboardingReward, KindActivityLoan,
-		KindActivityExchange, KindLakeEntry, KindLakeExchange, KindLakeCollectionReward, KindInactivityDecay, KindGachaTicketPurchase, KindGachaThemeReward,
-		KindFatFishUnlock, KindFatFishTicket, KindFatFishReward, KindFatFishRefund:
-		return sourceOperation, true
-	case KindForwardReserve, KindForwardSettle, KindForwardRelease,
-		KindCharityReserve, KindCharitySettle, KindCharityRelease:
-		return sourceLogicalRequest, true
-	case KindDonorReward:
-		return sourceDispatchClaim, true
-	case KindThursdayFinalize:
-		return sourcePeriod, true
-	case KindFishingReserve, KindFishingSettle, KindFishingRelease:
-		return sourceFishingBatch, true
-	case KindLinkLinkEntry:
-		return sourceLinkLinkSession, true
-	case KindRPSQueueReserve, KindRPSQueueRelease:
-		return sourceRPSQueue, true
-	case KindRPSSessionStart, KindRPSRoundCut, KindRPSTerminal:
-		return sourceRPSSession, true
-	case KindDuelQueueReserve, KindDuelQueueRelease:
-		return sourceDuelQueue, true
-	case KindDuelSessionStart, KindDuelTerminal, KindAITicket, KindAITerminal:
-		return sourceDuelSession, true
-	case KindCatchTicket, KindCatchRefund, KindCatchReward:
-		return sourceCatchSession, true
-	case KindBlackjackReserve, KindBlackjackSettle, KindBlackjackRelease:
-		return sourceBlackjackPayment, true
-	case KindImageReserve, KindImageSettle, KindImageRefund, KindImageDeleteFinalize:
-		return sourceImageTask, true
-	default:
-		return "", false
-	}
 }
 
 func (p Plan) add(role accountRole, delta Amount) Plan {

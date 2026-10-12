@@ -55,7 +55,8 @@ func setup(t *testing.T) *fixture {
 	}
 	t.Cleanup(func() { vault.Close() })
 	p := filepath.Join(t.TempDir(), "rewards.sqlite")
-	dbfixture.Materialize(t, p)
+
+	dbfixture.Materialize(t, p, vault)
 	store, e := db.Open(p, vault)
 	if e != nil {
 		t.Fatal(e)

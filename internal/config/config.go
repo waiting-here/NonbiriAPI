@@ -1,8 +1,7 @@
 // Package config loads startup-determined configuration from environment
 // variables. Per the contract, environment variables own the values that must
 // be fixed before startup or that are security roots (administrator account,
-// Discord OAuth credentials, master key, listen address, database path). SMTP
-// is parsed when present but is reserved (no email alerts in alpha).
+// Discord OAuth credentials, master key, listen address, database path).
 //
 // Load fails fast on missing required fields and on format violations, so a
 // misconfigured security root never lets the process come up silently. The
@@ -26,7 +25,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/waiting-here/NonbiriAPI/internal/gatewaypolicy"
 	"github.com/waiting-here/NonbiriAPI/internal/host"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
@@ -75,24 +73,8 @@ type Config struct {
 	UserHost string
 	// AdminHost is the admin station hostname (env override or derived as
 	// "admin." + UserHost). It must differ from UserHost.
-	AdminHost           string
-	TrustedProxyCIDRs   []netip.Prefix
-	SMTP                SMTPConfig
-	GatewayModels       gatewaypolicy.Config
-	GatewayModelsImport string
-}
-
-// SMTPConfig is reserved (alpha has no email alerts); it is parsed and
-// validated only when Host is set so a future rail can wire it without
-// touching the loader surface.
-type SMTPConfig struct {
-	Host    string
-	Port    int
-	User    string
-	Pass    string
-	From    string
-	TLS     string // "" auto, "starttls", "implicit"
-	Enabled bool
+	AdminHost         string
+	TrustedProxyCIDRs []netip.Prefix
 }
 
 // Load reads environment variables and returns a fully validated Config, or a
@@ -116,7 +98,6 @@ func Load() (*Config, error) {
 	if timeoutErr != nil {
 		errs = append(errs, timeoutErr.Error())
 	}
-	c.GatewayModelsImport = os.Getenv("NONBIRI_GATEWAY_MODEL_CAPABILITIES")
 
 	// Master key: exactly one non-empty source is required. Parsing produces a
 	// short-lived byte slice that setMasterKey clears after constructing the
@@ -182,10 +163,6 @@ func Load() (*Config, error) {
 		errs = append(errs, "NONBIRI_TRUSTED_PROXY_CIDRS: "+err.Error())
 	} else {
 		c.TrustedProxyCIDRs = proxies
-	}
-
-	if err := c.setSMTP(); err != nil {
-		errs = append(errs, err.Error())
 	}
 
 	if len(errs) > 0 {
@@ -323,40 +300,6 @@ func (c *Config) setAdminHost(override string) error {
 		return fmt.Errorf("must differ from the user station host %q", c.UserHost)
 	}
 	c.AdminHost = parsed.Authority
-	return nil
-}
-
-// setSMTP parses the reserved SMTP fields and validates them only when a host
-// is configured.
-func (c *Config) setSMTP() error {
-	host := strings.TrimSpace(os.Getenv("NONBIRI_SMTP_HOST"))
-	if host == "" {
-		return nil // reserved; nothing to validate when disabled
-	}
-	portStr := strings.TrimSpace(os.Getenv("NONBIRI_SMTP_PORT"))
-	port := 587
-	if portStr != "" {
-		n, err := strconv.Atoi(portStr)
-		if err != nil || n < 1 || n > 65535 {
-			return fmt.Errorf("NONBIRI_SMTP_PORT: must be an integer in [1,65535], got %q", portStr)
-		}
-		port = n
-	}
-	tls := strings.ToLower(strings.TrimSpace(os.Getenv("NONBIRI_SMTP_TLS")))
-	if tls != "" && tls != "starttls" && tls != "implicit" {
-		return fmt.Errorf("NONBIRI_SMTP_TLS: must be 'starttls' or 'implicit' (or unset), got %q", tls)
-	}
-	from := strings.TrimSpace(os.Getenv("NONBIRI_SMTP_FROM"))
-	if from == "" {
-		from = strings.TrimSpace(os.Getenv("NONBIRI_SMTP_USER"))
-	}
-	c.SMTP = SMTPConfig{
-		Host: host, Port: port,
-		User: os.Getenv("NONBIRI_SMTP_USER"),
-		Pass: os.Getenv("NONBIRI_SMTP_PASS"),
-		From: from, TLS: tls,
-		Enabled: true,
-	}
 	return nil
 }
 

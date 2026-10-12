@@ -47,9 +47,10 @@ func processTestVault(t *testing.T) *secret.Vault {
 func processTestStore(t *testing.T, path string, vault *secret.Vault) *db.Store {
 	t.Helper()
 	dbtest.EnsureOwnerOnlyParent(t, path)
-	dbfixture.Materialize(t, path)
+
 	ctx, cancel := context.WithTimeout(context.Background(), db.DefaultStartupTimeout)
 	defer cancel()
+	dbfixture.Materialize(t, path, vault)
 	store, err := db.OpenContext(ctx, path, vault)
 	if err != nil {
 		t.Fatalf("open process database: %v", err)
@@ -327,7 +328,12 @@ func TestInitializeProcessBindFailureKeepsResourcesOwnedForCleanup(t *testing.T)
 	t.Cleanup(func() { _ = occupied.Close() })
 	path := filepath.Join(t.TempDir(), "bind-failure.sqlite")
 	dbtest.EnsureOwnerOnlyParent(t, path)
-	dbfixture.Materialize(t, path)
+	fixtureVault, err := secret.New(bytes.Repeat([]byte{0x67}, secret.MasterKeyBytes))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dbfixture.Materialize(t, path, fixtureVault)
+	_ = fixtureVault.Close()
 	for name, value := range map[string]string{
 		"NONBIRI_LISTEN_ADDR":              occupied.Addr().String(),
 		"NONBIRI_DB_PATH":                  path,

@@ -26,51 +26,18 @@ func NewDonationReview(vault *Vault) (*DonationReview, error) {
 	return &DonationReview{vault: vault}, nil
 }
 
-// Initialize creates material only when no durable review identities exist.
+// Initialize verifies the existing singleton without creating or replacing it.
 func (r *DonationReview) Initialize(ctx context.Context, store *sql.DB) error {
 	if r == nil || store == nil {
 		return ErrReviewMaterial
 	}
-	tx, err := store.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
+	var version int
 	var envelope []byte
-	err = tx.QueryRowContext(ctx, `SELECT envelope FROM donation_review_material WHERE id = 1`).Scan(&envelope)
-	if errors.Is(err, sql.ErrNoRows) {
-		var existing int
-		err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM donation_key_review_requirements)
-   OR EXISTS(SELECT 1 FROM donation_keys WHERE key_body_review_hmac IS NOT NULL)
-   OR EXISTS(SELECT 1 FROM endpoint_key_secrets WHERE key_body_review_hmac IS NOT NULL)`).Scan(&existing)
-		if err != nil {
-			return err
-		}
-		if existing != 0 {
-			return ErrReviewMaterial
-		}
-		key, err := r.vault.DeriveGenerationTwoSubkey([]byte(reviewPurpose))
-		if err != nil {
-			return ErrReviewMaterial
-		}
-		defer clear(key)
-		encoded, err := r.vault.seal(key, []byte(reviewAAD))
-		if err != nil {
-			return ErrReviewMaterial
-		}
-		now := time.Now().Unix()
-		if _, err = tx.ExecContext(ctx, `INSERT INTO donation_review_material(id,version,envelope,created_at,updated_at) VALUES(1,1,?,?,?)`, []byte(encoded), now, now); err != nil {
-			return err
-		}
-	} else if err != nil {
-		return err
+	if err := store.QueryRowContext(ctx, "SELECT version,envelope FROM donation_review_material WHERE id=1").Scan(&version, &envelope); err != nil || version != 1 {
+		return ErrReviewMaterial
 	}
-	key, err := r.load(ctx, tx)
-	if err != nil {
-		return err
-	}
-	clear(key)
-	return tx.Commit()
+	defer clear(envelope)
+	return r.vault.ValidateDatabaseMaterial(envelope)
 }
 
 func (r *DonationReview) load(ctx context.Context, tx *sql.Tx) ([]byte, error) {

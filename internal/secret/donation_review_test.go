@@ -21,7 +21,8 @@ func TestDonationReviewStableRestartRewrapAndMissingMaterial(t *testing.T) {
 	}
 	defer vault.Close()
 	path := filepath.Join(t.TempDir(), "review.sqlite")
-	dbfixture.Materialize(t, path)
+
+	dbfixture.Materialize(t, path, vault)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		t.Fatal(err)
@@ -145,7 +146,8 @@ func TestDonationReviewLegacyBackfillOriginalSources(t *testing.T) {
 	}
 	defer vault.Close()
 	path := filepath.Join(t.TempDir(), "legacy.sqlite")
-	dbfixture.Materialize(t, path)
+
+	dbfixture.Materialize(t, path, vault)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		t.Fatal(err)

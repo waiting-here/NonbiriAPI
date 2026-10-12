@@ -1,6 +1,7 @@
 package db
 
 import (
+	"fmt"
 	"testing"
 )
 
@@ -18,7 +19,15 @@ func TestGenerationTwoHostileIdempotencyExpiryAcrossScopes(t *testing.T) {
 		"game_fishing",
 		"game_linklink",
 		"game_rps",
+		"game_bidding",
+		"game_likes",
+		"game_gwent",
+		"game_catch",
+		"game_blackjack",
+		"activity_loan",
 		"donation",
+		"lake_notes",
+		"personal_automation",
 	}
 	for i, scope := range scopes {
 		t.Run(scope, func(t *testing.T) {
@@ -62,6 +71,29 @@ INSERT INTO idempotency_records(
 INSERT INTO idempotency_records(
  scope,actor_scope_hash,key_hash,request_hash,state,http_status,response_body,created_at,expires_at
 ) VALUES('unknown',?,?,?,'accepted',0,?,0,86400)`, hostileBlob32(240), hostileBlob32(241), hostileBlob32(242), []byte{})
+}
+
+func TestRedemptionIdempotencyRetentionBoundsAndFixedExpiry(t *testing.T) {
+	database := openGenerationTwoConstraintFixture(t)
+	const insert = "INSERT INTO idempotency_records(scope,actor_scope_hash,key_hash,request_hash,state,http_status,response_body,created_at,expires_at) VALUES('reward_redemption',zeroblob(32),?,zeroblob(32),'accepted',0,x'',?,?)"
+	for i, duration := range []int64{86399, 86400, 86401, 172800, MaxBanDurationSeconds, MaxBanDurationSeconds + 1} {
+		t.Run(fmt.Sprint(duration), func(t *testing.T) {
+			key := hostileBlob32(byte(i + 1))
+			if duration < 86400 || duration > MaxBanDurationSeconds {
+				hostileMustFail(t, database, insert, key, 100, 100+duration)
+				return
+			}
+			hostileMustExec(t, database, insert, key, 100, 100+duration)
+			// Configuration changes cannot extend or shorten an accepted retry.
+			hostileMustFail(t, database, "UPDATE idempotency_records SET expires_at=expires_at+1 WHERE key_hash=?", key)
+			hostileMustFail(t, database, "UPDATE idempotency_records SET created_at=created_at+1,expires_at=expires_at+1 WHERE key_hash=?", key)
+			hostileMustExec(t, database, "UPDATE idempotency_records SET state='completed',http_status=400,response_body=x'7b7d' WHERE key_hash=?", key)
+		})
+	}
+	const maxTimestamp int64 = 253402300799
+	hostileMustExec(t, database, insert, hostileBlob32(100), maxTimestamp-MaxBanDurationSeconds, maxTimestamp)
+	hostileMustFail(t, database, insert, hostileBlob32(101), maxTimestamp-MaxBanDurationSeconds+1, maxTimestamp+1)
+	hostileMustFail(t, database, insert, hostileBlob32(102), maxTimestamp-86399, maxTimestamp)
 }
 
 func TestGenerationTwoHostileIdempotencyIdentityAndTransitions(t *testing.T) {

@@ -22,7 +22,8 @@ func fixture(t *testing.T) (*sql.DB, *continuity.Service) {
 		t.Fatal(err)
 	}
 	p := filepath.Join(t.TempDir(), "state.db")
-	dbfixture.Materialize(t, p)
+
+	dbfixture.Materialize(t, p, vault)
 	store, err := db.Open(p, vault)
 	if err != nil {
 		t.Fatal(err)
@@ -87,21 +88,6 @@ func TestIdentityBindingsAreStablePrivateAndFailClosed(t *testing.T) {
 	service.Close()
 	if _, err := service.KeyForDiscord("12345"); !errors.Is(err, continuity.ErrClosed) {
 		t.Fatal("closed key remained usable")
-	}
-}
-
-func TestBackfillRollsBackBatchAndDoesNotAdvanceCursor(t *testing.T) {
-	database, service := fixture(t)
-	insertUser(t, database, "valid")
-	insertUser(t, database, "invalid identity")
-	next, count, err := service.BackfillBatch(context.Background(), 0, 100)
-	if err == nil || next != 0 || count != 0 {
-		t.Fatalf("failed batch advanced: %d %d %v", next, count, err)
-	}
-	var rows int
-	database.QueryRow(`SELECT count(*) FROM user_continuity_identities`).Scan(&rows)
-	if rows != 0 {
-		t.Fatal("partial batch committed")
 	}
 }
 
@@ -178,7 +164,7 @@ func TestDailyPeriodUsesOriginalSiteMidnight(t *testing.T) {
 	}
 }
 
-func TestBackfillOnlyMissingBindingsAndOfflineAuditRejectsConflicts(t *testing.T) {
+func TestOfflineAuditRejectsConflictingBindings(t *testing.T) {
 	database, service := fixture(t)
 	first := insertUser(t, database, "bound")
 	tx := transaction(t, database)
@@ -188,22 +174,8 @@ func TestBackfillOnlyMissingBindingsAndOfflineAuditRejectsConflicts(t *testing.T
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	second := insertUser(t, database, "missing")
-	next, count, err := service.BackfillBatch(context.Background(), 0, 100)
-	if err != nil || count != 1 || next != second {
-		t.Fatal(next, count, err)
-	}
-	if err := service.ValidateBindings(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if _, count, err := service.BackfillBatch(context.Background(), 0, 100); err != nil || count != 0 {
-		t.Fatal(count, err)
-	}
 	if _, err := database.Exec(`UPDATE user_continuity_identities SET identity_key=zeroblob(32) WHERE user_id=?`, first); err != nil {
 		t.Fatal(err)
-	}
-	if _, count, err := service.BackfillBatch(context.Background(), 0, 100); err != nil || count != 0 {
-		t.Fatal(count, err)
 	}
 	if err := service.ValidateBindings(context.Background()); !errors.Is(err, continuity.ErrInvariant) {
 		t.Fatal("offline audit ignored conflict", err)

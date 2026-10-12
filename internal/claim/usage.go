@@ -83,23 +83,12 @@ total_cache_read_input_tokens=?,total_output_tokens=?,total_unknown_usage_reques
 	return requireOneRow(result)
 }
 
-// InitializeUsageTotals repairs the uninitialized counters of existing current
-// databases from their retained terminal logs. A nonzero site revision is the
-// durable completion marker; normal restarts and log retention never rebuild or
-// decrease established totals. Call before accepting requests or starting workers.
-func (s *Service) InitializeUsageTotals(ctx context.Context) error {
-	if s == nil || s.db == nil || ctx == nil {
+// InitializeUsageTotalsTx completes the one-time historical import inside the
+// caller-owned offline conversion transaction. Normal startup never calls it.
+func InitializeUsageTotalsTx(ctx context.Context, tx *sql.Tx, at int64) error {
+	if ctx == nil || tx == nil {
 		return ErrInvalidInput
 	}
-	at, err := s.nowUnix()
-	if err != nil {
-		return err
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
 	var revisionBytes []byte
 	if err := tx.QueryRowContext(ctx, `SELECT revision FROM site_usage_totals WHERE id=1`).Scan(&revisionBytes); err != nil {
 		return err
@@ -167,5 +156,5 @@ WHERE id>? AND completed_at IS NOT NULL ORDER BY id LIMIT 256`, cursor)
 			cursor = item.rowID
 		}
 	}
-	return tx.Commit()
+	return nil
 }

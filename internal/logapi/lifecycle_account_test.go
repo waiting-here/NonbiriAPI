@@ -31,7 +31,8 @@ func newLifecycleLogDatabase(t *testing.T) *lifecycleLogDatabase {
 		t.Fatal(err)
 	}
 	path := filepath.Join(t.TempDir(), "log-lifecycle.sqlite")
-	dbfixture.Materialize(t, path)
+
+	dbfixture.Materialize(t, path, vault)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		_ = vault.Close()

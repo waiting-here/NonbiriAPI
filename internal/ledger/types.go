@@ -18,7 +18,7 @@ var (
 	ErrRetryable           = errors.New("ledger: retryable database error")
 )
 
-// Kind is the closed credit_operations.kind set.
+// Kind identifies an operation registered by this application version.
 type Kind string
 
 const (

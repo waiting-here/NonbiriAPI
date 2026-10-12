@@ -135,7 +135,8 @@ func newGameFixture(t *testing.T, source *scriptedSource) *gameFixture {
 		t.Fatalf("new vault: %v", err)
 	}
 	path := filepath.Join(t.TempDir(), "game.db")
-	dbfixture.Materialize(t, path)
+
+	dbfixture.Materialize(t, path, vault)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		_ = vault.Close()

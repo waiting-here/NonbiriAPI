@@ -9,18 +9,26 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/waiting-here/NonbiriAPI/internal/config"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/gatewaypolicy"
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 )
 
 func TestGatewayHTTPPreservesModelControlsBeforeAccounting(t *testing.T) {
 	var calls atomic.Int32
-	f := newEmbeddingHTTPFixtureWithConfig(t, func(cfg *config.Config, base string) {
-		var err error
-		cfg.GatewayModels, err = gatewaypolicy.Parse(fmt.Sprintf(`{"models":[{"base_url":%q,"model":"private-model","adapter":"openai_responses","efforts":["max"],"max_output_tokens":128000,"storage":"openai"}]}`, base))
+	f := newEmbeddingHTTPFixtureWithConfig(t, func(store *db.Store, base string) {
+		policy, err := gatewaypolicy.Parse(fmt.Sprintf(`{"models":[{"base_url":%q,"model":"private-model","adapter":"openai_responses","efforts":["max"],"max_output_tokens":128000,"storage":"openai"}]}`, base))
 		if err != nil {
 			t.Fatal(err)
+		}
+		for _, entry := range policy.Entries() {
+			body, err := json.Marshal(entry.Policy)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := store.DB().Exec("INSERT INTO gateway_model_capabilities(base_url,model,policy_json,revision,updated_at) VALUES(?,?,?,1,0)", entry.BaseURL, entry.Model, string(body)); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}, func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
@@ -88,11 +96,19 @@ func TestGatewayHTTPPreservesModelControlsBeforeAccounting(t *testing.T) {
 
 func TestGatewayHTTPCacheAdmissionAndOnlineChanges(t *testing.T) {
 	var calls atomic.Int32
-	f := newEmbeddingHTTPFixtureWithConfig(t, func(cfg *config.Config, base string) {
-		var err error
-		cfg.GatewayModels, err = gatewaypolicy.Parse(fmt.Sprintf(`{"models":[{"base_url":%q,"model":"private-model","adapter":"anthropic_effort","efforts":[],"max_output_tokens":128000,"cache":"anthropic"}]}`, base))
+	f := newEmbeddingHTTPFixtureWithConfig(t, func(store *db.Store, base string) {
+		policy, err := gatewaypolicy.Parse(fmt.Sprintf(`{"models":[{"base_url":%q,"model":"private-model","adapter":"anthropic_effort","efforts":[],"max_output_tokens":128000,"cache":"anthropic"}]}`, base))
 		if err != nil {
 			t.Fatal(err)
+		}
+		for _, entry := range policy.Entries() {
+			body, err := json.Marshal(entry.Policy)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := store.DB().Exec("INSERT INTO gateway_model_capabilities(base_url,model,policy_json,revision,updated_at) VALUES(?,?,?,1,0)", entry.BaseURL, entry.Model, string(body)); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}, func(w http.ResponseWriter, r *http.Request) {
 		var body struct {

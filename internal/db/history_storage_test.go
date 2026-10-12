@@ -7,7 +7,7 @@ import (
 )
 
 func TestStorageContractsRetainsRequestIdentityAndSourceSequence(t *testing.T) {
-	database := supportedSourceFixture(t)
+	database := openGenerationTwoConstraintFixture(t)
 	user := hostileInsertUser(t, database, "retained-root", 0, 0)
 	hostileMustExec(t, database, "UPDATE users SET discord_id='123456789012345678' WHERE id=?", user)
 	admin := hostileInsertUser(t, database, "scan-actor", 1, 0)
@@ -26,9 +26,6 @@ func TestStorageContractsRetainsRequestIdentityAndSourceSequence(t *testing.T) {
 	hostileMustExec(t, database, "INSERT INTO risk_scan_results(scan_id,row_no,user_id,published,result_json) VALUES(?,1,?,1,'{}')", scan, user)
 	hostileMustExec(t, database, "INSERT INTO risk_scan_result_users VALUES(?,1,?)", scan, user)
 	hostileMustExec(t, database, "INSERT INTO risk_scan_result_sources VALUES(?,1,?)", scan, logs[0])
-	if err := extendKnownGenerationTwoSchema(context.Background(), database); err != nil {
-		t.Fatal(err)
-	}
 	var state, reason string
 	if err := database.QueryRow("SELECT state,reason FROM risk_client_scans WHERE id=?", scan).Scan(&state, &reason); err != nil || state != "running" || reason != "" {
 		t.Fatal(state, reason, err)
@@ -68,9 +65,6 @@ func TestStorageContractsRetainsRequestIdentityAndSourceSequence(t *testing.T) {
 		t.Fatal(rows, err)
 	}
 	if err := foreignKeyCheck(context.Background(), database); err != nil {
-		t.Fatal(err)
-	}
-	if err := extendKnownGenerationTwoSchema(context.Background(), database); err != nil {
 		t.Fatal(err)
 	}
 }

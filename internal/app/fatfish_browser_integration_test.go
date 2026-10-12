@@ -30,7 +30,7 @@ func TestFatFishBrowserFixture(t *testing.T) {
 	}
 	defer vault.Close()
 	f := &imageBrowserFixture{t: t, vault: vault, cfg: auditConfig(), path: filepath.Join(t.TempDir(), "fish.db")}
-	dbfixture.Materialize(t, f.path)
+	dbfixture.Materialize(t, f.path, vault)
 	f.upstream = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Error("unexpected upstream request", r.Method, r.URL.Path)
 		http.Error(w, "upstream disabled", http.StatusBadGateway)

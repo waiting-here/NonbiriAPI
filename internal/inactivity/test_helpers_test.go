@@ -43,7 +43,8 @@ func fixture(t *testing.T) *testEnv {
 		t.Fatal(err)
 	}
 	path := filepath.Join(t.TempDir(), "inactivity.sqlite")
-	dbfixture.Materialize(t, path)
+
+	dbfixture.Materialize(t, path, vault)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		t.Fatal(err)
