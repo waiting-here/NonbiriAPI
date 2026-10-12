@@ -21,6 +21,7 @@ interface Saved {
   state: Snapshot;
   entered: boolean;
   day: string;
+  limitedDay?: string;
   month: string;
   receipts: Record<string, { input: string; result: Outcome }>;
   history: DrawReceipt[];
@@ -69,6 +70,7 @@ function initial(): Saved {
       pity: { permanent: freshPity(defaultRules), featured: freshPity(defaultRules) },
       newcomer: true,
       checked_in: false,
+      limited_checked_in: false,
       claimed: [],
       redeemed: [],
       month_used: { permanent: 0, limited: 0 },
@@ -140,6 +142,7 @@ function sync(data: Saved) {
   for (const pool of data.state.pools)
     pool.rates ??= [0.51317544, 0.32656619, 0.13817568, 0.02208269];
   data.state.checked_in = data.day === day();
+  data.state.limited_checked_in = data.limitedDay === day();
   if (data.month !== month()) {
     data.month = month();
     data.state.month_used = { permanent: 0, limited: 0 };
@@ -170,6 +173,12 @@ function run(input: Action, key: string): Outcome {
       data.day = day();
       state.checked_in = true;
       state.tickets.permanent++;
+      break;
+    case 'limited-check-in':
+      if (state.limited_checked_in) fail('already-claimed');
+      data.limitedDay = day();
+      state.limited_checked_in = true;
+      state.tickets.limited++;
       break;
     case 'draw': {
       const pool = state.pools.find((p) => p.id === input.pool_id);

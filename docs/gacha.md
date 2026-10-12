@@ -6,7 +6,7 @@ Cards are cosmetic collectibles. They cannot be transferred, traded, sold or con
 
 ## Getting started
 
-Opening the activity for the first time grants ten standard tickets. The first permanent ten-pull guarantees at least one SSR. Single pulls leave this guarantee available. A separate manual daily check-in grants one standard ticket. Days and calendar-month limits use the configured site time zone.
+Opening the activity for the first time grants ten standard tickets. The first permanent ten-pull guarantees at least one SSR. Single pulls leave this guarantee available. Two independent daily check-in buttons grant one standard ticket and one limited ticket. Both can be claimed on the same day; missed days cannot be claimed later. An existing standard-ticket check-in does not use the limited-ticket entitlement. Days and calendar-month limits use the configured site time zone.
 
 One ticket buys one pull; ten-pulls cost ten tickets. By default, a ticket costs 10,000 credits:
 
@@ -83,7 +83,7 @@ Base probabilities use 0.01% increments and total 100%. The SR threshold is 1–
 
 ## Site appearance
 
-Obtaining an SP card by drawing or shop redemption immediately unlocks its matching appearance. It remains available after the pool ends. The site does not select it automatically: choose **Appearance** in the user site and apply an unlocked design. The existing light, dark or system preference chooses its matching palette and background. Each design preserves page layout and provides responsive background cropping; game scenes retain their own style.
+Obtaining an SP card by drawing, shop redemption or an administrator reward immediately unlocks its matching appearance. It remains available after the pool ends. The site does not select it automatically: choose **Appearance** in the user site and apply an unlocked design. The existing light, dark or system preference chooses its matching palette and background. Each design preserves page layout and provides responsive background cropping; game scenes retain their own style.
 
 With a non-default appearance selected, **View animated background** in the top bar hides the interface for appreciation. **Return to page** or Escape restores the page and its current input state. Reduced-motion preferences still apply.
 
@@ -93,7 +93,7 @@ The selected appearance is saved per account. Unlocks derive from owned cards, i
 
 ## Records and HTTP access
 
-Draw history retains the most recent 180 days. Collection, first-acquisition times, pity and claimed/redeemed states remain while the account exists. Ticket/shard accounting remains independently of draw-detail expiry. Account export schema 17 includes these records and the appearance selection, unlocked designs and selection timestamp. Deletion removes personal activity state and clears user and retry-key associations from retained accounting/configuration events.
+Draw history retains the most recent 180 days. Collection, first-acquisition times, pity and claimed/redeemed states remain while the account exists. Ticket/shard accounting remains independently of draw-detail expiry. Account export schema 18 includes these records and the appearance selection, unlocked designs and selection timestamp. Deletion removes personal activity state and clears user and retry-key associations from retained accounting/configuration events.
 
 These routes use station sessions and existing same-origin checks; they are not CallerKey automation endpoints:
 

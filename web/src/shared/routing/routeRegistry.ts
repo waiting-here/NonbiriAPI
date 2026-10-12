@@ -47,6 +47,16 @@ export const USER_ROUTE_DESCRIPTORS = [
     labelKey: 'user.home.nav',
   }),
   user({
+    id: 'rewards',
+    path: '/rewards',
+    access: 'user',
+    layout: 'readable',
+    nav: true,
+    registered: true,
+    icon: 'activities',
+    labelKey: 'common.rewards.userTitle',
+  }),
+  user({
     id: 'caller-key',
     path: '/keys',
     access: 'user',
@@ -285,6 +295,17 @@ export const USER_ROUTE_DESCRIPTORS = [
 ] as const satisfies readonly RouteDescriptor[];
 
 export const ADMIN_ROUTE_DESCRIPTORS = [
+  admin({
+    id: 'admin-rewards',
+    path: '/rewards',
+    access: 'admin',
+    layout: 'wide',
+    nav: true,
+    navGroup: 'content',
+    registered: true,
+    icon: 'activities',
+    labelKey: 'common.rewards.adminTitle',
+  }),
   admin({
     id: 'admin-inactivity-policy',
     path: '/inactivity-policy',

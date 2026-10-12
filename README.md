@@ -14,6 +14,8 @@ The current development version is **1.0.0-rc.7**. See the [changelog](CHANGELOG
 - Optional check-ins, shared activities and nine games with server-authoritative settlement, recovery and privacy-aware rankings.
 - A shared outbound security boundary, encrypted upstream secrets, bounded diagnostics and retention controls. Request logs and credit details have a 30-day ordinary retention period; compacted balance and audit summaries preserve accounting continuity.
 
+[Reward bundles and redemption codes](docs/rewards.md) support conditional administrator gifts and once-per-account redemption.
+
 [The Gacha Simulator](docs/gacha.md) adds 57 collectible cards, animated SSR/SP illustrations and unlockable site appearances, permanent and scheduled limited pools, a shard shop and theme memories.
 
 The administrator [Fat Fish editor](docs/fatfish-editor.md) supports level design, validation and free playtesting before publication.

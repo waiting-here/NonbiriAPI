@@ -8,6 +8,9 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Added
 
+- Administrator reward bundles with nested eligibility conditions, durable site-wide delivery and redemption codes with optional quotas and schedules. Personal receipts include duplicate conversion and skipped items.
+- Independent daily gacha check-ins for one standard ticket and one limited ticket; both may be claimed each site day.
+
 - Charity request logs and exports show the original caller mode and actual automatic penalties, with an explicit unknown state for old records.
 - Administrators and level-6 stewards can open a selected account’s retained call-IP audit from its profile, including accounts with only one observed IP.
 
@@ -35,7 +38,7 @@ Each version entry describes its source and compatibility boundary; a release ta
 - The Fat Fish editor groups creation tools, canvas modes and properties, explains unfinished requirements, previews invalid geometry and fish collisions, and supports precise headings, viewport placement, zoom and touch navigation.
 - Charity catalog filters remain visible. Both stations improve request-log labels, exact credit amounts, mobile controls, empty states and appearance contrast.
 - The gacha activity entrances start hidden and can be enabled by administrators. The permanent banner sits below Cyber Loan; each currently open limited pool gets its own scheduled entrance and direct link. Limited-only themes stay hidden until a pool has opened or the user owns one of their cards.
-- Database schema revision 14 adds transactional collection, guarantee and activity-journal storage, frozen context prices, temporary managed-header sessions, personal-model request configuration and safe request-mode/automatic-action facts while preserving supported predecessor data and existing legal overrides. Account export schema 17 includes the user's collection activity, appearance and safe personal request-configuration projections.
+- Database schema revision 15 adds reward campaigns, recipient receipts, independent daily ticket claims and transactional collection, guarantee and activity-journal storage, frozen context prices, temporary managed-header sessions, personal-model request configuration and safe request-mode/automatic-action facts while preserving supported predecessor data and existing legal overrides. Account export schema 18 includes the user's collection activity, appearance and safe personal request-configuration projections.
 
 ### Fixed
 

@@ -17,7 +17,7 @@ import (
 func (a Action) validate() error {
 	expected := Action{Action: a.Action}
 	switch a.Action {
-	case "enter", "check-in":
+	case "enter", "check-in", "limited-check-in":
 	case "draw":
 		if a.Quantity != 1 && a.Quantity != 10 || a.PoolID != "permanent" && !db.ValidateOpaqueID(a.PoolID, "gp_") {
 			return ErrInvalid
@@ -116,7 +116,7 @@ func (s *Service) Act(ctx context.Context, user int64, key string, input Action)
 	if err != nil {
 		return out, err
 	}
-	if input.Action == "enter" && exists {
+	if input.Action == "enter" && exists && p.WelcomeGranted {
 		out.Snapshot, err = s.snapshot(ctx, tx, user, at)
 		if err != nil {
 			return out, err
@@ -152,6 +152,8 @@ func (s *Service) Act(ctx context.Context, user int64, key string, input Action)
 	var roster []string
 	switch input.Action {
 	case "enter":
+		p.WelcomeGranted = true
+		p.EnteredAt = at
 		p.Balance[0] += 10
 	case "check-in":
 		if p.Day == day {
@@ -159,6 +161,12 @@ func (s *Service) Act(ctx context.Context, user int64, key string, input Action)
 		}
 		p.Day = day
 		p.Balance[0]++
+	case "limited-check-in":
+		if p.LimitedDay == day {
+			return out, ErrClaimed
+		}
+		p.LimitedDay = day
+		p.Balance[1]++
 	case "draw":
 		var receipt *DrawReceipt
 		receipt, drawRules, roster, err = s.draw(ctx, tx, user, at, operation, input, &p)

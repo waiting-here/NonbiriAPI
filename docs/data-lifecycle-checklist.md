@@ -12,7 +12,7 @@ family. The registered routes, export builder, deletion coordinator, retention w
 and bilingual privacy text are covered by their implementation and contract tests.
 Schema presence alone never creates a route or expands a response.
 
-Current account export schema 17 retains earlier safe projections and adds `gacha`, including balances, owned cards, guarantees, claims, activity journals and draw details within 180 days. Its filename is `nonbiriapi-account-export-v17.json`; SQLite `user_version` remains 2. The schema-11 rows remain historical coverage for fields still retained. This does not assert that any particular instance has been upgraded.
+Current account export schema 18 retains earlier safe projections and adds `gacha`, including balances, owned cards, guarantees, claims, activity journals and draw details within 180 days. Its filename is `nonbiriapi-account-export-v18.json`; SQLite `user_version` remains 2. The schema-11 rows remain historical coverage for fields still retained. This does not assert that any particular instance has been upgraded.
 
 Donated keys include the current U128 failure-disable threshold in owner, management and safe export projections. It follows the parent key/donation lifecycle and adds no retention window. Policy edits add no-secret donation review facts, retained under the existing donation-review policy; account deletion removes actor links. A zero threshold preserves error counting but never disables a key for errors. Expiry, withdrawal, bans, manual switches and quota limits remain effective.
 
@@ -266,3 +266,5 @@ Active logical requests retain their value. Sent completion extends the configur
 ### Selected-account IP audits
 
 Selected-account IP audits reuse the existing risk-scan query, result and source-reference storage. The frozen target is an original site-account ID; it does not create a new source event or include website sign-ins. The existing privileged access, 24-hour task expiry, source retirement, deletion and export exclusions remain applicable.
+
+Reward receipts are included in export schema 18 under `rewards`. They contain the account’s successful site-wide and code rewards, quantities, duplicate conversions and skipped items, without code text, eligibility configuration, other recipients or retry hashes. Receipts remain for the account lifetime and are removed on deletion; campaign totals and used quota remain. See [rewards](rewards.md).

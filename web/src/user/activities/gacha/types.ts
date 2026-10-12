@@ -97,6 +97,7 @@ export interface Snapshot {
   pity: Record<string, Pity>;
   newcomer: boolean;
   checked_in: boolean;
+  limited_checked_in: boolean;
   claimed: string[];
   redeemed: string[];
   month_used: Record<Ticket, number>;
@@ -109,6 +110,7 @@ export interface Snapshot {
 export type Action =
   | { action: 'enter' }
   | { action: 'check-in' }
+  | { action: 'limited-check-in' }
   | { action: 'draw'; pool_id: string; quantity: 1 | 10 }
   | { action: 'buy'; ticket: Ticket; quantity: number; revision: number }
   | { action: 'redeem'; product: string; revision: number }

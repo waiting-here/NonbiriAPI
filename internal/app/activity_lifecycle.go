@@ -14,6 +14,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/inactivity"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
 	"github.com/waiting-here/NonbiriAPI/internal/limitedactivities"
+	"github.com/waiting-here/NonbiriAPI/internal/rewards"
 )
 
 func (a *activityRuntime) ExportGovernance(ctx context.Context, tx *sql.Tx, r lifecycle.ExportRequest) (lifecycle.GovernanceExport, error) {
@@ -94,6 +95,14 @@ func (a *activityRuntime) ExportGovernance(ctx context.Context, tx *sql.Tx, r li
 	if err != nil {
 		return out, err
 	}
+	rewardReceipts, err := a.rewards.ExportUserTx(ctx, tx, r.UserID, r.Limit)
+	if err != nil {
+		return out, activityExportError(err)
+	}
+	out.Rewards, err = json.Marshal(rewardReceipts)
+	if err != nil {
+		return out, err
+	}
 	skin, err := a.appearance.ExportUserTx(ctx, tx, r.UserID)
 	if err != nil {
 		return out, err
@@ -103,7 +112,7 @@ func (a *activityRuntime) ExportGovernance(ctx context.Context, tx *sql.Tx, r li
 }
 
 func activityExportError(err error) error {
-	if errors.Is(err, limitedactivities.ErrExportLimit) || errors.Is(err, imageactivity.ErrExportLimit) || errors.Is(err, inactivity.ErrTooLarge) || errors.Is(err, gacha.ErrExportLimit) {
+	if errors.Is(err, limitedactivities.ErrExportLimit) || errors.Is(err, imageactivity.ErrExportLimit) || errors.Is(err, inactivity.ErrTooLarge) || errors.Is(err, gacha.ErrExportLimit) || errors.Is(err, rewards.ErrExportLimit) {
 		return lifecycle.ErrTooLarge
 	}
 	return err
@@ -119,6 +128,10 @@ func (a *activityRuntime) PrepareDelete(ctx context.Context, tx *sql.Tx, r lifec
 		return nil, err
 	}
 	if err = appearance.DeleteUserTx(ctx, tx, r.UserID); err != nil {
+		f.Abort()
+		return nil, err
+	}
+	if err = a.rewards.DeleteUserTx(ctx, tx, r.UserID); err != nil {
 		f.Abort()
 		return nil, err
 	}

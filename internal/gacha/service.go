@@ -182,17 +182,18 @@ func readPools(ctx context.Context, tx *sql.Tx, at int64, admin bool) ([]Pool, e
 }
 
 type profile struct {
-	Balance    [6]int64
-	Newcomer   bool
-	Day, Month string
-	Used       [2]int64
-	EnteredAt  int64
+	Balance                [6]int64
+	Newcomer               bool
+	Day, LimitedDay, Month string
+	WelcomeGranted         bool
+	Used                   [2]int64
+	EnteredAt              int64
 }
 
 func readProfile(ctx context.Context, tx *sql.Tx, user int64) (profile, bool, error) {
 	p := profile{Newcomer: true}
-	err := tx.QueryRowContext(ctx, `SELECT permanent,limited,n_shards,r_shards,sr_shards,ssr_shards,newcomer,checked_day,month,monthly_permanent,monthly_limited,entered_at FROM gacha_profiles WHERE user_id=?`, user).
-		Scan(&p.Balance[0], &p.Balance[1], &p.Balance[2], &p.Balance[3], &p.Balance[4], &p.Balance[5], &p.Newcomer, &p.Day, &p.Month, &p.Used[0], &p.Used[1], &p.EnteredAt)
+	err := tx.QueryRowContext(ctx, `SELECT permanent,limited,n_shards,r_shards,sr_shards,ssr_shards,newcomer,checked_day,month,monthly_permanent,monthly_limited,entered_at,limited_checked_day,welcome_granted FROM gacha_profiles WHERE user_id=?`, user).
+		Scan(&p.Balance[0], &p.Balance[1], &p.Balance[2], &p.Balance[3], &p.Balance[4], &p.Balance[5], &p.Newcomer, &p.Day, &p.Month, &p.Used[0], &p.Used[1], &p.EnteredAt, &p.LimitedDay, &p.WelcomeGranted)
 	if errors.Is(err, sql.ErrNoRows) {
 		return p, false, nil
 	}
@@ -209,8 +210,8 @@ func saveProfile(ctx context.Context, tx *sql.Tx, user, at int64, p profile) err
 			return ErrCapacity
 		}
 	}
-	_, err := tx.ExecContext(ctx, `UPDATE gacha_profiles SET permanent=?,limited=?,n_shards=?,r_shards=?,sr_shards=?,ssr_shards=?,newcomer=?,checked_day=?,month=?,monthly_permanent=?,monthly_limited=?,updated_at=? WHERE user_id=?`,
-		p.Balance[0], p.Balance[1], p.Balance[2], p.Balance[3], p.Balance[4], p.Balance[5], p.Newcomer, p.Day, p.Month, p.Used[0], p.Used[1], at, user)
+	_, err := tx.ExecContext(ctx, `UPDATE gacha_profiles SET permanent=?,limited=?,n_shards=?,r_shards=?,sr_shards=?,ssr_shards=?,newcomer=?,checked_day=?,month=?,monthly_permanent=?,monthly_limited=?,updated_at=?,limited_checked_day=?,welcome_granted=?,entered_at=? WHERE user_id=?`,
+		p.Balance[0], p.Balance[1], p.Balance[2], p.Balance[3], p.Balance[4], p.Balance[5], p.Newcomer, p.Day, p.Month, p.Used[0], p.Used[1], at, p.LimitedDay, p.WelcomeGranted, p.EnteredAt, user)
 	return err
 }
 func readOwned(ctx context.Context, tx *sql.Tx, user int64) (map[string]Owned, error) {
@@ -270,6 +271,7 @@ func (s *Service) snapshot(ctx context.Context, tx *sql.Tx, user, at int64) (Sna
 	}
 	out.Newcomer = p.Newcomer
 	out.CheckedIn = p.Day == day
+	out.LimitedCheckedIn = p.LimitedDay == day
 	if p.Month != month {
 		p.Used = [2]int64{}
 	}

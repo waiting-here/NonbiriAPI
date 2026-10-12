@@ -15,6 +15,10 @@ export const router = createBrowserRouter([
     errorElement: <RouteErrorPage station="admin" />,
     children: [
       {
+        path: pathFor('admin-rewards'),
+        lazy: async () => ({ Component: (await import('./pages/RewardsPage')).RewardsPage }),
+      },
+      {
         path: pathFor('admin-blacklist'),
         lazy: async () => ({ Component: (await import('./pages/BlacklistPage')).BlacklistPage }),
       },

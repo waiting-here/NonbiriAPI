@@ -82,22 +82,23 @@ type Credits struct {
 	Game    string `json:"game"`
 }
 type Snapshot struct {
-	VisibleThemes []string         `json:"visible_themes"`
-	Tickets       map[string]int64 `json:"tickets"`
-	Fragments     map[Rarity]int64 `json:"fragments"`
-	Credits       Credits          `json:"credits"`
-	Owned         map[string]Owned `json:"owned"`
-	Pity          map[string]Pity  `json:"pity"`
-	Newcomer      bool             `json:"newcomer"`
-	CheckedIn     bool             `json:"checked_in"`
-	Claimed       []string         `json:"claimed"`
-	Redeemed      []string         `json:"redeemed"`
-	MonthUsed     map[string]int64 `json:"month_used"`
-	Donation      string           `json:"donation"`
-	Pools         []Pool           `json:"pools"`
-	Shop          ShopSettings     `json:"shop"`
-	ServerTime    int64            `json:"server_time"`
-	TimeZone      string           `json:"time_zone"`
+	VisibleThemes    []string         `json:"visible_themes"`
+	Tickets          map[string]int64 `json:"tickets"`
+	Fragments        map[Rarity]int64 `json:"fragments"`
+	Credits          Credits          `json:"credits"`
+	Owned            map[string]Owned `json:"owned"`
+	Pity             map[string]Pity  `json:"pity"`
+	Newcomer         bool             `json:"newcomer"`
+	CheckedIn        bool             `json:"checked_in"`
+	LimitedCheckedIn bool             `json:"limited_checked_in"`
+	Claimed          []string         `json:"claimed"`
+	Redeemed         []string         `json:"redeemed"`
+	MonthUsed        map[string]int64 `json:"month_used"`
+	Donation         string           `json:"donation"`
+	Pools            []Pool           `json:"pools"`
+	Shop             ShopSettings     `json:"shop"`
+	ServerTime       int64            `json:"server_time"`
+	TimeZone         string           `json:"time_zone"`
 }
 type Action struct {
 	Action   string `json:"action"`

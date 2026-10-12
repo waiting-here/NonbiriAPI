@@ -46,7 +46,7 @@ func (s *Service) Entry(ctx context.Context, user int64) (Entry, error) {
 	if err != nil {
 		return out, err
 	}
-	if err = tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM gacha_profiles WHERE user_id=?)", user).Scan(&out.Entered); err != nil {
+	if err = tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM gacha_profiles WHERE user_id=? AND welcome_granted=1)", user).Scan(&out.Entered); err != nil {
 		return out, err
 	}
 	if out.Enabled {

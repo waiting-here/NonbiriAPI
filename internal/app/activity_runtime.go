@@ -27,12 +27,14 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/limitedactivities"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
+	"github.com/waiting-here/NonbiriAPI/internal/rewards"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
 type activityRuntime struct {
 	limited     *limitedactivities.Service
 	gacha       *gacha.Service
+	rewards     *rewards.Service
 	appearance  *appearance.Service
 	images      *imageactivity.Service
 	fish        *fatfish.Service
@@ -129,6 +131,11 @@ func newActivityRuntime(store *db.Store, vault *secret.Vault, sessions *auth.Run
 		_ = a.Close()
 		return nil, err
 	}
+	a.rewards, err = rewards.New(rewards.Config{Database: store.DB(), Users: users, Admins: roles, Gate: admission, Activity: activeActivityRecorder{}, Now: now})
+	if err != nil {
+		_ = a.Close()
+		return nil, err
+	}
 	a.appearance, err = appearance.New(appearance.Config{Database: store.DB(), Users: users, Gate: admission, Now: now,
 		Visible: func(ctx context.Context, tx *sql.Tx, key string) (bool, error) {
 			if !strings.HasPrefix(key, "card:") {
@@ -221,7 +228,11 @@ func (a *activityRuntime) PrepareMaintenanceTx(ctx context.Context, tx *sql.Tx, 
 func (a *activityRuntime) Start(parent context.Context, failures chan<- error, unavailable func()) {
 	ctx, cancel := context.WithCancel(parent)
 	a.cancel = cancel
-	a.workers.Add(2)
+	a.workers.Add(3)
+	go func() {
+		defer a.workers.Done()
+		a.rewards.Run(ctx, func(error) { slog.Error("reward delivery worker encountered an operational failure") })
+	}()
 	go func() {
 		defer a.workers.Done()
 		if err := a.images.Run(ctx); ctx.Err() == nil {
@@ -346,6 +357,9 @@ func (a *activityRuntime) RegisterRoutes(sessions *auth.Runtime) error {
 		return err
 	}
 	if err := appearance.RegisterRoutes(l, a.appearance); err != nil {
+		return err
+	}
+	if err := rewards.RegisterRoutes(l, l, a.rewards); err != nil {
 		return err
 	}
 	if err := gacha.RegisterRoutes(l, l, a.gacha); err != nil {

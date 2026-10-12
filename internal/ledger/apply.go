@@ -191,7 +191,7 @@ func validatePlan(plan Plan) error {
 		return ErrInvalidPlan
 	}
 	if spec.reason != "" {
-		if !validReason(spec.reason) || spec.kind != KindAdminUserAdjustment && spec.kind != KindAdminPoolAdjustment && spec.kind != KindAntiAbusePenalty {
+		if !validReason(spec.reason) || spec.kind != KindAdminUserAdjustment && spec.kind != KindAdminPoolAdjustment && spec.kind != KindAntiAbusePenalty && spec.kind != KindRewardGrant {
 			return ErrInvalidPlan
 		}
 	}

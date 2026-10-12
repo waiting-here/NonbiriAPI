@@ -49,3 +49,6 @@ var personalAdaptationSQL string
 
 //go:embed migrations/0014_request_facts.sql
 var requestFactsSQL string
+
+//go:embed migrations/0015_rewards.sql
+var rewardsSQL string

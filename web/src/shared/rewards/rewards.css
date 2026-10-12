@@ -1,0 +1,110 @@
+.reward-stack {
+  display: grid;
+  gap: var(--nb-space-5);
+}
+.reward-form {
+  display: grid;
+  gap: var(--nb-space-5);
+}
+.reward-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: var(--nb-space-4);
+}
+.reward-item {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(7rem, 1fr) auto;
+  gap: var(--nb-space-3);
+  align-items: end;
+}
+.reward-summary {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: var(--nb-space-2);
+}
+.reward-summary li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--nb-space-2) var(--nb-space-4);
+}
+.reward-number {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.reward-number--grant {
+  color: var(--nb-color-success);
+}
+.reward-detail {
+  flex-basis: 100%;
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-sm);
+}
+.reward-condition {
+  border: 0;
+  border-inline-start: 2px solid var(--nb-color-border-strong);
+  margin: 0;
+  padding: var(--nb-space-3);
+  display: grid;
+  gap: var(--nb-space-3);
+  min-width: 0;
+}
+.reward-condition legend {
+  font-weight: var(--nb-font-weight-semibold);
+  font-size: var(--nb-font-size-sm);
+  padding: 0 var(--nb-space-2);
+}
+.reward-condition-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: var(--nb-space-3);
+}
+.reward-condition-child {
+  min-width: 0;
+  display: grid;
+  gap: var(--nb-space-2);
+}
+.reward-summary-text {
+  overflow-wrap: anywhere;
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-sm);
+}
+.reward-code {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--nb-space-3);
+  align-items: center;
+  overflow-wrap: anywhere;
+}
+.reward-list {
+  display: grid;
+  gap: var(--nb-space-5);
+}
+.reward-entry {
+  border-block-end: 1px solid var(--nb-color-border);
+  padding-block-end: var(--nb-space-5);
+  display: grid;
+  gap: var(--nb-space-3);
+}
+.reward-entry:last-child {
+  border: 0;
+  padding: 0;
+}
+.reward-entry h3 {
+  margin: 0;
+  font-size: var(--nb-font-size-lg);
+}
+@media (width < 40rem) {
+  .reward-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .reward-item > :first-child {
+    grid-column: 1 / -1;
+  }
+  .reward-condition {
+    padding-inline-end: 0;
+    padding-inline-start: var(--nb-space-2);
+  }
+}

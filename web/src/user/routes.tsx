@@ -16,6 +16,10 @@ export const router = createBrowserRouter([
     errorElement: <RouteErrorPage station="user" />,
     children: [
       {
+        path: pathFor('rewards'),
+        lazy: async () => ({ Component: (await import('./pages/RewardsPage')).RewardsPage }),
+      },
+      {
         path: pathFor('access-denied'),
         loader: () => {
           throw new ApiError('forbidden', 'Access forbidden.', 403);

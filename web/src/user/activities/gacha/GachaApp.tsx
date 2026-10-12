@@ -472,21 +472,42 @@ export function GachaApp({
                   label: english && p.name_en ? p.name_en : p.name,
                 }))}
               />
-              <Button
-                size="sm"
-                onClick={() =>
-                  void act(
-                    { action: 'check-in' },
-                    t('签到成功，常驻抽奖券 +1', 'Checked in · +1 standard ticket'),
-                  )
-                }
-                disabled={busy || state.checked_in}
+              <div
+                className="gacha-checkins"
+                role="group"
+                aria-label={t('每日签到', 'Daily check-in')}
               >
-                <Icon name={state.checked_in ? 'check' : 'credits'} />
-                {state.checked_in
-                  ? t('今日已签到', 'Checked in')
-                  : t('每日签到 · 领 1 券', 'Daily check-in · +1 ticket')}
-              </Button>
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    void act(
+                      { action: 'check-in' },
+                      t('签到成功，常驻抽奖券 +1', 'Checked in · +1 standard ticket'),
+                    )
+                  }
+                  disabled={busy || state.checked_in}
+                >
+                  <Icon name={state.checked_in ? 'check' : 'credits'} />
+                  {state.checked_in
+                    ? t('常驻券已领取', 'Standard claimed')
+                    : t('签到 · 常驻券 +1', 'Check in · +1 standard')}
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    void act(
+                      { action: 'limited-check-in' },
+                      t('签到成功，限定抽奖券 +1', 'Checked in · +1 limited ticket'),
+                    )
+                  }
+                  disabled={busy || state.limited_checked_in}
+                >
+                  <Icon name={state.limited_checked_in ? 'check' : 'credits'} />
+                  {state.limited_checked_in
+                    ? t('限定券已领取', 'Limited claimed')
+                    : t('签到 · 限定券 +1', 'Check in · +1 limited')}
+                </Button>
+              </div>
             </div>
             <section
               className={'gacha-banner gacha-banner--' + pool.cover}
@@ -1062,8 +1083,8 @@ export function GachaApp({
           <Fold title={t('新手、签到与碎片', 'Welcome gifts, check-in and shards')}>
             <p>
               {t(
-                '首次进入赠送 10 张常驻抽奖券，首次常驻十连至少获得一张 SSR；先单抽不消耗资格。每日手动签到获得 1 张常驻券，按站点时区零点刷新。每张重复卡自动转为 1 枚同稀有度卡牌碎片。',
-                'Receive 10 standard tickets on your first visit. Your first standard ten-pull includes at least one SSR; single pulls do not use this guarantee. Check in manually once per site day for one standard ticket. Each duplicate becomes one matching rarity shard.',
+                '首次进入赠送 10 张常驻抽奖券，首次常驻十连至少获得一张 SSR；先单抽不消耗资格。每日可分别手动领取 1 张常驻券和 1 张限定券，两种都可领，按站点时区零点刷新。每张重复卡自动转为 1 枚同稀有度卡牌碎片。',
+                'Receive 10 standard tickets on your first visit. Your first standard ten-pull includes at least one SSR; single pulls do not use this guarantee. Claim one standard ticket and one limited ticket with separate daily check-in buttons. Both can be claimed each site day. Each duplicate becomes one matching rarity shard.',
               )}
             </p>
           </Fold>

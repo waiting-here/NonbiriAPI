@@ -183,6 +183,12 @@
   gap: var(--nb-space-3);
   padding: var(--nb-space-4) var(--nb-space-6);
 }
+.gacha-checkins {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--nb-space-2);
+}
 .gacha-pool-nav .nb-tabs {
   min-width: 0;
   overflow-x: auto;

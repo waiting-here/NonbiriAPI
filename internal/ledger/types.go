@@ -22,6 +22,7 @@ var (
 type Kind string
 
 const (
+	KindRewardGrant          Kind = "reward_grant"
 	KindAdminUserAdjustment  Kind = "admin_user_adjustment"
 	KindAdminPoolAdjustment  Kind = "admin_pool_adjustment"
 	KindAccountDeleteZero    Kind = "account_delete_zero"

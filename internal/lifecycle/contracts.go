@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	SchemaVersion         = 17
+	SchemaVersion         = 18
 	CollectionLimit       = 10_000
 	MaxExportBytes        = 16 << 20
 	WorkerBatchLimit      = 100
