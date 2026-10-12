@@ -15,6 +15,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/applog"
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
@@ -178,7 +179,7 @@ func logStartupFailure(trace *db.StartupTrace, err error, cleanupPending bool) {
 		"processed_count", progress.ProcessedCount, "bytes", progress.ProcessedBytes,
 		"primary_cause", category, "category", category, "retryability", retryable,
 		"secondary", secondary, "last_committed_phase", progress.LastCommittedPhase,
-		"cleanup_pending", cleanupPending)
+		"cleanup_pending", cleanupPending, "recovery_domain", lifecycle.FailureDomain(err))
 }
 
 func run() int {

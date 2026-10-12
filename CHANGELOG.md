@@ -28,6 +28,9 @@ use a verified commit and its matching artifacts without a release tag.
 
 ### Fixed
 
+- Recover in-flight requests through the active-state index, avoiding scans of
+  completed request history. Startup failures identify the recovery domain
+  without exposing private error details.
 - Gacha entry survives ordinary session refreshes and retries the same accepted
   operation. Countdown updates no longer render the whole activity page.
 - Activity streams recover silently from short interruptions and offer one

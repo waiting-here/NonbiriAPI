@@ -563,7 +563,7 @@ func (c *testCharity) RequestCharge(_ context.Context, _ *sql.Tx, requestID stri
 }
 
 type claimFixture struct {
-	t          *testing.T
+	t          testing.TB
 	store      *db.Store
 	db         *sql.DB
 	codec      *testCodec
@@ -588,7 +588,7 @@ func (allowAcceptanceGate) AuthorizeChatAcceptance(context.Context, *sql.Tx, int
 	return nil
 }
 
-func newClaimFixture(t *testing.T) *claimFixture {
+func newClaimFixture(t testing.TB) *claimFixture {
 	t.Helper()
 	codec := newTestCodec()
 	path := filepath.Join(t.TempDir(), "claim.sqlite")

@@ -145,6 +145,12 @@ WHERE state IN ('claimed','dispatched') ORDER BY claim_now,id LIMIT 1`).Scan(&cl
 	return StateCommitted, nil
 }
 
+const requestRecoveryCandidateSQL = `SELECT r.id FROM logical_requests r
+WHERE r.state IN ('accepted','running')
+AND NOT EXISTS(SELECT 1 FROM dispatch_claims c
+               WHERE c.logical_request_id=r.id AND c.state IN ('claimed','dispatched'))
+ORDER BY r.created_at,r.id LIMIT 1`
+
 func (s *Service) recoverOneRequestAt(ctx context.Context, at int64) (bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -152,11 +158,7 @@ func (s *Service) recoverOneRequestAt(ctx context.Context, at int64) (bool, erro
 	}
 	defer tx.Rollback()
 	var requestID string
-	if err := tx.QueryRowContext(ctx, `SELECT r.id FROM logical_requests r
-WHERE r.state<>'terminal'
-AND NOT EXISTS(SELECT 1 FROM dispatch_claims c
-               WHERE c.logical_request_id=r.id AND c.state IN ('claimed','dispatched'))
-ORDER BY r.created_at,r.id LIMIT 1`).Scan(&requestID); err != nil {
+	if err := tx.QueryRowContext(ctx, requestRecoveryCandidateSQL).Scan(&requestID); err != nil {
 		return false, err
 	}
 	request, err := loadRequestTx(ctx, tx, requestID)
@@ -294,11 +296,13 @@ WHERE id IN (
 	return MaintenanceReport{Marked: int(marked), Deleted: int(deleted), More: more}, nil
 }
 
+const claimRecoveryPendingSQL = `SELECT
+EXISTS(SELECT 1 FROM dispatch_claims WHERE state IN ('claimed','dispatched'))
+OR EXISTS(SELECT 1 FROM logical_requests WHERE state IN ('accepted','running'))`
+
 func (s *Service) hasClaimRecoveryWork(ctx context.Context) (bool, error) {
 	var pending int
-	err := s.db.QueryRowContext(ctx, `SELECT
-EXISTS(SELECT 1 FROM dispatch_claims WHERE state IN ('claimed','dispatched'))
-OR EXISTS(SELECT 1 FROM logical_requests WHERE state<>'terminal')`).Scan(&pending)
+	err := s.db.QueryRowContext(ctx, claimRecoveryPendingSQL).Scan(&pending)
 	if err != nil {
 		return false, fmt.Errorf("claim: inspect recovery backlog: %w", err)
 	}
