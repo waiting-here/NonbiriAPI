@@ -50,7 +50,8 @@ func newAbuseFixture(t *testing.T) *abuseFixture {
 	}
 	t.Cleanup(func() { _ = vault.Close() })
 	path := filepath.Join(t.TempDir(), "abuse.db")
-	dbfixture.Materialize(t, path)
+
+	dbfixture.Materialize(t, path, vault)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		t.Fatal(err)
@@ -60,9 +61,6 @@ func newAbuseFixture(t *testing.T) *abuseFixture {
 	f.clock.Store(time.Now().Unix())
 	claims, err := claim.New(claim.Dependencies{DB: store.DB(), Secrets: vault, Acceptance: f.gate})
 	if err != nil {
-		t.Fatal(err)
-	}
-	if err := claims.InitializeUsageTotals(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	f.claims = claims

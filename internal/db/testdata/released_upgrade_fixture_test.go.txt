@@ -16,7 +16,7 @@ import (
 
 // This fixture is compiled with the pinned released source.
 func TestWriteReleasedUpgradeFixture(t *testing.T) {
-	if db.GenerationTwoSchemaHash() != "41d6ba87261075647661ec37279c2cd83a6c3b32c97206d2b4b3cb68c05e69e5" || db.PinnedGenerationTwoManifestHash != "e2f99944f596dda1702a76de6c7ba540761bd1d27f748c437968df0ecc1cf452" || db.PinnedGenerationTwoFreshConfigSeedHash != "d07ead0c73eb8173f5e88cc463601bac7b72b576f22361db87e0da7a1cc0c1fc" {
+	if db.GenerationTwoSchemaHash() != "f497335da8efcdd49132bc9d7c3d97bf8bb41dc5f2ca14ce557871ddc76e5c17" || db.PinnedGenerationTwoManifestHash != "484bf7ee92aec1dfb9c8750e9bb1a73b2b4b5d1e9761e1f86c5dcd31d2719f23" || db.PinnedGenerationTwoFreshConfigSeedHash != "9773098cd2282c59dbecb6062ba1a64a13b4e0b0bf8c43845c152ced03d813d5" {
 		t.Fatal("wrong released schema")
 	}
 	path := os.Getenv("NONBIRI_RELEASED_FIXTURE")
@@ -108,10 +108,19 @@ func TestWriteReleasedUpgradeFixture(t *testing.T) {
 	seedReleasedGovernanceFacts(t, tx, vault, users)
 	seedReleasedEconomyAuditProjection(t, tx, users)
 	seedReleasedLakeNotes(t, tx, users[0])
+	seedReleasedGachaFacts(t, tx, users[0])
 	if err := ValidateRecovery(ctx, tx); err != nil {
 		t.Fatal(err)
 	}
 	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	review, err := secret.NewDonationReview(vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := review.Initialize(ctx, store.DB()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.DB().Exec(`PRAGMA wal_checkpoint(TRUNCATE)`); err != nil {
@@ -164,8 +173,8 @@ func seedReleasedLakeNotes(t *testing.T, tx *sql.Tx, user int64) {
 	}
 }
 
-func TestReleasedRejectsDuelUpgrade(t *testing.T) {
-	path := os.Getenv("NONBIRI_DUAL_UPGRADED_FIXTURE")
+func TestReleasedRejectsStableSchema(t *testing.T) {
+	path := os.Getenv("NONBIRI_STABLE_UPGRADED_FIXTURE")
 	if path == "" {
 		t.Fatal("missing upgraded fixture")
 	}
@@ -189,5 +198,27 @@ func TestReleasedRejectsDuelUpgrade(t *testing.T) {
 	after, err := os.ReadFile(path)
 	if err != nil || sha256.Sum256(before) != sha256.Sum256(after) {
 		t.Fatal("rejection modified the database", err)
+	}
+}
+
+func seedReleasedGachaFacts(t *testing.T, tx *sql.Tx, user int64) {
+	t.Helper()
+	pool := mustLedgerID(t, "gp_")
+	queries := []struct {
+		query string
+		args  []any
+	}{
+		{"INSERT INTO gacha_pools(id,config,revision,created_at) SELECT ?,config,7,? FROM gacha_presets ORDER BY id LIMIT 1", []any{pool, ledgerTestNow}},
+		{"INSERT INTO gacha_config_events(actor_user_id,target,revision,config,created_at) SELECT ?,id,revision,config,created_at FROM gacha_pools WHERE id=?", []any{user, pool}},
+		{"INSERT INTO gacha_profiles(user_id,permanent,limited,n_shards,r_shards,sr_shards,ssr_shards,newcomer,checked_day,month,monthly_permanent,monthly_limited,entered_at,updated_at,limited_checked_day,welcome_granted) VALUES(?,37,11,9,7,5,3,0,'2023-11-14','2023-11',4,2,?,?,'2023-11-14',1)", []any{user, ledgerTestNow, ledgerTestNow}},
+		{"INSERT INTO gacha_owned(user_id,card_id,obtained_at,source) VALUES(?,'a-chatgpt',?,'reward')", []any{user, ledgerTestNow}},
+		{"INSERT INTO gacha_pity(user_id,group_id,sr,ssr,sr_limit,ssr_limit,sr_featured,ssr_featured,ssr_misses) VALUES(?,'permanent',3,42,10,90,1,0,1)", []any{user}},
+		{"INSERT INTO gacha_claims(user_id,kind,target,created_at) VALUES(?,'card','a-chatgpt',?)", []any{user, ledgerTestNow}},
+		{"UPDATE gacha_presets SET name='Edited synthetic template',revision=8 WHERE id=(SELECT id FROM gacha_presets ORDER BY id LIMIT 1)", nil},
+	}
+	for _, item := range queries {
+		if _, err := tx.Exec(item.query, item.args...); err != nil {
+			t.Fatal(err)
+		}
 	}
 }

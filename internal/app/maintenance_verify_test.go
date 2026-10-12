@@ -16,7 +16,12 @@ import (
 
 func TestMaintenanceVerifyAuditsWithoutRecoveryOrWrites(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "verify.sqlite")
-	dbfixture.Materialize(t, path)
+	vault, err := secret.New(bytes.Repeat([]byte{0x53}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer vault.Close()
+	dbfixture.Materialize(t, path, vault)
 	for key, value := range map[string]string{
 		"NONBIRI_LISTEN_ADDR": "127.0.0.1:9090", "NONBIRI_DB_PATH": path,
 		"NONBIRI_ADMIN_USERNAME": "operator", "NONBIRI_ADMIN_PASSWORD": "synthetic-password",
@@ -40,11 +45,6 @@ func TestMaintenanceVerifyAuditsWithoutRecoveryOrWrites(t *testing.T) {
 	if err != nil || !bytes.Equal(before, after) {
 		t.Fatal("verify changed source", err)
 	}
-	vault, err := secret.New(bytes.Repeat([]byte{0x53}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer vault.Close()
 	store, err := db.Open(path, vault)
 	if err != nil {
 		t.Fatal(err)

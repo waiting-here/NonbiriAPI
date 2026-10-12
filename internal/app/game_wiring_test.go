@@ -40,7 +40,8 @@ func newGameWireFixtureWithClock(t *testing.T, nowFunc func() time.Time) gameWir
 	}
 	t.Cleanup(func() { _ = vault.Close() })
 	path := filepath.Join(t.TempDir(), "games-http.db")
-	dbfixture.Materialize(t, path)
+
+	dbfixture.Materialize(t, path, vault)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		t.Fatal(err)

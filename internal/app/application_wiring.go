@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/waiting-here/NonbiriAPI/internal/gatewaypolicy"
 	"log/slog"
 	"time"
 
@@ -255,25 +254,12 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err != nil {
 		return nil, fmt.Errorf("create authentication runtime: %w", err)
 	}
-	for cursor := int64(0); ; {
-		next, count, err := authRuntime.IdentityContinuity().BackfillBatch(startupContext, cursor, 1000)
-		if err != nil {
-			return nil, fmt.Errorf("bind account continuity: %w", err)
-		}
-		if count < 1000 {
-			break
-		}
-		cursor = next
-	}
 	roleAuthorizer := &roleFinalTxAuthorizer{authorizer: authorizer}
 	audits, err = newAuditRuntime(startupContext, store, vault, roleAuthorizer)
 	if err != nil {
 		return nil, fmt.Errorf("create audit runtime: %w", err)
 	}
 	audits.outbound = outbound
-	if err := gatewaypolicy.NewStore(store.DB()).Initialize(startupContext, cfg.GatewayModelsImport, cfg.GatewayModels); err != nil {
-		return nil, fmt.Errorf("initialize Gateway model capabilities: %w", err)
-	}
 	adminConfigRepository, err := adminapi.NewSiteConfigRepository(adminapi.SiteConfigRepositoryOptions{
 		Store: store, FinalAuthorizer: roleAuthorizer,
 		Committed: audits.configurationChanged,
@@ -322,12 +308,6 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create claim service: %w", err)
-	}
-	usageContext, cancelUsageInitialization := context.WithTimeout(startupContext, 30*time.Second)
-	err = claimService.InitializeUsageTotals(usageContext)
-	cancelUsageInitialization()
-	if err != nil {
-		return nil, fmt.Errorf("initialize request usage totals: %w", err)
 	}
 	bridgeRuntime, err = resourcebridge.New(resourcebridge.Config{
 		ErrorScope: audits.observations.DiscoveryScope,
@@ -497,7 +477,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err := authRuntime.AttachUserSessionInvalidationObserver(userInvalidations); err != nil {
 		return nil, fmt.Errorf("attach user-session invalidation observer: %w", err)
 	}
-	activityEngines, err = newActivityRuntime(store, vault, authRuntime, roleAuthorizer,
+	activityEngines, err = newActivityRuntime(startupContext, store, vault, authRuntime, roleAuthorizer,
 		maintenanceService, outbound, audits, userInvalidations, gameRuntimes.CancelUserDuelsTx, gameRuntimes, options.ActivityNow)
 	if err != nil {
 		return nil, fmt.Errorf("create limited activity runtimes: %w", err)

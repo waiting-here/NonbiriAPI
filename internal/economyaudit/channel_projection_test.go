@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"net/http/httptest"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -13,26 +12,20 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 )
 
-func TestEveryClosedLedgerKindFitsAuditChannelsForEveryAsset(t *testing.T) {
+func TestEveryRegisteredLedgerKindFitsAuditChannelsForEveryAsset(t *testing.T) {
 	f := newAuditFixture(t)
-	var definition string
-	if err := f.database.QueryRow("SELECT sql FROM sqlite_schema WHERE name='credit_operations'").Scan(&definition); err != nil {
-		t.Fatal(err)
-	}
-	kinds := regexp.MustCompile(`kind TEXT NOT NULL CHECK\(kind IN \(([^)]+)\)\)`).FindStringSubmatch(definition)
-	if len(kinds) != 2 {
-		t.Fatal("closed ledger kind constraint missing")
-	}
 	tx, err := f.database.Begin()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	if _, err := tx.Exec("INSERT INTO economy_audit_buckets VALUES('general','audit_fixture','operation','unknown','day',0,0,'0','0','0','0','0',1,1,1)"); err == nil {
-		t.Fatal("fresh schema accepted unknown channel")
+	if _, err := tx.Exec("INSERT INTO economy_audit_buckets VALUES('general','audit_fixture','operation','invalid channel','day',0,0,'0','0','0','0','0',1,1,1)"); err == nil {
+		t.Fatal("fresh schema accepted malformed channel")
 	}
-	for _, raw := range strings.Split(kinds[1], ",") {
-		kind := ledger.Kind(strings.Trim(raw, "'"))
+	if _, err := tx.Exec("INSERT INTO economy_audit_buckets VALUES('general','audit_fixture','operation','future_activity','day',0,0,'0','0','0','0','0',1,1,1)"); err != nil {
+		t.Fatal("new audit channels must not require DDL", err)
+	}
+	for _, kind := range ledger.RegisteredKinds() {
 		seen := map[string]bool{}
 		for _, prefix := range []string{"bid_", "lik_", "gwt_", "future_"} {
 			source := prefix + strings.Repeat("A", 22)

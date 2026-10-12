@@ -206,6 +206,8 @@ nginx/*.local.conf
 !internal/db/generation_two.sql
 !internal/db/migrations/**/*.sql
 !internal/db/testdata/*.sql
+!internal/upgrade/rc7/convert.sql
+!internal/upgrade/rc7/testdata/schema.sql
 
 # ===== Local deployment configs =====
 

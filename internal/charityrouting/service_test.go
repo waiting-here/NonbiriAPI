@@ -103,7 +103,8 @@ func newRoutingTestEnv(t *testing.T) *routingTestEnv {
 	}
 	t.Cleanup(func() { _ = vault.Close() })
 	path := filepath.Join(t.TempDir(), "routing.sqlite")
-	dbfixture.Materialize(t, path)
+
+	dbfixture.Materialize(t, path, vault)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		t.Fatal(err)

@@ -106,7 +106,8 @@ func newSiteConfigAuthFixture(t *testing.T) *siteConfigAuthFixture {
 		t.Fatalf("create auth integration vault: %v", err)
 	}
 	path := filepath.Join(t.TempDir(), "site-config-auth.db")
-	dbfixture.Materialize(t, path)
+
+	dbfixture.Materialize(t, path, vault)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		_ = vault.Close()

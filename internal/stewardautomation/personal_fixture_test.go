@@ -139,7 +139,8 @@ func newPersonalFixture(t *testing.T) *personalFixture {
 	}
 	t.Cleanup(func() { _ = vault.Close() })
 	path := filepath.Join(t.TempDir(), "automation.sqlite")
-	dbfixture.Materialize(t, path)
+
+	dbfixture.Materialize(t, path, vault)
 	f.store, err = db.Open(path, vault)
 	if err != nil {
 		t.Fatal(err)

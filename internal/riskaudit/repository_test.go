@@ -59,7 +59,8 @@ func newAuditFixture(t *testing.T) *auditFixture {
 	}
 	t.Cleanup(func() { _ = vault.Close() })
 	path := filepath.Join(t.TempDir(), "risk.db")
-	dbfixture.Materialize(t, path)
+
+	dbfixture.Materialize(t, path, vault)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		t.Fatal(err)

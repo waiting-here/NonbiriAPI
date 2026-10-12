@@ -260,13 +260,14 @@ VALUES(?, ?,1,'self',0,'released',0,'not_applicable','neutral','platform')`, hos
 INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,claim_now,state,terminal_at,donor_reward_state,streak_disposition,failure_origin)
 VALUES(?, ?,1,'self',0,'released',0,'not_applicable','neutral','platform')`, claim, hostileBadOID("req_"))
 
-	// Source identities are a closed prefix map, not a generic OID slot.
+	// The database bounds source references; the operation registry validates
+	// their relationship to each kind before a ledger transaction is applied.
 	otherOperation := hostileOID("op_")[:24] + "g"
 	hostileMustFail(t, db, `
 INSERT INTO credit_operations(
  id,ledger_seq,kind,source_type,source_id,source_seq,
  donation_credit_delta_sign,donation_credit_delta_mag,created_at
-) VALUES(?,1,'welfare_claim','operation',?, ?,0,?,0)`, otherOperation, req, hostileBlob16(0), hostileBlob16(0))
+) VALUES(?,1,'welfare_claim','operation',?, ?,0,?,0)`, otherOperation, strings.Repeat("x", 201), hostileBlob16(0), hostileBlob16(0))
 	hostileMustFail(t, db, `
 INSERT INTO credit_operations(
  id,ledger_seq,kind,source_type,source_id,source_seq,

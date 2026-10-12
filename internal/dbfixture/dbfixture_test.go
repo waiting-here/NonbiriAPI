@@ -73,8 +73,8 @@ func TestMaterializeCreatesPrivateIndependentValidatedStores(t *testing.T) {
 	}
 	firstPath := filepath.Join(root, "first.sqlite")
 	secondPath := filepath.Join(root, "second.sqlite")
-	Materialize(t, firstPath)
-	Materialize(t, secondPath)
+	Materialize(t, firstPath, fixtureVault(t, 0x11))
+	Materialize(t, secondPath, fixtureVault(t, 0x22))
 
 	if runtime.GOOS != "windows" {
 		parentInfo, err := os.Stat(root)
@@ -291,7 +291,7 @@ func TestRaceTemplateChildProcess(t *testing.T) {
 	if err := materialize(path); err != nil {
 		t.Fatalf("child materialize: %v", err)
 	}
-	store, err := db.Open(path, fixtureVault(t, 0x33))
+	store, err := db.Open(path, fixtureVault(t, 0x41))
 	if err != nil {
 		t.Fatalf("child current-store validation: %v", err)
 	}

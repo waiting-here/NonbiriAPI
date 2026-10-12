@@ -368,6 +368,9 @@ func validateReadOnlyDatabase(ctx context.Context, d *sql.DB, secrets secret.Gen
 	if err := validateGenerationTwoSeedManifest(ctx, d); err != nil {
 		return startupSQLFailure(ctx, err, StartupSchemaMismatch)
 	}
+	if err := validateDatabaseMaterial(ctx, d, secrets); err != nil {
+		return startupSQLFailure(ctx, err, StartupCredentialReject)
+	}
 	if err := validateEndpointKeyEnvelopes(ctx, d, secrets); err != nil {
 		return startupSQLFailure(ctx, err, StartupCredentialReject)
 	}
@@ -826,6 +829,8 @@ func (o *freshOwnership) cleanup() error {
 
 func seedGenerationTwo(ctx context.Context, tx *sql.Tx, announcementEpoch string) error {
 	zero := make([]byte, 16)
+	one := make([]byte, 16)
+	one[15] = 1
 	if err := insertGenerationTwoConfig(ctx, tx, announcementEpoch); err != nil {
 		return err
 	}
@@ -834,10 +839,13 @@ func seedGenerationTwo(ctx context.Context, tx *sql.Tx, announcementEpoch string
 			return err
 		}
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO site_usage_totals(id,total_requests,total_uncached_input_tokens,total_cache_write_input_tokens,total_cache_read_input_tokens,total_output_tokens,total_unknown_usage_requests,revision,updated_at) VALUES(1,?,?,?,?,?,?,?,0)`, zero, zero, zero, zero, zero, zero, zero); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO site_usage_totals(id,total_requests,total_uncached_input_tokens,total_cache_write_input_tokens,total_cache_read_input_tokens,total_output_tokens,total_unknown_usage_requests,revision,updated_at) VALUES(1,?,?,?,?,?,?,?,0)`, zero, zero, zero, zero, zero, zero, one); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO credit_capacity(id,last_ledger_seq,reserved_future_rows,revision) VALUES(1,0,?,?)`, zero, zero); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, "INSERT INTO gateway_model_capabilities_state(singleton,initialized_at) VALUES(1,0)"); err != nil {
 		return err
 	}
 	accountIDs := make(map[string]int64, 6)
@@ -1000,6 +1008,10 @@ func createFreshGenerationTwo(ctx context.Context, path string, secrets secret.G
 	if err := seedGenerationTwo(ctx, tx, announcementEpoch); err != nil {
 		_ = tx.Rollback()
 		return fail(StartupInitialization)
+	}
+	if err := createDatabaseMaterial(ctx, tx, secrets); err != nil {
+		_ = tx.Rollback()
+		return fail(StartupCredentialReject)
 	}
 	if err := validateGenerationTwoManifest(ctx, tx); err != nil {
 		_ = tx.Rollback()

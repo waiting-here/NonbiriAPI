@@ -13,104 +13,27 @@ type AuditClassification struct {
 // ClassifyForAudit is exhaustive for the closed operation set. A future or
 // unknown kind remains visible as a coverage gap instead of being omitted.
 func ClassifyForAudit(kind Kind, sourceID string) AuditClassification {
-	channel, behavior := "", ""
-	switch kind {
-	case KindRewardGrant, KindAdminUserAdjustment, KindAdminPoolAdjustment:
-		channel, behavior = "admin", "adjustment"
-	case KindAccountDeleteZero:
-		channel, behavior = "account", "deletion"
-	case KindCheckinAward:
-		channel, behavior = "checkin", "award"
-	case KindAntiAbusePenalty:
-		channel, behavior = "penalty", "penalty"
-	case KindWelfareClaim:
-		channel, behavior = "welfare", "payout"
-	case KindThursdayContribution:
-		channel, behavior = "thursday", "contribution"
-	case KindThursdayPayout:
-		channel, behavior = "thursday", "payout"
-	case KindThursdayFinalize:
-		channel, behavior = "thursday", "transfer"
-	case KindForwardReserve, KindForwardSettle, KindForwardRelease:
-		channel, behavior = "api", movementBehavior(kind)
-	case KindCharityReserve, KindCharitySettle, KindCharityRelease:
-		channel, behavior = "charity", movementBehavior(kind)
-	case KindDonorReward:
-		channel, behavior = "donation", "reward"
-	case KindFishingReserve, KindFishingSettle, KindFishingRelease:
-		channel, behavior = "fishing", movementBehavior(kind)
-	case KindLinkLinkEntry:
-		channel, behavior = "linklink", "fee"
-	case KindRPSQueueReserve, KindRPSQueueRelease, KindRPSSessionStart, KindRPSRoundCut, KindRPSTerminal:
-		channel, behavior = "rps", movementBehavior(kind)
-	case KindDuelQueueReserve, KindDuelQueueRelease, KindDuelSessionStart, KindDuelTerminal:
-		if strings.HasPrefix(sourceID, "bid_") || strings.HasPrefix(sourceID, "bidq_") {
-			channel = "bidding"
-		} else if strings.HasPrefix(sourceID, "lik_") || strings.HasPrefix(sourceID, "likq_") {
-			channel = "likes"
-		} else if strings.HasPrefix(sourceID, "gwt_") || strings.HasPrefix(sourceID, "gwtq_") {
-			channel = "gwent"
+	rule, known := operationRules[kind]
+	channel, behavior := rule.channel, rule.behavior
+	if rule.duel {
+		if kind == KindAITicket || kind == KindAITerminal {
+			channel = duelIDGame(sourceID, false)
+		} else {
+			switch {
+			case strings.HasPrefix(sourceID, "bid_"), strings.HasPrefix(sourceID, "bidq_"):
+				channel = "bidding"
+			case strings.HasPrefix(sourceID, "lik_"), strings.HasPrefix(sourceID, "likq_"):
+				channel = "likes"
+			case strings.HasPrefix(sourceID, "gwt_"), strings.HasPrefix(sourceID, "gwtq_"):
+				channel = "gwent"
+			}
 		}
-		behavior = movementBehavior(kind)
-	case KindBlackjackReserve, KindBlackjackSettle, KindBlackjackRelease:
-		channel, behavior = "blackjack", movementBehavior(kind)
-	case KindCatchTicket:
-		channel, behavior = "steadycatch", "fee"
-	case KindCatchRefund:
-		channel, behavior = "steadycatch", "refund"
-	case KindCatchReward:
-		channel, behavior = "steadycatch", "reward"
-	case KindAITicket:
-		channel, behavior = duelIDGame(sourceID, false), "reserve"
-	case KindAITerminal:
-		channel, behavior = duelIDGame(sourceID, false), "settlement"
-	case KindGameOnboardingReward:
-		channel, behavior = "onboarding", "reward"
-	case KindActivityLoan:
-		channel, behavior = "loan", "exchange"
-	case KindGachaTicketPurchase:
-		channel, behavior = "gacha", "exchange"
-	case KindGachaThemeReward:
-		channel, behavior = "gacha", "reward"
-	case KindLakeEntry:
-		channel, behavior = "lake_notes", "fee"
-	case KindLakeCollectionReward:
-		channel, behavior = "lake_notes", "reward"
-	case KindLakeExchange:
-		channel, behavior = "lake_notes", "exchange"
-	case KindActivityExchange:
-		channel, behavior = "picture_book", "exchange"
-	case KindImageReserve, KindImageSettle, KindImageRefund, KindImageDeleteFinalize:
-		channel, behavior = "picture_book", movementBehavior(kind)
-	case KindInactivityDecay:
-		channel, behavior = "inactivity", "decay"
-	case KindFatFishUnlock, KindFatFishTicket:
-		channel, behavior = "fat_fish", "fee"
-	case KindFatFishReward:
-		channel, behavior = "fat_fish", "reward"
-	case KindFatFishRefund:
-		channel, behavior = "fat_fish", "refund"
+	}
+	if !known {
+		channel = ""
 	}
 	if channel == "" {
 		return AuditClassification{Channel: "unclassified", Behavior: "unclassified"}
 	}
 	return AuditClassification{Channel: channel, Behavior: behavior, Known: true}
-}
-
-func movementBehavior(kind Kind) string {
-	value := string(kind)
-	switch {
-	case strings.HasSuffix(value, "_reserve"):
-		return "reserve"
-	case strings.HasSuffix(value, "_release"), strings.HasSuffix(value, "_refund"):
-		return "refund"
-	case kind == KindImageDeleteFinalize:
-		return "deletion"
-	case strings.HasSuffix(value, "_start"):
-		return "transfer"
-	case strings.HasSuffix(value, "_cut"):
-		return "fee"
-	default:
-		return "settlement"
-	}
 }

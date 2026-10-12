@@ -17,7 +17,6 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
-	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
@@ -47,7 +46,7 @@ func newEmbeddingHTTPFixture(t *testing.T, custom ...http.HandlerFunc) *embeddin
 	return newEmbeddingHTTPFixtureWithConfig(t, nil, custom...)
 }
 
-func newEmbeddingHTTPFixtureWithConfig(t *testing.T, configure func(*config.Config, string), custom ...http.HandlerFunc) *embeddingHTTPFixture {
+func newEmbeddingHTTPFixtureWithConfig(t *testing.T, configure func(*db.Store, string), custom ...http.HandlerFunc) *embeddingHTTPFixture {
 	t.Helper()
 	connectorType := "openai-compatible"
 	if len(custom) != 0 {
@@ -56,7 +55,7 @@ func newEmbeddingHTTPFixtureWithConfig(t *testing.T, configure func(*config.Conf
 	return newModelHTTPFixture(t, configure, connectorType, custom...)
 }
 
-func newModelHTTPFixture(t *testing.T, configure func(*config.Config, string), connectorType string, custom ...http.HandlerFunc) *embeddingHTTPFixture {
+func newModelHTTPFixture(t *testing.T, configure func(*db.Store, string), connectorType string, custom ...http.HandlerFunc) *embeddingHTTPFixture {
 	t.Helper()
 	f := &embeddingHTTPFixture{}
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -125,7 +124,8 @@ func newModelHTTPFixture(t *testing.T, configure func(*config.Config, string), c
 	}
 	t.Cleanup(func() { _ = vault.Close() })
 	path := filepath.Join(t.TempDir(), "embedding.sqlite")
-	dbfixture.Materialize(t, path)
+
+	dbfixture.Materialize(t, path, vault)
 	f.store, err = db.Open(path, vault)
 	if err != nil {
 		t.Fatal(err)
@@ -133,7 +133,7 @@ func newModelHTTPFixture(t *testing.T, configure func(*config.Config, string), c
 	t.Cleanup(func() { _ = f.store.Close() })
 	cfg := auditConfig()
 	if configure != nil {
-		configure(cfg, upstream.URL+"/v1")
+		configure(f.store, upstream.URL+"/v1")
 	}
 	f.app, err = buildApplication(context.Background(), cfg, f.store, vault)
 	if err != nil {
@@ -166,7 +166,7 @@ func newModelHTTPFixture(t *testing.T, configure func(*config.Config, string), c
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime, err := newPublicForwardRuntime(f.store, vault, f.app.adaptations, f.app.authRuntime.IdentityContinuity(), f.app.claims, f.app.charity, f.app.charityRouting, f.app.resourceRepo, connector.NewDefaultRegistryWithGatewayModels(cfg.GatewayModels), local, f.app.debug, f.app.gate, ratelimit.RPMConfig{GlobalLimit: 600, PerUserLimit: 600}, f.app.games.CancelUserDuelsTx, f.app.audits)
+	runtime, err := newPublicForwardRuntime(f.store, vault, f.app.adaptations, f.app.authRuntime.IdentityContinuity(), f.app.claims, f.app.charity, f.app.charityRouting, f.app.resourceRepo, connector.NewDefaultRegistry(), local, f.app.debug, f.app.gate, ratelimit.RPMConfig{GlobalLimit: 600, PerUserLimit: 600}, f.app.games.CancelUserDuelsTx, f.app.audits)
 	if err != nil {
 		t.Fatal(err)
 	}

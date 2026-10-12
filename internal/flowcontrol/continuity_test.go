@@ -22,7 +22,8 @@ func TestRPMDeletionRecoveryKeepsOriginalWindowAndResetsOnlyLimits(t *testing.T)
 	}
 	defer vault.Close()
 	path := filepath.Join(t.TempDir(), "window.db")
-	dbfixture.Materialize(t, path)
+
+	dbfixture.Materialize(t, path, vault)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		t.Fatal(err)

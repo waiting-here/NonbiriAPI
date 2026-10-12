@@ -13,14 +13,15 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
-func TestDonationReviewStartupResumesCommittedBatches(t *testing.T) {
+func TestDonationReviewStartupDoesNotBackfillCredentials(t *testing.T) {
 	vault, err := secret.New(bytes.Repeat([]byte{0x53}, secret.MasterKeyBytes))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer vault.Close()
 	path := filepath.Join(t.TempDir(), "review.sqlite")
-	dbfixture.Materialize(t, path)
+
+	dbfixture.Materialize(t, path, vault)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		t.Fatal(err)
@@ -50,33 +51,23 @@ VALUES(?,?,'https://upstream.example/v1','openai-compatible',?,0)`, i, contextID
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.DB().Exec(`CREATE TRIGGER stop_review_batch BEFORE UPDATE OF key_body_review_hmac ON endpoint_key_secrets
-WHEN NEW.id=1001 BEGIN SELECT RAISE(ABORT,'batch failure'); END`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := initializeDonationReview(context.Background(), store.DB(), vault); err == nil {
-		t.Fatal("failed batch accepted")
-	}
-	var completed int
-	if err := store.DB().QueryRow("SELECT count(*) FROM endpoint_key_secrets WHERE key_body_review_hmac IS NOT NULL").Scan(&completed); err != nil || completed != 1000 {
-		t.Fatalf("committed batch count=%d: %v", completed, err)
-	}
-	var before, after []byte
-	if err := store.DB().QueryRow("SELECT envelope FROM donation_review_material WHERE id=1").Scan(&before); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := store.DB().Exec("DROP TRIGGER stop_review_batch"); err != nil {
-		t.Fatal(err)
-	}
+
 	if _, err := initializeDonationReview(context.Background(), store.DB(), vault); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.DB().QueryRow("SELECT count(*) FROM endpoint_key_secrets WHERE key_body_review_hmac IS NOT NULL").Scan(&completed); err != nil || completed != 1001 {
-		t.Fatalf("resumed batch count=%d: %v", completed, err)
+	var completed int
+	if err := store.DB().QueryRow("SELECT count(*) FROM endpoint_key_secrets WHERE key_body_review_hmac IS NOT NULL").Scan(&completed); err != nil || completed != 0 {
+		t.Fatalf("startup backfilled %d credentials: %v", completed, err)
 	}
-	if err := store.DB().QueryRow("SELECT envelope FROM donation_review_material WHERE id=1").Scan(&after); err != nil || !bytes.Equal(before, after) {
-		t.Fatal("resume replaced stable material", err)
+	for _, mutation := range []string{"UPDATE donation_review_material SET envelope=zeroblob(64)", "DELETE FROM donation_review_material"} {
+		if _, err := store.DB().Exec(mutation); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := initializeDonationReview(context.Background(), store.DB(), vault); err == nil {
+			t.Fatal("invalid material was silently regenerated")
+		}
 	}
+
 }
 
 func sealRootTestCredential(t *testing.T) ([]byte, string) {

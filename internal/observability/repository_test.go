@@ -30,7 +30,8 @@ func newObservedDatabase(t *testing.T) (*Repository, int64) {
 		t.Fatal(err)
 	}
 	path := filepath.Join(t.TempDir(), "observability.sqlite")
-	dbfixture.Materialize(t, path)
+
+	dbfixture.Materialize(t, path, vault)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		t.Fatal(err)

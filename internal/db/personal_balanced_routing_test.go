@@ -5,15 +5,8 @@ import (
 	"testing"
 )
 
-func TestPersonalBalancedRoutingUpgradePreservesModelsAndBindings(t *testing.T) {
-	database, err := sql.Open("sqlite", ":memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
-	database.SetMaxOpenConns(1)
-	defer database.Close()
-	hostileMustExec(t, database, "PRAGMA foreign_keys=ON;"+modelTypesAndImagesStorageSchema())
-	assertRetainedManifest(t, database, modelTypesAndImagesManifestHash)
+func TestPersonalBalancedRoutingPreservesModelsAndBindings(t *testing.T) {
+	database := openGenerationTwoConstraintFixture(t)
 	user := hostileInsertUser(t, database, "balanced-owner", 0, 0)
 	endpoint := hostileInsertEndpoint(t, database, user, "https://routing.example/v1")
 	secret := hostileInsertSecret(t, database, "https://routing.example/v1", 0)
@@ -25,9 +18,6 @@ VALUES(?,'provider','model','provider/model','random',5,7,6,2,3)`, user))
 	binding := hostileMustLastID(t, hostileMustExec(t, database, `INSERT INTO model_bindings(model_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at) VALUES(?,?,'upstream',3,2,3)`, model, key))
 	hostileMustExec(t, database, "UPDATE sqlite_sequence SET seq=1000 WHERE name='models'")
 	for range 2 {
-		if err := extendKnownGenerationTwoSchema(t.Context(), database); err != nil {
-			t.Fatal(err)
-		}
 		var strategy, upstream string
 		var mask, revision, bindingRevision, created, updated, bindingID, order, sequence int64
 		if err := database.QueryRow(`SELECT m.route_strategy,m.model_types,m.revision,m.binding_revision,m.created_at,m.updated_at,b.id,b.ord,b.upstream_model_id

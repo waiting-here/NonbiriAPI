@@ -136,7 +136,8 @@ func newCheckinFixture(t *testing.T) *checkinFixture {
 		t.Fatalf("new secret codec: %v", err)
 	}
 	path := filepath.Join(t.TempDir(), "checkin.db")
-	dbfixture.Materialize(t, path)
+
+	dbfixture.Materialize(t, path, vault)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		_ = vault.Close()

@@ -440,7 +440,8 @@ func openConcurrentSiteConfigStore(t *testing.T) *db.Store {
 	if err != nil {
 		t.Fatalf("create shared test vault: %v", err)
 	}
-	dbfixture.Materialize(t, path)
+
+	dbfixture.Materialize(t, path, vault)
 	first, err := db.Open(path, vault)
 	if err != nil {
 		_ = vault.Close()
