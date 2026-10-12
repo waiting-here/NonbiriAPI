@@ -389,9 +389,9 @@ for (const scenario of SCENARIOS) {
     expect(BigInt(LONG_BLUE_LENGTH)).toBeGreaterThan(BigInt(Number.MAX_SAFE_INTEGER));
     expect(BigInt(UNSAFE_BLUE_LENGTH)).toBeGreaterThan(BigInt(Number.MAX_SAFE_INTEGER));
 
-    await expect.poll(() => fixture.boardRequests.single).toBeGreaterThan(0);
     await expect.poll(() => fixture.boardRequests.recent_single).toBeGreaterThan(0);
-    await expect.poll(() => fixture.boardRequests.total).toBeGreaterThan(0);
+    expect(fixture.boardRequests.single).toBe(0);
+    expect(fixture.boardRequests.total).toBe(0);
     await expect.poll(() => fixture.ackRequests).toBeGreaterThan(0);
 
     const screenshotDirectory = process.env.NONBIRI_TEST_SCREENSHOT_DIR;
@@ -428,6 +428,7 @@ for (const scenario of SCENARIOS) {
     await expect(
       singleBoard.getByRole('heading', { name: scenario.historicalTitle }),
     ).toBeVisible();
+    await expect.poll(() => fixture.boardRequests.single).toBe(1);
     await expect(singleBoard).toContainText(scenario.historicalCatch);
     const historicalBeforeRefresh = fixture.boardRequests.single;
     await singleBoard.getByRole('button', { name: scenario.refresh }).click();
@@ -465,8 +466,10 @@ for (const scenario of SCENARIOS) {
     await expect.poll(() => fixture.boardRequests.recent_single).toBe(recentBeforeRefresh + 1);
     await expect(recentTab).toHaveAttribute('aria-selected', 'true');
 
+    expect(fixture.boardRequests.total).toBe(0);
     await boardTabs.getByRole('tab').nth(1).click();
     await expect(totalBoard.getByRole('heading', { name: scenario.totalTitle })).toBeVisible();
+    await expect.poll(() => fixture.boardRequests.total).toBe(1);
     const totalBeforeRefresh = fixture.boardRequests.total;
     await totalBoard.getByRole('button', { name: scenario.refresh }).click();
     await expect.poll(() => fixture.boardRequests.total).toBe(totalBeforeRefresh + 1);
