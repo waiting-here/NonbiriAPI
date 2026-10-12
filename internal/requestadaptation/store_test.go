@@ -14,9 +14,13 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-func testStore(t *testing.T) (*Store, *sql.DB) {
+func testStore(t testing.TB) (*Store, *sql.DB) {
+	return testStoreDriver(t, "sqlite", "file:request-adaptation-"+t.Name()+"?mode=memory&cache=shared")
+}
+
+func testStoreDriver(t testing.TB, driver, name string) (*Store, *sql.DB) {
 	t.Helper()
-	database, err := sql.Open("sqlite", "file:request-adaptation-"+t.Name()+"?mode=memory&cache=shared")
+	database, err := sql.Open(driver, name)
 	if err != nil {
 		t.Fatal(err)
 	}

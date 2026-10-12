@@ -12,7 +12,7 @@ import (
 )
 
 type embeddingTestDriver struct {
-	legacyOpenAIPolicyDriver
+	policyOpenAIDriver
 	embeddingCalls int
 	policy         connectorcontract.AttemptPolicy
 }
@@ -61,7 +61,7 @@ func TestOperationBoundaryRejectsAmbiguousSnapshotsBeforeDriver(t *testing.T) {
 	}
 	input.Target = connectorcontract.NewTarget(connectorcontract.TypeAnthropicCompatible, "https://upstream.example/v1", "physical")
 	input.Credential = connectorcontract.NewShortLivedSecret([]byte("secret"), nil)
-	anthropicDriver := &legacyAnthropicPolicyDriver{}
+	anthropicDriver := &policyAnthropicDriver{}
 	if result := (&anthropicConnector{driver: anthropicDriver}).Attempt(context.Background(), input); result.Success || anthropicDriver.calls.Load() != 0 {
 		t.Fatal("embedding reached chat-only connector")
 	}

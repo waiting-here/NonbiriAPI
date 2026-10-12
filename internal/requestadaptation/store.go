@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
@@ -125,6 +126,10 @@ func (s *Store) LoadTx(ctx context.Context, tx *sql.Tx, ref Ref) (Snapshot, erro
 	if err != nil {
 		return Snapshot{}, fmt.Errorf("request adaptation: load: %w", err)
 	}
+	return s.openSnapshot(ref, revision, contextID, ciphertext)
+}
+
+func (s *Store) openSnapshot(ref Ref, revision int64, contextID []byte, ciphertext string) (Snapshot, error) {
 	expected, secretCtx, err := s.contextFor(ref)
 	if err != nil {
 		return Snapshot{}, err
@@ -172,34 +177,76 @@ func (s *Store) LoadMany(ctx context.Context, refs []Ref) (map[Ref]Snapshot, err
 	if s == nil || len(refs) > 202 {
 		return nil, ErrInvalid
 	}
+	out := make(map[Ref]Snapshot, len(refs))
+	groups := make(map[Scope][]int64, 4)
+	for _, ref := range refs {
+		if !ref.valid() {
+			return nil, ErrInvalid
+		}
+		if _, exists := out[ref]; !exists {
+			out[ref] = Snapshot{Document: Empty(ref.Scope), Revision: "0"}
+			groups[ref.Scope] = append(groups[ref.Scope], ref.ID)
+		}
+	}
+	if len(out) == 0 {
+		return out, nil
+	}
+	complete := false
+	defer func() {
+		if !complete {
+			for _, snapshot := range out {
+				snapshot.Clear()
+			}
+		}
+	}()
+	parts := make([]string, 0, len(groups))
+	args := make([]any, 0, len(out)+len(groups))
+	for _, scope := range []Scope{ScopeEndpoint, ScopePersonalModel, ScopeCharityModel, ScopeBinding} {
+		ids := groups[scope]
+		if len(ids) == 0 {
+			continue
+		}
+		column := refColumn(scope)
+		parts = append(parts, "SELECT scope,"+column+",revision,secret_context,secret_ciphertext FROM request_adaptations WHERE scope=? AND "+column+" IN ("+strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")+")")
+		args = append(args, scope)
+		for _, id := range ids {
+			args = append(args, id)
+		}
+	}
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return nil, ErrUnavailable
 	}
 	defer tx.Rollback()
-	out := make(map[Ref]Snapshot, len(refs))
-	for _, ref := range refs {
-		if !ref.valid() {
-			return nil, ErrInvalid
+	rows, err := tx.QueryContext(ctx, strings.Join(parts, " UNION ALL "), args...)
+	if err != nil {
+		return nil, fmt.Errorf("request adaptation: load candidates: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var ref Ref
+		var revision int64
+		var contextID []byte
+		var ciphertext string
+		if err := rows.Scan(&ref.Scope, &ref.ID, &revision, &contextID, &ciphertext); err != nil {
+			return nil, fmt.Errorf("request adaptation: scan candidate: %w", err)
 		}
-		if _, exists := out[ref]; exists {
-			continue
-		}
-		value, err := s.LoadTx(ctx, tx, ref)
+		value, err := s.openSnapshot(ref, revision, contextID, ciphertext)
 		if err != nil {
-			for _, item := range out {
-				item.Clear()
-			}
 			return nil, err
 		}
 		out[ref] = value
 	}
-	if err := tx.Commit(); err != nil {
-		for _, item := range out {
-			item.Clear()
-		}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("request adaptation: iterate candidates: %w", err)
+	}
+	if err := rows.Close(); err != nil {
 		return nil, ErrUnavailable
 	}
+	if err := tx.Commit(); err != nil {
+		return nil, ErrUnavailable
+	}
+	complete = true
 	return out, nil
 }
 
