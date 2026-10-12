@@ -782,6 +782,33 @@ function Leaderboard({
   );
 }
 
+function RPSRankings({ mode }: { readonly mode: RPSMode }) {
+  const { text } = useGameCopy();
+  const profit = useRPSLeaderboard(mode, 'profit_rate', true);
+  const net = useRPSLeaderboard(mode, 'net_profit', true);
+  return (
+    <section className="rps-leaderboards">
+      <div className="rps-board-heading">
+        <h2>{text('rps.leaderboard.title')}</h2>
+        <span>{text(`rps.mode.${mode}`)}</span>
+      </div>
+      {profit.isPending || net.isPending ? <LoadingState label={text('common.loading')} /> : null}
+      {profit.error ? (
+        <ErrorState error={profit.error} onRetry={() => void profit.refetch()} />
+      ) : null}
+      {net.error ? <ErrorState error={net.error} onRetry={() => void net.refetch()} /> : null}
+      {(!profit.isPending && !profit.error) || (!net.isPending && !net.error) ? (
+        <div className="rps-board-grid">
+          {!profit.isPending && !profit.error ? (
+            <Leaderboard data={profit.data} board="profit_rate" />
+          ) : null}
+          {!net.isPending && !net.error ? <Leaderboard data={net.data} board="net_profit" /> : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export function RPSGame() {
   const { text } = useGameCopy();
   const sound = useGameSound('rps');
@@ -849,16 +876,6 @@ export function RPSGame() {
     home?.kind === 'pending_result' && ackStatus?.sessionID === home.result.sessionID
       ? ackStatus.value
       : ('idle' as const);
-  const profit = useRPSLeaderboard(
-    displayedMode,
-    'profit_rate',
-    Boolean(snapshot.data) && !maintenance,
-  );
-  const net = useRPSLeaderboard(
-    displayedMode,
-    'net_profit',
-    Boolean(snapshot.data) && !maintenance,
-  );
   const refetchHome = homeQuery.refetch;
   const reconcile = useCallback(() => {
     void refetchHome();
@@ -1341,32 +1358,8 @@ export function RPSGame() {
       ) : null}
       {snapshot.data && home?.kind !== 'pending_result' ? (
         <div id="game-rankings">
-          <Fold title={text('rps.leaderboard.title')}>
-            <section className="rps-leaderboards">
-              <div className="rps-board-heading">
-                <h2>{text('rps.leaderboard.title')}</h2>
-                <span>{text(`rps.mode.${displayedMode}`)}</span>
-              </div>
-              {profit.isPending || net.isPending ? (
-                <LoadingState label={text('common.loading')} />
-              ) : null}
-              {profit.error ? (
-                <ErrorState error={profit.error} onRetry={() => void profit.refetch()} />
-              ) : null}
-              {net.error ? (
-                <ErrorState error={net.error} onRetry={() => void net.refetch()} />
-              ) : null}
-              {(!profit.isPending && !profit.error) || (!net.isPending && !net.error) ? (
-                <div className="rps-board-grid">
-                  {!profit.isPending && !profit.error ? (
-                    <Leaderboard data={profit.data} board="profit_rate" />
-                  ) : null}
-                  {!net.isPending && !net.error ? (
-                    <Leaderboard data={net.data} board="net_profit" />
-                  ) : null}
-                </div>
-              ) : null}
-            </section>
+          <Fold title={text('rps.leaderboard.title')} lazy>
+            <RPSRankings mode={displayedMode} />
           </Fold>
         </div>
       ) : null}

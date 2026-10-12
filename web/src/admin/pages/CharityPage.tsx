@@ -1,7 +1,6 @@
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
-import { clearStationSession } from '@shared/charityManagement';
 import { CharityManagement } from '@shared/components/CharityManagement';
 import { PageHeader } from '@shared/components/States';
 import { useAdminSession } from '../data';
@@ -13,7 +12,7 @@ export function CharityPage() {
   const session = useAdminSession();
   const accountId = session.data ? `admin:${session.data.admin.username}` : undefined;
   const clearAuthority = useCallback(() => {
-    clearStationSession(client, 'admin');
+    void client.invalidateQueries({ queryKey: ['admin', 'session'] });
   }, [client]);
   return (
     <div className="page ops-page">

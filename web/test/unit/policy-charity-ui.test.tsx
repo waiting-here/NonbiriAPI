@@ -22,7 +22,7 @@ import { charityKeys } from '../../src/shared/operations/charity';
 import { ApiError } from '../../src/shared/query/http';
 import { userKeys, useUserSession } from '../../src/user/data';
 import { coreKeys } from '../../src/user/features/core/queries';
-import { operationsKeys } from '../../src/user/features/operations/data';
+import { operationsKeys, useUserAuthority } from '../../src/user/features/operations/data';
 import { UserLayout } from '../../src/user/layouts/UserLayout';
 import { CharityPage } from '../../src/user/pages/CharityPage';
 import { EndpointsPage } from '../../src/user/pages/EndpointsPage';
@@ -2219,6 +2219,32 @@ describe('experimental policy and charity controls', () => {
     },
   );
 
+  test('shares one session request between the station and capability view', async () => {
+    let level = 6;
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ ...coreSession, user: { ...coreSession.user, effective_level: level } }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    function SessionViews() {
+      const station = useUserSession();
+      const authority = useUserAuthority();
+      return (
+        <output data-testid="shared-session">
+          {station.data?.user.effective_level}:{authority.data?.effective_level}
+        </output>
+      );
+    }
+    const rendered = await renderWithProviders(<SessionViews />, { station: 'user', role: 'user' });
+    await waitFor(() => expect(screen.getByTestId('shared-session')).toHaveTextContent('6:6'));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    level = 5;
+    await act(async () => {
+      await rendered.queryClient.invalidateQueries({ queryKey: operationsKeys.session });
+    });
+    await waitFor(() => expect(screen.getByTestId('shared-session')).toHaveTextContent('5:5'));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   test('clears level-6 steward data after a server-forced demotion', async () => {
     const levelSix = { ...coreSession, user: { ...coreSession.user, effective_level: 6 } };
     const demoted = { ...coreSession, user: { ...coreSession.user, effective_level: 4 } };
@@ -2627,8 +2653,17 @@ describe('experimental policy and charity controls', () => {
     await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(0));
     const nextGeneration = beginManagementSessionRequest(rendered.queryClient, 'admin');
     expect(nextGeneration).toBe(2);
-    release();
-    await expect(screen.findByText(/management session changed/i)).resolves.toBeVisible();
+    noteManagementSessionSuccess(
+      rendered.queryClient,
+      'admin',
+      { admin: { username: 'other-admin' } },
+      nextGeneration,
+    );
+    await act(async () => {
+      release();
+      await responseGate;
+    });
+    expect(screen.queryByText(/old administrator/)).not.toBeInTheDocument();
     expect(
       rendered.queryClient.getQueryState(charityManagementKeys.bindings('admin', '7'))?.data,
     ).toBeUndefined();
@@ -2708,9 +2743,18 @@ describe('experimental policy and charity controls', () => {
       { station: 'admin', role: 'admin' },
     );
     await waitFor(() => expect(fetchMock.mock.calls.length).toBe(1));
-    beginManagementSessionRequest(rendered.queryClient, 'admin');
-    release();
-    await expect(screen.findByText(/management session changed/i)).resolves.toBeVisible();
+    const request = beginManagementSessionRequest(rendered.queryClient, 'admin');
+    noteManagementSessionSuccess(
+      rendered.queryClient,
+      'admin',
+      { admin: { username: 'other-admin' } },
+      request,
+    );
+    await act(async () => {
+      release();
+      await responseGate;
+    });
+    expect(screen.queryByText(/old administrator/)).not.toBeInTheDocument();
     expect(fetchMock.mock.calls).toHaveLength(1);
     expect(rendered.queryClient.getQueryData(charityManagementKeys.capability('admin'))).not.toBe(
       true,
@@ -2745,7 +2789,13 @@ describe('experimental policy and charity controls', () => {
     await screen.findByRole('button', { name: 'run mutation' });
     await rendered.user.click(screen.getByRole('button', { name: 'run mutation' }));
     await waitFor(() => expect(fetchMock.mock.calls.length).toBe(1));
-    beginManagementSessionRequest(rendered.queryClient, 'admin');
+    const request = beginManagementSessionRequest(rendered.queryClient, 'admin');
+    noteManagementSessionSuccess(
+      rendered.queryClient,
+      'admin',
+      { admin: { username: 'other-admin' } },
+      request,
+    );
     release();
     await expect(screen.findByText(/management session changed/i)).resolves.toBeVisible();
     expect(fetchMock.mock.calls).toHaveLength(1);

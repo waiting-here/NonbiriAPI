@@ -327,3 +327,9 @@
     filter: none;
   }
 }
+
+.linklink-tile.is-pending {
+  outline: 3px solid var(--nb-color-accent);
+  outline-offset: 1px;
+  background: var(--nb-color-accent-soft);
+}

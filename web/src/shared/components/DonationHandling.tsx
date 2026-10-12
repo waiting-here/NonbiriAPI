@@ -1,5 +1,6 @@
 import { Button } from '@shared/components/ui/Button';
 import { useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useRetainedOperation } from '../../admin/features/operations/useRetainedOperation';
 import {
@@ -43,6 +44,7 @@ export function DonationHandlingControl({
   onCapabilityLoss?: () => void;
 }) {
   const formatDateTime = useDateTimeFormatter();
+  const client = useQueryClient();
   const { t } = useTranslation();
   const process = useRetainedOperation<{ revision: string }, DonationHandlingReceipt>(
     (input, key) => processManagedDonation(role, donationID, input.revision, key),
@@ -51,8 +53,11 @@ export function DonationHandlingControl({
   );
   const lost = isUnauthorized(process.error) || isForbidden(process.error);
   useEffect(() => {
-    if (lost) onCapabilityLoss?.();
-  }, [lost, onCapabilityLoss]);
+    if (!lost) return;
+    void client.cancelQueries({ queryKey: charityKeys.root(role) });
+    client.removeQueries({ queryKey: charityKeys.root(role) });
+    onCapabilityLoss?.();
+  }, [client, lost, onCapabilityLoss, role]);
   if (lost)
     return (
       <p className="field-error" role="alert">
@@ -84,7 +89,7 @@ export function DonationHandlingControl({
         <>
           <ErrorState error={process.error} />
           <p>{t('common.donationHandling.conflictHint')}</p>
-          <Button type="button"  onClick={() => void refresh()}>
+          <Button type="button" onClick={() => void refresh()}>
             {t('common.refresh')}
           </Button>
         </>

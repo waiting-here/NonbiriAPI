@@ -170,6 +170,7 @@ async function consumeAccountEventStream(
   response: Response,
   signal: AbortSignal,
   onRecord: (record: SSERecord) => void,
+  onHeartbeat: () => void,
 ): Promise<void> {
   const contentType = response.headers.get('Content-Type')?.trim() ?? '';
   if (!response.ok || !SSE_CONTENT_TYPE.test(contentType) || !response.body) {
@@ -192,6 +193,7 @@ async function consumeAccountEventStream(
         }
         const record = parseSSERecord(recordText);
         if (record) onRecord(record);
+        else onHeartbeat();
         boundary = nextSSERecordBoundary(buffer);
       }
       if (new TextEncoder().encode(buffer).byteLength > MAX_SSE_RECORD_BYTES) {
@@ -227,6 +229,11 @@ export function connectActivityAccountEvents(options: ConnectOptions): () => voi
   let activeController: AbortController | null = null;
   let lastEventId: string | null = null;
   let latestActivitiesRevision: bigint | null = null;
+  const healthy = () => {
+    reconnectAttempt = 0;
+    disconnected = false;
+    options.onConnectionChange?.('connected');
+  };
   options.onConnectionChange?.('connecting');
 
   const handle = (record: SSERecord) => {
@@ -236,6 +243,7 @@ export function connectActivityAccountEvents(options: ConnectOptions): () => voi
     lastEventId = record.id;
     const result = parseActivityAccountEvent(record.eventName, record.data, record.id);
     if (result.kind === 'replace') {
+      healthy();
       const revision = BigInt(result.revision);
       if (latestActivitiesRevision !== null && revision <= latestActivitiesRevision) return;
       latestActivitiesRevision = revision;
@@ -291,11 +299,10 @@ export function connectActivityAccountEvents(options: ConnectOptions): () => voi
         ) {
           throw new Error('The account event stream could not be opened.');
         }
-        options.onConnectionChange?.('connected');
-        if (disconnected) options.onResync('reconnect');
-        disconnected = false;
-        reconnectAttempt = 0;
-        await consumeAccountEventStream(response, controller.signal, handle);
+        const openedAt = Date.now();
+        await consumeAccountEventStream(response, controller.signal, handle, () => {
+          if (Date.now() - openedAt >= 15_000) healthy();
+        });
       })
       .catch((error: unknown) => {
         if (closed || controller.signal.aborted) return;
@@ -315,7 +322,6 @@ export function connectActivityAccountEvents(options: ConnectOptions): () => voi
       window.clearTimeout(reconnectTimer);
       reconnectTimer = null;
     }
-    reconnectAttempt = 0;
     openStream();
   };
   window.addEventListener('online', reconnectNow);

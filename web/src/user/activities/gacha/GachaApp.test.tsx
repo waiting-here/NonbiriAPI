@@ -3,61 +3,33 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { GachaApp } from './GachaApp';
 import { Shop } from './Shop';
 import { themes } from './catalog';
-import { defaultRules, consolidatedRates } from './rules';
+import { gachaSnapshot } from '../../../../test/fixtures/gacha';
 import type { GachaPort, Outcome, Snapshot } from './types';
 
 function snapshot(): Snapshot {
-  return {
-    visible_themes: themes.map((theme) => theme.id),
-    tickets: { permanent: 10, limited: 0 },
-    fragments: { N: 0, R: 0, SR: 0, SSR: 0 },
-    credits: { general: '10000', game: '10000' },
-    owned: {},
-    pity: {},
-    newcomer: true,
-    checked_in: false,
-    limited_checked_in: false,
-    claimed: [],
-    redeemed: [],
-    month_used: { permanent: 0, limited: 0 },
-    donation: '0',
-    server_time: 1800000000,
-    time_zone: 'UTC+08:00',
-    pools: [
-      {
-        id: 'permanent',
-        name: '永续智能',
-        cover: 'permanent',
-        kind: 'permanent',
-        group: 'permanent',
-        rules: defaultRules,
-        featured: [],
-        starts_at: null,
-        ends_at: null,
-        paused: false,
-        published: true,
-        revision: 1,
-        rates: consolidatedRates(defaultRules),
-      },
-    ],
-    shop: {
-      permanent_price: '10000',
-      limited_price: '10000',
-      n_ticket: 20,
-      r_ticket: 10,
-      sr_ticket: 5,
-      ssr_tickets: 1,
-      permanent_cap: 20,
-      limited_cap: 10,
-      sr_card: 10,
-      ssr_card: 3,
-      sp_card: 9,
-      chibi_n: 30,
-      chibi_r: 15,
-      revision: 1,
-    },
-  };
+  return { ...gachaSnapshot(), visible_themes: themes.map((theme) => theme.id) };
 }
+
+it('keeps entry identity through a lost response and language change', async () => {
+  const act = vi
+    .fn<GachaPort['act']>()
+    .mockRejectedValueOnce(new TypeError('response lost'))
+    .mockResolvedValue({ snapshot: snapshot() });
+  const port: GachaPort = {
+    scope: 'user:entry-retry',
+    act,
+    load: async () => snapshot(),
+    history: async () => ({ items: [] }),
+  };
+  const view = render(<GachaApp port={port} />);
+  fireEvent.click(await screen.findByRole('button', { name: '重试' }));
+  await screen.findByRole('button', { name: '签到 · 常驻券 +1' });
+  expect(act).toHaveBeenCalledTimes(2);
+  expect(act.mock.calls[0][1]).toBe(act.mock.calls[1][1]);
+  view.rerender(<GachaApp port={port} english />);
+  expect(await screen.findByRole('button', { name: /Check in.*standard/i })).toBeEnabled();
+  expect(act).toHaveBeenCalledTimes(2);
+});
 
 it.each([false, true])(
   'labels every shop card with its actual shard cost, English=%s',

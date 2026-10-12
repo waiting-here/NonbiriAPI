@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDuelText } from './duel/copy';
 import { gameRequest } from './request';
 import { exactRecord, invalidResponse } from './strict';
+import { Fold } from '@shared/components/ui/Fold';
 import {
   RANDOM_MAX_BYTES,
   randomProof,
@@ -103,17 +104,17 @@ function ProofPanel({
     }
   }
   return (
-    <details className="random-proof">
-      <summary>
-        {text('common.verifyRandomness')}{' '}
-        <span>
-          {p?.seed
-            ? text('common.seedDisclosed')
-            : p
-              ? text('common.openingCommitmentLocked')
-              : text('common.proof')}
-        </span>
-      </summary>
+    <Fold
+      className="random-proof"
+      title={text('common.verifyRandomness')}
+      meta={
+        p?.seed
+          ? text('common.seedDisclosed')
+          : p
+            ? text('common.openingCommitmentLocked')
+            : text('common.proof')
+      }
+    >
       {query.isPending ? (
         <p>{text('common.loadingProof')}</p>
       ) : query.isError ? (
@@ -173,6 +174,6 @@ function ProofPanel({
           </p>
         </>
       ) : null}
-    </details>
+    </Fold>
   );
 }

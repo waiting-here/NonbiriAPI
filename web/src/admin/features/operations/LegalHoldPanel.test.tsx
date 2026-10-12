@@ -760,6 +760,10 @@ describe('administrator legal hold panel', () => {
       ).toBeVisible();
       expect(screen.queryByText(REPORT_ID)).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Metadata' })).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Release reason')).not.toBeInTheDocument();
+      expect(rendered.queryClient.getQueryData(['admin', 'session'])).toEqual(
+        status === 401 ? null : session(),
+      );
       expect(fetchMock.mock.calls.map(([input]) => String(input))).toEqual([
         '/admin/api/session',
         '/admin/api/legal-holds?page=1&page_size=20',

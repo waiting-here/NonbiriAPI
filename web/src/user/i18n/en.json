@@ -2282,11 +2282,7 @@
       "masterState": {},
       "masterBody": {},
       "stream": {
-        "connecting": "Connecting to live activity updates…",
-        "connected": "Live activity updates connected.",
-        "disconnected": "Live updates disconnected; reconnecting from the last position.",
-        "reconciled": "Live activity status updated.",
-        "recoveryFailed": "Live recovery could not refresh the state. Retry the page read before acting."
+        "recoveryFailed": "Activity updates are temporarily unavailable."
       },
       "poolBalance": "Pool balance (general credits)",
       "poolUnavailable": "Unavailable",

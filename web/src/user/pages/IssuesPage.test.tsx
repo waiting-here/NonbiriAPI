@@ -2,7 +2,8 @@ import { act, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useLocation } from 'react-router';
 import { installJsonFetchFixtures, renderWithProviders } from '../../../test/unit/support';
-import { normalizeUserAuthority, operationsKeys } from '../features/operations/data';
+import { operationsKeys } from '../features/operations/data';
+import { normalizeUserEnvelope } from '../features/core/normalizers';
 import { IssuesPage } from './IssuesPage';
 
 afterEach(() => {
@@ -450,7 +451,7 @@ describe('user issues page', () => {
       ),
     );
     currentAccount = 'B';
-    rendered.queryClient.setQueryData(operationsKeys.session, normalizeUserAuthority(session('8')));
+    rendered.queryClient.setQueryData(operationsKeys.session, normalizeUserEnvelope(session('8')));
     expect(await screen.findByText('Issue account-b')).toBeVisible();
 
     await act(async () => {

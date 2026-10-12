@@ -8,7 +8,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSearchState } from '@shared/operations/useSearchState';
-import { clearStationSession } from '@shared/charityManagement';
 import { CharityManagement } from '@shared/components/CharityManagement';
 import { RoleLogPanel } from '@shared/components/log';
 import { IndependentDiagnostics } from '@shared/observability/IndependentDiagnostics';
@@ -17,7 +16,7 @@ import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/S
 import { Tabs, Panel } from '@shared/components/ui';
 import { MaintenancePanel } from '@shared/operations/MaintenancePanel';
 import { TimeContextProvider } from '@shared/components/TimeContext';
-import { operationsKeys, useUserAuthority } from '../features/operations/data';
+import { useUserAuthority } from '../features/operations/data';
 import '@shared/operations/operations.css';
 
 const sectionKeys = {
@@ -64,8 +63,22 @@ function StewardPageContent() {
   );
   const [authorityRefreshing, setAuthorityRefreshing] = useState(false);
   const clearSensitiveQueries = useCallback(() => {
-    clearStationSession(client, 'steward');
-    client.setQueryData(operationsKeys.session, null);
+    const predicate = (query: { queryKey: readonly unknown[] }) =>
+      (query.queryKey[0] === 'charity-management' && query.queryKey[1] === 'steward') ||
+      (query.queryKey[0] === 'user' &&
+        (query.queryKey[1] === 'steward' ||
+          query.queryKey[1] === 'steward-logs' ||
+          (query.queryKey[1] === 'operations' &&
+            [
+              'steward',
+              'users',
+              'user',
+              'deleted-account',
+              'announcements-page',
+              'announcement',
+            ].includes(String(query.queryKey[2])))));
+    void client.cancelQueries({ predicate });
+    client.removeQueries({ predicate });
   }, [client]);
   const authorityLoss = useCallback(() => {
     setAuthorityRefreshing(true);
@@ -89,7 +102,7 @@ function StewardPageContent() {
         <ErrorState error={authority.error} onRetry={() => void authority.refetch()} />
       </div>
     );
-  if (!allowed)
+  if (!authority.data || !allowed)
     return (
       <div className="page ops-page">
         <PageHeader title={t('user.steward.title')} description={t('user.steward.description')} />

@@ -57,7 +57,7 @@ export async function economySessionRequest<T>(
     if (!stationSessionMatches(queryClient, 'steward', station)) {
       throw new StationSessionChangedError();
     }
-    if (isUnauthorized(error) || (isApiError(error) && error.code === 'forbidden')) {
+    if (isUnauthorized(error)) {
       clearStationSession(queryClient, 'steward');
     }
     throw error;
@@ -365,11 +365,13 @@ export function useContributeThursday() {
 
 export type ActivityConnectionState = 'connecting' | 'connected' | 'disconnected';
 
-export function useActivityAccountEvents(enabled = true, identity = '', sessionUpdatedAt = 0) {
+export function useActivityAccountEvents(enabled = true, identity = '') {
   const queryClient = useQueryClient();
   const [connection, setConnection] = useState<ActivityConnectionState>('connecting');
   const [recoveryError, setRecoveryError] = useState<unknown>(null);
   const [reconciledAt, setReconciledAt] = useState(0);
+  const retryRef = useRef<() => Promise<void>>(async () => undefined);
+  const retry = useCallback(() => retryRef.current(), []);
 
   useEffect(() => {
     if (!enabled) return;
@@ -382,37 +384,73 @@ export function useActivityAccountEvents(enabled = true, identity = '', sessionU
     let alive = true;
     const stationCurrent = () => alive && stationSessionMatches(queryClient, 'steward', station);
     let resyncRequest: Promise<void> | null = null;
+    let failureTimer: number | undefined;
+    let recoveryTimer: number | undefined;
+    let lastSnapshotAt = queryClient.getQueryState(economyKeys.activities)?.dataUpdatedAt ?? 0;
+    let needsSnapshot = !lastSnapshotAt;
+    let unavailableSince: number | undefined;
+    const recovered = () => {
+      window.clearTimeout(failureTimer);
+      window.clearTimeout(recoveryTimer);
+      failureTimer = undefined;
+      unavailableSince = undefined;
+      setRecoveryError(null);
+      setReconciledAt(Date.now());
+    };
     const controller = new AbortController();
+    const unavailable = () => {
+      unavailableSince ??= Date.now();
+      if (failureTimer !== undefined) return;
+      failureTimer = window.setTimeout(
+        () => {
+          if (stationCurrent()) setRecoveryError(new Error('Activity updates are unavailable.'));
+        },
+        Math.max(0, 15_000 - (Date.now() - unavailableSince)),
+      );
+    };
     const resync = () => {
       if (!stationCurrent()) return Promise.resolve();
       if (resyncRequest) return resyncRequest;
+      unavailable();
       const request = reconcileActivities(queryClient, controller.signal)
         .then(() => {
           if (!alive || !stationCurrent()) return;
-          setRecoveryError(null);
-          setReconciledAt(Date.now());
+          lastSnapshotAt = Date.now();
+          needsSnapshot = false;
+          recovered();
         })
-        .catch((error: unknown) => {
-          if (alive && stationCurrent()) setRecoveryError(error);
-        })
+        .catch(() => undefined)
         .finally(() => {
           if (resyncRequest === request) resyncRequest = null;
         });
       resyncRequest = request;
       return request;
     };
+    retryRef.current = resync;
     const disconnect = connectActivityAccountEvents({
       onReplace: (snapshot) => {
         if (!stationCurrent()) return;
         void queryClient.cancelQueries({ queryKey: economyKeys.activities, exact: true });
         queryClient.setQueryData(economyKeys.activities, snapshot);
-        setRecoveryError(null);
+        lastSnapshotAt = Date.now();
+        needsSnapshot = false;
+        recovered();
       },
-      onResync: () => {
-        void resync();
+      onResync: (reason) => {
+        if (reason === 'gap' || reason === 'malformed') needsSnapshot = true;
+        const freshness = lastSnapshotAt ? 15_000 - (Date.now() - lastSnapshotAt) : 0;
+        if ((reason === 'disconnect' || reason === 'reconnect') && freshness > 0) {
+          window.clearTimeout(recoveryTimer);
+          recoveryTimer = window.setTimeout(() => void resync(), freshness);
+        } else void resync();
       },
       onConnectionChange: (state) => {
-        if (stationCurrent()) setConnection(state);
+        if (stationCurrent()) {
+          if (state === 'disconnected') unavailable();
+          if (state === 'connected' && !needsSnapshot && unavailableSince !== undefined)
+            recovered();
+          setConnection(state);
+        }
       },
     });
     const online = () => {
@@ -421,11 +459,14 @@ export function useActivityAccountEvents(enabled = true, identity = '', sessionU
     window.addEventListener('online', online);
     return () => {
       alive = false;
+      window.clearTimeout(failureTimer);
+      window.clearTimeout(recoveryTimer);
+      retryRef.current = async () => undefined;
       controller.abort();
       window.removeEventListener('online', online);
       disconnect();
     };
-  }, [enabled, identity, queryClient, sessionUpdatedAt]);
+  }, [enabled, identity, queryClient]);
 
-  return { connection, recoveryError, reconciledAt };
+  return { connection, recoveryError, reconciledAt, retry };
 }

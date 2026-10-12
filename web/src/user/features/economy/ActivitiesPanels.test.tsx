@@ -134,6 +134,7 @@ describe('activity cards', () => {
       connection: 'connected',
       recoveryError: null,
       reconciledAt: 0,
+      retry: vi.fn(async () => undefined),
     });
     const rendered = await renderWithProviders(<ActivitiesPage />, {
       station: 'user',

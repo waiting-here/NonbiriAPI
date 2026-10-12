@@ -81,7 +81,7 @@ export function AnnouncementsPage() {
       />
       {session.error ? (
         <ErrorState error={session.error} onRetry={() => void session.refetch()} />
-      ) : session.isPending || announcements.isPending ? (
+      ) : session.isPending || !accountID || announcements.isPending ? (
         <LoadingState />
       ) : announcements.error ? (
         <ErrorState error={announcements.error} onRetry={() => void announcements.refetch()} />
@@ -95,7 +95,7 @@ export function AnnouncementsPage() {
           ) : (
             <div className="ops-grid" aria-busy={busy}>
               {pageData.data.map((item) => {
-                const key = announcementDismissalKey(session.data.id, item);
+                const key = announcementDismissalKey(accountID, item);
                 const dismissed = isAnnouncementDismissed(key);
                 return (
                   <Card key={item.id} className="ops-stack">

@@ -64,6 +64,9 @@ export interface Receipt {
 export interface Redemption extends Receipt {
   already_claimed: boolean;
 }
+export type RedemptionRejection =
+  | { rejection: 'unavailable' | 'conditions' | 'capacity' }
+  | { rejection: 'banned'; banned_until: number };
 export interface Page<T> {
   items: T[];
   next_cursor: string;
@@ -105,8 +108,11 @@ export const retryReward = (id: string) =>
   apiFetch<Campaign>('/admin/api/rewards/retry', { method: 'POST', json: { id } });
 export const getReceipts = (cursor: string, signal?: AbortSignal) =>
   apiFetch<Page<Receipt>>(queryPath('/api/rewards/history', { cursor }), { signal });
-export const redeemReward = (code: string) =>
-  apiFetch<Redemption | { rejection: string }>('/api/rewards/redeem', {
-    method: 'POST',
-    json: { code },
-  });
+export const redeemReward = (code: string, key: string) =>
+  apiFetch<Redemption | RedemptionRejection>(
+    '/api/rewards/redeem',
+    idempotentOptions(key, {
+      method: 'POST',
+      json: { code },
+    }),
+  );

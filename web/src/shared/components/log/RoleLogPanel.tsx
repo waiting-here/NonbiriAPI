@@ -9,7 +9,7 @@ import { type PageSize } from '@shared/operations/pageNumbers';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
-import { isApiError } from '@shared/query/http';
+import { isApiError, isUnauthorized } from '@shared/query/http';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -451,7 +451,8 @@ function ScopedRoleLogPanel({
       { filters: {}, fromUnix: undefined, toUnix: undefined },
       { clearDetail: true, replace: true },
     );
-    clearStationSession(queryClient, role === 'admin' ? 'admin' : 'steward');
+    if (isUnauthorized(authorityError))
+      clearStationSession(queryClient, role === 'admin' ? 'admin' : 'steward');
     onAuthorityLoss?.();
   }, [authorityError, onAuthorityLoss, patchUrlState, queryClient, role]);
 
@@ -668,9 +669,7 @@ function ScopedRoleLogPanel({
       ? t('common.operations.logs.facts.unknown')
       : row.automatic_actions.length === 0
         ? t('common.operations.logs.facts.noActions')
-        : row.automatic_actions
-            .map((action) => actionLabels[action])
-            .join(' · ');
+        : row.automatic_actions.map((action) => actionLabels[action]).join(' · ');
   const columns: LogColumn<RoleLogRow>[] = [
     {
       key: 'time',

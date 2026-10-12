@@ -22,7 +22,7 @@ export function automaticRestrictions(value: unknown) {
       kind: oneOf(item.kind, ['ban', 'charity_suspend'] as const, 'restriction kind'),
       reason_code: oneOf(
         item.reason_code,
-        ['charity_rpm', 'charity_short_content'] as const,
+        ['charity_rpm', 'charity_short_content', 'redemption_code'] as const,
         'restriction reason code',
       ),
       reason: string(item.reason, 'restriction reason', { min: 1 }),

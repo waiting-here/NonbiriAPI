@@ -425,6 +425,52 @@ describe('administrator alerts page', () => {
     },
   );
 
+  it('keeps denied alert rows hidden through a failed retry and restores a successful fresh read', async () => {
+    const failedRetry = deferred<Response>();
+    const restoredRetry = deferred<Response>();
+    let reads = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = String(input);
+        if (path === '/admin/api/session') return jsonResponse(session());
+        if (path.startsWith('/admin/api/alerts?')) {
+          reads++;
+          if (reads === 1) return jsonResponse(page([alert('1')]));
+          return reads === 2 ? failedRetry.promise : restoredRetry.promise;
+        }
+        if (path === '/admin/api/alerts/1/resolve' && init?.method === 'POST')
+          return jsonResponse({ error: { code: 'forbidden', message: 'Denied' } }, 403);
+        throw new Error('Unexpected request: ' + path);
+      }),
+    );
+    const view = await renderWithProviders(<AlertsPage />, {
+      station: 'admin',
+      role: 'admin',
+      route: '/alerts?resolved=false&page=1&page_size=20',
+    });
+    await screen.findByRole('checkbox', { name: 'Select alert 1' });
+    await view.user.click(screen.getByRole('button', { name: 'Alert actions' }));
+    await view.user.click(screen.getByRole('menuitem', { name: 'Resolve' }));
+    await view.user.click(await screen.findByRole('button', { name: 'Retry' }));
+    await view.user.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(reads).toBe(2);
+    expect(screen.queryByRole('checkbox', { name: 'Select alert 1' })).not.toBeInTheDocument();
+    await act(async () =>
+      failedRetry.resolve(
+        jsonResponse({ error: { code: 'unavailable', message: 'Offline' } }, 503),
+      ),
+    );
+    expect(screen.queryByRole('checkbox', { name: 'Select alert 1' })).not.toBeInTheDocument();
+    await view.user.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(screen.queryByRole('checkbox', { name: 'Select alert 1' })).not.toBeInTheDocument();
+    await act(async () => restoredRetry.resolve(jsonResponse(page([alert('2')]))));
+    expect(await screen.findByRole('checkbox', { name: 'Select alert 2' })).toBeVisible();
+    expect(screen.queryByRole('checkbox', { name: 'Select alert 1' })).not.toBeInTheDocument();
+    expect(view.queryClient.getQueryData(adminKeys.session)).toEqual(session());
+    expect(reads).toBe(3);
+  });
+
   it('keeps the same account rows visible while a new page is busy, but disables row actions', async () => {
     const nextPage = deferred<Response>();
     const firstRows = [

@@ -96,7 +96,7 @@ async function guardedRead<T>(
     return result;
   } catch (error) {
     if (!stationSessionMatches(client, frame, snapshot)) throw new StationSessionChangedError();
-    if (isUnauthorized(error) || isForbidden(error)) clearStationSession(client, frame);
+    if (isUnauthorized(error)) clearStationSession(client, frame);
     throw error;
   }
 }
@@ -174,7 +174,6 @@ export function CharityBindingPicker(props: CharityBindingPickerProps) {
   const management = useManagementCapability(props.role);
   const session = useQuery<SessionProjection | null>({
     queryKey: props.role === 'admin' ? ['admin', 'session'] : ['user', 'session'],
-    queryFn: async () => null,
     enabled: false,
     retry: false,
   });

@@ -221,7 +221,7 @@ describe('owner donation pages', () => {
     ]);
   });
 
-  it('retains rows for a retryable background error and closes them on current permission loss', async () => {
+  it('retains rows for a retryable background error and closes them on authentication loss', async () => {
     let status = 200;
     vi.stubGlobal(
       'fetch',
@@ -231,7 +231,7 @@ describe('owner donation pages', () => {
           return json(
             {
               error: {
-                code: status === 403 ? 'forbidden' : 'unavailable',
+                code: status === 401 ? 'unauthorized' : 'unavailable',
                 message: 'controlled read failure',
               },
             },
@@ -259,7 +259,7 @@ describe('owner donation pages', () => {
     await waitFor(() =>
       expect(screen.getByRole('menuitem', { name: 'View donated keys' })).toBeEnabled(),
     );
-    status = 403;
+    status = 401;
     await view.queryClient.invalidateQueries({ queryKey: economyKeys.donations });
     await screen.findByText('Session closed');
     expect(screen.queryByText('Submission 1')).not.toBeInTheDocument();

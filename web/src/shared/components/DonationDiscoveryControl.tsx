@@ -68,7 +68,7 @@ export function DonationDiscoveryControl({ role, target, disabled, onCapabilityL
       } catch (error) {
         guard();
         if (isUnauthorized(error) || isForbidden(error)) {
-          clearStationSession(client, role);
+          if (isUnauthorized(error)) clearStationSession(client, role);
           setLost(true);
           onCapabilityLoss?.();
         }
@@ -154,7 +154,7 @@ export function DonationDiscoveryControl({ role, target, disabled, onCapabilityL
             </p>
           ) : null}
           {working ? (
-            <Button type="button"  onClick={() => job.stop()}>
+            <Button type="button" onClick={() => job.stop()}>
               {t('common.donationDiscovery.stop')}
             </Button>
           ) : null}

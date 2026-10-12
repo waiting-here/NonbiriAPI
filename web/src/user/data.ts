@@ -788,7 +788,10 @@ export function normalizeSecret(value: unknown): CallerKeySecret {
   return { secret };
 }
 
-export function useUserSession(enabled = true) {
+export function useUserSession<T = UserSessionResponse>(
+  enabled = true,
+  select?: (session: UserSessionResponse) => T,
+) {
   const queryClient = useQueryClient();
   return useQuery({
     queryKey: userKeys.session,
@@ -803,13 +806,14 @@ export function useUserSession(enabled = true) {
         }
         return value;
       } catch (error) {
-        failManagementSessionRequest(queryClient, 'steward', generation);
+        failManagementSessionRequest(queryClient, 'steward', generation, error);
         throw error;
       }
     },
     staleTime: 15_000,
     retry: false,
     enabled,
+    select,
   });
 }
 

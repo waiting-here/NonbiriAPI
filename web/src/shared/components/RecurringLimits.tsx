@@ -868,7 +868,7 @@ function ConflictPanel({
         </div>
       </div>
       <div className="recurring-limits__conflict-actions">
-        <Button type="button"  onClick={onUseCurrent}>
+        <Button type="button" onClick={onUseCurrent}>
           {copy.useCurrent}
         </Button>
         <Button type="button" variant="ghost" onClick={onKeepDraft}>
@@ -1360,7 +1360,8 @@ export function RecurringLimits({
     // This state transition is intentionally driven by the external auth result.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setCapabilityRevoked(true);
-    clearStationSession(client, authorityFrame(role));
+    if ([read.error, mutationError, zones.error].some(isUnauthorized))
+      clearStationSession(client, authorityFrame(role));
     void client.cancelQueries({ queryKey: recurringLimitsKeys.root(role, accountId) });
     client.removeQueries({ queryKey: recurringLimitsKeys.root(role, accountId) });
     loadedDataRef.current = null;
@@ -1380,7 +1381,17 @@ export function RecurringLimits({
     operationRef.current = null;
     notifiedReceiptRef.current = null;
     onCapabilityLoss?.();
-  }, [accountId, capabilityLost, capabilityRevoked, client, onCapabilityLoss, role]);
+  }, [
+    accountId,
+    capabilityLost,
+    capabilityRevoked,
+    client,
+    mutationError,
+    onCapabilityLoss,
+    read.error,
+    role,
+    zones.error,
+  ]);
 
   useEffect(() => {
     if (!save.data || scopeMismatch || savedScope !== scope) return;

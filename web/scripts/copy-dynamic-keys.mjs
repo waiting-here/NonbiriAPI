@@ -488,22 +488,6 @@ const dynamicCopyKeys = [
     ),
   ),
 
-  // User activity stream states are finite connection/recovery states.
-  ...[
-    'user.activities.stream.connecting',
-    'user.activities.stream.connected',
-    'user.activities.stream.disconnected',
-    'user.activities.stream.reconciled',
-    'user.activities.stream.recoveryFailed',
-  ].map((key) =>
-    entry(
-      'user',
-      key,
-      activitiesPanels,
-      't(`user.activities.stream.${key}`)',
-      'The connection notice selects only the explicit connecting/connected/disconnected/reconciled/recoveryFailed set.',
-    ),
-  ),
   // User welfare state/body domains are finite.
   ...[
     'user.activities.welfare.state.unavailable',

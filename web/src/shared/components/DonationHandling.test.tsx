@@ -213,7 +213,7 @@ describe('DonationHandlingControl', () => {
       sentinel: [...charityKeys.root('steward'), 'sentinel'] as const,
     },
   ])(
-    'evicts station data and reports authority loss after HTTP $status for $role',
+    'evicts capability data and reports authority loss after HTTP $status for $role',
     async ({ status, role, station, endpoint, sentinel }) => {
       const fetchMock = vi.fn<typeof fetch>(async (input) => {
         expect(String(input)).toBe(endpoint);
@@ -238,6 +238,8 @@ describe('DonationHandlingControl', () => {
       );
       seedStationSession(view.queryClient, role);
       view.queryClient.setQueryData(sentinel, { private: 'marker' });
+      const ordinary = [station, 'ordinary-page'];
+      view.queryClient.setQueryData(ordinary, { available: true });
       await view.user.click(await screen.findByRole('button', { name: 'Mark as processed' }));
 
       await waitFor(() => expect(onCapabilityLoss).toHaveBeenCalledTimes(1));
@@ -246,6 +248,9 @@ describe('DonationHandlingControl', () => {
       );
       expect(screen.queryByRole('button', { name: 'Mark as processed' })).not.toBeInTheDocument();
       expect(view.queryClient.getQueryData(sentinel)).toBeUndefined();
+      expect(view.queryClient.getQueryData(ordinary)).toEqual(
+        status === 401 ? undefined : { available: true },
+      );
       expect(refresh).not.toHaveBeenCalled();
     },
   );

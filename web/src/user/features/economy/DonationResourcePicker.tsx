@@ -18,7 +18,7 @@ import {
   type StationSessionSnapshot,
 } from '@shared/charityManagement';
 import { ErrorState, EmptyState, LoadingState } from '@shared/components/States';
-import { ApiError, isForbidden, isUnauthorized } from '@shared/query/http';
+import { ApiError, isUnauthorized } from '@shared/query/http';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { type PageMetadata, type PageSize } from '@shared/operations/pageNumbers';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
@@ -234,7 +234,7 @@ function stationRead<T>(
       ) {
         throw new StationSessionChangedError();
       }
-      if (isUnauthorized(error) || isForbidden(error)) {
+      if (isUnauthorized(error)) {
         clearStationSession(queryClient, 'steward');
       }
       throw error;

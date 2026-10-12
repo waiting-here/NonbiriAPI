@@ -13,7 +13,7 @@ import {
   stationSessionMatches,
 } from '@shared/charityManagement';
 import { Icon } from '@shared/components/Icon';
-import { ApiError, isForbidden, isUnauthorized } from '@shared/query/http';
+import { ApiError, isUnauthorized } from '@shared/query/http';
 import { Link } from 'react-router';
 import { SafeAnnouncementBody } from './SafeAnnouncementBody';
 import {
@@ -68,7 +68,7 @@ async function readForAccount<T>(
     return result;
   } catch (error) {
     guard();
-    if (isUnauthorized(error) || isForbidden(error)) clearStationSession(queryClient, 'steward');
+    if (isUnauthorized(error)) clearStationSession(queryClient, 'steward');
     throw error;
   }
 }

@@ -78,3 +78,40 @@ describe('penalty boundary', () => {
     expect(readLoginRestrictions('#user_id=7')).toEqual([]);
   });
 });
+
+it('reads redemption penalties and preserves the original fields of historical rule snapshots', () => {
+  const older = evidencePage();
+  expect(normalizePenaltyEvidence(older, '1', 20).rules).toEqual(older.rules);
+  const newer = {
+    ...older,
+    rules: {
+      ...older.rules,
+      version: 2,
+      redemption_ban_threshold: 5,
+      redemption_ban_window_seconds: 86400,
+      redemption_ban_duration_seconds: 86400,
+    },
+    statistics: { ...older.statistics, rule: 'redemption_window', threshold: 5, count: 5 },
+    members: {
+      ...older.members,
+      data: older.members.data.map((member) => ({ ...member, violation_kind: 'redemption_code' })),
+    },
+  };
+  expect(normalizePenaltyEvidence(newer, '1', 20)).toEqual(newer);
+  expect(
+    normalizePenaltyDetail(
+      {
+        case: { ...penalty, reason_code: 'redemption_code' },
+        actions: penaltyPage([{ ...penaltyAction, reason_code: 'redemption_code' }]),
+      },
+      '1',
+      20,
+    ).case.reason_code,
+  ).toBe('redemption_code');
+  const { redemption_ban_threshold: omitted, ...incomplete } = newer.rules;
+  expect(omitted).toBe(5);
+  expect(() => normalizePenaltyEvidence({ ...newer, rules: incomplete }, '1', 20)).toThrow();
+  expect(() =>
+    normalizePenaltyEvidence({ ...newer, rules: { ...newer.rules, version: 1 } }, '1', 20),
+  ).toThrow();
+});

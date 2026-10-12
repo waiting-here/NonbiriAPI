@@ -717,7 +717,7 @@ export function CharitySourceBrowser({
     if (!authorityError || capabilityNotified.current) return;
     capabilityNotified.current = true;
     setRevoked(true);
-    clearStationSession(client, role);
+    if (isUnauthorized(authorityError)) clearStationSession(client, role);
     setSearchParams((previous) => {
       const next = new URLSearchParams(previous);
       for (const name of [
@@ -862,9 +862,7 @@ export function CharitySourceBrowser({
               </span>
             ) : null}
           </label>
-          <Button type="submit" >
-            {t('common.operations.charity.sourceBrowser.applySearch')}
-          </Button>
+          <Button type="submit">{t('common.operations.charity.sourceBrowser.applySearch')}</Button>
           {sourceSearch.value ? (
             <Button
               type="button"
@@ -971,7 +969,7 @@ export function CharitySourceBrowser({
             <div className="charity-source-browser__missing" role="status">
               <h3>{t('common.operations.charity.sourceBrowser.sourceMissing')}</h3>
               <p>{t('common.operations.charity.sourceBrowser.sourceMissingBody')}</p>
-              <Button type="button"  onClick={clearSource}>
+              <Button type="button" onClick={clearSource}>
                 {t('common.operations.charity.sourceBrowser.backToSources')}
               </Button>
             </div>
@@ -1022,7 +1020,7 @@ export function CharitySourceBrowser({
                     </span>
                   ) : null}
                 </label>
-                <Button type="submit" >
+                <Button type="submit">
                   {t('common.operations.charity.sourceBrowser.applySearch')}
                 </Button>
                 {keySearch.value ? (
