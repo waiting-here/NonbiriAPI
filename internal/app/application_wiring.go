@@ -24,7 +24,6 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
-	"github.com/waiting-here/NonbiriAPI/internal/creditapi"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/debug"
 	"github.com/waiting-here/NonbiriAPI/internal/donation"
@@ -44,7 +43,6 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 	"github.com/waiting-here/NonbiriAPI/internal/stewardautomation"
-	"github.com/waiting-here/NonbiriAPI/internal/timeapi"
 )
 
 // emptyResourceValidationAuthority is the production authority when no
@@ -554,105 +552,46 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err != nil {
 		return nil, fmt.Errorf("create account lifecycle coordinator: %w", err)
 	}
-	if err := adminapi.RegisterSiteConfigRoutes(siteConfigRouteRegistrar{runtime: authRuntime}, adminConfigRuntime); err != nil {
-		return nil, fmt.Errorf("register administrator site configuration routes: %w", err)
+	app := &application{
+		workerCancel:    workerCancel,
+		audits:          audits,
+		activityRuntime: activityEngines,
+		authRuntime:     authRuntime,
+		bridge:          bridgeRuntime,
+		claims:          claimService,
+		resourceRepo:    resourceRepository,
+		automation:      automationService,
+		discoveryWorker: discoveryWorker,
+		donations:       donationService,
+		charity:         charityService,
+		charityRouting:  charityRoutingService,
+		adaptations:     adaptations,
+		checkin:         checkinService,
+		homeGames:       homeGameService,
+		announcements:   announcementService,
+		issues:          issueService,
+		reports:         reportRepository,
+		activities:      activityService,
+		activityRepo:    activityRepository,
+		activityEvents:  activityEvents,
+		adminConfig:     adminConfigRuntime,
+		adminAlerts:     adminAlertRepository,
+		adminUsers:      adminUserService,
+		lifecycle:       lifecycleCoordinator,
+		debug:           debugHub,
+		logs:            logRepository,
+		accountEvents:   accountConnections,
+		forward:         forwardRuntime,
+		games:           gameRuntimes,
+		authorizer:      authorizer,
+		elevation:       elevationManager,
+		gate:            gate,
+		registry:        registry,
+		maintenance:     maintenanceService,
+		egress:          outbound,
 	}
-	if err := adminusers.RegisterRoutes(adminUserRouteRegistrar{runtime: authRuntime}, adminUserService); err != nil {
-		return nil, fmt.Errorf("register administrator user routes: %w", err)
-	}
-	if err := adminusers.RegisterStewardRoutes(adminUserRouteRegistrar{runtime: authRuntime}, adminUserService); err != nil {
-		return nil, fmt.Errorf("register steward user routes: %w", err)
-	}
-	if err := adminalerts.RegisterRoutes(adminAlertRouteRegistrar{runtime: authRuntime}, adminAlertRepository); err != nil {
-		return nil, fmt.Errorf("register administrator alert routes: %w", err)
-	}
-	if err := resources.RegisterRoutes(authRuntime, resourceRepository); err != nil {
-		return nil, fmt.Errorf("register resource routes: %w", err)
-	}
-	if err := resources.RegisterAdminRoutes(resourceAdminRouteRegistrar{runtime: authRuntime}, resourceRepository); err != nil {
-		return nil, fmt.Errorf("register resource administrator routes: %w", err)
-	}
-	if err := resources.RegisterManagedDiscoveryRoutes(authRuntime, resourceAdminRouteRegistrar{runtime: authRuntime}, resourceRepository); err != nil {
-		return nil, fmt.Errorf("register managed model discovery routes: %w", err)
-	}
-	if err := donation.RegisterOwnerRoutes(authRuntime, donationService); err != nil {
-		return nil, fmt.Errorf("register donation owner routes: %w", err)
-	}
-	if err := donation.RegisterAdminRoutes(authRuntime, donationService); err != nil {
-		return nil, fmt.Errorf("register donation administrator routes: %w", err)
-	}
-	if err := donation.RegisterStewardRoutes(authRuntime, donationService); err != nil {
-		return nil, fmt.Errorf("register donation steward routes: %w", err)
-	}
-	if err := charityrouting.RegisterOwnerRoutes(authRuntime, charityRoutingService); err != nil {
-		return nil, fmt.Errorf("register charity capability routes: %w", err)
-	}
-	if err := charityrouting.RegisterAdminRoutes(authRuntime, charityRoutingService); err != nil {
-		return nil, fmt.Errorf("register charity administrator routes: %w", err)
-	}
-	if err := charityrouting.RegisterStewardRoutes(authRuntime, charityRoutingService); err != nil {
-		return nil, fmt.Errorf("register charity steward routes: %w", err)
-	}
-	if err := checkin.RegisterRoutes(authRuntime, checkinService); err != nil {
-		return nil, fmt.Errorf("register check-in routes: %w", err)
-	}
-	activityRoutes := activityRouteRegistrar{runtime: authRuntime}
-	if err := activities.RegisterRoutes(activityRoutes, activityRoutes, activityService); err != nil {
-		return nil, fmt.Errorf("register activities routes: %w", err)
-	}
-	announcementRoutes := announcementRouteRegistrar{runtime: authRuntime}
-	if err := announcements.RegisterRoutes(announcementRoutes, announcementRoutes, announcementService); err != nil {
-		return nil, fmt.Errorf("register announcement routes: %w", err)
-	}
-	if err := announcements.RegisterStewardRoutes(announcementRoutes, announcementService); err != nil {
-		return nil, fmt.Errorf("register steward announcement routes: %w", err)
-	}
-	if err := issues.RegisterRoutes(issueRouteRegistrar{runtime: authRuntime}, issueService); err != nil {
-		return nil, fmt.Errorf("register issue routes: %w", err)
-	}
-	if err := reportRepository.RegisterRoutes(authRuntime); err != nil {
-		return nil, fmt.Errorf("register report routes: %w", err)
-	}
-	maintenanceRoutes := maintenanceRouteRegistrar{runtime: authRuntime}
-	if err := maintenance.RegisterRoutes(maintenanceRoutes, maintenanceRoutes, maintenance.HTTPOptions{
-		Database: store.DB(), Service: maintenanceService,
-	}); err != nil {
-		return nil, fmt.Errorf("register maintenance routes: %w", err)
-	}
-	if err := debug.RegisterRoutes(debugRouteRegistrar{runtime: authRuntime}, debugHub, debugMutations); err != nil {
-		return nil, fmt.Errorf("register Debug routes: %w", err)
-	}
-	if err := logapi.RegisterUserRoutes(authRuntime, logRepository); err != nil {
-		return nil, fmt.Errorf("register user log routes: %w", err)
-	}
-	if err := creditapi.RegisterUserRoutes(authRuntime, store.DB()); err != nil {
-		return nil, fmt.Errorf("register credit history route: %w", err)
-	}
-	if err := logapi.RegisterStewardRoutes(authRuntime, logRepository, roleAuthorizer); err != nil {
-		return nil, fmt.Errorf("register steward log routes: %w", err)
-	}
-	if err := logapi.RegisterAdminRoutes(authRuntime, logRepository); err != nil {
-		return nil, fmt.Errorf("register administrator log routes: %w", err)
-	}
-	if err := audits.registerRoutes(authRuntime, logRepository, roleAuthorizer); err != nil {
-		return nil, fmt.Errorf("register audit routes: %w", err)
-	}
-	if err := activityEngines.RegisterRoutes(authRuntime); err != nil {
-		return nil, fmt.Errorf("register limited activity routes: %w", err)
-	}
-	lifecycleRoutes := lifecycleRouteRegistrar{runtime: authRuntime}
-	if err := lifecycle.RegisterRoutes(lifecycleRoutes, lifecycleRoutes, lifecycleCoordinator); err != nil {
-		return nil, fmt.Errorf("register account lifecycle routes: %w", err)
-	}
-	if err := timeapi.RegisterRoutes(
-		authRuntime,
-		resourceAdminRouteRegistrar{runtime: authRuntime},
-		&timeContextResolver{store: store, authority: roleAuthorizer},
-	); err != nil {
-		return nil, fmt.Errorf("register time API routes: %w", err)
-	}
-	if err := registerAccountEventRoute(authRuntime, gate, gameRuntimes.AccountContinuation(), activityEvents, accountConnections); err != nil {
-		return nil, fmt.Errorf("register account event route: %w", err)
+	if err := app.registerRoutes(store, roleAuthorizer, debugMutations); err != nil {
+		return nil, err
 	}
 	if _, err := maintenanceService.PrepareListener(startupContext, store.DB()); err != nil {
 		return nil, fmt.Errorf("prepare maintenance state: %w", err)
@@ -704,51 +643,10 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	go func() { defer close(rankingDone); rankingService.Run(rankingContext) }()
 	audits.Start(workerContext)
 	activityEngines.Start(workerContext, failures, func() { readiness.failed.Store(true) })
-	return &application{
-		readiness:       readiness,
-		workerCancel:    workerCancel,
-		audits:          audits,
-		activityRuntime: activityEngines,
-		handler:         handler,
-		authRuntime:     authRuntime,
-		bridge:          bridgeRuntime,
-		claims:          claimService,
-		resourceRepo:    resourceRepository,
-		automation:      automationService,
-		discoveryWorker: discoveryWorker,
-		donations:       donationService,
-		charity:         charityService,
-		charityRouting:  charityRoutingService,
-		adaptations:     adaptations,
-		checkin:         checkinService,
-		homeGames:       homeGameService,
-		announcements:   announcementService,
-		issues:          issueService,
-		reports:         reportRepository,
-		activities:      activityService,
-		activityRepo:    activityRepository,
-		activityEvents:  activityEvents,
-		adminConfig:     adminConfigRuntime,
-		adminAlerts:     adminAlertRepository,
-		adminUsers:      adminUserService,
-		lifecycle:       lifecycleCoordinator,
-		lifecycleCancel: lifecycleCancel,
-		lifecycleDone:   lifecycleDone,
-		rankingCancel:   rankingCancel,
-		rankingDone:     rankingDone,
-		debug:           debugHub,
-		logs:            logRepository,
-		accountEvents:   accountConnections,
-		forward:         forwardRuntime,
-		games:           gameRuntimes,
-		failures:        failures,
-		authorizer:      authorizer,
-		elevation:       elevationManager,
-		gate:            gate,
-		registry:        registry,
-		maintenance:     maintenanceService,
-		egress:          outbound,
-	}, nil
+	app.readiness, app.handler, app.failures = readiness, handler, failures
+	app.lifecycleCancel, app.lifecycleDone = lifecycleCancel, lifecycleDone
+	app.rankingCancel, app.rankingDone = rankingCancel, rankingDone
+	return app, nil
 }
 
 const lifecycleRecoveryBatch = 100
