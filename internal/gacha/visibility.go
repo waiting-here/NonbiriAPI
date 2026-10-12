@@ -82,21 +82,31 @@ func readPoolEntries(ctx context.Context, tx *sql.Tx, at int64) ([]PoolEntry, er
 	return out, rows.Err()
 }
 
-// CardWasOfferedTx uses saved opening intervals, including completed pools.
-func (s *Service) CardWasOfferedTx(ctx context.Context, tx *sql.Tx, id string) (bool, error) {
-	card, ok := cardsByID[id]
-	if !ok {
-		return false, nil
+// CardsWereOfferedTx reads saved opening intervals once for all requested
+// cards, including completed pools. Unknown identifiers remain unavailable.
+func (s *Service) CardsWereOfferedTx(ctx context.Context, tx *sql.Tx, ids []string) (map[string]bool, error) {
+	out := make(map[string]bool, len(ids))
+	limited := false
+	for _, id := range ids {
+		card, ok := cardsByID[id]
+		out[id] = ok && card.Source != "limited"
+		limited = limited || ok && card.Source == "limited"
 	}
-	if card.Source != "limited" {
-		return true, nil
+	if !limited {
+		return out, nil
 	}
 	at, err := s.now()
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	offered, err := readOfferedCards(ctx, tx, at)
-	return offered[id], err
+	if err != nil {
+		return nil, err
+	}
+	for _, id := range ids {
+		out[id] = out[id] || offered[id]
+	}
+	return out, nil
 }
 
 // Each configuration applies from its save time until the next revision.

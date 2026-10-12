@@ -125,34 +125,76 @@ func price(value string) (ledger.Amount, error) {
 	}
 	return ledger.AmountFromMilli(n), nil
 }
-func readSettings(ctx context.Context, tx *sql.Tx) (Rules, ShopSettings, int64, error) {
-	var rules Rules
-	var shop ShopSettings
-	var rawRules, rawShop string
-	var revision int64
-	err := tx.QueryRowContext(ctx, "SELECT rules,shop,revision FROM gacha_settings WHERE id=1").Scan(&rawRules, &rawShop, &revision)
-	if err != nil {
-		return rules, shop, 0, err
-	}
-	if err = json.Unmarshal([]byte(rawRules), &rules); err != nil {
-		return rules, shop, 0, err
-	}
-	if err = json.Unmarshal([]byte(rawShop), &shop); err != nil {
-		return rules, shop, 0, err
-	}
-	shop.Revision = revision
-	return rules, shop, revision, nil
+
+type settingsSnapshot struct {
+	rules        Rules
+	shop         ShopSettings
+	revision     int64
+	entryEnabled bool
+	rates        map[Rules][4]float64
 }
-func readPools(ctx context.Context, tx *sql.Tx, at int64, admin bool) ([]Pool, error) {
-	rules, _, revision, err := readSettings(ctx, tx)
+
+func readSettings(ctx context.Context, tx *sql.Tx) (*settingsSnapshot, error) {
+	out := &settingsSnapshot{rates: make(map[Rules][4]float64)}
+	var rawRules, rawShop string
+	err := tx.QueryRowContext(ctx, "SELECT rules,shop,revision,COALESCE(json_extract(shop,'$.entry_enabled'),0) FROM gacha_settings WHERE id=1").Scan(&rawRules, &rawShop, &out.revision, &out.entryEnabled)
 	if err != nil {
 		return nil, err
+	}
+	if err = json.Unmarshal([]byte(rawRules), &out.rules); err != nil {
+		return nil, err
+	}
+	if err = json.Unmarshal([]byte(rawShop), &out.shop); err != nil {
+		return nil, err
+	}
+	out.shop.Revision = out.revision
+	return out, nil
+}
+
+func (s *settingsSnapshot) consolidatedRates(rules Rules) ([4]float64, error) {
+	if rates, ok := s.rates[rules]; ok {
+		return rates, nil
 	}
 	rates, err := ConsolidatedRates(rules)
+	if err == nil {
+		s.rates[rules] = rates
+	}
+	return rates, err
+}
+
+func (s *settingsSnapshot) permanentPool() Pool {
+	return Pool{ID: "permanent", Name: "永续智能", NameEN: "Perpetual intelligence", Cover: "permanent", Kind: "permanent", Group: "permanent", Rules: s.rules, Featured: []string{}, Published: true, Revision: s.revision}
+}
+
+func readPool(ctx context.Context, tx *sql.Tx, id string, settings *settingsSnapshot) (Pool, error) {
+	if id == "permanent" {
+		return settings.permanentPool(), nil
+	}
+	var pool Pool
+	var raw string
+	err := tx.QueryRowContext(ctx, "SELECT config,revision FROM gacha_pools WHERE id=?", id).Scan(&raw, &pool.Revision)
+	if errors.Is(err, sql.ErrNoRows) {
+		return pool, ErrClosed
+	}
+	if err != nil {
+		return pool, err
+	}
+	revision := pool.Revision
+	if err := json.Unmarshal([]byte(raw), &pool); err != nil {
+		return Pool{}, err
+	}
+	pool.Revision = revision
+	return pool, nil
+}
+
+func readPools(ctx context.Context, tx *sql.Tx, at int64, admin bool, settings *settingsSnapshot) ([]Pool, error) {
+	permanent := settings.permanentPool()
+	rates, err := settings.consolidatedRates(permanent.Rules)
 	if err != nil {
 		return nil, err
 	}
-	pools := []Pool{{ID: "permanent", Name: "永续智能", NameEN: "Perpetual intelligence", Cover: "permanent", Kind: "permanent", Group: "permanent", Rules: rules, Featured: []string{}, Published: true, Revision: revision, Rates: rates}}
+	permanent.Rates = rates
+	pools := []Pool{permanent}
 	rows, err := tx.QueryContext(ctx, "SELECT config,revision FROM gacha_pools ORDER BY created_at,id")
 	if err != nil {
 		return nil, err
@@ -172,7 +214,7 @@ func readPools(ctx context.Context, tx *sql.Tx, at int64, admin bool) ([]Pool, e
 			continue
 		}
 		p.Revision = revision
-		p.Rates, err = ConsolidatedRates(p.Rules)
+		p.Rates, err = settings.consolidatedRates(p.Rules)
 		if err != nil {
 			return nil, err
 		}
@@ -255,6 +297,14 @@ func savePity(ctx context.Context, tx *sql.Tx, user int64, group string, p Pity)
 	return err
 }
 func (s *Service) snapshot(ctx context.Context, tx *sql.Tx, user, at int64) (Snapshot, error) {
+	settings, err := readSettings(ctx, tx)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	return s.snapshotWithSettings(ctx, tx, user, at, settings)
+}
+
+func (s *Service) snapshotWithSettings(ctx context.Context, tx *sql.Tx, user, at int64, settings *settingsSnapshot) (Snapshot, error) {
 	out := Snapshot{Tickets: map[string]int64{}, Fragments: map[Rarity]int64{}, Claimed: []string{}, Redeemed: []string{}, MonthUsed: map[string]int64{}, ServerTime: at}
 	day, month, zone, err := calendar(ctx, tx, at)
 	if err != nil {
@@ -276,11 +326,8 @@ func (s *Service) snapshot(ctx context.Context, tx *sql.Tx, user, at int64) (Sna
 		p.Used = [2]int64{}
 	}
 	out.MonthUsed["permanent"], out.MonthUsed["limited"] = p.Used[0], p.Used[1]
-	_, out.Shop, _, err = readSettings(ctx, tx)
-	if err != nil {
-		return out, err
-	}
-	out.Pools, err = readPools(ctx, tx, at, false)
+	out.Shop = settings.shop
+	out.Pools, err = readPools(ctx, tx, at, false, settings)
 	if err != nil {
 		return out, err
 	}

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -41,7 +42,7 @@ func validatePool(p Pool) (Pool, error) {
 	if strings.TrimSpace(p.Name) == "" || utf8.RuneCountInString(p.Name) > 80 || utf8.RuneCountInString(p.NameEN) > 80 || p.Kind != "limited" {
 		return p, ErrInvalid
 	}
-	if p.Cover != "permanent" && p.Cover != "h" && p.Cover != "i" && p.Cover != "j" && p.Cover != "l" && p.Cover != "m" && p.Cover != "entry" {
+	if !slices.Contains(poolCoverIDs(), p.Cover) {
 		return p, ErrInvalid
 	}
 	if err := p.Rules.Validate(); err != nil {
@@ -70,21 +71,17 @@ func validatePool(p Pool) (Pool, error) {
 }
 func (s *Service) configuration(ctx context.Context, tx *sql.Tx, at int64) (Configuration, error) {
 	var out Configuration
-	var err error
 	out.ServerTime = at
-	out.EntryEnabled, err = readEntryEnabled(ctx, tx)
+	settings, err := readSettings(ctx, tx)
 	if err != nil {
 		return out, err
 	}
-	out.Rules, out.Shop, out.Revision, err = readSettings(ctx, tx)
-	if err != nil {
-		return out, err
-	}
+	out.Rules, out.Shop, out.Revision, out.EntryEnabled = settings.rules, settings.shop, settings.revision, settings.entryEnabled
 	_, _, out.TimeZone, err = calendar(ctx, tx, at)
 	if err != nil {
 		return out, err
 	}
-	out.Pools, err = readPools(ctx, tx, at, true)
+	out.Pools, err = readPools(ctx, tx, at, true, settings)
 	if err != nil {
 		return out, err
 	}
@@ -243,7 +240,7 @@ func (s *Service) AdminSave(ctx context.Context, actor int64, key string, input 
 			return out, ErrInvalid
 		}
 		p := *input.Preset
-		if !db.ValidateOpaqueID(p.ID, "gt_") && p.ID != "summer" && p.ID != "theatre" || strings.TrimSpace(p.Name) == "" || utf8.RuneCountInString(p.Name) > 80 {
+		if !db.ValidateOpaqueID(p.ID, "gt_") && !builtInPreset(p.ID) || strings.TrimSpace(p.Name) == "" || utf8.RuneCountInString(p.Name) > 80 {
 			return out, ErrInvalid
 		}
 		p.Pool.Published = false

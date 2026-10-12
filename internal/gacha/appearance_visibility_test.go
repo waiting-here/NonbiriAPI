@@ -17,6 +17,7 @@ import (
 
 func TestAppearanceVisibilityFollowsOwnershipAndActualOpening(t *testing.T) {
 	f := newFixture(t)
+	visibilityReads := 0
 	service, err := appearance.New(appearance.Config{
 		Database: f.db, Users: testAuthority{f.admin}, Gate: f.gate, Moments: f.s.MomentOptionsTx, Now: func() time.Time { return time.Unix(f.at.Load(), 0) },
 		Unlock: func(ctx context.Context, tx *sql.Tx, user int64, key string) (bool, error) {
@@ -24,8 +25,18 @@ func TestAppearanceVisibilityFollowsOwnershipAndActualOpening(t *testing.T) {
 			err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM gacha_owned WHERE user_id=? AND card_id=?)", user, strings.TrimPrefix(key, "card:")).Scan(&owned)
 			return owned, err
 		},
-		Visible: func(ctx context.Context, tx *sql.Tx, key string) (bool, error) {
-			return f.s.CardWasOfferedTx(ctx, tx, strings.TrimPrefix(key, "card:"))
+		Visible: func(ctx context.Context, tx *sql.Tx, keys []string) (map[string]bool, error) {
+			visibilityReads++
+			ids := make([]string, len(keys))
+			for i, key := range keys {
+				ids[i] = strings.TrimPrefix(key, "card:")
+			}
+			offered, err := f.s.CardsWereOfferedTx(ctx, tx, ids)
+			out := make(map[string]bool, len(keys))
+			for i, key := range keys {
+				out[key] = offered[ids[i]]
+			}
+			return out, err
 		},
 	})
 	if err != nil {
@@ -33,9 +44,13 @@ func TestAppearanceVisibilityFollowsOwnershipAndActualOpening(t *testing.T) {
 	}
 	check := func(user int64, visible, unlocked []string) {
 		t.Helper()
+		before := visibilityReads
 		got, err := service.State(t.Context(), user)
 		if err != nil || !slices.Equal(got.Visible, visible) || !slices.Equal(got.Unlocked, unlocked) {
 			t.Fatal(got, err)
+		}
+		if visibilityReads-before > 1 {
+			t.Fatal("appearance repeated eligibility reads")
 		}
 	}
 	base := []string{"default", "heart-moment"}

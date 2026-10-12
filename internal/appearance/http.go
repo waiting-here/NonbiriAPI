@@ -1,13 +1,11 @@
 package appearance
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/limitedactivities"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
@@ -23,12 +21,9 @@ func RegisterRoutes(routes limitedactivities.UserRouteRegistrar, s *Service) err
 			respond(w, State{}, ErrInvalid)
 			return
 		}
-		if r.Body != nil {
-			raw, err := io.ReadAll(io.LimitReader(r.Body, 1))
-			if err != nil || len(raw) > 0 {
-				respond(w, State{}, ErrInvalid)
-				return
-			}
+		if !httpapi.NoBody(r) {
+			respond(w, State{}, ErrInvalid)
+			return
 		}
 		out, err := s.State(r.Context(), p.UserID)
 		respond(w, out, err)
@@ -40,18 +35,12 @@ func RegisterRoutes(routes limitedactivities.UserRouteRegistrar, s *Service) err
 			respond(w, State{}, ErrInvalid)
 			return
 		}
-		raw, err := io.ReadAll(io.LimitReader(r.Body, 1025))
-		if err != nil || len(raw) > 1024 || strictjson.ValidateObject(raw) != nil {
-			respond(w, State{}, ErrInvalid)
-			return
-		}
 		var input struct {
 			Selected string `json:"selected"`
 			Moment   string `json:"moment"`
 		}
-		decoder := json.NewDecoder(bytes.NewReader(raw))
-		decoder.DisallowUnknownFields()
-		if decoder.Decode(&input) != nil || input.Selected == "" {
+		_, err := httpapi.ReadJSON(w, r, &input, httpapi.BodyOptions{MaxBytes: 1024, Validate: strictjson.ValidateObject})
+		if err != nil || input.Selected == "" {
 			respond(w, State{}, ErrInvalid)
 			return
 		}
