@@ -168,7 +168,7 @@ export function UserLayout() {
     return () => media.removeEventListener('change', closeForDesktop);
   }, [menuOpen]);
 
-  const signedIn = !logoutRequested && !session.error && Boolean(session.data?.user);
+  const signedIn = !logoutRequested && Boolean(session.data?.user);
   const profile = signedIn ? session.data?.user : undefined;
   const showStewardEntry = profile?.effective_level === 5 || profile?.effective_level === 6;
   // The fixed primary navigation never grows with capabilities. Steward

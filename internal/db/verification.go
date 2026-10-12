@@ -137,7 +137,7 @@ func validateCurrentSource(ctx context.Context, path string, source *sourceSnaps
 		}
 	}
 	RecordStartupStage(ctx, StageCredentialValidation)
-	if err := validateEndpointKeyEnvelopes(ctx, d, secrets); err != nil {
+	if err := validateDatabaseMaterial(ctx, d, secrets); err != nil {
 		return startupSQLFailure(ctx, err, StartupCredentialReject)
 	}
 	return nil
@@ -180,6 +180,10 @@ func validateStartupSeed(ctx context.Context, q queryer) error {
 	}
 	if !welfare || !thursday {
 		return errors.New("required shared pool identity missing")
+	}
+	var initialized int
+	if err := q.QueryRowContext(ctx, "SELECT (SELECT count(*) FROM gateway_model_capabilities_state WHERE singleton=1) AND (SELECT revision<>zeroblob(16) FROM site_usage_totals WHERE id=1)").Scan(&initialized); err != nil || initialized != 1 {
+		return errors.New("stable storage initialization marker missing")
 	}
 	return nil
 }

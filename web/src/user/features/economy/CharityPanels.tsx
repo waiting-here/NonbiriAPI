@@ -777,8 +777,11 @@ export function DonationKeyPanel({
           </dd>
         </div>
       </dl>
-      <details className="economy-key-details" open={!compact}>
-        <summary>{t('user.charity.quotaDetails')}</summary>
+      <Fold
+        className="economy-key-details"
+        defaultOpen={!compact}
+        title={t('user.charity.quotaDetails')}
+      >
         <div className="economy-limit-grid">
           <section>
             <h5>{t('user.charity.priceQuota')}</h5>
@@ -886,7 +889,7 @@ export function DonationKeyPanel({
             </dd>
           </div>
         </dl>
-      </details>
+      </Fold>
       {ruleSummary}
       {accountID && donationId && donationRevision ? (
         <FailurePolicyControl
@@ -1096,11 +1099,14 @@ export function DonationCard({
       </dl>
 
       {donation.reviewResult ? (
-        <details className="economy-review-result" open={!showDetailLink}>
-          <summary>{t('user.charity.reviewResult')}</summary>
+        <Fold
+          className="economy-review-result"
+          defaultOpen={!showDetailLink}
+          title={t('user.charity.reviewResult')}
+        >
           <MarkdownText>{donation.reviewResult.reason}</MarkdownText>
           <span className="muted">{formatDateTime(donation.reviewResult.reviewedAt)}</span>
-        </details>
+        </Fold>
       ) : null}
 
       {keysContent !== undefined ? (
@@ -1123,8 +1129,10 @@ export function DonationCard({
           ) : null}
         </div>
       ) : (
-        <details className="economy-donation-details">
-          <summary>{t('user.charity.resourceDetails', { count: donation.keys.length })}</summary>
+        <Fold
+          className="economy-donation-details"
+          title={t('user.charity.resourceDetails', { count: donation.keys.length })}
+        >
           {donation.keys.length > 0 ? (
             <div className="economy-donation-key-list">
               {donation.keys.map((key) => (
@@ -1141,7 +1149,7 @@ export function DonationCard({
           ) : (
             <p className="muted">{t('user.charity.noRemainingKeys')}</p>
           )}
-        </details>
+        </Fold>
       )}
 
       <MutationNotice error={visibleError} successKey={visibleSuccessKey} />

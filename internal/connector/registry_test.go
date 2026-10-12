@@ -2,6 +2,7 @@ package connector
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,24 +14,32 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 )
 
-type legacyOpenAIPolicyDriver struct{ calls atomic.Int32 }
+type policyOpenAIDriver struct {
+	calls  atomic.Int32
+	policy connectorcontract.AttemptPolicy
+}
 
-func (*legacyOpenAIPolicyDriver) ConnectorType() connectorcontract.Type {
+func (*policyOpenAIDriver) ConnectorType() connectorcontract.Type {
 	return connectorcontract.TypeOpenAICompatible
 }
 
-func (d *legacyOpenAIPolicyDriver) Attempt(context.Context, http.ResponseWriter, openai.Target, *openai.ChatRequest, string) connectorcontract.AttemptResult {
+func (d *policyOpenAIDriver) AttemptWithPolicy(_ context.Context, _ http.ResponseWriter, _ openai.Target, _ *openai.ChatRequest, policy connectorcontract.AttemptPolicy) connectorcontract.AttemptResult {
+	d.policy = policy
 	d.calls.Add(1)
 	return connectorcontract.AttemptResult{Success: true}
 }
 
-type legacyAnthropicPolicyDriver struct{ calls atomic.Int32 }
+type policyAnthropicDriver struct {
+	calls  atomic.Int32
+	policy connectorcontract.AttemptPolicy
+}
 
-func (*legacyAnthropicPolicyDriver) ConnectorType() connectorcontract.Type {
+func (*policyAnthropicDriver) ConnectorType() connectorcontract.Type {
 	return connectorcontract.TypeAnthropicCompatible
 }
 
-func (d *legacyAnthropicPolicyDriver) Attempt(context.Context, http.ResponseWriter, anthropic.Target, *openai.ChatRequest, string) connectorcontract.AttemptResult {
+func (d *policyAnthropicDriver) AttemptWithPolicy(_ context.Context, _ http.ResponseWriter, _ anthropic.Target, _ *openai.ChatRequest, policy connectorcontract.AttemptPolicy) connectorcontract.AttemptResult {
+	d.policy = policy
 	d.calls.Add(1)
 	return connectorcontract.AttemptResult{Success: true}
 }
@@ -208,88 +217,62 @@ func TestDefaultRegistryFiltersByProtocolFidelity(t *testing.T) {
 	}
 }
 
-func TestLegacyOpenAIDriverCannotSilentlyIgnoreOutboundPolicies(t *testing.T) {
-	driver := &legacyOpenAIPolicyDriver{}
-	protocol := &openAIConnector{driver: driver}
-	for _, policy := range []connectorcontract.AttemptPolicy{
-		{ForceStoreFalse: true},
-		{FlattenToolCalls: true},
-		{ManagedHeaders: http.Header{"X-Session-ID": {"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}},
-		{OnRequestSent: func() {}},
-	} {
-		credential := connectorcontract.NewShortLivedSecret([]byte("secret"), []byte("cipher"))
-		result := protocol.Attempt(context.Background(), AttemptInput{
-			Operation:  connectorcontract.OperationChatCompletions,
-			Target:     connectorcontract.NewTarget(connectorcontract.TypeOpenAICompatible, "https://upstream.example", "up/model"),
-			Credential: credential,
-			Ingress:    &openai.ChatRequest{Model: "p/m"},
-			Policy:     policy,
-			Sink:       httptest.NewRecorder(),
+func TestDriversReceiveCompleteAttemptPolicies(t *testing.T) {
+	for _, kind := range []connectorcontract.Type{connectorcontract.TypeOpenAICompatible, connectorcontract.TypeAnthropicCompatible} {
+		t.Run(string(kind), func(t *testing.T) {
+			open := &policyOpenAIDriver{}
+			anthropic := &policyAnthropicDriver{}
+			var protocol Connector = &openAIConnector{driver: open}
+			if kind == connectorcontract.TypeAnthropicCompatible {
+				protocol = &anthropicConnector{driver: anthropic}
+			}
+			sent := false
+			policy := connectorcontract.AttemptPolicy{
+				ForceStoreFalse: kind == connectorcontract.TypeOpenAICompatible, FlattenToolCalls: true,
+				ManagedHeaders:    http.Header{"X-Session-ID": {"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},
+				AdditionalHeaders: http.Header{"X-Research": {"configured"}},
+				NativeExtensions:  map[string]json.RawMessage{"/thinking": json.RawMessage("true")},
+				SafetyIdentifier:  "safe_identifier", HasAdaptation: true, OnRequestSent: func() { sent = true },
+			}
+			credential := connectorcontract.NewShortLivedSecret([]byte("secret"), []byte("cipher"))
+			result := protocol.Attempt(t.Context(), AttemptInput{Operation: connectorcontract.OperationChatCompletions,
+				Target: connectorcontract.NewTarget(kind, "https://upstream.example", "up/model"), Credential: credential,
+				Ingress: &openai.ChatRequest{Model: "p/m"}, Policy: policy, Sink: httptest.NewRecorder(),
+			})
+			got := open.policy
+			calls := open.calls.Load()
+			if kind == connectorcontract.TypeAnthropicCompatible {
+				got, calls = anthropic.policy, anthropic.calls.Load()
+			}
+			if !result.Success || calls != 1 || got.ForceStoreFalse != policy.ForceStoreFalse || !got.FlattenToolCalls ||
+				!got.HasAdaptation || got.SafetyIdentifier != policy.SafetyIdentifier || got.ManagedHeaders.Get("X-Session-ID") != policy.ManagedHeaders.Get("X-Session-ID") ||
+				got.AdditionalHeaders.Get("X-Research") != "configured" || string(got.NativeExtensions["/thinking"]) != "true" || got.OnRequestSent == nil {
+				t.Fatal("incomplete policy reached driver")
+			}
+			got.OnRequestSent()
+			if !sent {
+				t.Fatal("request-sent callback changed")
+			}
+			if _, _, ok := credential.Take(); ok {
+				t.Fatal("credential remained takeable")
+			}
 		})
-		if result.Failure != connectorcontract.FailureInternal || result.Diagnostic != "connector policy unsupported" || driver.calls.Load() != 0 {
-			t.Fatalf("policy=%+v result=%+v driver_calls=%d", policy, result, driver.calls.Load())
-		}
-		if _, _, ok := credential.Take(); ok {
-			t.Fatalf("policy=%+v credential remained takeable after fail-closed rejection", policy)
-		}
-	}
-
-	result := protocol.Attempt(context.Background(), AttemptInput{
-		Operation:  connectorcontract.OperationChatCompletions,
-		Target:     connectorcontract.NewTarget(connectorcontract.TypeOpenAICompatible, "https://upstream.example", "up/model"),
-		Credential: connectorcontract.NewShortLivedSecret([]byte("secret"), []byte("cipher")),
-		Ingress:    &openai.ChatRequest{Model: "p/m"},
-		Policy:     connectorcontract.AttemptPolicy{},
-		Sink:       httptest.NewRecorder(),
-	})
-	if !result.Success || driver.calls.Load() != 1 {
-		t.Fatalf("legacy zero-policy fallback result=%+v driver_calls=%d", result, driver.calls.Load())
 	}
 }
 
 func TestAnthropicConnectorRejectsOpenAIOnlyPoliciesBeforeCredentialTake(t *testing.T) {
-	driver := &legacyAnthropicPolicyDriver{}
+	driver := &policyAnthropicDriver{}
 	protocol := &anthropicConnector{driver: driver}
-	for _, policy := range []connectorcontract.AttemptPolicy{
-		{ForceStoreFalse: true},
-		{FlattenToolCalls: true},
-	} {
-		credential := connectorcontract.NewShortLivedSecret([]byte("secret"), []byte("cipher"))
-		result := protocol.Attempt(context.Background(), AttemptInput{
-			Operation:  connectorcontract.OperationChatCompletions,
-			Target:     connectorcontract.NewTarget(connectorcontract.TypeAnthropicCompatible, "https://upstream.example", "up/model"),
-			Credential: credential,
-			Ingress:    &openai.ChatRequest{Model: "p/m"},
-			Policy:     policy,
-			Sink:       httptest.NewRecorder(),
-		})
-		if result.Failure != connectorcontract.FailureInternal || result.Diagnostic != "connector policy incompatible" || driver.calls.Load() != 0 {
-			t.Fatalf("policy=%+v result=%+v driver_calls=%d", policy, result, driver.calls.Load())
-		}
-		if _, _, ok := credential.Take(); ok {
-			t.Fatalf("policy=%+v credential remained takeable after rejection", policy)
-		}
+	credential := connectorcontract.NewShortLivedSecret([]byte("secret"), []byte("cipher"))
+	result := protocol.Attempt(t.Context(), AttemptInput{Operation: connectorcontract.OperationChatCompletions,
+		Target:     connectorcontract.NewTarget(connectorcontract.TypeAnthropicCompatible, "https://upstream.example", "up/model"),
+		Credential: credential, Ingress: &openai.ChatRequest{Model: "p/m"},
+		Policy: connectorcontract.AttemptPolicy{ForceStoreFalse: true}, Sink: httptest.NewRecorder(),
+	})
+	if result.Failure != connectorcontract.FailureInternal || result.Diagnostic != "connector policy incompatible" || driver.calls.Load() != 0 {
+		t.Fatalf("result=%+v calls=%d", result, driver.calls.Load())
 	}
-}
-
-func TestLegacyAnthropicDriverCannotIgnoreManagedHeaders(t *testing.T) {
-	driver := &legacyAnthropicPolicyDriver{}
-	protocol := &anthropicConnector{driver: driver}
-	for _, policy := range []connectorcontract.AttemptPolicy{
-		{ManagedHeaders: http.Header{"X-Session-ID": {"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}},
-		{OnRequestSent: func() {}},
-	} {
-		credential := connectorcontract.NewShortLivedSecret([]byte("secret"), []byte("cipher"))
-		result := protocol.Attempt(t.Context(), AttemptInput{
-			Operation:  connectorcontract.OperationChatCompletions,
-			Target:     connectorcontract.NewTarget(connectorcontract.TypeAnthropicCompatible, "https://upstream.example", "up/model"),
-			Credential: credential, Ingress: &openai.ChatRequest{Model: "p/m"}, Policy: policy, Sink: httptest.NewRecorder(),
-		})
-		if result.Failure != connectorcontract.FailureInternal || result.Diagnostic != "connector policy unsupported" || driver.calls.Load() != 0 {
-			t.Fatalf("policy ignored: %+v, calls=%d", result, driver.calls.Load())
-		}
-		if _, _, ok := credential.Take(); ok {
-			t.Fatal("credential remained available")
-		}
+	if _, _, ok := credential.Take(); ok {
+		t.Fatal("credential remained takeable after rejection")
 	}
 }

@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
@@ -59,7 +59,7 @@ func RegisterRoutes(users limitedactivities.UserRouteRegistrar, admins limitedac
 	}
 	if err := users.RegisterUserRoute(http.MethodPost, "/api/gacha/actions", func(w http.ResponseWriter, r *http.Request, p limitedactivities.UserPrincipal) {
 		var input Action
-		if err := decode(r, &input); err != nil {
+		if err := decode(w, r, &input); err != nil {
 			writeError(w, err)
 			return
 		}
@@ -90,7 +90,7 @@ func RegisterRoutes(users limitedactivities.UserRouteRegistrar, admins limitedac
 	}
 	return admins.RegisterAdminRoute(http.MethodPost, "/admin/api/gacha", func(w http.ResponseWriter, r *http.Request, p limitedactivities.AdminPrincipal) {
 		var input AdminInput
-		if err := decode(r, &input); err != nil {
+		if err := decode(w, r, &input); err != nil {
 			writeError(w, err)
 			return
 		}
@@ -117,26 +117,14 @@ func empty(r *http.Request, query bool) bool {
 	if r.URL.RawQuery != "" && !query {
 		return false
 	}
-	if r.Body == nil {
-		return true
-	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, 1))
-	return err == nil && len(body) == 0
+	return httpapi.NoBody(r)
 }
-func decode(r *http.Request, out any) error {
+func decode(w http.ResponseWriter, r *http.Request, out any) error {
 	if r.URL.RawQuery != "" || r.Body == nil {
 		return ErrInvalid
 	}
-	raw, err := io.ReadAll(io.LimitReader(r.Body, 32769))
-	if err != nil || len(raw) > 32768 {
-		return ErrInvalid
-	}
-	if err = strictjson.ValidateObject(raw); err != nil {
-		return ErrInvalid
-	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	if err = decoder.Decode(out); err != nil {
+	raw, err := httpapi.ReadJSON(w, r, out, httpapi.BodyOptions{MaxBytes: 32768, Validate: strictjson.ValidateObject})
+	if err != nil {
 		return ErrInvalid
 	}
 	// Null fields must not silently acquire a Go zero value.

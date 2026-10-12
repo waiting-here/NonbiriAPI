@@ -10,9 +10,17 @@ import maintenanceStateURL from '@shared/assets/state-maintenance.svg';
 import { PublicShell } from './PublicShell';
 import { LoginRestrictions } from './AutomaticRestrictions';
 
-export type RouteErrorKind = '403' | '404' | '500' | 'network' | 'render' | 'maintenance';
+export type RouteErrorKind =
+  '403' | '404' | '500' | 'network' | 'render' | 'maintenance' | 'resource';
 
 export function classifyRouteError(error: unknown): RouteErrorKind {
+  if (
+    error instanceof Error &&
+    /Failed to fetch dynamically imported module|Importing a module script failed|Loading chunk .* failed|Unable to preload CSS/i.test(
+      error.message,
+    )
+  )
+    return 'resource';
   if (isForbidden(error)) return '403';
   if (isNotFoundError(error)) return '404';
   if (isApiError(error) && error.code === 'network_error') return 'network';
@@ -44,29 +52,33 @@ export function RouteErrorPage({
   const siteName = config.data?.siteName || t('app.name');
   const kind = classifyRouteError(error);
   const titleKey =
-    kind === '404'
-      ? 'common.notFoundTitle'
-      : kind === '403'
-        ? 'common.forbiddenTitle'
-        : kind === '500'
-          ? 'common.serverErrorTitle'
-          : kind === 'maintenance'
-            ? 'common.maintenanceTitle'
-            : kind === 'network'
-              ? 'common.networkError'
-              : 'common.routeErrorTitle';
+    kind === 'resource'
+      ? 'common.resourceErrorTitle'
+      : kind === '404'
+        ? 'common.notFoundTitle'
+        : kind === '403'
+          ? 'common.forbiddenTitle'
+          : kind === '500'
+            ? 'common.serverErrorTitle'
+            : kind === 'maintenance'
+              ? 'common.maintenanceTitle'
+              : kind === 'network'
+                ? 'common.networkError'
+                : 'common.routeErrorTitle';
   const bodyKey =
-    kind === '404'
-      ? 'common.notFoundBody'
-      : kind === '403'
-        ? 'common.forbiddenBody'
-        : kind === '500'
-          ? 'common.serverErrorBody'
-          : kind === 'maintenance'
-            ? 'common.maintenanceBody'
-            : kind === 'network'
-              ? 'common.networkHint'
-              : 'common.routeErrorBody';
+    kind === 'resource'
+      ? 'common.resourceErrorBody'
+      : kind === '404'
+        ? 'common.notFoundBody'
+        : kind === '403'
+          ? 'common.forbiddenBody'
+          : kind === '500'
+            ? 'common.serverErrorBody'
+            : kind === 'maintenance'
+              ? 'common.maintenanceBody'
+              : kind === 'network'
+                ? 'common.networkHint'
+                : 'common.routeErrorBody';
   const recovery =
     kind === 'maintenance' ? null : kind === '403' || kind === '404' ? (
       <Link
@@ -76,11 +88,7 @@ export function RouteErrorPage({
         {t('common.backHome')}
       </Link>
     ) : (
-      <Button
-        type="button"
-        variant="primary"
-        onClick={() => window.location.reload()}
-      >
+      <Button type="button" variant="primary" onClick={() => window.location.reload()}>
         {t('common.reload')}
       </Button>
     );

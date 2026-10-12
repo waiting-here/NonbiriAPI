@@ -8,7 +8,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
-func TestCredentialRestartValidatesStoredURLsAndLiveTargets(t *testing.T) {
+func TestOfflineVerificationValidatesStoredURLsAndLiveTargets(t *testing.T) {
 	// Keep one real fresh bootstrap, then exercise each restart from a private
 	// copy of its closed, credential-free seed database.
 	baselinePath := bootstrapTestPath(t, "credentials-baseline.db")
@@ -86,17 +86,18 @@ VALUES(?,?,'openai-compatible',?,0)`, contextID, tc.stored, envelope)
 				t.Fatal(err)
 			}
 			before := snapshotBootstrapSources(t, path)
-			reopened, err := Open(path, vault)
+			err = VerifyContext(t.Context(), path, vault, nil)
 			if !tc.accepted {
-				if reopened != nil {
-					_ = reopened.Close()
-				}
 				assertBootstrapStartupKind(t, err, StartupCredentialReject)
 				assertBootstrapSourcesUnchanged(t, path, before)
 				return
 			}
 			if err != nil {
-				t.Fatalf("reopen valid credential: %v", err)
+				t.Fatalf("verify valid credential: %v", err)
+			}
+			reopened, err := Open(path, vault)
+			if err != nil {
+				t.Fatal(err)
 			}
 			defer reopened.Close()
 			var stored, encrypted string

@@ -201,7 +201,7 @@ export function AlertsPage() {
     if (handledAuthorityError.current === currentError) return;
     handledAuthorityError.current = currentError;
     setAuthorityError(currentError);
-    clearStationSession(client, 'admin');
+    if (isUnauthorized(currentError)) clearStationSession(client, 'admin');
   }, [client, result.error, detail.error, diagnostic.error]);
 
   const mutation = useMutation({
@@ -210,10 +210,13 @@ export function AlertsPage() {
     onError: (error) => {
       if (isAuthorityError(error)) {
         setAuthorityError(error);
-        clearStationSession(client, 'admin');
+        if (isUnauthorized(error)) clearStationSession(client, 'admin');
       }
     },
-    onSettled: () => client.invalidateQueries({ queryKey: adminAlertPageKeys.root }),
+    onSettled: (_data, error) => {
+      if (!isAuthorityError(error))
+        return client.invalidateQueries({ queryKey: adminAlertPageKeys.root });
+    },
   });
 
   const selectionScope = [accountID, resolved, kind, pager.page, pager.pageSize].join(':');
@@ -232,10 +235,13 @@ export function AlertsPage() {
     onError: (error) => {
       if (isAuthorityError(error)) {
         setAuthorityError(error);
-        clearStationSession(client, 'admin');
+        if (isUnauthorized(error)) clearStationSession(client, 'admin');
       }
     },
-    onSettled: () => client.invalidateQueries({ queryKey: adminAlertPageKeys.root }),
+    onSettled: (_data, error) => {
+      if (!isAuthorityError(error))
+        return client.invalidateQueries({ queryKey: adminAlertPageKeys.root });
+    },
   });
   const selectKind = (value: string) => {
     setSearchParams((previous) => {
@@ -353,7 +359,34 @@ export function AlertsPage() {
   const pageData = result.data;
   const busy = session.isFetching || result.isFetching;
   const actionDisabled = busy || result.isPlaceholderData || mutation.isPending || bulk.isPending;
-  const sessionError = session.error ?? (!session.data ? authorityError : null);
+  const sessionError = session.error;
+  const closedError =
+    authorityError ??
+    [result.error, detail.error, diagnostic.error, mutation.error, bulk.error].find(
+      isAuthorityError,
+    );
+  const retryClosed = async () => {
+    const reads = await Promise.all([
+      result.refetch({ cancelRefetch: false }),
+      focusedID ? detail.refetch({ cancelRefetch: false }) : Promise.resolve(),
+      selectedTarget ? diagnostic.refetch({ cancelRefetch: false }) : Promise.resolve(),
+    ]);
+    const failed = reads.find((read) => read && read.error);
+    if (failed) setAuthorityError(failed.error);
+    else {
+      mutation.reset();
+      bulk.reset();
+      setSelection({ scope: '', ids: [] });
+      setAuthorityError(null);
+    }
+  };
+  if (closedError)
+    return (
+      <ErrorState
+        error={closedError}
+        onRetry={isUnauthorized(closedError) ? undefined : () => void retryClosed()}
+      />
+    );
 
   return (
     <div className="page ops-page alerts-page">
@@ -691,7 +724,10 @@ export function AlertsPage() {
                     header: t('admin.alerts.subject'),
                     mobileLabel: t('admin.alerts.subject'),
                     cell: 'meta',
-                    render: (alert) => alert.subject_user_id === null ? '—' : t('admin.alerts.subjectUser', { id: alert.subject_user_id }),
+                    render: (alert) =>
+                      alert.subject_user_id === null
+                        ? '—'
+                        : t('admin.alerts.subjectUser', { id: alert.subject_user_id }),
                   },
                   {
                     key: 'created',

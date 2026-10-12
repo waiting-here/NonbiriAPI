@@ -306,6 +306,7 @@ describe('useDebugV2 authority and observer boundaries', () => {
 
       act(() => controlledStreams[0]?.onEvent(snapshotEvent()));
       expect(rendered.result.current.view.traces).toEqual([TRACE]);
+      rendered.queryClient.setQueryData(['user', 'ordinary-page'], { available: true });
       authorityFailure = status;
 
       await act(async () => {
@@ -318,10 +319,16 @@ describe('useDebugV2 authority and observer boundaries', () => {
       expect(rendered.result.current.observer).toBe('disconnected');
       expect(rendered.result.current.streamError).toBeNull();
       expect(window.localStorage).toHaveLength(0);
-      expect(Object.keys(window.sessionStorage)).toEqual(['nonbiri:resource-navigation-epoch:v1']);
-      expect(window.sessionStorage.getItem('nonbiri:resource-navigation-epoch:v1')).toMatch(
-        /^\d+$/,
+      expect(rendered.queryClient.getQueryData(['user', 'ordinary-page'])).toEqual(
+        status === 401 ? undefined : { available: true },
       );
+      expect(Object.keys(window.sessionStorage)).toEqual(
+        status === 401 ? ['nonbiri:resource-navigation-epoch:v1'] : [],
+      );
+      if (status === 401)
+        expect(window.sessionStorage.getItem('nonbiri:resource-navigation-epoch:v1')).toMatch(
+          /^\d+$/,
+        );
     },
   );
 });

@@ -777,6 +777,9 @@ describe('beta.1 game pages', () => {
       'Original legendary species:',
     );
 
+    expect(
+      fetchMock.mock.calls.some(([input]) => /board=(?:single|total)$/.test(String(input))),
+    ).toBe(false);
     await rendered.user.click(screen.getByRole('tab', { name: 'Historical board' }));
     expect(
       screen.getByText('Historical largest single catches, showing the top 20 and your position.'),
@@ -1150,6 +1153,9 @@ describe('beta.1 game pages', () => {
     });
     const start = await screen.findByRole('button', { name: 'Start 6x8' });
     await waitFor(() => expect(start).toBeEnabled());
+    await rendered.user.click(
+      screen.getByText('Best single-game score in the past 7 days', { selector: 'summary strong' }),
+    );
     for (const spec of ['6x8', '8x8', '10x10']) {
       await rendered.user.selectOptions(screen.getByRole('combobox', { name: 'Board size' }), spec);
       for (const days of ['7', '30']) {

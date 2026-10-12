@@ -113,12 +113,10 @@ func TestLoadAggregatesTimeoutAndExistingConfigErrorsSafely(t *testing.T) {
 	allEnvs(t)
 	setTimeoutEnvs(t, "29", "not-a-duration")
 	t.Setenv("NONBIRI_ADMIN_PASSWORD", "config-secret-sentinel")
-	t.Setenv("NONBIRI_SMTP_HOST", "mail.example.test")
-	t.Setenv("NONBIRI_SMTP_PORT", "99999")
 
 	c, err := Load()
 	if err == nil {
-		t.Fatal("Load accepted invalid startup, shutdown, and SMTP settings")
+		t.Fatal("Load accepted invalid startup and shutdown settings")
 	}
 	if c != nil {
 		t.Fatal("Load returned a Config with invalid settings")
@@ -126,7 +124,6 @@ func TestLoadAggregatesTimeoutAndExistingConfigErrorsSafely(t *testing.T) {
 	for _, field := range []string{
 		"NONBIRI_STARTUP_TIMEOUT_SECONDS",
 		"NONBIRI_SHUTDOWN_TIMEOUT_SECONDS",
-		"NONBIRI_SMTP_PORT",
 	} {
 		if !strings.Contains(err.Error(), field) {
 			t.Errorf("Load error %q does not include %s", err, field)

@@ -6,7 +6,12 @@ const EVENT_ID_2 = 'sse_abcdefghijklmnopqrstuQ';
 const EVENT_ID_3 = 'sse_abcdefghijklmnopqrstug';
 const EVENT_ID_4 = 'sse_abcdefghijklmnopqrstuw';
 const ACTIVITY_FIXTURE = {
-  loan: { enabled: false, available: false, reason: 'disabled', tiers: ['10000', '100000', '1000000'] },
+  loan: {
+    enabled: false,
+    available: false,
+    reason: 'disabled',
+    tiers: ['10000', '100000', '1000000'],
+  },
   master: { enabled: true, available: true, reason: 'available' },
   welfare: {
     asset_type: 'game',
@@ -78,6 +83,63 @@ afterEach(() => {
 });
 
 describe('activities account events', () => {
+  it('backs off handshake-only EOFs without treating the HTTP response as healthy', async () => {
+    vi.useFakeTimers();
+    const fetchStream = vi.fn(async () => streamResponse(': connected\n\n'));
+    const state = vi.fn();
+    const stop = connectActivityAccountEvents({
+      onReplace: vi.fn(),
+      onResync: vi.fn(),
+      onConnectionChange: state,
+      fetchStream,
+      random: () => 1,
+    });
+    await flushAsyncWork();
+    expect(fetchStream).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(fetchStream).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(fetchStream).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(fetchStream).toHaveBeenCalledTimes(3);
+    expect(state).not.toHaveBeenCalledWith('connected');
+    stop();
+  });
+
+  it('marks a replay without new frames healthy only after a stable heartbeat', async () => {
+    vi.useFakeTimers();
+    let stream!: ReadableStreamDefaultController<Uint8Array>;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        stream = controller;
+      },
+    });
+    const state = vi.fn();
+    const replace = vi.fn();
+    const stop = connectActivityAccountEvents({
+      onReplace: replace,
+      onResync: vi.fn(),
+      onConnectionChange: state,
+      fetchStream: async () =>
+        new Response(body, { headers: { 'Content-Type': 'text/event-stream' } }),
+    });
+    try {
+      await flushAsyncWork();
+      stream.enqueue(new TextEncoder().encode(': connected\n\n'));
+      await flushAsyncWork();
+      expect(state).not.toHaveBeenCalledWith('connected');
+      await vi.advanceTimersByTimeAsync(15_000);
+      stream.enqueue(new TextEncoder().encode(': heartbeat\n\n'));
+      await flushAsyncWork();
+      expect(state).toHaveBeenLastCalledWith('connected');
+      expect(replace).not.toHaveBeenCalled();
+    } finally {
+      stop();
+      stream.close();
+      await flushAsyncWork();
+    }
+  });
+
   it('uses both snapshot and delta as complete authoritative replacements', () => {
     for (const type of ['snapshot', 'delta'] as const) {
       const result = parseActivityAccountEvent(type, JSON.stringify(frame(type)), EVENT_ID);
@@ -248,9 +310,9 @@ describe('activities account events', () => {
     window.dispatchEvent(new Event('focus'));
     await flushAsyncWork();
     expect(fetchStream).toHaveBeenCalledTimes(2);
-    expect(onResync).toHaveBeenCalledWith('reconnect');
+    expect(onResync).not.toHaveBeenCalledWith('reconnect');
     expect(onResync).toHaveBeenCalledWith('malformed');
-    expect(onResync.mock.calls.filter(([reason]) => reason === 'disconnect')).toHaveLength(2);
+    expect(onResync.mock.calls.filter(([reason]) => reason === 'disconnect')).toHaveLength(1);
     disconnect();
   });
 });

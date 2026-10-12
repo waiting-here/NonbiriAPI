@@ -1,9 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
-import {
-  captureStationSession,
-  stationSessionMatches,
-  StationSessionChangedError,
-} from '@shared/charityManagement';
+import { stationSessionWrite, StationSessionChangedError } from '@shared/charityManagement';
 import { apiFetch, ApiError } from '@shared/query/http';
 import { idempotentOptions, queryPath } from '@shared/operations/api';
 import type {
@@ -25,11 +21,7 @@ export function createGachaPort(client: QueryClient, account: string): GachaPort
   async function bound<T>(request: () => Promise<T>): Promise<T> {
     const owner = client.getQueryData<{ user: { id: string } }>(['user', 'session']);
     if (owner?.user.id !== account) throw new StationSessionChangedError();
-    const session = captureStationSession(client, 'steward');
-    if (!stationSessionMatches(client, 'steward', session)) throw new StationSessionChangedError();
-    const result = await request();
-    if (!stationSessionMatches(client, 'steward', session)) throw new StationSessionChangedError();
-    return result;
+    return stationSessionWrite(client, 'steward', request);
   }
   return {
     scope: 'user:' + account,
@@ -47,9 +39,10 @@ export function createGachaPort(client: QueryClient, account: string): GachaPort
           throw new ApiError('invalid_response', 'The activity result was incomplete.', 0);
         return result;
       });
-      void client.invalidateQueries({ queryKey: ['user', 'session'] });
-      void client.invalidateQueries({ queryKey: ['user', 'credits'] });
-      void client.invalidateQueries({ queryKey: ['user', 'gacha-entry'] });
+      if (input.action === 'buy' || input.action === 'claim') {
+        void client.invalidateQueries({ queryKey: ['user', 'session'] });
+        void client.invalidateQueries({ queryKey: ['user', 'credits'] });
+      }
       return confirmed;
     },
   };

@@ -120,6 +120,9 @@ var catalogMetadataByKey = map[string]catalogMetadata{
 	KeyRPMBanThreshold:                  {"abuse", catalogText("公益 RPM 自动封禁阈值", "Charity RPM auto-ban threshold"), catalogText("仅统计公益请求超过站点对单用户的 RPM 限额；自用请求、站点总量及密钥共享限额不计入。窗口内达到该次数后自动封禁。", "Counts only charity requests denied by the site's per-user RPM limit. Personal requests, site-wide limits, and shared key limits are excluded. Bans the account at this count within the window."), unitCount, nil},
 	KeyRPMBanWindowSeconds:              {"abuse", catalogText("RPM 违规窗口", "RPM violation window"), catalogText("统计单用户 RPM 拒绝的滚动窗口。", "Rolling window used to count per-user RPM denials."), unitSecond, nil},
 	KeyRPMBanDurationSeconds:            {"abuse", catalogText("RPM 自动封禁时长", "RPM auto-ban duration"), catalogText("RPM 自动封禁生效的时长。", "Duration of an RPM-triggered automatic ban."), unitSecond, nil},
+	KeyRedemptionBanThreshold:           {"abuse", catalogText("兑换码自动封禁阈值", "Redemption auto-ban threshold"), catalogText("无效或已领取的兑换码直接计数。有效码因时间、开关、名额或资格被拒时，同一账号同一码在窗口内首次免计，后续新提交计数。达到阈值后封禁；网络重试不重复计数。", "Counts invalid or already-claimed codes. For a valid code refused by its time, availability, quota or eligibility, the first refusal per account and code within the window is exempt; later new submissions count. Bans at the threshold. Network retries do not count twice."), unitCount, nil},
+	KeyRedemptionBanWindowSeconds:       {"abuse", catalogText("兑换码违规窗口", "Redemption violation window"), catalogText("统计兑换码违规的滚动窗口，也是同一码首次业务拒绝的宽限期限。", "Rolling window for redemption violations and the first-refusal exemption for each code."), unitSecond, nil},
+	KeyRedemptionBanDurationSeconds:     {"abuse", catalogText("兑换码自动封禁时长", "Redemption auto-ban duration"), catalogText("兑换码违规达到阈值后的封禁时长。", "Ban duration after redemption violations reach the threshold."), unitSecond, nil},
 	KeyCharityMinChars:                  {"abuse", catalogText("公益请求最少字符", "Minimum charity request characters"), catalogText("公益调用内容需达到的最少字符数。", "Minimum number of characters required for a charity call."), catalogText("字符", "characters"), nil},
 	KeyCharityViolationDeductMilli:      {"abuse", catalogText("公益违规扣分", "Charity violation deduction"), catalogText("每次公益请求内容过短时扣除的积分金额。", "Amount deducted from available credits for each charity request that is too short."), unitMilli, nil},
 	KeyCharityViolationBanSeconds:       {"abuse", catalogText("公益单次违规封禁", "Single charity-violation ban"), catalogText("一次公益内容违规可触发的封禁时长。", "Ban duration optionally triggered by one charity content violation."), unitSecond, nil},
@@ -380,6 +383,8 @@ func catalogSemantics(key string, spec keySpec) (zero *localizedCatalogText, nul
 		zero = catalogTextPtr("关闭对应功能，不改变已经接受的在途工作。", "Disables the feature without changing already accepted work.")
 	case KeyRPMBanThreshold:
 		zero = catalogTextPtr("关闭由单用户 RPM 拒绝触发的自动封禁。", "Disables automatic bans triggered by per-user RPM denials.")
+	case KeyRedemptionBanThreshold:
+		zero = catalogTextPtr("关闭兑换码违规计数和自动封禁。", "Disables redemption violation counting and automatic bans.")
 	case KeyCharityMinChars:
 		zero = catalogTextPtr("不要求公益请求达到最小字符数。", "Applies no minimum-character requirement to charity requests.")
 	case KeyCharityViolationDeductMilli:

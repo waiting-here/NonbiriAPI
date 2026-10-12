@@ -1,5 +1,5 @@
 import { rewardLabels, rejectionLabels } from '@shared/rewards/copy';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { CursorPagination } from '@shared/operations/CursorPagination';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -15,11 +15,13 @@ import {
   type Redemption,
 } from '@shared/rewards/api';
 import { useUserSession } from '../data';
+import { stationSessionWrite } from '@shared/charityManagement';
+import { responseOutcomeUnknown } from '@shared/operations/api';
 import '@shared/rewards/rewards.css';
 export function RewardsPage() {
   const session = useUserSession();
   if (session.isPending) return <LoadingState />;
-  if (session.error || !session.data) return <ErrorState error={session.error} />;
+  if (!session.data) return <ErrorState error={session.error} />;
   return <RewardsContent key={session.data.user.id} account={session.data.user.id} />;
 }
 function RewardsContent({ account }: { account: string }) {
@@ -28,9 +30,14 @@ function RewardsContent({ account }: { account: string }) {
   const time = useDateTimeFormatter();
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
+  const sending = useRef(false);
+  const pending = useRef<{ code: string; key: string } | null>(null);
+  const [unknownCode, setUnknownCode] = useState<string | null>(null);
+  const unknown = unknownCode !== null && unknownCode === code.trim();
   const [error, setError] = useState<unknown>();
   const [result, setResult] = useState<Redemption>();
   const [rejection, setRejection] = useState('');
+  const [bannedUntil, setBannedUntil] = useState<number | null>(null);
   const [cursor, setCursor] = useState('');
   const [pages, setPages] = useState<string[]>([]);
   const assets = useQuery({
@@ -42,14 +49,31 @@ function RewardsContent({ account }: { account: string }) {
     queryFn: ({ signal }) => getReceipts(cursor, signal),
   });
   async function redeem() {
+    if (sending.current) return;
+    sending.current = true;
     setBusy(true);
+    const submitted = code.trim();
+    const operation =
+      pending.current?.code === submitted
+        ? pending.current
+        : { code: submitted, key: crypto.randomUUID() };
+    pending.current = operation;
     setError(undefined);
     setRejection('');
+    setBannedUntil(null);
     setResult(undefined);
     try {
-      const out = await redeemReward(code);
+      const out = await stationSessionWrite(client, 'steward', () =>
+        redeemReward(operation.code, operation.key),
+      );
+      pending.current = null;
+      setUnknownCode(null);
       if ('rejection' in out) {
         setRejection(out.rejection);
+        if (out.rejection === 'banned') {
+          setBannedUntil(out.banned_until);
+          void client.invalidateQueries({ queryKey: ['user', 'session'] });
+        }
       } else {
         setResult(out);
         setCode('');
@@ -58,8 +82,12 @@ function RewardsContent({ account }: { account: string }) {
         void client.invalidateQueries({ queryKey: ['user', 'credits'] });
       }
     } catch (e) {
+      const unresolved = responseOutcomeUnknown(e);
+      if (!unresolved) pending.current = null;
+      setUnknownCode(unresolved ? operation.code : null);
       setError(e);
     } finally {
+      sending.current = false;
       setBusy(false);
     }
   }
@@ -86,6 +114,7 @@ function RewardsContent({ account }: { account: string }) {
                   required
                   autoComplete="off"
                   maxLength={64}
+                  disabled={busy}
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
                   placeholder={t('common.rewards.codePlaceholder')}
@@ -94,12 +123,22 @@ function RewardsContent({ account }: { account: string }) {
             </Field>
             <div>
               <Button variant="primary" type="submit" disabled={busy || !code.trim()}>
-                {busy ? t('common.rewards.redeeming') : t('common.rewards.redeem')}
+                {busy
+                  ? t('common.rewards.redeeming')
+                  : unknown
+                    ? t('common.retry')
+                    : t('common.rewards.redeem')}
               </Button>
             </div>
           </form>
           {!!error && <ErrorState error={error} />}
-          {rejection && (
+          {unknown && <Note tone="warn">{t('common.rewards.retryUnknown')}</Note>}
+          {bannedUntil !== null && (
+            <Note tone="warn">
+              {t('common.rewards.redemptionBanned', { time: time(bannedUntil) })}
+            </Note>
+          )}
+          {rejection && rejection !== 'banned' && (
             <Note tone="warn">
               {t(
                 rejectionLabels[

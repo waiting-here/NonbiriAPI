@@ -39,8 +39,8 @@ func (s *Service) MomentOptionsTx(ctx context.Context, tx *sql.Tx, user int64) (
 	for _, pool := range pools {
 		covers[pool.Cover] = true
 	}
-	for _, cover := range []string{"entry", "h", "i", "j", "l", "m"} {
-		if covers[cover] {
+	for _, cover := range poolCoverIDs() {
+		if cover != "permanent" && covers[cover] {
 			options = append(options, "cover:"+cover)
 		}
 	}

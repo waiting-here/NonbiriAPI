@@ -132,10 +132,11 @@ func buildStartupScaleFixture(t *testing.T, path string, item startupScaleCase) 
 	if item.entries <= 0 || item.entries%2 != 0 || item.users <= 0 || item.keys != scaleLiveKeys {
 		t.Fatal("invalid scale fixture dimensions")
 	}
-	dbfixture.Materialize(t, path)
+
 	vault := startupScaleVault(t)
 	defer func() { _ = vault.Close() }()
 	startup, cancelStartup := context.WithTimeout(context.Background(), db.DefaultStartupTimeout)
+	dbfixture.Materialize(t, path, vault)
 	store, err := db.OpenContext(startup, path, vault)
 	cancelStartup()
 	if err != nil {

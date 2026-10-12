@@ -2,107 +2,57 @@
 
 [English](README.md)
 
-NonbiriAPI 是可自行部署的 AI API 端点管理平台，提供 OpenAI-compatible 调用入口。每位用户可以管理自己的端点、加密凭据、模型发现与路由，并用可撤销的 CallerKey 调用个人或公益模型。
+NonbiriAPI 是可自行部署的 AI 端点管理平台，提供 OpenAI-compatible 调用入口。用户管理端点、加密凭据、模型发现与路由，通过可撤销的 CallerKey 调用个人或公益模型。可选活动和小游戏共用服务端权威的账务及生命周期规则。
 
-当前源码预发布版本为 [1.0.0-rc.7](https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-rc.7)。版本变化见 [CHANGELOG](CHANGELOG.md)。所有版本仅发布源代码。生产环境支持 Linux/amd64。
+当前代码用于筹备 **v1.0.0**。Tag 和 GitHub Release 单独发布；部署可使用经过审查的精确提交。已发布版本仅提供源码，版本沿革见 [CHANGELOG](CHANGELOG.md)。
 
-## 主要能力
+## 架构
 
-- 提供 `/v1/models`、`/v1/chat/completions`、`/v1/embeddings` 和 `/v1/images/generations`，可连接 OpenAI-compatible、Anthropic-compatible 和 AI SDK Gateway v3 上游。支持的操作与协议边界见 [API 契约](docs/api-contract.md)。
-- 支持个人模型命名、发现、顺序／随机／综合优化负载均衡路由、有限的请求适配及仅驻留内存的 Debug Hub。公益资源支持密钥捐赠、使用预算、积分结算与分级协管。
-- Discord 登录、独立管理员站、中英双语响应式页面和站点外观配置；用户可导出数据或删除账号。
-- 可选的签到、共享活动及九款小游戏，结算和恢复由服务端控制，榜单遵循隐私设置。
-- 统一出站安全策略、上游凭据加密、有限诊断与留存清理。请求日志和积分明细通常保留 30 天；压缩后的余额基线与审计汇总保持账务连续。
+单个 Go 进程提供两套内嵌 React 站点和一个本地 SQLite 数据库。用户站与管理员站采用独立主机名及权限边界。生产目标为 Linux/amd64；Windows 用于开发和构建验证。
 
-[全站奖励与兑换码](docs/rewards.md)支持管理员组合配置奖励、按与／或／非条件发放，用户每码限领一次。
+| 范围 | 源码与契约 |
+| --- | --- |
+| 启动、恢复与 HTTP 接线 | `main.go`、`internal/app/` |
+| 正式结构与迁移 | `internal/db/`、[数据库升级](docs/database-upgrades.md) |
+| rc.7 离线转换 | `cmd/nonbiri-upgrade-rc7/` |
+| 账务、导出、删除与留存 | `internal/ledger/`、`internal/lifecycle/`、[生命周期](docs/data-lifecycle-checklist.md) |
+| 连接器、转发与出站策略 | `internal/connector/`、`internal/forward/`、`internal/egress/` |
+| 共享组件与双站页面 | `web/src/shared/`、`web/src/user/`、`web/src/admin/` |
+| 验证与部署示例 | `scripts/`、`.github/workflows/`、`deploy/` |
 
-[《真·抽卡模拟器》](docs/gacha.md)提供 57 张收藏卡牌、SSR／SP 动态卡面与可解锁的站点装扮、常驻与限时奖池、碎片商店和主题合照。「心动时刻」可将已拥有的卡牌、已解锁插画或可用卡池封面设为用户站背景。
+连接器注册表支持 OpenAI-compatible、Anthropic-compatible 和 AI SDK Gateway v3 上游。公共入口包括 `/v1/models`、`/v1/chat/completions`、`/v1/embeddings` 和 `/v1/images/generations`，各连接器支持的操作不同。后端执行所有权、凭据、SSRF、账务和取消约束；格式及限制见 [API 契约](docs/api-contract.md)。
 
-## 构建与启动
+## 构建与开发
 
-构建需要 **Go 1.26.9**、**Node.js ≥22.22.3**、**npm 12.0.1**；仓库脚本使用 Bash，Windows 开发使用 Git Bash。最终程序内嵌两套 React 站点，使用纯 Go SQLite，运行时无需 Node.js。
+使用 **Go 1.26.9**、**Node.js ≥22.22.3**、**npm 12.0.1** 和 Bash；Windows 使用 Git Bash。最终程序无需 Node.js 或 C 运行时。
 
 ```sh
 npm --prefix web ci
 npm --prefix web run build
-CGO_ENABLED=0 go build -tags dist -trimpath -o nonbiriapi .
+CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 ```
 
-`-tags dist` 会嵌入已构建的网页；不带该标记时，程序提供开发占位页。
+`-tags dist` 嵌入双站构建产物；不带该标记时提供开发占位页。[贡献指南](CONTRIBUTING.md) 集中说明本地检查、浏览器准备、共享 fixture、CI 范围和受保护分支流程。实现与受影响测试应同时更新。
 
-按照 [首次配置指南](docs/first-run-setup.md) 准备私有路径、文件权限、Discord OAuth、DNS 与反向代理。将 [admin.env.example](admin.env.example) 复制到检出目录之外的私有路径，替换占位值并配置：
+## 配置与部署
 
-- `NONBIRI_MASTER_KEY_FILE` 或 `NONBIRI_MASTER_KEY`，二选一，提供 32 字节加密密钥。
-- 管理员用户名、密码，以及 Discord 客户端 ID 和密钥。
-- `NONBIRI_SITE_BASE_URL` 和独立的管理员域名；`NONBIRI_ADMIN_HOST` 默认推导为 `admin.<用户站域名>`。
-- 检出目录之外的数据库与密钥路径，以及保留配套密钥的备份。
+[首次配置](docs/first-run-setup.md) 涵盖私有目录、加密密钥、Discord OAuth 和公共域名。将 [admin.env.example](admin.env.example) 复制到检出目录外，替换占位值并在启动前加载。数据库与对应密钥须配套保留。
 
-```sh
-set -a
-. /absolute/private/path/admin.env
-set +a
-./nonbiriapi
-```
+新库默认开启维护并关闭公共功能。本版采用正式结构 schema 17；rc.7 的 schema 16 须先使用独立离线转换器。后续 v1.x 程序保持从任一更早 v1.x 正式库连续升级，不承诺旧程序读取新版数据库。
 
-新数据库默认开启维护、关闭公共功能。接纳用户前，请检查实例法律页面与设置。[配置参考](docs/configuration.md) 说明启动变量和在线控制项；[部署指南](docs/deployment.md) 涵盖 systemd、代理、备份和恢复。
+[部署指南](docs/deployment.md) 说明 systemd、代理、不可变产物、升级和完整快照恢复；启动变量及在线设置统一维护在 [配置参考](docs/configuration.md)。
 
-rc.7 支持空白启动、最终 rc.5 数据库及已登记的 rc.6／rc.7 数据库。更早或未知结构会被拒绝；具体来源与回退要求见 [数据库兼容性](docs/deployment.md#database-compatibility-and-version-changes)。
-
-## 调用 API
-
-先创建端点、添加上游密钥、发现或填写模型，再将模型连接到个人平台名称。创建 CallerKey 后，及时保存当次展示的完整值。
-
-```sh
-curl https://api.example.com/v1/chat/completions \
-  -H 'Authorization: Bearer nbk_REPLACE_WITH_YOUR_CALLER_KEY' \
-  -H 'Content-Type: application/json' \
-  -d '{"model":"provider/model","messages":[{"role":"user","content":"Hello"}]}'
-```
-
-通过 `/v1/models` 查看可用名称，使用 `/v1/embeddings` 或 `/v1/images/generations` 调用已启用对应类型的模型。新建模型默认只启用聊天补全，可在模型设置中多选接口类型；旧模型保留聊天补全和向量化。图像生成目前支持 OpenAI-compatible 上游。上游地址应包含其 API 版本，例如 `https://provider.example/v1`。浏览器调用使用 Bearer CallerKey 和 `credentials: 'omit'`。不要将密钥放入 URL 或共享日志。
-
-[API 契约](docs/api-contract.md) 说明流式响应、错误、计费、CORS、连接器差异及个人自动化接口。[协管自动化说明](docs/steward-automation.md) 介绍由管理员提供的接入指南。
-
-## 开发导航
-
-应用采用单进程、单 SQLite 数据库。用户站与管理员站共用程序，通过不同主机名和权限边界隔离。
-
-| 范围 | 入口 |
-| --- | --- |
-| 启动和 HTTP 接线 | `main.go`、`internal/app/` |
-| 数据库结构、初始化与验证 | `internal/db/` |
-| 账务与留存 | `internal/ledger/`、`internal/lifecycle/` |
-| 上游协议与出站策略 | `internal/connector/`、`internal/egress/` |
-| 用户站和管理员站 | `web/` |
-| 检查脚本与部署示例 | `scripts/`、`deploy/` |
-
-日常开发验证实际影响范围，最终候选运行完整门禁：
-
-```sh
-scripts/check-go.sh
-scripts/check-upgrade.sh
-scripts/race-check.sh
-npm --prefix web test
-npm --prefix web run typecheck
-npm --prefix web run lint
-npm --prefix web run build
-```
-
-race 检查需要可用的 C 编译器。CI 还覆盖真实浏览器、许可证、漏洞与目标构建，不执行部署。测试范围与受保护分支流程见 [贡献指南](CONTRIBUTING.md)。
-
-## 详细文档
+## 技术文档
 
 | 主题 | 文档 |
 | --- | --- |
-| Gateway 模型与缓存控制 | [Gateway 设置](docs/gateway-model-controls.md) |
-| 游戏和随机结果验证 | [对战游戏](docs/duel-games.md)、[AI 玩家](docs/ai-players.md)、[二十一点](docs/blackjack.md)、[随机性](docs/game-randomness.md) |
-| 新游戏模块 | [稳稳地接住你](docs/steady-catch.md)、[AI 昆特牌](docs/ai-gwent.md)、[垂钓手记](docs/lake-notes.md) |
-| 绘本活动 | [活动指南](docs/image-activity.md) |
-| 导出、删号与记录留存 | [数据生命周期](docs/data-lifecycle-checklist.md) |
-| 离线完整性与账务审计 | [维护验证](docs/api-contract.md#10-maintenance-recovery-and-retention) |
+| HTTP 与自动化 | [API 契约](docs/api-contract.md)、[协管接入](docs/steward-automation.md) |
+| Gateway 与计费 | [模型控制](docs/gateway-model-controls.md)、[上下文价格](docs/charity-context-pricing.md)、[托管请求头](docs/charity-session-headers.md) |
+| 游戏接入 | [游戏模块](docs/game-modules.md)、[随机性](docs/game-randomness.md)、[对战](docs/duel-games.md)、[AI 玩家](docs/ai-players.md) |
+| 游戏数据与规则 | [二十一点](docs/blackjack.md)、[稳稳地接住你](docs/steady-catch.md)、[AI 昆特牌](docs/ai-gwent.md)、[垂钓手记](docs/lake-notes.md)、[大肥鱼编辑器](docs/fatfish-editor.md) |
+| 收藏与活动 | [真·抽卡模拟器](docs/gacha.md)、[美术资源](docs/gacha-art.md)、[活动周期](docs/limited-activities.md)、[绘本活动](docs/image-activity.md)、[奖励](docs/rewards.md) |
+| 候选验收与发布 | [发布检查](docs/release-checklist.md)、[仓库设置](docs/github-settings.md) |
 
-部署者须按实际运营情况修改内置隐私政策和服务条款。独立上游各自适用其数据政策；`store:false` 无法保证零留存。受限的原始错误诊断可能包含上游回显的内容，权限、留存和法律保留例外见生命周期文档。
+实例运营者按实际数据处理维护隐私政策和服务条款。上游各自适用其政策；`store:false` 无法保证零留存。受限错误诊断可能含上游回显内容，访问和留存遵循生命周期文档。
 
-漏洞请按 [SECURITY.md](SECURITY.md) 报告。项目代码采用 [AGPL-3.0](LICENSE)；署名与素材许可见 [NOTICE](NOTICE)、[前端声明](web/THIRD_PARTY_NOTICES.md) 和 [音频署名](web/src/shared/assets/game-audio/NOTICE.md)。
-
-关卡设计与试玩参见[饲养大肥鱼编辑器说明](docs/fatfish-editor.md)。
+漏洞按 [SECURITY.md](SECURITY.md) 报告。代码采用 [AGPL-3.0](LICENSE)；署名见 [NOTICE](NOTICE)、[前端声明](web/THIRD_PARTY_NOTICES.md) 和 [音频署名](web/src/shared/assets/game-audio/NOTICE.md)。

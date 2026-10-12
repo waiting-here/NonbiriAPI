@@ -46,8 +46,12 @@ export function DonationPendingBadge({
   const lost = isUnauthorized(badge.error) || isForbidden(badge.error);
   useEffect(() => {
     if (!revoked) return;
-    clearStationSession(client, role);
-  }, [revoked, client, role]);
+    if (isUnauthorized(badge.error)) clearStationSession(client, role);
+    else {
+      void client.cancelQueries({ queryKey: charityKeys.root(role) });
+      client.removeQueries({ queryKey: charityKeys.root(role) });
+    }
+  }, [revoked, badge.error, client, role]);
   if (!eligible || revoked || lost) return null;
   const count = !badge.error ? badge.data?.pending_count : undefined;
   const label =

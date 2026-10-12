@@ -17,7 +17,7 @@ import {
   string,
   unixSecond,
 } from '@shared/operations/wire';
-import { ApiError, apiFetch, isForbidden, isUnauthorized } from '@shared/query/http';
+import { ApiError, apiFetch, isUnauthorized } from '@shared/query/http';
 import { MODEL_TYPES, type ModelType } from '@shared/modelTypes';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
@@ -529,11 +529,7 @@ export function useCharityCatalog(
       handledError.current = null;
       return;
     }
-    if (
-      !query.error ||
-      handledError.current === query.error ||
-      (!isUnauthorized(query.error) && !isForbidden(query.error))
-    ) {
+    if (!query.error || handledError.current === query.error || !isUnauthorized(query.error)) {
       return;
     }
     handledError.current = query.error;

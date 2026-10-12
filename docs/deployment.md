@@ -71,7 +71,7 @@ The `dist` build tag is required for the real frontend. An untagged binary conta
 Install into a versioned directory and publish the symlink with a same-filesystem rename. Set `version` to the release being installed:
 
 ```sh
-version=1.0.0-rc.3
+version=1.0.0
 release=/opt/nonbiriapi/releases/$version
 sudo install -d -o root -g root -m 0755 "$release"
 sudo install -o root -g root -m 0755 nonbiriapi "$release/nonbiriapi"
@@ -188,61 +188,79 @@ The shared page works without the application and offers Chinese/English text, l
 
 This fallback also covers proxy timeouts or invalid upstream responses before response headers reach the client. It cannot replace an interrupted response after headers were sent, or handle failures before the request reaches Nginx. Test the actual layout with nginx -t before reload, then check both hosts with an unavailable upstream, an application-generated error and recovery.
 
-<a id="beta1-database-compatibility-and-version-changes"></a>
-
 ## Database compatibility and version changes
 
-rc.7 accepts a fresh database, the final rc.5 schema at commit `8949a3d6e5b3d7536549f42a4c597393fccab62a`, and registered rc.6/rc.7 schemas, including final rc.6 at `4ae0d09e6c2cb4422e2802b0273b60545fd2ef59`. The target schema revision is 16. The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`); account exports use schema 19. Compatibility is checked against the complete structural manifest. Earlier releases, partial schemas and unknown intermediate states are rejected without repair.
+The stable application starts from an empty database or a registered stable
+schema, beginning at **17**. Schema **16** uses the standalone
+[rc.7 converter](../cmd/nonbiri-upgrade-rc7/README.md). Other prereleases and unknown
+structures are rejected. SQLite identity remains Generation 2; exports use
+format **19**. See [database upgrades](database-upgrades.md) for manifests, stable
+migration guarantees and content versions.
 
-Supported upgrades include ledger-compaction storage, history-query indexes, an explicit migration version and Lake Notes save-format versions. The rc.7 revisions add the gacha collection and activity records, appearance preferences, context pricing, managed session headers, personal request configuration, request audit facts and reward delivery records. They preserve accounts, credentials, balances, donations, saved game rules, configuration and instance legal overrides. Six-hour maintenance compacts expired credit details into balance baselines and audit totals before removing them. Necessary settlement, legal-hold and idempotency evidence follows its business lifecycle.
+Run `./nonbiriapi maintenance schema-info --json` without a production environment
+or database to inspect the target's compatibility descriptor. Deployment helpers
+must consume this output instead of parsing Go files. Use
+`./nonbiriapi maintenance verify` on a stopped current database or consistent copy
+for a full offline audit; normal startup performs the current checks and recovers
+unfinished work. Historical cleanup commands are retired from the running binary.
 
-From v1.0.0 onward, every stable v1.x release must support a direct upgrade from any earlier stable v1.x database. Prereleases are outside that long-term guarantee. The [database upgrade guide](database-upgrades.md) describes the baseline and migration rules.
-
-Startup validates the registered source, applies supported changes atomically, checks target configuration and credentials before commit, and recovers unfinished work before opening listeners. It does not replay the complete historical ledger on every upgrade. Run `./nonbiriapi maintenance verify` against a stopped current-version database or an upgraded consistent copy for full structural, historical accounting and domain audits. Verification uses the normal private environment and does not repair, migrate, start workers or open listeners; SQLite may create coordination files.
-
-Keep the database, master key, encrypted instance matching material, configuration and matching binary together. A binary-only downgrade is unsupported; rollback restores the complete stopped snapshot. After reopening, do not overwrite newly accepted user data automatically with an old snapshot.
-
-Fresh creation requires the main database and its sidecars to be absent. It starts with maintenance on and public features closed. Opening those features and publishing instance legal text are operator actions.
-
-Saved Fat Fish levels and replays retain their own engine versions. An update does not rewrite drafts, publish levels or replace selected period nodes. Legacy content cleanup remains the explicit procedure below.
-
-Deployment helpers are maintained separately. Review their actual behavior and bind the selected source to an immutable commit. Reuse passing CI and a trusted final artifact when their inputs match; transfer and verify that artifact instead of rebuilding on the production host by default.
-
-## Explicit Fat Fish legacy cleanup
-
-This optional destructive operation is not part of normal startup and must be approved for the exact instance and consistent source. Stop the service, preserve a complete matching recovery set and use the target binary with that instance's normal protected environment. Do not point an external SQLite client at the online database.
-
-Provide `source.json` with lowercase-hex `instance_identity` (64 characters), `source_commit` (40), `source_tree` (40) and `source_schema_hash` (64) taken from the verified source, not invented placeholders. Planning selects old v1/v2 content and associated periods/nodes/revisions, progress/ranks, challenges and playtests; review the resulting precise ID manifest before applying it.
-
-```sh
-./nonbiriapi maintenance fatfish-cleanup-plan --source source.json > manifest.json
-./nonbiriapi maintenance fatfish-cleanup --source source.json   --manifest manifest.json --operation-key "$CLEANUP_OPERATION_KEY" > receipt.json
-```
-
-These commands open the configured database offline, without listeners or normal workers. The plan, source and stable operation key must match. Pending game work is terminated through its real transitions and eligible unsettled tickets are refunded before deletion. Refunds, exact deletion and the source-bound receipt commit together; a repeated identical operation returns the receipt and never clears later v3 content. Mismatched or changed source state is rejected. Accounts, site wallets, settled financial/reward receipts, other games, source assets, configuration and legal text are preserved. Validate foreign keys, integrity, capacity and balance conservation on the resulting stopped copy before reopening. After reopening, do not overwrite new data with the old snapshot.
+Preserve the database, master key, encrypted instance matching material,
+configuration and matching binary together. A binary-only downgrade is unsupported.
+Fresh creation requires the database and sidecars to be absent and starts with
+maintenance on and public features closed. Opening features and publishing
+instance legal text remain separate operator actions.
 
 ## Manual same-generation deployment procedure
 
-1. Fix the source commit, supported source schema and impact of the change. Generation 2 alone does not prove compatibility. Reuse valid CI and release evidence; run only missing platform, startup, storage or recovery checks. Validate schema changes using isolated synthetic predecessor databases before the production window.
-2. Build the final Linux/amd64 `CGO_ENABLED=0 -tags dist -trimpath` binary once in a controlled environment. Record commit, tree, toolchain and SHA256, copy it into a new immutable release directory, and verify the hash on the host.
-3. Close public admission, drain accepted work and stop the service. Create one complete protected snapshot containing the database and existing sidecars, exact old release, environment, master key, unit, manifest and checksums. An unchanged stopped-state retry does not need another snapshot.
-4. Preserve runtime configuration and custom legal text. Point the current-release link at the prepared release and start the target once. Validate local health and the active binary identity before reopening.
-5. Reopen admission. Verify both public hosts, login boundaries and changed pages while observing the process and errors for about 60 seconds. Extend observation or add an isolated audit only for a concrete fault or remaining evidence gap.
-6. Remove temporary verification copies and processes. Ordinary deployment recovery sets retain the most recent two successful switches, excluding independent disaster recovery, legal retention and any unresolved incident set. Do not retroactively delete unrelated older archives.
+1. Pin the target to an exact commit and inspect its descriptor. Reuse valid CI
+   and platform evidence; a complete PR run does not need a simultaneous manual
+   full run. Rehearse changed storage/conversion and startup behavior once using
+   an isolated consistent copy of the verified current source.
+2. Build the Linux/amd64 `CGO_ENABLED=0 -tags dist -trimpath -buildvcs=true`
+   binary in a clean controlled checkout. Build the converter from that same
+   commit when required. Record the commit, tree, toolchain and artifact hashes.
+   Transfer verified artifacts; the VPS does not repeat full builds or tests.
+   A branch deployment pins the selected commit and needs no tag or GitHub Release.
+3. Close admission, drain accepted work and stop the service. Take one complete
+   protected recovery snapshot containing the database and existing sidecars,
+   exact source release, environment, master key, unit, manifest and checksums.
+   An unchanged stopped-state retry reuses that snapshot.
+4. For schema 16, run the converter with `--apply` under exclusive database access.
+   After any eligible legacy Gateway import, remove
+   `NONBIRI_GATEWAY_MODEL_CAPABILITIES` and the six
+   `NONBIRI_SMTP_HOST/PORT/USER/PASS/FROM/TLS` keys. Preserve other environment
+   lines and permissions; report key names, never values. Normal stable upgrades
+   use the application's registered migration chain.
+5. Switch to the prepared release and start it once. Confirm both local station
+   health endpoints and the running binary identity, then reopen admission.
+   Verify public hosts, login boundaries and changed pages alongside about
+   60 seconds of process/error observation. Extend only for a concrete fault.
+6. Remove finished verification copies and duplicate artifacts. Keep the two most
+   recent successful ordinary recovery sets and any independently required
+   disaster-recovery, legal or unresolved-incident material. Check actual references
+   before removing old releases or snapshots.
 
-If startup fails before reopening, stop the target and preserve its diagnostic state. Restore the complete matching pre-change set when rollback is needed; an old binary alone is not a rollback. After reopening, new user data must not be overwritten automatically by the old snapshot. Diagnose public proxy/TLS failures while preserving accepted target data.
+Before reopening, failed conversion/startup can restore the complete matching
+snapshot. After reopening, do not automatically replace newly accepted data with
+an old snapshot; diagnose the fault while preserving the current state.
 
 ## Backup and restore test
 
-Verify the recovery procedure with a complete restore in an isolated directory, using its matching binary and master key. Reuse matching Linux upgrade/restore evidence for an unchanged procedure; a production snapshot does not need a second full rehearsal by default. Never open an online production database with an external SQLite client or rehearse against its active path.
+Use an isolated directory with the recovery set's matching binary and key. Reuse
+valid restore evidence for an unchanged procedure. Never connect an external
+SQLite client to the online production database or rehearse against its active
+path. The conversion rehearsal is not another long-lived recovery set.
 
 ## Starting fresh from an unsupported version
 
-There is no direct upgrade from releases before rc.5. Preserve a complete stopped recovery set and configure a separate empty database path. Do not copy tables, credentials or configuration rows into the new database by hand. Re-enter required settings and review the fresh safety gates before opening the instance. Keep the old database until its recovery or retention purpose ends.
+Preserve the complete stopped source set and select a separate empty database
+path. Do not copy tables or credentials into the fresh database manually. Review
+required settings and closed admission gates before opening it; retain the source
+only while it has a defined recovery or retention purpose.
 
-## Deployment limitations
+## Deployment limits
 
-- Production targets Linux/amd64. All releases contain source code only; build the selected revision with the documented toolchain.
-- SMTP settings are reserved and do not send alert email in the current prereleases.
-- Real Discord OAuth and upstream success flows must be tested with disposable staging credentials before public operation.
-- Choose a maintenance window for every update and keep a known-good binary, environment backup, and database backup together.
+Production targets Linux/amd64. Published releases contain source; deployment
+artifacts are built from the selected commit. Real OAuth and upstream success
+flows use disposable staging credentials for pre-deployment acceptance. Use a
+maintenance window and retain matching binary, environment, key and database.

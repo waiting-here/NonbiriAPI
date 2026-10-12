@@ -10,7 +10,7 @@ import {
 import { getLoans, type LoanQuote, type LoanReceipt } from '@shared/operations/loans';
 import { usePagePager } from '@shared/operations/usePagePager';
 import { PagePagination } from '@shared/operations/PagePagination';
-import { isForbidden, isUnauthorized } from '@shared/query/http';
+import { isUnauthorized } from '@shared/query/http';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { ErrorState, LoadingState } from './States';
 import { useLoanText } from './loanCopy';
@@ -97,7 +97,7 @@ export function HistoryDialog({
     >
       <header>
         <h2 id={id}>{title}</h2>
-        <Button  onClick={onClose} autoFocus>
+        <Button onClick={onClose} autoFocus>
           {text('关闭', 'Close')}
         </Button>
       </header>
@@ -142,7 +142,7 @@ function LoanHistoryContent({
         return result;
       } catch (error) {
         if (!stationSessionMatches(client, frame, session)) throw new StationSessionChangedError();
-        if (isUnauthorized(error) || isForbidden(error)) clearStationSession(client, frame);
+        if (isUnauthorized(error)) clearStationSession(client, frame);
         throw error;
       }
     },
@@ -212,9 +212,7 @@ export function LoanHistory({
     text = useLoanText();
   return (
     <>
-      <Button  onClick={() => setOpen(true)}>
-        {text('借款明细', 'Loan history')}
-      </Button>
+      <Button onClick={() => setOpen(true)}>{text('借款明细', 'Loan history')}</Button>
       {open ? (
         <HistoryDialog title={text('借款明细', 'Loan history')} onClose={() => setOpen(false)}>
           <LoanHistoryContent role={role} account={account} userID={userID} />

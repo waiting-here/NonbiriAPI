@@ -2282,11 +2282,7 @@
       "masterState": {},
       "masterBody": {},
       "stream": {
-        "connecting": "正在连接活动实时更新…",
-        "connected": "活动实时更新已连接。",
-        "disconnected": "实时更新已断开，正从上次位置重连。",
-        "reconciled": "实时状态已更新。",
-        "recoveryFailed": "实时恢复未能刷新状态，请先重试页面读取再操作。"
+        "recoveryFailed": "暂时无法更新活动状态。"
       },
       "poolBalance": "资金池余额（通用积分）",
       "poolUnavailable": "不可用",

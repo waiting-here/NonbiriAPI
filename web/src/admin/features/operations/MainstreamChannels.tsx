@@ -345,7 +345,7 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
       }
       if (isAuthorityLoss(error)) {
         setAuthorityLoss(error);
-        clearStationSession(client, 'admin');
+        if (isUnauthorized(error)) clearStationSession(client, 'admin');
       }
       throw error;
     }
@@ -459,9 +459,7 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
       create.reset();
       patch.reset();
       retire.reset();
-      clearStationSession(client, 'admin');
-    } else if (authorityLoss && session.data && !session.error) {
-      setAuthorityLoss(null);
+      if (isUnauthorized(authorityError)) clearStationSession(client, 'admin');
     } else if (isNotFoundError(detail.error)) {
       setSelected('');
       setPanelOpen(false);
@@ -542,7 +540,14 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
         {session.error || authorityLoss ? (
           <ErrorState
             error={session.error ?? authorityLoss}
-            onRetry={() => void session.refetch()}
+            onRetry={() => {
+              void session.refetch().then((result) => {
+                if (result.data && !result.error) {
+                  setAuthorityLoss(null);
+                  void channels.refetch();
+                }
+              });
+            }}
           />
         ) : session.isPending || (channels.isPending && !pageData) ? (
           <LoadingState />

@@ -1,3 +1,4 @@
+import { Fold } from '@shared/components/ui/Fold';
 import { GameActionBar } from '../common/GameActionBar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -219,8 +220,7 @@ function FishingStage({
 function RakeDetails({ gross, rake }: { readonly gross: string; readonly rake: FishingRake }) {
   const { text } = useGameCopy();
   return (
-    <details className="fishing-rake-details">
-      <summary>{text('fishing.rake.details')}</summary>
+    <Fold className="fishing-rake-details" title={text('fishing.rake.details')}>
       <dl>
         <div>
           <dt>{text('fishing.rake.gross')}</dt>
@@ -237,7 +237,7 @@ function RakeDetails({ gross, rake }: { readonly gross: string; readonly rake: F
           </div>
         ))}
       </dl>
-    </details>
+    </Fold>
   );
 }
 
@@ -480,15 +480,11 @@ function LeaderboardCard({
   );
 }
 
-function FishingSingleBoards({
-  historical,
-  recent,
-}: {
-  readonly historical: LeaderboardQuery;
-  readonly recent: LeaderboardQuery;
-}) {
+function FishingSingleBoards() {
   const { text } = useGameCopy();
   const [board, setBoard] = useState<'single' | 'recent_single'>('recent_single');
+  const historical = useFishingLeaderboard('single', board === 'single');
+  const recent = useFishingLeaderboard('recent_single', board === 'recent_single');
   const selected = board === 'single' ? historical : recent;
   return (
     <div className="fishing-board-switch">
@@ -538,6 +534,11 @@ function FishingSingleBoards({
   );
 }
 
+function FishingTotalBoard() {
+  const query = useFishingLeaderboard('total', true);
+  return <LeaderboardCard board="total" query={query} />;
+}
+
 export function FishingGame() {
   const { text, language } = useGameCopy();
   const sound = useGameSound('fishing');
@@ -547,12 +548,6 @@ export function FishingGame() {
   const maintenance = isMaintenance(snapshot.error);
   const state = useFishingState(Boolean(snapshot.data) && !maintenance);
   const runtimeMaintenance = maintenance || isMaintenance(state.error);
-  const single = useFishingLeaderboard('single', Boolean(snapshot.data) && !maintenance);
-  const recentSingle = useFishingLeaderboard(
-    'recent_single',
-    Boolean(snapshot.data) && !maintenance,
-  );
-  const total = useFishingLeaderboard('total', Boolean(snapshot.data) && !maintenance);
   const session = useUserSession(false);
   const reducedMotion = useReducedMotion();
   const [selectedBait, setSelectedBait] = useState<Bait>('worm');
@@ -957,7 +952,11 @@ export function FishingGame() {
                   </button>
                 ) : null}
                 {pending?.state === 'recovery_required' ? (
-                  <button type="button" className="nb-btn nb-btn--primary" onClick={() => void recover()}>
+                  <button
+                    type="button"
+                    className="nb-btn nb-btn--primary"
+                    onClick={() => void recover()}
+                  >
                     {text('fishing.recovery.action')}
                   </button>
                 ) : null}
@@ -1059,12 +1058,12 @@ export function FishingGame() {
             {
               id: 'catch',
               label: text('fishing.leaderboard.single'),
-              content: <FishingSingleBoards historical={single} recent={recentSingle} />,
+              content: <FishingSingleBoards />,
             },
             {
               id: 'total',
               label: text('fishing.leaderboard.total'),
-              content: <LeaderboardCard board="total" query={total} />,
+              content: <FishingTotalBoard />,
             },
             {
               id: 'profit',

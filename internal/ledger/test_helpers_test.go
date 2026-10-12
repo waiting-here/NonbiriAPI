@@ -21,7 +21,8 @@ func openLedgerTestStore(t *testing.T) *db.Store {
 	}
 	t.Cleanup(func() { _ = vault.Close() })
 	path := filepath.Join(t.TempDir(), "ledger.db")
-	dbfixture.Materialize(t, path)
+
+	dbfixture.Materialize(t, path, vault)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		t.Fatalf("open generation two store: %v", err)

@@ -84,7 +84,7 @@ export function FailureResetControl({
       } catch (error) {
         guard();
         if (isUnauthorized(error) || isForbidden(error)) {
-          clearStationSession(client, role);
+          if (isUnauthorized(error)) clearStationSession(client, role);
           setLost(true);
           onCapabilityLoss?.();
         }
@@ -213,7 +213,7 @@ export function FailureResetControl({
               </Button>
             ) : null}
             {job.phase === 'paused' ? (
-              <Button type="button"  onClick={() => void job.resume()}>
+              <Button type="button" onClick={() => void job.resume()}>
                 {t('common.failureReset.resume')}
               </Button>
             ) : null}

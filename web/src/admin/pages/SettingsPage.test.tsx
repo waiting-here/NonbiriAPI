@@ -222,3 +222,53 @@ describe('site settings discovery and saving', () => {
     expect(api.patchSiteSettings).not.toHaveBeenCalled();
   });
 });
+
+it('edits the catalog-driven redemption ban policy including a zero threshold', async () => {
+  const values = {
+    redemption_ban_threshold: 5,
+    redemption_ban_window_seconds: 86400,
+    redemption_ban_duration_seconds: 86400,
+  };
+  const names = {
+    redemption_ban_threshold: pair('Redemption ban threshold', '兑换码违规封禁阈值'),
+    redemption_ban_window_seconds: pair('Redemption window', '兑换码违规窗口'),
+    redemption_ban_duration_seconds: pair('Redemption ban duration', '兑换码违规封禁时长'),
+  };
+  bundle.values = { ...bundle.values, ...values };
+  for (const key of Object.keys(values) as (keyof typeof values)[]) {
+    const threshold = key === 'redemption_ban_threshold';
+    bundle.catalog.push({
+      ...entry(key, 'abuse', names[key]),
+      minimum: threshold ? 0 : 1,
+      maximum: threshold ? 4096 : 316224000,
+      raw_default: values[key],
+      effective_fallback: values[key],
+      unit: threshold ? pair('submissions', '次') : pair('seconds', '秒'),
+      zero_semantics: threshold
+        ? pair('Disable redemption bans.', '关闭兑换码自动封禁。')
+        : pair('Not allowed.', '不可为零。'),
+    });
+  }
+  const view = await renderWithProviders(<SettingsPage />, {
+    station: 'admin',
+    role: 'admin',
+    route: '/settings?group=abuse',
+  });
+  view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'fixture' } });
+  const threshold = await screen.findByLabelText('Redemption ban threshold');
+  expect(threshold).toHaveValue(5);
+  expect(threshold).toHaveAttribute('max', '4096');
+  expect(screen.getByLabelText('Redemption window')).toHaveValue(86400);
+  expect(screen.getByLabelText('Redemption ban duration')).toHaveAttribute('max', '316224000');
+  await view.user.clear(threshold);
+  await view.user.type(threshold, '0');
+  await view.user.click(screen.getByRole('button', { name: 'Save all changes' }));
+  await view.user.click(
+    within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Save all changes' }),
+  );
+  await waitFor(() => expect(api.patchSiteSettings).toHaveBeenCalledTimes(1));
+  expect(api.patchSiteSettings.mock.calls[0][0]).toEqual({
+    expected_revision: '1',
+    values: { redemption_ban_threshold: 0 },
+  });
+});

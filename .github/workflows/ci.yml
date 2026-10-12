@@ -29,6 +29,10 @@ jobs:
       upgrade: ${{ steps.scope.outputs.upgrade }}
       go_packages: ${{ steps.scope.outputs.go_packages }}
       race_packages: ${{ steps.scope.outputs.race_packages }}
+      browser: ${{ steps.scope.outputs.browser }}
+      browser_integration: ${{ steps.scope.outputs.browser_integration }}
+      browser_plan: ${{ steps.scope.outputs.browser_plan }}
+      browser_matrix: ${{ steps.scope.outputs.browser_matrix }}
       template_artifact_id: ${{ steps.template_artifact.outputs.artifact-id }}
     steps:
       - name: Check out source
@@ -199,7 +203,18 @@ jobs:
       - name: Run complete risk race shard
         env:
           SHARD: ${{ matrix.shard }}
-        run: bash scripts/race-check.sh --shard "$SHARD" --workers 4 --prepared .ci-race
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/ci
+          bash scripts/race-check.sh --shard "$SHARD" --workers 4 --prepared .ci-race | tee ".cache/ci/race-${SHARD//\//-}.log"
+      - name: Save race measurements
+        if: ${{ always() && !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: race-measurements-${{ strategy.job-index }}-${{ github.run_attempt }}
+          path: .cache/ci/race-*.log
+          if-no-files-found: warn
+          retention-days: 3
 
   go:
     name: Go checks
@@ -255,7 +270,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Unit tests
-        run: npm test
+        env:
+          BROWSER_PLAN: ${{ needs.plan.outputs.browser_plan }}
+        run: bash ../scripts/check-web.sh unit
       - name: Typecheck
         run: npm run typecheck
       - name: Lint
@@ -300,15 +317,54 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
-  web_browser:
+  web_fixture:
     needs: [plan, web_build]
-    if: needs.plan.outputs.web == 'true'
-    name: Web browser (${{ matrix.suite }})
+    if: needs.plan.outputs.browser_integration == 'true'
+    name: Browser integration fixture
+    runs-on: ubuntu-latest
+    outputs:
+      artifact_id: ${{ steps.fixture.outputs.artifact-id }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: 1.26.9
+          cache: true
+      - name: Require verified station artifact
+        env:
+          ARTIFACT_ID: ${{ needs.web_build.outputs.artifact_id }}
+        run: test -n "$ARTIFACT_ID"
+      - name: Download verified station build
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.web_build.outputs.artifact_id }}
+          path: web/dist
+      - name: Compile isolated browser fixtures once
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p .cache/ci
+          go test -c -tags dist -o .cache/ci/browser-fixture ./internal/app
+      - name: Share this run's browser fixture
+        id: fixture
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: browser-fixture-${{ github.sha }}-${{ github.run_attempt }}
+          path: .cache/ci/browser-fixture
+          if-no-files-found: error
+          retention-days: 3
+
+  web_browser:
+    needs: [plan, web_build, web_fixture]
+    if: ${{ always() && !cancelled() && needs.plan.result == 'success' && needs.web_build.result == 'success' && needs.plan.outputs.browser == 'true' && (needs.web_fixture.result == 'success' || needs.web_fixture.result == 'skipped') }}
+    name: Web browser (${{ matrix.name }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        suite: [smoke, integration]
+        include: ${{ fromJSON(needs.plan.outputs.browser_matrix || '[]') }}
     defaults:
       run:
         working-directory: web
@@ -321,12 +377,6 @@ jobs:
           node-version: 22.22.3
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - name: Set up Go for browser integration
-        if: matrix.suite == 'integration'
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: 1.26.9
-          cache: true
       - name: Pin npm
         run: |
           npm install --global npm@12.0.1
@@ -344,57 +394,43 @@ jobs:
           path: web/dist
       - name: Install Chromium
         run: npm exec -- playwright install --with-deps chromium
-      - name: Deterministic game engine in Chromium
-        if: matrix.suite == 'smoke'
-        run: node test/fatfish-engine/check.mjs chromium
-      - name: Browser smoke
-        if: matrix.suite == 'smoke'
+      - name: Require this run's fixture artifact
+        if: matrix.kind == 'integration'
         env:
-          PLAYWRIGHT_HTML_OPEN: never
-        run: npm run test:e2e
-      - name: Compile the isolated browser fixtures once
-        if: matrix.suite == 'integration'
-        env:
-          CGO_ENABLED: "0"
+          ARTIFACT_ID: ${{ needs.web_fixture.outputs.artifact_id }}
+        run: test -n "$ARTIFACT_ID"
+      - name: Download browser fixture
+        if: matrix.kind == 'integration'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.web_fixture.outputs.artifact_id }}
+          path: .cache/ci
+      - name: Prepare isolated fixture processes
+        if: matrix.kind == 'integration'
         run: |
-          set -euo pipefail
-          go test -c -tags dist -o "$RUNNER_TEMP/browser-fixture" ../internal/app
-          printf 'NONBIRI_BROWSER_FIXTURE_BINARY=%s\n' "$RUNNER_TEMP/browser-fixture" >> "$GITHUB_ENV"
-      - name: Image activity browser integration
-        if: matrix.suite == 'integration'
+          chmod +x ../.cache/ci/browser-fixture
+          printf 'NONBIRI_BROWSER_FIXTURE_BINARY=%s/.cache/ci/browser-fixture\n' "$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
+      - name: Selected browser contracts
         env:
           PLAYWRIGHT_HTML_OPEN: never
           CGO_ENABLED: "0"
-        run: npx playwright test -c playwright.picturebook.config.ts
-      - name: Audit browser integration
-        if: matrix.suite == 'integration'
-        env:
-          PLAYWRIGHT_HTML_OPEN: never
-          CGO_ENABLED: "0"
-        run: npx playwright test -c playwright.audit.config.ts
-      - name: Management browser integration
-        if: matrix.suite == 'integration'
-        env:
-          PLAYWRIGHT_HTML_OPEN: never
-          CGO_ENABLED: "0"
-        run: npx playwright test -c playwright.management.config.ts
-      - name: Fish game browser integration
-        if: matrix.suite == 'integration'
-        env:
-          PLAYWRIGHT_HTML_OPEN: never
-          CGO_ENABLED: "0"
-        run: npx playwright test -c playwright.fatfish.config.ts
-      - name: Lake notes browser integration
-        if: matrix.suite == 'integration'
-        env:
-          PLAYWRIGHT_HTML_OPEN: never
-          CGO_ENABLED: "0"
-        run: npx playwright test -c playwright.lakenotes.config.ts
+          BROWSER_PLAN: ${{ needs.plan.outputs.browser_plan }}
+          GROUP: ${{ matrix.kind == 'smoke' && 'smoke' || matrix.name }}
+          SHARD: ${{ matrix.shard || 'all' }}
+        run: bash ../scripts/check-web.sh browser "$GROUP" "$SHARD"
+      - name: Save browser measurements
+        if: ${{ always() && !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: browser-measurements-${{ matrix.name }}-${{ github.run_attempt }}
+          path: .cache/ci/browser-*.json
+          if-no-files-found: warn
+          retention-days: 3
 
   web:
     name: Web checks
     if: ${{ always() }}
-    needs: [plan, web_unit, web_build, web_browser]
+    needs: [plan, web_unit, web_build, web_fixture, web_browser]
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
@@ -404,14 +440,43 @@ jobs:
           PLAN_RESULT: ${{ needs.plan.result }}
           MODE: ${{ needs.plan.outputs.mode }}
           FIRST_APPLICABLE: ${{ needs.plan.outputs.web }}
-          SECOND_APPLICABLE: ${{ needs.plan.outputs.web }}
+          SECOND_APPLICABLE: ${{ needs.plan.outputs.browser }}
           FIRST_RESULT: ${{ needs.web_unit.result }}
           SECOND_RESULT: ${{ needs.web_browser.result }}
           THIRD_APPLICABLE: ${{ needs.plan.outputs.web }}
           THIRD_RESULT: ${{ needs.web_build.result }}
+          FOURTH_APPLICABLE: ${{ needs.plan.outputs.browser_integration }}
+          FOURTH_RESULT: ${{ needs.web_fixture.result }}
         run: |
           set -euo pipefail
           bash scripts/check-ci-results.sh | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Confirm full Web coverage
         if: needs.plan.outputs.mode == 'full'
         run: printf 'Complete Web and browser coverage passed.\n' >> "$GITHUB_STEP_SUMMARY"
+
+  metrics:
+    name: Verification timing
+    needs: [go, web]
+    if: ${{ always() && !cancelled() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.22.3
+      - name: Summarize execution and queue time
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/ci-metrics.mjs
+      - name: Save timing metadata
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: verification-timing-${{ github.sha }}-${{ github.run_attempt }}
+          path: .cache/ci/metrics.json
+          if-no-files-found: error
+          retention-days: 7

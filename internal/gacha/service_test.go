@@ -75,7 +75,8 @@ func newFixture(t *testing.T) *fixture {
 	}
 	t.Cleanup(func() { _ = vault.Close() })
 	path := filepath.Join(t.TempDir(), "gacha.sqlite")
-	dbfixture.Materialize(t, path)
+
+	dbfixture.Materialize(t, path, vault)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		t.Fatal(err)
@@ -118,6 +119,9 @@ func newFixture(t *testing.T) *fixture {
 	a := testAuthority{f.admin}
 	f.s, err = New(Config{Database: f.db, Users: a, Admins: a, Gate: f.gate, Keys: vault, Activity: f.recorder, Now: func() time.Time { return time.Unix(f.at.Load(), 0) }})
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err = f.s.SyncCatalog(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	return f

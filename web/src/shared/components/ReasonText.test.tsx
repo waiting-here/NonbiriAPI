@@ -26,3 +26,9 @@ it('retains multiline manual history as text alongside an automatic reason', () 
   );
   expect(container.querySelector('img')).toBeNull();
 });
+
+it('uses localized redemption penalty copy instead of raw server reason text', () => {
+  render(<ReasonText reason="Server language summary" reasonCode="redemption_code" />);
+  expect(screen.getByText('common.reasons.redemptionCode')).toBeInTheDocument();
+  expect(screen.queryByText('Server language summary')).not.toBeInTheDocument();
+});

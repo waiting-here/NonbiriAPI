@@ -2,7 +2,7 @@
 
 NonbiriAPI separates **startup security roots** from **runtime site settings**. Startup values are read only when the process starts; `site_config` values are administrator-controlled and applied without rebuilding the binary.
 
-## Current source additions
+## Model, game and review settings
 
 Model APIs configure `role_policy` separately for each model. Native/empty rules preserve the connector's default behavior. Personal automation uses the existing CallerKey and requires no additional startup token or charge configuration.
 
@@ -38,13 +38,17 @@ Copy [admin.env.example](../admin.env.example) to a private path outside the che
 | `NONBIRI_SITE_BASE_URL` | yes | canonical public origin of the user station |
 | `NONBIRI_ADMIN_HOST` | no | separate admin host; blank/unset derives `admin.<user-host>` (explicit value required for IPv6 user hosts) |
 | `NONBIRI_TRUSTED_PROXY_CIDRS` | no | peers allowed to supply forwarding metadata; defaults to loopback ranges; `none` disables trust |
-| `NONBIRI_SMTP_*` | no | parsed/reserved only; the current prereleases do not send alert email |
 
 The timeout variables accept integer seconds only; decimals and out-of-range values are rejected. Blank or unset values use the defaults. Budgets cover the whole process phase rather than restarting for each step. Opening the database alone does not mean the application is ready; readiness follows full initialization and listener binding. See the [API contract](api-contract.md) for `/readyz`.
 
 An OAuth scope override must retain both identity and guild-member access for registration or sign-in without an exemption; `identify` alone cannot satisfy guild/role checks.
 
-The master key is not a normal setting. Back it up securely, keep its Unix file mode owner-only (`0400` or `0600`), and never replace it for an existing database. Losing it makes encrypted upstream credentials unrecoverable. The environment file also contains secrets (administrator password and OAuth client secret, and possibly SMTP credentials), so keep it readable only by root and the dedicated service account.
+The master key is not a normal setting. Back it up securely, keep its Unix file mode owner-only (`0400` or `0600`), and never replace it for an existing database. Losing it makes encrypted upstream credentials unrecoverable. The environment file also contains the administrator password and OAuth client secret, so keep it readable only by root and the dedicated service account.
+
+`NONBIRI_GATEWAY_MODEL_CAPABILITIES` and `NONBIRI_SMTP_HOST/PORT/USER/PASS/FROM/TLS`
+are removed. The rc.7 converter imports eligible legacy Gateway settings before
+these keys are removed from an existing environment file; database settings take
+precedence. See [database upgrades](database-upgrades.md).
 
 The database directory and file hold encrypted upstream credentials and private account metadata. On Unix, the application enforces owner-only access at startup: the database parent directory must be owned by the service account with mode `0700` (no group or other access), and an existing database file together with existing `-wal` and `-shm` sidecars must already be owner-owned regular files with mode `0600`. The parent directory is resolved to an absolute path, so the check also covers the current directory for a relative database path and root for a root-level path. A permissive, wrong-owner, symlink, non-regular, or otherwise anomalous existing file is rejected before the protected validation snapshot or writable open; the application does not chmod a rejected source as a side effect. Fresh files are created and verified as `0600`, and SQLite sidecars inherit that owner-only mode. On Windows, POSIX permission bits are not synthesized or checked; run the service under a dedicated account and configure an ACL that grants access only to that account and administrators, and verify the ACL in a supported test environment.
 
@@ -67,9 +71,7 @@ invalidate unaccepted quotes; saved receipts and balances are unchanged.
 `(stake-min_stake) % stake_step == 0`; the response sorts them ascending.
 Defaults are `["1000","5000","10000","50000"]`. An empty array disables the
 buttons. Changes to limits and buttons validate atomically under the same
-revision. During formal rc.1 upgrade, invalid default buttons are filtered;
-if none fit, the saved default stake supplies one button. Repeated startup
-preserves explicit empty arrays and existing queue terms.
+revision. Repeated startup preserves explicit empty arrays and existing queue terms.
 
 The user profile's `charity_profile_public` is separate from `game_profile_public`
 and defaults to false. A current ban forces anonymous display on both sets of
@@ -79,7 +81,7 @@ keeps the existing bounded trimming and one-penalty-per-window behavior.
 
 Embeddings require the `embeddings` operation in the platform model's `model_types`; existing models retain it, while newly created models default to chat. Configure an `openai-compatible` versioned base; the connector appends `/embeddings`. Personal and charity model connections use their existing workflow, with no separate startup variable or price configuration. Token-priced embeddings use only the uncached-input price and reward rate; a batch is one call for per-request pricing and call quotas. Missing usage follows the model's accepted reserve or global inheritance and earns no donor reward. Minimum-content penalties and the `force_store_false`/`flatten_tool_calls` policies apply only to chat. Force-store-false remains OpenAI-compatible only; tool flattening also supports Anthropic-compatible and Gateway v3 chat. Other shared limits remain active.
 
-The administrator station exposes the following authoritative keys. Unknown keys are rejected; `alert_prefs_*` is the only bounded namespace. Values below describe the `1.0.0-rc.2` prerelease. A fresh Generation 2 database explicitly seeds maintenance on and registration, activities, charity, donation intake, and all games off; these safety seeds take precedence over generic code fallbacks.
+The administrator station exposes the following authoritative keys. Unknown keys are rejected; `alert_prefs_*` is the only bounded namespace. A fresh database starts with maintenance on and registration, activities, charity, donation intake, and all games off. Existing administrator choices are preserved during upgrades.
 
 | Key | Type / range | Default and effect |
 | --- | --- | --- |
@@ -117,6 +119,9 @@ The administrator station exposes the following authoritative keys. Unknown keys
 | `rpm_ban_threshold` | integer `[0,4096]` | `5`; requests denied by the per-user charity RPM limit before an automatic ban; personal calls, global limits, shared key limits and upstream `429` do not count; `0` disables |
 | `rpm_ban_window_seconds` | integer `[1,316224000]` | `86400`; persisted rolling RPM violation window; unexpired counts survive restart and same-Discord re-registration |
 | `rpm_ban_duration_seconds` | integer `[1,316224000]` | `86400`; automatic ban duration |
+| `redemption_ban_threshold` | integer `[0,4096]` | `5`; counted redemption-code errors before an automatic ban; `0` disables |
+| `redemption_ban_window_seconds` | integer `[1,316224000]` | `86400`; persisted rolling redemption violation window |
+| `redemption_ban_duration_seconds` | integer `[1,316224000]` | `86400`; redemption automatic ban duration |
 | `charity_min_chars` | integer `[0,1048576]` | `20`; counted Unicode message runes before a charity request is dispatched; `0` disables |
 | `charity_violation_deduct_milli` | canonical non-negative decimal string | `"0"`; per-violation penalty, allowed to make credits negative |
 | `charity_violation_ban_seconds` | integer `[0,316224000]` | `0`; single-violation automatic ban duration |

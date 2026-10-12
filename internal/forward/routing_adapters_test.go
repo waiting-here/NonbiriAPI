@@ -36,7 +36,8 @@ func newRoutingAdapterTestEnvironment(t *testing.T) *routingAdapterTestEnvironme
 	}
 	t.Cleanup(func() { _ = vault.Close() })
 	path := filepath.Join(t.TempDir(), "forward-routing.sqlite")
-	dbfixture.Materialize(t, path)
+
+	dbfixture.Materialize(t, path, vault)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		t.Fatal(err)

@@ -643,7 +643,7 @@ describe('charity catalog panel', () => {
     fireEvent.change(search, { target: { value: 'private' } });
     fireEvent.submit(search.closest('form')!);
     await waitFor(() => expect(screen.queryByText('[公益]provider/old')).toBeNull());
-    expect(rendered.queryClient.getQueryData(['user', 'session'])).toBeNull();
+    expect(rendered.queryClient.getQueryData(['user', 'session'])).toBeUndefined();
   });
 
   it('drops a late catalog response after the account scope changes', async () => {

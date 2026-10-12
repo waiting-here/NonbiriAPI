@@ -122,4 +122,49 @@ VALUES(?,1,'sliding','day','UTC','tokens',?,?,?,?,?,?,?,?)`, rule, mag(1000), at
 	exec(`UPDATE donation_quota_capacity SET rows_used=2 WHERE id=1`)
 	exec(`INSERT INTO legal_holds(id,object_kind,object_ref,state,revision,basis,created_by_user_id,created_at,expires_at)
 VALUES(?,'donation',?,'active',1,'Synthetic preservation requirement',?,?,?)`, mustLedgerID(t, "lgh_"), fmt.Sprint(donation), admin, at, at+86400)
+	seedReleasedAbuseFacts(t, tx, users[0], at)
+}
+
+func seedReleasedAbuseFacts(t *testing.T, tx *sql.Tx, user, at int64) {
+	t.Helper()
+	exec := func(query string, args ...any) int64 {
+		t.Helper()
+		r, e := tx.Exec(query, args...)
+		if e != nil {
+			t.Fatal(e)
+		}
+		id, e := r.LastInsertId()
+		if e != nil {
+			t.Fatal(e)
+		}
+		return id
+	}
+	var lastCase string
+	for _, kind := range []string{"rpm", "short_content"} {
+		req := mustLedgerID(t, "req_")
+		c := mustLedgerID(t, "abc_")
+		lastCase = c
+		var chars any
+		if kind == "short_content" {
+			chars = 7
+		}
+		exec("INSERT INTO abuse_windows VALUES(?,?,1,0,2,?)", user, kind, at)
+		exec("INSERT INTO abuse_window_events VALUES(?,?,1,?,?,?,?)", user, kind, at, req, chars, at+86400)
+		exec("INSERT INTO abuse_cases VALUES(?,?,'ban',?,?,?,?,'ended','expired')", c, user, "charity_"+kind, at-10, at, at)
+		action := exec("INSERT INTO abuse_actions(case_id,action,occurred_at,request_id,reason_code,rules_json,statistics_json,evidence_count,evidence_bytes) VALUES(?,'trigger',?,?,?,'{}','{}',1,128)", c, at-10, req, "charity_"+kind)
+		exec("INSERT INTO abuse_evidence VALUES(?,0,?,?,?,?)", action, at, req, kind, chars)
+	}
+	// Pruned terminal actions still reserve their sequence identities.
+	exec("INSERT INTO abuse_actions(seq,case_id,action,occurred_at,reason_code,rules_json,statistics_json,evidence_count,evidence_bytes) VALUES(9001,?,'expire',?,'expired','{}','{}',0,0)", lastCase, at)
+	exec("DELETE FROM abuse_actions WHERE seq=9001")
+	for _, kind := range []string{"user_rpm", "report_frequency", "game_start", "abuse_rpm", "abuse_short_content"} {
+		exec("INSERT INTO identity_window_events VALUES(zeroblob(32),?,'synthetic','event',?,?,1,NULL)", kind, at*1000, (at+86400)*1000)
+	}
+	for _, scope := range []string{"credential_report", "control_mutation", "openai_chat_completions", "charity_chat_completions", "model_discovery", "maintenance", "announcement", "activity", "game_fishing", "game_linklink", "game_rps", "game_bidding", "game_likes", "game_gwent", "game_catch", "game_blackjack", "activity_loan", "donation", "lake_notes", "personal_automation"} {
+		var fingerprint any
+		if scope == "credential_report" {
+			fingerprint = make([]byte, 32)
+		}
+		exec("INSERT INTO idempotency_records VALUES(?,zeroblob(32),zeroblob(32),zeroblob(32),?,'completed',200,X'7b7d',?,?)", scope, fingerprint, at, at+86400)
+	}
 }

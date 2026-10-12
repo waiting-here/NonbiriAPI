@@ -41,3 +41,13 @@ if check_third_child full true ""; then exit 1; fi
 check_third_child full true success
 check_third_child routine false skipped
 printf 'Third-child failure propagation: passed\n'
+
+for result in failure cancelled skipped missing; do
+  if FOURTH_APPLICABLE=true FOURTH_RESULT=$result check_third_child full true success; then
+    printf 'Unexpected fixture-child success: %s\n' "$result" >&2
+    exit 1
+  fi
+done
+FOURTH_APPLICABLE=true FOURTH_RESULT=success check_third_child full true success
+FOURTH_APPLICABLE=false FOURTH_RESULT=skipped check_third_child routine true success
+printf 'Fixture-child failure propagation: passed\n'

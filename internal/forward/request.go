@@ -26,6 +26,7 @@ type validatedRequest struct {
 	policyRevision     int64
 	policyModelID      int64
 	policyDecisionNow  int64
+	personalPolicy     *PersonalPreflight
 	personalAdaptation *requestadaptation.Snapshot
 	excluded           []string
 }
@@ -110,7 +111,13 @@ func (r *validatedRequest) CloneForAttempt() *validatedRequest {
 	} else {
 		result = embeddingRequest(r.embedding.CloneForAttempt())
 	}
+	r.copyMetadata(result)
+	return result
+}
+
+func (r *validatedRequest) copyMetadata(result *validatedRequest) {
 	result.policyModelID, result.policyDecisionNow = r.policyModelID, r.policyDecisionNow
+	result.personalPolicy = r.personalPolicy
 	if r.roleSnapshot != nil {
 		policy := r.roleSnapshot.Clone()
 		result.roleSnapshot = &policy
@@ -122,7 +129,6 @@ func (r *validatedRequest) CloneForAttempt() *validatedRequest {
 	result.policyRevision = r.policyRevision
 	result.transportRule = r.transportRule
 	result.excluded = append([]string(nil), r.excluded...)
-	return result
 }
 
 func (r *validatedRequest) excludeFields(fields []string) error {

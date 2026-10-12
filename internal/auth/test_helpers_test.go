@@ -94,7 +94,8 @@ func newRuntimeFixture(t *testing.T, configure func(*RuntimeConfig)) *runtimeFix
 		t.Fatal(err)
 	}
 	path := filepath.Join(t.TempDir(), "auth.db")
-	dbfixture.Materialize(t, path)
+
+	dbfixture.Materialize(t, path, vault)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		_ = vault.Close()

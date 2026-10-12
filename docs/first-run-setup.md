@@ -75,7 +75,7 @@ sudo chown root:nonbiriapi /etc/nonbiriapi/admin.env
 sudo chmod 0640 /etc/nonbiriapi/admin.env
 ```
 
-The environment file contains secrets, including the administrator password and Discord client secret (and possibly SMTP credentials). The example `0640 root:nonbiriapi` layout is acceptable only when `nonbiriapi` is a dedicated group with no unrelated members: root owns the file and the service account needs group-read access. Use an equivalently restrictive owner-only layout if your service manager supports it. Walk through each variable:
+The environment file contains secrets, including the administrator password and Discord client secret. The example `0640 root:nonbiriapi` layout is acceptable only when `nonbiriapi` is a dedicated group with no unrelated members: root owns the file and the service account needs group-read access. Use an equivalently restrictive owner-only layout if your service manager supports it. Walk through each variable:
 
 ### Listener and storage
 
@@ -160,14 +160,6 @@ caller forge its apparent IP and defeat the per-IP OAuth admission throttle. If
 the proxy runs on the same host, the loopback default is correct; if it is on a
 separate private address, put that address here.
 
-### SMTP (reserved, leave off in the current prerelease)
-
-The `NONBIRI_SMTP_*` variables are parsed and validated only when
-`NONBIRI_SMTP_HOST` is set; the current prereleases do not send alert email. Leave them all
-commented out for a first run. If you set them later: `NONBIRI_SMTP_PORT` is an
-integer in `[1,65535]` (default 587), `NONBIRI_SMTP_TLS` is `starttls` or
-`implicit` (or unset), and `NONBIRI_SMTP_FROM` defaults to `NONBIRI_SMTP_USER`.
-
 ## 4. Permissions checklist
 
 Before the first boot, confirm:
@@ -191,7 +183,6 @@ The loader collects the validation problems below and reports them together. Res
   path, query, or fragment present).
 - The admin host equals the user host, or is not a valid hostname.
 - `NONBIRI_TRUSTED_PROXY_CIDRS` malformed (use `none` to disable cleanly).
-- Any `NONBIRI_SMTP_*` field malformed when `NONBIRI_SMTP_HOST` is set.
 - The startup or shutdown budget is not a whole integer number of seconds within
   its inclusive range.
 
@@ -200,7 +191,7 @@ material.
 
 ## 6. Prepare a Generation 2 database path
 
-For a fresh start, the configured database and its exact `-wal` and `-shm` paths must all be absent. rc.7 supports the final rc.5 schema and registered rc.6/rc.7 schemas; see [deployment.md](deployment.md#database-compatibility-and-version-changes) for exact sources and versions. Supported upgrades preserve existing balances, fees, configuration, legal settings and saved game rules. Unregistered schemas and Alpha/Generation 1 cannot be migrated in place. An empty file is not a fresh database and is rejected.
+For a fresh start, the configured database and its exact `-wal` and `-shm` paths must all be absent. This version uses stable schema 17. Later stable binaries register forward upgrades from that baseline. Schema 16 must first pass the [one-time rc.7 conversion](database-upgrades.md#one-time-rc7-conversion). Other prerelease schemas and empty placeholder files are rejected.
 
 On a true fresh start the process creates a Generation 2 SQLite database with `application_id=0x4E425249` and `user_version=2`, validates the complete schema, and seeds these safe states:
 
@@ -209,7 +200,7 @@ On a true fresh start the process creates a Generation 2 SQLite database with `a
 - activities, charity, and donation intake off;
 - the game master switch and every game-specific switch off.
 
-If a main file or sidecar already exists, the process first validates file identity, the raw SQLite header, schema, foreign keys, indexes, and contextual credential envelopes through a protected read-only snapshot. An alpha or Generation 1 database, an empty or corrupt file, an unknown generation, an unexpected schema object, or an anomalous sidecar is rejected without modifying the source files or creating new source-side sidecars. Do not create a placeholder with `touch`, run hand-written DDL, or point the application at an unverified or unsupported earlier database.
+If a main file or sidecar already exists, the process first validates file identity, the raw SQLite header, the registered structure and key-check singleton before its writable open. An alpha or Generation 1 database, an empty or corrupt file, an unknown generation, an unexpected schema object, or an anomalous sidecar is rejected without modifying the source files or creating new source-side sidecars. Do not create a placeholder with `touch`, run hand-written DDL, or point the application at an unverified or unsupported earlier database.
 
 For a cutover, stop the old service and retain a verified complete source snapshot before moving the old database set out of the configured path. The complete snapshot must keep the database/sidecars, matching release, environment/configuration, master key, and systemd unit together. See [deployment.md](deployment.md#database-compatibility-and-version-changes); deleting or replacing an existing database requires a separate explicit destructive operation and is never an ordinary first-boot step.
 

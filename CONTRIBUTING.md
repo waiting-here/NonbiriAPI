@@ -1,6 +1,6 @@
 # Contributing to NonbiriAPI
 
-Thank you for contributing. NonbiriAPI is released under the GNU AGPL v3.0. By submitting a contribution, you agree that it may be distributed under the project's license.
+NonbiriAPI is distributed under AGPL-3.0. Contributions use the same license.
 
 ## Before opening a change
 
@@ -8,7 +8,7 @@ Thank you for contributing. NonbiriAPI is released under the GNU AGPL v3.0. By s
 2. For a security issue, follow [SECURITY.md](SECURITY.md) instead of opening a public issue.
 3. Keep one logical change per pull request where practical.
 4. Do not include credentials, databases, exported account data, browser profiles, or private deployment files.
-5. Update user-facing documentation, privacy text, API contract, and changelog when behavior or data lifecycle changes.
+5. Update affected tests, shared fixtures, API examples, documentation and verification scope with the implementation. Data-lifecycle changes also require privacy and export/deletion updates.
 
 ## Development environment
 
@@ -20,27 +20,47 @@ The frontend dependencies are not part of the Go module. Run npm commands from t
 
 ## Required checks
 
-Backend:
+Install the locked frontend dependencies and Chromium before browser checks:
 
 ```sh
-scripts/check-go.sh
-scripts/check-upgrade.sh
-scripts/race-check.sh
+npm --prefix web ci
+cd web && npm exec -- playwright install chromium
 ```
 
-Frontend:
+From the repository root, inspect and execute the current change's verification
+plan. An omitted or unavailable base selects the complete checks.
 
 ```sh
-npm --prefix web test
-npm --prefix web run typecheck
-npm --prefix web run lint
-npm --prefix web run build
+bash scripts/check-risk.sh --base origin/master --plan-only
+bash scripts/check-risk.sh --base origin/master
 ```
 
-CI runs frontend unit/type/lint/build checks, browser smoke tests and browser
-integrations in independent jobs. The `Web checks` gate requires every job to
-succeed. Browser integrations retain isolated application/database fixtures;
-splitting the workflow does not change test retries, workers or assertions.
+The plan includes staged, unstaged and untracked inputs, reverse Go dependencies,
+concurrency risks, browser specs and real-backend suites. Known API modules select
+their browser contracts; shared or unknown inputs retain full coverage. Use
+`--component go|race|web|browser` for an individual layer. `web` builds both
+stations and runs its selected browser tests; `browser` reuses an existing build.
+`GO`, `NPM` and `CC` can select installed tool executables.
+
+Maintain tests during development: add the regression with the behavior change,
+update typed response fixtures when a DTO changes, and run the affected browser
+contracts before handing over the change. Keep assertions independent of the
+implementation. Pure prose or style changes only need checks for their actual
+impact. New browser modules belong in the small module map in `riskplan`; unknown
+modules remain covered by the full fallback.
+
+Stable integration points and final candidates use:
+
+```sh
+bash scripts/check-risk.sh --mode full
+```
+
+`check-go.sh` remains the full build/vet/test entry, `check-upgrade.sh` checks
+populated conversion, and `race-check.sh` runs the concurrency-risk catalog.
+CI retains the required `Go checks` and `Web checks` summaries. Browser smoke
+runs in two whole-spec shards with one worker each; real-backend suites run in
+two isolated groups, sharing only the immutable compiled fixture and station
+build. Every selected child must succeed, including fixture preparation.
 
 The complete race gate derives its package and test catalog from the checked-out
 source. `scripts/race-timings.json` only balances work across the sixteen CI
@@ -48,6 +68,22 @@ shards; stale or missing timings must never omit a test. Keep fresh-database,
 upgrade, rollback and lock tests on their actual initialization paths. Tests
 that only exercise constraints may copy a validated schema image into a private
 database, provided mutations and cleanup cannot affect another test.
+
+Each CI run records queue/setup/build/test times and runner-minutes separately.
+Race logs and browser JSON measurements are retained for three days. To refresh
+balancing hints from downloaded measurements:
+
+```sh
+node scripts/update-verification-timings.mjs /path/to/artifacts RUN_URL COMMIT
+```
+
+Review the generated timing changes. Test discovery defines coverage; timing
+files only define placement. Do not start another full workflow while the same
+candidate is running. A successful PR run whose Go and Web summaries both
+confirm full coverage supplies final verification evidence. Use manual full
+verification only when that coverage is missing or its source/tree, lockfile,
+toolchain or relevant input identity has changed. Preserve the PR's required
+checks when reusing evidence across a merge.
 
 For a release-like binary, build the frontend first and then run:
 

@@ -73,6 +73,7 @@ func OpenContext(ctx context.Context, path string, secrets secret.GenerationTwoC
 	if err := prepareDBDirectory(path); err != nil {
 		return nil, err
 	}
+	ctx = context.WithValue(ctx, startupSchemaPlanKey{}, &startupSchemaPlan{})
 	return openGenerationTwo(ActiveRecoveryContext(ctx), path, secrets)
 }
 

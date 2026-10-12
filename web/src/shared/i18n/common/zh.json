@@ -892,7 +892,8 @@
       "unspecified": "未提供原因。",
       "recheckLogin": "请返回首页重新通过Discord登录，以查看当前限制原因。",
       "cleared": "当前限制已解除，可返回首页重新登录。",
-      "more": "加载更多说明"
+      "more": "加载更多说明",
+      "redemptionCode": "兑换码重复违规提交"
     },
     "account": {
       "deleted": "已删除账号",
@@ -1558,8 +1559,12 @@
       "failedRecipients": "未到账账号",
       "recipient": "账号 {{id}}",
       "noFailures": "暂无未到账账号",
-      "retryHelp": "刷新发放列表查看最新结果。"
-    }
+      "retryHelp": "刷新发放列表查看最新结果。",
+      "retryUnknown": "尚未确认兑换结果，请重试查看本次提交的结果。",
+      "redemptionBanned": "兑换码重复违规提交，账号已被暂时限制至 {{time}}。"
+    },
+    "resourceErrorTitle": "请重新加载页面",
+    "resourceErrorBody": "页面文件暂时无法加载。重新加载即可打开当前版本。"
   },
   "logs": {
     "charityModel": "调用的公益模型",

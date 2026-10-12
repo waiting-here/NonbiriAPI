@@ -173,7 +173,7 @@ export function AnnouncementManagement({
   useEffect(() => {
     if (isUnauthorized(authorityError) || isForbidden(authorityError)) {
       if (onAuthorityLoss) onAuthorityLoss();
-      else clearStationSession(client, role);
+      else if (isUnauthorized(authorityError)) clearStationSession(client, role);
     }
   }, [client, authorityError, role, onAuthorityLoss]);
   const stateLabels: Record<AnnouncementState, string> = {
@@ -187,6 +187,8 @@ export function AnnouncementManagement({
     warning: t('management.announcements.severity.warning'),
     important: t('management.announcements.severity.important'),
   };
+  if (isUnauthorized(authorityError) || isForbidden(authorityError))
+    return <ErrorState error={authorityError} />;
   return (
     <div className="page ops-page">
       <PageHeader
@@ -394,7 +396,6 @@ export function AnnouncementManagement({
                           data-label={t('management.announcements.table.open')}
                         >
                           <Button
-
                             type="button"
                             onClick={() =>
                               navigate(detailPath(item.id), {

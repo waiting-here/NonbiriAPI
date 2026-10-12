@@ -1,0 +1,167 @@
+{
+  "version": 1,
+  "presets": [
+    {
+      "id": "summer",
+      "name": "夏夜花火",
+      "pool": {
+        "id": "",
+        "name": "夏夜花火",
+        "cover": "i",
+        "kind": "limited",
+        "group": "",
+        "rules": {
+          "weights": [
+            5500,
+            3500,
+            900,
+            100
+          ],
+          "sr_pity": 10,
+          "ssr_pity": 60,
+          "sr_featured": 5000,
+          "ssr_featured": 5000,
+          "sr_guarantee": true,
+          "ssr_guarantee": true
+        },
+        "featured": [
+          "h-chatgpt",
+          "h-claude",
+          "h-glm",
+          "h-deepseek",
+          "h-gemini",
+          "i-chatgpt",
+          "i-claude",
+          "i-glm",
+          "i-deepseek",
+          "i-gemini"
+        ],
+        "starts_at": null,
+        "ends_at": null,
+        "paused": false,
+        "published": false,
+        "revision": 0
+      }
+    },
+    {
+      "id": "theatre",
+      "name": "童话剧场",
+      "pool": {
+        "id": "",
+        "name": "童话剧场",
+        "cover": "j",
+        "kind": "limited",
+        "group": "",
+        "rules": {
+          "weights": [
+            5500,
+            3500,
+            900,
+            100
+          ],
+          "sr_pity": 10,
+          "ssr_pity": 60,
+          "sr_featured": 5000,
+          "ssr_featured": 5000,
+          "sr_guarantee": true,
+          "ssr_guarantee": true
+        },
+        "featured": [
+          "h-chatgpt",
+          "h-claude",
+          "h-glm",
+          "h-deepseek",
+          "h-gemini",
+          "j-chatgpt",
+          "j-claude",
+          "j-glm",
+          "j-deepseek",
+          "j-gemini"
+        ],
+        "starts_at": null,
+        "ends_at": null,
+        "paused": false,
+        "published": false,
+        "revision": 0
+      }
+    },
+    {
+      "id": "celestial",
+      "name": "星月神话",
+      "pool": {
+        "id": "",
+        "name": "星月神话",
+        "cover": "l",
+        "kind": "limited",
+        "group": "",
+        "rules": {
+          "weights": [
+            5500,
+            3500,
+            900,
+            100
+          ],
+          "sr_pity": 10,
+          "ssr_pity": 60,
+          "sr_featured": 5000,
+          "ssr_featured": 1500,
+          "sr_guarantee": true,
+          "ssr_guarantee": true,
+          "ssr_guarantee_misses": 2
+        },
+        "featured": [
+          "h-chatgpt",
+          "h-claude",
+          "h-glm",
+          "h-deepseek",
+          "h-gemini",
+          "l-chatgpt"
+        ],
+        "starts_at": null,
+        "ends_at": null,
+        "paused": false,
+        "published": false,
+        "revision": 0
+      }
+    },
+    {
+      "id": "wandering",
+      "name": "逍遥游",
+      "pool": {
+        "id": "",
+        "name": "逍遥游",
+        "cover": "m",
+        "kind": "limited",
+        "group": "",
+        "rules": {
+          "weights": [
+            5500,
+            3500,
+            900,
+            100
+          ],
+          "sr_pity": 10,
+          "ssr_pity": 60,
+          "sr_featured": 5000,
+          "ssr_featured": 1500,
+          "sr_guarantee": true,
+          "ssr_guarantee": true,
+          "ssr_guarantee_misses": 2
+        },
+        "featured": [
+          "h-chatgpt",
+          "h-claude",
+          "h-glm",
+          "h-deepseek",
+          "h-gemini",
+          "m-deepseek"
+        ],
+        "starts_at": null,
+        "ends_at": null,
+        "paused": false,
+        "published": false,
+        "revision": 0
+      }
+    }
+  ]
+}

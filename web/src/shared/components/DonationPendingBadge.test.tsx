@@ -203,7 +203,7 @@ describe('DonationPendingBadge', () => {
       sentinel: [...charityKeys.root('steward'), 'sentinel'] as const,
     },
   ])(
-    'hides the badge and evicts its station cache after HTTP $status for $role',
+    'hides the badge and evicts its capability cache after HTTP $status for $role',
     async ({ status, role, station, endpoint, sentinel }) => {
       const fetchMock = vi.fn<typeof fetch>(async (input) => {
         expect(String(input)).toBe(endpoint);
@@ -219,10 +219,15 @@ describe('DonationPendingBadge', () => {
         { station, role: role === 'admin' ? 'admin' : 'level5' },
       );
       view.queryClient.setQueryData(sentinel, { private: 'marker' });
+      const ordinary = [station, 'ordinary-page'];
+      view.queryClient.setQueryData(ordinary, { available: true });
 
       await waitFor(() => expect(screen.queryByRole('link')).not.toBeInTheDocument());
       expect(screen.queryByText('Pending')).not.toBeInTheDocument();
       expect(view.queryClient.getQueryData(sentinel)).toBeUndefined();
+      expect(view.queryClient.getQueryData(ordinary)).toEqual(
+        status === 401 ? undefined : { available: true },
+      );
       expect(view.queryClient.getQueryData(charityKeys.badge(role, 'account-a'))).toBeUndefined();
     },
   );

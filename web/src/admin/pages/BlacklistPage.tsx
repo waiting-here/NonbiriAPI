@@ -180,7 +180,7 @@ export function BlacklistManagement({
       isForbidden(events.error)
     ) {
       if (onAuthorityLoss) onAuthorityLoss();
-      else clearStationSession(client, role);
+      else if ([result.error, events.error].some(isUnauthorized)) clearStationSession(client, role);
     }
   }, [client, events.error, onAuthorityLoss, result.error, role]);
   const busy =
@@ -246,6 +246,10 @@ export function BlacklistManagement({
       ) : null}
     </>
   );
+  const authorityError = [result.error, events.error, mutation.error].find(
+    (error) => isUnauthorized(error) || isForbidden(error),
+  );
+  if (authorityError) return <ErrorState error={authorityError} />;
   return (
     <div className="page ops-page blacklist-management">
       <PageHeader

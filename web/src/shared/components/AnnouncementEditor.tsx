@@ -87,6 +87,7 @@ export function AnnouncementEditor({
   });
   const [draft, setDraft] = useState<DraftState | null>(null);
   const [loadedRevision, setLoadedRevision] = useState('');
+  const [denied, setDenied] = useState<unknown>(null);
   const [dirty, setDirty] = useState(false);
   const [conflict, setConflict] = useState(false);
   const [reason, setReason] = useState('');
@@ -185,8 +186,9 @@ export function AnnouncementEditor({
     }
     // Capability loss must synchronously discard the private draft and preview state.
     if (isUnauthorized(error) || isForbidden(error)) {
+      setDenied(error);
       if (onAuthorityLoss) onAuthorityLoss();
-      else clearStationSession(client, role);
+      else if (isUnauthorized(error)) clearStationSession(client, role);
       setDraft(null);
       setReason('');
       setConfirmation(null);
@@ -226,6 +228,7 @@ export function AnnouncementEditor({
     important: t('management.announcements.severity.important'),
   };
 
+  if (denied) return <ErrorState error={denied} />;
   if (authority.isPending || !draft || !authority.data)
     return (
       <div className="page ops-page">
@@ -416,7 +419,6 @@ export function AnnouncementEditor({
             {t('management.announcements.detail.saveDraft')}
           </Button>
           <Button
-
             type="button"
             disabled={
               authorityBlocked ||

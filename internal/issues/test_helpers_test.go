@@ -42,7 +42,8 @@ func newIssueTestEnvironment(t *testing.T) *issueTestEnvironment {
 	}
 	t.Cleanup(func() { _ = vault.Close() })
 	path := filepath.Join(t.TempDir(), "issues.sqlite")
-	dbfixture.Materialize(t, path)
+
+	dbfixture.Materialize(t, path, vault)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		t.Fatalf("db.Open: %v", err)

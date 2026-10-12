@@ -120,7 +120,16 @@ export function GachaApp({
   });
   const [motion, setMotion] = useState(true);
   const [audio] = useState(() => new GachaAudio());
-  const enterKey = useRef(crypto.randomUUID());
+  const [enterKey] = useState(() => {
+    const storageKey = 'nb.gacha.enter:' + port.scope;
+    try {
+      const key = sessionStorage.getItem(storageKey) || crypto.randomUUID();
+      sessionStorage.setItem(storageKey, key);
+      return key;
+    } catch {
+      return crypto.randomUUID();
+    }
+  });
   const inFlight = useRef(false);
   const [pendingState, setPendingState] = useState<PendingAction | null>(() =>
     storedAction(port.scope),
@@ -149,18 +158,40 @@ export function GachaApp({
   }
   useEffect(() => {
     mounted.current = true;
-    const timer = window.setInterval(() => setClock(Date.now()), 1000);
     return () => {
       mounted.current = false;
-      window.clearInterval(timer);
     };
   }, []);
+  useEffect(() => {
+    if (!state) return;
+    const now = state.server_time + Math.max(0, Math.floor((Date.now() - receivedAt) / 1000));
+    const boundaries = state.pools
+      .flatMap((pool) => [pool.starts_at, pool.ends_at])
+      .filter((at): at is number => typeof at === 'number' && at > now);
+    const next = Math.min(...boundaries);
+    const update = () => setClock(Date.now());
+    const timer = Number.isFinite(next)
+      ? window.setTimeout(update, Math.min((next - now) * 1000 + 20, 2_147_483_647))
+      : undefined;
+    window.addEventListener('focus', update);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('focus', update);
+    };
+  }, [state, receivedAt, clock]);
   useEffect(() => {
     let cancelled = false;
     void (
       pending.current
         ? port.load()
-        : port.act({ action: 'enter' }, enterKey.current).then((value) => value.snapshot)
+        : port.act({ action: 'enter' }, enterKey).then((value) => {
+            try {
+              sessionStorage.removeItem('nb.gacha.enter:' + port.scope);
+            } catch {
+              /* Optional storage. */
+            }
+            return value.snapshot;
+          })
     )
       .then((value) => {
         if (!cancelled) {
@@ -177,7 +208,9 @@ export function GachaApp({
     return () => {
       cancelled = true;
     };
-  }, [port, english]);
+    // Language changes only affect presentation, never the entry operation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [port]);
   useEffect(() => {
     try {
       localStorage.setItem('nb.gacha.preferences', JSON.stringify(preferences));
@@ -201,7 +234,11 @@ export function GachaApp({
   async function act(input: Action, message = '') {
     if (inFlight.current) return;
     if (pending.current && JSON.stringify(pending.current.input) !== JSON.stringify(input)) return;
-    const operation = pending.current ?? { input, key: crypto.randomUUID(), message };
+    const operation = pending.current ?? {
+      input,
+      key: input.action === 'enter' ? enterKey : crypto.randomUUID(),
+      message,
+    };
     remember(operation);
     inFlight.current = true;
     setBusy(true);
@@ -211,8 +248,16 @@ export function GachaApp({
       const result = await port.act(operation.input, operation.key);
       if (!mounted.current) return;
       remember(null);
+      if (input.action === 'enter') {
+        try {
+          sessionStorage.removeItem('nb.gacha.enter:' + port.scope);
+        } catch {
+          /* Optional storage. */
+        }
+      }
       accept(result.snapshot);
-      appearance?.refresh();
+      if (input.action === 'draw' || input.action === 'redeem' || input.action === 'claim')
+        appearance?.refresh();
       if (result.draw) setDraw(result.draw);
       else {
         setNotice(

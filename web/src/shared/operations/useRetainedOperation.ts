@@ -248,11 +248,9 @@ export function useRetainedOperation<TVariables, TResult>(
       );
       if (isFinalAuthorityLoss(error)) {
         clearSecrets.current?.();
-        if (input.frame) clearStationSession(client, input.frame);
+        if (input.frame && isUnauthorized(error)) clearStationSession(client, input.frame);
         else {
           void client.cancelQueries({ queryKey: authorityRoot });
-          client.removeQueries({ queryKey: authorityRoot });
-          client.getMutationCache().clear();
         }
         // Existing editors consume this safe denial to close their local draft.
         // A later confirmed login clears it before another account can inherit it.

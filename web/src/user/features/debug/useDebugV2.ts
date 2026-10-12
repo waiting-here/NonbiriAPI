@@ -4,7 +4,13 @@ import { clearStationSession } from '@shared/charityManagement';
 import { ApiError, isForbidden, isUnauthorized } from '@shared/query/http';
 import { conflictOrUnknown, operationKey } from '@shared/operations/api';
 import { applyDebugEvent, initialDebugState, type DebugViewState } from './v2state';
-import { changeDebugMode, getDebugSession, replaceDebugSession, startDebugSession, stopDebugSession } from './v2api';
+import {
+  changeDebugMode,
+  getDebugSession,
+  replaceDebugSession,
+  startDebugSession,
+  stopDebugSession,
+} from './v2api';
 import { openDebugStream, type DebugObserverStatus, type DebugStream } from './v2stream';
 import type { DebugMode, DebugSessionMetadata } from './v2types';
 
@@ -22,7 +28,11 @@ function signature(intent: MutationIntent): string {
 
 export function useDebugV2() {
   const client = useQueryClient();
-  const authority = useQuery({ queryKey: debugV2Keys.session, queryFn: getDebugSession, retry: false });
+  const authority = useQuery({
+    queryKey: debugV2Keys.session,
+    queryFn: getDebugSession,
+    retry: false,
+  });
   const viewRef = useRef<DebugViewState>(initialDebugState());
   const [view, setView] = useState<DebugViewState>(() => initialDebugState());
   const [observer, setObserver] = useState<DebugObserverStatus>('disconnected');
@@ -116,8 +126,11 @@ export function useDebugV2() {
       if (!nextAuthority.active) {
         disconnect();
         commitView(initialDebugState());
-      } else if (current.session.active && current.session.id === nextAuthority.id
-        && current.session.generation === nextAuthority.generation) {
+      } else if (
+        current.session.active &&
+        current.session.id === nextAuthority.id &&
+        current.session.generation === nextAuthority.generation
+      ) {
         commitView({ ...current, session: nextAuthority });
       } else {
         disconnect();
@@ -130,7 +143,8 @@ export function useDebugV2() {
   }, [authority.data, commitView, disconnect]);
 
   useEffect(() => {
-    if (authority.data?.active && observer === 'disconnected' && !streamError && !streamRef.current) connect();
+    if (authority.data?.active && observer === 'disconnected' && !streamError && !streamRef.current)
+      connect();
   }, [authority.data, connect, observer, streamError]);
 
   /* eslint-disable react-hooks/set-state-in-effect -- Final authentication loss must erase captured request bodies immediately. */
@@ -138,7 +152,7 @@ export function useDebugV2() {
     // Authentication loss must immediately close the live observer and erase captured request bodies.
     if (isUnauthorized(authority.error) || isForbidden(authority.error)) {
       clearSensitive();
-      clearStationSession(client, 'steward');
+      if (isUnauthorized(authority.error)) clearStationSession(client, 'steward');
     }
   }, [authority.error, clearSensitive, client]);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -152,38 +166,44 @@ export function useDebugV2() {
     }
   }, [authority]);
 
-  const run = useCallback(async (intent: MutationIntent) => {
-    if (mutating) return;
-    setMutating(true);
-    setMutationError(null);
-    const intentSignature = signature(intent);
-    const key = intentRef.current?.signature === intentSignature ? intentRef.current.key : operationKey();
-    intentRef.current = { signature: intentSignature, key };
-    try {
-      let result: DebugSessionMetadata = { active: false };
-      if (intent.kind === 'start') result = await startDebugSession(key);
-      else if (intent.kind === 'mode') result = await changeDebugMode(intent.mode, intent.revision, key);
-      else if (intent.kind === 'replace') result = await replaceDebugSession(intent.revision, intent.confirm, key);
-      else await stopDebugSession(intent.revision, intent.confirm, key);
-      if (!mountedRef.current) return;
-      intentRef.current = null;
-      disconnect();
-      setStreamError(null);
-      commitView(initialDebugState(result));
-      client.setQueryData(debugV2Keys.session, result);
-    } catch (error) {
-      if (!mountedRef.current) return;
-      setMutationError(error);
-      if (isUnauthorized(error) || isForbidden(error)) {
-        clearSensitive();
-        clearStationSession(client, 'steward');
-      } else if (conflictOrUnknown(error)) {
-        await reconcile();
+  const run = useCallback(
+    async (intent: MutationIntent) => {
+      if (mutating) return;
+      setMutating(true);
+      setMutationError(null);
+      const intentSignature = signature(intent);
+      const key =
+        intentRef.current?.signature === intentSignature ? intentRef.current.key : operationKey();
+      intentRef.current = { signature: intentSignature, key };
+      try {
+        let result: DebugSessionMetadata = { active: false };
+        if (intent.kind === 'start') result = await startDebugSession(key);
+        else if (intent.kind === 'mode')
+          result = await changeDebugMode(intent.mode, intent.revision, key);
+        else if (intent.kind === 'replace')
+          result = await replaceDebugSession(intent.revision, intent.confirm, key);
+        else await stopDebugSession(intent.revision, intent.confirm, key);
+        if (!mountedRef.current) return;
+        intentRef.current = null;
+        disconnect();
+        setStreamError(null);
+        commitView(initialDebugState(result));
+        client.setQueryData(debugV2Keys.session, result);
+      } catch (error) {
+        if (!mountedRef.current) return;
+        setMutationError(error);
+        if (isUnauthorized(error) || isForbidden(error)) {
+          clearSensitive();
+          if (isUnauthorized(error)) clearStationSession(client, 'steward');
+        } else if (conflictOrUnknown(error)) {
+          await reconcile();
+        }
+      } finally {
+        if (mountedRef.current) setMutating(false);
       }
-    } finally {
-      if (mountedRef.current) setMutating(false);
-    }
-  }, [clearSensitive, client, commitView, disconnect, mutating, reconcile]);
+    },
+    [clearSensitive, client, commitView, disconnect, mutating, reconcile],
+  );
 
   return {
     authority,
@@ -202,7 +222,9 @@ export function useDebugV2() {
 }
 
 export function debugMutationMessage(error: unknown): string {
-  if (error instanceof ApiError && error.status === 409) return 'The session changed. Refresh the latest status and review it before confirming again.';
-  if (error instanceof ApiError && error.status === 0) return 'The result is unknown. The same request identity is retained; refresh the latest status before an explicit retry.';
+  if (error instanceof ApiError && error.status === 409)
+    return 'The session changed. Refresh the latest status and review it before confirming again.';
+  if (error instanceof ApiError && error.status === 0)
+    return 'The result is unknown. The same request identity is retained; refresh the latest status before an explicit retry.';
   return error instanceof Error ? error.message : 'The Debug operation failed.';
 }

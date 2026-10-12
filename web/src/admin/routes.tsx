@@ -1,4 +1,5 @@
 import { createBrowserRouter } from 'react-router';
+import { NavigationProgress } from '@shared/components/NavigationProgress';
 import { NotFoundPage } from '@shared/components/NotFoundPage';
 import { LoadingState } from '@shared/components/States';
 import { RouteErrorPage } from '@shared/components/RouteErrorPage';
@@ -10,7 +11,12 @@ const pathFor = (id: string) => relativeRoutePath('admin', id);
 export const router = createBrowserRouter([
   {
     path: '/',
-    element: <AdminLayout />,
+    element: (
+      <>
+        <NavigationProgress />
+        <AdminLayout />
+      </>
+    ),
     hydrateFallbackElement: <LoadingState />,
     errorElement: <RouteErrorPage station="admin" />,
     children: [

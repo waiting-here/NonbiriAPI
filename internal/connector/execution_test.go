@@ -23,13 +23,13 @@ func (cancelExecutionDriver) ConnectorType() connectorcontract.Type {
 	return connectorcontract.TypeOpenAICompatible
 }
 
-func (d cancelExecutionDriver) Attempt(ctx context.Context, _ http.ResponseWriter, _ openai.Target, _ *openai.ChatRequest, _ string) openai.AttemptResult {
+func (d cancelExecutionDriver) AttemptWithPolicy(ctx context.Context, _ http.ResponseWriter, _ openai.Target, _ *openai.ChatRequest, _ connectorcontract.AttemptPolicy) openai.AttemptResult {
 	close(d.entered)
 	<-ctx.Done()
 	return openai.AttemptResult{Failure: openai.FailureCanceled, Diagnostic: "request canceled"}
 }
 
-func (d observerExecutionDriver) Attempt(_ context.Context, writer http.ResponseWriter, _ openai.Target, _ *openai.ChatRequest, _ string) openai.AttemptResult {
+func (d observerExecutionDriver) AttemptWithPolicy(_ context.Context, writer http.ResponseWriter, _ openai.Target, _ *openai.ChatRequest, _ connectorcontract.AttemptPolicy) openai.AttemptResult {
 	select {
 	case <-d.observerEntered:
 	case <-time.After(time.Second):

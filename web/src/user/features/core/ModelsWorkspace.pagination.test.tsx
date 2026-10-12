@@ -644,7 +644,12 @@ describe('ModelsWorkspace numbered pagination', () => {
     await rendered.user.click(screen.getByRole('button', { name: 'Add 1 selected sources' }));
 
     expect(writes).toHaveLength(1);
-    await waitFor(() => expect(rendered.queryClient.getQueryData(coreKeys.session)).toBeNull());
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: 'Add 1 selected sources' }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(rendered.queryClient.getQueryData(coreKeys.session)).toEqual({ user: account });
     expect(
       screen.queryByRole('button', { name: 'Add 1 selected sources' }),
     ).not.toBeInTheDocument();

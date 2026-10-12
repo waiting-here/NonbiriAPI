@@ -45,7 +45,8 @@ func newGuardFixture(t *testing.T) *guardFixture {
 	}
 	t.Cleanup(func() { _ = vault.Close() })
 	path := filepath.Join(t.TempDir(), "guard.db")
-	dbfixture.Materialize(t, path)
+
+	dbfixture.Materialize(t, path, vault)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		t.Fatal(err)
@@ -54,9 +55,6 @@ func newGuardFixture(t *testing.T) *guardFixture {
 	f := &guardFixture{t: t, store: store}
 	claims, err := claim.New(claim.Dependencies{DB: store.DB(), Secrets: vault})
 	if err != nil {
-		t.Fatal(err)
-	}
-	if err := claims.InitializeUsageTotals(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	f.exec(`CREATE TABLE guard_game_cancels(user_id INTEGER PRIMARY KEY)`)

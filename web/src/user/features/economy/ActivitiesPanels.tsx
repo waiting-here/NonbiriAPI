@@ -88,28 +88,26 @@ export function ActivitiesMasterNotice({ snapshot }: { snapshot: ActivitiesSnaps
 }
 
 export function ActivityConnectionNotice({
-  connection,
   recoveryError,
-  reconciled,
+  onRetry,
 }: {
   connection: ActivityConnectionState;
   recoveryError: unknown;
   reconciled: boolean;
+  onRetry?: () => void;
 }) {
   const { t } = useTranslation();
-  const key = recoveryError
-    ? 'recoveryFailed'
-    : connection === 'disconnected'
-      ? 'disconnected'
-      : connection === 'connecting'
-        ? 'connecting'
-        : reconciled
-          ? 'reconciled'
-          : 'connected';
-  if (!recoveryError && connection !== 'disconnected') return null;
+  if (!recoveryError) return null;
   return (
     <div className="economy-stream-state">
-      <Note tone="warn">{t(`user.activities.stream.${key}`)}</Note>
+      <Note tone="warn">
+        {t('user.activities.stream.recoveryFailed')}
+        {onRetry ? (
+          <button type="button" className="nb-btn nb-btn--ghost nb-btn--sm" onClick={onRetry}>
+            {t('common.retry')}
+          </button>
+        ) : null}
+      </Note>
     </div>
   );
 }

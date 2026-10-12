@@ -49,7 +49,7 @@ func NewMaintenance(database *sql.DB) *Maintenance {
 // Recover removes visible in-progress rows and records whose fixed replay
 // window has expired. A legitimate mutation completes its accepted row in the
 // same transaction, so a committed accepted row cannot represent replayable
-// domain success. Completed rows inside their 24-hour window are untouched.
+// domain success. Completed rows inside their frozen replay window are untouched.
 func (maintenance *Maintenance) Recover(
 	ctx context.Context,
 	decisionNow int64,

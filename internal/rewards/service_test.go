@@ -2,13 +2,18 @@ package rewards
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/antiabuse"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/continuity"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
+	"github.com/waiting-here/NonbiriAPI/internal/flowcontrol"
 	"github.com/waiting-here/NonbiriAPI/internal/gacha"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/rewardasset"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 	"path/filepath"
@@ -29,7 +34,7 @@ func (a authority) AuthorizeAdmin(_ context.Context, _ *sql.Tx, user int64) erro
 }
 func (a authority) AuthorizeUserMutation(ctx context.Context, tx *sql.Tx, user int64) error {
 	var ok bool
-	if err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM users WHERE id=? AND is_admin=0 AND is_banned=0)", user).Scan(&ok); err != nil {
+	if err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM users WHERE id=? AND is_admin=0 AND is_banned=0 AND NOT EXISTS(SELECT 1 FROM user_deletion_markers WHERE user_id=users.id))", user).Scan(&ok); err != nil {
 		return err
 	}
 	if !ok {
@@ -45,6 +50,23 @@ type fixture struct {
 	at                 atomic.Int64
 	admin, user, other int64
 	vault              *secret.Vault
+	continuity         *continuity.Service
+	abuse              *antiabuse.Service
+	abuseConfig        antiabuse.ServiceConfig
+	flow               *flowcontrol.Controller
+	keys               atomic.Int64
+	retirements, bans  atomic.Int64
+	cancellations      atomic.Int64
+	finalized          atomic.Int64
+}
+
+type unusedRejections struct{}
+
+func (unusedRejections) RecordCharityRejectionTx(context.Context, *sql.Tx, int64, string, string, int, int, int64) error {
+	return errors.New("unexpected charity rejection")
+}
+func (unusedRejections) RecordRejectionTx(context.Context, *sql.Tx, int64, requestattempt.Fact, int64) error {
+	return errors.New("unexpected forwarded request rejection")
 }
 
 func setup(t *testing.T) *fixture {
@@ -55,7 +77,8 @@ func setup(t *testing.T) *fixture {
 	}
 	t.Cleanup(func() { vault.Close() })
 	p := filepath.Join(t.TempDir(), "rewards.sqlite")
-	dbfixture.Materialize(t, p)
+
+	dbfixture.Materialize(t, p, vault)
 	store, e := db.Open(p, vault)
 	if e != nil {
 		t.Fatal(e)
@@ -63,12 +86,45 @@ func setup(t *testing.T) *fixture {
 	t.Cleanup(func() { store.Close() })
 	f := &fixture{db: store.DB(), vault: vault}
 	f.at.Store(1800000000)
+	f.continuity, e = continuity.New(f.db, vault)
+	if e != nil {
+		t.Fatal(e)
+	}
+	t.Cleanup(func() { f.continuity.Close() })
 	f.admin = f.add(t, true)
 	f.user = f.add(t, false)
 	f.other = f.add(t, false)
 	a := authority{f.admin}
-	f.s, e = New(Config{Database: f.db, Users: a, Admins: a, Gate: a, Now: func() time.Time { return time.Unix(f.at.Load(), 0) }})
+	f.s, e = New(Config{Database: f.db, Users: a, Admins: a, Gate: a, Keys: vault, Now: func() time.Time { return time.Unix(f.at.Load(), 0) }})
 	if e != nil {
+		t.Fatal(e)
+	}
+	f.flow, e = flowcontrol.New(flowcontrol.Config{UserLimits: flowcontrol.DBUserLimitResolver(store)})
+	if e != nil {
+		t.Fatal(e)
+	}
+	t.Cleanup(func() { f.flow.Close() })
+	f.abuseConfig = antiabuse.ServiceConfig{Database: f.db, Continuity: f.continuity, Rejections: unusedRejections{}, Now: f.s.config.Now,
+		BeginUserRetirement: func(_ context.Context, user int64) (antiabuse.Retirement, error) {
+			f.retirements.Add(1)
+			return f.flow.BeginUserRetirement(user)
+		},
+		OnBan: func(int64) { f.bans.Add(1) },
+		CancelUserDuelsTx: func(context.Context, *sql.Tx, int64, string, int64) (func(bool), error) {
+			f.cancellations.Add(1)
+			return func(committed bool) {
+				if committed {
+					f.finalized.Add(1)
+				}
+			}, nil
+		},
+	}
+	f.abuse, e = antiabuse.NewService(f.abuseConfig)
+	if e != nil {
+		t.Fatal(e)
+	}
+	t.Cleanup(func() { f.abuse.Close() })
+	if e := f.s.AttachAbuse(f.abuse); e != nil {
 		t.Fatal(e)
 	}
 	if _, e = f.db.Exec("INSERT INTO site_config(key,value,updated_at) VALUES('site_timezone_offset_minutes','480',0) ON CONFLICT(key) DO UPDATE SET value='480'"); e != nil {
@@ -92,6 +148,19 @@ func (f *fixture) add(t *testing.T, admin bool) int64 {
 		t.Fatal(e)
 	}
 	defer tx.Rollback()
+	if !admin {
+		discord := "test-" + strconv.FormatInt(id, 10)
+		if _, e := tx.Exec("UPDATE users SET discord_id=? WHERE id=?", discord, id); e != nil {
+			t.Fatal(e)
+		}
+		if _, e := f.continuity.BindUserTx(t.Context(), tx, id); e != nil {
+			t.Fatal(e)
+		}
+		hash := sha256.Sum256([]byte(strconv.FormatInt(id, 10)))
+		if _, e := tx.Exec("INSERT INTO caller_keys(user_id,generation,key_hash,key_created_at,updated_at) VALUES(?,1,?,?,?)", id, hash[:], f.at.Load(), f.at.Load()); e != nil {
+			t.Fatal(e)
+		}
+	}
 	for _, asset := range []ledger.Asset{ledger.General, ledger.Game} {
 		if _, e = ledger.CreateUserAssetAccount(t.Context(), tx, id, asset, f.at.Load()); e != nil {
 			t.Fatal(e)
@@ -101,6 +170,9 @@ func (f *fixture) add(t *testing.T, admin bool) int64 {
 		t.Fatal(e)
 	}
 	return id
+}
+func (f *fixture) nextKey() string {
+	return "reward-redemption-key-" + strconv.FormatInt(f.keys.Add(1), 10)
 }
 func input(kind string) Input {
 	return Input{Kind: kind, Title: "Welcome", Enabled: true, Conditions: Condition{Op: "all"}, Rewards: []rewardasset.Item{{Asset: "general", Quantity: "10.125"}, {Asset: "sketch_paper", Quantity: "2"}, {Asset: "gacha:limited", Quantity: "3"}}}
@@ -170,7 +242,7 @@ func TestCodeQuotaConcurrencyAndExpiredReplay(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if result, e := f.s.Redeem(t.Context(), user, "  gift-test  "); e == nil {
+			if result, e := f.s.Redeem(t.Context(), user, f.nextKey(), "  gift-test  "); e == nil {
 				if result.AlreadyClaimed {
 					t.Error("first redemption reported as already claimed")
 				}
@@ -187,7 +259,7 @@ func TestCodeQuotaConcurrencyAndExpiredReplay(t *testing.T) {
 		t.Fatal(e)
 	}
 	f.at.Add(5)
-	r, e := f.s.Redeem(t.Context(), winner, c.Code)
+	r, e := f.s.Redeem(t.Context(), winner, f.nextKey(), c.Code)
 	if e != nil || len(r.Results) != 3 || !r.AlreadyClaimed {
 		t.Fatal(r, e)
 	}
@@ -198,7 +270,7 @@ func TestCodeQuotaConcurrencyAndExpiredReplay(t *testing.T) {
 	if loser == winner {
 		loser = f.other
 	}
-	if _, e = f.s.Redeem(t.Context(), loser, c.Code); !errors.Is(e, ErrUnavailable) {
+	if _, e = f.s.Redeem(t.Context(), loser, f.nextKey(), c.Code); !errors.Is(e, ErrUnavailable) {
 		t.Fatal(e)
 	}
 }
@@ -209,7 +281,7 @@ func TestBundleRollbackLeavesQuotaAndEligibilityIntact(t *testing.T) {
 	if _, e := f.db.Exec("INSERT INTO gacha_profiles(user_id,limited,month,entered_at,updated_at) VALUES(?,?,'2027-01',1,1)", f.user, maxCount); e != nil {
 		t.Fatal(e)
 	}
-	if _, e := f.s.Redeem(t.Context(), f.user, c.Code); !errors.Is(e, ErrCapacity) {
+	if _, e := f.s.Redeem(t.Context(), f.user, f.nextKey(), c.Code); !errors.Is(e, ErrCapacity) {
 		t.Fatal(e)
 	}
 	if f.balance(t, f.user, ledger.General) != "0" {
@@ -222,7 +294,7 @@ func TestBundleRollbackLeavesQuotaAndEligibilityIntact(t *testing.T) {
 	if _, e := f.db.Exec("UPDATE gacha_profiles SET limited=0 WHERE user_id=?", f.user); e != nil {
 		t.Fatal(e)
 	}
-	if _, e := f.s.Redeem(t.Context(), f.user, c.Code); e != nil {
+	if _, e := f.s.Redeem(t.Context(), f.user, f.nextKey(), c.Code); e != nil {
 		t.Fatal(e)
 	}
 }
@@ -239,7 +311,7 @@ func TestDonationConditionAndCardDuplicateDoNotGrantDonation(t *testing.T) {
 	}
 	in.Conditions = Condition{Op: "or", Children: []Condition{{Op: "compare", Field: "donation", Compare: "gte", Value: "0.001"}, {Op: "compare", Field: "asset", Asset: "general", Compare: "eq", Value: "0"}}}
 	c := f.create(t, in, "cards")
-	r, e := f.s.Redeem(t.Context(), f.user, c.Code)
+	r, e := f.s.Redeem(t.Context(), f.user, f.nextKey(), c.Code)
 	if e != nil || r.Results[0].Granted != "1" || r.Results[0].Converted == nil || r.Results[0].Converted.Quantity != "1" {
 		t.Fatal(r, e)
 	}

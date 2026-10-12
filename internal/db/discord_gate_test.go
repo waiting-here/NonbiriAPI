@@ -2,26 +2,26 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"testing"
 )
 
-func TestDiscordGateUpgradePreservesAccountsAndDefaultsToRequired(t *testing.T) {
-	database, err := sql.Open("sqlite", ":memory:")
+func TestDiscordGatePolicyPreservesAccountAndConfiguration(t *testing.T) {
+	database := openGenerationTwoConstraintFixture(t)
+	tx, err := database.Begin()
 	if err != nil {
 		t.Fatal(err)
 	}
-	database.SetMaxOpenConns(1)
-	defer database.Close()
-	hostileMustExec(t, database, gwentAIStorageSchema())
-	assertRetainedManifest(t, database, gwentAIManifestHash)
+	defer tx.Rollback()
+	if err := seedGenerationTwo(context.Background(), tx, hostileOID("b1e_")); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
 	userID := hostileInsertUser(t, database, "gate-account", 0, 0)
 	hostileMustExec(t, database, "UPDATE users SET username='gate-account' WHERE id=?", userID)
-	hostileMustExec(t, database, "INSERT INTO site_config(key,value,updated_at) VALUES('discord_guild_id','preserved-guild',42)")
+	hostileMustExec(t, database, "UPDATE site_config SET value='preserved-guild',updated_at=42 WHERE key='discord_guild_id'")
 	for range 2 {
-		if err := extendKnownGenerationTwoSchema(t.Context(), database); err != nil {
-			t.Fatal(err)
-		}
 		var policy, name, exempt, guild string
 		var updated int
 		if err := database.QueryRow(`SELECT username,discord_gate_policy FROM users WHERE id=?`, userID).Scan(&name, &policy); err != nil || policy != "inherit" || name != "gate-account" {

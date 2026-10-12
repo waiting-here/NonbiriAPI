@@ -12,5 +12,13 @@ describe('route error classification', () => {
     expect(classifyRouteError(new ApiError('service_unavailable', 'no', 503))).toBe('500');
     expect(classifyRouteError(new ApiError('service_unavailable', 'no', 500))).toBe('500');
     expect(classifyRouteError(new Error('implementation detail'))).toBe('render');
+    expect(
+      classifyRouteError(
+        new TypeError('Failed to fetch dynamically imported module: /assets/page-old.js'),
+      ),
+    ).toBe('resource');
+    expect(classifyRouteError(new Error('Unable to preload CSS for /assets/page-old.css'))).toBe(
+      'resource',
+    );
   });
 });

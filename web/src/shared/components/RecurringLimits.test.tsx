@@ -739,7 +739,7 @@ describe('RecurringLimits', () => {
     expect(screen.getByRole('button', { name: 'Save recurring limits' })).toBeDisabled();
   });
 
-  it('ignores a late conflict comparison after the same account confirms a new session', async () => {
+  it('keeps the conflict comparison when the same account refreshes its session', async () => {
     let resolveRead!: (value: Response) => void;
     const pendingRead = new Promise<Response>((resolve) => {
       resolveRead = resolve;
@@ -777,7 +777,7 @@ describe('RecurringLimits', () => {
       await pendingRead;
     });
     expect(screen.getByLabelText('Limit')).toHaveValue('120');
-    expect(screen.queryByText('The rules changed while you were editing.')).not.toBeInTheDocument();
+    expect(screen.getByText('The rules changed while you were editing.')).toBeVisible();
     expect(screen.queryByText('Recurring limits saved.')).not.toBeInTheDocument();
     expect(onSaved).not.toHaveBeenCalled();
     expect(writes).toBe(1);

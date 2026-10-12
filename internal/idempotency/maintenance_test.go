@@ -248,6 +248,7 @@ func TestMaintenanceCoversEveryCanonicalScope(t *testing.T) {
 		idempotency.ScopeDonation,
 		idempotency.ScopeLakeNotes,
 		idempotency.ScopePersonalAutomation,
+		idempotency.ScopeRewardRedemption,
 	}
 	t.Run("recovery", func(t *testing.T) {
 		store := openStore(t)

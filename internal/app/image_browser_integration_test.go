@@ -127,7 +127,7 @@ func TestImageBrowserFixture(t *testing.T) {
 	defer vault.Close()
 	f := &imageBrowserFixture{t: t, vault: vault, cfg: auditConfig(),
 		path: filepath.Join(t.TempDir(), "picture-book.db")}
-	dbfixture.Materialize(t, f.path)
+	dbfixture.Materialize(t, f.path, vault)
 	f.upstreamState = newImageFixtureUpstream(t)
 	f.upstream = httptest.NewServer(f.upstreamState)
 	defer f.upstream.Close()

@@ -133,7 +133,7 @@ describe('home announcement authority', () => {
     expect(loadDetail).toHaveBeenCalledTimes(2);
   });
 
-  it('ignores a late unauthorized response after the same account confirms a new session', async () => {
+  it('ignores a late unauthorized response after another account signs in', async () => {
     let reject!: (error: unknown) => void;
     const pending = new Promise<HomeAnnouncementPage>((_resolve, fail) => {
       reject = fail;
@@ -156,16 +156,18 @@ describe('home announcement authority', () => {
     });
     await waitFor(() => expect(load).toHaveBeenCalledTimes(1));
     await act(async () => {
+      const other = { user: { ...session.user, id: '8' } };
       const generation = beginManagementSessionRequest(view.queryClient, 'steward');
-      expect(noteManagementSessionSuccess(view.queryClient, 'steward', session, generation)).toBe(
+      expect(noteManagementSessionSuccess(view.queryClient, 'steward', other, generation)).toBe(
         true,
       );
-      view.queryClient.setQueryData(coreKeys.session, session);
+      view.queryClient.setQueryData(coreKeys.session, other);
     });
     await act(async () => {
       reject(new ApiError('unauthorized', 'Expired session', 401));
     });
-    expect(view.queryClient.getQueryData(coreKeys.session)).toEqual(session);
-    await screen.findByText('Body revision 1');
+    expect(view.queryClient.getQueryData(coreKeys.session)).toEqual({
+      user: { ...session.user, id: '8' },
+    });
   });
 });
