@@ -524,7 +524,7 @@ describe('managed donation page integration', () => {
 
   it('retains review drafts on separate pages and submits every key in one revision', async () => {
     const { reviews } = install(true);
-    const view = await renderWithProviders(<CharityPage />, {
+    await renderWithProviders(<CharityPage />, {
       station: 'admin',
       route: '/charity?donation_id=7',
     });
@@ -536,12 +536,12 @@ describe('managed donation page integration', () => {
       });
     const firstNote = firstReviewNote();
     fireEvent.change(firstNote, { target: { value: 'first page note' } });
-    await view.user.click(
+    fireEvent.click(
       within(card.querySelector('nav.page-pagination')!).getByRole('button', { name: 'Next' }),
     );
     const lastNote = within(card).getByLabelText('Review note');
     fireEvent.change(lastNote, { target: { value: 'second page note' } });
-    await view.user.click(
+    fireEvent.click(
       within(card.querySelector('nav.page-pagination')!).getByRole('button', { name: 'Previous' }),
     );
     expect(firstReviewNote()).toHaveValue('first page note');
@@ -559,12 +559,35 @@ describe('managed donation page integration', () => {
       fireEvent.change(reason, { target: { value: 'Reviewed all pages' } });
       fireEvent.click(confirmation);
     });
-    await view.user.click(
+    fireEvent.click(
       within(card).getByText('Approve donation', { selector: 'button', exact: true }),
     );
     await waitFor(() => expect(reviews).toHaveLength(1));
     expect(reviews[0].expected_revision).toBe('1');
     expect(reviews[0].key_settings).toHaveLength(21);
+    expect(reviews[0].key_settings.map((row) => row.donation_key_id)).toEqual([
+      '11',
+      '12',
+      '13',
+      '14',
+      '15',
+      '16',
+      '17',
+      '18',
+      '19',
+      '20',
+      '21',
+      '22',
+      '23',
+      '24',
+      '25',
+      '26',
+      '27',
+      '28',
+      '29',
+      '30',
+      '31',
+    ]);
     expect(reviews[0].key_settings.find((row) => row.donation_key_id === '11')?.safe_note).toBe(
       'first page note',
     );
