@@ -147,7 +147,7 @@ func TestBrowserSpecializedViewsIncludeCrossPageContracts(t *testing.T) {
 	}
 	for _, test := range []struct{ path, spec, suite string }{
 		{"web/src/user/appearance/AppearancePicker.tsx", "dialog-layering", "management"},
-		{"internal/picturebook/service.go", "user-polish", "picturebook"},
+		{"internal/imageactivity/service.go", "user-polish", "picturebook"},
 		{"web/src/user/activities/lake-notes/LakeNotesPage.tsx", "lake-notes", "lakenotes"},
 	} {
 		plan := verificationPlan{Mode: "routine", Changed: []string{test.path}}
@@ -157,6 +157,35 @@ func TestBrowserSpecializedViewsIncludeCrossPageContracts(t *testing.T) {
 		if !slices.Contains(plan.Browser.Specs, "test/e2e/"+test.spec+".spec.ts") ||
 			!slices.Equal(plan.Browser.Suites, []string{test.suite}) {
 			t.Fatalf("cross-page scope %s: %+v", test.path, plan.Browser)
+		}
+	}
+}
+
+func TestBrowserFeatureDirectoriesSelectTheirContracts(t *testing.T) {
+	browserCatalogFixture(t)
+	for _, name := range []string{"fatfish-editor", "fatfish-workspace", "image-discovery", "image-drafts", "image-settings", "game-experience", "desktop-game-layout", "user-polish"} {
+		if err := os.WriteFile("web/test/e2e/"+name+".spec.ts", nil, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, test := range []struct {
+		path, suite string
+		specs       []string
+		engine      bool
+	}{
+		{"web/src/user/features/fatfish/FatFishActivity.tsx", "fatfish", []string{"desktop-game-layout", "fatfish-editor", "fatfish-workspace", "game-experience"}, true},
+		{"web/src/user/features/picturebook/PictureBookExperience.tsx", "picturebook", []string{"game-experience", "image-discovery", "image-drafts", "image-settings", "user-polish"}, false},
+	} {
+		plan := verificationPlan{Mode: "routine", Changed: []string{test.path}}
+		if err := selectBrowserPlan(&plan); err != nil {
+			t.Fatal(err)
+		}
+		want := make([]string, len(test.specs))
+		for i, spec := range test.specs {
+			want[i] = "test/e2e/" + spec + ".spec.ts"
+		}
+		if !slices.Equal(plan.Browser.Specs, want) || !slices.Equal(plan.Browser.Suites, []string{test.suite}) || plan.Browser.Engine != test.engine {
+			t.Fatalf("feature scope %s: %+v", test.path, plan.Browser)
 		}
 	}
 }
