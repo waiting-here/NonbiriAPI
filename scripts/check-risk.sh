@@ -24,7 +24,7 @@ while [ "$#" -gt 0 ]; do
     *) printf 'Unknown option: %s\n' "$1" >&2; exit 2 ;;
   esac
 done
-case "$component" in all|go|race|web) ;; *) exit 2 ;; esac
+case "$component" in all|go|race|web|browser) ;; *) exit 2 ;; esac
 scope=$(mktemp)
 trap 'rm -f -- "$scope"' EXIT
 CGO_ENABLED=0 "$GO" run ./internal/citools/riskplan -go "$GO" \
@@ -34,6 +34,7 @@ go_packages=()
 race_packages=()
 web=false
 upgrade=false
+browser=false
 while IFS='=' read -r key value; do
   case "$key" in
     mode) mode=$value ;;
@@ -41,8 +42,10 @@ while IFS='=' read -r key value; do
     race_packages) read -r -a race_packages <<< "$value" ;;
     web) web=$value ;;
     upgrade) upgrade=$value ;;
+    browser) browser=$value ;;
+    browser_plan) export BROWSER_PLAN=$value ;;
   esac
-done
+done < "$scope"
 if [ "$component" = all ] || [ "$component" = go ]; then
   if [ "$mode" = full ]; then
     bash scripts/check-go.sh
@@ -67,14 +70,18 @@ if [ "$component" = all ] || [ "$component" = race ]; then
 fi
 if [ "$component" = all ] || [ "$component" = web ]; then
   if "$web"; then
-    cd web
+    bash scripts/check-web.sh unit
+    pushd web >/dev/null
     npm_command="${NPM:-npm}"
-    "$npm_command" test
     "$npm_command" run typecheck
     "$npm_command" run lint
     "$npm_command" run build
     git diff --exit-code -- THIRD_PARTY_NOTICES.md
+    popd >/dev/null
   else
     printf 'Web: not applicable to this scope\n'
   fi
+fi
+if [ "$component" = all ] || [ "$component" = web ] || [ "$component" = browser ]; then
+  if "$browser"; then bash scripts/check-web.sh browser; fi
 fi

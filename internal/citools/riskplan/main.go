@@ -31,13 +31,14 @@ type packageInfo struct {
 }
 
 type verificationPlan struct {
-	Mode         string   `json:"mode"`
-	Reasons      []string `json:"reasons"`
-	Changed      []string `json:"changed_files"`
-	GoPackages   []string `json:"go_packages"`
-	RacePackages []string `json:"race_packages"`
-	Web          bool     `json:"web"`
-	Upgrade      bool     `json:"upgrade"`
+	Mode         string      `json:"mode"`
+	Reasons      []string    `json:"reasons"`
+	Changed      []string    `json:"changed_files"`
+	GoPackages   []string    `json:"go_packages"`
+	RacePackages []string    `json:"race_packages"`
+	Web          bool        `json:"web"`
+	Upgrade      bool        `json:"upgrade"`
+	Browser      browserPlan `json:"browser"`
 }
 
 func main() {
@@ -66,6 +67,9 @@ func run(args []string, output io.Writer) error {
 	}
 	changed, diffErr := changedFiles(*base, *head)
 	plan := selectPlan(packages, changed, *mode, diffErr)
+	if err := selectBrowserPlan(&plan); err != nil {
+		return err
+	}
 	if err := json.NewEncoder(output).Encode(plan); err != nil {
 		return err
 	}
@@ -252,14 +256,14 @@ func selectPlan(packages []packageInfo, changed []string, mode string, diffErr e
 	for _, file := range changed {
 		testSource := strings.HasSuffix(file, "_test.go")
 		testInput := testSource || (strings.Contains(file, "/testdata/") && !productionInputs[file])
-		if file == "go.mod" || file == "go.sum" || (filepath.Dir(file) == "." && strings.HasSuffix(file, ".go") && !testSource) || file == "web/package-lock.json" || file == "web/package.json" || strings.HasPrefix(file, "scripts/") || strings.HasPrefix(file, ".github/") || (!testInput && (strings.HasPrefix(file, "internal/db/") || strings.HasPrefix(file, "internal/lifecycle/") || strings.HasPrefix(file, "internal/app/"))) {
+		if file == "go.mod" || file == "go.sum" || (filepath.Dir(file) == "." && strings.HasSuffix(file, ".go") && !testSource) || file == "web/package-lock.json" || file == "web/package.json" || strings.HasPrefix(file, "scripts/") || strings.HasPrefix(file, ".github/") || (!testInput && (strings.HasPrefix(file, "internal/db/") || strings.HasPrefix(file, "internal/citools/") || strings.HasPrefix(file, "internal/lifecycle/") || strings.HasPrefix(file, "internal/app/"))) {
 			return full("shared schema, lifecycle, root, dependency or gate input changed")
 		}
 		if strings.HasPrefix(file, "web/") {
 			plan.Web = true
 			continue
 		}
-		if file == "README.md" || file == "CHANGELOG.md" || file == "LICENSE" || strings.HasPrefix(file, "docs/") {
+		if documentationFile(file) {
 			continue
 		}
 		dir := filepath.ToSlash(filepath.Dir(file))
@@ -398,5 +402,17 @@ func writeJobOutputs(path string, plan verificationPlan) error {
 	}
 	defer file.Close()
 	_, err = fmt.Fprintf(file, "mode=%s\ngo=%t\nrace=%t\nweb=%t\nupgrade=%t\ngo_packages=%s\nrace_packages=%s\n", plan.Mode, len(plan.GoPackages) > 0, len(plan.RacePackages) > 0, plan.Web, plan.Upgrade, strings.Join(plan.GoPackages, " "), strings.Join(plan.RacePackages, " "))
+	if err != nil {
+		return err
+	}
+	browser, err := json.Marshal(plan.Browser)
+	if err != nil {
+		return err
+	}
+	matrix, err := json.Marshal(plan.Browser.matrix())
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(file, "browser=%t\nbrowser_integration=%t\nbrowser_plan=%s\nbrowser_matrix=%s\n", len(plan.Browser.matrix()) > 0, len(plan.Browser.Suites) > 0, browser, matrix)
 	return err
 }
