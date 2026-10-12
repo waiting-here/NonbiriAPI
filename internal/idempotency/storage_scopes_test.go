@@ -17,7 +17,7 @@ func TestStorageScopesUseCanonicalReplayAndRecovery(t *testing.T) {
 	_, changed := actorAndDigest(t, "/api/operations/{id}", struct {
 		Revision string `json:"revision"`
 	}{Revision: "2"})
-	scopes := []idempotency.Scope{idempotency.ScopeLakeNotes, idempotency.ScopePersonalAutomation}
+	scopes := []idempotency.Scope{idempotency.ScopeLakeNotes, idempotency.ScopePersonalAutomation, idempotency.ScopeRewardRedemption}
 	for _, scope := range scopes {
 		input := idempotency.BeginInput{
 			Scope: scope, ActorHash: actor, Key: testKey, RequestHash: digest,
@@ -69,7 +69,7 @@ func TestStorageScopesUseCanonicalReplayAndRecovery(t *testing.T) {
 	}
 	maintenance := idempotency.NewMaintenance(store.DB())
 	result, err := maintenance.Recover(ctx, maintenanceDecisionNow, 100, maintenanceDeadline())
-	if err != nil || result != (idempotency.MaintenanceResult{Processed: 2}) {
+	if err != nil || result != (idempotency.MaintenanceResult{Processed: len(scopes)}) {
 		t.Fatalf("recovery = (%+v, %v)", result, err)
 	}
 	for _, scope := range scopes {
@@ -86,7 +86,7 @@ func TestStorageScopesUseCanonicalReplayAndRecovery(t *testing.T) {
 		}
 	}
 	result, err = maintenance.Retain(ctx, maintenanceDecisionNow+idempotency.ReplayWindowSeconds, 100, maintenanceDeadline())
-	if err != nil || result != (idempotency.MaintenanceResult{Processed: 2}) {
+	if err != nil || result != (idempotency.MaintenanceResult{Processed: len(scopes)}) {
 		t.Fatalf("expiry boundary = (%+v, %v)", result, err)
 	}
 }

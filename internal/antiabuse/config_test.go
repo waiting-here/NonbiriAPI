@@ -48,3 +48,20 @@ func TestReadConfigIntFieldsStayWithinPortableBounds(t *testing.T) {
 		t.Fatalf("corrupt suspend threshold = %d, want fallback %d", corrupt.CharitySuspendThreshold, defaults.CharitySuspendThreshold)
 	}
 }
+
+func TestRedemptionRuleDefaultsAndDisabledConfig(t *testing.T) {
+	defaults := readConfig(nil)
+	if defaults.RedemptionBanThreshold != 5 || defaults.RedemptionBanWindowSeconds != 86400 || defaults.RedemptionBanDurationSeconds != 86400 {
+		t.Fatal(defaults)
+	}
+	for _, value := range []string{"-1", "4097", "1.5", "01", "4294967296"} {
+		cfg := readConfig(mapConfigReader{KeyRedemptionBanThreshold: value})
+		if cfg.RedemptionBanThreshold != 5 {
+			t.Fatalf("invalid threshold %q: %d", value, cfg.RedemptionBanThreshold)
+		}
+	}
+	cfg := readConfig(mapConfigReader{KeyRedemptionBanThreshold: "0", KeyRedemptionBanWindowSeconds: "1", KeyRedemptionBanDurationSeconds: "316224000"})
+	if cfg.RedemptionBanThreshold != 0 || cfg.RedemptionBanWindowSeconds != 1 || cfg.RedemptionBanDurationSeconds != 316224000 {
+		t.Fatal(cfg)
+	}
+}

@@ -32,12 +32,18 @@ AND ((c.kind='ban' AND u.is_banned=1 AND (u.banned_until IS NULL OR u.banned_unt
 			value := ends.Int64
 			item.EndsAt = &value
 		}
-		if item.ReasonCode == "charity_rpm" {
+		switch item.ReasonCode {
+		case "charity_rpm":
 			item.Reason = "公益调用多次超过请求频率限制。"
 			if lang == "en" {
 				item.Reason = "Repeated charity requests exceeded the rate limit."
 			}
-		} else {
+		case "redemption_code":
+			item.Reason = "多次提交无效、已领取或暂时无法领取的兑换码。"
+			if lang == "en" {
+				item.Reason = "Repeated submissions of invalid, already-claimed or currently unavailable redemption codes."
+			}
+		default:
 			item.Reason = "公益调用的有效内容未达到最低长度要求。"
 			if lang == "en" {
 				item.Reason = "Charity request content did not meet the minimum length."

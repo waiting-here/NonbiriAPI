@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"hash"
 	"strings"
+
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
 
 const (
@@ -46,6 +48,7 @@ const (
 	ScopeDonation               Scope = "donation"
 	ScopeLakeNotes              Scope = "lake_notes"
 	ScopePersonalAutomation     Scope = "personal_automation"
+	ScopeRewardRedemption       Scope = "reward_redemption"
 )
 
 var (
@@ -75,6 +78,7 @@ var validScopes = map[Scope]struct{}{
 	ScopeDonation:               {},
 	ScopeLakeNotes:              {},
 	ScopePersonalAutomation:     {},
+	ScopeRewardRedemption:       {},
 }
 
 // DigestInput contains canonical, already-authorized request facts. Body must
@@ -191,6 +195,9 @@ type BeginInput struct {
 	Key         string
 	RequestHash [32]byte
 	DecisionNow int64
+	// ReplaySeconds freezes a redemption's replay lifetime at acceptance.
+	// Other scopes retain their existing fixed 24-hour lifetime.
+	ReplaySeconds int64
 }
 
 // Begin reserves a replay identity inside the caller's business transaction,
@@ -206,7 +213,14 @@ func Begin(ctx context.Context, tx *sql.Tx, input BeginInput) (Decision, error) 
 	if input.Scope == ScopeCredentialReport {
 		return Decision{}, errors.New("credential report uses its dedicated acceptance rail")
 	}
-	if input.DecisionNow < 0 || input.DecisionNow > maxUnixSecond-ReplayWindowSeconds {
+	replaySeconds := ReplayWindowSeconds
+	if input.ReplaySeconds != 0 {
+		if input.Scope != ScopeRewardRedemption || input.ReplaySeconds < ReplayWindowSeconds || input.ReplaySeconds > db.MaxBanDurationSeconds {
+			return Decision{}, errors.New("idempotency replay lifetime is invalid")
+		}
+		replaySeconds = input.ReplaySeconds
+	}
+	if input.DecisionNow < 0 || input.DecisionNow > maxUnixSecond-replaySeconds {
 		return Decision{}, errors.New("idempotency decision time is outside the supported UTC range")
 	}
 	keyHash, err := KeyHash(input.Key)
@@ -226,7 +240,7 @@ INSERT INTO idempotency_records(
  scope,actor_scope_hash,key_hash,request_hash,state,http_status,response_body,created_at,expires_at
 ) VALUES(?,?,?,?,'accepted',0,?, ?,?)
 ON CONFLICT(scope,actor_scope_hash,key_hash) DO NOTHING`,
-		string(input.Scope), input.ActorHash[:], keyHash[:], input.RequestHash[:], []byte{}, input.DecisionNow, input.DecisionNow+ReplayWindowSeconds)
+		string(input.Scope), input.ActorHash[:], keyHash[:], input.RequestHash[:], []byte{}, input.DecisionNow, input.DecisionNow+replaySeconds)
 	if err != nil {
 		return Decision{}, fmt.Errorf("accept idempotency record: %w", err)
 	}

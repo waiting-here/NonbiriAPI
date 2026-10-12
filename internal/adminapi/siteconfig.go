@@ -148,6 +148,9 @@ const (
 	KeyRPMBanThreshold                  = antiabuse.KeyRPMBanThreshold
 	KeyRPMBanWindowSeconds              = antiabuse.KeyRPMBanWindowSeconds
 	KeyRPMBanDurationSeconds            = antiabuse.KeyRPMBanDurationSeconds
+	KeyRedemptionBanThreshold           = antiabuse.KeyRedemptionBanThreshold
+	KeyRedemptionBanWindowSeconds       = antiabuse.KeyRedemptionBanWindowSeconds
+	KeyRedemptionBanDurationSeconds     = antiabuse.KeyRedemptionBanDurationSeconds
 	KeyCharityMinChars                  = antiabuse.KeyCharityMinChars
 	KeyCharityViolationDeductMilli      = antiabuse.KeyCharityViolationDeductMilli
 	KeyCharityViolationBanSeconds       = antiabuse.KeyCharityViolationBanSeconds
@@ -356,6 +359,9 @@ var knownSiteConfig = func() map[string]keySpec {
 		KeyRPMBanThreshold:                  {kind: kindInt, min: 0, max: maxAntiAbuseThreshold, def: antiabuse.DefaultRPMBanThreshold},
 		KeyRPMBanWindowSeconds:              {kind: kindInt, min: 1, max: maxAntiAbuseSeconds, def: int(antiabuse.DefaultViolationWindow.Seconds())},
 		KeyRPMBanDurationSeconds:            {kind: kindInt, min: 1, max: maxAntiAbuseSeconds, def: int(antiabuse.DefaultRPMBanDuration.Seconds())},
+		KeyRedemptionBanThreshold:           {kind: kindInt, min: 0, max: maxAntiAbuseThreshold, def: antiabuse.DefaultRedemptionBanThreshold},
+		KeyRedemptionBanWindowSeconds:       {kind: kindInt, min: 1, max: maxAntiAbuseSeconds, def: int(antiabuse.DefaultRedemptionBanWindow.Seconds())},
+		KeyRedemptionBanDurationSeconds:     {kind: kindInt, min: 1, max: maxAntiAbuseSeconds, def: int(antiabuse.DefaultRedemptionBanDuration.Seconds())},
 		KeyCharityMinChars:                  {kind: kindInt, min: 0, max: maxCharityMinChars, def: antiabuse.DefaultCharityMinChars},
 		KeyCharityViolationDeductMilli:      {kind: kindAmount, defAmount: 0},
 		KeyCharityViolationBanSeconds:       {kind: kindInt, min: 0, max: maxAntiAbuseSeconds, def: 0},

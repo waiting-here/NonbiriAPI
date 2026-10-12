@@ -5,107 +5,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"strconv"
 	"time"
 )
 
-func (s *Service) attempt(user, at int64) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.minute != at/60 {
-		s.minute = at / 60
-		s.attempts = map[int64]int{}
-	}
-	if len(s.attempts) >= 8192 && s.attempts[user] == 0 {
-		return false
-	}
-	s.attempts[user]++
-	return s.attempts[user] <= 12
-}
-func (s *Service) Redeem(ctx context.Context, user int64, code string) (Redemption, error) {
-	var out Redemption
-	at, err := s.now()
-	if err != nil {
-		return out, err
-	}
-	if !s.attempt(user, at) {
-		return out, ErrRate
-	}
-	code, err = normalizeCode(code)
-	if err != nil {
-		return out, ErrUnavailable
-	}
-	tx, err := s.config.Database.BeginTx(ctx, nil)
-	if err != nil {
-		return out, err
-	}
-	defer tx.Rollback()
-	if err = s.config.Users.AuthorizeUserMutation(ctx, tx, user); err != nil {
-		return out, err
-	}
-	if err = s.config.Gate.AuthorizeUserActivity(ctx, tx, user); err != nil {
-		return out, err
-	}
-	var id string
-	var actor sql.NullInt64
-	err = tx.QueryRowContext(ctx, "SELECT id,actor_user_id FROM reward_campaigns WHERE code=? AND kind='code'", code).Scan(&id, &actor)
-	if errors.Is(err, sql.ErrNoRows) {
-		return out, ErrUnavailable
-	}
-	if err != nil {
-		return out, err
-	}
-	c, err := readConfiguration(ctx, tx, id)
-	if err != nil {
-		return out, err
-	}
-	// A committed receipt remains recoverable after expiry or exhaustion.
-	var claimID int64
-	err = tx.QueryRowContext(ctx, "SELECT id FROM reward_claims WHERE campaign_id=? AND user_id=? AND status='success'", id, user).Scan(&claimID)
-	if err == nil {
-		out.Receipt, err = readReceipt(ctx, tx, user, claimID)
-		out.AlreadyClaimed = err == nil
-		return out, err
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return out, err
-	}
-	if !c.Enabled || c.StartsAt != nil && at < *c.StartsAt || c.EndsAt != nil && at >= *c.EndsAt || c.Quota != nil && c.Claimed >= *c.Quota {
-		return out, ErrUnavailable
-	}
-	f, err := loadFacts(ctx, tx, user, at, usesAssets(c.Conditions))
-	if err != nil {
-		return out, err
-	}
-	if !matches(c.Conditions, f) {
-		return out, ErrConditions
-	}
-	results, err := grant(ctx, tx, user, actor.Int64, at, c.Title, c.Rewards)
-	if err != nil {
-		return out, err
-	}
-	r, err := tx.ExecContext(ctx, "INSERT INTO reward_claims(campaign_id,user_id,status,receipt,created_at,completed_at) VALUES(?,?,'success',?,?,?)", id, user, jsonText(results), at, at)
-	if err != nil {
-		return out, err
-	}
-	claimID, err = r.LastInsertId()
-	if err != nil {
-		return out, err
-	}
-	if _, err = tx.ExecContext(ctx, "UPDATE reward_campaigns SET claimed=claimed+1 WHERE id=?", id); err != nil {
-		return out, err
-	}
-	if s.config.Activity != nil {
-		if err = s.config.Activity.RecordLimitedActivityTx(ctx, tx, user, at); err != nil {
-			return out, err
-		}
-	}
-	out.Receipt, err = readReceipt(ctx, tx, user, claimID)
-	if err != nil {
-		return out, err
-	}
-	return out, tx.Commit()
-}
 func readReceipt(ctx context.Context, tx *sql.Tx, user, id int64) (Receipt, error) {
 	var out Receipt
 	var raw string
@@ -299,10 +203,17 @@ func (s *Service) ExportUserTx(ctx context.Context, tx *sql.Tx, user int64, limi
 	return out, nil
 }
 func (s *Service) DeleteUserTx(ctx context.Context, tx *sql.Tx, user int64) error {
+	actor, err := idempotency.ActorScopeHash("user", strconv.FormatInt(user, 10))
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM idempotency_records WHERE scope=? AND actor_scope_hash=?", idempotency.ScopeRewardRedemption, actor[:]); err != nil {
+		return err
+	}
 	// Aggregate counts retain economic facts without a former account identity.
 	if _, err := tx.ExecContext(ctx, "UPDATE reward_campaigns SET skipped=skipped+(SELECT count(*) FROM reward_claims WHERE campaign_id=reward_campaigns.id AND user_id=? AND status IN ('pending','failed')) WHERE kind='broadcast'", user); err != nil {
 		return err
 	}
-	_, err := tx.ExecContext(ctx, "DELETE FROM reward_claims WHERE user_id=?", user)
+	_, err = tx.ExecContext(ctx, "DELETE FROM reward_claims WHERE user_id=?", user)
 	return err
 }

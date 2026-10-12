@@ -134,7 +134,7 @@ func newActivityRuntime(ctx context.Context, store *db.Store, vault *secret.Vaul
 		_ = a.Close()
 		return nil, err
 	}
-	a.rewards, err = rewards.New(rewards.Config{Database: store.DB(), Users: users, Admins: roles, Gate: admission, Activity: activeActivityRecorder{}, Now: now})
+	a.rewards, err = rewards.New(rewards.Config{Database: store.DB(), Users: users, Admins: roles, Gate: admission, Keys: vault, Activity: activeActivityRecorder{}, Now: now})
 	if err != nil {
 		_ = a.Close()
 		return nil, err
