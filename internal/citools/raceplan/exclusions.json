@@ -10,8 +10,8 @@
       "TestBindingReorderAtCapacityPreservesDependentRows",
       "TestBlackjackNineSeatFreshConstraintAndRepeatedOpenNoOp",
       "TestBlackjackPartialSourceRejectedWithoutWriting",
-      "TestCredentialRestartValidatesStoredURLsAndLiveTargets",
       "TestCustomPresetUpgradeBoundsOwnershipAndDeletion",
+      "TestDiscordGatePolicyPreservesAccountAndConfiguration",
       "TestDualAssetSeeds",
       "TestEmbeddingRouteChecksAcceptOnlyKnownOperations",
       "TestGenerationTwoBootstrapFreshRequiresAbsentSidecarsAndSeedsIdentity",
@@ -21,7 +21,6 @@
       "TestGenerationTwoCurrentFreshEpochAndIdentityAreStableAcrossRestart",
       "TestGenerationTwoCurrentRecoveryFailurePreservesStableClassification",
       "TestGenerationTwoCurrentRejectsExternallyMutatedValidDatabaseWithoutSourceWrite",
-      "TestGenerationTwoCurrentRejectsNonGenerationTwoSecretEnvelopes",
       "TestGenerationTwoCurrentRejectsSourceRecheckMutation",
       "TestGenerationTwoCurrentReopensWithControlledWALCheckpoint",
       "TestGenerationTwoCurrentTimezoneLockMarkerIsStableAcrossRestart",
@@ -82,17 +81,26 @@
       "TestLimitedActivityRejectsFractionalAccountingAndScheduleFacts",
       "TestLoanTermsExactArithmeticAndBounds",
       "TestModelTokenReserveConstraintsAndCascade",
+      "TestModelTypesPreserveModelsAndRequestHistory",
+      "TestOfflineVerificationRejectsNonGenerationTwoSecretEnvelopes",
+      "TestOfflineVerificationValidatesStoredURLsAndLiveTargets",
       "TestOpenContextCanceledBeforeSourceIO",
       "TestOpenContextCanceledPreflightPreservesSource",
       "TestOpenContextRejectsOwnedPathAndHardlink",
+      "TestPersonalBalancedRoutingPreservesModelsAndBindings",
       "TestPublicModelDescriptionTextBoundary",
       "TestQuotaAggregateModeCannotDrift",
       "TestQuotaReceiptPeriodReferenceIsRetainedUntilRelease",
       "TestQuotaRejectsInvalidStateCombinations",
       "TestQuotaSameSecondAndPreUnixBoundaries",
+      "TestRedemptionIdempotencyRetentionBoundsAndFixedExpiry",
       "TestRequestAdaptationAuditContainsOnlyImmutablePartitionNames",
+      "TestRestartKeyValidationCostDoesNotGrowWithCredentials",
       "TestRoutingExtensionRejectsModifiedPriorSchema",
       "TestScanCheckpointPrivacyWithoutPublishedResults",
+      "TestSchemaMigrationsRejectUnknownSourcesAndIncompleteChains",
+      "TestSchemaMigrationsRollbackWholeChainAndRetry",
+      "TestSchemaMigrationsUpgradeEveryPriorRevisionOnce",
       "TestStartupDiagnosticsKeepPrimaryCauseAndHideSecondaryDetails",
       "TestStartupSecondaryErrorsRemainBoundedAndSafe",
       "TestStorageContractsCharityBindingKeepsEndpointLifetime",
@@ -102,6 +110,7 @@
       "TestStorageContractsLakePeriodsStayUnpublishedAndRejectOverlap",
       "TestStorageContractsPersonalBatchIdentityProgressAndDeletion",
       "TestStorageContractsRolePolicyDefaultAndMalformedPersistence",
+      "TestTokenQuotaPreservesRecordedDimensions",
       "TestUsageDiscrepancyUpgradePreservesHistoryAndBoundsMarkers"
     ]
   },
@@ -328,6 +337,18 @@
       "TestGenerationNearestPairFallbackVerifiesProgress",
       "TestGenerationQualityRejectsRowAndColumnPairing",
       "TestGenerationRandomFailuresAndBoundedDegenerateSources"
+    ]
+  },
+  {
+    "package": "github.com/waiting-here/NonbiriAPI/internal/upgrade/rc7",
+    "reason": "Serial conversion, rollback and data preservation; ordinary conversion and exact released-source upgrade gates retained. Exclusive-access cancellation stays in race.",
+    "tests": [
+      "TestConversionBackfillBatchesShareOneTransaction",
+      "TestConversionChecksThenUpgradesExactSourceAndReenters",
+      "TestConversionImportsGatewayOnlyBeforeInitialization",
+      "TestConversionRefusesUnknownDriftAndWrongKeyWithoutWrites",
+      "TestConversionTransactionRollsBackAllChangesOnFailureOrCancellation",
+      "TestConvertReleasedDatabase"
     ]
   }
 ]

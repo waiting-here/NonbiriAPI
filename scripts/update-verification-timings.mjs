@@ -39,6 +39,13 @@ export function browserMeasurements(reports) {
   return seconds;
 }
 
+export function applyRaceMeasurements(hints, race) {
+  Object.assign(hints.package_seconds, race.packages);
+  for (const [pkg, tests] of Object.entries(race.tests)) {
+    if (hints.split_packages.includes(pkg)) Object.assign(hints.test_seconds[pkg] ||= {}, tests);
+  }
+}
+
 function filesIn(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name);
@@ -59,8 +66,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (Object.keys(race.packages).length) {
     const path = join(root, 'scripts/race-timings.json');
     const hints = JSON.parse(readFileSync(path, 'utf8'));
-    Object.assign(hints.package_seconds, race.packages);
-    for (const [pkg, tests] of Object.entries(race.tests)) Object.assign(hints.test_seconds[pkg] ||= {}, tests);
+    applyRaceMeasurements(hints, race);
     hints.source = {
       run_url: runURL, commit, attempt: +attempt,
       measured_packages: Object.keys(race.packages).length,
