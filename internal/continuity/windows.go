@@ -8,11 +8,12 @@ import (
 type WindowKind string
 
 const (
-	UserRPM           WindowKind = "user_rpm"
-	GameStart         WindowKind = "game_start"
-	AbuseRPM          WindowKind = "abuse_rpm"
-	AbuseShortContent WindowKind = "abuse_short_content"
-	MaxWindowEvents              = 10000
+	UserRPM             WindowKind = "user_rpm"
+	GameStart           WindowKind = "game_start"
+	AbuseRPM            WindowKind = "abuse_rpm"
+	AbuseShortContent   WindowKind = "abuse_short_content"
+	AbuseRedemptionCode WindowKind = "abuse_redemption_code"
+	MaxWindowEvents                = 10000
 )
 
 type WindowEvent struct {
@@ -48,7 +49,7 @@ func (service *Service) AttachWindowPreservers(owners ...WindowPreserver) error 
 }
 
 func validWindow(kind WindowKind, scope string, nowMillis int64, limit int) bool {
-	return (kind == UserRPM || kind == GameStart || kind == AbuseRPM || kind == AbuseShortContent) && validLabel(scope) && nowMillis >= 0 && nowMillis <= maxUnixSecond*1000 && limit > 0 && limit <= MaxWindowEvents
+	return (kind == UserRPM || kind == GameStart || kind == AbuseRPM || kind == AbuseShortContent || kind == AbuseRedemptionCode) && validLabel(scope) && nowMillis >= 0 && nowMillis <= maxUnixSecond*1000 && limit > 0 && limit <= MaxWindowEvents
 }
 
 func (service *Service) LoadWindow(ctx context.Context, userID int64, kind WindowKind, scope string, nowMillis int64, limit int) (Key, []WindowEvent, error) {

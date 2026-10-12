@@ -49,9 +49,18 @@ type Service struct {
 	done    <-chan struct{}
 }
 type windowKey struct {
-	userID  int64
-	charity bool
+	userID    int64
+	violation violationKind
 }
+
+type violationKind uint8
+
+const (
+	violationRPM violationKind = iota
+	violationShortContent
+	violationRedemption
+)
+
 type violationWindow struct {
 	events               []int64
 	facts                []windowEvent
@@ -186,7 +195,10 @@ func (s *Service) record(parent context.Context, userID int64, charity bool, mod
 			return nil, charityrouting.ErrCharitySuspended
 		}
 	}
-	key := windowKey{userID: userID, charity: charity}
+	key := windowKey{userID: userID}
+	if charity {
+		key.violation = violationShortContent
+	}
 	windows, eventCount, err := s.cleanupCopy(ctx, tx, now, cfg, key)
 	if err != nil {
 		return nil, err
@@ -486,8 +498,8 @@ func (s *Service) ForgetUser(userID int64) {
 	}
 	s.gate <- struct{}{}
 	defer func() { <-s.gate }()
-	for _, charity := range []bool{false, true} {
-		key := windowKey{userID: userID, charity: charity}
+	for kind := violationRPM; kind <= violationRedemption; kind++ {
+		key := windowKey{userID: userID, violation: kind}
 		s.events -= len(s.windows[key].events)
 		delete(s.windows, key)
 	}

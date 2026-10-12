@@ -17,8 +17,11 @@ type continuationFlags struct {
 }
 
 func (k windowKey) continuityKind() continuity.WindowKind {
-	if k.charity {
+	if k.violation == violationShortContent {
 		return continuity.AbuseShortContent
+	}
+	if k.violation == violationRedemption {
+		return continuity.AbuseRedemptionCode
 	}
 	return continuity.AbuseRPM
 }
@@ -39,7 +42,8 @@ func (s *Service) PreserveWindowTx(ctx context.Context, tx *sql.Tx, userID, now 
 	if reader.err != nil {
 		return reader.err
 	}
-	for _, key := range []windowKey{{userID: userID}, {userID: userID, charity: true}} {
+	for kind := violationRPM; kind <= violationRedemption; kind++ {
+		key := windowKey{userID: userID, violation: kind}
 		var flags continuationFlags
 		err := tx.QueryRowContext(ctx, `SELECT ban_done,suspend_done FROM abuse_windows WHERE user_id=? AND violation_kind=?`, userID, key.kind()).Scan(&flags.BanDone, &flags.SuspendDone)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -116,7 +120,7 @@ func (s *Service) mergeContinuityWindow(ctx context.Context, tx *sql.Tx, key win
 	}
 	added := []windowEvent{}
 	for _, event := range events {
-		if event.Count != 1 || event.AtMillis%1000 != 0 || event.ExpiresMillis%1000 != 0 || !key.charity && event.Value != nil || event.Value != nil && *event.Value > MaxCharityContentRuneCount {
+		if event.Count != 1 || event.AtMillis%1000 != 0 || event.ExpiresMillis%1000 != 0 || key.violation != violationShortContent && event.Value != nil || event.Value != nil && *event.Value > MaxCharityContentRuneCount {
 			return 0, continuity.ErrInvariant
 		}
 		if event.AtMillis/1000 <= now-windowDuration(key, cfg) {

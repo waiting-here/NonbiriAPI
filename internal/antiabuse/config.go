@@ -14,6 +14,9 @@ const (
 	KeyRPMBanThreshold                  = "rpm_ban_threshold"
 	KeyRPMBanWindowSeconds              = "rpm_ban_window_seconds"
 	KeyRPMBanDurationSeconds            = "rpm_ban_duration_seconds"
+	KeyRedemptionBanThreshold           = "redemption_ban_threshold"
+	KeyRedemptionBanWindowSeconds       = "redemption_ban_window_seconds"
+	KeyRedemptionBanDurationSeconds     = "redemption_ban_duration_seconds"
 	KeyCharityMinChars                  = "charity_min_chars"
 	KeyCharityViolationDeductMilli      = "charity_violation_deduct_milli"
 	KeyCharityViolationBanSeconds       = "charity_violation_ban_seconds"
@@ -26,27 +29,33 @@ const (
 )
 
 const (
-	DefaultRPMBanThreshold     = 5
-	DefaultRPMBanWindow        = 24 * time.Hour
-	DefaultRPMBanDuration      = 24 * time.Hour
-	DefaultCharityMinChars     = 20
-	DefaultViolationWindow     = 24 * time.Hour
-	DefaultSuspendWindow       = 24 * time.Hour
-	MaxWindowDuration          = db.MaxBanDurationSeconds
-	MaxWindowUsers             = 10000
-	MaxEventsPerUser           = 256
-	MaxRememberedOperationIDs  = 256
-	MaxViolationThreshold      = 4096
-	MaxCharityContentRuneCount = 1 << 20
+	DefaultRPMBanThreshold        = 5
+	DefaultRPMBanWindow           = 24 * time.Hour
+	DefaultRPMBanDuration         = 24 * time.Hour
+	DefaultRedemptionBanThreshold = 5
+	DefaultRedemptionBanWindow    = 24 * time.Hour
+	DefaultRedemptionBanDuration  = 24 * time.Hour
+	DefaultCharityMinChars        = 20
+	DefaultViolationWindow        = 24 * time.Hour
+	DefaultSuspendWindow          = 24 * time.Hour
+	MaxWindowDuration             = db.MaxBanDurationSeconds
+	MaxWindowUsers                = 10000
+	MaxEventsPerUser              = 256
+	MaxRememberedOperationIDs     = 256
+	MaxViolationThreshold         = 4096
+	MaxCharityContentRuneCount    = 1 << 20
 )
 
 // Config is the authoritative anti-abuse snapshot used for one event. It is
 // read per request, so administrator changes take effect without stale process
 // state. Zero threshold/duration values are intentional feature switches.
 type Config struct {
-	RPMBanThreshold       int
-	RPMBanWindowSeconds   int64
-	RPMBanDurationSeconds int64
+	RPMBanThreshold              int
+	RPMBanWindowSeconds          int64
+	RPMBanDurationSeconds        int64
+	RedemptionBanThreshold       int
+	RedemptionBanWindowSeconds   int64
+	RedemptionBanDurationSeconds int64
 
 	CharityMinChars                  int
 	CharityViolationDeductMilli      int64
@@ -64,6 +73,9 @@ func DefaultConfig() Config {
 		RPMBanThreshold:                  DefaultRPMBanThreshold,
 		RPMBanWindowSeconds:              int64(DefaultRPMBanWindow / time.Second),
 		RPMBanDurationSeconds:            int64(DefaultRPMBanDuration / time.Second),
+		RedemptionBanThreshold:           DefaultRedemptionBanThreshold,
+		RedemptionBanWindowSeconds:       int64(DefaultRedemptionBanWindow / time.Second),
+		RedemptionBanDurationSeconds:     int64(DefaultRedemptionBanDuration / time.Second),
 		CharityMinChars:                  DefaultCharityMinChars,
 		CharityViolationWindowSeconds:    int64(DefaultViolationWindow / time.Second),
 		CharitySuspendWindowSeconds:      int64(DefaultSuspendWindow / time.Second),
@@ -124,6 +136,9 @@ func readConfig(reader ConfigReader) Config {
 	cfg.RPMBanThreshold = readInt(KeyRPMBanThreshold, cfg.RPMBanThreshold, 0, MaxViolationThreshold)
 	cfg.RPMBanWindowSeconds = readInt64(KeyRPMBanWindowSeconds, cfg.RPMBanWindowSeconds, 1, maxSeconds)
 	cfg.RPMBanDurationSeconds = readInt64(KeyRPMBanDurationSeconds, cfg.RPMBanDurationSeconds, 1, maxSeconds)
+	cfg.RedemptionBanThreshold = readInt(KeyRedemptionBanThreshold, cfg.RedemptionBanThreshold, 0, MaxViolationThreshold)
+	cfg.RedemptionBanWindowSeconds = readInt64(KeyRedemptionBanWindowSeconds, cfg.RedemptionBanWindowSeconds, 1, maxSeconds)
+	cfg.RedemptionBanDurationSeconds = readInt64(KeyRedemptionBanDurationSeconds, cfg.RedemptionBanDurationSeconds, 1, maxSeconds)
 	cfg.CharityMinChars = readInt(KeyCharityMinChars, cfg.CharityMinChars, 0, MaxCharityContentRuneCount)
 	cfg.CharityViolationDeductMilli = readAmount(KeyCharityViolationDeductMilli, 0)
 	cfg.CharityViolationBanSeconds = readInt64(KeyCharityViolationBanSeconds, 0, 0, maxSeconds)

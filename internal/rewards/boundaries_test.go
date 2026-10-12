@@ -36,18 +36,18 @@ func TestCodeWindowEligibilityAndAdminBoundary(t *testing.T) {
 		}
 	}
 	c := f.create(t, in, "window")
-	if _, e := f.s.Redeem(t.Context(), f.user, c.Code); !errors.Is(e, ErrUnavailable) {
+	if _, e := f.s.Redeem(t.Context(), f.user, f.nextKey(), c.Code); !errors.Is(e, ErrUnavailable) {
 		t.Fatal(e)
 	}
 	f.at.Store(start)
-	if _, e := f.s.Redeem(t.Context(), f.other, c.Code); !errors.Is(e, ErrConditions) {
+	if _, e := f.s.Redeem(t.Context(), f.other, f.nextKey(), c.Code); !errors.Is(e, ErrConditions) {
 		t.Fatal(e)
 	}
-	if _, e := f.s.Redeem(t.Context(), f.user, c.Code); e != nil {
+	if _, e := f.s.Redeem(t.Context(), f.user, f.nextKey(), c.Code); e != nil {
 		t.Fatal(e)
 	}
 	f.at.Store(end)
-	if _, e := f.s.Redeem(t.Context(), f.other, c.Code); !errors.Is(e, ErrUnavailable) {
+	if _, e := f.s.Redeem(t.Context(), f.other, f.nextKey(), c.Code); !errors.Is(e, ErrUnavailable) {
 		t.Fatal(e)
 	}
 	edit := Edit{ID: c.ID, Revision: c.Revision, Title: c.Title, Enabled: false}
@@ -60,7 +60,7 @@ func TestCodeWindowEligibilityAndAdminBoundary(t *testing.T) {
 	if _, e := f.s.Update(t.Context(), f.admin, edit); e != nil {
 		t.Fatal("lost update response", e)
 	}
-	if result, e := f.s.Redeem(t.Context(), f.user, c.Code); e != nil || !result.AlreadyClaimed {
+	if result, e := f.s.Redeem(t.Context(), f.user, f.nextKey(), c.Code); e != nil || !result.AlreadyClaimed {
 		t.Fatal("committed receipt lost after disable", result, e)
 	}
 }
@@ -122,7 +122,7 @@ func TestRewardCatalogIsPrivateAndUniqueGearIsSkipped(t *testing.T) {
 	in := input("code")
 	in.Rewards = []rewardasset.Item{{Asset: "lake:gear:bambooPole", Quantity: "1"}, {Asset: "general", Quantity: "1"}}
 	c := f.create(t, in, "gear")
-	result, e := f.s.Redeem(t.Context(), f.user, c.Code)
+	result, e := f.s.Redeem(t.Context(), f.user, f.nextKey(), c.Code)
 	if e != nil || result.Results[0].Skipped != "1" || result.Results[0].Granted != "0" || f.balance(t, f.user, ledger.General) != "1000" {
 		t.Fatal(result, e)
 	}

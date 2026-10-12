@@ -494,6 +494,9 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err != nil {
 		return nil, err
 	}
+	if err := activityEngines.rewards.AttachAbuse(forwardRuntime.abuse); err != nil {
+		return nil, fmt.Errorf("attach redemption abuse protection: %w", err)
+	}
 	if err := authRuntime.AttachUserLifecycleGate(forwardRuntime.lifecycle); err != nil {
 		return nil, fmt.Errorf("attach shared user lifecycle gate: %w", err)
 	}

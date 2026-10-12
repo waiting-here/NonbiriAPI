@@ -9,30 +9,37 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/antiabuse"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 	"unicode/utf8"
 )
 
 type Service struct {
-	config   Config
-	mu       sync.Mutex
-	minute   int64
-	attempts map[int64]int
+	config Config
+	abuse  *antiabuse.Service
 }
 
 func New(c Config) (*Service, error) {
-	if c.Database == nil || c.Users == nil || c.Admins == nil || c.Gate == nil {
+	if c.Database == nil || c.Users == nil || c.Admins == nil || c.Gate == nil || c.Keys == nil {
 		return nil, ErrInvalid
 	}
 	if c.Now == nil {
 		c.Now = time.Now
 	}
-	return &Service{config: c, attempts: map[int64]int{}}, nil
+	return &Service{config: c}, nil
+}
+
+// AttachAbuse connects the shared restriction service before serving requests.
+func (s *Service) AttachAbuse(abuse *antiabuse.Service) error {
+	if abuse == nil || s.abuse != nil {
+		return ErrInvalid
+	}
+	s.abuse = abuse
+	return nil
 }
 func (s *Service) now() (int64, error) {
 	at := s.config.Now().Unix()

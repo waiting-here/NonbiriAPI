@@ -63,21 +63,17 @@ func RegisterRoutes(users limitedactivities.UserRouteRegistrar, admins limitedac
 			respond(w, nil, ErrInvalid)
 			return
 		}
-		out, err := s.Redeem(r.Context(), p.UserID, *in.Code)
-		rejection := ""
-		switch {
-		case errors.Is(err, ErrUnavailable):
-			rejection = "unavailable"
-		case errors.Is(err, ErrConditions):
-			rejection = "conditions"
-		case errors.Is(err, ErrCapacity):
-			rejection = "capacity"
-		}
-		if rejection != "" {
-			respond(w, map[string]string{"rejection": rejection}, nil)
+		keys := r.Header.Values("Idempotency-Key")
+		if len(keys) != 1 {
+			respond(w, nil, ErrInvalid)
 			return
 		}
-		respond(w, out, err)
+		out, err := s.Redeem(r.Context(), p.UserID, keys[0], *in.Code)
+		if errors.Is(err, ErrUnavailable) || errors.Is(err, ErrConditions) || errors.Is(err, ErrCapacity) {
+			respond(w, redemptionResponse(out, err), nil)
+			return
+		}
+		respond(w, redemptionResponse(out, nil), err)
 	}); err != nil {
 		return err
 	}
@@ -239,7 +235,7 @@ func respond(w http.ResponseWriter, out any, err error) {
 	switch {
 	case errors.Is(err, ErrInvalid):
 		code, message = httperr.CodeInvalidRequest, "Check the reward settings."
-	case errors.Is(err, ErrConflict):
+	case errors.Is(err, ErrConflict), errors.Is(err, idempotency.ErrConflict):
 		code, message = httperr.CodeConflict, "The code or configuration has changed."
 	case errors.Is(err, authz.ErrUnauthorized):
 		code, message = httperr.CodeUnauthorized, "Sign in to continue."

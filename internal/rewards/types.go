@@ -31,11 +31,15 @@ type AdminAuthorizer interface {
 type Gate interface {
 	AuthorizeUserActivity(context.Context, *sql.Tx, int64) error
 }
+type KeyDeriver interface {
+	DeriveGenerationTwoSubkey([]byte) ([]byte, error)
+}
 type Config struct {
 	Database *sql.DB
 	Users    UserAuthorizer
 	Admins   AdminAuthorizer
 	Gate     Gate
+	Keys     KeyDeriver
 	Activity limitedactivities.ActivityRecorder
 	Now      func() time.Time
 }
@@ -90,7 +94,8 @@ type Receipt struct {
 }
 type Redemption struct {
 	Receipt
-	AlreadyClaimed bool `json:"already_claimed"`
+	AlreadyClaimed bool   `json:"already_claimed"`
+	BannedUntil    *int64 `json:"banned_until,omitempty"`
 }
 
 type Preview struct {

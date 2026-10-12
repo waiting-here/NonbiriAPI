@@ -17,24 +17,48 @@ type windowEvent struct {
 }
 
 func (k windowKey) kind() string {
-	if k.charity {
+	switch k.violation {
+	case violationShortContent:
 		return "short_content"
+	case violationRedemption:
+		return "redemption_code"
 	}
 	return "rpm"
 }
+
+func parseViolationKind(kind string) (violationKind, error) {
+	switch kind {
+	case "rpm":
+		return violationRPM, nil
+	case "short_content":
+		return violationShortContent, nil
+	case "redemption_code":
+		return violationRedemption, nil
+	default:
+		return 0, charityrouting.ErrInvariant
+	}
+}
+
 func windowDuration(k windowKey, c Config) int64 {
-	if k.charity {
+	if k.violation == violationShortContent {
 		return max(c.CharityViolationWindowSeconds, c.CharitySuspendWindowSeconds)
+	}
+	if k.violation == violationRedemption {
+		return c.RedemptionBanWindowSeconds
 	}
 	return c.RPMBanWindowSeconds
 }
 func resetDone(k windowKey, w *violationWindow, now int64, c Config) {
-	if k.charity {
+	if k.violation == violationShortContent {
 		if c.CharityViolationBanThreshold == 0 || c.CharityViolationWindowBanSeconds == 0 || countEvents(w.events, now, c.CharityViolationWindowSeconds) < c.CharityViolationBanThreshold {
 			w.banDone = false
 		}
 		if c.CharitySuspendThreshold == 0 || c.CharitySuspendDurationSeconds == 0 || countEvents(w.events, now, c.CharitySuspendWindowSeconds) < c.CharitySuspendThreshold {
 			w.suspendDone = false
+		}
+	} else if k.violation == violationRedemption {
+		if c.RedemptionBanThreshold == 0 || countEvents(w.events, now, c.RedemptionBanWindowSeconds) < c.RedemptionBanThreshold {
+			w.banDone = false
 		}
 	} else if c.RPMBanThreshold == 0 || countEvents(w.events, now, c.RPMBanWindowSeconds) < c.RPMBanThreshold {
 		w.banDone = false
@@ -76,7 +100,11 @@ func (s *Service) restore() error {
 			rows.Close()
 			return err
 		}
-		k.charity = kind == "short_content"
+		k.violation, err = parseViolationKind(kind)
+		if err != nil {
+			rows.Close()
+			return err
+		}
 		windows[k] = w
 	}
 	err = rows.Err()
@@ -102,7 +130,11 @@ func (s *Service) restore() error {
 			rows.Close()
 			return err
 		}
-		k.charity = kind == "short_content"
+		k.violation, err = parseViolationKind(kind)
+		if err != nil {
+			rows.Close()
+			return err
+		}
 		w, ok := windows[k]
 		if !ok || seq >= w.next || len(w.events) >= MaxViolationThreshold || count >= MaxWindowUsers*MaxEventsPerUser {
 			rows.Close()
@@ -139,7 +171,8 @@ func (s *Service) restore() error {
 }
 
 func pruneWindowRows(ctx context.Context, tx *sql.Tx, now int64, cfg Config) error {
-	for _, k := range []windowKey{{charity: false}, {charity: true}} {
+	for kind := violationRPM; kind <= violationRedemption; kind++ {
+		k := windowKey{violation: kind}
 		if _, err := tx.ExecContext(ctx, `UPDATE abuse_window_events SET expires_at=MIN(253402300799,occurred_at+?) WHERE violation_kind=? AND expires_at IS NULL`, windowDuration(k, cfg), k.kind()); err != nil {
 			return err
 		}
@@ -186,10 +219,10 @@ func (s *Service) cleanupCopy(ctx context.Context, tx *sql.Tx, now int64, cfg Co
 		if k == target {
 			// The incoming event is included before the ordinary threshold
 			// crossing decision. Disabled switches reset immediately.
-			if !k.charity && cfg.RPMBanThreshold == 0 || k.charity && (cfg.CharityViolationBanThreshold == 0 || cfg.CharityViolationWindowBanSeconds == 0) {
+			if k.violation == violationRPM && cfg.RPMBanThreshold == 0 || k.violation == violationShortContent && (cfg.CharityViolationBanThreshold == 0 || cfg.CharityViolationWindowBanSeconds == 0) || k.violation == violationRedemption && cfg.RedemptionBanThreshold == 0 {
 				w.banDone = false
 			}
-			if k.charity && (cfg.CharitySuspendThreshold == 0 || cfg.CharitySuspendDurationSeconds == 0) {
+			if k.violation == violationShortContent && (cfg.CharitySuspendThreshold == 0 || cfg.CharitySuspendDurationSeconds == 0) {
 				w.suspendDone = false
 			}
 		} else {

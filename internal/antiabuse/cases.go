@@ -24,7 +24,8 @@ type evidenceStatistics struct {
 }
 
 func rulesJSON(c Config) ([]byte, error) {
-	return json.Marshal(map[string]any{"version": 1, "rpm_ban_threshold": c.RPMBanThreshold, "rpm_ban_window_seconds": c.RPMBanWindowSeconds, "rpm_ban_duration_seconds": c.RPMBanDurationSeconds,
+	return json.Marshal(map[string]any{"version": 2, "rpm_ban_threshold": c.RPMBanThreshold, "rpm_ban_window_seconds": c.RPMBanWindowSeconds, "rpm_ban_duration_seconds": c.RPMBanDurationSeconds,
+		"redemption_ban_threshold": c.RedemptionBanThreshold, "redemption_ban_window_seconds": c.RedemptionBanWindowSeconds, "redemption_ban_duration_seconds": c.RedemptionBanDurationSeconds,
 		"charity_min_chars": c.CharityMinChars, "charity_violation_deduct_milli": c.CharityViolationDeductMilli, "charity_violation_ban_seconds": c.CharityViolationBanSeconds,
 		"charity_violation_window_seconds": c.CharityViolationWindowSeconds, "charity_violation_ban_threshold": c.CharityViolationBanThreshold, "charity_violation_window_ban_seconds": c.CharityViolationWindowBanSeconds,
 		"charity_suspend_window_seconds": c.CharitySuspendWindowSeconds, "charity_suspend_threshold": c.CharitySuspendThreshold, "charity_suspend_duration_seconds": c.CharitySuspendDurationSeconds})
@@ -117,6 +118,8 @@ func recordCase(ctx context.Context, tx *sql.Tx, user, now int64, kind, reason, 
 	violation := "short_content"
 	if reason == "charity_rpm" {
 		violation = "rpm"
+	} else if reason == "redemption_code" {
+		violation = "redemption_code"
 	}
 	return appendAction(ctx, tx, id, action, reason, request, operation, nil, now, previous, end, rules, summary, facts, violation)
 }
