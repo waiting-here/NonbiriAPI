@@ -360,7 +360,7 @@ describe('retained operation station authority', () => {
     client.clear();
   });
 
-  it('reuses the receipt key when the same account confirms a new session generation', async () => {
+  it('accepts the committed response when the same account refreshes its session', async () => {
     const { client, wrapper } = setup();
     let resolve!: (value: string) => void;
     const pendingRequest = new Promise<string>((done) => {
@@ -383,22 +383,19 @@ describe('retained operation station authority', () => {
       resolve('committed receipt');
       await pending;
     });
-    expect(await pending).toBeInstanceOf(StationSessionChangedError);
-    await act(async () => {
-      await expect(hook.result.current.mutateAsync({ id: '7' })).resolves.toBe('committed receipt');
-    });
-    expect(keys[0]).toBe(keys[1]);
+    expect(await pending).toBe('committed receipt');
+    expect(keys).toHaveLength(1);
     expect(reconcile).toHaveBeenCalledOnce();
     hook.unmount();
     client.clear();
   });
 
-  it('closes the current account on its own forbidden response', async () => {
+  it('closes the current account on its own unauthorized response', async () => {
     const { client, wrapper } = setup();
     client.setQueryData(['admin', 'operations', 'private'], 'first account');
     const reconcile = vi.fn();
     const execute = vi.fn(async () => {
-      throw new ApiError('forbidden', 'Forbidden.', 403);
+      throw new ApiError('unauthorized', 'Unauthorized.', 401);
     });
     const hook = renderHook(() => useRetainedOperation(execute, reconcile), { wrapper });
     await act(async () => {

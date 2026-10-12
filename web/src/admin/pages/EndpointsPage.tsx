@@ -6,7 +6,7 @@ import { clearStationSession } from '@shared/charityManagement';
 import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
-import { isForbidden, isUnauthorized } from '@shared/query/http';
+import { isUnauthorized } from '@shared/query/http';
 import {
   adminPageKeys,
   getAdminEndpointUsersPage,
@@ -46,7 +46,7 @@ function EndpointUsersPanel({ account, scopeReady, baseURL }: EndpointUsersPanel
         : undefined,
   });
   useEffect(() => {
-    if (isUnauthorized(result.error) || isForbidden(result.error)) {
+    if (isUnauthorized(result.error)) {
       clearStationSession(client, 'admin');
     }
   }, [client, result.error]);
@@ -162,7 +162,7 @@ function EndpointsPageContent({ account, scopeReady, sessionError }: EndpointsPa
     setUserDraft(userId);
   }, [userId]);
   useEffect(() => {
-    if (isUnauthorized(result.error) || isForbidden(result.error)) {
+    if (isUnauthorized(result.error)) {
       clearStationSession(client, 'admin');
     }
   }, [client, result.error]);

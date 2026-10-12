@@ -62,7 +62,8 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchState();
   const client = useQueryClient();
-  const scopeReady = Boolean(accountId);
+  const [authorityError, setAuthorityError] = useState<unknown>(null);
+  const scopeReady = Boolean(accountId) && !authorityError;
   const lineageTargetValues = searchParams.getAll('lineage_target');
   const urlLineageTargetId =
     lineageTargetValues.length === 1 &&
@@ -126,12 +127,19 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
     (lineageTarget?.id === effectiveLineageTargetId ? lineageTarget : undefined) ??
     targetList.data?.data.find((target) => target.id === effectiveLineageTargetId);
   const reconcile = async () => {
-    await Promise.all([
-      detail.refetch(),
-      targetList.refetch(),
-      effectiveLineageTargetId ? targetDonations.refetch() : Promise.resolve(),
+    return Promise.all([
+      detail.refetch({ cancelRefetch: false }),
+      targetList.refetch({ cancelRefetch: false }),
+      effectiveLineageTargetId
+        ? targetDonations.refetch({ cancelRefetch: false })
+        : Promise.resolve(),
       client.invalidateQueries({ queryKey: reportPageKeys.badge(accountId || 'anonymous') }),
     ]);
+  };
+  const retryAuthority = async () => {
+    const results = await reconcile();
+    const failed = results.find((result) => result && result.error);
+    setAuthorityError(failed?.error ?? null);
   };
   const decide = useRetainedOperation(
     async (
@@ -196,7 +204,8 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
       setDecision(null);
     }
     if (isUnauthorized(error) || isForbidden(error)) {
-      clearStationSession(client, 'admin');
+      setAuthorityError(error);
+      if (isUnauthorized(error)) clearStationSession(client, 'admin');
       setReason('');
       resetDecision();
       resetResume();
@@ -234,11 +243,13 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
     detail.isFetching ||
     targetList.isFetching,
   );
-  const readAuthorityError = [detail.error, targetList.error, targetDonations.error].find(
-    (error) => isForbidden(error) || isUnauthorized(error),
-  );
+  const readAuthorityError =
+    authorityError ??
+    [detail.error, targetList.error, targetDonations.error, decide.error, resume.error].find(
+      (error) => isForbidden(error) || isUnauthorized(error),
+    );
   if (readAuthorityError)
-    return <ErrorState error={readAuthorityError} onRetry={() => void reconcile()} />;
+    return <ErrorState error={readAuthorityError} onRetry={() => void retryAuthority()} />;
   const statusLabels: Record<ReportStatus, string> = {
     pending_indexing: t('admin.reports.status.pendingIndexing'),
     pending_review: t('admin.reports.status.pendingReview'),

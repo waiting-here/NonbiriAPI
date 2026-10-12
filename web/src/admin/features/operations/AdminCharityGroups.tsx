@@ -272,8 +272,8 @@ export function AdminCharityGroupsPanel() {
   const authorityLost = isUnauthorized(donations.error) || isForbidden(donations.error);
 
   useEffect(() => {
-    if (authorityLost) clearStationSession(client, 'admin');
-  }, [authorityLost, client]);
+    if (isUnauthorized(donations.error)) clearStationSession(client, 'admin');
+  }, [donations.error, client]);
 
   if (authorityLost) {
     return <ErrorState error={donations.error} />;

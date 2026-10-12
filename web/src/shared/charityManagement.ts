@@ -136,8 +136,10 @@ interface ManagementRevocation {
 }
 
 interface ManagementSessionAuthority {
-  /** Monotonic generation incremented when a station-session request starts. */
+  /** Changes only when the account or its authorization changes. */
   generation: number;
+  /** Orders session reads without invalidating concurrent business requests. */
+  requestSerial: number;
   subject?: string;
   elevated: boolean;
 }
@@ -193,7 +195,7 @@ function sessionAuthority(
   }
   let authority = frames.get(frame);
   if (!authority) {
-    authority = { generation: 0, elevated: false };
+    authority = { generation: 0, requestSerial: 0, elevated: false };
     frames.set(frame, authority);
   }
   return authority;
@@ -270,7 +272,7 @@ export async function stationSessionWrite<T>(
     return value;
   } catch (error) {
     if (!stationSessionMatches(client, frame, snapshot)) throw new StationSessionChangedError();
-    if (isUnauthorized(error) || isForbidden(error)) clearStationSession(client, frame);
+    if (isUnauthorized(error)) clearStationSession(client, frame);
     throw error;
   }
 }
@@ -281,8 +283,8 @@ export function beginManagementSessionRequest(
   frame: CharityManagementFrame,
 ): number {
   const authority = sessionAuthority(client, frame);
-  authority.generation += 1;
-  return authority.generation;
+  authority.requestSerial += 1;
+  return authority.requestSerial;
 }
 
 /** Drop management projections and the old subject at an explicit logout. */
@@ -309,6 +311,7 @@ export function clearStationSession(
   clearResourceNavigation(client);
   const authority = sessionAuthority(client, frame);
   authority.generation += 1;
+  authority.requestSerial += 1;
   authority.subject = undefined;
   authority.elevated = false;
   clearRevoked(client, frame);
@@ -336,9 +339,18 @@ export function failManagementSessionRequest(
   client: ReturnType<typeof useQueryClient>,
   frame: CharityManagementFrame,
   generation: number,
+  error?: unknown,
 ): boolean {
   const authority = sessionAuthority(client, frame);
-  if (authority.generation !== generation) return false;
+  if (authority.requestSerial !== generation) return false;
+  if (
+    error !== undefined &&
+    !isUnauthorized(error) &&
+    !isForbidden(error) &&
+    !isNotFoundError(error) &&
+    !(error instanceof ApiError && error.code === 'invalid_response')
+  )
+    return false;
   // Keep the authoritative session query object alive so React Query can
   // publish this request's error to its observers, but erase its old identity
   // before the error is delivered. Logout and explicit mutation auth failures
@@ -375,7 +387,7 @@ function markRevoked(
   frames.set(frame, {
     timestamp: Date.now(),
     subject: authority.subject ?? '',
-    generation: authority.generation,
+    generation: authority.requestSerial,
   });
 }
 
@@ -401,7 +413,7 @@ export function noteManagementSessionSuccess(
   generation: number,
 ): boolean {
   const authority = sessionAuthority(client, frame);
-  if (authority.generation !== generation) return false;
+  if (authority.requestSerial !== generation) return false;
   const identity = managementSessionIdentity(frame, value);
   if (!identity) return false;
   const previousSubject = authority.subject;
@@ -413,6 +425,7 @@ export function noteManagementSessionSuccess(
   // from the previous login. The same subject is allowed to recover only from
   // a later, successful generation that is still elevated.
   if (previousSubject !== identity.subject) {
+    authority.generation += 1;
     if (previousSubject !== undefined) clearResourceNavigation(client);
     clearRevoked(client, frame);
     client.setQueryData(charityManagementKeys.capability(frame), identity.elevated ? false : true);
@@ -494,12 +507,8 @@ export function useManagementCapability(frame: CharityManagementFrame) {
   // this observer after login/role restoration.
   const session = useQuery({
     queryKey: sessionKey,
-    // This observer is deliberately disabled.  The station's authoritative
-    // session query owns this key and will update every observer after a
-    // login/role transition; a disabled queryFn must still return data when
-    // invoked by a test/client refetch, otherwise TanStack Query warns and
-    // treats the result as an invalid cache write.
-    queryFn: async () => null,
+    // The station's session observer owns the read function. A local cache
+    // subscriber must not replace it during a background refresh.
     enabled: false,
     retry: false,
   });
@@ -518,7 +527,7 @@ export function useManagementCapability(frame: CharityManagementFrame) {
   useEffect(() => {
     const marker = managementRevocations.get(client)?.get(frame);
     const authority = sessionAuthority(client, frame);
-    if (capability.data !== true || !marker || authority.generation <= marker.generation) return;
+    if (capability.data !== true || !marker || authority.requestSerial <= marker.generation) return;
     if (
       !session.error &&
       authority.subject === marker.subject &&
@@ -692,16 +701,7 @@ function managementSessionIdentity(
   const identity = sessionUserIdentity(value);
   if (!identity) return undefined;
   return {
-    subject: JSON.stringify([
-      'user',
-      identity.user.id,
-      identity.user.username,
-      identity.effective_level === 6
-        ? 'steward'
-        : identity.effective_level === 5
-          ? 'trainee'
-          : 'user',
-    ]),
+    subject: JSON.stringify(['user', identity.user.id, identity.effective_level]),
     elevated: identity.effective_level === 5 || identity.effective_level === 6,
   };
 }
@@ -798,10 +798,8 @@ async function refreshManagementSession(
     }
     if (!noteManagementSessionSuccess(client, frame, cacheValue, generation)) return;
     client.setQueryData(sessionKey, cacheValue);
-  } catch {
-    // A failed or malformed refresh also discards the old subject so a
-    // mounted page cannot retain management controls after session loss.
-    failManagementSessionRequest(client, frame, generation);
+  } catch (error) {
+    failManagementSessionRequest(client, frame, generation, error);
   }
 }
 

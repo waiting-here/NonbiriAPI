@@ -5,13 +5,19 @@ import { RouteErrorPage } from '@shared/components/RouteErrorPage';
 import { relativeRoutePath } from '@shared/routing/routeRegistry';
 import { ApiError } from '@shared/query/http';
 import { UserLayout } from './layouts/UserLayout';
+import { NavigationProgress } from '@shared/components/NavigationProgress';
 
 const pathFor = (id: string) => relativeRoutePath('user', id);
 
 export const router = createBrowserRouter([
   {
     path: '/',
-    element: <UserLayout />,
+    element: (
+      <>
+        <NavigationProgress />
+        <UserLayout />
+      </>
+    ),
     hydrateFallbackElement: <LoadingState />,
     errorElement: <RouteErrorPage station="user" />,
     children: [

@@ -158,7 +158,7 @@ function LegalHoldSessionPanel({
   const accountID = session.data ? `admin:${session.data.admin.username}` : undefined;
   const accountTransitioning =
     previousAccountID !== undefined && accountID !== undefined && previousAccountID !== accountID;
-  const scopeReady = Boolean(accountID) && !session.error;
+  const scopeReady = Boolean(accountID) && !session.error && !authorityError;
   const filtersReady =
     !filterNeedsNormalization(searchParams, STATE_PARAM, STATES) &&
     !filterNeedsNormalization(searchParams, KIND_PARAM, FILTER_KINDS);
@@ -362,7 +362,7 @@ function LegalHoldSessionPanel({
     createElevationToken.current = null;
     releaseElevationToken.current = null;
     onAuthorityLoss(error);
-    clearStationSession(client, 'admin');
+    if (isUnauthorized(error)) clearStationSession(client, 'admin');
     setSearchParams(
       (current) => {
         const next = new URLSearchParams(current);

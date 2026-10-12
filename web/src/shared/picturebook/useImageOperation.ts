@@ -9,7 +9,7 @@ import {
   type StationSessionSnapshot,
 } from '@shared/charityManagement';
 import { operationKey, responseOutcomeUnknown } from '@shared/operations/api';
-import { isForbidden, isUnauthorized } from '@shared/query/http';
+import { isUnauthorized } from '@shared/query/http';
 
 interface Retained<T> {
   input: T;
@@ -81,7 +81,7 @@ export function useImageOperation<T, R>(
       await reconcile?.(result);
     } catch (caught) {
       if (!mounted.current || !stationSessionMatches(client, frame, request.session)) return;
-      if (isUnauthorized(caught) || isForbidden(caught)) {
+      if (isUnauthorized(caught)) {
         retained.current = null;
         clearStationSession(client, frame);
         return;

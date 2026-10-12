@@ -253,10 +253,15 @@ export function AdminLayout() {
     );
   }
   if (session.isPending) return <LoadingState />;
-  if (session.error && !isUnauthorized(session.error) && !isNotFoundError(session.error)) {
+  if (
+    session.error &&
+    !session.data &&
+    !isUnauthorized(session.error) &&
+    !isNotFoundError(session.error)
+  ) {
     return <ErrorState error={session.error} onRetry={() => void session.refetch()} />;
   }
-  if (session.error || !session.data) {
+  if (!session.data) {
     return (
       <AdminLogin
         siteName={siteName}

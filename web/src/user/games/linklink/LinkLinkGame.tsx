@@ -1,7 +1,7 @@
 import { OverlayPortal } from '@shared/components/OverlayPortal';
 import { Fold } from '@shared/components/ui/Fold';
 import { GameActionBar } from '../common/GameActionBar';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { Card, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
@@ -37,8 +37,8 @@ import {
   useLinkLinkCurrent,
 } from './api';
 import { boardWasRearranged, shouldApplyLinkLinkReplacement } from './normalize';
-import { TileGlyph } from './TileGlyph';
-import { MatchEffect, type MatchAnimation } from './MatchEffect';
+import { LinkBoard } from './LinkBoard';
+import type { MatchAnimation } from './MatchEffect';
 import type {
   LinkLinkCoordinate,
   LinkLinkCurrent,
@@ -101,134 +101,6 @@ function LinkLinkRules({
   );
 }
 
-function LinkBoard({
-  state,
-  selected,
-  busy,
-  animation,
-  hint,
-  onSelect,
-}: {
-  readonly state: LinkLinkState;
-  readonly selected: LinkLinkCoordinate | null;
-  readonly busy: boolean;
-  readonly animation: MatchAnimation | null;
-  readonly hint: LinkLinkHint | null;
-  readonly onSelect: (coordinate: LinkLinkCoordinate) => void;
-}) {
-  const { text } = useGameCopy();
-  const active = state.board.tiles.filter((tile) => !tile.removed);
-  const [focus, setFocus] = useState(() => (active[0] ? `${active[0].row}:${active[0].col}` : ''));
-  const refs = useRef(new Map<string, HTMLButtonElement>());
-  const effectiveFocus = active.some((tile) => `${tile.row}:${tile.col}` === focus)
-    ? focus
-    : active[0]
-      ? `${active[0].row}:${active[0].col}`
-      : '';
-  const focusAt = (row: number, col: number) => {
-    const candidates = active;
-    const exact = candidates.find((tile) => tile.row === row && tile.col === col);
-    const fallback = candidates.reduce<(typeof candidates)[number] | undefined>((best, tile) => {
-      const distance = Math.abs(tile.row - row) + Math.abs(tile.col - col);
-      if (!best) return tile;
-      const bestDistance = Math.abs(best.row - row) + Math.abs(best.col - col);
-      return distance < bestDistance ? tile : best;
-    }, undefined);
-    const target = exact ?? fallback;
-    if (target) {
-      const key = `${target.row}:${target.col}`;
-      setFocus(key);
-      refs.current.get(key)?.focus();
-    }
-  };
-  return (
-    <div className={`linklink-board-scroll linklink-board-scroll--${state.spec}`}>
-      <div
-        className="linklink-board"
-        style={{ '--linklink-cols': state.board.cols } as React.CSSProperties}
-        role="grid"
-        aria-rowcount={state.board.rows}
-        aria-colcount={state.board.cols}
-        aria-label={text('linklink.active')}
-      >
-        {state.board.tiles.map((tile) => {
-          const key = `${tile.row}:${tile.col}`;
-          const isSelected = selected?.row === tile.row && selected.col === tile.col;
-          const hinted =
-            hint &&
-            [hint.first, hint.second].some(
-              (point) => point.row === tile.row && point.col === tile.col,
-            );
-          const vanishing = animation?.pair.some(
-            (point) => point.row === tile.row && point.col === tile.col,
-          );
-          const glyph = vanishing
-            ? (animation?.before.board.tiles.find(
-                (point) => point.row === tile.row && point.col === tile.col,
-              )?.tileKey ?? tile.tileKey)
-            : tile.tileKey;
-          return (
-            <button
-              type="button"
-              role="gridcell"
-              aria-rowindex={tile.row + 1}
-              aria-colindex={tile.col + 1}
-              aria-selected={isSelected}
-              className={`linklink-tile${isSelected ? ' is-selected' : ''}${tile.removed ? ' is-removed' : ''}${vanishing ? ' is-vanishing' : ''}${hinted ? ' is-hinted' : ''}`}
-              style={{ gridRow: tile.row + 1, gridColumn: tile.col + 1 }}
-              disabled={tile.removed || busy}
-              tabIndex={!tile.removed && key === effectiveFocus ? 0 : -1}
-              key={key}
-              ref={(node) => {
-                if (node) refs.current.set(key, node);
-                else refs.current.delete(key);
-              }}
-              onFocus={() => setFocus(key)}
-              onClick={() => onSelect({ row: tile.row, col: tile.col })}
-              onKeyDown={(event) => {
-                const delta =
-                  event.key === 'ArrowLeft'
-                    ? [0, -1]
-                    : event.key === 'ArrowRight'
-                      ? [0, 1]
-                      : event.key === 'ArrowUp'
-                        ? [-1, 0]
-                        : event.key === 'ArrowDown'
-                          ? [1, 0]
-                          : null;
-                if (!delta) return;
-                event.preventDefault();
-                focusAt(tile.row + delta[0], tile.col + delta[1]);
-              }}
-            >
-              {hinted ? (
-                <span className="linklink-hint-tag">{text('linklink.hintTile')}</span>
-              ) : null}
-              {tile.removed && !vanishing ? (
-                <span aria-hidden="true" />
-              ) : (
-                <TileGlyph tileKey={glyph} />
-              )}
-            </button>
-          );
-        })}
-        {animation ? <MatchEffect key={animation.key} animation={animation} /> : null}
-        {hint ? (
-          <MatchEffect
-            hint
-            animation={{
-              key: state.revision,
-              before: state,
-              pair: [hint.first, hint.second],
-              path: hint.path,
-            }}
-          />
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
 function SummaryCard({
   summary,
   onNew,
@@ -276,6 +148,19 @@ function SummaryCard({
         {text('linklink.summary.new')}
       </button>
     </Card>
+  );
+}
+
+function LinkCountdown({ state, onElapsed }: { state: LinkLinkState; onElapsed: () => void }) {
+  const { text } = useGameCopy();
+  const remaining = useAuthoritativeCountdown(
+    state.sessionID + ':' + state.revision,
+    state.deadline,
+    state.serverNow,
+    onElapsed,
+  );
+  return (
+    <p className="linklink-countdown">{text('linklink.remaining', { seconds: remaining ?? 0 })}</p>
   );
 }
 
@@ -371,12 +256,6 @@ export function LinkLinkGame() {
     await queryClient.invalidateQueries({ queryKey: gameKeys.snapshot });
   }, [queryClient, refetchCurrent]);
   const reconcileElapsed = useCallback(() => void reconcile(), [reconcile]);
-  const remaining = useAuthoritativeCountdown(
-    stateIdentity ?? 'none',
-    state?.deadline ?? null,
-    state?.serverNow ?? 0,
-    reconcileElapsed,
-  );
 
   useEffect(() => {
     if (!sessionID) return undefined;
@@ -421,8 +300,11 @@ export function LinkLinkGame() {
     [queryClient],
   );
 
+  const sending = useRef(false);
   const execute = useCallback(
     async (intent: MutationIntent) => {
+      if (sending.current) return;
+      sending.current = true;
       setMutation(intent);
       setMutationState('sending');
       setMutationError(null);
@@ -493,6 +375,7 @@ export function LinkLinkGame() {
         else {
           setMutation(null);
           setMutationState('idle');
+          setSelection(null);
           if (intent.kind === 'match')
             setFeedbackState({
               identity: `${intent.value.sessionID}:${intent.value.expectedRevision}`,
@@ -500,34 +383,50 @@ export function LinkLinkGame() {
             });
           if (isConflict(error)) await reconcile();
         }
+      } finally {
+        sending.current = false;
       }
     },
     [adopt, current.data, queryClient, reconcile, refetchCurrent],
   );
 
-  const chooseTile = (coordinate: LinkLinkCoordinate) => {
-    if (!state || mutationState !== 'idle' || lease !== 'active') return;
-    playSound('select');
-    if (!selected) {
-      setSelection({ identity: `${state.sessionID}:${state.revision}`, coordinate });
-      return;
-    }
-    if (selected.row === coordinate.row && selected.col === coordinate.col) {
-      setSelection(null);
-      return;
-    }
-    setSelection(null);
-    void execute({
-      kind: 'match',
-      value: {
-        sessionID: state.sessionID,
-        expectedRevision: state.revision,
-        first: selected,
-        second: coordinate,
-        idempotencyKey: createIdempotencyKey(),
-      },
-    });
-  };
+  const chooseTile = useCallback(
+    (coordinate: LinkLinkCoordinate) => {
+      if (!state || sending.current || mutationState !== 'idle' || lease !== 'active') return;
+      playSound('select');
+      if (!selected) {
+        setSelection({ identity: `${state.sessionID}:${state.revision}`, coordinate });
+        return;
+      }
+      if (selected.row === coordinate.row && selected.col === coordinate.col) {
+        setSelection(null);
+        return;
+      }
+      void execute({
+        kind: 'match',
+        value: {
+          sessionID: state.sessionID,
+          expectedRevision: state.revision,
+          first: selected,
+          second: coordinate,
+          idempotencyKey: createIdempotencyKey(),
+        },
+      });
+    },
+    [state, mutationState, lease, playSound, selected, execute],
+  );
+  const selectRef = useRef(chooseTile);
+  useLayoutEffect(() => {
+    selectRef.current = chooseTile;
+  }, [chooseTile]);
+  const selectTile = useCallback(
+    (coordinate: LinkLinkCoordinate) => selectRef.current(coordinate),
+    [],
+  );
+  const pendingPair =
+    mutation?.kind === 'match' && mutationState !== 'idle'
+      ? [mutation.value.first, mutation.value.second]
+      : null;
 
   const spec = snapshot.data?.linklink.specs[selectedSpec];
   const gateOpen = Boolean(
@@ -608,9 +507,7 @@ export function LinkLinkGame() {
             <div className="linklink-heading">
               <div>
                 <h2>{text('linklink.spec', { spec: state.spec })}</h2>
-                <p className="linklink-countdown">
-                  {text('linklink.remaining', { seconds: remaining ?? 0 })}
-                </p>
+                <LinkCountdown state={state} onElapsed={reconcileElapsed} />
               </div>
               <StatusBadge
                 active={lease === 'active'}
@@ -626,10 +523,9 @@ export function LinkLinkGame() {
                 }
               />
             </div>
-            <details>
-              <summary>{text('common.entryPayment')}</summary>
+            <Fold title={text('common.entryPayment')} plain>
               <GamePayment payment={state.payment} />
-            </details>
+            </Fold>
             <div className="linklink-progress">
               <progress max={state.totalPairs} value={state.pairsRemoved} />
               <span>
@@ -660,17 +556,15 @@ export function LinkLinkGame() {
             busy={mutationState !== 'idle' || lease !== 'active'}
             animation={animation?.before.sessionID === state.sessionID ? animation : null}
             hint={hint}
-            onSelect={chooseTile}
+            pending={pendingPair}
+            onSelect={selectTile}
           />
           {state.rulesVersion === 2 ? (
             <button
               type="button"
               className="nb-btn nb-btn--primary linklink-hint"
               disabled={
-                mutationState !== 'idle' ||
-                lease !== 'active' ||
-                state.opportunitiesRemaining === 0 ||
-                remaining === 0
+                mutationState !== 'idle' || lease !== 'active' || state.opportunitiesRemaining === 0
               }
               onClick={() =>
                 void execute({
@@ -701,6 +595,7 @@ export function LinkLinkGame() {
             <LinkBoard
               state={animation.before}
               selected={null}
+              pending={null}
               busy
               animation={animation}
               hint={null}
@@ -776,7 +671,7 @@ export function LinkLinkGame() {
       ) : null}
       {current.isSuccess && !state && !maintenance ? (
         <div id="game-rankings">
-          <Fold title={text('linklink.leaderboard.title', { days: 7 })}>
+          <Fold title={text('linklink.leaderboard.title', { days: 7 })} lazy>
             <LinkLinkLeaderboard spec={selectedSpec} onSpecChange={setSelectedSpec} />
           </Fold>
         </div>

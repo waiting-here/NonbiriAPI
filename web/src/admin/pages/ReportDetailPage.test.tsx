@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Route, Routes, useLocation } from 'react-router';
 import { renderWithProviders } from '../../../test/unit/support';
@@ -238,6 +238,63 @@ describe('ReportDetailPage numbered nested pagination', () => {
     );
     expect(screen.queryByText(summary.canonical_base_url)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /approve deletion/i })).not.toBeInTheDocument();
+  });
+
+  it('restores a denied report only after an explicit retry reads fresh authority', async () => {
+    const data = { ...detail, status: 'pending_review' as const };
+    mocks.useReportDetailPage.mockReturnValue({
+      data,
+      error: null,
+      isPending: false,
+      isFetching: false,
+      refetch: vi.fn().mockResolvedValue({ data, error: null }),
+    });
+    let targetError: ApiError | null = null;
+    let release!: () => void;
+    const restored = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const refetch = vi
+      .fn()
+      .mockResolvedValueOnce({ error: new ApiError('unavailable', 'Offline', 503) })
+      .mockImplementationOnce(async () => {
+        await restored;
+        targetError = null;
+        return { data: targets, error: null };
+      });
+    mocks.useReportTargetsPage.mockImplementation(() => ({
+      data: targets,
+      error: targetError,
+      isPending: false,
+      isFetching: false,
+      refetch,
+    }));
+    const content = () => (
+      <Routes>
+        <Route path="/reports/:caseId" element={<ReportDetailPage />} />
+      </Routes>
+    );
+    const view = await renderWithProviders(content(), {
+      station: 'admin',
+      role: 'admin',
+      route: `/reports/${caseId}`,
+    });
+    const session = { admin: { username: 'operator' } };
+    view.queryClient.setQueryData(['admin', 'session'], session);
+    await view.user.type(screen.getByLabelText('Reason'), 'Private review draft');
+    targetError = new ApiError('forbidden', 'Denied', 403);
+    view.rerender(content());
+    expect(screen.queryByText(summary.canonical_base_url)).not.toBeInTheDocument();
+    await view.user.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(refetch).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(summary.canonical_base_url)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Reason')).not.toBeInTheDocument();
+    await view.user.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(screen.queryByText(summary.canonical_base_url)).not.toBeInTheDocument();
+    await act(async () => release());
+    expect(await screen.findByLabelText('Reason')).toHaveValue('');
+    expect(screen.getByRole('button', { name: 'Approve deletion' })).toBeVisible();
+    expect(view.queryClient.getQueryData(['admin', 'session'])).toEqual(session);
   });
 
   it('keeps materials, targets, and lineage query identities separate', async () => {

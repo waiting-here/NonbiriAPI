@@ -541,7 +541,11 @@ describe('shared account management', () => {
     await view.user.click(screen.getByRole('button', { name: 'Save settings' }));
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Save settings' })).toBeNull());
     expect(screen.queryByDisplayValue('99')).toBeNull();
-    expect(view.queryClient.getQueryData(['user', 'session'])).toBeNull();
+    await waitFor(() =>
+      expect(view.queryClient.getQueryData(['user', 'session'])).toMatchObject({
+        user: { id: '9', effective_level: 5 },
+      }),
+    );
   });
 });
 
@@ -568,7 +572,11 @@ describe('shared announcement editor', () => {
     await waitFor(() =>
       expect(screen.queryByRole('button', { name: 'Create private draft' })).toBeNull(),
     );
-    expect(view.queryClient.getQueryData(['user', 'session'])).toBeNull();
+    await waitFor(() =>
+      expect(view.queryClient.getQueryData(['user', 'session'])).toMatchObject({
+        user: { id: '9', effective_level: 5 },
+      }),
+    );
   });
 
   it('shows an administrator session error without a disabled-query spinner', async () => {

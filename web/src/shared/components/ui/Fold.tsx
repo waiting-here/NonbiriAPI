@@ -8,6 +8,10 @@ export function Fold({
   defaultOpen = false,
   plain = false,
   persistKey,
+  open: controlledOpen,
+  onOpenChange,
+  className = '',
+  lazy = false,
 }: {
   title: ReactNode;
   summary?: ReactNode;
@@ -16,9 +20,13 @@ export function Fold({
   defaultOpen?: boolean;
   plain?: boolean;
   persistKey?: string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  className?: string;
+  lazy?: boolean;
 }) {
   const storageKey = persistKey ? `nb.fold.${persistKey}` : null;
-  const [open, setOpen] = useState(() => {
+  const [localOpen, setOpen] = useState(() => {
     if (!storageKey) return defaultOpen;
     try {
       const saved = sessionStorage.getItem(storageKey);
@@ -27,23 +35,33 @@ export function Fold({
       return defaultOpen;
     }
   });
+  const open = controlledOpen ?? localOpen;
+  const [visited, setVisited] = useState(open);
+  if (open && !visited) setVisited(true);
+  function update(next: boolean) {
+    if (next === open) return;
+    setOpen(next);
+    onOpenChange?.(next);
+    if (storageKey) {
+      try {
+        sessionStorage.setItem(storageKey, next ? '1' : '0');
+      } catch {
+        // Disclosure remains usable when browser storage is unavailable.
+      }
+    }
+  }
   return (
     <details
-      className={`nb-fold${plain ? ' nb-fold--plain' : ''}`}
+      className={`nb-fold${plain ? ' nb-fold--plain' : ''} ${className}`.trim()}
       open={open}
-      onToggle={(event) => {
-        const next = event.currentTarget.open;
-        setOpen(next);
-        if (storageKey) {
-          try {
-            sessionStorage.setItem(storageKey, next ? '1' : '0');
-          } catch {
-            // Disclosure remains usable when browser storage is unavailable.
-          }
-        }
-      }}
+      onToggle={(event) => update(event.currentTarget.open)}
     >
-      <summary>
+      <summary
+        onClick={(event) => {
+          event.preventDefault();
+          update(!open);
+        }}
+      >
         <span className="nb-fold__title">
           <strong>{title}</strong>
           {summary ? <span>{summary}</span> : null}
@@ -51,7 +69,7 @@ export function Fold({
         {meta ? <span className="nb-fold__meta">{meta}</span> : null}
       </summary>
 
-      <div className="nb-fold__body">{children}</div>
+      {!lazy || visited ? <div className="nb-fold__body">{children}</div> : null}
     </details>
   );
 }

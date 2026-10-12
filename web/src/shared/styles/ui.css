@@ -1537,3 +1537,21 @@ button.nb-row:hover {
     justify-content: center;
   }
 }
+
+.nb-navigation-progress {
+  position: fixed;
+  inset: 0 0 auto;
+  height: 3px;
+  z-index: var(--nb-z-toast);
+  background: var(--nb-color-accent);
+  box-shadow: var(--nb-elevation-1);
+}
+.nb-fold[open] > summary {
+  border-bottom: 1px solid var(--nb-color-border);
+  border-end-start-radius: 0;
+  border-end-end-radius: 0;
+  margin-bottom: var(--nb-space-4);
+}
+.nb-fold > summary::after {
+  flex-shrink: 0;
+}

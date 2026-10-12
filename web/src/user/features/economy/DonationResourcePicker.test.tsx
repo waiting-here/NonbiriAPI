@@ -976,29 +976,39 @@ describe('DonationResourcePicker', () => {
     );
   });
 
-  it.each([401, 403])('clears private rows and identity after endpoint %s', async (status) => {
-    const fetchMock = installPickerServer((url) => {
-      if (url.pathname === '/api/endpoints') {
-        return jsonResponse(
-          { error: { code: status === 401 ? 'unauthorized' : 'forbidden', message: 'closed' } },
-          status,
-        );
-      }
-      throw new Error(`Unexpected picker request: ${url.pathname}${url.search}`);
-    });
-    const selected = [selectedChoice('1', '1')];
-    const rendered = await renderWithProviders(
-      <SeedSession session={sessionA}>
-        <ControlledPicker initialSelected={selected} />
-      </SeedSession>,
-      { station: 'user', role: 'user' },
-    );
+  it.each([401, 403])(
+    'handles endpoint denial %s without treating business permission as logout',
+    async (status) => {
+      const fetchMock = installPickerServer((url) => {
+        if (url.pathname === '/api/endpoints') {
+          return jsonResponse(
+            { error: { code: status === 401 ? 'unauthorized' : 'forbidden', message: 'closed' } },
+            status,
+          );
+        }
+        throw new Error(`Unexpected picker request: ${url.pathname}${url.search}`);
+      });
+      const selected = [selectedChoice('1', '1')];
+      const rendered = await renderWithProviders(
+        <SeedSession session={sessionA}>
+          <ControlledPicker initialSelected={selected} />
+        </SeedSession>,
+        { station: 'user', role: 'user' },
+      );
 
-    await waitFor(() => expect(rendered.queryClient.getQueryData(['user', 'session'])).toBeNull());
-    expect(screen.getByText('0 / 100 keys selected')).toBeVisible();
-    expect(screen.getByText('No resources selected yet.')).toBeVisible();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
+      if (status === 401) {
+        await waitFor(() =>
+          expect(rendered.queryClient.getQueryData(['user', 'session'])).toBeNull(),
+        );
+        expect(screen.getByText('0 / 100 keys selected')).toBeVisible();
+        expect(screen.getByText('No resources selected yet.')).toBeVisible();
+      } else {
+        await screen.findByRole('button', { name: 'Retry' });
+        expect(rendered.queryClient.getQueryData(['user', 'session'])).toEqual(sessionA);
+      }
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('does not let a late old-account 401 clear the new account', async () => {
     let releaseOld: ((response: Response) => void) | undefined;

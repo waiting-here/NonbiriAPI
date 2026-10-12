@@ -354,7 +354,8 @@ function UserAuthority({
               className="nb-btn nb-btn--secondary"
               to={
                 role === 'admin'
-                  ? routePath('admin', 'admin-risk-audit') + `?audit_tab=user_ips&audit_ip_user=${user.id}`
+                  ? routePath('admin', 'admin-risk-audit') +
+                    `?audit_tab=user_ips&audit_ip_user=${user.id}`
                   : `/steward?tab=risk&audit_tab=user_ips&audit_ip_user=${user.id}`
               }
             >
@@ -932,7 +933,8 @@ export function UserManagement({
       isForbidden(deletedDetail.error)
     ) {
       if (onAuthorityLoss) onAuthorityLoss();
-      else clearStationSession(client, role);
+      else if ([users.error, detail.error, deletedDetail.error].some(isUnauthorized))
+        clearStationSession(client, role);
     }
   }, [client, detail.error, deletedDetail.error, users.error, role, onAuthorityLoss]);
   const commitListState = (
@@ -1012,6 +1014,10 @@ export function UserManagement({
       return next;
     });
   };
+  const authorityError = [users.error, detail.error, deletedDetail.error].find(
+    (error) => isUnauthorized(error) || isForbidden(error),
+  );
+  if (authorityError) return <ErrorState error={authorityError} />;
   return (
     <div className="page ops-page user-management">
       <PageHeader
@@ -1092,7 +1098,12 @@ export function UserManagement({
                     <select
                       value={banned}
                       onChange={(event) =>
-                        commitListState(query, event.target.value as typeof banned, level, userIDDraft)
+                        commitListState(
+                          query,
+                          event.target.value as typeof banned,
+                          level,
+                          userIDDraft,
+                        )
                       }
                     >
                       <option value="">{t('common.all')}</option>
@@ -1128,11 +1139,7 @@ export function UserManagement({
                   {accountLabels.discordInvalid}
                 </p>
               ) : null}
-              <Button
-
-                type="submit"
-                disabled={invalidUserIDDraft || invalidDiscordIDDraft}
-              >
+              <Button type="submit" disabled={invalidUserIDDraft || invalidDiscordIDDraft}>
                 {t('common.applyFilter')}
               </Button>
             </form>
@@ -1216,8 +1223,11 @@ export function UserManagement({
                         entry.account_state === 'deleted'
                           ? entry.deleted.effective_level === null
                             ? accountLabels.unknown
-                            : t('management.users.levelValue', { level: entry.deleted.effective_level })
-                          : entry.user.level.display_name || t('management.users.levelValue', { level: entry.user.level.effective }),
+                            : t('management.users.levelValue', {
+                                level: entry.deleted.effective_level,
+                              })
+                          : entry.user.level.display_name ||
+                            t('management.users.levelValue', { level: entry.user.level.effective }),
                     },
                     {
                       key: 'status',
@@ -1245,12 +1255,15 @@ export function UserManagement({
                       align: 'num',
                       mobileLabel: t('management.users.creditsBalance'),
                       render: (entry) => {
-                        const balance = entry.account_state === 'deleted'
-                          ? entry.deleted.general_balance
-                          : entry.user.balance;
-                        return balance === null
-                          ? accountLabels.unknown
-                          : <span className="nb-amount">{formatCredits(balance)}</span>;
+                        const balance =
+                          entry.account_state === 'deleted'
+                            ? entry.deleted.general_balance
+                            : entry.user.balance;
+                        return balance === null ? (
+                          accountLabels.unknown
+                        ) : (
+                          <span className="nb-amount">{formatCredits(balance)}</span>
+                        );
                       },
                     },
                   ]}
@@ -1275,11 +1288,7 @@ export function UserManagement({
               body={t('management.users.selectUserBody')}
             />
           ) : !selected || detailUnavailable || detail.isPending || detail.error ? (
-            <Button
-              variant="ghost" className="user-detail-back"
-              type="button"
-              onClick={closeUser}
-            >
+            <Button variant="ghost" className="user-detail-back" type="button" onClick={closeUser}>
               {t('management.users.backToList')}
             </Button>
           ) : null}

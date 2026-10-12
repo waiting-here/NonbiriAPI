@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { UserPageGate } from '../components/UserPageGate';
+import { Fold } from '@shared/components/ui/Fold';
 import { useUserSession } from '../data';
 import {
   ActivitiesMasterNotice,
@@ -31,23 +32,21 @@ function ActivitySlot({
   const [state, setState] = useState({ available, expanded: false });
   if (state.available !== available) setState({ available, expanded: false });
   return (
-    <details
-      className={`activity-slot nb-fold${available ? ' is-available' : ''}`}
+    <Fold
+      title={title}
+      className={`activity-slot${available ? ' is-available' : ''}`}
       open={available || state.expanded}
-      onToggle={(event) => {
-        if (!available) setState({ available, expanded: event.currentTarget.open });
+      onOpenChange={(expanded) => {
+        if (!available) setState({ available, expanded });
       }}
-    >
-      <summary>
-        <span className="nb-fold__title">
-          <strong>{title}</strong>
-        </span>
+      meta={
         <span className="nb-badge nb-badge--plain">
           {t('user.activities.presentation.unavailable')}
         </span>
-      </summary>
+      }
+    >
       <div className="activity-slot__body">{children}</div>
-    </details>
+    </Fold>
   );
 }
 
@@ -58,9 +57,8 @@ function ActivitiesContent() {
   const gacha = useGachaEntry();
   const accountID = session.data?.user.id;
   const stream = useActivityAccountEvents(
-    Boolean(activities.data && accountID && !session.isFetching && !session.error),
-    accountID ?? '',
-    session.dataUpdatedAt,
+    Boolean(activities.data && accountID),
+    `${accountID ?? ''}:${session.data?.user.effective_level ?? ''}`,
   );
 
   return (
@@ -91,6 +89,7 @@ function ActivitiesContent() {
             connection={stream.connection}
             recoveryError={stream.recoveryError}
             reconciled={stream.reconciledAt > 0}
+            onRetry={() => void stream.retry()}
           />
           <ActivitiesMasterNotice snapshot={activities.data} />
           <section className="economy-activities-grid" aria-label={t('user.activities.cardsLabel')}>

@@ -175,3 +175,66 @@ for (const theme of ['light', 'dark'] as const)
       guard.assertNone();
     });
   }
+
+for (const locale of ['en', 'zh'] as const) {
+  test('redemption retry identity and ban feedback ' + locale, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 900 });
+    await page.addInitScript((lang) => localStorage.setItem('nb.lang', lang), locale);
+    await mockRoleSession(page, 'user', 'user');
+    await mockPublicConfig(page, 'user');
+    await page.route('**/api/rewards/assets', (route) => route.fulfill({ json: assets }));
+    await page.route('**/api/rewards/history*', (route) =>
+      route.fulfill({ json: { items: [], next_cursor: '' } }),
+    );
+    const keys: string[] = [];
+    await page.route('**/api/rewards/redeem', (route) => {
+      keys.push(route.request().headers()['idempotency-key']);
+      if (keys.length === 1) return route.abort('failed');
+      if (keys.length === 4)
+        return route.fulfill({ json: { rejection: 'banned', banned_until: 1_800_086_400 } });
+      return route.fulfill({ json: { rejection: 'conditions' } });
+    });
+    await page.goto(USER_ORIGIN + '/rewards');
+    const submit = locale === 'en' ? 'Claim rewards' : '领取奖励';
+    const input = page.getByLabel(locale === 'en' ? 'Redemption code' : '兑换码', { exact: true });
+    await input.fill('SYNTHETIC-CODE');
+    await page.getByRole('button', { name: submit, exact: true }).click();
+    await page
+      .getByRole('button', { name: locale === 'en' ? 'Retry' : '重试', exact: true })
+      .click();
+    await expect(page.getByRole('button', { name: submit, exact: true })).toBeEnabled();
+    await page.getByRole('button', { name: submit, exact: true }).click();
+    await expect.poll(() => keys.length).toBe(3);
+    expect(keys[0]).toBeTruthy();
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).not.toBe(keys[1]);
+    let refreshes = 0;
+    let release!: () => void;
+    const hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route('**/api/session', async (route) => {
+      refreshes++;
+      await hold;
+      await route.fulfill({
+        status: 401,
+        json: { error: { code: 'unauthorized', message: 'Session ended' } },
+      });
+    });
+    await page.getByRole('button', { name: submit, exact: true }).click();
+    await expect(
+      page.getByText(
+        locale === 'en'
+          ? /Repeated invalid code submissions have restricted/
+          : /兑换码重复违规提交，账号已被暂时限制至/,
+      ),
+    ).toBeVisible();
+    await expect.poll(() => refreshes).toBe(1);
+    expect(keys[3]).not.toBe(keys[2]);
+    const refreshed = page.waitForResponse(
+      (response) => new URL(response.url()).pathname === '/api/session',
+    );
+    release();
+    await refreshed;
+  });
+}

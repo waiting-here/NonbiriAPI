@@ -19,7 +19,7 @@ import {
 
 export const penaltyKinds = ['deduction', 'ban', 'charity_suspend'] as const;
 export const penaltyStates = ['active', 'ended'] as const;
-const reasons = ['charity_rpm', 'charity_short_content'] as const;
+const reasons = ['charity_rpm', 'charity_short_content', 'redemption_code'] as const;
 export const ruleFields = [
   'rpm_ban_threshold',
   'rpm_ban_window_seconds',
@@ -33,6 +33,9 @@ export const ruleFields = [
   'charity_suspend_window_seconds',
   'charity_suspend_threshold',
   'charity_suspend_duration_seconds',
+  'redemption_ban_threshold',
+  'redemption_ban_window_seconds',
+  'redemption_ban_duration_seconds',
 ] as const;
 export type PenaltyRole = 'admin' | 'steward';
 export type PenaltyFilter = {
@@ -154,12 +157,16 @@ export function normalizePenaltyDetail(value: unknown, page: string, size: PageS
 export function normalizePenaltyEvidence(value: unknown, page: string, size: PageSize) {
   const r = record(value, ['rules', 'statistics', 'members'], 'penalty evidence');
   const rules = record(r.rules, ['version', ...ruleFields], 'rule snapshot', []);
-  if (Object.keys(rules).length !== 0 && Object.keys(rules).length !== ruleFields.length + 1)
-    invalidResponse('incomplete rule snapshot');
   const parsedRules: Partial<Record<(typeof ruleFields)[number] | 'version', number>> = {};
   if (Object.keys(rules).length) {
-    parsedRules.version = integer(rules.version, 'rule version', 1, 1);
-    for (const key of ruleFields) parsedRules[key] = integer(rules[key], 'rule value');
+    parsedRules.version = integer(rules.version, 'rule version', 1, 2);
+    const fields =
+      parsedRules.version === 1
+        ? ruleFields.filter((key) => !key.startsWith('redemption_'))
+        : ruleFields;
+    if (Object.keys(rules).length !== fields.length + 1)
+      invalidResponse('incomplete rule snapshot');
+    for (const key of fields) parsedRules[key] = integer(rules[key], 'rule value');
   }
   const stats = record(
     r.statistics,
@@ -191,6 +198,7 @@ export function normalizePenaltyEvidence(value: unknown, page: string, size: Pag
       stats.rule,
       [
         'rpm_window',
+        'redemption_window',
         'short_content_direct',
         'short_content_window',
         'short_content_suspend_window',
@@ -221,7 +229,7 @@ export function normalizePenaltyEvidence(value: unknown, page: string, size: Pag
         request_id: opaqueID(e.request_id, 'req_', 'evidence request'),
         violation_kind: oneOf(
           e.violation_kind,
-          ['rpm', 'short_content'] as const,
+          ['rpm', 'short_content', 'redemption_code'] as const,
           'violation kind',
         ),
         content_chars: nullableInteger(e.content_chars, 'content length'),

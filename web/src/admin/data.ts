@@ -750,7 +750,7 @@ export function useAdminSession(enabled = true) {
         }
         return value;
       } catch (error) {
-        failManagementSessionRequest(queryClient, 'admin', generation);
+        failManagementSessionRequest(queryClient, 'admin', generation, error);
         throw error;
       }
     },

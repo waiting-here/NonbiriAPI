@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { ApiError } from '@shared/query/http';
-import { automaticRestrictions } from '@shared/operations/restrictions';
+import { useUserSession, type UserSessionResponse } from '../../data';
 import { decoded, queryPath } from '@shared/operations/api';
 import {
   isPageNumber,
@@ -11,15 +11,11 @@ import {
   type PageSize,
 } from '@shared/operations/pageNumbers';
 import {
-  amount,
   boolean,
   decimal,
   decimalID,
   array,
-  integer,
   invalidResponse,
-  nullableDecimal,
-  nullableString,
   nullableUnixSecond,
   oneOf,
   opaqueID,
@@ -29,14 +25,6 @@ import {
   unixSecond,
   type CursorPage,
 } from '@shared/operations/wire';
-
-export interface UserAuthority {
-  id: string;
-  username: string;
-  lang: '' | 'zh' | 'en';
-  effective_level: number;
-  is_banned: boolean;
-}
 
 interface IssueCommon {
   id: string;
@@ -86,81 +74,6 @@ export interface AnnouncementDetail extends Omit<AnnouncementSummary, 'excerpt'>
 export interface AnnouncementPage extends CursorPage<AnnouncementSummary> {
   next_cursor: null;
   pagination: PageMetadata;
-}
-
-const USAGE_FIELDS = [
-  'total_requests',
-  'total_uncached_input_tokens',
-  'total_cache_write_input_tokens',
-  'total_cache_read_input_tokens',
-  'total_output_tokens',
-  'total_prompt_tokens',
-  'total_completion_tokens',
-  'total_unknown_usage_requests',
-] as const;
-
-export function normalizeUserAuthority(value: unknown): UserAuthority {
-  const envelope = record(value, ['user'], 'user session');
-  const fields = [
-    'id',
-    'username',
-    'avatar',
-    'avatar_url',
-    'guild_nick',
-    'guild_avatar_url',
-    'lang',
-    'is_banned',
-    'banned_until',
-    'charity_suspended_until',
-    'endpoint_limit',
-    'effective_endpoint_limit',
-    'rpm_limit',
-    'effective_rpm_limit',
-    'concurrency_limit',
-    'effective_concurrency_limit',
-    'balance',
-    'game_balance',
-    'donation_credit',
-    'effective_level',
-    'level_display_name',
-    'game_profile_public',
-    'charity_profile_public',
-    'automatic_restrictions',
-    'created_at',
-    'updated_at',
-    'usage',
-  ] as const;
-  const user = record(envelope.user, fields, 'user session subject');
-  nullableString(user.avatar, 'avatar');
-  nullableString(user.avatar_url, 'avatar URL');
-  nullableString(user.guild_nick, 'guild nickname');
-  nullableString(user.guild_avatar_url, 'guild avatar URL');
-  nullableUnixSecond(user.banned_until, 'ban deadline');
-  nullableUnixSecond(user.charity_suspended_until, 'charity suspension deadline');
-  nullableDecimal(user.endpoint_limit, 'endpoint limit');
-  decimal(user.effective_endpoint_limit, 'effective endpoint limit');
-  nullableDecimal(user.rpm_limit, 'RPM limit');
-  decimal(user.effective_rpm_limit, 'effective RPM limit');
-  nullableDecimal(user.concurrency_limit, 'concurrency limit');
-  decimal(user.effective_concurrency_limit, 'effective concurrency limit');
-  amount(user.balance, 'balance', true);
-  amount(user.game_balance, 'game balance', true);
-  amount(user.donation_credit, 'donation credit', false);
-  string(user.level_display_name, 'level display name', { min: 1 });
-  boolean(user.game_profile_public, 'game profile visibility');
-  boolean(user.charity_profile_public, 'charity profile visibility');
-  automaticRestrictions(user.automatic_restrictions);
-  unixSecond(user.created_at, 'account creation time');
-  unixSecond(user.updated_at, 'account update time');
-  const usage = record(user.usage, USAGE_FIELDS, 'usage summary');
-  for (const field of USAGE_FIELDS) decimal(usage[field], `usage ${field}`);
-  return {
-    id: decimalID(user.id, 'user id'),
-    username: string(user.username, 'username', { min: 1 }),
-    lang: oneOf(user.lang, ['', 'zh', 'en'] as const, 'user language'),
-    effective_level: integer(user.effective_level, 'effective level', 1, 6),
-    is_banned: boolean(user.is_banned, 'ban state'),
-  };
 }
 
 export function normalizeIssue(value: unknown): Issue {
@@ -354,7 +267,7 @@ export function normalizeAnnouncementPage(value: unknown): AnnouncementPage {
 
 export const operationsKeys = {
   root: ['user', 'operations'] as const,
-  session: ['user', 'operations', 'session'] as const,
+  session: ['user', 'session'] as const,
   issues: (state: 'current' | 'closed', cursor: string | null) =>
     ['user', 'operations', 'issues', state, cursor] as const,
   announcements: (cursor: string | null) =>
@@ -372,14 +285,10 @@ export const operationsKeys = {
   announcement: (id: string) => ['user', 'operations', 'announcement', id] as const,
 };
 
+const selectAuthority = (session: UserSessionResponse | null) => session?.user ?? null;
+
 export function useUserAuthority(enabled = true) {
-  return useQuery({
-    queryKey: operationsKeys.session,
-    queryFn: () => decoded('/api/session', normalizeUserAuthority),
-    enabled,
-    staleTime: 0,
-    retry: false,
-  });
+  return useUserSession(enabled, selectAuthority);
 }
 
 export function useIssues(state: 'current' | 'closed', cursor: string | null, enabled = true) {

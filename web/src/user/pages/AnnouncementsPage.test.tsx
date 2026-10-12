@@ -1,7 +1,8 @@
 import { screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AnnouncementsPage } from './AnnouncementsPage';
-import { normalizeUserAuthority, operationsKeys } from '../features/operations/data';
+import { operationsKeys } from '../features/operations/data';
+import { normalizeUserEnvelope } from '../features/core/normalizers';
 import { installJsonFetchFixtures, renderWithProviders } from '../../../test/unit/support';
 
 afterEach(() => {
@@ -218,7 +219,7 @@ describe('user announcements page', () => {
       ),
     );
     currentAccount = 'B';
-    rendered.queryClient.setQueryData(operationsKeys.session, normalizeUserAuthority(session('8')));
+    rendered.queryClient.setQueryData(operationsKeys.session, normalizeUserEnvelope(session('8')));
     expect(await screen.findByText('Announcement B')).toBeVisible();
 
     oldPage.resolve(jsonResponse(page([summary('A')])));
@@ -252,7 +253,7 @@ describe('user announcements page', () => {
     language = 'zh';
     const changed = session();
     changed.user.lang = 'zh';
-    rendered.queryClient.setQueryData(operationsKeys.session, normalizeUserAuthority(changed));
+    rendered.queryClient.setQueryData(operationsKeys.session, normalizeUserEnvelope(changed));
     await waitFor(() => expect(screen.queryByText('Announcement English')).not.toBeInTheDocument());
     translated.resolve(jsonResponse(page([{ ...summary('Chinese'), effective_language: 'zh' }])));
     expect(await screen.findByText('Announcement Chinese')).toBeVisible();

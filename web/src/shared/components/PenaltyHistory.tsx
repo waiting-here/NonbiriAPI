@@ -22,7 +22,7 @@ import {
 import { usePagePager, type PagePager } from '@shared/operations/usePagePager';
 import { PagePagination } from '@shared/operations/PagePagination';
 import type { PageMetadata } from '@shared/operations/pageNumbers';
-import { isForbidden, isUnauthorized } from '@shared/query/http';
+import { isUnauthorized } from '@shared/query/http';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { HistoryDialog } from './LoanDetails';
 import { useLoanText } from './loanCopy';
@@ -47,6 +47,14 @@ const names: Record<string, readonly [string, string]> = {
   expire: ['自动到期', 'Expired'],
   charity_rpm: ['公益请求超过频率限制', 'Charity request rate exceeded'],
   charity_short_content: ['公益内容过短', 'Charity content too short'],
+  redemption_code: ['兑换码重复违规提交', 'Repeated invalid code submissions'],
+  redemption_window: ['兑换码违规窗口', 'Redemption violation window'],
+  redemption_ban_threshold: ['兑换码违规封禁阈值（次）', 'Redemption ban threshold (submissions)'],
+  redemption_ban_window_seconds: ['兑换码违规窗口（秒）', 'Redemption window (seconds)'],
+  redemption_ban_duration_seconds: [
+    '兑换码违规封禁时长（秒）',
+    'Redemption ban duration (seconds)',
+  ],
   manual_release: ['人工解除', 'Manually released'],
   manual_adjustment: ['人工调整', 'Manually adjusted'],
   rpm_window: ['频率违规窗口', 'Rate violation window'],
@@ -102,7 +110,7 @@ function useProtectedQuery<T>(
       } catch (error) {
         if (!stationSessionMatches(client, scope.role, session))
           throw new StationSessionChangedError();
-        if (isUnauthorized(error) || isForbidden(error)) clearStationSession(client, scope.role);
+        if (isUnauthorized(error)) clearStationSession(client, scope.role);
         throw error;
       }
     },
@@ -227,9 +235,7 @@ function Evidence({
   const data = query.data;
   return (
     <>
-      <Button  onClick={onBack}>
-        {text('返回处理记录', 'Back to actions')}
-      </Button>
+      <Button onClick={onBack}>{text('返回处理记录', 'Back to actions')}</Button>
       <h3>{text('当时依据', 'Evidence at the time')}</h3>
       {query.isPending ? (
         <LoadingState />
@@ -280,12 +286,14 @@ function Evidence({
             <details>
               <summary>{text('查看当时完整规则', 'View all rules at the time')}</summary>
               <dl className="loan-facts">
-                {ruleFields.map((key) => (
-                  <div key={key}>
-                    <dt>{name(key)}</dt>
-                    <dd>{data.rules[key]}</dd>
-                  </div>
-                ))}
+                {ruleFields
+                  .filter((key) => data.rules[key] !== undefined)
+                  .map((key) => (
+                    <div key={key}>
+                      <dt>{name(key)}</dt>
+                      <dd>{data.rules[key]}</dd>
+                    </div>
+                  ))}
               </dl>
             </details>
           ) : null}
@@ -296,7 +304,9 @@ function Evidence({
                 {formatDateTime(member.occurred_at)} ·{' '}
                 {member.violation_kind === 'rpm'
                   ? text('请求频率', 'Request rate')
-                  : text('内容长度', 'Content length')}
+                  : member.violation_kind === 'redemption_code'
+                    ? text('兑换码提交', 'Redemption submission')
+                    : text('内容长度', 'Content length')}
                 {member.content_chars === null ? '' : ` · ${member.content_chars}`}
               </p>
               <RequestReference
@@ -348,9 +358,7 @@ function CaseHistory({
     );
   return (
     <>
-      <Button  onClick={onBack}>
-        {text('返回处罚列表', 'Back to penalties')}
-      </Button>
+      <Button onClick={onBack}>{text('返回处罚列表', 'Back to penalties')}</Button>
       {query.isPending ? (
         <LoadingState />
       ) : query.error ? (
@@ -383,7 +391,7 @@ function CaseHistory({
                 id={a.request_id}
                 available={a.request_log_available}
               />
-              <Button  onClick={() => setAction(a)}>
+              <Button onClick={() => setAction(a)}>
                 {text('查看当时依据', 'View evidence')} ({a.evidence_count})
               </Button>
             </article>
@@ -483,7 +491,7 @@ function PenaltyList({ scope }: { scope: Scope }) {
             query.data.data.map((c) => (
               <article className="loan-record" key={c.id}>
                 <PenaltyFacts value={c} />
-                <Button  onClick={() => setCaseID(c.id)}>
+                <Button onClick={() => setCaseID(c.id)}>
                   {text('查看处理记录', 'View actions')}
                 </Button>
               </article>
@@ -502,9 +510,7 @@ export function PenaltyHistory({ inline = false, ...scope }: Scope & { inline?: 
     return <PenaltyList key={`${scope.role}:${scope.account}:${scope.userID}`} scope={scope} />;
   return (
     <>
-      <Button  onClick={() => setOpen(true)}>
-        {text('自动处罚记录', 'Automatic penalties')}
-      </Button>
+      <Button onClick={() => setOpen(true)}>{text('自动处罚记录', 'Automatic penalties')}</Button>
       {open ? (
         <HistoryDialog
           title={text('自动处罚记录', 'Automatic penalties')}

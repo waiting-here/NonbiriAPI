@@ -192,8 +192,8 @@ describe('activity query authority recovery', () => {
     return { observer, unsubscribe };
   }
 
-  it('reconnects with renewed session authority and ignores callbacks from the closed stream', async () => {
-    const rendered = renderHook(({ updated }) => useActivityAccountEvents(true, '7', updated), {
+  it('keeps its stream across a refresh with the same account and permissions', async () => {
+    const rendered = renderHook(() => useActivityAccountEvents(true, '7'), {
       initialProps: { updated: 1 },
       wrapper,
     });
@@ -208,9 +208,8 @@ describe('activity query authority recovery', () => {
       generation,
     );
     rendered.rerender({ updated: 2 });
-    await waitFor(() => expect(mocks.connect).toHaveBeenCalledTimes(2));
+    expect(mocks.connect).toHaveBeenCalledTimes(1);
     act(() => handlers.onConnectionChange('connected'));
-    act(() => old.onConnectionChange('disconnected'));
     expect(rendered.result.current.connection).toBe('connected');
     rendered.unmount();
   });
@@ -235,6 +234,130 @@ describe('activity query authority recovery', () => {
       expect(queryClient.getQueryData(economyKeys.activities)).toEqual(NEW_SNAPSHOT),
     );
     rendered.unmount();
+  });
+
+  it('recovers a brief disconnect silently without fetching a fresh snapshot twice', async () => {
+    vi.useFakeTimers();
+    queryClient.setQueryData(economyKeys.activities, OLD_SNAPSHOT);
+    const rendered = renderHook(() => useActivityAccountEvents(true, '7'), { wrapper });
+    try {
+      act(() => {
+        handlers.onConnectionChange('disconnected');
+        handlers.onResync('disconnect');
+      });
+      await act(() => vi.advanceTimersByTimeAsync(10_000));
+      expect(rendered.result.current.recoveryError).toBeNull();
+      expect(mocks.getActivities).not.toHaveBeenCalled();
+      act(() => handlers.onReplace(NEW_SNAPSHOT, '10'));
+      await act(() => vi.advanceTimersByTimeAsync(10_000));
+      expect(rendered.result.current.recoveryError).toBeNull();
+      expect(mocks.getActivities).not.toHaveBeenCalled();
+    } finally {
+      rendered.unmount();
+      vi.useRealTimers();
+    }
+  });
+
+  it('shows one recovery state after 15 seconds even when the authority read is hanging', async () => {
+    vi.useFakeTimers();
+    queryClient.setQueryData(economyKeys.activities, OLD_SNAPSHOT);
+    const request = deferred<ActivitiesSnapshot>();
+    mocks.getActivities.mockReturnValue(request.promise);
+    const rendered = renderHook(() => useActivityAccountEvents(true, '7'), { wrapper });
+    try {
+      act(() => {
+        handlers.onConnectionChange('disconnected');
+        handlers.onResync('disconnect');
+      });
+      await act(() => vi.advanceTimersByTimeAsync(14_999));
+      expect(rendered.result.current.recoveryError).toBeNull();
+      await act(() => vi.advanceTimersByTimeAsync(1));
+      expect(rendered.result.current.recoveryError).toBeInstanceOf(Error);
+      expect(mocks.getActivities).toHaveBeenCalledTimes(1);
+      act(() => {
+        void rendered.result.current.retry();
+        handlers.onResync('gap');
+      });
+      expect(mocks.getActivities).toHaveBeenCalledTimes(1);
+      await act(async () => request.resolve(NEW_SNAPSHOT));
+      expect(rendered.result.current.recoveryError).toBeNull();
+      expect(queryClient.getQueryData(economyKeys.activities)).toEqual(NEW_SNAPSHOT);
+    } finally {
+      rendered.unmount();
+      vi.useRealTimers();
+    }
+  });
+
+  it('counts a successful recovery GET as fresh during the next short disconnect', async () => {
+    vi.useFakeTimers();
+    queryClient.setQueryData(economyKeys.activities, OLD_SNAPSHOT, {
+      updatedAt: Date.now() - 30_000,
+    });
+    mocks.getActivities.mockResolvedValue(NEW_SNAPSHOT);
+    const rendered = renderHook(() => useActivityAccountEvents(true, '7'), { wrapper });
+    try {
+      act(() => handlers.onResync('gap'));
+      await act(() => vi.advanceTimersByTimeAsync(0));
+      expect(mocks.getActivities).toHaveBeenCalledTimes(1);
+      await act(() => vi.advanceTimersByTimeAsync(2_000));
+      act(() => {
+        handlers.onConnectionChange('disconnected');
+        handlers.onResync('disconnect');
+      });
+      await act(() => vi.advanceTimersByTimeAsync(5_000));
+      expect(mocks.getActivities).toHaveBeenCalledTimes(1);
+      act(() => handlers.onConnectionChange('connected'));
+      await act(() => vi.advanceTimersByTimeAsync(15_000));
+      expect(mocks.getActivities).toHaveBeenCalledTimes(1);
+      expect(rendered.result.current.recoveryError).toBeNull();
+    } finally {
+      rendered.unmount();
+      vi.useRealTimers();
+    }
+  });
+
+  it('clears a long-disconnect error after stable heartbeats resume an intact replay cursor', async () => {
+    vi.useFakeTimers();
+    queryClient.setQueryData(economyKeys.activities, OLD_SNAPSHOT, {
+      updatedAt: Date.now() - 30_000,
+    });
+    mocks.getActivities.mockRejectedValue(new Error('Offline'));
+    const rendered = renderHook(() => useActivityAccountEvents(true, '7'), { wrapper });
+    try {
+      act(() => {
+        handlers.onConnectionChange('disconnected');
+        handlers.onResync('disconnect');
+      });
+      await act(() => vi.advanceTimersByTimeAsync(15_000));
+      expect(rendered.result.current.recoveryError).toBeInstanceOf(Error);
+      expect(mocks.getActivities).toHaveBeenCalledTimes(1);
+      act(() => handlers.onConnectionChange('connected'));
+      expect(rendered.result.current.recoveryError).toBeNull();
+      expect(queryClient.getQueryData(economyKeys.activities)).toEqual(OLD_SNAPSHOT);
+      expect(mocks.getActivities).toHaveBeenCalledTimes(1);
+    } finally {
+      rendered.unmount();
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps a malformed-frame recovery error until an authoritative snapshot arrives', async () => {
+    vi.useFakeTimers();
+    queryClient.setQueryData(economyKeys.activities, OLD_SNAPSHOT);
+    mocks.getActivities.mockRejectedValue(new Error('Offline'));
+    const rendered = renderHook(() => useActivityAccountEvents(true, '7'), { wrapper });
+    try {
+      act(() => handlers.onResync('malformed'));
+      await act(() => vi.advanceTimersByTimeAsync(15_000));
+      expect(rendered.result.current.recoveryError).toBeInstanceOf(Error);
+      act(() => handlers.onConnectionChange('connected'));
+      expect(rendered.result.current.recoveryError).toBeInstanceOf(Error);
+      act(() => handlers.onReplace(NEW_SNAPSHOT, '12'));
+      expect(rendered.result.current.recoveryError).toBeNull();
+    } finally {
+      rendered.unmount();
+      vi.useRealTimers();
+    }
   });
 
   it('prevents an ordinary activities GET from overwriting a newer SSE snapshot', async () => {
@@ -613,8 +736,8 @@ describe('activity query authority recovery', () => {
     donationPage.unsubscribe();
   });
 
-  it('closes the station on a true forbidden authentication boundary', async () => {
-    const rejected = new ApiError('forbidden', 'closed', 403);
+  it('closes the station on an unauthorized authentication boundary', async () => {
+    const rejected = new ApiError('unauthorized', 'closed', 401);
     mocks.claimWelfare.mockRejectedValue(rejected);
     queryClient.setQueryData(economyKeys.activities, OLD_SNAPSHOT);
     const rendered = renderHook(() => useClaimWelfare(), { wrapper });

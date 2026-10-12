@@ -56,7 +56,9 @@ export function ReasonText({
       ? 'common.reasons.charityRPM'
       : reasonCode === 'charity_short_content'
         ? 'common.reasons.charityShortContent'
-        : undefined;
+        : reasonCode === 'redemption_code'
+          ? 'common.reasons.redemptionCode'
+          : undefined;
   return (
     <p className={code ? 'ops-break' : 'ops-break ops-blacklist-note'}>
       {code ? t(code) : automatic?.manual_text || reason || t('common.reasons.unspecified')}

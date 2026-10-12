@@ -892,7 +892,8 @@
       "unspecified": "No reason provided.",
       "recheckLogin": "Return to the home page and sign in with Discord again to view the current restriction reasons.",
       "cleared": "The current restriction has ended. Return to the home page to sign in again.",
-      "more": "Load more notes"
+      "more": "Load more notes",
+      "redemptionCode": "Repeated invalid code submissions"
     },
     "account": {
       "deleted": "Deleted account",
@@ -1558,8 +1559,12 @@
       "failedRecipients": "Undelivered rewards",
       "recipient": "Account {{id}}",
       "noFailures": "No undelivered rewards",
-      "retryHelp": "Refresh the delivery list to see the latest results."
-    }
+      "retryHelp": "Refresh the delivery list to see the latest results.",
+      "retryUnknown": "The result is not confirmed. Retry to check the same submission.",
+      "redemptionBanned": "Repeated invalid code submissions have restricted your account until {{time}}."
+    },
+    "resourceErrorTitle": "This page needs to be reloaded",
+    "resourceErrorBody": "The page files could not be loaded. Reload to open the current version."
   },
   "logs": {
     "charityModel": "Called charity model",
