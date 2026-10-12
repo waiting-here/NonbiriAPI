@@ -18,7 +18,7 @@ import (
 func TestAppearanceVisibilityFollowsOwnershipAndActualOpening(t *testing.T) {
 	f := newFixture(t)
 	service, err := appearance.New(appearance.Config{
-		Database: f.db, Users: testAuthority{f.admin}, Gate: f.gate, Now: func() time.Time { return time.Unix(f.at.Load(), 0) },
+		Database: f.db, Users: testAuthority{f.admin}, Gate: f.gate, Moments: f.s.MomentOptionsTx, Now: func() time.Time { return time.Unix(f.at.Load(), 0) },
 		Unlock: func(ctx context.Context, tx *sql.Tx, user int64, key string) (bool, error) {
 			var owned bool
 			err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM gacha_owned WHERE user_id=? AND card_id=?)", user, strings.TrimPrefix(key, "card:")).Scan(&owned)
@@ -38,8 +38,8 @@ func TestAppearanceVisibilityFollowsOwnershipAndActualOpening(t *testing.T) {
 			t.Fatal(got, err)
 		}
 	}
-	base := []string{"default"}
-	known := []string{"default", "celestial"}
+	base := []string{"default", "heart-moment"}
+	known := []string{"default", "heart-moment", "celestial"}
 	check(f.user, base, base)
 	id, err := db.GenerateOpaqueID("gp_")
 	if err != nil {
@@ -63,16 +63,16 @@ func TestAppearanceVisibilityFollowsOwnershipAndActualOpening(t *testing.T) {
 	pool.Paused = false
 	f.save(t, "open-appearance", AdminInput{Kind: "pool", Pool: &pool, ExpectedRevision: pool.Revision})
 	check(f.user, known, base)
-	if _, err = service.Select(t.Context(), f.user, "celestial"); !errors.Is(err, authz.ErrForbidden) {
+	if _, err = service.Select(t.Context(), f.user, "celestial", ""); !errors.Is(err, authz.ErrForbidden) {
 		t.Fatal(err)
 	}
 	f.at.Add(1000)
 	check(f.user, known, base)
 	f.exec(t, "INSERT INTO gacha_owned(user_id,card_id,obtained_at,source) VALUES(?,?,?,'shop')", f.user, "m-deepseek", f.at.Load())
-	check(f.user, []string{"default", "celestial", "wandering"}, []string{"default", "wandering"})
+	check(f.user, []string{"default", "heart-moment", "celestial", "wandering"}, []string{"default", "heart-moment", "wandering"})
 	check(f.other, known, base)
-	selected, err := service.Select(t.Context(), f.user, "wandering")
-	if err != nil || selected.Selected != "wandering" || len(selected.Visible) != 3 {
+	selected, err := service.Select(t.Context(), f.user, "wandering", "")
+	if err != nil || selected.Selected != "wandering" || len(selected.Visible) != 4 {
 		t.Fatal(selected, err)
 	}
 	tx, err := f.db.BeginTx(t.Context(), &sql.TxOptions{ReadOnly: true})

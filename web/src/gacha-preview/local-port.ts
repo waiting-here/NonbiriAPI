@@ -18,6 +18,7 @@ import type {
 
 interface Saved {
   appearance?: string;
+  moment?: string;
   state: Snapshot;
   entered: boolean;
   day: string;
@@ -352,6 +353,7 @@ export function resetPreview(mode: 'new' | 'collection') {
 function appearanceState() {
   const unlocked = [
     'default',
+    'heart-moment',
     ...cards
       .filter((card) => card.appearance && memory.state.owned[card.id])
       .map((card) => card.appearance!),
@@ -359,7 +361,24 @@ function appearanceState() {
   return {
     selected: unlocked.includes(memory.appearance ?? '') ? memory.appearance! : 'default',
     unlocked,
-    visible: ['default', 'celestial', 'wandering'],
+    visible: ['default', 'heart-moment', 'celestial', 'wandering'],
+    moment: memory.moment ?? 'cover:permanent',
+    moments: [
+      'cover:permanent',
+      ...new Set(
+        memory.state.pools
+          .filter((pool) => pool.kind === 'limited' && pool.published)
+          .map((pool) => 'cover:' + pool.cover),
+      ),
+      ...cards.filter((card) => memory.state.owned[card.id]).map((card) => 'card:' + card.id),
+      ...themes
+        .filter((theme) =>
+          cards
+            .filter((card) => card.theme === theme.id)
+            .every((card) => memory.state.owned[card.id]),
+        )
+        .map((theme) => 'illustration:' + theme.id),
+    ],
     updated_at: null,
   };
 }
@@ -368,9 +387,10 @@ export const localAppearancePort: AppearancePort = {
   async load() {
     return appearanceState();
   },
-  async select(selected) {
+  async select(selected, moment) {
+    if (moment && !appearanceState().moments.includes(moment)) throw new Error('moment-locked');
     if (!appearanceState().unlocked.includes(selected)) throw new Error('appearance-locked');
-    save({ ...memory, appearance: selected });
+    save({ ...memory, appearance: selected, moment: moment ?? memory.moment });
     return appearanceState();
   },
 };
@@ -381,12 +401,14 @@ export const appearancePreviewPort: AppearancePort = {
   async load() {
     return {
       selected: previewAppearance,
-      unlocked: ['default', 'celestial', 'wandering'],
+      unlocked: ['default', 'heart-moment', 'celestial', 'wandering'],
+      moment: 'cover:permanent',
+      moments: ['cover:permanent'],
       updated_at: null,
     };
   },
   async select(selected) {
-    if (!['default', 'celestial', 'wandering'].includes(selected))
+    if (!['default', 'heart-moment', 'celestial', 'wandering'].includes(selected))
       throw new Error('appearance-locked');
     previewAppearance = selected;
     return this.load();

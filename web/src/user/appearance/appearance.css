@@ -1,9 +1,9 @@
 html[data-appearance='celestial'],
-html[data-appearance='wandering'] {
+html:is([data-appearance='wandering'], [data-appearance='heart-moment']) {
   background: var(--nb-color-bg);
 }
 html[data-appearance='celestial'] body,
-html[data-appearance='wandering'] body {
+html:is([data-appearance='wandering'], [data-appearance='heart-moment']) body {
   background: transparent;
 }
 .nb-appearance-still {
@@ -17,13 +17,13 @@ html[data-appearance='wandering'] body {
   z-index: -1;
 }
 html[data-appearance='celestial'] .nb-user-shell,
-html[data-appearance='wandering'] .nb-user-shell,
+html:is([data-appearance='wandering'], [data-appearance='heart-moment']) .nb-user-shell,
 html[data-appearance='celestial'] .gacha-preview,
-html[data-appearance='wandering'] .gacha-preview {
+html:is([data-appearance='wandering'], [data-appearance='heart-moment']) .gacha-preview {
   background: transparent;
 }
 html[data-appearance='celestial'] .nb-user-header,
-html[data-appearance='wandering'] .nb-user-header {
+html:is([data-appearance='wandering'], [data-appearance='heart-moment']) .nb-user-header {
   background: var(--nb-color-surface);
   backdrop-filter: blur(16px);
 }
@@ -115,7 +115,7 @@ html[data-appearance='wandering'] .nb-user-header {
 }
 
 html[data-appearance='celestial'] .nb-page-header,
-html[data-appearance='wandering'] .nb-page-header {
+html:is([data-appearance='wandering'], [data-appearance='heart-moment']) .nb-page-header {
   background: var(--nb-color-surface);
   border-radius: var(--nb-radius-sm);
   padding: var(--nb-space-4);
@@ -126,16 +126,25 @@ html[data-appearance='wandering'] .nb-page-header {
     display: none;
   }
   html[data-appearance='celestial'] .nb-user-header,
-  html[data-appearance='wandering'] .nb-user-header {
+  html:is([data-appearance='wandering'], [data-appearance='heart-moment']) .nb-user-header {
     backdrop-filter: none;
   }
 }
 
-html:is([data-appearance='celestial'], [data-appearance='wandering'])
+html:is(
+    [data-appearance='celestial'],
+    [data-appearance='wandering'],
+    [data-appearance='heart-moment']
+  )
   :is(.nb-tabs, .nb-user-shell__footer) {
   background: var(--nb-color-surface);
 }
-html:is([data-appearance='celestial'], [data-appearance='wandering']) .nb-tabs {
+html:is(
+    [data-appearance='celestial'],
+    [data-appearance='wandering'],
+    [data-appearance='heart-moment']
+  )
+  .nb-tabs {
   padding-inline: var(--nb-space-3);
   border-radius: var(--nb-radius-sm);
 }
@@ -158,7 +167,11 @@ html:is([data-appearance='celestial'], [data-appearance='wandering']) .nb-tabs {
   }
 }
 
-html:is([data-appearance='celestial'], [data-appearance='wandering'])
+html:is(
+    [data-appearance='celestial'],
+    [data-appearance='wandering'],
+    [data-appearance='heart-moment']
+  )
   :is(.nb-panel, .nb-page-header, .nb-fold, .nb-card) {
   background: linear-gradient(
     135deg,
@@ -174,15 +187,28 @@ html:is([data-appearance='celestial'], [data-appearance='wandering'])
     0 12px 32px -12px var(--nb-appearance-glass-shadow);
   backdrop-filter: blur(24px) saturate(0.85);
 }
-html:is([data-appearance='celestial'], [data-appearance='wandering'])
+html:is(
+    [data-appearance='celestial'],
+    [data-appearance='wandering'],
+    [data-appearance='heart-moment']
+  )
   :is(.nb-panel__head, .nb-panel__foot) {
   border-color: var(--nb-appearance-glass-divider);
 }
-html:is([data-appearance='celestial'], [data-appearance='wandering']) .nb-panel--danger {
+html:is(
+    [data-appearance='celestial'],
+    [data-appearance='wandering'],
+    [data-appearance='heart-moment']
+  )
+  .nb-panel--danger {
   border-color: var(--nb-color-danger);
 }
 @supports not (backdrop-filter: blur(1px)) {
-  html:is([data-appearance='celestial'], [data-appearance='wandering'])
+  html:is(
+      [data-appearance='celestial'],
+      [data-appearance='wandering'],
+      [data-appearance='heart-moment']
+    )
     :is(.nb-panel, .nb-page-header, .nb-fold, .nb-card) {
     background: var(--nb-color-surface);
   }

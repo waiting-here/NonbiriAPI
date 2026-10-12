@@ -6520,7 +6520,7 @@ CREATE TABLE schema_state (
 ) STRICT;
 INSERT INTO credit_compaction(id,through_seq,details_before,sweep_at,sweep_after_seq) VALUES(1,0,0,0,0);
 INSERT INTO game_blackjack_clock(id,observed_at) VALUES(1,0);
-INSERT INTO schema_state(id,version) VALUES(1,15);
+INSERT INTO schema_state(id,version) VALUES(1,16);
 
 CREATE TABLE game_ai_settings (
  game_key TEXT PRIMARY KEY NOT NULL,
@@ -6820,7 +6820,8 @@ INSERT INTO gacha_presets(id,name,config,revision) VALUES('theatre','童话剧�
 CREATE TABLE user_appearance (
  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
  selected TEXT NOT NULL CHECK(length(selected) BETWEEN 1 AND 64),
- updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799)
+ updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799),
+ moment TEXT NOT NULL DEFAULT 'cover:permanent' CHECK(length(moment) BETWEEN 1 AND 64)
 ) STRICT;
 INSERT INTO gacha_presets(id,name,config,revision) VALUES('celestial','星月神话','{"id":"","name":"星月神话","cover":"l","kind":"limited","group":"","rules":{"weights":[5500,3500,900,100],"sr_pity":10,"ssr_pity":60,"sr_featured":5000,"ssr_featured":1500,"sr_guarantee":true,"ssr_guarantee":true,"ssr_guarantee_misses":2},"featured":["h-chatgpt","h-claude","h-glm","h-deepseek","h-gemini","l-chatgpt"],"starts_at":null,"ends_at":null,"paused":false,"published":false,"revision":0}',1);
 INSERT INTO gacha_presets(id,name,config,revision) VALUES('wandering','逍遥游','{"id":"","name":"逍遥游","cover":"m","kind":"limited","group":"","rules":{"weights":[5500,3500,900,100],"sr_pity":10,"ssr_pity":60,"sr_featured":5000,"ssr_featured":1500,"sr_guarantee":true,"ssr_guarantee":true,"ssr_guarantee_misses":2},"featured":["h-chatgpt","h-claude","h-glm","h-deepseek","h-gemini","m-deepseek"],"starts_at":null,"ends_at":null,"paused":false,"published":false,"revision":0}',1);

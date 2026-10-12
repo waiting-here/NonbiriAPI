@@ -102,7 +102,23 @@ func (s *Service) CardWasOfferedTx(ctx context.Context, tx *sql.Tx, id string) (
 // Each configuration applies from its save time until the next revision.
 // A scheduled pool paused before its opening time has never been open.
 func readOfferedCards(ctx context.Context, tx *sql.Tx, at int64) (map[string]bool, error) {
+	pools, err := readOfferedPools(ctx, tx, at)
+	if err != nil {
+		return nil, err
+	}
 	offered := map[string]bool{}
+	for _, pool := range pools {
+		for _, id := range pool.Featured {
+			if _, ok := cardsByID[id]; ok {
+				offered[id] = true
+			}
+		}
+	}
+	return offered, nil
+}
+
+func readOfferedPools(ctx context.Context, tx *sql.Tx, at int64) ([]Pool, error) {
+	offered := []Pool{}
 	rows, err := tx.QueryContext(ctx, `
   SELECT config FROM (
    SELECT config,created_at,lead(created_at,1,?) OVER (PARTITION BY target ORDER BY seq) AS next_at
@@ -123,11 +139,7 @@ func readOfferedCards(ctx context.Context, tx *sql.Tx, at int64) (map[string]boo
 		if err = json.Unmarshal([]byte(raw), &pool); err != nil {
 			return nil, err
 		}
-		for _, id := range pool.Featured {
-			if _, ok := cardsByID[id]; ok {
-				offered[id] = true
-			}
-		}
+		offered = append(offered, pool)
 	}
 	if err = rows.Err(); err != nil {
 		return nil, err

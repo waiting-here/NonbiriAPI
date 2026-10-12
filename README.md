@@ -16,7 +16,7 @@ The current development version is **1.0.0-rc.7**. See the [changelog](CHANGELOG
 
 [Reward bundles and redemption codes](docs/rewards.md) support conditional administrator gifts and once-per-account redemption.
 
-[The Gacha Simulator](docs/gacha.md) adds 57 collectible cards, animated SSR/SP illustrations and unlockable site appearances, permanent and scheduled limited pools, a shard shop and theme memories.
+[The Gacha Simulator](docs/gacha.md) adds 57 collectible cards, animated SSR/SP illustrations and unlockable site appearances, permanent and scheduled limited pools, a shard shop and theme memories. Heartfelt moments lets each account use owned cards, unlocked illustrations or available pool covers as its site background.
 
 The administrator [Fat Fish editor](docs/fatfish-editor.md) supports level design, validation and free playtesting before publication.
 

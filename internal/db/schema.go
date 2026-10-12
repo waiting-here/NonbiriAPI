@@ -52,3 +52,6 @@ var requestFactsSQL string
 
 //go:embed migrations/0015_rewards.sql
 var rewardsSQL string
+
+//go:embed migrations/0016_heart_moment.sql
+var heartMomentSQL string

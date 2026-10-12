@@ -85,15 +85,21 @@ Base probabilities use 0.01% increments and total 100%. The SR threshold is 1–
 
 Obtaining an SP card by drawing, shop redemption or an administrator reward immediately unlocks its matching appearance. It remains available after the pool ends. The site does not select it automatically: choose **Appearance** in the user site and apply an unlocked design. The existing light, dark or system preference chooses its matching palette and background. Each design preserves page layout and provides responsive background cropping; game scenes retain their own style.
 
-With a non-default appearance selected, **View animated background** in the top bar hides the interface for appreciation. **Return to page** or Escape restores the page and its current input state. Reduced-motion preferences still apply.
+With a non-default appearance selected, **View background** in the top bar hides the interface for appreciation. **Return to page** or Escape restores the page and its current input state. Reduced-motion preferences still apply.
 
 An appearance stays out of the selector until its card has been offered in an opened pool or the account owns it. Scheduling a future pool or pausing it before opening does not reveal the design. Previously offered appearances can remain visible as locked choices.
 
 The selected appearance is saved per account. Unlocks derive from owned cards, independently of draw-history expiry. Reading or selecting an appearance grants no tickets or activity rewards.
 
+## Heartfelt moments
+
+Every account can choose **Heartfelt moments** in Appearance. Its default is the standard pool cover. Open **Collection → Heartfelt moments** to select an owned card, an unlocked theme illustration, any standard cover, or a limited cover whose pool has actually opened. A limited cover remains available after its pool closes; drafts, future schedules and pools paused before opening do not unlock it. Completing a theme unlocks its illustration without claiming the theme reward.
+
+Cards use their theme’s static background and an independent foreground. SSR and SP retain character animation; other cards, illustrations and covers are static. SP selections also point to their dedicated full site appearance. One responsive layout serves desktop and mobile, with reduced-motion fallback. The account remembers the chosen artwork when another appearance is selected.
+
 ## Records and HTTP access
 
-Draw history retains the most recent 180 days. Collection, first-acquisition times, pity and claimed/redeemed states remain while the account exists. Ticket/shard accounting remains independently of draw-detail expiry. Account export schema 18 includes these records and the appearance selection, unlocked designs and selection timestamp. Deletion removes personal activity state and clears user and retry-key associations from retained accounting/configuration events.
+Draw history retains the most recent 180 days. Collection, first-acquisition times, pity and claimed/redeemed states remain while the account exists. Ticket/shard accounting remains independently of draw-detail expiry. Account export schema 19 includes these records and the appearance selection, saved artwork key, unlocked designs and selection timestamp. Deletion removes personal activity state and clears user and retry-key associations from retained accounting/configuration events.
 
 These routes use station sessions and existing same-origin checks; they are not CallerKey automation endpoints:
 
@@ -103,8 +109,8 @@ These routes use station sessions and existing same-origin checks; they are not 
 | GET | `/api/gacha/state` | Personal balances, collection, visible themes, pity, pools and prices |
 | GET | `/api/gacha/history?cursor=…` | Personal draw history, 50 receipts per page |
 | POST | `/api/gacha/actions` | Enter, check in, draw, buy, redeem or claim |
-| GET | `/api/appearance` | Selected and unlocked personal appearances |
-| POST | `/api/appearance` | Replace selection with an unlocked appearance |
+| GET | `/api/appearance` | Selected appearance, remembered artwork and available artwork keys |
+| POST | `/api/appearance` | Replace selection and optionally the Heartfelt moments artwork |
 | GET | `/admin/api/gacha` | Administrator configuration |
 | POST | `/admin/api/gacha` | Save settings, a pool or a template |
 
@@ -114,7 +120,7 @@ Administrator settings accept an optional `entry_enabled` boolean, alongside rul
 
 Gacha POST routes require `Idempotency-Key`. Retry uncertain operations with the same key and identical body. Confirmed retries never repeat charges or rewards. Expired draw receipts report completion without a new draw. Price-dependent actions include the displayed `revision`; administrator edits include `expected_revision`. Unknown fields and oversized bodies are rejected.
 
-Appearance POST accepts only `{"selected":"default"}`, `{"selected":"celestial"}` or `{"selected":"wandering"}`, with a 1 KiB body limit. It is an idempotent desired-state update and does not require an idempotency key. The visible catalogue is derived at read time and is excluded from account exports. Both appearance routes return `selected,unlocked,visible,updated_at`, reject query parameters and use `Cache-Control: no-store`. Locked designs are forbidden; malformed or unknown selections are invalid requests.
+Appearance POST accepts `selected` (`default`, `heart-moment`, `celestial` or `wandering`) and an optional `moment` artwork key, with a 1 KiB body limit. It is an idempotent desired-state update and does not require an idempotency key. The visible catalogue is derived at read time and is excluded from account exports. Both appearance routes return `selected,moment,moments,unlocked,visible,updated_at`, reject query parameters and use `Cache-Control: no-store`. Locked designs are forbidden; malformed or unknown selections are invalid requests.
 
 Example action bodies:
 
@@ -124,6 +130,8 @@ Example action bodies:
 {"action":"redeem","product":"ticket-n","revision":1}
 {"action":"claim","theme":"a"}
 ```
+
+`GET /api/appearance` returns `selected`, `moment`, `moments`, `unlocked`, `visible` and `updated_at`. Artwork keys are `card:<card-id>`, `illustration:<theme-id>` or `cover:<cover-id>`. `POST /api/appearance` accepts `{ "selected": "heart-moment", "moment": "card:g-chatgpt" }`; omit `moment` to keep the remembered artwork. A supplied artwork requires `selected=heart-moment`. The server validates account access and collection/opening eligibility in the same transaction. Repeating a selection leaves its timestamp unchanged. Reads do not enter the activity or grant tickets.
 
 ## Standalone local preview
 

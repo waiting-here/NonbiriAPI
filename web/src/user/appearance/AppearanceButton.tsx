@@ -5,6 +5,7 @@ import { Button } from '@shared/components/ui/Button';
 import { Icon } from '@shared/components/Icon';
 import { ErrorState, LoadingState } from '@shared/components/States';
 import { ThemeToggle } from '@shared/theme/ThemeToggle';
+import { defaultMoment, momentByKey } from './moments';
 import { appearances, useOptionalAppearance } from './context';
 
 export function AppearanceButton() {
@@ -89,6 +90,15 @@ export function AppearanceButton() {
                         />
                         <img className="nb-appearance-dark" src={item.dark} alt="" loading="lazy" />
                       </>
+                    )}
+                    {item.id === 'heart-moment' && (
+                      <img
+                        src={
+                          (momentByKey.get(appearance.state.moment ?? '') ?? defaultMoment).thumb
+                        }
+                        alt=""
+                        loading="lazy"
+                      />
                     )}
                     {item.id === 'default' && <Icon name="spark" />}
                   </span>

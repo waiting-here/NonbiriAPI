@@ -24,7 +24,7 @@ A failed claim consumes no quota. Retry a lost response using the same code to r
 
 ## Records and account lifecycle
 
-Successful receipts and claim eligibility remain for the account lifetime, independently of ordinary credit-detail retention. Account export schema 18 includes personal receipts under `rewards`, without code text, eligibility configuration, other recipients or internal retry hashes. Deletion removes personal reward records; aggregate campaign counts and consumed quota remain. A newly registered account is a different account for code eligibility.
+Successful receipts and claim eligibility remain for the account lifetime, independently of ordinary credit-detail retention. Account export schema 19 includes personal receipts under `rewards`, without code text, eligibility configuration, other recipients or internal retry hashes. Deletion removes personal reward records; aggregate campaign counts and consumed quota remain. A newly registered account is a different account for code eligibility.
 
 ## Session HTTP API
 

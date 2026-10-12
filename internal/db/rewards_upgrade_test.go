@@ -9,7 +9,9 @@ import (
 //go:embed testdata/pre_rewards.sql
 var preRewardsFixture string
 
-func requestFactsStorageSchema() string { return generationTwoSchema + preRewardsFixture }
+func requestFactsStorageSchema() string {
+	return generationTwoSchema + preHeartMomentFixture + preRewardsFixture
+}
 func TestRewardsUpgradePreservesExistingCheckin(t *testing.T) {
 	database, err := sql.Open("sqlite", ":memory:")
 	if err != nil {

@@ -136,7 +136,7 @@ func newActivityRuntime(store *db.Store, vault *secret.Vault, sessions *auth.Run
 		_ = a.Close()
 		return nil, err
 	}
-	a.appearance, err = appearance.New(appearance.Config{Database: store.DB(), Users: users, Gate: admission, Now: now,
+	a.appearance, err = appearance.New(appearance.Config{Database: store.DB(), Users: users, Gate: admission, Now: now, Moments: a.gacha.MomentOptionsTx,
 		Visible: func(ctx context.Context, tx *sql.Tx, key string) (bool, error) {
 			if !strings.HasPrefix(key, "card:") {
 				return false, nil
