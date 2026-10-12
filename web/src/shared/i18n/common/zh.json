@@ -1453,6 +1453,7 @@
       "images_generations": "图像生成"
     },
     "rewards": {
+      "navTitle": "兑换码",
       "adminTitle": "奖励与兑换码",
       "adminIntro": "组合奖励、设置领取条件，并查看发放进度。",
       "userTitle": "兑换码领取",

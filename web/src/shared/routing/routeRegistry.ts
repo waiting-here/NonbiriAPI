@@ -54,7 +54,7 @@ export const USER_ROUTE_DESCRIPTORS = [
     nav: true,
     registered: true,
     icon: 'activities',
-    labelKey: 'common.rewards.userTitle',
+    labelKey: 'common.rewards.navTitle',
   }),
   user({
     id: 'caller-key',

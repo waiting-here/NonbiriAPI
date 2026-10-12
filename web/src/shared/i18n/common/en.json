@@ -1453,6 +1453,7 @@
       "images_generations": "Image generation"
     },
     "rewards": {
+      "navTitle": "Redeem",
       "adminTitle": "Rewards and redemption codes",
       "adminIntro": "Combine rewards, set eligibility conditions and track delivery.",
       "userTitle": "Redeem a code",
