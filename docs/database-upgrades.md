@@ -1,74 +1,95 @@
 # Database upgrades
 
-Every stable v1.x release must accept any earlier stable v1.x database, starting
-with v1.0.0, without requiring intermediate binaries. Alpha, beta and release
-candidates are outside that long-term guarantee. During rc.6, the final rc.5
-schema and registered rc.6 schemas have explicit import bridges.
+## Supported databases
 
-## Schema and data versions
+The stable baseline is schema **17**. The application accepts a new database or a
+registered stable schema from v1.0.0 onward. Later v1.x binaries must upgrade any
+earlier v1.x schema through the complete forward chain; intermediate binaries are
+not required. An older binary is not required to read a newer database.
 
-`internal/db/generation_two.sql` describes a new database at the current version.
-It contains the final object definitions and initial fixed rows, without replaying
-historical alterations. Fresh configuration comes from the current seed helpers.
+SQLite identity remains `application_id=0x4E425249`, `user_version=2`. Account
+exports use format **19**, independently of the storage schema. An unknown
+identity, version or structural manifest is rejected before writes. Schema 16
+requires the separate rc.7 converter and is not a normal startup source.
 
-`schema_state.version` identifies the installed schema **and data** revision.
-`storageSchema` in `internal/db/schema_extension.go` registers consecutive forward
-steps, each with its resulting structural manifest and SQL or a Go transaction
-callback. A data-only conversion also advances the version. SQLite's
-`application_id` and `user_version` continue to identify the storage generation.
+```sh
+./nonbiriapi maintenance schema-info --json
+```
 
-For a persistent change:
+This command reads no environment or database. Its machine-readable descriptor
+contains the current identity, minimum supported version, registered migration
+sources and offline conversions. Deployment tools should use it instead of
+parsing Go source or deriving a version from the number of migrations.
 
-1. Append a migration that transforms the previous revision, including new
-   configuration keys and fixed rows. Preserve existing operator choices. Keep
-   released migration SQL and conversion behavior immutable; do not call mutable
-   fresh-default helpers from an old step.
-2. Update the fresh DDL and seeds to produce the same target. Update the pinned
-   schema hash, structural manifest and configuration golden where applicable.
-3. Test direct upgrades from every supported schema/data revision. Include
-   populated accounts, credentials, game saves and receipts; cover failure,
-   cancellation, retry and repeated startup. No-change releases can reuse the
-   same database revision and fixtures.
+## Stable migrations
 
-Startup checks source identity and its registered manifest before writes. All
-missing steps run in one transaction; target schema, required configuration,
-fixed identities and credentials are checked before commit. Unknown versions or
-structural drift reject. Failed or cancelled migrations roll back the whole
-chain. Full historical audits remain an explicit maintenance operation on a
-stopped database or an upgraded consistent copy.
+`internal/db/generation_two.sql` is the complete fresh schema. The migration
+registry declares explicit source and target versions, structural manifests and
+transactional SQL or Go conversion callbacks. Released steps are immutable.
 
-At v1.0.0 publication, freeze its exact baseline and retain its populated fixture
-as the oldest stable source. Later releases append to that chain. Prerelease
-imports live separately in `schema_prerelease.go` and `migrations/pre_release/`;
-they can be retired when the stable baseline is frozen. The current multi-step
-unit matrix uses synthetic revisions; it does not claim to test future releases.
-`scripts/check-upgrade.sh` additionally builds the pinned released predecessor to
-generate and upgrade its own populated fixture.
+For a change to persistent semantics:
 
-## Games and activities
+1. Register a forward step from the previous stable version. Preserve stored
+   operator choices and historical facts; seed only missing configuration.
+2. Update fresh DDL and seeds to produce the same target. Update the structural
+   manifest, pinned hashes and configuration golden together.
+3. Test populated supported sources, fresh/upgrade equality, cancellation,
+   injected failure, retry, unknown-source rejection and repeated startup.
+   Exercise successive steps as a chain, including data-only conversions.
 
-Keep a player's durable profile separate from activity periods, participation
-receipts and live rounds. Add tables and conversions through the central upgrade
-chain; use the existing [game module](game-modules.md) and lifecycle contracts for
-runtime integration, export, deletion and retention.
+All required steps run atomically. Validation checks the registered source before
+writes and the target before commit. A failed or cancelled chain rolls back.
+A database rollback restores its complete matching stopped recovery set; an old
+binary alone cannot reverse a migration.
 
-Version a save's encoding separately from its gameplay rules. Lake Notes profiles
-and cast checkpoints have explicit storage versions. Compatible catalog changes
-can read a validated profile without resetting it; an unfinished cast still
-requires its exact simulation rules, saved random state and settlement facts.
-An incompatible format needs a conversion that preserves those facts or a retained
-reader until its data is converted or expires. Closing an entry point does not
-retire data, entitlements, idempotency receipts or lifecycle obligations.
+Current-version startup verifies the key-check singleton, current structure and
+required configuration, then recovers in-flight work. Credentials are decrypted
+when used. Missing or invalid key-check material is an error, never a reason to
+silently create new material. Full credential and historical accounting audits
+belong to `nonbiriapi maintenance verify` on a stopped database or consistent copy.
 
-Keep only the historical execution paths still needed by retained work. Before
-removing one, prove that no supported source or retained record needs it, or add
-an explicit migration. Database rollback always restores a complete matching
-stopped snapshot; an older binary alone is not a downgrade procedure.
+## One-time rc.7 conversion
 
-The AI-player revision adds explicit human/bot participants, challenge economics,
-and a history order independent of payment operations. During referenced-table
-rebuilds, the startup-owned connection temporarily disables foreign-key actions,
-checks the complete target before commit, and restores the connection setting.
-Ordinary restarts at the current revision do not repeat that full reference scan.
-Duel payload format 1 adds action provenance; retained format 0 remains readable
-with unknown provenance instead of invented human/AI classifications.
+Build `./cmd/nonbiri-upgrade-rc7` from the same commit as the target application.
+The converter accepts the registered rc.7 schema 16 identity and exact structure;
+the reference source is `82f1711b674425745a768f781e0e0c34dcb37ac3`. The database
+manifest determines eligibility, not a guess based on a release label.
+
+Use `--check` on an isolated consistent copy, then `--apply` with the service
+stopped and its existing master key available. The converter acquires exclusive
+database access and transforms schema 16 to 17 in one transaction. A matching
+schema 17 is a no-op; structural drift, an unknown source or a wrong key is
+rejected. Failure or cancellation rolls back.
+
+The conversion preserves accounts, encrypted credentials, configuration, instance
+legal text, game progress, activities, balances and financial receipts. It moves
+remaining prerelease backfills out of normal startup. Existing database Gateway
+configuration remains authoritative; legacy environment import runs only when its
+import marker is absent. Remove obsolete environment keys after that step.
+
+See the [converter instructions](../cmd/nonbiri-upgrade-rc7/README.md) for commands
+and the [deployment procedure](deployment.md#manual-same-generation-deployment-procedure)
+for the single recovery snapshot and cutover. The source and synthetic fixtures
+contain no instance addresses, keys or production records. Earlier prereleases
+are outside this converter's scope.
+
+## Content versions and accounting operations
+
+Card, theme and pool-template IDs remain stable. The gacha catalog and
+`internal/gacha/presets.json` have content versions independent of the database.
+Catalog synchronization inserts missing templates without overwriting administrator
+edits or opening a pool. New cards, templates and new periods of an existing
+activity type do not require DDL. Eligibility, pity counters and claim records
+remain attached to their existing IDs.
+
+Accounting operation kinds and their association rules are registered in Go,
+so adding a valid operation does not rebuild an enum-constrained ledger table.
+Database constraints still enforce amount bounds, references, uniqueness,
+idempotency, immutable facts and necessary state transitions. A new persistent
+meaning still needs an explicit migration and lifecycle coverage.
+
+Saved game encodings and simulation rules have their own versions. Retained
+rounds must keep their exact rules, random state and settlement facts; closing an
+entry does not retire saves, entitlements or receipts. See
+[game modules](game-modules.md) and the
+[data lifecycle checklist](data-lifecycle-checklist.md) for integration obligations.

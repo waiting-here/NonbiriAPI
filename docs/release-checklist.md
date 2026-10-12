@@ -1,170 +1,77 @@
-# Release checklist
+# Candidate validation and deployment
 
-Bind evidence to the candidate commit/tree, input and lock hashes, toolchain,
-command, environment, time and real exit status. Reuse matching green results.
-Schema, DTO, root wiring, dependency or lifecycle changes invalidate their
-integration evidence; isolated copy and style changes affect their own checks.
-This checklist does not itself assert a pass.
+Keep evidence tied to the candidate commit/tree, relevant inputs and lock hashes,
+toolchain, command, environment, time and real exit status. Reuse matching results.
+Schema, DTO, root wiring, dependencies and lifecycle changes invalidate the
+corresponding integration evidence. This checklist does not assert that a check
+has passed.
 
-## Source and compatibility
+## During development
 
-- Synchronize version metadata, bilingual README/changelog, API, configuration,
-  lifecycle, game, legal and deployment documentation.
-- Validate fresh creation, the final rc.5 source at
-  `8949a3d6e5b3d7536549f42a4c597393fccab62a`, and registered rc.6/rc.7 schemas.
-  `scripts/check-upgrade.sh` builds the pinned released source to create its fixture.
-  Generate populated samples with that exact old code. Include
-  wide and negative balances, manual donation-credit adjustments, historical
-  empty descriptions, bans, active/terminal games, reward holds, nine Blackjack
-  seats and a waiter, saved catalogs, configuration and credentials.
-- Check exact fresh/upgrade manifest equality, injected-failure rollback,
-  repeated startup, unknown/partial schema zero-write rejection and old-binary
-  rejection. Unregistered intermediate schemas are outside this guarantee.
-- At v1.0.0, freeze the stable database baseline. Each later v1.x release must
-  upgrade every earlier stable schema/data revision directly, with populated
-  fixtures and immutable migration steps. Cover data-only revisions, new config
-  defaults and saved game formats; see [database upgrades](database-upgrades.md).
-- Preserve old account/entry IDs, settled charges, saved rules, configured games,
-  security roots and legal overrides. Preserve already configured loans, quick
-  stakes, charity achievement and the game-statistics start. Keep new activities
-  unconfigured and optional daily check-in exclusivity off by default. Do not
-  invent historical rewards, penalties or contributions.
-- Check matching complete-snapshot restore. Never connect external SQLite to an
-  online production database.
+- Update implementation, affected tests, shared typed fixtures and independent
+  expectations in the same logical change. Copy and style changes need only
+  proportionate validation.
+- Use the shared risk plan for Go packages, race, frontend tests, browser specs
+  and real-backend suites. Unknown impact selects complete coverage. Run affected
+  browser tests before review. Commands and scope rules live in
+  [CONTRIBUTING](../CONTRIBUTING.md#required-checks).
+- Check test discovery after additions, deletions and renames. Timing data only
+  balances work; missing timings must never exclude a test.
 
-## Financial, control and lifecycle acceptance
+## Stable candidate
 
-- Verify 22 once-only newcomer tasks, multi-award atomicity, reward-capacity
-  release, natural-21 stacking, surrender/system-cancel boundaries and deletion
-  races. Awards and loans must not inflate game ranking contributions.
-- Verify exact integer loan quotes, owner/expiry/config binding, maximum and
-  invalid coefficients, idempotent replay, negative General Credit results,
-  independent Game Credit availability, four-entry conservation and rollback.
-- Verify four leaderboards, independent privacy preferences, banned anonymity,
-  signed loss aggregation, positive-profit rules, logical 7/30-day expiry,
-  tie ordering, immutable statistics start and bounded catch-up.
-- Verify each authenticated pre-handler rejection is recorded once with no
-  call fee; retain rule snapshots, manual endings and authorized traceability.
-  Durable violation windows must survive restart without repeating measures.
-  Check 90-day case and 30-day request-link boundaries.
-- Verify character passives, simultaneous step snapshots, per-layer resistance,
-  SOTA derivation, full/partial outcomes, deterministic proof replay and saved
-  old catalogs. Run the ten-round local tutorial with the current engine and
-  its actual 66–61 result, without real game or financial writes.
-- Verify Blackjack :00/:30 rounds with 5/20/5 stages, early settlement extending
-  presentation without advancing the next round, skipped-time recovery,
-  3×3 seating, quick-stake validation/migration and select-before-queue behavior.
-- Verify Bidding suits by seat; combined resource filters and equal count/row
-  predicates; safe key reverse lookup including all still-associated states;
-  required new donation descriptions with historical blank compatibility.
-- Verify current owner-only exports, all-or-error size/row budgets, rollback on
-  incomplete ranking catch-up, synchronous deletion and both late-write orders.
-  Lazy game finalization, financial facts and rankings must agree in one snapshot.
-- Keep prior ownership, egress, secrets, financial, randomness and game contracts
-  intact. Reuse unchanged evidence and supplement candidate-specific gaps.
+- Validate fresh schema 17, the exact rc.7 source conversion, target equality,
+  rollback/cancellation, re-entry and zero-write unsupported-source rejection.
+  Preserve credentials, operator settings, legal overrides, balances, game saves,
+  activities and receipts. Exercise successive stable migrations; see
+  [database upgrades](database-upgrades.md).
+- Prove catalog/template/period additions need no DDL and preserve administrator
+  edits, historical eligibility, pity and claims. Recheck exports and deletion
+  for every new user-associated record.
+- Cover ownership, secrets, SSRF, original-input abuse priority, ledger atomicity,
+  cancellation, bans and deletion races in the affected paths. Redemption tests
+  distinguish invalid/already-claimed codes, first business refusals, later
+  repeats, rolling-window boundaries and idempotent retries.
+- Complete ordinary Go, populated conversion/upgrade, the applicable full race
+  catalog, frontend unit/type/lint/build, browser smoke and real-backend suites.
+  Retain required Go/Web check names and failure/cancellation propagation.
+  Complete dependency, license, vulnerability and CodeQL checks; an unavailable
+  scan is not a pass.
+- Inspect desktop/mobile, light/dark and keyboard flows. Cover same-account
+  session refresh during gacha entry, account switching, short/long SSE outages,
+  delayed LinkLink responses, hidden-content loading and stale deployment assets.
+  Preserve approved game designs, animations and reduced-motion fallbacks.
+- Compare startup, SQL count, allocation and response timings with fixed inputs.
+  Record CI queue, setup, build, test and runner usage from normal runs. Reduced
+  effective coverage is not a performance improvement.
+- Build clean Windows/amd64 and Linux/amd64 pure-Go dist artifacts. Record exact
+  revision, tree, toolchain, build flags and SHA256; verify isolated startup and
+  embedded resources. One frontend build supplies both stations, notices and
+  the hash manifest.
+- Review the cumulative diff, generated output, LF and sensitive-file exclusions.
+  Reconcile API, configuration, lifecycle, deployment and developer documentation.
 
-## Current compatibility, governance and activity acceptance
+## Integration and production
 
-- Verify startup and shutdown budgets, phase diagnostics and readiness. On
-  Linux, exercise actual application main/SHM lock conflicts; cover cancellation
-  and closing on Windows as well. Do not infer file-lock correctness from an
-  isolated SQLite fixture alone.
-- Verify administrator, level-6, level-5 and ordinary-user authority, all account
-  deletion sources, retained restriction/qualification continuity, permanent
-  Discord blacklist events and authorized minimal deletion snapshots. Exercise
-  both orders of deletion versus late callbacks and financial settlement.
-- Verify request adaptation with actual mock outbound requests for all three
-  connectors, including headers, native extension paths, protected fields and
-  redaction. Check total-usage mismatch labels and filters while billing valid
-  individual usage categories independently.
-- Verify image-model capabilities, resolution pricing, saved configuration
-  revisions, zero-consumption previews and the final locked price. Check source
-  retirement, audit pagination, alert navigation and permission loss.
-- Verify deterministic fish-engine state tick by tick across Go and TypeScript,
-  bounded maximum-load validation, resume and submission deadlines, settlement
-  versus refund/ban/deletion, and private-state cleanup. Exercise all eight
-  examples through administrator playtesting and server verification, plus
-  editor import/export and user desktop/phone flows.
-- Verify 30-second planning for new battle matches, preserved historical rules,
-  ten owner-only Custom preset slots, and atomic daily check-in exclusivity.
+1. Push one PR to protected `master`. Inspect existing/running candidate checks
+   before scheduling any full run; a full PR run is sufficient. Merge normally
+   after the required checks. If master advances, merge it and verify the affected
+   inputs without rewriting shared history.
+2. Compare the merged tree with the tested candidate and reuse valid evidence.
+   Verify the independently triggered master security checks. Build the trusted
+   final artifact from the exact merge commit; a tag is not required.
+3. Follow the [deployment procedure](deployment.md): validate source compatibility,
+   rehearse changed storage behavior on a consistent copy, close admission, stop,
+   take one complete recovery snapshot, convert if required, clean deprecated
+   environment keys and start the target once.
+4. Verify local identity/readiness, then both public stations and changed pages
+   alongside about 60 seconds of observation. After reopening, preserve newly
+   accepted data; never automatically overwrite it with an old snapshot.
+5. Remove completed validation copies and duplicate artifacts. Retain the two
+   latest eligible ordinary recovery sets and any independently required sets.
+   Record the deployed revision, artifact checksum, checks and recovery references.
 
-## Build and checks
-
-Daily work runs affected checks. Stable candidates run the complete Go and web
-gates; final Linux/race evidence may come from cumulative PR CI, supplemented by
-local Windows and platform-specific checks.
-
-```sh
-npm --prefix web ci
-npm --prefix web test
-npm --prefix web run typecheck
-npm --prefix web run lint
-npm --prefix web run build
-npm --prefix web run test:e2e
-scripts/check-go.sh
-scripts/check-upgrade.sh
-scripts/race-check.sh
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags dist -trimpath -o nonbiriapi-linux-amd64 .
-```
-
-Run each command where its evidence is needed. One web build generates both
-stations, notices and hashes. Preserve full ordinary Go tests and populated
-upgrades, the complete risk-based
-race catalog on every nonempty dynamic shard, frontend unit/type/lint/build,
-both browser suites, and aggregate Go/Web/CodeQL checks. Exact reviewed serial
-and pure-rule race exclusions remain in ordinary coverage; new names cannot be
-silently excluded. Timing weights affect placement only. Share this run's empty
-database template and immutable station-build artifacts; each test database and
-browser fixture process remains isolated.
-Verify current dependency integrity,
-license notices and available vulnerability scans; record actual findings and
-unavailable scans. Never classify unavailable evidence as a pass.
-
-- Build Windows/amd64 and Linux/amd64 pure-Go dist artifacts. Record revision,
-  clean VCS, tree, toolchain, build parameters and SHA256; validate isolated
-  startup and embedded resources.
-- Cover new pages and changed flows in real Chromium at phone/desktop sizes,
-  Chinese/English and light/dark themes, including keyboard and reduced motion.
-- Validate sound separately with actual listening. Six-game feedback must use
-  authoritative events, capped follow-up layers, distinct resistance outcomes,
-  batch coalescing, music recovery and no historical replay on reconnect.
-- Review the cumulative diff, LF, sensitive paths, executable bits and generated
-  output. Retain exact command status and scope when reusing earlier results.
-
-## PR, release and deployment
-
-- Push one candidate PR to protected `master`, integrate any master advance
-  without rewriting shared history, and require full exact-candidate CI.
-  Save the successful run's original PR association record and checksum before
-  normal protected merge.
-- Synchronize local master and verify its tree equals the tested candidate.
-  Reuse full candidate evidence when the merge tree and relevant inputs match;
-  otherwise run the affected checks and obtain full evidence for the resulting
-  candidate. Verify the independently triggered CodeQL result on `master`.
-  Tags, prereleases and deployment each require their own authorization;
-  merging a development PR does not publish or deploy a version.
-- When a release is authorized, create its annotated tag and source prerelease
-  at the approved commit. Publish source code only; do not attach precompiled binaries,
-  container images or installers.
-- For an authorized deployment, use a trusted final Linux artifact from a clean
-  independent checkout. A branch deployment can use an approved immutable commit
-  without creating a tag. Reuse matching business-test evidence, record the full
-  revision and checksum, and verify the deployment source and target.
-- Preserve current production data, keys, configuration, site name and legal
-  overrides and configured feature switches. A maintained local legal draft does
-  not publish instance policy.
-- Reuse valid CI, artifact and upgrade evidence. Supplement isolated
-  startup/storage/finance validation where the schema or real deployment
-  requires it. Do not rerun complete builds and tests on the VPS by default.
-- Close admission, drain, stop, create one complete recovery snapshot, switch
-  and start the target. Use the instance's measured health budget and stop
-  polling as soon as health succeeds.
-- After local health, reopen and check both stations, login boundaries and
-  changed pages alongside about 60 seconds of runtime observation.
-  Restore only within the helper's pre-commit boundary; after commit or opening,
-  preserve newly accepted data and respond to the actual failure.
-- Remove temporary processes and verification copies; retain the two eligible
-  latest ordinary recovery sets and existing independent/exception sets.
-- Deliver PR and CI links, any authorized release link, actual production revision, artifact checksum,
-  acceptance results, recovery location and the legal draft awaiting manual
-  publication.
+Deployment, tags, GitHub releases and publishing instance legal text are separate
+actions. The v1.0.0 preparation deploys an exact commit without a tag or GitHub
+Release. The maintained instance legal draft is revised for the deployed behavior;
+its publication follows the existing administrator workflow.

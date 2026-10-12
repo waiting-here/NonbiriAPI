@@ -10,7 +10,7 @@ Both `max_completion_tokens` and `max_tokens` become `maxOutputTokens`, preservi
 
 Open **Settings → Gateway model capabilities** in the administrator site. Add the exact upstream address and model, then select the verified adapter, reasoning levels, output ceiling, storage policy and cache mapping. Saves apply to new requests immediately. Each admitted request keeps one capability snapshot through preflight, compilation and retries. Up to 128 targets can be configured. Binding details show their effective declaration.
 
-On the first upgraded startup, existing `NONBIRI_GATEWAY_MODEL_CAPABILITIES` entries are imported into the database once. An empty configuration also completes this migration. The database is then the sole source: later environment changes cannot overwrite edits or restore deleted entries. The retired variable can be removed after a successful upgrade.
+The database is the sole configuration source. Normal startup ignores the retired `NONBIRI_GATEWAY_MODEL_CAPABILITIES` variable. The [rc.7 converter](database-upgrades.md#one-time-rc7-conversion) imports it only if the database's import marker is absent, preserving existing entries and administrator edits. Remove the variable after conversion.
 
 Each entry matches the exact stored endpoint base URL and complete upstream model ID. Trailing URL slashes are ignored; other URL and model text must match. No prefix, wildcard or provider-name inference applies. Matching entries govern both personal and charity bindings for that target.
 

@@ -1,5 +1,21 @@
 # The Gacha Simulator
 
+## Integration and content maintenance
+
+`internal/gacha` owns the catalog, rules, balances, transactions and HTTP API;
+`web/src/user/activities/gacha` implements the activity presentation. Card
+and theme IDs are stable. Catalog and `presets.json` content versions are separate
+from database schema 17. Adding cards, pool templates or a new period of an
+existing activity type requires no DDL; new persistent semantics still require a
+registered migration.
+
+`SyncCatalog` inserts missing built-in templates only. It preserves administrator
+edits, does not open pools and does not reset collection, eligibility, pity or
+claim records. Published theme membership and accepted pool rules remain fixed.
+The rules and configuration contracts below are authoritative for both API and UI.
+
+## Entry and admission
+
 Activity entrances are hidden by default. Administrators can show them from the activity settings. This display switch does not stop scheduled pools or disable the activity URL. The permanent pool, catalogue and mystery shop stay open. Limited pools have individual schedules. When entrances are enabled, the main banner appears below Cyber Loan under permanent activities. Each open limited pool also appears under limited activities, with its cover, featured cards and opening dates, and links directly to that pool. Draft, paused, future and ended pools have no entrance. Open **Activities → The Gacha Simulator**; administrators configure it from **Activity management**. Site login, account restrictions and maintenance still apply.
 
 Cards are cosmetic collectibles. They cannot be transferred, traded, sold or converted into credits. One-time theme completion rewards grant tickets, credits and cumulative donation credit. Donation credit itself is not a spendable balance.
@@ -124,12 +140,12 @@ Appearance POST accepts `selected` (`default`, `heart-moment`, `celestial` or `w
 
 Example action bodies:
 
-```json
-{"action":"draw","pool_id":"permanent","quantity":10}
-{"action":"buy","ticket":"permanent","quantity":10,"revision":1}
-{"action":"redeem","product":"ticket-n","revision":1}
-{"action":"claim","theme":"a"}
-```
+| Action | Body |
+| --- | --- |
+| Draw | `{"action":"draw","pool_id":"permanent","quantity":10}` |
+| Buy tickets | `{"action":"buy","ticket":"permanent","quantity":10,"revision":1}` |
+| Redeem | `{"action":"redeem","product":"ticket-n","revision":1}` |
+| Claim a theme reward | `{"action":"claim","theme":"a"}` |
 
 `GET /api/appearance` returns `selected`, `moment`, `moments`, `unlocked`, `visible` and `updated_at`. Artwork keys are `card:<card-id>`, `illustration:<theme-id>` or `cover:<cover-id>`. `POST /api/appearance` accepts `{ "selected": "heart-moment", "moment": "card:g-chatgpt" }`; omit `moment` to keep the remembered artwork. A supplied artwork requires `selected=heart-moment`. The server validates account access and collection/opening eligibility in the same transaction. Repeating a selection leaves its timestamp unchanged. Reads do not enter the activity or grant tickets.
 

@@ -1,6 +1,6 @@
 # NonbiriAPI HTTP API Contract
 
-- Status: **v1.0.0-rc.7 development source**. Check an instance's deployed build before using new routes.
+- Status: **v1.0.0 source contract**. Check an instance's deployed build before using routes or configuration added by an update.
 - Scope: the OpenAI-compatible ingress routes are `GET /v1/models`, `POST /v1/chat/completions`, `POST /v1/embeddings`, and `POST /v1/images/generations`. Chat supports OpenAI-compatible, Anthropic-compatible and native AI SDK Gateway v3 upstreams; embeddings support OpenAI-compatible and the strict Gateway text subset; image generation supports OpenAI-compatible upstreams. There is no public Anthropic-native or rerank API.
 - Authority: this document reflects the current source route registry, strict request/response types, stable error catalog, and contract tests. A future wire change requires a changelog entry; undocumented database fields never enter an API response automatically. The session-authenticated picture-book activity has its own configuration and accounting, separate from the public image-generation model route.
 - Release boundary: new source behavior is listed in the [changelog](../CHANGELOG.md). This document does not assert that an instance has deployed it.
@@ -86,9 +86,9 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`). rc.6 accepts fresh databases, final rc.5 and registered rc.6 schemas; unknown or partial structures are rejected before source writes. Supported additive upgrades preserve identities, balances, settled charges, saved games, configuration and legal overrides. Startup checks identity, schema, configuration and credentials and recovers unfinished work. Full historical audits use `maintenance verify`. See [deployment compatibility](deployment.md#database-compatibility-and-version-changes) for the exact source and complete-snapshot rollback requirements.
+The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with stable schema 17. Normal startup accepts fresh storage and registered stable sources; rc.7 schema 16 requires the offline converter. Unknown or partial structures are rejected before writes. Startup validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for explicit source/target versions and rollback requirements.
 
-Current account export `schema_version=19` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v19.json`. SQLite remains Generation 2. See §9 for current and historical safe projections.
+Current account export `schema_version=19` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v19.json`. See §9 for its safe projections.
 
 ### 1.5 Display time context
 
@@ -738,7 +738,7 @@ Administrator-only `/admin/api/games/blackjack/history` and `.../history/{id}` a
 
 `POST /admin/api/games/blackjack/history/export` accepts `{dataset,cursor?}` and returns `{format:"blackjack-history/v1",dataset,items,next_cursor}` in bounded batches of at most 10 records. Clients may save each successful batch as NDJSON and resume only from its returned cursor. Signed cursors expire after one hour and bind the account/session, dataset, limit, endpoint kind, high-water mark and page position. Exporting or reading history does not pause play.
 
-Restart cancels only the unfinished table and refunds original assets, preserving waiters and committed outcomes. Maintenance/closure releases waiters and undealt seats while dealt games finish. Ban stops a seat's actions and auto-stands it. Deletion detaches identity and continues settlement without cancelling other players; unavailable proceeds use the corresponding external asset account and cannot recreate a wallet. Queue game-credit reserves remain part of welfare assets. Account export schema 12 includes `blackjack:{current,history}` and safe per-game `randomness` proofs while retaining all previous fields and existing 10,000-row/16-MiB bounds.
+Restart cancels only the unfinished table and refunds original assets, preserving waiters and committed outcomes. Maintenance/closure releases waiters and undealt seats while dealt games finish. Ban stops a seat's actions and auto-stands it. Deletion detaches identity and continues settlement without cancelling other players; unavailable proceeds use the corresponding external asset account and cannot recreate a wallet. Queue game-credit reserves remain part of welfare assets. Account export schema 19 includes `blackjack:{current,history}` and safe per-game `randomness` proofs while retaining all previous fields and existing 10,000-row/16-MiB bounds.
 
 ### 5.9 Loans and leaderboards
 
@@ -767,7 +767,7 @@ The additional net-profit boards reuse retained seven-day net game facts: final 
 
 Fishing's administrator configuration also controls the probability that a legendary catch becomes the blue fat fish: default 10%, range 0–100% in 0.01% steps. New accepted batches capture the setting; legendary species, length and reward rules are unchanged.
 
-### 5.10 Fat Fish limited activity (rc.4)
+### 5.10 Fat Fish limited activity
 
 Fat Fish is a session-authenticated limited activity under `/api/limited-activities/fat-fish`; it is not a `/v1/*` API or an ordinary game-center route. Only the environment administrator can edit content under `/admin/api/limited-activities/fat-fish`. Ordinary users and level-5/6 stewards have no editor authority. Mutations use same-origin/CSRF protection, strict JSON, a 22–128-character `Idempotency-Key`, and no query parameters; GETs have no body. A repeated key and identical request return its receipt, while a changed request conflicts. Responses and errors use `no-store` and the shared error envelope.
 
@@ -815,7 +815,7 @@ The administrator workspace can save the clicked draft snapshot, create its immu
 
 `GET /admin/api/limited-activities/fat-fish/playtests/current` returns the current own nonterminal playtest or null. `POST .../playtests/{id}/abandon` accepts `{"expected_revision":"1"}` and the usual idempotency key, terminating only that administrator's playtest without charge, reward or passed proof. `GET|PUT .../periods/{id}/layout` uses a separate layout revision; PUT is bounded to 32 KiB. Node condition edits preserve all/any, passed, star/count thresholds and reachable cycles; visual layout never changes access conditions.
 
-Existing content is not erased by ordinary startup. An explicit offline legacy cleanup is documented in [deployment](deployment.md#explicit-fat-fish-legacy-cleanup).
+Existing content is preserved by startup and the rc.7 conversion. Historical cleanup entry points are no longer part of the running application; retained cleanup receipts remain valid.
 
 ## 6. Debug and level-6 steward surfaces
 
@@ -1091,23 +1091,23 @@ Lineage items are exactly `{donation_id,donation_key_id,donation_status,key_stat
 
 ## 9. Export, privacy, and account deletion
 
-Current exports use schema 12, described below. The schema-10 and schema-11 paragraphs record the earlier additions whose safe fields remain; their attachment filenames describe those historical versions.
+`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v19.json`, with `schema_version:19` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema.
 
-Version 10 adds top-level `limited_activities`, `image_tasks` and `inactivity`. Limited activities contain the safe general/paper/brush wallet projection and own exchange receipts; the existing game wallet remains separate. Image tasks contain only local ID, state, requested/actual image counts, times, billing state and two-currency charge/refund facts. Inactivity contains safe own activity timestamps and retained execution outcomes. No prompts, complete execution parameters, images, source facts, raw errors, risk rules, private adapter/configuration or upstream task identifiers are included.
+The top-level fields include `limited_activities`, `image_tasks` and `inactivity`. Limited activities contain the safe general/paper/brush wallet projection and own exchange receipts; the existing game wallet remains separate. Image tasks contain only local ID, state, requested/actual image counts, times, billing state and two-currency charge/refund facts. Inactivity contains safe own activity timestamps and retained execution outcomes. No prompts, complete execution parameters, images, source facts, raw errors, risk rules, private adapter/configuration or upstream task identifiers are included.
 
-Export v10 retains previous safe account, resource, wallet, activity, donation and game fields, including `game_onboarding_holds`, `loans`, `game_rankings` and `penalties`. The attachment is `nonbiriapi-account-export-v10.json`, with `schema_version:10` and `generated_at`. `user` adds `charity_profile_public` and nullable `donation_credit_achieved_at`, without internal tie sequence. `game_onboarding` includes `game_key,task_key,award,completed_at,operation_id`; pending qualifications contain only `id,game_key,task_key,created_at`, never internal capacity or parent/account IDs. Loan exports contain `loan_id,operation_id,created_at`, the terms and actual balances listed in §5.9, excluding quote tokens, nonces, internal sequence and configuration revision. `game_rankings` contains `statistics_start,totals,events`: totals contain `board,window,amount,achieved_at`; events contain `game,settled_at,loss,positive_profit` with expired amounts null. Charity contributions expire at seven days and profit events at 30 days; historical totals remain until account deletion. `penalties` contains safe reason codes, actual/expected times, state/result and actions, with owner request/operation links where available; it excludes rules, thresholds, counted members and management evidence. Active cases persist; ended cases and direct deductions expire after 90 days, while request links expire after 30 days. Every collection, and the combined actions across penalty cases, is capped at 10,000; the complete JSON is capped at 16 MiB. Exceeding either fails without truncation. Bounded ranking catch-up can return retryable 503. Game settlement and safe projections share one transaction, so exported balances and qualifications agree.
+The export includes safe account, resource, wallet, activity, donation and game fields, including `game_onboarding_holds`, `loans`, `game_rankings` and `penalties`. `user` contains `charity_profile_public` and nullable `donation_credit_achieved_at`, without internal tie sequence. `game_onboarding` includes `game_key,task_key,award,completed_at,operation_id`; pending qualifications contain only `id,game_key,task_key,created_at`, never internal capacity or parent/account IDs. Loan exports contain `loan_id,operation_id,created_at`, the terms and actual balances listed in §5.9, excluding quote tokens, nonces, internal sequence and configuration revision. `game_rankings` contains `statistics_start,totals,events`: totals contain `board,window,amount,achieved_at`; events contain `game,settled_at,loss,positive_profit` with expired amounts null. Charity contributions expire at seven days and profit events at 30 days; historical totals remain until account deletion. `penalties` contains safe reason codes, actual/expected times, state/result and actions, with owner request/operation links where available; it excludes rules, thresholds, counted members and management evidence. Active cases persist; ended cases and direct deductions expire after 90 days, while request links expire after 30 days. Every collection, and the combined actions across penalty cases, is capped at 10,000; the complete JSON is capped at 16 MiB. Exceeding either fails without truncation. Bounded ranking catch-up can return retryable 503. Game settlement and safe projections share one transaction, so exported balances and qualifications agree.
 
 Blackjack contains the owner's safe current queue, payment composition and retained history; opposing identities, funding, hidden cards and equipment are excluded. `randomness` contains only owner-accessible proofs: active items disclose commitments, terminal proofs disclose seeds and bounded streams for independent verification, including reconstructed unused deck order. Proofs do not extend the parent's 30-day access. Endpoint/key metadata, safe origins, current recurring limits, check-ins and original game payment/rule fields retain their established projections. No raw keys, ciphertext, authentication tokens, Debug bodies or internal scheduling/audit data are exported.
 
 Secrets, ciphertext, fingerprints, request/response bodies, report data, IP material, other identities, complete pool ledgers, announcement copies, anti-collusion values, workers/checkpoints/replay internals, management notes, channel category/revision, internal source IDs, and administrator/steward audit material are excluded. If the result exceeds 16 MiB or any collection exceeds 10,000 rows, export fails atomically with 413; it is never silently truncated.
 
-### Export schema 11 (rc.4)
+### Adaptation, continuity and activity projections
 
-`POST /api/account/export` keeps its elevated user-session authorization and returns the attachment `nonbiriapi-account-export-v11.json` with `schema_version:11`. Existing safe fields remain; the following **top-level** fields are added (an excerpt, not a complete export):
+The following fields are top-level (an excerpt, not a complete export):
 
 ```json
 {
-  "schema_version": 11,
+  "schema_version": 19,
   "request_adaptations": [],
   "continuity": [],
   "fat_fish": {"summaries": [], "progress": []}
@@ -1124,9 +1124,9 @@ Account deletion is synchronous. It revokes credentials, removes private project
 
 Deletion keeps a separate minimum security projection for administrator and current level-6 steward review. Its original site/Discord IDs, known registration/deletion times and level, deletion source, then-effective ban and charity-pause state, four settled-before-zero wallet amounts, donation credit and automatic blacklist outcome are read-only; unavailable historical facts remain null or `unknown`, never inferred from a later account. It has no automatic expiry and is excluded from self-service export. The same Discord identity can retain minimum used-reward/once-only qualification and unexpired violation or rate-window facts after deletion, so re-registration does not reset them; those facts do not restore an old account, game progress, manual level or resource limits. A self-deletion that actually aborts an active Bidding Duel or Turn-based Battle match creates an administrator-only minimal event, cleared 90 days after it occurred. Blacklist entries and append-only reasons remain until an administrator removes the entry. Contact the instance operator for applicable rights requests; a new account cannot retrieve another account's historical management record through export.
 
-### Current export schema 19
+### Collection, appearance and other games
 
-The current attachment is `nonbiriapi-account-export-v19.json`, with `schema_version:19`. Version 19 adds the saved Heartfelt moments artwork key in `appearance.moment`; the derived `moments` eligibility catalogue is omitted from exports. Version 18 adds personal reward receipts. Version 17 adds owner model request adaptations, excluded parameter names and partition modes, without saved values. Version 16 adds `appearance:{selected,unlocked,updated_at}`, deriving unlocked designs from permanent collection ownership. Version 15 adds `gacha`: personal ticket/shard balances, collection, pity, claims, retained transactions and draw records, without internal retry-key digests. Version 14 adds the user's `discord_gate_policy` and each personal model's `model_types`, and accepts `cache_balanced` as a personal `route_strategy`. The schema-11 section above describes retained historical fields. Current personal models also include `role_policy` and `transport_rule`; saved Likes preset names are currently omitted from the account export. `lake_notes` contains `rules_id,profile_revision,profile,casts,entries,exchanges`, excluding private encounter/reward randomness and internal checkpoints. Safe cast entries include identity, nullable source period, rules/generation/revision, acknowledged tick, phase/pause and public motion state. Entry/exchange receipts retain exact amounts and financial references.
+`appearance` contains `selected,unlocked,moment,updated_at`; eligibility derives from collection ownership and pool history, while the derived `moments` catalogue is omitted. `rewards` contains personal successful receipts. `gacha` contains ticket/shard balances, collection, pity, claims, retained transactions and draw records, without retry-key digests. Model request adaptations include excluded parameter names and partition modes without saved values. `user` contains `discord_gate_policy`; personal models include `model_types` and accept `cache_balanced` as a `route_strategy`. Current personal models also include `role_policy` and `transport_rule`; saved Likes preset names are currently omitted from the account export. `lake_notes` contains `rules_id,profile_revision,profile,casts,entries,exchanges`, excluding private encounter/reward randomness and internal checkpoints. Safe cast entries include identity, nullable source period, rules/generation/revision, acknowledged tick, phase/pause and public motion state. Entry/exchange receipts retain exact amounts and financial references.
 
 `steadycatch` contains the owner's first-clear status, retained sessions and accepted replay inputs. `gwent` uses the duel export with owner-only competitive results and the current Elo aggregate. Neither adds access to another player's private state. See [Steady Catch](steady-catch.md), [AI Gwent](ai-gwent.md) and the [lifecycle checklist](data-lifecycle-checklist.md) for routes and retention.
 
@@ -1140,7 +1140,7 @@ Maintenance mode rejects new public inference, OAuth admission, ordinary pages, 
 
 New Fishing batches, LinkLink sessions and RPS queues always use rules version 2; clients cannot choose an older version. Old version-1 state drains through its saved rules and funding, including after restart. Already terminal fees and game results are never recalculated under current prices or rules.
 
-Ordinary startup keeps database ownership locking, identity/version/schema/credential checks and unfinished request, ledger, game and account recovery. It backfills missing rows and uses maintained counters without full-database copies or repeated historical scans; retention proceeds in background without blocking initialization. Full historical audits run separately with `nonbiriapi maintenance verify`, using the normal private environment and a stopped database or trusted consistent copy. Verification opens the database read-only and never initializes storage, repairs, migrates, starts workers or opens a listener. SQLite may create WAL/shared-memory coordination files. Successful verification prints `{"status":"verified"}`; failure exits nonzero.
+Ordinary startup keeps database ownership locking, current structure/configuration and constant-cost key checks, followed by unfinished request, ledger, game and account recovery. Historical backfills belong to the rc.7 converter; catalog synchronization only fills missing content defaults. Retention proceeds in the background. Full historical and credential audits run separately with `nonbiriapi maintenance verify`, using the normal private environment and a stopped database or trusted consistent copy. Verification never initializes, repairs, migrates, starts workers or opens a listener; SQLite may create coordination files. Success prints `{"status":"verified"}`; failure exits nonzero. `maintenance schema-info --json` only describes the binary's supported schemas and loads neither environment nor database.
 
 Recovery runs before listeners open. Recovery of unfinished API requests drains once per process before accepting traffic; periodic maintenance cannot settle live requests as abandoned after a restart. Accepted requests, donation claims, report indexing/deletion, Thursday settlement, Fishing settlement, LinkLink deadlines, and RPS matching/phases/terminal processing resume from persisted state and exact-once operation identities. Non-terminal records are not removed by age. SQLite WAL/checkpoint restart is supported for a valid Generation 2 database, including after an explicitly supported additive update. Unsupported schemas remain outside the recovery boundary.
 
@@ -1204,7 +1204,19 @@ The management rule editor provides populated, suspected-client presets: Tavo (`
 
 Client rules combine up to eight conditions with AND; enabled rules are alternatives. Existing `equals`, `contains` and `prefix` conditions use `value` and `case_sensitive`. An observed-IP condition can instead use `{"field":"effective_ip","operator":"ip_in","values":["192.0.2.1","2001:db8::1"]}` to match any listed address. For `ip_in`, `value` must be empty or omitted and `case_sensitive` false or omitted; other operators do not accept a nonempty `values` array. The server accepts 1–64 IPv4/IPv6 addresses per list, trims surrounding whitespace, normalizes IPv6 and IPv4-mapped addresses, and removes duplicates while retaining first-seen order. Domain names, CIDRs, ports and zone IDs are rejected. A match requires a complete, valid `direct_peer` or `trusted_forwarded` source IP; the rule's remaining conditions must also match. The editor accepts newlines, commas or spaces between addresses. Rule bodies remain limited to 32 KiB and stored conditions to 16 KiB. Existing single-value rules and frozen scan snapshots retain their meaning; list conditions use the same matching logic in audits, scans and explicitly enabled automatic-ban bindings.
 
-### Automatic bans from new charity requests (rc.4)
+### Redemption-code bans
+
+Authenticated code submissions use the existing automatic-ban system. By default,
+five counted failures within a rolling 24 hours cause a 24-hour account ban.
+Unknown, malformed and already-claimed codes count immediately. An existing code
+that is disabled, outside its dates, exhausted or ineligible grants one uncounted
+business refusal per account/code/window; later new submissions count. Successful
+claims do not reset the window. Capacity errors and failed authentication do not
+count. Retries with the same idempotency key and body replay the original outcome
+without counting again. Rule configuration is listed in [configuration](configuration.md),
+and request/retry details in [rewards](rewards.md).
+
+### Automatic bans from new charity requests
 
 Rule create/update bodies may include administrator-only `auto_ban:{enabled,duration_seconds}`. Both fields are required when the object is present; `duration_seconds` is an integer from 1 through 315360000, or `null` for a permanent ban. Omission creates no binding on a new rule and preserves the binding on update; explicit `null` removes an existing binding and is invalid during creation. The binding and rule share the rule revision. At most 100 rules can have a binding, including disabled bindings. Level-6 stewards may read bindings but cannot create, change or remove one, or edit/delete a bound rule; existing authority for unbound rules remains unchanged.
 
@@ -1214,17 +1226,17 @@ The saved account-ban reason uses the configured rule name, for example `识别�
 
 `GET /admin/api/abuse-audit/client-rule-ban-receipts/{request_id}` is administrator-only and returns `{request_id,user_id,source,rules,banned_until,created_at,expires_at}`. `user_id` is a decimal string, `source` is `client_rule`, `rules` contains every matched `{id,revision}` (at most 100), and `banned_until` is a Unix second or `null`. The [request admission standard](request-admission.md) requires original inbound client clues to be checked before header/body adaptation or business rejection. Receipts last 90 days, are removed with the account, and enforce one set of effects per logical request. Missing/expired receipts return 404; unauthorized roles receive 403. Rule identifiers remain management-only and are not added to ordinary caller errors or personal exports.
 
-### Persistent client scans (rc.3 compatibility and rc.4 additions)
+### Persistent client scans
 
 Creation accepts `{"request_token":"unique_attempt_token","lookback_hours":24,"kind":"total"}` or an explicit `from,to` epoch-second window instead of `lookback_hours`. Optional `model` is exact; `kind` is `total|self|charity|unclassified`. The range is at most 30 days. `request_token` is 16–64 ASCII letters, digits, `_` or `-`; retry the same token and identical body after a lost response. A different body with a retained token returns 409. Tokens expire with their scan; a token still awaiting expiry cleanup also returns 409. Creation returns 202, including an immediate empty/completed result. Current actor/session authority and CSRF are required; the token is not a credential.
 
-Each `scn_` task freezes the resolved window, filters, enabled rule revisions and highest recorded log ID. One global worker processes at most 100 candidate source records per independent transaction, then applies kind/model/rule filters. Shutdown or cancellation preserves the last committed checkpoint; restart resumes. There is one unfinished task per actor, at most eight queued tasks and 32 retained tasks in total; capacity conflicts return 409. Each task lasts 24 hours and retains at most 100,000 unique logical-request references. Hitting that limit yields `limited` with `result_limit`; repeated storage failures yield `failed` with `scan_failed`, preserving committed results. No enabled rules produces an immediate completed scan with zero matches.
+Each `scn_` task freezes the resolved window, filters, enabled rule revisions and highest recorded log ID. Two shared workers process client scans in transactions of at most 100 candidate source records, then apply kind/model/rule filters. Shutdown or cancellation preserves the last committed checkpoint; restart resumes. Shared scan limits are two unfinished tasks per actor, 20 unfinished and 200 retained tasks in total; capacity conflicts return 409. Each task lasts 24 hours and retains at most 100,000 unique logical-request references. Hitting that limit yields `limited` with `result_limit`; repeated storage failures yield `failed` with `scan_failed`, preserving committed results. No enabled rules produces an immediate completed scan with zero matches.
 
 Scan metadata is `id,state,reason,from,to,kind,model,candidates,scanned,matched,rule_count,created_at,updated_at,expires_at`. States are `queued|running|completed|cancelled|limited|failed`; candidate/scanned counts are decimal strings, other counts are bounded JSON integers. Candidate counts cover the frozen source window before kind/model filtering. Result reads accept only `page` (1–2147483647, default 1) and `page_size` (10/20/50/100, default 20), returning `{scan,items,page,page_size,total_items,total_pages}` with decimal-string page/count fields. Out-of-range pages clamp to the last page. Totals describe currently retained matching references and remain provisional while scanning. Source deletion/retention may reduce them. Each result uses the existing source projection and frozen rule evidence, capped at 20 match details per request and 100 per page.
 
 Cancellation accepts `{}` and is idempotent. Tasks are private to their creating actor and role, even between administrators; another actor gets 404. Permission loss invalidates all of that actor's scans, including completed ones, and restoration does not revive them. Account/source deletion removes related references; expiry and revocation cleanup use bounded batches. These transient management records are excluded from personal exports, never collect request bodies and do not change existing source retention or create automatic penalties. Legacy cursor-based client observations remain compatible.
 
-### Full-range audit navigation (rc.4)
+### Full-range audit navigation
 
 For current administrator or level-6 steward sessions, the following operations are registered under both role prefixes. The deployed `/client-scans` path above remains compatible; its `kind` is a call-kind filter and its result pages still accept 10/20/50/100. The new `/scans` path has a separate four-value result `kind` and only 20/50/100 page sizes.
 
@@ -1325,7 +1337,7 @@ RAM pickup window; successful generation is not refunded if a result is lost or
 not downloaded. Natural activity end lets accepted tasks finish; manual pause
 or maintenance cancels undispatched tasks with refunds. Ban, deletion, and
 model withdrawal follow the documented atomic cleanup rules. Safe task history
-lasts 30 days; accounting follows ledger retention and account export schema 12.
+lasts 30 days; accounting follows ledger retention and account export schema 19.
 
 ### Lake Notes API
 

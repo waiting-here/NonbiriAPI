@@ -4,6 +4,48 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## Unreleased — 1.0.0
+
+The stable database baseline is schema 17 with account export 19. The normal
+service accepts fresh or registered stable databases; the separate
+`nonbiri-upgrade-rc7` command converts the exact rc.7 schema 16. Deployments can
+use a verified commit and its matching artifacts without a release tag.
+
+### Changed
+
+- Remove prerelease migration chains and startup backfills from the service.
+  Validate the encryption key once at startup; retain full credential checks in
+  offline maintenance. Deployment tooling can read compiled schema metadata.
+- Keep ledger operation rules in one registry and synchronize missing content
+  templates without overwriting administrator settings or reopening activities.
+- Batch request adaptation and gacha eligibility reads, reuse immutable request
+  metadata, and separate application route registration from runtime setup.
+- Remove the unused SMTP variables and the normal Gateway environment import.
+- Share local and CI verification scope, balance complete browser specs across
+  two smoke jobs, split backend integration suites and update race weights from
+  measured runs. Serial conversion checks remain in the ordinary upgrade gate.
+- Consolidate developer setup, configuration, database and deployment guidance.
+
+### Fixed
+
+- Gacha entry survives ordinary session refreshes and retries the same accepted
+  operation. Countdown updates no longer render the whole activity page.
+- Activity streams recover silently from short interruptions and offer one
+  inline retry after a prolonged loss of authoritative state.
+- Link Link shows selection immediately while the server decides each match.
+  Collapsed views defer expensive content and hidden ranking requests.
+- Capability refusals clear affected private views without signing out the
+  whole site. Route loading and obsolete deployment resources have explicit
+  recovery controls.
+
+### Added
+
+- Redemption-code abuse protection, defaulting to five counted errors in a
+  rolling 24-hour window and a 24-hour ban. Unknown and already-claimed codes
+  count immediately. An existing but unavailable or ineligible code receives
+  one free refusal per account and code in the window; later attempts count.
+  Retrying the same idempotent submission never counts twice.
+
 ## [1.0.0-rc.7] - 2026-10-12
 
 This source prerelease supports fresh databases, the final rc.5 schema and registered rc.6/rc.7 schemas. SQLite remains Generation 2 with schema revision 16; account exports use schema 19. Build from the tagged source; no official prebuilt binaries are provided. See the deployment guide for supported upgrades and complete-snapshot restore requirements.
