@@ -137,6 +137,7 @@ for (const theme of ['light', 'dark'] as const)
           return route.fulfill({ json: { items: receipt ? [receipt] : [], next_cursor: '' } });
         if (route.request().postDataJSON().code !== 'AUTUMN-GIFT')
           return route.fulfill({ json: { rejection: 'unavailable' } });
+        if (receipt) return route.fulfill({ json: { ...receipt, already_claimed: true } });
         receipt = {
           id: 1,
           campaign_id: campaigns[0].id,
@@ -150,7 +151,7 @@ for (const theme of ['light', 'dark'] as const)
             { asset: 'gacha:limited', quantity: '1', granted: '1' },
           ],
         };
-        return route.fulfill({ json: receipt });
+        return route.fulfill({ json: { ...receipt, already_claimed: false } });
       });
       await page.goto(USER_ORIGIN + '/rewards');
       await capture(page, `user-rewards-empty-${theme}-${width}`);
@@ -163,6 +164,14 @@ for (const theme of ['light', 'dark'] as const)
       await expect(page.getByText('奖励已到账', { exact: true })).toBeVisible();
       await expect(page.locator('.reward-list')).toContainText('100.125');
       await capture(page, `user-rewards-${theme}-${width}`);
+      await page.reload();
+      await page.getByLabel('兑换码', { exact: true }).fill('AUTUMN-GIFT');
+      await page.getByRole('button', { name: '领取奖励', exact: true }).click();
+      await expect(page.getByText('你已领取过此兑换码', { exact: true })).toBeVisible();
+      await expect(page.getByText('奖励已到账', { exact: true })).toHaveCount(0);
+      await expect(page.locator('.reward-list > article')).toHaveCount(1);
+      await expect(page.locator('.reward-form').locator('..')).toContainText('奖励不会重复发放');
+      await capture(page, `user-rewards-already-claimed-${theme}-${width}`);
       guard.assertNone();
     });
   }

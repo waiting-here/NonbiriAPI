@@ -52,14 +52,17 @@ func TestRewardsRootAuthorizationReplayExportAndDeletion(t *testing.T) {
 	if r := request(false, "/api/rewards/redeem", `{"code":"ROOT-GIFT"}`, user.Cookie, "https://untrusted.example"); r.Code != 403 {
 		t.Fatal("CSRF accepted", r.Code)
 	}
-	var receipt rewards.Receipt
-	for range 2 {
+	var receipt rewards.Redemption
+	for attempt := range 2 {
 		r := request(false, "/api/rewards/redeem", `{"code":"root-gift"}`, user.Cookie, origin)
 		if r.Code != 200 {
 			t.Fatal(r.Code, r.Body.String())
 		}
 		if e := json.Unmarshal(r.Body.Bytes(), &receipt); e != nil {
 			t.Fatal(e)
+		}
+		if receipt.AlreadyClaimed != (attempt > 0) {
+			t.Fatal("redemption status", attempt, receipt.AlreadyClaimed)
 		}
 	}
 	other := f.call("GET", "/api/rewards/history", nil, f.users[1].Cookie, false)
@@ -90,7 +93,7 @@ func TestRewardsRootAuthorizationReplayExportAndDeletion(t *testing.T) {
 	if e = json.Unmarshal(exported.Rewards, &receipts); e != nil || len(receipts) != 1 || receipts[0].ID != receipt.ID {
 		t.Fatal(receipts, e)
 	}
-	if strings.Contains(string(exported.Rewards), "ROOT-GIFT") || strings.Contains(string(exported.Rewards), "key_hash") {
+	if strings.Contains(string(exported.Rewards), "ROOT-GIFT") || strings.Contains(string(exported.Rewards), "key_hash") || strings.Contains(string(exported.Rewards), "already_claimed") {
 		t.Fatal("private configuration exported")
 	}
 	account("/api/account/delete", `{"confirm":"DELETE"}`)

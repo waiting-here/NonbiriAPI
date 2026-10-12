@@ -61,6 +61,9 @@ export interface Receipt {
   created_at: number;
   completed_at?: number;
 }
+export interface Redemption extends Receipt {
+  already_claimed: boolean;
+}
 export interface Page<T> {
   items: T[];
   next_cursor: string;
@@ -103,7 +106,7 @@ export const retryReward = (id: string) =>
 export const getReceipts = (cursor: string, signal?: AbortSignal) =>
   apiFetch<Page<Receipt>>(queryPath('/api/rewards/history', { cursor }), { signal });
 export const redeemReward = (code: string) =>
-  apiFetch<Receipt | { rejection: string }>('/api/rewards/redeem', {
+  apiFetch<Redemption | { rejection: string }>('/api/rewards/redeem', {
     method: 'POST',
     json: { code },
   });

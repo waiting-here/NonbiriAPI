@@ -170,7 +170,10 @@ func TestCodeQuotaConcurrencyAndExpiredReplay(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if _, e := f.s.Redeem(t.Context(), user, "  gift-test  "); e == nil {
+			if result, e := f.s.Redeem(t.Context(), user, "  gift-test  "); e == nil {
+				if result.AlreadyClaimed {
+					t.Error("first redemption reported as already claimed")
+				}
 				success.Add(1)
 			}
 		}()
@@ -185,7 +188,7 @@ func TestCodeQuotaConcurrencyAndExpiredReplay(t *testing.T) {
 	}
 	f.at.Add(5)
 	r, e := f.s.Redeem(t.Context(), winner, c.Code)
-	if e != nil || len(r.Results) != 3 {
+	if e != nil || len(r.Results) != 3 || !r.AlreadyClaimed {
 		t.Fatal(r, e)
 	}
 	if f.balance(t, winner, ledger.General) != "10125" {
