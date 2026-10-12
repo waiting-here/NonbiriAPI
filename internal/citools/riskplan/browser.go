@@ -19,11 +19,11 @@ type browserFamily struct {
 }
 
 var browserFamilies = []browserFamily{
-	{[]string{"internal/gacha/", "internal/appearance/", "web/src/user/activities/gacha/", "web/src/user/features/appearance/", "web/public/assets/gacha/"}, []string{"gacha-", "heart-moment", "appearance-", "rewards", "checkin-choice", "newcomer-rewards", "frontend-lifecycle"}, []string{"management"}, false},
-	{[]string{"internal/game/linklink/", "web/src/user/games/linklink/"}, []string{"linklink-", "game-experience", "game-presentation", "game-shell-controls", "desktop-game-layout", "frontend-lifecycle"}, nil, false},
+	{[]string{"internal/gacha/", "internal/appearance/", "web/src/user/activities/gacha/", "web/src/user/appearance/", "web/public/assets/gacha/"}, []string{"gacha-", "heart-moment", "appearance-", "rewards", "checkin-choice", "newcomer-rewards", "frontend-lifecycle", "dialog-layering"}, []string{"management"}, false},
+	{[]string{"internal/game/linklink/", "web/src/user/games/linklink/"}, []string{"linklink-", "game-experience", "game-presentation", "game-shell-controls", "desktop-game-layout", "frontend-lifecycle", "dialog-layering", "randomness"}, nil, false},
 	{[]string{"internal/fatfish/", "web/src/user/games/fatfish/", "web/public/assets/fatfish/", "web/test/fatfish/", "web/test/fatfish-assets/", "web/test/fatfish-engine/"}, []string{"fatfish-", "game-experience", "desktop-game-layout"}, []string{"fatfish"}, true},
-	{[]string{"internal/lakenotes/", "web/src/user/games/lakenotes/", "web/src/user/games/lake-notes/", "web/public/assets/lake-notes/"}, []string{"lake-", "game-experience", "desktop-game-layout"}, []string{"lakenotes"}, false},
-	{[]string{"internal/picturebook/", "web/src/user/activities/picturebook/", "web/test/picturebook/"}, []string{"image-", "game-experience"}, []string{"picturebook"}, false},
+	{[]string{"internal/lakenotes/", "web/src/user/activities/lake-notes/", "web/public/assets/lake-notes/"}, []string{"lake-", "game-experience", "desktop-game-layout"}, []string{"lakenotes"}, false},
+	{[]string{"internal/picturebook/", "web/src/user/activities/picturebook/", "web/test/picturebook/"}, []string{"image-", "game-experience", "user-polish"}, []string{"picturebook"}, false},
 	{[]string{"internal/riskaudit/", "internal/clientguard/", "web/test/audit/"}, []string{"audit-", "client-scans", "penalties"}, []string{"audit", "management"}, false},
 }
 

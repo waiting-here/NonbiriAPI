@@ -113,7 +113,7 @@ func TestBrowserCatalogIncludesNestedAndRenamedSpecs(t *testing.T) {
 
 func TestBrowserSharedGameContractsFollowTheirModules(t *testing.T) {
 	browserCatalogFixture(t)
-	for _, name := range []string{"game-presentation", "frontend-lifecycle"} {
+	for _, name := range []string{"game-presentation", "frontend-lifecycle", "dialog-layering", "randomness"} {
 		if err := os.WriteFile("web/test/e2e/"+name+".spec.ts", nil, 0600); err != nil {
 			t.Fatal(err)
 		}
@@ -123,7 +123,7 @@ func TestBrowserSharedGameContractsFollowTheirModules(t *testing.T) {
 		if err := selectBrowserPlan(&plan); err != nil {
 			t.Fatal(err)
 		}
-		for _, spec := range []string{"linklink-hints", "game-presentation", "frontend-lifecycle"} {
+		for _, spec := range []string{"linklink-hints", "game-presentation", "frontend-lifecycle", "dialog-layering", "randomness"} {
 			if !slices.Contains(plan.Browser.Specs, "test/e2e/"+spec+".spec.ts") {
 				t.Fatalf("%s missing %s", path, spec)
 			}
@@ -135,5 +135,28 @@ func TestBrowserSharedGameContractsFollowTheirModules(t *testing.T) {
 	}
 	if !slices.Contains(plan.Browser.Specs, "test/e2e/frontend-lifecycle.spec.ts") {
 		t.Fatal("gacha identity/entry regression omitted")
+	}
+}
+
+func TestBrowserSpecializedViewsIncludeCrossPageContracts(t *testing.T) {
+	browserCatalogFixture(t)
+	for _, name := range []string{"dialog-layering", "user-polish", "lake-notes"} {
+		if err := os.WriteFile("web/test/e2e/"+name+".spec.ts", nil, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, test := range []struct{ path, spec, suite string }{
+		{"web/src/user/appearance/AppearancePicker.tsx", "dialog-layering", "management"},
+		{"internal/picturebook/service.go", "user-polish", "picturebook"},
+		{"web/src/user/activities/lake-notes/LakeNotesPage.tsx", "lake-notes", "lakenotes"},
+	} {
+		plan := verificationPlan{Mode: "routine", Changed: []string{test.path}}
+		if err := selectBrowserPlan(&plan); err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Contains(plan.Browser.Specs, "test/e2e/"+test.spec+".spec.ts") ||
+			!slices.Equal(plan.Browser.Suites, []string{test.suite}) {
+			t.Fatalf("cross-page scope %s: %+v", test.path, plan.Browser)
+		}
 	}
 }
