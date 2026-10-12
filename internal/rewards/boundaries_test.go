@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/gacha"
+	"github.com/waiting-here/NonbiriAPI/internal/lakenotes"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/rewardasset"
 	"testing"
@@ -126,6 +127,21 @@ func TestRewardCatalogIsPrivateAndUniqueGearIsSkipped(t *testing.T) {
 		t.Fatal(result, e)
 	}
 }
+func TestGearRewardRejectsOversizedQuantities(t *testing.T) {
+	f := setup(t)
+	for _, quantity := range []string{"2", "3", "9007199254740991"} {
+		tx, err := f.db.Begin()
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = lakenotes.GrantRewardTx(t.Context(), tx, f.user, f.at.Load(), rewardasset.Item{Asset: "lake:gear:bambooPole", Quantity: quantity})
+		tx.Rollback()
+		if !errors.Is(err, lakenotes.ErrInvalid) {
+			t.Fatalf("quantity %s: %v", quantity, err)
+		}
+	}
+}
+
 func TestBothCheckinsResetAtSiteMidnight(t *testing.T) {
 	f := setup(t)
 	f.at.Store(time.Date(2027, 1, 15, 15, 59, 59, 0, time.UTC).Unix())

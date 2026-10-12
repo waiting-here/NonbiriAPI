@@ -90,7 +90,7 @@ func GrantRewardTx(ctx context.Context, tx *sql.Tx, user, at int64, item rewarda
 		if g.Slot == "rod" {
 			cap = 1
 		}
-		if n > uint64(cap) {
+		if n > 2 || g.Slot == "rod" && n > 1 {
 			return out, ErrInvalid
 		}
 		added := min(int(n), max(0, cap-p.Copies(id)))

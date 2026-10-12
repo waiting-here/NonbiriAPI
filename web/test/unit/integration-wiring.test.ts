@@ -32,6 +32,7 @@ describe('central route and navigation wiring', () => {
     expect(userPaths.indexOf('debug')).toBe(userPaths.indexOf('keys') + 1);
     expect(userChildren.find((route) => route.path === 'games')?.lazy).toBeTypeOf('function');
     expect(userChildren.find((route) => route.path === 'activities')?.lazy).toBeTypeOf('function');
+    expect(userChildren.find((route) => route.path === 'rewards')?.lazy).toBeTypeOf('function');
     expect(userChildren.find((route) => route.path === 'activities/picture-book')?.lazy).toBeTypeOf(
       'function',
     );
@@ -46,6 +47,7 @@ describe('central route and navigation wiring', () => {
       'function',
     );
     for (const path of [
+      'rewards',
       'blacklist',
       'inactivity-policy',
       'limited-activities',
@@ -57,6 +59,7 @@ describe('central route and navigation wiring', () => {
 
     expect(userNav.map(({ to, key }) => `${to}:${key}`)).toEqual([
       '/:home',
+      '/rewards:rewards',
       '/keys:caller-key',
       '/endpoints:endpoints',
       '/models:models',
@@ -66,6 +69,7 @@ describe('central route and navigation wiring', () => {
       '/logs:logs',
     ]);
     expect(adminNav.map(({ to, key }) => `${to}:${key}`)).toEqual([
+      '/rewards:admin-rewards',
       '/inactivity-policy:admin-inactivity-policy',
       '/limited-activities:admin-limited-activities',
       '/abuse-audit:admin-risk-audit',
