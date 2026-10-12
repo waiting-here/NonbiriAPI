@@ -3,6 +3,7 @@ package forward
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"net/http"
 
@@ -23,6 +24,37 @@ type preparedAttempt struct {
 	native      map[string]json.RawMessage
 	active      bool
 	outputFloor int64
+}
+
+// source stays immutable until the logical request completes. Each dispatch
+// takes its own clone, so cancellation and retry cleanup cannot alter it.
+func (p *preparedAttempt) source(original *validatedRequest) *validatedRequest {
+	if p != nil && p.request != nil {
+		return p.request
+	}
+	return original
+}
+
+func (p *preparedAttempt) applyPolicy(policy *connectorcontract.AttemptPolicy) func() {
+	if p == nil {
+		return func() {}
+	}
+	policy.AdditionalHeaders = p.headers.Clone()
+	policy.HasAdaptation = p.active || len(policy.ManagedHeaders) > 0
+	if len(p.native) == 0 {
+		return func() {}
+	}
+	native := make(map[string]json.RawMessage, len(p.native))
+	for path, value := range p.native {
+		native[path] = bytes.Clone(value)
+	}
+	policy.NativeExtensions = native
+	return func() {
+		for path, value := range native {
+			clear(value)
+			delete(native, path)
+		}
+	}
 }
 
 func outputFloor(candidate RouteCandidate) int64 {
@@ -48,10 +80,17 @@ func (p *preparedAttempt) clear() {
 }
 
 func (plan *executionPlan) clearPrepared() {
+	plan.clearUnusedPrepared(nil)
+}
+
+func (plan *executionPlan) clearUnusedPrepared(retained []RouteCandidate) {
 	if plan == nil {
 		return
 	}
 	seen := make(map[*preparedAttempt]bool)
+	for _, candidate := range retained {
+		seen[candidate.prepared] = true
+	}
 	for _, candidate := range plan.candidates {
 		if candidate.prepared != nil && !seen[candidate.prepared] {
 			candidate.prepared.clear()
@@ -91,6 +130,11 @@ func (service *Service) freezeAdaptations(ctx context.Context, request *validate
 			snapshot.Clear()
 		}
 	}()
+	type preparedKey struct {
+		connector connectorcontract.Type
+		document  [sha256.Size]byte
+	}
+	cache := make(map[preparedKey]*preparedAttempt)
 	for index := range plan.candidates {
 		candidate := &plan.candidates[index]
 		var effective requestadaptation.Snapshot
@@ -106,6 +150,18 @@ func (service *Service) freezeAdaptations(ctx context.Context, request *validate
 			}
 			effective = requestadaptation.EffectivePersonal(endpoint, model)
 		}
+		encoded, err := json.Marshal(effective.Document)
+		if err != nil {
+			effective.Clear()
+			return err
+		}
+		key := preparedKey{candidate.ConnectorType, sha256.Sum256(encoded)}
+		clear(encoded)
+		if prepared, exists := cache[key]; exists {
+			candidate.prepared = prepared
+			effective.Clear()
+			continue
+		}
 		if requestadaptation.ValidateDocument(effective.Document, requestadaptation.ScopeEndpoint) != nil || requestadaptation.ExcludedConflict(effective.Document, request.excluded) {
 			effective.Clear()
 			return requestadaptation.ErrConflict
@@ -116,6 +172,7 @@ func (service *Service) freezeAdaptations(ctx context.Context, request *validate
 			return err
 		}
 		candidate.prepared = prepared
+		cache[key] = prepared
 	}
 	return nil
 }
@@ -130,8 +187,7 @@ func prepareAdaptedAttempt(request *validatedRequest, connectorType connectorcon
 	if err != nil {
 		return nil, err
 	}
-	if !prepared.active {
-		prepared.request = request.CloneForAttempt()
+	if len(doc.BodyDefaults.Values)+len(doc.BodyForced.Values) == 0 && (connectorType == connectorcontract.TypeOpenAICompatible || len(doc.NativeExtensionPaths.Values) == 0) {
 		return prepared, nil
 	}
 	var logical []byte

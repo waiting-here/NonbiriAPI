@@ -90,6 +90,7 @@ func (s *Service) decodeEnvelope(ctx context.Context, user int64, body []byte, e
 	if err == nil && adaptation != nil {
 		err = request.excludeFields(adaptation.Document.ExcludedRequestFields)
 		request.policyModelID = personal.ModelID
+		request.personalPolicy = &personal
 		pinned := adaptation.Clone()
 		request.personalAdaptation = &pinned
 	}
@@ -191,6 +192,7 @@ func (s *Service) bindDirectPersonalPolicy(ctx context.Context, user int64, requ
 	copy := request.CloneForAttempt()
 	copy.personalAdaptation = snapshot
 	copy.policyModelID = policy.ModelID
+	copy.personalPolicy = &policy
 	fields := snapshot.Document.ExcludedRequestFields
 	if err := copy.excludeFields(fields); err != nil {
 		copy.Clear()

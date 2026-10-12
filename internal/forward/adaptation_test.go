@@ -11,6 +11,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
+	"github.com/waiting-here/NonbiriAPI/internal/transportpolicy"
 )
 
 func TestCharityAdaptationCombinedBudgetRejectsBeforeClaim(t *testing.T) {
@@ -77,7 +78,7 @@ func TestPersonalAdaptationFrozenBeforeClaimAndAppliedToAttempt(t *testing.T) {
 	}
 	request := decodeChatForTest(t, `{"model":"provider/model","messages":[{"role":"user","content":"hello"}],"thinking":{"type":"enabled","budget_tokens":4096}}`)
 	fixture.service.Chat(context.Background(), httptest.NewRecorder(), 1, request, []byte(`{}`), "application/json", "en")
-	if loads != 1 || fixture.openAI.calls != 1 || string(sent["reasoning_effort"]) != `"low"` || sent["thinking"] == nil {
+	if loads != 1 || fixture.personal.preCalls != 1 || fixture.openAI.calls != 1 || string(sent["reasoning_effort"]) != `"low"` || sent["thinking"] == nil {
 		t.Fatalf("loads=%d, calls=%d, outbound=%v", loads, fixture.openAI.calls, sent)
 	}
 	original, err := request.LogicalBody()
@@ -87,6 +88,69 @@ func TestPersonalAdaptationFrozenBeforeClaimAndAppliedToAttempt(t *testing.T) {
 	var source map[string]json.RawMessage
 	if json.Unmarshal(original, &source) != nil || source["reasoning_effort"] != nil {
 		t.Fatalf("adaptation mutated logical source: %s", original)
+	}
+}
+
+func TestFrozenAdaptationsSharePreparationButNotDispatchData(t *testing.T) {
+	for _, bodyRule := range []bool{false, true} {
+		t.Run(fmt.Sprint(bodyRule), func(t *testing.T) {
+			request := chatRequest(decodeChatForTest(t, `{"model":"provider/model","messages":[{"role":"user","content":"original"}]}`))
+			defer request.Clear()
+			service := &Service{adaptations: adaptationReaderFunc(func(refs []requestadaptation.Ref) map[requestadaptation.Ref]requestadaptation.Snapshot {
+				out := make(map[requestadaptation.Ref]requestadaptation.Snapshot)
+				for _, ref := range refs {
+					doc := requestadaptation.Empty(ref.Scope)
+					doc.FixedHeaders.Values["X-Research"] = "original"
+					if bodyRule {
+						doc.BodyForced.Values["/temperature"] = json.RawMessage(`0.2`)
+					}
+					out[ref] = requestadaptation.Snapshot{Document: doc, Revision: "1"}
+				}
+				return out
+			})}
+			plan := executionPlan{candidates: []RouteCandidate{
+				{EndpointID: 1, ConnectorType: connectorcontract.TypeOpenAICompatible},
+				{EndpointID: 2, ConnectorType: connectorcontract.TypeOpenAICompatible},
+			}}
+			if err := service.freezeAdaptations(t.Context(), request, &plan, nil); err != nil {
+				t.Fatal(err)
+			}
+			defer plan.clearPrepared()
+			shared := plan.candidates[0].prepared
+			if shared != plan.candidates[1].prepared {
+				t.Fatal("same effective rules prepared twice")
+			}
+			if !bodyRule && shared.request != nil {
+				t.Fatal("header-only adaptation copied the body")
+			}
+			plan.transportRule = transportpolicy.ForceStream
+			if err := freezeTransport(request, &plan); err != nil {
+				t.Fatal(err)
+			}
+			if plan.candidates[0].prepared != plan.candidates[1].prepared || !shared.source(request).Stream {
+				t.Fatal("transport lost shared preparation")
+			}
+			// Removing one unsupported candidate must not clear the request
+			// that a remaining candidate will dispatch.
+			plan.clearUnusedPrepared(plan.candidates[1:])
+			first := shared.source(request).CloneForAttempt()
+			second := shared.source(request).CloneForAttempt()
+			first.Clear()
+			defer second.Clear()
+			if raw, err := second.chat.LogicalBody(); err != nil || !json.Valid(raw) {
+				t.Fatal("retry source was cleared", err)
+			}
+			shared.native = map[string]json.RawMessage{"/thinking": json.RawMessage(`{"budget":2048}`)}
+			var a, b connectorcontract.AttemptPolicy
+			clearA, clearB := shared.applyPolicy(&a), shared.applyPolicy(&b)
+			a.AdditionalHeaders.Set("X-Research", "changed")
+			a.NativeExtensions["/thinking"][0] = 'x'
+			clearA()
+			if b.AdditionalHeaders.Get("X-Research") != "original" || !json.Valid(b.NativeExtensions["/thinking"]) || !json.Valid(shared.native["/thinking"]) {
+				t.Fatal("dispatch mutated shared adaptation")
+			}
+			clearB()
+		})
 	}
 }
 

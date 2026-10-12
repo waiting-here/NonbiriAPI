@@ -45,7 +45,7 @@ type Config struct {
 	Users    limitedactivities.UserAuthorizer
 	Gate     limitedactivities.AdmissionGate
 	Unlock   func(context.Context, *sql.Tx, int64, string) (bool, error)
-	Visible  func(context.Context, *sql.Tx, string) (bool, error)
+	Visible  func(context.Context, *sql.Tx, []string) (map[string]bool, error)
 	Moments  func(context.Context, *sql.Tx, int64) ([]string, error)
 	Now      func() time.Time
 }
@@ -134,19 +134,25 @@ func (s *Service) stateTx(ctx context.Context, tx *sql.Tx, user int64) (State, e
 		return out, err
 	}
 	out.Visible = []string{}
+	unlocked := make(map[string]bool, len(out.Unlocked))
+	for _, id := range out.Unlocked {
+		unlocked[id] = true
+	}
+	locked := make([]string, 0, len(catalog))
 	for _, d := range catalog {
-		unlocked := false
-		for _, id := range out.Unlocked {
-			unlocked = unlocked || id == d.ID
+		if !unlocked[d.ID] {
+			locked = append(locked, d.Unlock)
 		}
-		visible := unlocked
-		if !visible {
-			visible, err = s.config.Visible(ctx, tx, d.Unlock)
-			if err != nil {
-				return out, err
-			}
+	}
+	var visible map[string]bool
+	if len(locked) > 0 {
+		visible, err = s.config.Visible(ctx, tx, locked)
+		if err != nil {
+			return out, err
 		}
-		if visible {
+	}
+	for _, d := range catalog {
+		if unlocked[d.ID] || visible[d.Unlock] {
 			out.Visible = append(out.Visible, d.ID)
 		}
 	}

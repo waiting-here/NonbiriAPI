@@ -143,10 +143,11 @@ func (s *Service) Act(ctx context.Context, user int64, key string, input Action)
 	if err != nil {
 		return out, err
 	}
-	_, shop, _, err := readSettings(ctx, tx)
+	settings, err := readSettings(ctx, tx)
 	if err != nil {
 		return out, err
 	}
+	shop := settings.shop
 	var creditOperation any
 	var drawRules Rules
 	var roster []string
@@ -169,7 +170,7 @@ func (s *Service) Act(ctx context.Context, user int64, key string, input Action)
 		p.Balance[1]++
 	case "draw":
 		var receipt *DrawReceipt
-		receipt, drawRules, roster, err = s.draw(ctx, tx, user, at, operation, input, &p)
+		receipt, drawRules, roster, err = s.draw(ctx, tx, user, at, operation, input, &p, settings)
 		out.Draw = receipt
 	case "buy":
 		if input.Revision != shop.Revision {
@@ -216,25 +217,18 @@ func (s *Service) Act(ctx context.Context, user int64, key string, input Action)
 			return out, err
 		}
 	}
-	out.Snapshot, err = s.snapshot(ctx, tx, user, at)
+	out.Snapshot, err = s.snapshotWithSettings(ctx, tx, user, at, settings)
 	if err != nil {
 		return out, err
 	}
 	return out, tx.Commit()
 }
-func (s *Service) draw(ctx context.Context, tx *sql.Tx, user, at int64, id string, input Action, p *profile) (*DrawReceipt, Rules, []string, error) {
-	pools, err := readPools(ctx, tx, at, false)
+func (s *Service) draw(ctx context.Context, tx *sql.Tx, user, at int64, id string, input Action, p *profile, settings *settingsSnapshot) (*DrawReceipt, Rules, []string, error) {
+	pool, err := readPool(ctx, tx, input.PoolID, settings)
 	if err != nil {
 		return nil, Rules{}, nil, err
 	}
-	var pool *Pool
-	for i := range pools {
-		if pools[i].ID == input.PoolID {
-			pool = &pools[i]
-			break
-		}
-	}
-	if pool == nil || !pool.Open(at) {
+	if !pool.Open(at) {
 		return nil, Rules{}, nil, ErrClosed
 	}
 	wallet := 0
@@ -401,19 +395,14 @@ func redeem(ctx context.Context, tx *sql.Tx, user, at int64, product string, sho
 			spend[0] = shop.ChibiN
 			spend[1] = shop.ChibiR
 		} else {
-			pools, err := readPools(ctx, tx, at, false)
+			open := false
+			err := tx.QueryRowContext(ctx, `SELECT EXISTS(
+ SELECT 1 FROM gacha_pools, json_each(config,'$.featured') card
+ WHERE json_extract(config,'$.published')=1 AND json_extract(config,'$.paused')=0
+ AND json_extract(config,'$.starts_at')<=? AND json_extract(config,'$.ends_at')>?
+ AND card.value=?)`, at, at, product).Scan(&open)
 			if err != nil {
 				return err
-			}
-			open := false
-			for _, pool := range pools {
-				if pool.Open(at) {
-					for _, id := range pool.Featured {
-						if id == product {
-							open = true
-						}
-					}
-				}
 			}
 			if !open {
 				return ErrClosed

@@ -121,6 +121,9 @@ func newFixture(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err = f.s.SyncCatalog(t.Context()); err != nil {
+		t.Fatal(err)
+	}
 	return f
 }
 func (f *fixture) act(user int64, key string, input Action) (Outcome, error) {
