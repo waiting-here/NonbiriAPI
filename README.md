@@ -4,7 +4,7 @@
 
 NonbiriAPI is a self-hosted AI API endpoint manager and OpenAI-compatible gateway. Each user manages their own endpoints, encrypted credentials, discovered models and routing, then calls personal or shared charity models with a revocable CallerKey.
 
-The current development version is **1.0.0-rc.7**. See the [changelog](CHANGELOG.md); the latest published source release is [1.0.0-rc.6](https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-rc.6). All releases provide source code only. Linux/amd64 is the supported production target.
+The current source prerelease is [1.0.0-rc.7](https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-rc.7). See the [changelog](CHANGELOG.md). All releases provide source code only. Linux/amd64 is the supported production target.
 
 ## Capabilities
 
@@ -48,7 +48,7 @@ set +a
 
 Fresh databases start in maintenance with public features closed. Review the instance's legal pages and settings before accepting users. See [configuration](docs/configuration.md) for startup variables and online controls, and [deployment](docs/deployment.md) for systemd, proxy, backup and restore procedures.
 
-rc.7 supports fresh databases, the final rc.5 schema and registered rc.6 schemas. Older or unknown databases are rejected. The [compatibility section](docs/deployment.md#database-compatibility-and-version-changes) identifies the supported source and rollback requirements.
+rc.7 supports fresh databases, the final rc.5 schema and registered rc.6/rc.7 schemas. Older or unknown databases are rejected. The [compatibility section](docs/deployment.md#database-compatibility-and-version-changes) identifies the supported source and rollback requirements.
 
 ## Call the API
 

@@ -11,7 +11,7 @@ This checklist does not itself assert a pass.
 - Synchronize version metadata, bilingual README/changelog, API, configuration,
   lifecycle, game, legal and deployment documentation.
 - Validate fresh creation, the final rc.5 source at
-  `8949a3d6e5b3d7536549f42a4c597393fccab62a`, and registered rc.6 schemas.
+  `8949a3d6e5b3d7536549f42a4c597393fccab62a`, and registered rc.6/rc.7 schemas.
   `scripts/check-upgrade.sh` builds the pinned released source to create its fixture.
   Generate populated samples with that exact old code. Include
   wide and negative balances, manual donation-credit adjustments, historical
@@ -57,7 +57,7 @@ This checklist does not itself assert a pass.
 - Verify Bidding suits by seat; combined resource filters and equal count/row
   predicates; safe key reverse lookup including all still-associated states;
   required new donation descriptions with historical blank compatibility.
-- Verify v11 owner-only exports, all-or-error size/row budgets, rollback on
+- Verify current owner-only exports, all-or-error size/row budgets, rollback on
   incomplete ranking catch-up, synchronous deletion and both late-write orders.
   Lazy game finalization, financial facts and rankings must agree in one snapshot.
 - Keep prior ownership, egress, secrets, financial, randomness and game contracts

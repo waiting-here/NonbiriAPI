@@ -4,7 +4,9 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
-## [1.0.0-rc.7] - Unreleased
+## [1.0.0-rc.7] - 2026-10-12
+
+This source prerelease supports fresh databases, the final rc.5 schema and registered rc.6/rc.7 schemas. SQLite remains Generation 2 with schema revision 16; account exports use schema 19. Build from the tagged source; no official prebuilt binaries are provided. See the deployment guide for supported upgrades and complete-snapshot restore requirements.
 
 ### Added
 
