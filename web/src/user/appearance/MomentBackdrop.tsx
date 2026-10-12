@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { artSourceSet } from '../activities/gacha/art-resolution';
 import { isRare } from '../activities/gacha/catalog';
 import { defaultMoment, momentByKey } from './moments';
+import { useArtworkHue } from './artwork-hue';
 import './moments.css';
 
 export function MomentBackdrop({ moment }: { moment?: string }) {
@@ -9,6 +10,8 @@ export function MomentBackdrop({ moment }: { moment?: string }) {
   const card = artwork.card;
   const rare = !!card && isRare(card.rarity);
   const canvas = useRef<HTMLCanvasElement>(null);
+  const scene = useRef<HTMLImageElement>(null);
+  useArtworkHue(scene, artwork.key);
   const hero = card
     ? rare
       ? '/assets/gacha/motion/' + card.id + '/hero.webp'
@@ -71,6 +74,7 @@ export function MomentBackdrop({ moment }: { moment?: string }) {
   return (
     <div className="nb-moment-backdrop" aria-hidden="true" data-moment={artwork.key}>
       <img
+        ref={scene}
         className="nb-moment-backdrop__scene"
         src={background}
         srcSet={artSourceSet(background)}

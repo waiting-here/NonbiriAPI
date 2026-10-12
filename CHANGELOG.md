@@ -44,6 +44,8 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Fixed
 
+- Themed donation lists, filters, tables and older cards retain readable surfaces. Heartfelt moments gently tint the shared interface from the selected artwork while keeping light and dark text contrast stable.
+- Mystery-shop cards show their individual shard costs. Reusing a reward code explicitly reports that it was already claimed and identifies the earlier receipt without issuing rewards again.
 - Selecting or clearing a limited-card theme in the administrator pool editor no longer saves the pool or template automatically.
 - Appearance settings hide unowned designs whose cards have never been offered, including future and never-open paused pools.
 - Wallpaper portraits keep their faces, bodies and limbs fixed; only individually marked hair ends and loose fabric sway.
