@@ -70,7 +70,7 @@ func newAuditFixtureFromSource(t *testing.T, source string) *auditFixture {
 	t.Cleanup(func() { _ = vault.Close() })
 	path := filepath.Join(t.TempDir(), "audit.db")
 	if source == "" {
-		dbfixture.Materialize(t, path)
+		dbfixture.Materialize(t, path, vault)
 	} else {
 		dbtest.EnsureOwnerOnlyParent(t, path)
 		image, err := os.ReadFile(source)

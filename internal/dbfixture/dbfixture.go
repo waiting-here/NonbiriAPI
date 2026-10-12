@@ -8,6 +8,7 @@ package dbfixture
 import (
 	"bytes"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -113,7 +114,9 @@ func validDigest(value string) bool {
 // 2 template to path. The target must not already exist. Callers still open the
 // result with db.Open so the production current-store validation path remains
 // covered by every fixture.
-func Materialize(t testing.TB, path string) {
+// Passing a codec binds the copied key-validation singleton to that fixture.
+// Omit it only for SQL-only tests or tests using the template's fixed 0x41 key.
+func Materialize(t testing.TB, path string, codecs ...secret.GenerationTwoContextCodec) {
 	t.Helper()
 	dir := filepath.Dir(path)
 	if dir != "." && dir != "" && dir != string(filepath.Separator) {
@@ -124,6 +127,24 @@ func Materialize(t testing.TB, path string) {
 	dbtest.EnsureOwnerOnlyParent(t, path)
 	if err := materialize(path); err != nil {
 		t.Fatalf("dbfixture: materialize %s: %v", path, err)
+	}
+	if len(codecs) > 1 {
+		t.Fatal("dbfixture: at most one codec is accepted")
+	}
+	if len(codecs) == 1 {
+		envelope, err := codecs[0].CreateDatabaseMaterial()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer clear(envelope)
+		database, err := sql.Open("sqlite", path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, updateErr := database.Exec("UPDATE donation_review_material SET envelope=? WHERE id=1", envelope)
+		if err := errors.Join(updateErr, database.Close()); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 

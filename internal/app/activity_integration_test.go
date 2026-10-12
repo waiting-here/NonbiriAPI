@@ -31,7 +31,7 @@ func newActivityWireFixture(t *testing.T) *imageBrowserFixture {
 		t.Fatal(err)
 	}
 	f := &imageBrowserFixture{t: t, vault: vault, cfg: auditConfig(), path: filepath.Join(t.TempDir(), "activity.db")}
-	dbfixture.Materialize(t, f.path)
+	dbfixture.Materialize(t, f.path, vault)
 	f.upstreamState = newImageFixtureUpstream(t)
 	f.upstream = httptest.NewServer(f.upstreamState)
 	if err := f.open(); err != nil {

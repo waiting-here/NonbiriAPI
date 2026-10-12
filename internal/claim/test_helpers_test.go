@@ -1,6 +1,7 @@
 package claim
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
@@ -24,6 +25,16 @@ type testCodec struct {
 	opens    int
 	failOpen bool
 	onOpen   func()
+}
+
+func (c *testCodec) CreateDatabaseMaterial() ([]byte, error) {
+	return bytes.Repeat([]byte{0x41}, 64), nil
+}
+func (c *testCodec) ValidateDatabaseMaterial(envelope []byte) error {
+	if !bytes.Equal(envelope, bytes.Repeat([]byte{0x41}, 64)) {
+		return errors.New("invalid fixture material")
+	}
+	return nil
 }
 
 func newTestCodec() *testCodec {
@@ -581,7 +592,8 @@ func newClaimFixture(t *testing.T) *claimFixture {
 	t.Helper()
 	codec := newTestCodec()
 	path := filepath.Join(t.TempDir(), "claim.sqlite")
-	dbfixture.Materialize(t, path)
+
+	dbfixture.Materialize(t, path, codec)
 	store, err := db.Open(path, codec)
 	if err != nil {
 		t.Fatalf("open Generation 2 fixture: %v", err)

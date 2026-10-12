@@ -33,7 +33,8 @@ func openMaintenanceStore(t *testing.T) *db.Store {
 		t.Fatalf("new vault: %v", err)
 	}
 	t.Cleanup(func() { _ = vault.Close() })
-	dbfixture.Materialize(t, path)
+
+	dbfixture.Materialize(t, path, vault)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		t.Fatalf("open store: %v", err)

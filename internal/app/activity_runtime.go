@@ -80,7 +80,7 @@ func (g limitedAdmissionGate) AuthorizeUserActivity(ctx context.Context, tx *sql
 	return g.service.AuthorizeChatAcceptance(ctx, tx, user, g.now().Unix())
 }
 
-func newActivityRuntime(store *db.Store, vault *secret.Vault, sessions *auth.Runtime, roles *roleFinalTxAuthorizer,
+func newActivityRuntime(ctx context.Context, store *db.Store, vault *secret.Vault, sessions *auth.Runtime, roles *roleFinalTxAuthorizer,
 	gate *maintenance.Service, outbound *egress.Stack, audits *auditRuntime, invalidator inactivity.Invalidator,
 	cancelGames inactivity.CancelUserTx, games *gamebuiltin.Runtime, now func() time.Time) (*activityRuntime, error) {
 	if now == nil {
@@ -127,6 +127,9 @@ func newActivityRuntime(store *db.Store, vault *secret.Vault, sessions *auth.Run
 		Database: store.DB(), Users: users, Admins: roles, Gate: admission,
 		Keys: vault, Activity: activeActivityRecorder{}, Now: now,
 	})
+	if err == nil {
+		err = a.gacha.SyncCatalog(ctx)
+	}
 	if err != nil {
 		_ = a.Close()
 		return nil, err
@@ -137,11 +140,22 @@ func newActivityRuntime(store *db.Store, vault *secret.Vault, sessions *auth.Run
 		return nil, err
 	}
 	a.appearance, err = appearance.New(appearance.Config{Database: store.DB(), Users: users, Gate: admission, Now: now, Moments: a.gacha.MomentOptionsTx,
-		Visible: func(ctx context.Context, tx *sql.Tx, key string) (bool, error) {
-			if !strings.HasPrefix(key, "card:") {
-				return false, nil
+		Visible: func(ctx context.Context, tx *sql.Tx, keys []string) (map[string]bool, error) {
+			ids := make([]string, 0, len(keys))
+			for _, key := range keys {
+				if strings.HasPrefix(key, "card:") {
+					ids = append(ids, strings.TrimPrefix(key, "card:"))
+				}
 			}
-			return a.gacha.CardWasOfferedTx(ctx, tx, strings.TrimPrefix(key, "card:"))
+			offered, err := a.gacha.CardsWereOfferedTx(ctx, tx, ids)
+			if err != nil {
+				return nil, err
+			}
+			visible := make(map[string]bool, len(keys))
+			for _, key := range keys {
+				visible[key] = strings.HasPrefix(key, "card:") && offered[strings.TrimPrefix(key, "card:")]
+			}
+			return visible, nil
 		},
 		Unlock: func(ctx context.Context, tx *sql.Tx, user int64, key string) (bool, error) {
 			if !strings.HasPrefix(key, "card:") {

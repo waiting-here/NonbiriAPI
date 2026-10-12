@@ -44,7 +44,7 @@ func openPublicConfigStore(t *testing.T, useTemplate bool) *db.Store {
 		}
 	})
 	if useTemplate {
-		dbfixture.Materialize(t, path)
+		dbfixture.Materialize(t, path, vault)
 	} else {
 		dbtest.EnsureOwnerOnlyParent(t, path)
 	}

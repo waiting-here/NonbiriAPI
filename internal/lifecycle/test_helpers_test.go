@@ -359,7 +359,8 @@ func newLifecycleTestFixture(t *testing.T, now int64) *lifecycleTestFixture {
 	}
 	t.Cleanup(func() { _ = vault.Close() })
 	path := filepath.Join(t.TempDir(), "lifecycle.sqlite")
-	dbfixture.Materialize(t, path)
+
+	dbfixture.Materialize(t, path, vault)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		t.Fatalf("db.Open: %v", err)

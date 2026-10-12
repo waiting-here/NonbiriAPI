@@ -77,7 +77,8 @@ func newFixture(t *testing.T) *fixture {
 	}
 	t.Cleanup(func() { vault.Close() })
 	path := filepath.Join(t.TempDir(), "lake.db")
-	dbfixture.Materialize(t, path)
+
+	dbfixture.Materialize(t, path, vault)
 	store, e := db.Open(path, vault)
 	if e != nil {
 		t.Fatal(e)

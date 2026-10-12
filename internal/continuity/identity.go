@@ -78,7 +78,7 @@ func (service *Service) KeyForDiscord(discordID string) (Key, error) {
 }
 
 // UserKeyTx checks the current account in the caller's transaction. Missing
-// bindings can be derived during bounded startup backfill. Conflicting stored
+// bindings are derived when an account first needs its continuity identity. Conflicting stored
 // bindings fail closed; a deleted account cannot attach late work to a new one.
 func (service *Service) UserKeyTx(ctx context.Context, tx *sql.Tx, userID int64) (Key, error) {
 	if service == nil || ctx == nil || tx == nil || userID <= 0 {
@@ -128,51 +128,6 @@ func (service *Service) UserKey(ctx context.Context, userID int64) (Key, error) 
 		return Key{}, err
 	}
 	return key, tx.Commit()
-}
-
-// BackfillBatch binds only extant accounts, never inventing deleted history.
-// The caller owns the overall startup budget. A failed batch returns its input
-// cursor, so a retry cannot skip rows whose transaction was rolled back.
-func (service *Service) BackfillBatch(ctx context.Context, lastID int64, limit int) (int64, int, error) {
-	if service == nil || ctx == nil || lastID < 0 || limit < 1 || limit > 1000 {
-		return lastID, 0, ErrInvalid
-	}
-	tx, err := service.database.BeginTx(ctx, nil)
-	if err != nil {
-		return lastID, 0, err
-	}
-	defer tx.Rollback()
-	rows, err := tx.QueryContext(ctx, `SELECT u.id FROM users u WHERE u.is_admin=0 AND u.id>? AND NOT EXISTS(SELECT 1 FROM user_continuity_identities c WHERE c.user_id=u.id) ORDER BY u.id LIMIT ?`, lastID, limit)
-	if err != nil {
-		return lastID, 0, err
-	}
-	ids := make([]int64, 0, limit)
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			rows.Close()
-			return lastID, 0, err
-		}
-		ids = append(ids, id)
-	}
-	err = rows.Err()
-	if closeErr := rows.Close(); err == nil {
-		err = closeErr
-	}
-	if err != nil {
-		return lastID, 0, err
-	}
-	next := lastID
-	for _, id := range ids {
-		if _, err := service.BindUserTx(ctx, tx, id); err != nil {
-			return lastID, 0, err
-		}
-		next = id
-	}
-	if err := tx.Commit(); err != nil {
-		return lastID, 0, err
-	}
-	return next, len(ids), nil
 }
 
 func (service *Service) Close() error {

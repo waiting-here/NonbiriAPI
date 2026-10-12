@@ -23,13 +23,10 @@ func TestStorageContractsCompatibilityRegistryIsDetachedAndClosed(t *testing.T) 
 		}
 		seen[hash] = true
 	}
-	if len(seen) != 18 || !seen[rewardsManifestHash] || !seen[requestFactsManifestHash] || !seen[personalAdaptationManifestHash] || !seen[sessionHeadersManifestHash] || !seen[contextPricingManifestHash] || !seen[userAppearanceManifestHash] || !seen[gachaManifestHash] || !seen[personalBalancedRoutingManifestHash] || !seen[modelTypesAndImagesManifestHash] || !seen[discordGateManifestHash] || !seen[gwentAIManifestHash] || !seen[managementAndGamesManifestHash] || !seen[aiPlayersManifestHash] || !seen[preLedgerRetentionManifestHash] || !seen[preQueryIndexesManifestHash] || !seen[preStorageVersionManifestHash] || !seen[baselineManifestHash] || !seen[terminalReservationIndexesManifestHash] {
-		t.Fatal("deployed source missing")
+	if len(seen) != 0 || descriptor.MinimumSchemaVersion != 17 || descriptor.SchemaVersion != 17 || len(descriptor.SourceSchemaVersions) != 0 {
+		t.Fatal("unexpected stable schema history", descriptor)
 	}
-	if descriptor.SchemaVersion != 16 || !reflect.DeepEqual(descriptor.SourceSchemaVersions, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}) {
-		t.Fatal("unexpected stable schema history")
-	}
-	descriptor.SourceManifestHashes[0] = "unknown"
+	descriptor.SourceManifestHashes = append(descriptor.SourceManifestHashes, "unknown")
 	if reflect.DeepEqual(descriptor, GenerationTwoCompatibilityDescriptor()) {
 		t.Fatal("descriptor mutation changed registry")
 	}

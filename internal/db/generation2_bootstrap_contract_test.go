@@ -1016,7 +1016,7 @@ func TestGenerationTwoCurrentRecoveryFailurePreservesStableClassification(t *tes
 	}
 }
 
-func TestGenerationTwoCurrentRejectsNonGenerationTwoSecretEnvelopes(t *testing.T) {
+func TestOfflineVerificationRejectsNonGenerationTwoSecretEnvelopes(t *testing.T) {
 	cases := []struct {
 		name       string
 		makeCipher func(t *testing.T, vault *secret.Vault, contextID []byte) string
@@ -1058,7 +1058,7 @@ func TestGenerationTwoCurrentRejectsNonGenerationTwoSecretEnvelopes(t *testing.T
 			insertBootstrapSecretRow(t, path, contextID, envelope, nil)
 			clear(contextID)
 			before := snapshotBootstrapSources(t, path)
-			_, err := Open(path, bootstrapTestVault(t))
+			err := VerifyContext(t.Context(), path, bootstrapTestVault(t), nil)
 			assertBootstrapStartupKind(t, err, StartupCredentialReject)
 			assertBootstrapSourcesUnchanged(t, path, before)
 		})

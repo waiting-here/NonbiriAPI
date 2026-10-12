@@ -143,7 +143,8 @@ func newFixture(t *testing.T) *fixture {
 		t.Fatal(err)
 	}
 	path := filepath.Join(t.TempDir(), "linklink.db")
-	dbfixture.Materialize(t, path)
+
+	dbfixture.Materialize(t, path, vault)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		vault.Close()

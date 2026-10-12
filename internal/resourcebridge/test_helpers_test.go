@@ -59,7 +59,8 @@ func newBridgeFixtureWithRandom(t testing.TB, random io.Reader) *bridgeFixture {
 	t.Cleanup(func() { _ = inner.Close() })
 	vault := &trackingVault{inner: inner}
 	path := filepath.Join(t.TempDir(), "resourcebridge.sqlite")
-	dbfixture.Materialize(t, path)
+
+	dbfixture.Materialize(t, path, vault)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		t.Fatalf("db.Open: %v", err)
@@ -349,6 +350,13 @@ func (v *trackingVault) SealForGenerationTwoContext(plaintext []byte, credential
 		return "", errors.New(errorText)
 	}
 	return v.inner.SealForGenerationTwoContext(plaintext, credentialContext)
+}
+
+func (v *trackingVault) CreateDatabaseMaterial() ([]byte, error) {
+	return v.inner.CreateDatabaseMaterial()
+}
+func (v *trackingVault) ValidateDatabaseMaterial(envelope []byte) error {
+	return v.inner.ValidateDatabaseMaterial(envelope)
 }
 
 func (v *trackingVault) OpenForGenerationTwoContext(ciphertext string, credentialContext secret.GenerationTwoEndpointKeyContext) ([]byte, error) {

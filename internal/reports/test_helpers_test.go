@@ -142,7 +142,8 @@ func newReportTestEnvironmentWith(t *testing.T, options reportTestOptions) *repo
 		t.Fatalf("secret.New: %v", err)
 	}
 	path := filepath.Join(t.TempDir(), "reports.sqlite")
-	dbfixture.Materialize(t, path)
+
+	dbfixture.Materialize(t, path, vault)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		_ = vault.Close()

@@ -183,7 +183,7 @@ func validatePlan(plan Plan) error {
 	if !validSourceID(spec.sourceType, spec.sourceID) || spec.sourceType == sourceOperation && spec.sourceID != spec.meta.OperationID {
 		return ErrInvalidPlan
 	}
-	if spec.kind == KindRPSRoundCut {
+	if operationRules[spec.kind].positiveSequence {
 		if spec.sourceSeq.Big().Sign() <= 0 {
 			return ErrInvalidPlan
 		}
@@ -191,12 +191,12 @@ func validatePlan(plan Plan) error {
 		return ErrInvalidPlan
 	}
 	if spec.reason != "" {
-		if !validReason(spec.reason) || spec.kind != KindAdminUserAdjustment && spec.kind != KindAdminPoolAdjustment && spec.kind != KindAntiAbusePenalty && spec.kind != KindRewardGrant {
+		if !validReason(spec.reason) || !operationRules[spec.kind].reason {
 			return ErrInvalidPlan
 		}
 	}
 	if spec.donation != nil {
-		if spec.donation.userID <= 0 || spec.donation.accountID <= 0 || spec.kind != KindAdminUserAdjustment && spec.kind != KindDonorReward && spec.kind != KindGachaThemeReward && spec.kind != KindLakeCollectionReward {
+		if spec.donation.userID <= 0 || spec.donation.accountID <= 0 || !operationRules[spec.kind].donation {
 			return ErrInvalidPlan
 		}
 	}

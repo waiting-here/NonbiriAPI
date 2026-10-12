@@ -56,6 +56,8 @@ const (
 type GenerationTwoContextCodec interface {
 	OpenForGenerationTwoContext(ciphertext string, context GenerationTwoEndpointKeyContext) ([]byte, error)
 	SealForGenerationTwoContext(plaintext []byte, context GenerationTwoEndpointKeyContext) (string, error)
+	CreateDatabaseMaterial() ([]byte, error)
+	ValidateDatabaseMaterial(envelope []byte) error
 }
 
 // Vault holds the process master key and implements authenticated encryption.

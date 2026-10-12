@@ -56,7 +56,8 @@ func newPublicScopeFixture(t *testing.T, rpm ratelimit.RPMConfig, downstreamStat
 	}
 	t.Cleanup(func() { _ = vault.Close() })
 	path := filepath.Join(t.TempDir(), "scope.sqlite")
-	dbfixture.Materialize(t, path)
+
+	dbfixture.Materialize(t, path, vault)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		t.Fatal(err)
@@ -91,9 +92,6 @@ VALUES('Test account',?,?,?,?,?,?,?,?,?,?)`, zero, zero, zero, zero, zero, zero,
 	t.Cleanup(func() { _ = flow.Close() })
 	claims, err := claim.New(claim.Dependencies{DB: store.DB(), Secrets: vault})
 	if err != nil {
-		t.Fatal(err)
-	}
-	if err := claims.InitializeUsageTotals(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	abuse, err = antiabuse.NewService(antiabuse.ServiceConfig{Database: store.DB(), Rejections: noShortRejection{claims, t}, BeginUserRetirement: func(_ context.Context, id int64) (antiabuse.Retirement, error) { return flow.BeginUserRetirement(id) }})

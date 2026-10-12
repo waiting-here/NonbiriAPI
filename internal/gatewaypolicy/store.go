@@ -3,55 +3,15 @@ package gatewaypolicy
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 )
 
 type Store struct{ database *sql.DB }
 
 func NewStore(database *sql.DB) *Store { return &Store{database: database} }
-
-// Initialize imports the legacy startup configuration exactly once, including
-// an empty configuration. A later environment value cannot restore deleted rows.
-func (s *Store) Initialize(ctx context.Context, raw string, fallback Config) error {
-	tx, err := s.database.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	var exists int
-	if err = tx.QueryRowContext(ctx, "SELECT count(*) FROM gateway_model_capabilities_state WHERE singleton=1").Scan(&exists); err != nil {
-		return err
-	}
-	if exists != 0 {
-		return tx.Commit()
-	}
-	config := fallback
-	if strings.TrimSpace(raw) != "" {
-		config, err = Parse(raw)
-		if err != nil {
-			return err
-		}
-	}
-	now := time.Now().UTC().Unix()
-	for _, entry := range config.Entries() {
-		policy, err := json.Marshal(entry.Policy)
-		if err != nil {
-			return err
-		}
-		if _, err = tx.ExecContext(ctx, "INSERT INTO gateway_model_capabilities(base_url,model,policy_json,revision,updated_at) VALUES(?,?,?,1,?)", entry.BaseURL, entry.Model, string(policy), now); err != nil {
-			return err
-		}
-	}
-	if _, err = tx.ExecContext(ctx, "INSERT INTO gateway_model_capabilities_state(singleton,initialized_at) VALUES(1,?)", now); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
 
 type Record struct {
 	ID        string `json:"id"`
