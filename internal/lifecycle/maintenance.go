@@ -23,6 +23,16 @@ func (stage lifecycleStageError) Error() string {
 
 func (stage lifecycleStageError) Unwrap() error { return stage.err }
 
+// FailureDomain returns the coordinator-owned domain label for a failed phase.
+// It does not expose the underlying error, which can contain private data.
+func FailureDomain(err error) string {
+	var stage lifecycleStageError
+	if errors.As(err, &stage) {
+		return stage.domain
+	}
+	return ""
+}
+
 // RecoverBeforeListener runs the full fixed recovery order synchronously.
 // Any failed domain keeps listener startup closed, but later domains are still
 // attempted so one failure does not hide another recoverable backlog.
