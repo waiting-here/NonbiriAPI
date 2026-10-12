@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -18,8 +19,8 @@ type browserFamily struct {
 }
 
 var browserFamilies = []browserFamily{
-	{[]string{"internal/gacha/", "internal/appearance/", "web/src/user/activities/gacha/", "web/src/user/features/appearance/", "web/public/assets/gacha/"}, []string{"gacha-", "heart-moment", "appearance-", "rewards", "checkin-choice", "newcomer-rewards"}, []string{"management"}, false},
-	{[]string{"internal/game/linklink/", "web/src/user/games/linklink/"}, []string{"linklink-", "game-experience", "game-shell-controls", "desktop-game-layout"}, nil, false},
+	{[]string{"internal/gacha/", "internal/appearance/", "web/src/user/activities/gacha/", "web/src/user/features/appearance/", "web/public/assets/gacha/"}, []string{"gacha-", "heart-moment", "appearance-", "rewards", "checkin-choice", "newcomer-rewards", "frontend-lifecycle"}, []string{"management"}, false},
+	{[]string{"internal/game/linklink/", "web/src/user/games/linklink/"}, []string{"linklink-", "game-experience", "game-presentation", "game-shell-controls", "desktop-game-layout", "frontend-lifecycle"}, nil, false},
 	{[]string{"internal/fatfish/", "web/src/user/games/fatfish/", "web/public/assets/fatfish/", "web/test/fatfish/", "web/test/fatfish-assets/", "web/test/fatfish-engine/"}, []string{"fatfish-", "game-experience", "desktop-game-layout"}, []string{"fatfish"}, true},
 	{[]string{"internal/lakenotes/", "web/src/user/games/lakenotes/", "web/src/user/games/lake-notes/", "web/public/assets/lake-notes/"}, []string{"lake-", "game-experience", "desktop-game-layout"}, []string{"lakenotes"}, false},
 	{[]string{"internal/picturebook/", "web/src/user/activities/picturebook/", "web/test/picturebook/"}, []string{"image-", "game-experience"}, []string{"picturebook"}, false},
@@ -87,13 +88,21 @@ func selectBrowserPlan(plan *verificationPlan) error {
 	related := map[string]bool{}
 	all := plan.Mode == "full"
 	unitAll := all
-	paths, err := filepath.Glob("web/test/e2e/*.spec.ts")
+	catalog := map[string]bool{}
+	err := filepath.WalkDir("web/test/e2e", func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			if path == "web/test/e2e" && errors.Is(err, fs.ErrNotExist) {
+				return nil
+			}
+			return err
+		}
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".spec.ts") {
+			catalog[strings.TrimPrefix(filepath.ToSlash(path), "web/")] = true
+		}
+		return nil
+	})
 	if err != nil {
 		return err
-	}
-	catalog := map[string]bool{}
-	for _, path := range paths {
-		catalog[strings.TrimPrefix(filepath.ToSlash(path), "web/")] = true
 	}
 	for _, path := range plan.Changed {
 		if documentationFile(path) {

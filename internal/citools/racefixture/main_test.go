@@ -38,7 +38,8 @@ func TestRunCreatesClosedCredentialFreeTemplate(t *testing.T) {
 			t.Fatalf("closed template has sidecar %s: %v", suffix, err)
 		}
 	}
-	key := bytes.Repeat([]byte{0x55}, secret.MasterKeyBytes)
+	// The shared template uses the fixed synthetic key from dbfixture.
+	key := bytes.Repeat([]byte{0x41}, secret.MasterKeyBytes)
 	vault, err := secret.New(key)
 	clear(key)
 	if err != nil {

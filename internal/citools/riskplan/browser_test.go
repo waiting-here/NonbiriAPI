@@ -83,3 +83,57 @@ func TestMissingBrowserCatalogFailsBeforeSelectingNoTests(t *testing.T) {
 		t.Fatal("empty browser catalog accepted")
 	}
 }
+
+func TestBrowserCatalogIncludesNestedAndRenamedSpecs(t *testing.T) {
+	browserCatalogFixture(t)
+	path := "web/test/e2e/nested/renamed.spec.ts"
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, changed := range []string{path, "web/test/e2e/nested/previous.spec.ts"} {
+		plan := verificationPlan{Mode: "routine", Changed: []string{changed}}
+		if err := selectBrowserPlan(&plan); err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Contains(plan.Browser.Specs, "test/e2e/nested/renamed.spec.ts") {
+			t.Fatalf("nested or renamed spec omitted: %+v", plan.Browser)
+		}
+	}
+	plan := verificationPlan{Mode: "full", Web: true}
+	if err := selectBrowserPlan(&plan); err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Browser.Specs) != 6 {
+		t.Fatalf("full catalog: %+v", plan.Browser.Specs)
+	}
+}
+
+func TestBrowserSharedGameContractsFollowTheirModules(t *testing.T) {
+	browserCatalogFixture(t)
+	for _, name := range []string{"game-presentation", "frontend-lifecycle"} {
+		if err := os.WriteFile("web/test/e2e/"+name+".spec.ts", nil, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, path := range []string{"internal/game/linklink/service.go", "web/src/user/games/linklink/LinkLinkGame.tsx"} {
+		plan := verificationPlan{Mode: "routine", Changed: []string{path}}
+		if err := selectBrowserPlan(&plan); err != nil {
+			t.Fatal(err)
+		}
+		for _, spec := range []string{"linklink-hints", "game-presentation", "frontend-lifecycle"} {
+			if !slices.Contains(plan.Browser.Specs, "test/e2e/"+spec+".spec.ts") {
+				t.Fatalf("%s missing %s", path, spec)
+			}
+		}
+	}
+	plan := verificationPlan{Mode: "routine", Changed: []string{"internal/gacha/http.go"}}
+	if err := selectBrowserPlan(&plan); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(plan.Browser.Specs, "test/e2e/frontend-lifecycle.spec.ts") {
+		t.Fatal("gacha identity/entry regression omitted")
+	}
+}
