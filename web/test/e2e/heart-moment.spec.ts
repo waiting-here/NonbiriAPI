@@ -79,6 +79,23 @@ const snapshot = {
   },
 };
 
+const shopSnapshot = {
+  ...snapshot,
+  visible_themes: [...snapshot.visible_themes, 'h', 'j'],
+  pools: [
+    ...snapshot.pools,
+    {
+      ...snapshot.pools[0],
+      id: 'limited',
+      kind: 'limited',
+      cover: 'h',
+      featured: ['h-chatgpt', 'j-chatgpt', 'l-chatgpt'],
+      starts_at: snapshot.server_time - 60,
+      ends_at: snapshot.server_time + 60,
+    },
+  ],
+};
+
 for (const mode of ['light', 'dark'])
   for (const width of [1440, 390])
     test('heartfelt moments selection and persistence ' + mode + ' ' + width, async ({ page }) => {
@@ -103,12 +120,12 @@ for (const mode of ['light', 'dark'])
       await page.route('**/api/gacha/entry', (route) =>
         route.fulfill({ json: { enabled: true, entered: true, pools: [] } }),
       );
-      await page.route('**/api/gacha/state', (route) => route.fulfill({ json: snapshot }));
+      await page.route('**/api/gacha/state', (route) => route.fulfill({ json: shopSnapshot }));
       let enters = 0;
       await page.route('**/api/gacha/actions', (route) => {
         expect(route.request().postDataJSON().action).toBe('enter');
         enters++;
-        return route.fulfill({ json: { snapshot } });
+        return route.fulfill({ json: { snapshot: shopSnapshot } });
       });
       const appearance = {
         selected: 'default',
@@ -188,6 +205,11 @@ for (const mode of ['light', 'dark'])
       await page.locator('input[name="appearance"][value="default"]').check();
       await page.getByRole('button', { name: '应用装扮', exact: true }).click();
       await expect(page.locator('.nb-moment-backdrop')).toHaveCount(0);
+      expect(
+        await page.evaluate(() =>
+          document.documentElement.style.getPropertyValue('--nb-moment-hue'),
+        ),
+      ).toBe('');
       await openAppearance();
       await page.locator('input[name="appearance"][value="heart-moment"]').check();
       await page.getByRole('button', { name: '应用装扮', exact: true }).click();
@@ -229,6 +251,21 @@ for (const mode of ['light', 'dark'])
           path: resolve(
             process.env.NONBIRI_VISUAL_DIR,
             'moment-page-' + mode + '-' + width + '.png',
+          ),
+        });
+      await page.goto(USER_ORIGIN + '/activities/gacha');
+      await page.getByRole('tab', { name: '神秘商店', exact: true }).click();
+      await expect(
+        page.getByText('兑换需要：30 N 碎片 和 15 R 碎片', { exact: true }).first(),
+      ).toBeVisible();
+      const price = page.getByText('兑换需要：9 SSR 碎片', { exact: true });
+      await expect(price).toBeVisible();
+      await price.scrollIntoViewIfNeeded();
+      if (process.env.NONBIRI_VISUAL_DIR)
+        await page.screenshot({
+          path: resolve(
+            process.env.NONBIRI_VISUAL_DIR,
+            'shop-prices-' + mode + '-' + width + '.png',
           ),
         });
       guard.assertNone();

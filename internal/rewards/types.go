@@ -88,6 +88,11 @@ type Receipt struct {
 	CreatedAt   int64                `json:"created_at"`
 	CompletedAt *int64               `json:"completed_at,omitempty"`
 }
+type Redemption struct {
+	Receipt
+	AlreadyClaimed bool `json:"already_claimed"`
+}
+
 type Preview struct {
 	Matched int64 `json:"matched"`
 	Banned  int64 `json:"banned"`

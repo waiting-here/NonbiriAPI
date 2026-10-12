@@ -4,7 +4,9 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
-## [1.0.0-rc.7] - Unreleased
+## [1.0.0-rc.7] - 2026-10-12
+
+This source prerelease supports fresh databases, the final rc.5 schema and registered rc.6/rc.7 schemas. SQLite remains Generation 2 with schema revision 16; account exports use schema 19. Build from the tagged source; no official prebuilt binaries are provided. See the deployment guide for supported upgrades and complete-snapshot restore requirements.
 
 ### Added
 
@@ -44,6 +46,9 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Fixed
 
+- Themed donation lists, filters, tables and older cards retain readable surfaces. Heartfelt moments gently tint the shared interface from the selected artwork while keeping light and dark text contrast stable.
+- Mystery-shop cards show their individual shard costs. Reusing a reward code explicitly reports that it was already claimed and identifies the earlier receipt without issuing rewards again.
+- Selecting or clearing a limited-card theme in the administrator pool editor no longer saves the pool or template automatically.
 - Appearance settings hide unowned designs whose cards have never been offered, including future and never-open paused pools.
 - Wallpaper portraits keep their faces, bodies and limbs fixed; only individually marked hair ends and loose fabric sway.
 - SSR/SP card blinks follow individual eyelid contours without crossfading the surrounding face. Card animation now uses the same phase-preserving 60 Hz cadence as appearance wallpapers.

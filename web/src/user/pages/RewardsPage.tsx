@@ -12,7 +12,7 @@ import {
   getReceipts,
   redeemReward,
   rewardKeys,
-  type Receipt,
+  type Redemption,
 } from '@shared/rewards/api';
 import { useUserSession } from '../data';
 import '@shared/rewards/rewards.css';
@@ -29,7 +29,7 @@ function RewardsContent({ account }: { account: string }) {
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>();
-  const [result, setResult] = useState<Receipt>();
+  const [result, setResult] = useState<Redemption>();
   const [rejection, setRejection] = useState('');
   const [cursor, setCursor] = useState('');
   const [pages, setPages] = useState<string[]>([]);
@@ -110,8 +110,22 @@ function RewardsContent({ account }: { account: string }) {
           )}
           {result && (
             <div className="reward-stack">
-              <Note tone="ok" title={t('common.rewards.received')}>
+              <Note
+                tone={result.already_claimed ? 'info' : 'ok'}
+                title={t(
+                  result.already_claimed
+                    ? 'common.rewards.alreadyClaimed'
+                    : 'common.rewards.received',
+                )}
+              >
                 {result.title}
+                {result.already_claimed && (
+                  <p>
+                    {t('common.rewards.previousReceipt', {
+                      time: time(result.completed_at ?? result.created_at),
+                    })}
+                  </p>
+                )}
               </Note>
               <RewardSummary items={result.results} assets={assets.data ?? []} results />
             </div>

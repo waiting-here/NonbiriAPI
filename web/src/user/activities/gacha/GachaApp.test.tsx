@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { GachaApp } from './GachaApp';
+import { Shop } from './Shop';
 import { themes } from './catalog';
 import { defaultRules, consolidatedRates } from './rules';
 import type { GachaPort, Outcome, Snapshot } from './types';
@@ -57,6 +58,38 @@ function snapshot(): Snapshot {
     },
   };
 }
+
+it.each([false, true])(
+  'labels every shop card with its actual shard cost, English=%s',
+  (english) => {
+    const state = snapshot();
+    state.pools.push({
+      ...state.pools[0],
+      id: 'limited',
+      kind: 'limited',
+      starts_at: state.server_time - 60,
+      ends_at: state.server_time + 60,
+      featured: ['h-chatgpt', 'j-chatgpt', 'l-chatgpt'],
+    });
+    const view = render(
+      <Shop state={state} english={english} busy={false} act={vi.fn()} inspect={vi.fn()} />,
+    );
+    const prices = [...view.container.querySelectorAll('.gacha-shop-card__price')].map(
+      (node) => node.textContent,
+    );
+    if (english) {
+      expect(prices).toContain('Cost: 30 N shards and 15 R shards');
+      expect(prices).toContain('Cost: 10 SR shards');
+      expect(prices).toContain('Cost: 3 SSR shards');
+      expect(prices).toContain('Cost: 9 SSR shards');
+    } else {
+      expect(prices).toContain('兑换需要：30 N 碎片 和 15 R 碎片');
+      expect(prices).toContain('兑换需要：10 SR 碎片');
+      expect(prices).toContain('兑换需要：3 SSR 碎片');
+      expect(prices).toContain('兑换需要：9 SSR 碎片');
+    }
+  },
+);
 it('claims both daily tickets independently', async () => {
   const state = snapshot();
   const port: GachaPort = {

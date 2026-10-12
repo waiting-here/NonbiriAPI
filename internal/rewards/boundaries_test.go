@@ -60,8 +60,8 @@ func TestCodeWindowEligibilityAndAdminBoundary(t *testing.T) {
 	if _, e := f.s.Update(t.Context(), f.admin, edit); e != nil {
 		t.Fatal("lost update response", e)
 	}
-	if _, e := f.s.Redeem(t.Context(), f.user, c.Code); e != nil {
-		t.Fatal("committed receipt lost after disable", e)
+	if result, e := f.s.Redeem(t.Context(), f.user, c.Code); e != nil || !result.AlreadyClaimed {
+		t.Fatal("committed receipt lost after disable", result, e)
 	}
 }
 func TestBroadcastCapacityRetryAndRestart(t *testing.T) {

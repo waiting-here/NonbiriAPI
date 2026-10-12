@@ -172,7 +172,17 @@ html:is(
     [data-appearance='wandering'],
     [data-appearance='heart-moment']
   )
-  :is(.nb-panel, .nb-page-header, .nb-fold, .nb-card) {
+  :is(
+    .nb-panel,
+    .nb-page-header,
+    .nb-fold:not(.nb-fold--plain),
+    .card,
+    .core-card,
+    .nb-list:not(:empty),
+    .nb-table-wrap,
+    .table-wrap,
+    .ops-subcard
+  ) {
   background: linear-gradient(
     135deg,
     var(--nb-appearance-glass-edge),
@@ -183,9 +193,63 @@ html:is(
   border-color: var(--nb-appearance-glass-line);
   box-shadow:
     inset 0 1px 0 var(--nb-appearance-glass-line),
-    0 0 24px 6px var(--nb-appearance-glass-glow),
-    0 12px 32px -12px var(--nb-appearance-glass-shadow);
+    0 8px 24px -12px var(--nb-appearance-glass-shadow);
   backdrop-filter: blur(24px) saturate(0.85);
+}
+
+html:is(
+    [data-appearance='celestial'],
+    [data-appearance='wandering'],
+    [data-appearance='heart-moment']
+  )
+  :is(.nb-list:not(:empty), .nb-table-wrap, .table-wrap) {
+  border: 1px solid var(--nb-appearance-glass-line);
+  border-radius: var(--nb-radius-lg);
+}
+
+html:is(
+    [data-appearance='celestial'],
+    [data-appearance='wandering'],
+    [data-appearance='heart-moment']
+  )
+  .nb-list:not(:empty) {
+  padding-inline: var(--nb-space-4);
+}
+
+html:is(
+    [data-appearance='celestial'],
+    [data-appearance='wandering'],
+    [data-appearance='heart-moment']
+  )
+  :is(.nb-filter, .nb-pager, .economy-owner-filters, .core-resource-filters, form.ops-toolbar) {
+  padding: var(--nb-space-3) var(--nb-space-4);
+  border-radius: var(--nb-radius-md);
+  background: var(--nb-appearance-glass-core);
+  backdrop-filter: blur(24px);
+}
+
+/* Nested surfaces share their parent's frost instead of stacking blur and shadows. */
+html:is(
+    [data-appearance='celestial'],
+    [data-appearance='wandering'],
+    [data-appearance='heart-moment']
+  )
+  :is(.nb-panel, .card, .core-card, .nb-fold:not(.nb-fold--plain), .nb-list)
+  :is(
+    .nb-panel,
+    .card,
+    .core-card,
+    .nb-fold:not(.nb-fold--plain),
+    .nb-list,
+    .nb-table-wrap,
+    .table-wrap,
+    .ops-subcard,
+    .nb-filter,
+    .nb-pager
+  ) {
+  background: color-mix(in srgb, var(--nb-color-surface) 38%, transparent);
+  box-shadow: none;
+  backdrop-filter: none;
 }
 html:is(
     [data-appearance='celestial'],
@@ -209,7 +273,22 @@ html:is(
       [data-appearance='wandering'],
       [data-appearance='heart-moment']
     )
-    :is(.nb-panel, .nb-page-header, .nb-fold, .nb-card) {
+    :is(
+      .nb-panel,
+      .nb-page-header,
+      .nb-fold,
+      .card,
+      .core-card,
+      .nb-list,
+      .nb-table-wrap,
+      .table-wrap,
+      .ops-subcard,
+      .nb-filter,
+      .nb-pager,
+      .economy-owner-filters,
+      .core-resource-filters,
+      form.ops-toolbar
+    ) {
     background: var(--nb-color-surface);
   }
 }

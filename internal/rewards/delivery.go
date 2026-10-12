@@ -22,8 +22,8 @@ func (s *Service) attempt(user, at int64) bool {
 	s.attempts[user]++
 	return s.attempts[user] <= 12
 }
-func (s *Service) Redeem(ctx context.Context, user int64, code string) (Receipt, error) {
-	var out Receipt
+func (s *Service) Redeem(ctx context.Context, user int64, code string) (Redemption, error) {
+	var out Redemption
 	at, err := s.now()
 	if err != nil {
 		return out, err
@@ -63,7 +63,9 @@ func (s *Service) Redeem(ctx context.Context, user int64, code string) (Receipt,
 	var claimID int64
 	err = tx.QueryRowContext(ctx, "SELECT id FROM reward_claims WHERE campaign_id=? AND user_id=? AND status='success'", id, user).Scan(&claimID)
 	if err == nil {
-		return readReceipt(ctx, tx, user, claimID)
+		out.Receipt, err = readReceipt(ctx, tx, user, claimID)
+		out.AlreadyClaimed = err == nil
+		return out, err
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return out, err
@@ -98,7 +100,7 @@ func (s *Service) Redeem(ctx context.Context, user int64, code string) (Receipt,
 			return out, err
 		}
 	}
-	out, err = readReceipt(ctx, tx, user, claimID)
+	out.Receipt, err = readReceipt(ctx, tx, user, claimID)
 	if err != nil {
 		return out, err
 	}

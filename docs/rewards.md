@@ -72,4 +72,6 @@ Example creation body:
 
 Fields are `level,donation,registered_at,registered_days,banned,asset`; asset comparisons also supply the catalog `asset` identifier. Numeric operators are `eq,ne,gt,gte,lt,lte`; booleans support only `eq,ne`. Registration timestamps and schedule boundaries are Unix seconds. No-condition eligibility is `{"op":"all"}`.
 
+Successful redemption responses include the receipt and `already_claimed`: `false` for a new grant, `true` when returning an earlier claim. The user interface identifies an earlier claim and shows its original time and rewards. This response flag is not stored in receipt history or account exports.
+
 Normal unsuccessful claims return `{"rejection":"unavailable"}`, `conditions` or `capacity`; unavailable combines unknown, disabled, out-of-window and exhausted codes. Other errors use the standard error envelope.

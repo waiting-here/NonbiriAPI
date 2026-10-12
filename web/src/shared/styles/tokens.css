@@ -202,11 +202,11 @@
   --nb-color-surface-emphasis: #dee9df;
   --nb-color-surface-alt: #f4f8f2;
   --nb-color-text: #1e3935;
-  --nb-color-text-muted: #53695e;
-  --nb-color-text-subtle: #657867;
+  --nb-color-text-muted: #3d5449;
+  --nb-color-text-subtle: #465e50;
   --nb-color-border: #c3d6c6;
   --nb-color-border-strong: #8eae9c;
-  --nb-color-accent: #296b57;
+  --nb-color-accent: #215e4b;
   --nb-color-accent-hover: #1e5845;
   --nb-color-accent-soft: #dfecdf;
   --nb-color-accent-quiet: #f1f7ec;
@@ -240,11 +240,11 @@
   --nb-color-surface-emphasis: #d9ebec;
   --nb-color-surface-alt: #f0f8f8;
   --nb-color-text: #173b46;
-  --nb-color-text-muted: #4d6c74;
-  --nb-color-text-subtle: #5f7980;
+  --nb-color-text-muted: #39535d;
+  --nb-color-text-subtle: #3e5d67;
   --nb-color-border: #b9d3d7;
   --nb-color-border-strong: #81adb8;
-  --nb-color-accent: #176777;
+  --nb-color-accent: #175867;
   --nb-color-accent-hover: #0e5361;
   --nb-color-accent-soft: #d9edf0;
   --nb-color-accent-quiet: #eef8f8;
@@ -260,7 +260,7 @@
   --nb-color-surface-alt: #153641;
   --nb-color-text: #dff2f5;
   --nb-color-text-muted: #a0c3cf;
-  --nb-color-text-subtle: #8aacb7;
+  --nb-color-text-subtle: #a0bdc7;
   --nb-color-border: #315b69;
   --nb-color-border-strong: #507f8d;
   --nb-color-accent: #8bd7e6;
@@ -271,17 +271,55 @@
   --nb-elevation-1: 0 3px 16px #01101740;
 }
 
-/* Diffuse edges let the painting tint surfaces without competing with text. */
+/* Artwork supplies only the hue; lightness stays bounded for readable controls. */
+:root[data-appearance='heart-moment'] {
+  --nb-moment-hue: 215deg;
+  --nb-color-bg: hsl(var(--nb-moment-hue) 24% 94%);
+  --nb-color-surface: hsl(var(--nb-moment-hue) 32% 98%);
+  --nb-color-surface-raised: hsl(var(--nb-moment-hue) 24% 99%);
+  --nb-color-surface-muted: hsl(var(--nb-moment-hue) 26% 93%);
+  --nb-color-surface-emphasis: hsl(var(--nb-moment-hue) 28% 89%);
+  --nb-color-surface-alt: hsl(var(--nb-moment-hue) 26% 95%);
+  --nb-color-text: hsl(var(--nb-moment-hue) 25% 15%);
+  --nb-color-text-muted: hsl(var(--nb-moment-hue) 18% 28%);
+  --nb-color-text-subtle: hsl(var(--nb-moment-hue) 14% 30%);
+  --nb-color-border: hsl(var(--nb-moment-hue) 24% 78%);
+  --nb-color-border-strong: hsl(var(--nb-moment-hue) 26% 57%);
+  --nb-color-accent: hsl(var(--nb-moment-hue) 44% 24%);
+  --nb-color-accent-hover: hsl(var(--nb-moment-hue) 44% 22%);
+  --nb-color-accent-soft: hsl(var(--nb-moment-hue) 30% 89%);
+  --nb-color-accent-quiet: hsl(var(--nb-moment-hue) 26% 94%);
+  --nb-color-accent-contrast: #ffffff;
+}
+:root[data-appearance='heart-moment'][data-theme='dark'] {
+  --nb-color-bg: hsl(var(--nb-moment-hue) 30% 8%);
+  --nb-color-surface: hsl(var(--nb-moment-hue) 24% 13%);
+  --nb-color-surface-raised: hsl(var(--nb-moment-hue) 23% 16%);
+  --nb-color-surface-muted: hsl(var(--nb-moment-hue) 22% 18%);
+  --nb-color-surface-emphasis: hsl(var(--nb-moment-hue) 24% 22%);
+  --nb-color-surface-alt: hsl(var(--nb-moment-hue) 22% 15%);
+  --nb-color-text: hsl(var(--nb-moment-hue) 28% 94%);
+  --nb-color-text-muted: hsl(var(--nb-moment-hue) 20% 80%);
+  --nb-color-text-subtle: hsl(var(--nb-moment-hue) 16% 72%);
+  --nb-color-border: hsl(var(--nb-moment-hue) 20% 32%);
+  --nb-color-border-strong: hsl(var(--nb-moment-hue) 24% 46%);
+  --nb-color-accent: hsl(var(--nb-moment-hue) 50% 76%);
+  --nb-color-accent-hover: hsl(var(--nb-moment-hue) 52% 86%);
+  --nb-color-accent-soft: hsl(var(--nb-moment-hue) 30% 24%);
+  --nb-color-accent-quiet: hsl(var(--nb-moment-hue) 26% 18%);
+  --nb-color-accent-contrast: hsl(var(--nb-moment-hue) 30% 14%);
+}
+
+/* Frosted surfaces admit the artwork's colors without lowering text opacity. */
 :root:is(
   [data-appearance='celestial'],
   [data-appearance='wandering'],
   [data-appearance='heart-moment']
 ) {
-  --nb-appearance-glass-edge: color-mix(in srgb, var(--nb-color-surface-raised) 52%, transparent);
-  --nb-appearance-glass-core: color-mix(in srgb, var(--nb-color-surface-raised) 86%, transparent);
-  --nb-appearance-glass-line: color-mix(in srgb, var(--nb-color-surface-raised) 35%, transparent);
-  --nb-appearance-glass-shadow: color-mix(in srgb, var(--nb-color-accent) 16%, transparent);
-  --nb-appearance-glass-glow: color-mix(in srgb, var(--nb-color-surface-raised) 24%, transparent);
+  --nb-appearance-glass-edge: color-mix(in srgb, var(--nb-color-surface-raised) 82%, transparent);
+  --nb-appearance-glass-core: color-mix(in srgb, var(--nb-color-surface-raised) 88%, transparent);
+  --nb-appearance-glass-line: color-mix(in srgb, var(--nb-color-border) 42%, transparent);
+  --nb-appearance-glass-shadow: color-mix(in srgb, var(--nb-color-bg) 26%, transparent);
   --nb-appearance-glass-divider: color-mix(in srgb, var(--nb-color-border) 50%, transparent);
 }
 :root:is(
@@ -289,9 +327,8 @@
     [data-appearance='wandering'],
     [data-appearance='heart-moment']
   )[data-theme='dark'] {
-  --nb-appearance-glass-edge: color-mix(in srgb, var(--nb-color-surface) 78%, transparent);
+  --nb-appearance-glass-edge: color-mix(in srgb, var(--nb-color-surface) 94%, transparent);
   --nb-appearance-glass-core: color-mix(in srgb, var(--nb-color-surface) 96%, transparent);
   --nb-appearance-glass-line: color-mix(in srgb, var(--nb-color-border) 50%, transparent);
   --nb-appearance-glass-shadow: color-mix(in srgb, var(--nb-color-bg) 62%, transparent);
-  --nb-appearance-glass-glow: color-mix(in srgb, var(--nb-color-surface) 15%, transparent);
 }
