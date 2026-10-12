@@ -1,5 +1,6 @@
 import { Button } from '@shared/components/ui/Button';
 import { Icon } from '@shared/components/Icon';
+import { formatCount } from '@shared/utils/formatNumber';
 import { Panel, PanelHead, PanelBody } from '@shared/components/ui/Panel';
 import { cards, rarities, tierOf } from './catalog';
 import { poolOpen } from './rules';
@@ -167,24 +168,15 @@ export function Shop({
         {
           source: 'shop',
           title: t('口袋应援团', 'Pocket cheer squad'),
-          sub:
-            t('常驻专属 · 每张 ', 'Always available · ') +
-            s.chibi_n +
-            ' N + ' +
-            s.chibi_r +
-            t(' R 碎片 · 无法从奖池抽取', ' R shards each · shop exclusive'),
+          sub: t('常驻专属，无法从奖池抽取。', 'Always available, exclusively in the shop.'),
         },
         {
           source: 'limited',
           title: t('此刻限定', 'Here for a limited time'),
-          sub:
-            'SR: ' +
-            s.sr_card +
-            ' SR · SSR: ' +
-            s.ssr_card +
-            ' SSR · SP: ' +
-            s.sp_card +
-            t(' SSR 碎片 · 每卡仅兑换一次', ' SSR shards · once per card'),
+          sub: t(
+            '奖池开放期间可兑换，每张卡牌限兑换一次。',
+            'Available while its pool is open. Each card can be exchanged once.',
+          ),
         },
       ].map((section) => (
         <section key={section.source} className="gacha-shop__cards">
@@ -217,6 +209,24 @@ export function Shop({
                       owned={owned}
                       onClick={() => inspect(card)}
                     />
+                    <p className="gacha-shop-card__price">
+                      {t('兑换需要：', 'Cost: ')}
+                      {card.source === 'shop' ? (
+                        <>
+                          <span>
+                            {formatCount(s.chibi_n).display} N {t('碎片', 'shards')}
+                          </span>
+                          {t(' 和 ', ' and ')}
+                          <span>
+                            {formatCount(s.chibi_r).display} R {t('碎片', 'shards')}
+                          </span>
+                        </>
+                      ) : (
+                        <span>
+                          {formatCount(cost).display} {tierOf(card.rarity)} {t('碎片', 'shards')}
+                        </span>
+                      )}
+                    </p>
                     <Button
                       block
                       disabled={busy || owned || insufficient}

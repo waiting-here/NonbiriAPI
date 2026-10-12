@@ -933,6 +933,16 @@
   font-size: var(--nb-font-size-sm);
   color: var(--g-muted);
 }
+.gacha-shop-card__price {
+  margin: var(--nb-space-2) 0;
+  color: var(--nb-color-text);
+  font-size: var(--nb-font-size-sm);
+  text-align: center;
+}
+.gacha-shop-card__price span {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
 .gacha-shop-card {
   display: flex;
   flex-direction: column;
