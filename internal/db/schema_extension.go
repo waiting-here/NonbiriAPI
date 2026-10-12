@@ -55,7 +55,9 @@ var storageSchema = schemaRegistry{
 		{version: 11, manifest: contextPricingManifestHash, sql: contextPricingSQL},
 		{version: 12, manifest: sessionHeadersManifestHash, sql: sessionHeadersSQL},
 		{version: 13, manifest: personalAdaptationManifestHash, sql: personalAdaptationSQL},
-		{version: 14, manifest: PinnedGenerationTwoManifestHash, sql: requestFactsSQL},
+		{version: 14, manifest: requestFactsManifestHash, sql: requestFactsSQL},
+		{version: 15, manifest: rewardsManifestHash, sql: rewardsSQL},
+		{version: 16, manifest: PinnedGenerationTwoManifestHash, sql: heartMomentSQL},
 	},
 	bridges: preReleaseSchemaBridges(),
 }

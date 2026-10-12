@@ -12,7 +12,7 @@ family. The registered routes, export builder, deletion coordinator, retention w
 and bilingual privacy text are covered by their implementation and contract tests.
 Schema presence alone never creates a route or expands a response.
 
-Current account export schema 17 retains earlier safe projections and adds `gacha`, including balances, owned cards, guarantees, claims, activity journals and draw details within 180 days. Its filename is `nonbiriapi-account-export-v17.json`; SQLite `user_version` remains 2. The schema-11 rows remain historical coverage for fields still retained. This does not assert that any particular instance has been upgraded.
+Current account export schema 19 retains earlier safe projections, including `gacha` balances, owned cards, guarantees, claims, activity journals and draw details within 180 days, and adds the saved appearance artwork key. Its filename is `nonbiriapi-account-export-v19.json`; SQLite `user_version` remains 2. The schema-11 rows remain historical coverage for fields still retained. This does not assert that any particular instance has been upgraded.
 
 Donated keys include the current U128 failure-disable threshold in owner, management and safe export projections. It follows the parent key/donation lifecycle and adds no retention window. Policy edits add no-secret donation review facts, retained under the existing donation-review policy; account deletion removes actor links. A zero threshold preserves error counting but never disables a key for errors. Expiry, withdrawal, bans, manual switches and quota limits remain effective.
 
@@ -255,7 +255,7 @@ AI callbacks, cancellation, financial settlement, memory extraction and deletion
 
 `gacha_settings`, `gacha_pools` and `gacha_presets` are administrator configuration. `gacha_config_events` preserves revisions and clears deleted actor links. Public state omits drafts. Configuration history also determines whether limited-card themes have ever opened; the entry display switch is stored in the existing settings JSON. The activity collects no device identifiers, IP addresses, prompts, upstream keys or private image uploads.
 
-`user_appearance` stores the selected site cosmetic and its update time. Available cosmetics derive from permanent card ownership; no duplicate unlock ledger is needed. Export includes the selection and available designs. Account deletion removes the row in the same transaction as collection data. Reading appearance grants no activity rewards. The browser retains light/dark/system and sound/motion/vibration preferences; the server remains authoritative for cosmetic access.
+`user_appearance` stores the selected site cosmetic, remembered Heartfelt moments artwork key and update time. Available cosmetics and artwork derive from card ownership, theme completion and pool opening history; no duplicate unlock ledger is needed. Export includes the selection, remembered artwork and unlocked designs; the derived artwork eligibility list is omitted. Account deletion removes the row in the same transaction as collection data. Reading appearance grants no activity rewards. The browser retains light/dark/system and sound/motion/vibration preferences; the server remains authoritative for cosmetic access.
 
 ## Managed upstream session headers
 
@@ -266,3 +266,5 @@ Active logical requests retain their value. Sent completion extends the configur
 ### Selected-account IP audits
 
 Selected-account IP audits reuse the existing risk-scan query, result and source-reference storage. The frozen target is an original site-account ID; it does not create a new source event or include website sign-ins. The existing privileged access, 24-hour task expiry, source retirement, deletion and export exclusions remain applicable.
+
+Reward receipts are included in export schema 19 under `rewards`. They contain the account’s successful site-wide and code rewards, quantities, duplicate conversions and skipped items, without code text, eligibility configuration, other recipients or retry hashes. Receipts remain for the account lifetime and are removed on deletion; campaign totals and used quota remain. See [rewards](rewards.md).

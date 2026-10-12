@@ -15,7 +15,7 @@ type AuditClassification struct {
 func ClassifyForAudit(kind Kind, sourceID string) AuditClassification {
 	channel, behavior := "", ""
 	switch kind {
-	case KindAdminUserAdjustment, KindAdminPoolAdjustment:
+	case KindRewardGrant, KindAdminUserAdjustment, KindAdminPoolAdjustment:
 		channel, behavior = "admin", "adjustment"
 	case KindAccountDeleteZero:
 		channel, behavior = "account", "deletion"

@@ -66,17 +66,19 @@ export async function renderSSR(
   frozenTime?: number,
   paused?: () => boolean,
   highResolution = false,
+  options: { characterOnly?: boolean; signal?: AbortSignal } = {},
 ) {
   const cfg = configFor(id);
   const scene = spScenes[id];
   const image = (src: string) => load(highResolution ? highResolutionArt(src) : src);
   const [background, hero, closed, cloud] = await Promise.all([
-    image(cfg.background),
+    options.characterOnly ? null : image(cfg.background),
     image(cfg.hero),
     cfg.closed ? image(cfg.closed) : null,
-    cfg.cloud ? image(cfg.cloud) : null,
+    !options.characterOnly && cfg.cloud ? image(cfg.cloud) : null,
   ]);
-  const ctx = canvas.getContext('2d', { alpha: false });
+  if (options.signal?.aborted) return () => {};
+  const ctx = canvas.getContext('2d', { alpha: !!options.characterOnly });
   const layer = document.createElement('canvas');
   layer.width = canvas.width;
   layer.height = canvas.height;
@@ -139,7 +141,7 @@ void main(){
   const attr = gl.getAttribLocation(program, 'a');
   gl.enableVertexAttribArray(attr);
   gl.vertexAttribPointer(attr, 2, gl.FLOAT, false, 0, 0);
-  const textures = [hero, closed ?? hero, background].map((image, index) => {
+  const textures = [hero, closed ?? hero, background ?? hero].map((image, index) => {
     const i = index === 2 ? 3 : index;
     const texture = gl.createTexture();
     gl.activeTexture(gl.TEXTURE0 + i);
@@ -218,7 +220,7 @@ void main(){
   window.addEventListener('resize', resize);
   resize();
   function frame(at: number) {
-    if (stopped) return;
+    if (stopped || options.signal?.aborted) return;
     const isPaused = paused?.() && frozenTime === undefined;
     if (isPaused && painted) {
       last = at;
@@ -236,27 +238,22 @@ void main(){
       w = canvas.width,
       h = canvas.height;
     gl!.uniform1f(phase, p);
-    if (scene) {
+    if (scene && !options.characterOnly) {
       gl!.uniform1f(backgroundPass, 1);
       gl!.drawArrays(gl!.TRIANGLES, 0, 6);
       ctx!.drawImage(layer, 0, 0);
       paintSPAtmosphere(ctx!, scene, p, w, h);
-    } else
-      ctx!.drawImage(
-        background,
-        -w * 0.008 + Math.sin(p) * w * 0.003,
-        -h * 0.008,
-        w * 1.016,
-        h * 1.016,
-      );
+    } else if (background) ctx!.drawImage(background, 0, 0, w, h);
+    else ctx!.clearRect(0, 0, w, h);
     gl!.uniform1f(phase, p);
     gl!.uniform1f(backgroundPass, 0);
     gl!.uniform1f(blink, blinkAt(time));
     gl!.drawArrays(gl!.TRIANGLES, 0, 6);
-    if (cfg.pilot)
+    if (cfg.pilot && !options.characterOnly)
       ctx!.drawImage(layer, (w * 10) / 864, (h * 72) / 1296, (w * 844) / 864, (h * 1266) / 1296);
     else ctx!.drawImage(layer, 0, 0);
     if (cloud) {
+      const cloudPhase = scene ? p : 0;
       for (const [x, y, size, offset] of [
         [0.16, 0.25, 0.13, 0],
         [0.87, 0.285, 0.21, 0.5],
@@ -264,10 +261,10 @@ void main(){
       ]) {
         ctx!.save();
         ctx!.translate(
-          (x + Math.sin(p + offset) * 0.014) * w,
-          (y + Math.cos(p + offset) * 0.009) * h,
+          (x + Math.sin(cloudPhase + offset) * 0.014) * w,
+          (y + Math.cos(cloudPhase + offset) * 0.009) * h,
         );
-        ctx!.rotate(Math.sin(p + offset) * 0.055);
+        ctx!.rotate(Math.sin(cloudPhase + offset) * 0.055);
         ctx!.drawImage(cloud, (-size * w) / 2, (-size * w) / 2, size * w, size * w);
         ctx!.restore();
       }

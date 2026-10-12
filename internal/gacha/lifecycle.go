@@ -89,18 +89,20 @@ type DrawExport struct {
 	CatalogVersion int         `json:"catalog_version"`
 }
 type UserExport struct {
-	EnteredAt     int64             `json:"entered_at"`
-	CheckedDay    string            `json:"checked_day"`
-	Month         string            `json:"month"`
-	Balance       [6]int64          `json:"balance"`
-	BalanceAssets [6]string         `json:"balance_assets"`
-	Newcomer      bool              `json:"newcomer"`
-	MonthlyUsed   [2]int64          `json:"monthly_used"`
-	Owned         map[string]Owned  `json:"owned"`
-	Pity          map[string]Pity   `json:"pity"`
-	Claims        []ClaimExport     `json:"claims"`
-	Operations    []OperationExport `json:"operations"`
-	Draws         []DrawExport      `json:"draws"`
+	EnteredAt         int64             `json:"entered_at"`
+	CheckedDay        string            `json:"checked_day"`
+	LimitedCheckedDay string            `json:"limited_checked_day"`
+	WelcomeGranted    bool              `json:"welcome_granted"`
+	Month             string            `json:"month"`
+	Balance           [6]int64          `json:"balance"`
+	BalanceAssets     [6]string         `json:"balance_assets"`
+	Newcomer          bool              `json:"newcomer"`
+	MonthlyUsed       [2]int64          `json:"monthly_used"`
+	Owned             map[string]Owned  `json:"owned"`
+	Pity              map[string]Pity   `json:"pity"`
+	Claims            []ClaimExport     `json:"claims"`
+	Operations        []OperationExport `json:"operations"`
+	Draws             []DrawExport      `json:"draws"`
 }
 type ClaimExport struct {
 	Kind   string `json:"kind"`
@@ -119,6 +121,8 @@ func (s *Service) ExportUserTx(ctx context.Context, tx *sql.Tx, user, at int64, 
 	}
 	out.EnteredAt = p.EnteredAt
 	out.CheckedDay = p.Day
+	out.LimitedCheckedDay = p.LimitedDay
+	out.WelcomeGranted = p.WelcomeGranted
 	out.Month = p.Month
 	out.Balance = p.Balance
 	out.Newcomer = p.Newcomer

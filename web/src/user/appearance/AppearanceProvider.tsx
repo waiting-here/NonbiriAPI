@@ -35,7 +35,7 @@ export function AppearanceProvider({
     retry: false,
   });
   const mutation = useMutation({
-    mutationFn: (id: string) => port!.select(id),
+    mutationFn: ({ id, moment }: { id: string; moment?: string }) => port!.select(id, moment),
     onSuccess: (state) => client.setQueryData(key, state),
   });
   const state = port && !query.error ? (query.data ?? defaults) : defaults;
@@ -57,15 +57,15 @@ export function AppearanceProvider({
               pending: query.isPending,
               error: query.error,
               saving: mutation.isPending,
-              select: async (id) => {
-                await mutation.mutateAsync(id);
+              select: async (id, moment) => {
+                await mutation.mutateAsync({ id, moment });
               },
               refresh,
             }
           : null
       }
     >
-      <AppearanceBackdrop selected={state.selected} />
+      <AppearanceBackdrop selected={state.selected} moment={state.moment} />
       {children}
     </AppearanceContext>
   );
@@ -93,9 +93,12 @@ export function AccountAppearance({
     return {
       scope: account,
       load: () => bound(() => apiFetch<AppearanceState>('/api/appearance')),
-      select: (selected) =>
+      select: (selected, moment) =>
         bound(() =>
-          apiFetch<AppearanceState>('/api/appearance', { method: 'POST', json: { selected } }),
+          apiFetch<AppearanceState>('/api/appearance', {
+            method: 'POST',
+            json: { selected, moment },
+          }),
         ),
     };
   }, [account, client]);

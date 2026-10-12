@@ -18,9 +18,11 @@ import type {
 
 interface Saved {
   appearance?: string;
+  moment?: string;
   state: Snapshot;
   entered: boolean;
   day: string;
+  limitedDay?: string;
   month: string;
   receipts: Record<string, { input: string; result: Outcome }>;
   history: DrawReceipt[];
@@ -69,6 +71,7 @@ function initial(): Saved {
       pity: { permanent: freshPity(defaultRules), featured: freshPity(defaultRules) },
       newcomer: true,
       checked_in: false,
+      limited_checked_in: false,
       claimed: [],
       redeemed: [],
       month_used: { permanent: 0, limited: 0 },
@@ -140,6 +143,7 @@ function sync(data: Saved) {
   for (const pool of data.state.pools)
     pool.rates ??= [0.51317544, 0.32656619, 0.13817568, 0.02208269];
   data.state.checked_in = data.day === day();
+  data.state.limited_checked_in = data.limitedDay === day();
   if (data.month !== month()) {
     data.month = month();
     data.state.month_used = { permanent: 0, limited: 0 };
@@ -170,6 +174,12 @@ function run(input: Action, key: string): Outcome {
       data.day = day();
       state.checked_in = true;
       state.tickets.permanent++;
+      break;
+    case 'limited-check-in':
+      if (state.limited_checked_in) fail('already-claimed');
+      data.limitedDay = day();
+      state.limited_checked_in = true;
+      state.tickets.limited++;
       break;
     case 'draw': {
       const pool = state.pools.find((p) => p.id === input.pool_id);
@@ -343,6 +353,7 @@ export function resetPreview(mode: 'new' | 'collection') {
 function appearanceState() {
   const unlocked = [
     'default',
+    'heart-moment',
     ...cards
       .filter((card) => card.appearance && memory.state.owned[card.id])
       .map((card) => card.appearance!),
@@ -350,7 +361,24 @@ function appearanceState() {
   return {
     selected: unlocked.includes(memory.appearance ?? '') ? memory.appearance! : 'default',
     unlocked,
-    visible: ['default', 'celestial', 'wandering'],
+    visible: ['default', 'heart-moment', 'celestial', 'wandering'],
+    moment: memory.moment ?? 'cover:permanent',
+    moments: [
+      'cover:permanent',
+      ...new Set(
+        memory.state.pools
+          .filter((pool) => pool.kind === 'limited' && pool.published)
+          .map((pool) => 'cover:' + pool.cover),
+      ),
+      ...cards.filter((card) => memory.state.owned[card.id]).map((card) => 'card:' + card.id),
+      ...themes
+        .filter((theme) =>
+          cards
+            .filter((card) => card.theme === theme.id)
+            .every((card) => memory.state.owned[card.id]),
+        )
+        .map((theme) => 'illustration:' + theme.id),
+    ],
     updated_at: null,
   };
 }
@@ -359,9 +387,10 @@ export const localAppearancePort: AppearancePort = {
   async load() {
     return appearanceState();
   },
-  async select(selected) {
+  async select(selected, moment) {
+    if (moment && !appearanceState().moments.includes(moment)) throw new Error('moment-locked');
     if (!appearanceState().unlocked.includes(selected)) throw new Error('appearance-locked');
-    save({ ...memory, appearance: selected });
+    save({ ...memory, appearance: selected, moment: moment ?? memory.moment });
     return appearanceState();
   },
 };
@@ -372,12 +401,14 @@ export const appearancePreviewPort: AppearancePort = {
   async load() {
     return {
       selected: previewAppearance,
-      unlocked: ['default', 'celestial', 'wandering'],
+      unlocked: ['default', 'heart-moment', 'celestial', 'wandering'],
+      moment: 'cover:permanent',
+      moments: ['cover:permanent'],
       updated_at: null,
     };
   },
   async select(selected) {
-    if (!['default', 'celestial', 'wandering'].includes(selected))
+    if (!['default', 'heart-moment', 'celestial', 'wandering'].includes(selected))
       throw new Error('appearance-locked');
     previewAppearance = selected;
     return this.load();

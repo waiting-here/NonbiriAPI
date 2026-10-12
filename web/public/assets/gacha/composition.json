@@ -1,0 +1,750 @@
+{
+  "version": 1,
+  "backgrounds": {
+    "a": "backgrounds/a.webp",
+    "b": "backgrounds/b.webp",
+    "c": "backgrounds/c.webp",
+    "d": "backgrounds/d.webp",
+    "e": "backgrounds/e.webp",
+    "f": "backgrounds/f.webp",
+    "g": "backgrounds/g.webp",
+    "h": "backgrounds/h.webp",
+    "i": "backgrounds/i.webp",
+    "j": "backgrounds/j.webp",
+    "k": "backgrounds/k.webp",
+    "l": "backgrounds/l.webp",
+    "m": "backgrounds/m.webp"
+  },
+  "characters": {
+    "a-chatgpt": "layers/a-chatgpt.webp",
+    "a-claude": "layers/a-claude.webp",
+    "a-glm": "layers/a-glm.webp",
+    "a-deepseek": "layers/a-deepseek.webp",
+    "a-gemini": "layers/a-gemini.webp",
+    "b-chatgpt": "layers/b-chatgpt.webp",
+    "b-claude": "layers/b-claude.webp",
+    "b-glm": "layers/b-glm.webp",
+    "b-deepseek": "layers/b-deepseek.webp",
+    "b-gemini": "layers/b-gemini.webp",
+    "c-chatgpt": "layers/c-chatgpt.webp",
+    "c-claude": "layers/c-claude.webp",
+    "c-glm": "layers/c-glm.webp",
+    "c-deepseek": "layers/c-deepseek.webp",
+    "c-gemini": "layers/c-gemini.webp",
+    "d-chatgpt": "layers/d-chatgpt.webp",
+    "d-claude": "layers/d-claude.webp",
+    "d-glm": "layers/d-glm.webp",
+    "d-deepseek": "layers/d-deepseek.webp",
+    "d-gemini": "layers/d-gemini.webp",
+    "e-chatgpt": "layers/e-chatgpt.webp",
+    "e-claude": "layers/e-claude.webp",
+    "e-glm": "layers/e-glm.webp",
+    "e-deepseek": "layers/e-deepseek.webp",
+    "e-gemini": "layers/e-gemini.webp",
+    "f-chatgpt": "layers/f-chatgpt.webp",
+    "f-claude": "layers/f-claude.webp",
+    "f-glm": "layers/f-glm.webp",
+    "f-deepseek": "layers/f-deepseek.webp",
+    "f-gemini": "layers/f-gemini.webp",
+    "g-chatgpt": "motion/g-chatgpt/hero.webp",
+    "g-claude": "motion/g-claude/hero.webp",
+    "g-glm": "motion/g-glm/hero.webp",
+    "g-deepseek": "motion/g-deepseek/hero.webp",
+    "g-gemini": "motion/g-gemini/hero.webp",
+    "h-chatgpt": "layers/h-chatgpt.webp",
+    "h-claude": "layers/h-claude.webp",
+    "h-glm": "layers/h-glm.webp",
+    "h-deepseek": "layers/h-deepseek.webp",
+    "h-gemini": "layers/h-gemini.webp",
+    "i-chatgpt": "motion/i-chatgpt/hero.webp",
+    "i-claude": "motion/i-claude/hero.webp",
+    "i-glm": "motion/i-glm/hero.webp",
+    "i-deepseek": "motion/i-deepseek/hero.webp",
+    "i-gemini": "motion/i-gemini/hero.webp",
+    "j-chatgpt": "motion/j-chatgpt/hero.webp",
+    "j-claude": "motion/j-claude/hero.webp",
+    "j-glm": "motion/j-glm/hero.webp",
+    "j-deepseek": "motion/j-deepseek/hero.webp",
+    "j-gemini": "motion/j-gemini/hero.webp",
+    "k-chatgpt": "layers/k-chatgpt.webp",
+    "k-claude": "layers/k-claude.webp",
+    "k-glm": "layers/k-glm.webp",
+    "k-deepseek": "layers/k-deepseek.webp",
+    "k-gemini": "layers/k-gemini.webp",
+    "l-chatgpt": "motion/l-chatgpt/hero.webp",
+    "m-deepseek": "motion/m-deepseek/hero.webp"
+  },
+  "cards": {
+    "a-chatgpt": {
+      "background": "backgrounds/a.webp",
+      "character": "layers/a-chatgpt.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "a-claude": {
+      "background": "backgrounds/a.webp",
+      "character": "layers/a-claude.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "a-glm": {
+      "background": "backgrounds/a.webp",
+      "character": "layers/a-glm.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "a-deepseek": {
+      "background": "backgrounds/a.webp",
+      "character": "layers/a-deepseek.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "a-gemini": {
+      "background": "backgrounds/a.webp",
+      "character": "layers/a-gemini.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "b-chatgpt": {
+      "background": "backgrounds/b.webp",
+      "character": "layers/b-chatgpt.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "b-claude": {
+      "background": "backgrounds/b.webp",
+      "character": "layers/b-claude.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "b-glm": {
+      "background": "backgrounds/b.webp",
+      "character": "layers/b-glm.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "b-deepseek": {
+      "background": "backgrounds/b.webp",
+      "character": "layers/b-deepseek.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "b-gemini": {
+      "background": "backgrounds/b.webp",
+      "character": "layers/b-gemini.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "c-chatgpt": {
+      "background": "backgrounds/c.webp",
+      "character": "layers/c-chatgpt.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "c-claude": {
+      "background": "backgrounds/c.webp",
+      "character": "layers/c-claude.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "c-glm": {
+      "background": "backgrounds/c.webp",
+      "character": "layers/c-glm.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "c-deepseek": {
+      "background": "backgrounds/c.webp",
+      "character": "layers/c-deepseek.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "c-gemini": {
+      "background": "backgrounds/c.webp",
+      "character": "layers/c-gemini.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "d-chatgpt": {
+      "background": "backgrounds/d.webp",
+      "character": "layers/d-chatgpt.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "d-claude": {
+      "background": "backgrounds/d.webp",
+      "character": "layers/d-claude.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "d-glm": {
+      "background": "backgrounds/d.webp",
+      "character": "layers/d-glm.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "d-deepseek": {
+      "background": "backgrounds/d.webp",
+      "character": "layers/d-deepseek.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "d-gemini": {
+      "background": "backgrounds/d.webp",
+      "character": "layers/d-gemini.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "e-chatgpt": {
+      "background": "backgrounds/e.webp",
+      "character": "layers/e-chatgpt.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "e-claude": {
+      "background": "backgrounds/e.webp",
+      "character": "layers/e-claude.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "e-glm": {
+      "background": "backgrounds/e.webp",
+      "character": "layers/e-glm.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "e-deepseek": {
+      "background": "backgrounds/e.webp",
+      "character": "layers/e-deepseek.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "e-gemini": {
+      "background": "backgrounds/e.webp",
+      "character": "layers/e-gemini.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "f-chatgpt": {
+      "background": "backgrounds/f.webp",
+      "character": "layers/f-chatgpt.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "f-claude": {
+      "background": "backgrounds/f.webp",
+      "character": "layers/f-claude.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "f-glm": {
+      "background": "backgrounds/f.webp",
+      "character": "layers/f-glm.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "f-deepseek": {
+      "background": "backgrounds/f.webp",
+      "character": "layers/f-deepseek.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "f-gemini": {
+      "background": "backgrounds/f.webp",
+      "character": "layers/f-gemini.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "g-chatgpt": {
+      "source": "registered-motion-layers",
+      "background": "motion/g-chatgpt/garden.webp",
+      "character": "motion/g-chatgpt/hero.webp"
+    },
+    "g-claude": {
+      "source": "registered-motion-layers",
+      "background": "motion/g-claude/background.webp",
+      "character": "motion/g-claude/hero.webp"
+    },
+    "g-glm": {
+      "source": "registered-motion-layers",
+      "background": "motion/g-glm/background.webp",
+      "character": "motion/g-glm/hero.webp"
+    },
+    "g-deepseek": {
+      "source": "registered-motion-layers",
+      "background": "motion/g-deepseek/background.webp",
+      "character": "motion/g-deepseek/hero.webp"
+    },
+    "g-gemini": {
+      "source": "registered-motion-layers",
+      "background": "motion/g-gemini/background.webp",
+      "character": "motion/g-gemini/hero.webp"
+    },
+    "h-chatgpt": {
+      "background": "backgrounds/h.webp",
+      "character": "layers/h-chatgpt.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "h-claude": {
+      "background": "backgrounds/h.webp",
+      "character": "layers/h-claude.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "h-glm": {
+      "background": "backgrounds/h.webp",
+      "character": "layers/h-glm.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "h-deepseek": {
+      "background": "backgrounds/h.webp",
+      "character": "layers/h-deepseek.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "h-gemini": {
+      "background": "backgrounds/h.webp",
+      "character": "layers/h-gemini.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "i-chatgpt": {
+      "source": "registered-motion-layers",
+      "background": "motion/i-chatgpt/background.webp",
+      "character": "motion/i-chatgpt/hero.webp"
+    },
+    "i-claude": {
+      "source": "registered-motion-layers",
+      "background": "motion/i-claude/background.webp",
+      "character": "motion/i-claude/hero.webp"
+    },
+    "i-glm": {
+      "source": "registered-motion-layers",
+      "background": "motion/i-glm/background.webp",
+      "character": "motion/i-glm/hero.webp"
+    },
+    "i-deepseek": {
+      "source": "registered-motion-layers",
+      "background": "motion/i-deepseek/background.webp",
+      "character": "motion/i-deepseek/hero.webp"
+    },
+    "i-gemini": {
+      "source": "registered-motion-layers",
+      "background": "motion/i-gemini/background.webp",
+      "character": "motion/i-gemini/hero.webp"
+    },
+    "j-chatgpt": {
+      "source": "registered-motion-layers",
+      "background": "motion/j-chatgpt/background.webp",
+      "character": "motion/j-chatgpt/hero.webp"
+    },
+    "j-claude": {
+      "source": "registered-motion-layers",
+      "background": "motion/j-claude/background.webp",
+      "character": "motion/j-claude/hero.webp"
+    },
+    "j-glm": {
+      "source": "registered-motion-layers",
+      "background": "motion/j-glm/background.webp",
+      "character": "motion/j-glm/hero.webp"
+    },
+    "j-deepseek": {
+      "source": "registered-motion-layers",
+      "background": "motion/j-deepseek/background.webp",
+      "character": "motion/j-deepseek/hero.webp"
+    },
+    "j-gemini": {
+      "source": "registered-motion-layers",
+      "background": "motion/j-gemini/background.webp",
+      "character": "motion/j-gemini/hero.webp"
+    },
+    "k-chatgpt": {
+      "background": "backgrounds/k.webp",
+      "character": "layers/k-chatgpt.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "k-claude": {
+      "background": "backgrounds/k.webp",
+      "character": "layers/k-claude.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "k-glm": {
+      "background": "backgrounds/k.webp",
+      "character": "layers/k-glm.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "k-deepseek": {
+      "background": "backgrounds/k.webp",
+      "character": "layers/k-deepseek.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "k-gemini": {
+      "background": "backgrounds/k.webp",
+      "character": "layers/k-gemini.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "center-cover",
+      "characterFit": "full-canvas"
+    },
+    "l-chatgpt": {
+      "source": "registered-motion-layers",
+      "background": "motion/l-chatgpt/background.webp",
+      "character": "motion/l-chatgpt/hero.webp"
+    },
+    "m-deepseek": {
+      "source": "registered-motion-layers",
+      "background": "motion/m-deepseek/background.webp",
+      "character": "motion/m-deepseek/hero.webp"
+    }
+  },
+  "groups": {
+    "a": {
+      "background": "backgrounds/a.webp",
+      "foreground": "layers/groups/a.webp",
+      "canvas": [
+        3840,
+        2160
+      ],
+      "fit": "full-canvas"
+    },
+    "b": {
+      "background": "backgrounds/b.webp",
+      "foreground": "layers/groups/b.webp",
+      "canvas": [
+        3840,
+        2160
+      ],
+      "fit": "full-canvas"
+    },
+    "c": {
+      "background": "backgrounds/c.webp",
+      "foreground": "layers/groups/c.webp",
+      "canvas": [
+        3840,
+        2160
+      ],
+      "fit": "full-canvas"
+    },
+    "d": {
+      "background": "backgrounds/d.webp",
+      "foreground": "layers/groups/d.webp",
+      "canvas": [
+        3840,
+        2160
+      ],
+      "fit": "full-canvas"
+    },
+    "e": {
+      "background": "backgrounds/e.webp",
+      "foreground": "layers/groups/e.webp",
+      "canvas": [
+        3840,
+        2160
+      ],
+      "fit": "full-canvas"
+    },
+    "f": {
+      "background": "backgrounds/f.webp",
+      "foreground": "layers/groups/f.webp",
+      "canvas": [
+        3840,
+        2160
+      ],
+      "fit": "full-canvas"
+    },
+    "g": {
+      "background": "backgrounds/g.webp",
+      "foreground": "layers/groups/g.webp",
+      "canvas": [
+        3840,
+        2160
+      ],
+      "fit": "full-canvas"
+    },
+    "h": {
+      "background": "backgrounds/h.webp",
+      "foreground": "layers/groups/h.webp",
+      "canvas": [
+        3840,
+        2160
+      ],
+      "fit": "full-canvas"
+    },
+    "i": {
+      "background": "backgrounds/i.webp",
+      "foreground": "layers/groups/i.webp",
+      "canvas": [
+        3840,
+        2160
+      ],
+      "fit": "full-canvas"
+    },
+    "j": {
+      "background": "backgrounds/j.webp",
+      "foreground": "layers/groups/j.webp",
+      "canvas": [
+        3840,
+        2160
+      ],
+      "fit": "full-canvas"
+    },
+    "k": {
+      "background": "backgrounds/k.webp",
+      "foreground": "layers/groups/k.webp",
+      "canvas": [
+        3840,
+        2160
+      ],
+      "fit": "full-canvas"
+    },
+    "l": {
+      "background": "backgrounds/l.webp",
+      "foreground": "layers/groups/l.webp",
+      "canvas": [
+        3840,
+        2160
+      ],
+      "fit": "full-canvas"
+    },
+    "m": {
+      "background": "backgrounds/m.webp",
+      "foreground": "layers/groups/m.webp",
+      "canvas": [
+        3840,
+        2160
+      ],
+      "fit": "full-canvas"
+    }
+  },
+  "covers": {
+    "permanent": {
+      "background": "backgrounds/covers/permanent.webp",
+      "foreground": "layers/covers/permanent.webp",
+      "canvas": [
+        3840,
+        2160
+      ],
+      "fit": "full-canvas"
+    },
+    "entry": {
+      "background": "backgrounds/covers/entry.webp",
+      "foreground": "layers/covers/entry.webp",
+      "canvas": [
+        3840,
+        2160
+      ],
+      "fit": "full-canvas"
+    },
+    "h": {
+      "background": "backgrounds/covers/h.webp",
+      "foreground": "layers/covers/h.webp",
+      "canvas": [
+        3840,
+        2160
+      ],
+      "fit": "full-canvas"
+    },
+    "i": {
+      "background": "backgrounds/covers/i.webp",
+      "foreground": "layers/covers/i.webp",
+      "canvas": [
+        3840,
+        2160
+      ],
+      "fit": "full-canvas"
+    },
+    "j": {
+      "background": "backgrounds/covers/j.webp",
+      "foreground": "layers/covers/j.webp",
+      "canvas": [
+        3840,
+        2160
+      ],
+      "fit": "full-canvas"
+    },
+    "l": {
+      "background": "backgrounds/covers/l.webp",
+      "foreground": "layers/covers/l.webp",
+      "canvas": [
+        3840,
+        2160
+      ],
+      "fit": "full-canvas"
+    },
+    "m": {
+      "background": "backgrounds/covers/m.webp",
+      "foreground": "layers/covers/m.webp",
+      "canvas": [
+        3840,
+        2160
+      ],
+      "fit": "full-canvas"
+    }
+  },
+  "sampling": "Lanczos3; generated native 1024x1536 portraits and approximately 1672x941 landscapes; larger derivatives do not add native detail.",
+  "compositing": "Background first, then registered transparent foreground using source-over. Existing rare cards retain their registered motion composition."
+}

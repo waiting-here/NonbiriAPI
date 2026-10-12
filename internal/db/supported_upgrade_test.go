@@ -52,7 +52,7 @@ var preSessionHeadersFixture string
 //go:embed testdata/pre_personal_adaptation.sql
 var prePersonalAdaptationFixture string
 
-func personalAdaptationStorageSchema() string { return generationTwoSchema + "ALTER TABLE request_logs DROP COLUMN automatic_actions; ALTER TABLE request_logs DROP COLUMN requested_streaming; UPDATE schema_state SET version=13;" }
+func personalAdaptationStorageSchema() string { return requestFactsStorageSchema() + "ALTER TABLE request_logs DROP COLUMN automatic_actions; ALTER TABLE request_logs DROP COLUMN requested_streaming; UPDATE schema_state SET version=13;" }
 func sessionHeadersStorageSchema() string { return personalAdaptationStorageSchema() + prePersonalAdaptationFixture }
 func contextPricingStorageSchema() string {
 	return sessionHeadersStorageSchema() + preSessionHeadersFixture

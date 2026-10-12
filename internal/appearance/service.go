@@ -7,6 +7,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
@@ -33,6 +34,8 @@ var catalog = func() []Definition {
 
 type State struct {
 	Selected  string   `json:"selected"`
+	Moment    string   `json:"moment"`
+	Moments   []string `json:"moments,omitempty"`
 	Unlocked  []string `json:"unlocked"`
 	Visible   []string `json:"visible,omitempty"`
 	UpdatedAt *int64   `json:"updated_at"`
@@ -43,12 +46,13 @@ type Config struct {
 	Gate     limitedactivities.AdmissionGate
 	Unlock   func(context.Context, *sql.Tx, int64, string) (bool, error)
 	Visible  func(context.Context, *sql.Tx, string) (bool, error)
+	Moments  func(context.Context, *sql.Tx, int64) ([]string, error)
 	Now      func() time.Time
 }
 type Service struct{ config Config }
 
 func New(c Config) (*Service, error) {
-	if c.Database == nil || c.Users == nil || c.Gate == nil || c.Unlock == nil || c.Visible == nil {
+	if c.Database == nil || c.Users == nil || c.Gate == nil || c.Unlock == nil || c.Visible == nil || c.Moments == nil {
 		return nil, ErrInvalid
 	}
 	if c.Now == nil {
@@ -78,7 +82,18 @@ func (s *Service) authorize(ctx context.Context, tx *sql.Tx, user int64) error {
 	return nil
 }
 func (s *Service) ExportUserTx(ctx context.Context, tx *sql.Tx, user int64) (State, error) {
-	out := State{Selected: "default", Unlocked: []string{}}
+	out, err := s.readStateTx(ctx, tx, user)
+	out.Moments = nil
+	return out, err
+}
+
+func (s *Service) readStateTx(ctx context.Context, tx *sql.Tx, user int64) (State, error) {
+	out := State{Selected: "default", Moment: "cover:permanent", Unlocked: []string{}}
+	options, err := s.config.Moments(ctx, tx, user)
+	if err != nil {
+		return out, err
+	}
+	out.Moments = options
 	for _, d := range catalog {
 		unlocked := d.Unlock == ""
 		if !unlocked {
@@ -92,14 +107,17 @@ func (s *Service) ExportUserTx(ctx context.Context, tx *sql.Tx, user int64) (Sta
 			out.Unlocked = append(out.Unlocked, d.ID)
 		}
 	}
-	var selected string
+	var selected, moment string
 	var at int64
-	err := tx.QueryRowContext(ctx, "SELECT selected,updated_at FROM user_appearance WHERE user_id=?", user).Scan(&selected, &at)
+	err = tx.QueryRowContext(ctx, "SELECT selected,moment,updated_at FROM user_appearance WHERE user_id=?", user).Scan(&selected, &moment, &at)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return out, err
 	}
 	if err == nil {
 		out.UpdatedAt = &at
+		if slices.Contains(options, moment) {
+			out.Moment = moment
+		}
 		for _, id := range out.Unlocked {
 			if id == selected {
 				out.Selected = id
@@ -111,7 +129,7 @@ func (s *Service) ExportUserTx(ctx context.Context, tx *sql.Tx, user int64) (Sta
 
 // Visibility is a catalogue projection, not part of the account export.
 func (s *Service) stateTx(ctx context.Context, tx *sql.Tx, user int64) (State, error) {
-	out, err := s.ExportUserTx(ctx, tx, user)
+	out, err := s.readStateTx(ctx, tx, user)
 	if err != nil {
 		return out, err
 	}
@@ -152,12 +170,12 @@ func (s *Service) State(ctx context.Context, user int64) (State, error) {
 }
 
 // Select replaces the preference; repeating the same choice has no side effects.
-func (s *Service) Select(ctx context.Context, user int64, selected string) (State, error) {
+func (s *Service) Select(ctx context.Context, user int64, selected, moment string) (State, error) {
 	known := false
 	for _, d := range catalog {
 		known = known || d.ID == selected
 	}
-	if !known {
+	if !known || len(moment) > 64 || (moment != "" && selected != "heart-moment") {
 		return State{}, ErrInvalid
 	}
 	tx, err := s.config.Database.BeginTx(ctx, nil)
@@ -182,13 +200,20 @@ func (s *Service) Select(ctx context.Context, user int64, selected string) (Stat
 	if !unlocked {
 		return State{}, authz.ErrForbidden
 	}
-	if out.Selected != selected {
+	if moment == "" {
+		moment = out.Moment
+	}
+	if !slices.Contains(out.Moments, moment) {
+		return State{}, authz.ErrForbidden
+	}
+	if out.Selected != selected || out.Moment != moment {
 		at := s.config.Now().Unix()
-		_, err = tx.ExecContext(ctx, `INSERT INTO user_appearance(user_id,selected,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET selected=excluded.selected,updated_at=excluded.updated_at`, user, selected, at)
+		_, err = tx.ExecContext(ctx, `INSERT INTO user_appearance(user_id,selected,moment,updated_at) VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET selected=excluded.selected,moment=excluded.moment,updated_at=excluded.updated_at`, user, selected, moment, at)
 		if err != nil {
 			return out, err
 		}
 		out.Selected = selected
+		out.Moment = moment
 		out.UpdatedAt = &at
 	}
 	return out, tx.Commit()

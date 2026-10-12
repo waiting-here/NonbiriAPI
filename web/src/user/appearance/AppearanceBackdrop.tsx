@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { MomentBackdrop } from './MomentBackdrop';
 import type { WallpaperQuality, WallpaperTheme } from './wallpaper-motion';
 
 const colorMode = (): WallpaperTheme =>
@@ -8,7 +9,7 @@ const qualityLevel = (): WallpaperQuality =>
     ? 'high'
     : 'standard';
 
-export function AppearanceBackdrop({ selected }: { selected: string }) {
+export function AppearanceBackdrop({ selected, moment }: { selected: string; moment?: string }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [theme, setTheme] = useState(colorMode);
   const [quality, setQuality] = useState(qualityLevel);
@@ -58,6 +59,7 @@ export function AppearanceBackdrop({ selected }: { selected: string }) {
       release?.();
     };
   }, [selected, theme, quality]);
+  if (selected === 'heart-moment') return <MomentBackdrop key={moment} moment={moment} />;
   if (selected !== 'celestial' && selected !== 'wandering') return null;
   const revision = '?v=7';
   const filename = selected + '-' + theme + '.webp' + revision;

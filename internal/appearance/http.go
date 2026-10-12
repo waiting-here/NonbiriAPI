@@ -47,6 +47,7 @@ func RegisterRoutes(routes limitedactivities.UserRouteRegistrar, s *Service) err
 		}
 		var input struct {
 			Selected string `json:"selected"`
+			Moment   string `json:"moment"`
 		}
 		decoder := json.NewDecoder(bytes.NewReader(raw))
 		decoder.DisallowUnknownFields()
@@ -54,7 +55,7 @@ func RegisterRoutes(routes limitedactivities.UserRouteRegistrar, s *Service) err
 			respond(w, State{}, ErrInvalid)
 			return
 		}
-		out, err := s.Select(r.Context(), p.UserID, input.Selected)
+		out, err := s.Select(r.Context(), p.UserID, input.Selected, input.Moment)
 		respond(w, out, err)
 	})
 }

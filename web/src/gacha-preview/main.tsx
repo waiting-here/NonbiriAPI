@@ -85,7 +85,7 @@ function Preview() {
                       : '显示页面组件'
                     : english
                       ? 'View background'
-                      : '欣赏动态背景'}
+                      : '欣赏背景'}
                 </button>
               )}
               {!appearanceView && (

@@ -141,6 +141,7 @@ const reasons: Record<Exclude<HistoryKind, 'lake_entry' | 'lake_exchange'>, [str
   donor_reward: ['捐赠回馈', 'Donation reward'],
   gacha_ticket_purchase: ['抽奖券兑换', 'Draw ticket exchange'],
   gacha_theme_reward: ['主题全收集回馈', 'Theme collection reward'],
+  reward_grant: ['奖励发放', 'Reward delivery'],
   lake_collection_reward: ['钓点图鉴回馈', 'Lake collection reward'],
   fishing_reserve: ['垂钓：鱼饵费用', 'Fishing: bait cost'],
   fishing_settle: ['垂钓：收获奖励', 'Fishing: catch reward'],

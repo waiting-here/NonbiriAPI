@@ -24,7 +24,7 @@ func TestGachaRootSessionCSRFReplayExportAndDeletion(t *testing.T) {
 	user := f.users[0]
 	// Reading appearance does not enter the activity or grant welcome tickets.
 	fresh := f.call("GET", "/api/appearance", nil, user.Cookie, false)
-	if fresh["selected"] != "default" || len(fresh["unlocked"].([]any)) != 1 || len(fresh["visible"].([]any)) != 1 {
+	if fresh["selected"] != "default" || len(fresh["unlocked"].([]any)) != 2 || len(fresh["visible"].([]any)) != 2 || fresh["moment"] != "cover:permanent" {
 		t.Fatal(fresh)
 	}
 	var profiles int
@@ -109,13 +109,24 @@ func TestGachaRootSessionCSRFReplayExportAndDeletion(t *testing.T) {
 		}
 	}
 	unlocked := f.call("GET", "/api/appearance", nil, user.Cookie, false)
-	if unlocked["selected"] != "default" || len(unlocked["unlocked"].([]any)) != 3 || len(unlocked["visible"].([]any)) != 3 {
+	if unlocked["selected"] != "default" || len(unlocked["unlocked"].([]any)) != 4 || len(unlocked["visible"].([]any)) != 4 {
 		t.Fatal(unlocked)
 	}
 	choose := func(cookie *http.Cookie, body, origin string) *httptest.ResponseRecorder {
 		return testApplicationRequest(t, f.app.Load().handler, "POST", f.cfg.UserHost, "/api/appearance", body, []*http.Cookie{cookie}, map[string]string{"Content-Type": "application/json", "Origin": origin})
 	}
 	origin := "http://" + f.cfg.UserHost
+	for _, moment := range []string{"card:m-deepseek", "illustration:m"} {
+		if denied := choose(f.users[1].Cookie, `{"selected":"heart-moment","moment":"`+moment+`"}`, origin); denied.Code != http.StatusForbidden {
+			t.Fatal("unowned moment allowed", denied.Code)
+		}
+		if selected := choose(user.Cookie, `{"selected":"heart-moment","moment":"`+moment+`"}`, origin); selected.Code != http.StatusOK {
+			t.Fatal(selected.Code, selected.Body.String())
+		}
+	}
+	if denied := choose(user.Cookie, `{"selected":"heart-moment","moment":"cover:m"}`, origin); denied.Code != http.StatusForbidden {
+		t.Fatal("unopened cover allowed", denied.Code)
+	}
 	for _, id := range []string{"celestial", "wandering"} {
 		selected := choose(user.Cookie, `{"selected":"`+id+`"}`, origin)
 		if selected.Code != http.StatusOK {
@@ -133,7 +144,7 @@ func TestGachaRootSessionCSRFReplayExportAndDeletion(t *testing.T) {
 	if locked := choose(f.users[1].Cookie, `{"selected":"celestial"}`, origin); locked.Code != http.StatusForbidden {
 		t.Fatal("another account used locked appearance", locked.Code)
 	}
-	for _, body := range []string{`{"selected":"unknown"}`, `{"selected":"default","user_id":1}`, `{"selected":"default","selected":"wandering"}`, `{"selected":null}`} {
+	for _, body := range []string{`{"selected":"unknown"}`, `{"selected":"default","user_id":1}`, `{"selected":"default","selected":"wandering"}`, `{"selected":null}`, `{"selected":"default","moment":"cover:permanent"}`, `{"selected":"heart-moment","moment":"card:m-deepseek","moment":"cover:permanent"}`} {
 		if bad := choose(user.Cookie, body, origin); bad.Code != http.StatusBadRequest {
 			t.Fatal("ambiguous appearance selection", bad.Code)
 		}
@@ -142,7 +153,7 @@ func TestGachaRootSessionCSRFReplayExportAndDeletion(t *testing.T) {
 		t.Fatal("appearance CSRF accepted", bad.Code)
 	}
 	otherAppearance := f.call("GET", "/api/appearance", nil, f.users[1].Cookie, false)
-	if otherAppearance["selected"] != "default" || len(otherAppearance["unlocked"].([]any)) != 1 || len(otherAppearance["visible"].([]any)) != 1 {
+	if otherAppearance["selected"] != "default" || len(otherAppearance["unlocked"].([]any)) != 2 || len(otherAppearance["visible"].([]any)) != 2 {
 		t.Fatal("cross-account appearance", otherAppearance)
 	}
 	binding := sha256.Sum256([]byte(user.Cookie.Value))
@@ -165,7 +176,7 @@ func TestGachaRootSessionCSRFReplayExportAndDeletion(t *testing.T) {
 		t.Fatal(err)
 	}
 	var appearanceExport appearance.State
-	if err := json.Unmarshal(document.Appearance, &appearanceExport); err != nil || appearanceExport.Visible != nil || appearanceExport.Selected != "wandering" || len(appearanceExport.Unlocked) != 3 {
+	if err := json.Unmarshal(document.Appearance, &appearanceExport); err != nil || appearanceExport.Visible != nil || appearanceExport.Moments != nil || appearanceExport.Moment != "illustration:m" || appearanceExport.Selected != "wandering" || len(appearanceExport.Unlocked) != 4 {
 		t.Fatal("appearance export", appearanceExport, err)
 	}
 	var exported gacha.UserExport

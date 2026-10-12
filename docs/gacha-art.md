@@ -12,6 +12,14 @@ This standard applies to every existing and future Gacha Simulator card. Rarity 
 - Trace every visible limb from shoulder through elbow and wrist before approving its hand. Check handedness from the character's anatomy and the visible palm/back orientation, then count one thumb and four fingers. Verify foreshortening, joint direction and occluded digits at full size. Match palm width, finger thickness and finger spread to the character's build, while retaining plausible perspective enlargement. Apply the same review to cards, companion illustrations, both wallpaper variants and every animation pose. A hand correction must preserve correct limbs and propagate to animation layers and static fallbacks.
 - Retain references, source images, layered animation inputs, authoring parameters, licensing and adoption status in the maintained asset library. Ship optimized derivatives with applicable notices.
 
+## Layered production
+
+Create the character-free theme background first. Author transparent character foregrounds against that background, then compose the card, companion illustration and pool cover from the retained layers. Independent compositions may retain connected props in their foreground layer to preserve contact and occlusion. Keep registration, alpha, source references and composition parameters with the artwork; flattened output is a delivery derivative.
+
+Existing N/R/SR cards use separate theme backgrounds and character layers. Existing group illustrations and covers retain their original cast compositions as registered foreground layers. Existing SSR/SP character, eyelid and scene layers remain reusable. The asset composition manifest records the inputs and placement. Keep the former flattened masters in the local archive.
+
+SSR card backgrounds stay static while their characters animate. SP also requires coordinated background animation and the complete dedicated site appearance. Heartfelt moments uses a static theme background for every selected card, including SP, and only animates SSR/SP characters.
+
 ## High-resolution delivery
 
 Target 2560 × 3840 portrait derivatives and 3840 × 2160 landscape derivatives for desktop appreciation, including animation layers. Keep native masters and enhancement settings separately. Enhanced derivatives improve display clarity but must not be described as new native detail. Inspect faces, fine jewelry, patterned cloth, transparent edges and painted textures before adoption; reject oversharpening and invented features.
@@ -33,7 +41,7 @@ N and R continue automatically. SR and higher wait for a click on the presentati
 
 Use continuous, restrained motion: breathing, natural blinking, slight head/shoulder movement and flowing hair or fabric. Motion must be noticeable promptly at actual phone display size. Increase existing motion amplitudes when needed; do not add unrelated gestures merely to signal rarity.
 
-SSR uses a smooth, seamless loop with a stable face and intact occlusion edges. Match the approved visual quality on each illustration; a single multiplier is not a substitute for reviewing individual artwork.
+SSR character animation uses a smooth, seamless loop over a static background with a stable face and intact occlusion edges. Match the approved visual quality on each illustration; a single multiplier is not a substitute for reviewing individual artwork.
 
 SP also animates the scene during both the draw close-up and catalogue appreciation. Choose movement from its imagery: celestial light and star drift, for example, or a gliding creature and moving cloud currents. Coordinate direction, phase and amplitude with the character. Preserve architectural lines, facial geometry and readable silhouettes; avoid whole-image wobble, edge gaps and abrupt resets. Background light should support the portrait.
 

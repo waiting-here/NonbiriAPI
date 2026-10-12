@@ -8,7 +8,7 @@ import (
 )
 
 func TestFrozenBoundsAndHeldObjectKinds(t *testing.T) {
-	if SchemaVersion != 17 || CollectionLimit != 10_000 || MaxExportBytes != 16<<20 || WorkerBatchLimit != 100 {
+	if SchemaVersion != 19 || CollectionLimit != 10_000 || MaxExportBytes != 16<<20 || WorkerBatchLimit != 100 {
 		t.Fatalf("frozen bounds changed: schema=%d collection=%d bytes=%d batch=%d",
 			SchemaVersion, CollectionLimit, MaxExportBytes, WorkerBatchLimit)
 	}
@@ -47,7 +47,7 @@ func TestExportDocumentHasClosedTopLevel(t *testing.T) {
 	sort.Strings(got)
 	want := []string{
 		"request_adaptations", "continuity", "fat_fish",
-		"limited_activities", "image_tasks", "inactivity", "lake_notes", "gacha", "appearance",
+		"limited_activities", "image_tasks", "inactivity", "lake_notes", "gacha", "appearance", "rewards",
 		"game_onboarding_holds", "loans", "game_rankings", "penalties",
 		"bidding", "likes", "steadycatch", "gwent", "blackjack", "randomness",
 		"caller_key", "catalog_pairs", "charity", "checkins", "game_onboarding", "credit_ledger", "donations", "endpoints",
@@ -63,7 +63,7 @@ func TestExportDocumentHasClosedTopLevel(t *testing.T) {
 func TestExportEndpointAndDonationSchemasAreClosed(t *testing.T) {
 	assertClosedJSONKeys(t, PersonalAutomationBatchExport{}, "id", "kind", "target_id", "item_count", "created_at", "expires_at", "results")
 	assertClosedJSONKeys(t, PersonalAutomationStepExport{Outcome: "imported", EndpointKeyID: "key", BindingID: "binding", Code: "code", Message: "message"}, "index", "status", "outcome", "endpoint_key_id", "binding_id", "code", "message")
-	assertClosedJSONKeys(t, GovernanceExport{LakeNotes: testLakeNotesExport()}, "limited_activities", "image_tasks", "inactivity", "lake_notes", "gacha", "appearance")
+	assertClosedJSONKeys(t, GovernanceExport{LakeNotes: testLakeNotesExport()}, "limited_activities", "image_tasks", "inactivity", "lake_notes", "gacha", "appearance", "rewards")
 	assertClosedJSONKeys(t, testLakeNotesExport(), "rules_id", "profile_revision", "profile", "casts", "entries", "exchanges")
 	assertClosedJSONKeys(t, ImageTaskExport{}, "id", "status", "n", "created_at", "dispatched_at", "completed_at", "billing_state", "charge", "refund", "actual_images")
 	assertClosedJSONKeys(t, LimitedActivityExport{}, "wallet", "exchanges")

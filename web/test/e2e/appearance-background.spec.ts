@@ -37,7 +37,7 @@ for (const design of ['celestial', 'wandering'])
           });
         });
         await page.goto(USER_ORIGIN + '/activities');
-        const trigger = page.getByRole('button', { name: '欣赏动态背景', exact: true });
+        const trigger = page.getByRole('button', { name: '欣赏背景', exact: true });
         await expect(page.locator('.loan-card')).toBeVisible();
         await expect(trigger).toHaveCount(0);
         const appearance = page.getByRole('button', { name: '外观', exact: true });
@@ -61,7 +61,7 @@ for (const design of ['celestial', 'wandering'])
         const amount = page.locator('.loan-card select');
         await amount.selectOption('2');
         await trigger.click();
-        const view = page.getByRole('dialog', { name: '欣赏动态背景', exact: true });
+        const view = page.getByRole('dialog', { name: '欣赏背景', exact: true });
         await expect(view).toBeVisible();
         await expect(page.locator('.nb-user-shell')).toBeHidden();
         const back = view.getByRole('button', { name: '返回页面', exact: true });

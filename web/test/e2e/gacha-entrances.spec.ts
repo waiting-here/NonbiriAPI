@@ -84,6 +84,7 @@ for (const theme of ['light', 'dark'] as const)
         pity: {},
         newcomer: true,
         checked_in: false,
+        limited_checked_in: false,
         claimed: [],
         redeemed: [],
         month_used: { permanent: 0, limited: 0 },
@@ -130,8 +131,15 @@ for (const theme of ['light', 'dark'] as const)
       await page.route('**/api/gacha/state', (route) => route.fulfill({ json: snapshot }));
       let enters = 0;
       await page.route('**/api/gacha/actions', (route) => {
-        expect(route.request().postDataJSON()).toEqual({ action: 'enter' });
-        enters++;
+        const { action } = route.request().postDataJSON();
+        if (action === 'enter') enters++;
+        else if (action === 'check-in') {
+          snapshot.checked_in = true;
+          snapshot.tickets.permanent++;
+        } else if (action === 'limited-check-in') {
+          snapshot.limited_checked_in = true;
+          snapshot.tickets.limited++;
+        } else throw new Error('Unexpected action ' + action);
         return route.fulfill({ json: { snapshot } });
       });
       await page.goto(USER_ORIGIN + '/activities');
@@ -176,6 +184,23 @@ for (const theme of ['light', 'dark'] as const)
       await expect(page).toHaveURL(USER_ORIGIN + '/activities/gacha?pool=gp_celestial');
       await expect(page.locator('#gacha-pool-title')).toHaveText('星月神话');
       expect(enters).toBe(1);
+      await page.getByRole('button', { name: '签到 · 常驻券 +1', exact: true }).click();
+      await expect(page.getByRole('button', { name: '常驻券已领取', exact: true })).toBeDisabled();
+      await page.getByRole('button', { name: '签到 · 限定券 +1', exact: true }).click();
+      await expect(page.getByRole('button', { name: '限定券已领取', exact: true })).toBeDisabled();
+      expect(snapshot.tickets).toEqual({ permanent: 11, limited: 11 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      if (process.env.NONBIRI_VISUAL_DIR) {
+        await page.screenshot({
+          path: resolve(process.env.NONBIRI_VISUAL_DIR, `gacha-daily-${theme}-${width}.png`),
+          fullPage: true,
+        });
+        await page.screenshot({
+          path: resolve(process.env.NONBIRI_VISUAL_DIR, `gacha-daily-${theme}-${width}-viewport.png`),
+        });
+      }
       guard.assertNone();
     });
   }

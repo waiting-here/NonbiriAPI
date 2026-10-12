@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { MomentPicker } from '../../appearance/MomentPicker';
+import { useOptionalAppearance } from '../../appearance/context';
 import { Button } from '@shared/components/ui/Button';
 import { Field } from '@shared/components/ui/Field';
 import { FilterBar } from '@shared/components/ui/FilterBar';
@@ -25,7 +27,8 @@ export function Collection({
   viewGroup: (theme: Theme) => void;
 }) {
   const t = (zh: string, en: string) => (english ? en : zh);
-  const [view, setView] = useState<'cards' | 'themes'>('cards');
+  const appearance = useOptionalAppearance();
+  const [view, setView] = useState<'cards' | 'themes' | 'moments'>('cards');
   const [search, setSearch] = useState(''),
     [character, setCharacter] = useState(''),
     [rarity, setRarity] = useState(''),
@@ -58,9 +61,14 @@ export function Collection({
         tabs={[
           { value: 'cards', label: t('卡牌图鉴', 'Cards') },
           { value: 'themes', label: t('主题回忆', 'Theme memories') },
+          ...(appearance
+            ? [{ value: 'moments' as const, label: t('心动时刻', 'Heartfelt moments') }]
+            : []),
         ]}
       />
-      {view === 'cards' ? (
+      {view === 'moments' ? (
+        <MomentPicker />
+      ) : view === 'cards' ? (
         <>
           <FilterBar
             ariaLabel={t('查找卡牌', 'Find cards')}

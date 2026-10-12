@@ -15,6 +15,7 @@ function snapshot(): Snapshot {
     pity: {},
     newcomer: true,
     checked_in: false,
+    limited_checked_in: false,
     claimed: [],
     redeemed: [],
     month_used: { permanent: 0, limited: 0 },
@@ -56,6 +57,32 @@ function snapshot(): Snapshot {
     },
   };
 }
+it('claims both daily tickets independently', async () => {
+  const state = snapshot();
+  const port: GachaPort = {
+    scope: 'user:both-daily-tickets',
+    load: async () => structuredClone(state),
+    history: async () => ({ items: [] }),
+    act: async (input) => {
+      if (input.action === 'check-in') {
+        state.checked_in = true;
+        state.tickets.permanent++;
+      }
+      if (input.action === 'limited-check-in') {
+        state.limited_checked_in = true;
+        state.tickets.limited++;
+      }
+      return { snapshot: structuredClone(state) };
+    },
+  };
+  render(<GachaApp port={port} />);
+  fireEvent.click(await screen.findByRole('button', { name: '签到 · 常驻券 +1' }));
+  expect(await screen.findByRole('button', { name: '常驻券已领取' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: '签到 · 限定券 +1' }));
+  expect(await screen.findByRole('button', { name: '限定券已领取' })).toBeDisabled();
+  expect(state.tickets).toEqual({ permanent: 11, limited: 1 });
+});
+
 beforeEach(() => {
   localStorage.setItem(
     'nb.gacha.preferences',

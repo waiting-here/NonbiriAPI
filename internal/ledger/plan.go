@@ -134,7 +134,7 @@ func newPlan(meta Meta, kind Kind, typ sourceType, sourceID string, sourceSeq db
 
 func sourceTypeForKind(kind Kind) (sourceType, bool) {
 	switch kind {
-	case KindAdminUserAdjustment, KindAdminPoolAdjustment, KindAccountDeleteZero,
+	case KindRewardGrant, KindAdminUserAdjustment, KindAdminPoolAdjustment, KindAccountDeleteZero,
 		KindCheckinAward, KindAntiAbusePenalty, KindWelfareClaim,
 		KindThursdayContribution, KindThursdayPayout, KindGameOnboardingReward, KindActivityLoan,
 		KindActivityExchange, KindLakeEntry, KindLakeExchange, KindLakeCollectionReward, KindInactivityDecay, KindGachaTicketPurchase, KindGachaThemeReward,

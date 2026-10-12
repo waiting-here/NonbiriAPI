@@ -8,6 +8,14 @@
     "unlock": ""
   },
   {
+    "id": "heart-moment",
+    "name": "心动时刻",
+    "name_en": "Heartfelt moments",
+    "description": "把喜欢的收藏设为背景，在抽卡图鉴中选择画面。",
+    "description_en": "Make a favorite collectible your background. Choose artwork in the card collection.",
+    "unlock": ""
+  },
+  {
     "id": "celestial",
     "name": "星月神话",
     "name_en": "A Myth of Moon and Stars",
