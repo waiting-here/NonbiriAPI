@@ -258,7 +258,13 @@ function SettingsForm({
     <form
       onSubmit={(event) => {
         event.preventDefault();
-        save({ kind: 'settings', expected_revision: config.revision, rules, shop, entry_enabled: entryEnabled });
+        save({
+          kind: 'settings',
+          expected_revision: config.revision,
+          rules,
+          shop,
+          entry_enabled: entryEnabled,
+        });
       }}
     >
       <Panel>
@@ -270,7 +276,16 @@ function SettingsForm({
           )}
         />
         <PanelBody>
-          <Toggle disabled={busy} checked={entryEnabled} onChange={setEntryEnabled} label={t('在用户站活动页显示入口', 'Show the entry on the user activity page')} description={t('默认隐藏。此开关控制入口展示，不改变已发布奖池的开放时间。', 'Hidden by default. This controls the entry; published pool schedules stay in effect.')} />
+          <Toggle
+            disabled={busy}
+            checked={entryEnabled}
+            onChange={setEntryEnabled}
+            label={t('在用户站活动页显示入口', 'Show the entry on the user activity page')}
+            description={t(
+              '默认隐藏。此开关控制入口展示，不改变已发布奖池的开放时间。',
+              'Hidden by default. This controls the entry; published pool schedules stay in effect.',
+            )}
+          />
           <RulesFields value={rules} onChange={setRules} disabled={busy} t={t} />
         </PanelBody>
       </Panel>
@@ -520,7 +535,7 @@ function PoolEditor({
                     <h4>
                       {t(theme.name, theme.name_en)} · {theme.rarity}
                     </h4>
-                    <Button size="sm" onClick={() => chooseTheme(theme.id)}>
+                    <Button type="button" size="sm" onClick={() => chooseTheme(theme.id)}>
                       {t('全选／取消本组', 'Select / clear theme')}
                     </Button>
                   </header>
@@ -561,6 +576,7 @@ function PoolEditor({
             </Button>
             {!draft.preset && (
               <Button
+                type="button"
                 disabled={
                   busy || !validRules(pool.rules) || !pool.name.trim() || pool.featured.length === 0
                 }
