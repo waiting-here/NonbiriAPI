@@ -173,7 +173,7 @@ describe('activities account events', () => {
         }),
         EVENT_ID,
       ),
-    ).toEqual({ kind: 'resync', reason: 'malformed' });
+    ).toEqual(parseActivityAccountEvent('snapshot', JSON.stringify(frame('snapshot')), EVENT_ID));
     const maximumRevision = '340282366920938463463374607431768211455';
     const maximum = parseActivityAccountEvent(
       'snapshot',

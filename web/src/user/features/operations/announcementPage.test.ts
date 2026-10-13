@@ -58,6 +58,15 @@ describe('user announcement page contract', () => {
     ).toMatchObject({ data: [], pagination: { page_size: 100, total_pages: '1' } });
   });
 
+  it.each([['an extra envelope field', { ...page([summary()]), extra: true }]])(
+    'ignores response extension: %s',
+    (_label, value) => {
+      expect(normalizeAnnouncementPage(value)).toEqual(
+        normalizeAnnouncementPage(page([summary()])),
+      );
+    },
+  );
+
   it.each([
     ['a cursor in a page response', page([summary()], undefined, 'next')],
     [
@@ -73,7 +82,6 @@ describe('user announcement page contract', () => {
         total_pages: '1',
       }),
     ],
-    ['an extra envelope field', { ...page([summary()]), extra: true }],
   ])('rejects %s', (_label, value) => {
     expect(() => normalizeAnnouncementPage(value)).toThrow();
   });

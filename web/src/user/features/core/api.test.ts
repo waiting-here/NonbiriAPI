@@ -40,7 +40,7 @@ function jsonResponse(body: unknown, status: number, headers: HeadersInit = {}):
 }
 
 describe('core API wire contract', () => {
-  it('uses the frozen home paths, closed DTOs, and bodyless check-in mutation', async () => {
+  it('uses the home paths, typed responses and bodyless check-in mutation', async () => {
     const suffix = 'A'.repeat(22);
     const announcement = {
       epoch: `b1e_${suffix}`,
@@ -202,7 +202,7 @@ describe('core API wire contract', () => {
     });
   });
 
-  it('normalizes endpoint creation options and rejects extra option fields', async () => {
+  it('normalizes endpoint creation options and strips extra option fields', async () => {
     const channelID = `mch_${'B'.repeat(21)}A`;
     const fetchMock = vi.fn<typeof fetch>(async () =>
       jsonResponse(
@@ -251,7 +251,15 @@ describe('core API wire contract', () => {
         200,
       ),
     );
-    await expect(getEndpointCreateOptions()).rejects.toMatchObject({ code: 'invalid_response' });
+    const options = await getEndpointCreateOptions();
+    expect(options.mainstream_channels).toEqual([
+      {
+        id: channelID,
+        name: 'Main channel',
+        connector_type: 'openai-compatible',
+        base_url: 'https://example.com/v1',
+      },
+    ]);
   });
 
   it('requires CallerKey generation evidence and never adds an idempotency header to plaintext generation', async () => {
@@ -275,7 +283,7 @@ describe('core API wire contract', () => {
     expect(JSON.parse(String(regenerateInit?.body))).toEqual({ expected_generation: '0' });
   });
 
-  it('rejects missing generation headers and malformed successful DTOs', async () => {
+  it('rejects missing generation headers and projects successful endpoint responses', async () => {
     const endpoint = fixture('internal/resources/testdata/endpoint.json') as Record<
       string,
       unknown
@@ -287,7 +295,7 @@ describe('core API wire contract', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(getCallerKey()).rejects.toMatchObject({ code: 'invalid_response' });
-    await expect(getEndpoint('11')).rejects.toMatchObject({ code: 'invalid_response' });
+    await expect(getEndpoint('11')).resolves.toEqual(endpoint);
   });
 
   it('canonicalizes candidate queries and rejects oversized path IDs before fetch', async () => {

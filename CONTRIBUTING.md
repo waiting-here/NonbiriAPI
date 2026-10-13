@@ -97,6 +97,15 @@ Do not hide a command's exit status behind a truncating pipeline. Do not termina
 
 Every new user-associated field must have an export, deletion, retention, and privacy decision. Preserve ownership checks, station isolation, encrypted secret storage, bounded diagnostics, shared egress protection, stream cancellation, and no-store behavior. Never add plaintext secrets to logs, errors, tests that resemble production credentials, URLs, frontend query caches, or persistent browser storage.
 
+Normalize display responses once at the API boundary: require the fields the
+view uses, preserve exact numeric strings, and project only known fields. Ignore
+unused response extensions instead of failing the page or forwarding them into
+forms. Account balances can be negative; clamp each wallet separately only when
+calculating spendable funds. Render server-calculated totals and settlements
+without deriving them again. Keep strict schemas for request inputs, executable
+adapter declarations, randomness proofs and deterministic game protocols, plus
+identity, visibility and state checks that affect available actions.
+
 ## Commit and pull request guidance
 
 `master` is protected and PR-only; never commit or push directly to it, including for emergency fixes. Maintainers may designate a version integration branch, merge reviewed short-lived work branches into it locally, and open one final GitHub pull request to `master` after the complete version passes its gates. Contributors should confirm the intended base branch before starting work.

@@ -457,7 +457,7 @@ function donationListPayload(value: unknown): unknown[] {
  */
 function charityModelsPayload(value: unknown): unknown[] {
   const record = requiredRecord(value, 'charity model list');
-  if (!Array.isArray(record.data) || Object.keys(record).some((key) => key !== 'data')) {
+  if (!Array.isArray(record.data)) {
     throw new ApiError(
       'invalid_response',
       'The server returned an invalid charity model list.',

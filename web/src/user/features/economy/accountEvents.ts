@@ -46,11 +46,9 @@ interface SSERecord {
 
 class MalformedAccountEventStreamError extends Error {}
 
-function exactRecord(value: unknown, keys: readonly string[]): Record<string, unknown> | null {
+function responseRecord(value: unknown, keys: readonly string[]): Record<string, unknown> | null {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
   const item = value as Record<string, unknown>;
-  const actual = Object.keys(item);
-  if (actual.length !== keys.length || actual.some((key) => !keys.includes(key))) return null;
   return keys.every((key) => Object.prototype.hasOwnProperty.call(item, key)) ? item : null;
 }
 
@@ -78,7 +76,7 @@ export function parseActivityAccountEvent(
   } catch {
     return malformed();
   }
-  const frame = exactRecord(parsed, FRAME_KEYS);
+  const frame = responseRecord(parsed, FRAME_KEYS);
   if (
     !frame ||
     frame.version !== 1 ||
@@ -97,7 +95,7 @@ export function parseActivityAccountEvent(
 
   if (eventName === 'gap') {
     if (frame.revision !== null || frame.identity_epoch !== null) return malformed();
-    const gap = exactRecord(frame.data, GAP_KEYS);
+    const gap = responseRecord(frame.data, GAP_KEYS);
     if (!gap || typeof gap.reason !== 'string' || !GAP_REASONS.has(gap.reason)) return malformed();
     if (gap.last_event_id !== null && !isCanonicalSSEID(gap.last_event_id)) return malformed();
     return { kind: 'resync', reason: 'gap' };

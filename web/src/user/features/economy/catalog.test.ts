@@ -93,10 +93,10 @@ describe('charity catalog normalizer', () => {
     ).toMatchObject({ models: [], pagination: { page: '1', page_size: 50 } });
   });
 
-  it('rejects private or malformed model fields and inconsistent availability', () => {
-    expect(() =>
-      normalizeCharityCatalog(catalogPage([catalogModel({ source: 'private' })])),
-    ).toThrow();
+  it('strips unused model fields and rejects malformed availability', () => {
+    expect(normalizeCharityCatalog(catalogPage([catalogModel({ source: 'private' })]))).toEqual(
+      normalizeCharityCatalog(catalogPage([catalogModel()])),
+    );
     expect(() =>
       normalizeCharityCatalog(catalogPage([catalogModel({ allowed_levels: [3, 1] })])),
     ).toThrow();

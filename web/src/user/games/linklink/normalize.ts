@@ -4,7 +4,7 @@ import {
   creditsValue,
   decimalValue,
   enumValue,
-  exactRecord,
+  responseRecord,
   gamePayment,
   invalidResponse,
   opaqueID,
@@ -76,7 +76,7 @@ function specValue(value: unknown): LinkLinkSpec {
 }
 
 export function normalizeLinkLinkState(value: unknown): LinkLinkState {
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     [
       'session_id',
@@ -97,14 +97,14 @@ export function normalizeLinkLinkState(value: unknown): LinkLinkState {
   const spec = specValue(record.spec);
   if (record.state !== 'active') invalidResponse('LinkLink active state');
   const [rows, cols] = DIMENSIONS[spec];
-  const board = exactRecord(record.board, ['rows', 'cols', 'tiles'], [], 'LinkLink board');
+  const board = responseRecord(record.board, ['rows', 'cols', 'tiles'], [], 'LinkLink board');
   safeInteger(board.rows, rows, rows, 'LinkLink board rows');
   safeInteger(board.cols, cols, cols, 'LinkLink board columns');
   if (!Array.isArray(board.tiles) || board.tiles.length !== rows * cols)
     invalidResponse('LinkLink tiles');
   const seen = new Set<string>();
   const tiles: LinkLinkTile[] = board.tiles.map((value, index) => {
-    const tile = exactRecord(
+    const tile = responseRecord(
       value,
       ['row', 'col', 'tile_key', 'removed'],
       [],
@@ -157,7 +157,7 @@ export function normalizeLinkLinkState(value: unknown): LinkLinkState {
 }
 
 export function normalizeLinkLinkSummary(value: unknown): LinkLinkSummary {
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     [
       'session_id',
@@ -220,7 +220,7 @@ export function normalizeLinkLinkSummary(value: unknown): LinkLinkSummary {
 
 export function normalizeLinkLinkCurrent(value: unknown): LinkLinkCurrent {
   if (value === null) return null;
-  const discriminator = exactRecord(
+  const discriminator = responseRecord(
     value,
     [],
     [
@@ -252,7 +252,7 @@ export function normalizeLinkLinkCurrent(value: unknown): LinkLinkCurrent {
 
 export function normalizeLinkLinkLease(value: unknown): number {
   return unixTime(
-    exactRecord(value, ['expires_at'], [], 'LinkLink lease').expires_at,
+    responseRecord(value, ['expires_at'], [], 'LinkLink lease').expires_at,
     'LinkLink lease expiry',
   );
 }
@@ -277,7 +277,7 @@ function normalizePath(rawPath: unknown, spec: LinkLinkSpec): readonly LinkLinkC
     invalidResponse('LinkLink match path');
   const [rows, cols] = DIMENSIONS[spec];
   const path = rawPath.map((value) => {
-    const point = exactRecord(value, ['row', 'col'], [], 'LinkLink path point');
+    const point = responseRecord(value, ['row', 'col'], [], 'LinkLink path point');
     return {
       row: safeInteger(point.row, -1, rows, 'LinkLink path row'),
       col: safeInteger(point.col, -1, cols, 'LinkLink path column'),
@@ -328,9 +328,9 @@ export function normalizeLinkLinkHint(
     return { result, hint: null, reshuffled };
   }
   if (reshuffled) invalidResponse('LinkLink mixed hint and refresh');
-  const hint = exactRecord(rawHint, ['first', 'second', 'path'], [], 'LinkLink hint pair');
+  const hint = responseRecord(rawHint, ['first', 'second', 'path'], [], 'LinkLink hint pair');
   const point = (value: unknown): LinkLinkCoordinate => {
-    const record = exactRecord(value, ['row', 'col'], [], 'LinkLink hint coordinate');
+    const record = responseRecord(value, ['row', 'col'], [], 'LinkLink hint coordinate');
     return {
       row: safeInteger(record.row, 0, result.board.rows - 1, 'LinkLink hint row'),
       col: safeInteger(record.col, 0, result.board.cols - 1, 'LinkLink hint column'),
@@ -350,7 +350,7 @@ export function normalizeLinkLinkLeaderboard(
   spec: LinkLinkSpec,
   windowDays: 7 | 30,
 ): LinkLinkLeaderboard {
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     ['spec', 'window_days', 'window_start', 'as_of', 'rules_version', 'rows', 'me'],
     [],
@@ -363,7 +363,7 @@ export function normalizeLinkLinkLeaderboard(
   if (!Array.isArray(record.rows) || record.rows.length > 20)
     invalidResponse('LinkLink leaderboard window or rows');
   const row = (value: unknown): LinkLinkRank => {
-    const r = exactRecord(
+    const r = responseRecord(
       value,
       ['rank', 'score', 'achieved_at', 'identity', 'is_me'],
       [],

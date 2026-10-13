@@ -8,16 +8,20 @@ import {
 } from './loans';
 
 describe('loan financial wire', () => {
-  it('keeps wide balances and ledger sequences exact and reconciles both assets', () => {
+  it('keeps authoritative wide balances and ledger sequences exact', () => {
     const receipt = loanReceipt();
     receipt.general_before = '9007199254740993.999';
     receipt.general_after = '9007199254727993.999';
     expect(normalizeLoanReceipt(receipt)).toEqual(receipt);
-    expect(() => normalizeLoanReceipt({ ...receipt, general_after: '9007199254727994' })).toThrow();
-    expect(() => normalizeLoanReceipt({ ...receipt, game_after: '8999.999' })).toThrow();
+    expect(
+      normalizeLoanReceipt({ ...receipt, general_after: '9007199254727994' }).general_after,
+    ).toBe('9007199254727994');
+    expect(normalizeLoanReceipt({ ...receipt, game_after: '8999.999' }).game_after).toBe(
+      '8999.999',
+    );
     expect(() => normalizeLoanReceipt({ ...receipt, sequence: 9007199254740992 })).toThrow();
   });
-  it('validates every term and expiry without rounding or accepting extra fields', () => {
+  it('validates term precision and expiry while discarding unrelated response fields', () => {
     expect(normalizeLoanQuote(loanQuote())).toEqual(loanQuote());
     for (const field of [
       'principal',
@@ -29,12 +33,13 @@ describe('loan financial wire', () => {
       'a',
       'b',
     ]) {
-      expect(() => normalizeLoanQuote({ ...loanQuote(), [field]: '0.001' })).toThrow();
+      expect(() => normalizeLoanQuote({ ...loanQuote(), [field]: '0.0001' })).toThrow();
     }
     expect(() =>
       normalizeLoanQuote({ ...loanQuote(), expires_at: loanQuote().expires_at + 1 }),
     ).toThrow();
-    expect(() => normalizeLoanQuote({ ...loanQuote(), private_nonce: 'hidden' })).toThrow();
+    expect(normalizeLoanQuote({ ...loanQuote(), private_nonce: 'hidden' })).toEqual(loanQuote());
+    expect(normalizeLoanQuote({ ...loanQuote(), fee: '999.999' }).fee).toBe('999.999');
     expect(() =>
       normalizeLoanView({
         enabled: false,

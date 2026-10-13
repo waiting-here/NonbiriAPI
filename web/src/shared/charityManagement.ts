@@ -985,14 +985,8 @@ function listPayload(value: unknown): { items: unknown[]; hasMore: boolean; tota
 
 function dataArrayPayload(value: unknown, field: string): unknown[] {
   const record = requiredRecord(value, field);
-  // This management endpoint has one deliberately narrow wire shape. Do not
-  // silently accept pagination/diagnostic fields that could be mistaken for a
-  // different authorization or resource projection.
-  if (
-    Object.keys(record).length !== 1 ||
-    !Object.prototype.hasOwnProperty.call(record, 'data') ||
-    !Array.isArray(record.data)
-  ) {
+  // managementRead checks authority; callers project each binding before caching it.
+  if (!Object.prototype.hasOwnProperty.call(record, 'data') || !Array.isArray(record.data)) {
     return invalidResponse(`${field} data`);
   }
   return record.data;

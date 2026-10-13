@@ -54,7 +54,7 @@ describe('authoritative RPS presentation', () => {
       ],
     });
     Object.assign(value.seats[1], { own_buy_in: '1' });
-    expect(() => normalizeRPSPending(value)).toThrow();
+    expect(normalizeRPSPending(value).seats[1]).not.toHaveProperty('own_buy_in');
   });
 
   it('preserves unknown historical fields without inventing zero or gestures', () => {
@@ -87,12 +87,17 @@ describe('authoritative RPS presentation', () => {
     });
   });
 
+  it('preserves cash-out and net as separate authoritative values', () => {
+    expect(normalizeRPSPending({ ...pending(), own_cash_out: '20' })).toMatchObject({
+      ownCashOut: '20',
+      ownWalletNet: '2.003',
+      ownBuyIn: '18.002',
+    });
+  });
+
   it.each([
     (value: ReturnType<typeof pending>) => {
       value.own_buy_in = null;
-    },
-    (value: ReturnType<typeof pending>) => {
-      value.own_cash_out = '20';
     },
     (value: ReturnType<typeof pending>) => {
       value.own_cash_out = (1n << 128n).toString();

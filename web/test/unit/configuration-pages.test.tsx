@@ -530,7 +530,7 @@ describe('authoritative site-config frontend', () => {
     expect(timezoneInput).toHaveValue(-300);
   });
 
-  test('accepts only the closed Generation 2 catalog entry shape', () => {
+  test('requires current catalog fields and ignores response extensions', () => {
     const current = catalogEntry('site_name', {
       type: 'string',
       title: { zh: '站点名称', en: 'Site name' },
@@ -548,9 +548,9 @@ describe('authoritative site-config frontend', () => {
         type: undefined,
         value_type: 'text',
       }),
-    ).toThrow(/site configuration catalog entry/i);
-    expect(() => normalizeSiteConfigCatalogEntry({ ...current, alpha_optional: true })).toThrow(
-      /site configuration catalog entry/i,
+    ).toThrow();
+    expect(normalizeSiteConfigCatalogEntry({ ...current, alpha_optional: true })).toEqual(
+      normalizeSiteConfigCatalogEntry(current),
     );
   });
 
@@ -1695,8 +1695,8 @@ describe('B1 and U3-U5 additive wire normalizers', () => {
         created_at: '2026-08-23T00:00:00Z',
       }),
     ).toThrow(/creation time/i);
-    expect(() => normalizeCoreEndpoint({ ...validEndpoint, unexpected_status: true })).toThrow(
-      /invalid endpoint/i,
+    expect(normalizeCoreEndpoint({ ...validEndpoint, unexpected_status: true })).toEqual(
+      normalizeCoreEndpoint(validEndpoint),
     );
 
     const missingCurrent = charityModelFixture(3);

@@ -17,7 +17,9 @@ describe('admin match records', () => {
     const polluted = structuredClone(anonymous);
     Object.assign(polluted.items[0].facts!.initial, { user_id: '17' });
     expect(() => normalizeExport(polluted, 'likes', 'anonymous')).toThrow();
-    expect(() => normalizeMatch({ ...recent.items[0], extra: true }, 'likes', 'recent')).toThrow();
+    expect(normalizeMatch({ ...recent.items[0], extra: true }, 'likes', 'recent')).toEqual(
+      normalizeMatch(recent.items[0], 'likes', 'recent'),
+    );
     expect(() => normalizeRound({ ...recent.items[1].record, round: 76 }, 'recent')).toThrow();
   });
   it('rejects oversized pages, misplaced round references, and malformed cursors', () => {

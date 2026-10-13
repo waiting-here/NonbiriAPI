@@ -1,3 +1,4 @@
+import { exactRecord } from '@shared/operations/wire';
 import { ApiError } from '@shared/query/http';
 import {
   normalizeDonationHandling,
@@ -256,7 +257,7 @@ function queryText(value: unknown, label: string): string {
 }
 
 function donationFilters(value: unknown): Required<ManagedDonationPageFilters> {
-  const root = record(value, ['status', 'handling', 'q'], 'donation page filters', []);
+  const root = exactRecord(value, ['status', 'handling', 'q'], 'donation page filters', []);
   const status =
     root.status === undefined
       ? ''
@@ -286,7 +287,7 @@ interface NormalizedSourceFilters {
 
 function sourceFilters(value: unknown, allowIdle: boolean): NormalizedSourceFilters {
   const fields = allowIdle ? ['q', 'scope', 'handling', 'idle'] : ['q', 'scope', 'handling'];
-  const root = record(
+  const root = exactRecord(
     value,
     fields,
     allowIdle ? 'source key page filters' : 'source page filters',

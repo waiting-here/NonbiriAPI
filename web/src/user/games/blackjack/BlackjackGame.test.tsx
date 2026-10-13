@@ -319,14 +319,16 @@ describe('blackjack public state and simultaneous controls', () => {
     }
   });
 
-  it('rejects private shoe fields, unexpected seats, and identity-bearing anonymous exports', () => {
+  it('strips unused shoe and identity fields while rejecting unexpected seats', () => {
     const home = blackjackWire();
     expect(blackjackState(home).table?.fact.cards?.dealer).toHaveLength(1);
-    expect(() => blackjackState({ ...home, table: { ...home.table, deck: [] } })).toThrow();
+    expect(blackjackState({ ...home, table: { ...home.table, deck: [] } })).toEqual(
+      blackjackState(home),
+    );
     const extra = structuredClone(home);
     extra.table.fact.cards!.seats.push({ ...extra.table.fact.cards!.seats[0], number: 8 });
     expect(() => blackjackState(extra)).toThrow();
-    expect(() =>
+    expect(
       blackjackAdminDetail({
         id: 'bja_AAAAAAAAAAAAAAAAAAAAAA',
         dataset: 'anonymous',
@@ -338,6 +340,6 @@ describe('blackjack public state and simultaneous controls', () => {
         },
         recent: { user_id: '1' },
       }),
-    ).toThrow();
+    ).not.toHaveProperty('recent');
   });
 });

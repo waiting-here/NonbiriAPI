@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { configValue, homeValue } from '../common/duel/normalize';
-import { biddingCodec, biddingView } from './normalize';
+import { biddingAction, biddingCodec, biddingView } from './normalize';
 import { biddingHomeWire, biddingViewWire } from './testFixtures';
 
 describe('bidding public boundary', () => {
@@ -13,24 +13,31 @@ describe('bidding public boundary', () => {
     expect(result.current?.view.selected).toBe(13);
     expect(result.current?.profiles[1].displayName).toBe('Card player');
   });
-  it('rejects private decks, duplicate cards, extra selected seats and unpaired rewards', () => {
+  it('projects the visible cards and rejects unusable card and reward data', () => {
     const base = biddingViewWire();
+    expect(biddingView({ ...base, decks: [[1], [2]], opponent_selected_card: 13 })).toEqual(
+      biddingView(base),
+    );
     for (const invalid of [
-      { ...base, decks: [[1], [2]] },
-      { ...base, opponent_selected_card: 13 },
+      { ...base, own_selected_card: 14 },
       { ...base, hand_remaining: [Array(13).fill(1), base.hand_remaining[1]] },
       { ...base, rewards: base.rewards.slice(0, 1) },
     ])
       expect(() => biddingView(invalid)).toThrow();
   });
-  it('rejects invalid revisions, null deadlines and hidden identity fields', () => {
+  it('keeps bid commands exact', () => {
+    expect(biddingAction({ kind: 'bid', card: 13 })).toEqual({ kind: 'bid', card: 13 });
+    expect(() => biddingAction({ kind: 'bid', card: 14 })).toThrow();
+    expect(() => biddingAction({ kind: 'bid', card: 13, use: true })).toThrow();
+  });
+  it('rejects invalid revisions and deadlines while projecting anonymous profiles', () => {
     const base = biddingHomeWire();
-    for (const change of [
-      { revision: 1 },
-      { phase_seq: '0' },
-      { deadline: null },
-      { profiles: [{ kind: 'anonymous', user_id: '1' }, { kind: 'anonymous' }] },
-    ])
+    const profiles = [{ kind: 'anonymous', user_id: '1' }, { kind: 'anonymous' }];
+    expect(
+      homeValue({ ...base, current: { ...base.current, profiles } }, biddingCodec).current
+        ?.profiles[0],
+    ).toEqual({ kind: 'anonymous' });
+    for (const change of [{ revision: 1 }, { phase_seq: '0' }, { deadline: null }])
       expect(() =>
         homeValue({ ...base, current: { ...base.current, ...change } }, biddingCodec),
       ).toThrow();

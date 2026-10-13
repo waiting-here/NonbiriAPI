@@ -96,10 +96,7 @@ function numberedKeyBindingPage(
   }
   const record = value as UnknownRecord;
   const allowed = ['data', 'next_cursor', 'pagination'] as const;
-  if (
-    Object.keys(record).some((key) => !allowed.includes(key as (typeof allowed)[number])) ||
-    allowed.some((key) => !Object.hasOwn(record, key))
-  ) {
+  if (allowed.some((key) => !Object.hasOwn(record, key))) {
     invalidResponse('key binding page');
   }
   if (record.next_cursor !== null) invalidResponse('key binding cursor');

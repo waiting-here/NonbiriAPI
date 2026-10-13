@@ -244,9 +244,9 @@ describe('administrator charity grouped projection', () => {
     );
   });
 
-  it('fails closed on malformed provenance and invalid expiry bounds', () => {
-    expect(() => donation('1', [key({ ...mainstream, extra: 'not-allowed' }, '11')])).toThrow(
-      /mainstream charity source/i,
+  it('projects provenance and rejects invalid expiry bounds', () => {
+    expect(donation('1', [key({ ...mainstream, extra: 'not-allowed' }, '11')])).toEqual(
+      donation('1', [key(mainstream, '11')]),
     );
     expect(() =>
       donation('1', [key(mainstream, '11', { ended_reason: 'physical_deleted' })]),
@@ -267,7 +267,7 @@ describe('administrator charity grouped projection', () => {
     ).toThrow(/ended reason/i);
   });
 
-  it('reads the closed admin page with a status filter and cursor', async () => {
+  it('reads the admin page with a status filter and cursor', async () => {
     const fetchMock = vi.fn<typeof fetch>(async (input) => {
       expect(String(input)).toBe('/admin/api/donations?status=approved&cursor=YWJj&limit=50');
       return jsonResponse({ data: [donationWire('1', [key(custom, '11')])], next_cursor: null });

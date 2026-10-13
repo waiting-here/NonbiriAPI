@@ -76,18 +76,25 @@ describe('exact rankings', () => {
         normalizeRanking({ ...board(), rows: [{ ...row(), identity }] }, 'bidding', '7d'),
       ).toThrow();
   });
-  it('rejects unsafe numeric amounts, stale windows and impossible own rows', () => {
+  it('rejects unsafe amounts and stale windows while using server ranks and own rows', () => {
     for (const amount of [1, '0', '-1', '1.000', '1e6'])
       expect(() =>
         normalizeRanking({ ...board(), rows: [{ ...row(), amount }] }, 'bidding', '7d'),
       ).toThrow();
     expect(() => normalizeRanking(board(), 'bidding', '30d')).toThrow();
+    expect(
+      normalizeRanking({ ...board(), me: row('21', '1', true) }, 'bidding', '7d').me?.rank,
+    ).toBe('21');
+    expect(
+      normalizeRanking(
+        { ...board(), rows: [row('1', '1'), row('3', '2')] },
+        'bidding',
+        '7d',
+      ).rows.map((entry) => entry.rank),
+    ).toEqual(['1', '3']);
     expect(() =>
-      normalizeRanking({ ...board(), me: row('21', '1', true) }, 'bidding', '7d'),
-    ).toThrow();
-    expect(() =>
-      normalizeRanking({ ...board(), rows: [row('1'), row('3')] }, 'bidding', '7d'),
-    ).toThrow();
+      normalizeRanking({ ...board(), rows: [row('1'), row('1')] }, 'bidding', '7d'),
+    ).toThrow(/duplicate rank/);
   });
   it('accepts twenty plus me and exact charity page offsets', () => {
     const rows = Array.from({ length: 20 }, (_, i) => row(String(i + 1)));

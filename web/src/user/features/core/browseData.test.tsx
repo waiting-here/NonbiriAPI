@@ -166,16 +166,18 @@ describe('resource browse summary normalizers', () => {
     expect(model.browse).toEqual({ ...modelBrowse(), preview: [BASE_BINDING] });
   });
 
-  it('rejects unknown/private browse fields and invalid binding view state', () => {
-    expect(() =>
+  it('strips unused browse fields and rejects invalid binding view state', () => {
+    expect(
       normalizeEndpoint({ ...OLD_ENDPOINT, browse: { ...endpointBrowse(), private: true } }),
-    ).toThrow(/endpoint browse summary/i);
-    expect(() =>
+    ).toEqual(normalizeEndpoint({ ...OLD_ENDPOINT, browse: endpointBrowse() }));
+    expect(
       normalizeEndpointKey({
         ...OLD_KEY,
         browse: { ...keyBrowse(), preview: [{ ...BASE_BINDING, secret: 'nope' }] },
       }),
-    ).toThrow(/key binding view/i);
+    ).toEqual(
+      normalizeEndpointKey({ ...OLD_KEY, browse: { ...keyBrowse(), preview: [BASE_BINDING] } }),
+    );
     expect(() => normalizeKeyBindingView({ ...BASE_BINDING, state: 'other' })).toThrow(
       /key binding state/i,
     );

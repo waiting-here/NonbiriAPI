@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { GachaApp } from './GachaApp';
 import { Shop } from './Shop';
@@ -9,6 +9,82 @@ import type { GachaPort, Outcome, Snapshot } from './types';
 function snapshot(): Snapshot {
   return { ...gachaSnapshot(), visible_themes: themes.map((theme) => theme.id) };
 }
+
+it.each([
+  ['-1', '10000', '10000', '10,000 游戏积分 + 0 通用积分', true, false],
+  ['10000', '-0.001', '10000', '0 游戏积分 + 10,000 通用积分', true, true],
+  ['-1', '-0.001', '10000', '0 游戏积分 + 10,000 通用积分', false, false],
+  ['0', '0', '10000', '0 游戏积分 + 10,000 通用积分', false, false],
+  ['0.999', '0.001', '1', '0.001 游戏积分 + 0.999 通用积分', true, false],
+] as const)(
+  'renders wallets %s/%s and previews ticket payment without spending debt',
+  async (general, game, price, split, standardAllowed, limitedAllowed) => {
+    const state = snapshot();
+    state.credits = { general, game };
+    state.shop.permanent_price = state.shop.limited_price = price;
+    const port: GachaPort = {
+      scope: `user:wallet:${general}:${game}`,
+      load: async () => state,
+      act: async () => ({ snapshot: state }),
+      history: async () => ({ items: [] }),
+    };
+    render(<GachaApp port={port} />);
+    fireEvent.click(await screen.findByTitle('兑换常驻抽奖券'));
+    const dialog = within(screen.getByRole('dialog', { name: '兑换抽奖券' }));
+    fireEvent.change(dialog.getByRole('spinbutton', { name: '兑换数量' }), {
+      target: { value: '1' },
+    });
+    expect(dialog.getByText('优先消耗游戏积分：' + split)).toBeVisible();
+    for (const balance of [general, game].filter((value) => value.startsWith('-'))) {
+      expect(dialog.getByText(balance + ' 积分')).toBeVisible();
+    }
+    const standard = dialog.getByRole('button', {
+      name: standardAllowed ? '兑换 1 张' : '积分不足',
+    });
+    if (standardAllowed) expect(standard).toBeEnabled();
+    else expect(standard).toBeDisabled();
+    fireEvent.click(dialog.getByRole('tab', { name: '限定抽奖券' }));
+    expect(dialog.getByText('仅消耗通用积分。')).toBeVisible();
+    const limited = dialog.getByRole('button', { name: limitedAllowed ? '兑换 1 张' : '积分不足' });
+    if (limitedAllowed) expect(limited).toBeEnabled();
+    else expect(limited).toBeDisabled();
+  },
+);
+
+it('keeps rendering when an authoritative purchase response changes a wallet below zero', async () => {
+  const state = snapshot();
+  const act = vi.fn<GachaPort['act']>(async (input) => {
+    if (input.action === 'buy') {
+      state.credits = { general: '-0.001', game: '10000' };
+      state.tickets.permanent++;
+    }
+    return { snapshot: structuredClone(state) };
+  });
+  render(
+    <GachaApp
+      port={{
+        scope: 'user:purchase-balance',
+        load: async () => state,
+        act,
+        history: async () => ({ items: [] }),
+      }}
+    />,
+  );
+  fireEvent.click(await screen.findByTitle('兑换常驻抽奖券'));
+  fireEvent.change(screen.getByRole('spinbutton', { name: '兑换数量' }), {
+    target: { value: '1' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: '兑换 1 张' }));
+  await waitFor(() =>
+    expect(act).toHaveBeenCalledWith(
+      { action: 'buy', ticket: 'permanent', quantity: 1, revision: state.shop.revision },
+      expect.any(String),
+    ),
+  );
+  fireEvent.click(await screen.findByTitle('兑换限定抽奖券'));
+  expect(await screen.findByText('-0.001 积分')).toBeVisible();
+  expect(screen.getByRole('button', { name: '积分不足' })).toBeDisabled();
+});
 
 it('keeps entry identity through a lost response and language change', async () => {
   const act = vi

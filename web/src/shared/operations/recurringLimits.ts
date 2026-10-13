@@ -1,3 +1,4 @@
+import { exactRecord } from '@shared/operations/wire';
 import { ApiError } from '@shared/query/http';
 import { decoded, idempotentOptions } from './api';
 import { charityScopePath } from './charityScope';
@@ -122,7 +123,7 @@ function validateCombination(
 }
 
 function normalizeRuleInput(value: unknown, label: string): RecurringLimitRuleInput {
-  const root = record(
+  const root = exactRecord(
     value,
     [
       'id',
@@ -154,9 +155,7 @@ function normalizeRuleInput(value: unknown, label: string): RecurringLimitRuleIn
           `${label} alignment`,
         );
   const anchorLocal =
-    root.anchor_local == null
-      ? null
-      : string(root.anchor_local, `${label} anchor`, { min: 19 });
+    root.anchor_local == null ? null : string(root.anchor_local, `${label} anchor`, { min: 19 });
   if (alignment === 'exact_time' ? anchorLocal === null : anchorLocal !== null)
     invalidResponse(`${label} anchor`);
   const weekStartsOn = nullableInteger(root.week_starts_on, `${label} week start`, 1, 7);
@@ -294,7 +293,7 @@ function normalizeWritePayload(payload: RecurringLimitsWritePayload): RecurringL
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     throw new ApiError('invalid_request', 'Recurring limits payload is invalid.', 400);
   }
-  const root = record(payload, ['expected_revision', 'rules'], 'recurring limits payload');
+  const root = exactRecord(payload, ['expected_revision', 'rules'], 'recurring limits payload');
   const expectedRevision = decimal(root.expected_revision, 'expected donation revision', {
     positive: true,
   });

@@ -1,17 +1,15 @@
 import { BAITS, type Bait } from '../common/types';
 import {
   booleanValue,
-  creditsToMilli,
   creditsValue,
   decimalValue,
   enumValue,
-  exactRecord,
+  responseRecord,
   entryPayment,
   invalidResponse,
   opaqueID,
   publicIdentity,
   safeInteger,
-  sumCredits,
   textValue,
   unixTime,
 } from '../common/strict';
@@ -107,9 +105,19 @@ function blueFatFishLength(
 }
 
 export function normalizeFishingPending(value: unknown): FishingSettlementPending {
-  const record = exactRecord(
+  const record = responseRecord(
     value,
-    ['batch_id', 'bait', 'count', 'entry_total', 'state', 'next_attempt_at', 'retry_exhausted', 'rules_version', 'payment'],
+    [
+      'batch_id',
+      'bait',
+      'count',
+      'entry_total',
+      'state',
+      'next_attempt_at',
+      'retry_exhausted',
+      'rules_version',
+      'payment',
+    ],
     [],
     'fishing pending',
   );
@@ -140,7 +148,7 @@ export function normalizeFishingPending(value: unknown): FishingSettlementPendin
 }
 
 function normalizeRake(value: unknown, field: string): FishingRake {
-  const record = exactRecord(value, ['platform', 'welfare', 'thursday'], [], field);
+  const record = responseRecord(value, ['platform', 'welfare', 'thursday'], [], field);
   return {
     platform: creditsValue(record.platform, {}, field),
     welfare: creditsValue(record.welfare, {}, field),
@@ -149,10 +157,14 @@ function normalizeRake(value: unknown, field: string): FishingRake {
 }
 
 export function normalizeFishingResult(value: unknown): FishingBatchResult {
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     [
-      'rules_version', 'payment', 'game_balance', 'net_payout_total', 'rake',
+      'rules_version',
+      'payment',
+      'game_balance',
+      'net_payout_total',
+      'rake',
       'batch_id',
       'bait',
       'count',
@@ -170,14 +182,11 @@ export function normalizeFishingResult(value: unknown): FishingBatchResult {
   const parsedCount = count(record.count, 'fishing count');
   const unitPrice = creditsValue(record.unit_price, { positive: true }, 'fishing unit price');
   const entryTotal = creditsValue(record.entry_total, { positive: true }, 'fishing entry total');
-  if (creditsToMilli(unitPrice) * BigInt(parsedCount) !== creditsToMilli(entryTotal)) {
-    invalidResponse('fishing entry arithmetic');
-  }
   if (!Array.isArray(record.outcomes) || record.outcomes.length !== parsedCount)
     invalidResponse('fishing outcomes');
   const funding = entryPayment(record, entryTotal, 'fishing');
   const outcomes = record.outcomes.map((value, index) => {
-    const outcome = exactRecord(
+    const outcome = responseRecord(
       value,
       ['ordinal', 'species_key', 'tier', 'size_cm', 'reward', 'net_reward', 'rake'],
       ['blue_fat_fish_length_cm'],
@@ -197,8 +206,6 @@ export function normalizeFishingResult(value: unknown): FishingBatchResult {
     const reward = creditsValue(outcome.reward, {}, `fishing outcome ${index} reward`);
     const netReward = creditsValue(outcome.net_reward, {}, `fishing outcome ${index} net reward`);
     const rake = normalizeRake(outcome.rake, `fishing outcome ${index} rake`);
-    if (sumCredits([netReward, rake.platform, rake.welfare, rake.thursday]) !== reward ||
-        funding.rulesVersion === 1 && netReward !== reward) invalidResponse('fishing outcome arithmetic');
     return {
       netReward,
       rake,
@@ -213,12 +220,6 @@ export function normalizeFishingResult(value: unknown): FishingBatchResult {
   const payoutTotal = creditsValue(record.payout_total, {}, 'fishing payout total');
   const netPayoutTotal = creditsValue(record.net_payout_total, {}, 'fishing net payout total');
   const rake = normalizeRake(record.rake, 'fishing rake total');
-  for (const kind of ['platform', 'welfare', 'thursday'] as const) {
-    if (sumCredits(outcomes.map((outcome) => outcome.rake[kind])) !== rake[kind]) invalidResponse('fishing rake sum');
-  }
-  if (sumCredits(outcomes.map((outcome) => outcome.netReward)) !== netPayoutTotal ||
-      sumCredits(outcomes.map((outcome) => outcome.reward)) !== payoutTotal)
-    invalidResponse('fishing payout arithmetic');
   return {
     ...funding,
     netPayoutTotal,
@@ -240,11 +241,15 @@ export function normalizeFishingResult(value: unknown): FishingBatchResult {
 export function normalizeFishingStart(
   value: unknown,
 ): FishingBatchResult | FishingSettlementPending {
-  const record = exactRecord(
+  const record = responseRecord(
     value as unknown,
     [],
     [
-      'rules_version', 'payment', 'game_balance', 'net_payout_total', 'rake',
+      'rules_version',
+      'payment',
+      'game_balance',
+      'net_payout_total',
+      'rake',
       'batch_id',
       'bait',
       'count',
@@ -267,7 +272,7 @@ export function normalizeFishingStart(
 }
 
 export function normalizeFishingState(value: unknown): FishingState {
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     ['settlement_pending', 'unrevealed', 'has_more_unrevealed'],
     [],
@@ -292,7 +297,7 @@ function rowBase(value: unknown, expected: 'single' | 'total', field: string) {
       ? ['rank', 'species_key', 'size_cm', 'identity', 'is_me']
       : ['rank', 'total_credits', 'identity', 'is_me'];
   const optional = expected === 'single' ? ['blue_fat_fish_length_cm'] : [];
-  const record = exactRecord(value, required, optional, field);
+  const record = responseRecord(value, required, optional, field);
   return {
     record,
     rank: decimalValue(record.rank, { bits: 256, positive: true }, `${field} rank`),
@@ -332,7 +337,7 @@ export function normalizeFishingLeaderboard(
   value: unknown,
   expectedBoard: FishingLeaderboardBoard,
 ): FishingLeaderboard {
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     ['board', 'window_start', 'entries', 'me'],
     [],

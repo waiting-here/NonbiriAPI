@@ -47,7 +47,7 @@ describe('core wire normalizers', () => {
     );
   });
 
-  it('keeps charity visibility independent and rejects private restriction details', () => {
+  it('keeps charity visibility independent and strips private restriction details', () => {
     const raw = jsonFixture('internal/auth/testdata/user_envelope.json') as {
       user: Record<string, unknown>;
     };
@@ -67,8 +67,16 @@ describe('core wire normalizers', () => {
     expect(parsed.charity_profile_public).toBe(true);
     expect(parsed.game_profile_public).toBe(false);
     expect(parsed.automatic_restrictions).toEqual([restriction]);
+    // The account DTO exposes restriction state; evidence is never part of this projection.
+    const projected = normalizeUserEnvelope({
+      user: {
+        ...user,
+        automatic_restrictions: [{ ...restriction, evidence: [] }],
+      },
+    }).user.automatic_restrictions;
+    expect(projected).toEqual([restriction]);
+    expect(projected[0]).not.toHaveProperty('evidence');
     for (const automatic_restrictions of [
-      [{ ...restriction, evidence: [] }],
       [restriction, restriction],
       [{ ...restriction, kind: 'deduction' }],
     ]) {
@@ -117,7 +125,7 @@ describe('core wire normalizers', () => {
     expect(user.user.usage.total_requests).toBe('340282366920938463463374607431768211455');
   });
 
-  it('strictly decodes the frozen home check-in wire without numeric conversion', () => {
+  it('decodes home check-in fields without numeric conversion', () => {
     const maximum = '340282366920938463463374607431768211.455';
     expect(normalizeHomeCheckinStatus({ enabled: false })).toEqual({
       enabled: false,
@@ -166,8 +174,8 @@ describe('core wire normalizers', () => {
       balance: '-1.5',
     });
 
-    expect(() => normalizeHomeCheckinStatus({ enabled: false, reason: 'hidden' })).toThrow(
-      /check-in status/i,
+    expect(normalizeHomeCheckinStatus({ enabled: false, reason: 'hidden' })).toEqual(
+      normalizeHomeCheckinStatus({ enabled: false }),
     );
     expect(() =>
       normalizeHomeCheckinStatus({ enabled: false, mutually_exclusive: 'true' }),
@@ -197,9 +205,9 @@ describe('core wire normalizers', () => {
         balance_cap: '3',
       }),
     ).toThrow(/award range/i);
-    expect(() =>
+    expect(
       normalizeHomeCheckinResult({ asset_type: 'general', award: '1', balance: '2', extra: true }),
-    ).toThrow(/check-in result/i);
+    ).toEqual({ asset_type: 'general', award: '1', balance: '2' });
   });
 
   it('enforces the closed game-route-state tuples in the home summary', () => {
@@ -278,14 +286,14 @@ describe('core wire normalizers', () => {
         continue: [{ ...valid.continue[0], route_id: 'game-rps' }],
       }),
     ).toThrow(/home game continuation/i);
-    expect(() =>
+    expect(
       normalizeHomeGameSummary({
         ...valid,
         pending_results: [{ ...valid.pending_results[0], state: 'committed' }],
       }),
-    ).toThrow(/pending game result/i);
-    expect(() => normalizeHomeGameSummary({ ...valid, href: '/games' })).toThrow(
-      /home game summary/i,
+    ).toEqual(normalizeHomeGameSummary({ ...valid, pending_results: [valid.pending_results[0]] }));
+    expect(normalizeHomeGameSummary({ ...valid, href: '/games' })).toEqual(
+      normalizeHomeGameSummary(valid),
     );
   });
 
@@ -309,32 +317,32 @@ describe('core wire normalizers', () => {
       data: [announcement],
       next_cursor: 'next',
     });
-    expect(() =>
+    expect(
       normalizeHomeAnnouncementPage({
         data: [{ ...announcement, rendered_body: 'not a summary field' }],
         next_cursor: null,
       }),
-    ).toThrow(/announcement summary/i);
-    expect(() =>
+    ).toEqual(normalizeHomeAnnouncementPage({ data: [announcement], next_cursor: null }));
+    expect(
       normalizeHomeAnnouncementPage({ data: [announcement], next_cursor: null, extra: true }),
-    ).toThrow(/announcements page/i);
+    ).toEqual(normalizeHomeAnnouncementPage({ data: [announcement], next_cursor: null }));
   });
 
-  it('rejects unknown fields, unsafe ID widths, C1 controls, and out-of-range times', () => {
+  it('strips extensions and rejects unsafe ID widths, controls and out-of-range times', () => {
     const endpoint = jsonFixture('internal/resources/testdata/endpoint.json') as Record<
       string,
       unknown
     >;
-    expect(() => normalizeEndpoint({ ...endpoint, extra: true })).toThrow(/invalid endpoint/i);
+    expect(normalizeEndpoint({ ...endpoint, extra: true })).toEqual(normalizeEndpoint(endpoint));
     expect(() => normalizeEndpoint({ ...endpoint, id: '9223372036854775808' })).toThrow(
       /endpoint id/i,
     );
     expect(() => normalizeEndpoint({ ...endpoint, note: 'bad\u0085note' })).toThrow(
       /endpoint note/i,
     );
-    expect(() =>
-      normalizeEndpoint({ ...endpoint, origin: { kind: 'custom', name: 'leak' } }),
-    ).toThrow(/endpoint origin/i);
+    expect(normalizeEndpoint({ ...endpoint, origin: { kind: 'custom', name: 'leak' } })).toEqual(
+      normalizeEndpoint({ ...endpoint, origin: { kind: 'custom' } }),
+    );
     expect(() => normalizeEndpoint({ ...endpoint, updated_at: 253_402_300_800 })).toThrow(
       /update time/i,
     );
@@ -352,7 +360,7 @@ describe('core wire normalizers', () => {
     ).toBe('3703');
   });
 
-  it('keeps mainstream provenance closed and normalizes only safe creation options', () => {
+  it('projects mainstream provenance and safe creation options', () => {
     const channelID = `mch_${'A'.repeat(22)}`;
     expect(
       normalizeEndpointOrigin({ kind: 'mainstream', channel_id: channelID, name: 'Main channel' }),
@@ -364,14 +372,16 @@ describe('core wire normalizers', () => {
         name: ' '.repeat(128),
       }),
     ).toThrow(/channel name/i);
-    expect(() =>
+    expect(
       normalizeEndpointOrigin({
         kind: 'mainstream',
         channel_id: channelID,
         name: 'Main channel',
         category: 'subscription',
       }),
-    ).toThrow(/endpoint origin/i);
+    ).toEqual(
+      normalizeEndpointOrigin({ kind: 'mainstream', channel_id: channelID, name: 'Main channel' }),
+    );
 
     expect(
       normalizeEndpointCreateOptions({

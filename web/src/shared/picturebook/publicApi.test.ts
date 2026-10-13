@@ -28,19 +28,28 @@ describe('image activity public boundary', () => {
     expect(validScalar({ ...rule, step: 1e-8 }, 3e-8)).toBe(true);
   });
 
-  it('rejects private model, queue and task fields instead of carrying them into the browser', () => {
+  it('projects model, queue and task data without carrying unused fields into the page', () => {
     expect(decodeModel(modelFixture()).revision).toBe('2');
     for (const field of ['upstream_model_id', 'base_url', 'metadata', 'secret', 'mapping'])
-      expect(() => decodeModel({ ...modelFixture(), [field]: 'private' })).toThrow();
-    expect(() => decodeTask({ ...taskFixture(), upstream_task_id: 'private' })).toThrow();
-    expect(() =>
+      expect(decodeModel({ ...modelFixture(), [field]: 'private' })).toEqual(
+        decodeModel(modelFixture()),
+      );
+    expect(decodeTask({ ...taskFixture(), upstream_task_id: 'private' })).toEqual(
+      decodeTask(taskFixture()),
+    );
+    expect(
       decodeQueue({
         queued: 1,
         running: 0,
         dispatch_paused: false,
         own: [{ task_id: taskFixture().id, position: 1, accepted_at: 1, user_id: '2' }],
       }),
-    ).toThrow();
+    ).toEqual({
+      queued: 1,
+      running: 0,
+      dispatch_paused: false,
+      own: [{ task_id: taskFixture().id, position: 1, accepted_at: 1 }],
+    });
   });
   it('distinguishes reservation, full-price partial success and full refund without subtracting the refund twice', () => {
     expect(decodeTask(taskFixture()).billing_state).toBe('reserved');

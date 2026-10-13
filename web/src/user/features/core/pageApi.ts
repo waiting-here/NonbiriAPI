@@ -1,3 +1,4 @@
+import { responseFields } from '@shared/query/responseFields';
 import {
   canonicalResourceFilters,
   type ResourceFilters,
@@ -63,21 +64,8 @@ function exactRecord(
   return record;
 }
 
-function exactResponseRecord(
-  value: unknown,
-  allowed: readonly string[],
-  label: string,
-): UnknownRecord {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) invalidResponse(label);
-  const record = value as UnknownRecord;
-  const allowedKeys = new Set(allowed);
-  if (
-    Object.keys(record).some((key) => !allowedKeys.has(key)) ||
-    allowed.some((key) => !Object.hasOwn(record, key))
-  ) {
-    invalidResponse(label);
-  }
-  return record;
+function responseRecord(value: unknown, allowed: readonly string[], label: string): UnknownRecord {
+  return responseFields(value, allowed, allowed, () => invalidResponse(label));
 }
 
 function pageWindowInput(value: unknown): PageWindow {
@@ -183,7 +171,7 @@ function numberedPage<T>(
   label: string,
   normalize: (value: unknown) => Page<T>,
 ): NumberedPage<T> {
-  const record = exactResponseRecord(value, ['data', 'next_cursor', 'pagination'], `${label} page`);
+  const record = responseRecord(value, ['data', 'next_cursor', 'pagination'], `${label} page`);
   if (record.next_cursor !== null) invalidResponse(`${label} cursor`);
   const pagination = normalizePageMetadata(record.pagination);
   const page = normalize({ data: record.data, next_cursor: null });
@@ -196,7 +184,7 @@ function numberedCatalog(
   window: PageWindow,
   source: CatalogSourceType | undefined,
 ): NumberedCatalogView {
-  const record = exactResponseRecord(
+  const record = responseRecord(
     value,
     ['evidence', 'automatic_entries', 'manual_entries', 'next_cursor', 'pagination'],
     'catalog page',

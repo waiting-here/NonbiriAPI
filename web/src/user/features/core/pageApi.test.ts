@@ -11,6 +11,7 @@ import {
 } from './pageApi';
 import type { PageWindow } from './pageTypes';
 import type { CandidateFilters } from './types';
+import { normalizeModel } from './normalizers';
 
 function fixture(path: string): Record<string, unknown> {
   return JSON.parse(readFileSync(resolve(process.cwd(), '..', path), 'utf8')) as Record<
@@ -318,7 +319,7 @@ describe('numbered core resource API', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('rejects closed response shapes, bad pagination, duplicates, and oversized pages', async () => {
+  it('strips response extensions and rejects bad pagination, duplicates and oversized pages', async () => {
     const fetchMock = vi.fn<typeof fetch>();
     vi.stubGlobal('fetch', fetchMock);
     const request: PageWindow = { page: '1', pageSize: 20 };
@@ -328,7 +329,8 @@ describe('numbered core resource API', () => {
       await expect(listModelsPage(request)).rejects.toMatchObject({ code: 'invalid_response' });
     };
 
-    await expectRejected({ ...numbered([model]), extra: true });
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ...numbered([model]), extra: true }));
+    expect((await listModelsPage(request)).data).toEqual([normalizeModel(model)]);
     await expectRejected(numbered([model], { nextCursor: 'cursor' }));
     const validPagination = numbered([model]).pagination as Record<string, unknown>;
     await expectRejected({

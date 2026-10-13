@@ -79,7 +79,7 @@ for (const theme of ['light', 'dark'] as const)
         visible_themes: ['a', 'g', 'i', 'l'],
         tickets: { permanent: 10, limited: 10 },
         fragments: { N: 0, R: 0, SR: 0, SSR: 0 },
-        credits: { general: '10000', game: '10000' },
+        credits: { general: '-1', game: '10000' },
         owned: {},
         pity: {},
         newcomer: true,
@@ -198,7 +198,26 @@ for (const theme of ['light', 'dark'] as const)
           fullPage: true,
         });
         await page.screenshot({
-          path: resolve(process.env.NONBIRI_VISUAL_DIR, `gacha-daily-${theme}-${width}-viewport.png`),
+          path: resolve(
+            process.env.NONBIRI_VISUAL_DIR,
+            `gacha-daily-${theme}-${width}-viewport.png`,
+          ),
+        });
+      }
+      guard.assertNone();
+      await page.getByTitle('兑换常驻抽奖券', { exact: true }).click();
+      const purchase = page.getByRole('dialog', { name: '兑换抽奖券' });
+      await purchase.getByRole('spinbutton', { name: '兑换数量' }).fill('1');
+      await expect(purchase).toContainText('-1 积分');
+      await expect(purchase.getByRole('button', { name: '兑换 1 张' })).toBeEnabled();
+      await purchase.getByRole('tab', { name: '限定抽奖券' }).click();
+      await expect(purchase.getByRole('button', { name: '积分不足' })).toBeDisabled();
+      if (process.env.NONBIRI_VISUAL_DIR) {
+        await page.screenshot({
+          path: resolve(
+            process.env.NONBIRI_VISUAL_DIR,
+            `gacha-negative-wallet-${theme}-${width}.png`,
+          ),
         });
       }
       guard.assertNone();

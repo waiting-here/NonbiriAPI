@@ -104,7 +104,7 @@ describe('managed donation discovery', () => {
     ]);
     expect(run.counts).toEqual({ selected: 4, processed: 4, succeeded: 0, failed: 1, skipped: 3 });
   });
-  it('stops on capability loss and rejects contradictory or leaking evidence', async () => {
+  it('stops on capability loss, validates discovery state and strips unused fields', async () => {
     const io = transport();
     io.start.mockRejectedValue(new ApiError('forbidden', 'Forbidden', 403));
     const run = new DonationDiscoveryRun(item, io);
@@ -112,11 +112,11 @@ describe('managed donation discovery', () => {
     expect(run.phase).toBe('paused');
     expect(io.read).not.toHaveBeenCalled();
     expect(normalizeManagedDiscovery(empty)).toEqual(empty);
+    expect(normalizeManagedDiscovery({ ...empty, secret: 'unexpected' })).toEqual(empty);
     for (const malformed of [
       { ...empty, count: '1001' },
       { ...empty, result: 'nonempty' },
       { ...checking, count: '1' },
-      { ...empty, secret: 'unexpected' },
     ]) {
       expect(() => normalizeManagedDiscovery(malformed)).toThrow();
     }

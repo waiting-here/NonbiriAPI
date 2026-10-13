@@ -1,3 +1,4 @@
+import { exactRecord } from '@shared/operations/wire';
 import { ApiError } from '@shared/query/http';
 import { decoded, queryPath } from './api';
 import { array, decimalID, invalidResponse, oneOf, record } from './wire';
@@ -109,7 +110,7 @@ function inputCandidateFilters(value: unknown): Required<CharityBindingCandidate
 function candidateFilters(
   value: CharityBindingCandidatePageFilters,
 ): Required<CharityBindingCandidatePageFilters> {
-  const root = record(
+  const root = exactRecord(
     value,
     ['donation_id', 'donation_key_id', 'source', 'q'],
     'binding candidate page filters',

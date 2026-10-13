@@ -5,6 +5,23 @@ import { normalizeGamesSnapshot } from './snapshot';
 import { gamesSnapshotWire } from './testFixtures';
 
 describe('games snapshot normalizer', () => {
+  it('accepts response extensions without exposing them and keeps signed wallets', () => {
+    const wire = gamesSnapshotWire();
+    wire.balance = '-1';
+    wire.game_balance = '-0.001';
+    const extended = {
+      ...wire,
+      future_label: 'extra',
+      rps: { ...wire.rps, future_mode_label: 'extra' },
+      blackjack: { ...wire.blackjack, future_table_label: 'extra' },
+    };
+    const normalized = normalizeGamesSnapshot(extended);
+    expect(normalized).toEqual(normalizeGamesSnapshot(wire));
+    expect(normalized.balance).toBe('-1');
+    expect(normalized.gameBalance).toBe('-0.001');
+    expect(() => normalizeGamesSnapshot({ ...extended, balance: 1 })).toThrow();
+    expect(() => normalizeGamesSnapshot({ ...extended, blackjack: null })).toThrow();
+  });
   it('accepts the current server projection with new game onboarding fields', () => {
     const wire = JSON.parse(
       readFileSync(
@@ -123,9 +140,9 @@ describe('games snapshot normalizer', () => {
       expect(() => normalizeGamesSnapshot(invalid)).toThrow(/onboarding/i);
   });
 
-  it('fails closed on unknown keys, noncanonical money, and invalid pump totals', () => {
+  it('ignores extensions and rejects noncanonical money and invalid pump totals', () => {
     const extra = { ...gamesSnapshotWire(), extra: true };
-    expect(() => normalizeGamesSnapshot(extra)).toThrow(/invalid game data/i);
+    expect(normalizeGamesSnapshot(extra)).toEqual(normalizeGamesSnapshot(gamesSnapshotWire()));
     const money = gamesSnapshotWire();
     money.fishing.bait_prices.worm = '1.0';
     expect(() => normalizeGamesSnapshot(money)).toThrow(/invalid game data/i);

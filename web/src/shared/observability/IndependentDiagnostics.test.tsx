@@ -239,7 +239,34 @@ describe('independent management diagnostics', () => {
       decodeIndependentDetail({
         item: metadata,
         body: { ...metadata, encoding: 'utf-8', body: '<script>untrusted</script>' },
-        source: { effective_ip: '', ip_quality: 'direct_peer', authorization: 'forbidden' },
+        source: { effective_ip: '', ip_quality: 'unknown' },
+      }),
+    ).toThrow();
+  });
+  it('strips source extensions while preserving typed provenance and quality flags', () => {
+    const metadata = entry();
+    const detail = {
+      item: metadata,
+      body: { ...metadata, encoding: 'utf-8', body: '<script>untrusted</script>' },
+      source: {
+        effective_ip: '192.0.2.17',
+        ip_quality: 'direct_peer',
+        authorization: 'forbidden',
+        quality: {
+          user_agent: { truncated: true, future_flag: true },
+          future_field: { invalid: true },
+        },
+      },
+    };
+    expect(decodeIndependentDetail(detail).source).toEqual({
+      effective_ip: '192.0.2.17',
+      ip_quality: 'direct_peer',
+      quality: { user_agent: { truncated: true } },
+    });
+    expect(() =>
+      decodeIndependentDetail({
+        ...detail,
+        source: { ...detail.source, quality: { user_agent: { truncated: 'true' } } },
       }),
     ).toThrow();
   });

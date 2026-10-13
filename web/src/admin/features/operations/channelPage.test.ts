@@ -99,6 +99,20 @@ describe('administrator mainstream channel page wire', () => {
 
   it.each([
     ['an unknown envelope field', { ...page([active]), extra: true }],
+    [
+      'an unknown pagination field',
+      {
+        ...page([active]),
+        pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1', extra: 1 },
+      },
+    ],
+  ])('ignores response extension: %s', (_label, value) => {
+    expect(normalizeAdminMainstreamChannelPage(value, 'active', '1', 20)).toEqual(
+      normalizeAdminMainstreamChannelPage(page([active]), 'active', '1', 20),
+    );
+  });
+
+  it.each([
     ['a non-null cursor', page([active], undefined, 'cursor')],
     ['a row from a different state', page([retired])],
     [
@@ -118,13 +132,6 @@ describe('administrator mainstream channel page wire', () => {
         total_items: '1',
         total_pages: '1',
       }),
-    ],
-    [
-      'an unknown pagination field',
-      {
-        ...page([active]),
-        pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1', extra: 1 },
-      },
     ],
   ])('rejects %s', (_label, value) => {
     expect(() => normalizeAdminMainstreamChannelPage(value, 'active', '1', 20)).toThrow();

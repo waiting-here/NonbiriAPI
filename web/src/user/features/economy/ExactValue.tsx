@@ -1,5 +1,5 @@
-import { Amount } from '@shared/components/Amount';
-import { amountToMilli } from './normalize';
+import { useTranslation } from 'react-i18next';
+import { ExactCredits } from '../core/components';
 
 function groupInteger(value: string): string {
   let result = '';
@@ -11,7 +11,14 @@ function groupInteger(value: string): string {
 }
 
 export function CreditAmount({ value, unit }: { value: string; unit?: string }) {
-  return <Amount value={amountToMilli(value)} unit={unit} />;
+  const { t } = useTranslation();
+  const displayUnit = unit ?? t('common.creditsUnit');
+  return (
+    <span className="nb-amount">
+      <ExactCredits value={value} />
+      {displayUnit ? <span className="nb-amount__unit"> {displayUnit}</span> : null}
+    </span>
+  );
 }
 
 export function ExactCount({ value, unit }: { value: string; unit?: string }) {

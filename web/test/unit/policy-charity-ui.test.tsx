@@ -2612,7 +2612,7 @@ describe('experimental policy and charity controls', () => {
     expect(client.getQueryData(charityManagementKeys.capability('admin'))).toBe(false);
   });
 
-  test('rejects a bindings response with fields outside the exact data envelope', async () => {
+  test('keeps only binding data when its response envelope has extra fields', async () => {
     const fetchMock = vi.fn(async () => jsonResponse({ data: [], extra: true }));
     vi.stubGlobal('fetch', fetchMock);
     const rendered = await renderWithProviders(
@@ -2621,11 +2621,33 @@ describe('experimental policy and charity controls', () => {
       </ManagementSessionGate>,
       { station: 'admin', role: 'admin' },
     );
-    await expect(screen.findByText(/invalid charity bindings list data/i)).resolves.toBeVisible();
-    expect(
-      rendered.queryClient.getQueryData(charityManagementKeys.bindings('admin', '7')),
-    ).toBeUndefined();
+    await waitFor(() =>
+      expect(screen.getByTestId('management-bindings-state')).toHaveTextContent('[]'),
+    );
+    expect(rendered.queryClient.getQueryData(charityManagementKeys.bindings('admin', '7'))).toEqual(
+      [],
+    );
   });
+
+  test.each([{}, { data: null }, { data: 'wrong' }])(
+    'rejects an unusable bindings envelope: %j',
+    async (payload) => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => jsonResponse(payload)),
+      );
+      const rendered = await renderWithProviders(
+        <ManagementSessionGate frame="admin">
+          <ManagementBindingsProbe />
+        </ManagementSessionGate>,
+        { station: 'admin', role: 'admin' },
+      );
+      await expect(screen.findByText(/invalid charity bindings list data/i)).resolves.toBeVisible();
+      expect(
+        rendered.queryClient.getQueryData(charityManagementKeys.bindings('admin', '7')),
+      ).toBeUndefined();
+    },
+  );
 
   test('drops a management read that returns after the session generation changes', async () => {
     let release!: () => void;

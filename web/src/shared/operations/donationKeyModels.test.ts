@@ -35,19 +35,17 @@ describe('donated key inverse pages', () => {
       manual_entry_revision: '1',
     };
     const payload = await response([model]).json();
-    const fetcher = vi
-      .fn()
-      .mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            ...payload,
-            candidates: [candidate],
-            candidates_pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
-            manual_catalog_revision: '5',
-          }),
-          { status: 200, headers: { 'content-type': 'application/json' } },
-        ),
-      );
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ...payload,
+          candidates: [candidate],
+          candidates_pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
+          manual_catalog_revision: '5',
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
     vi.stubGlobal('fetch', fetcher);
     const result = await getDonationKeyModels(
       'steward',
@@ -72,15 +70,13 @@ describe('donated key inverse pages', () => {
   });
 
   it('uses the same selected model scope and catalog revision for manual candidate writes', async () => {
-    const fetcher = vi
-      .fn()
-      .mockImplementation(
-        () =>
-          new Response(JSON.stringify({ entries: [], manual_catalog_revision: '6' }), {
-            status: 200,
-            headers: { 'content-type': 'application/json' },
-          }),
-      );
+    const fetcher = vi.fn().mockImplementation(
+      () =>
+        new Response(JSON.stringify({ entries: [], manual_catalog_revision: '6' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+    );
     vi.stubGlobal('fetch', fetcher);
     const controller = new AbortController();
     const key = 'abcdefghijklmnopqrstuv';
@@ -125,17 +121,19 @@ describe('donated key inverse pages', () => {
       expect(options.signal).toBe(controller.signal);
     },
   );
-  it('rejects duplicate models, unsafe additions, and impossible availability counts', async () => {
-    for (const rows of [
-      [model, model],
-      [{ ...model, owner: 'private' }],
-      [{ ...model, available_binding_count: '3' }],
-    ]) {
+  it('rejects duplicate models and impossible availability counts', async () => {
+    for (const rows of [[model, model], [{ ...model, available_binding_count: '3' }]]) {
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(rows)));
       await expect(getDonationKeyModels('steward', '7', '9', '1', 20)).rejects.toMatchObject({
         code: 'invalid_response',
       });
     }
+  });
+  it('projects only the managed model fields', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response([{ ...model, owner: 'private' }])));
+    const result = await getDonationKeyModels('steward', '7', '9', '1', 20);
+    expect(result.data).toEqual([model]);
+    expect(result.data[0]).not.toHaveProperty('owner');
   });
   it('validates binding identity and state without exposing source secrets', async () => {
     const binding = {
@@ -154,6 +152,6 @@ describe('donated key inverse pages', () => {
     );
     await expect(
       getDonationKeyModelBindings('steward', '7', '9', '21', '1', 20),
-    ).rejects.toMatchObject({ code: 'invalid_response' });
+    ).resolves.not.toHaveProperty('data.0.endpoint_key_id');
   });
 });
