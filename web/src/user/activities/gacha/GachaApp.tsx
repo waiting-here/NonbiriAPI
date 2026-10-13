@@ -12,6 +12,7 @@ import { Icon } from '@shared/components/Icon';
 import { PageHeader } from '@shared/components/States';
 import { formatDateTime } from '@shared/utils/datetime';
 import { formatCredits, creditsToMilli } from '../../games/common/strict';
+import { spendableGameMilli } from '../../games/common/spendable';
 import { cards, cardById, themes, themeById, rarities, isRare } from './catalog';
 import { Artwork } from './Artwork';
 import { CardTile } from './CardTile';
@@ -364,10 +365,10 @@ export function GachaApp({
       fraction = (milli % 1000n).toString().padStart(3, '0').replace(/0+$/, '');
     return formatCredits(integer + (fraction ? '.' + fraction : ''));
   };
-  const availableGame =
-    creditsToMilli(state.credits.game) > 0n ? creditsToMilli(state.credits.game) : 0n;
-  const availableGeneral =
-    creditsToMilli(state.credits.general) > 0n ? creditsToMilli(state.credits.general) : 0n;
+  const { game: availableGame, general: availableGeneral } = spendableGameMilli({
+    balance: state.credits.general,
+    gameBalance: state.credits.game,
+  });
   const currentTime = state.server_time + Math.max(0, Math.floor((clock - receivedAt) / 1000));
   const currentState = { ...state, server_time: currentTime };
   const repeatPool = draw && state.pools.find((value) => value.id === draw.pool_id);
