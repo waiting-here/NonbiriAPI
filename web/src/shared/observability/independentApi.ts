@@ -1,4 +1,5 @@
 import { apiFetch } from '@shared/query/http';
+import { responseFields } from '@shared/query/responseFields';
 import {
   errorBytes,
   type DiagnosticRole,
@@ -179,7 +180,7 @@ export function decodeIndependentPage(value: unknown): IndependentPage {
 }
 function source(value: unknown): SourceFacts | null {
   if (value === null) return null;
-  const v = object(value);
+  const raw = object(value);
   const keys = [
     'effective_ip',
     'ip_quality',
@@ -195,22 +196,29 @@ function source(value: unknown): SourceFacts | null {
     'sdk_runtime_version',
     'quality',
   ];
+  const v = responseFields(raw, ['effective_ip', 'ip_quality'], keys, invalid);
   if (
-    Object.keys(v).some((key) => !keys.includes(key)) ||
-    JSON.stringify(v).length > 8192 ||
+    JSON.stringify(raw).length > 8192 ||
     typeof v.effective_ip !== 'string' ||
     !['direct_peer', 'trusted_forwarded', 'peer_fallback'].includes(String(v.ip_quality))
   )
     invalid();
   for (const [key, entry] of Object.entries(v)) {
     if (key === 'quality') {
-      for (const [field, flags] of Object.entries(object(entry))) {
-        if (!keys.includes(field) || field === 'quality') invalid();
-        for (const [flag, enabled] of Object.entries(object(flags))) {
-          if (!['truncated', 'multiple', 'invalid'].includes(flag) || typeof enabled !== 'boolean')
-            invalid();
+      const quality = responseFields(
+        entry,
+        [],
+        keys.filter((field) => field !== 'quality'),
+        invalid,
+      );
+      for (const [field, flags] of Object.entries(quality)) {
+        const projected = responseFields(flags, [], ['truncated', 'multiple', 'invalid'], invalid);
+        for (const enabled of Object.values(projected)) {
+          if (typeof enabled !== 'boolean') invalid();
         }
+        quality[field] = projected;
       }
+      v.quality = quality;
     } else if (typeof entry !== 'string') invalid();
   }
   return v as unknown as SourceFacts;

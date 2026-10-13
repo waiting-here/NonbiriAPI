@@ -164,9 +164,9 @@ describe('recurring limits operations', () => {
     });
   });
 
-  it('rejects unknown fields, illegal combinations, and non-canonical credit values', () => {
-    expect(() => normalizeRecurringLimitsResponse({ ...response(), extra: true })).toThrow(
-      ApiError,
+  it('strips response extensions and rejects extra input fields and invalid quota values', () => {
+    expect(normalizeRecurringLimitsResponse({ ...response(), extra: true })).toEqual(
+      normalizeRecurringLimitsResponse(response()),
     );
     expect(() =>
       putRecurringLimits(

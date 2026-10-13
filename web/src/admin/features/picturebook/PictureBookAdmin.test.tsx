@@ -140,7 +140,9 @@ describe('image configuration boundaries', () => {
     expect(catalog.data[0].catalog_type).toBe('image');
     expect(requests[0].path).toContain('page=8');
     expect(requests[0].path).toContain('q=synthetic');
-    expect(() => decodeAdminModel({ ...model, upstream_secret: 'private' })).toThrow();
+    expect(decodeAdminModel({ ...model, upstream_secret: 'private' })).toEqual(
+      decodeAdminModel(model),
+    );
     expect(() => decodeAdminModel({ ...model, parameter_capabilities: [] })).toThrow();
     const result = await saveModelsBatch(
       {
@@ -435,7 +437,7 @@ describe('image configuration boundaries', () => {
     expect(() =>
       decodeAdapter({ ...adapter, submit: { ...adapter.submit, headers: { secret: 'no' } } }),
     ).toThrow();
-    expect(() =>
+    expect(
       decodeControlRow({
         id: 'iup_AAAAAAAAAAAAAAAAAAAAAA',
         paused: true,
@@ -447,7 +449,7 @@ describe('image configuration boundaries', () => {
         running: 1,
         identity_hash: 'private',
       }),
-    ).toThrow();
+    ).not.toHaveProperty('identity_hash');
   });
   it('accepts bounded declarative receipts only with polling and a task identity', () => {
     const value = {

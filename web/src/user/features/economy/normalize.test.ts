@@ -214,7 +214,7 @@ describe('economy closed-wire normalizers', () => {
     ).toThrow();
   });
 
-  it('accepts exact token pricing and rejects altered or expanded public projections', () => {
+  it('preserves exact token pricing and strips public response extensions', () => {
     const model = {
       ...capabilityModel(),
       pricing: {
@@ -279,12 +279,12 @@ describe('economy closed-wire normalizers', () => {
         ],
       }),
     ).toThrow();
-    expect(() =>
+    expect(
       normalizeCharityCapability({
         ...payload,
         models: [{ ...model, donor_reward_milli: '1' }],
       }),
-    ).toThrow();
+    ).toEqual(normalizeCharityCapability(payload));
   });
 
   it('keeps credit amounts and U128 counters exact without floating point', () => {
@@ -403,28 +403,28 @@ describe('economy closed-wire normalizers', () => {
     ).toEqual(['unavailable', 'not_open', 'open', 'settling', 'ended', 'configuration_error']);
   });
 
-  it('rejects non-canonical money and hidden internal fields', () => {
+  it('rejects non-canonical money and strips hidden internal fields', () => {
     for (const value of ['01', '+1', '-1', '1.0', '1.0000', '1e3', ' 1', '1 ']) {
       expect(() => amountToMilli(value), value).toThrow();
     }
-    expect(() =>
+    expect(
       normalizeDonation({
         ...DONATION_FIXTURE,
         keys: [{ ...DONATION_FIXTURE.keys[0], raw_secret: 'synthetic-secret-must-never-cross' }],
       }),
-    ).toThrow();
-    expect(() =>
+    ).toEqual(normalizeDonation(DONATION_FIXTURE));
+    expect(
       normalizeActivitiesSnapshot({
         ...ACTIVITY_FIXTURE,
         thursday: { ...ACTIVITY_FIXTURE.thursday, participant_count: '3' },
       }),
-    ).toThrow();
-    expect(() =>
+    ).toEqual(normalizeActivitiesSnapshot(ACTIVITY_FIXTURE));
+    expect(
       normalizeActivitiesSnapshot({
         ...ACTIVITY_FIXTURE,
         welfare: { ...ACTIVITY_FIXTURE.welfare, source_events: [] },
       }),
-    ).toThrow();
+    ).toEqual(normalizeActivitiesSnapshot(ACTIVITY_FIXTURE));
   });
 
   it('treats Thursday literature as bounded plain text data', () => {
@@ -642,7 +642,7 @@ describe('economy closed-wire normalizers', () => {
     expect(final.keys.every((key) => key.charityState === 'ended')).toBe(true);
   });
 
-  it('keeps mainstream and custom source projections closed and category-free', () => {
+  it('keeps mainstream and custom source projections category-free', () => {
     const mainstream = normalizeDonationKey({
       ...DONATION_FIXTURE.keys[0],
       safe_source: {
@@ -662,7 +662,7 @@ describe('economy closed-wire normalizers', () => {
       baseUrl: 'https://main.example.test/v1',
     });
     expect(mainstream.expiresAt).toBe(1_900_000_000);
-    expect(() =>
+    expect(
       normalizeDonationKey({
         ...DONATION_FIXTURE.keys[0],
         safe_source: {
@@ -674,7 +674,7 @@ describe('economy closed-wire normalizers', () => {
           category: 'internal-only',
         },
       }),
-    ).toThrow();
+    ).not.toHaveProperty('source.category');
     expect(
       normalizeEndpoint({
         id: '11',
@@ -787,12 +787,12 @@ describe('economy closed-wire normalizers', () => {
         keys: [DONATION_FIXTURE.keys[0], DONATION_FIXTURE.keys[0]],
       }),
     ).toThrow();
-    expect(() =>
+    expect(
       normalizeDonation({
         ...DONATION_FIXTURE,
         keys: [{ ...DONATION_FIXTURE.keys[0], safe_note: 'admin only' }],
       }),
-    ).toThrow();
+    ).toEqual(normalizeDonation(DONATION_FIXTURE));
     expect(() =>
       normalizeDonation({
         ...DONATION_FIXTURE,

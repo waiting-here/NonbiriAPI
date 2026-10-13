@@ -1,4 +1,4 @@
-import { decimalValue, exactRecord, opaqueID, unixTime } from '../common/strict';
+import { decimalValue, responseRecord, opaqueID, unixTime } from '../common/strict';
 import { normalizeRPSHome, rpsStateEpoch, rpsStateRevision } from './normalize';
 import type { RPSHomeState } from './types';
 
@@ -21,7 +21,7 @@ export function parseRPSStreamEvent(
       (eventName === 'snapshot' ? 65_536 : eventName === 'delta' ? 16_384 : 2_048)
     )
       return { kind: 'resync', reason: 'malformed' };
-    const frame = exactRecord(
+    const frame = responseRecord(
       JSON.parse(raw) as unknown,
       ['version', 'channel', 'type', 'revision', 'identity_epoch', 'occurred_at', 'data'],
       [],
@@ -38,7 +38,7 @@ export function parseRPSStreamEvent(
     if (eventName === 'gap') {
       if (frame.revision !== null || frame.identity_epoch !== null)
         return { kind: 'resync', reason: 'malformed' };
-      const gap = exactRecord(frame.data, ['reason', 'last_event_id'], [], 'RPS stream gap');
+      const gap = responseRecord(frame.data, ['reason', 'last_event_id'], [], 'RPS stream gap');
       if (
         typeof gap.reason !== 'string' ||
         !GAP_REASONS.includes(gap.reason as (typeof GAP_REASONS)[number])

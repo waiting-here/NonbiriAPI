@@ -107,7 +107,7 @@ describe('LinkLink authoritative projection', () => {
     duplicate.board.tiles[1].col = 0;
     expect(() => normalizeLinkLinkState(duplicate)).toThrow(/duplicate coordinate/i);
     const path = { ...active(), path: [{ row: 0, col: 0 }] };
-    expect(() => normalizeLinkLinkState(path)).toThrow(/LinkLink state/i);
+    expect(normalizeLinkLinkState(path)).toEqual(normalizeLinkLinkState(active()));
     const key = active();
     key.board.tiles[4].tile_key = 'tile_01';
     expect(normalizeLinkLinkState(key).board.tiles[4].tileKey).toBe('tile_01');
@@ -189,7 +189,16 @@ describe('server-confirmed match paths', () => {
     const path = [intent.first, { row: -1, col: 0 }, { row: -1, col: 1 }, intent.second];
     expect(normalizeLinkLinkMatch({ ...active(), match_path: path }, intent).path).toEqual(path);
     expect(normalizeLinkLinkMatch(active(), intent).path).toBeNull();
-    expect(() => normalizeLinkLinkCurrent({ ...active(), match_path: path })).toThrow();
+    expect(normalizeLinkLinkCurrent({ ...active(), match_path: path })).toEqual(
+      normalizeLinkLinkCurrent(active()),
+    );
+  });
+  it('projects only the coordinates used to draw a response path', () => {
+    const path = [{ ...intent.first, command: 'x' }, intent.second];
+    expect(normalizeLinkLinkMatch({ ...active(), match_path: path }, intent).path).toEqual([
+      intent.first,
+      intent.second,
+    ]);
   });
   it.each([
     null,
@@ -205,10 +214,6 @@ describe('server-confirmed match paths', () => {
       { row: 0, col: 0 },
       { row: -0.5, col: 0 },
       { row: -0.5, col: 1 },
-      { row: 0, col: 1 },
-    ],
-    [
-      { row: 0, col: 0, command: 'x' },
       { row: 0, col: 1 },
     ],
   ])('rejects malformed geometry %j', (path) => {
@@ -245,7 +250,9 @@ describe('hint and score projections', () => {
         intent,
       ).reshuffled,
     ).toBe(true);
-    expect(() => normalizeLinkLinkState({ ...current(), hint })).toThrow();
+    expect(normalizeLinkLinkState({ ...current(), hint })).toEqual(
+      normalizeLinkLinkState(current()),
+    );
     expect(() =>
       normalizeLinkLinkState({ ...current(), opportunities_remaining: undefined }),
     ).toThrow();

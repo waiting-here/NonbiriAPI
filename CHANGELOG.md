@@ -28,6 +28,10 @@ use a verified commit and its matching artifacts without a release tag.
 
 ### Fixed
 
+- Keep gacha usable with negative account balances and calculate each wallet's
+  spendable funds independently. Display decoders omit unused response fields
+  and redundant settlement arithmetic while retaining exact amounts and action
+  constraints.
 - Recover in-flight requests through the active-state index, avoiding scans of
   completed request history. Startup failures identify the recovery domain
   without exposing private error details.

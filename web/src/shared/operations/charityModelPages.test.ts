@@ -88,12 +88,17 @@ describe('managed charity model pages', () => {
     response([model('1', { enabled: false })]),
     response([model('1', { provider: 'else', full_name: '[公益]else/model' })]),
     { ...response([model()]), next_cursor: 'old-cursor' },
-    response([model('1', { secret: 'forbidden projection' })]),
-  ])('rejects inconsistent, wrong-filter or over-broad model pages', async (payload) => {
+  ])('rejects inconsistent or wrong-filter model pages', async (payload) => {
     mock(payload);
     await expect(
       getManagedCharityModelsPage('admin', 'provider', 'true', '1', 20),
     ).rejects.toMatchObject({ code: 'invalid_response', status: 200 });
+  });
+
+  it('drops fields outside the managed model projection', async () => {
+    mock(response([model('1', { secret: 'private' })]));
+    const result = await getManagedCharityModelsPage('admin', 'provider', 'true', '1', 20);
+    expect(result.data[0]).not.toHaveProperty('secret');
   });
 
   it('rejects invalid input before fetching and verifies detail identity', async () => {

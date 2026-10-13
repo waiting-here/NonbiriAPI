@@ -89,6 +89,20 @@ describe('user issue page contract', () => {
 
   it.each([
     ['an unknown envelope field', { ...page([issue()]), extra: true }],
+    [
+      'an unknown pagination field',
+      {
+        ...page([issue()]),
+        pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1', extra: 1 },
+      },
+    ],
+  ])('ignores response extension: %s', (_label, value) => {
+    expect(normalizeIssuePageResponse(value, 'current', '1', 20)).toEqual(
+      normalizeIssuePageResponse(page([issue()]), 'current', '1', 20),
+    );
+  });
+
+  it.each([
     ['a non-null cursor', page([issue()], undefined, 'cursor')],
     ['a mismatched issue state', page([issue('C', { state: 'closed', closed_at: 1_800_000_002 })])],
     [
@@ -98,13 +112,6 @@ describe('user issue page contract', () => {
     [
       'metadata for a different requested size',
       page([issue()], { page: '1', page_size: 50, total_items: '1', total_pages: '1' }),
-    ],
-    [
-      'an unknown pagination field',
-      {
-        ...page([issue()]),
-        pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1', extra: 1 },
-      },
     ],
   ])('rejects %s', (_label, value) => {
     expect(() => normalizeIssuePageResponse(value, 'current', '1', 20)).toThrow();

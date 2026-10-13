@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { ApiError } from '@shared/query/http';
 import { gameRequest } from '../common/request';
-import { exactRecord, unixTime } from '../common/strict';
+import { responseRecord, unixTime } from '../common/strict';
 import type { RPSMode } from '../common/types';
 import {
   normalizeRPSHome,
@@ -98,7 +98,7 @@ export async function renewRPSLease(sessionID: string, leaseID: string): Promise
       expectedStatuses: [200],
     })
   ).data;
-  const record = exactRecord(value, ['expires_at'], [], 'RPS lease');
+  const record = responseRecord(value, ['expires_at'], [], 'RPS lease');
   return unixTime(record.expires_at, 'RPS lease expiry');
 }
 export async function acknowledgeRPSResult(sessionID: string): Promise<void> {

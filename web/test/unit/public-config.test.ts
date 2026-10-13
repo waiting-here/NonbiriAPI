@@ -17,7 +17,7 @@ const VALID_CONFIG = {
 } as const;
 
 describe('public bootstrap contract', () => {
-  test('normalizes the complete closed DTO, including the announcement epoch', () => {
+  test('normalizes the known fields, including the announcement epoch', () => {
     expect(normalizePublicConfig(VALID_CONFIG)).toEqual({
       siteName: 'NonbiriAPI',
       siteLogoURL: '',
@@ -34,25 +34,46 @@ describe('public bootstrap contract', () => {
     });
   });
 
+  test.each([['unknown field', { ...VALID_CONFIG, default_locale: 'en' }]])(
+    'ignores response extension: %s',
+    (_label, payload) => {
+      expect(normalizePublicConfig(payload)).toEqual(normalizePublicConfig(VALID_CONFIG));
+    },
+  );
+
   test.each([
     ['null', null],
     ['array', []],
     ['missing field', { ...VALID_CONFIG, registration_open: undefined }],
     ['wrong boolean type', { ...VALID_CONFIG, maintenance_mode: 'false' }],
-    ['unknown field', { ...VALID_CONFIG, default_locale: 'en' }],
     ['invalid authoritative locale', { ...VALID_CONFIG, legal_authoritative_locale: 'fr' }],
-    ['invalid announcement prefix', { ...VALID_CONFIG, announcement_epoch: 'ann_AAAAAAAAAAAAAAAAAAAAAA' }],
-    ['invalid announcement length', { ...VALID_CONFIG, announcement_epoch: 'b1e_AAAAAAAAAAAAAAAAAAAAA' }],
-    ['invalid announcement tail bits', { ...VALID_CONFIG, announcement_epoch: 'b1e_AAAAAAAAAAAAAAAAAAAAAB' }],
+    [
+      'invalid announcement prefix',
+      { ...VALID_CONFIG, announcement_epoch: 'ann_AAAAAAAAAAAAAAAAAAAAAA' },
+    ],
+    [
+      'invalid announcement length',
+      { ...VALID_CONFIG, announcement_epoch: 'b1e_AAAAAAAAAAAAAAAAAAAAA' },
+    ],
+    [
+      'invalid announcement tail bits',
+      { ...VALID_CONFIG, announcement_epoch: 'b1e_AAAAAAAAAAAAAAAAAAAAAB' },
+    ],
   ])('rejects malformed bootstrap: %s', (_label, payload) => {
     expect(() => normalizePublicConfig(payload)).toThrow(/invalid public configuration/i);
   });
 
   test('rejects control characters and overlong bounded text', () => {
     expect(() => normalizePublicConfig({ ...VALID_CONFIG, site_name: 'bad\u0001name' })).toThrow();
-    expect(() => normalizePublicConfig({ ...VALID_CONFIG, charity_donation_notice_zh: 'bad\u0085notice' })).toThrow();
-    expect(() => normalizePublicConfig({ ...VALID_CONFIG, legal_terms_override_en: 'x'.repeat(65537) })).toThrow();
-    expect(() => normalizePublicConfig({ ...VALID_CONFIG, charity_donation_notice_en: 'x'.repeat(8193) })).toThrow();
+    expect(() =>
+      normalizePublicConfig({ ...VALID_CONFIG, charity_donation_notice_zh: 'bad\u0085notice' }),
+    ).toThrow();
+    expect(() =>
+      normalizePublicConfig({ ...VALID_CONFIG, legal_terms_override_en: 'x'.repeat(65537) }),
+    ).toThrow();
+    expect(() =>
+      normalizePublicConfig({ ...VALID_CONFIG, charity_donation_notice_en: 'x'.repeat(8193) }),
+    ).toThrow();
   });
 });
 
@@ -64,7 +85,9 @@ describe('public logo URL policy', () => {
 
   test('requires cross-origin HTTPS without URL credentials', () => {
     expect(isPublicLogoURL('http://cdn.example/logo.svg', 'https://app.example')).toBe(false);
-    expect(isPublicLogoURL('https://user:pass@cdn.example/logo.svg', 'https://app.example')).toBe(false);
+    expect(isPublicLogoURL('https://user:pass@cdn.example/logo.svg', 'https://app.example')).toBe(
+      false,
+    );
     expect(isPublicLogoURL('https://cdn.example/logo.svg', 'https://app.example')).toBe(true);
   });
 });

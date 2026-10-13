@@ -23,9 +23,9 @@ describe('penalty boundary', () => {
         20,
       ).pagination.total_items,
     ).toBe('2');
-    expect(() =>
-      normalizePenaltyList({ ...value, data: [{ ...penalty, rules: {} }] }, '1', 20),
-    ).toThrow();
+    expect(normalizePenaltyList({ ...value, data: [{ ...penalty, rules: {} }] }, '1', 20)).toEqual(
+      normalizePenaltyList(value, '1', 20),
+    );
     expect(() =>
       normalizePenaltyList({ ...value, data: [{ ...penalty, state: 'active' }] }, '1', 20),
     ).toThrow();
@@ -39,13 +39,13 @@ describe('penalty boundary', () => {
     expect(normalizePenaltyEvidence(value, '1', 20).members.data).toHaveLength(20);
     expect(normalizePenaltyEvidence(evidencePage('2'), '2', 20).members.data).toHaveLength(1);
     expect(() => normalizePenaltyEvidence({ ...value, rules: { version: 1 } }, '1', 20)).toThrow();
-    expect(() =>
+    expect(
       normalizePenaltyEvidence(
         { ...value, statistics: { ...value.statistics, raw_body: 'secret' } },
         '1',
         20,
       ),
-    ).toThrow();
+    ).toEqual(normalizePenaltyEvidence(value, '1', 20));
     expect(() =>
       normalizePenaltyEvidence(
         { ...value, members: { ...value.members, data: Array(20).fill(value.members.data[0]) } },

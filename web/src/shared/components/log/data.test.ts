@@ -85,7 +85,9 @@ it('keeps retained origin identity distinct from the current account and rejects
     origin_deleted: true,
     history_record_id: '19',
   });
-  expect(() => normalizeUserLogRow({ ...userRow, origin_user_id: '7' })).toThrow(/invalid/i);
+  expect(normalizeUserLogRow({ ...userRow, origin_user_id: '7' })).toEqual(
+    normalizeUserLogRow(userRow),
+  );
 });
 
 const attempt = {
@@ -166,9 +168,9 @@ describe('role log wire', () => {
     expect(normalizeUserLogDetail(detail).request.route_kind).toBe(route);
     if (charity) {
       expect(() => normalizeUserLogRow({ ...request, attempt_count: '1' })).toThrow(/charity/);
-      expect(() =>
+      expect(
         normalizeUserLogDetail({ ...detail, attempts: { data: [], next_cursor: null } }),
-      ).toThrow();
+      ).toEqual(normalizeUserLogDetail(detail));
     }
     for (const normalize of [normalizeAdminLogRow, normalizeStewardLogRow]) {
       const management = { ...row, route_kind: route };
@@ -243,7 +245,9 @@ describe('role log wire', () => {
         }),
       ).toMatchObject({ usage_total_mismatch: true, usage: { usage_unknown: true } });
     }
-    expect(() => normalizeUserLogRow({ ...userRow, usage_total_mismatch: true })).toThrow();
+    expect(normalizeUserLogRow({ ...userRow, usage_total_mismatch: true })).toEqual(
+      normalizeUserLogRow(userRow),
+    );
 
     for (const normalize of [normalizeAdminLogAttempt, normalizeStewardLogAttempt]) {
       expect(
@@ -331,11 +335,11 @@ describe('role log wire', () => {
         caller_identity: { discord_nickname: 'Ada Example', discord_id: syntheticDiscordID },
       }),
     ).toThrow(/steward caller identity/i);
-    expect(() => normalizeAdminLogRow({ ...row, caller_identity: null, secret: 'never' })).toThrow(
-      /administrator log row/i,
+    expect(normalizeAdminLogRow({ ...row, caller_identity: null, secret: 'never' })).toEqual(
+      normalizeAdminLogRow(row),
     );
-    expect(() => normalizeUserLogRow({ ...userRow, caller_identity: null })).toThrow(
-      /user log row/i,
+    expect(normalizeUserLogRow({ ...userRow, caller_identity: null })).toEqual(
+      normalizeUserLogRow(userRow),
     );
   });
 
@@ -366,7 +370,9 @@ it('accepts requested charity models only on management charity projections', ()
     expect(normalize(stewardRow).charity_model).toBeNull();
     expect(() => normalize({ ...stewardRow, charity_model: 'Private alias' })).toThrow();
   }
-  expect(() => normalizeUserLogRow({ ...userRow, charity_model: 'Public model' })).toThrow();
+  expect(normalizeUserLogRow({ ...userRow, charity_model: 'Public model' })).toEqual(
+    normalizeUserLogRow(userRow),
+  );
 });
 
 it('keeps recorded call mode and actual penalties separate from unknown history', () => {

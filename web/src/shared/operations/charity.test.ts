@@ -208,27 +208,28 @@ describe('role-safe charity wire', () => {
     expect(normalizeStewardDonation({ ...common, owner: null }).owner).toBeNull();
   });
 
-  it('keeps admin and steward projections closed and rejects secret-bearing additions', () => {
-    expect(() =>
-      normalizeAdminDonation({ ...common, owner: null, secret: 'sk-never-project' }),
-    ).toThrow(/invalid administrator donation/i);
+  it('projects only allowed donation fields and requires complete non-null owners', () => {
+    expect(normalizeAdminDonation({ ...common, owner: null, secret: 'sk-never-project' })).toEqual(
+      normalizeAdminDonation({ ...common, owner: null }),
+    );
     expect(
       normalizeStewardDonation({
         ...common,
         owner: { user_id: '2', display_name: 'Owner', discord_id: 'private' },
       }).owner?.discord_id,
     ).toBe('private');
-    expect(() =>
+    expect(
       normalizeStewardDonation({
         ...common,
         owner: { user_id: '2', display_name: 'Owner', discord_id: 'private', email: 'secret' },
       }),
-    ).toThrow(/invalid steward donation owner/i);
+    ).not.toHaveProperty('owner.email');
     expect(() =>
       normalizeAdminDonation({ ...common, owner: { user_id: '2', display_name: 'Owner' } }),
     ).toThrow(/invalid administrator donation owner/i);
-    expect(() => normalizeAdminDonation({ ...common, owner: null, expires_at: null })).toThrow(
-      /invalid administrator donation/i,
+    // Expiry belongs to each key; the donation itself has no expires_at field.
+    expect(normalizeAdminDonation({ ...common, owner: null, expires_at: null })).toEqual(
+      normalizeAdminDonation({ ...common, owner: null }),
     );
   });
 
@@ -388,10 +389,10 @@ describe('charity model wire', () => {
     );
   });
 
-  it('rejects private model fields while accepting an empty public description', () => {
+  it('strips private model fields while accepting an empty public description', () => {
     expect(normalizeStewardCharityModel(model).public_description).toBe('');
-    expect(() => normalizeAdminCharityModel({ ...model, secret: 'upstream-key' })).toThrow(
-      /invalid administrator charity model/i,
+    expect(normalizeAdminCharityModel({ ...model, secret: 'upstream-key' })).toEqual(
+      normalizeAdminCharityModel(model),
     );
   });
 

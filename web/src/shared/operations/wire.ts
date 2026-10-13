@@ -1,4 +1,5 @@
 import { ApiError } from '@shared/query/http';
+import { responseFields } from '@shared/query/responseFields';
 
 export type WireRecord = Record<string, unknown>;
 
@@ -16,11 +17,18 @@ export function record(
   label: string,
   required: readonly string[] = allowed,
 ): WireRecord {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) invalidResponse(label);
-  const result = value as WireRecord;
-  const allowedSet = new Set(allowed);
-  if (Object.keys(result).some((key) => !allowedSet.has(key))) invalidResponse(label);
-  if (required.some((key) => !Object.prototype.hasOwnProperty.call(result, key)))
+  return responseFields(value, required, allowed, () => invalidResponse(label));
+}
+
+/** Exact request and declarative-protocol objects have a closed field set. */
+export function exactRecord(
+  value: unknown,
+  allowed: readonly string[],
+  label: string,
+  required: readonly string[] = allowed,
+): WireRecord {
+  const result = record(value, allowed, label, required);
+  if (Object.keys(value as WireRecord).some((key) => !allowed.includes(key)))
     invalidResponse(label);
   return result;
 }

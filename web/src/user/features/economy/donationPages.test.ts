@@ -381,12 +381,12 @@ describe('owner donation numbered-page normalizers', () => {
         20,
       ),
     ).toThrow(ApiError);
-    expect(() =>
+    expect(
       normalizeOwnerDonationsPage(page([summary({ owner: { user_id: OWNER_ID } })]), {}, '1', 20),
-    ).toThrow(ApiError);
+    ).toEqual(normalizeOwnerDonationsPage(page([summary()]), {}, '1', 20));
   });
 
-  it('rejects duplicate summary identities and unknown top-level wire fields', () => {
+  it('rejects duplicate summary identities and strips unused wire fields', () => {
     expect(() =>
       normalizeOwnerDonationsPage(
         page([summary(), summary({ updated_at: 1_800_000_002 })], {
@@ -398,12 +398,12 @@ describe('owner donation numbered-page normalizers', () => {
         20,
       ),
     ).toThrow(ApiError);
-    expect(() =>
+    expect(
       normalizeOwnerDonationsPage(page([summary({ handling: { state: 'pending' } })]), {}, '1', 20),
-    ).toThrow(ApiError);
-    expect(() =>
-      normalizeOwnerDonationsPage({ ...page([summary()]), extra: true }, {}, '1', 20),
-    ).toThrow(ApiError);
+    ).toEqual(normalizeOwnerDonationsPage(page([summary()]), {}, '1', 20));
+    expect(normalizeOwnerDonationsPage({ ...page([summary()]), extra: true }, {}, '1', 20)).toEqual(
+      normalizeOwnerDonationsPage(page([summary()]), {}, '1', 20),
+    );
   });
 });
 
@@ -432,7 +432,7 @@ describe('owner donation key numbered-page normalizers', () => {
     expect(result.data[0]?.usage.priceUsed).toBe('0');
   });
 
-  it('preserves long amounts and rejects key parent/id mismatches or private fields', () => {
+  it('preserves long amounts, rejects key parent/id mismatches and strips private fields', () => {
     const result = normalizeOwnerDonationKeysPage(
       page([
         key({
@@ -453,9 +453,9 @@ describe('owner donation key numbered-page normalizers', () => {
     expect(() =>
       normalizeOwnerDonationKeysPage(page([key({ key_id: '52' })]), OWNER_ID, '1', 20),
     ).toThrow(ApiError);
-    expect(() =>
+    expect(
       normalizeOwnerDonationKeysPage(page([key({ safe_note: 'private' })]), OWNER_ID, '1', 20),
-    ).toThrow(ApiError);
+    ).toEqual(normalizeOwnerDonationKeysPage(page([key()]), OWNER_ID, '1', 20));
   });
 
   it('requires exactly the bounded rule preview and limited rules first', () => {

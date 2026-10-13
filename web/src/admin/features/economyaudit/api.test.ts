@@ -74,7 +74,7 @@ describe('economy audit exact monetary values', () => {
       decodeSummary({ ...summary, metadata: { ...meta, offset_minutes: 15 } }),
     ).toThrow();
     expect(() => decodeSummary({ ...summary, metadata: { ...meta, scale: '1' } })).toThrow();
-    expect(() => decodeSummary({ ...summary, source_prompt: 'private' })).toThrow();
+    expect(decodeSummary({ ...summary, source_prompt: 'private' })).toEqual(decodeSummary(summary));
   });
 
   it('separates the original pagination anchor from the current ledger watermark', () => {

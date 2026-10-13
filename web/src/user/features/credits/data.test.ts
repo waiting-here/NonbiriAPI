@@ -142,10 +142,14 @@ describe('owner credit history projection', () => {
     ).toBe(entry.request_id);
   });
 
-  it('rejects unsafe extra fields, duplicate rows and inconsistent pagination', () => {
+  it('strips unused history fields and rejects malformed entries and pagination', () => {
+    expect(
+      normalizeHistory({
+        ...page,
+        data: [{ ...entry, source_id: 'private-claim', reason: 'private-admin-note' }],
+      }),
+    ).toEqual(normalizeHistory(page));
     for (const invalid of [
-      { ...page, data: [{ ...entry, source_id: 'private-claim' }] },
-      { ...page, data: [{ ...entry, reason: 'private-admin-note' }] },
       { ...page, data: [{ ...entry, delta: '0' }] },
       { ...page, data: [{ ...entry, delta: 0.007 }] },
       { ...page, data: [{ ...entry, request_id: 'req_wrong' }] },

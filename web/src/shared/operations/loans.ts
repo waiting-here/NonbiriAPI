@@ -92,24 +92,10 @@ function terms(root: Record<string, unknown>) {
   const values = Object.fromEntries(
     termFields.map((field) => [field, amount(root[field], `loan ${field}`, false, MAX_MILLI)]),
   ) as Record<(typeof termFields)[number], string>;
-  const principal = decimal(values.principal, 'loan principal', { positive: true });
-  const x = BigInt(principal),
-    a = loanMilli(values.a),
+  decimal(values.principal, 'loan principal', { positive: true });
+  const a = loanMilli(values.a),
     b = loanMilli(values.b);
-  const nominal = x * 1000n,
-    disbursed = x * a,
-    repayment = x * b;
-  if (
-    a <= 0n ||
-    a >= 1000n ||
-    b <= 1000n ||
-    loanMilli(values.nominal) !== nominal ||
-    loanMilli(values.disbursed) !== disbursed ||
-    loanMilli(values.repayment) !== repayment ||
-    loanMilli(values.fee) !== nominal - disbursed ||
-    loanMilli(values.interest) !== repayment - nominal
-  )
-    invalidResponse('loan terms');
+  if (a <= 0n || a >= 1000n || b <= 1000n) invalidResponse('loan terms');
   return values;
 }
 
@@ -120,13 +106,6 @@ function financialFacts(root: Record<string, unknown>) {
       balanceFields.map((field) => [field, amount(root[field], `loan ${field}`)]),
     ) as Record<(typeof balanceFields)[number], string>),
   };
-  if (
-    loanMilli(result.general_before) < 0n ||
-    loanMilli(result.general_after) !==
-      loanMilli(result.general_before) - loanMilli(result.repayment) ||
-    loanMilli(result.game_after) !== loanMilli(result.game_before) + loanMilli(result.disbursed)
-  )
-    invalidResponse('loan balances');
   return result;
 }
 

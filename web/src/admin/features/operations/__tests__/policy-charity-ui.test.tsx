@@ -513,7 +513,7 @@ describe('Generation 2 charity management policy', () => {
     );
   });
 
-  it('fails closed when a steward response contains an unknown owner field', async () => {
+  it('renders the allowed steward owner projection without extra personal fields', async () => {
     const donation = stewardDonation();
     const invalid = {
       ...donationPageSummary(donation),
@@ -540,7 +540,8 @@ describe('Generation 2 charity management policy', () => {
       role: 'user',
     });
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/invalid/i);
+    expect(await screen.findByText('Current steward')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.queryByText('forbidden')).not.toBeInTheDocument();
     expect(screen.queryByText('No donations')).not.toBeInTheDocument();
   });

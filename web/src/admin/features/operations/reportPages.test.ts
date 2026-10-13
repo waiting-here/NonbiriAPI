@@ -120,7 +120,7 @@ describe('numbered administrator report adapters', () => {
 
   it('keeps materials pagination at the detail root', () => {
     expect(normalizeReportDetailPage(detailBody(), '1', 20).materials.data).toEqual([material]);
-    expect(() =>
+    expect(
       normalizeReportDetailPage(
         {
           ...detailBody(),
@@ -129,21 +129,23 @@ describe('numbered administrator report adapters', () => {
         '1',
         20,
       ),
-    ).toThrow(/report materials/i);
+    ).toEqual(normalizeReportDetailPage(detailBody(), '1', 20));
   });
 
-  it('rejects unknown/private fields, cursor responses, invalid windows, and mixed page metadata', () => {
+  it('strips unused fields and rejects invalid cursor and page metadata', () => {
     const list = { data: [summary], next_cursor: null, pagination: metadata('1', 20, '1') };
-    expect(() => normalizeReportPage({ ...list, private_field: 'secret' }, '1', 20)).toThrow();
+    expect(normalizeReportPage({ ...list, private_field: 'secret' }, '1', 20)).toEqual(
+      normalizeReportPage(list, '1', 20),
+    );
     expect(() => normalizeReportPage({ ...list, next_cursor: 'YWJj' }, '1', 20)).toThrow(/cursor/i);
     expect(() =>
       normalizeReportPage({ ...list, pagination: metadata('1', 20, '21') }, '2', 20),
     ).toThrow(/window/i);
     expect(() => normalizeReportPage(list, '0', 20)).toThrow(/page/i);
     expect(() => normalizeReportPage(list, '1', 15 as never)).toThrow(/page size/i);
-    expect(() =>
+    expect(
       normalizeReportDetailPage({ ...detailBody(), materials_cursor: 'YWJj' }, '1', 20),
-    ).toThrow();
+    ).toEqual(normalizeReportDetailPage(detailBody(), '1', 20));
   });
 
   it('uses only numbered query parameters and forwards abort signals', async () => {

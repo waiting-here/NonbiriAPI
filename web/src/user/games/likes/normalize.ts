@@ -2,6 +2,7 @@ import {
   booleanValue,
   enumValue,
   exactRecord,
+  responseRecord,
   invalidResponse,
   safeInteger,
 } from '../common/strict';
@@ -71,7 +72,7 @@ export function planValue(value: unknown): Plan {
   return { purchases, main: nullable(r.main, choiceValue), extra: list(r.extra, 1, choiceValue) };
 }
 function status(value: unknown): Status {
-  const r = exactRecord(
+  const r = responseRecord(
     value,
     ['key', 'kind', 'name', 'positive', 'p', 'q', 'remaining', 'layers', 'buffId', 'activeFrom'],
     ['category', 'targetSkill', 'expires', 'refreshedTurn', 'appliedBy', 'persistentLayers'],
@@ -100,7 +101,7 @@ function status(value: unknown): Status {
   };
 }
 function subscription(value: unknown): Subscription {
-  const r = exactRecord(value, [
+  const r = responseRecord(value, [
     'burstInitial',
     'totalInitial',
     'totalCap',
@@ -116,7 +117,7 @@ function subscription(value: unknown): Subscription {
   };
 }
 function distill(value: unknown): Distill {
-  const r = exactRecord(value, ['template', 'level', 'learning', 'usedSamples']);
+  const r = responseRecord(value, ['template', 'level', 'learning', 'usedSamples']);
   return {
     template: nullable(r.template, label),
     level: nullable(r.level, (v) => enumValue(v, ['I', 'II'], 'distill level')),
@@ -125,7 +126,7 @@ function distill(value: unknown): Distill {
   };
 }
 function player(value: unknown): Player {
-  const r = exactRecord(
+  const r = responseRecord(
     value,
     [
       'role',
@@ -212,13 +213,13 @@ function player(value: unknown): Player {
   };
 }
 function record(value: unknown): TurnRecord {
-  const r = exactRecord(
+  const r = responseRecord(
     value,
     ['skipped', 'stunned', 'last', 'lastMain', 'lastSuccess', 'lastCopyable'],
     ['nonbasicSuccess'],
   );
   const sample = (v: unknown) => {
-    const q = exactRecord(v, ['id', 'skillId', 'success', 'kind', 'derived']);
+    const q = responseRecord(v, ['id', 'skillId', 'success', 'kind', 'derived']);
     return {
       id: amount(q.id),
       skillId: label(q.skillId),
@@ -238,7 +239,7 @@ function record(value: unknown): TurnRecord {
   };
 }
 export function likesView(value: unknown): LikesView {
-  const r = exactRecord(value, ['energy', 'players', 'records', 'locked_plan']);
+  const r = responseRecord(value, ['energy', 'players', 'records', 'locked_plan']);
   return {
     energy: amount(r.energy),
     players: pair(r.players, player),
@@ -247,7 +248,7 @@ export function likesView(value: unknown): LikesView {
   };
 }
 function effectCue(value: unknown): EffectCue {
-  const r = exactRecord(
+  const r = responseRecord(
     value,
     ['key', 'kind', 'buff_id', 'layers', 'remaining', 'active_from'],
     ['persistent_layers'],
@@ -267,7 +268,7 @@ function effectCue(value: unknown): EffectCue {
   };
 }
 function resources(value: unknown, full: boolean): Resources {
-  const r = exactRecord(
+  const r = responseRecord(
     value,
     [
       'gold',
@@ -313,7 +314,7 @@ function resources(value: unknown, full: boolean): Resources {
   };
 }
 function frame(value: unknown, full: boolean): Frame {
-  const r = exactRecord(value, ['stage', 'players', 'energy', ...(full ? ['event_end'] : [])]);
+  const r = responseRecord(value, ['stage', 'players', 'energy', ...(full ? ['event_end'] : [])]);
   if (full) amount(r.event_end);
   return {
     stage: label(r.stage),
@@ -322,7 +323,7 @@ function frame(value: unknown, full: boolean): Frame {
   };
 }
 function score(value: unknown): Score {
-  const r = exactRecord(value, [
+  const r = responseRecord(value, [
     'original',
     'parts',
     'intrinsic',
@@ -335,7 +336,7 @@ function score(value: unknown): Score {
   return {
     original: amount(r.original),
     parts: list(r.parts, 128, (v) => {
-      const p = exactRecord(v, ['key', 'amount'], ['buff_id']);
+      const p = responseRecord(v, ['key', 'amount'], ['buff_id']);
       return {
         key: label(p.key),
         amount: signedAmount(p.amount),
@@ -351,7 +352,7 @@ function score(value: unknown): Score {
   };
 }
 function stepValue(value: unknown): NonNullable<Cast['step']> {
-  const r = exactRecord(value, ['kind', 'index', 'likes']);
+  const r = responseRecord(value, ['kind', 'index', 'likes']);
   const kind = enumValue(r.kind, ['main', 'extra', 'flash'], 'settlement step');
   return {
     kind,
@@ -360,7 +361,7 @@ function stepValue(value: unknown): NonNullable<Cast['step']> {
   };
 }
 function applicationValue(value: unknown): NonNullable<Cast['applications']>[number] {
-  const r = exactRecord(value, ['buff_id', 'target', 'success', 'resisted', 'derived']);
+  const r = responseRecord(value, ['buff_id', 'target', 'success', 'resisted', 'derived']);
   const success = safeInteger(r.success, 0, 4, 'successful layers'),
     resisted = safeInteger(r.resisted, 0, 4, 'resisted layers');
   if (success + resisted < 1 || success + resisted > 4) invalidResponse('attempted layers');
@@ -373,7 +374,7 @@ function applicationValue(value: unknown): NonNullable<Cast['applications']>[num
   };
 }
 function validateAttempt(value: unknown) {
-  const r = exactRecord(value, [
+  const r = responseRecord(value, [
     'rules_version',
     'step',
     'source',
@@ -411,7 +412,7 @@ function validateAttempt(value: unknown) {
   if (r.draw !== null) safeInteger(r.draw, 1, 10000, 'draw ordinal');
 }
 function cast(value: unknown): Cast {
-  const r = exactRecord(
+  const r = responseRecord(
     value,
     [
       'skillId',
@@ -465,14 +466,14 @@ function cast(value: unknown): Cast {
   };
 }
 export function eventValue(value: unknown): LikesEvent {
-  const r = exactRecord(value, ['id', 'round', 'stage', 'kind', 'seat'], ['data', 'score']);
+  const r = responseRecord(value, ['id', 'round', 'stage', 'kind', 'seat'], ['data', 'score']);
   const kind = label(r.kind),
     data = r.data === undefined ? {} : dictionary(r.data, (v) => safeJSON(v), 128);
   if (data.shortage !== undefined) shortageValue(data.shortage);
   if (kind === 'effect-attempt') validateAttempt(data);
   let transition: LikesEvent['transition'] = null;
   if (kind === 'round-start') {
-    const p = exactRecord(data, ['before', 'after']);
+    const p = responseRecord(data, ['before', 'after']);
     transition = { before: frame(p.before, true), after: frame(p.after, true) };
   }
   return {
@@ -488,7 +489,7 @@ export function eventValue(value: unknown): LikesEvent {
   };
 }
 export function presentationValue(value: unknown): Presentation {
-  const r = exactRecord(value, ['plans', 'before', 'after', 'frames', 'events'], ['timeline']);
+  const r = responseRecord(value, ['plans', 'before', 'after', 'frames', 'events'], ['timeline']);
   const p: Presentation = {
     plans: pair(r.plans, planValue),
     before: frame(r.before, false),
@@ -500,7 +501,7 @@ export function presentationValue(value: unknown): Presentation {
     const seen = new Set<number>();
     let lastStage = -1;
     p.timeline = list(r.timeline, 519, (value) => {
-      const step = exactRecord(value, ['stage', 'duration_ms', 'event_ids']);
+      const step = responseRecord(value, ['stage', 'duration_ms', 'event_ids']);
       const stage = enumValue(step.stage, STAGES, 'presentation stage');
       const index = STAGES.indexOf(stage);
       if (index < lastStage) invalidResponse('presentation order');
@@ -535,7 +536,7 @@ export function presentationValue(value: unknown): Presentation {
   return p;
 }
 export function roundFacts(value: unknown): RoundFacts {
-  const r = exactRecord(value, [
+  const r = responseRecord(value, [
     'round',
     'plans',
     'before',
@@ -553,7 +554,7 @@ export function roundFacts(value: unknown): RoundFacts {
     frames: list(r.frames, 7, (v) => frame(v, true)),
     events: list(r.events, 512, eventValue),
     draws: list(r.draws, 512, (v) => {
-      const d = exactRecord(v, ['ordinal', 'candidate_count', 'index']);
+      const d = responseRecord(v, ['ordinal', 'candidate_count', 'index']);
       const count = safeInteger(d.candidate_count, 1, 10000, 'draw candidates');
       return {
         ordinal: amount(d.ordinal),
@@ -562,7 +563,7 @@ export function roundFacts(value: unknown): RoundFacts {
       };
     }),
     result: nullable(r.result, (v) => {
-      const q = exactRecord(v, ['winner', 'reason', 'scores']);
+      const q = responseRecord(v, ['winner', 'reason', 'scores']);
       return {
         winner: nullable(q.winner, seatValue),
         reason: label(q.reason),

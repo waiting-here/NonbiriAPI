@@ -3,10 +3,9 @@ import { normalizePageMetadata, validatePageResponse } from '@shared/operations/
 import {
   booleanValue,
   creditsValue,
-  creditsToMilli,
   decimalValue,
   enumValue,
-  exactRecord,
+  responseRecord,
   invalidResponse,
   publicIdentity,
   unixTime,
@@ -33,7 +32,7 @@ export function isNetProfitBoard(board: RankBoard) {
 }
 
 function row(value: unknown) {
-  const v = exactRecord(value, ['rank', 'amount', 'is_me', 'identity']);
+  const v = responseRecord(value, ['rank', 'amount', 'is_me', 'identity']);
   return {
     rank: decimalValue(v.rank, { bits: 128, positive: true }, 'rank'),
     amount: creditsValue(v.amount, { positive: true }, 'rank amount'),
@@ -45,7 +44,7 @@ function row(value: unknown) {
 export function normalizeRanking(value: unknown, board: RankBoard, window: RankWindow, page = '1') {
   if (isNetProfitBoard(board) && window !== '7d') invalidResponse('rank window');
   const bidding = board === 'bidding_net_profit';
-  const v = exactRecord(
+  const v = responseRecord(
     value,
     [
       'as_of',
@@ -87,29 +86,12 @@ export function normalizeRanking(value: unknown, board: RankBoard, window: RankW
       : null;
   if (bidding && rebuildStatus !== 'completed' && (rows.length !== 0 || me !== null))
     invalidResponse('unpublished bidding board');
-  let offset = 0n;
   if (pagination) {
     validatePageResponse(pagination, page, 20);
-    offset = (BigInt(pagination.page) - 1n) * 20n;
     if (me !== null) invalidResponse('charity extra row');
   }
-  rows.forEach((row, i) => {
-    if (
-      BigInt(row.rank) !== offset + BigInt(i + 1) ||
-      (i > 0 && creditsToMilli(row.amount) > creditsToMilli(rows[i - 1].amount))
-    )
-      invalidResponse('rank order');
-  });
-  if (
-    rows.filter((r) => r.isMe).length > 1 ||
-    (me &&
-      (!me.isMe ||
-        BigInt(me.rank) <= 20n ||
-        rows.length !== 20 ||
-        rows.some((r) => r.isMe) ||
-        creditsToMilli(me.amount) > creditsToMilli(rows[19].amount)))
-  )
-    invalidResponse('rank owner');
+  if (new Set(rows.map((row) => row.rank)).size !== rows.length) invalidResponse('duplicate rank');
+  if (me && !me.isMe) invalidResponse('rank owner');
   return {
     asOf,
     statisticsStart,

@@ -5,7 +5,7 @@ import {
   creditsValue,
   decimalValue,
   enumValue,
-  exactRecord,
+  responseRecord,
   gamePayment,
   httpsURL,
   invalidResponse,
@@ -60,7 +60,7 @@ export const prefix = (game: DuelGame, queue = false) =>
   `${{ bidding: 'bid', likes: 'lik', gwent: 'gwt' }[game]}${queue ? 'q' : ''}_`;
 export const aiQueuePrefix = (game: DuelGame) => (game === 'gwent' ? 'gaq_' : 'aiq_');
 export function ratesValue(value: unknown): Rates {
-  const r = exactRecord(value, ['platform', 'welfare', 'thursday']);
+  const r = responseRecord(value, ['platform', 'welfare', 'thursday']);
   const v = {
     platform: safeInteger(r.platform, 0, 9999, 'platform rate'),
     welfare: safeInteger(r.welfare, 0, 9999, 'welfare rate'),
@@ -77,7 +77,7 @@ export function configValue(value: unknown, game: DuelGame, modes: readonly stri
       : game === 'bidding'
         ? ['joker_seconds', 'bid_seconds']
         : ['plan_seconds', 'settlement_seconds'];
-  const r = exactRecord(value, [
+  const r = responseRecord(value, [
     'enabled',
     'available',
     'modes',
@@ -92,10 +92,10 @@ export function configValue(value: unknown, game: DuelGame, modes: readonly stri
   if (game === 'bidding') safeInteger(r.bid_seconds, 20, 20, 'phase duration');
   else if (game === 'likes' && r.settlement_seconds !== 0 && r.settlement_seconds !== 5)
     invalidResponse('presentation duration');
-  const raw = exactRecord(r.modes, modes);
+  const raw = responseRecord(r.modes, modes);
   const normalized: Record<string, DuelConfig['modes'][string]> = {};
   for (const mode of modes) {
-    const m = exactRecord(raw[mode], [
+    const m = responseRecord(raw[mode], [
       'enabled',
       'available',
       'ticket',
@@ -121,10 +121,9 @@ export function configValue(value: unknown, game: DuelGame, modes: readonly stri
   };
 }
 function profileValue(value: unknown): Profile {
-  const r = exactRecord(value, ['kind'], ['display_name', 'avatar_url']);
+  const r = responseRecord(value, ['kind'], ['display_name', 'avatar_url']);
   const kind = enumValue(r.kind, ['public', 'anonymous', 'deleted', 'ai'], 'profile kind');
   if (kind !== 'public' && kind !== 'ai') {
-    exactRecord(value, ['kind']);
     return { kind };
   }
   return {
@@ -158,7 +157,7 @@ function resolutionValue<P>(
   duration?: (value: P) => number,
 ): Resolution<P> | null {
   if (value === null) return null;
-  const r = exactRecord(value, ['round', 'started_at', 'ends_at', 'summary']);
+  const r = responseRecord(value, ['round', 'started_at', 'ends_at', 'summary']);
   const startedAt = unixTime(r.started_at, 'resolution start');
   const endsAt = unixTime(r.ends_at, 'resolution end');
   if (!decode) invalidResponse('resolution decoder');
@@ -174,7 +173,7 @@ function resolutionValue<P>(
 }
 function roundStartValue<S>(value: unknown, decode?: (item: unknown) => S): RoundStart<S> | null {
   if (value === null) return null;
-  const r = exactRecord(value, ['round', 'started_at', 'events']);
+  const r = responseRecord(value, ['round', 'started_at', 'events']);
   if (!decode) invalidResponse('round start');
   return {
     round: safeInteger(r.round, 1, 75, 'round start'),
@@ -186,7 +185,7 @@ export function resultValue<V, F, P, S, L, A>(
   value: unknown,
   c: DuelCodec<V, F, P, S, L, A>,
 ): DuelResult<V, P> {
-  const r = exactRecord(
+  const r = responseRecord(
     value,
     [
       'id',
@@ -208,7 +207,7 @@ export function resultValue<V, F, P, S, L, A>(
     ['content_hash', 'economy', 'ai'],
   );
   enumValue(r.game, [c.game], 'game');
-  const rake = exactRecord(r.rake, ['platform', 'welfare', 'thursday']);
+  const rake = responseRecord(r.rake, ['platform', 'welfare', 'thursday']);
   return {
     ai: aiViewValue(r.ai as AIView | undefined, c.loadout),
     id: opaqueID(r.id, prefix(c.game), 'result'),
@@ -250,7 +249,7 @@ function stateValue<V, F, P, S, L, A>(
   value: unknown,
   c: DuelCodec<V, F, P, S, L, A>,
 ): DuelState<V, P, S> {
-  const r = exactRecord(
+  const r = responseRecord(
     value,
     [
       'id',
@@ -320,14 +319,14 @@ export function homeValue<V, F, P, S, L, A>(
   value: unknown,
   c: DuelCodec<V, F, P, S, L, A>,
 ): DuelHome<V, P, S, L> {
-  const r = exactRecord(
+  const r = responseRecord(
     value,
     ['server_now', 'queue', 'current', 'latest_result'],
     ['ai_queue_error'],
   );
   if (r.queue !== null && r.current !== null) invalidResponse('occupied slot');
   const queue = nullable(r.queue, (value) => {
-    const q = exactRecord(
+    const q = responseRecord(
       value,
       ['id', 'revision', 'mode', 'deadline', 'ticket', 'payment', 'terms_hash', 'rules_version'],
       ['loadout', 'economy', 'ai', 'position'],
@@ -361,7 +360,7 @@ export function roundValue<V, F, P, S, L, A>(
   value: unknown,
   c: DuelCodec<V, F, P, S, L, A>,
 ): DuelRound<V, F, S> {
-  const r = exactRecord(
+  const r = responseRecord(
     value,
     ['round', 'before', 'after', 'facts', 'start_events', 'timeouts'],
     ['sources'],
@@ -379,7 +378,7 @@ export function detailValue<V, F, P, S, L, A>(
   value: unknown,
   c: DuelCodec<V, F, P, S, L, A>,
 ): DuelDetail<V, P, S, A> {
-  const r = exactRecord(
+  const r = responseRecord(
     value,
     [
       'result',

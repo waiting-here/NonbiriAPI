@@ -2,6 +2,7 @@ import {
   booleanValue,
   enumValue,
   exactRecord,
+  responseRecord,
   invalidResponse,
   safeInteger,
 } from '../common/strict';
@@ -52,7 +53,7 @@ function cards(value: unknown) {
   return result;
 }
 function reward(value: unknown): Reward {
-  const r = exactRecord(value, ['round', 'side', 'rank', 'multiplier', 'status', 'owner']);
+  const r = responseRecord(value, ['round', 'side', 'rank', 'multiplier', 'status', 'owner']);
   const status = enumValue(r.status, ['pool', 'awarded', 'discarded'], 'reward status');
   const owner = nullable(r.owner, seatValue);
   if ((status === 'awarded') !== (owner !== null)) invalidResponse('reward owner');
@@ -66,7 +67,7 @@ function reward(value: unknown): Reward {
   };
 }
 export function biddingView(value: unknown): BiddingView {
-  const r = exactRecord(value, [
+  const r = responseRecord(value, [
     'dealer',
     'hand_remaining',
     'played',
@@ -104,7 +105,7 @@ export function biddingView(value: unknown): BiddingView {
   };
 }
 export function biddingRound(value: unknown): BiddingRound {
-  const r = exactRecord(value, [
+  const r = responseRecord(value, [
     'round',
     'bids',
     'joker_used_by',

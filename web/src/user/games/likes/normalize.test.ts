@@ -99,9 +99,9 @@ describe('likes catalog, art and projections', () => {
       ).toBe(1);
     }
   });
-  it('rejects concealed loadouts, secret runtime counters, private slots and malformed events', () => {
+  it('strips runtime extensions and rejects concealed loadouts, private slots and malformed events', () => {
     const source = structuredClone(wire.initial);
-    expect(() => likesView({ ...source, cast_seq: 1 })).toThrow();
+    expect(likesView({ ...source, cast_seq: 1 })).toEqual(likesView(source));
     expect(() =>
       likesView({
         ...source,

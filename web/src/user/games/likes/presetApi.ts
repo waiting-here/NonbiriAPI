@@ -1,4 +1,10 @@
-import { enumValue, exactRecord, invalidResponse, safeInteger, unixTime } from '../common/strict';
+import {
+  enumValue,
+  responseRecord,
+  invalidResponse,
+  safeInteger,
+  unixTime,
+} from '../common/strict';
 import { gameRequest } from '../common/request';
 import type { Selection } from './types';
 
@@ -35,7 +41,7 @@ function identifier(value: unknown, field: string): string {
 }
 
 export function savedPreset(value: unknown): SavedPreset {
-  const r = exactRecord(value, ['slot', 'name', 'revision', 'mode', 'loadout', 'updated_at']);
+  const r = responseRecord(value, ['slot', 'name', 'revision', 'mode', 'loadout', 'updated_at']);
   const revision = r.revision;
   if (
     typeof revision !== 'string' ||
@@ -43,7 +49,7 @@ export function savedPreset(value: unknown): SavedPreset {
     BigInt(revision) > 9_223_372_036_854_775_807n
   )
     invalidResponse('custom preset revision');
-  const loadout = exactRecord(r.loadout, ['role', 'harness', 'skills']);
+  const loadout = responseRecord(r.loadout, ['role', 'harness', 'skills']);
   if (!Array.isArray(loadout.skills) || loadout.skills.length < 1 || loadout.skills.length > 6)
     invalidResponse('custom preset skills');
   const skills = loadout.skills.map((skill) => identifier(skill, 'custom preset skill'));
@@ -64,7 +70,7 @@ export function savedPreset(value: unknown): SavedPreset {
 }
 
 export function customPresetList(value: unknown): CustomPresetList {
-  const r = exactRecord(value, ['capacity', 'slots']);
+  const r = responseRecord(value, ['capacity', 'slots']);
   safeInteger(r.capacity, 10, 10, 'custom preset capacity');
   if (!Array.isArray(r.slots) || r.slots.length > 10) invalidResponse('custom presets');
   const slots = r.slots.map(savedPreset);

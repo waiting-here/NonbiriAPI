@@ -1,3 +1,4 @@
+import { responseFields } from '@shared/query/responseFields';
 import { normalizeModelTypes } from '@shared/modelTypes';
 import { normalizeCharitySuccess } from '@shared/operations/charitySuccess';
 import { normalizeLoanView } from '@shared/operations/loans';
@@ -53,14 +54,7 @@ function record(
   keys: readonly string[],
   optional: readonly string[] = [],
 ): UnknownRecord {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) invalid(field);
-  const result = value as UnknownRecord;
-  const actual = Object.keys(result);
-  if (actual.some((key) => !keys.includes(key) && !optional.includes(key))) invalid(field);
-  for (const key of keys) {
-    if (!Object.prototype.hasOwnProperty.call(result, key)) invalid(field);
-  }
-  return result;
+  return responseFields(value, keys, [...keys, ...optional], () => invalid(field));
 }
 
 function array(value: unknown, field: string, maximum: number): unknown[] {

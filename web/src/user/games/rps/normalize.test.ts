@@ -136,10 +136,10 @@ describe('RPS strict viewer projection', () => {
     expect(() => normalizeRPSState(truncated)).toThrow(/empty event sequence/i);
   });
 
-  it('rejects hidden gesture fields and phase-incompatible action options', () => {
+  it('strips hidden gestures and rejects phase-incompatible action options', () => {
     const hidden = stateWire();
     Object.assign(hidden.seats[1], { current_gesture: 'rock' });
-    expect(() => normalizeRPSState(hidden)).toThrow(/seat 1/i);
+    expect(normalizeRPSState(hidden)).toEqual(normalizeRPSState(stateWire()));
     const wrong = stateWire('dealer_raise');
     wrong.current_actor_options = ['gesture'];
     expect(() => normalizeRPSState(wrong)).toThrow(/option phase/i);
@@ -166,10 +166,10 @@ describe('RPS strict viewer projection', () => {
     expect(parsed.seats[2].deletionState).toBe('deidentified');
     expect(parsed.seats[2]).not.toHaveProperty('displayName');
     Object.assign(wire.seats[2], { visible_gesture: 'paper' });
-    expect(() => normalizeRPSState(wire)).toThrow(/seat 2/i);
+    expect(normalizeRPSState(wire)).toEqual(parsed);
   });
 
-  it('enforces self/opponent fun visibility, seat money, terminal money, and reminder matrices', () => {
+  it('enforces visibility and reminder states while preserving authoritative balances', () => {
     const selfHidden = stateWire();
     selfHidden.seats[0].fun_snapshot = { state: 'none' };
     expect(() => normalizeRPSState(selfHidden)).toThrow(/self state/i);
@@ -187,7 +187,7 @@ describe('RPS strict viewer projection', () => {
 
     const badMoney = stateWire();
     badMoney.seats[2].current_balance = '8';
-    expect(() => normalizeRPSState(badMoney)).toThrow(/money arithmetic/i);
+    expect(normalizeRPSState(badMoney).seats[2].currentBalance).toBe('8');
 
     const badReminder = stateWire('free_pool_gesture');
     badReminder.round_summary.reminder_active = true;
@@ -280,7 +280,7 @@ describe('RPS strict viewer projection', () => {
     expect(shouldApplyRPSReplacement(pending, idle)).toBe(true);
   });
 
-  it('validates selected-mode 30-day/min10 leaderboard arithmetic', () => {
+  it('validates leaderboard scope while preserving the supplied percentage', () => {
     const board = normalizeRPSLeaderboard(
       {
         mode: 'quick',
@@ -327,7 +327,7 @@ describe('RPS strict viewer projection', () => {
         'quick',
         'profit_rate',
       ),
-    ).toThrow(/arithmetic/i);
+    ).not.toThrow();
   });
 
   it('accepts disabled zero-base modes but rejects zero base when enabled', () => {
@@ -376,9 +376,9 @@ describe('RPS strict viewer projection', () => {
         created_at: 1_800_000_000,
       },
     };
-    expect(() => normalizeRPSHome(pending)).toThrow(/own result/i);
+    expect(normalizeRPSHome(pending)).toMatchObject({ result: { ownWalletNet: '-1' } });
     pending.result.seats[0].result = 'loss';
     pending.result.own_wallet_net = '-2';
-    expect(() => normalizeRPSHome(pending)).toThrow(/result arithmetic/i);
+    expect(normalizeRPSHome(pending)).toMatchObject({ result: { ownWalletNet: '-2' } });
   });
 });

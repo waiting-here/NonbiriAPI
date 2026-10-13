@@ -1,4 +1,4 @@
-import { enumValue, exactRecord } from '../common/strict';
+import { enumValue, responseRecord } from '../common/strict';
 import { amount, unique } from './value';
 import type { LikesEvent } from './types';
 import type { Seat } from '../common/duel/types';
@@ -13,14 +13,14 @@ export interface Shortage {
   resources: ResourceShortage[];
 }
 export function shortageValue(value: unknown): Shortage {
-  const r = exactRecord(value, ['payment', 'resources']);
+  const r = responseRecord(value, ['payment', 'resources']);
   return {
     payment: enumValue(r.payment, ['energy', 'mix', 'api', 'sub', 'image'], 'shortage payment'),
     resources: unique(
       r.resources,
       4,
       (value) => {
-        const item = exactRecord(value, ['resource', 'required', 'available']);
+        const item = responseRecord(value, ['resource', 'required', 'available']);
         return {
           resource: enumValue(
             item.resource,

@@ -301,7 +301,7 @@ describe('donation page operations', () => {
     );
     expect(admin.data[0]?.owner).toEqual(owner);
     expect(steward.data[0]?.owner).toEqual(owner);
-    expect(() =>
+    expect(
       normalizeManagedDonationsPage(
         page([donation({ owner: { ...owner, email: 'private' } })]),
         'steward',
@@ -309,7 +309,7 @@ describe('donation page operations', () => {
         '1',
         20,
       ),
-    ).toThrow(ApiError);
+    ).toEqual(normalizeManagedDonationsPage(page([donation({ owner })]), 'steward', {}, '1', 20));
   });
 
   it('uses the steward key path, preserves wide decimal fields, and matches donation id', async () => {
@@ -492,8 +492,8 @@ describe('donation page operations', () => {
     expect(result.data[0]?.rules[0]?.state).toBe('limited');
   });
 
-  it('rejects private fields, duplicate IDs, cursor mixing, bad counts, and wrong windows', () => {
-    expect(() =>
+  it('strips unused fields and rejects duplicate IDs, cursor mixing, bad counts and wrong windows', () => {
+    expect(
       normalizeManagedDonationsPage(
         page([
           donation({
@@ -505,11 +505,19 @@ describe('donation page operations', () => {
         '1',
         20,
       ),
-    ).toThrow(ApiError);
-    expect(() =>
+    ).toEqual(
+      normalizeManagedDonationsPage(
+        page([donation({ sources: [mainstreamSource()] })]),
+        'admin',
+        {},
+        '1',
+        20,
+      ),
+    );
+    expect(
       normalizeManagedDonationsPage(page([donation({ keys: [] })]), 'admin', {}, '1', 20),
-    ).toThrow(ApiError);
-    expect(() =>
+    ).toEqual(normalizeManagedDonationsPage(page([donation()]), 'admin', {}, '1', 20));
+    expect(
       normalizeManagedDonationKeysPage(
         page([
           keySummary({
@@ -520,7 +528,14 @@ describe('donation page operations', () => {
         '1',
         20,
       ),
-    ).toThrow(ApiError);
+    ).toEqual(
+      normalizeManagedDonationKeysPage(
+        page([keySummary({ safe_source: mainstreamSource() })]),
+        '7',
+        '1',
+        20,
+      ),
+    );
     expect(() =>
       normalizeManagedDonationsPage(page([donation(), donation()]), 'admin', {}, '1', 20),
     ).toThrow(ApiError);

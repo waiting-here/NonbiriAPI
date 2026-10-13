@@ -1,3 +1,4 @@
+import { exactRecord } from '@shared/operations/wire';
 import { decoded, idempotentOptions, queryPath } from '@shared/operations/api';
 import {
   array,
@@ -29,8 +30,8 @@ const jsonSize = (v: unknown, max: number, label: string) => {
   if (new TextEncoder().encode(JSON.stringify(v)).byteLength > max) invalidResponse(label);
 };
 export function decodeMapping(value: unknown) {
-  const v = record(value, ['model_pointer', 'parameters', 'constants'], 'parameter mapping');
-  const parameters = record(v.parameters, parameterKeys, 'parameter destinations', []);
+  const v = exactRecord(value, ['model_pointer', 'parameters', 'constants'], 'parameter mapping');
+  const parameters = exactRecord(v.parameters, parameterKeys, 'parameter destinations', []);
   const result: {
     model_pointer: string;
     parameters: Partial<Record<ParameterKey, string>>;
@@ -41,7 +42,7 @@ export function decodeMapping(value: unknown) {
       Object.entries(parameters).map(([key, value]) => [key, pointer(value)]),
     ),
     constants: array(v.constants, 'constant fields', 64).map((entry) => {
-      const c = record(entry, ['pointer', 'value'], 'constant field');
+      const c = exactRecord(entry, ['pointer', 'value'], 'constant field');
       if (c.value !== null && !['string', 'boolean', 'number'].includes(typeof c.value))
         invalidResponse('constant scalar');
       if (typeof c.value === 'number' && !Number.isFinite(c.value))
@@ -54,23 +55,23 @@ export function decodeMapping(value: unknown) {
   return result;
 }
 export function decodeAdapter(value: unknown) {
-  const v = record(value, ['discovery', 'submit', 'poll', 'response'], 'image adapter', [
+  const v = exactRecord(value, ['discovery', 'submit', 'poll', 'response'], 'image adapter', [
     'discovery',
     'submit',
     'response',
   ]);
-  const d = record(
+  const d = exactRecord(
     v.discovery,
     ['method', 'path', 'items_pointer', 'id_pointer', 'metadata_pointer'],
     'discovery adapter',
     ['method', 'path', 'items_pointer', 'id_pointer'],
   );
-  const s = record(v.submit, ['method', 'path', 'mapping', 'receipt'], 'submit adapter', [
+  const s = exactRecord(v.submit, ['method', 'path', 'mapping', 'receipt'], 'submit adapter', [
     'method',
     'path',
     'mapping',
   ]);
-  const r = record(
+  const r = exactRecord(
     v.response,
     [
       'task_id_pointer',
@@ -89,15 +90,13 @@ export function decodeAdapter(value: unknown) {
   const optionalPointer = (entry: Record<string, unknown>, key: string) =>
     Object.hasOwn(entry, key) ? { [key]: pointer(entry[key]) } : {};
   const states = (entry: unknown) =>
-    array(entry, 'response states', 32).map((item) =>
-      string(item, 'response state', { min: 1 }),
-    );
+    array(entry, 'response states', 32).map((item) => string(item, 'response state', { min: 1 }));
   const poll = Object.hasOwn(v, 'poll')
-    ? record(v.poll, ['method', 'path'], 'poll adapter')
+    ? exactRecord(v.poll, ['method', 'path'], 'poll adapter')
     : undefined;
   const receipt = Object.hasOwn(s, 'receipt')
     ? (() => {
-        const value = record(
+        const value = exactRecord(
           s.receipt,
           ['indicator_pointer', 'indicator_value'],
           'submission receipt',
@@ -368,9 +367,7 @@ export function decodeRefresh(value: unknown) {
     completed_at: nullableUnixSecond(v.completed_at, 'discovery completion'),
     model_count: integer(v.model_count, 'discovered models', 0, 1000),
     error_code:
-      v.error_code === null
-        ? null
-        : string(v.error_code, 'discovery error', { ascii: true }),
+      v.error_code === null ? null : string(v.error_code, 'discovery error', { ascii: true }),
   };
 }
 export const getUpstream = (signal?: AbortSignal) =>

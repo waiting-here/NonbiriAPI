@@ -5,9 +5,8 @@ import { asRecord, type UnknownRecord } from './normalize';
 // Display-only public site configuration. The backend /api/config endpoint
 // projects a strict allowlist (site identity, donation guidance, legal
 // overrides, and station state) and
-// never carries secrets. The browser treats the response as a closed DTO:
-// missing/unknown fields and wrong types fail closed instead of silently
-// turning a malformed response into permissive maintenance=false state. The
+// never carries secrets. The browser projects known fields and requires their
+// types, so missing state cannot silently become maintenance=false. The
 // logo URL is additionally constrained to public HTTPS so a misconfigured or
 // hostile value can never become a javascript:/data: vector when rendered
 // into an <img src>. Credentials in a configured URL are also rejected
@@ -54,19 +53,29 @@ const PUBLIC_CONFIG_KEYS = new Set([
 const ANNOUNCEMENT_EPOCH_PATTERN = /^b1e_[A-Za-z0-9_-]{21}[AQgw]$/;
 
 function invalidPublicConfig(): never {
-  throw new ApiError('invalid_response', 'The server returned an invalid public configuration.', 200);
+  throw new ApiError(
+    'invalid_response',
+    'The server returned an invalid public configuration.',
+    200,
+  );
 }
 
 function byteLength(value: string): number {
   return new TextEncoder().encode(value).byteLength;
 }
 
-function requiredText(record: UnknownRecord, key: string, maxBytes: number, multiline = false): string {
+function requiredText(
+  record: UnknownRecord,
+  key: string,
+  maxBytes: number,
+  multiline = false,
+): string {
   const value = record[key];
   if (typeof value !== 'string' || byteLength(value) > maxBytes) invalidPublicConfig();
   for (const character of value) {
     const codePoint = character.codePointAt(0) ?? 0;
-    const allowedWhitespace = multiline && (codePoint === 9 || codePoint === 10 || codePoint === 13);
+    const allowedWhitespace =
+      multiline && (codePoint === 9 || codePoint === 10 || codePoint === 13);
     if (codePoint < 32 || (codePoint >= 127 && codePoint <= 159)) {
       if (!allowedWhitespace) invalidPublicConfig();
     }
@@ -81,11 +90,13 @@ export function isPublicLogoURL(
   if (!value) return false;
   try {
     const url = new URL(value);
-    return url.protocol === 'https:'
-      && Boolean(url.hostname)
-      && !url.username
-      && !url.password
-      && (!origin || url.origin !== origin);
+    return (
+      url.protocol === 'https:' &&
+      Boolean(url.hostname) &&
+      !url.username &&
+      !url.password &&
+      (!origin || url.origin !== origin)
+    );
   } catch {
     return false;
   }
@@ -97,20 +108,30 @@ export function isPublicLogoURL(
 // only, so it cannot become an HTML injection vector.
 export function normalizePublicConfig(payload: unknown): PublicConfig {
   const record = asRecord(payload);
-  if (!record || Object.keys(record).some((key) => !PUBLIC_CONFIG_KEYS.has(key))) invalidPublicConfig();
+  if (!record) invalidPublicConfig();
   for (const key of PUBLIC_CONFIG_KEYS) {
     if (!Object.prototype.hasOwnProperty.call(record, key)) invalidPublicConfig();
   }
   const rawLogo = requiredText(record, 'site_logo_url', MAX_LOGO_URL);
   const siteLogoURL = rawLogo && isPublicLogoURL(rawLogo) ? rawLogo : '';
   const legalAuthoritativeLocale = record.legal_authoritative_locale;
-  if (legalAuthoritativeLocale !== '' && legalAuthoritativeLocale !== 'zh' && legalAuthoritativeLocale !== 'en') {
+  if (
+    legalAuthoritativeLocale !== '' &&
+    legalAuthoritativeLocale !== 'zh' &&
+    legalAuthoritativeLocale !== 'en'
+  ) {
     invalidPublicConfig();
   }
-  if (typeof record.maintenance_mode !== 'boolean' || typeof record.registration_open !== 'boolean') {
+  if (
+    typeof record.maintenance_mode !== 'boolean' ||
+    typeof record.registration_open !== 'boolean'
+  ) {
     invalidPublicConfig();
   }
-  if (typeof record.announcement_epoch !== 'string' || !ANNOUNCEMENT_EPOCH_PATTERN.test(record.announcement_epoch)) {
+  if (
+    typeof record.announcement_epoch !== 'string' ||
+    !ANNOUNCEMENT_EPOCH_PATTERN.test(record.announcement_epoch)
+  ) {
     invalidPublicConfig();
   }
   return {
@@ -128,8 +149,18 @@ export function normalizePublicConfig(payload: unknown): PublicConfig {
       MAX_DONATION_NOTICE,
       true,
     ),
-    legalPrivacyOverrideZh: requiredText(record, 'legal_privacy_override_zh', MAX_LEGAL_OVERRIDE, true),
-    legalPrivacyOverrideEn: requiredText(record, 'legal_privacy_override_en', MAX_LEGAL_OVERRIDE, true),
+    legalPrivacyOverrideZh: requiredText(
+      record,
+      'legal_privacy_override_zh',
+      MAX_LEGAL_OVERRIDE,
+      true,
+    ),
+    legalPrivacyOverrideEn: requiredText(
+      record,
+      'legal_privacy_override_en',
+      MAX_LEGAL_OVERRIDE,
+      true,
+    ),
     legalTermsOverrideZh: requiredText(record, 'legal_terms_override_zh', MAX_LEGAL_OVERRIDE, true),
     legalTermsOverrideEn: requiredText(record, 'legal_terms_override_en', MAX_LEGAL_OVERRIDE, true),
     legalAuthoritativeLocale: legalAuthoritativeLocale as 'zh' | 'en' | '',
@@ -144,7 +175,8 @@ export function usePublicConfig(enabled = true, path = '/api/config') {
     queryKey: ['public-config', path] as const,
     queryFn: async () => {
       const payload = await apiFetch<unknown>(path);
-      if (payload === undefined) throw new ApiError('invalid_response', 'The server returned an invalid response.', 200);
+      if (payload === undefined)
+        throw new ApiError('invalid_response', 'The server returned an invalid response.', 200);
       return normalizePublicConfig(payload);
     },
     enabled,

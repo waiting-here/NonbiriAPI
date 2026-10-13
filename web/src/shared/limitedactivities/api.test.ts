@@ -25,14 +25,17 @@ describe('limited activity exact values and projections', () => {
     expect(decoded.module_config.brush_cap).toBe('9007199254740993123');
     expect(() => decodeSupply({ ...detail.module_config, brush_remaining: '2' })).toThrow();
   });
-  it('rejects private fields and inconsistent receipt charges', () => {
-    expect(() => decodeDetail({ ...limitedActivity(), upstream: 'private' })).toThrow();
+  it('projects the exchange receipt and rejects inconsistent charges', () => {
+    expect(decodeDetail({ ...limitedActivity(), upstream: 'private' })).toEqual(
+      decodeDetail(limitedActivity()),
+    );
     const value = activityExchange();
     expect(decodeExchange(value).receipt.cost).toBe('1000');
     expect(() => decodeExchange({ ...value, receipt: { ...value.receipt, cost: '1' } })).toThrow();
-    expect(() =>
-      decodeExchange({ ...value, receipt: { ...value.receipt, user_id: '2' } }),
-    ).toThrow();
+    // A receipt identifies the operation; user_id is not a receipt field.
+    expect(decodeExchange({ ...value, receipt: { ...value.receipt, user_id: '2' } })).toEqual(
+      decodeExchange(value),
+    );
   });
   it('quotes with exact arithmetic and rejects overflow or fractional units', () => {
     expect(exchangeCost('0.001', '9007199254740993')).toBe('9007199254740.993');
@@ -59,8 +62,8 @@ describe('limited activity exact values and projections', () => {
     };
     expect(decodeDetail(fish).key).toBe('fat-fish');
     expect(() => decodeDetail({ ...fish, cover_key: 'picture-book' })).toThrow();
-    expect(() =>
-      decodeDetail({ ...fish, module_config: { upstream: 'https://invalid.test' } }),
-    ).toThrow();
+    expect(decodeDetail({ ...fish, module_config: { upstream: 'https://invalid.test' } })).toEqual(
+      decodeDetail(fish),
+    );
   });
 });

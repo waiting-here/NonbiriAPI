@@ -5,7 +5,7 @@ import {
   booleanValue,
   decodeBase64URL,
   encodeBase64URL,
-  exactRecord,
+  responseRecord,
   invalidResponse,
   opaqueID,
   unixTime,
@@ -104,12 +104,12 @@ export async function sendDuelIntent(game: DuelGame, intent: DuelIntent, key: st
     return;
   }
   if (intent.kind === 'queue') {
-    const r = exactRecord(response.data, ['queue_id', 'revision', 'deadline']);
+    const r = responseRecord(response.data, ['queue_id', 'revision', 'deadline']);
     opaqueID(r.queue_id, intent.botID ? aiQueuePrefix(game) : prefix(game, true), 'queue receipt');
     revisionValue(r.revision);
     unixTime(r.deadline, 'queue receipt');
   } else {
-    const r = exactRecord(response.data, ['session_id', 'revision', 'phase_seq', 'locked']);
+    const r = responseRecord(response.data, ['session_id', 'revision', 'phase_seq', 'locked']);
     if (opaqueID(r.session_id, prefix(game), 'session receipt') !== intent.id)
       invalidResponse('receipt identity');
     revisionValue(r.revision);
@@ -205,7 +205,7 @@ export async function readHistory<V, F, P, S, L, A>(
 ) {
   const search = new URLSearchParams({ limit: '20' });
   if (cursor) search.set('cursor', cursor);
-  const r = exactRecord(
+  const r = responseRecord(
     (
       await gameRequest<unknown>(`/api/games/${codec.game}/history?${search}`, {
         signal,
@@ -245,7 +245,7 @@ export async function readRounds<V, F, P, S, L, A>(
   opaqueID(id, prefix(codec.game), 'round session');
   const search = new URLSearchParams({ limit: '5' });
   if (cursor) search.set('cursor', cursor);
-  const r = exactRecord(
+  const r = responseRecord(
     (
       await gameRequest<unknown>(
         `/api/games/${codec.game}/${active ? 'sessions' : 'history'}/${id}/rounds?${search}`,

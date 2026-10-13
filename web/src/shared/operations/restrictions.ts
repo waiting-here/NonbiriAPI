@@ -1,5 +1,6 @@
 import {
   array,
+  exactRecord,
   invalidResponse,
   nullableUnixSecond,
   oneOf,
@@ -8,9 +9,9 @@ import {
   unixSecond,
 } from './wire';
 
-export function automaticRestrictions(value: unknown) {
+export function automaticRestrictions(value: unknown, exact = false) {
   const items = array(value, 'automatic restrictions', 2).map((value) => {
-    const item = record(
+    const item = (exact ? exactRecord : record)(
       value,
       ['kind', 'reason_code', 'reason', 'started_at', 'ends_at'],
       'automatic restriction',
@@ -46,7 +47,7 @@ export function readLoginRestrictions(fragment: string): AutomaticRestriction[] 
     const text = new TextDecoder('utf-8', { fatal: true }).decode(
       Uint8Array.from(raw, (c) => c.charCodeAt(0)),
     );
-    return automaticRestrictions(JSON.parse(text));
+    return automaticRestrictions(JSON.parse(text), true);
   } catch {
     return [];
   }

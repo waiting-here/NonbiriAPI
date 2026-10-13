@@ -1,11 +1,10 @@
 import { RPS_MODES, type RPSMode, type RPSModeConfig } from '../common/types';
 import {
   booleanValue,
-  creditsToMilli,
   creditsValue,
   decimalValue,
   enumValue,
-  exactRecord,
+  responseRecord,
   gamePayment,
   httpsURL,
   invalidResponse,
@@ -64,7 +63,7 @@ function mode(value: unknown, field: string): RPSMode {
 }
 
 function normalizePumps(value: unknown, field: string) {
-  const record = exactRecord(value, ['platform', 'welfare', 'thursday'], [], field);
+  const record = responseRecord(value, ['platform', 'welfare', 'thursday'], [], field);
   const result = {
     platform: safeInteger(record.platform, 0, 9_999, `${field} platform`),
     welfare: safeInteger(record.welfare, 0, 9_999, `${field} welfare`),
@@ -76,7 +75,7 @@ function normalizePumps(value: unknown, field: string) {
 }
 
 function normalizeModeConfig(value: unknown, field: string): RPSModeConfig {
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     [
       'enabled',
@@ -107,7 +106,7 @@ function normalizeModeConfig(value: unknown, field: string): RPSModeConfig {
 }
 
 export function normalizeRPSQueue(value: unknown): RPSQueue {
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     ['id', 'mode', 'state', 'revision', 'deadline', 'server_now'],
     ['rules_version', 'payment'],
@@ -116,9 +115,16 @@ export function normalizeRPSQueue(value: unknown): RPSQueue {
   if (record.state !== 'waiting') invalidResponse('RPS queue state');
   const deadline = unixTime(record.deadline, 'RPS queue deadline');
   const serverNow = unixTime(record.server_now, 'RPS queue server time');
-  const rulesVersion = record.rules_version === undefined ? 1 : safeInteger(record.rules_version, 1, 2, 'RPS queue rules');
-  const payment = record.payment === undefined ? null : gamePayment(record.payment, 'RPS queue payment');
-  if (rulesVersion === 2 && payment === null || rulesVersion === 1 && payment !== null && payment.game !== '0')
+  const rulesVersion =
+    record.rules_version === undefined
+      ? 1
+      : safeInteger(record.rules_version, 1, 2, 'RPS queue rules');
+  const payment =
+    record.payment === undefined ? null : gamePayment(record.payment, 'RPS queue payment');
+  if (
+    (rulesVersion === 2 && payment === null) ||
+    (rulesVersion === 1 && payment !== null && payment.game !== '0')
+  )
     invalidResponse('RPS queue funding');
   return {
     rulesVersion,
@@ -133,7 +139,7 @@ export function normalizeRPSQueue(value: unknown): RPSQueue {
 }
 
 function funSnapshot(value: unknown, field: string, viewer: 'self' | 'opponent'): FunSnapshot {
-  const discriminator = exactRecord(
+  const discriminator = responseRecord(
     value,
     ['state'],
     ['completed_count', 'profitable_count', 'rock_count', 'scissors_count', 'paper_count'],
@@ -141,12 +147,11 @@ function funSnapshot(value: unknown, field: string, viewer: 'self' | 'opponent')
   );
   if (discriminator.state === 'none') {
     if (viewer === 'self') invalidResponse(`${field} self state`);
-    exactRecord(value, ['state'], [], field);
     return { state: 'none' };
   }
   if (discriminator.state === 'insufficient') {
     if (viewer === 'self') invalidResponse(`${field} self state`);
-    const record = exactRecord(value, ['state', 'completed_count'], [], field);
+    const record = responseRecord(value, ['state', 'completed_count'], [], field);
     const completedCount = decimalValue(
       record.completed_count,
       { bits: 128, positive: true },
@@ -159,7 +164,7 @@ function funSnapshot(value: unknown, field: string, viewer: 'self' | 'opponent')
     };
   }
   if (discriminator.state !== 'full') invalidResponse(field);
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     ['state', 'completed_count', 'profitable_count', 'rock_count', 'scissors_count', 'paper_count'],
     [],
@@ -214,7 +219,7 @@ function seatMoney(record: Record<string, unknown>, field: string) {
 }
 
 function normalizeSeat(value: unknown, field: string): RPSSeat {
-  const discriminator = exactRecord(
+  const discriminator = responseRecord(
     value,
     [
       'seat_no',
@@ -241,7 +246,7 @@ function normalizeSeat(value: unknown, field: string): RPSSeat {
     field,
   );
   if (discriminator.deletion_state === 'active') {
-    const record = exactRecord(
+    const record = responseRecord(
       value,
       [
         'seat_no',
@@ -262,16 +267,27 @@ function normalizeSeat(value: unknown, field: string): RPSSeat {
       field,
     );
     const viewer = enumValue(record.viewer, ['self', 'opponent'] as const, `${field} viewer`);
-    const funding = record.funding === undefined ? null :
-      exactRecord(record.funding, ['buy_in_general', 'buy_in_game', 'current_general', 'game_remaining'], [], `${field} funding`);
+    const funding =
+      record.funding === undefined
+        ? null
+        : responseRecord(
+            record.funding,
+            ['buy_in_general', 'buy_in_game', 'current_general', 'game_remaining'],
+            [],
+            `${field} funding`,
+          );
     if (funding && viewer !== 'self') invalidResponse(`${field} private funding`);
     const seat: ActiveRPSSeat = {
-      ...(funding ? { funding: {
-        buyInGeneral: creditsValue(funding.buy_in_general, {}, `${field} general buy-in`),
-        buyInGame: creditsValue(funding.buy_in_game, {}, `${field} game buy-in`),
-        currentGeneral: creditsValue(funding.current_general, {}, `${field} current general`),
-        gameRemaining: creditsValue(funding.game_remaining, {}, `${field} game remaining`),
-      }} : {}),
+      ...(funding
+        ? {
+            funding: {
+              buyInGeneral: creditsValue(funding.buy_in_general, {}, `${field} general buy-in`),
+              buyInGame: creditsValue(funding.buy_in_game, {}, `${field} game buy-in`),
+              currentGeneral: creditsValue(funding.current_general, {}, `${field} current general`),
+              gameRemaining: creditsValue(funding.game_remaining, {}, `${field} game remaining`),
+            },
+          }
+        : {}),
       ...seatMoney(record, field),
       viewer,
       deletionState: 'active',
@@ -297,7 +313,7 @@ function normalizeSeat(value: unknown, field: string): RPSSeat {
       invalidResponse(`${field} private follower action`);
     return seat;
   }
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     [
       'seat_no',
@@ -330,24 +346,24 @@ function eventPayload(
   field: string,
 ): Readonly<Record<string, unknown>> {
   if (kind === 'phase_changed') {
-    const record = exactRecord(value, ['phase', 'deadline'], [], field);
+    const record = responseRecord(value, ['phase', 'deadline'], [], field);
     enumValue(record.phase, RPS_PHASES.slice(0, 6), `${field} phase`);
     unixTime(record.deadline, `${field} deadline`);
     return record;
   }
   if (kind === 'action_locked') {
-    const record = exactRecord(value, ['seat_no', 'action_kind'], [], field);
+    const record = responseRecord(value, ['seat_no', 'action_kind'], [], field);
     safeInteger(record.seat_no, 0, 2, `${field} seat`);
     enumValue(record.action_kind, ACTIONS, `${field} action`);
     return record;
   }
   if (kind === 'reveal') {
-    const record = exactRecord(value, ['gestures', 'result_code'], [], field);
+    const record = responseRecord(value, ['gestures', 'result_code'], [], field);
     if (!Array.isArray(record.gestures) || record.gestures.length !== 3)
       invalidResponse(`${field} gestures`);
     const seen = new Set<number>();
     for (const item of record.gestures) {
-      const gesture = exactRecord(item, ['seat_no', 'gesture'], [], `${field} gesture`);
+      const gesture = responseRecord(item, ['seat_no', 'gesture'], [], `${field} gesture`);
       const seat = safeInteger(gesture.seat_no, 0, 2, `${field} gesture seat`);
       if (seen.has(seat)) invalidResponse(`${field} duplicate seat`);
       seen.add(seat);
@@ -357,37 +373,42 @@ function eventPayload(
     return record;
   }
   if (kind === 'settlement') {
-    const record = exactRecord(value, ['seat_deltas', 'player_pool', 'cuts'], [], field);
+    const record = responseRecord(value, ['seat_deltas', 'player_pool', 'cuts'], [], field);
     if (!Array.isArray(record.seat_deltas) || record.seat_deltas.length !== 3)
       invalidResponse(`${field} deltas`);
     const seen = new Set<number>();
     for (const item of record.seat_deltas) {
-      const delta = exactRecord(item, ['seat_no', 'delta'], [], `${field} delta`);
+      const delta = responseRecord(item, ['seat_no', 'delta'], [], `${field} delta`);
       const seat = safeInteger(delta.seat_no, 0, 2, `${field} seat`);
       if (seen.has(seat)) invalidResponse(`${field} duplicate seat`);
       seen.add(seat);
       creditsValue(delta.delta, { signed: true }, `${field} delta`);
     }
     creditsValue(record.player_pool, {}, `${field} pool`);
-    const cuts = exactRecord(record.cuts, ['platform', 'welfare', 'thursday'], [], `${field} cuts`);
+    const cuts = responseRecord(
+      record.cuts,
+      ['platform', 'welfare', 'thursday'],
+      [],
+      `${field} cuts`,
+    );
     for (const key of ['platform', 'welfare', 'thursday'] as const)
       creditsValue(cuts[key], {}, `${field} ${key}`);
     return record;
   }
   if (kind === 'reminder') {
-    const record = exactRecord(value, ['free_tie_count'], [], field);
+    const record = responseRecord(value, ['free_tie_count'], [], field);
     const count = decimalValue(record.free_tie_count, { bits: 128 }, `${field} count`);
     if (BigInt(count) < 3n || BigInt(count) > 5n) invalidResponse(`${field} count`);
     return record;
   }
   if (kind === 'identity_reset') {
-    const record = exactRecord(value, ['seat_no', 'identity_epoch'], [], field);
+    const record = responseRecord(value, ['seat_no', 'identity_epoch'], [], field);
     safeInteger(record.seat_no, 0, 2, `${field} seat`);
     decimalValue(record.identity_epoch, { bits: 128, positive: true }, `${field} epoch`);
     return record;
   }
   if (kind === 'terminal') {
-    const record = exactRecord(value, ['terminal_reason'], [], field);
+    const record = responseRecord(value, ['terminal_reason'], [], field);
     enumValue(record.terminal_reason, TERMINAL_REASONS, `${field} reason`);
     return record;
   }
@@ -395,7 +416,7 @@ function eventPayload(
 }
 
 function recentEvent(value: unknown, field: string): RPSRecentEvent {
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     ['seq', 'identity_epoch', 'kind', 'phase_seq', 'safe_payload'],
     [],
@@ -420,7 +441,7 @@ function recentEvent(value: unknown, field: string): RPSRecentEvent {
 }
 
 export function normalizeRPSState(value: unknown): RPSState {
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     [
       'session_id',
@@ -456,7 +477,7 @@ export function normalizeRPSState(value: unknown): RPSState {
     (state === 'terminal_processing' && (phase !== 'terminal_processing' || deadline !== null))
   )
     invalidResponse('RPS state/phase matrix');
-  const rules = exactRecord(
+  const rules = responseRecord(
     record.rule_snapshot,
     [
       'rules_version',
@@ -488,7 +509,7 @@ export function normalizeRPSState(value: unknown): RPSState {
     freeTieReminder: safeInteger(rules.free_tie_reminder, 3, 3, 'RPS reminder') as 3,
     freeTieLimit: safeInteger(rules.free_tie_limit, 6, 6, 'RPS tie limit') as 6,
   };
-  const economyRecord = exactRecord(
+  const economyRecord = responseRecord(
     record.economy,
     [
       'player_pool',
@@ -526,7 +547,7 @@ export function normalizeRPSState(value: unknown): RPSState {
     (phase !== 'followers' && dealerRaise !== null)
   )
     invalidResponse('RPS economy phase matrix');
-  const cutsRecord = exactRecord(
+  const cutsRecord = responseRecord(
     economyRecord.cuts,
     ['platform', 'welfare', 'thursday'],
     [],
@@ -561,35 +582,15 @@ export function normalizeRPSState(value: unknown): RPSState {
   )
     invalidResponse('RPS seat topology');
   for (const seat of seats) {
-    const starting = creditsToMilli(seat.startingBalance);
-    const current = creditsToMilli(seat.currentBalance);
-    const roundInput = creditsToMilli(seat.currentRoundInput);
-    const totalInput = creditsToMilli(seat.totalInput, false, 256);
-    const totalReturned = creditsToMilli(seat.totalReturned, false, 256);
-    if (roundInput > totalInput || starting - totalInput + totalReturned !== current)
-      invalidResponse(`RPS seat ${seat.seatNo} money arithmetic`);
-    if (seat.deletionState === 'active' && seat.viewer === 'self') {
-      if (!seat.funding && ruleSnapshot.rulesVersion === 2) invalidResponse('RPS missing funding');
-      if (seat.funding) {
-        const generalBuyIn = creditsToMilli(seat.funding.buyInGeneral);
-        const gameBuyIn = creditsToMilli(seat.funding.buyInGame);
-        const gameRemaining = creditsToMilli(seat.funding.gameRemaining);
-        if (generalBuyIn + gameBuyIn !== starting ||
-            creditsToMilli(seat.funding.currentGeneral) + gameRemaining !== current ||
-            gameRemaining !== (gameBuyIn > totalInput ? gameBuyIn - totalInput : 0n) ||
-            ruleSnapshot.rulesVersion === 1 && gameBuyIn !== 0n)
-          invalidResponse('RPS funding arithmetic');
-      }
-    }
-    const hasTerminal = seat.terminalReturn !== undefined;
-    if ((state === 'terminal_processing') !== hasTerminal)
-      invalidResponse(`RPS seat ${seat.seatNo} terminal matrix`);
     if (
-      hasTerminal &&
-      (creditsToMilli(seat.terminalReturn!) !== current ||
-        creditsToMilli(seat.walletNet!, true) !== current - starting)
+      seat.deletionState === 'active' &&
+      seat.viewer === 'self' &&
+      !seat.funding &&
+      ruleSnapshot.rulesVersion === 2
     )
-      invalidResponse(`RPS seat ${seat.seatNo} terminal arithmetic`);
+      invalidResponse('RPS missing funding');
+    if ((state === 'terminal_processing') !== (seat.terminalReturn !== undefined))
+      invalidResponse(`RPS seat ${seat.seatNo} terminal matrix`);
   }
   if (!Array.isArray(record.current_actor_options) || record.current_actor_options.length > 1)
     invalidResponse('RPS actor options');
@@ -607,7 +608,7 @@ export function normalizeRPSState(value: unknown): RPSState {
     (actorOption === 'follower_decision' && phase !== 'followers')
   )
     invalidResponse('RPS actor option phase');
-  const round = exactRecord(
+  const round = responseRecord(
     record.round_summary,
     [
       'base_round_count',
@@ -699,7 +700,7 @@ export function normalizeRPSState(value: unknown): RPSState {
 }
 
 export function normalizeRPSPending(value: unknown): RPSPendingResult {
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     [
       'session_id',
@@ -720,7 +721,7 @@ export function normalizeRPSPending(value: unknown): RPSPendingResult {
   if (!Array.isArray(record.seats) || record.seats.length !== 3)
     invalidResponse('RPS result seats');
   const seats = record.seats.map((item, index) => {
-    const seat = exactRecord(
+    const seat = responseRecord(
       item,
       ['seat_no', 'result', 'gesture'],
       [],
@@ -744,37 +745,26 @@ export function normalizeRPSPending(value: unknown): RPSPendingResult {
   const ownInput = creditsValue(record.own_input, { bits: 256 }, 'RPS own input');
   const ownReturned = creditsValue(record.own_returned, { bits: 256 }, 'RPS own returned');
   const ownWalletNet = creditsValue(record.own_wallet_net, { signed: true }, 'RPS wallet net');
-  const ownSign = creditsToMilli(ownWalletNet, true);
-  if (creditsToMilli(ownReturned, false, 256) - creditsToMilli(ownInput, false, 256) !== ownSign)
-    invalidResponse('RPS own result arithmetic');
   const ownBuyIn =
     record.own_buy_in === null ? null : creditsValue(record.own_buy_in, {}, 'RPS buy-in');
   const ownCashOut =
     record.own_cash_out === null ? null : creditsValue(record.own_cash_out, {}, 'RPS cash-out');
-  if (
-    (ownBuyIn === null) !== (ownCashOut === null) ||
-    (ownBuyIn !== null &&
-      ownCashOut !== null &&
-      creditsToMilli(ownCashOut) - creditsToMilli(ownBuyIn) !== ownSign)
-  )
-    invalidResponse('RPS wallet transfer arithmetic');
-  const rulesVersion = record.rules_version === undefined ? 1 : safeInteger(record.rules_version, 1, 2, 'RPS result rules');
-  const amountOrUnknown = (value: unknown, field: string) => value === null || value === undefined ? null : creditsValue(value, {}, field);
+  if ((ownBuyIn === null) !== (ownCashOut === null)) invalidResponse('RPS wallet transfer fields');
+  const rulesVersion =
+    record.rules_version === undefined
+      ? 1
+      : safeInteger(record.rules_version, 1, 2, 'RPS result rules');
+  const amountOrUnknown = (value: unknown, field: string) =>
+    value === null || value === undefined ? null : creditsValue(value, {}, field);
   const ownBuyInGeneral = amountOrUnknown(record.own_buy_in_general, 'RPS general buy-in');
   const ownBuyInGame = amountOrUnknown(record.own_buy_in_game, 'RPS game buy-in');
   const ownReturnedGeneral = amountOrUnknown(record.own_returned_general, 'RPS general cash-out');
-  if ((ownBuyInGeneral === null) !== (ownBuyInGame === null) ||
-      rulesVersion === 2 && (ownBuyInGeneral === null || ownReturnedGeneral === null) ||
-      rulesVersion === 1 && ownBuyInGame !== null && ownBuyInGame !== '0')
+  if (
+    (ownBuyInGeneral === null) !== (ownBuyInGame === null) ||
+    (rulesVersion === 2 && (ownBuyInGeneral === null || ownReturnedGeneral === null)) ||
+    (rulesVersion === 1 && ownBuyInGame !== null && ownBuyInGame !== '0')
+  )
     invalidResponse('RPS result funding');
-  if (ownBuyInGeneral !== null && ownBuyInGame !== null) {
-    const original = creditsToMilli(ownBuyInGeneral) + creditsToMilli(ownBuyInGame);
-    if (ownBuyIn !== null && original !== creditsToMilli(ownBuyIn) ||
-        ownReturnedGeneral !== null && creditsToMilli(ownReturnedGeneral) - original !== ownSign)
-      invalidResponse('RPS result funding arithmetic');
-  }
-  if (ownReturnedGeneral !== null && ownCashOut !== null && ownReturnedGeneral !== ownCashOut)
-    invalidResponse('RPS result cash-out');
   const resultMode = mode(record.mode, 'RPS result mode');
   const terminalReason = enumValue(record.terminal_reason, TERMINAL_REASONS, 'RPS terminal reason');
   const revealed = seats.filter((seat) => seat.gesture !== null).length;
@@ -783,10 +773,11 @@ export function normalizeRPSPending(value: unknown): RPSPendingResult {
     (revealed !== 3 || resultMode !== 'quick' || terminalReason !== 'quick_resolved')
   )
     invalidResponse('RPS result gesture matrix');
-  const expectedOwnResult = ownSign > 0n ? 'win' : ownSign < 0n ? 'loss' : 'tie';
-  if (seats[ownSeatNo].result !== expectedOwnResult) invalidResponse('RPS own result');
   return {
-    rulesVersion, ownBuyInGeneral, ownBuyInGame, ownReturnedGeneral,
+    rulesVersion,
+    ownBuyInGeneral,
+    ownBuyInGame,
+    ownReturnedGeneral,
     sessionID: opaqueID(record.session_id, 'rps_', 'RPS result session'),
     mode: resultMode,
     terminalReason,
@@ -802,15 +793,15 @@ export function normalizeRPSPending(value: unknown): RPSPendingResult {
 }
 
 export function normalizeRPSHome(value: unknown): RPSHomeState {
-  const root = exactRecord(
+  const root = responseRecord(
     value,
     ['kind'],
     ['tutorial_seen', 'modes', 'queue', 'session', 'result'],
     'RPS home',
   );
   if (root.kind === 'idle') {
-    const record = exactRecord(value, ['kind', 'tutorial_seen', 'modes'], [], 'RPS idle');
-    const modes = exactRecord(record.modes, RPS_MODES, [], 'RPS idle modes');
+    const record = responseRecord(value, ['kind', 'tutorial_seen', 'modes'], [], 'RPS idle');
+    const modes = responseRecord(record.modes, RPS_MODES, [], 'RPS idle modes');
     return {
       kind: 'idle',
       tutorialSeen: booleanValue(record.tutorial_seen, 'RPS tutorial seen'),
@@ -822,15 +813,15 @@ export function normalizeRPSHome(value: unknown): RPSHomeState {
     };
   }
   if (root.kind === 'queue') {
-    const record = exactRecord(value, ['kind', 'queue'], [], 'RPS queue home');
+    const record = responseRecord(value, ['kind', 'queue'], [], 'RPS queue home');
     return { kind: 'queue', queue: normalizeRPSQueue(record.queue) };
   }
   if (root.kind === 'session') {
-    const record = exactRecord(value, ['kind', 'session'], [], 'RPS session home');
+    const record = responseRecord(value, ['kind', 'session'], [], 'RPS session home');
     return { kind: 'session', session: normalizeRPSState(record.session) };
   }
   if (root.kind === 'pending_result') {
-    const record = exactRecord(value, ['kind', 'result'], [], 'RPS pending home');
+    const record = responseRecord(value, ['kind', 'result'], [], 'RPS pending home');
     return { kind: 'pending_result', result: normalizeRPSPending(record.result) };
   }
   invalidResponse('RPS home discriminator');
@@ -844,11 +835,6 @@ function percentBP(value: unknown, field: string): number {
   if (result > 10_000) invalidResponse(field);
   return result;
 }
-function formatBP(value: bigint): string {
-  const whole = value / 100n;
-  const fraction = (value % 100n).toString().padStart(2, '0').replace(/0+$/, '');
-  return `${whole}${fraction ? `.${fraction}` : ''}`;
-}
 function leaderboardRow(
   value: unknown,
   board: 'profit_rate' | 'net_profit',
@@ -858,7 +844,7 @@ function leaderboardRow(
     board === 'profit_rate'
       ? ['rank', 'identity', 'session_count', 'profitable_count', 'profit_rate', 'is_me']
       : ['rank', 'identity', 'session_count', 'net_profit', 'is_me'];
-  const record = exactRecord(value, required, [], field);
+  const record = responseRecord(value, required, [], field);
   const rank = decimalValue(record.rank, { bits: 256, positive: true }, `${field} rank`);
   const identity = publicIdentity(record.identity, `${field} identity`);
   const sessionCount = decimalValue(
@@ -879,12 +865,7 @@ function leaderboardRow(
       typeof record.profit_rate === 'string'
         ? record.profit_rate
         : invalidResponse(`${field} rate`);
-    const bp = percentBP(profitRate, `${field} rate`);
-    if (
-      formatBP((BigInt(profitableCount) * 10_000n) / BigInt(sessionCount)) !== profitRate ||
-      bp > 10_000
-    )
-      invalidResponse(`${field} rate arithmetic`);
+    percentBP(profitRate, `${field} rate`);
     return { board, rank, identity, sessionCount, profitableCount, profitRate, isMe };
   }
   return {
@@ -901,7 +882,7 @@ export function normalizeRPSLeaderboard(
   expectedMode: RPSMode,
   expectedBoard: 'profit_rate' | 'net_profit',
 ): RPSLeaderboard {
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     ['mode', 'board', 'window_days', 'window_start', 'min_sessions', 'rows', 'me'],
     [],

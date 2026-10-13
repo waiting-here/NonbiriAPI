@@ -1,3 +1,4 @@
+import { responseFields } from '@shared/query/responseFields';
 import { normalizeModelTypes } from '@shared/modelTypes';
 import { automaticRestrictions } from '@shared/operations/restrictions';
 import { oneOf } from '@shared/operations/wire';
@@ -73,22 +74,13 @@ function asRecord(value: unknown, label: string): UnknownRecord {
   return value as UnknownRecord;
 }
 
-function exactRecord(
+function responseRecord(
   value: unknown,
   required: readonly string[],
   optional: readonly string[] = [],
   label: string,
 ): UnknownRecord {
-  const record = asRecord(value, label);
-  const allowed = new Set([...required, ...optional]);
-  const keys = Object.keys(record);
-  if (
-    keys.some((key) => !allowed.has(key)) ||
-    required.some((key) => !Object.hasOwn(record, key))
-  ) {
-    invalid(label);
-  }
-  return record;
+  return responseFields(value, required, [...required, ...optional], () => invalid(label));
 }
 
 function hasForbiddenScalar(value: string): boolean {
@@ -257,7 +249,7 @@ export function normalizePage<T>(
   normalize: (item: unknown) => T,
   label: string,
 ): Page<T> {
-  const record = exactRecord(value, ['data', 'next_cursor'], [], `${label} page`);
+  const record = responseRecord(value, ['data', 'next_cursor'], [], `${label} page`);
   const data = boundedArray(record.data, normalize, label);
   uniqueBy(data, (item) => JSON.stringify(item), `${label} page`);
   return { data, next_cursor: nullableCursor(record.next_cursor) };
@@ -274,7 +266,7 @@ export function normalizeHomeCheckinStatus(value: unknown): HomeCheckinStatus {
       ? false
       : exactBoolean(root.blocked_by_other_checkin, 'other check-in block');
   if (root.enabled === false) {
-    exactRecord(
+    responseRecord(
       value,
       ['enabled'],
       ['mutually_exclusive', 'blocked_by_other_checkin'],
@@ -286,7 +278,7 @@ export function normalizeHomeCheckinStatus(value: unknown): HomeCheckinStatus {
       blocked_by_other_checkin: blockedByOtherCheckin,
     };
   }
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     [
       'enabled',
@@ -318,7 +310,7 @@ export function normalizeHomeCheckinStatus(value: unknown): HomeCheckinStatus {
 }
 
 export function normalizeHomeCheckinResult(value: unknown): HomeCheckinResult {
-  const record = exactRecord(value, ['asset_type', 'award', 'balance'], [], 'check-in result');
+  const record = responseRecord(value, ['asset_type', 'award', 'balance'], [], 'check-in result');
   return {
     asset_type: oneOf(record.asset_type, ['general', 'game'] as const, 'check-in asset'),
     award: creditAmount(record.award, 'check-in award', false),
@@ -327,7 +319,7 @@ export function normalizeHomeCheckinResult(value: unknown): HomeCheckinResult {
 }
 
 function normalizeHomeContinue(value: unknown): HomeGameSummary {
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     ['game', 'resource_id', 'state', 'route_id'],
     [],
@@ -465,7 +457,7 @@ function normalizeHomeContinue(value: unknown): HomeGameSummary {
 }
 
 function normalizeHomePendingResult(value: unknown): HomeGameSummary {
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     ['game', 'resource_id', 'created_at', 'route_id'],
     [],
@@ -493,7 +485,7 @@ function normalizeHomePendingResult(value: unknown): HomeGameSummary {
 }
 
 export function normalizeHomeGameSummary(value: unknown): HomeGameSummary[] {
-  const record = exactRecord(value, ['continue', 'pending_results'], [], 'home game summary');
+  const record = responseRecord(value, ['continue', 'pending_results'], [], 'home game summary');
   const continuations = boundedArray(
     record.continue,
     normalizeHomeContinue,
@@ -526,7 +518,7 @@ export function normalizeUsageSummary(value: unknown): UsageSummary {
     'total_completion_tokens',
     'total_unknown_usage_requests',
   ] as const;
-  const record = exactRecord(value, fields, [], 'usage summary');
+  const record = responseRecord(value, fields, [], 'usage summary');
   const result = {
     total_requests: u128(record.total_requests, 'request count'),
     total_uncached_input_tokens: u128(
@@ -579,7 +571,7 @@ export function normalizeUserProfile(value: unknown): UserProfile {
     'updated_at',
     'usage',
   ] as const;
-  const record = exactRecord(value, fields, [], 'user profile');
+  const record = responseRecord(value, fields, [], 'user profile');
   const lang = record.lang;
   if (lang !== '' && lang !== 'zh' && lang !== 'en') invalid('account language');
   if (
@@ -635,18 +627,17 @@ export function normalizeUserProfile(value: unknown): UserProfile {
 }
 
 export function normalizeUserEnvelope(value: unknown): UserEnvelope {
-  const record = exactRecord(value, ['user'], [], 'user envelope');
+  const record = responseRecord(value, ['user'], [], 'user envelope');
   return { user: normalizeUserProfile(record.user) };
 }
 
 export function normalizeEndpointOrigin(value: unknown): EndpointOrigin {
   const root = asRecord(value, 'endpoint origin');
   if (root.kind === 'custom') {
-    exactRecord(value, ['kind'], [], 'endpoint origin');
     return { kind: 'custom' };
   }
   if (root.kind === 'mainstream') {
-    const record = exactRecord(value, ['kind', 'channel_id', 'name'], [], 'endpoint origin');
+    const record = responseRecord(value, ['kind', 'channel_id', 'name'], [], 'endpoint origin');
     return {
       kind: 'mainstream',
       channel_id: opaqueID(record.channel_id, 'mch_', 'endpoint origin channel id'),
@@ -659,7 +650,7 @@ export function normalizeEndpointOrigin(value: unknown): EndpointOrigin {
 }
 
 export function normalizeMainstreamChannelOption(value: unknown): MainstreamChannelOption {
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     ['id', 'name', 'connector_type', 'base_url'],
     [],
@@ -676,7 +667,7 @@ export function normalizeMainstreamChannelOption(value: unknown): MainstreamChan
 }
 
 export function normalizeEndpointCreateOptions(value: unknown): EndpointCreateOptions {
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     ['base_connector_types', 'mainstream_channels'],
     [],
@@ -737,7 +728,7 @@ function browseRoutingLimit(value: unknown, label: string): number {
 }
 
 export function normalizeKeyBindingView(value: unknown): KeyBindingView {
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     [
       'id',
@@ -819,7 +810,7 @@ function normalizeEndpointBrowse(
   endpointKeyCount: string,
   endpointEnabled: boolean,
 ): EndpointBrowse {
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     ['model_count', 'available_key_count', 'state'],
     ['mainstream_categories'],
@@ -871,7 +862,7 @@ function normalizeEndpointKeyBrowse(
   endpointID: string,
   keyID: string,
 ): EndpointKeyBrowse {
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     [
       'model_count',
@@ -927,7 +918,7 @@ function normalizeEndpointKeyBrowse(
 
 function normalizeModelBrowse(value: unknown, modelID: string, bindingCount: string): ModelBrowse {
   if (BigInt(bindingCount) > BigInt(MAX_BINDINGS)) invalid('model binding count');
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     ['available_binding_count', 'preview'],
     [],
@@ -951,7 +942,7 @@ function normalizeModelBrowse(value: unknown, modelID: string, bindingCount: str
 }
 
 export function normalizeEndpoint(value: unknown): Endpoint {
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     [
       'id',
@@ -993,7 +984,7 @@ export function normalizeEndpoint(value: unknown): Endpoint {
 }
 
 export function normalizeEndpointKey(value: unknown): EndpointKey {
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     [
       'id',
@@ -1048,7 +1039,7 @@ function keyRoutingLimit(value: unknown): number {
 }
 
 export function normalizeCallerKeyMetadata(value: unknown): CallerKeyMetadata {
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     ['display', 'created_at', 'updated_at', 'generation'],
     [],
@@ -1082,7 +1073,7 @@ export function normalizeCallerKeySecret(
   value: unknown,
   expectedGeneration: string,
 ): CallerKeySecret {
-  const record = exactRecord(value, ['secret', 'metadata'], [], 'CallerKey one-time response');
+  const record = responseRecord(value, ['secret', 'metadata'], [], 'CallerKey one-time response');
   const secret = scalarString(record.secret, 'CallerKey secret');
   if (!CALLER_SECRET.test(secret)) invalid('CallerKey secret');
   const metadata = normalizeCallerKeyMetadata(record.metadata);
@@ -1104,7 +1095,7 @@ function catalogSource(value: unknown): CatalogSourceType {
 }
 
 export function normalizeDiscoveryEvidence(value: unknown): DiscoveryEvidence {
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     ['state', 'revision', 'result', 'safe_class', 'observed_at', 'count'],
     [],
@@ -1245,7 +1236,7 @@ export function validateIdempotencyKey(value: string): string {
 }
 
 export function normalizeCatalogEntry(value: unknown): CatalogEntry {
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     [
       'id',
@@ -1277,7 +1268,7 @@ export function normalizeCatalogEntry(value: unknown): CatalogEntry {
 }
 
 export function normalizeCatalogView(value: unknown): CatalogView {
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     ['evidence', 'automatic_entries', 'manual_entries', 'next_cursor'],
     [],
@@ -1318,7 +1309,7 @@ export function normalizeCatalogView(value: unknown): CatalogView {
 }
 
 export function normalizeModel(value: unknown): Model {
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     [
       'id',
@@ -1392,7 +1383,7 @@ function normalizeSourceTypes(value: unknown): CatalogSourceType[] {
 }
 
 export function normalizeBindingCandidate(value: unknown): BindingCandidate {
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     [
       'endpoint_key_id',
@@ -1432,7 +1423,7 @@ export function normalizeBindingCandidate(value: unknown): BindingCandidate {
 }
 
 export function normalizeBinding(value: unknown): Binding {
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     [
       'id',
@@ -1495,7 +1486,7 @@ function normalizeBindings(value: unknown): Binding[] {
 }
 
 export function normalizeBindingsResponse(value: unknown): BindingsResponse {
-  const record = exactRecord(value, ['bindings', 'binding_revision'], [], 'bindings response');
+  const record = responseRecord(value, ['bindings', 'binding_revision'], [], 'bindings response');
   return {
     bindings: normalizeBindings(record.bindings),
     binding_revision: decimal(record.binding_revision, 'binding revision'),
@@ -1503,7 +1494,7 @@ export function normalizeBindingsResponse(value: unknown): BindingsResponse {
 }
 
 export function normalizeDiscoveryAccepted(value: unknown): DiscoveryAccepted {
-  const record = exactRecord(value, ['operation_id', 'evidence'], [], 'discovery acceptance');
+  const record = responseRecord(value, ['operation_id', 'evidence'], [], 'discovery acceptance');
   const operationId = scalarString(record.operation_id, 'discovery operation id');
   if (!OPERATION_ID.test(operationId)) invalid('discovery operation id');
   return {
@@ -1513,7 +1504,7 @@ export function normalizeDiscoveryAccepted(value: unknown): DiscoveryAccepted {
 }
 
 export function normalizeManualEntriesResponse(value: unknown): ManualEntriesResponse {
-  const record = exactRecord(value, ['entries'], [], 'manual catalog response');
+  const record = responseRecord(value, ['entries'], [], 'manual catalog response');
   const entries = boundedArray(record.entries, normalizeCatalogEntry, 'manual catalog entries');
   if (entries.some((entry) => entry.source_type !== 'manual')) invalid('manual catalog response');
   uniqueBy(entries, (entry) => entry.id, 'manual catalog entry ids');
@@ -1521,7 +1512,7 @@ export function normalizeManualEntriesResponse(value: unknown): ManualEntriesRes
 }
 
 function normalizeAffectedModel(value: unknown): AffectedModel {
-  const record = exactRecord(value, ['model', 'bindings'], [], 'affected model');
+  const record = responseRecord(value, ['model', 'bindings'], [], 'affected model');
   const model = normalizeModel(record.model);
   const bindings = normalizeBindings(record.bindings);
   if (model.binding_count !== String(bindings.length)) invalid('affected model binding count');
@@ -1529,7 +1520,7 @@ function normalizeAffectedModel(value: unknown): AffectedModel {
 }
 
 export function normalizeManualUpdateResponse(value: unknown): ManualUpdateResponse {
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     ['entries', 'affected_models'],
     [],
@@ -1729,6 +1720,6 @@ export function canonicalCandidateFilters(filters: CandidateFilters): CanonicalC
 }
 
 export function normalizeAuthorizationURL(value: unknown): string {
-  const record = exactRecord(value, ['authorization_url'], [], 'elevation response');
+  const record = responseRecord(value, ['authorization_url'], [], 'elevation response');
   return httpsURL(record.authorization_url, 'elevation authorization URL');
 }

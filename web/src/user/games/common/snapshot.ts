@@ -8,7 +8,7 @@ import {
   booleanValue,
   creditsValue,
   enumValue,
-  exactRecord,
+  responseRecord,
   invalidResponse,
   safeInteger,
   unixTime,
@@ -30,7 +30,7 @@ export const gameKeys = {
 };
 
 function normalizeMode(value: unknown, field: string): RPSModeConfig {
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     [
       'enabled',
@@ -45,7 +45,7 @@ function normalizeMode(value: unknown, field: string): RPSModeConfig {
     [],
     field,
   );
-  const pumps = exactRecord(
+  const pumps = responseRecord(
     record.pumps_bp,
     ['platform', 'welfare', 'thursday'],
     [],
@@ -78,10 +78,10 @@ function normalizeOnboarding(
   rewards: readonly string[],
   field: string,
 ): OnboardingProgress {
-  const record = exactRecord(value, ['items', 'all_completed'], [], field);
+  const record = responseRecord(value, ['items', 'all_completed'], [], field);
   if (!Array.isArray(record.items) || record.items.length !== tasks.length) invalidResponse(field);
   const items = record.items.map((value, index) => {
-    const item = exactRecord(value, ['key', 'reward', 'asset_type', 'completed'], [], field);
+    const item = responseRecord(value, ['key', 'reward', 'asset_type', 'completed'], [], field);
     if (
       item.key !== tasks[index] ||
       item.reward !== rewards[index] ||
@@ -101,7 +101,7 @@ function normalizeOnboarding(
 }
 
 export function normalizeGamesSnapshot(value: unknown): GamesSnapshot {
-  const record = exactRecord(
+  const record = responseRecord(
     value,
     [
       'server_now',
@@ -123,21 +123,21 @@ export function normalizeGamesSnapshot(value: unknown): GamesSnapshot {
     [],
     'games snapshot',
   );
-  const catchGame = exactRecord(
+  const catchGame = responseRecord(
     record.steadycatch,
     ['enabled', 'available', 'price', 'first_clear_reward', 'first_cleared'],
     [],
     'catch game',
   );
-  const fishing = exactRecord(
+  const fishing = responseRecord(
     record.fishing,
     ['enabled', 'available', 'bait_prices', 'blue_fish_chance_bps'],
     [],
     'fishing module',
   );
-  const baits = exactRecord(fishing.bait_prices, BAITS, [], 'bait prices');
-  const linklink = exactRecord(record.linklink, ['enabled', 'specs'], [], 'LinkLink module');
-  const specs = exactRecord(linklink.specs, LINKLINK_SPECS, [], 'LinkLink specs');
+  const baits = responseRecord(fishing.bait_prices, BAITS, [], 'bait prices');
+  const linklink = responseRecord(record.linklink, ['enabled', 'specs'], [], 'LinkLink module');
+  const specs = responseRecord(linklink.specs, LINKLINK_SPECS, [], 'LinkLink specs');
   const normalizedSpecs = {} as Record<
     LinkLinkSpec,
     GamesSnapshot['linklink']['specs'][LinkLinkSpec]
@@ -148,7 +148,7 @@ export function normalizeGamesSnapshot(value: unknown): GamesSnapshot {
     '10x10': 240,
   };
   for (const spec of LINKLINK_SPECS) {
-    const specRecord = exactRecord(
+    const specRecord = responseRecord(
       specs[spec],
       ['enabled', 'price', 'seconds'],
       [],
@@ -169,8 +169,8 @@ export function normalizeGamesSnapshot(value: unknown): GamesSnapshot {
       seconds: seconds as 150 | 180 | 240,
     };
   }
-  const rps = exactRecord(record.rps, ['enabled', 'modes'], [], 'RPS module');
-  const modes = exactRecord(rps.modes, RPS_MODES, [], 'RPS modes');
+  const rps = responseRecord(record.rps, ['enabled', 'modes'], [], 'RPS module');
+  const modes = responseRecord(rps.modes, RPS_MODES, [], 'RPS modes');
   const normalizedModes = {} as Record<RPSMode, RPSModeConfig>;
   for (const mode of RPS_MODES) {
     enumValue(mode, RPS_MODES, 'RPS mode key');

@@ -46,22 +46,22 @@ describe('administrator mainstream channel wire', () => {
     expect(normalizeAdminMainstreamChannel(retired)).toEqual(retired);
   });
 
-  it('rejects inconsistent retired state and unknown fields', () => {
+  it('rejects inconsistent retired state and strips unknown fields', () => {
     expect(() => normalizeAdminMainstreamChannel({ ...active, retired_at: 9 })).toThrow(
       /retirement state/i,
     );
     expect(() => normalizeAdminMainstreamChannel({ ...retired, enabled: true })).toThrow(
       /retired mainstream channel state/i,
     );
-    expect(() => normalizeAdminMainstreamChannel({ ...active, secret: 'never-render' })).toThrow(
-      /administrator mainstream channel/i,
+    expect(normalizeAdminMainstreamChannel({ ...active, secret: 'never-render' })).toEqual(
+      normalizeAdminMainstreamChannel(active),
     );
     expect(() => normalizeAdminMainstreamChannel({ ...active, name: 'bad\u0080name' })).toThrow(
       /mainstream channel name/i,
     );
-    expect(() => normalizeAdminMainstreamChannel({ ...active, base_url: 'https://bad\u0080.example' })).toThrow(
-      /canonical URL/i,
-    );
+    expect(() =>
+      normalizeAdminMainstreamChannel({ ...active, base_url: 'https://bad\u0080.example' }),
+    ).toThrow(/canonical URL/i);
   });
 
   it('decodes a bounded list and preserves cursor validation', async () => {
@@ -112,7 +112,9 @@ describe('administrator mainstream channel wire', () => {
         'patch-operation-key',
       ),
     ).resolves.toEqual(active);
-    await expect(retireAdminMainstreamChannel(channelID, '3', 'retire-operation-key')).resolves.toBeUndefined();
+    await expect(
+      retireAdminMainstreamChannel(channelID, '3', 'retire-operation-key'),
+    ).resolves.toBeUndefined();
 
     expect(requests).toHaveLength(3);
     const createBody = JSON.parse(requests[0].body ?? 'null') as Record<string, unknown>;
@@ -124,8 +126,14 @@ describe('administrator mainstream channel wire', () => {
       enabled: true,
     });
     expect(requests[0].headers.get('Idempotency-Key')).toBe('create-operation-key');
-    expect(JSON.parse(requests[1].body ?? 'null')).toEqual({ expected_revision: '3', enabled: false });
-    expect(JSON.parse(requests[2].body ?? 'null')).toEqual({ expected_revision: '3', confirmation: 'retire' });
+    expect(JSON.parse(requests[1].body ?? 'null')).toEqual({
+      expected_revision: '3',
+      enabled: false,
+    });
+    expect(JSON.parse(requests[2].body ?? 'null')).toEqual({
+      expected_revision: '3',
+      confirmation: 'retire',
+    });
     expect(requests[2].headers.get('Idempotency-Key')).toBe('retire-operation-key');
   });
 

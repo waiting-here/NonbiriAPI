@@ -175,8 +175,16 @@ describe('numbered log wire', () => {
     expect(normalizeRoleLogPage(value, 'user', '2147483647', 20).pagination.page).toBe('2');
   });
 
+  it.each([['an unknown envelope field', { ...list(), extra: true }]])(
+    'ignores response extension: %s',
+    (_label, value) => {
+      expect(normalizeRoleLogPage(value, 'user', '1', 20)).toEqual(
+        normalizeRoleLogPage(list(), 'user', '1', 20),
+      );
+    },
+  );
+
   it.each([
-    ['an unknown envelope field', { ...list(), extra: true }],
     ['a non-null cursor', { ...list(), next_cursor: 'opaque' }],
     ['a metadata size mismatch', list([row], pagination('1', 50, 1, 1))],
     ['duplicate row identities', list([row, row], pagination('1', 20, 2, 1))],

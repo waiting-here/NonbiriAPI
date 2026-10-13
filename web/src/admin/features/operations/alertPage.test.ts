@@ -53,16 +53,21 @@ describe('administrator alert page contract', () => {
     expect(normalizeAdminAlertPageResponse(page(data), 'all', '1', 20, 'all').data).toEqual(data);
   });
 
-  it.each(['all', 'true', 'false'] as const)('preserves deletion snapshots for the %s status filter', (resolved) => {
-    const rows = [
-      alert('2', true, { kind: 'account_deleted', account_deletion: deletionSnapshots.v2 }),
-      alert('1', false, { kind: 'account_deleted', account_deletion: deletionSnapshots.v1 }),
-    ].filter((row) => resolved === 'all' || row.resolved === (resolved === 'true'));
-    expect(normalizeAdminAlertPageResponse(page(rows), resolved, '1', 20, 'account_deleted').data)
-      .toEqual(rows);
-    expect(() => normalizeAdminAlertPageResponse(page(rows), resolved, '1', 20, 'fetch_failed'))
-      .toThrow();
-  });
+  it.each(['all', 'true', 'false'] as const)(
+    'preserves deletion snapshots for the %s status filter',
+    (resolved) => {
+      const rows = [
+        alert('2', true, { kind: 'account_deleted', account_deletion: deletionSnapshots.v2 }),
+        alert('1', false, { kind: 'account_deleted', account_deletion: deletionSnapshots.v1 }),
+      ].filter((row) => resolved === 'all' || row.resolved === (resolved === 'true'));
+      expect(
+        normalizeAdminAlertPageResponse(page(rows), resolved, '1', 20, 'account_deleted').data,
+      ).toEqual(rows);
+      expect(() =>
+        normalizeAdminAlertPageResponse(page(rows), resolved, '1', 20, 'fetch_failed'),
+      ).toThrow();
+    },
+  );
 
   it('preserves normalized alert fields and accepts a complete page window', () => {
     expect(
@@ -100,10 +105,7 @@ describe('administrator alert page contract', () => {
 
     expect(
       normalizeAdminAlertPageResponse(
-        page(
-          [alert('2', true)],
-          { page: '2', page_size: 20, total_items: '21', total_pages: '2' },
-        ),
+        page([alert('2', true)], { page: '2', page_size: 20, total_items: '21', total_pages: '2' }),
         'true',
         '2147483647',
         20,
@@ -113,6 +115,21 @@ describe('administrator alert page contract', () => {
 
   it.each([
     ['an unknown envelope field', { ...page([alert()]), extra: true }],
+    [
+      'an unknown pagination field',
+      {
+        ...page([alert()]),
+        pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1', extra: 1 },
+      },
+    ],
+    ['an unknown alert field', page([{ ...alert(), private_detail: 'secret' }])],
+  ])('ignores response extension: %s', (_label, value) => {
+    expect(normalizeAdminAlertPageResponse(value, 'false', '1', 20)).toEqual(
+      normalizeAdminAlertPageResponse(page([alert()]), 'false', '1', 20),
+    );
+  });
+
+  it.each([
     ['a non-null cursor', page([alert()], undefined, 'cursor')],
     ['a row from a different resolution filter', page([alert('2', true)])],
     [
@@ -123,14 +140,6 @@ describe('administrator alert page contract', () => {
       'metadata for a different requested size',
       page([alert()], { page: '1', page_size: 50, total_items: '1', total_pages: '1' }),
     ],
-    [
-      'an unknown pagination field',
-      {
-        ...page([alert()]),
-        pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1', extra: 1 },
-      },
-    ],
-    ['an unknown alert field', page([{ ...alert(), private_detail: 'secret' }])],
   ])('rejects %s', (_label, value) => {
     expect(() => normalizeAdminAlertPageResponse(value, 'false', '1', 20)).toThrow();
   });
@@ -147,17 +156,22 @@ describe('administrator alert page requests', () => {
       {
         method: 'GET',
         path,
-        body: page(
-          [alert('2', resolved === 'true')],
-          { page: '2', page_size: 50, total_items: '51', total_pages: '2' },
-        ),
+        body: page([alert('2', resolved === 'true')], {
+          page: '2',
+          page_size: 50,
+          total_items: '51',
+          total_pages: '2',
+        }),
       },
     ]);
 
     const result = await getAdminAlertPage(resolved, '2', 50, controller.signal);
 
     expect(result.pagination.page).toBe('2');
-    expect(fetchMock).toHaveBeenCalledWith(path, expect.objectContaining({ signal: controller.signal }));
+    expect(fetchMock).toHaveBeenCalledWith(
+      path,
+      expect.objectContaining({ signal: controller.signal }),
+    );
     expect(fetchMock.mock.calls[0]?.[0]).not.toContain('cursor=');
     expect(fetchMock.mock.calls[0]?.[0]).not.toContain('limit=');
   });
@@ -167,14 +181,19 @@ describe('administrator alert page requests', () => {
     ['2147483648', 20, 'false'],
     ['1', 30, 'false'],
     ['1', 20, 'unknown'],
-  ] as const)('rejects invalid request parameters before the network call: %s/%s/%s', async (pageNumber, size, resolved) => {
-    const fetchMock = installJsonFetchFixtures([]);
-    await expect(getAdminAlertPage(resolved as never, pageNumber, size as never)).rejects.toMatchObject({
-      code: 'invalid_request',
-      status: 400,
-    });
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
+  ] as const)(
+    'rejects invalid request parameters before the network call: %s/%s/%s',
+    async (pageNumber, size, resolved) => {
+      const fetchMock = installJsonFetchFixtures([]);
+      await expect(
+        getAdminAlertPage(resolved as never, pageNumber, size as never),
+      ).rejects.toMatchObject({
+        code: 'invalid_request',
+        status: 400,
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
 
   it('keeps the account, filter, page, and size dimensions in the query key', () => {
     expect(adminAlertPageKeys.page('admin:root', 'true', '3', 100)).toEqual([

@@ -1,4 +1,5 @@
 import { ApiError } from '@shared/query/http';
+import { responseFields } from '@shared/query/responseFields';
 
 const MAX_TIME = 253_402_300_799;
 const U128_MAX = (1n << 128n) - 1n;
@@ -34,20 +35,32 @@ export function exactRecord(
 }
 
 export function gamePayment(value: unknown, field: string) {
-  const record = exactRecord(value, ['general', 'game'], [], field);
+  const record = responseRecord(value, ['general', 'game'], [], field);
   return {
     general: creditsValue(record.general, {}, `${field} general`),
     game: creditsValue(record.game, {}, `${field} game`),
   };
 }
 
+export function responseRecord(
+  value: unknown,
+  required: readonly string[],
+  optional: readonly string[] = [],
+  field = 'object',
+): Record<string, unknown> {
+  return responseFields(value, required, [...required, ...optional], () => invalidResponse(field));
+}
+
 export function entryPayment(record: Record<string, unknown>, total: string, field: string) {
-  const rulesVersion = record.rules_version === undefined ? 1 : safeInteger(record.rules_version, 1, 2, `${field} rules`);
+  const rulesVersion =
+    record.rules_version === undefined
+      ? 1
+      : safeInteger(record.rules_version, 1, 2, `${field} rules`);
   if (rulesVersion === 2 && record.payment === undefined) invalidResponse(`${field} payment`);
-  const payment = record.payment === undefined ? { general: total, game: '0' } : gamePayment(record.payment, `${field} payment`);
-  if (creditsToMilli(payment.general) + creditsToMilli(payment.game) !== creditsToMilli(total) ||
-      rulesVersion === 1 && payment.game !== '0')
-    invalidResponse(`${field} payment arithmetic`);
+  const payment =
+    record.payment === undefined
+      ? { general: total, game: '0' }
+      : gamePayment(record.payment, `${field} payment`);
   return { rulesVersion, payment };
 }
 
