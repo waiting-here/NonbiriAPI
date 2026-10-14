@@ -7,6 +7,7 @@ import {
   DataTable,
   Field,
   Fold,
+  Note,
   OutcomeNote,
   Segmented,
   Tabs,
@@ -150,7 +151,7 @@ function UserAuthority({
     await refresh();
   };
   const patch = useRetainedOperation(
-    (input: { revision: string; body: Record<string, unknown> }, key) =>
+    (input: EconomyIntent, key) =>
       mutateManagedUser(role, user.id, { ...input.body, expected_revision: input.revision }, key),
     reconcile,
     root,
@@ -247,6 +248,35 @@ function UserAuthority({
   useEffect(() => {
     if (isUnauthorized(mutationError) || isForbidden(mutationError)) onAuthorityLoss?.();
   }, [mutationError, onAuthorityLoss]);
+  const economyUnknown = patch.outcome === 'unknown';
+  const economyLocked = patch.isPending || economyUnknown;
+  const checkEconomy = () => void (patch.isSuccess ? patch.refresh() : patch.check());
+  const economyFeedback =
+    patch.outcome !== 'idle' && patch.outcome !== 'pending' ? (
+      <div className="user-save-result">
+        {patch.outcome === 'conflict' ? (
+          <Note
+            tone="warn"
+            action={
+              <Button type="button" size="sm" onClick={checkEconomy}>
+                {t('common.outcome.reload')}
+              </Button>
+            }
+          >
+            {t('management.users.economyConflict')}
+          </Note>
+        ) : (
+          <OutcomeNote
+            outcome={profileOutcome(patch.outcome, checkEconomy)}
+            body={economyUnknown ? t('management.users.economyUnknown') : undefined}
+          />
+        )}
+        {patch.error && patch.outcome !== 'conflict' ? <ErrorState error={patch.error} /> : null}
+        {patch.refreshError ? (
+          <ErrorState error={patch.refreshError} onRetry={checkEconomy} />
+        ) : null}
+      </div>
+    ) : null;
 
   return (
     <div className="ops-stack user-authority">
@@ -517,6 +547,7 @@ function UserAuthority({
                 <Segmented
                   label={t('management.users.economyTarget')}
                   value={draft.economyTarget}
+                  disabled={economyLocked}
                   options={(role === 'admin'
                     ? (['balance', 'game_balance', 'donation_credit'] as const)
                     : (['balance', 'game_balance'] as const)
@@ -526,6 +557,7 @@ function UserAuthority({
                 <Segmented
                   label={t('management.users.economyDirection')}
                   value={draft.economyDirection}
+                  disabled={economyLocked}
                   options={[
                     { value: 'increase', label: t('management.users.economyIncrease') },
                     { value: 'decrease', label: t('management.users.economyDecrease') },
@@ -539,6 +571,7 @@ function UserAuthority({
                     unit={t('management.users.creditsBalance')}
                     inputMode="decimal"
                     value={draft.economyAmount}
+                    disabled={economyLocked}
                     placeholder="1.5"
                     onChange={(event) => setDraft({ ...draft, economyAmount: event.target.value })}
                   />
@@ -550,6 +583,7 @@ function UserAuthority({
                     required
                     maxLength={1024}
                     value={draft.economyReason}
+                    disabled={economyLocked}
                     onChange={(event) => setDraft({ ...draft, economyReason: event.target.value })}
                   />
                   <small className="user-field-hint">{t('management.users.reasonRequired')}</small>
@@ -565,20 +599,29 @@ function UserAuthority({
                   !draft.economyReason.trim()
                 }
                 onClick={() =>
-                  setEconomyConfirm({
-                    revision: user.revision,
-                    body: {
-                      mode: 'economy',
-                      target: draft.economyTarget,
-                      direction: draft.economyDirection,
-                      amount: draft.economyAmount,
-                      reason: draft.economyReason.trim(),
-                    },
-                  })
+                  setEconomyConfirm(
+                    economyUnknown && patch.variables
+                      ? patch.variables
+                      : {
+                          revision: user.revision,
+                          body: {
+                            mode: 'economy',
+                            target: draft.economyTarget,
+                            direction: draft.economyDirection,
+                            amount: draft.economyAmount,
+                            reason: draft.economyReason.trim(),
+                          },
+                        },
+                  )
                 }
               >
-                {t('management.users.economySubmit')}
+                {t(
+                  economyUnknown
+                    ? 'management.users.economyRetry'
+                    : 'management.users.economySubmit',
+                )}
               </Button>
+              {!economyConfirm ? economyFeedback : null}
             </Card>
           </section>
           <section
@@ -638,7 +681,7 @@ function UserAuthority({
                   </Button>
                 )}
               </div>
-              {mutationError && !economyConfirm ? <ErrorState error={mutationError} /> : null}
+              {ban.error || unban.error ? <ErrorState error={ban.error ?? unban.error} /> : null}
             </Card>
           </section>
           <Card className="user-danger">
@@ -749,7 +792,9 @@ function UserAuthority({
           danger={economyConfirm.body.direction === 'decrease'}
           title={t('management.users.economyConfirmTitle')}
           description={t('management.users.economyConfirmBody', { user: user.username })}
-          confirmLabel={t('management.users.economySubmit')}
+          confirmLabel={t(
+            economyUnknown ? 'management.users.economyRetry' : 'management.users.economySubmit',
+          )}
           busy={patch.isPending}
           onCancel={() => setEconomyConfirm(null)}
           onConfirm={() =>
@@ -777,7 +822,7 @@ function UserAuthority({
             <dt>{t('management.users.economyReason')}</dt>
             <dd>{economyConfirm.body.reason}</dd>
           </dl>
-          {patch.error ? <ErrorState error={patch.error} /> : null}
+          {economyFeedback}
         </ConfirmDialog>
       ) : null}
     </div>
@@ -1287,7 +1332,10 @@ export function UserManagement({
               title={t('management.users.selectUser')}
               body={t('management.users.selectUserBody')}
             />
-          ) : !selected || detailUnavailable || detail.isPending || detail.error ? (
+          ) : !selected ||
+            detailUnavailable ||
+            detail.isPending ||
+            (detail.error && !detail.data) ? (
             <Button variant="ghost" className="user-detail-back" type="button" onClick={closeUser}>
               {t('management.users.backToList')}
             </Button>
@@ -1300,7 +1348,7 @@ export function UserManagement({
           !detailUnavailable ? (
             detail.isPending ? (
               <LoadingState />
-            ) : detail.error ? (
+            ) : detail.error && !detail.data ? (
               <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
             ) : (
               <UserAuthority

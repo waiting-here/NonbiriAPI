@@ -40,6 +40,9 @@ use a verified commit and its matching artifacts without a release tag.
 
 ### Fixed
 
+- Keep credit-adjustment results visible after account refreshes in the
+  administrator and steward consoles. Preserve rejected input and retry an
+  unknown result with its original idempotent operation.
 - Display input and output token quotas with token units in summaries and usage
   cards, preserving the server's exact counts and credit precision.
 - Correct hand anatomy in the celestial pool cover and wandering character
