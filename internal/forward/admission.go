@@ -46,18 +46,8 @@ func (service *Service) preflight(ctx context.Context, userID int64, request *va
 		if err != nil {
 			return logicalAdmission{charity: true}, request, nil, err
 		}
-		// Ingress has authenticated the caller, resolved model access, and
-		// parsed the request. Client restrictions must run before content,
-		// balance, candidate availability, outbound transformations, or Debug
-		// capture. The guard uses the immutable original ingress source.
-		if service.charityGuard != nil {
-			guarded, guardErr := service.charityGuard.CheckCharityCall(ctx, userID, request.Model, now)
-			if guardErr != nil {
-				return logicalAdmission{charity: true}, request, nil, claim.ErrDependencyUnavailable
-			}
-			if guarded.Banned {
-				return logicalAdmission{charity: true}, request, nil, &accountBannedError{until: guarded.Until}
-			}
+		if err := service.checkClientRules(ctx, userID, request.Model, now); err != nil {
+			return logicalAdmission{charity: true}, request, nil, err
 		}
 		var value CharityPreflight
 		if request.operation == connectorcontract.OperationEmbeddings {
@@ -101,6 +91,15 @@ func (service *Service) preflight(ctx context.Context, userID int64, request *va
 	if request.policyModelID != 0 && request.policyModelID != value.ModelID {
 		return logicalAdmission{}, request, nil, routing.ErrNotFound
 	}
+	if service.clientGuard != nil {
+		now, err := service.nowUnix()
+		if err != nil {
+			return logicalAdmission{}, request, nil, err
+		}
+		if err := service.checkClientRules(ctx, userID, request.Model, now); err != nil {
+			return logicalAdmission{}, request, nil, err
+		}
+	}
 	if !value.ModelTypes.Supports(request.operation) {
 		return logicalAdmission{}, request, nil, unsupportedModelType()
 	}
@@ -114,6 +113,23 @@ func (service *Service) preflight(ctx context.Context, userID int64, request *va
 		admission.transportRule = request.transportRule
 	}
 	return prepareModelPolicy(request, admission)
+}
+
+// checkClientRules runs after ingress authentication, model access and parsing,
+// before business rejection, outbound transformations or Debug capture.
+// The guard reads the original ingress source for both personal and charity calls.
+func (service *Service) checkClientRules(ctx context.Context, userID int64, model string, now int64) error {
+	if service.clientGuard == nil {
+		return nil
+	}
+	guarded, err := service.clientGuard.CheckCall(ctx, userID, model, now)
+	if err != nil {
+		return claim.ErrDependencyUnavailable
+	}
+	if guarded.Banned {
+		return &accountBannedError{until: guarded.Until}
+	}
+	return nil
 }
 
 func prepareModelPolicy(request *validatedRequest, admission logicalAdmission) (logicalAdmission, *validatedRequest, func(), error) {

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"regexp"
@@ -12,12 +13,11 @@ import (
 )
 
 func TestClientGuardUsesOriginalHeadersBeforeOutboundOverrides(t *testing.T) {
-	for _, managed := range []bool{false, true} {
+	for _, variant := range []string{"personal-fixed", "charity-fixed", "charity-managed"} {
+		managed := variant == "charity-managed"
+		personal := variant == "personal-fixed"
 		for _, blocked := range []bool{false, true} {
-			name := "fixed"
-			if managed {
-				name = "managed"
-			}
+			name := variant
 			if blocked {
 				name += "/blocked"
 			} else {
@@ -37,17 +37,22 @@ func TestClientGuardUsesOriginalHeadersBeforeOutboundOverrides(t *testing.T) {
 				}
 				configureClientGuardRule(t, f, pattern, true)
 				var model int64
-				if err := f.store.DB().QueryRow(`SELECT id FROM charity_models WHERE full_name='[公益]provider/per_request'`).Scan(&model); err != nil {
+				scope, table, modelName := requestadaptation.ScopeCharityModel, "charity_models", "[公益]provider/per_request"
+				if personal {
+					scope, table, modelName = requestadaptation.ScopePersonalModel, "models", "provider/self"
+				}
+				if err := f.store.DB().QueryRow("SELECT id FROM "+table+" WHERE full_name=?", modelName).Scan(&model); err != nil {
 					t.Fatal(err)
 				}
-				doc := requestadaptation.Empty(requestadaptation.ScopeCharityModel)
+				doc := requestadaptation.Empty(scope)
+				doc.FixedHeaders.Mode = "replace"
 				doc.FixedHeaders.Values["User-Agent"] = "UpstreamFixed/1"
 				tx, err := f.store.DB().BeginTx(t.Context(), nil)
 				if err != nil {
 					t.Fatal(err)
 				}
 				defer tx.Rollback()
-				if _, err = f.app.adaptations.SaveTx(t.Context(), tx, requestadaptation.Ref{Scope: requestadaptation.ScopeCharityModel, ID: model}, 0, doc, f.userID, time.Now().Unix()); err != nil {
+				if _, err = f.app.adaptations.SaveTx(t.Context(), tx, requestadaptation.Ref{Scope: scope, ID: model}, 0, doc, f.userID, time.Now().Unix()); err != nil {
 					t.Fatal(err)
 				}
 				if err = tx.Commit(); err != nil {
@@ -56,7 +61,7 @@ func TestClientGuardUsesOriginalHeadersBeforeOutboundOverrides(t *testing.T) {
 				if managed {
 					f.exec(t, `UPDATE charity_models SET session_headers='[{"name":"user-agent","idle_seconds":300,"format":"uuid_v4"}]' WHERE id=?`, model)
 				}
-				status, body := f.post(t, "/v1/chat/completions", `{"model":"[公益]provider/per_request","messages":[{"role":"user","content":"Hello"}]}`)
+				status, body := f.post(t, "/v1/chat/completions", fmt.Sprintf(`{"model":%q,"messages":[{"role":"user","content":"Hello"}]}`, modelName))
 				var requestedStreaming bool
 				var actions int
 				if err := f.store.DB().QueryRow("SELECT requested_streaming,automatic_actions FROM request_logs ORDER BY started_at DESC LIMIT 1").Scan(&requestedStreaming, &actions); err != nil {

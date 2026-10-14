@@ -6,7 +6,7 @@ After authentication and the minimum parsing and model-access checks needed to i
 
 Only admitted requests may proceed to route adaptation and dispatch. Fixed headers, forwarded headers, generated session values, body defaults/forced values and future connector transformations must operate on an outbound representation. For example, a configured upstream `User-Agent` cannot hide the caller's original client signature, and an upstream-only signature cannot create a false inbound match.
 
-Preserve existing policy scope: live automatic client-rule bans apply to configured charity calls; ordinary personal calls and historical audit scans do not acquire new punishment behavior from this ordering rule. Actions remain idempotent per logical request and respect account-retirement barriers.
+Live automatic client-rule bans apply to both personal and charity model calls when the rule and its administrator-controlled ban binding are enabled. Historical audit scans and model discovery do not trigger these bans. Charity-only short-content and RPM penalties retain their existing scope. Actions remain idempotent per logical request and respect account-retirement barriers.
 
 ## Review and regression expectations
 

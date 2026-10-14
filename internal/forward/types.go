@@ -179,8 +179,8 @@ type DebugCapture interface {
 	DecideAfterAdmission(context.Context, debug.CaptureInput) (debug.CaptureDecision, error)
 }
 
-type CharityCallGuard interface {
-	CheckCharityCall(context.Context, int64, string, int64) (clientguard.Decision, error)
+type ClientCallGuard interface {
+	CheckCall(context.Context, int64, string, int64) (clientguard.Decision, error)
 }
 
 // Config is the production composition surface. Connector instances are
@@ -193,7 +193,7 @@ type Config struct {
 	Charity        CharityRouter
 	Claims         ClaimRail
 	CharityCharges CharityChargeCalculator
-	CharityGuard   CharityCallGuard
+	ClientGuard    ClientCallGuard
 	Debug          DebugCapture
 	Registry       *connector.Registry
 	Connectors     []connector.Connector

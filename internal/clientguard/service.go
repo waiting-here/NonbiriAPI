@@ -1,4 +1,4 @@
-// Package clientguard applies administrator-bound client rules to new charity
+// Package clientguard applies administrator-bound client rules to new personal and charity
 // calls before claim acceptance. Historical audit scans never call this service.
 package clientguard
 
@@ -189,12 +189,12 @@ func readReceipt(ctx context.Context, tx *sql.Tx, requestID string, userID, now 
 	return decision, true, nil
 }
 
-// CheckCharityCall requires a validated, classified real charity model call.
+// CheckCall requires a validated, classified personal or charity model call.
 // The caller invokes it after ingress authentication, model access, and parsing,
 // before content, credit, candidate, and Debug admission.
 // A Banned decision becomes a generic account-ban response to the caller.
-func (s *Service) CheckCharityCall(parent context.Context, userID int64, model string, decisionNow int64) (Decision, error) {
-	if s == nil || parent == nil || userID <= 0 || decisionNow < 0 || decisionNow > maxUnixSecond-receiptLifetime || requestattempt.Kind(parent) != "charity" {
+func (s *Service) CheckCall(parent context.Context, userID int64, model string, decisionNow int64) (Decision, error) {
+	if s == nil || parent == nil || userID <= 0 || decisionNow < 0 || decisionNow > maxUnixSecond-receiptLifetime || (requestattempt.Kind(parent) != "charity" && requestattempt.Kind(parent) != "self") {
 		return Decision{}, ErrInvalid
 	}
 	requestID, err := requestattempt.Identity(parent, userID)
