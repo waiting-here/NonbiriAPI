@@ -87,7 +87,7 @@
       "distinctDiscord": "Distinct Discord identities",
       "openLogs": "View original requests in this window",
       "presentation": {
-        "note": "Matches are clues, not proof of misuse. Automatic bans apply to new charity calls.",
+        "note": "Historical matches are clues for review. Enabled automatic bans apply to new personal and charity model calls.",
         "basis": "Audit basis"
       }
     },
@@ -957,7 +957,7 @@
     },
     "riskAudit": {
       "title": "Abuse audit",
-      "description": "Review request patterns and supporting evidence. Administrator-bound rules can ban new charity calls automatically.",
+      "description": "Review request patterns and supporting evidence. Administrator-bound rules can automatically ban matching personal and charity model calls.",
       "caveat": "Client names and headers are self-reported and may be changed or relayed. A rule match is a lead, not proof of identity or misuse.",
       "comparisonHelp": "Compare samples from the same time range and model. A cluster near 125 seconds may reflect a CDN timeout. Generic SDK names, shared limits, mixed clients, and a 200 SPA response do not establish misuse.",
       "users": "Users",
@@ -1045,7 +1045,7 @@
       "ipValues": "IP addresses",
       "ipValuesHelp": "Separate IPv4 or IPv6 addresses with newlines, commas or spaces. Up to 64 addresses; duplicates are merged when saved.",
       "ruleHelp": "All conditions in a rule must match. Rules are alternatives. Missing or truncated values cannot match. Up to 8 conditions per rule and 1,000 rules.",
-      "autoBan": "Automatic ban for new charity calls",
+      "autoBan": "Automatic ban for new model calls",
       "noAutoBan": "No automatic ban binding",
       "autoBanDisabled": "Bound, but automatic ban disabled",
       "autoBanEnabled": "Automatic ban enabled",
@@ -1056,7 +1056,7 @@
       "autoBanDuration": "Ban duration",
       "autoBanInvalid": "Enter a whole duration from 1 second to 3,650 days.",
       "autoBanProtected": "Only an administrator can edit or remove this bound rule, even while its ban is disabled.",
-      "autoBanHelp": "Only new matching charity model calls are refused before dispatch. Unbinding restores ordinary rule editing.",
+      "autoBanHelp": "New matching personal and charity model calls are refused before dispatch. Historical scans and discovery do not trigger bans. Unbinding restores ordinary rule editing.",
       "threshold": "Threshold (%)",
       "consecutive": "Consecutive complete minutes",
       "hours": "Shared IP window (hours)",

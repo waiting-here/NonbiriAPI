@@ -141,82 +141,100 @@ func (f *guardFixture) context(kind, ua string) context.Context {
 	return observability.WithSource(ctx, observability.Source{UserAgent: ua})
 }
 
-func TestFreshCharityMatchIsAtomicZeroCostAndIdempotent(t *testing.T) {
-	f := newGuardFixture(t)
-	long := int64(3600)
-	f.rule("short", "Client/", true, &long)
-	f.rule("permanent", "Client/", true, nil)
-	// Many ordinary rules before the binding cannot mask it.
-	for i := 0; i < 120; i++ {
-		f.exec(`INSERT INTO risk_client_rules(id,name,status,enabled,revision,conditions_json,evidence_note,evidence_url,created_by_role,updated_by_role,created_at,updated_at) VALUES(?,?,'suspected',1,1,'[{"field":"user_agent","operator":"equals","value":"Other","case_sensitive":false}]','','','admin','admin',?,?)`, fmt.Sprintf("ordinary-%03d", i), "other", testNow, testNow)
-	}
-	ctx := f.context("charity", "Client/1")
-	requestID := requestattempt.CurrentID(ctx)
-	decision, err := f.service.CheckCharityCall(ctx, f.user, "[公益]provider/model", testNow)
-	if err != nil || !decision.Banned || decision.Until != nil || decision.Replayed {
-		t.Fatalf("decision %+v %v", decision, err)
-	}
-	if f.gateCalls != 1 || f.committed != 1 || f.gameCalls != 1 || f.gamePublished != 1 || f.gameRolledBack != 0 {
-		t.Fatalf("gate/game %d %d %d %d %d", f.gateCalls, f.committed, f.gameCalls, f.gamePublished, f.gameRolledBack)
-	}
-	if f.scalar(`SELECT count(*) FROM client_rule_ban_receipts WHERE request_id=? AND json_array_length(rules_json)=2`, requestID) != 1 {
-		t.Fatal("missing bounded receipt")
-	}
-	if f.scalar(`SELECT count(*) FROM logical_requests WHERE id=? AND route_kind='charity_chat_completions' AND rejection_stage='preflight' AND rejection_reason='forbidden' AND caller_status=403 AND account_reserved_milli=0`, requestID) != 1 {
-		t.Fatal("missing zero-cost pre-dispatch refusal")
-	}
-	if f.scalar(`SELECT count(*) FROM dispatch_claims`) != 0 || f.scalar(`SELECT count(*) FROM credit_entries`) != 0 {
-		t.Fatal("upstream or fee effect on first hit")
-	}
-	var reason string
-	if err := f.store.DB().QueryRow(`SELECT banned_reason FROM users WHERE id=?`, f.user).Scan(&reason); err != nil || reason != "识别到违规第三方客户端特征：permanent、short" {
-		t.Fatalf("reason %q %v", reason, err)
-	}
-	replay, err := f.service.CheckCharityCall(ctx, f.user, "[公益]provider/model", testNow)
-	if err != nil || !replay.Banned || !replay.Replayed || f.gameCalls != 1 || f.gateCalls != 2 {
-		t.Fatalf("replay %+v %v", replay, err)
-	}
-	if f.scalar(`SELECT count(*) FROM request_logs WHERE logical_request_id=?`, requestID) != 1 {
-		t.Fatal("duplicate rejection")
-	}
-	deleted, err := f.service.CleanupReceiptsBatch(context.Background(), testNow+receiptLifetime-1, 100)
-	if err != nil || deleted != 0 {
-		t.Fatalf("early cleanup %d %v", deleted, err)
-	}
-	deleted, err = f.service.CleanupReceiptsBatch(context.Background(), testNow+receiptLifetime, 100)
-	if err != nil || deleted != 1 {
-		t.Fatalf("expiry cleanup %d %v", deleted, err)
+func TestFreshModelCallMatchIsAtomicZeroCostAndIdempotent(t *testing.T) {
+	for _, kind := range []string{"self", "charity"} {
+		t.Run(kind, func(t *testing.T) {
+			model := "provider/model"
+			route := "openai_chat_completions"
+			if kind == "charity" {
+				model = "[公益]" + model
+				route = "charity_chat_completions"
+			}
+			f := newGuardFixture(t)
+			long := int64(3600)
+			f.rule("short", "Client/", true, &long)
+			f.rule("permanent", "Client/", true, nil)
+			// Many ordinary rules before the binding cannot mask it.
+			for i := 0; i < 120; i++ {
+				f.exec(`INSERT INTO risk_client_rules(id,name,status,enabled,revision,conditions_json,evidence_note,evidence_url,created_by_role,updated_by_role,created_at,updated_at) VALUES(?,?,'suspected',1,1,'[{"field":"user_agent","operator":"equals","value":"Other","case_sensitive":false}]','','','admin','admin',?,?)`, fmt.Sprintf("ordinary-%03d", i), "other", testNow, testNow)
+			}
+			ctx := f.context(kind, "Client/1")
+			requestID := requestattempt.CurrentID(ctx)
+			decision, err := f.service.CheckCall(ctx, f.user, model, testNow)
+			if err != nil || !decision.Banned || decision.Until != nil || decision.Replayed {
+				t.Fatalf("decision %+v %v", decision, err)
+			}
+			if f.gateCalls != 1 || f.committed != 1 || f.gameCalls != 1 || f.gamePublished != 1 || f.gameRolledBack != 0 {
+				t.Fatalf("gate/game %d %d %d %d %d", f.gateCalls, f.committed, f.gameCalls, f.gamePublished, f.gameRolledBack)
+			}
+			if f.scalar(`SELECT count(*) FROM client_rule_ban_receipts WHERE request_id=? AND json_array_length(rules_json)=2`, requestID) != 1 {
+				t.Fatal("missing bounded receipt")
+			}
+			if f.scalar(`SELECT count(*) FROM logical_requests WHERE id=? AND route_kind=? AND rejection_stage='preflight' AND rejection_reason='forbidden' AND caller_status=403 AND account_reserved_milli=0`, requestID, route) != 1 {
+				t.Fatal("missing zero-cost pre-dispatch refusal")
+			}
+			if f.scalar(`SELECT count(*) FROM dispatch_claims`) != 0 || f.scalar(`SELECT count(*) FROM credit_entries`) != 0 {
+				t.Fatal("upstream or fee effect on first hit")
+			}
+			var reason string
+			if err := f.store.DB().QueryRow(`SELECT banned_reason FROM users WHERE id=?`, f.user).Scan(&reason); err != nil || reason != "识别到违规第三方客户端特征：permanent、short" {
+				t.Fatalf("reason %q %v", reason, err)
+			}
+			replay, err := f.service.CheckCall(ctx, f.user, model, testNow)
+			if err != nil || !replay.Banned || !replay.Replayed || f.gameCalls != 1 || f.gateCalls != 2 {
+				t.Fatalf("replay %+v %v", replay, err)
+			}
+			if f.scalar(`SELECT count(*) FROM request_logs WHERE logical_request_id=?`, requestID) != 1 {
+				t.Fatal("duplicate rejection")
+			}
+			deleted, err := f.service.CleanupReceiptsBatch(context.Background(), testNow+receiptLifetime-1, 100)
+			if err != nil || deleted != 0 {
+				t.Fatalf("early cleanup %d %v", deleted, err)
+			}
+			deleted, err = f.service.CleanupReceiptsBatch(context.Background(), testNow+receiptLifetime, 100)
+			if err != nil || deleted != 1 {
+				t.Fatalf("expiry cleanup %d %v", deleted, err)
+			}
+		})
 	}
 }
 
 func TestIPListBindingUsesAnyTrustedAddress(t *testing.T) {
-	f := newGuardFixture(t)
-	id := f.rule("Example relay", "Example/", true, nil)
-	f.exec(`UPDATE risk_client_rules SET conditions_json=? WHERE id=?`, `[{"field":"effective_ip","operator":"ip_in","value":"","values":["192.0.2.1","2001:db8::2"],"case_sensitive":false}]`, id)
-	for _, source := range []observability.Source{
-		{EffectiveIP: "192.0.2.3", IPQuality: "direct_peer"},
-		{EffectiveIP: "2001:db8::2", IPQuality: "peer_fallback"},
-	} {
-		ctx := observability.WithSource(f.context("charity", ""), source)
-		decision, err := f.service.CheckCharityCall(ctx, f.user, "[公益]provider/model", testNow)
-		if err != nil || decision.Banned || f.gameCalls != 0 {
-			t.Fatalf("unmatched source: %+v %v", decision, err)
-		}
-	}
-	ctx := observability.WithSource(f.context("charity", ""), observability.Source{EffectiveIP: "2001:db8::2", IPQuality: "trusted_forwarded"})
-	decision, err := f.service.CheckCharityCall(ctx, f.user, "[公益]provider/model", testNow)
-	if err != nil || !decision.Banned || f.gameCalls != 1 || f.committed != 1 {
-		t.Fatalf("second address did not trigger binding: %+v %v", decision, err)
-	}
-	if f.scalar(`SELECT count(*) FROM client_rule_ban_receipts WHERE request_id=?`, requestattempt.CurrentID(ctx)) != 1 || f.scalar(`SELECT count(*) FROM dispatch_claims`) != 0 {
-		t.Fatal("missing pre-dispatch receipt")
+	for _, kind := range []string{"self", "charity"} {
+		t.Run(kind, func(t *testing.T) {
+			model := "provider/model"
+			if kind == "charity" {
+				model = "[公益]" + model
+			}
+			f := newGuardFixture(t)
+			id := f.rule("Example relay", "Example/", true, nil)
+			f.exec(`UPDATE risk_client_rules SET conditions_json=? WHERE id=?`, `[{"field":"effective_ip","operator":"ip_in","value":"","values":["192.0.2.1","2001:db8::2"],"case_sensitive":false}]`, id)
+			for _, source := range []observability.Source{
+				{EffectiveIP: "192.0.2.3", IPQuality: "direct_peer"},
+				{EffectiveIP: "2001:db8::2", IPQuality: "peer_fallback"},
+			} {
+				ctx := observability.WithSource(f.context(kind, ""), source)
+				decision, err := f.service.CheckCall(ctx, f.user, model, testNow)
+				if err != nil || decision.Banned || f.gameCalls != 0 {
+					t.Fatalf("unmatched source: %+v %v", decision, err)
+				}
+			}
+			ctx := observability.WithSource(f.context(kind, ""), observability.Source{EffectiveIP: "2001:db8::2", IPQuality: "trusted_forwarded"})
+			decision, err := f.service.CheckCall(ctx, f.user, model, testNow)
+			if err != nil || !decision.Banned || f.gameCalls != 1 || f.committed != 1 {
+				t.Fatalf("second address did not trigger binding: %+v %v", decision, err)
+			}
+			if f.scalar(`SELECT count(*) FROM client_rule_ban_receipts WHERE request_id=?`, requestattempt.CurrentID(ctx)) != 1 || f.scalar(`SELECT count(*) FROM dispatch_claims`) != 0 {
+				t.Fatal("missing pre-dispatch receipt")
+			}
+		})
 	}
 }
 
 func TestRulesRecheckedAfterGateAndNoMatchDoesNotRetire(t *testing.T) {
 	f := newGuardFixture(t)
 	id := f.rule("race", "Client/", true, nil)
-	allow, err := f.service.CheckCharityCall(f.context("charity", "Other/1"), f.user, "[公益]provider/model", testNow)
+	allow, err := f.service.CheckCall(f.context("charity", "Other/1"), f.user, "[公益]provider/model", testNow)
 	if err != nil || allow.Banned || f.gateCalls != 0 {
 		t.Fatalf("no match %+v %v", allow, err)
 	}
@@ -224,15 +242,15 @@ func TestRulesRecheckedAfterGateAndNoMatchDoesNotRetire(t *testing.T) {
 		f.exec(`UPDATE risk_client_rules SET revision=revision+1,updated_at=updated_at+1 WHERE id=?`, id)
 		f.exec(`UPDATE client_rule_auto_bans SET enabled=0,revision=revision+1,updated_at=updated_at+1 WHERE rule_id=?`, id)
 	}
-	decision, err := f.service.CheckCharityCall(f.context("charity", "Client/1"), f.user, "[公益]provider/model", testNow)
+	decision, err := f.service.CheckCall(f.context("charity", "Client/1"), f.user, "[公益]provider/model", testNow)
 	if err != nil || decision.Banned || f.gameCalls != 0 || f.committed != 0 || f.aborted != 1 {
 		t.Fatalf("changed rule %+v %v", decision, err)
 	}
 	if f.scalar(`SELECT is_banned FROM users WHERE id=?`, f.user) != 0 {
 		t.Fatal("stale match banned account")
 	}
-	for _, kind := range []string{"self", "discovery"} {
-		if _, err := f.service.CheckCharityCall(f.context(kind, "Client/1"), f.user, "[公益]provider/model", testNow); !errors.Is(err, ErrInvalid) {
+	for _, kind := range []string{"unclassified", "discovery"} {
+		if _, err := f.service.CheckCall(f.context(kind, "Client/1"), f.user, "[公益]provider/model", testNow); !errors.Is(err, ErrInvalid) {
 			t.Fatalf("%s entered penalty path: %v", kind, err)
 		}
 	}
@@ -244,7 +262,7 @@ func TestPriorManualBanAndFailedGameHookPreserveState(t *testing.T) {
 	f.rule("finite", "Client/", true, &duration)
 	f.exec(`UPDATE users SET is_banned=1,banned_until=?,banned_reason='Manual review',auto_banned=0 WHERE id=?`, testNow+3600, f.user)
 	f.exec(`CREATE TRIGGER guard_fail_receipt BEFORE INSERT ON client_rule_ban_receipts BEGIN SELECT RAISE(ABORT,'injected'); END`)
-	_, err := f.service.CheckCharityCall(f.context("charity", "Client/1"), f.user, "[公益]provider/model", testNow)
+	_, err := f.service.CheckCall(f.context("charity", "Client/1"), f.user, "[公益]provider/model", testNow)
 	if err == nil || f.committed != 0 || f.gameRolledBack != 1 || f.scalar(`SELECT count(*) FROM guard_game_cancels`) != 0 || f.scalar(`SELECT count(*) FROM request_logs`) != 0 {
 		t.Fatalf("rollback failure %v", err)
 	}
@@ -253,7 +271,7 @@ func TestPriorManualBanAndFailedGameHookPreserveState(t *testing.T) {
 		t.Fatal("manual evidence changed on rollback")
 	}
 	f.exec(`DROP TRIGGER guard_fail_receipt`)
-	decision, err := f.service.CheckCharityCall(f.context("charity", "Client/1"), f.user, "[公益]provider/model", testNow)
+	decision, err := f.service.CheckCall(f.context("charity", "Client/1"), f.user, "[公益]provider/model", testNow)
 	if err != nil || decision.Until == nil || *decision.Until != testNow+3600 {
 		t.Fatalf("manual maximum %+v %v", decision, err)
 	}
@@ -299,7 +317,7 @@ func TestIdentityAndManualRestrictionGatePrecedesPenaltyTransaction(t *testing.T
 	}
 	done := make(chan outcome, 1)
 	go func() {
-		d, e := f.service.CheckCharityCall(ctx, f.user, "[公益]provider/model", testNow)
+		d, e := f.service.CheckCall(ctx, f.user, "[公益]provider/model", testNow)
 		done <- outcome{d, e}
 	}()
 	<-barrier
@@ -321,7 +339,7 @@ func TestAccountRemovedBeforePenaltyTransactionCannotBeRebanned(t *testing.T) {
 	f.rule("retired", "Client/", true, nil)
 	old := f.user
 	f.beforeGate = func() { f.exec(`DELETE FROM users WHERE id=?`, old) }
-	_, err := f.service.CheckCharityCall(f.context("charity", "Client/1"), old, "[公益]provider/model", testNow)
+	_, err := f.service.CheckCall(f.context("charity", "Client/1"), old, "[公益]provider/model", testNow)
 	if err == nil || f.gameCalls != 0 || f.scalar(`SELECT count(*) FROM client_rule_ban_receipts`) != 0 {
 		t.Fatalf("deleted account processed: %v", err)
 	}
@@ -337,7 +355,7 @@ func TestHundredRuleEvidenceFitsManagementReasonBudget(t *testing.T) {
 		f.rule(fmt.Sprintf("%03d-%s", i, strings.Repeat("名称", 58)), "Client/", true, nil)
 	}
 	ctx := f.context("charity", "Client/1")
-	decision, err := f.service.CheckCharityCall(ctx, f.user, "[公益]provider/model", testNow)
+	decision, err := f.service.CheckCall(ctx, f.user, "[公益]provider/model", testNow)
 	if err != nil || !decision.Banned {
 		t.Fatalf("maximum evidence %+v %v", decision, err)
 	}
@@ -375,7 +393,7 @@ func TestAutomaticBanReasonUsesFinalRuleNameAndKeepsReceipt(t *testing.T) {
 		f.exec(`UPDATE client_rule_auto_bans SET revision=revision+1 WHERE rule_id=?`, id)
 	}
 	ctx := f.context("charity", "Tavo/secret-not-a-reason")
-	decision, err := f.service.CheckCharityCall(ctx, f.user, "[公益]provider/model", testNow)
+	decision, err := f.service.CheckCall(ctx, f.user, "[公益]provider/model", testNow)
 	if err != nil || !decision.Banned {
 		t.Fatalf("client penalty %+v %v", decision, err)
 	}
@@ -389,7 +407,7 @@ func TestAutomaticBanReasonUsesFinalRuleNameAndKeepsReceipt(t *testing.T) {
 	f.beforeGate = nil
 	f.exec(`UPDATE risk_client_rules SET name='Renamed later',revision=revision+1 WHERE id=?`, id)
 	f.exec(`UPDATE client_rule_auto_bans SET revision=revision+1 WHERE rule_id=?`, id)
-	replay, err := f.service.CheckCharityCall(ctx, f.user, "[公益]provider/model", testNow)
+	replay, err := f.service.CheckCall(ctx, f.user, "[公益]provider/model", testNow)
 	if err != nil || !replay.Replayed || f.gameCalls != 1 {
 		t.Fatalf("duplicate penalty %+v %v", replay, err)
 	}

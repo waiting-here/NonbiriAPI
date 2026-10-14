@@ -188,7 +188,7 @@ func newPublicForwardRuntime(
 		GatewayModels: gatewaypolicy.NewStore(store.DB()),
 		Personal:      personal, Charity: charityPolicyRouter{CharityRouter: charity, abuse: abuse}, Claims: claimRail, CharityCharges: charityService,
 		Debug: debugHub, Registry: registry, Connectors: connectors, Safety: safety,
-		CharityGuard: clientGuard,
+		ClientGuard: clientGuard,
 	}
 	if audits != nil {
 		forwardConfig.ErrorScope = audits.observations.DiscoveryScope

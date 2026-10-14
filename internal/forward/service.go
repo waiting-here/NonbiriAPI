@@ -56,7 +56,7 @@ type Service struct {
 	charity        CharityRouter
 	claims         ClaimRail
 	charityCharges CharityChargeCalculator
-	charityGuard   CharityCallGuard
+	clientGuard    ClientCallGuard
 	debug          DebugCapture
 	registry       *connector.Registry
 	connectors     map[connectorcontract.Type]connector.Connector
@@ -119,8 +119,8 @@ func NewService(config Config) (*Service, error) {
 		errorScope: config.ErrorScope, classify: config.Classify,
 		personal: config.Personal, charity: config.Charity, claims: config.Claims,
 		charityCharges: config.CharityCharges, debug: config.Debug, registry: config.Registry,
-		charityGuard: config.CharityGuard,
-		connectors:   instances, safety: config.Safety, observer: config.Observer,
+		clientGuard: config.ClientGuard,
+		connectors:  instances, safety: config.Safety, observer: config.Observer,
 		adaptations:   config.Adaptations,
 		gatewayModels: config.GatewayModels,
 		now:           config.Now, timeout: config.ForwardTimeout, settlement: config.Settlement,

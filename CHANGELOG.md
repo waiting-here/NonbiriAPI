@@ -13,6 +13,9 @@ use a verified commit and its matching artifacts without a release tag.
 
 ### Changed
 
+- Apply configured live client-rule automatic bans to personal and charity
+  model calls, using original headers and trusted source IPs before dispatch.
+
 - Remove prerelease migration chains and startup backfills from the service.
   Validate the encryption key once at startup; retain full credential checks in
   offline maintenance. Deployment tooling can read compiled schema metadata.
