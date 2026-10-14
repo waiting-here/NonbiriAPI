@@ -17,6 +17,8 @@ const (
 	MaxAddedHeaderBytes   = 16 << 10
 	MaxBodyPaths          = 128
 	MaxPathBytes          = 512
+	MaxSensitiveValues    = 16
+	MaxSensitiveBytes     = 16 << 10
 )
 
 var (
@@ -56,13 +58,15 @@ type ListSection struct {
 }
 
 type HeaderSection struct {
-	Mode   Mode              `json:"mode"`
-	Values map[string]string `json:"values"`
+	Mode           Mode                `json:"mode"`
+	Values         map[string]string   `json:"values"`
+	SensitivePaths map[string][]string `json:"sensitive_paths,omitempty"`
 }
 
 type BodySection struct {
-	Mode   Mode                       `json:"mode"`
-	Values map[string]json.RawMessage `json:"values"`
+	Mode           Mode                       `json:"mode"`
+	Values         map[string]json.RawMessage `json:"values"`
+	SensitivePaths map[string][]string        `json:"sensitive_paths,omitempty"`
 }
 
 // Document is sensitive and belongs only in an attempt or the encrypted store.
@@ -112,8 +116,9 @@ func (d *Document) Clear() {
 }
 
 type ValueEdit struct {
-	Action string          `json:"action"`
-	Value  json.RawMessage `json:"value,omitempty"`
+	Action         string          `json:"action"`
+	Value          json.RawMessage `json:"value,omitempty"`
+	SensitivePaths *[]string       `json:"sensitive_paths,omitempty"`
 }
 
 type ListEdit struct {
@@ -138,8 +143,9 @@ type Patch struct {
 }
 
 type ValueProjection struct {
-	HasValue bool   `json:"has_value"`
-	Mask     string `json:"mask,omitempty"`
+	HasValue       bool     `json:"has_value"`
+	Mask           string   `json:"mask,omitempty"`
+	SensitivePaths []string `json:"sensitive_paths,omitempty"`
 }
 
 type ListProjection struct {

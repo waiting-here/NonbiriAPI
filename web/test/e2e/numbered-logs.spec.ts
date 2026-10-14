@@ -457,3 +457,71 @@ for (const role of ['admin', 'steward', 'user'] as const)
     }
     guard.assertNone();
   });
+
+for (const role of ['admin', 'steward', 'user'] as const)
+  for (const locale of ['zh', 'en'] as const)
+    test(
+      role + ' ' + locale + ' distinguishes missing models from unavailable keys',
+      async ({ page }) => {
+        const { origin, guard } = await prepare(page, role, locale, 1440);
+        const path =
+          role === 'admin'
+            ? '/admin/api/logs'
+            : role === 'steward'
+              ? '/api/steward/logs'
+              : '/api/logs';
+        const missing = locale === 'zh' ? '模型不存在' : 'Model not found';
+        const unavailable = locale === 'zh' ? '暂无可用密钥' : 'No usable key';
+        await mockJson(page, {
+          origin,
+          method: 'GET',
+          path: path + '?page=1&page_size=20',
+          body: {
+            data: [
+              {
+                ...row(role, 1, true),
+                caller_result_class: 'failed',
+                caller_status: 404,
+                caller_error_code: 'not_found',
+                ...(role === 'user' ? {} : { attempt_count: '0' }),
+              },
+              {
+                ...row(role, 2, true),
+                caller_result_class: 'failed',
+                caller_status: 503,
+                caller_error_code: 'unbound_model',
+                ...(role === 'user' ? {} : { attempt_count: '0' }),
+              },
+            ],
+            next_cursor: null,
+            pagination: windowFor(2, 1, 20),
+          },
+        });
+        await page.goto(origin + (role === 'steward' ? '/steward?tab=logs' : '/logs'));
+        for (const theme of ['light', 'dark']) {
+          await page.evaluate((value) => {
+            localStorage.setItem('nb.theme', value);
+            document.documentElement.dataset.theme = value;
+          }, theme);
+          for (const width of [1440, 390]) {
+            await page.setViewportSize({ width, height: 900 });
+            const results = page.locator('.log-table .log-result');
+            await expect(results).toHaveCount(2);
+            await expect(results.nth(0)).toHaveText(missing);
+            await expect(results.nth(1)).toHaveText(unavailable);
+            expect(
+              await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+            ).toBe(true);
+            if (process.env.NONBIRI_VISUAL_DIR)
+              await page.screenshot({
+                path: resolve(
+                  process.env.NONBIRI_VISUAL_DIR,
+                  ['log-availability', role, locale, theme, width].join('-') + '.png',
+                ),
+                fullPage: true,
+              });
+          }
+        }
+        guard.assertNone();
+      },
+    );

@@ -64,7 +64,9 @@ func TestEncryptedRevisionAndRedactedProjection(t *testing.T) {
 	ref := Ref{Scope: ScopeEndpoint, ID: 42}
 	doc := Empty(ScopeEndpoint)
 	doc.FixedHeaders.Values["X-Access"] = "SECRET-header-value"
+	doc.FixedHeaders.SensitivePaths = map[string][]string{"X-Access": {""}}
 	doc.BodyForced.Values["/thinking"] = json.RawMessage(`{"budget_tokens":2048,"secret":"SECRET-body-value"}`)
+	doc.BodyForced.SensitivePaths = map[string][]string{"/thinking": {"/secret"}}
 	tx, err := database.BeginTx(ctx, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -94,6 +96,9 @@ func TestEncryptedRevisionAndRedactedProjection(t *testing.T) {
 	got, err := store.Load(ctx, ref)
 	if err != nil || got.Document.FixedHeaders.Values["X-Access"] != "SECRET-header-value" || got.Revision != "1" {
 		t.Fatalf("load: %+v %v", got.Projection(), err)
+	}
+	if len(got.Document.FixedHeaders.SensitivePaths["X-Access"]) != 1 || len(got.Document.BodyForced.SensitivePaths["/thinking"]) != 1 || got.Document.BodyForced.SensitivePaths["/thinking"][0] != "/secret" {
+		t.Fatal("encrypted roundtrip lost sensitive markers")
 	}
 	tx, err = database.BeginTx(ctx, nil)
 	if err != nil {

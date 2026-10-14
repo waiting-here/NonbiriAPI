@@ -101,6 +101,7 @@ func TestFrozenAdaptationsSharePreparationButNotDispatchData(t *testing.T) {
 				for _, ref := range refs {
 					doc := requestadaptation.Empty(ref.Scope)
 					doc.FixedHeaders.Values["X-Research"] = "original"
+					doc.FixedHeaders.SensitivePaths = map[string][]string{"X-Research": {""}}
 					if bodyRule {
 						doc.BodyForced.Values["/temperature"] = json.RawMessage(`0.2`)
 					}
@@ -143,14 +144,85 @@ func TestFrozenAdaptationsSharePreparationButNotDispatchData(t *testing.T) {
 			shared.native = map[string]json.RawMessage{"/thinking": json.RawMessage(`{"budget":2048}`)}
 			var a, b connectorcontract.AttemptPolicy
 			clearA, clearB := shared.applyPolicy(&a), shared.applyPolicy(&b)
+			if len(a.ResponseSecrets) != 1 || string(a.ResponseSecrets[0]) != "original" {
+				t.Fatal("marked header not frozen")
+			}
+			a.ResponseSecrets[0][0] = 'x'
 			a.AdditionalHeaders.Set("X-Research", "changed")
 			a.NativeExtensions["/thinking"][0] = 'x'
 			clearA()
+			if string(b.ResponseSecrets[0]) != "original" || string(shared.secrets[0]) != "original" || a.ResponseSecrets != nil {
+				t.Fatal("secret lifetime crossed retry ownership")
+			}
 			if b.AdditionalHeaders.Get("X-Research") != "original" || !json.Valid(b.NativeExtensions["/thinking"]) || !json.Valid(shared.native["/thinking"]) {
 				t.Fatal("dispatch mutated shared adaptation")
 			}
 			clearB()
 		})
+	}
+}
+
+func TestHeaderOnlySensitiveAttemptCleanup(t *testing.T) {
+	p := &preparedAttempt{secrets: [][]byte{[]byte("short-lived-secret")}}
+	var policy connectorcontract.AttemptPolicy
+	cleanup := p.applyPolicy(&policy)
+	alias := policy.ResponseSecrets[0]
+	cleanup()
+	for _, value := range alias {
+		if value != 0 {
+			t.Fatal("header-only cleanup retained secret")
+		}
+	}
+	if string(p.secrets[0]) != "short-lived-secret" {
+		t.Fatal("dispatch cleanup mutated preparation")
+	}
+	preparedAlias := p.secrets[0]
+	p.clear()
+	for _, value := range preparedAlias {
+		if value != 0 {
+			t.Fatal("prepared cleanup retained secret")
+		}
+	}
+}
+
+func TestPreparedBodySecretsReachEachConnectorPolicy(t *testing.T) {
+	for _, kind := range []connectorcontract.Type{connectorcontract.TypeOpenAICompatible, connectorcontract.TypeAnthropicCompatible, connectorcontract.TypeAISDKGatewayV3} {
+		for _, callerValue := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/caller%v", kind, callerValue), func(t *testing.T) {
+				raw := `{"model":"provider/model","messages":[{"role":"user","content":"hello"}]}`
+				if callerValue {
+					raw = `{"model":"provider/model","messages":[{"role":"user","content":"hello"}],"vendor":{"token":"caller-value"}}`
+				}
+				request := chatRequest(decodeChatForTest(t, raw))
+				defer request.Clear()
+				doc := requestadaptation.Empty(requestadaptation.ScopeEndpoint)
+				doc.BodyDefaults.Values["/vendor"] = json.RawMessage(`{"token":"default-secret"}`)
+				doc.BodyDefaults.SensitivePaths = map[string][]string{"/vendor": {"/token"}}
+				doc.BodyForced.Values["/extra"] = json.RawMessage(`"forced-secret"`)
+				doc.BodyForced.SensitivePaths = map[string][]string{"/extra": {""}}
+				if kind != connectorcontract.TypeOpenAICompatible {
+					doc.NativeExtensionPaths.Values = []string{"/vendor", "/extra"}
+				}
+				prepared, err := prepareAdaptedAttempt(request, kind, doc, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer prepared.clear()
+				var policy connectorcontract.AttemptPolicy
+				cleanup := prepared.applyPolicy(&policy)
+				defer cleanup()
+				want := 2
+				if callerValue {
+					want = 1
+				}
+				if len(policy.ResponseSecrets) != want || string(policy.ResponseSecrets[0]) != "forced-secret" || !callerValue && string(policy.ResponseSecrets[1]) != "default-secret" {
+					t.Fatal("applied body secrets did not reach dispatch")
+				}
+				if kind != connectorcontract.TypeOpenAICompatible && string(policy.NativeExtensions["/extra"]) != `"forced-secret"` {
+					t.Fatal("native extension was discarded")
+				}
+			})
+		}
 	}
 }
 

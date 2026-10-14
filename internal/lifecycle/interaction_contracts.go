@@ -41,8 +41,9 @@ type RequestAdaptationExport struct {
 }
 
 type AdaptationValueExport struct {
-	Path     string `json:"path"`
-	HasValue bool   `json:"has_value"`
+	Path           string   `json:"path"`
+	HasValue       bool     `json:"has_value"`
+	SensitivePaths []string `json:"sensitive_paths,omitempty"`
 }
 
 // Eligibility excludes internal identity keys, old account IDs and abuse

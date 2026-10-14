@@ -39,6 +39,7 @@ import {
   type TimeStation,
 } from '@shared/time';
 import { useCharityModelScope } from './charityModelScopeContext';
+import { formatCount } from '@shared/utils/formatNumber';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { useDisplayTimeContext } from '@shared/components/timeContextValue';
 import { ErrorState, LoadingState } from './States';
@@ -218,11 +219,7 @@ function newDraftRule(id: string, zone: string): DraftRule {
 
 function displayInteger(value: string | null | undefined): string {
   if (value === null || value === undefined) return '—';
-  try {
-    return BigInt(value).toLocaleString('en-US');
-  } catch {
-    return '—';
-  }
+  return formatCount(value).display;
 }
 
 function displayMetric(value: string | null | undefined, metric: RecurringLimitMetric): string {

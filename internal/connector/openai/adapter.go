@@ -258,10 +258,15 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWri
 		return result
 	}
 
-	guard := newResponseGuard(target.credential.bearer, target.credential.ciphertext)
+	sentSecrets, err := requestadaptation.SentSecrets(policy.ResponseSecrets, httpRequest.Header, body)
+	if err != nil {
+		return result
+	}
+	materials := append([][]byte{target.credential.bearer, target.credential.ciphertext}, sentSecrets...)
+	guard := newResponseGuard(materials...)
 	defer guard.Clear()
 	safetyMaterial := []byte(policy.SafetyIdentifier)
-	errorGuard := newSensitiveGuard(target.credential.bearer, target.credential.ciphertext, safetyMaterial)
+	errorGuard := newSensitiveGuard(append([][]byte{target.credential.bearer, target.credential.ciphertext, safetyMaterial}, sentSecrets...)...)
 	clear(safetyMaterial)
 	defer errorGuard.Clear()
 	errorContext := upstreamerror.Context{
@@ -279,7 +284,7 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWri
 	}
 	var sourceGuard *responseGuard
 	if request.Stream {
-		sourceGuard = newResponseGuard(target.credential.bearer, target.credential.ciphertext)
+		sourceGuard = newResponseGuard(materials...)
 		defer sourceGuard.Clear()
 	}
 	httpRequest.Header.Set("Authorization", "Bearer "+string(target.credential.bearer))

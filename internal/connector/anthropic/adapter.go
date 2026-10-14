@@ -229,14 +229,19 @@ func (a *Adapter) attempt(ctx context.Context, writer http.ResponseWriter, targe
 	if len(target.credential.apiKey) == 0 {
 		return result
 	}
+	sentSecrets, err := requestadaptation.SentSecrets(policy.ResponseSecrets, httpRequest.Header, body)
+	if err != nil {
+		return result
+	}
 	safetyMaterial := []byte(policy.SafetyIdentifier)
-	wireGuard := newSensitiveGuard(target.credential.apiKey, target.credential.ciphertext, safetyMaterial)
+	materials := append([][]byte{target.credential.apiKey, target.credential.ciphertext, safetyMaterial}, sentSecrets...)
+	wireGuard := newSensitiveGuard(materials...)
 	clear(safetyMaterial)
 	semanticGuard := wireGuard.clone()
 	defer wireGuard.Clear()
 	defer semanticGuard.Clear()
 	if request.Stream && policy.FlattenToolCalls {
-		outputGuard := openai.NewResponseGuard(target.credential.apiKey, target.credential.ciphertext, []byte(policy.SafetyIdentifier))
+		outputGuard := openai.NewResponseGuard(append([][]byte{target.credential.apiKey, target.credential.ciphertext, []byte(policy.SafetyIdentifier)}, sentSecrets...)...)
 		defer outputGuard.Clear()
 		sink := openai.NewFlattenSink(writer, min(a.maxStreamBytes, MaxCallerStreamBytes), MaxCallerSSEEventBytes, outputGuard.ContainsJSON)
 		defer sink.Clear()

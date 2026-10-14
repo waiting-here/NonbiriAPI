@@ -172,13 +172,27 @@ func parseMapEdit(raw []byte) (MapEdit, error) {
 				return MapEdit{}, ErrInvalid
 			}
 			for field := range editFields {
-				if field != "action" && field != "value" {
+				if field != "action" && field != "value" && field != "sensitive_paths" {
 					return MapEdit{}, ErrInvalid
 				}
 			}
 			var edit ValueEdit
 			if json.Unmarshal(rawEdit, &edit) != nil {
 				return MapEdit{}, ErrInvalid
+			}
+			if rawPaths, present := editFields["sensitive_paths"]; present && (edit.SensitivePaths == nil || bytes.Equal(bytes.TrimSpace(rawPaths), []byte("null")) || edit.Action == "clear") {
+				return MapEdit{}, ErrInvalid
+			}
+			if rawPaths, present := editFields["sensitive_paths"]; present {
+				var paths []json.RawMessage
+				if json.Unmarshal(rawPaths, &paths) != nil {
+					return MapEdit{}, ErrInvalid
+				}
+				for _, path := range paths {
+					if trimmed := bytes.TrimSpace(path); len(trimmed) == 0 || trimmed[0] != '"' {
+						return MapEdit{}, ErrInvalid
+					}
+				}
 			}
 			_, hasValue := editFields["value"]
 			if edit.Action != "replace" && hasValue || edit.Action == "replace" && !hasValue {
@@ -213,6 +227,9 @@ func cloneDocument(d Document) Document {
 	}
 	out.BodyDefaults.Values = cloneBody(d.BodyDefaults.Values)
 	out.BodyForced.Values = cloneBody(d.BodyForced.Values)
+	out.FixedHeaders.SensitivePaths = cloneSensitivity(d.FixedHeaders.SensitivePaths)
+	out.BodyDefaults.SensitivePaths = cloneSensitivity(d.BodyDefaults.SensitivePaths)
+	out.BodyForced.SensitivePaths = cloneSensitivity(d.BodyForced.SensitivePaths)
 	return out
 }
 
@@ -248,7 +265,7 @@ func ApplyPatch(previous Document, patch Patch, scope Scope) (Document, error) {
 			out.Clear()
 			return Document{}, err
 		}
-		out.FixedHeaders = HeaderSection{Mode: patch.FixedHeaders.Mode, Values: values}
+		out.FixedHeaders = HeaderSection{Mode: patch.FixedHeaders.Mode, Values: values, SensitivePaths: editSensitivity(previous.FixedHeaders.SensitivePaths, patch.FixedHeaders.Values)}
 	}
 	if patch.BodyDefaults != nil {
 		values, err := applyBodyEdits(previous.BodyDefaults.Values, patch.BodyDefaults.Values)
@@ -256,7 +273,7 @@ func ApplyPatch(previous Document, patch Patch, scope Scope) (Document, error) {
 			out.Clear()
 			return Document{}, err
 		}
-		out.BodyDefaults = BodySection{Mode: patch.BodyDefaults.Mode, Values: values}
+		out.BodyDefaults = BodySection{Mode: patch.BodyDefaults.Mode, Values: values, SensitivePaths: editSensitivity(previous.BodyDefaults.SensitivePaths, patch.BodyDefaults.Values)}
 	}
 	if patch.BodyForced != nil {
 		values, err := applyBodyEdits(previous.BodyForced.Values, patch.BodyForced.Values)
@@ -264,7 +281,7 @@ func ApplyPatch(previous Document, patch Patch, scope Scope) (Document, error) {
 			out.Clear()
 			return Document{}, err
 		}
-		out.BodyForced = BodySection{Mode: patch.BodyForced.Mode, Values: values}
+		out.BodyForced = BodySection{Mode: patch.BodyForced.Mode, Values: values, SensitivePaths: editSensitivity(previous.BodyForced.SensitivePaths, patch.BodyForced.Values)}
 	}
 	if err := ValidateDocument(out, scope); err != nil {
 		out.Clear()
@@ -369,6 +386,21 @@ func validHeaderValue(value string) bool {
 // ParsePointer accepts RFC6901 object member paths, never the root. Runtime
 // traversal rejects arrays, so a numeric object member remains unambiguous.
 func ParsePointer(path string) ([]string, error) {
+	parts, err := decodePointer(path)
+	if err != nil {
+		return nil, err
+	}
+	for _, part := range parts {
+		if part == "" || part == "__proto__" || part == "prototype" || part == "constructor" {
+			return nil, ErrInvalid
+		}
+	}
+	return parts, nil
+}
+
+// decodePointer preserves member names. Mutation paths impose additional
+// restrictions, while read-only selectors may name any JSON object member.
+func decodePointer(path string) ([]string, error) {
 	if path == "" || len(path) > MaxPathBytes || path[0] != '/' || !utf8.ValidString(path) {
 		return nil, ErrInvalid
 	}
@@ -395,9 +427,6 @@ func ParsePointer(path string) ([]string, error) {
 			n++
 		}
 		parts[i] = out.String()
-		if parts[i] == "" || parts[i] == "__proto__" || parts[i] == "prototype" || parts[i] == "constructor" {
-			return nil, ErrInvalid
-		}
 	}
 	return parts, nil
 }
@@ -521,6 +550,9 @@ func ValidateDocument(d Document, scope Scope) error {
 	}
 	if _, err := ForcedMaxOutput(d); err != nil {
 		return ErrInvalid
+	}
+	if err := validateSensitivity(d); err != nil {
+		return err
 	}
 	encoded, err := json.Marshal(d)
 	if err != nil || len(encoded) > MaxConfigurationBytes || !validJSON(encoded) {

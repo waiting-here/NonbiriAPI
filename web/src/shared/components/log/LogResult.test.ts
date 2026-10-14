@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { logResult } from './LogResult';
+import { logResult, logResultCopyKey } from './LogResult';
 import type { RoleLogRow } from './data';
 const failure = {
   caller_result_class: 'failed',
@@ -27,14 +27,42 @@ describe('caller-safe log result presentation', () => {
       logResult({ ...failure, caller_status: 503, caller_error_code: 'service_unavailable' }).key,
     ).toBe('failed');
   });
+  it.each(['handler', 'pre_handler'] as const)(
+    'distinguishes missing models from unavailable bindings in %s',
+    (phase) => {
+      for (const [code, status, key] of [
+        ['not_found', 404, 'missingModel'],
+        ['unbound_model', 503, 'noUsableKey'],
+      ] as const) {
+        expect(
+          logResult({ ...failure, phase, caller_status: status, caller_error_code: code }).key,
+        ).toBe(key);
+        expect(
+          logResult({
+            ...failure,
+            phase,
+            caller_status: status,
+            caller_error_code: null,
+            rejection_reason: code,
+          }).key,
+        ).toBe(key);
+      }
+    },
+  );
+  it.each(['user', 'admin', 'steward'] as const)('uses the %s translation namespace', (role) => {
+    for (const key of ['missingModel', 'noUsableKey'] as const) {
+      expect(logResultCopyKey(role, key)).toBe(
+        role === 'user'
+          ? 'user.logs.result.' + key
+          : 'common.operations.logs.presentation.result.' + key,
+      );
+    }
+  });
   it('keeps specific admission reasons while distinguishing cancellation and pending calls', () => {
     expect(
       logResult({ ...failure, phase: 'pre_handler', caller_error_code: 'insufficient_credits' })
         .key,
     ).toBe('credits');
-    expect(
-      logResult({ ...failure, phase: 'pre_handler', caller_error_code: 'unbound_model' }).key,
-    ).toBe('missingModel');
     expect(
       logResult({ ...failure, phase: 'pre_handler', caller_error_code: 'concurrency' }).key,
     ).toBe('rejected');

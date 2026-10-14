@@ -13,8 +13,8 @@ export function logResult(
   const code = row.caller_error_code ?? row.rejection_reason;
   if (code === 'insufficient_credits')
     return { key: 'credits', tone: 'bad', hint: 'creditsHint' } as const;
-  if (code === 'not_found' || code === 'unbound_model')
-    return { key: 'missingModel', tone: 'bad' } as const;
+  if (code === 'unbound_model') return { key: 'noUsableKey', tone: 'bad' } as const;
+  if (code === 'not_found') return { key: 'missingModel', tone: 'bad' } as const;
   if (row.phase === 'pre_handler') return { key: 'rejected', tone: 'bad' } as const;
   if (code === 'upstream') {
     if (row.caller_status === 401 || row.caller_status === 403)
@@ -34,6 +34,7 @@ const userResultKeys = {
   cancelled: 'user.logs.result.cancelled',
   credits: 'user.logs.result.credits',
   missingModel: 'user.logs.result.missingModel',
+  noUsableKey: 'user.logs.result.noUsableKey',
   rejected: 'user.logs.result.rejected',
   keyRejected: 'user.logs.result.keyRejected',
   rateLimited: 'user.logs.result.rateLimited',
@@ -48,6 +49,7 @@ const resultKeys = {
   cancelled: 'common.operations.logs.presentation.result.cancelled',
   credits: 'common.operations.logs.presentation.result.credits',
   missingModel: 'common.operations.logs.presentation.result.missingModel',
+  noUsableKey: 'common.operations.logs.presentation.result.noUsableKey',
   rejected: 'common.operations.logs.presentation.result.rejected',
   keyRejected: 'common.operations.logs.presentation.result.keyRejected',
   rateLimited: 'common.operations.logs.presentation.result.rateLimited',

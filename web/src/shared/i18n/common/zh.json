@@ -399,6 +399,7 @@
             "timeout": "请求超时",
             "credits": "余额不足",
             "missingModel": "模型不存在",
+            "noUsableKey": "暂无可用密钥",
             "rejected": "调用前被拒绝",
             "cancelled": "已取消",
             "failed": "失败（{{status}}）"
@@ -1964,7 +1965,14 @@
       "duplicate": "同一分区中的名称或路径不可重复。",
       "refresh": "刷新配置",
       "readOnly": "当前角色只能查看此配置。",
-      "example": "填入示例"
+      "example": "填入示例",
+      "protection": "响应防回显",
+      "protectionOff": "不开启",
+      "protectionWhole": "保护此字符串",
+      "protectionLeaves": "保护 JSON 中的字符串",
+      "protectedPaths": "敏感字符串路径",
+      "protectedPathsHelp": "每行一个相对 JSON Pointer，例如 /token 或 /credentials/0/key。仅选择字符串。",
+      "protectionHelp": "仅用于秘密值，普通参数无需开启。匹配时停止响应；流式输出中已发送的片段无法撤回。"
     },
     "service": {
       "title": "请求改写",
