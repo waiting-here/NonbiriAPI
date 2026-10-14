@@ -22,73 +22,82 @@ func actionRule(name string) Rule {
 	return Rule{Name: name, Status: "suspected", Enabled: true, Conditions: []Condition{{Field: "user_agent", Operator: "prefix", Value: "Example/"}}}
 }
 
-func TestAutoBanBindingProtectsWholeRuleAndSharesRevision(t *testing.T) {
-	f := newAuditFixture(t)
-	ctx := context.Background()
-	admin := Actor{Admin: true, UserID: f.admin}
-	steward := Actor{UserID: f.user(6)}
-	ordinary, err := f.repository.PutRule(ctx, steward, actionRule("ordinary"), true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if ordinary.AutoBan != nil {
-		t.Fatal("ordinary rule gained a binding")
-	}
-	bound := actionRule("bound")
-	duration := int64(3600)
-	bound.AutoBan = &AutoBan{Enabled: false, DurationSeconds: &duration}
-	bound, err = f.repository.PutRule(ctx, admin, bound, true)
-	if err != nil || bound.AutoBan == nil || bound.Revision != 1 || bound.AutoBan.Enabled {
-		t.Fatalf("create %+v %v", bound, err)
-	}
-	bound.Conditions[0].Value = "Changed/"
-	if _, err := f.repository.PutRule(ctx, steward, bound, false); !errors.Is(err, ErrForbidden) {
-		t.Fatalf("steward changed disabled binding: %v", err)
-	}
-	if err := f.repository.DeleteRule(ctx, steward, bound.ID, bound.Revision); !errors.Is(err, ErrForbidden) {
-		t.Fatalf("steward deleted disabled binding: %v", err)
-	}
-	if _, err := f.repository.PutRuleWithAction(ctx, steward, ordinary, false, ActionMutation{Present: true}); !errors.Is(err, ErrForbidden) {
-		t.Fatalf("steward unbound action: %v", err)
-	}
-	updated, err := f.repository.PutRuleWithAction(ctx, admin, bound, false, ActionMutation{})
-	if err != nil || updated.Revision != 2 || updated.AutoBan == nil || updated.AutoBan.Enabled {
-		t.Fatalf("preserve binding %+v %v", updated, err)
-	}
-	var actionRevision int64
-	if err := f.store.DB().QueryRow(`SELECT revision FROM client_rule_auto_bans WHERE rule_id=?`, bound.ID).Scan(&actionRevision); err != nil || actionRevision != updated.Revision {
-		t.Fatalf("binding revision %d %v", actionRevision, err)
-	}
-	if _, err := f.repository.PutRule(ctx, admin, bound, false); !errors.Is(err, ErrConflict) {
-		t.Fatalf("stale revision: %v", err)
-	}
-	unbound, err := f.repository.PutRuleWithAction(ctx, admin, updated, false, ActionMutation{Present: true})
-	if err != nil || unbound.AutoBan != nil || unbound.Revision != 3 {
-		t.Fatalf("explicit unbind %+v %v", unbound, err)
-	}
-	unbound.Name = "steward may edit"
-	if _, err := f.repository.PutRule(ctx, steward, unbound, false); err != nil {
-		t.Fatalf("steward edit after unbind: %v", err)
-	}
-	if err := f.repository.DeleteRule(ctx, steward, bound.ID, 4); err != nil {
-		t.Fatalf("steward delete after unbind: %v", err)
+func TestAutoBanBindingManagementSharesRevision(t *testing.T) {
+	for _, role := range []string{"admin", "level6"} {
+		t.Run(role, func(t *testing.T) {
+			f := newAuditFixture(t)
+			ctx := context.Background()
+			actor := Actor{Admin: true, UserID: f.admin}
+			if role == "level6" {
+				actor = Actor{UserID: f.user(6)}
+			}
+			rule := actionRule("bound")
+			duration := int64(3600)
+			rule.AutoBan = &AutoBan{Enabled: false, DurationSeconds: &duration}
+			created, err := f.repository.PutRule(ctx, actor, rule, true)
+			if err != nil || created.AutoBan == nil || created.AutoBan.Enabled || created.Revision != 1 {
+				t.Fatalf("create %+v %v", created, err)
+			}
+			// Either manager may maintain a rule originally created by the other.
+			editor := Actor{UserID: f.user(6)}
+			if role == "level6" {
+				editor = Actor{Admin: true, UserID: f.admin}
+			}
+			created.Conditions[0].Value = "Changed/"
+			updated, err := f.repository.PutRuleWithAction(ctx, editor, created, false, ActionMutation{})
+			if err != nil || updated.AutoBan == nil || updated.AutoBan.Enabled || updated.Revision != 2 || *updated.AutoBan.DurationSeconds != duration {
+				t.Fatalf("preserve binding %+v %v", updated, err)
+			}
+			if _, err := f.repository.PutRule(ctx, actor, created, false); !errors.Is(err, ErrConflict) {
+				t.Fatalf("stale update: %v", err)
+			}
+			updated.AutoBan = &AutoBan{Enabled: true}
+			updated, err = f.repository.PutRule(ctx, actor, updated, false)
+			if err != nil || updated.Revision != 3 || updated.AutoBan == nil || !updated.AutoBan.Enabled || updated.AutoBan.DurationSeconds != nil {
+				t.Fatalf("enable permanent binding %+v %v", updated, err)
+			}
+			var actionRevision, actionActor, ruleActor int64
+			var actorRole string
+			if err := f.store.DB().QueryRow("SELECT b.revision,b.actor_user_id,r.updated_by_user_id,r.updated_by_role FROM client_rule_auto_bans b JOIN risk_client_rules r ON r.id=b.rule_id WHERE r.id=?", updated.ID).Scan(&actionRevision, &actionActor, &ruleActor, &actorRole); err != nil || actionRevision != updated.Revision || actionActor != actor.UserID || ruleActor != actor.UserID || actorRole != role {
+				t.Fatalf("binding audit: %d %d %d %s %v", actionRevision, actionActor, ruleActor, actorRole, err)
+			}
+			unbound, err := f.repository.PutRuleWithAction(ctx, actor, updated, false, ActionMutation{Present: true})
+			if err != nil || unbound.AutoBan != nil || unbound.Revision != 4 {
+				t.Fatalf("explicit unbind %+v %v", unbound, err)
+			}
+			unbound.AutoBan = &AutoBan{Enabled: false, DurationSeconds: &duration}
+			rebound, err := f.repository.PutRule(ctx, actor, unbound, false)
+			if err != nil || rebound.Revision != 5 || rebound.AutoBan == nil || rebound.AutoBan.Enabled {
+				t.Fatalf("rebind disabled %+v %v", rebound, err)
+			}
+			if err := f.repository.DeleteRule(ctx, actor, rebound.ID, 4); !errors.Is(err, ErrConflict) {
+				t.Fatalf("stale deletion: %v", err)
+			}
+			if err := f.repository.DeleteRule(ctx, actor, rebound.ID, rebound.Revision); err != nil {
+				t.Fatalf("delete bound rule: %v", err)
+			}
+			var rules, bindings int
+			if err := f.store.DB().QueryRow("SELECT (SELECT COUNT(*) FROM risk_client_rules),(SELECT COUNT(*) FROM client_rule_auto_bans)").Scan(&rules, &bindings); err != nil || rules != 0 || bindings != 0 {
+				t.Fatalf("delete residue: %d %d %v", rules, bindings, err)
+			}
+		})
 	}
 }
 
 func TestAutoBanCapacityAndActionParsing(t *testing.T) {
 	f := newAuditFixture(t)
 	ctx := context.Background()
-	admin := Actor{Admin: true, UserID: f.admin}
+	actor := Actor{UserID: f.user(6)}
 	for i := 0; i < MaxAutoBanRules; i++ {
 		rule := actionRule("bounded")
 		rule.AutoBan = &AutoBan{Enabled: true}
-		if _, err := f.repository.PutRule(ctx, admin, rule, true); err != nil {
+		if _, err := f.repository.PutRule(ctx, actor, rule, true); err != nil {
 			t.Fatalf("binding %d: %v", i, err)
 		}
 	}
 	rule := actionRule("over capacity")
 	rule.AutoBan = &AutoBan{Enabled: true}
-	if _, err := f.repository.PutRule(ctx, admin, rule, true); !errors.Is(err, ErrConflict) {
+	if _, err := f.repository.PutRule(ctx, actor, rule, true); !errors.Is(err, ErrConflict) {
 		t.Fatalf("101st binding: %v", err)
 	}
 	var count int
@@ -161,5 +170,53 @@ func TestRuleBanReceiptIsExactAndAdminOnly(t *testing.T) {
 	f.exec(`UPDATE sessions SET last_seen_at=?,expires_at=?,absolute_expires_at=? WHERE user_id=?`, f.now, f.now+600, f.now+1200, f.admin)
 	if _, err := f.repository.RuleBanReceipt(ctx, admin, requestID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("expired receipt: %v", err)
+	}
+}
+
+func TestAutoBanBindingRejectsLostAuthorityWithoutWrites(t *testing.T) {
+	for _, state := range []string{"ordinary", "level5", "demoted", "banned", "revoked", "replaced"} {
+		t.Run(state, func(t *testing.T) {
+			f := newAuditFixture(t)
+			ctx := context.Background()
+			actor := Actor{UserID: f.user(6)}
+			admin := Actor{Admin: true, UserID: f.admin}
+			rule := actionRule("existing")
+			rule.AutoBan = &AutoBan{Enabled: true}
+			existing, err := f.repository.PutRule(ctx, admin, rule, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			switch state {
+			case "ordinary":
+				actor = Actor{UserID: f.user(1)}
+			case "level5":
+				actor = Actor{UserID: f.user(5)}
+			case "demoted":
+				f.exec("UPDATE users SET level=5 WHERE id=?", actor.UserID)
+			case "banned":
+				f.exec("UPDATE users SET is_banned=1 WHERE id=?", actor.UserID)
+			case "revoked":
+				f.exec("DELETE FROM sessions WHERE user_id=?", actor.UserID)
+			case "replaced":
+				f.exec("UPDATE sessions SET cred_gen='replaced' WHERE user_id=?", actor.UserID)
+			}
+			if _, err := f.repository.PutRule(ctx, actor, rule, true); !errors.Is(err, ErrForbidden) {
+				t.Fatalf("create allowed: %v", err)
+			}
+			existing.Name = "unauthorized edit"
+			if _, err := f.repository.PutRule(ctx, actor, existing, false); !errors.Is(err, ErrForbidden) {
+				t.Fatalf("edit allowed: %v", err)
+			}
+			if _, err := f.repository.PutRuleWithAction(ctx, actor, existing, false, ActionMutation{Present: true}); !errors.Is(err, ErrForbidden) {
+				t.Fatalf("unbind allowed: %v", err)
+			}
+			if err := f.repository.DeleteRule(ctx, actor, existing.ID, existing.Revision); !errors.Is(err, ErrForbidden) {
+				t.Fatalf("delete allowed: %v", err)
+			}
+			rules, err := f.repository.Rules(ctx, admin)
+			if err != nil || len(rules) != 1 || rules[0].Name != "existing" || rules[0].Revision != 1 || rules[0].AutoBan == nil || !rules[0].AutoBan.Enabled {
+				t.Fatalf("denial wrote data: %+v %v", rules, err)
+			}
+		})
 	}
 }

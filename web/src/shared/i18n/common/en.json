@@ -957,7 +957,7 @@
     },
     "riskAudit": {
       "title": "Abuse audit",
-      "description": "Review request patterns and supporting evidence. Administrator-bound rules can automatically ban matching personal and charity model calls.",
+      "description": "Review request patterns and supporting evidence. Configured rules can automatically ban matching personal and charity model calls.",
       "caveat": "Client names and headers are self-reported and may be changed or relayed. A rule match is a lead, not proof of identity or misuse.",
       "comparisonHelp": "Compare samples from the same time range and model. A cluster near 125 seconds may reflect a CDN timeout. Generic SDK names, shared limits, mixed clients, and a 200 SPA response do not establish misuse.",
       "users": "Users",
@@ -1055,8 +1055,7 @@
       "autoBanPermanent": "Permanent",
       "autoBanDuration": "Ban duration",
       "autoBanInvalid": "Enter a whole duration from 1 second to 3,650 days.",
-      "autoBanProtected": "Only an administrator can edit or remove this bound rule, even while its ban is disabled.",
-      "autoBanHelp": "New matching personal and charity model calls are refused before dispatch. Historical scans and discovery do not trigger bans. Unbinding restores ordinary rule editing.",
+      "autoBanHelp": "New matching personal and charity model calls are refused before dispatch. Historical scans and discovery do not trigger bans.",
       "threshold": "Threshold (%)",
       "consecutive": "Consecutive complete minutes",
       "hours": "Shared IP window (hours)",

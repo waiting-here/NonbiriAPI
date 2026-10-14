@@ -13,6 +13,9 @@ use a verified commit and its matching artifacts without a release tag.
 
 ### Changed
 
+- Allow level-6 stewards to configure automatic bans on client rules and manage
+  bound rules, using the existing session, revision and audit controls.
+
 - Apply configured live client-rule automatic bans to personal and charity
   model calls, using original headers and trusted source IPs before dispatch.
 

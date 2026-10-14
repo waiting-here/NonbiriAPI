@@ -487,80 +487,119 @@ it('builds a two-condition website and title rule without silently saving it', a
   expect(api.saveRule).not.toHaveBeenCalled();
 });
 
-it('converts a bounded administrator ban duration exactly and keeps it off ordinary rules', async () => {
-  const view = await renderWithProviders(<RiskAuditPanel role="admin" scopeKey="operator" />, {
-    station: 'admin',
-    role: 'admin',
-  });
-  view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'operator' } });
-  await view.user.click(screen.getByRole('tab', { name: 'Client rules' }));
-  await view.user.click(await screen.findByRole('button', { name: 'New rule' }));
-  await view.user.click(screen.getByRole('button', { name: 'Tavo' }));
-  await view.user.selectOptions(screen.getByRole('combobox', { name: 'Ban duration' }), 'days');
-  await view.user.clear(screen.getByRole('spinbutton', { name: /Ban duration/ }));
-  await view.user.type(screen.getByRole('spinbutton', { name: /Ban duration/ }), '3651');
-  expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
-  await view.user.selectOptions(screen.getByRole('combobox', { name: 'Ban duration' }), 'hours');
-  await view.user.clear(screen.getByRole('spinbutton', { name: /Ban duration/ }));
-  await view.user.type(screen.getByRole('spinbutton', { name: /Ban duration/ }), '2');
-  await view.user.click(screen.getByRole('checkbox', { name: 'Automatic ban enabled' }));
-  await view.user.click(screen.getByRole('button', { name: 'Save' }));
-  expect(api.saveRule).not.toHaveBeenCalled();
-  const confirmation = await screen.findByRole('alertdialog');
-  expect(confirmation).toHaveTextContent('Tavo');
-  expect(confirmation).toHaveTextContent('2 Hours');
-  await view.user.click(within(confirmation).getByRole('button', { name: 'Save' }));
-  await waitFor(() =>
-    expect(api.saveRule).toHaveBeenCalledWith(
-      expect.objectContaining({ auto_ban: { enabled: true, duration_seconds: 7200 } }),
-      undefined,
-      expect.any(AbortSignal),
-    ),
-  );
-});
+it.each(['admin', 'steward'] as const)(
+  'lets %s configure an exact ban duration with confirmation',
+  async (role) => {
+    const view = await renderWithProviders(<RiskAuditPanel role={role} scopeKey={role} />, {
+      station: role === 'admin' ? 'admin' : 'user',
+      role: role === 'admin' ? 'admin' : 'level6',
+    });
+    view.queryClient.setQueryData(
+      role === 'admin' ? ['admin', 'session'] : ['user', 'session'],
+      role === 'admin'
+        ? { admin: { username: 'operator' } }
+        : { user: { id: '6', username: 'Steward', level: 6, effective_level: 6 } },
+    );
+    await view.user.click(screen.getByRole('tab', { name: 'Client rules' }));
+    await view.user.click(await screen.findByRole('button', { name: 'New rule' }));
+    await view.user.click(screen.getByRole('button', { name: 'Tavo' }));
+    await view.user.selectOptions(screen.getByRole('combobox', { name: 'Ban duration' }), 'days');
+    await view.user.clear(screen.getByRole('spinbutton', { name: /Ban duration/ }));
+    await view.user.type(screen.getByRole('spinbutton', { name: /Ban duration/ }), '3651');
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    await view.user.selectOptions(screen.getByRole('combobox', { name: 'Ban duration' }), 'hours');
+    await view.user.clear(screen.getByRole('spinbutton', { name: /Ban duration/ }));
+    await view.user.type(screen.getByRole('spinbutton', { name: /Ban duration/ }), '2');
+    await view.user.click(screen.getByRole('checkbox', { name: 'Automatic ban enabled' }));
+    await view.user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(api.saveRule).not.toHaveBeenCalled();
+    const confirmation = await screen.findByRole('alertdialog');
+    expect(confirmation).toHaveTextContent('Tavo');
+    expect(confirmation).toHaveTextContent('2 Hours');
+    await view.user.click(within(confirmation).getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(api.saveRule).toHaveBeenCalledWith(
+        expect.objectContaining({ auto_ban: { enabled: true, duration_seconds: 7200 } }),
+        undefined,
+        expect.any(AbortSignal),
+      ),
+    );
+  },
+);
 
-it('blocks steward editing of a bound rule even when its ban is disabled', async () => {
-  api.numberedRules.mockResolvedValue({
-    items: [
-      {
-        id: 'rsk_AAAAAAAAAAAAAAAAAAAAAA',
-        name: 'Protected',
-        status: 'suspected',
-        enabled: true,
-        revision: 3,
-        conditions: [
-          { field: 'user_agent', operator: 'prefix', value: 'App/', case_sensitive: false },
-        ],
-        evidence_note: '',
-        evidence_url: '',
-        created_at: 1790000640,
-        updated_at: 1790000640,
-        created_by_role: 'admin',
-        updated_by_role: 'admin',
-        created_by_user_id: null,
-        updated_by_user_id: null,
-        auto_ban: { enabled: false, duration_seconds: null },
-      },
-    ],
-    page: '1',
-    page_size: 20,
-    total_items: '1',
-    total_pages: '1',
-    revision: 'r2',
-    changed: false,
-  });
-  const view = await renderWithProviders(<RiskAuditPanel role="steward" scopeKey="6" />, {
-    station: 'user',
-  });
-  await view.user.click(screen.getByRole('tab', { name: 'Client rules' }));
-  await waitFor(() => {
-    expect(
-      screen.getByText(/Only an administrator can edit or remove this bound rule/),
-    ).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Edit' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled();
-  });
-});
+it.each(['disable', 'unbind', 'delete'] as const)(
+  'lets a steward %s an existing bound rule',
+  async (operation) => {
+    api.numberedRules.mockResolvedValue({
+      items: [
+        {
+          id: 'rsk_AAAAAAAAAAAAAAAAAAAAAA',
+          name: 'Bound rule',
+          status: 'suspected',
+          enabled: true,
+          revision: 3,
+          conditions: [
+            { field: 'user_agent', operator: 'prefix', value: 'App/', case_sensitive: false },
+          ],
+          evidence_note: '',
+          evidence_url: '',
+          created_at: 1790000640,
+          updated_at: 1790000640,
+          created_by_role: 'admin',
+          updated_by_role: 'admin',
+          created_by_user_id: null,
+          updated_by_user_id: null,
+          auto_ban: { enabled: true, duration_seconds: null },
+        },
+      ],
+      page: '1',
+      page_size: 20,
+      total_items: '1',
+      total_pages: '1',
+      revision: 'r2',
+      changed: false,
+    });
+    const view = await renderWithProviders(<RiskAuditPanel role="steward" scopeKey="6" />, {
+      station: 'user',
+      role: 'level6',
+    });
+    view.queryClient.setQueryData(['user', 'session'], {
+      user: { id: '6', username: 'Steward', level: 6, effective_level: 6 },
+    });
+    await view.user.click(screen.getByRole('tab', { name: 'Client rules' }));
+    const edit = await screen.findByRole('button', { name: 'Edit' });
+    expect(edit).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled();
+    if (operation === 'delete') {
+      await view.user.click(screen.getByRole('button', { name: 'Delete' }));
+      await waitFor(() =>
+        expect(api.deleteRule).toHaveBeenCalledWith(
+          'rsk_AAAAAAAAAAAAAAAAAAAAAA',
+          3,
+          expect.any(AbortSignal),
+        ),
+      );
+      return;
+    }
+    await view.user.click(edit);
+    expect(screen.getByRole('combobox', { name: 'Ban duration' })).toHaveValue('permanent');
+    if (operation === 'disable') {
+      await view.user.click(screen.getByRole('checkbox', { name: 'Automatic ban enabled' }));
+    } else {
+      await view.user.selectOptions(screen.getByRole('combobox', { name: 'Ban duration' }), 'none');
+    }
+    await view.user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(api.saveRule).toHaveBeenCalledWith(
+        expect.objectContaining({
+          auto_ban: operation === 'disable' ? { enabled: false, duration_seconds: null } : null,
+        }),
+        'rsk_AAAAAAAAAAAAAAAAAAAAAA',
+        expect.any(AbortSignal),
+      ),
+    );
+  },
+);
 
 it('restores a saved aggregate scan’s frozen signal, call kind and time across history navigation', async () => {
   const old = {
