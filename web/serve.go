@@ -65,8 +65,8 @@ func PickSite(raw string, configured ...string) Site {
 // SPAHandler serves a single site's embedded SPA. Unknown paths fall back to
 // the site index.html so client-side routing works. The fallback response and
 // any direct index.html request are sent with Cache-Control: no-store so a
-// stale SPA bundle from a previous binary never shadows a redeploy; hashed
-// content-hashed JavaScript and CSS can be cached across visits.
+// stale SPA bundle from a previous binary never shadows a redeploy.
+// Content-hashed JavaScript and CSS can be cached across visits.
 func SPAHandler(site Site) http.Handler {
 	fsys := siteFS(site)
 	if fsys == nil {
