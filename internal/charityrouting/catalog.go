@@ -58,6 +58,8 @@ func (s *Service) Catalog(ctx context.Context, userID int64, filter CatalogFilte
 	if err != nil {
 		return Catalog{}, fmt.Errorf("charity routing: begin catalog: %w", err)
 	}
+	endTransaction := observability.TimeTransaction(ctx, "catalog")
+	defer endTransaction()
 	defer tx.Rollback()
 	now, err := s.nowUnix()
 	if err != nil {
@@ -177,6 +179,7 @@ cm.enabled,a.allowed_level_mask,a.public_description,cm.model_types,cm.context_p
 	if err := tx.Commit(); err != nil {
 		return Catalog{}, fmt.Errorf("charity routing: commit catalog: %w", err)
 	}
+	endTransaction()
 	intake := "closed"
 	if charityGate == "1" && donationGate == "1" {
 		intake = "open"
