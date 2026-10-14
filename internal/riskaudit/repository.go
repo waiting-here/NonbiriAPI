@@ -312,10 +312,7 @@ func (r *Repository) PutRuleWithAction(ctx context.Context, actor Actor, rule Ru
 	if validateRule(rule) != nil {
 		return Rule{}, ErrInvalid
 	}
-	if action.Present && (!actor.Admin || action.AutoBan != nil && !action.AutoBan.valid()) {
-		if !actor.Admin {
-			return Rule{}, ErrForbidden
-		}
+	if action.Present && action.AutoBan != nil && !action.AutoBan.valid() {
 		return Rule{}, ErrInvalid
 	}
 	if create && action.Present && action.AutoBan == nil {
@@ -366,9 +363,6 @@ func (r *Repository) PutRuleWithAction(ctx context.Context, actor Actor, rule Ru
 		bound, boundRevision, e := actionForRule(ctx, tx, rule.ID)
 		if e != nil {
 			return Rule{}, e
-		}
-		if bound != nil && !actor.Admin {
-			return Rule{}, ErrForbidden
 		}
 		if bound != nil && boundRevision != rule.Revision {
 			return Rule{}, ErrConflict
@@ -430,9 +424,6 @@ func (r *Repository) DeleteRule(ctx context.Context, actor Actor, id string, rev
 		return err
 	}
 	if bound != nil {
-		if !actor.Admin {
-			return ErrForbidden
-		}
 		if boundRevision != revision {
 			return ErrConflict
 		}

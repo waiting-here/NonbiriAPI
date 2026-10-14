@@ -754,14 +754,12 @@ function emptyRule(): RuleInput {
 }
 function RuleEditor({
   rule,
-  role,
   save,
   cancel,
   c,
   busy,
 }: {
   rule?: Rule;
-  role: RiskRole;
   save: (v: RuleInput) => void;
   cancel: () => void;
   c: RiskCopy;
@@ -818,7 +816,7 @@ function RuleEditor({
         e.preventDefault();
         if (!validDuration) return;
         const auto_ban =
-          role !== 'admin' || (banMode === 'none' && !rule?.auto_ban)
+          banMode === 'none' && !rule?.auto_ban
             ? undefined
             : banMode === 'none'
               ? null
@@ -914,57 +912,55 @@ function RuleEditor({
         />
         {c.enabled}
       </label>
-      {role === 'admin' && (
-        <fieldset className="audit-condition">
-          <legend>{c.autoBan}</legend>
+      <fieldset className="audit-condition">
+        <legend>{c.autoBan}</legend>
+        <label>
+          {c.autoBanDuration}
+          <select value={banMode} onChange={(e) => setBanMode(e.target.value as typeof banMode)}>
+            <option value="none">{c.noAutoBan}</option>
+            <option value="hours">{c.autoBanHours}</option>
+            <option value="days">{c.autoBanDays}</option>
+            <option value="seconds">{c.autoBanSeconds}</option>
+            <option value="permanent">{c.autoBanPermanent}</option>
+          </select>
+        </label>
+        {banMode !== 'none' && (
           <label>
-            {c.autoBanDuration}
-            <select value={banMode} onChange={(e) => setBanMode(e.target.value as typeof banMode)}>
-              <option value="none">{c.noAutoBan}</option>
-              <option value="hours">{c.autoBanHours}</option>
-              <option value="days">{c.autoBanDays}</option>
-              <option value="seconds">{c.autoBanSeconds}</option>
-              <option value="permanent">{c.autoBanPermanent}</option>
-            </select>
+            <input
+              type="checkbox"
+              checked={banEnabled}
+              onChange={(e) => setBanEnabled(e.target.checked)}
+            />
+            {c.autoBanEnabled}
           </label>
-          {banMode !== 'none' && (
-            <label>
-              <input
-                type="checkbox"
-                checked={banEnabled}
-                onChange={(e) => setBanEnabled(e.target.checked)}
-              />
-              {c.autoBanEnabled}
-            </label>
-          )}
-          {banMode !== 'none' && banMode !== 'permanent' && (
-            <label>
-              {c.autoBanDuration} (
-              {
-                c[
-                  banMode === 'days'
-                    ? 'autoBanDays'
-                    : banMode === 'hours'
-                      ? 'autoBanHours'
-                      : 'autoBanSeconds'
-                ]
-              }
-              )
-              <input
-                type="number"
-                min="1"
-                max={Math.floor(315360000 / multiplier)}
-                step="1"
-                required
-                value={durationInput}
-                onChange={(e) => setDurationInput(e.target.value)}
-              />
-            </label>
-          )}
-          {!validDuration && <p role="alert">{c.autoBanInvalid}</p>}
-          <small>{c.autoBanHelp}</small>
-        </fieldset>
-      )}
+        )}
+        {banMode !== 'none' && banMode !== 'permanent' && (
+          <label>
+            {c.autoBanDuration} (
+            {
+              c[
+                banMode === 'days'
+                  ? 'autoBanDays'
+                  : banMode === 'hours'
+                    ? 'autoBanHours'
+                    : 'autoBanSeconds'
+              ]
+            }
+            )
+            <input
+              type="number"
+              min="1"
+              max={Math.floor(315360000 / multiplier)}
+              step="1"
+              required
+              value={durationInput}
+              onChange={(e) => setDurationInput(e.target.value)}
+            />
+          </label>
+        )}
+        {!validDuration && <p role="alert">{c.autoBanInvalid}</p>}
+        <small>{c.autoBanHelp}</small>
+      </fieldset>
       {value.conditions.map((item, i) => (
         <fieldset className="ops-field-grid audit-condition" key={i}>
           <legend>
@@ -1208,7 +1204,6 @@ function Rules({ role, scopeKey, c }: Scope) {
         <RuleEditor
           key={editing === 'new' ? 'new' : editing.id}
           rule={editing === 'new' ? undefined : editing}
-          role={role}
           c={c}
           busy={mutation.isPending}
           cancel={() => {
@@ -1252,9 +1247,6 @@ function Rules({ role, scopeKey, c }: Scope) {
                         : `${rule.auto_ban.duration_seconds} ${c.autoBanSeconds}`}
                     </p>
                   )}
-                  {role !== 'admin' && rule.auto_ban && (
-                    <p className="audit-muted">{c.autoBanProtected}</p>
-                  )}
                   <p>
                     {rule.conditions
                       .map(
@@ -1271,7 +1263,7 @@ function Rules({ role, scopeKey, c }: Scope) {
                   </p>
                   <button
                     className="nb-btn nb-btn--secondary"
-                    disabled={mutation.isPending || (role !== 'admin' && rule.auto_ban != null)}
+                    disabled={mutation.isPending}
                     onClick={() => {
                       mutation.reset();
                       setEditing(rule);
@@ -1281,7 +1273,7 @@ function Rules({ role, scopeKey, c }: Scope) {
                   </button>
                   <button
                     className="nb-btn nb-btn--secondary"
-                    disabled={mutation.isPending || (role !== 'admin' && rule.auto_ban != null)}
+                    disabled={mutation.isPending}
                     onClick={() => mutation.mutate({ rule })}
                   >
                     {c.remove}

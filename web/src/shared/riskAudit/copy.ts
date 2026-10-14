@@ -100,7 +100,6 @@ export function riskCopy(t: TFunction) {
     autoBanPermanent: t('common.riskAudit.autoBanPermanent'),
     autoBanDuration: t('common.riskAudit.autoBanDuration'),
     autoBanInvalid: t('common.riskAudit.autoBanInvalid'),
-    autoBanProtected: t('common.riskAudit.autoBanProtected'),
     autoBanHelp: t('common.riskAudit.autoBanHelp'),
     threshold: t('common.riskAudit.threshold'),
     consecutive: t('common.riskAudit.consecutive'),
