@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/fstest"
 )
 
 func TestStubFSContainsIndex(t *testing.T) {
@@ -75,5 +76,37 @@ func TestSPAHandlerIndexAndFallback(t *testing.T) {
 	}
 	if !strings.Contains(fb.Body.String(), "NonbiriAPI") {
 		t.Fatalf("fallback body missing marker: %q", fb.Body.String())
+	}
+}
+
+func TestSPAHandlerCachesOnlyExistingContentHashedBundles(t *testing.T) {
+	h := spaHandler(fstest.MapFS{
+		"index.html":                {Data: []byte("<html>current build</html>")},
+		"assets/index-Ab12_9-x.js":  {Data: []byte("export default 1")},
+		"assets/index-Z1234567.css": {Data: []byte("body {color:red}")},
+		"assets/fixed.js":           {Data: []byte("export default 2")},
+		"assets/card-Ab123456.webp": {Data: []byte("image")},
+		"build-manifest.json":       {Data: []byte("{}")},
+	})
+	for _, tc := range []struct{ path, cache string }{
+		{"/assets/index-Ab12_9-x.js", "public, max-age=31536000, immutable"},
+		{"/assets/index-Z1234567.css?v=1", "public, max-age=31536000, immutable"},
+		{"/assets/fixed.js", ""},
+		{"/assets/card-Ab123456.webp", ""},
+		{"/build-manifest.json", ""},
+		{"/assets/oldbuild-Ab123456.js", "no-store"},
+		{"/games/gacha", "no-store"},
+		{"/", "no-store"},
+		{"/index.html", "no-store"},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			for _, method := range []string{http.MethodGet, http.MethodHead} {
+				w := httptest.NewRecorder()
+				h.ServeHTTP(w, httptest.NewRequest(method, tc.path, nil))
+				if got := w.Header().Get("Cache-Control"); got != tc.cache {
+					t.Fatalf("%s cache=%q want=%q", method, got, tc.cache)
+				}
+			}
+		})
 	}
 }

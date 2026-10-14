@@ -4,6 +4,7 @@ import (
 	"io/fs"
 	"net/http"
 	"path"
+	"regexp"
 	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/host"
@@ -24,8 +25,9 @@ const (
 // implementation backs them (stub placeholders vs. real dist output) is chosen
 // by the build tag in embed_stub.go / embed_dist.go.
 var (
-	adminFS = embeddedAdmin()
-	userFS  = embeddedUser()
+	adminFS      = embeddedAdmin()
+	userFS       = embeddedUser()
+	hashedBundle = regexp.MustCompile(`^assets/[^/]+-[A-Za-z0-9_-]{8}\.(js|css)$`)
 )
 
 func siteFS(site Site) fs.FS {
@@ -64,7 +66,7 @@ func PickSite(raw string, configured ...string) Site {
 // the site index.html so client-side routing works. The fallback response and
 // any direct index.html request are sent with Cache-Control: no-store so a
 // stale SPA bundle from a previous binary never shadows a redeploy; hashed
-// asset files keep the file server's default caching.
+// content-hashed JavaScript and CSS can be cached across visits.
 func SPAHandler(site Site) http.Handler {
 	fsys := siteFS(site)
 	if fsys == nil {
@@ -72,6 +74,10 @@ func SPAHandler(site Site) http.Handler {
 			httperr.WriteError(w, httperr.New(httperr.CodeInternal, "site is not configured"))
 		})
 	}
+	return spaHandler(fsys)
+}
+
+func spaHandler(fsys fs.FS) http.Handler {
 	fileServer := http.FileServer(http.FS(fsys))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		clean := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
@@ -85,6 +91,8 @@ func SPAHandler(site Site) http.Handler {
 		}
 		if clean == "index.html" {
 			w.Header().Set("Cache-Control", "no-store")
+		} else if hashedBundle.MatchString(clean) {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		}
 		fileServer.ServeHTTP(w, r)
 	})
