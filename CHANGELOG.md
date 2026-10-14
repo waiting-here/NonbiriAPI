@@ -28,6 +28,10 @@ use a verified commit and its matching artifacts without a release tag.
 
 ### Fixed
 
+- Display input and output token quotas with token units in summaries and usage
+  cards, preserving the server's exact counts and credit precision.
+- Correct hand anatomy in the celestial pool cover and wandering character
+  artwork, including animation layers and high-resolution derivatives.
 - Align charity catalog and key-model availability with donor ban eligibility,
   and distinguish missing models from temporarily unavailable keys in logs.
 - Keep gacha usable with negative account balances and calculate each wallet's
