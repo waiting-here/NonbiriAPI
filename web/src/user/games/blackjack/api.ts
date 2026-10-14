@@ -75,8 +75,17 @@ export function useBlackjack() {
         (await gameRequest<unknown>(base + '/state', { signal, expectedStatuses: [200] })).data,
       ),
     retry: false,
-    refetchInterval: visible ? 700 : 5000,
-    refetchIntervalInBackground: true,
+    refetchInterval: (query) => {
+      if (!visible) return false;
+      const state = query.state.data;
+      return !query.state.error &&
+        state &&
+        (state.you ||
+          state.queue_count !== '0' ||
+          (state.table && state.table.phase !== 'result' && state.table.phase !== 'cancelled'))
+        ? 700
+        : 5000;
+    },
     refetchOnWindowFocus: 'always',
     refetchOnReconnect: 'always',
     staleTime: 0,
