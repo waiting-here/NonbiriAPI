@@ -305,18 +305,9 @@ test('reachable user home keeps level state but removes the implementation hint'
   page,
 }) => {
   const guard = await prepare(context, page, 'user', 'user', 'en', 'dark');
-  await mockJson(page, { origin: USER_ORIGIN, method: 'GET', path: '/api/me', body: { user } });
-  await mockJson(page, {
-    origin: USER_ORIGIN,
-    method: 'GET',
-    path: '/api/me/usage',
-    body: {
-      total_requests: 1,
-      total_prompt_tokens: 2,
-      total_completion_tokens: 3,
-      total_unknown_usage_requests: 0,
-    },
-  });
+  for (const path of ['/api/session', '/api/me']) {
+    await mockJson(page, { origin: USER_ORIGIN, method: 'GET', path, body: { user } });
+  }
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',
@@ -357,7 +348,7 @@ test('reachable user home keeps level state but removes the implementation hint'
   await page.route(`${USER_ORIGIN}/api/charity/models?**`, (route) =>
     route.fulfill({
       json: {
-        data: [],
+        models: [],
         pagination: { page: '1', page_size: 10, total_items: '0', total_pages: '1' },
         donation_intake: 'closed',
         server_now: 1800000000,
