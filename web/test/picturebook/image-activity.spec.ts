@@ -859,6 +859,11 @@ test('real endpoint adaptation hides saved values and blocks stale browser write
     await fixed.getByRole('button', { name: 'Add field' }).click();
     await fixed.getByLabel('Header or path').fill('X-Synthetic-Header');
     await fixed.getByLabel('Value', { exact: true }).fill('synthetic-private-header');
+    const protection = fixed.getByRole('combobox', {
+      name: 'Response protection: X-Synthetic-Header',
+      exact: true,
+    });
+    await protection.selectOption('whole');
     const forced = page.getByRole('group', {
       name: 'Fixed parameters (always override)',
       exact: true,
@@ -882,13 +887,15 @@ test('real endpoint adaptation hides saved values and blocks stale browser write
     await page.reload();
     await page.getByText('Request rewriting (advanced)', { exact: true }).click();
     await expect(fixed.getByText('Saved value is hidden')).toBeVisible();
-    await fixed.getByRole('combobox').selectOption('replace');
+    await expect(protection).toHaveValue('whole');
+    await fixed.getByRole('combobox', { name: 'Edit', exact: true }).selectOption('replace');
     await expect(fixed.getByLabel('Value', { exact: true })).toHaveValue('');
     await fixed.getByLabel('Value', { exact: true }).fill('synthetic-replacement');
     const currentResponse = await api(owner, path);
     expect(currentResponse.status()).toBe(200);
     const current = await currentResponse.json();
     expect(current.forward_headers.values).toEqual(['X-Client-Tag']);
+    expect(current.fixed_headers.values['X-Synthetic-Header'].sensitive_paths).toEqual(['']);
     expect(JSON.stringify(current)).not.toContain('synthetic-private-header');
     expect((await api(other, path)).status()).toBe(404);
     const concurrent = await api(owner, path, 'PUT', {
