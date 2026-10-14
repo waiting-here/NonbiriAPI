@@ -230,6 +230,7 @@ export function useCoreSession(enabled = true) {
 }
 
 export function useCoreMe(accountId: string, enabled = true) {
+  const queryClient = useQueryClient();
   return useQuery({
     queryKey: coreKeys.me(accountId),
     queryFn: async ({ signal }) => {
@@ -243,6 +244,15 @@ export function useCoreMe(accountId: string, enabled = true) {
       }
       return envelope;
     },
+    initialData: () => {
+      const cached = queryClient.getQueryData(coreKeys.session);
+      if (cached === undefined) return undefined;
+      const session = normalizeCoreSessionBoundary(cached);
+      return session?.accountId === accountId && session.profile
+        ? { user: session.profile }
+        : undefined;
+    },
+    initialDataUpdatedAt: () => queryClient.getQueryState(coreKeys.session)?.dataUpdatedAt,
     enabled,
     staleTime: 10_000,
     retry: false,

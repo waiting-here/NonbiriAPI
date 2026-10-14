@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createIdempotencyKey, gameRequest, isResponseUnknown, secureBytes } from '../request';
 import {
@@ -137,8 +137,12 @@ export function useDuel<V, F, P, S, L, A>(
         codec,
       ),
     retry: false,
-    refetchInterval: visible ? 1000 : 5000,
-    refetchIntervalInBackground: true,
+    refetchInterval: (query) =>
+      !visible
+        ? false
+        : !query.state.error && (query.state.data?.queue || query.state.data?.current)
+          ? 1000
+          : 5000,
     refetchOnWindowFocus: 'always',
     refetchOnReconnect: 'always',
     staleTime: 0,
@@ -148,9 +152,6 @@ export function useDuel<V, F, P, S, L, A>(
     void refetch();
     void refreshWallets?.();
   }, [refetch, refreshWallets]);
-  useEffect(() => {
-    if (visible) refresh();
-  }, [visible, refresh]);
   const inFlight = useRef(false);
   const retained = useRef<{ intent: DuelIntent; key: string } | null>(null);
   const [pending, setPending] = useState(false);
