@@ -22,11 +22,36 @@ func (s *Service) Available(mode, spec string) bool {
 	return s != nil && !s.closed.Load() && s.recovered.Load() && spec == "" && s.descriptor.ResolveMode(mode) == nil
 }
 func (s *Service) Tick(ctx context.Context) (WorkResult, error) {
+	pending, err := s.workerPending(ctx)
+	if err != nil || !pending {
+		return WorkResult{}, err
+	}
 	result, err := s.work(ctx, false, 100, time.Now().Add(2*time.Second))
 	if err == nil {
 		err = s.driveAI(ctx)
 	}
 	return result, err
+}
+
+// This read only skips idle ticks. Matching, expiry, refunds and AI admission
+// retain their authoritative checks inside the existing write transaction.
+func (s *Service) workerPending(ctx context.Context) (bool, error) {
+	if s == nil || s.closed.Load() {
+		return false, ErrUnavailable
+	}
+	now := s.now().UTC().Unix()
+	if now < 0 || now > maxDecisionTime {
+		return false, ErrInvariant
+	}
+	query := `SELECT EXISTS(SELECT 1 FROM game_duel_queue WHERE game_key=?) OR EXISTS(SELECT 1 FROM game_duel_sessions WHERE game_key=? AND state='active' AND phase_deadline<=?)`
+	args := []any{s.rules.ID(), s.rules.ID(), now}
+	if s.aiAdapter != nil {
+		query += ` OR EXISTS(SELECT 1 FROM game_duel_sessions WHERE game_key=? AND state='active' AND economy='ai_challenge') OR EXISTS(SELECT 1 FROM game_ai_queue WHERE game_key=? AND (state='waiting' OR resolved_at<=?)) OR EXISTS(SELECT 1 FROM game_ai_memories WHERE expires_at<=?)`
+		args = append(args, s.rules.ID(), s.rules.ID(), now-QueueSeconds, now)
+	}
+	var pending bool
+	err := s.database.QueryRowContext(ctx, query, args...).Scan(&pending)
+	return pending, err
 }
 func (s *Service) RecoverBeforeListenAt(ctx context.Context, _ int64, limit int, deadline time.Time) (WorkResult, error) {
 	s.recoveryMu.Lock()

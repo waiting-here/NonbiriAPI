@@ -134,6 +134,18 @@ func (s *Service) RecoverBeforeListen(ctx context.Context, now int64, limit int,
 	return host.WorkResult{Processed: max(1, processed), More: more}, nil
 }
 func (s *Service) work(ctx context.Context, limit int) (host.WorkResult, error) {
+	if s == nil || s.closed.Load() {
+		return host.WorkResult{}, ErrUnavailable
+	}
+	// Empty tables need no clock write. A new entry arriving after this read
+	// is picked up on the next tick; progress still rechecks under the writer.
+	var pending bool
+	if err := s.database.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM game_blackjack_entries WHERE state='waiting') OR EXISTS(SELECT 1 FROM game_blackjack_sessions WHERE phase IN ('seating','decision'))`).Scan(&pending); err != nil {
+		return host.WorkResult{}, err
+	}
+	if !pending {
+		return host.WorkResult{}, nil
+	}
 	tx, now, err := s.begin(ctx)
 	if err != nil {
 		return host.WorkResult{}, err
