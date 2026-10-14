@@ -432,18 +432,26 @@ test.describe('recurring limits in the complete charity pages', () => {
           const summary = card.locator('.recurring-limits__summary-text');
           for (const value of expected) await expect(summary).toContainText(value);
           await expect(card.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '0.15');
-          const numbersFit = await card
+          const numberBounds = await card
             .locator('.recurring-limits__metrics dd')
             .evaluateAll((nodes) =>
-              nodes.every((node) => {
+              nodes.map((node) => {
                 const range = document.createRange();
                 range.selectNodeContents(node);
-                return range.getClientRects().length === 1 && node.scrollWidth <= node.clientWidth;
+                return {
+                  text: node.textContent,
+                  lines: range.getClientRects().length,
+                  width: node.clientWidth,
+                  scrollWidth: node.scrollWidth,
+                };
               }),
             );
-          expect(numbersFit).toBe(true);
           const name = `quota-units-${locale}-${theme}-${width}`;
           await flow.check(name);
+          expect(
+            numberBounds.every((node) => node.lines === 1 && node.scrollWidth <= node.width),
+            JSON.stringify(numberBounds),
+          ).toBe(true);
           await card.scrollIntoViewIfNeeded();
           if (process.env.NONBIRI_VISUAL_DIR) {
             await page.screenshot({
@@ -457,7 +465,7 @@ test.describe('recurring limits in the complete charity pages', () => {
           for (const value of expected) await expect(summary).toContainText(value);
           await toggle.click();
           await card
-            .getByLabel(locale === 'zh' ? '计量维度' : 'Measure', { exact: true })
+            .getByRole('combobox', { name: locale === 'zh' ? '计量维度' : 'Measure', exact: true })
             .selectOption('credits');
           await expect(summary).toContainText(locale === 'zh' ? '832,500积分' : '832,500 credits');
           await expect(card.locator('.recurring-limits__metrics dd')).toHaveText(expected);
