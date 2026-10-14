@@ -3,10 +3,6 @@ package forward
 import (
 	"context"
 	"fmt"
-	"github.com/waiting-here/NonbiriAPI/internal/claim"
-	"github.com/waiting-here/NonbiriAPI/internal/connector"
-	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
-	"github.com/waiting-here/NonbiriAPI/internal/transportpolicy"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +10,11 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/waiting-here/NonbiriAPI/internal/claim"
+	"github.com/waiting-here/NonbiriAPI/internal/connector"
+	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/transportpolicy"
 )
 
 func forceTransport(f *serviceFixture, rule transportpolicy.Rule) {
@@ -23,7 +24,6 @@ func forceTransport(f *serviceFixture, rule transportpolicy.Rule) {
 
 type canceledTransportBody struct {
 	ctx    context.Context
-	cancel context.CancelFunc
 	first  *strings.Reader
 	closed chan struct{}
 	once   sync.Once
@@ -33,11 +33,37 @@ func (b *canceledTransportBody) Read(p []byte) (int, error) {
 	if b.first.Len() > 0 {
 		return b.first.Read(p)
 	}
-	b.cancel()
 	<-b.ctx.Done()
 	return 0, b.ctx.Err()
 }
 func (b *canceledTransportBody) Close() error { b.once.Do(func() { close(b.closed) }); return nil }
+
+type cancelAfterFrameConnector struct {
+	connector.Connector
+	cancel context.CancelFunc
+}
+
+func (c cancelAfterFrameConnector) Attempt(ctx context.Context, in connector.AttemptInput) contract.AttemptResult {
+	in.Sink = cancelAfterFrameWriter{ResponseWriter: in.Sink, cancel: c.cancel}
+	return c.Connector.Attempt(ctx, in)
+}
+
+type cancelAfterFrameWriter struct {
+	http.ResponseWriter
+	cancel context.CancelFunc
+}
+
+func (w cancelAfterFrameWriter) Write(p []byte) (int, error) {
+	n, err := w.ResponseWriter.Write(p)
+	if err == nil && n == len(p) && n > 0 {
+		// Cancel only after the adapter has consumed a frame and its usage.
+		w.cancel()
+	}
+	return n, err
+}
+
+func (w cancelAfterFrameWriter) Flush()                      { _ = http.NewResponseController(w.ResponseWriter).Flush() }
+func (w cancelAfterFrameWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
 func TestBufferedTransportCancellationKeepsUpstreamUsage(t *testing.T) {
 	for _, known := range []bool{false, true} {
@@ -57,14 +83,20 @@ func TestBufferedTransportCancellationKeepsUpstreamUsage(t *testing.T) {
 			b := &delayedStreamBackend{do: func(r *http.Request) (*http.Response, error) {
 				calls++
 				response := streamResponse(200, "")
-				response.Body = &canceledTransportBody{ctx: r.Context(), cancel: cancel, first: strings.NewReader(chunk), closed: closed}
+				response.Body = &canceledTransportBody{ctx: r.Context(), first: strings.NewReader(chunk), closed: closed}
 				return response, nil
 			}}
 			useRealStreamConnector(t, f, contract.TypeOpenAICompatible, b, 1, false)
+			f.service.connectors[contract.TypeOpenAICompatible] = cancelAfterFrameConnector{
+				Connector: f.service.connectors[contract.TypeOpenAICompatible], cancel: cancel,
+			}
 			forceTransport(f, transportpolicy.ForceStream)
 			w := httptest.NewRecorder()
 			request := decodeChatForTest(t, `{"model":"[公益]care/model","messages":[{"role":"user","content":"hello"}]}`)
 			f.service.Chat(ctx, w, 1, request, nil, "application/json", "en")
+			if ctx.Err() != context.Canceled {
+				t.Fatalf("frame did not trigger cancellation: %v", ctx.Err())
+			}
 			select {
 			case <-closed:
 			default:
