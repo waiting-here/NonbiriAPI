@@ -60,6 +60,7 @@ type application struct {
 	lifecycle       *lifecycle.Coordinator
 	lifecycleCancel context.CancelFunc
 	lifecycleDone   <-chan struct{}
+	performanceDone <-chan struct{}
 	rankingCancel   context.CancelFunc
 	rankingDone     <-chan struct{}
 	debug           *debug.Hub

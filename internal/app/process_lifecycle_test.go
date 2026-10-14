@@ -160,6 +160,24 @@ func TestApplicationCloseCancelsEveryWorkerBeforeWaiting(t *testing.T) {
 	}
 }
 
+func TestApplicationCloseWaitsForPerformanceReporter(t *testing.T) {
+	done := make(chan struct{})
+	release := sync.OnceFunc(func() { close(done) })
+	defer release()
+	workerCanceled := make(chan struct{})
+	app := &application{performanceDone: done, workerCancel: func() { close(workerCanceled) }}
+	budget, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	if err := app.CloseContext(budget); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("reporter was not awaited: %v", err)
+	}
+	waitForProcessTestSignal(t, workerCanceled, "performance reporter cancellation")
+	release()
+	if err := app.CloseContext(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestProcessCloseTimeoutRetainsStoreAndVaultOwnership(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "process-owned.sqlite")
 	vault := processTestVault(t)

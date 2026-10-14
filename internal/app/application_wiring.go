@@ -36,6 +36,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/lifecyclegate"
 	"github.com/waiting-here/NonbiriAPI/internal/logapi"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/reports"
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/resourcebridge"
@@ -600,7 +601,8 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err != nil {
 		return nil, err
 	}
-	handler, err := stationBoundary(cfg, audits.Wrap(mux))
+	performance := observability.NewPerformance()
+	handler, err := stationBoundary(cfg, performance.Wrap(audits.Wrap(mux)))
 	if err != nil {
 		return nil, err
 	}
@@ -626,6 +628,14 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	go func() { defer close(rankingDone); rankingService.Run(rankingContext) }()
 	audits.Start(workerContext)
 	activityEngines.Start(workerContext, failures, func() { readiness.failed.Store(true) })
+	performanceDone := make(chan struct{})
+	go func() {
+		defer close(performanceDone)
+		performance.Run(workerContext, store.DB().Stats, func(window observability.PerformanceWindow) {
+			slog.Info("runtime performance", "metrics", window)
+		})
+	}()
+	app.performanceDone = performanceDone
 	app.readiness, app.handler, app.failures = readiness, handler, failures
 	app.lifecycleCancel, app.lifecycleDone = lifecycleCancel, lifecycleDone
 	app.rankingCancel, app.rankingDone = rankingCancel, rankingDone
