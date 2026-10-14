@@ -317,8 +317,7 @@ export async function mockRoleSession(
     throw new Error('The user station cannot receive an administrator session.');
   const body = userSession(role);
   await mockJson(page, { origin, method: 'GET', path, body });
-  // The shell keeps a deliberately narrow session projection. Generation 2
-  // pages then read the same account through /api/me for the strict profile.
+  // Both endpoints return the same complete profile for the signed-in account.
   await mockJson(page, { origin, method: 'GET', path: '/api/me', body });
   await mockJson(page, {
     origin,

@@ -8,51 +8,8 @@ import { AnnouncementDetailPage } from '../../admin/pages/AnnouncementDetailPage
 import { StewardPage } from '../../user/pages/StewardPage';
 import { AnnouncementEditor } from './AnnouncementEditor';
 import type { AdminUser } from '../operations/managedUsers';
+import { managedUserFixture as userFixture } from '../../../test/fixtures/managedUsers';
 
-const userFixture = (id = '7', level = 1): AdminUser => ({
-  id,
-  username: 'member-' + id,
-  discord_id: null,
-  avatar_url: null,
-  guild_nick: null,
-  guild_avatar_url: null,
-  is_admin: false,
-  discord_gate_policy: 'inherit',
-  is_banned: false,
-  banned_reason: '',
-  banned_until: null,
-  charity_suspended_until: null,
-  endpoint_limit: null,
-  effective_endpoint_limit: '5',
-  rpm_limit: null,
-  effective_rpm_limit: '60',
-  concurrency_limit: null,
-  effective_concurrency_limit: '5',
-  lang: 'en',
-  balance: '0',
-  game_balance: '-1.25',
-  donation_credit: '0',
-  level: {
-    manual: level >= 5 ? level : null,
-    automatic: level >= 5 ? 1 : level,
-    effective: level,
-    display_name: 'Lv' + level,
-  },
-  game_profile_public: false,
-  revision: '1',
-  created_at: 1_800_000_000,
-  updated_at: 1_800_000_000,
-  usage: {
-    total_requests: '0',
-    total_uncached_input_tokens: '0',
-    total_cache_write_input_tokens: '0',
-    total_cache_read_input_tokens: '0',
-    total_output_tokens: '0',
-    total_prompt_tokens: '0',
-    total_completion_tokens: '0',
-    total_unknown_usage_requests: '0',
-  },
-});
 function session(level = 6) {
   const user = userFixture('9', level);
   const fields = Object.fromEntries(
@@ -232,8 +189,154 @@ describe('shared account management', () => {
       });
       expect(write.headers.get('Idempotency-Key')).toBeTruthy();
       await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+      expect(screen.getByText('Saved.')).toBeVisible();
     },
   );
+  it.each(['admin', 'steward'] as const)(
+    'keeps a credit conflict visible after refreshing the account for %s',
+    async (role) => {
+      const base = role === 'admin' ? '/admin/api/users' : '/api/steward/users';
+      let target = userFixture();
+      const calls = install((call) => {
+        if (call.path === '/admin/api/session') return { admin: { username: 'fixture-admin' } };
+        if (call.path === '/api/session') return session();
+        if (call.path.startsWith(base + '?')) return page([target]);
+        if (call.path === base + '/7' && call.method === 'GET') return target;
+        if (call.path === base + '/7' && call.method === 'PATCH') {
+          if (call.body.expected_revision === '1') {
+            target = { ...target, revision: '2' };
+            return json({ error: { code: 'conflict', message: 'Current state conflicts.' } }, 409);
+          }
+          target = { ...target, balance: '1.5', revision: '3' };
+          return target;
+        }
+        throw new Error('Unexpected request ' + call.path);
+      });
+      const view = await renderWithProviders(role === 'admin' ? <UsersPage /> : <StewardPage />, {
+        station: role === 'admin' ? 'admin' : 'user',
+        role: role === 'admin' ? 'admin' : 'user',
+        route: role === 'admin' ? '/users?user=7' : '/steward?tab=users&user=7',
+      });
+      await view.user.click(await screen.findByRole('tab', { name: 'Credit adjustment' }));
+      await view.user.type(screen.getByLabelText('Positive amount'), '1.5');
+      await view.user.type(screen.getByLabelText('Reason (required)'), 'Reward correction');
+      await view.user.click(screen.getByRole('button', { name: 'Apply adjustment' }));
+      await view.user.click(
+        within(screen.getByRole('alertdialog')).getByRole('button', {
+          name: 'Apply adjustment',
+        }),
+      );
+      await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+      expect(screen.getByText(/This adjustment was not applied/)).toBeVisible();
+      expect(screen.getByLabelText('Positive amount')).toHaveValue('1.5');
+      expect(screen.getByLabelText('Reason (required)')).toHaveValue('Reward correction');
+      expect(target.balance).toBe('0');
+      expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(1);
+
+      await view.user.click(screen.getByRole('button', { name: 'Apply adjustment' }));
+      await view.user.click(
+        within(screen.getByRole('alertdialog')).getByRole('button', {
+          name: 'Apply adjustment',
+        }),
+      );
+      await waitFor(() => expect(screen.getByText('Saved.')).toBeVisible());
+      const writes = calls.filter((call) => call.method === 'PATCH');
+      expect(writes.map((call) => call.body.expected_revision)).toEqual(['1', '2']);
+      expect(writes[1].headers.get('Idempotency-Key')).not.toBe(
+        writes[0].headers.get('Idempotency-Key'),
+      );
+      expect(target.balance).toBe('1.5');
+    },
+  );
+
+  it('keeps a confirmed adjustment visible when its detail refresh fails', async () => {
+    let saved = false;
+    const target = userFixture();
+    const calls = install((call) => {
+      if (call.path === '/admin/api/session') return { admin: { username: 'fixture-admin' } };
+      if (call.path.startsWith('/admin/api/users?')) return page([target]);
+      if (call.path === '/admin/api/users/7' && call.method === 'GET')
+        return saved
+          ? json({ error: { code: 'unavailable', message: 'Refresh unavailable.' } }, 503)
+          : target;
+      if (call.path === '/admin/api/users/7' && call.method === 'PATCH') {
+        saved = true;
+        return { ...target, balance: '1', revision: '2' };
+      }
+      throw new Error('Unexpected request ' + call.path);
+    });
+    const view = await renderWithProviders(<UsersPage />, {
+      station: 'admin',
+      role: 'admin',
+      route: '/users?user=7',
+    });
+    await view.user.click(await screen.findByRole('tab', { name: 'Credit adjustment' }));
+    await view.user.type(screen.getByLabelText('Positive amount'), '1');
+    await view.user.type(screen.getByLabelText('Reason (required)'), 'Reward correction');
+    await view.user.click(screen.getByRole('button', { name: 'Apply adjustment' }));
+    await view.user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Apply adjustment',
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.getByText('Saved, but the latest version could not be loaded.')).toBeVisible(),
+    );
+    expect(screen.getByLabelText('Positive amount')).toHaveValue('');
+    expect(screen.getAllByRole('button', { name: 'Back to list' })).toHaveLength(1);
+    expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(1);
+    await view.user.click(screen.getByRole('button', { name: 'Check again' }));
+    expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(1);
+  });
+
+  it('retries an unknown credit result with its original intent and key after a refreshed revision', async () => {
+    let target = userFixture();
+    let lostResponse = false;
+    const calls = install((call) => {
+      if (call.path === '/admin/api/session') return { admin: { username: 'fixture-admin' } };
+      if (call.path.startsWith('/admin/api/users?')) return page([target]);
+      if (call.path === '/admin/api/users/7' && call.method === 'GET') return target;
+      if (call.path === '/admin/api/users/7' && call.method === 'PATCH') {
+        if (!lostResponse) {
+          lostResponse = true;
+          target = { ...target, balance: '1.5', revision: '2' };
+          throw new TypeError('Synthetic lost response');
+        }
+        return target;
+      }
+      throw new Error('Unexpected request ' + call.path);
+    });
+    const view = await renderWithProviders(<UsersPage />, {
+      station: 'admin',
+      role: 'admin',
+      route: '/users?user=7',
+    });
+    await view.user.click(await screen.findByRole('tab', { name: 'Credit adjustment' }));
+    await view.user.type(screen.getByLabelText('Positive amount'), '1.5');
+    await view.user.type(screen.getByLabelText('Reason (required)'), 'Reward correction');
+    await view.user.click(screen.getByRole('button', { name: 'Apply adjustment' }));
+    await view.user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Apply adjustment',
+      }),
+    );
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    expect(screen.getByText("Couldn't confirm the save")).toBeVisible();
+    expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(1);
+    await view.user.click(screen.getByRole('button', { name: 'Retry original adjustment' }));
+    await view.user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Retry original adjustment',
+      }),
+    );
+    await waitFor(() => expect(screen.getByText('Saved.')).toBeVisible());
+    const writes = calls.filter((call) => call.method === 'PATCH');
+    expect(writes).toHaveLength(2);
+    expect(writes[1].body).toEqual(writes[0].body);
+    expect(writes[1].headers.get('Idempotency-Key')).toBe(writes[0].headers.get('Idempotency-Key'));
+    expect(target.balance).toBe('1.5');
+  });
+
   it.each([
     ['admin', 1],
     ['steward', 1],

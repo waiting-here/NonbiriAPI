@@ -199,7 +199,9 @@ function EconomyCard({ accountId }: { accountId: string }) {
             <div>
               <dt>{t('home.level')}</dt>
               <dd>
-                {new RegExp(`^Lv\\.?\\s*${me.data.user.effective_level}$`, 'i').test(me.data.user.level_display_name)
+                {new RegExp(`^Lv\\.?\\s*${me.data.user.effective_level}$`, 'i').test(
+                  me.data.user.level_display_name,
+                )
                   ? me.data.user.level_display_name
                   : t('home.levelValue', {
                       level: me.data.user.effective_level,
@@ -252,7 +254,7 @@ function OnboardingChecklist({
       currentlyAvailable: 'all',
       modelType: 'all',
     },
-    enabled,
+    enabled && (models.isError || (models.isSuccess && models.data.data.length === 0)),
   );
   const keyDone = Boolean(key.data?.metadata);
   const modelDone = Boolean(models.data?.data.length || charity.data?.models.length);

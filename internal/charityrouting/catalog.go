@@ -58,6 +58,8 @@ func (s *Service) Catalog(ctx context.Context, userID int64, filter CatalogFilte
 	if err != nil {
 		return Catalog{}, fmt.Errorf("charity routing: begin catalog: %w", err)
 	}
+	endTransaction := observability.TimeTransaction(ctx, "catalog")
+	defer endTransaction()
 	defer tx.Rollback()
 	now, err := s.nowUnix()
 	if err != nil {
@@ -137,13 +139,15 @@ cm.enabled,a.allowed_level_mask,a.public_description,cm.model_types,cm.context_p
 		return Catalog{}, fmt.Errorf("charity routing: read catalog page: %w", err)
 	}
 	models := make([]CatalogModel, 0, page.Size)
+	modelIDs := make([]int64, 0, page.Size)
 	for rows.Next() {
-		model, _, err := scanCatalogModel(rows, level)
+		model, modelID, err := scanCatalogModel(rows, level)
 		if err != nil {
 			_ = rows.Close()
 			return Catalog{}, err
 		}
 		models = append(models, model)
+		modelIDs = append(modelIDs, modelID)
 	}
 	if err := rows.Err(); err != nil {
 		_ = rows.Close()
@@ -152,16 +156,13 @@ cm.enabled,a.allowed_level_mask,a.public_description,cm.model_types,cm.context_p
 	if err := rows.Close(); err != nil {
 		return Catalog{}, fmt.Errorf("charity routing: close catalog: %w", err)
 	}
+	rates, err := observability.RecentSuccessBatchTx(ctx, tx, modelIDs, now)
+	if err != nil {
+		return Catalog{}, err
+	}
 	for index := range models {
 		model := &models[index]
-		modelID, err := strconv.ParseInt(model.ID, 10, 64)
-		if err != nil {
-			return Catalog{}, ErrInvariant
-		}
-		model.RecentSuccess, err = observability.RecentSuccessTx(ctx, tx, modelID, now)
-		if err != nil {
-			return Catalog{}, err
-		}
+		model.RecentSuccess = rates[modelIDs[index]]
 		switch {
 		case charityGate == "0":
 			model.Availability = "feature_disabled"
@@ -178,6 +179,7 @@ cm.enabled,a.allowed_level_mask,a.public_description,cm.model_types,cm.context_p
 	if err := tx.Commit(); err != nil {
 		return Catalog{}, fmt.Errorf("charity routing: commit catalog: %w", err)
 	}
+	endTransaction()
 	intake := "closed"
 	if charityGate == "1" && donationGate == "1" {
 		intake = "open"

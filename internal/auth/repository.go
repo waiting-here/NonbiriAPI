@@ -16,6 +16,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/useractivity"
 )
 
@@ -94,6 +95,8 @@ func (r *Runtime) authenticate(ctx context.Context, rawToken string, kind authz.
 	if err != nil {
 		return sessionPrincipal{}, fmt.Errorf("authenticate session: begin: %w", err)
 	}
+	endTransaction := observability.TimeTransaction(ctx, "session")
+	defer endTransaction()
 	done := false
 	defer func() {
 		if !done {
@@ -124,6 +127,7 @@ func (r *Runtime) authenticate(ctx context.Context, rawToken string, kind authz.
 			deleted, rowsErr := result.RowsAffected()
 			if rowsErr == nil && deleted == 1 {
 				if commitErr := tx.Commit(); commitErr == nil {
+					endTransaction()
 					done = true
 					if !expectedAdmin {
 						r.notifyUserSessionInvalidated(p.actor.UserID)
@@ -169,6 +173,7 @@ func (r *Runtime) authenticate(ctx context.Context, rawToken string, kind authz.
 		return sessionPrincipal{}, fmt.Errorf("authenticate session: commit: %w", err)
 	}
 	done = true
+	endTransaction()
 	p.actor.Kind = kind
 	p.actor.SessionTokenHash = hash
 	p.actor.ElevationToken = elevationToken

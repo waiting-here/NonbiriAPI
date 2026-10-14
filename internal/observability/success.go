@@ -3,6 +3,7 @@ package observability
 import (
 	"context"
 	"database/sql"
+	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
@@ -68,4 +69,54 @@ func RecentSuccessTx(ctx context.Context, tx *sql.Tx, modelID, at int64) (Succes
 		result.Rate = &rate
 	}
 	return result, nil
+}
+
+// RecentSuccessBatchTx reads one shared capture start and aggregates the
+// caller's page of model IDs in the existing authorization snapshot.
+// Callers supply model IDs from their validated, bounded page.
+func RecentSuccessBatchTx(ctx context.Context, tx *sql.Tx, modelIDs []int64, at int64) (map[int64]SuccessRate, error) {
+	if tx == nil || ctx == nil || at < 0 {
+		return nil, ErrInvalid
+	}
+	rates := make(map[int64]SuccessRate, len(modelIDs))
+	if len(modelIDs) == 0 {
+		return rates, nil
+	}
+	base := SuccessRate{WindowStart: max(0, at-86400), AsOf: at, InsufficientSample: true}
+	if err := tx.QueryRowContext(ctx, `SELECT capture_started_at FROM observability_state WHERE id=1`).Scan(&base.CaptureStartedAt); err != nil {
+		return nil, err
+	}
+	args := make([]any, 0, len(modelIDs)+2)
+	for _, id := range modelIDs {
+		rates[id] = base
+		args = append(args, id)
+	}
+	args = append(args, base.WindowStart, at)
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(modelIDs)), ",")
+	rows, err := tx.QueryContext(ctx, `SELECT model_id,SUM(result='success'),SUM(result='failure'),SUM(result='cancelled')
+FROM charity_request_outcomes WHERE model_id IN (`+placeholders+`) AND dispatched=1 AND completed_at>=? AND completed_at<?
+GROUP BY model_id`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, success, failure, cancelled int64
+		if err := rows.Scan(&id, &success, &failure, &cancelled); err != nil {
+			return nil, err
+		}
+		result := rates[id]
+		result.Success, result.Failure, result.Cancelled = success, failure, cancelled
+		result.SampleCount = result.Success + result.Failure
+		result.InsufficientSample = result.SampleCount < 20
+		if result.SampleCount > 0 {
+			rate := float64(result.Success) / float64(result.SampleCount)
+			result.Rate = &rate
+		}
+		rates[id] = result
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return rates, nil
 }

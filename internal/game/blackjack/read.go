@@ -7,6 +7,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/game"
 	"github.com/waiting-here/NonbiriAPI/internal/game/blackjack/engine"
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 )
 
 func (s *Service) Read(ctx context.Context, identity Identity) (Home, error) {
@@ -14,6 +15,8 @@ func (s *Service) Read(ctx context.Context, identity Identity) (Home, error) {
 	if err != nil {
 		return Home{}, err
 	}
+	endTransaction := observability.TimeTransaction(ctx, "blackjack_state")
+	defer endTransaction()
 	defer tx.Rollback()
 	if err := s.authorize(ctx, tx, identity); err != nil {
 		return Home{}, err
@@ -51,6 +54,7 @@ func (s *Service) Read(ctx context.Context, identity Identity) (Home, error) {
 	if err := tx.Commit(); err != nil {
 		return Home{}, err
 	}
+	endTransaction()
 	s.publish(ctx, facts)
 	return result, nil
 }

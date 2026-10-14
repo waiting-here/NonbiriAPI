@@ -7,6 +7,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/activities"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 )
 
 func projectQueue(q queueRecord) *Queue {
@@ -63,6 +64,8 @@ func (s *Service) Read(ctx context.Context, identity Identity) (Home, error) {
 	if err != nil {
 		return Home{}, err
 	}
+	endTransaction := observability.TimeTransaction(ctx, "duel_state")
+	defer endTransaction()
 	defer tx.Rollback()
 	if err := s.authorize(ctx, tx, identity); err != nil {
 		return Home{}, err
@@ -164,6 +167,7 @@ func (s *Service) Read(ctx context.Context, identity Identity) (Home, error) {
 	if err := tx.Commit(); err != nil {
 		return Home{}, classify(err)
 	}
+	endTransaction()
 	s.publish(ctx, facts)
 	s.wakeAI()
 	return home, nil
