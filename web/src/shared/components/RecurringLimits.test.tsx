@@ -1,5 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
-import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import type { ComponentProps, ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useAdminSession } from '../../admin/data';
@@ -249,6 +249,280 @@ describe('RecurringLimits', () => {
     );
     expect(screen.queryByRole('button', { name: 'Save recurring limits' })).toBeNull();
   });
+  for (const locale of ['en', 'zh'] as const) {
+    for (const mode of ['reset', 'sliding'] as const) {
+      it(`renders all five recurring measures in ${locale} for ${mode} usage and collapsed summaries`, async () => {
+        const cases = [
+          {
+            metric: 'calls',
+            values: ['1,234 calls', '56 calls', '831,210 calls', '832,500 calls'],
+            zh: ['1,234次', '56次', '831,210次', '832,500次'],
+          },
+          {
+            metric: 'tokens',
+            values: ['1,234 tokens', '56 tokens', '831,210 tokens', '832,500 tokens'],
+            zh: ['1,234 Token', '56 Token', '831,210 Token', '832,500 Token'],
+          },
+          {
+            metric: 'input_tokens',
+            values: ['1,234 tokens', '56 tokens', '831,210 tokens', '832,500 tokens'],
+            zh: ['1,234 Token', '56 Token', '831,210 Token', '832,500 Token'],
+          },
+          {
+            metric: 'output_tokens',
+            values: ['1,234 tokens', '56 tokens', '831,210 tokens', '832,500 tokens'],
+            zh: ['1,234 Token', '56 Token', '831,210 Token', '832,500 Token'],
+          },
+          {
+            metric: 'credits',
+            values: [
+              '1,234.012 credits',
+              '56.003 credits',
+              '831,210.108 credits',
+              '832,500.123 credits',
+            ],
+            zh: ['1,234.012积分', '56.003积分', '831,210.108积分', '832,500.123积分'],
+          },
+        ];
+        installQuotaFetch({
+          role: 'owner',
+          reads: [
+            response({
+              rules: cases.map(({ metric }, index) =>
+                rule({
+                  id: `qlr_${String(index).repeat(21)}Q`,
+                  metric,
+                  mode,
+                  interval: '1h',
+                  alignment: mode === 'sliding' ? null : 'first_success',
+                  limit: metric === 'credits' ? '832500.123' : '832500',
+                  used: metric === 'credits' ? '1234.012' : '1234',
+                  reserved: metric === 'credits' ? '56.003' : '56',
+                  remaining: metric === 'credits' ? '831210.108' : '831210',
+                  state: 'available',
+                  period_start: mode === 'sliding' ? null : 1_800_000_000,
+                  period_end: mode === 'sliding' ? null : 1_800_003_600,
+                  next_transition_at: 1_800_003_600,
+                }),
+              ),
+            }),
+          ],
+        });
+        const { container } = await renderWithProviders(
+          <RecurringLimits role="owner" donationId="7" keyId="8" accountId="account-a" />,
+          { station: 'user', role: 'user', locale },
+        );
+        await waitFor(() =>
+          expect(container.querySelectorAll('.recurring-limits__rule')).toHaveLength(5),
+        );
+        const cards = container.querySelectorAll('.recurring-limits__rule');
+        cases.forEach(({ values, zh }, index) => {
+          const card = cards[index] as HTMLElement;
+          const expected = locale === 'zh' ? zh : values;
+          expect(
+            Array.from(
+              card.querySelectorAll('.recurring-limits__metrics dd'),
+              (node) => node.textContent,
+            ),
+          ).toEqual(expected);
+          const progress = within(card).getByRole('progressbar');
+          expect(progress).toHaveAttribute('aria-valuenow', '0.15');
+          for (const value of expected.slice(0, 3))
+            expect(progress.getAttribute('aria-valuetext')).toContain(value);
+          const toggle = within(card).getByRole('button');
+          for (const value of expected) expect(toggle).toHaveTextContent(value);
+          fireEvent.click(toggle);
+          expect(toggle).toHaveAttribute('aria-expanded', 'false');
+          expect(card.querySelector('.recurring-limits__metrics')).toBeNull();
+          for (const value of expected) expect(toggle).toHaveTextContent(value);
+        });
+      });
+    }
+
+    it(`keeps units and pending reservations when the server rotates a period in ${locale}`, async () => {
+      const input = rule({
+        metric: 'input_tokens',
+        interval: '1h',
+        limit: '832500',
+        used: '1234',
+        reserved: '56',
+        remaining: '831210',
+        state: 'available',
+      });
+      const credits = rule({
+        id: `qlr_${'B'.repeat(21)}Q`,
+        metric: 'credits',
+        interval: '1h',
+        limit: '832500.123',
+        used: '1234.012',
+        reserved: '56.003',
+        remaining: '831210.108',
+        state: 'available',
+      });
+      const rotated = [input, credits].map((entry) => ({
+        ...entry,
+        used: '0',
+        remaining: entry.metric === 'credits' ? '832444.12' : '832444',
+        state: 'waiting_first_success',
+        period_start: null,
+        period_end: null,
+        next_transition_at: null,
+      }));
+      installQuotaFetch({
+        role: 'owner',
+        reads: [
+          response({ rules: [input, credits] }),
+          { ...response({ rules: rotated }), server_now: 1_800_003_600 },
+        ],
+      });
+      const { container, queryClient } = await renderWithProviders(
+        <RecurringLimits role="owner" donationId="7" keyId="8" accountId="account-a" />,
+        { station: 'user', role: 'user', locale },
+      );
+      const expectedUsed = locale === 'zh' ? '1,234 Token' : '1,234 tokens';
+      await waitFor(() =>
+        expect(container.querySelector('.recurring-limits__metrics dd')).toHaveTextContent(
+          expectedUsed,
+        ),
+      );
+      await act(async () => {
+        await queryClient.invalidateQueries({
+          queryKey: recurringLimitsKeys.detail('owner', 'account-a', '7', '8'),
+        });
+      });
+      const expected =
+        locale === 'zh'
+          ? [
+              '0 Token',
+              '56 Token',
+              '832,444 Token',
+              '832,500 Token',
+              '0积分',
+              '56.003积分',
+              '832,444.12积分',
+              '832,500.123积分',
+            ]
+          : [
+              '0 tokens',
+              '56 tokens',
+              '832,444 tokens',
+              '832,500 tokens',
+              '0 credits',
+              '56.003 credits',
+              '832,444.12 credits',
+              '832,500.123 credits',
+            ];
+      await waitFor(() =>
+        expect(
+          Array.from(
+            container.querySelectorAll('.recurring-limits__metrics dd'),
+            (node) => node.textContent,
+          ),
+        ).toEqual(expected),
+      );
+      const summaries = container.querySelectorAll('.recurring-limits__summary-text');
+      expect(summaries[0]).toHaveTextContent(expected[1]!);
+      expect(summaries[0]).toHaveTextContent(expected[2]!);
+      expect(summaries[1]).toHaveTextContent(expected[5]!);
+      expect(summaries[1]).toHaveTextContent(expected[6]!);
+    });
+
+    it(`renders the one-hour input-token rule before its first success in ${locale}`, async () => {
+      installQuotaFetch({
+        role: 'owner',
+        reads: [
+          response({
+            rules: [
+              rule({
+                metric: 'input_tokens',
+                interval: '1h',
+                time_zone: 'America/Indianapolis',
+                limit: '832500',
+                used: '0',
+                reserved: '0',
+                remaining: '832500',
+                state: 'waiting_first_success',
+                period_start: null,
+                period_end: null,
+                next_transition_at: null,
+              }),
+            ],
+          }),
+        ],
+      });
+      const { container } = await renderWithProviders(
+        <RecurringLimits role="owner" donationId="7" keyId="8" accountId="account-a" />,
+        { station: 'user', role: 'user', locale },
+      );
+      const expected =
+        locale === 'zh'
+          ? ['0 Token', '0 Token', '832,500 Token', '832,500 Token']
+          : ['0 tokens', '0 tokens', '832,500 tokens', '832,500 tokens'];
+      await waitFor(() =>
+        expect(
+          Array.from(
+            container.querySelectorAll('.recurring-limits__metrics dd'),
+            (node) => node.textContent,
+          ),
+        ).toEqual(expected),
+      );
+      expect(container.querySelector('.recurring-limits__summary-text')).toHaveTextContent(
+        expected[2]!,
+      );
+      expect(container.querySelector('.recurring-limits__summary-text')).not.toHaveTextContent(
+        locale === 'zh' ? '积分' : 'credits',
+      );
+      expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '0');
+      expect(
+        screen.getByText(
+          locale === 'zh'
+            ? '等待首次成功公益调用；发送或 HTTP 头都不会启动此周期。'
+            : 'Waiting for the first successful charity call. A dispatch or HTTP header does not start this period.',
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it(`keeps the server usage unit while editing a different measure in ${locale}`, async () => {
+      installQuotaFetch({
+        reads: [
+          response({
+            rules: [
+              rule({
+                metric: 'input_tokens',
+                limit: '832500',
+                used: '1234',
+                reserved: '56',
+                remaining: '831210',
+              }),
+            ],
+          }),
+        ],
+      });
+      const { container } = await renderAdmin({}, { locale });
+      const metricSelect = await screen.findByLabelText(locale === 'zh' ? '计量维度' : 'Measure');
+      for (const metric of ['credits', 'calls', 'output_tokens']) {
+        fireEvent.change(metricSelect, { target: { value: metric } });
+        const limit =
+          locale === 'zh'
+            ? metric === 'credits'
+              ? '832,500积分'
+              : metric === 'calls'
+                ? '832,500次'
+                : '832,500 Token'
+            : metric === 'credits'
+              ? '832,500 credits'
+              : metric === 'calls'
+                ? '832,500 calls'
+                : '832,500 tokens';
+        expect(container.querySelector('.recurring-limits__summary-text')).toHaveTextContent(limit);
+        const used = locale === 'zh' ? '1,234 Token' : '1,234 tokens';
+        expect(container.querySelector('.recurring-limits__summary-text')).toHaveTextContent(used);
+        expect(container.querySelector('.recurring-limits__metrics dd')).toHaveTextContent(used);
+        expect(screen.getByRole('progressbar').getAttribute('aria-valuetext')).toContain(used);
+      }
+    });
+  }
+
   it('renders U128 usage and limit strings without numeric truncation', async () => {
     installQuotaFetch({
       role: 'owner',
