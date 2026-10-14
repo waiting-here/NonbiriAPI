@@ -1973,6 +1973,7 @@
         "timeout": "Request timed out",
         "credits": "Insufficient credits",
         "missingModel": "Model not found",
+        "noUsableKey": "No usable key",
         "rejected": "Rejected before dispatch",
         "cancelled": "Cancelled",
         "failed": "Failed ({{status}})"

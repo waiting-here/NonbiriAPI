@@ -399,6 +399,7 @@
             "timeout": "请求超时",
             "credits": "余额不足",
             "missingModel": "模型不存在",
+            "noUsableKey": "暂无可用密钥",
             "rejected": "调用前被拒绝",
             "cancelled": "已取消",
             "failed": "失败（{{status}}）"

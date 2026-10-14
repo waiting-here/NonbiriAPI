@@ -387,7 +387,7 @@ AND d.user_id IS NOT NULL AND dk.ended_at IS NULL AND dk.enabled=1 AND dk.failur
 AND k.enabled=1 AND e.enabled=1 AND `+charityscope.SupportSQL("dk.id", "b.endpoint_key_id", "b.upstream_model_id")+`
 AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions x WHERE x.endpoint_key_id=k.id)
 AND (?=0 OR d.user_id<>? OR EXISTS(SELECT 1 FROM users caller WHERE caller.id=? AND caller.is_admin=0 AND COALESCE(caller.level,caller.auto_level)=6))
-AND EXISTS(SELECT 1 FROM users donor WHERE donor.id=d.user_id AND (donor.is_banned=0 OR donor.banned_until<=? OR (donor.banned_until IS NULL AND donor.ban_kind='protective_inactivity')))
+AND `+donorAvailableSQL("?")+`
 ORDER BY b.ord,b.id LIMIT ?`, modelID, callerID, callerID, callerID, decisionNow, maxBindingBatch+1)
 	if err != nil {
 		return RuntimeSnapshot{}, fmt.Errorf("charity routing: read runtime candidates: %w", err)

@@ -28,6 +28,8 @@ use a verified commit and its matching artifacts without a release tag.
 
 ### Fixed
 
+- Align charity catalog and key-model availability with donor ban eligibility,
+  and distinguish missing models from temporarily unavailable keys in logs.
 - Keep gacha usable with negative account balances and calculate each wallet's
   spendable funds independently. Display decoders omit unused response fields
   and redundant settlement arithmetic while retaining exact amounts and action

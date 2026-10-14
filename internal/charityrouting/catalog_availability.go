@@ -34,6 +34,7 @@ func catalogAvailableBindingSQL(bindingID string) string {
  JOIN endpoints e ON e.id=k.endpoint_id
 
  WHERE b.charity_model_id=cm.id AND d.status='approved' AND d.user_id IS NOT NULL
+ AND ` + donorAvailableSQL("cx.decision_now") + `
  AND dk.ended_at IS NULL AND dk.enabled=1 AND dk.failure_disabled=0
  AND k.enabled=1 AND e.enabled=1 AND ` + charityscope.SupportSQL("dk.id", "b.endpoint_key_id", "b.upstream_model_id") + `
  AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions x WHERE x.endpoint_key_id=k.id)
