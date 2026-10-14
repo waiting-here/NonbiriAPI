@@ -13,6 +13,12 @@ use a verified commit and its matching artifacts without a release tag.
 
 ### Changed
 
+- Reduce redundant homepage requests, idle game polling and empty game-worker
+  transactions. Aggregate charity catalog success rates for the whole page in
+  one snapshot, and cache content-hashed JavaScript and CSS across visits.
+- Report anonymous request latency histograms and database-pool waiting once
+  per minute through the existing process logger.
+
 - Allow level-6 stewards to configure automatic bans on client rules and manage
   bound rules, using the existing session, revision and audit controls.
 

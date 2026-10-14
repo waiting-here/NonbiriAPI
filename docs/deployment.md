@@ -172,6 +172,27 @@ A proxy correction affects new captures. Source records retain the selected addr
 
 Model calls allow up to 900 seconds for upstream response headers and 1200 seconds for the whole logical request, including retries and streaming. Keep proxy timeouts at least 1200 seconds. These are application defaults, not editable site settings. Model discovery retains its separate five-minute worker budget.
 
+The process logger emits a `runtime performance` aggregate at INFO once per minute.
+Fixed route groups contain completed, active, peak, server-error and cancellation
+counts, plus duration p50/p95/p99 and maximum in milliseconds. Percentiles are
+histogram bucket upper bounds; `first_response_p95_ms` measures the first final
+header/body/flush, not the first model token. Requests rejected by the outer
+station boundary are excluded. Long streams span windows and complete in the
+window in which their handler returns.
+
+`db_waits` and `db_wait_ms` are database-pool deltas for the whole process;
+`db_in_use` and `db_open` are samples at emission. Transaction groups measure
+session authentication, catalog reads and game-state work after acquisition
+(game timing starts after the writer lock and decision clock), ending at commit
+or rollback. These aggregates contain no identities, raw paths, query strings,
+headers or bodies and add no database records. Apply ordinary process-log
+rotation. Compare page latency, pool waiting and model-call duration together;
+in-flight model counts alone do not establish page capacity.
+
+Existing content-hashed JS/CSS files use a one-year immutable cache. HTML and
+SPA fallbacks remain `no-store`; fixed-path artwork and other files do not gain
+immutable caching. Preserve these headers at the reverse proxy.
+
 The image activity accepts a task promptly and uses separate status/image reads; the browser does not hold one generation connection open for its 30-minute default execution deadline. All provider requests are made by the server under the activity's shared limits. Configure the endpoint and encrypted key privately in the administrator station, and review the [image activity guide](image-activity.md). The separate `/v1/images/generations` API serves CallerKey requests through platform models with image generation enabled; it uses the model-call timeouts above and does not use the activity queue or image cache.
 
 Allow sufficient process memory beyond the activity's default 512 MiB budget, database and normal request overhead. Images and queued prompts are intentionally not durable: maintenance cancels queued image tasks with refunds, dispatched work continues where possible, and stopping the service loses cached images. A restart refunds queued tasks with lost payloads; known upstream tasks resume queries, while uncertain submissions pause new dispatch and require administrator recovery. Do not attempt to recover an uncertain result by manually repeating its generation POST.

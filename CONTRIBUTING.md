@@ -93,6 +93,32 @@ CGO_ENABLED=0 go build -tags dist -o nonbiriapi .
 
 Do not hide a command's exit status behind a truncating pipeline. Do not terminate processes by name when testing locally; stop the specific process you started.
 
+## Performance comparisons
+
+Use synthetic inputs and an isolated machine window for before/after comparisons:
+
+```sh
+CGO_ENABLED=0 go test ./internal/charityrouting -run '^$' -bench BenchmarkCatalogRecentSuccess -benchmem
+NONBIRI_LOAD_TEST=1 CGO_ENABLED=0 go test ./internal/app -run '^TestApplicationSyntheticLoad$' -count=1 -v -timeout=10m
+```
+
+The catalog benchmark varies page size and history size outside setup timing.
+The opt-in application test uses private temporary databases and a loopback
+upstream with the real authentication, routing, game workers and settlement
+paths. It compares no model traffic, 50/100/200 long requests, a short-response
+burst and slow readers with cancellation. It retains default admission and
+egress budgets; offered, admitted and upstream-active counts are distinct.
+Its six independent page probes target 15 requests/second in total.
+
+`LOAD_RESULT` JSON reports page and model percentiles, status/rejection counts,
+database-pool wait deltas by phase, memory and recovery. Pool wait time sums all
+waiters and can exceed wall time. Check completion bursts separately from steady
+streams, and retain failed admissions when comparing throughput. The test checks
+protocol completion and releases of claims/reservations; it has no machine-speed
+pass threshold and is skipped by ordinary CI. Bind results to source, toolchain,
+configuration and hardware; these local measurements do not establish production
+capacity. Runtime aggregate interpretation is in [deployment.md](docs/deployment.md).
+
 ## Security and data boundaries
 
 Every new user-associated field must have an export, deletion, retention, and privacy decision. Preserve ownership checks, station isolation, encrypted secret storage, bounded diagnostics, shared egress protection, stream cancellation, and no-store behavior. Never add plaintext secrets to logs, errors, tests that resemble production credentials, URLs, frontend query caches, or persistent browser storage.
