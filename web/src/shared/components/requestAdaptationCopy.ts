@@ -1,6 +1,13 @@
 import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
 
 const editorKeys = {
+  protection: 'requestAdaptation.editor.protection',
+  protectionOff: 'requestAdaptation.editor.protectionOff',
+  protectionWhole: 'requestAdaptation.editor.protectionWhole',
+  protectionLeaves: 'requestAdaptation.editor.protectionLeaves',
+  protectedPaths: 'requestAdaptation.editor.protectedPaths',
+  protectedPathsHelp: 'requestAdaptation.editor.protectedPathsHelp',
+  protectionHelp: 'requestAdaptation.editor.protectionHelp',
   title: 'requestAdaptation.editor.title',
   description: 'requestAdaptation.editor.description',
   openaiSupport: 'requestAdaptation.editor.openaiSupport',
@@ -46,6 +53,13 @@ const editorKeys = {
   example: 'requestAdaptation.editor.example',
 } as const;
 const serviceKeys = {
+  protection: 'requestAdaptation.editor.protection',
+  protectionOff: 'requestAdaptation.editor.protectionOff',
+  protectionWhole: 'requestAdaptation.editor.protectionWhole',
+  protectionLeaves: 'requestAdaptation.editor.protectionLeaves',
+  protectedPaths: 'requestAdaptation.editor.protectedPaths',
+  protectedPathsHelp: 'requestAdaptation.editor.protectedPathsHelp',
+  protectionHelp: 'requestAdaptation.editor.protectionHelp',
   openaiSupport: 'requestAdaptation.editor.openaiSupport',
   convertedSupport: 'requestAdaptation.editor.convertedSupport',
   allSupport: 'requestAdaptation.editor.allSupport',

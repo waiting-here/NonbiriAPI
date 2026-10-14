@@ -118,13 +118,31 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, w http.ResponseWriter, 
 	}
 	defer clear(plain)
 	defer clear(cipher)
+	setRequestHeaders(request, plain)
+	request.Header.Set("Content-Type", "application/json")
+	if embedding != nil {
+		request.Header.Set("ai-embedding-model-specification-version", "3")
+		request.Header.Set("ai-model-id", target.UpstreamModel())
+	} else {
+		request.Header.Set("ai-language-model-specification-version", "3")
+		request.Header.Set("ai-language-model-id", target.UpstreamModel())
+		request.Header.Set("ai-language-model-streaming", strconv.FormatBool(stream))
+	}
+	if stream {
+		request.Header.Set("Accept", "text/event-stream")
+	}
+	sentSecrets, err := requestadaptation.SentSecrets(policy.ResponseSecrets, request.Header, body)
+	if err != nil {
+		return result
+	}
 	label := []byte(attribution)
-	guard := openai.NewResponseGuard(plain, cipher, label)
-	errorGuard := openai.NewResponseGuard(plain, cipher, label)
+	materials := append([][]byte{plain, cipher, label}, sentSecrets...)
+	guard := openai.NewResponseGuard(materials...)
+	errorGuard := openai.NewResponseGuard(materials...)
 	defer guard.Clear()
 	defer errorGuard.Clear()
 	if stream && policy.FlattenToolCalls {
-		outputGuard := openai.NewResponseGuard(plain, cipher, label)
+		outputGuard := openai.NewResponseGuard(materials...)
 		defer outputGuard.Clear()
 		sink := openai.NewFlattenSink(w, maxStreamBytes, maxEventBytes, outputGuard.ContainsJSON)
 		defer sink.Clear()
@@ -157,19 +175,6 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, w http.ResponseWriter, 
 	errorContext := upstreamerror.Context{BaseURL: target.BaseURL(), PrivateModel: target.UpstreamModel(), ContainsSecret: errorGuard.ContainsBytes}
 	if policy.HasAdaptation || len(policy.ManagedHeaders) > 0 {
 		errorContext.ContainsSecret = func(value []byte) bool { return len(value) != 0 }
-	}
-	setRequestHeaders(request, plain)
-	request.Header.Set("Content-Type", "application/json")
-	if embedding != nil {
-		request.Header.Set("ai-embedding-model-specification-version", "3")
-		request.Header.Set("ai-model-id", target.UpstreamModel())
-	} else {
-		request.Header.Set("ai-language-model-specification-version", "3")
-		request.Header.Set("ai-language-model-id", target.UpstreamModel())
-		request.Header.Set("ai-language-model-streaming", strconv.FormatBool(stream))
-	}
-	if stream {
-		request.Header.Set("Accept", "text/event-stream")
 	}
 	clear(plain)
 	clear(cipher)

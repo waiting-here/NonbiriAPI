@@ -78,7 +78,7 @@ func projectionValues(section MapProjection) []lifecycle.AdaptationValueExport {
 	sort.Strings(keys)
 	out := make([]lifecycle.AdaptationValueExport, 0, len(keys))
 	for _, key := range keys {
-		out = append(out, lifecycle.AdaptationValueExport{Path: key, HasValue: section.Values[key].HasValue})
+		out = append(out, lifecycle.AdaptationValueExport{Path: key, HasValue: section.Values[key].HasValue, SensitivePaths: append([]string(nil), section.Values[key].SensitivePaths...)})
 	}
 	return out
 }

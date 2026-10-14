@@ -19,7 +19,7 @@ interface ListProjection {
 }
 interface MapProjection {
   mode: Mode;
-  values: Record<string, { has_value: boolean; mask?: string }>;
+  values: Record<string, { has_value: boolean; mask?: string; sensitive_paths?: string[] }>;
   source?: string;
 }
 interface Projection {
@@ -40,6 +40,9 @@ interface Row {
   value: string;
   existing: boolean;
   structuredCache?: boolean;
+  sensitivePaths?: string[];
+  sensitivePathText?: string;
+  sensitivityChanged?: boolean;
 }
 interface ListDraft {
   mode: Mode;
@@ -96,7 +99,14 @@ function parseMap(value: unknown): MapProjection {
     const entry = record(raw);
     if (entry.has_value !== true || typeof entry.mask !== 'string')
       throw new Error('Invalid adaptation projection');
-    safe[name] = { has_value: true, mask: entry.mask };
+    safe[name] = {
+      has_value: true,
+      mask: entry.mask,
+      ...(Array.isArray(entry.sensitive_paths) &&
+      entry.sensitive_paths.every((path) => typeof path === 'string')
+        ? { sensitive_paths: entry.sensitive_paths as string[] }
+        : {}),
+    };
   }
   return {
     mode: mode(section.mode),
@@ -142,6 +152,7 @@ function newDraft(view: Projection): Draft {
       action: 'keep',
       value: '',
       existing: true,
+      sensitivePaths: section.values[name].sensitive_paths,
     })),
   });
   return {
@@ -197,6 +208,13 @@ function buildPayload(draft: Draft, revision: string, copy: Copy) {
           values[name] = { action: 'replace', value };
         } else {
           values[name] = { action: row.action };
+        }
+        if (row.action !== 'clear' && row.sensitivityChanged) {
+          const paths =
+            row.sensitivePathText === undefined
+              ? (row.sensitivePaths ?? [])
+              : row.sensitivePathText.split('\n').filter(Boolean);
+          values[name] = { ...(values[name] as Record<string, unknown>), sensitive_paths: paths };
         }
       }
     }
@@ -358,6 +376,64 @@ function MapEditor({
             ) : row.existing ? (
               <span>{copy('masked')}</span>
             ) : null}
+            <div>
+              <label>
+                <span>{copy('protection')}</span>
+                <select
+                  aria-label={`${copy('protection')}: ${row.name}`}
+                  value={
+                    row.sensitivePaths?.includes('')
+                      ? 'whole'
+                      : row.sensitivePaths?.length
+                        ? 'leaves'
+                        : 'off'
+                  }
+                  disabled={!editable || row.action === 'clear'}
+                  onChange={(event) =>
+                    changeRow(index, {
+                      ...row,
+                      sensitivePaths:
+                        event.target.value === 'whole'
+                          ? ['']
+                          : event.target.value === 'leaves'
+                            ? ['/token']
+                            : [],
+                      sensitivePathText: undefined,
+                      sensitivityChanged: true,
+                    })
+                  }
+                >
+                  <option value="off">{copy('protectionOff')}</option>
+                  <option value="whole">{copy('protectionWhole')}</option>
+                  {kind !== 'fixed_headers' ? (
+                    <option value="leaves">{copy('protectionLeaves')}</option>
+                  ) : null}
+                </select>
+              </label>
+              {kind !== 'fixed_headers' &&
+              row.sensitivePaths?.length &&
+              !row.sensitivePaths.includes('') ? (
+                <label>
+                  <span>{copy('protectedPaths')}</span>
+                  <textarea
+                    aria-label={copy('protectedPaths')}
+                    value={row.sensitivePathText ?? row.sensitivePaths.join('\n')}
+                    rows={2}
+                    placeholder="/token"
+                    disabled={!editable || row.action === 'clear'}
+                    onChange={(event) =>
+                      changeRow(index, {
+                        ...row,
+                        sensitivePathText: event.target.value,
+                        sensitivityChanged: true,
+                      })
+                    }
+                  />
+                  <small>{copy('protectedPathsHelp')}</small>
+                </label>
+              ) : null}
+              <small>{copy('protectionHelp')}</small>
+            </div>
           </div>
         ),
       )}
@@ -595,13 +671,15 @@ export function RequestAdaptationEditor({
               <textarea
                 rows={3}
                 aria-labelledby={exclusionsID}
-                aria-describedby={exclusionsID + "-help"}
+                aria-describedby={exclusionsID + '-help'}
                 value={draft.excluded}
                 disabled={!editable}
                 placeholder={'temperature\nmax_tokens'}
                 onChange={(event) => setDraft({ ...draft, excluded: event.target.value })}
               />
-              <small id={exclusionsID + '-help'}>{t('requestAdaptation.personal.excludedHelp')}</small>
+              <small id={exclusionsID + '-help'}>
+                {t('requestAdaptation.personal.excludedHelp')}
+              </small>
             </label>
           ) : null}
           {(

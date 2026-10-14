@@ -43,10 +43,15 @@ func (a *Adapter) AttemptEmbedding(ctx context.Context, writer http.ResponseWrit
 	}
 	httpRequest.Header.Set("Content-Type", "application/json")
 	httpRequest.Header.Set("Accept", "application/json")
-	guard := newResponseGuard(target.credential.bearer, target.credential.ciphertext)
+	sentSecrets, err := requestadaptation.SentSecrets(policy.ResponseSecrets, httpRequest.Header, body)
+	if err != nil {
+		return result
+	}
+	materials := append([][]byte{target.credential.bearer, target.credential.ciphertext}, sentSecrets...)
+	guard := newResponseGuard(materials...)
 	defer guard.Clear()
 	identifier := []byte(policy.SafetyIdentifier)
-	errorGuard := newSensitiveGuard(target.credential.bearer, target.credential.ciphertext, identifier)
+	errorGuard := newSensitiveGuard(append([][]byte{target.credential.bearer, target.credential.ciphertext, identifier}, sentSecrets...)...)
 	clear(identifier)
 	defer errorGuard.Clear()
 	errorContext := upstreamerror.Context{

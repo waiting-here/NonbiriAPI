@@ -3,6 +3,7 @@ package requestadaptation
 import (
 	"bytes"
 	"encoding/json"
+	"sort"
 	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
@@ -89,47 +90,92 @@ func decodedValue(raw json.RawMessage) (any, error) {
 // ApplyBody mutates a fresh logical JSON copy. Null is an existing value;
 // absent parents may be created, but scalar, null, and array parents conflict.
 func ApplyBody(source []byte, d Document, maxBytes int64) ([]byte, error) {
+	body, secrets, err := ApplyBodyWithSecrets(source, d, maxBytes)
+	for _, secret := range secrets {
+		clear(secret)
+	}
+	return body, err
+}
+
+// ApplyBodyWithSecrets records provenance while applying overrides. Defaults
+// that were not used and string leaves overwritten later are not protected.
+func ApplyBodyWithSecrets(source []byte, d Document, maxBytes int64) ([]byte, [][]byte, error) {
 	if len(d.BodyDefaults.Values) == 0 && len(d.BodyForced.Values) == 0 {
-		return append([]byte(nil), source...), nil
+		return append([]byte(nil), source...), nil, nil
 	}
 	root, err := decodeBody(source)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	var protected map[string]string
+	if len(d.BodyDefaults.SensitivePaths)+len(d.BodyForced.SensitivePaths) > 0 {
+		protected = make(map[string]string)
 	}
 	callerCache := hasPromptCache(root)
 	for _, section := range []struct {
 		values      map[string]json.RawMessage
+		sensitive   map[string][]string
 		onlyMissing bool
-	}{{d.BodyDefaults.Values, true}, {d.BodyForced.Values, false}} {
+	}{{d.BodyDefaults.Values, d.BodyDefaults.SensitivePaths, true}, {d.BodyForced.Values, d.BodyForced.SensitivePaths, false}} {
 		for path, raw := range section.values {
 			if section.onlyMissing && (path == "/cache_control" || strings.HasPrefix(path, "/cache_control/")) && callerCache {
 				continue
 			}
 			parts, err := ParsePointer(path)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			value, err := decodedValue(raw)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
+			}
+			if section.onlyMissing {
+				_, present, err := pointerValue(root, parts)
+				if err != nil {
+					return nil, nil, err
+				}
+				if present {
+					continue
+				}
 			}
 			if err := putPointer(root, parts, value, section.onlyMissing); err != nil {
-				return nil, err
+				return nil, nil, err
+			}
+			for previous := range protected {
+				if overlapsPath(previous, path) {
+					delete(protected, previous)
+				}
+			}
+			for _, relative := range section.sensitive[path] {
+				text, ok := sensitiveString(value, relative)
+				if !ok {
+					return nil, nil, ErrInvalid
+				}
+				protected[path+relative] = text
 			}
 		}
 	}
 	encoded, err := encodeBody(root, maxBytes)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	// Only ordinary sampling fields are interpreted here. Connector-specific
 	// capability checks and server authority still run on the final copy.
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(encoded, &fields) != nil || ValidateSamplerFields(fields) != nil {
 		clear(encoded)
-		return nil, ErrInvalid
+		return nil, nil, ErrInvalid
 	}
-	return encoded, nil
+	paths := make([]string, 0, len(protected))
+	for path := range protected {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	var secrets [][]byte
+	for _, path := range paths {
+		secrets = append(secrets, []byte(protected[path]))
+	}
+	return encoded, secrets, nil
 }
 
 // ExcludedConflict rejects a configured body path whose top-level parent is

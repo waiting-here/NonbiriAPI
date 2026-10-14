@@ -49,6 +49,9 @@ use a verified commit and its matching artifacts without a release tag.
 
 ### Added
 
+- Optional per-value sensitivity markers for request rewriting. Only marked
+  strings present in the outgoing request participate in response leak checks;
+  existing configurations and ordinary option values retain their behavior.
 - Redemption-code abuse protection, defaulting to five counted errors in a
   rolling 24-hour window and a 24-hour ban. Unknown and already-claimed codes
   count immediately. An existing but unavailable or ineligible code receives

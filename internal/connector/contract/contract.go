@@ -166,6 +166,7 @@ type AttemptPolicy struct {
 	FlattenToolCalls  bool
 	AdditionalHeaders http.Header
 	NativeExtensions  map[string]json.RawMessage
+	ResponseSecrets   [][]byte
 	HasAdaptation     bool
 }
 

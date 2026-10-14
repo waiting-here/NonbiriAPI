@@ -86,12 +86,12 @@ func project(d Document, revision int64, sources [5]Scope) Projection {
 	}
 	headers := MapProjection{Mode: d.FixedHeaders.Mode, Values: make(map[string]ValueProjection, len(d.FixedHeaders.Values)), Source: sources[1]}
 	for name := range d.FixedHeaders.Values {
-		headers.Values[name] = ValueProjection{HasValue: true, Mask: "••••"}
+		headers.Values[name] = ValueProjection{HasValue: true, Mask: "••••", SensitivePaths: append([]string(nil), d.FixedHeaders.SensitivePaths[name]...)}
 	}
 	body := func(section BodySection, source Scope) MapProjection {
 		out := MapProjection{Mode: section.Mode, Values: make(map[string]ValueProjection, len(section.Values)), Source: source}
 		for path := range section.Values {
-			out.Values[path] = ValueProjection{HasValue: true, Mask: "••••"}
+			out.Values[path] = ValueProjection{HasValue: true, Mask: "••••", SensitivePaths: append([]string(nil), section.SensitivePaths[path]...)}
 		}
 		return out
 	}
@@ -372,15 +372,15 @@ func effectivePartitions(model, binding Snapshot, parentScope, childScope Scope)
 		out.Sources[0] = childScope
 	}
 	if binding.Document.FixedHeaders.Mode == ModeReplace {
-		out.Document.FixedHeaders = HeaderSection{Mode: ModeReplace, Values: cloneHeaders(binding.Document.FixedHeaders.Values)}
+		out.Document.FixedHeaders = HeaderSection{Mode: ModeReplace, Values: cloneHeaders(binding.Document.FixedHeaders.Values), SensitivePaths: cloneSensitivity(binding.Document.FixedHeaders.SensitivePaths)}
 		out.Sources[1] = childScope
 	}
 	if binding.Document.BodyDefaults.Mode == ModeReplace {
-		out.Document.BodyDefaults = BodySection{Mode: ModeReplace, Values: cloneBody(binding.Document.BodyDefaults.Values)}
+		out.Document.BodyDefaults = BodySection{Mode: ModeReplace, Values: cloneBody(binding.Document.BodyDefaults.Values), SensitivePaths: cloneSensitivity(binding.Document.BodyDefaults.SensitivePaths)}
 		out.Sources[2] = childScope
 	}
 	if binding.Document.BodyForced.Mode == ModeReplace {
-		out.Document.BodyForced = BodySection{Mode: ModeReplace, Values: cloneBody(binding.Document.BodyForced.Values)}
+		out.Document.BodyForced = BodySection{Mode: ModeReplace, Values: cloneBody(binding.Document.BodyForced.Values), SensitivePaths: cloneSensitivity(binding.Document.BodyForced.SensitivePaths)}
 		out.Sources[3] = childScope
 	}
 	if binding.Document.NativeExtensionPaths.Mode == ModeReplace {

@@ -1965,7 +1965,14 @@
       "duplicate": "Names and paths must be unique within each section.",
       "refresh": "Refresh configuration",
       "readOnly": "This setting is read-only for your role.",
-      "example": "Try this example"
+      "example": "Try this example",
+      "protection": "Response protection",
+      "protectionOff": "Off",
+      "protectionWhole": "Protect this string",
+      "protectionLeaves": "Protect strings inside JSON",
+      "protectedPaths": "Protected string paths",
+      "protectedPathsHelp": "One relative JSON Pointer per line, such as /token or /credentials/0/key. Select strings only.",
+      "protectionHelp": "Use for secrets, not ordinary options. A matching response is stopped; streaming fragments already sent cannot be recalled."
     },
     "service": {
       "title": "Request rewriting",

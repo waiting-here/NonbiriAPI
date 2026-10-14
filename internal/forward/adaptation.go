@@ -22,6 +22,7 @@ type preparedAttempt struct {
 	request     *validatedRequest
 	headers     http.Header
 	native      map[string]json.RawMessage
+	secrets     [][]byte
 	active      bool
 	outputFloor int64
 }
@@ -41,15 +42,24 @@ func (p *preparedAttempt) applyPolicy(policy *connectorcontract.AttemptPolicy) f
 	}
 	policy.AdditionalHeaders = p.headers.Clone()
 	policy.HasAdaptation = p.active || len(policy.ManagedHeaders) > 0
-	if len(p.native) == 0 {
-		return func() {}
+	var native map[string]json.RawMessage
+	if len(p.native) > 0 {
+		native = make(map[string]json.RawMessage, len(p.native))
 	}
-	native := make(map[string]json.RawMessage, len(p.native))
 	for path, value := range p.native {
 		native[path] = bytes.Clone(value)
 	}
 	policy.NativeExtensions = native
+	var secrets [][]byte
+	for _, value := range p.secrets {
+		secrets = append(secrets, bytes.Clone(value))
+	}
+	policy.ResponseSecrets = secrets
 	return func() {
+		for _, value := range secrets {
+			clear(value)
+		}
+		policy.ResponseSecrets = nil
 		for path, value := range native {
 			clear(value)
 			delete(native, path)
@@ -75,6 +85,9 @@ func (p *preparedAttempt) clear() {
 	for path, raw := range p.native {
 		clear(raw)
 		delete(p.native, path)
+	}
+	for _, value := range p.secrets {
+		clear(value)
 	}
 	*p = preparedAttempt{}
 }
@@ -182,9 +195,10 @@ func prepareAdaptedAttempt(request *validatedRequest, connectorType connectorcon
 	if err != nil {
 		return nil, err
 	}
-	prepared := &preparedAttempt{headers: headers, active: adaptationActive(doc)}
+	prepared := &preparedAttempt{headers: headers, active: adaptationActive(doc), secrets: requestadaptation.HeaderSecrets(headers, doc)}
 	prepared.outputFloor, err = requestadaptation.ForcedMaxOutput(doc)
 	if err != nil {
+		prepared.clear()
 		return nil, err
 	}
 	if len(doc.BodyDefaults.Values)+len(doc.BodyForced.Values) == 0 && (connectorType == connectorcontract.TypeOpenAICompatible || len(doc.NativeExtensionPaths.Values) == 0) {
@@ -199,13 +213,16 @@ func prepareAdaptedAttempt(request *validatedRequest, connectorType connectorcon
 		logical, err = request.embedding.LogicalBody()
 	}
 	if err != nil {
+		prepared.clear()
 		return nil, err
 	}
 	defer clear(logical)
-	adapted, err := requestadaptation.ApplyBody(logical, doc, request.bodyLimit())
+	adapted, bodySecrets, err := requestadaptation.ApplyBodyWithSecrets(logical, doc, request.bodyLimit())
 	if err != nil {
+		prepared.clear()
 		return nil, err
 	}
+	prepared.secrets = append(prepared.secrets, bodySecrets...)
 	defer func() { clear(adapted) }()
 	if connectorType != connectorcontract.TypeOpenAICompatible {
 		var filtered []byte

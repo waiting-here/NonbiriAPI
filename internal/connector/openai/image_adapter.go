@@ -45,10 +45,15 @@ func (a *Adapter) AttemptImage(ctx context.Context, writer http.ResponseWriter, 
 	if request.Stream {
 		httpRequest.Header.Set("Accept", "text/event-stream")
 	}
-	guard := newResponseGuard(target.credential.bearer, target.credential.ciphertext)
+	sentSecrets, err := requestadaptation.SentSecrets(policy.ResponseSecrets, httpRequest.Header, body)
+	if err != nil {
+		return result
+	}
+	materials := append([][]byte{target.credential.bearer, target.credential.ciphertext}, sentSecrets...)
+	guard := newResponseGuard(materials...)
 	defer guard.Clear()
 	identifier := []byte(policy.SafetyIdentifier)
-	errorGuard := newSensitiveGuard(target.credential.bearer, target.credential.ciphertext, identifier)
+	errorGuard := newSensitiveGuard(append([][]byte{target.credential.bearer, target.credential.ciphertext, identifier}, sentSecrets...)...)
 	clear(identifier)
 	defer errorGuard.Clear()
 	errorContext := upstreamerror.Context{

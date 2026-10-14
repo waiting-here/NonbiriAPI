@@ -91,6 +91,90 @@ const projection = {
 };
 
 for (const locale of ['en', 'zh'] as const) {
+  test(`service secret markers remain editable without revealing values ${locale}`, async ({
+    page,
+  }) => {
+    await page.addInitScript((language) => localStorage.setItem('nb.lang', language), locale);
+    await mockPublicConfig(page, 'user');
+    await mockRoleSession(page, 'user', 'user');
+    const protectedProjection = {
+      ...projection,
+      fixed_headers: {
+        mode: 'replace',
+        values: { 'X-Token': { has_value: true, mask: '••••', sensitive_paths: [''] } },
+      },
+      body_forced: {
+        mode: 'replace',
+        values: { '/vendor': { has_value: true, mask: '••••', sensitive_paths: ['/token'] } },
+      },
+    };
+    const writes: Record<string, unknown>[] = [];
+    await page.route(`${USER_ORIGIN}/api/**`, async (route) => {
+      const request = route.request(),
+        url = new URL(request.url());
+      if (url.pathname === '/api/endpoints/11') return route.fulfill({ json: endpoint });
+      if (url.pathname === '/api/endpoints/11/keys')
+        return route.fulfill({ json: numberedPage([], url.searchParams) });
+      if (url.pathname === '/api/endpoints/11/request-adaptation') {
+        if (request.method() === 'PUT')
+          writes.push(request.postDataJSON() as Record<string, unknown>);
+        return route.fulfill({ json: protectedProjection });
+      }
+      return route.fallback();
+    });
+    const copy = (en: string, zh: string) => (locale === 'en' ? en : zh);
+    await page.goto(`${USER_ORIGIN}/endpoints/11`);
+    const fold = page
+      .locator('summary')
+      .filter({ hasText: copy('Request rewriting (advanced)', '请求改写（高级）') });
+    await fold.focus();
+    await page.keyboard.press('Enter');
+    const protection = page.getByRole('combobox', {
+      name: copy('Response protection: X-Token', '响应防回显: X-Token'),
+      exact: true,
+    });
+    await expect(protection).toHaveValue('whole');
+    const paths = page.getByLabel(copy('Protected string paths', '敏感字符串路径'), {
+      exact: true,
+    });
+    await expect(paths).toHaveValue('/token');
+    for (const width of [1440, 390])
+      for (const theme of ['light', 'dark']) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.evaluate((value) => (document.documentElement.dataset.theme = value), theme);
+        await protection.scrollIntoViewIfNeeded();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+          true,
+        );
+        if (process.env.NONBIRI_VISUAL_DIR)
+          await page.screenshot({
+            path: join(
+              process.env.NONBIRI_VISUAL_DIR,
+              `secret-markers-${locale}-${theme}-${width}.png`,
+            ),
+            fullPage: true,
+          });
+      }
+    await protection.selectOption('off');
+    await paths.fill('/credentials/0/token\n/token');
+    await page
+      .getByRole('button', { name: copy('Save request rewriting', '保存请求改写'), exact: true })
+      .click();
+    await expect.poll(() => writes.length).toBe(1);
+    expect(writes[0].fixed_headers).toEqual({
+      mode: 'replace',
+      values: { 'X-Token': { action: 'keep', sensitive_paths: [] } },
+    });
+    expect(writes[0].body_forced).toEqual({
+      mode: 'replace',
+      values: {
+        '/vendor': { action: 'keep', sensitive_paths: ['/credentials/0/token', '/token'] },
+      },
+    });
+  });
+}
+
+for (const locale of ['en', 'zh'] as const) {
   test(`service setup keeps drafts, ownership and partial results ${locale}`, async ({
     page,
     context,
