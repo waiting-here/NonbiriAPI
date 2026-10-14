@@ -100,6 +100,22 @@ export interface RecurringLimitsCopy {
   formatMetricValue: (value: string, metric: RecurringLimitMetric) => string;
 }
 
+const enMetricUnits: Record<RecurringLimitMetric, string> = {
+  calls: 'calls',
+  tokens: 'tokens',
+  input_tokens: 'tokens',
+  output_tokens: 'tokens',
+  credits: 'credits',
+};
+
+const zhMetricUnits: Record<RecurringLimitMetric, string> = {
+  calls: '次',
+  tokens: ' Token',
+  input_tokens: ' Token',
+  output_tokens: ' Token',
+  credits: '积分',
+};
+
 const en: RecurringLimitsCopy = {
   title: 'Recurring charity limits',
   description:
@@ -230,8 +246,7 @@ const en: RecurringLimitsCopy = {
     'Save succeeded. Confirming the latest server state before allowing another change.',
   authoritySyncUnavailable:
     'The save succeeded, but the latest server state could not be confirmed. The values shown remain the last confirmed snapshot until reload succeeds. Editing and another save are paused until the authority is reloaded.',
-  formatMetricValue: (value, metric) =>
-    `${value} ${metric === 'calls' ? 'calls' : metric === 'tokens' ? 'tokens' : 'credits'}`,
+  formatMetricValue: (value, metric) => `${value} ${enMetricUnits[metric]}`,
 };
 
 const zh: RecurringLimitsCopy = {
@@ -338,8 +353,7 @@ const zh: RecurringLimitsCopy = {
   authoritySyncPending: '保存已成功，正在确认服务器最新状态；确认完成前不能再次修改。',
   authoritySyncUnavailable:
     '保存已成功，但暂时无法确认服务器最新状态。当前显示仍是上次确认的服务器快照，重新读取成功前会暂停编辑和再次保存。',
-  formatMetricValue: (value, metric) =>
-    `${value}${metric === 'calls' ? '次' : metric === 'tokens' ? ' Token' : '积分'}`,
+  formatMetricValue: (value, metric) => `${value}${zhMetricUnits[metric]}`,
 };
 
 export const recurringLimitsCopy: Record<RecurringLimitsLocale, RecurringLimitsCopy> = { en, zh };

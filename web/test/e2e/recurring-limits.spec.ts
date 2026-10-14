@@ -400,6 +400,72 @@ async function prepare(
 test.describe('recurring limits in the complete charity pages', () => {
   test.use({ timezoneId: 'America/New_York' });
 
+  for (const locale of ['en', 'zh'] as const) {
+    for (const theme of ['light', 'dark'] as const) {
+      for (const width of [1440, 390]) {
+        test(`recurring token units in ${locale} ${theme} at ${width}px`, async ({
+          context,
+          page,
+        }) => {
+          const flow = await prepare(context, page, 'admin', locale, theme, width);
+          flow.state.rules = [
+            rule({
+              metric: 'input_tokens',
+              interval: '1h',
+              limit: '832500',
+              used: '1234',
+              reserved: '56',
+              remaining: '831210',
+              period_start: NOW,
+              period_end: NOW + 3600,
+              next_transition_at: NOW + 3600,
+            }),
+          ];
+          await flow.open();
+          await flow.expand();
+          const card = page.locator('.recurring-limits__rule');
+          const expected =
+            locale === 'zh'
+              ? ['1,234 Token', '56 Token', '831,210 Token', '832,500 Token']
+              : ['1,234 tokens', '56 tokens', '831,210 tokens', '832,500 tokens'];
+          await expect(card.locator('.recurring-limits__metrics dd')).toHaveText(expected);
+          const summary = card.locator('.recurring-limits__summary-text');
+          for (const value of expected) await expect(summary).toContainText(value);
+          await expect(card.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '0.15');
+          const numbersFit = await card
+            .locator('.recurring-limits__metrics dd')
+            .evaluateAll((nodes) =>
+              nodes.every((node) => {
+                const range = document.createRange();
+                range.selectNodeContents(node);
+                return range.getClientRects().length === 1 && node.scrollWidth <= node.clientWidth;
+              }),
+            );
+          expect(numbersFit).toBe(true);
+          const name = `quota-units-${locale}-${theme}-${width}`;
+          await flow.check(name);
+          await card.scrollIntoViewIfNeeded();
+          if (process.env.NONBIRI_VISUAL_DIR) {
+            await page.screenshot({
+              path: resolve(process.env.NONBIRI_VISUAL_DIR, `${name}-viewport.png`),
+            });
+          }
+          const toggle = card.locator('.recurring-limits__toggle');
+          await toggle.click();
+          await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+          await expect(card.locator('.recurring-limits__metrics')).toHaveCount(0);
+          for (const value of expected) await expect(summary).toContainText(value);
+          await toggle.click();
+          await card
+            .getByLabel(locale === 'zh' ? '计量维度' : 'Measure', { exact: true })
+            .selectOption('credits');
+          await expect(summary).toContainText(locale === 'zh' ? '832,500积分' : '832,500 credits');
+          await expect(card.locator('.recurring-limits__metrics dd')).toHaveText(expected);
+        });
+      }
+    }
+  }
+
   test('admin retries the initial read, edits one key, and retains the saved rules through refresh', async ({
     context,
     page,
