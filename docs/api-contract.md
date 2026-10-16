@@ -1,7 +1,7 @@
 # NonbiriAPI HTTP API Contract
 
 - Status: **v1.0.0 source contract**. Check an instance's deployed build before using routes or configuration added by an update.
-- Scope: the OpenAI-compatible ingress routes are `GET /v1/models`, `POST /v1/chat/completions`, `POST /v1/embeddings`, and `POST /v1/images/generations`. Chat supports OpenAI-compatible, Anthropic-compatible and native AI SDK Gateway v3 upstreams; embeddings support OpenAI-compatible and the strict Gateway text subset; image generation supports OpenAI-compatible upstreams. There is no public Anthropic-native or rerank API.
+- Scope: public ingress includes `GET /v1/models` and `POST /v1/chat/completions`, `/v1/embeddings`, `/v1/images/generations` and `/v1/decisions`. Chat supports OpenAI-compatible, Anthropic-compatible, AI SDK Gateway v3, Google Gemini and OpenAI Responses upstreams. Embeddings support OpenAI-compatible and the strict Gateway text subset; image generation supports OpenAI-compatible upstreams; Decisions uses OpenAI Decisions upstreams. There is no public Responses, Anthropic-native or rerank API. See the [protocol matrix](content-protocols.md) for conversion limits.
 - Authority: this document reflects the current source route registry, strict request/response types, stable error catalog, and contract tests. A future wire change requires a changelog entry; undocumented database fields never enter an API response automatically. The session-authenticated picture-book activity has its own configuration and accounting, separate from the public image-generation model route.
 - Release boundary: new source behavior is listed in the [changelog](../CHANGELOG.md). This document does not assert that an instance has deployed it.
 
@@ -28,7 +28,7 @@ An incorrect password at `POST /admin/api/auth/elevate` returns `403 elevated_re
 
 #### Browser cross-origin access
 
-The four exact public model routes support CORS: `GET /v1/models`, `POST /v1/chat/completions`, `POST /v1/embeddings`, and `POST /v1/images/generations`. Responses, including authentication, maintenance, validation, rate-limit and upstream errors and streaming responses, carry `Access-Control-Allow-Origin: *`. Browser clients supply their CallerKey explicitly in `Authorization` and use the default fetch credentials mode or `credentials: 'omit'`; `credentials: 'include'` is not supported. `Access-Control-Allow-Credentials` is never enabled. `Retry-After` is exposed to browser code.
+The five exact public model routes support CORS: `GET /v1/models`, `POST /v1/chat/completions`, `POST /v1/embeddings`, `POST /v1/images/generations`, and `POST /v1/decisions`. Responses, including authentication, maintenance, validation, rate-limit and upstream errors and streaming responses, carry `Access-Control-Allow-Origin: *`. Browser clients supply their CallerKey explicitly in `Authorization` and use the default fetch credentials mode or `credentials: 'omit'`; `credentials: 'include'` is not supported. `Access-Control-Allow-Credentials` is never enabled. `Retry-After` is exposed to browser code.
 
 A valid `OPTIONS` preflight needs no CallerKey and returns an empty `204` before maintenance, authentication or request admission. It does not call an upstream, consume caller limits, reserve credits or create a call log. It permits only the exact route's method, echoes validated requested header **names** (including Authorization, Content-Type and SDK metadata headers), and permits browser preflight caching for 600 seconds. It includes `Cache-Control: no-store` and `Vary: Origin, Access-Control-Request-Method, Access-Control-Request-Headers`. Origin is not reflected; opaque browser origins such as `null` use the same wildcard permission.
 
@@ -62,6 +62,10 @@ Shared numbered-page metadata is `{page:string,page_size:number,total_items:stri
 ```
 
 `code`, `source`, and `message` are always present. `source` is `upstream` only for code `upstream`; it is `platform` otherwise. Platform messages receive the prefix exactly once. Messages are bounded to 1,024 UTF-8 bytes. Personal and charity upstream errors may include `upstream_code`, extracted from the upstream `code` or `type` and restricted to 1–64 ASCII letters, digits, underscores, dots, colons or hyphens. A bounded integer code is represented as a string. The optional `diag` remains limited to explicitly allowed owner-visible failures, sanitized to at most 4,096 bytes; charity errors omit it. Platform and Debug errors omit both context fields.
+
+Platform error messages follow `Accept-Language` (`zh` or `en`, including regional variants and quality weights); unsupported or missing preferences use English. Both stations send their selected language. Stable codes, source, HTTP status and retry semantics do not change. Upstream messages are sanitized but not translated. This applies to platform errors emitted inside an active SSE response as well as ordinary JSON errors.
+
+Display projections replace valid IPv4 address strings with `[redacted]` in errors, logs, alerts and restricted diagnostics. Persisted source facts and matching rules remain unchanged. Editable endpoint addresses, IP-rule values and normal model output retain their original values.
 
 | HTTP | Stable code |
 | ---: | --- |
@@ -1205,6 +1209,8 @@ These browser-session reads require a current administrator on the administrator
 | `GET {prefix}/abuse-audit/access-events`, `GET {prefix}/abuse-audit/access-summary` | Authenticated auxiliary events and separate anonymous counts. |
 
 `{prefix}` is `/admin/api` or `/api/steward`. Reads use bounded filters and pages, not an unrestricted header or body search. Access-event filters include `user_id,key_generation,path_kind,status_class,from,to,lookback_hours`, with `page_size` up to 100 and a separate opaque cursor. A maximum 30-day range and coverage/drop counters keep incomplete observations explicit. A zero ratio denominator is no sample, never an infinite risk score. `coverage.last_gap_at` is null when no capture gap has been recorded. Audit users, user details, shared IPs and access reads accept `lookback_hours` (integer 1–720), anchored to server time and mutually exclusive with `from`/`to`. With no time filter the default is 24 hours, except shared IPs use the configured window.
+
+Restricted diagnostic reads and downloads apply the same IPv4 redaction before UTF-8 or base64 encoding. Stored bodies remain unchanged; byte counts and truncation metadata describe the stored capture, so they can differ from the displayed projection. Source-IP observations are similarly redacted when displayed; rule editing continues to use the configured address.
 
 Original failure capture covers personal/charity calls, retries, explicit streaming error events, model discovery and the image activity. It captures the HTTP-decoded error entity or error event, not TLS/chunk/compression wire bytes. Each body is capped at 1 MiB; truncation is explicit. JSON has formatted and original views, other text is rendered as text, and non-UTF-8 bytes use a base64 representation without pretending replacement text is the original. Local refusals have the site's safe reason and no invented upstream body. Successful response bodies, normal stream content, request bodies and Authorization headers are not actively logged. An upstream can echo inputs or credentials in an error; those original bytes may be retained in this restricted store.
 
