@@ -53,7 +53,7 @@ for (const state of states)
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
       .toBe(true);
     if (state.width === 390)
-      expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThan(2000);
+      expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThan(2300);
     if (process.env.NONBIRI_SCREENSHOT_DIR)
       await page.screenshot({
         path: `${process.env.NONBIRI_SCREENSHOT_DIR}/account-${state.locale}-${state.theme}-${state.width}.png`,

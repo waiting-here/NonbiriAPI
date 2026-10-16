@@ -1,3 +1,4 @@
+import { AccountMfaPanel } from '../features/mfa/AccountMfaPanel';
 import { AccountWorkspace } from '../features/core/AccountWorkspace';
 import { productionAccountLifecycleAdapter } from '../features/core/adapters';
 import { CoreUserGate } from '../features/core/components';
@@ -17,6 +18,7 @@ export function AccountPage() {
           <AccountWorkspace
             key={user.id}
             user={user}
+            security={<AccountMfaPanel key={`${user.id}-mfa`} />}
             lifecycleAdapter={productionAccountLifecycleAdapter}
             activity={<InactivityStatus key={`${user.id}-activity`} accountId={user.id} />}
           />

@@ -1,3 +1,4 @@
+import { UserMfaReset } from './UserMfaReset';
 import { useEffect, useRef } from 'react';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { UserManagement } from '@shared/components/UserManagement';
@@ -27,6 +28,7 @@ export function UsersPage() {
   return (
     <UserManagement
       role="admin"
+      renderSecurity={(user) => (user.is_admin ? null : <UserMfaReset key={user.id} user={user} />)}
       renderDeletion={(user, refresh) => <UserDeletion user={user} refresh={refresh} />}
       key={account ?? 'anonymous'}
       account={account ?? ''}

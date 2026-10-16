@@ -1,3 +1,4 @@
+import { captureMfaRequiredHandlers } from './mfaRequired';
 import { requestLanguage } from '@shared/query/language';
 import { cleanText } from './normalize';
 import type { QueryClient, QueryKey } from '@tanstack/react-query';
@@ -158,8 +159,13 @@ export function isUnauthorized(error: unknown): boolean {
   return isApiError(error) && (error.status === 401 || error.code === 'unauthorized');
 }
 
+export function isMfaRequired(error: unknown): boolean {
+  return isApiError(error) && error.code === 'mfa_required';
+}
+
 export function isForbidden(error: unknown): boolean {
-  return isApiError(error) && (error.status === 403 || error.code === 'forbidden');
+  return isApiError(error) && !isMfaRequired(error)
+    && (error.status === 403 || error.code === 'forbidden');
 }
 
 export function isNotFoundError(error: unknown): boolean {
@@ -213,6 +219,7 @@ export async function refetchAuthoritativeQueries(
 }
 
 export async function apiFetch<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
+  const mfaHandlers = path.startsWith('/api/') ? captureMfaRequiredHandlers() : [];
   const { json, headers, ...init } = options;
   const requestHeaders = new Headers(headers);
   requestHeaders.set('Accept', 'application/json');
@@ -240,6 +247,8 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
 
   if (!response.ok) {
     const detail = await parseErrorBody(response);
+    if (response.status === 403 && detail?.code === 'mfa_required')
+      for (const notify of mfaHandlers) notify();
     throw new ApiError(
       detail?.code ?? fallbackCode(response.status),
       detail?.message ?? fallbackMessage(response.status),

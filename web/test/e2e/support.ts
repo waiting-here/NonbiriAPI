@@ -266,6 +266,12 @@ export async function mockRoleSession(
     await mockJson(page, {
       origin,
       method: 'GET',
+      path: '/api/auth/mfa',
+      body: { enrolled: false, required: false, verified: false, verified_until: null },
+    });
+    await mockJson(page, {
+      origin,
+      method: 'GET',
       path: '/api/appearance',
       body: { selected: 'default', unlocked: ['default'], updated_at: null },
     });
@@ -298,6 +304,10 @@ export async function mockRoleSession(
     },
   });
   if (station === 'admin') {
+    await page.route(/\/admin\/api\/users\/[^/]+\/mfa$/, async (route) => {
+      if (route.request().method() !== 'GET') { await route.fallback(); return; }
+      await route.fulfill({ json: { enrolled: false } });
+    });
     await mockEmptyDiagnosticHistory(page, station);
     await mockJson(page, {
       origin,

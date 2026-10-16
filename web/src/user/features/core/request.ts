@@ -1,3 +1,4 @@
+import { captureMfaRequiredHandlers } from '@shared/query/mfaRequired';
 import { requestLanguage } from '@shared/query/language';
 import { ApiError, isApiError } from '@shared/query/http';
 import { validateIdempotencyKey } from './normalizers';
@@ -64,6 +65,7 @@ export async function coreRawRequest(
   path: string,
   options: CoreRequestOptions = {},
 ): Promise<Response> {
+  const mfaHandlers = path.startsWith('/api/') ? captureMfaRequiredHandlers() : [];
   const { json, headers, ...init } = options;
   const requestHeaders = new Headers(headers);
   requestHeaders.set('Accept', 'application/json');
@@ -84,7 +86,11 @@ export async function coreRawRequest(
     if (init.signal?.aborted) throw error;
     throw new ApiError('network_error', 'The network request failed.', 0);
   }
-  if (!response.ok) throw await apiError(response);
+  if (!response.ok) {
+    const error = await apiError(response);
+    if (error.code === 'mfa_required') for (const notify of mfaHandlers) notify();
+    throw error;
+  }
   return response;
 }
 

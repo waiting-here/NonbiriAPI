@@ -1,0 +1,57 @@
+.mfa-challenge {
+  max-width: var(--nb-content-readable);
+  margin-inline: auto;
+}
+.mfa-stack,
+.mfa-setup {
+  display: grid;
+  gap: var(--nb-space-3);
+}
+.mfa-setup {
+  justify-items: start;
+}
+.mfa-setup .nb-fold {
+  width: 100%;
+  min-width: 0;
+}
+.mfa-qr {
+  width: 14rem;
+  height: 14rem;
+  max-width: 100%;
+  border-radius: var(--nb-radius-md);
+}
+.mfa-help {
+  margin: 0;
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-sm);
+}
+.mfa-secret {
+  width: 100%;
+  min-width: 0;
+}
+.mfa-recovery {
+  margin: var(--nb-space-4);
+}
+.mfa-challenge-page {
+  padding: 0;
+  width: 100%;
+}
+.mfa-actions {
+  display: flex;
+  gap: var(--nb-space-3);
+  flex-wrap: wrap;
+}
+
+.mfa-shell .nb-public-shell__main {
+  padding-block: var(--nb-space-6);
+  align-items: start;
+}
+@media (width < 40rem) {
+  .mfa-shell .nb-public-shell__main {
+    padding-block: var(--nb-space-4);
+  }
+  .mfa-qr {
+    width: 12rem;
+    height: 12rem;
+  }
+}
