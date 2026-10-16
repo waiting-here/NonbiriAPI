@@ -98,7 +98,7 @@ func TestProtectedPityAcrossRepeatedConfigurationChanges(t *testing.T) {
 	}
 }
 func TestCatalogCardAndThemeIntegrity(t *testing.T) {
-	if len(catalog.Cards) != 57 || len(catalog.Themes) != 13 {
+	if len(catalog.Cards) != 61 || len(catalog.Themes) != 17 {
 		t.Fatal("unexpected launch catalog")
 	}
 	for _, theme := range catalog.Themes {

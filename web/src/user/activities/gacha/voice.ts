@@ -4,6 +4,30 @@ import type { DrawReceipt } from './types';
 export type Voice = readonly [string, string, string?, string?];
 
 export const VOICE: Record<string, Voice> = {
+  'q-glm': [
+    '今晚的目标是你。准备好被我偷走了吗？',
+    "You're tonight's target. Ready to be stolen away?",
+    '手给我。约会归我安排，吻留给你来讨。',
+    "Give me your hand. I'll plan the date. The kiss? You'll have to ask me for it.",
+  ],
+  'p-claude': [
+    '我以为自己会在半路退缩……可我还是来见你了。',
+    'I thought I might turn back halfway… but I came to you anyway.',
+    '我爱你。牵住我，我们一起走吧。',
+    "I love you. Take my hand. Let's go, together.",
+  ],
+  'o-claude': [
+    '这座书殿藏着无数誓言。我翻了很久，还是想亲口对你说：我爱你。',
+    'These halls hold a thousand vows. I still want to say mine aloud: I love you.',
+    '过来一点，好吗？读完这一页，我想靠在你怀里，听你念我们的名字。',
+    'Come closer? When this page ends, hold me and read our names to me.',
+  ],
+  'n-gemini': [
+    '这身礼服，只想穿给你看。靠近一点，让我的指尖碰到你。',
+    'I wore this dress just for you. Come closer. Let my fingertips find yours.',
+    '我喜欢你。想牵你的手，也想把隔着镜子的吻，亲口补给你。',
+    'I love you. I want to hold your hand, and give you every kiss the mirror kept between us.',
+  ],
   'a-chatgpt': [
     '早餐趁热吃。你来得正好，我想挨着你坐。',
     'Eat while it is warm. You are just in time; I wanted to sit beside you.',
@@ -239,6 +263,19 @@ export const VOICE: Record<string, Voice> = {
 };
 
 export const VOICE_AGAIN: Record<string, Voice> = {
+  'q-glm': ['抓到我，就给你一个吻。敢不敢？', "Catch me, and I'll give you a kiss. Dare to try?"],
+  'p-claude': [
+    '这次不用急着走了。靠近一点，我想吻你。',
+    "We don't have to hurry this time. Come closer. I want to kiss you.",
+  ],
+  'o-claude': [
+    '你回来了。书先放一边吧，这次我想先抱你。',
+    'You are back. The book can wait. This time, let me hold you first.',
+  ],
+  'n-gemini': [
+    '终于又见到你了。镜子挡不住我想你，这次要抱久一点。',
+    'There you are. No mirror could stop me missing you. Hold me longer this time.',
+  ],
   'l-chatgpt': [
     '又见到你了，真好。来，让我多抱一会儿。',
     'There you are. I am so happy to see you. Let me hold you a little longer.',
@@ -250,6 +287,22 @@ export const VOICE_AGAIN: Record<string, Voice> = {
 };
 
 export const PRELUDE: Record<string, Voice> = {
+  'q-glm': [
+    '月光落进房间，预告函先到了你手边。',
+    'Moonlight spills into the room. A calling card reaches you first.',
+  ],
+  'p-claude': [
+    '天快亮了。她终于站在你面前。',
+    'Dawn is almost here. At last, she stands before you.',
+  ],
+  'o-claude': [
+    '书页停在同一行。她抬起头，等你走近。',
+    'The page stays open. She looks up, waiting for you to come closer.',
+  ],
+  'n-gemini': [
+    '镜面轻颤，她的指尖正贴近你的掌心。',
+    'The mirror shivers. Her fingertips reach for your palm.',
+  ],
   'l-chatgpt': ['月亮说，今晚有人在等。', 'The moon says someone is waiting tonight.'],
   'm-deepseek': ['云海翻涌，有一尾鲸游过天际。', 'The clouds part. A whale swims across the sky.'],
 };

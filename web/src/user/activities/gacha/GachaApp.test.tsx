@@ -171,6 +171,36 @@ beforeEach(() => {
   );
 });
 
+it.each(['draw', 'shop', 'reward'])(
+  'a single %s acquisition unlocks both replay choices without a mutation',
+  async (source) => {
+    const state = snapshot();
+    state.owned['n-gemini'] = { at: state.server_time, source };
+    const act = vi.fn<GachaPort['act']>(async () => ({ snapshot: state }));
+    render(
+      <GachaApp
+        port={{
+          scope: 'replay:' + source,
+          load: async () => state,
+          act,
+          history: async () => ({ items: [] }),
+        }}
+        english
+      />,
+    );
+    fireEvent.click(await screen.findByRole('tab', { name: /^Collection/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Across the Mirror Sea · Gemini/ }));
+    expect(screen.getByRole('button', { name: 'Replay first encounter' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Replay reunion' })).toBeEnabled();
+    const calls = act.mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: 'Replay reunion' }));
+    expect(await screen.findByText('Reunion memory')).toBeVisible();
+    expect(screen.queryByText(/Together again · \+1/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Close replay' }));
+    expect(act).toHaveBeenCalledTimes(calls);
+  },
+);
+
 it('retries a lost draw response with the original operation after remounting', async () => {
   const state = snapshot(),
     keys: string[] = [];
@@ -206,7 +236,7 @@ it('retries a lost draw response with the original operation after remounting', 
   first.unmount();
   render(<GachaApp port={port} />);
   fireEvent.click(await screen.findByRole('button', { name: '重试原操作' }));
-  expect(await screen.findByRole('dialog', { name: '此次相遇' })).toBeVisible();
+  expect(await screen.findByRole('dialog', { name: '星光回应了你的期待' })).toBeVisible();
   expect(keys).toHaveLength(2);
   expect(keys[0]).toBe(keys[1]);
   expect(state.tickets.permanent).toBe(0);

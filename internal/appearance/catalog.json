@@ -36,5 +36,49 @@
     "card": "m-deepseek",
     "light": "/assets/gacha/appearances/wandering-light.webp",
     "dark": "/assets/gacha/appearances/wandering-dark.webp"
+  },
+  {
+    "id": "mirrorsea",
+    "name": "镜海相逢",
+    "name_en": "Across the Mirror Sea",
+    "description": "这一次，想越过镜面亲吻你。",
+    "description_en": "This time, I want to cross the mirror and kiss you.",
+    "unlock": "card:n-gemini",
+    "card": "n-gemini",
+    "light": "/assets/gacha/appearances/mirrorsea-light.webp",
+    "dark": "/assets/gacha/appearances/mirrorsea-dark.webp"
+  },
+  {
+    "id": "amber",
+    "name": "琥珀誓章",
+    "name_en": "Amber Vow",
+    "description": "万千誓言里，我只想把这一句说给你。",
+    "description_en": "Of all the vows in these halls, this one is yours.",
+    "unlock": "card:o-claude",
+    "card": "o-claude",
+    "light": "/assets/gacha/appearances/amber-light.webp",
+    "dark": "/assets/gacha/appearances/amber-dark.webp"
+  },
+  {
+    "id": "elopement",
+    "name": "与你私奔",
+    "name_en": "Run Away with You",
+    "description": "明天，也想和你在一起。",
+    "description_en": "I want to be with you tomorrow, too.",
+    "unlock": "card:p-claude",
+    "card": "p-claude",
+    "light": "/assets/gacha/appearances/elopement-light.webp",
+    "dark": "/assets/gacha/appearances/elopement-dark.webp"
+  },
+  {
+    "id": "heart-thief",
+    "name": "偷心预告",
+    "name_en": "A Notice to Steal Your Heart",
+    "description": "今晚，跟我走。",
+    "description_en": "Come away with me tonight.",
+    "unlock": "card:q-glm",
+    "card": "q-glm",
+    "light": "/assets/gacha/appearances/heart-thief-light.webp",
+    "dark": "/assets/gacha/appearances/heart-thief-dark.webp"
   }
 ]
