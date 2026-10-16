@@ -11,6 +11,8 @@ The caller must remain an active level-6 steward. Level-5 trainees cannot use th
 
 Creation and model binding accept only POST without query parameters. Failure-policy reads use GET with the two specified IDs; edits use PATCH without query parameters. Other methods, suffixes and path variants are rejected. JSON rejects unknown and duplicate fields. Each request is limited to 256 KiB, 100 keys, 16 recurring rules per key and 16,384 total object fields; responses are limited to 64 KiB. All controls share a maximum of four concurrent requests, with one per user and no queue, across personal reads/writes, charity reads and existing charity writes. A busy control returns HTTP 429. Maintenance admission and the existing resource, credential, discovery and outbound protections still apply. These management operations do not consume model-call credits or charity usage quotas.
 
+Endpoint protocols include `google-gemini`, `openai-responses` and `openai-decisions` alongside the existing types. Gemini and Responses bindings serve Chat only; Decisions bindings serve `/v1/decisions` with model type `decisions`. Same-URL endpoints can use distinct protocols. Discovery availability does not prove model-operation support. See [content protocols](content-protocols.md) for native base URLs, supported subsets, continuation fields and usage. Existing control authentication, revision, idempotency and request/response budgets remain unchanged.
+
 ## Create and approve one donation
 
 `POST /api/steward/automation/donations`

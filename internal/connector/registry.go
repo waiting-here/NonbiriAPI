@@ -31,6 +31,7 @@ type AttemptInput struct {
 	Ingress      *openai.ChatRequest
 	Embedding    *openai.EmbeddingRequest
 	Image        *openai.ImageRequest
+	Decision     *openai.DecisionRequest
 	Policy       connectorcontract.AttemptPolicy
 	Sink         ResponseSink
 	Observer     *SafeObserver
@@ -39,6 +40,12 @@ type AttemptInput struct {
 }
 
 func (input AttemptInput) validOperation() bool {
+	if input.Operation == connectorcontract.OperationDecisions {
+		return input.Decision != nil && input.Ingress == nil && input.Embedding == nil && input.Image == nil
+	}
+	if input.Decision != nil {
+		return false
+	}
 	switch input.Operation {
 	case connectorcontract.OperationChatCompletions:
 		return input.Ingress != nil && input.Embedding == nil && input.Image == nil
@@ -143,7 +150,7 @@ func NewDefaultRegistry() *Registry {
 }
 
 func NewDefaultRegistryWithGatewayModels(models gatewaypolicy.Config) *Registry {
-	registry, err := NewRegistry(openAIDescriptor(), anthropicDescriptor(), gatewayDescriptorWithModels(models))
+	registry, err := NewRegistry(openAIDescriptor(), anthropicDescriptor(), gatewayDescriptorWithModels(models), decisionsDescriptor(), translatingDescriptor(connectorcontract.TypeGoogleGemini), translatingDescriptor(connectorcontract.TypeOpenAIResponses))
 	if err != nil {
 		panic(err)
 	}
@@ -154,7 +161,7 @@ func NewDefaultRegistryWithGatewayModels(models gatewaypolicy.Config) *Registry 
 // descriptor's optional protocol-specific fidelity predicate. It performs no
 // target lookup, decryption, reservation, or network I/O.
 func (r *Registry) SupportsRequest(t connectorcontract.Type, request *openai.ChatRequest) bool {
-	if request == nil {
+	if request == nil || !continuationCompatible(t, request) {
 		return false
 	}
 	descriptor, ok := r.Descriptor(t)
@@ -322,7 +329,7 @@ func openAICapabilities() connectorcontract.CapabilitySet {
 
 func (c *openAIConnector) Attempt(ctx context.Context, input AttemptInput) connectorcontract.AttemptResult {
 	result := connectorcontract.AttemptResult{Failure: connectorcontract.FailureInternal, Diagnostic: "forwarding attempt unavailable"}
-	if c == nil || nilOpenAIDriver(c.driver) || ctx == nil || input.Sink == nil || !input.validOperation() || input.Credential == nil || input.Target.Type() != c.Type() {
+	if c == nil || nilOpenAIDriver(c.driver) || ctx == nil || input.Sink == nil || !input.validOperation() || input.Operation == connectorcontract.OperationDecisions || input.Credential == nil || input.Target.Type() != c.Type() {
 		if input.Credential != nil {
 			input.Credential.Clear()
 		}

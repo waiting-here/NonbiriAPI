@@ -3,7 +3,7 @@ import { MessageField, MessagesView } from '@shared/components/MessagesView';
 import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
 import { Fold } from '@shared/components/ui';
 import '@shared/operations/operations.css';
-import { isEmbeddingRoute } from '@shared/operations/requestKind';
+import { isEmbeddingRoute, isDecisionRoute } from '@shared/operations/requestKind';
 import { ApiError } from '@shared/query/http';
 import { formatDateTime } from '@shared/utils/datetime';
 import { useMemo, useState } from 'react';
@@ -47,6 +47,8 @@ const ROUTE_LABEL_KEYS = {
   charity_embeddings: 'user.debug.state.route.charityEmbeddings',
   openai_images_generations: 'user.debug.state.route.openaiImagesGenerations',
   charity_images_generations: 'user.debug.state.route.charityImagesGenerations',
+  openai_decisions: 'user.debug.state.route.openaiDecisions',
+  charity_decisions: 'user.debug.state.route.charityDecisions',
 } as const satisfies Record<DebugTrace['request']['route_kind'], string>;
 
 const TRACE_STATE_LABEL_KEYS = {
@@ -128,7 +130,16 @@ function RequestDetails({ trace }: { trace: DebugTrace }) {
       <dl className="ops-debug-presence">
         {(isEmbeddingRoute(trace.request.route_kind)
           ? EMBEDDING_PARAMETER_ORDER
-          : PARAMETER_ORDER
+          : isDecisionRoute(trace.request.route_kind)
+            ? [
+                'model',
+                'input',
+                'questions',
+                'prompt_cache_key',
+                'prompt_cache_options',
+                'safety_identifier',
+              ]
+            : PARAMETER_ORDER
         ).map((name) => {
           const present = Boolean(root && Object.prototype.hasOwnProperty.call(root, name));
           const value = root?.[name];

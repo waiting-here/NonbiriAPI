@@ -2,6 +2,7 @@ package resourcebridge
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -11,13 +12,20 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/logapi"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
 func TestDiscoverySuccessCrossesDispatchBeforeCredentialAndNetwork(t *testing.T) {
+	for _, kind := range []connectorcontract.Type{connectorcontract.TypeOpenAICompatible, connectorcontract.TypeGoogleGemini, connectorcontract.TypeOpenAIResponses, connectorcontract.TypeOpenAIDecisions} {
+		t.Run(string(kind), func(t *testing.T) { testDiscoverySuccessCrossesDispatch(t, kind) })
+	}
+}
+func testDiscoverySuccessCrossesDispatch(t *testing.T, kind connectorcontract.Type) {
 	fixture := newBridgeFixture(t)
+	fixture.clock.Store(time.Now().Unix())
 	ownerID := fixture.seedUser(t, "success")
-	key := fixture.seedEndpointKey(t, ownerID, "success", connectorcontract.TypeOpenAICompatible, "upstream-success-credential")
+	key := fixture.seedEndpointKey(t, ownerID, "success", kind, "upstream-success-credential")
 	var calls atomic.Int64
 	discoverer := discovererFunc(func(ctx context.Context, input connectorcontract.DiscoveryInput) connectorcontract.DiscoveryResult {
 		calls.Add(1)
@@ -72,6 +80,18 @@ WHERE endpoint_key_id=? ORDER BY rowid DESC LIMIT 1`, key.keyID).Scan(&state); e
 	}
 	facts := fixture.latestDiscoveryFacts(t)
 	assertFixedDiscoveryRequest(t, facts)
+	logs, err := logapi.NewRepository(fixture.store.DB(), fixture.vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	detail, err := logs.GetAdmin(context.Background(), facts.requestID, logapi.AttemptFilter{})
+	if err != nil {
+		t.Fatalf("project persisted %s attempt: %v", kind, err)
+	}
+	encoded, err := json.Marshal(detail)
+	if err != nil || !strings.Contains(string(encoded), string(kind)) {
+		t.Fatalf("persisted connector missing: %s %v", encoded, err)
+	}
 	if facts.claimState != "committed" || !facts.resultKind.Valid || facts.resultKind.String != "response" ||
 		!facts.upstreamStatus.Valid || facts.upstreamStatus.Int64 != 200 || !facts.usageUnknown.Valid || facts.usageUnknown.Int64 != 1 {
 		t.Fatalf("unexpected attempt facts: %+v", facts)

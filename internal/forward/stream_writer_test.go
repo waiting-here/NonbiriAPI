@@ -23,6 +23,10 @@ func successfulStream(kind contract.Type) string {
 	case contract.TypeOpenAICompatible:
 		return "data: " + `{"id":"c1","object":"chat.completion.chunk","created":1,"model":"m","choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}` + "\n\n" +
 			"data: " + `{"id":"c1","object":"chat.completion.chunk","created":1,"model":"m","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}` + "\n\ndata: [DONE]\n\n"
+	case contract.TypeGoogleGemini:
+		return "data: " + transportJSON(kind) + "\n\n"
+	case contract.TypeOpenAIResponses:
+		return responsesTransportStream()
 	case contract.TypeAnthropicCompatible:
 		return "event: message_start\ndata: " + `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"m","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":0}}}` + "\n\n" +
 			"event: content_block_start\ndata: " + `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}` + "\n\n" +

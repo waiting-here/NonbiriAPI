@@ -14,6 +14,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 )
@@ -417,7 +418,7 @@ func validateCommonRecord(record commonLogRecord) error {
 		return ErrInvariant
 	}
 	switch RouteKind(record.routeKind) {
-	case RouteOpenAIChat, RouteCharityChat, RouteOpenAIEmbeddings, RouteCharityEmbeddings, RouteOpenAIImages, RouteCharityImages, RouteDiscovery:
+	case RouteOpenAIChat, RouteCharityChat, RouteOpenAIEmbeddings, RouteCharityEmbeddings, RouteOpenAIImages, RouteCharityImages, RouteOpenAIDecisions, RouteCharityDecisions, RouteDiscovery:
 	default:
 		return ErrInvariant
 	}
@@ -584,7 +585,7 @@ func validDiagnostic(value string) bool {
 }
 
 func validConnector(value string) bool {
-	return value == "openai-compatible" || value == "anthropic-compatible" || value == "ai-sdk-gateway-v3"
+	return connectorcontract.Type(value).Valid()
 }
 
 func validBaseURL(value string) bool {

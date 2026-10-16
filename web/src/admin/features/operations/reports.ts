@@ -59,7 +59,13 @@ export interface ReportCaseSummary {
   id: string;
   status: ReportStatus;
   progress_state: 'in_progress' | 'complete';
-  connector_type: 'openai-compatible' | 'anthropic-compatible' | 'ai-sdk-gateway-v3';
+  connector_type:
+    | 'openai-compatible'
+    | 'anthropic-compatible'
+    | 'ai-sdk-gateway-v3'
+    | 'google-gemini'
+    | 'openai-responses'
+    | 'openai-decisions';
   canonical_base_url: string;
   material_version: string;
   target_version: string;
@@ -161,7 +167,14 @@ export function normalizeReportSummary(value: unknown): ReportCaseSummary {
     progress_state: progress,
     connector_type: oneOf(
       root.connector_type,
-      ['openai-compatible', 'anthropic-compatible', 'ai-sdk-gateway-v3'] as const,
+      [
+        'openai-compatible',
+        'anthropic-compatible',
+        'ai-sdk-gateway-v3',
+        'google-gemini',
+        'openai-responses',
+        'openai-decisions',
+      ] as const,
       'reported connector',
     ),
     canonical_base_url: string(root.canonical_base_url, 'reported canonical URL', { min: 1 }),
@@ -278,7 +291,13 @@ export interface ReportTarget {
   key_ref: string;
   owner: { user_id: string; discord_id: string; display_name: string } | null;
   endpoint: {
-    connector_type: 'openai-compatible' | 'anthropic-compatible' | 'ai-sdk-gateway-v3';
+    connector_type:
+      | 'openai-compatible'
+      | 'anthropic-compatible'
+      | 'ai-sdk-gateway-v3'
+      | 'google-gemini'
+      | 'openai-responses'
+      | 'openai-decisions';
     canonical_base_url: string;
     display_head: string;
     display_tail: string;
@@ -358,7 +377,14 @@ export function normalizeReportTarget(value: unknown): ReportTarget {
     endpoint: {
       connector_type: oneOf(
         endpoint.connector_type,
-        ['openai-compatible', 'anthropic-compatible', 'ai-sdk-gateway-v3'] as const,
+        [
+          'openai-compatible',
+          'anthropic-compatible',
+          'ai-sdk-gateway-v3',
+          'google-gemini',
+          'openai-responses',
+          'openai-decisions',
+        ] as const,
         'target connector',
       ),
       canonical_base_url: string(endpoint.canonical_base_url, 'target canonical URL', { min: 1 }),

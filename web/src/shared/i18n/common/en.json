@@ -332,7 +332,9 @@
           "charityEmbeddings": "Charity embedding",
           "modelDiscovery": "Model check",
           "openaiImagesGenerations": "Personal image generation",
-          "charityImagesGenerations": "Charity image generation"
+          "charityImagesGenerations": "Charity image generation",
+          "openaiDecisions": "Personal decisions",
+          "charityDecisions": "Charity decisions"
         },
         "resultValue": {
           "success": "Success",
@@ -1451,7 +1453,8 @@
       "required": "Select at least one model type.",
       "chat_completions": "Chat completions",
       "embeddings": "Embeddings",
-      "images_generations": "Image generation"
+      "images_generations": "Image generation",
+      "decisions": "Decisions"
     },
     "rewards": {
       "navTitle": "Redeem",
@@ -1564,7 +1567,10 @@
       "redemptionBanned": "Repeated invalid code submissions have restricted your account until {{time}}."
     },
     "resourceErrorTitle": "This page needs to be reloaded",
-    "resourceErrorBody": "The page files could not be loaded. Reload to open the current version."
+    "resourceErrorBody": "The page files could not be loaded. Reload to open the current version.",
+    "connectorGemini": "Google Gemini (Chat)",
+    "connectorResponses": "OpenAI Responses (Chat)",
+    "connectorDecisions": "OpenAI Decisions"
   },
   "logs": {
     "charityModel": "Called charity model",
@@ -1974,7 +1980,10 @@
       "protectionLeaves": "Protect strings inside JSON",
       "protectedPaths": "Protected string paths",
       "protectedPathsHelp": "One relative JSON Pointer per line, such as /token or /credentials/0/key. Select strings only.",
-      "protectionHelp": "Use for secrets, not ordinary options. A matching response is stopped; streaming fragments already sent cannot be recalled."
+      "protectionHelp": "Use for secrets, not ordinary options. A matching response is stopped; streaming fragments already sent cannot be recalled.",
+      "geminiSupport": "Gemini supports Chat. Native settings are limited to thinkingConfig and safetySettings; set the output budget with Chat token parameters.",
+      "responsesSupport": "Responses supports stateless Chat with storage disabled. Native settings support reasoning summary and text verbosity.",
+      "decisionsSupport": "Decisions uses its own JSON endpoint. Streaming and native extensions are unavailable."
     },
     "service": {
       "title": "Request rewriting",

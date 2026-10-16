@@ -105,7 +105,7 @@ func (repository *Repository) ListUser(ctx context.Context, userID int64, filter
 		}
 		if len(page.Data) < filter.Limit {
 			switch RouteKind(record.routeKind) {
-			case RouteOpenAIChat, RouteOpenAIEmbeddings, RouteOpenAIImages, RouteDiscovery:
+			case RouteOpenAIChat, RouteOpenAIEmbeddings, RouteOpenAIImages, RouteOpenAIDecisions, RouteDiscovery:
 				page.Data = append(page.Data, UserSelfLogRow{
 					RejectionFields: rejectionFields(record),
 					ID:              record.id, RouteKind: RouteKind(record.routeKind),
@@ -114,7 +114,7 @@ func (repository *Repository) ListUser(ctx context.Context, userID int64, filter
 					StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
 					Model: model, AttemptCount: strconv.FormatInt(record.attemptCount, 10),
 				})
-			case RouteCharityChat, RouteCharityEmbeddings, RouteCharityImages:
+			case RouteCharityChat, RouteCharityEmbeddings, RouteCharityImages, RouteCharityDecisions:
 				page.Data = append(page.Data, UserCharityLogRow{
 					RejectionFields: rejectionFields(record),
 					ID:              record.id, RouteKind: RouteKind(record.routeKind),

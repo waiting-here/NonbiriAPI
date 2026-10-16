@@ -365,7 +365,7 @@ func validHeaderName(name string, managed bool) bool {
 	}
 	switch lower {
 	case "host", "content-length", "transfer-encoding", "connection", "keep-alive", "te", "trailer", "upgrade",
-		"authorization", "proxy-authorization", "cookie", "set-cookie", "content-type", "accept", "x-api-key", "forwarded":
+		"authorization", "proxy-authorization", "cookie", "set-cookie", "content-type", "accept", "x-api-key", "x-goog-api-key", "forwarded":
 		return false
 	}
 	return true
@@ -432,10 +432,12 @@ func decodePointer(path string) ([]string, error) {
 }
 
 var protectedPaths = []string{
-	"/model", "/messages", "/input", "/tools", "/tool_choice", "/user", "/safety_identifier",
+	"/model", "/messages", "/input", "/questions", "/tools", "/tool_choice", "/user", "/safety_identifier",
 	"/stream", "/stream_options", "/store", "/metadata", "/providerOptions/gateway/user",
 	"/usage", "/billing", "/credential", "/route", "/endpoint", "/price",
 	"/prompt", "/system", "/content", "/toolChoice", "/maxOutputTokens",
+	"/contents", "/systemInstruction", "/toolConfig", "/labels/safety_identifier", "/generationConfig/maxOutputTokens",
+	"/max_output_tokens", "/previous_response_id", "/conversation", "/background", "/include",
 }
 
 func overlapsPath(a, b string) bool {

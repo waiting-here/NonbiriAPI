@@ -48,7 +48,7 @@ func (repository *Repository) GetUser(ctx context.Context, userID int64, request
 		return nil, ErrInvariant
 	}
 	switch RouteKind(record.routeKind) {
-	case RouteOpenAIChat, RouteOpenAIEmbeddings, RouteOpenAIImages, RouteDiscovery:
+	case RouteOpenAIChat, RouteOpenAIEmbeddings, RouteOpenAIImages, RouteOpenAIDecisions, RouteDiscovery:
 		row := UserSelfLogRow{
 			RejectionFields: rejectionFields(record), ID: record.id, RouteKind: RouteKind(record.routeKind),
 			CallerResultClass: resultClassPointer(record.callerResultClass),
@@ -63,7 +63,7 @@ func (repository *Repository) GetUser(ctx context.Context, userID int64, request
 		metadata := attempts.Pagination
 		attempts.Pagination = nil
 		return UserSelfLogDetail{Request: row, Attempts: attempts, AttemptPagination: metadata}, nil
-	case RouteCharityChat, RouteCharityEmbeddings, RouteCharityImages:
+	case RouteCharityChat, RouteCharityEmbeddings, RouteCharityImages, RouteCharityDecisions:
 		// Charity detail deliberately returns before constructing or querying an
 		// attempt projection. Its response shape and size are independent of the
 		// number of physical candidates/retries.

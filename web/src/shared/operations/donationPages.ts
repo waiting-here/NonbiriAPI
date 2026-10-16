@@ -61,12 +61,24 @@ export interface DonationPageResult<T> {
 export type DonationPageSafeSource =
   | {
       kind: 'custom';
-      connector_type: 'openai-compatible' | 'anthropic-compatible' | 'ai-sdk-gateway-v3';
+      connector_type:
+        | 'openai-compatible'
+        | 'anthropic-compatible'
+        | 'ai-sdk-gateway-v3'
+        | 'google-gemini'
+        | 'openai-responses'
+        | 'openai-decisions';
       base_url: string;
     }
   | {
       kind: 'mainstream';
-      connector_type: 'openai-compatible' | 'anthropic-compatible' | 'ai-sdk-gateway-v3';
+      connector_type:
+        | 'openai-compatible'
+        | 'anthropic-compatible'
+        | 'ai-sdk-gateway-v3'
+        | 'google-gemini'
+        | 'openai-responses'
+        | 'openai-decisions';
       base_url: string;
       channel_id: string;
       name: string;

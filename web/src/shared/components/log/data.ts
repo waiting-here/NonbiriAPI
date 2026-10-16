@@ -63,7 +63,12 @@ interface LogRowCommon {
   rejection_reason: string | null;
   request_method: 'GET' | 'POST' | null;
   request_path:
-    '/v1/models' | '/v1/chat/completions' | '/v1/embeddings' | '/v1/images/generations' | null;
+    | '/v1/models'
+    | '/v1/chat/completions'
+    | '/v1/embeddings'
+    | '/v1/images/generations'
+    | '/v1/decisions'
+    | null;
   id: string;
   route_kind: LogRouteKind;
   caller_result_class: LogResultClass | null;
@@ -81,6 +86,7 @@ export interface UserSelfLogRow extends LogRowCommon {
     | 'openai_chat_completions'
     | 'openai_embeddings'
     | 'openai_images_generations'
+    | 'openai_decisions'
     | 'model_discovery';
   model: string;
   attempt_count: string;
@@ -89,7 +95,11 @@ export interface UserSelfLogRow extends LogRowCommon {
 export interface UserCharityLogRow extends LogRowCommon {
   role: 'user';
   kind: 'charity';
-  route_kind: 'charity_chat_completions' | 'charity_embeddings' | 'charity_images_generations';
+  route_kind:
+    | 'charity_chat_completions'
+    | 'charity_embeddings'
+    | 'charity_images_generations'
+    | 'charity_decisions';
   model: string;
 }
 
@@ -127,7 +137,13 @@ interface LogAttemptCommon {
   result_kind: 'response' | 'synthetic';
   endpoint_key_id: string | null;
   endpoint_base_url: string;
-  connector_type: 'openai-compatible' | 'anthropic-compatible' | 'ai-sdk-gateway-v3';
+  connector_type:
+    | 'openai-compatible'
+    | 'anthropic-compatible'
+    | 'ai-sdk-gateway-v3'
+    | 'google-gemini'
+    | 'openai-responses'
+    | 'openai-decisions';
   upstream_model_id: string;
   status_code: number | null;
   upstream_code: string | null;
@@ -298,7 +314,13 @@ function rejection(root: WireRecord) {
   const method = oneOf(root.request_method, ['GET', 'POST'] as const, 'request method');
   const path = oneOf(
     root.request_path,
-    ['/v1/models', '/v1/chat/completions', '/v1/embeddings', '/v1/images/generations'] as const,
+    [
+      '/v1/models',
+      '/v1/chat/completions',
+      '/v1/embeddings',
+      '/v1/images/generations',
+      '/v1/decisions',
+    ] as const,
     'request path',
   );
   if ((method === 'GET') !== (path === '/v1/models') || root.caller_result_class !== 'failed')
@@ -533,7 +555,14 @@ function commonAttempt(root: WireRecord): LogAttemptCommon {
     endpoint_base_url: endpointBaseURL,
     connector_type: oneOf(
       root.connector_type,
-      ['openai-compatible', 'anthropic-compatible', 'ai-sdk-gateway-v3'] as const,
+      [
+        'openai-compatible',
+        'anthropic-compatible',
+        'ai-sdk-gateway-v3',
+        'google-gemini',
+        'openai-responses',
+        'openai-decisions',
+      ] as const,
       'connector type',
     ),
     upstream_model_id: string(root.upstream_model_id, 'upstream model id'),

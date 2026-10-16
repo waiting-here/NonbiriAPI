@@ -223,12 +223,7 @@ func validCredential(value []byte) bool {
 }
 
 func validConnectorType(value string) bool {
-	switch connectorcontract.Type(value) {
-	case connectorcontract.TypeOpenAICompatible, connectorcontract.TypeAnthropicCompatible, connectorcontract.TypeAISDKGatewayV3:
-		return true
-	default:
-		return false
-	}
+	return connectorcontract.Type(value).Valid()
 }
 
 func validBaseURLText(value string) bool {

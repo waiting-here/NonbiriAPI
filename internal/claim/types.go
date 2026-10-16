@@ -62,6 +62,8 @@ const (
 	RouteCharityChat       = requestkind.CharityChat
 	RouteCharityEmbeddings = requestkind.CharityEmbeddings
 	RouteCharityImages     = requestkind.CharityImages
+	RouteOpenAIDecisions   = requestkind.OpenAIDecisions
+	RouteCharityDecisions  = requestkind.CharityDecisions
 	RouteDiscovery         = requestkind.Discovery
 )
 

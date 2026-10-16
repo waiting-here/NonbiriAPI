@@ -22,8 +22,9 @@ import (
 func TestWrittenEndpointCredentialsSurviveDatabaseRestart(t *testing.T) {
 	fixture := newBridgeFixture(t)
 	owner := fixture.seedUser(t, "restart")
-	fixture.seedEndpointKey(t, owner, "restart-openai", connectorcontract.TypeOpenAICompatible, "restart-credential-one")
-	fixture.seedEndpointKey(t, owner, "restart-anthropic", connectorcontract.TypeAnthropicCompatible, "restart-credential-two")
+	for _, kind := range []connectorcontract.Type{connectorcontract.TypeOpenAICompatible, connectorcontract.TypeAnthropicCompatible, connectorcontract.TypeAISDKGatewayV3, connectorcontract.TypeGoogleGemini, connectorcontract.TypeOpenAIResponses, connectorcontract.TypeOpenAIDecisions} {
+		fixture.seedEndpointKey(t, owner, "restart-"+string(kind), kind, "restart-credential")
+	}
 	var sequence int
 	var name, path string
 	if err := fixture.store.DB().QueryRow(`PRAGMA database_list`).Scan(&sequence, &name, &path); err != nil {
@@ -41,7 +42,7 @@ func TestWrittenEndpointCredentialsSurviveDatabaseRestart(t *testing.T) {
 	}
 	defer reopened.Close()
 	var count int
-	if err := reopened.DB().QueryRow(`SELECT COUNT(*) FROM endpoint_keys`).Scan(&count); err != nil || count != 2 {
+	if err := reopened.DB().QueryRow(`SELECT COUNT(*) FROM endpoint_keys`).Scan(&count); err != nil || count != 6 {
 		t.Fatalf("reopened credential count = %d, error = %v", count, err)
 	}
 }

@@ -211,7 +211,13 @@ export function ConnectorLabel({ value }: { value: ConnectorType }) {
           ? 'connector.openai'
           : value === 'anthropic-compatible'
             ? 'connector.anthropic'
-            : 'connector.gateway',
+            : value === 'google-gemini'
+              ? 'connector.gemini'
+              : value === 'openai-responses'
+                ? 'connector.responses'
+                : value === 'openai-decisions'
+                  ? 'connector.decisions'
+                  : 'connector.gateway',
       )}
     </>
   );

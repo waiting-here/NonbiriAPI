@@ -14,12 +14,12 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
-func createBrowseDonation(t *testing.T, e *donationTestEnv, owner int64, suffix byte, source string) (Donation, int64) {
+func createBrowseDonation(t *testing.T, e *donationTestEnv, owner int64, suffix byte, source string, connectors ...string) (Donation, int64) {
 	t.Helper()
 	if source == "" {
 		source = fmt.Sprintf("https://%c.example.test/v1", suffix)
 	}
-	_, key := e.seedEndpointKeyAt(t, owner, suffix, source)
+	_, key := e.seedEndpointKeyAt(t, owner, suffix, source, connectors...)
 	input := CreateInput{Description: "safe shared description", Keys: []CreateKeyInput{{EndpointKeyID: key}}, OwnershipAuthorized: true}
 	out, err := e.service.Create(context.Background(), owner, donationMutation(t, suffix, http.MethodPost, routeDonations, nil, input), input)
 	if err != nil {
@@ -180,11 +180,16 @@ func TestDonationSourcesAggregateAcrossDonorsAndFilteredCollections(t *testing.T
 }
 
 func TestSourceUsabilityUsesUndiscountedReserveAndCurrentRules(t *testing.T) {
+	for _, kind := range []string{"openai-compatible", "google-gemini", "openai-responses", "openai-decisions"} {
+		t.Run(kind, func(t *testing.T) { testSourceUsability(t, kind) })
+	}
+}
+func testSourceUsability(t *testing.T, kind string) {
 	e := newDonationTestEnv(t)
 	ctx := context.Background()
 	owner := e.seedUser(t, "usable-owner", nil, false)
 	e.seedUser(t, "", nil, true)
-	d, key := createBrowseDonation(t, e, owner, 'k', "")
+	d, key := createBrowseDonation(t, e, owner, 'k', "", kind)
 	id, keyID := parseTestID(t, d.ID), parseTestID(t, d.Keys[0].ID)
 	if _, err := e.store.DB().Exec(`UPDATE donations SET status='approved' WHERE id=?`, id); err != nil {
 		t.Fatal(err)
@@ -216,7 +221,7 @@ func TestSourceUsabilityUsesUndiscountedReserveAndCurrentRules(t *testing.T) {
 	assertUsable("1")
 	// A newer pending donation supplies the source preview, while the older
 	// approved key still makes the complete group usable.
-	pending, _ := createBrowseDonation(t, e, owner, 'p', "https://k.example.test/v1")
+	pending, _ := createBrowseDonation(t, e, owner, 'p', "https://k.example.test/v1", kind)
 	out, err := e.service.SourcesAdminPage(ctx, SourceFilter{}, pagination.Default())
 	if err != nil || len(out.Data) != 1 || out.Data[0].DonationCount != "2" || out.Data[0].KeyCount != "2" || out.Data[0].UsableKeyCount != "1" {
 		t.Fatalf("mixed approval group=%+v err=%v", out, err)

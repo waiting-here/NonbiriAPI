@@ -43,9 +43,9 @@ var (
 // ModelDiscoverer is the OpenAI-compatible registry capability. It performs
 // one GET /models through the supplied shared backend, parses a bounded strict
 // response, and never reads or writes the model cache itself.
-type ModelDiscoverer struct{}
+type ModelDiscoverer struct{ ConnectorType connectorcontract.Type }
 
-func (ModelDiscoverer) Discover(ctx context.Context, input connectorcontract.DiscoveryInput) connectorcontract.DiscoveryResult {
+func (d ModelDiscoverer) Discover(ctx context.Context, input connectorcontract.DiscoveryInput) connectorcontract.DiscoveryResult {
 	if ctx == nil {
 		if input.Credential != nil {
 			input.Credential.Clear()
@@ -58,7 +58,12 @@ func (ModelDiscoverer) Discover(ctx context.Context, input connectorcontract.Dis
 		}
 		return failedDiscoveryResult(kind, nil, discoveryContextDiagnostic(kind))
 	}
-	if backend.IsNil(input.Backend) || input.Target.Type() != connectorcontract.TypeOpenAICompatible || input.Credential == nil {
+	kind := d.ConnectorType
+	if kind == "" {
+		kind = connectorcontract.TypeOpenAICompatible
+	}
+	validKind := kind == connectorcontract.TypeOpenAICompatible || kind == connectorcontract.TypeOpenAIResponses || kind == connectorcontract.TypeOpenAIDecisions
+	if backend.IsNil(input.Backend) || !validKind || input.Target.Type() != kind || input.Credential == nil {
 		if input.Credential != nil {
 			input.Credential.Clear()
 		}

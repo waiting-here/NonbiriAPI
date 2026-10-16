@@ -1,12 +1,18 @@
 import { array, invalidResponse, oneOf } from './operations/wire';
 
-export const MODEL_TYPES = ['chat_completions', 'embeddings', 'images_generations'] as const;
+export const MODEL_TYPES = [
+  'chat_completions',
+  'embeddings',
+  'images_generations',
+  'decisions',
+] as const;
 export type ModelType = (typeof MODEL_TYPES)[number];
 
 export const MODEL_TYPE_PATHS: Record<ModelType, string> = {
   chat_completions: '/v1/chat/completions',
   embeddings: '/v1/embeddings',
   images_generations: '/v1/images/generations',
+  decisions: '/v1/decisions',
 };
 
 export function normalizeModelTypes(value: unknown): ModelType[] {

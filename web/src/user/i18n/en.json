@@ -1647,7 +1647,9 @@
           "openaiEmbeddings": "Personal embedding",
           "charityEmbeddings": "Charity embedding",
           "openaiImagesGenerations": "Personal image generation",
-          "charityImagesGenerations": "Charity image generation"
+          "charityImagesGenerations": "Charity image generation",
+          "openaiDecisions": "Personal decisions",
+          "charityDecisions": "Charity decisions"
         },
         "trace": {
           "capturing": "Capturing",
@@ -2724,7 +2726,10 @@
       "accountPresentation.deleteAction": "Delete account…",
       "models.cacheBalanced": "Optimized load balancing",
       "keys.charityModelExample": "[公益]provider/model-name",
-      "keys.ownModelExample": "my/model-name"
+      "keys.ownModelExample": "my/model-name",
+      "connector.gemini": "Google Gemini (Chat)",
+      "connector.responses": "OpenAI Responses (Chat)",
+      "connector.decisions": "OpenAI Decisions"
     },
     "lakeNotes": {
       "exchangeAvailable": "Fishing is free. Coin exchange is available below.",
@@ -3587,7 +3592,7 @@
       "otherServiceHelp": "Enter the service address yourself.",
       "existingService": "Added service",
       "existingServiceHelp": "Add another key to it.",
-      "connectorHelp": "Choose OpenAI compatible if unsure; most providers support it.",
+      "connectorHelp": "Choose the provider’s protocol. You can add the same address with different protocols. Gemini and Responses serve Chat; Decisions serves the decisions endpoint.",
       "manualLink": "Need advanced options? Set up manually",
       "prefix": "Model name prefix",
       "modelSearch": "Search models",
