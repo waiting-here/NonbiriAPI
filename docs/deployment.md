@@ -120,10 +120,10 @@ Configure the public user host and the separate admin host in DNS and TLS. The p
 - avoid logging `Authorization`, cookies, request bodies, or upstream credentials.
 
 Before a forwarded response is returned to a caller, the application scans it for the exact
-upstream credential that was handed to the upstream in the same request, both as literal wire
+upstream credential and explicitly sensitive request-adaptation values sent in the same request, both as literal wire
 bytes and across decoded JSON / SSE string fragments, and truncates the response if that
 credential reappears. This response guard is a defense-in-depth layer, not a general
-data-loss-prevention filter: it matches only the exact known credential, so it does not detect
+data-loss-prevention filter: it matches those exact known values, so it does not detect
 an encoded, truncated, or otherwise transformed key, and it does not detect arbitrary other
 sensitive data an upstream may return. Treat each caller key as a sensitive credential and
 protect it at the proxy, storage, and logging boundary; the guard is one layer, not a
@@ -133,9 +133,50 @@ The application accepts forwarding metadata only from configured trusted proxy a
 
 Review upstream operators as a trust boundary. Their reported usage determines actual charges and donation rewards and may exceed the admission reserve; the platform cannot independently verify a provider's token accounting. Public HTTP endpoints remain supported, but send credentials and content without transport encryption. Prefer HTTPS and review any HTTP exception before approving a donated source.
 
-Original-error diagnostics may retain a credential or other private content echoed by an upstream. Only administrators and currently authorized level-6 stewards can read them; protect the database and its backups accordingly. Silent retries before an accepted response can also duplicate provider work when delivery is uncertain. Personal routes default to retries off; charity routes stop retrying as soon as HTTP 200 is received. See the [API contract](api-contract.md) for billing and error behavior.
+Original-error diagnostics may retain a credential or other private content echoed by an upstream. Only administrators and currently authorized level-6 stewards can read them; protect the database and its backups accordingly. Display and download responses replace IPv4 addresses with `[redacted]`; stored diagnostics and source facts retain their original values for authorized processing. Silent retries before an accepted response can also duplicate provider work when delivery is uncertain. Personal routes default to retries off; charity routes stop retrying as soon as HTTP 200 is received. See the [API contract](api-contract.md) for billing and error behavior.
 
 Source auditing distinguishes a direct peer, a validated forwarded client and a fallback peer. Before using shared-IP findings, verify the complete direct/CDN → Nginx → application chain for both IPv4 and IPv6, including an untrusted client-supplied forwarding header and malformed or duplicate values. A proxy address incorrectly treated as a client can associate many unrelated users. Fallback-quality addresses are excluded from shared-IP findings, but configuration still determines whether a forwarded address is trustworthy. Client headers are self-reported clues and cannot establish the identity of a relay or application.
+
+### Protecting the management entry
+
+Use a separate identity boundary for the administrator host. Protect the DNS/CDN
+account and its recovery email with MFA, and keep recovery methods outside the VPS.
+Encrypted storage and hidden credential fields limit exposure; an administrator
+can still change upstream destinations, so protecting administrator access matters.
+
+For a Cloudflare deployment:
+
+1. Create an Access application for the exact administrator hostname and allow only
+   the intended identities. Require [independent MFA](https://developers.cloudflare.com/cloudflare-one/access-controls/access-settings/independent-mfa/)
+   with Windows Hello or a security key. Enroll a recovery authenticator before
+   enforcing it. Use a practical session duration, such as 24 hours, and test it
+   in a separate browser session. Keep the application's own administrator login.
+2. Leave the public user host and model APIs outside this application. For automated
+   checks, scope any exception to the anonymous `/healthz` and `/readyz` paths,
+   or use a dedicated [service-auth policy](https://developers.cloudflare.com/cloudflare-one/access-controls/service-credentials/service-tokens/).
+   Do not bypass the whole admin API or treat an Access token as an application session.
+3. Restrict origin HTTPS to Cloudflare ranges and use a private, zone-specific
+   [Authenticated Origin Pull certificate](https://developers.cloudflare.com/ssl/origin-configuration/authenticated-origin-pull/set-up/zone-level/).
+   A shared Cloudflare certificate authenticates Cloudflare traffic but does not
+   identify the owning zone. Keep the normal server certificate and Full (strict)
+   validation as well. Public HTTP should only redirect or serve an intentionally
+   configured certificate challenge; it must not proxy application traffic.
+4. Install the private CA at Nginx, enable client-certificate verification in
+   optional mode, and confirm the expected certificate arrives on both hosts.
+   Then require it. Validate with `nginx -t` before each reload, including the
+   deployment helper's loopback health probes; use only a local probe path if
+   those probes do not carry the origin-pull certificate. Direct external requests
+   and requests without the private client certificate must be rejected.
+5. Keep a working SSH recovery session during the change. Verify management login,
+   revocation, public pages, CallerKey calls and SSE. If access is lost, restore the
+   affected proxy or Access configuration through the recovery channel; a network
+   policy failure does not call for restoring an old application database.
+
+Keep SSH key authentication and review listeners against their actual workloads.
+An origin address can become known through DNS history or other hosted services;
+restrict access independently of whether the address is known. Review optional
+systemd restrictions on the target host: local-interface discovery uses netlink
+on Linux, so an address-family allowlist must include `AF_NETLINK`.
 
 ### Nginx and Cloudflare notes
 
