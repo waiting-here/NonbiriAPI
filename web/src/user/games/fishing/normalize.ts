@@ -83,10 +83,10 @@ function count(value: unknown, field: string): 1 | 10 {
 }
 
 /**
- * The blue fat fish length is display-only data. Keep it as a canonical decimal
+ * Presentation length is display-only data. Keep it as a canonical decimal
  * string so a 128-character value cannot lose precision in a JavaScript number.
  */
-function blueFatFishLength(
+function presentationLength(
   value: unknown,
   tier: (typeof FISHING_TIERS)[number],
   field: string,
@@ -189,7 +189,7 @@ export function normalizeFishingResult(value: unknown): FishingBatchResult {
     const outcome = responseRecord(
       value,
       ['ordinal', 'species_key', 'tier', 'size_cm', 'reward', 'net_reward', 'rake'],
-      ['blue_fat_fish_length_cm'],
+      ['blue_fat_fish_length_cm', 'milk_crab_length_cm'],
       `fishing outcome ${index}`,
     );
     const ordinal = safeInteger(outcome.ordinal, index, index, `fishing outcome ${index} ordinal`);
@@ -198,10 +198,15 @@ export function normalizeFishingResult(value: unknown): FishingBatchResult {
     if (SPECIES_TIER.get(speciesKey) !== tier) invalidResponse(`fishing outcome ${index} roster`);
     const [minimum, maximum] = TIER_SIZE[tier];
     const sizeCM = safeInteger(outcome.size_cm, minimum, maximum, `fishing outcome ${index} size`);
-    const blueFatFishLengthCM = blueFatFishLength(
+    const blueFatFishLengthCM = presentationLength(
       outcome.blue_fat_fish_length_cm,
       tier,
       `fishing outcome ${index} blue fat fish length`,
+    );
+    const milkCrabLengthCM = presentationLength(
+      outcome.milk_crab_length_cm,
+      tier,
+      `fishing outcome ${index} milk crab length`,
     );
     const reward = creditsValue(outcome.reward, {}, `fishing outcome ${index} reward`);
     const netReward = creditsValue(outcome.net_reward, {}, `fishing outcome ${index} net reward`);
@@ -214,6 +219,7 @@ export function normalizeFishingResult(value: unknown): FishingBatchResult {
       tier,
       sizeCM,
       blueFatFishLengthCM,
+      milkCrabLengthCM,
       reward,
     };
   });
@@ -296,7 +302,7 @@ function rowBase(value: unknown, expected: 'single' | 'total', field: string) {
     expected === 'single'
       ? ['rank', 'species_key', 'size_cm', 'identity', 'is_me']
       : ['rank', 'total_credits', 'identity', 'is_me'];
-  const optional = expected === 'single' ? ['blue_fat_fish_length_cm'] : [];
+  const optional = expected === 'single' ? ['blue_fat_fish_length_cm', 'milk_crab_length_cm'] : [];
   const record = responseRecord(value, required, optional, field);
   return {
     record,
@@ -312,16 +318,22 @@ function singleRow(value: unknown, field: string): FishingSingleRow {
   const tier = SPECIES_TIER.get(speciesKey);
   if (!tier) invalidResponse(`${field} species roster`);
   const [minimum, maximum] = TIER_SIZE[tier];
-  const blueFatFishLengthCM = blueFatFishLength(
+  const blueFatFishLengthCM = presentationLength(
     base.record.blue_fat_fish_length_cm,
     tier,
     `${field} blue fat fish length`,
+  );
+  const milkCrabLengthCM = presentationLength(
+    base.record.milk_crab_length_cm,
+    tier,
+    `${field} milk crab length`,
   );
   return {
     ...base,
     speciesKey,
     sizeCM: safeInteger(base.record.size_cm, minimum, maximum, `${field} size`),
     blueFatFishLengthCM,
+    milkCrabLengthCM,
   };
 }
 

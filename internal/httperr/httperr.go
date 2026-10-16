@@ -22,6 +22,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
+	"github.com/waiting-here/NonbiriAPI/internal/textprivacy"
 )
 
 // Stable error codes. Add new codes; never redefine an existing one.
@@ -37,6 +38,9 @@ const (
 	CodeRateLimited             = "rate_limited"
 	CodePayloadTooLarge         = "payload_too_large"
 	CodeElevationRequired       = "elevated_required"
+	CodeMFARequired             = "mfa_required"
+	CodeMFAInvalidCode          = "mfa_invalid_code"
+	CodeMFASetupExpired         = "mfa_setup_expired"
 	CodeUnboundModel            = "unbound_model"
 	CodeUpstream                = "upstream"
 	CodeMaintenance             = "maintenance"
@@ -118,7 +122,7 @@ func IsStableCode(code string) bool {
 	switch code {
 	case CodeInternal, CodeInvalidRequest, CodeUnauthorized, CodeForbidden,
 		CodeNotFound, CodeConflict, CodeRefreshRequired, CodeMethodNotAllowed, CodeRateLimited,
-		CodePayloadTooLarge, CodeElevationRequired, CodeUnboundModel,
+		CodePayloadTooLarge, CodeElevationRequired, CodeMFARequired, CodeMFAInvalidCode, CodeMFASetupExpired, CodeUnboundModel,
 		CodeUpstream, CodeMaintenance, CodeServiceUnavailable,
 		CodeResourceLimitExceeded, CodeResourceLocked, CodeInsufficientCredits,
 		CodeFeatureDisabled, CodeCharitySuspended, CodeContentTooShort,
@@ -139,12 +143,12 @@ func statusOf(code string) int {
 		return http.StatusBadRequest
 	case CodeUnauthorized:
 		return http.StatusUnauthorized
-	case CodeForbidden, CodeElevationRequired, CodeInsufficientCredits, CodeFeatureDisabled,
+	case CodeForbidden, CodeMFARequired, CodeMFAInvalidCode, CodeElevationRequired, CodeInsufficientCredits, CodeFeatureDisabled,
 		CodeCharitySuspended, CodeCheckinCapReached:
 		return http.StatusForbidden
 	case CodeNotFound:
 		return http.StatusNotFound
-	case CodeConflict, CodeRefreshRequired, CodeAlreadyCheckedIn:
+	case CodeConflict, CodeMFASetupExpired, CodeRefreshRequired, CodeAlreadyCheckedIn:
 		return http.StatusConflict
 	case CodeMethodNotAllowed:
 		return http.StatusMethodNotAllowed
@@ -255,6 +259,11 @@ func writeError(w http.ResponseWriter, e Error, statusOverride *int, allowUpstre
 			break
 		}
 	}
+	if e.Source == SourcePlatform {
+		language := Language(w)
+		e = sanitizeError(Localize(e, language), allowUpstreamContext)
+		w.Header().Set("Content-Language", language)
+	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
@@ -289,6 +298,20 @@ func WriteJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
+}
+
+// WriteDisplayJSON removes IPv4 addresses from a read-only display projection.
+// It must not be used for editable configuration or normal model output.
+func WriteDisplayJSON(w http.ResponseWriter, status int, value any) {
+	body, err := textprivacy.MarshalJSON(value)
+	if err != nil {
+		WriteError(w, New(CodeInternal, "response could not be encoded"))
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(status)
+	_, _ = w.Write(append(body, '\n'))
 }
 
 // sseErrorPayload is the compact {error:{code,source,message}} shape shared by
@@ -386,7 +409,7 @@ func sanitizeWireMessage(source, message string) string {
 	// Prefix handling is deliberately centralized at both wire sinks. Remove
 	// every exact marker before applying the source-specific prefix, so an
 	// internal marker cannot smuggle platform attribution through either sink.
-	message = strings.ReplaceAll(controlStrip(message), platformPrefix, "")
+	message = textprivacy.IPv4(strings.ReplaceAll(controlStrip(message), platformPrefix, ""))
 	if source == SourcePlatform {
 		contentBound := msgBound - len(platformPrefix)
 		if contentBound < 0 {
@@ -402,14 +425,14 @@ func sanitizeWireMessage(source, message string) string {
 // UTF-8 repair and control-character normalization. Empty input returns the
 // empty string, which the omitempty JSON tag drops from the envelope.
 func sanitizeDiag(s string) string {
-	return diagnostic.Bound(stripC1Controls(s))
+	return diagnostic.Bound(textprivacy.IPv4(diagnostic.Bound(stripC1Controls(s))))
 }
 
 func sanitizeUpstreamCode(s string) string {
 	if s == "" {
 		return ""
 	}
-	if len(s) > upstreamCodeBound {
+	if len(s) > upstreamCodeBound || textprivacy.IPv4(s) != s {
 		return ""
 	}
 	for i := 0; i < len(s); i++ {

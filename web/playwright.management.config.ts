@@ -8,6 +8,7 @@ process.env.NONBIRI_AUDIT_BROWSER_STATE = resolve('test-results/management/state
 export default defineConfig({
   ...audit,
   testMatch: [
+    'account-mfa.spec.ts',
     'management.spec.ts',
     'moderation.spec.ts',
     'directory-controls.spec.ts',

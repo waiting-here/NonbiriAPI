@@ -19,7 +19,7 @@ func TestDenialGrantPaginatedCurrentReasonsAndCredentialIsolation(t *testing.T) 
 	f := newRuntimeFixture(t, nil)
 	ctx := context.Background()
 	discord := "123456789012345678"
-	f.store.DB().Exec(`INSERT INTO discord_blacklist(discord_id,reason,created_at) VALUES(?,'Original manual reason',?)`, discord, authTestNow)
+	f.store.DB().Exec(`INSERT INTO discord_blacklist(discord_id,reason,created_at) VALUES(?,'Original manual reason 192.0.2.1',?)`, discord, authTestNow)
 	for i := range 43 {
 		if _, err := f.store.DB().Exec(`INSERT INTO discord_blacklist_events(discord_id,operation_key,actor_kind,reason_codes_json,safe_note,created_at) VALUES(?,?,'automatic','["deletion_penalty_evasion"]',?,?)`, discord, fmt.Sprintf("synthetic-operation-%d", i), fmt.Sprintf("Note %d\n完整理由", i), authTestNow+int64(i)); err != nil {
 			t.Fatal(err)
@@ -53,7 +53,7 @@ func TestDenialGrantPaginatedCurrentReasonsAndCredentialIsolation(t *testing.T) 
 		if response.Header().Get("Cache-Control") != "no-store" {
 			t.Fatal("cacheable denial")
 		}
-		if pageNo == 0 && page.Items[0].Reason != "Original manual reason" {
+		if pageNo == 0 && page.Items[0].Reason != "Original manual reason [redacted]" {
 			t.Fatal(page)
 		}
 		for _, item := range page.Items {
@@ -74,6 +74,10 @@ func TestDenialGrantPaginatedCurrentReasonsAndCredentialIsolation(t *testing.T) 
 	session := request(t, f.runtime.UserHandler(), host.StationUser, http.MethodGet, "https://user.example/api/session", "", []*http.Cookie{{Name: UserSessionCookieName, Value: token}}, nil)
 	if session.Code != 401 {
 		t.Fatal("grant gained session authority", session.Code)
+	}
+	var originalReason string
+	if err = f.store.DB().QueryRow(`SELECT reason FROM discord_blacklist WHERE discord_id=?`, discord).Scan(&originalReason); err != nil || originalReason != "Original manual reason 192.0.2.1" {
+		t.Fatal("stored blacklist reason changed", originalReason, err)
 	}
 	f.store.DB().Exec(`DELETE FROM discord_blacklist WHERE discord_id=?`, discord)
 	current := request(t, f.runtime.UserHandler(), host.StationUser, http.MethodGet, "https://user.example/api/auth/access-denied-reasons", "", []*http.Cookie{grant}, nil)
@@ -104,9 +108,9 @@ func TestDenialLongestRuleFactsFitBudgetWithoutLosingManualHistory(t *testing.T)
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	reason := observability.AutomaticReason{Kind: "client_rules", SchemaVersion: 1, Params: json.RawMessage(`{}`), ManualText: strings.Repeat("<", 4095) + "X"}
+	reason := observability.AutomaticReason{Kind: "client_rules", SchemaVersion: 1, Params: json.RawMessage(`{}`), ManualText: "Peer 192.0.2.1 " + strings.Repeat("<", 4080) + "X"}
 	for i := range 100 {
-		reason.Rules = append(reason.Rules, observability.ReasonRuleLabel{RuleID: strings.Repeat("x", 26), Revision: int64(i + 1), Name: strings.Repeat("<", 120)})
+		reason.Rules = append(reason.Rules, observability.ReasonRuleLabel{RuleID: strings.Repeat("x", 26), Revision: int64(i + 1), Name: "Rule 203.0.113.9 " + strings.Repeat("<", 103)})
 	}
 	if err = observability.PutAutomaticReasonTx(ctx, tx, "user_ban", strconv.FormatInt(user, 10), reason); err != nil {
 		t.Fatal(err)
@@ -124,8 +128,20 @@ func TestDenialLongestRuleFactsFitBudgetWithoutLosingManualHistory(t *testing.T)
 		t.Fatal(response.Code, len(response.Body.Bytes()), err)
 	}
 	item := page.Items[0]
-	if item.Metadata == nil || len(item.Metadata.Rules) != 100 || item.Metadata.ManualText != reason.ManualText || item.Reason != "Client usage rules were matched." {
+	if item.Metadata == nil || len(item.Metadata.Rules) != 100 || item.Metadata.ManualText != "Peer [redacted] "+strings.Repeat("<", 4080)+"X" || item.Reason != "Client usage rules were matched." {
 		t.Fatal("lost rule labels, English projection, or manual history")
+	}
+	if item.Metadata.Rules[0].Name != "Rule [redacted] "+strings.Repeat("<", 103) || strings.Contains(response.Body.String(), "203.0.113.9") {
+		t.Fatal("rule label was not redacted")
+	}
+	storedTx, err := f.store.DB().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer storedTx.Rollback()
+	storedReason, err := observability.ReadAutomaticReasonTx(ctx, storedTx, "user_ban", strconv.FormatInt(user, 10))
+	if err != nil || storedReason == nil || storedReason.ManualText != reason.ManualText || storedReason.Rules[0].Name != reason.Rules[0].Name {
+		t.Fatal("stored rule evidence changed", err)
 	}
 	if strings.Contains(response.Body.String(), `"rule_id"`) || strings.Contains(response.Body.String(), `"revision"`) {
 		t.Fatal("denial exposed management rule identifiers")

@@ -111,6 +111,10 @@ func (router *fakeCharityRouter) PreflightImage(ctx context.Context, userID int6
 	return router.Preflight(ctx, userID, model, nil, now)
 }
 
+func (router *fakeCharityRouter) PreflightDecision(ctx context.Context, userID int64, model string, _ *openai.DecisionRequest, now int64) (CharityPreflight, error) {
+	return router.Preflight(ctx, userID, model, nil, now)
+}
+
 func (router *fakeCharityRouter) ListAvailableModels(_ context.Context, userID int64, _ int64, _ int) ([]ListedModel, error) {
 	router.listCalls++
 	router.listUsers = append(router.listUsers, userID)
@@ -379,13 +383,21 @@ func newServiceFixture(t *testing.T, capture DebugCapture) *serviceFixture {
 	anthropic := &fakeConnector{connectorType: connectorcontract.TypeAnthropicCompatible, capabilities: anthropicDescriptor.Capabilities, consume: true}
 	gatewayDescriptor, _ := registry.Descriptor(connectorcontract.TypeAISDKGatewayV3)
 	gateway := &fakeConnector{connectorType: connectorcontract.TypeAISDKGatewayV3, capabilities: gatewayDescriptor.Capabilities, consume: true}
+	connectors := []connector.Connector{openAI, anthropic, gateway}
+	for _, kind := range registry.Types() {
+		if kind == connectorcontract.TypeOpenAICompatible || kind == connectorcontract.TypeAnthropicCompatible || kind == connectorcontract.TypeAISDKGatewayV3 {
+			continue
+		}
+		descriptor, _ := registry.Descriptor(kind)
+		connectors = append(connectors, &fakeConnector{connectorType: kind, capabilities: descriptor.Capabilities, consume: true})
+	}
 	safety, err := NewSafetyIdentifierFactory(fixedSubkeyDeriver{})
 	if err != nil {
 		t.Fatalf("NewSafetyIdentifierFactory: %v", err)
 	}
 	service, err := NewService(Config{
 		Personal: personal, Charity: charity, Claims: claims, CharityCharges: charges,
-		Debug: capture, Registry: registry, Connectors: []connector.Connector{openAI, anthropic, gateway}, Safety: safety,
+		Debug: capture, Registry: registry, Connectors: connectors, Safety: safety,
 		Now:            func() time.Time { return time.Unix(2_000, 0) },
 		ForwardTimeout: time.Minute, Settlement: time.Second,
 		Backoff: BackoffConfig{Max: time.Nanosecond},
@@ -434,6 +446,10 @@ func requireEvents(t *testing.T, got []string, want ...string) {
 type activeIdentityVerifier struct{}
 
 func (activeIdentityVerifier) VerifyDebugIdentity(context.Context, int64, string) (debug.IdentityState, error) {
+	return debug.IdentityActive, nil
+}
+
+func (activeIdentityVerifier) VerifyDebugBrowserIdentity(context.Context, int64, string) (debug.IdentityState, error) {
 	return debug.IdentityActive, nil
 }
 

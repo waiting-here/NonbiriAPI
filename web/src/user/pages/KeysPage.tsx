@@ -106,7 +106,8 @@ function ClientInstructions() {
                   <code>{t('user.core.keys.charityModelExample')}</code>
                 </p>
                 <p>
-                  <Link to="/models">{t('user.core.keys.ownModels')}</Link> · <code>{t('user.core.keys.ownModelExample')}</code>
+                  <Link to="/models">{t('user.core.keys.ownModels')}</Link> ·{' '}
+                  <code>{t('user.core.keys.ownModelExample')}</code>
                 </p>
                 <span className="nb-small nb-muted">{t('user.core.keys.copyModel')}</span>
               </dd>
@@ -114,7 +115,7 @@ function ClientInstructions() {
           </dl>
           <p className="nb-small nb-muted api-paths">
             <code>/v1/chat/completions</code> · <code>/v1/embeddings</code> ·{' '}
-            <code>/v1/images/generations</code>
+            <code>/v1/images/generations</code> �� <code>/v1/decisions</code>
             <br />
             {t('user.core.keys.supportedPaths')} <code>/v1/models</code>
           </p>

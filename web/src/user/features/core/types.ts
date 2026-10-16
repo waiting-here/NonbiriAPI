@@ -7,6 +7,9 @@ export const CONNECTOR_TYPES = [
   'openai-compatible',
   'anthropic-compatible',
   'ai-sdk-gateway-v3',
+  'google-gemini',
+  'openai-responses',
+  'openai-decisions',
 ] as const;
 
 export type ConnectorType = (typeof CONNECTOR_TYPES)[number];

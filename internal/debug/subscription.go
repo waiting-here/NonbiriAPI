@@ -349,12 +349,17 @@ func writeHeartbeat(writer http.ResponseWriter, controller *http.ResponseControl
 	return controller.Flush()
 }
 
-func (subscription *Subscription) writeQueued(writer http.ResponseWriter, controller *http.ResponseController, queued queuedEvent) (bool, bool, error) {
+func (subscription *Subscription) writeQueued(ctx context.Context, writer http.ResponseWriter, controller *http.ResponseController, queued queuedEvent) (bool, bool, error) {
 	pin, resolved := subscription.pinQueued(queued)
 	if !resolved {
 		return false, false, nil
 	}
 	subscription.deliveryMu.Lock()
+	if err := ctx.Err(); err != nil {
+		subscription.deliveryMu.Unlock()
+		subscription.releasePin(pin)
+		return false, false, err
+	}
 	if queued.sequence != subscription.sequence.Load() || subscription.closedFlag.Load() {
 		subscription.deliveryMu.Unlock()
 		subscription.releasePin(pin)
@@ -369,35 +374,41 @@ func (subscription *Subscription) writeQueued(writer http.ResponseWriter, contro
 	return true, queued.closeAfter, nil
 }
 
-func (subscription *Subscription) recheckIdentity(ctx context.Context) {
+func (subscription *Subscription) recheckIdentity(ctx context.Context) error {
 	if subscription == nil || subscription.hub == nil {
-		return
+		return ErrInvalid
 	}
 	hub := subscription.hub
 	hub.mu.Lock()
 	if hub.closed || subscription.closed {
 		hub.mu.Unlock()
-		return
+		return nil
 	}
 	current := hub.activeByUser[subscription.userID]
 	if current == nil || current.id != subscription.sessionID {
 		hub.mu.Unlock()
-		return
+		return nil
 	}
 	binding, verifier := current.identityBinding, hub.config.verifier
 	hub.mu.Unlock()
 	if verifier == nil {
-		return
+		return nil
 	}
-	state, err := verifier.VerifyDebugIdentity(ctx, subscription.userID, binding)
-	if err != nil || state == IdentityActive || state == IdentityUncertain {
-		return
+	state, err := verifier.VerifyDebugBrowserIdentity(ctx, subscription.userID, binding)
+	if err != nil {
+		return err
+	}
+	if state == IdentityUncertain {
+		return errors.New("debug stream identity is unavailable")
+	}
+	if state == IdentityActive {
+		return nil
 	}
 	hub.mu.Lock()
 	defer hub.mu.Unlock()
 	current = hub.activeByUser[subscription.userID]
 	if current == nil || current.id != subscription.sessionID {
-		return
+		return nil
 	}
 	switch state {
 	case IdentityRevoked:
@@ -407,6 +418,7 @@ func (subscription *Subscription) recheckIdentity(ctx context.Context) {
 	case IdentityDeleted:
 		hub.endSessionLocked(current, EndAccountDeleted)
 	}
+	return nil
 }
 
 // Stream writes the dedicated v2 SSE stream. Observer disconnect only closes
@@ -425,8 +437,11 @@ func (subscription *Subscription) Stream(ctx context.Context, writer http.Respon
 	defer heartbeat.Stop()
 
 	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if queued, ok := subscription.popPending(); ok {
-			written, closed, err := subscription.writeQueued(writer, controller, queued)
+			written, closed, err := subscription.writeQueued(ctx, writer, controller, queued)
 			if err != nil {
 				return err
 			}
@@ -442,7 +457,9 @@ func (subscription *Subscription) Stream(ctx context.Context, writer http.Respon
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-heartbeat.C:
-			subscription.recheckIdentity(ctx)
+			if err := subscription.recheckIdentity(ctx); err != nil {
+				return err
+			}
 			if subscription.closedFlag.Load() {
 				return nil
 			}
@@ -453,7 +470,7 @@ func (subscription *Subscription) Stream(ctx context.Context, writer http.Respon
 			if !ok {
 				return nil
 			}
-			written, closed, err := subscription.writeQueued(writer, controller, queued)
+			written, closed, err := subscription.writeQueued(ctx, writer, controller, queued)
 			if err != nil {
 				return err
 			}

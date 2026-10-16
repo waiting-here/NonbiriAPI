@@ -530,7 +530,7 @@ it.each(['admin', 'steward'] as const)(
 it.each(['disable', 'unbind', 'delete'] as const)(
   'lets a steward %s an existing bound rule',
   async (operation) => {
-    api.numberedRules.mockResolvedValue({
+    const savedRules = {
       items: [
         {
           id: 'rsk_AAAAAAAAAAAAAAAAAAAAAA',
@@ -558,7 +558,12 @@ it.each(['disable', 'unbind', 'delete'] as const)(
       total_pages: '1',
       revision: 'r2',
       changed: false,
+    };
+    let completeRefresh!: (value: typeof savedRules) => void;
+    const refreshedRules = new Promise<typeof savedRules>((resolve) => {
+      completeRefresh = resolve;
     });
+    api.numberedRules.mockResolvedValueOnce(savedRules).mockReturnValue(refreshedRules);
     const view = await renderWithProviders(<RiskAuditPanel role="steward" scopeKey="6" />, {
       station: 'user',
       role: 'level6',
@@ -567,6 +572,10 @@ it.each(['disable', 'unbind', 'delete'] as const)(
       user: { id: '6', username: 'Steward', level: 6, effective_level: 6 },
     });
     await view.user.click(screen.getByRole('tab', { name: 'Client rules' }));
+    await waitFor(() =>
+      expect(api.numberedRules).toHaveBeenCalledWith('1', 20, 'r2', expect.any(AbortSignal)),
+    );
+    await act(async () => completeRefresh(savedRules));
     const edit = await screen.findByRole('button', { name: 'Edit' });
     expect(edit).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled();

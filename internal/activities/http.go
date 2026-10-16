@@ -3,6 +3,7 @@ package activities
 import (
 	"errors"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -587,6 +588,10 @@ func writeActivitiesJSON(writer http.ResponseWriter, status int, value any) {
 }
 
 func writeActivitiesError(writer http.ResponseWriter, err error) {
+	if errors.Is(err, authz.ErrMFARequired) {
+		httperr.WriteError(writer, httperr.New(httperr.CodeMFARequired, "MFA verification is required."))
+		return
+	}
 	switch {
 	case errors.Is(err, ErrInvalidRequest):
 		httperr.WriteError(writer, httperr.New(httperr.CodeInvalidRequest, "invalid request"))

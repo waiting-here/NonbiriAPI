@@ -169,12 +169,12 @@ func TestRegistryNormalizesTypedNilDiscovererToUnsupported(t *testing.T) {
 func TestDefaultRegistryDescriptorDrivesExecutionAndDiscovery(t *testing.T) {
 	registry := NewDefaultRegistry()
 	types := registry.Types()
-	if len(types) != 3 || types[0] != connectorcontract.TypeAISDKGatewayV3 || types[1] != connectorcontract.TypeAnthropicCompatible || types[2] != connectorcontract.TypeOpenAICompatible {
+	if len(types) != 6 || types[0] != connectorcontract.TypeAISDKGatewayV3 || types[1] != connectorcontract.TypeAnthropicCompatible || types[2] != connectorcontract.TypeGoogleGemini || types[3] != connectorcontract.TypeOpenAICompatible || types[4] != connectorcontract.TypeOpenAIDecisions || types[5] != connectorcontract.TypeOpenAIResponses {
 		t.Fatalf("default registry types=%v", types)
 	}
 	for _, connectorType := range types {
 		descriptor, ok := registry.Descriptor(connectorType)
-		if !ok || descriptor.New == nil || descriptor.Discoverer == nil || descriptor.Supports == nil || !descriptor.Capabilities.Has(connectorcontract.CapabilityModelDiscovery) {
+		if !ok || descriptor.New == nil || descriptor.Discoverer == nil || connectorType != connectorcontract.TypeOpenAIDecisions && descriptor.Supports == nil || !descriptor.Capabilities.Has(connectorcontract.CapabilityModelDiscovery) {
 			t.Fatalf("default descriptor %q incomplete: %+v ok=%v", connectorType, descriptor, ok)
 		}
 	}

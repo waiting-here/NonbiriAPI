@@ -125,6 +125,7 @@ function UserAuthority({
   role,
   account,
   renderDeletion,
+  renderSecurity,
   onAuthorityLoss,
 }: {
   user: AdminUser;
@@ -134,6 +135,7 @@ function UserAuthority({
   account: string;
   onAuthorityLoss?: () => void;
   renderDeletion?: (user: AdminUser, refresh: () => Promise<unknown>) => ReactNode;
+  renderSecurity?: (user: AdminUser) => ReactNode;
 }) {
   const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
@@ -308,6 +310,7 @@ function UserAuthority({
           </dd>
         </dl>
       </Card>
+      {renderSecurity?.(user)}
       <Tabs
         label={t('management.users.detailTabs')}
         value={tab}
@@ -836,6 +839,7 @@ interface UserManagementProps {
   role: ManagementRole;
   onAuthorityLoss?: () => void;
   renderDeletion?: (user: AdminUser, refresh: () => Promise<unknown>) => ReactNode;
+  renderSecurity?: (user: AdminUser) => ReactNode;
 }
 
 export function UserManagement({
@@ -845,6 +849,7 @@ export function UserManagement({
   role,
   onAuthorityLoss,
   renderDeletion,
+  renderSecurity,
 }: UserManagementProps) {
   const { t } = useTranslation();
   const accountLabels = accountCopy(t);
@@ -1357,6 +1362,7 @@ export function UserManagement({
                 role={role}
                 account={account}
                 renderDeletion={renderDeletion}
+                renderSecurity={renderSecurity}
                 onAuthorityLoss={onAuthorityLoss}
                 onClose={closeUser}
                 refresh={async () => {

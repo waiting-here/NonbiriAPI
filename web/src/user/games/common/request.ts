@@ -1,3 +1,4 @@
+import { requestLanguage } from '@shared/query/language';
 import { ApiError } from '@shared/query/http';
 import { encodeBase64URL } from './strict';
 
@@ -17,11 +18,6 @@ export interface GameRequestOptions {
   readonly maxResponseBytes?: number;
 }
 
-function boundedError(value: unknown, fallback: string): string {
-  if (typeof value !== 'string' || value.length === 0) return fallback;
-  return Array.from(value).slice(0, 1000).join('');
-}
-
 function errorFrom(status: number, body: unknown): ApiError {
   const root =
     body !== null && typeof body === 'object' && !Array.isArray(body)
@@ -36,7 +32,9 @@ function errorFrom(status: number, body: unknown): ApiError {
     typeof detail?.code === 'string' ? detail.code : status === 409 ? 'conflict' : `http_${status}`;
   return new ApiError(
     code,
-    boundedError(detail?.message, `Game request failed (HTTP ${status}).`),
+    typeof detail?.message === 'string' && detail.message.length > 0
+      ? detail.message
+      : `Game request failed (HTTP ${status}).`,
     status,
   );
 }
@@ -107,6 +105,7 @@ export async function gameRequest<T>(
   if (!Number.isSafeInteger(maximum) || maximum < 1 || maximum > 8 * 1024 * 1024)
     throw new ApiError('invalid_request', 'Invalid response budget.', 0);
   const headers = new Headers({ Accept: 'application/json', 'Cache-Control': 'no-store' });
+  headers.set('Accept-Language', requestLanguage());
   if (options.json !== undefined) headers.set('Content-Type', 'application/json');
   if (options.idempotencyKey) headers.set('Idempotency-Key', options.idempotencyKey);
   let response: Response;

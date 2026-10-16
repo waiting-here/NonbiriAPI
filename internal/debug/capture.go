@@ -603,7 +603,7 @@ func WriteLiveCaptured(writer http.ResponseWriter, language string) {
 func WriteLiveCancelled(writer http.ResponseWriter, language string, streamCommitted bool) {
 	errorValue := httperr.New(httperr.CodeDebugLiveCancelled, liveCancelledMessage(language))
 	if streamCommitted {
-		_, _ = writer.Write(httperr.SSEErrorFrame(errorValue))
+		_, _ = writer.Write(httperr.SSEErrorFrame(httperr.Localize(errorValue, httperr.Language(writer))))
 		return
 	}
 	writer.Header().Set("X-Nonbiri-Debug-Mode", "live-cancelled")

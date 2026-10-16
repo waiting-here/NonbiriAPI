@@ -122,12 +122,34 @@ for (const theme of ['light', 'dark']) {
         });
       if (path.endsWith('/actions')) {
         writes.push(request.postDataJSON());
-        state.current.locked = [true, false];
-        state.current.phase_seq = '3';
-        state.current.decision_id = '3';
-        state.current.view.legal_actions = [];
+        state.current.locked = [writes.length > 1, false];
+        state.current.phase_seq = String(writes.length + 2);
+        state.current.decision_id = state.current.phase_seq;
+        state.current.view.legal_actions =
+          writes.length === 1 ? [{ kind: 'play', card: 10, row: 'close' }, { kind: 'pass' }] : [];
+        if (writes.length === 1) {
+          state.current.view.round = 2;
+          state.current.view.rounds = [
+            {
+              round: 1,
+              scores: [57, 30],
+              winner: 0,
+              rows: ['close', 'ranged', 'siege'].map((row) => ({ row, scores: [19, 10] })),
+              lives_before: [2, 2],
+              lives_after: [2, 1],
+            },
+          ];
+          state.current.view.board
+            .find((row) => row.side === 'self' && row.row === 'ranged')!
+            .cards.push(card('gemini_flash37_hero', 999));
+        }
         return route.fulfill({
-          json: { session_id: state.current.id, revision: '4', phase_seq: '3', locked: true },
+          json: {
+            session_id: state.current.id,
+            revision: String(writes.length + 3),
+            phase_seq: state.current.phase_seq,
+            locked: state.current.locked[0],
+          },
         });
       }
       if (path.endsWith('/leaderboard'))
@@ -197,6 +219,48 @@ for (const theme of ['light', 'dark']) {
     expect(writes).toEqual([
       { phase_seq: '2', decision_id: '2', action: { kind: 'play', card: 10, row: 'close' } },
     ]);
+    await expect(arena.locator('#round-summary')).toBeVisible();
+    await expect(arena.locator('#action-title')).toContainText('Gemini 3.7 Flash');
+    const pass = arena.locator('#arena-pass');
+    await expect(pass).toBeEnabled();
+    await expect(arena.locator('#selection-info')).toBeVisible();
+    for (const size of [
+      { width: 1440, height: 900 },
+      { width: 1280, height: 720 },
+      { width: 390, height: 844 },
+    ]) {
+      await page.setViewportSize(size);
+      await pass.scrollIntoViewIfNeeded();
+      if (size.width >= 1081) {
+        const sidebar = arena.locator('.side-column');
+        const height = await sidebar.evaluate((element) => ({
+          content: element.scrollHeight,
+          visible: element.clientHeight,
+        }));
+        expect(height.content).toBeGreaterThan(height.visible);
+        await sidebar.hover();
+        await page.mouse.wheel(0, 1000);
+        await expect
+          .poll(() => sidebar.evaluate((element) => element.scrollTop))
+          .toBeGreaterThan(0);
+        await expect(arena.locator('#battle-log li').last()).toBeInViewport();
+      }
+      if (process.env.NONBIRI_GAME_PRESENTATION_EVIDENCE) {
+        mkdirSync(process.env.NONBIRI_GAME_PRESENTATION_EVIDENCE, { recursive: true });
+        await page.screenshot({
+          path: `${process.env.NONBIRI_GAME_PRESENTATION_EVIDENCE}/gwent-side-${theme}-${size.width}.png`,
+        });
+      }
+      // Round details and the latest card must not paint over the hand controls.
+      await pass.click({ trial: true });
+    }
+    await Promise.all([
+      page.waitForResponse(
+        (response) => response.url().endsWith('/actions') && response.request().method() === 'POST',
+      ),
+      pass.click(),
+    ]);
+    expect(writes[1]).toEqual({ phase_seq: '3', decision_id: '3', action: { kind: 'pass' } });
     await expect(arena.locator('#battle')).not.toHaveClass(/my-turn/);
     errors.assertNone();
   });

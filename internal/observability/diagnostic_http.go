@@ -1,9 +1,10 @@
 package observability
 
 import (
-	"encoding/json"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/textprivacy"
 	"io"
 	"net/http"
 	"net/url"
@@ -93,6 +94,10 @@ func parseIndependentDiagnosticQuery(r *http.Request) (DiagnosticFilter, error) 
 	return out, nil
 }
 func writeIndependentDiagnosticError(w http.ResponseWriter, err error) {
+	if errors.Is(err, authz.ErrMFARequired) {
+		httperr.WriteError(w, httperr.New(httperr.CodeMFARequired, "MFA verification is required."))
+		return
+	}
 	code, message := httperr.CodeServiceUnavailable, "diagnostics unavailable"
 	switch {
 	case errors.Is(err, ErrInvalid):
@@ -131,7 +136,7 @@ func (r *DiagnosticReader) serve(w http.ResponseWriter, request *http.Request, a
 		writeIndependentDiagnosticError(w, err)
 		return
 	}
-	body, err := json.Marshal(value)
+	body, err := textprivacy.MarshalJSON(value)
 	if err != nil || len(body) > 8<<20 {
 		writeIndependentDiagnosticError(w, ErrUnavailable)
 		return

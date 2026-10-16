@@ -3,6 +3,7 @@ package charityrouting
 import (
 	"errors"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -147,6 +148,10 @@ func writeJSON(writer http.ResponseWriter, value any) {
 }
 
 func writeRoutingError(writer http.ResponseWriter, err error) {
+	if errors.Is(err, authz.ErrMFARequired) {
+		httperr.WriteError(writer, httperr.New(httperr.CodeMFARequired, "MFA verification is required."))
+		return
+	}
 	httperr.WriteMapped(writer, err,
 		httperr.Mapping{Err: ErrInvalidRequest, Code: httperr.CodeInvalidRequest, Message: "invalid request"},
 		httperr.Mapping{Err: ErrUnauthorized, Code: httperr.CodeUnauthorized, Message: "authentication required"},

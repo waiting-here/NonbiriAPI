@@ -186,13 +186,17 @@ for (const game of ['blackjack', 'bidding'] as const) {
       const errors = collectConsoleViolations(page);
       const counts = await common(page);
       await page.clock.install();
+      const idleBlackjack = blackjackWire();
       const wire =
         game === 'blackjack'
           ? active
             ? blackjackWire('decision', null)
             : {
-                ...blackjackWire(),
+                ...idleBlackjack,
                 phase: 'seating',
+                // Keep deadline refreshes outside this polling-only observation.
+                deadline: idleBlackjack.server_now + 120,
+                next_round_at: idleBlackjack.server_now + 120,
                 your_seat: null,
                 you: null,
                 table: null,

@@ -382,7 +382,13 @@ export function useAnnouncement(id: string | undefined, enabled = true) {
 }
 
 export interface CredentialReportInput {
-  connector_type: 'openai-compatible' | 'anthropic-compatible' | 'ai-sdk-gateway-v3';
+  connector_type:
+    | 'openai-compatible'
+    | 'anthropic-compatible'
+    | 'ai-sdk-gateway-v3'
+    | 'google-gemini'
+    | 'openai-responses'
+    | 'openai-decisions';
   base_url: string;
   secret: string;
   note: string;

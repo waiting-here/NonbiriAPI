@@ -126,8 +126,14 @@ VALUES('issue_projection_incomplete','synthetic projection checkpoint',?,?,0)`, 
 	}
 	seedAuditBrowserGameBalances(t, f, now)
 	var management map[string]any
+	var mfaUser imageBrowserUser
 	if os.Getenv("NONBIRI_MANAGEMENT_BROWSER") == "1" {
 		management = seedManagementBrowser(t, f, now)
+		var adminID int64
+		if err := f.store.DB().QueryRow(`SELECT id FROM users WHERE is_admin=1`).Scan(&adminID); err != nil {
+			t.Fatal(err)
+		}
+		mfaUser = f.seedUser(90, 2, adminID)
 	}
 	// A real failed queued image task exercises its diagnostic root and refund.
 	models := f.call("GET", "/api/limited-activities/picture-book/models", nil, f.users[0].Cookie, false)["data"].([]any)
@@ -179,6 +185,14 @@ VALUES('issue_projection_incomplete','synthetic projection checkpoint',?,?,0)`, 
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
+		if r.Method == http.MethodPost && r.URL.Path == "/mfa/expire" && mfaUser.ID != "" {
+			if _, err := f.store.DB().ExecContext(r.Context(), `DELETE FROM account_mfa_proofs WHERE user_id=?`, mfaUser.ID); err != nil {
+				http.Error(w, "fixture update failed", http.StatusInternalServerError)
+				return
+			}
+			writeImageFixtureJSON(w, map[string]bool{"ok": true})
+			return
+		}
 		if r.Method != http.MethodPost || r.URL.Path != "/shutdown" {
 			http.NotFound(w, r)
 			return
@@ -199,6 +213,7 @@ VALUES('issue_projection_incomplete','synthetic projection checkpoint',?,?,0)`, 
 	}
 	if management != nil {
 		state["management"] = management
+		state["mfa_user"] = mfaUser
 	}
 	raw, err := json.Marshal(state)
 	if err != nil {

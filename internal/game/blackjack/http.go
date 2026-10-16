@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"io"
 	"net/http"
 	"net/url"
@@ -328,6 +329,11 @@ func writeValue(w http.ResponseWriter, value any, err error) {
 	_, _ = w.Write(body)
 }
 func writeMutation(w http.ResponseWriter, value MutationResult, err error) {
+	// Durable conflict receipts carry the same conflict as direct refusals.
+	// Render it for this request's language without rewriting the receipt.
+	if err == nil && value.Status == http.StatusConflict {
+		err = ErrConflict
+	}
 	if err != nil {
 		writeError(w, err)
 		return
@@ -342,6 +348,10 @@ func writeMutation(w http.ResponseWriter, value MutationResult, err error) {
 	}
 }
 func writeError(w http.ResponseWriter, err error) {
+	if errors.Is(err, authz.ErrMFARequired) {
+		httperr.WriteError(w, httperr.New(httperr.CodeMFARequired, "MFA verification is required."))
+		return
+	}
 	code, message := httperr.CodeInternal, "request failed"
 	switch {
 	case errors.Is(err, ErrInvalid):

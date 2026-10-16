@@ -91,6 +91,12 @@ var catalogMetadataByKey = map[string]catalogMetadata{
 	KeyOAuthStartRateWindowSecs:        {"access", catalogText("OAuth 启动窗口", "OAuth start window"), catalogText("OAuth 启动次数的统计窗口。", "Counting window for OAuth starts."), unitSecond, nil},
 	KeyOAuthStartRatePenaltySecs:       {"access", catalogText("OAuth 启动处罚时长", "OAuth start penalty"), catalogText("超过登录启动次数上限后，该客户端 IP 暂时不能再次发起登录的时长。", "How long a client IP must wait before starting another sign-in after exceeding the limit."), unitSecond, nil},
 	KeyMaintenanceMode:                 {"access", catalogText("维护模式", "Maintenance mode"), catalogText("阻止普通业务入口并展示维护状态。", "Blocks regular business entry points and exposes maintenance state."), unitNone, nil},
+	KeyMFARequiredLevel1:               {"access", catalogText("Lv1 必须使用验证器", "Require authenticator for Lv1"), catalogText("该等级账号须绑定验证器并验证后才能使用网页账号功能。", "Accounts at this level must enroll and verify an authenticator before using browser account features."), unitNone, nil},
+	KeyMFARequiredLevel2:               {"access", catalogText("Lv2 必须使用验证器", "Require authenticator for Lv2"), catalogText("该等级账号须绑定验证器并验证后才能使用网页账号功能。", "Accounts at this level must enroll and verify an authenticator before using browser account features."), unitNone, nil},
+	KeyMFARequiredLevel3:               {"access", catalogText("Lv3 必须使用验证器", "Require authenticator for Lv3"), catalogText("该等级账号须绑定验证器并验证后才能使用网页账号功能。", "Accounts at this level must enroll and verify an authenticator before using browser account features."), unitNone, nil},
+	KeyMFARequiredLevel4:               {"access", catalogText("Lv4 必须使用验证器", "Require authenticator for Lv4"), catalogText("该等级账号须绑定验证器并验证后才能使用网页账号功能。", "Accounts at this level must enroll and verify an authenticator before using browser account features."), unitNone, nil},
+	KeyMFARequiredLevel5:               {"access", catalogText("Lv5 必须使用验证器", "Require authenticator for Lv5"), catalogText("该等级账号须绑定验证器并验证后才能使用网页账号功能。", "Accounts at this level must enroll and verify an authenticator before using browser account features."), unitNone, nil},
+	KeyMFARequiredLevel6:               {"access", catalogText("Lv6 必须使用验证器", "Require authenticator for Lv6"), catalogText("该等级账号须绑定验证器并验证后才能使用网页账号功能。", "Accounts at this level must enroll and verify an authenticator before using browser account features."), unitNone, nil},
 	KeyRegistrationOpen:                {"access", catalogText("开放注册", "Registration open"), catalogText("控制新的 Discord 身份是否可以创建账号。", "Controls whether a new Discord identity may create an account."), unitNone, nil},
 	KeySiteTimezoneOffsetMinutes:       {"economy", catalogText("站点时区偏移", "Site timezone offset"), catalogText("签到与按日活跃使用的 UTC 有符号分钟偏移；产生数据后不可修改。", "Signed minutes from UTC used by check-in and daily activity; immutable after data exists."), unitMinute, nil},
 
@@ -109,7 +115,8 @@ var catalogMetadataByKey = map[string]catalogMetadata{
 	KeyGameFishingRakePlatform:      {"games", catalogText("垂钓平台抽成", "Fishing platform cut"), catalogText("从每次渔获收入中收取的平台费用；100 基点为 1%，三项费用合计须低于 100%。", "Platform fee from each catch. 100 basis points is 1%; the three fees must total less than 100%."), unitBP, []string{KeyGameFishingRakeWelfare, KeyGameFishingRakeThursday}},
 	KeyGameFishingRakeWelfare:       {"games", catalogText("垂钓福利池抽成", "Fishing welfare-pool cut"), catalogText("从每次渔获收入划入福利池的比例；100 基点为 1%。", "Share of each catch allocated to the welfare pool. 100 basis points is 1%."), unitBP, []string{KeyGameFishingRakePlatform, KeyGameFishingRakeThursday}},
 	KeyGameFishingRakeThursday:      {"games", catalogText("垂钓周四池抽成", "Fishing Thursday-pool cut"), catalogText("从每次渔获收入划入周四池的比例；100 基点为 1%。", "Share of each catch allocated to the Thursday pool. 100 basis points is 1%."), unitBP, []string{KeyGameFishingRakePlatform, KeyGameFishingRakeWelfare}},
-	KeyGameFishingBlueFishChanceBPS: {"games", catalogText("蓝色大肥鱼概率", "Blue fat fish chance"), catalogText("传奇鱼变为蓝色大肥鱼的概率；100 基点为 1%，只影响新开始的垂钓批次。", "Chance that a legendary catch becomes a blue fat fish. 100 basis points is 1%; applies only to new fishing batches."), unitBP, nil},
+	KeyGameFishingBlueFishChanceBPS: {"games", catalogText("蓝色大肥鱼概率", "Blue fat fish chance"), catalogText("传奇鱼变为蓝色大肥鱼的概率；100 基点为 1%，与奶蟹概率合计不超过 100%，只影响新垂钓批次。", "Chance of a blue fat fish among legendary catches. 100 basis points is 1%; combined with milk crab, at most 100%. Applies to new batches."), unitBP, []string{KeyGameFishingMilkCrabChanceBPS}},
+	KeyGameFishingMilkCrabChanceBPS: {"games", catalogText("奶蟹概率", "Milk crab chance"), catalogText("传奇鱼变为奶蟹的概率；100 基点为 1%，与蓝色大肥鱼概率合计不超过 100%，只影响新垂钓批次。", "Chance of a milk crab among legendary catches. 100 basis points is 1%; combined with blue fat fish, at most 100%. Applies to new batches."), unitBP, []string{KeyGameFishingBlueFishChanceBPS}},
 
 	KeyCharityEnabled:           {"charity", catalogText("公益资源总开关", "Charity master switch"), catalogText("控制公益资源发现与调用是否开放。", "Controls whether charity discovery and calls are available."), unitNone, nil},
 	KeyDonationAcceptEnabled:    {"charity", catalogText("接受公益捐赠", "Donation intake"), catalogText("只控制新捐赠提交，不影响既有资源管理。", "Controls new donation submissions only; existing resources remain manageable."), unitNone, nil},
@@ -365,6 +372,8 @@ func catalogSemantics(key string, spec keySpec) (zero *localizedCatalogText, nul
 		zero = catalogTextPtr("该项不抽成。", "No cut for this destination.")
 	case KeyGameFishingBlueFishChanceBPS:
 		zero = catalogTextPtr("关闭新垂钓批次的蓝色大肥鱼彩蛋。", "Disables blue fat fish for newly accepted fishing batches.")
+	case KeyGameFishingMilkCrabChanceBPS:
+		zero = catalogTextPtr("关闭新垂钓批次的奶蟹彩蛋。", "Disables milk crab for newly accepted fishing batches.")
 	case KeyGameFishingRTP, KeyGameFishingRTPPremium:
 		zero = catalogTextPtr("可填写 0%；鱼饵价格与宝物倍率仍须形成可用组合。", "0% is allowed, but bait prices and treasure multipliers must still form a workable combination.")
 	case KeyAnnouncementEpoch:

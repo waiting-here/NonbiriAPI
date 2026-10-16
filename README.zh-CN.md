@@ -14,13 +14,13 @@ NonbiriAPI 是可自行部署的 AI 端点管理平台，提供 OpenAI-compatibl
 | --- | --- |
 | 启动、恢复与 HTTP 接线 | `main.go`、`internal/app/` |
 | 正式结构与迁移 | `internal/db/`、[数据库升级](docs/database-upgrades.md) |
-| rc.7 离线转换 | `cmd/nonbiri-upgrade-rc7/` |
+| 一次性数据库转换 | `cmd/nonbiri-upgrade-v1/` |
 | 账务、导出、删除与留存 | `internal/ledger/`、`internal/lifecycle/`、[生命周期](docs/data-lifecycle-checklist.md) |
 | 连接器、转发与出站策略 | `internal/connector/`、`internal/forward/`、`internal/egress/` |
 | 共享组件与双站页面 | `web/src/shared/`、`web/src/user/`、`web/src/admin/` |
 | 验证与部署示例 | `scripts/`、`.github/workflows/`、`deploy/` |
 
-连接器注册表支持 OpenAI-compatible、Anthropic-compatible 和 AI SDK Gateway v3 上游。公共入口包括 `/v1/models`、`/v1/chat/completions`、`/v1/embeddings` 和 `/v1/images/generations`，各连接器支持的操作不同。后端执行所有权、凭据、SSRF、账务和取消约束；格式及限制见 [API 契约](docs/api-contract.md)。
+连接器注册表支持 OpenAI-compatible、Anthropic-compatible、AI SDK Gateway v3、Google Gemini、OpenAI Responses 和 OpenAI Decisions 上游。公共入口包括 `/v1/models`、`/v1/chat/completions`、`/v1/embeddings`、`/v1/images/generations` 和 `/v1/decisions`。Gemini 与 Responses 转换 Chat 请求，Decisions 使用原生接口；各连接器支持的操作不同。后端执行所有权、凭据、SSRF、账务和取消约束；格式及限制见 [API 契约](docs/api-contract.md)。
 
 ## 构建与开发
 
@@ -38,7 +38,7 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [首次配置](docs/first-run-setup.md) 涵盖私有目录、加密密钥、Discord OAuth 和公共域名。将 [admin.env.example](admin.env.example) 复制到检出目录外，替换占位值并在启动前加载。数据库与对应密钥须配套保留。
 
-新库默认开启维护并关闭公共功能。本版采用正式结构 schema 17；rc.7 的 schema 16 须先使用独立离线转换器。后续 v1.x 程序保持从任一更早 v1.x 正式库连续升级，不承诺旧程序读取新版数据库。
+新库默认开启维护并关闭公共功能。v1.0.0 正常程序仅接受 schema 19 或全新初始化，既有 schema 16、17、18 使用独立离线转换器，历史转换代码不进入正常服务。后续 v1.x 保持从任一更早 v1.x 正式库升级的路径，不承诺旧程序读取新版数据库。
 
 [部署指南](docs/deployment.md) 说明 systemd、代理、不可变产物、升级和完整快照恢复；启动变量及在线设置统一维护在 [配置参考](docs/configuration.md)。
 

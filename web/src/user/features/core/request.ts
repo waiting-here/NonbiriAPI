@@ -1,3 +1,5 @@
+import { captureMfaRequiredHandlers } from '@shared/query/mfaRequired';
+import { requestLanguage } from '@shared/query/language';
 import { ApiError, isApiError } from '@shared/query/http';
 import { validateIdempotencyKey } from './normalizers';
 import type { OperationIdentity } from './types';
@@ -10,19 +12,6 @@ export interface CoreResponse {
   status: number;
   headers: Headers;
   payload: unknown;
-}
-
-function safeText(value: unknown, maximum: number): string | undefined {
-  if (typeof value !== 'string') return undefined;
-  let output = '';
-  for (const character of value) {
-    const point = character.codePointAt(0) ?? 0;
-    if (point < 32 || (point >= 127 && point <= 159) || (point >= 0xd800 && point <= 0xdfff))
-      continue;
-    if (Array.from(output).length >= maximum) break;
-    output += character;
-  }
-  return output || undefined;
 }
 
 function fallbackCode(status: number): string {
@@ -57,8 +46,9 @@ async function apiError(response: Response): Promise<ApiError> {
     if (payload !== null && typeof payload === 'object' && !Array.isArray(payload)) {
       const error = (payload as Record<string, unknown>).error;
       if (error !== null && typeof error === 'object' && !Array.isArray(error)) {
-        code = safeText((error as Record<string, unknown>).code, 96);
-        message = safeText((error as Record<string, unknown>).message, 1_000);
+        const detail = error as Record<string, unknown>;
+        code = typeof detail.code === 'string' ? detail.code : undefined;
+        message = typeof detail.message === 'string' ? detail.message : undefined;
       }
     }
   } catch {
@@ -75,9 +65,11 @@ export async function coreRawRequest(
   path: string,
   options: CoreRequestOptions = {},
 ): Promise<Response> {
+  const mfaHandlers = path.startsWith('/api/') ? captureMfaRequiredHandlers() : [];
   const { json, headers, ...init } = options;
   const requestHeaders = new Headers(headers);
   requestHeaders.set('Accept', 'application/json');
+  requestHeaders.set('Accept-Language', requestLanguage());
   requestHeaders.set('Cache-Control', 'no-store');
   if (json !== undefined) requestHeaders.set('Content-Type', 'application/json');
 
@@ -94,7 +86,11 @@ export async function coreRawRequest(
     if (init.signal?.aborted) throw error;
     throw new ApiError('network_error', 'The network request failed.', 0);
   }
-  if (!response.ok) throw await apiError(response);
+  if (!response.ok) {
+    const error = await apiError(response);
+    if (error.code === 'mfa_required') for (const notify of mfaHandlers) notify();
+    throw error;
+  }
   return response;
 }
 
@@ -157,5 +153,5 @@ export function isOutcomeUnknown(error: unknown): boolean {
 }
 
 export function callerSafeError(error: unknown): string | undefined {
-  return isApiError(error) ? safeText(error.message, 1_000) : undefined;
+  return isApiError(error) ? error.message : undefined;
 }

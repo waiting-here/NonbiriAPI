@@ -58,6 +58,45 @@ type streamWriter struct {
 	flushes chan struct{}
 }
 
+func TestStreamCancellationDiscardsPendingPrivateFrames(t *testing.T) {
+	hub, _ := newTestHub(t, newTestAuthority(1), nil)
+	subscription, err := hub.Subscribe(context.Background(), SubscribeRequest{AccountID: 1, Channels: []Channel{ChannelActivities}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	writer := newStreamWriter()
+	if err := subscription.Stream(ctx, writer); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Stream: %v", err)
+	}
+	if body := writer.String(); body != "" {
+		t.Fatalf("private frames after cancellation: %q", body)
+	}
+}
+
+func TestStreamRechecksAuthorizationAtHeartbeat(t *testing.T) {
+	hub, _ := newTestHub(t, newTestAuthority(1), func(config *hubConfig) { config.heartbeat = 5 * time.Millisecond })
+	denied := errors.New("proof no longer valid")
+	calls := 0
+	subscription, err := hub.Subscribe(context.Background(), SubscribeRequest{
+		AccountID: 1, Channels: []Channel{ChannelActivities},
+		RecheckAuthorization: func(context.Context) error { calls++; return denied },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	writer := newStreamWriter()
+	if err := subscription.Stream(ctx, writer); !errors.Is(err, denied) {
+		t.Fatalf("Stream: %v", err)
+	}
+	if calls != 1 || strings.Contains(writer.String(), ": heartbeat") {
+		t.Fatalf("calls=%d body=%q", calls, writer.String())
+	}
+}
+
 func newStreamWriter() *streamWriter {
 	return &streamWriter{header: make(http.Header), flushes: make(chan struct{}, 8)}
 }

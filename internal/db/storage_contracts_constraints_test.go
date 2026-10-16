@@ -23,10 +23,11 @@ func TestStorageContractsCompatibilityRegistryIsDetachedAndClosed(t *testing.T) 
 		}
 		seen[hash] = true
 	}
-	if len(seen) != 0 || descriptor.MinimumSchemaVersion != 17 || descriptor.SchemaVersion != 17 || len(descriptor.SourceSchemaVersions) != 0 {
-		t.Fatal("unexpected stable schema history", descriptor)
+	if len(seen) != 0 || descriptor.MinimumSchemaVersion != 19 || descriptor.SchemaVersion != 19 || len(descriptor.SourceSchemaVersions) != 0 || len(SchemaDescriptor().OfflineConversions) != 0 {
+		t.Fatal("runtime descriptor accepts historical storage", descriptor)
 	}
 	descriptor.SourceManifestHashes = append(descriptor.SourceManifestHashes, "unknown")
+	descriptor.SourceSchemaVersions = append(descriptor.SourceSchemaVersions, 999)
 	if reflect.DeepEqual(descriptor, GenerationTwoCompatibilityDescriptor()) {
 		t.Fatal("descriptor mutation changed registry")
 	}

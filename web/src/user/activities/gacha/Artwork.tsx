@@ -42,9 +42,12 @@ export function Artwork({
   }, [paused]);
   useEffect(() => {
     if (!animated || !isRare(card.rarity) || !canvas.current) return;
+    const controller = new AbortController();
     let disposed = false,
       cleanup: (() => void) | undefined;
-    void renderSSR(canvas.current, card.id, undefined, () => pausedRef.current, highResolution)
+    void renderSSR(canvas.current, card.id, undefined, () => pausedRef.current, highResolution, {
+      signal: controller.signal,
+    })
       .then((dispose) => {
         if (disposed) dispose();
         else {
@@ -57,6 +60,7 @@ export function Artwork({
       });
     return () => {
       disposed = true;
+      controller.abort();
       cleanup?.();
       setReady(false);
     };

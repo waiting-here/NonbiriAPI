@@ -20,7 +20,7 @@ func NormalizeExcludedRequestFields(fields []string) ([]string, error) {
 			}
 		}
 		switch name {
-		case "model", "messages", "input", "prompt", "stream", "stream_options", "tools", "tool_choice", "functions", "function_call", "response_format", "encoding_format":
+		case "model", "messages", "input", "prompt", "questions", "stream", "stream_options", "tools", "tool_choice", "functions", "function_call", "response_format", "encoding_format":
 			return nil, ErrInvalid
 		}
 		if !seen[name] {

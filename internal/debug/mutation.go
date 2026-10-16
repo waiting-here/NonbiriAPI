@@ -13,23 +13,24 @@ import (
 )
 
 // MutationRepository applies the shared Generation 2 control_mutation replay
-// primitive to Debug's process-local state changes. Authentication and strict
-// decoding happen in the HTTP adapter before every call, including replay.
+// primitive to Debug's process-local state changes. Strict decoding precedes
+// the call; live browser authorization runs after the serialization wait.
 type MutationRepository struct {
-	db  *sql.DB
-	now func() time.Time
-	mu  sync.Mutex
+	db        *sql.DB
+	now       func() time.Time
+	mu        sync.Mutex
+	finalAuth resources.FinalTxAuthorizer
 }
 
-func NewMutationRepository(database *sql.DB) (*MutationRepository, error) {
-	return newMutationRepository(database, time.Now)
+func NewMutationRepository(database *sql.DB, finalAuth resources.FinalTxAuthorizer) (*MutationRepository, error) {
+	return newMutationRepository(database, time.Now, finalAuth)
 }
 
-func newMutationRepository(database *sql.DB, now func() time.Time) (*MutationRepository, error) {
-	if database == nil || now == nil {
+func newMutationRepository(database *sql.DB, now func() time.Time, finalAuth resources.FinalTxAuthorizer) (*MutationRepository, error) {
+	if database == nil || now == nil || finalAuth == nil {
 		return nil, ErrInvalid
 	}
-	return &MutationRepository{db: database, now: now}, nil
+	return &MutationRepository{db: database, now: now, finalAuth: finalAuth}, nil
 }
 
 func (repository *MutationRepository) Execute(
@@ -38,7 +39,7 @@ func (repository *MutationRepository) Execute(
 	input resources.ControlMutation,
 	operation func() (int, []byte, error),
 ) (int, []byte, bool, error) {
-	if repository == nil || repository.db == nil || ctx == nil || userID <= 0 || operation == nil ||
+	if repository == nil || repository.db == nil || repository.finalAuth == nil || ctx == nil || userID <= 0 || operation == nil ||
 		len(input.CanonicalBody) > idempotency.MaxControlBodyBytes {
 		return 0, nil, false, ErrInvalid
 	}
@@ -63,8 +64,8 @@ func (repository *MutationRepository) Execute(
 	repository.mu.Lock()
 	defer repository.mu.Unlock()
 
-	// The HTTP layer has already completed live authentication and strict
-	// decoding. From this point onward a caller disconnect is response loss,
+	// Strict decoding is complete. Once the process-local operation starts,
+	// a caller disconnect is response loss,
 	// not authority to roll back the durable receipt after the process-local
 	// operation has crossed its linearization point. database/sql otherwise
 	// rolls back a BeginTx transaction when its parent context is cancelled,
@@ -89,6 +90,11 @@ func (repository *MutationRepository) Execute(
 	}
 	if err != nil {
 		return 0, nil, false, ErrClosed
+	}
+	// Begin has acquired the SQLite writer. Re-read live session/MFA authority
+	// now, after both serialization waits and before replay or Hub mutation.
+	if err := repository.finalAuth.AuthorizeUserMutation(ctx, tx, userID); err != nil {
+		return 0, nil, false, err
 	}
 	if decision.Kind == idempotency.Replay {
 		if decision.HTTPStatus < 200 || decision.HTTPStatus > 299 ||

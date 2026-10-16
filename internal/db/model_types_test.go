@@ -38,7 +38,7 @@ func TestModelTypesPreserveModelsAndRequestHistory(t *testing.T) {
 	if err := database.QueryRow("SELECT model_types FROM models WHERE id=?", newModel).Scan(&mask); err != nil || mask != 1 {
 		t.Fatalf("new model types=%d err=%v", mask, err)
 	}
-	for _, invalid := range []any{0, 8, -1, nil, 1.5, []byte{1}} {
+	for _, invalid := range []any{0, 16, -1, nil, 1.5, []byte{1}} {
 		hostileMustFail(t, database, "UPDATE models SET model_types=? WHERE id=?", invalid, newModel)
 	}
 	for i, route := range []string{"openai_images_generations", "charity_images_generations"} {

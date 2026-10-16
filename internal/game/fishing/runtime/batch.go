@@ -182,7 +182,7 @@ func (service *Service) startFishing(ctx context.Context, input StartInput, rule
 	service.rngMu.Lock()
 	draws, drawErr := snapshot.Rules.RollBatch(bait, input.Count, source)
 	if drawErr == nil {
-		draws, drawErr = fishing.DecorateBatchWithChance(ctx, draws, source, snapshot.Fishing.BlueFishChanceBPS)
+		draws, drawErr = fishing.DecorateBatchWithChances(ctx, draws, source, snapshot.Fishing.BlueFishChanceBPS, snapshot.Fishing.MilkCrabChanceBPS)
 	}
 	service.rngMu.Unlock()
 	if drawErr != nil {
@@ -219,7 +219,7 @@ func (service *Service) startFishing(ctx context.Context, input StartInput, rule
 	}
 	nextAttempt := now.Add(firstRetryDelay).Unix()
 	err = service.finance.Reserve(ctx, tx, finance.Entry{Meta: ledger.Meta{OperationID: reserveOperationID, ActorUserID: input.UserID, CreatedAt: decisionNow}, ResourceID: batchID, UserID: input.UserID, Amount: ledger.AmountFromMilli(entryTotal), GamePaid: payment.Game}, func(ctx context.Context, tx *sql.Tx) error {
-		_, insertErr := tx.ExecContext(ctx, `INSERT INTO game_fishing_batches(id,user_id,bait,count,unit_price_milli,entry_total_milli,payout_total_milli,operation_id,request_hash,state,ledger_rows_remaining,attempt_count,next_attempt_at,last_error_class,retry_exhausted,created_at,settled_at,revealed_at,rules_version,game_paid_milli,net_payout_total_milli,platform_bp,welfare_bp,thursday_bp,platform_cut_total_milli,welfare_cut_total_milli,thursday_cut_total_milli,blue_fish_chance_bps,config_revision) VALUES(?,?,?,?,?,?,?,?,?,'reserved',?,0,?,NULL,0,?,NULL,NULL,?,?,?,?,?,?,?,?,?,?,?)`, batchID, input.UserID, string(bait), input.Count, entry, entryTotal, payoutTotal, terminalOperationID, requestHash[:], db.EncodeU128(one), nextAttempt, decisionNow, rulesVersion, gamePaid, netTotal, rakeBP.Platform, rakeBP.Welfare, rakeBP.Thursday, platformTotal, welfareTotal, thursdayTotal, snapshot.Fishing.BlueFishChanceBPS, configRevision)
+		_, insertErr := tx.ExecContext(ctx, `INSERT INTO game_fishing_batches(id,user_id,bait,count,unit_price_milli,entry_total_milli,payout_total_milli,operation_id,request_hash,state,ledger_rows_remaining,attempt_count,next_attempt_at,last_error_class,retry_exhausted,created_at,settled_at,revealed_at,rules_version,game_paid_milli,net_payout_total_milli,platform_bp,welfare_bp,thursday_bp,platform_cut_total_milli,welfare_cut_total_milli,thursday_cut_total_milli,blue_fish_chance_bps,config_revision,milk_crab_chance_bps) VALUES(?,?,?,?,?,?,?,?,?,'reserved',?,0,?,NULL,0,?,NULL,NULL,?,?,?,?,?,?,?,?,?,?,?,?)`, batchID, input.UserID, string(bait), input.Count, entry, entryTotal, payoutTotal, terminalOperationID, requestHash[:], db.EncodeU128(one), nextAttempt, decisionNow, rulesVersion, gamePaid, netTotal, rakeBP.Platform, rakeBP.Welfare, rakeBP.Thursday, platformTotal, welfareTotal, thursdayTotal, snapshot.Fishing.BlueFishChanceBPS, configRevision, snapshot.Fishing.MilkCrabChanceBPS)
 		if insertErr != nil {
 			return classifyDB(insertErr)
 		}
@@ -230,8 +230,12 @@ func (service *Service) startFishing(ctx context.Context, input StartInput, rule
 			if _, insertErr = tx.ExecContext(ctx, `INSERT INTO game_fishing_outcomes(batch_id,ordinal,species_key,tier,size_cm,payout_milli,net_payout_milli,platform_cut_milli,welfare_cut_milli,thursday_cut_milli) VALUES(?,?,?,?,?,?,?,?,?,?)`, batchID, ordinal, draw.Outcome.Key, string(draw.Outcome.Tier), draw.Outcome.SizeCentimetre, draw.Settlement.PayoutMilli, draw.Settlement.NetMilli, draw.Settlement.PlatformMilli, draw.Settlement.WelfareMilli, draw.Settlement.ThursdayMilli); insertErr != nil {
 				return classifyDB(insertErr)
 			}
-			if draw.Outcome.BlueFatFishLengthCM != "" {
-				if _, insertErr = tx.ExecContext(ctx, `INSERT INTO game_fishing_outcome_lengths(batch_id,ordinal,length_cm) VALUES(?,?,?)`, batchID, ordinal, draw.Outcome.BlueFatFishLengthCM); insertErr != nil {
+			length, kind := draw.Outcome.BlueFatFishLengthCM, "blue"
+			if draw.Outcome.MilkCrabLengthCM != "" {
+				length, kind = draw.Outcome.MilkCrabLengthCM, "milk"
+			}
+			if length != "" {
+				if _, insertErr = tx.ExecContext(ctx, `INSERT INTO game_fishing_outcome_lengths(batch_id,ordinal,length_cm,kind) VALUES(?,?,?,?)`, batchID, ordinal, length, kind); insertErr != nil {
 					return classifyDB(insertErr)
 				}
 			}

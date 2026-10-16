@@ -3,6 +3,7 @@ package resources
 import (
 	"errors"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -229,6 +230,10 @@ func writeJSON(writer http.ResponseWriter, status int, value any) {
 }
 
 func writeResourceError(writer http.ResponseWriter, err error) {
+	if errors.Is(err, authz.ErrMFARequired) {
+		httperr.WriteError(writer, httperr.New(httperr.CodeMFARequired, "MFA verification is required."))
+		return
+	}
 	httperr.WriteMapped(writer, err,
 		httperr.Mapping{Err: ErrInvalidRequest, Code: httperr.CodeInvalidRequest, Message: "invalid request"},
 		httperr.Mapping{Err: ErrUnauthorized, Code: httperr.CodeUnauthorized, Message: "authentication required"},

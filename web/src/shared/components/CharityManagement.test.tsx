@@ -470,6 +470,10 @@ describe('CharityManagement corrective controls', () => {
       );
       await view.user.click(await screen.findByRole('button', { name: 'Manage' }));
       await screen.findByRole('heading', { name: 'Service connection order' });
+      expect(
+        screen.queryByRole('button', { name: 'Save request adaptation' }),
+      ).not.toBeInTheDocument();
+      await view.user.click(screen.getByText('Request adaptation', { selector: 'strong' }));
       await screen.findByRole('button', { name: 'Save request adaptation' });
       if (mixed) expect(screen.queryByLabelText('Automatic cache default')).not.toBeInTheDocument();
       else expect(await screen.findByLabelText('Automatic cache default')).toHaveValue('off');

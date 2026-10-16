@@ -54,6 +54,8 @@ func (service *Service) preflight(ctx context.Context, userID int64, request *va
 			value, err = service.charity.PreflightEmbedding(ctx, userID, request.Model, request.embedding, now)
 		} else if request.image != nil {
 			value, err = service.charity.PreflightImage(ctx, userID, request.Model, request.image, now)
+		} else if request.decision != nil {
+			value, err = service.charity.PreflightDecision(ctx, userID, request.Model, request.decision, now)
 		} else {
 			value, err = service.charity.Preflight(ctx, userID, request.Model, request.chat, now)
 		}

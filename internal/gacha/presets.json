@@ -162,6 +162,142 @@
         "published": false,
         "revision": 0
       }
+    },
+    {
+      "id": "mirrorsea",
+      "name": "镜海相逢",
+      "pool": {
+        "id": "",
+        "name": "镜海相逢",
+        "cover": "n",
+        "kind": "limited",
+        "group": "",
+        "rules": {
+          "weights": [
+            5500,
+            3500,
+            900,
+            100
+          ],
+          "sr_pity": 10,
+          "ssr_pity": 60,
+          "sr_featured": 5000,
+          "ssr_featured": 1500,
+          "sr_guarantee": true,
+          "ssr_guarantee": true,
+          "ssr_guarantee_misses": 2
+        },
+        "featured": [
+          "n-gemini"
+        ],
+        "starts_at": null,
+        "ends_at": null,
+        "paused": false,
+        "published": false,
+        "revision": 0
+      }
+    },
+    {
+      "id": "amber",
+      "name": "琥珀誓章",
+      "pool": {
+        "id": "",
+        "name": "琥珀誓章",
+        "cover": "o",
+        "kind": "limited",
+        "group": "",
+        "rules": {
+          "weights": [
+            5500,
+            3500,
+            900,
+            100
+          ],
+          "sr_pity": 10,
+          "ssr_pity": 60,
+          "sr_featured": 5000,
+          "ssr_featured": 1500,
+          "sr_guarantee": true,
+          "ssr_guarantee": true,
+          "ssr_guarantee_misses": 2
+        },
+        "featured": [
+          "o-claude"
+        ],
+        "starts_at": null,
+        "ends_at": null,
+        "paused": false,
+        "published": false,
+        "revision": 0
+      }
+    },
+    {
+      "id": "elopement",
+      "name": "与你私奔",
+      "pool": {
+        "id": "",
+        "name": "与你私奔",
+        "cover": "p",
+        "kind": "limited",
+        "group": "",
+        "rules": {
+          "weights": [
+            5500,
+            3500,
+            900,
+            100
+          ],
+          "sr_pity": 10,
+          "ssr_pity": 60,
+          "sr_featured": 5000,
+          "ssr_featured": 1500,
+          "sr_guarantee": true,
+          "ssr_guarantee": true,
+          "ssr_guarantee_misses": 2
+        },
+        "featured": [
+          "p-claude"
+        ],
+        "starts_at": null,
+        "ends_at": null,
+        "paused": false,
+        "published": false,
+        "revision": 0
+      }
+    },
+    {
+      "id": "heart-thief",
+      "name": "偷心预告",
+      "pool": {
+        "id": "",
+        "name": "偷心预告",
+        "cover": "q",
+        "kind": "limited",
+        "group": "",
+        "rules": {
+          "weights": [
+            5500,
+            3500,
+            900,
+            100
+          ],
+          "sr_pity": 10,
+          "ssr_pity": 60,
+          "sr_featured": 5000,
+          "ssr_featured": 1500,
+          "sr_guarantee": true,
+          "ssr_guarantee": true,
+          "ssr_guarantee_misses": 2
+        },
+        "featured": [
+          "q-glm"
+        ],
+        "starts_at": null,
+        "ends_at": null,
+        "paused": false,
+        "published": false,
+        "revision": 0
+      }
     }
   ]
 }

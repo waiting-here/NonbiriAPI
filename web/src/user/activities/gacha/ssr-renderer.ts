@@ -7,6 +7,7 @@ import {
 import { cardEyelids } from './card-eyelids';
 import { backdropShader, paintSPAtmosphere, spScenes } from './sp-motion';
 import { highResolutionArt } from './art-resolution';
+import { specialCards } from './special-scenes';
 
 type MotionConfig = {
   background: string;
@@ -68,6 +69,11 @@ export async function renderSSR(
   highResolution = false,
   options: { characterOnly?: boolean; signal?: AbortSignal } = {},
 ) {
+  const theme = specialCards[id];
+  if (theme) {
+    const { renderSpecial } = await import('./special-renderer');
+    return renderSpecial(canvas, theme, { ...options, frozenTime, paused, highResolution });
+  }
   const cfg = configFor(id);
   const scene = spScenes[id];
   const image = (src: string) => load(highResolution ? highResolutionArt(src) : src);

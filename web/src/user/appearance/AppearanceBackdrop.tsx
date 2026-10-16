@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { MomentBackdrop } from './MomentBackdrop';
+import { SpecialBackdrop } from './SpecialBackdrop';
+import { isSpecialTheme } from '../activities/gacha/special-scenes';
 import type { WallpaperQuality, WallpaperTheme } from './wallpaper-motion';
 
 const colorMode = (): WallpaperTheme =>
@@ -60,6 +62,7 @@ export function AppearanceBackdrop({ selected, moment }: { selected: string; mom
     };
   }, [selected, theme, quality]);
   if (selected === 'heart-moment') return <MomentBackdrop key={moment} moment={moment} />;
+  if (isSpecialTheme(selected)) return <SpecialBackdrop theme={selected} />;
   if (selected !== 'celestial' && selected !== 'wandering') return null;
   const revision = '?v=7';
   const filename = selected + '-' + theme + '.webp' + revision;

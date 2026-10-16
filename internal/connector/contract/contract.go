@@ -23,7 +23,22 @@ const (
 	TypeOpenAICompatible    Type = "openai-compatible"
 	TypeAnthropicCompatible Type = "anthropic-compatible"
 	TypeAISDKGatewayV3      Type = "ai-sdk-gateway-v3"
+	TypeGoogleGemini        Type = "google-gemini"
+	TypeOpenAIResponses     Type = "openai-responses"
+	TypeOpenAIDecisions     Type = "openai-decisions"
 )
+
+// Valid identifies protocol types supported by persisted connector records.
+// Execution still requires a descriptor from the process registry.
+func (t Type) Valid() bool {
+	switch t {
+	case TypeOpenAICompatible, TypeAnthropicCompatible, TypeAISDKGatewayV3,
+		TypeGoogleGemini, TypeOpenAIResponses, TypeOpenAIDecisions:
+		return true
+	default:
+		return false
+	}
+}
 
 // Operation selects an ingress protocol operation without classifying models.
 type Operation string
@@ -32,10 +47,11 @@ const (
 	OperationChatCompletions   Operation = "chat_completions"
 	OperationEmbeddings        Operation = "embeddings"
 	OperationImagesGenerations Operation = "images_generations"
+	OperationDecisions         Operation = "decisions"
 )
 
 func (o Operation) Valid() bool {
-	return o == OperationChatCompletions || o == OperationEmbeddings || o == OperationImagesGenerations
+	return o == OperationChatCompletions || o == OperationEmbeddings || o == OperationImagesGenerations || o == OperationDecisions
 }
 
 // Capability is one fidelity guarantee made by a connector descriptor.
@@ -58,6 +74,7 @@ const (
 	CapabilityStorage
 	CapabilityPromptCache
 	CapabilityImagesGenerations
+	CapabilityDecisions
 )
 
 const KnownCapabilities = CapabilityText |
@@ -74,7 +91,7 @@ const KnownCapabilities = CapabilityText |
 	CapabilityImagesGenerations |
 	CapabilityEmbeddings |
 	CapabilityReasoningEffort |
-	CapabilityStorage | CapabilityPromptCache
+	CapabilityStorage | CapabilityPromptCache | CapabilityDecisions
 
 // CapabilitySet is an immutable bit set in a registry descriptor.
 type CapabilitySet uint64

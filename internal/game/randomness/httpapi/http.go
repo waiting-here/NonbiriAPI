@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"io"
 	"net/http"
 	"time"
@@ -88,6 +89,10 @@ func handler(database *sql.DB, authorizer resources.FinalTxAuthorizer, game stri
 }
 
 func writeError(w http.ResponseWriter, err error) {
+	if errors.Is(err, authz.ErrMFARequired) {
+		httperr.WriteError(w, httperr.New(httperr.CodeMFARequired, "MFA verification is required."))
+		return
+	}
 	code, text := httperr.CodeInternal, "request failed"
 	switch {
 	case errors.Is(err, randomness.ErrInvalid):

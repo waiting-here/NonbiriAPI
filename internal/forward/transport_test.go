@@ -18,6 +18,10 @@ func transportJSON(kind contract.Type) string {
 	switch kind {
 	case contract.TypeOpenAICompatible:
 		return `{"id":"c1","object":"chat.completion","created":1,"model":"m","choices":[{"index":0,"message":{"role":"assistant","content":"Hello"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`
+	case contract.TypeGoogleGemini:
+		return `{"candidates":[{"content":{"role":"model","parts":[{"text":"Hello","thoughtSignature":"YWJj"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":1,"candidatesTokenCount":1,"totalTokenCount":2}}`
+	case contract.TypeOpenAIResponses:
+		return `{"id":"r","status":"completed","output":[{"type":"reasoning","id":"rs","summary":[],"encrypted_content":"opaque"},{"type":"message","id":"msg","role":"assistant","content":[{"type":"output_text","text":"Hello"}]}],"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}`
 	case contract.TypeAnthropicCompatible:
 		return `{"id":"msg_1","type":"message","role":"assistant","model":"m","content":[{"type":"text","text":"Hello"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":1}}`
 	default:
@@ -26,7 +30,7 @@ func transportJSON(kind contract.Type) string {
 }
 
 func TestModelTransportAcrossConnectorsAndCallerModes(t *testing.T) {
-	for _, kind := range []contract.Type{contract.TypeOpenAICompatible, contract.TypeAnthropicCompatible, contract.TypeAISDKGatewayV3} {
+	for _, kind := range []contract.Type{contract.TypeOpenAICompatible, contract.TypeAnthropicCompatible, contract.TypeAISDKGatewayV3, contract.TypeGoogleGemini, contract.TypeOpenAIResponses} {
 		for _, rule := range []transportpolicy.Rule{transportpolicy.Passthrough, transportpolicy.ForceNonStream, transportpolicy.ForceStream} {
 			for _, callerStream := range []bool{false, true} {
 				t.Run(fmt.Sprintf("%s/%s/stream=%t", kind, rule, callerStream), func(t *testing.T) {
@@ -40,7 +44,7 @@ func TestModelTransportAcrossConnectorsAndCallerModes(t *testing.T) {
 							t.Fatal("invalid physical body")
 						}
 						stream := strings.Contains(r.Header.Get("Accept"), "text/event-stream")
-						if kind != contract.TypeAISDKGatewayV3 {
+						if kind != contract.TypeAISDKGatewayV3 && kind != contract.TypeGoogleGemini {
 							_ = json.Unmarshal(body["stream"], &stream)
 						}
 						if stream != rule.UpstreamStream(callerStream) {
@@ -62,6 +66,16 @@ func TestModelTransportAcrossConnectorsAndCallerModes(t *testing.T) {
 					f.service.Chat(context.Background(), w, 1, request, nil, "application/json", "en")
 					if w.Code != 200 || calls != 1 || !strings.Contains(w.Body.String(), "Hello") {
 						t.Fatalf("status=%d calls=%d body=%s", w.Code, calls, w.Body)
+					}
+					marker := ""
+					if kind == contract.TypeGoogleGemini {
+						marker = "YWJj"
+					}
+					if kind == contract.TypeOpenAIResponses {
+						marker = "opaque"
+					}
+					if marker != "" && !strings.Contains(w.Body.String(), marker) {
+						t.Fatal("transport discarded continuation")
 					}
 					if callerStream {
 						if !strings.Contains(w.Body.String(), "[DONE]") || !strings.HasPrefix(w.Header().Get("Content-Type"), "text/event-stream") {
@@ -117,4 +131,47 @@ func TestTransportCompletionPreservesToolsReasoningRefusalAndUsage(t *testing.T)
 			t.Fatal("unsolicited usage")
 		}
 	}
+}
+
+func TestGeminiFlatteningRejectedBeforeAdmission(t *testing.T) {
+	for _, stream := range []bool{false, true} {
+		t.Run(fmt.Sprint(stream), func(t *testing.T) {
+			f := newServiceFixture(t, nil)
+			calls := 0
+			b := &delayedStreamBackend{do: func(*http.Request) (*http.Response, error) {
+				calls++
+				t.Fatal("lossy request reached upstream")
+				return nil, nil
+			}}
+			useRealStreamConnector(t, f, contract.TypeGoogleGemini, b, 0, true)
+			request := decodeChatForTest(t, fmt.Sprintf(`{"model":"[公益]care/model","stream":%t,"messages":[{"role":"user","content":"call a tool"}],"tools":[{"type":"function","function":{"name":"lookup","parameters":{"type":"object"}}}]}`, stream))
+			w := httptest.NewRecorder()
+			f.service.Chat(context.Background(), w, 1, request, nil, "application/json", "en")
+			if w.Code != 400 || calls != 0 || len(f.claims.accepts) != 0 || len(f.claims.outcomes) != 0 {
+				t.Fatalf("status=%d calls=%d body=%s", w.Code, calls, w.Body)
+			}
+		})
+	}
+}
+
+func responsesTransportStream() string {
+	reasoning := `{"type":"reasoning","id":"rs","summary":[],"encrypted_content":"opaque"}`
+	message := `{"type":"message","id":"msg","role":"assistant","content":[{"type":"output_text","text":"Hello"}]}`
+	events := []string{
+		`{"type":"response.created","response":{"id":"r","status":"in_progress"}}`,
+		`{"type":"response.output_item.added","output_index":0,"item":{"type":"reasoning","id":"rs","summary":[]}}`,
+		`{"type":"response.output_item.done","output_index":0,"item":` + reasoning + `}`,
+		`{"type":"response.output_item.added","output_index":1,"item":{"type":"message","id":"msg","role":"assistant","content":[]}}`,
+		`{"type":"response.content_part.added","output_index":1,"item_id":"msg","content_index":0,"part":{"type":"output_text","text":""}}`,
+		`{"type":"response.output_text.delta","output_index":1,"item_id":"msg","content_index":0,"delta":"Hello"}`,
+		`{"type":"response.output_text.done","output_index":1,"item_id":"msg","content_index":0,"text":"Hello"}`,
+		`{"type":"response.content_part.done","output_index":1,"item_id":"msg","content_index":0,"part":{"type":"output_text","text":"Hello"}}`,
+		`{"type":"response.output_item.done","output_index":1,"item":` + message + `}`,
+		`{"type":"response.completed","response":` + transportJSON(contract.TypeOpenAIResponses) + `}`,
+	}
+	var out strings.Builder
+	for i, event := range events {
+		fmt.Fprintf(&out, "data: {\"sequence_number\":%d,%s\n\n", i, event[1:])
+	}
+	return out.String()
 }

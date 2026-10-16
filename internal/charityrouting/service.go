@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"io"
 	"net/http"
 	"reflect"
@@ -1313,6 +1314,9 @@ func classifyWrite(operation string, err error) error {
 }
 
 func mapAuthorization(err error) error {
+	if errors.Is(err, authz.ErrMFARequired) {
+		return err
+	}
 	if err == nil {
 		return nil
 	}

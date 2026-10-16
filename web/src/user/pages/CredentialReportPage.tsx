@@ -15,6 +15,9 @@ const CONNECTOR_LABEL_KEYS: Record<CredentialReportInput['connector_type'], stri
   'openai-compatible': 'user.report.connector.openaiCompatible',
   'anthropic-compatible': 'user.report.connector.anthropicCompatible',
   'ai-sdk-gateway-v3': 'common.gatewayName',
+  'google-gemini': 'common.connectorGemini',
+  'openai-responses': 'common.connectorResponses',
+  'openai-decisions': 'common.connectorDecisions',
 };
 
 function validBaseURL(value: string): boolean {
@@ -108,6 +111,9 @@ export function CredentialReportPage() {
                   <option value="openai-compatible">{t(CONNECTOR_LABEL_KEYS['openai-compatible'])}</option>
                   <option value="anthropic-compatible">{t(CONNECTOR_LABEL_KEYS['anthropic-compatible'])}</option>
                   <option value="ai-sdk-gateway-v3">{t(CONNECTOR_LABEL_KEYS['ai-sdk-gateway-v3'])}</option>
+                  <option value="google-gemini">{t(CONNECTOR_LABEL_KEYS['google-gemini'])}</option>
+                  <option value="openai-responses">{t(CONNECTOR_LABEL_KEYS['openai-responses'])}</option>
+                  <option value="openai-decisions">{t(CONNECTOR_LABEL_KEYS['openai-decisions'])}</option>
                 </select>
               </label>
               <label className="ops-form-field">{t('user.report.baseUrlLabel')}

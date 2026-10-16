@@ -42,6 +42,16 @@ function fixture(save?: (body: Record<string, unknown>) => Promise<Response>) {
       );
       const method = init?.method ?? 'GET';
       if (method === 'GET') {
+        if (url.pathname.endsWith('/request-adaptation'))
+          return json({
+            revision: '0',
+            forward_headers: { mode: 'replace', values: [] },
+            fixed_headers: { mode: 'replace', values: {} },
+            body_defaults: { mode: 'replace', values: {} },
+            body_forced: { mode: 'replace', values: {} },
+            native_extension_paths: { mode: 'replace', values: [] },
+            excluded_request_fields: [],
+          });
         if (url.pathname === '/api/models/' + original.id) return json(current);
         if (url.pathname.endsWith('/bindings'))
           return json({ bindings: [], binding_revision: '1' });
@@ -144,7 +154,8 @@ describe('personal model role editor', () => {
         screen.queryByRole('group', { name: 'Message role handling' }),
       ).not.toBeInTheDocument(),
     );
-    expect(screen.getByText('critic')).toBeInTheDocument();
+    await view.user.click(screen.getByText('Advanced behavior', { selector: 'strong' }));
+    expect(screen.getByText('critic')).toBeVisible();
   });
 
   it('keeps duplicate rule rows editable and prevents saving until corrected', async () => {
@@ -194,7 +205,8 @@ describe('personal model role editor', () => {
       ).not.toBeInTheDocument(),
     );
     expect(f.writes).toHaveLength(1);
-    expect(screen.getByText('developer')).toBeInTheDocument();
+    await view.user.click(screen.getByText('Advanced behavior', { selector: 'strong' }));
+    expect(screen.getByText('developer')).toBeVisible();
   });
 
   it('drops an old account draft and ignores a late save response', async () => {

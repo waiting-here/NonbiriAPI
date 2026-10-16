@@ -11,6 +11,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/accountstream"
 	"github.com/waiting-here/NonbiriAPI/internal/adminapi"
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/anthropic"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/debug"
@@ -152,8 +153,27 @@ func (authority debugIdentityAuthority) VerifyDebugIdentity(ctx context.Context,
 	}
 }
 
+func (authority debugIdentityAuthority) VerifyDebugBrowserIdentity(ctx context.Context, userID int64, binding string) (debug.IdentityState, error) {
+	if authority.runtime == nil {
+		return debug.IdentityUncertain, errors.New("debug identity authority is unavailable")
+	}
+	_, err := authority.runtime.VerifyUserSessionMFA(ctx, userID, binding)
+	if err == nil {
+		return debug.IdentityActive, nil
+	}
+	if errors.Is(err, authz.ErrMFARequired) {
+		return debug.IdentityUncertain, err
+	}
+	state, bindingErr := authority.VerifyDebugIdentity(ctx, userID, binding)
+	if state == debug.IdentityActive {
+		return debug.IdentityUncertain, err
+	}
+	return state, bindingErr
+}
+
 type debugRouteRegistrar struct {
-	runtime *auth.Runtime
+	runtime     *auth.Runtime
+	connections *accountEventConnections
 }
 
 func (registrar debugRouteRegistrar) RegisterDebugUserRoute(method, pattern string, handler debug.AuthorizedUserHandler) error {
@@ -165,6 +185,21 @@ func (registrar debugRouteRegistrar) RegisterDebugUserRoute(method, pattern stri
 		if !ok || actor.UserID != principal.UserID || actor.SessionTokenHash == "" {
 			httperr.WriteError(writer, httperr.New(httperr.CodeUnauthorized, "authentication required"))
 			return
+		}
+		if method == http.MethodGet && pattern == "/api/debug/events" {
+			ctx, unregister, err := registrar.connections.Register(request.Context(), principal.UserID)
+			if err != nil {
+				writeMFAStreamError(writer, err)
+				return
+			}
+			defer unregister()
+			ctx, cancel, err := authorizedMFAStream(ctx, registrar.runtime, principal.UserID, actor.SessionTokenHash)
+			if err != nil {
+				writeMFAStreamError(writer, err)
+				return
+			}
+			defer cancel()
+			request = request.WithContext(ctx)
 		}
 		handler(writer, request, debug.UserPrincipal{UserID: principal.UserID, SessionBinding: actor.SessionTokenHash})
 	})
@@ -326,6 +361,12 @@ func (fanout *userSessionInvalidationFanout) UserSessionInvalidated(userID int64
 	}
 	if fanout.limitsChanged != nil {
 		fanout.limitsChanged(userID)
+	}
+}
+
+func (fanout *userSessionInvalidationFanout) UserMFAChanged(userID int64) {
+	if fanout != nil && fanout.connections != nil {
+		fanout.connections.CancelUser(userID)
 	}
 }
 

@@ -55,7 +55,13 @@ export interface ManagedDonationFilters {
   q?: string;
 }
 
-type CharityConnectorType = 'openai-compatible' | 'anthropic-compatible' | 'ai-sdk-gateway-v3';
+type CharityConnectorType =
+  | 'openai-compatible'
+  | 'anthropic-compatible'
+  | 'ai-sdk-gateway-v3'
+  | 'google-gemini'
+  | 'openai-responses'
+  | 'openai-decisions';
 
 export type ManagedSafeSource =
   | {
@@ -174,7 +180,14 @@ export function normalizeManagedSource(
   const kind = oneOf(discriminator.kind, ['custom', 'mainstream'] as const, `${label} kind`);
   const connectorType = oneOf(
     discriminator.connector_type,
-    ['openai-compatible', 'anthropic-compatible', 'ai-sdk-gateway-v3'] as const,
+    [
+      'openai-compatible',
+      'anthropic-compatible',
+      'ai-sdk-gateway-v3',
+      'google-gemini',
+      'openai-responses',
+      'openai-decisions',
+    ] as const,
     `${label} connector`,
   );
   const baseURL = sourceText(discriminator.base_url, `${label} canonical base URL`);
@@ -1021,7 +1034,14 @@ function normalizeSource(value: unknown, label: string): CharityBinding['source'
       root.max_rpm === undefined ? 0 : integer(root.max_rpm, `${label} RPM`, 0, 2_147_483_647),
     connector_type: oneOf(
       root.connector_type,
-      ['openai-compatible', 'anthropic-compatible', 'ai-sdk-gateway-v3'] as const,
+      [
+        'openai-compatible',
+        'anthropic-compatible',
+        'ai-sdk-gateway-v3',
+        'google-gemini',
+        'openai-responses',
+        'openai-decisions',
+      ] as const,
       `${label} connector`,
     ),
     canonical_base_url: string(root.canonical_base_url, `${label} base URL`, { min: 1 }),

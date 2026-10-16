@@ -687,9 +687,9 @@ func validAcceptInput(input AcceptInput) bool {
 		return false
 	}
 	switch input.Route {
-	case RouteOpenAIChat, RouteOpenAIEmbeddings, RouteOpenAIImages:
+	case RouteOpenAIChat, RouteOpenAIEmbeddings, RouteOpenAIImages, RouteOpenAIDecisions:
 		return input.CharityModelID == 0 && input.CharityDecisionNow == nil && input.OutputTokenFloor == 0
-	case RouteCharityChat, RouteCharityEmbeddings, RouteCharityImages:
+	case RouteCharityChat, RouteCharityEmbeddings, RouteCharityImages, RouteCharityDecisions:
 		return input.CharityModelID > 0 && input.CharityDecisionNow != nil &&
 			*input.CharityDecisionNow >= 0 && *input.CharityDecisionNow <= maxUnixSecond
 	default:
@@ -745,12 +745,7 @@ func validCandidateIdentity(candidate Candidate) bool {
 		len(candidate.CanonicalBaseURL) < 1 || len(candidate.CanonicalBaseURL) > MaxBaseURLBytes {
 		return false
 	}
-	switch candidate.ConnectorType {
-	case connectorcontract.TypeOpenAICompatible, connectorcontract.TypeAnthropicCompatible, connectorcontract.TypeAISDKGatewayV3:
-		return true
-	default:
-		return false
-	}
+	return candidate.ConnectorType.Valid()
 }
 
 func validHandle(handle Handle) bool {

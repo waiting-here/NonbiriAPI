@@ -57,6 +57,7 @@ func TestReviewedPolicyRetainsDatabaseLifecycleAndEngineCancellation(t *testing.
 	}{
 		{"db", []string{"TestStoreCloseWaitsForCancelledTransactionRollback", "TestGenerationTwoFreshConcurrentSingleOEXCLWinnerDoesNotDeleteWinner", "TestGenerationTwoBootstrapRecoveryRunsAfterCheckpointBeforeStoreReturn", "TestStartupCancellationAtEveryDatabaseStage", "TestStorageContractsCancelledTransactionRestoresForeignKeys"}},
 		{"fatfish/engine", []string{"TestSharedLevelReplayLeavesCallerDataUnchanged", "TestReplayCancellationAtBoundedTick"}},
+		{"upgrade/v1", []string{"TestConversionWaitsForExclusiveDatabaseAccess"}},
 	} {
 		for _, test := range item.tests {
 			if excluded["github.com/waiting-here/NonbiriAPI/internal/"+item.pkg+"/"+test] {

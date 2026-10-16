@@ -314,7 +314,11 @@
 :root:is(
   [data-appearance='celestial'],
   [data-appearance='wandering'],
-  [data-appearance='heart-moment']
+  [data-appearance='heart-moment'],
+  [data-appearance='mirrorsea'],
+  [data-appearance='amber'],
+  [data-appearance='elopement'],
+  [data-appearance='heart-thief']
 ) {
   --nb-appearance-glass-edge: color-mix(in srgb, var(--nb-color-surface-raised) 82%, transparent);
   --nb-appearance-glass-core: color-mix(in srgb, var(--nb-color-surface-raised) 88%, transparent);
@@ -325,10 +329,53 @@
 :root:is(
     [data-appearance='celestial'],
     [data-appearance='wandering'],
-    [data-appearance='heart-moment']
+    [data-appearance='heart-moment'],
+    [data-appearance='mirrorsea'],
+    [data-appearance='amber'],
+    [data-appearance='elopement'],
+    [data-appearance='heart-thief']
   )[data-theme='dark'] {
   --nb-appearance-glass-edge: color-mix(in srgb, var(--nb-color-surface) 94%, transparent);
   --nb-appearance-glass-core: color-mix(in srgb, var(--nb-color-surface) 96%, transparent);
   --nb-appearance-glass-line: color-mix(in srgb, var(--nb-color-border) 50%, transparent);
   --nb-appearance-glass-shadow: color-mix(in srgb, var(--nb-color-bg) 62%, transparent);
+}
+
+:root[data-appearance='mirrorsea'] {
+  --nb-color-bg: #efedf7;
+  --nb-color-surface: #faf8ff;
+  --nb-color-surface-raised: #fefbff;
+  --nb-color-surface-muted: #eeeaf7;
+  --nb-color-surface-emphasis: #e3dcf2;
+  --nb-color-surface-alt: #f3eefb;
+  --nb-color-text: #292238;
+  --nb-color-text-muted: #514762;
+  --nb-color-text-subtle: #625573;
+  --nb-color-border: #cec2dd;
+  --nb-color-border-strong: #9f8ab9;
+  --nb-color-accent: #684491;
+  --nb-color-accent-hover: #50316f;
+  --nb-color-accent-soft: #e9def5;
+  --nb-color-accent-quiet: #f3edf9;
+  --nb-color-accent-contrast: #ffffff;
+  --nb-elevation-1: 0 3px 16px #6a4b9e16;
+}
+:root[data-appearance='mirrorsea'][data-theme='dark'] {
+  --nb-color-bg: #141329;
+  --nb-color-surface: #22203c;
+  --nb-color-surface-raised: #2b2947;
+  --nb-color-surface-muted: #292641;
+  --nb-color-surface-emphasis: #3b3256;
+  --nb-color-surface-alt: #25233e;
+  --nb-color-text: #f0e9ff;
+  --nb-color-text-muted: #c6bbdd;
+  --nb-color-text-subtle: #b6aace;
+  --nb-color-border: #514869;
+  --nb-color-border-strong: #827295;
+  --nb-color-accent: #d2b6ff;
+  --nb-color-accent-hover: #ead8ff;
+  --nb-color-accent-soft: #493563;
+  --nb-color-accent-quiet: #32253f;
+  --nb-color-accent-contrast: #29163c;
+  --nb-elevation-1: 0 3px 16px #08071840;
 }

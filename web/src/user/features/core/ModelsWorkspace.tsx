@@ -25,7 +25,13 @@ import { useCoreCopy } from './copy';
 import { useNumberedModels } from './modelNumberedQueries';
 import { useModelText } from './models/copy';
 import { validateResourceId } from './normalizers';
-import { coreKeys, invalidateResourceDependents, useCoreSession, useModel } from './queries';
+import {
+  coreKeys,
+  invalidateResourceDependents,
+  useBindings,
+  useCoreSession,
+  useModel,
+} from './queries';
 import { FilteredResourceEmpty, ResourceFilterBar } from './ResourceFilterControls';
 import type { Model, RouteStrategy, UserProfile } from './types';
 import { useResourceFilters, useResourceListScroll } from './useResourceFilters';
@@ -68,6 +74,14 @@ function ModelDetail({
   const [requestedStrategy, setRequestedStrategy] = useState<RouteStrategy>();
   const queryClient = useQueryClient();
   const model = useModel(accountId, modelId);
+  // ModelSources owns this complete query; observe its cache without another read.
+  const bindings = useBindings(accountId, modelId, false);
+  const connectorType = bindings.data?.bindings[0]?.connector_type;
+  const adaptationConnectorType =
+    connectorType &&
+    bindings.data?.bindings.every((binding) => binding.connector_type === connectorType)
+      ? connectorType
+      : undefined;
   const [editing, setEditing] = useState<Model | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const permissionScope = `${accountId}\u0000${modelId}`;
@@ -241,7 +255,7 @@ function ModelDetail({
                 setEditing(model.data ?? null);
               }}
             />
-            <Fold title={textModel('advanced')} summary={textModel('advancedHelp')}>
+            <Fold lazy title={textModel('advanced')} summary={textModel('advancedHelp')}>
               <dl className="core-detail-list">
                 <div>
                   <dt>{t('models.silentRetry')}</dt>
@@ -261,9 +275,10 @@ function ModelDetail({
                 <ModelRoleSummary policy={model.data.role_policy} />
               ) : null}
               <RequestAdaptationEditor
-                key={model.data.id}
+                key={`${accountId}:${model.data.id}`}
                 url={'/api/models/' + model.data.id + '/request-adaptation'}
                 scope="personal-model"
+                connectorType={adaptationConnectorType}
                 editable={!reconciliationRequired && !replayAttempt}
               />
             </Fold>

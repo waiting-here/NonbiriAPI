@@ -61,10 +61,11 @@ func (r *Runtime) AttachUserLifecycleGate(gate *lifecyclegate.Gate) error {
 	return nil
 }
 
-// UserSessionInvalidationObserver receives committed user-session
-// invalidations. The callback never receives raw session material.
+// UserSessionInvalidationObserver separates committed first-factor revocation
+// from browser-only MFA changes. Callbacks receive no raw session material.
 type UserSessionInvalidationObserver interface {
 	UserSessionInvalidated(userID int64)
+	UserMFAChanged(userID int64)
 }
 
 // AttachUserSessionInvalidationObserver installs the one process-local
@@ -97,6 +98,15 @@ func (r *Runtime) notifyUserSessionInvalidated(userID int64) {
 	r.mu.Unlock()
 	if observer != nil {
 		observer.UserSessionInvalidated(userID)
+	}
+}
+
+func (r *Runtime) notifyUserMFAChanged(userID int64) {
+	r.mu.Lock()
+	observer := r.userSessionInvalidationObserver
+	r.mu.Unlock()
+	if observer != nil {
+		observer.UserMFAChanged(userID)
 	}
 }
 

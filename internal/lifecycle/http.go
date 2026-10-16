@@ -395,6 +395,8 @@ func writeLifecycleError(writer http.ResponseWriter, err error) {
 
 func lifecycleAuthMessage(code string) string {
 	switch code {
+	case httperr.CodeMFARequired:
+		return "MFA verification is required."
 	case httperr.CodeUnauthorized:
 		return "authentication required"
 	case httperr.CodeForbidden:

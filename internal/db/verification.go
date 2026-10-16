@@ -24,10 +24,10 @@ func IsActiveRecovery(ctx context.Context) bool {
 	return active
 }
 
-// VerifyContext audits a stopped database or trusted consistent copy. It never
-// opens the source writable, initializes storage, migrates or repairs data.
+// InspectContext owns a stopped database or trusted consistent copy while its
+// read-only callback inspects it. It validates path, storage identity and key.
 // SQLite may create WAL/shared-memory files for read-lock coordination.
-func VerifyContext(ctx context.Context, path string, secrets secret.GenerationTwoContextCodec, audit func(context.Context, *sql.DB) error) (result error) {
+func InspectContext(ctx context.Context, path string, secrets secret.GenerationTwoContextCodec, inspect func(context.Context, *sql.DB) error) (result error) {
 	if ctx == nil || nilSecretCodec(secrets) {
 		return errors.New("verification dependencies are required")
 	}
@@ -66,14 +66,22 @@ func VerifyContext(ctx context.Context, path string, secrets secret.GenerationTw
 		return startupSQLFailure(ctx, err, StartupCorruptDatabase)
 	}
 	owned := sourceStore(context.WithValue(ctx, databaseOwnerKey{}, owner), d, secrets)
-	defer func() { result = appendStartupError(result, owned.CloseContext(ctx)) }()
+	// A cancelled audit must finish closing SQLite before a caller can retry.
+	// Close has its own bounded cleanup budget independent of the audit deadline.
+	defer func() { result = appendStartupError(result, owned.Close()) }()
 	if _, err := d.ExecContext(ctx, "PRAGMA query_only=ON"); err != nil {
 		return startupSQLFailure(ctx, err, StartupCorruptDatabase)
 	}
-	if audit != nil {
-		ctx = context.WithValue(ctx, verificationAuditKey{}, audit)
+	if err := ValidateDatabaseIdentity(ctx, d); err != nil {
+		return err
 	}
-	return validateReadOnlyDatabase(ctx, d, secrets)
+	if err := validateDatabaseMaterial(ctx, d, secrets); err != nil {
+		return startupSQLFailure(ctx, err, StartupCredentialReject)
+	}
+	if inspect != nil {
+		return inspect(ctx, d)
+	}
+	return nil
 }
 
 func validateCurrentSource(ctx context.Context, path string, source *sourceSnapshotSet, secrets secret.GenerationTwoContextCodec) (result error) {
@@ -124,17 +132,14 @@ func validateCurrentSource(ctx context.Context, path string, source *sourceSnaps
 		return generationError(userVersion)
 	}
 	RecordStartupStage(ctx, StageSchemaValidation)
-	needed, err := generationTwoExtensionNeeded(ctx, d)
-	if err != nil {
+	if err := validateGenerationTwoManifest(ctx, d); err != nil {
 		return startupSQLFailure(ctx, err, StartupSchemaMismatch)
 	}
-	if !needed {
-		if err := validateStartupSeed(ctx, d); err != nil {
-			return startupSQLFailure(ctx, err, StartupSchemaMismatch)
-		}
-		if err := validateSourceConfig(ctx, d); err != nil {
-			return startupSQLFailure(ctx, err, StartupSchemaMismatch)
-		}
+	if err := validateStartupSeed(ctx, d); err != nil {
+		return startupSQLFailure(ctx, err, StartupSchemaMismatch)
+	}
+	if err := validateSourceConfig(ctx, d); err != nil {
+		return startupSQLFailure(ctx, err, StartupSchemaMismatch)
 	}
 	RecordStartupStage(ctx, StageCredentialValidation)
 	if err := validateDatabaseMaterial(ctx, d, secrets); err != nil {
@@ -186,4 +191,47 @@ func validateStartupSeed(ctx context.Context, q queryer) error {
 		return errors.New("stable storage initialization marker missing")
 	}
 	return nil
+}
+
+// VerifyContext performs the complete current-schema audit without repairs.
+func VerifyContext(ctx context.Context, path string, codec secret.GenerationTwoContextCodec, audit func(context.Context, *sql.DB) error) error {
+	return InspectContext(ctx, path, codec, func(ctx context.Context, d *sql.DB) error {
+		if audit != nil {
+			ctx = context.WithValue(ctx, verificationAuditKey{}, audit)
+		}
+		return validateReadOnlyDatabase(ctx, d, codec)
+	})
+}
+
+// ValidateDatabaseIdentity checks the SQLite application and generation markers.
+func ValidateDatabaseIdentity(ctx context.Context, q queryer) error {
+	var applicationID, userVersion uint32
+	if err := q.QueryRowContext(ctx, "PRAGMA application_id").Scan(&applicationID); err != nil {
+		return startupSQLFailure(ctx, err, StartupReadIO)
+	}
+	if applicationID != DatabaseApplicationID {
+		return startupError(StartupWrongIdentity)
+	}
+	if err := q.QueryRowContext(ctx, "PRAGMA user_version").Scan(&userVersion); err != nil {
+		return startupSQLFailure(ctx, err, StartupReadIO)
+	}
+	if userVersion != DatabaseUserVersion {
+		return generationError(userVersion)
+	}
+	return nil
+}
+
+// ValidateCurrentStorage checks final structure, configuration and key-bound
+// control material. Full historical credential and data audits are separate.
+func ValidateCurrentStorage(ctx context.Context, q queryer, codec secret.GenerationTwoContextCodec) error {
+	if err := validateGenerationTwoManifest(ctx, q); err != nil {
+		return err
+	}
+	if err := validateStartupSeed(ctx, q); err != nil {
+		return err
+	}
+	if err := validateSourceConfig(ctx, q); err != nil {
+		return err
+	}
+	return validateDatabaseMaterial(ctx, q, codec)
 }

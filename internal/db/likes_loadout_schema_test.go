@@ -1,7 +1,6 @@
 package db
 
 import (
-	"context"
 	"testing"
 )
 
@@ -9,7 +8,7 @@ func TestCustomPresetUpgradeBoundsOwnershipAndDeletion(t *testing.T) {
 	database := openGenerationTwoConstraintFixture(t)
 	user := hostileInsertUser(t, database, "preset owner", 0, 1)
 	other := hostileInsertUser(t, database, "another preset owner", 0, 1)
-	if err := extendKnownGenerationTwoSchema(context.Background(), database); err != nil {
+	if err := validateGenerationTwoManifest(t.Context(), database); err != nil {
 		t.Fatal(err)
 	}
 	const valid = `{"role":"ChatGPT","harness":null,"skills":["PUB01"]}`

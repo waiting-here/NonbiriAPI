@@ -145,6 +145,9 @@ func heldReadAdminID(ctx context.Context) (int64, error) {
 }
 
 func translateDonationHeldReadError(err error) error {
+	if errors.Is(err, authz.ErrMFARequired) {
+		return err
+	}
 	var target error
 	switch {
 	case errors.Is(err, lifecycle.ErrInvalid):
@@ -166,6 +169,9 @@ func translateDonationHeldReadError(err error) error {
 }
 
 func translateLogHeldReadError(err error) error {
+	if errors.Is(err, authz.ErrMFARequired) {
+		return err
+	}
 	var target error
 	switch {
 	case errors.Is(err, lifecycle.ErrInvalid):

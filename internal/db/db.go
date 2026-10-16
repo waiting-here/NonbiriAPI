@@ -32,7 +32,7 @@ type Store struct {
 
 // Open classifies path as either completely fresh or current Generation 2.
 // Existing databases receive read-only identity, schema and credential checks
-// before recovery. Only registered prior schemas receive an additive upgrade.
+// before recovery. Historical schemas require the separate offline tool.
 func Open(path string, secrets secret.GenerationTwoContextCodec) (*Store, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultStartupTimeout)
 	defer cancel()
@@ -73,7 +73,6 @@ func OpenContext(ctx context.Context, path string, secrets secret.GenerationTwoC
 	if err := prepareDBDirectory(path); err != nil {
 		return nil, err
 	}
-	ctx = context.WithValue(ctx, startupSchemaPlanKey{}, &startupSchemaPlan{})
 	return openGenerationTwo(ActiveRecoveryContext(ctx), path, secrets)
 }
 

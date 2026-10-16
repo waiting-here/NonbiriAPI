@@ -62,6 +62,13 @@ func (s *Service) PreflightImage(ctx context.Context, userID int64, fullName str
 	return s.preflight(ctx, userID, fullName, nil, decisionNow)
 }
 
+func (s *Service) PreflightDecision(ctx context.Context, userID int64, fullName string, request *openai.DecisionRequest, decisionNow int64) (RuntimePreflight, error) {
+	if request == nil || request.Model != fullName {
+		return RuntimePreflight{}, ErrInvalidRequest
+	}
+	return s.preflight(ctx, userID, fullName, nil, decisionNow)
+}
+
 func (s *Service) preflight(ctx context.Context, userID int64, fullName string, textRunes *int, decisionNow int64) (RuntimePreflight, error) {
 	if s == nil || s.db == nil || ctx == nil || userID <= 0 || fullName == "" || decisionNow < 0 || decisionNow > maxUnixSecond {
 		return RuntimePreflight{}, ErrInvalidRequest
@@ -412,7 +419,7 @@ ORDER BY b.ord,b.id LIMIT ?`, modelID, callerID, callerID, callerID, decisionNow
 			return RuntimeSnapshot{}, fmt.Errorf("charity routing: scan runtime candidate: %w", err)
 		}
 		candidate.ConnectorType = connectorcontract.Type(connector)
-		if candidate.ConnectorType != connectorcontract.TypeOpenAICompatible && candidate.ConnectorType != connectorcontract.TypeAnthropicCompatible && candidate.ConnectorType != connectorcontract.TypeAISDKGatewayV3 {
+		if !candidate.ConnectorType.Valid() {
 			return RuntimeSnapshot{}, ErrInvariant
 		}
 		sawRuntimeCandidate = true
@@ -709,12 +716,12 @@ func capabilityTokenPrices(values [4]int64) *CapabilityTokenPrices {
 }
 
 func runtimeConnectorSet(connectorTypes []connectorcontract.Type) (map[connectorcontract.Type]struct{}, error) {
-	if len(connectorTypes) < 1 || len(connectorTypes) > 3 {
+	if len(connectorTypes) < 1 {
 		return nil, ErrInvalidRequest
 	}
 	connectorSet := make(map[connectorcontract.Type]struct{}, len(connectorTypes))
 	for _, connectorType := range connectorTypes {
-		if connectorType != connectorcontract.TypeOpenAICompatible && connectorType != connectorcontract.TypeAnthropicCompatible && connectorType != connectorcontract.TypeAISDKGatewayV3 {
+		if !connectorType.Valid() {
 			return nil, ErrInvalidRequest
 		}
 		if _, duplicate := connectorSet[connectorType]; duplicate {

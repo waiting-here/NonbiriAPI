@@ -70,6 +70,8 @@ function errorMessage(error: unknown, translate: (key: string) => string): strin
   if (isForbidden(error)) return translate('common.forbidden');
   if (isApiError(error)) {
     switch (error.code) {
+      case 'mfa_required':
+        return translate('mfa.requiredError');
       case 'network_error':
         return translate('common.networkError');
       case 'rate_limited':

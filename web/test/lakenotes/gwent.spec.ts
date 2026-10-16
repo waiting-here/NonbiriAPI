@@ -108,8 +108,12 @@ async function observed(page: Page) {
         return;
       // Observe delivered identities without changing the native game or server state.
       (
-        window as Window & { observedGwent?: { id: string; phaseSeq: string; decisionID: string } }
-      ).observedGwent = event.data.snapshot.home?.current ?? undefined;
+        window as Window & {
+          observedGwent?: { id: string; phaseSeq: string; decisionID: string; blocked: boolean };
+        }
+      ).observedGwent = event.data.snapshot.home?.current
+        ? { ...event.data.snapshot.home.current, blocked: event.data.snapshot.blocked }
+        : undefined;
     });
   });
 }
@@ -119,7 +123,7 @@ async function aligned(arena: FrameLocator, current: Match) {
       const value = await arena.locator('body').evaluate(() => {
         return (
           window as Window & {
-            observedGwent?: { id: string; phaseSeq: string; decisionID: string };
+            observedGwent?: { id: string; phaseSeq: string; decisionID: string; blocked: boolean };
           }
         ).observedGwent;
       });
@@ -131,44 +135,48 @@ async function aligned(arena: FrameLocator, current: Match) {
               ? BigInt(value.phaseSeq) >= BigInt(current.phase_seq)
               : value.phaseSeq === current.phase_seq,
             value.decisionID,
+            value.blocked,
           ]
         : null;
     })
-    .toEqual([current.id, true, current.decision_id]);
+    .toEqual([current.id, true, current.decision_id, false]);
 }
 async function actionUI(page: Page, arena: FrameLocator, current: Match, action: Action) {
   await aligned(arena, current);
-  const submitted = page.waitForResponse(
-    (response) =>
-      new URL(response.url()).pathname === base + '/sessions/' + current.id + '/actions' &&
-      response.request().method() === 'POST',
-  );
-  if (current.view.choice) {
-    const choice = current.view.choice;
-    if (action.card) {
-      const index = choice.cards.findIndex((card) => card.instance_id === action.card);
-      expect(index).toBeGreaterThanOrEqual(0);
-      await arena.locator('#dialog-cards button').nth(index).click();
-    } else {
-      const actions = current.view.legal_actions.filter((value) => !value.card);
-      const index = actions.findIndex(
-        (value) => value.kind === action.kind && value.row === action.row,
-      );
-      expect(index).toBeGreaterThanOrEqual(0);
-      await arena.locator('#dialog-actions button').nth(index).click();
-    }
-  } else if (action.kind === 'pass') await arena.locator('#arena-pass').click();
-  else if (action.kind === 'leader') await arena.locator('#arena-leader').click();
-  else {
-    const index = current.view.hand.findIndex((card) => card.instance_id === action.card);
-    expect(index).toBeGreaterThanOrEqual(0);
-    await arena.locator('#arena-hand button').nth(index).click();
-    if (action.row) {
-      const spy = current.view.hand[index].abilities.includes('spy');
-      await arena.locator(`#arena-${spy ? 'op' : 'me'}-${action.row} .row-info`).click();
-    }
-  }
-  const response = await submitted;
+  const [response] = await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === base + '/sessions/' + current.id + '/actions' &&
+        response.request().method() === 'POST',
+    ),
+    (async () => {
+      if (current.view.choice) {
+        const choice = current.view.choice;
+        if (action.card) {
+          const index = choice.cards.findIndex((card) => card.instance_id === action.card);
+          expect(index).toBeGreaterThanOrEqual(0);
+          await arena.locator('#dialog-cards button').nth(index).click();
+        } else {
+          const actions = current.view.legal_actions.filter((value) => !value.card);
+          const index = actions.findIndex(
+            (value) => value.kind === action.kind && value.row === action.row,
+          );
+          expect(index).toBeGreaterThanOrEqual(0);
+          await arena.locator('#dialog-actions button').nth(index).click();
+        }
+      } else if (action.kind === 'pass') await arena.locator('#arena-pass').click();
+      else if (action.kind === 'leader') await arena.locator('#arena-leader').click();
+      else {
+        const index = current.view.hand.findIndex((card) => card.instance_id === action.card);
+        expect(index).toBeGreaterThanOrEqual(0);
+        await arena.locator('#arena-hand button').nth(index).click();
+        if (action.row) {
+          const spy = current.view.hand[index].abilities.includes('spy');
+          await arena.locator(`#arena-${spy ? 'op' : 'me'}-${action.row} .row-info`).click();
+        }
+      }
+    })(),
+  ]);
   expect(response.status()).toBe(200);
   const sent = response.request().postDataJSON();
   expect(sent).toEqual({

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"strconv"
+	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
@@ -187,19 +188,54 @@ ELSE 'eligible' END`, keyID, keyID).Scan(&eligibility)
 	}, nil
 }
 
-func modelBrowseTx(ctx context.Context, tx *sql.Tx, userID int64, model Model) (*ModelBrowse, error) {
-	scope := ownedBindingScope + ` AND m.id=?`
-	args := []any{userID, userID, model.ID}
-	var availableCount int64
-	err := tx.QueryRowContext(ctx, `SELECT COUNT(*)`+ownedBindingJoin+scope+` AND `+ownedBindingState+`='available'`, args...).Scan(&availableCount)
-	if err != nil {
-		return nil, err
+// Only models on this page participate. Counts and the first three bindings
+// share the page transaction's ownership checks and snapshot.
+func attachModelBrowseTx(ctx context.Context, tx *sql.Tx, userID int64, models []Model) error {
+	if len(models) == 0 {
+		return nil
 	}
-	preview, err := bindingPreviewTx(ctx, tx, scope, "b.ord,b.id", args)
-	if err != nil {
-		return nil, err
+	args := []any{userID, userID}
+	summaries := make(map[string]*ModelBrowse, len(models))
+	for i := range models {
+		models[i].Browse = &ModelBrowse{AvailableBindingCount: "0", Preview: make([]KeyBindingView, 0, 3)}
+		summaries[models[i].ID] = models[i].Browse
+		args = append(args, models[i].ID)
 	}
-	return &ModelBrowse{AvailableBindingCount: strconv.FormatInt(availableCount, 10), Preview: preview}, nil
+	scope := ownedBindingScope + ` AND m.id IN (` + strings.TrimSuffix(strings.Repeat("?,", len(models)), ",") + `)`
+	rows, err := tx.QueryContext(ctx, `SELECT m.id,SUM(CASE WHEN `+ownedBindingState+`='available' THEN 1 ELSE 0 END)`+ownedBindingJoin+scope+` GROUP BY m.id`, args...)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var id string
+		var count int64
+		if err = rows.Scan(&id, &count); err != nil {
+			rows.Close()
+			return err
+		}
+		summaries[id].AvailableBindingCount = strconv.FormatInt(count, 10)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	// Rank only this page's owned bindings. Hydrate the bounded preview after
+	// ranking, so eligibility and labels are read for at most three per model.
+	rows, err = tx.QueryContext(ctx, `WITH preview AS (SELECT b.id,ROW_NUMBER() OVER (PARTITION BY m.id ORDER BY b.ord,b.id) AS position`+ownedBindingJoin+scope+`)`+ownedBindingSelect+` JOIN preview ON preview.id=b.id AND preview.position<=3 ORDER BY m.id,b.ord,b.id`, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		item, err := scanKeyBinding(rows)
+		if err != nil {
+			return err
+		}
+		summary := summaries[item.ModelID]
+		summary.Preview = append(summary.Preview, item)
+	}
+	return rows.Err()
 }
 
 func (r *Repository) ListKeyBindingsPage(ctx context.Context, userID, endpointID, keyID int64, upstreamModel string, page pagination.Request) (Page[KeyBindingView], error) {

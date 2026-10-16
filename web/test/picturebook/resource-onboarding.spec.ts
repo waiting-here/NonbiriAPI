@@ -69,9 +69,8 @@ async function newService(page: Page, name: string, locale: Locale = 'en') {
   const text = copy(locale);
   await page.getByRole('radio', { name: servicesCopy(locale).otherService, exact: true }).check();
   await page
-    .getByRole('radiogroup', { name: text.connector, exact: true })
-    .getByRole('radio', { name: 'OpenAI-compatible', exact: true })
-    .check();
+    .getByRole('combobox', { name: text.connector, exact: true })
+    .selectOption('openai-compatible');
   await page.getByLabel(text.address, { exact: true }).fill(fixture().upstream_url + '/v1');
   await page.getByLabel(text.serviceNote, { exact: true }).fill(name);
   await page.getByRole('button', { name: text.createService, exact: true }).click();
@@ -469,9 +468,8 @@ test('stopping an in-flight step keeps a committed resource for explicit continu
     await open(page);
     await page.getByRole('radio', { name: servicesCopy('en').otherService, exact: true }).check();
     await page
-      .getByRole('radiogroup', { name: copy('en').connector, exact: true })
-      .getByRole('radio', { name: 'OpenAI-compatible', exact: true })
-      .check();
+      .getByRole('combobox', { name: copy('en').connector, exact: true })
+      .selectOption('openai-compatible');
     await page.getByLabel(copy('en').address, { exact: true }).fill(fixture().upstream_url + '/v1');
     await page.getByLabel(copy('en').serviceNote, { exact: true }).fill(name);
     await page.getByRole('button', { name: copy('en').createService, exact: true }).click();

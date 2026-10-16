@@ -1,9 +1,10 @@
+import { useTranslation } from 'react-i18next';
 import { useState, type ReactNode } from 'react';
 import { AuthRequired } from '@shared/components/States';
 import { Icon, type IconName } from '@shared/components/Icon';
 import { copyText } from '@shared/utils/clipboard';
 import { isApiError, isNotFoundError, isUnauthorized } from '@shared/query/http';
-import { useCoreCopy } from './copy';
+import { CONNECTOR_COPY_KEYS, useCoreCopy } from './copy';
 import { OutcomeNote } from '@shared/components/ui';
 import { callerSafeError } from './request';
 import { useCoreMe, useCoreSession, type CoreSessionBoundary } from './queries';
@@ -32,9 +33,11 @@ export function CoreErrorPanel({
   compact?: boolean;
 }) {
   const { t } = useCoreCopy();
+  const { t: sharedCopy } = useTranslation();
   let body = t('common.errorBody');
   if (isApiError(error)) {
-    if (error.status === 409 || error.code === 'conflict') body = t('common.conflict');
+    if (error.code === 'mfa_required') body = sharedCopy('mfa.requiredError');
+    else if (error.status === 409 || error.code === 'conflict') body = t('common.conflict');
     else if (error.code === 'maintenance' || error.status === 503) body = t('common.maintenance');
     else if (error.status === 401 || error.status === 403) body = t('common.permissionLost');
     else body = callerSafeError(error) ?? t('common.errorBody');
@@ -204,17 +207,7 @@ export function StatusPill({
 
 export function ConnectorLabel({ value }: { value: ConnectorType }) {
   const { t } = useCoreCopy();
-  return (
-    <>
-      {t(
-        value === 'openai-compatible'
-          ? 'connector.openai'
-          : value === 'anthropic-compatible'
-            ? 'connector.anthropic'
-            : 'connector.gateway',
-      )}
-    </>
-  );
+  return <>{t(CONNECTOR_COPY_KEYS[value])}</>;
 }
 
 export function DiscoveryStatus({ evidence }: { evidence: DiscoveryEvidence }) {

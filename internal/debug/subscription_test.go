@@ -660,3 +660,46 @@ func TestDedicatedSSEHeartbeatHasNoIDAndStreamClosesOnlyObserver(t *testing.T) {
 		t.Fatalf("stream disconnect changed session = (%+v,%v)", metadata, err)
 	}
 }
+
+func TestStreamCancellationDiscardsPendingPrivateEvents(t *testing.T) {
+	clock := newDebugTestClock(121_000)
+	hub, _ := newDebugTestHub(t, clock, &debugTestVerifier{state: IdentityActive})
+	mustStartDebug(t, hub, 121, "binding-121")
+	subscription, err := hub.Subscribe(context.Background(), 121, "binding-121", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	writer := newLockedDebugWriter()
+	if err := subscription.Stream(ctx, writer); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Stream: %v", err)
+	}
+	if body := writer.String(); body != "" {
+		t.Fatalf("private events after cancellation: %q", body)
+	}
+}
+
+func TestStreamClosesObserverWhenHeartbeatAuthorityIsUncertain(t *testing.T) {
+	clock := newDebugTestClock(122_000)
+	verifier := &debugTestVerifier{state: IdentityActive}
+	hub, _ := newDebugTestHub(t, clock, verifier)
+	hub.config.heartbeat = 5 * time.Millisecond
+	mustStartDebug(t, hub, 122, "binding-122")
+	subscription, err := hub.Subscribe(context.Background(), 122, "binding-122", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifier.mu.Lock()
+	verifier.state = IdentityUncertain
+	verifier.mu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := subscription.Stream(ctx, newLockedDebugWriter()); err == nil || errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Stream: %v", err)
+	}
+	metadata, err := hub.Metadata(122)
+	if err != nil || !metadata.Active || metadata.ConnectedSubscribers != 0 {
+		t.Fatalf("metadata=%+v err=%v", metadata, err)
+	}
+}

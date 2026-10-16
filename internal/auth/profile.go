@@ -202,6 +202,8 @@ func (r *Runtime) patchMe(w http.ResponseWriter, req *http.Request) {
 
 func writeAuthorizationFailure(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, authz.ErrMFARequired):
+		writeStableError(w, httperr.CodeMFARequired, "MFA verification is required.")
 	case errors.Is(err, authz.ErrUnauthorized):
 		writeStableError(w, httperr.CodeUnauthorized, "authentication required")
 	case errors.Is(err, authz.ErrForbidden):

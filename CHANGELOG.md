@@ -6,12 +6,38 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ## Unreleased — 1.0.0
 
-The stable database baseline is schema 17 with account export 19. The normal
-service accepts fresh or registered stable databases; the separate
-`nonbiri-upgrade-rc7` command converts the exact rc.7 schema 16. Deployments can
+The current database schema is 19 with account export 20. The normal service
+accepts fresh storage or schema 19 and contains no historical conversion chain.
+The separate `nonbiri-upgrade-v1` command converts exact schema 16, 17 and 18
+sources while preserving existing settings and stored facts. Deployments can
 use a verified commit and its matching artifacts without a release tag.
 
+### Added
+
+- Optional authenticator MFA for all user accounts, with independent default-off
+  requirements for each account level, seven-day browser proofs and administrator
+  reset. Existing CallerKey model calls and automation retain their credentials.
+- Four SP themes with matching layered artwork, appearance wallpapers and
+  encounter replays. New SP pool templates contain no featured SR cards.
+- A milk-crab fishing presentation with independently configurable probability,
+  mutually exclusive with the blue fish and using the same length and reward rules.
+- Gemini and OpenAI Responses chat upstreams, plus OpenAI Decisions upstreams
+  and the `/v1/decisions` API. Endpoints can share a URL across protocol types.
+
 ### Changed
+
+- Fit fatfish editor, playtest and gameplay fields to both viewport dimensions,
+  keeping the complete default field visible while retaining manual enlargement.
+- Localize platform API errors to the request language and redact IPv4 addresses
+  from displayed errors, logs and diagnostics while preserving editable settings
+  and normal model responses.
+- Require completion of first SSR/SP encounter scenes; owning a card once unlocks
+  both encounter replays.
+- Wake audit scans on demand, avoid charging transient database contention to the
+  scan failure budget, batch model-page summaries and mount adaptation editors
+  only when expanded.
+- Document independent management MFA and private origin authentication without
+  changing the deployment automatically.
 
 - Reduce redundant homepage requests, idle game polling and empty game-worker
   transactions. Aggregate charity catalog success rates for the whole page in

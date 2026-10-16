@@ -216,3 +216,87 @@ it('starts the gather cue once after strict lifecycle setup', () => {
   advance(0);
   expect(cue.mock.calls.map((call) => call[0])).toEqual(['gather']);
 });
+
+it('holds every first rare encounter across skip, close, escape, card and surface shortcuts', () => {
+  const { close } = show(receipt([item('g-chatgpt'), item('l-chatgpt'), item('l-chatgpt', true)]));
+  const trySkip = () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Skip · view all' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Skip animation' }));
+    fireEvent(
+      document.querySelector('dialog')!,
+      new Event('cancel', { bubbles: true, cancelable: true }),
+    );
+  };
+  trySkip();
+  expect(phase()).toBe('gather');
+  deal(3);
+  advance(900);
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+  fireEvent.click(document.querySelector('.gacha-cinema__caption')!);
+  fireEvent.click(document.querySelector('.gacha-draw-slot')!);
+  expect(phase()).toBe('closeup');
+  advance(1200);
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+  trySkip();
+  expect(phase()).toBe('charge');
+  advance(900);
+  trySkip();
+  expect(phase()).toBe('prelude');
+  advance(1800);
+  advance(2600);
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+  expect(phase()).toBe('closeup');
+  fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+  advance(10000);
+  expect(screen.getByRole('button', { name: 'Skip · view all' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Resume' }));
+  background(true);
+  advance(10000);
+  background(false);
+  advance(2199);
+  expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+  advance(1);
+  fireEvent.click(screen.getByRole('button', { name: 'Skip · view all' }));
+  expect(phase()).toBe('done');
+  expect(openIDs()).toEqual(['g-chatgpt', 'l-chatgpt', 'l-chatgpt']);
+  expect(close).not.toHaveBeenCalled();
+});
+
+it('reduced motion keeps first encounters and every line without audiovisual effects', () => {
+  show(receipt([item('a-chatgpt'), item('l-chatgpt'), item('g-chatgpt')]), {
+    ...preferences,
+    reduced: true,
+  });
+  expect(phase()).toBe('prelude');
+  advance(1800);
+  expect(document.querySelector('.gacha-voice-after')).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+  advance(4800);
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+  expect(document.querySelector('.gacha-cinema__encounter')).toHaveAttribute(
+    'data-card-id',
+    'g-chatgpt',
+  );
+  advance(1200);
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+  expect(phase()).toBe('done');
+  expect(cue).not.toHaveBeenCalled();
+  expect(vibrate).not.toHaveBeenCalled();
+});
+
+it.each([false, true])('a voluntary replay is immediately closable, duplicate=%s', (duplicate) => {
+  const close = vi.fn();
+  render(
+    <DrawReveal
+      receipt={receipt([item('l-chatgpt', duplicate)])}
+      preferences={{ ...preferences, reduced: true }}
+      audio={audio}
+      english
+      onClose={close}
+      replay
+    />,
+  );
+  expect(phase()).toBe(duplicate ? 'closeup' : 'prelude');
+  fireEvent.click(screen.getByRole('button', { name: 'Close replay' }));
+  expect(close).toHaveBeenCalledOnce();
+});

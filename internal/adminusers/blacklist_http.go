@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/waiting-here/NonbiriAPI/internal/blacklist"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
@@ -46,7 +47,7 @@ func (api *httpAPI) listBlacklist(w http.ResponseWriter, r *http.Request, p Admi
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, result)
+	httperr.WriteDisplayJSON(w, http.StatusOK, result)
 }
 
 func (api *httpAPI) listBlacklistEvents(w http.ResponseWriter, r *http.Request, p AdminPrincipal) {
@@ -67,7 +68,7 @@ func (api *httpAPI) listBlacklistEvents(w http.ResponseWriter, r *http.Request, 
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, result)
+	httperr.WriteDisplayJSON(w, http.StatusOK, result)
 }
 
 func (api *httpAPI) addBlacklist(w http.ResponseWriter, r *http.Request, p AdminPrincipal) {

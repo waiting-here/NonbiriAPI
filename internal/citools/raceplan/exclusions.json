@@ -3,6 +3,8 @@
     "package": "github.com/waiting-here/NonbiriAPI/internal/db",
     "reason": "Serial DDL, upgrade, recovery or storage constraint matrix; ordinary fresh/upgrade gate retained.",
     "tests": [
+      "TestAccountMFAOfflineAuditCoversBothSecretTablesWithoutStartupScan",
+      "TestAccountMFASchemaRevokesProofsAndCascadesDeletedIdentity",
       "TestAccountProtectionSchemaPins",
       "TestBetaTwoFreshSeedsCapacitySingleton",
       "TestBetaTwoSidecarHostileConstraints",
@@ -98,9 +100,6 @@
       "TestRestartKeyValidationCostDoesNotGrowWithCredentials",
       "TestRoutingExtensionRejectsModifiedPriorSchema",
       "TestScanCheckpointPrivacyWithoutPublishedResults",
-      "TestSchemaMigrationsRejectUnknownSourcesAndIncompleteChains",
-      "TestSchemaMigrationsRollbackWholeChainAndRetry",
-      "TestSchemaMigrationsUpgradeEveryPriorRevisionOnce",
       "TestStartupDiagnosticsKeepPrimaryCauseAndHideSecondaryDetails",
       "TestStartupSecondaryErrorsRemainBoundedAndSafe",
       "TestStorageContractsCharityBindingKeepsEndpointLifetime",
@@ -340,15 +339,28 @@
     ]
   },
   {
-    "package": "github.com/waiting-here/NonbiriAPI/internal/upgrade/rc7",
+    "package": "github.com/waiting-here/NonbiriAPI/internal/upgrade/v1",
     "reason": "Serial conversion, rollback and data preservation; ordinary conversion and exact released-source upgrade gates retained. Exclusive-access cancellation stays in race.",
     "tests": [
       "TestConversionBackfillBatchesShareOneTransaction",
       "TestConversionChecksThenUpgradesExactSourceAndReenters",
       "TestConversionImportsGatewayOnlyBeforeInitialization",
+      "TestConversionOfStoppedWALSource",
       "TestConversionRefusesUnknownDriftAndWrongKeyWithoutWrites",
       "TestConversionTransactionRollsBackAllChangesOnFailureOrCancellation",
-      "TestConvertReleasedDatabase"
+      "TestConvertReleasedDatabase",
+      "TestFinalSchemaConversionAcceptsExactStableSources",
+      "TestFishingPresentationMigrationFromExactSchema17",
+      "TestFishingPresentationMigrationRejectsOtherVersion",
+      "TestOfflineDescriptorContainsOnlyExactSupportedSources",
+      "TestProtocolExtensionPreservesSourceAndAllowsExplicitTypes",
+      "TestSchemaMigrationsRejectUnknownSourcesAndIncompleteChains",
+      "TestSchemaMigrationsRollbackWholeChainAndRetry",
+      "TestSchemaMigrationsUpgradeEveryPriorRevisionOnce",
+      "TestStableContentUpgradeCancellationRollsBackBothChanges",
+      "TestStableContentUpgradePreservesSavedStateAndReopens",
+      "TestStableContentUpgradeRejectsDriftBeforeWriting",
+      "TestTableRebuildPreservesDataReferencesDDLAndSequence"
     ]
   }
 ]

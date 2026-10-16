@@ -143,6 +143,7 @@ type CharityRouter interface {
 	Preflight(context.Context, int64, string, *openai.ChatRequest, int64) (CharityPreflight, error)
 	PreflightEmbedding(context.Context, int64, string, *openai.EmbeddingRequest, int64) (CharityPreflight, error)
 	PreflightImage(context.Context, int64, string, *openai.ImageRequest, int64) (CharityPreflight, error)
+	PreflightDecision(context.Context, int64, string, *openai.DecisionRequest, int64) (CharityPreflight, error)
 	Snapshot(context.Context, int64, int64, int64, []connectorcontract.Type) (CharitySnapshot, error)
 	ReserveForOutput(context.Context, int64, int64, int64) (int64, error)
 	ListAvailableModels(context.Context, int64, int64, int) ([]ListedModel, error)

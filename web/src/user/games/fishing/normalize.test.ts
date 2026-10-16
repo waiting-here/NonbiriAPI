@@ -224,6 +224,47 @@ describe('Fishing wire', () => {
     expect(() => normalizeFishingResult(nonLegend)).toThrow(/blue fat fish length/i);
   });
 
+  it('keeps presentation lengths exact without rejecting simultaneous display fields', () => {
+    const value = resultWire();
+    const length = '9'.repeat(128);
+    Object.assign(value.outcomes[0], {
+      species_key: 'koi',
+      tier: 'legend',
+      size_cm: 137,
+      milk_crab_length_cm: length,
+    });
+    expect(normalizeFishingResult(value).outcomes[0].milkCrabLengthCM).toBe(length);
+    expect(normalizeFishingResult(resultWire()).outcomes[0].milkCrabLengthCM).toBeNull();
+    const row = {
+      rank: '1',
+      species_key: 'koi',
+      size_cm: 137,
+      milk_crab_length_cm: length,
+      identity: { kind: 'anonymous' },
+      is_me: false,
+    };
+    const board = { board: 'single', window_start: null, entries: [row], me: null };
+    expect(normalizeFishingLeaderboard(board, 'single').entries[0]).toMatchObject({
+      milkCrabLengthCM: length,
+      blueFatFishLengthCM: null,
+    });
+    value.outcomes[0].blue_fat_fish_length_cm = '201';
+    expect(normalizeFishingResult(value).outcomes[0]).toMatchObject({
+      milkCrabLengthCM: length,
+      blueFatFishLengthCM: '201',
+    });
+    Object.assign(row, { blue_fat_fish_length_cm: '201' });
+    expect(normalizeFishingLeaderboard(board, 'single').entries[0]).toMatchObject({
+      milkCrabLengthCM: length,
+      blueFatFishLengthCM: '201',
+    });
+    value.outcomes[0].blue_fat_fish_length_cm = null;
+    for (const invalid of ['200', '0201', '201.5', '9'.repeat(129), 201]) {
+      Object.assign(value.outcomes[0], { milk_crab_length_cm: invalid });
+      expect(() => normalizeFishingResult(value)).toThrow(/milk crab length/);
+    }
+  });
+
   it('accepts recent_single with a long display length and keeps old single rows nullable', () => {
     const length = `201${'8'.repeat(125)}`;
     const recent = normalizeFishingLeaderboard(

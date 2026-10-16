@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"math/big"
 	"net/url"
 	"strconv"
@@ -14,6 +15,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 )
@@ -62,6 +64,9 @@ func (repository *Repository) beginStewardRead(
 	}
 	if err := authorizer.AuthorizeStewardRead(ctx, tx, stewardUserID); err != nil {
 		_ = tx.Rollback()
+		if errors.Is(err, authz.ErrMFARequired) {
+			return nil, err
+		}
 		if errors.Is(err, ErrUnavailable) {
 			return nil, ErrUnavailable
 		}
@@ -417,7 +422,7 @@ func validateCommonRecord(record commonLogRecord) error {
 		return ErrInvariant
 	}
 	switch RouteKind(record.routeKind) {
-	case RouteOpenAIChat, RouteCharityChat, RouteOpenAIEmbeddings, RouteCharityEmbeddings, RouteOpenAIImages, RouteCharityImages, RouteDiscovery:
+	case RouteOpenAIChat, RouteCharityChat, RouteOpenAIEmbeddings, RouteCharityEmbeddings, RouteOpenAIImages, RouteCharityImages, RouteOpenAIDecisions, RouteCharityDecisions, RouteDiscovery:
 	default:
 		return ErrInvariant
 	}
@@ -584,7 +589,7 @@ func validDiagnostic(value string) bool {
 }
 
 func validConnector(value string) bool {
-	return value == "openai-compatible" || value == "anthropic-compatible" || value == "ai-sdk-gateway-v3"
+	return connectorcontract.Type(value).Valid()
 }
 
 func validBaseURL(value string) bool {

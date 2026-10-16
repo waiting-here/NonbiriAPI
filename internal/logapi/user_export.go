@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/csv"
-	"encoding/json"
+	"github.com/waiting-here/NonbiriAPI/internal/textprivacy"
 	"net/http"
 	"strconv"
 )
@@ -74,9 +74,9 @@ func (r *Repository) ExportUser(ctx context.Context, user int64, filter ListFilt
 			return nil, ErrInvariant
 		}
 		switch RouteKind(record.routeKind) {
-		case RouteOpenAIChat, RouteOpenAIEmbeddings, RouteOpenAIImages, RouteDiscovery:
+		case RouteOpenAIChat, RouteOpenAIEmbeddings, RouteOpenAIImages, RouteOpenAIDecisions, RouteDiscovery:
 			result = append(result, UserSelfLogRow{RejectionFields: rejectionFields(record), ID: record.id, RouteKind: RouteKind(record.routeKind), CallerResultClass: resultClassPointer(record.callerResultClass), CallerStatus: intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode), StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage, Model: model, AttemptCount: strconv.FormatInt(record.attemptCount, 10)})
-		case RouteCharityChat, RouteCharityEmbeddings, RouteCharityImages:
+		case RouteCharityChat, RouteCharityEmbeddings, RouteCharityImages, RouteCharityDecisions:
 			result = append(result, UserCharityLogRow{RejectionFields: rejectionFields(record), ID: record.id, RouteKind: RouteKind(record.routeKind), CallerResultClass: resultClassPointer(record.callerResultClass), CallerStatus: intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode), StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage, Model: model})
 		default:
 			return nil, ErrInvariant
@@ -98,7 +98,7 @@ func MarshalUserJSON(rows []UserLogRow) ([]byte, error) {
 	if len(rows) > maxExportRows {
 		return nil, ErrCapacity
 	}
-	body, err := json.Marshal(struct {
+	body, err := textprivacy.MarshalJSON(struct {
 		Data []UserLogRow `json:"data"`
 	}{rows})
 	if err != nil {

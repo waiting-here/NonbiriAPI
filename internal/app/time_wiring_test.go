@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -15,6 +16,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
+	"github.com/waiting-here/NonbiriAPI/internal/debug"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 	"github.com/waiting-here/NonbiriAPI/internal/timeapi"
@@ -188,6 +190,26 @@ func TestTimeRoutesThroughProductionStationAndSessionBoundary(t *testing.T) {
 	if response := request(http.MethodGet, cfg.UserHost, "/api/time-zones", "", userCookie); response.Code != 200 {
 		t.Fatalf("steward same-station route: %d", response.Code)
 	}
+	t.Run("browser MFA does not change capture identity", func(t *testing.T) {
+		var userID int64
+		var binding string
+		if err := store.DB().QueryRow(`SELECT u.id,s.token_hash FROM users u JOIN sessions s ON s.user_id=u.id WHERE u.discord_id='time-test-user'`).Scan(&userID, &binding); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := store.DB().Exec(`UPDATE site_config SET value='1' WHERE key='mfa_required_level_6'`); err != nil {
+			t.Fatal(err)
+		}
+		authority := debugIdentityAuthority{runtime: runtime}
+		if state, err := authority.VerifyDebugIdentity(t.Context(), userID, binding); err != nil || state != debug.IdentityActive {
+			t.Fatalf("capture identity = %v, %v", state, err)
+		}
+		if state, err := authority.VerifyDebugBrowserIdentity(t.Context(), userID, binding); !errors.Is(err, authz.ErrMFARequired) || state != debug.IdentityUncertain {
+			t.Fatalf("browser identity = %v, %v", state, err)
+		}
+		if _, err := store.DB().Exec(`UPDATE site_config SET value='0' WHERE key='mfa_required_level_6'`); err != nil {
+			t.Fatal(err)
+		}
+	})
 	if _, err := store.DB().Exec(`UPDATE users SET is_banned=1 WHERE discord_id='time-test-user'`); err != nil {
 		t.Fatal(err)
 	}

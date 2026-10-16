@@ -7,6 +7,7 @@ const labelKeys = {
   chat_completions: 'common.modelTypes.chat_completions',
   embeddings: 'common.modelTypes.embeddings',
   images_generations: 'common.modelTypes.images_generations',
+  decisions: 'common.modelTypes.decisions',
 } as const;
 
 export function ModelTypesField({

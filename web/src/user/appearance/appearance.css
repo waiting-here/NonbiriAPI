@@ -1,9 +1,24 @@
 html[data-appearance='celestial'],
-html:is([data-appearance='wandering'], [data-appearance='heart-moment']) {
+html:is(
+  [data-appearance='wandering'],
+  [data-appearance='heart-moment'],
+  [data-appearance='mirrorsea'],
+  [data-appearance='amber'],
+  [data-appearance='elopement'],
+  [data-appearance='heart-thief']
+) {
   background: var(--nb-color-bg);
 }
 html[data-appearance='celestial'] body,
-html:is([data-appearance='wandering'], [data-appearance='heart-moment']) body {
+html:is(
+    [data-appearance='wandering'],
+    [data-appearance='heart-moment'],
+    [data-appearance='mirrorsea'],
+    [data-appearance='amber'],
+    [data-appearance='elopement'],
+    [data-appearance='heart-thief']
+  )
+  body {
   background: transparent;
 }
 .nb-appearance-still {
@@ -17,13 +32,37 @@ html:is([data-appearance='wandering'], [data-appearance='heart-moment']) body {
   z-index: -1;
 }
 html[data-appearance='celestial'] .nb-user-shell,
-html:is([data-appearance='wandering'], [data-appearance='heart-moment']) .nb-user-shell,
+html:is(
+    [data-appearance='wandering'],
+    [data-appearance='heart-moment'],
+    [data-appearance='mirrorsea'],
+    [data-appearance='amber'],
+    [data-appearance='elopement'],
+    [data-appearance='heart-thief']
+  )
+  .nb-user-shell,
 html[data-appearance='celestial'] .gacha-preview,
-html:is([data-appearance='wandering'], [data-appearance='heart-moment']) .gacha-preview {
+html:is(
+    [data-appearance='wandering'],
+    [data-appearance='heart-moment'],
+    [data-appearance='mirrorsea'],
+    [data-appearance='amber'],
+    [data-appearance='elopement'],
+    [data-appearance='heart-thief']
+  )
+  .gacha-preview {
   background: transparent;
 }
 html[data-appearance='celestial'] .nb-user-header,
-html:is([data-appearance='wandering'], [data-appearance='heart-moment']) .nb-user-header {
+html:is(
+    [data-appearance='wandering'],
+    [data-appearance='heart-moment'],
+    [data-appearance='mirrorsea'],
+    [data-appearance='amber'],
+    [data-appearance='elopement'],
+    [data-appearance='heart-thief']
+  )
+  .nb-user-header {
   background: var(--nb-color-surface);
   backdrop-filter: blur(16px);
 }
@@ -115,7 +154,15 @@ html:is([data-appearance='wandering'], [data-appearance='heart-moment']) .nb-use
 }
 
 html[data-appearance='celestial'] .nb-page-header,
-html:is([data-appearance='wandering'], [data-appearance='heart-moment']) .nb-page-header {
+html:is(
+    [data-appearance='wandering'],
+    [data-appearance='heart-moment'],
+    [data-appearance='mirrorsea'],
+    [data-appearance='amber'],
+    [data-appearance='elopement'],
+    [data-appearance='heart-thief']
+  )
+  .nb-page-header {
   background: var(--nb-color-surface);
   border-radius: var(--nb-radius-sm);
   padding: var(--nb-space-4);
@@ -126,7 +173,15 @@ html:is([data-appearance='wandering'], [data-appearance='heart-moment']) .nb-pag
     display: none;
   }
   html[data-appearance='celestial'] .nb-user-header,
-  html:is([data-appearance='wandering'], [data-appearance='heart-moment']) .nb-user-header {
+  html:is(
+      [data-appearance='wandering'],
+      [data-appearance='heart-moment'],
+      [data-appearance='mirrorsea'],
+      [data-appearance='amber'],
+      [data-appearance='elopement'],
+      [data-appearance='heart-thief']
+    )
+    .nb-user-header {
     backdrop-filter: none;
   }
 }
@@ -134,7 +189,11 @@ html:is([data-appearance='wandering'], [data-appearance='heart-moment']) .nb-pag
 html:is(
     [data-appearance='celestial'],
     [data-appearance='wandering'],
-    [data-appearance='heart-moment']
+    [data-appearance='heart-moment'],
+    [data-appearance='mirrorsea'],
+    [data-appearance='amber'],
+    [data-appearance='elopement'],
+    [data-appearance='heart-thief']
   )
   :is(.nb-tabs, .nb-user-shell__footer) {
   background: var(--nb-color-surface);
@@ -142,7 +201,11 @@ html:is(
 html:is(
     [data-appearance='celestial'],
     [data-appearance='wandering'],
-    [data-appearance='heart-moment']
+    [data-appearance='heart-moment'],
+    [data-appearance='mirrorsea'],
+    [data-appearance='amber'],
+    [data-appearance='elopement'],
+    [data-appearance='heart-thief']
   )
   .nb-tabs {
   padding-inline: var(--nb-space-3);
@@ -161,6 +224,12 @@ html:is(
 .nb-appearance-backdrop[data-ready='true'] {
   opacity: 1;
 }
+.nb-appearance-still[data-scene] {
+  object-position: 78% top;
+}
+.nb-appearance-still[data-scene='amber'] {
+  object-position: 82% top;
+}
 @media (prefers-reduced-motion: reduce) {
   .nb-appearance-backdrop {
     display: none;
@@ -170,7 +239,11 @@ html:is(
 html:is(
     [data-appearance='celestial'],
     [data-appearance='wandering'],
-    [data-appearance='heart-moment']
+    [data-appearance='heart-moment'],
+    [data-appearance='mirrorsea'],
+    [data-appearance='amber'],
+    [data-appearance='elopement'],
+    [data-appearance='heart-thief']
   )
   :is(
     .nb-panel,
@@ -200,7 +273,11 @@ html:is(
 html:is(
     [data-appearance='celestial'],
     [data-appearance='wandering'],
-    [data-appearance='heart-moment']
+    [data-appearance='heart-moment'],
+    [data-appearance='mirrorsea'],
+    [data-appearance='amber'],
+    [data-appearance='elopement'],
+    [data-appearance='heart-thief']
   )
   :is(.nb-list:not(:empty), .nb-table-wrap, .table-wrap) {
   border: 1px solid var(--nb-appearance-glass-line);
@@ -210,7 +287,11 @@ html:is(
 html:is(
     [data-appearance='celestial'],
     [data-appearance='wandering'],
-    [data-appearance='heart-moment']
+    [data-appearance='heart-moment'],
+    [data-appearance='mirrorsea'],
+    [data-appearance='amber'],
+    [data-appearance='elopement'],
+    [data-appearance='heart-thief']
   )
   .nb-list:not(:empty) {
   padding-inline: var(--nb-space-4);
@@ -219,7 +300,11 @@ html:is(
 html:is(
     [data-appearance='celestial'],
     [data-appearance='wandering'],
-    [data-appearance='heart-moment']
+    [data-appearance='heart-moment'],
+    [data-appearance='mirrorsea'],
+    [data-appearance='amber'],
+    [data-appearance='elopement'],
+    [data-appearance='heart-thief']
   )
   :is(.nb-filter, .nb-pager, .economy-owner-filters, .core-resource-filters, form.ops-toolbar) {
   padding: var(--nb-space-3) var(--nb-space-4);
@@ -232,7 +317,11 @@ html:is(
 html:is(
     [data-appearance='celestial'],
     [data-appearance='wandering'],
-    [data-appearance='heart-moment']
+    [data-appearance='heart-moment'],
+    [data-appearance='mirrorsea'],
+    [data-appearance='amber'],
+    [data-appearance='elopement'],
+    [data-appearance='heart-thief']
   )
   :is(.nb-panel, .card, .core-card, .nb-fold:not(.nb-fold--plain), .nb-list)
   :is(
@@ -254,7 +343,11 @@ html:is(
 html:is(
     [data-appearance='celestial'],
     [data-appearance='wandering'],
-    [data-appearance='heart-moment']
+    [data-appearance='heart-moment'],
+    [data-appearance='mirrorsea'],
+    [data-appearance='amber'],
+    [data-appearance='elopement'],
+    [data-appearance='heart-thief']
   )
   :is(.nb-panel__head, .nb-panel__foot) {
   border-color: var(--nb-appearance-glass-divider);
@@ -262,7 +355,11 @@ html:is(
 html:is(
     [data-appearance='celestial'],
     [data-appearance='wandering'],
-    [data-appearance='heart-moment']
+    [data-appearance='heart-moment'],
+    [data-appearance='mirrorsea'],
+    [data-appearance='amber'],
+    [data-appearance='elopement'],
+    [data-appearance='heart-thief']
   )
   .nb-panel--danger {
   border-color: var(--nb-color-danger);
@@ -271,7 +368,11 @@ html:is(
   html:is(
       [data-appearance='celestial'],
       [data-appearance='wandering'],
-      [data-appearance='heart-moment']
+      [data-appearance='heart-moment'],
+      [data-appearance='mirrorsea'],
+      [data-appearance='amber'],
+      [data-appearance='elopement'],
+      [data-appearance='heart-thief']
     )
     :is(
       .nb-panel,

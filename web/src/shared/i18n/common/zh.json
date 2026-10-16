@@ -332,7 +332,9 @@
           "charityEmbeddings": "公益向量嵌入",
           "modelDiscovery": "模型检查",
           "openaiImagesGenerations": "自用图像生成",
-          "charityImagesGenerations": "公益图像生成"
+          "charityImagesGenerations": "公益图像生成",
+          "openaiDecisions": "自用决策",
+          "charityDecisions": "公益决策"
         },
         "resultValue": {
           "success": "成功",
@@ -1223,23 +1225,24 @@
       "truncated": "（已截断）",
       "rawBodyWasNotSavedBecauseThe": "原文因容量不足未保存。",
       "nextEvents": "后续事件",
-      "loadOriginalBody": "加载原始正文",
+      "loadOriginalBody": "加载错误正文",
       "couldNotLoadTheErrorBody": "无法加载错误正文。",
-      "formattingIsUnavailableUseTheOriginalText": "无法格式化，请查看原文或下载。",
+      "formattingIsUnavailableUseTheOriginalText": "无法格式化，请查看正文或下载。",
       "formattingIsUnavailable": "格式化暂不可用。",
       "formattingTimedOut": "格式化超时。",
       "thisIsASafeDiagnosticSummaryGenerated": "本站生成的诊断摘要。",
       "theBodyWasTruncatedAt1Mib": "正文已在 1 MiB 处截断。",
-      "nonutf8BytesAreReplacedForDisplayDownload": "非 UTF-8 字节以替换字符显示；下载保留原始字节。",
+      "nonutf8BytesAreReplacedForDisplayDownload": "非 UTF-8 字节在预览中显示为替换字符，下载仍保留这些字节。",
+      "ipv4Redacted": "预览、复制和下载中的 IPv4 地址均替换为 [redacted]；字节数仍为存储时的大小。",
       "formatJson": "格式化 JSON",
       "formatted": "格式化",
       "summaryText": "摘要文本",
-      "original": "原文",
+      "original": "正文",
       "copied": "已复制。",
       "copyFailed": "复制失败。",
       "copyText": "复制文本",
       "downloadDiagnosticSummary": "下载诊断摘要",
-      "downloadOriginal": "下载原始正文",
+      "downloadOriginal": "下载错误正文",
       "bodyPreview": "正文预览",
       "previewShowsTheFirst65536CharactersCopy": "预览仅展示前 65,536 个字符，可复制或下载完整正文。",
       "rawBodyReadFailed": "读取上游原文失败。",
@@ -1451,7 +1454,8 @@
       "required": "请至少选择一种模型类型。",
       "chat_completions": "聊天补全",
       "embeddings": "向量化",
-      "images_generations": "图像生成"
+      "images_generations": "图像生成",
+      "decisions": "决策"
     },
     "rewards": {
       "navTitle": "兑换码",
@@ -1564,7 +1568,10 @@
       "redemptionBanned": "兑换码重复违规提交，账号已被暂时限制至 {{time}}。"
     },
     "resourceErrorTitle": "请重新加载页面",
-    "resourceErrorBody": "页面文件暂时无法加载。重新加载即可打开当前版本。"
+    "resourceErrorBody": "页面文件暂时无法加载。重新加载即可打开当前版本。",
+    "connectorGemini": "Google Gemini (Chat)",
+    "connectorResponses": "OpenAI Responses (Chat)",
+    "connectorDecisions": "OpenAI Decisions"
   },
   "logs": {
     "charityModel": "调用的公益模型",
@@ -1974,7 +1981,10 @@
       "protectionLeaves": "保护 JSON 中的字符串",
       "protectedPaths": "敏感字符串路径",
       "protectedPathsHelp": "每行一个相对 JSON Pointer，例如 /token 或 /credentials/0/key。仅选择字符串。",
-      "protectionHelp": "仅用于秘密值，普通参数无需开启。匹配时停止响应；流式输出中已发送的片段无法撤回。"
+      "protectionHelp": "仅用于秘密值，普通参数无需开启。匹配时停止响应；流式输出中已发送的片段无法撤回。",
+      "geminiSupport": "Gemini 用于聊天。原生参数支持 thinkingConfig 和 safetySettings；输出预算使用聊天令牌参数。",
+      "responsesSupport": "Responses 用于聊天，关闭上游存储。原生参数支持推理摘要和文本详细程度。",
+      "decisionsSupport": "Decisions 使用独立 JSON 接口，不支持流式和原生扩展。"
     },
     "service": {
       "title": "请求改写",
@@ -2002,5 +2012,50 @@
       "headerListHelp": "每行一个请求头名称，如 X-Client-Version，不加 /、冒号或值。只透传列出的客户端请求头。",
       "nativeListHelp": "每行一个参数路径，如 /thinking。使用 Anthropic 或 Gateway 时，允许该额外 JSON 字段进入上游原生请求；字段和值仍需得到该上游支持。"
     }
+  },
+  "mfa": {
+    "accountTitle": "两步验证",
+    "accountDescription": "使用验证器保护浏览器中的账号操作。使用 CallerKey 的 API 调用照常使用。",
+    "enabled": "已开启验证器",
+    "notEnabled": "未开启验证器",
+    "requiredPolicy": "当前账号等级要求使用验证器，无法关闭。",
+    "enable": "设置验证器",
+    "disable": "关闭验证器",
+    "setupTitle": "设置验证器",
+    "setupDescription": "使用 Microsoft Authenticator、Okta Verify 或其他 TOTP 验证器扫描二维码。",
+    "verifyTitle": "验证身份",
+    "verifyDescription": "输入验证器中的验证码以继续。本次登录中的验证有效期为 7 天。",
+    "verify": "验证并继续",
+    "confirmSetup": "完成设置",
+    "qrLabel": "验证器设置二维码",
+    "qrUnavailable": "无法显示二维码，请使用下方的手动密钥。",
+    "manualKey": "改用手动密钥",
+    "setupKey": "设置密钥",
+    "manualHelp": "选择基于时间的验证码，请妥善保管密钥。",
+    "setupUntil": "本次设置将于 {{time}} 到期。",
+    "code": "验证器验证码",
+    "codeHelp": "输入验证器中显示的六位验证码。",
+    "freshCodeHelp": "如果刚刚使用过当前验证码，请等待下一个。",
+    "lostAuthenticator": "丢失验证器？请联系管理员重置。",
+    "invalidCode": "验证码不正确或已使用，请尝试下一个验证码。",
+    "setupExpired": "本次设置已到期，请重新获取二维码和密钥。",
+    "rateLimited": "错误次数过多，请等待 15 分钟后重试。",
+    "conflict": "验证器设置已变更，请检查当前状态后重试。",
+    "restart": "检查状态并重试",
+    "disableTitle": "关闭验证器？",
+    "disableDescription": "关闭后，账号操作将不再要求验证器验证码。请输入一个新的验证码以确认。",
+    "disableConfirm": "关闭验证器",
+    "disableRequired": "当前账号等级要求使用验证器，无法关闭。",
+    "verifiedUntil": "本次登录的验证有效期至 {{time}}。",
+    "requiredError": "请验证身份后继续，已保留你的输入。",
+    "recoveryDescription": "请验证身份后继续，已保留你的输入。",
+    "recovered": "验证完成。请检查输入，再次提交操作。",
+    "adminTitle": "账号验证器",
+    "adminDescription": "用户丢失验证器时，可重置后重新设置。",
+    "reset": "重置验证器",
+    "resetTitle": "重置此验证器？",
+    "resetDescription": "重置 {{user}} 的验证器并退出其全部浏览器会话。用户需要重新登录，CallerKey 保持不变。",
+    "resetConfirm": "重置并退出会话",
+    "resetDone": "验证器已重置，全部浏览器会话已退出。用户需要重新登录。"
   }
 }

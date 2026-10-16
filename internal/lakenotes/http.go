@@ -111,6 +111,10 @@ func key(r *http.Request) (string, error) {
 	return v[0], nil
 }
 func respond(w http.ResponseWriter, v any, e error, operation ...string) {
+	if errors.Is(e, authz.ErrMFARequired) {
+		httperr.WriteError(w, httperr.New(httperr.CodeMFARequired, "MFA verification is required."))
+		return
+	}
 	w.Header().Set("Cache-Control", "no-store")
 	if e == nil {
 		httperr.WriteJSON(w, http.StatusOK, v)

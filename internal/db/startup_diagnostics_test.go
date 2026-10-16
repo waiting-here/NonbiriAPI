@@ -58,7 +58,7 @@ func TestStartupCancellationAtEveryDatabaseStage(t *testing.T) {
 	}
 	defer clear(content)
 	for _, target := range []StartupStage{StagePathPreflight, StageIdentityValidation, StageSchemaValidation, StageCredentialValidation,
-		StageSourceRecheck, StageRawHandlesClosed, StageSourceOpen, StageSchemaUpgrade, StageDomainRecovery} {
+		StageSourceRecheck, StageRawHandlesClosed, StageSourceOpen, StageDomainRecovery} {
 		t.Run(string(target), func(t *testing.T) {
 			path := bootstrapTestPath(t, string(target)+".sqlite")
 			if err := os.WriteFile(path, content, 0600); err != nil {

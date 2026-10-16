@@ -9,6 +9,7 @@ export function GachaDialog({
   onSurfaceClick,
   className = '',
   closeLabel = '关闭',
+  closeDisabled = false,
 }: {
   title: string;
   children: ReactNode;
@@ -16,6 +17,7 @@ export function GachaDialog({
   onSurfaceClick?: () => void;
   className?: string;
   closeLabel?: string;
+  closeDisabled?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const handler = useRef(onClose);
@@ -56,7 +58,13 @@ export function GachaDialog({
       <div className="gacha-dialog__inner">
         <header>
           <h2>{title}</h2>
-          <Button variant="ghost" onClick={onClose} aria-label={closeLabel} title={closeLabel}>
+          <Button
+            variant="ghost"
+            onClick={onClose}
+            disabled={closeDisabled}
+            aria-label={closeLabel}
+            title={closeLabel}
+          >
             <Icon name="close" />
           </Button>
         </header>

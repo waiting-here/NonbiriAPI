@@ -13,7 +13,7 @@ type Set []contract.Operation
 func Default() Set       { return Set{contract.OperationChatCompletions} }
 func (s Set) Clone() Set { return append(Set{}, s...) }
 func (s Set) Mask() (int64, error) {
-	if len(s) == 0 || len(s) > 3 {
+	if len(s) == 0 || len(s) > 4 {
 		return 0, errors.New("invalid model types")
 	}
 	var mask int64
@@ -26,6 +26,8 @@ func (s Set) Mask() (int64, error) {
 			bit = 2
 		case contract.OperationImagesGenerations:
 			bit = 4
+		case contract.OperationDecisions:
+			bit = 8
 		default:
 			return 0, errors.New("invalid model type")
 		}
@@ -48,11 +50,11 @@ func (s Set) Supports(operation contract.Operation) bool {
 func (s Set) Value() (driver.Value, error) { return s.Mask() }
 func (s *Set) Scan(value any) error {
 	mask, ok := value.(int64)
-	if !ok || mask < 1 || mask > 7 {
+	if !ok || mask < 1 || mask > 15 {
 		return errors.New("invalid stored model types")
 	}
 	*s = Set{}
-	for i, operation := range []contract.Operation{contract.OperationChatCompletions, contract.OperationEmbeddings, contract.OperationImagesGenerations} {
+	for i, operation := range []contract.Operation{contract.OperationChatCompletions, contract.OperationEmbeddings, contract.OperationImagesGenerations, contract.OperationDecisions} {
 		if mask&(1<<i) != 0 {
 			*s = append(*s, operation)
 		}

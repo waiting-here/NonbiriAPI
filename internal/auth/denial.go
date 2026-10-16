@@ -18,6 +18,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/blacklist"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
+	"github.com/waiting-here/NonbiriAPI/internal/textprivacy"
 )
 
 const DenialCookieName = "nb_access_denied"
@@ -287,11 +288,11 @@ func (r *Runtime) accessDeniedReasons(w http.ResponseWriter, req *http.Request) 
 			}
 		}
 	}
-	body, err := json.Marshal(page)
+	body, err := textprivacy.MarshalJSON(page)
 	for err == nil && len(body)+1 > 128*1024 && len(page.Items) > 1 {
 		page.Items = page.Items[:len(page.Items)-1]
 		page.NextCursor = denialCursor(domain, offset+uint64(len(page.Items)))
-		body, err = json.Marshal(page)
+		body, err = textprivacy.MarshalJSON(page)
 	}
 	if err != nil || len(body)+1 > 128*1024 {
 		writeStableError(w, httperr.CodeInternal, "reasons unavailable")

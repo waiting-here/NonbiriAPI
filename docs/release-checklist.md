@@ -20,7 +20,7 @@ has passed.
 
 ## Stable candidate
 
-- Validate fresh schema 17, the exact rc.7 source conversion, target equality,
+- Validate fresh schema 19, offline schema 17/18 and exact rc.7 conversions, target equality,
   rollback/cancellation, re-entry and zero-write unsupported-source rejection.
   Preserve credentials, operator settings, legal overrides, balances, game saves,
   activities and receipts. Exercise successive stable migrations; see
@@ -72,6 +72,7 @@ has passed.
    Record the deployed revision, artifact checksum, checks and recovery references.
 
 Deployment, tags, GitHub releases and publishing instance legal text are separate
-actions. The v1.0.0 preparation deploys an exact commit without a tag or GitHub
-Release. The maintained instance legal draft is revised for the deployed behavior;
-its publication follows the existing administrator workflow.
+actions. A deployment may use an exact commit without a tag or GitHub Release.
+Apply instance security prerequisites before deployment when needed. Revise the
+maintained legal draft for the intended behavior and distinguish it from the
+currently effective text; publication follows the administrator workflow.

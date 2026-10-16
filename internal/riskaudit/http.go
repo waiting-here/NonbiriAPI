@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/textprivacy"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -85,6 +86,10 @@ func RegisterStewardRoutes(registrar resources.UserRouteRegistrar, repository *R
 }
 
 func auditError(w http.ResponseWriter, err error) {
+	if errors.Is(err, authz.ErrMFARequired) {
+		httperr.WriteError(w, httperr.New(httperr.CodeMFARequired, "MFA verification is required."))
+		return
+	}
 	code, message := httperr.CodeServiceUnavailable, "audit unavailable"
 	switch {
 	case errors.Is(err, ErrInvalid):
@@ -103,8 +108,12 @@ func auditError(w http.ResponseWriter, err error) {
 	httperr.WriteError(w, httperr.New(code, message))
 }
 
-func auditJSON(w http.ResponseWriter, status int, value any) {
-	body, err := json.Marshal(value)
+func auditJSON(w http.ResponseWriter, status int, value any, display bool) {
+	encode := json.Marshal
+	if display {
+		encode = textprivacy.MarshalJSON
+	}
+	body, err := encode(value)
 	if err != nil || len(body) > 8<<20 {
 		auditError(w, ErrUnavailable)
 		return
@@ -450,5 +459,5 @@ func serve(repository *Repository, action string, actor Actor, w http.ResponseWr
 		auditError(w, err)
 		return
 	}
-	auditJSON(w, status, output)
+	auditJSON(w, status, output, action == "users" || action == "user" || action == "ips" || action == "rule_ban_receipt")
 }

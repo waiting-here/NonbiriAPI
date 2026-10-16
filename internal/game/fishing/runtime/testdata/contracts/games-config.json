@@ -22,6 +22,7 @@
   "fishing": {
     "enabled": false,
     "blue_fish_chance_bps": 1000,
+    "milk_crab_chance_bps": 1000,
     "bait_prices": {
       "worm": "2500",
       "lure": "5000",

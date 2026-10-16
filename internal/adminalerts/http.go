@@ -66,7 +66,7 @@ func (api *httpAPI) detail(writer http.ResponseWriter, request *http.Request, pr
 		writeError(writer, err)
 		return
 	}
-	httperr.WriteJSON(writer, http.StatusOK, value)
+	httperr.WriteDisplayJSON(writer, http.StatusOK, value)
 }
 
 func (api *httpAPI) list(writer http.ResponseWriter, request *http.Request, principal AdminPrincipal) {
@@ -79,7 +79,7 @@ func (api *httpAPI) list(writer http.ResponseWriter, request *http.Request, prin
 		writeError(writer, err)
 		return
 	}
-	httperr.WriteJSON(writer, http.StatusOK, page)
+	httperr.WriteDisplayJSON(writer, http.StatusOK, page)
 }
 
 func (api *httpAPI) resolve(writer http.ResponseWriter, request *http.Request, principal AdminPrincipal) {
@@ -97,7 +97,7 @@ func (api *httpAPI) resolve(writer http.ResponseWriter, request *http.Request, p
 		writeError(writer, err)
 		return
 	}
-	httperr.WriteJSON(writer, http.StatusOK, value)
+	httperr.WriteDisplayJSON(writer, http.StatusOK, value)
 }
 
 func parseListRequest(writer http.ResponseWriter, request *http.Request) (ListQuery, bool) {

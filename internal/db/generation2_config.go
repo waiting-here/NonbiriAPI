@@ -119,6 +119,12 @@ func buildGenerationTwoConfigCatalog() map[string]generationTwoConfigSpec {
 
 	catalog := map[string]generationTwoConfigSpec{
 		"discord_registered_user_gate_exempt": boolSpec("0"),
+		"mfa_required_level_1":                boolSpec("0"),
+		"mfa_required_level_2":                boolSpec("0"),
+		"mfa_required_level_3":                boolSpec("0"),
+		"mfa_required_level_4":                boolSpec("0"),
+		"mfa_required_level_5":                boolSpec("0"),
+		"mfa_required_level_6":                boolSpec("0"),
 
 		"site_name":                        textSpec("", 256, true),
 		"site_logo_url":                    textSpec("", 2048, true),
@@ -179,6 +185,7 @@ func buildGenerationTwoConfigCatalog() map[string]generationTwoConfigSpec {
 		"game_fishing_rake_welfare_bp":      uintSpec("100", 0, 9999),
 		"game_fishing_rake_thursday_bp":     uintSpec("100", 0, 9999),
 		"game_fishing_blue_fish_chance_bps": uintSpec("1000", 0, 10000),
+		"game_fishing_milk_crab_chance_bps": uintSpec("1000", 0, 10000),
 		"charity_enabled":                   boolSpec("0"),
 		"donation_accept_enabled":           boolSpec("0"),
 		"games_enabled":                     boolSpec("0"),

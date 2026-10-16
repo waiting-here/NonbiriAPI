@@ -2,6 +2,7 @@ package debug
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
@@ -89,7 +91,7 @@ func (api *HTTPAPI) getSession(writer http.ResponseWriter, request *http.Request
 }
 
 func (api *HTTPAPI) createSession(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
-	if !api.authorizePrincipal(writer, request, principal) || !requireNoQuery(writer, request) {
+	if !validPrincipal(writer, request, principal) || !requireNoQuery(writer, request) {
 		return
 	}
 	_, err := readNoBody(request)
@@ -119,7 +121,7 @@ type modeMutation struct {
 }
 
 func (api *HTTPAPI) changeMode(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
-	if !api.authorizePrincipal(writer, request, principal) || !requireNoQuery(writer, request) {
+	if !validPrincipal(writer, request, principal) || !requireNoQuery(writer, request) {
 		return
 	}
 	body, err := readStrictBody(request, maxControlBody)
@@ -160,7 +162,7 @@ type stopMutation struct {
 }
 
 func (api *HTTPAPI) stopSession(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
-	if !api.authorizePrincipal(writer, request, principal) || !requireNoQuery(writer, request) {
+	if !validPrincipal(writer, request, principal) || !requireNoQuery(writer, request) {
 		return
 	}
 	body, err := readStrictBody(request, maxControlBody)
@@ -194,7 +196,7 @@ func (api *HTTPAPI) stopSession(writer http.ResponseWriter, request *http.Reques
 }
 
 func (api *HTTPAPI) replaceSession(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
-	if !api.authorizePrincipal(writer, request, principal) || !requireNoQuery(writer, request) {
+	if !validPrincipal(writer, request, principal) || !requireNoQuery(writer, request) {
 		return
 	}
 	body, err := readStrictBody(request, maxControlBody)
@@ -279,34 +281,50 @@ func acceptsEventStream(values []string) bool {
 }
 
 func (api *HTTPAPI) authorizePrincipal(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) bool {
+	if !validPrincipal(writer, request, principal) {
+		return false
+	}
+	if err := api.verifyPrincipal(request.Context(), principal); err != nil {
+		api.writeDomainError(writer, err)
+		return false
+	}
+	return true
+}
+
+func validPrincipal(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) bool {
 	if principal.UserID <= 0 || principal.SessionBinding == "" || request == nil {
 		httperr.WriteError(writer, httperr.New(httperr.CodeUnauthorized, "authentication required"))
 		return false
 	}
+	return true
+}
+
+func (api *HTTPAPI) verifyPrincipal(ctx context.Context, principal UserPrincipal) error {
 	if api.hub.config.verifier == nil {
-		return true
+		return nil
 	}
-	state, err := api.hub.config.verifier.VerifyDebugIdentity(request.Context(), principal.UserID, principal.SessionBinding)
+	state, err := api.hub.config.verifier.VerifyDebugBrowserIdentity(ctx, principal.UserID, principal.SessionBinding)
+	if errors.Is(err, authz.ErrMFARequired) {
+		return authz.ErrMFARequired
+	}
 	if err != nil || state == IdentityUncertain {
-		httperr.WriteError(writer, httperr.New(httperr.CodeServiceUnavailable, "debug identity could not be verified"))
-		return false
+		return ErrClosed
 	}
 	switch state {
 	case IdentityActive:
-		return true
+		return nil
 	case IdentityBanned:
 		_ = api.hub.TerminateUser(principal.UserID, EndAccountBanned)
-		httperr.WriteError(writer, httperr.New(httperr.CodeForbidden, "account is unavailable"))
+		return authz.ErrForbidden
 	case IdentityDeleted:
 		_ = api.hub.TerminateUser(principal.UserID, EndAccountDeleted)
-		httperr.WriteError(writer, httperr.New(httperr.CodeUnauthorized, "authentication required"))
+		return authz.ErrUnauthorized
 	case IdentityRevoked:
 		_ = api.hub.TerminateUser(principal.UserID, EndAuthRevoked)
-		httperr.WriteError(writer, httperr.New(httperr.CodeUnauthorized, "authentication required"))
+		return authz.ErrUnauthorized
 	default:
-		httperr.WriteError(writer, httperr.New(httperr.CodeUnauthorized, "authentication required"))
+		return authz.ErrUnauthorized
 	}
-	return false
 }
 
 func (api *HTTPAPI) reconcileBinding(principal UserPrincipal) {
@@ -496,9 +514,15 @@ func writeInvalid(writer http.ResponseWriter, err error) {
 
 func (api *HTTPAPI) writeDomainError(writer http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, authz.ErrMFARequired):
+		httperr.WriteError(writer, httperr.New(httperr.CodeMFARequired, "MFA verification is required."))
+	case errors.Is(err, authz.ErrUnauthorized), errors.Is(err, resources.ErrUnauthorized):
+		httperr.WriteError(writer, httperr.New(httperr.CodeUnauthorized, "authentication required"))
+	case errors.Is(err, authz.ErrForbidden), errors.Is(err, resources.ErrForbidden):
+		httperr.WriteError(writer, httperr.New(httperr.CodeForbidden, "account is unavailable"))
 	case errors.Is(err, ErrInvalid):
 		writeInvalid(writer, err)
-	case errors.Is(err, ErrNoActiveSession):
+	case errors.Is(err, ErrNoActiveSession), errors.Is(err, resources.ErrNotFound):
 		httperr.WriteError(writer, httperr.New(httperr.CodeNotFound, "debug session was not found"))
 	case errors.Is(err, ErrConflict), errors.Is(err, ErrTraceTerminal):
 		httperr.WriteError(writer, httperr.New(httperr.CodeConflict, "debug state changed"))

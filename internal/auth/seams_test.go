@@ -67,6 +67,8 @@ type recordingSessionInvalidationObserver struct {
 	records []observedInvalidation
 }
 
+func (*recordingSessionInvalidationObserver) UserMFAChanged(int64) {}
+
 func (observer *recordingSessionInvalidationObserver) UserSessionInvalidated(userID int64) {
 	observer.mu.Lock()
 	binding := observer.binding

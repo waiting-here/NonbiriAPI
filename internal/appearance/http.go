@@ -49,6 +49,10 @@ func RegisterRoutes(routes limitedactivities.UserRouteRegistrar, s *Service) err
 	})
 }
 func respond(w http.ResponseWriter, state State, err error) {
+	if errors.Is(err, authz.ErrMFARequired) {
+		httperr.WriteError(w, httperr.New(httperr.CodeMFARequired, "MFA verification is required."))
+		return
+	}
 	w.Header().Set("Cache-Control", "no-store")
 	if err == nil {
 		httperr.WriteJSON(w, http.StatusOK, state)

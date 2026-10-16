@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../../../test/unit/support';
 import { biddingCodec } from '../../bidding/normalize';
@@ -65,6 +65,54 @@ describe('two-player request recovery', () => {
       phase_seq: '1',
       action: { kind: 'bid', card: 7 },
     });
+  });
+  it('keeps the next phase blocked until the previous wallet refresh completes', async () => {
+    const state = biddingHomeWire();
+    let releaseWallets!: () => void;
+    const wallets = new Promise<void>((resolve) => {
+      releaseWallets = resolve;
+    });
+    const refreshWallets = vi.fn(() => wallets);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: unknown, options?: RequestInit) => {
+        if (options?.method === 'POST') {
+          state.current.phase_seq = '2';
+          return json({ session_id: biddingID, revision: '2', phase_seq: '2', locked: true });
+        }
+        return json(state);
+      }),
+    );
+    function Harness() {
+      const duel = useDuel(biddingCodec, refreshWallets);
+      return (
+        <>
+          <output>{duel.query.data?.current?.phaseSeq}</output>
+          <button
+            disabled={duel.blocked}
+            onClick={() =>
+              duel.run({
+                kind: 'action',
+                id: biddingID,
+                phaseSeq: '1',
+                action: { kind: 'bid', card: 7 },
+              })
+            }
+          >
+            Lock
+          </button>
+        </>
+      );
+    }
+    const rendered = await renderWithProviders(<Harness />, { station: 'user' });
+    const button = screen.getByRole('button', { name: 'Lock' });
+    await waitFor(() => expect(button).toBeEnabled());
+    await rendered.user.click(button);
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('2'));
+    expect(refreshWallets).toHaveBeenCalledOnce();
+    expect(button).toBeDisabled();
+    await act(async () => releaseWallets());
+    await waitFor(() => expect(button).toBeEnabled());
   });
   it('rejects a receipt for a different session', async () => {
     vi.stubGlobal(

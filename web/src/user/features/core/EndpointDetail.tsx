@@ -1888,10 +1888,11 @@ export function EndpointDetail({
       </section>
 
       <Fold
+        lazy
         title={ui('user.services.adaptation')}
         meta={
           adaptationCount === null
-            ? t('common.loading')
+            ? undefined
             : adaptationCount
               ? ui('user.services.adaptationCount', { count: adaptationCount })
               : ui('user.services.adaptationNone')

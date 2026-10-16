@@ -99,6 +99,10 @@ func parseFilter(r *http.Request, now int64) (Filter, error) {
 }
 
 func writeError(w http.ResponseWriter, err error) {
+	if errors.Is(err, authz.ErrMFARequired) {
+		httperr.WriteError(w, httperr.New(httperr.CodeMFARequired, "MFA verification is required."))
+		return
+	}
 	code, message := httperr.CodeServiceUnavailable, "The accounting audit could not be loaded. Please try again."
 	switch {
 	case errors.Is(err, ErrInvalid):

@@ -23,12 +23,22 @@ describe('private error rendering', () => {
     const raw = '['.repeat(63) + '[' + '0,'.repeat(30_000) + '0]' + ']'.repeat(63);
     expect(formatErrorJSON(raw, false).reason).toBe('size');
   });
-  it('decodes non UTF-8 original bytes without replacing them in downloads', () => {
+  it.each(['utf-8', 'base64'] as const)(
+    'decodes %s redaction without comparing stored bytes',
+    (encoding) => {
+      const value = 'Failed at [redacted]';
+      const body = encoding === 'utf-8' ? value : btoa(value);
+      expect(
+        new TextDecoder().decode(errorBytes({ body, encoding, bytes_saved: 25 } as ErrorBody)),
+      ).toBe(value);
+    },
+  );
+  it('decodes non UTF-8 bytes and bounds the displayed data', () => {
     expect([
       ...errorBytes({ body: '/wD+', encoding: 'base64', bytes_saved: 3 } as ErrorBody),
     ]).toEqual([255, 0, 254]);
     expect(() =>
-      errorBytes({ body: 'x', encoding: 'utf-8', bytes_saved: 1_048_577 } as ErrorBody),
+      errorBytes({ body: 'x'.repeat(2_097_153), encoding: 'utf-8', bytes_saved: 1 } as ErrorBody),
     ).toThrow();
   });
 });

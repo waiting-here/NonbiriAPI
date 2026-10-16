@@ -429,6 +429,10 @@ func writeHTTPBody(writer http.ResponseWriter, status int, body []byte) {
 }
 
 func writeHTTPError(writer http.ResponseWriter, err error) {
+	if errors.Is(err, authz.ErrMFARequired) {
+		httperr.WriteError(writer, httperr.New(httperr.CodeMFARequired, "MFA verification is required."))
+		return
+	}
 	code, message := httperr.CodeInternal, "maintenance request failed"
 	switch {
 	case errors.Is(err, authz.ErrUnauthorized):

@@ -99,6 +99,7 @@ export function GachaApp({
     [group, setGroup] = useState<Theme | null>(null);
   const [draw, setDraw] = useState<DrawReceipt | null>(null),
     [history, setHistory] = useState<DrawReceipt[]>([]);
+  const [replay, setReplay] = useState<DrawReceipt | null>(null);
   const [working, setBusy] = useState(false),
     [error, setError] = useState(''),
     [notice, setNotice] = useState('');
@@ -812,6 +813,17 @@ export function GachaApp({
           }
         />
       )}
+      {replay && (
+        <DrawReveal
+          key={replay.id}
+          receipt={replay}
+          preferences={preferences}
+          audio={audio}
+          english={english}
+          onClose={() => setReplay(null)}
+          replay
+        />
+      )}
       {card && (
         <GachaDialog
           title={t(card.name, card.name_en)}
@@ -866,6 +878,29 @@ export function GachaApp({
               <Icon name={motion ? 'pause' : 'play'} />
               {motion ? t('暂停动态', 'Pause animation') : t('播放动态', 'Play animation')}
             </Button>
+          )}
+          {state.owned[card.id] && isRare(card.rarity) && (
+            <div className="gacha-replay-actions">
+              {[false, true].map((duplicate) => (
+                <Button
+                  key={String(duplicate)}
+                  onClick={() => {
+                    setReplay({
+                      id: crypto.randomUUID(),
+                      pool_id: card.theme,
+                      pool_name: themeById[card.theme].name,
+                      created_at: state.owned[card.id].at,
+                      items: [{ card_id: card.id, duplicate, guarantee: 'none' }],
+                    });
+                    setCard(null);
+                  }}
+                >
+                  {duplicate
+                    ? t('回看重逢', 'Replay reunion')
+                    : t('回看初遇', 'Replay first encounter')}
+                </Button>
+              ))}
+            </div>
           )}
         </GachaDialog>
       )}

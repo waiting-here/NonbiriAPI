@@ -926,7 +926,7 @@ func validPersistedRequest(request Request) bool {
 		return false
 	}
 	switch request.Route {
-	case RouteOpenAIChat, RouteCharityChat, RouteOpenAIEmbeddings, RouteCharityEmbeddings, RouteOpenAIImages, RouteCharityImages:
+	case RouteOpenAIChat, RouteCharityChat, RouteOpenAIEmbeddings, RouteCharityEmbeddings, RouteOpenAIImages, RouteCharityImages, RouteOpenAIDecisions, RouteCharityDecisions:
 	case RouteDiscovery:
 		if request.AttemptLimit != 1 {
 			return false

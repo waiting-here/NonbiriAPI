@@ -1,8 +1,8 @@
 package logapi
 
 import (
-	"encoding/json"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"io"
 	"net/http"
 	"net/url"
@@ -453,13 +453,14 @@ func requireNoBody(writer http.ResponseWriter, request *http.Request) bool {
 }
 
 func writeLogJSON(writer http.ResponseWriter, status int, body any) {
-	writer.Header().Set("Content-Type", "application/json; charset=utf-8")
-	writer.Header().Set("Cache-Control", "no-store")
-	writer.WriteHeader(status)
-	_ = json.NewEncoder(writer).Encode(body)
+	httperr.WriteDisplayJSON(writer, status, body)
 }
 
 func writeLogError(writer http.ResponseWriter, err error) {
+	if errors.Is(err, authz.ErrMFARequired) {
+		httperr.WriteError(writer, httperr.New(httperr.CodeMFARequired, "MFA verification is required."))
+		return
+	}
 	switch {
 	case errors.Is(err, ErrInvalid):
 		httperr.WriteError(writer, httperr.New(httperr.CodeInvalidRequest, "invalid log request"))

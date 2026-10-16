@@ -21,6 +21,7 @@ interface FishingState {
 }
 
 interface FishingFixture {
+  milk?: boolean;
   state: FishingState;
   readonly boardRequests: Record<Board, number>;
   ackRequests: number;
@@ -199,7 +200,16 @@ async function installFishingRoutes(page: Page, fixture: FishingFixture): Promis
         return;
       }
       fixture.boardRequests[board] += 1;
-      await route.fulfill(jsonResponse(boardBody(board)));
+      const body = boardBody(board);
+      if (fixture.milk && board !== 'total')
+        for (const row of body.entries) {
+          if ('blue_fat_fish_length_cm' in row)
+            Object.assign(row, {
+              milk_crab_length_cm: row.blue_fat_fish_length_cm,
+              blue_fat_fish_length_cm: null,
+            });
+        }
+      await route.fulfill(jsonResponse(body));
       return;
     }
     if (
@@ -292,7 +302,7 @@ const SCENARIOS = [
     historicalCatch: 'Taimen · 121 cm',
     rulesButton: 'How to play',
     closeRules: 'Close rules',
-    helpNotice: 'original species and rewards stay unchanged',
+    helpNotice: 'preserving the original species and rewards',
     refresh: 'Refresh board',
   },
   {
@@ -309,7 +319,7 @@ const SCENARIOS = [
     historicalCatch: '哲罗鲑 · 121 厘米',
     rulesButton: '玩法说明',
     closeRules: '关闭玩法说明',
-    helpNotice: '结果及榜单保留原鱼种，奖励不变',
+    helpNotice: '保留原鱼种，奖励不变',
     refresh: '刷新榜单',
   },
   {
@@ -326,7 +336,7 @@ const SCENARIOS = [
     historicalCatch: 'Taimen · 121 cm',
     rulesButton: 'How to play',
     closeRules: 'Close rules',
-    helpNotice: 'original species and rewards stay unchanged',
+    helpNotice: 'preserving the original species and rewards',
     refresh: 'Refresh board',
   },
   {
@@ -343,7 +353,7 @@ const SCENARIOS = [
     historicalCatch: '哲罗鲑 · 121 厘米',
     rulesButton: '玩法说明',
     closeRules: '关闭玩法说明',
-    helpNotice: '结果及榜单保留原鱼种，奖励不变',
+    helpNotice: '保留原鱼种，奖励不变',
     refresh: '刷新榜单',
   },
 ] as const;
@@ -508,3 +518,58 @@ for (const scenario of SCENARIOS) {
     consoleGuard.assertNone();
   });
 }
+
+for (const width of [390, 1440])
+  test(`milk crab artwork and exact length boards ${width}`, async ({ page }) => {
+    const guard = collectConsoleViolations(page);
+    const fixture = fixtureWithResult();
+    fixture.milk = true;
+    fixture.state = {
+      ...fixture.state,
+      unrevealed: {
+        ...RESULT,
+        outcomes: [
+          OLD_RESULT,
+          { ...BLUE_RESULT, blue_fat_fish_length_cm: null, milk_crab_length_cm: LONG_BLUE_LENGTH },
+          ...FILLER_RESULTS,
+        ],
+      },
+    };
+    await installUserShell(page, 'zh', width === 390 ? 'dark' : 'light');
+    await installFishingRoutes(page, fixture);
+    await page.setViewportSize({ width, height: 900 });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto(`${USER_ORIGIN}/games/fishing`);
+    const result = page.locator('.fishing-result');
+    await expect(result).toBeVisible();
+    await expect(result.locator('[data-milk-crab="true"]')).toContainText('奶蟹');
+    await expect(result).toContainText(LONG_BLUE_LENGTH);
+    await expect(result).toContainText('原传奇鱼种：锦鲤');
+    const crab = result.locator('[data-milk-crab="true"] > img');
+    await expect
+      .poll(() =>
+        crab.evaluate((node: HTMLImageElement) => node.complete && node.naturalWidth === 128),
+      )
+      .toBe(true);
+    await expect(crab).toHaveAttribute('src', /milk-crab/);
+    const board = page.locator('.fishing-board-switch .fishing-board');
+    await expect(board).toContainText('奶蟹 · 锦鲤');
+    await expect(board).toContainText(LONG_BLUE_LENGTH);
+    await page.getByRole('tab', { name: '历史榜', exact: true }).click();
+    await expect(board).toContainText('奶蟹 · 锦鲤 · 262 厘米');
+    await assertNoHorizontalOverflow(page, width);
+    if (process.env.NONBIRI_TEST_SCREENSHOT_DIR) {
+      await result.screenshot({
+        path: join(process.env.NONBIRI_TEST_SCREENSHOT_DIR, `milk-catch-${width}.png`),
+      });
+      await page
+        .locator('.fishing-stage')
+        .screenshot({
+          path: join(process.env.NONBIRI_TEST_SCREENSHOT_DIR, `milk-stage-${width}.png`),
+        });
+      await board.screenshot({
+        path: join(process.env.NONBIRI_TEST_SCREENSHOT_DIR, `milk-board-${width}.png`),
+      });
+    }
+    guard.assertNone();
+  });

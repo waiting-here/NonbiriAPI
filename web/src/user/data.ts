@@ -1,8 +1,10 @@
 import { CancelledError } from '@tanstack/react-query';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ApiError, apiFetch, isNotFoundError } from '@shared/query/http';
+import { ApiError, apiFetch, isMfaRequired, isNotFoundError } from '@shared/query/http';
 import {
   beginManagementSessionRequest,
+  captureStationSession,
+  stationSessionMatches,
   failManagementSessionRequest,
   isStationSessionChanged,
   noteManagementSessionSuccess,
@@ -373,7 +375,7 @@ function connectorType(value: unknown): Endpoint['connector_type'] {
   if (
     value === 'openai-compatible' ||
     value === 'anthropic-compatible' ||
-    value === 'ai-sdk-gateway-v3'
+    value === 'ai-sdk-gateway-v3' || value === 'google-gemini' || value === 'openai-responses' || value === 'openai-decisions'
   )
     return value;
   throw new ApiError('invalid_response', 'The server returned an invalid connector type.', 200);
@@ -796,6 +798,15 @@ export function useUserSession<T = UserSessionResponse>(
   return useQuery({
     queryKey: userKeys.session,
     queryFn: async () => {
+      const previous = queryClient.getQueryData<UserSessionResponse>(userKeys.session);
+      let snapshot: ReturnType<typeof captureStationSession> | undefined;
+      if (previous) {
+        try {
+          snapshot = captureStationSession(queryClient, 'steward');
+        } catch {
+          // A partial bootstrap cache still needs an authoritative read.
+        }
+      }
       const generation = beginManagementSessionRequest(queryClient, 'steward');
       try {
         const value = normalizeSession(await apiFetch<unknown>('/api/session'));
@@ -806,6 +817,11 @@ export function useUserSession<T = UserSessionResponse>(
         }
         return value;
       } catch (error) {
+        // An MFA challenge pauses this account without replacing its mounted forms.
+        if (
+          isMfaRequired(error) && previous && snapshot &&
+          stationSessionMatches(queryClient, 'steward', snapshot)
+        ) return previous;
         failManagementSessionRequest(queryClient, 'steward', generation, error);
         throw error;
       }

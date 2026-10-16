@@ -28,7 +28,7 @@ export function TaskScans<T>({
   kind: Exclude<TaskKind, 'client_hits'>;
   signal?: '' | 'rpm' | 'concurrency';
   userID?: string;
-  renderItem: (item: T) => ReactNode;
+  renderItem: (item: T, index: number) => ReactNode;
 }) {
   const { t } = useTranslation();
   const formatDateTime = useDateTimeFormatter();

@@ -72,11 +72,24 @@ WHERE token_hash IN (
 		}
 		deleted += n
 	}
+	if deleted < int64(limit) {
+		result, err = tx.ExecContext(workerCtx, `DELETE FROM account_mfa_pending WHERE user_id IN
+ (SELECT user_id FROM account_mfa_pending WHERE expires_at<=? ORDER BY expires_at,user_id LIMIT ?)`, decisionNow, int64(limit)-deleted)
+		if err != nil {
+			return LifecycleRetentionResult{}, fmt.Errorf("auth: retain MFA setup: %w", err)
+		}
+		n, err := result.RowsAffected()
+		if err != nil {
+			return LifecycleRetentionResult{}, err
+		}
+		deleted += n
+	}
 
 	var more int
 	if err := tx.QueryRowContext(workerCtx, `SELECT EXISTS(
  SELECT 1 FROM sessions WHERE expires_at<=? UNION SELECT 1 FROM auth_denial_grants WHERE expires_at<=?
-)`, decisionNow, decisionNow).Scan(&more); err != nil {
+ UNION SELECT 1 FROM account_mfa_pending WHERE expires_at<=?
+)`, decisionNow, decisionNow, decisionNow).Scan(&more); err != nil {
 		return LifecycleRetentionResult{}, fmt.Errorf("auth: retain sessions: check remaining: %w", err)
 	}
 	if more != 0 && more != 1 {

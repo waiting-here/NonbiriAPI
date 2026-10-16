@@ -448,9 +448,18 @@ test('workbench edits survive save and reload, and library deletion preserves pu
     await expect(
       page.getByRole('button', { name: 'Duration must be 10–600 seconds.', exact: true }),
     ).toHaveCount(0);
+    const stage = page.locator('.fatfish-level-stage');
+    const fittedWidth = await stage.evaluate((node) => node.getBoundingClientRect().width);
     await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
-    await expect(page.locator('.fatfish-level-stage')).toHaveAttribute('style', /125%/);
+    await expect
+      .poll(() => stage.evaluate((node) => node.getBoundingClientRect().width))
+      .toBeGreaterThan(fittedWidth * 1.2);
     await page.getByRole('button', { name: 'Fit screen', exact: true }).click();
+    await expect
+      .poll(async () =>
+        Math.abs((await stage.evaluate((node) => node.getBoundingClientRect().width)) - fittedWidth),
+      )
+      .toBeLessThan(1);
     await capture(page, '15-workbench-saved-layout');
     const published = page.waitForResponse(
       (result) => result.url().endsWith('/versions') && result.request().method() === 'POST',
@@ -1086,7 +1095,9 @@ test('editor exposes invalid geometry, collision ghosts, and touch zoom with pro
         await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x - 25, y, id: 1 }, { x: x + 25, y, id: 2 }] });
         await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x - 45, y, id: 1 }, { x: x + 45, y, id: 2 }] });
         await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-        await expect(page.locator('.fatfish-level-stage')).not.toHaveAttribute('style', 'width: 100%;');
+        await expect
+          .poll(() => map.evaluate((node) => node.getBoundingClientRect().width))
+          .toBeGreaterThan(box.width * 1.2);
         await cdp.detach();
       }
     } finally { await context.close(); }

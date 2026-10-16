@@ -62,15 +62,30 @@ func cleanupScansTx(ctx context.Context, tx *sql.Tx, now int64, limit int) (Clea
 	return result, err
 }
 
-func (r *Repository) CleanupScans(ctx context.Context) (CleanupResult, error) {
+func (r *Repository) CleanupScans(ctx context.Context) (out CleanupResult, resultErr error) {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
+	defer func() {
+		if resultErr != nil && ctx.Err() != nil {
+			resultErr = ctx.Err()
+		}
+	}()
+	// This read is only a scheduling hint. Recheck eligibility inside the
+	// transaction before deleting anything.
+	now := r.now().Unix()
+	var due bool
+	if err := r.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM risk_client_scans WHERE expires_at<=? OR reason='permission_changed')`, now).Scan(&due); err != nil {
+		return CleanupResult{}, err
+	}
+	if !due {
+		return CleanupResult{}, nil
+	}
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return CleanupResult{}, err
 	}
 	defer tx.Rollback()
-	result, err := cleanupScansTx(ctx, tx, r.now().Unix(), 100)
+	result, err := cleanupScansTx(ctx, tx, now, 100)
 	if err != nil {
 		return result, err
 	}
