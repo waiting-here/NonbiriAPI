@@ -28,6 +28,7 @@ type Repository struct {
 	configChanged func(Config)
 	finalAuth     FinalAuthorizer
 	scanSlots     chan struct{}
+	scanWake      [2]chan struct{}
 	scanSelection sync.Mutex
 	claimedScans  map[string]struct{}
 }
@@ -41,7 +42,7 @@ func NewRepository(database *sql.DB, options RepositoryOptions) (*Repository, er
 	}
 	return &Repository{
 		db: database, now: options.Now, configChanged: options.ConfigChanged, finalAuth: options.FinalAuth,
-		scanSlots: make(chan struct{}, 2), claimedScans: make(map[string]struct{}),
+		scanSlots: make(chan struct{}, 2), scanWake: [2]chan struct{}{make(chan struct{}, 1), make(chan struct{}, 1)}, claimedScans: make(map[string]struct{}),
 	}, nil
 }
 func (r *Repository) authorize(ctx context.Context, tx *sql.Tx, actor Actor, now int64) error {

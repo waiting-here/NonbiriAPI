@@ -358,7 +358,13 @@ func (r *Repository) CreateScan(ctx context.Context, actor Actor, input ScanInpu
 	if err != nil {
 		return out, err
 	}
-	return out, tx.Commit()
+	if err = tx.Commit(); err != nil {
+		return out, err
+	}
+	if out.State == "queued" {
+		r.wakeScans()
+	}
+	return out, nil
 }
 
 func scanPredicate(from, to, upper int64) (string, []any) {
@@ -553,6 +559,28 @@ func scanBusy(err error) bool {
 	return code == 5 || code == 6 // SQLITE_BUSY or SQLITE_LOCKED.
 }
 
+// Wakes are hints; each worker still selects durable work after waking.
+func (r *Repository) wakeScans() {
+	for _, wake := range r.scanWake {
+		select {
+		case wake <- struct{}{}:
+		default:
+		}
+	}
+}
+
+type scanWorkError struct {
+	phase string
+	err   error
+}
+
+func (e *scanWorkError) Error() string { return e.phase + ": " + e.err.Error() }
+func (e *scanWorkError) Unwrap() error { return e.err }
+
+func scanRetry(err error) bool {
+	return errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) || scanBusy(err)
+}
+
 // A task is claimed only in RAM for one batch. The durable checkpoint remains
 // the restart authority, and concurrent workers cannot select the same task.
 func (r *Repository) claimScan(ctx context.Context) (string, func(), error) {
@@ -593,24 +621,32 @@ func (r *Repository) ProcessScanBatch(ctx context.Context) (progress bool, resul
 	}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
+	phase := "queue"
+	defer func() {
+		if result == nil {
+			return
+		}
+		// SQLite can report interruption or a rolled-back transaction on timeout.
+		if ctx.Err() != nil {
+			result = ctx.Err()
+		}
+		result = &scanWorkError{phase: phase, err: result}
+	}()
 	scanID, release, err := r.claimScan(ctx)
 	if err != nil || scanID == "" {
 		return false, err
 	}
 	defer release()
+	phase = "transaction_wait"
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return false, err
 	}
 	defer tx.Rollback()
 	defer func() {
-		// Two independent task workers may race for SQLite's single writer.
-		// A BUSY/LOCKED snapshot is a scheduling retry, not a failed task.
-		if result != nil && parent.Err() == nil && scanBusy(result) {
-			progress, result = false, nil
-			return
-		}
-		if result == nil || parent.Err() != nil || scanID == "" {
+		// Scheduling contention and the batch deadline leave the durable
+		// checkpoint intact and never consume a task's failure budget.
+		if result == nil || parent.Err() != nil || ctx.Err() != nil || scanRetry(result) {
 			return
 		}
 		_ = tx.Rollback()
@@ -618,6 +654,7 @@ func (r *Repository) ProcessScanBatch(ctx context.Context) (progress bool, resul
 		defer cancel()
 		_, _ = r.db.ExecContext(bounded, `UPDATE risk_client_scans SET failures=failures+1,state=CASE WHEN failures>=2 THEN 'failed' ELSE state END,reason=CASE WHEN failures>=2 THEN 'scan_failed' ELSE reason END,checkpoint_json=CASE WHEN failures>=2 THEN `+scanCheckpointWithoutIdentitySQL+` ELSE checkpoint_json END WHERE id=? AND state IN ('queued','running')`, scanID)
 	}()
+	phase = "batch"
 	now := r.now().Unix()
 	scan, err := readScan(tx.QueryRowContext(ctx, `SELECT `+scanColumns+` FROM risk_client_scans WHERE id=? AND state IN ('queued','running') AND expires_at>?`, scanID, now))
 	if errors.Is(err, ErrNotFound) {
@@ -738,37 +775,67 @@ func (r *Repository) RunScans(ctx context.Context) {
 	var workers sync.WaitGroup
 	workers.Add(2)
 	for index := range 2 {
-		go func(cleanup bool) {
+		go func() {
 			defer workers.Done()
-			r.runScanWorker(ctx, cleanup)
-		}(index == 0)
+			r.runScanWorker(ctx, index == 0, r.scanWake[index])
+		}()
 	}
 	workers.Wait()
 }
 
-func (r *Repository) runScanWorker(ctx context.Context, cleanup bool) {
+func logScanWorkError(ctx context.Context, operation string, err error) {
+	if err == nil || ctx.Err() != nil {
+		return
+	}
+	phase := "retention"
+	var workError *scanWorkError
+	if errors.As(err, &workError) {
+		phase = workError.phase
+	}
+	if scanRetry(err) {
+		class := "busy"
+		if errors.Is(err, context.DeadlineExceeded) {
+			class = "deadline"
+		} else if errors.Is(err, context.Canceled) {
+			class = "cancelled"
+		}
+		slog.Info("client audit scan deferred", "operation", operation, "phase", phase, "error_class", class)
+		return
+	}
+	slog.Warn("client audit scan failed", "operation", operation, "phase", phase, "error_class", "storage")
+}
+
+func (r *Repository) runScanWorker(ctx context.Context, cleanup bool, wake <-chan struct{}) {
 	timer := time.NewTimer(0)
 	defer timer.Stop()
+	var cleanupAt time.Time
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-wake:
 		case <-timer.C:
 		}
-		if cleanup {
-			_, cleanupErr := r.CleanupScans(ctx)
-			if cleanupErr != nil && ctx.Err() == nil {
-				slog.Warn("client audit scan retention failed", "error_class", "storage_or_deadline")
+		// Cleanup follows its own cadence, including while task batches are busy.
+		if cleanup && !time.Now().Before(cleanupAt) {
+			result, err := r.CleanupScans(ctx)
+			logScanWorkError(ctx, "retention", err)
+			cleanupAt = time.Now().Add(30 * time.Second)
+			if result.More && err == nil {
+				cleanupAt = time.Now().Add(time.Second)
 			}
 		}
 		progress, err := r.ProcessScanBatch(ctx)
-		delay := time.Second
+		delay := 30 * time.Second
 		if progress {
 			delay = 250 * time.Millisecond
 		}
-		if err != nil && ctx.Err() == nil {
-			slog.Warn("client audit scan batch failed", "error_class", "storage_or_deadline")
+		if err != nil {
+			logScanWorkError(ctx, "batch", err)
 			delay = 5 * time.Second
+		}
+		if cleanup {
+			delay = min(delay, max(time.Until(cleanupAt), 0))
 		}
 		timer.Reset(delay)
 	}
