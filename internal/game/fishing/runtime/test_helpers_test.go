@@ -156,6 +156,9 @@ func newGameFixture(t *testing.T, source *scriptedSource) *gameFixture {
 		t.Fatalf("disable maintenance: %v", err)
 	}
 	// Reward and presentation fixtures use fixed historical RTP inputs.
+	if _, err = fixture.database.Exec(`UPDATE site_config SET value='0' WHERE key='game_fishing_milk_crab_chance_bps'`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err = fixture.database.Exec(`UPDATE site_config SET value=CASE key WHEN 'game_fishing_rtp' THEN '90' ELSE '88' END WHERE key IN ('game_fishing_rtp','game_fishing_rtp_premium')`); err != nil {
 		t.Fatal(err)
 	}

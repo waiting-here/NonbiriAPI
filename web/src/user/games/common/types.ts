@@ -93,6 +93,7 @@ export interface GamesSnapshot {
     readonly enabled: boolean;
     readonly available: boolean;
     readonly blueFishChanceBPS: number;
+    readonly milkCrabChanceBPS: number;
     readonly baitPrices: Readonly<Record<Bait, string>>;
   };
   readonly linklink: {

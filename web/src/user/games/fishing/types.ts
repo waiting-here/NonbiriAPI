@@ -27,6 +27,7 @@ export interface FishingOutcome {
   readonly sizeCM: number;
   /** A display-only blue fat fish length; kept as a decimal string for arbitrary precision. */
   readonly blueFatFishLengthCM: string | null;
+  readonly milkCrabLengthCM: string | null;
   readonly reward: string;
 }
 
@@ -77,6 +78,7 @@ export interface FishingSingleRow extends FishingLeaderboardBase {
   readonly sizeCM: number;
   /** A display-only blue fat fish length; kept as a decimal string for arbitrary precision. */
   readonly blueFatFishLengthCM: string | null;
+  readonly milkCrabLengthCM: string | null;
 }
 
 export interface FishingTotalRow extends FishingLeaderboardBase {

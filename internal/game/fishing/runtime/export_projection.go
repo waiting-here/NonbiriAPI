@@ -8,6 +8,7 @@ type RankExportProjection struct {
 	SizeCM              *int    `json:"size_cm"`
 	TotalCredits        *string `json:"total_credits"`
 	BlueFatFishLengthCM *string `json:"blue_fat_fish_length_cm"`
+	MilkCrabLengthCM    *string `json:"milk_crab_length_cm"`
 }
 
 func ProjectExportRank(value *FishingLeaderboardRow) (*RankExportProjection, error) {
@@ -22,12 +23,16 @@ func ProjectExportRank(value *FishingLeaderboardRow) (*RankExportProjection, err
 		species, size := value.SpeciesKey, value.SizeCM
 		out.SpeciesKey, out.SizeCM = &species, &size
 	}
+	if !validPresentation(value.SpeciesKey, value.SizeCM, value.BlueFatFishLengthCM, value.MilkCrabLengthCM) {
+		return nil, ErrInvariant
+	}
 	if value.BlueFatFishLengthCM != nil {
-		if !fishing.ValidBlueFatFishLength(*value.BlueFatFishLengthCM) || value.SpeciesKey != "koi" && value.SpeciesKey != "taimen" && value.SpeciesKey != "yellowcheek" {
-			return nil, ErrInvariant
-		}
 		length := *value.BlueFatFishLengthCM
 		out.BlueFatFishLengthCM = &length
+	}
+	if value.MilkCrabLengthCM != nil {
+		length := *value.MilkCrabLengthCM
+		out.MilkCrabLengthCM = &length
 	}
 	if value.TotalCredits != "" {
 		total := value.TotalCredits
@@ -36,8 +41,23 @@ func ProjectExportRank(value *FishingLeaderboardRow) (*RankExportProjection, err
 	return out, nil
 }
 
+func validPresentation(species string, size int, blue, milk *string) bool {
+	if blue == nil && milk == nil {
+		return true
+	}
+	if blue != nil && milk != nil || size < 100 || size > 200 || species != "koi" && species != "taimen" && species != "yellowcheek" {
+		return false
+	}
+	length := blue
+	if length == nil {
+		length = milk
+	}
+	return fishing.ValidPresentationLength(*length)
+}
+
 func ValidExportOutcome(value FishingOutcome) bool {
-	return value.BlueFatFishLengthCM == nil || value.Tier == "legend" && fishing.ValidBlueFatFishLength(*value.BlueFatFishLengthCM)
+	return validPresentation(value.SpeciesKey, value.SizeCM, value.BlueFatFishLengthCM, value.MilkCrabLengthCM) &&
+		(value.BlueFatFishLengthCM == nil && value.MilkCrabLengthCM == nil || value.Tier == "legend")
 }
 
 func (value UserExport) ValidateProjection() error {

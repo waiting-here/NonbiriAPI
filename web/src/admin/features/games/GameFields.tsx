@@ -87,8 +87,8 @@ export function FishingFields({ draft, disabled, edit }: Props) {
             span
             label={text('蓝色大肥鱼概率', 'Blue-fish probability')}
             help={text(
-              '传奇鱼变为蓝色大肥鱼的概率；奖励和长度保持不变。',
-              'Chance to decorate a legendary catch; rewards and length stay the same.',
+              '传奇鱼的彩蛋概率；与奶蟹互斥，合计不超过 100%，奖励不变。',
+              'Legendary catch chance, mutually exclusive with milk crab. Combined maximum 100%; rewards stay the same.',
             )}
           >
             {(props) => (
@@ -104,6 +104,24 @@ export function FishingFields({ draft, disabled, edit }: Props) {
                 name="fishing.blue_fish_chance_bps"
                 onChange={(event) =>
                   update({ blue_fish_chance_bps: fishingChanceFromPercent(event.target.value) })
+                }
+              />
+            )}
+          </Field>
+          <Field span label={text('奶蟹概率', 'Milk-crab probability')}>
+            {(props) => (
+              <Affix
+                {...props}
+                unit="%"
+                type="number"
+                inputMode="decimal"
+                min="0"
+                max="100"
+                step="0.01"
+                value={numeric(value.milk_crab_chance_bps / 100)}
+                name="fishing.milk_crab_chance_bps"
+                onChange={(event) =>
+                  update({ milk_crab_chance_bps: fishingChanceFromPercent(event.target.value) })
                 }
               />
             )}

@@ -30,6 +30,10 @@ identifier and crop focus. Fishing artwork bundles 35 catch illustrations,
 including the unknown catch, as local WebP derivatives and keeps a code-native
 SVG fallback for image load failures and high-contrast display.
 
+The milk crab illustration is a supplied transparent 128×128 PNG, distributed
+unchanged with permission under AGPL-3.0. It decorates legendary fishing catches
+and length rankings without changing their original species or rewards.
+
 Raising a Fat Fish bundles 68 supplied SVG illustrations (65 unchanged and three
 buttons repaired), two supplied PNG sprite sheets with 24 animation frames, an
 original illustrated cover, and eight adapted supplied level designs under AGPL-3.0.

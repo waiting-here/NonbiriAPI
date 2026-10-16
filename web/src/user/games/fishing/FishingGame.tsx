@@ -28,6 +28,7 @@ import { BAITS, type Bait } from '../common/types';
 import { gameKeys, useGamesSnapshot } from '../common/snapshot';
 import { FishingArtwork } from './FishingArtwork';
 import blueFatFish from '@shared/assets/game-fishing/blue-fat-fish.png';
+import milkCrab from '@shared/assets/game-fishing/milk-crab.png';
 import fishingScene from '@shared/assets/game-heroes/fishing.webp';
 import { GamePrivacyLink } from '../common/GamePrivacyControl';
 import { Leaderboard as NetProfitLeaderboard } from '../ranking/Leaderboard';
@@ -82,21 +83,36 @@ type LeaderboardQuery = {
 function BlueFatFishImage({
   label,
   className,
+  milk = false,
 }: {
   readonly label: string;
   readonly className?: string;
+  readonly milk?: boolean;
 }) {
   return (
     <img
       className={className ?? 'fishing-blue-fat-fish'}
-      src={blueFatFish}
+      src={milk ? milkCrab : blueFatFish}
       alt={label}
       decoding="async"
     />
   );
 }
 
+type Presentation = {
+  readonly blueFatFishLengthCM: string | null;
+  readonly milkCrabLengthCM: string | null;
+};
+function presentation(value: Presentation) {
+  return value.milkCrabLengthCM !== null
+    ? ('fishing.milkCrab' as const)
+    : value.blueFatFishLengthCM !== null
+      ? ('fishing.blueFatFish' as const)
+      : null;
+}
+
 function outcomeDisplayLength(outcome: FishingBatchResult['outcomes'][number]): string | null {
+  if (outcome.milkCrabLengthCM !== null) return outcome.milkCrabLengthCM;
   if (outcome.blueFatFishLengthCM !== null) return outcome.blueFatFishLengthCM;
   return outcome.sizeCM > 0 ? String(outcome.sizeCM) : null;
 }
@@ -110,10 +126,11 @@ function OutcomeName({
 }) {
   const { text } = useGameCopy();
   const species = fishingItemName(outcome.speciesKey, language);
-  if (outcome.blueFatFishLengthCM === null) return <strong>{species}</strong>;
+  const special = presentation(outcome);
+  if (special === null) return <strong>{species}</strong>;
   return (
     <>
-      <strong>{text('fishing.blueFatFish')}</strong>
+      <strong>{text(special)}</strong>
       <span>
         {' · '}
         {text('fishing.blueFatFish.original', { species })}
@@ -126,10 +143,12 @@ function FishingRules({
   open,
   onClose,
   chanceBPS,
+  milkChanceBPS,
 }: {
   readonly open: boolean;
   readonly onClose: () => void;
   readonly chanceBPS?: number;
+  readonly milkChanceBPS?: number;
 }) {
   const { text } = useGameCopy();
   const sections: readonly GameRulesSection[] = (
@@ -139,6 +158,7 @@ function FishingRules({
     paragraphs: [
       text(`fishing.rules.${section}Body`, {
         chance: chanceBPS === undefined ? '—' : `${chanceBPS / 100}%`,
+        milkChance: milkChanceBPS === undefined ? '—' : `${milkChanceBPS / 100}%`,
       }),
     ],
   }));
@@ -165,7 +185,7 @@ function FishingStage({
   const { text, language } = useGameCopy();
   const rarity = ['junk', 'small', 'regular', 'big', 'giant', 'treasure', 'legend'];
   const priority = (outcome: FishingBatchResult['outcomes'][number]) =>
-    rarity.indexOf(outcome.tier) + (outcome.blueFatFishLengthCM === null ? 0 : 1);
+    rarity.indexOf(outcome.tier) + (presentation(outcome) === null ? 0 : 1);
   const highlight = catchResult?.outcomes.reduce((best, outcome) =>
     priority(outcome) > priority(best) ? outcome : best,
   );
@@ -197,9 +217,10 @@ function FishingStage({
               />
             ))}
           </div>
-          {highlight.blueFatFishLengthCM !== null ? (
+          {presentation(highlight) !== null ? (
             <BlueFatFishImage
-              label={text('fishing.blueFatFish')}
+              label={text(presentation(highlight)!)}
+              milk={highlight.milkCrabLengthCM !== null}
               className="fishing-blue-fat-fish"
             />
           ) : (
@@ -274,12 +295,16 @@ function ResultPanel({
             <article
               className={`fishing-outcome fishing-outcome--${outcome.tier} fishing-rarity--${outcome.tier}`}
               data-blue-fat-fish={outcome.blueFatFishLengthCM !== null ? 'true' : undefined}
+              data-milk-crab={outcome.milkCrabLengthCM !== null ? 'true' : undefined}
               key={`${result.batchID}:${outcome.ordinal}`}
               role="listitem"
               data-ordinal={outcome.ordinal}
             >
-              {outcome.blueFatFishLengthCM !== null ? (
-                <BlueFatFishImage label={text('fishing.blueFatFish')} />
+              {presentation(outcome) !== null ? (
+                <BlueFatFishImage
+                  label={text(presentation(outcome)!)}
+                  milk={outcome.milkCrabLengthCM !== null}
+                />
               ) : (
                 <FishingArtwork
                   itemKey={outcome.speciesKey}
@@ -427,17 +452,18 @@ function LeaderboardCard({
               {[...rows, ...missingMe].map((row) => {
                 const score = isSingleBoard ? (
                   <span className="fishing-board__catch">
-                    {(row as FishingSingleRow).blueFatFishLengthCM !== null ? (
+                    {presentation(row as FishingSingleRow) !== null ? (
                       <BlueFatFishImage
-                        label={text('fishing.blueFatFish')}
+                        label={text(presentation(row as FishingSingleRow)!)}
+                        milk={(row as FishingSingleRow).milkCrabLengthCM !== null}
                         className="fishing-blue-fat-fish fishing-blue-fat-fish--board"
                       />
                     ) : null}
                     <span>
-                      {(row as FishingSingleRow).blueFatFishLengthCM !== null
-                        ? text('fishing.blueFatFish')
+                      {presentation(row as FishingSingleRow) !== null
+                        ? text(presentation(row as FishingSingleRow)!)
                         : fishingItemName((row as FishingSingleRow).speciesKey, language)}
-                      {(row as FishingSingleRow).blueFatFishLengthCM !== null ? (
+                      {presentation(row as FishingSingleRow) !== null ? (
                         <>
                           {' · '}
                           {fishingItemName((row as FishingSingleRow).speciesKey, language)}
@@ -446,6 +472,7 @@ function LeaderboardCard({
                       {' · '}
                       {text('fishing.size', {
                         size:
+                          (row as FishingSingleRow).milkCrabLengthCM ??
                           (row as FishingSingleRow).blueFatFishLengthCM ??
                           String((row as FishingSingleRow).sizeCM),
                       })}
@@ -818,6 +845,7 @@ export function FishingGame() {
       open={rulesOpen}
       onClose={closeRules}
       chanceBPS={snapshot.data?.fishing.blueFishChanceBPS}
+      milkChanceBPS={snapshot.data?.fishing.milkCrabChanceBPS}
     />
   );
 

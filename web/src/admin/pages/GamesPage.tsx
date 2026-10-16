@@ -378,14 +378,16 @@ function GamesEditor({
     }
     const blackjack = validateBlackjackConfiguration(draft, text);
     if (blackjack) return { game: 'blackjack', message: blackjack };
-    return fishingChanceValid(draft.fishing.blue_fish_chance_bps)
+    return fishingChanceValid(draft.fishing.blue_fish_chance_bps) &&
+      fishingChanceValid(draft.fishing.milk_crab_chance_bps) &&
+      draft.fishing.blue_fish_chance_bps + draft.fishing.milk_crab_chance_bps <= 10_000
       ? null
       : {
           game: 'fishing',
           field: 'fishing.blue_fish_chance_bps',
           message: text(
-            '蓝色大肥鱼概率必须为0%至100%，最多两位小数。',
-            'Blue-fish probability must be between 0% and 100%, with at most two decimal places.',
+            '蓝色大肥鱼和奶蟹的概率各为 0% 至 100%，最多两位小数，合计不超过 100%。',
+            'Each blue-fish and milk-crab chance must be between 0% and 100%, with at most two decimal places and a combined maximum of 100%.',
           ),
         };
   };

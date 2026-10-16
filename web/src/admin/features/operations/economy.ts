@@ -274,6 +274,7 @@ interface GamesConfig {
   fishing: {
     rake_bp: GamePumps;
     blue_fish_chance_bps: number;
+    milk_crab_chance_bps: number;
     enabled: boolean;
     bait_prices: { worm: string; lure: string; premium: string };
     rtp_percent: { standard: number; premium: number };
@@ -351,6 +352,7 @@ export function normalizeGamesConfig(value: unknown): GamesConfig {
       'treasure_multipliers',
       'rake_bp',
       'blue_fish_chance_bps',
+      'milk_crab_chance_bps',
     ],
     'Fishing configuration',
   );
@@ -394,6 +396,7 @@ export function normalizeGamesConfig(value: unknown): GamesConfig {
         0,
         10_000,
       ),
+      milk_crab_chance_bps: integer(fishing.milk_crab_chance_bps, 'Milk crab chance', 0, 10_000),
       bait_prices: {
         worm: amount(bait.worm, 'worm price', false),
         lure: amount(bait.lure, 'lure price', false),

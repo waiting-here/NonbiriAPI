@@ -45,6 +45,7 @@ const INITIAL_CONFIG: GamesConfig = {
   master_enabled: true,
   fishing: {
     blue_fish_chance_bps: 1000,
+    milk_crab_chance_bps: 1000,
     enabled: true,
     bait_prices: { worm: '2.5', lure: '5', premium: '7.5' },
     rtp_percent: { standard: 90, premium: 88 },
@@ -237,6 +238,11 @@ test('admin games route performs authoritative PATCH with keyboard input at 390p
   await expect(chance).toHaveValue('10');
   await chance.fill('37.5');
   const save = page.getByRole('button', { name: 'Save Fishing settings', exact: true });
+  const milkChance = page.getByLabel('Milk-crab probability', { exact: true });
+  await expect(milkChance).toHaveValue('10');
+  await milkChance.fill('70');
+  await expect(save).toBeDisabled();
+  await milkChance.fill('20.25');
   await save.focus();
   await page.keyboard.press('Enter');
   await expect.poll(() => config.patches.length).toBe(1);
@@ -252,6 +258,7 @@ test('admin games route performs authoritative PATCH with keyboard input at 390p
     fishing: {
       ...INITIAL_CONFIG.fishing,
       blue_fish_chance_bps: 3750,
+      milk_crab_chance_bps: 2025,
       bait_prices: { ...INITIAL_CONFIG.fishing.bait_prices, worm: '3' },
     },
     linklink: INITIAL_CONFIG.linklink,

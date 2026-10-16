@@ -181,8 +181,8 @@ FROM game_fishing_best b LEFT JOIN game_fishing_best_lengths l ON l.user_id=b.us
 	if err != nil {
 		return classifyDB(err)
 	}
-	if value.blueLength != nil {
-		_, err = tx.ExecContext(ctx, `INSERT INTO game_fishing_best_lengths(user_id,length_cm) VALUES(?,?)`, record.UserID, *value.blueLength)
+	if value.length != nil {
+		_, err = tx.ExecContext(ctx, `INSERT INTO game_fishing_best_lengths(user_id,length_cm,kind) VALUES(?,?,?)`, record.UserID, *value.length, *value.kind)
 		return classifyDB(err)
 	}
 	return nil
@@ -247,7 +247,7 @@ func loadResultTx(ctx context.Context, tx *sql.Tx, record batchRecord, replay bo
 	if err != nil {
 		return nil, ErrInvariant
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT o.ordinal,o.species_key,o.tier,o.size_cm,o.payout_milli,l.length_cm,COALESCE(o.net_payout_milli,o.payout_milli),o.platform_cut_milli,o.welfare_cut_milli,o.thursday_cut_milli
+	rows, err := tx.QueryContext(ctx, `SELECT o.ordinal,o.species_key,o.tier,o.size_cm,o.payout_milli,CASE WHEN l.kind='blue' THEN l.length_cm END,CASE WHEN l.kind='milk' THEN l.length_cm END,COALESCE(o.net_payout_milli,o.payout_milli),o.platform_cut_milli,o.welfare_cut_milli,o.thursday_cut_milli
 FROM game_fishing_outcomes o LEFT JOIN game_fishing_outcome_lengths l ON l.batch_id=o.batch_id AND l.ordinal=o.ordinal
 WHERE o.batch_id=? ORDER BY o.ordinal`, record.ID)
 	if err != nil {
@@ -258,10 +258,10 @@ WHERE o.batch_id=? ORDER BY o.ordinal`, record.ID)
 	for rows.Next() {
 		var outcome FishingOutcome
 		var payout, net, platform, welfare, thursday int64
-		if err = rows.Scan(&outcome.Ordinal, &outcome.SpeciesKey, &outcome.Tier, &outcome.SizeCM, &payout, &outcome.BlueFatFishLengthCM, &net, &platform, &welfare, &thursday); err != nil {
+		if err = rows.Scan(&outcome.Ordinal, &outcome.SpeciesKey, &outcome.Tier, &outcome.SizeCM, &payout, &outcome.BlueFatFishLengthCM, &outcome.MilkCrabLengthCM, &net, &platform, &welfare, &thursday); err != nil {
 			return nil, classifyDB(err)
 		}
-		if outcome.BlueFatFishLengthCM != nil && (outcome.Tier != string(fishing.TierLegend) || !fishing.ValidBlueFatFishLength(*outcome.BlueFatFishLengthCM)) {
+		if !ValidExportOutcome(outcome) {
 			return nil, ErrInvariant
 		}
 		outcome.Reward = game.FormatAmount(payout)
