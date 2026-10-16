@@ -1,12 +1,6 @@
 import { apiFetch } from '@shared/query/http';
 import { responseFields } from '@shared/query/responseFields';
-import {
-  errorBytes,
-  type DiagnosticRole,
-  type ErrorBody,
-  type ErrorMetadata,
-  type SourceFacts,
-} from './api';
+import { type DiagnosticRole, type ErrorBody, type ErrorMetadata, type SourceFacts } from './api';
 export type IndependentKind =
   'all' | 'api_request' | 'model_discovery' | 'image_task' | 'image_discovery';
 export interface IndependentItem extends ErrorMetadata {
@@ -233,7 +227,6 @@ export function decodeIndependentDetail(value: unknown): IndependentDetail {
   if ((raw.encoding !== 'utf-8' && raw.encoding !== 'base64') || typeof raw.body !== 'string')
     invalid();
   const body: ErrorBody = { ...meta, encoding: raw.encoding, body: raw.body };
-  errorBytes(body);
   return { item: entry, body, source: source(v.source) };
 }
 function root(role: DiagnosticRole) {

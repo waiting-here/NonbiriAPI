@@ -328,6 +328,11 @@ func writeValue(w http.ResponseWriter, value any, err error) {
 	_, _ = w.Write(body)
 }
 func writeMutation(w http.ResponseWriter, value MutationResult, err error) {
+	// Durable conflict receipts carry the same conflict as direct refusals.
+	// Render it for this request's language without rewriting the receipt.
+	if err == nil && value.Status == http.StatusConflict {
+		err = ErrConflict
+	}
 	if err != nil {
 		writeError(w, err)
 		return

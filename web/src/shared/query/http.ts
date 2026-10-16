@@ -1,3 +1,4 @@
+import { requestLanguage } from '@shared/query/language';
 import { cleanText } from './normalize';
 import type { QueryClient, QueryKey } from '@tanstack/react-query';
 
@@ -78,12 +79,12 @@ function parseEnvelope(body: unknown): ApiErrorBody | null {
   if (rawError === null || typeof rawError !== 'object' || Array.isArray(rawError)) return null;
 
   const error = rawError as Record<string, unknown>;
-  const code = boundedText(error.code, 96);
-  const message = boundedText(error.message, 1000);
+  const code = typeof error.code === 'string' ? error.code : undefined;
+  const message = typeof error.message === 'string' ? error.message : undefined;
   if (!code || !message) return null;
 
-  const diag = boundedText(error.diag, 4096, 4096);
-  const requestId = boundedText(error.request_id, 128);
+  const diag = typeof error.diag === 'string' ? error.diag : undefined;
+  const requestId = typeof error.request_id === 'string' ? error.request_id : undefined;
   return {
     code,
     message,
@@ -215,6 +216,7 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
   const { json, headers, ...init } = options;
   const requestHeaders = new Headers(headers);
   requestHeaders.set('Accept', 'application/json');
+  requestHeaders.set('Accept-Language', requestLanguage());
   requestHeaders.set('Cache-Control', 'no-store');
   if (json !== undefined) requestHeaders.set('Content-Type', 'application/json');
   const elevatedToken = elevatedTokenForPath(path);

@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/csv"
-	"encoding/json"
+	"github.com/waiting-here/NonbiriAPI/internal/textprivacy"
 	"net/http"
 	"strconv"
 )
@@ -98,7 +98,7 @@ func MarshalUserJSON(rows []UserLogRow) ([]byte, error) {
 	if len(rows) > maxExportRows {
 		return nil, ErrCapacity
 	}
-	body, err := json.Marshal(struct {
+	body, err := textprivacy.MarshalJSON(struct {
 		Data []UserLogRow `json:"data"`
 	}{rows})
 	if err != nil {

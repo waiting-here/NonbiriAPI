@@ -220,7 +220,7 @@ describe('independent management diagnostics', () => {
       await screen.findByText('The actual upstream dispatch was not recorded for this operation.'),
     ).toBeInTheDocument();
   });
-  it('rejects oversized pages, invalid cursor ordering, foreign roots and corrupt body counts', () => {
+  it('rejects oversized pages, invalid cursor ordering and foreign roots', () => {
     expect(() => decodeIndependentPage(page(Array.from({ length: 21 }, () => entry())))).toThrow();
     expect(() => decodeIndependentPage(page([entry('2'), entry('3')]))).toThrow();
     expect(() =>
@@ -228,13 +228,13 @@ describe('independent management diagnostics', () => {
     ).toThrow();
     expect(() => decodeIndependentPage(page([entry()], '9223372036854775808'))).toThrow();
     const metadata = entry();
-    expect(() =>
-      decodeIndependentDetail({
-        item: metadata,
-        body: { ...metadata, encoding: 'utf-8', body: 'short' },
-        source: null,
-      }),
-    ).toThrow();
+    const redacted = decodeIndependentDetail({
+      item: metadata,
+      body: { ...metadata, encoding: 'utf-8', body: '[redacted]' },
+      source: null,
+    });
+    expect(redacted.body.body).toBe('[redacted]');
+    expect(redacted.body.bytes_saved).toBe(metadata.bytes_saved);
     expect(() =>
       decodeIndependentDetail({
         item: metadata,

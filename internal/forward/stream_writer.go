@@ -216,7 +216,7 @@ func (w *streamWriter) finishFailure(failure wireFailure) bool {
 		return true
 	}
 	w.terminal = true
-	value := httperr.New(failure.code, failure.message)
+	value := httperr.Localize(httperr.New(failure.code, failure.message), httperr.Language(w.writer))
 	frame := httperr.SSEErrorFrame(value)
 	if failure.upstreamContext {
 		value = value.WithUpstreamCode(failure.upstreamCode)

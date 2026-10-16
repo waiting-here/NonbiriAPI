@@ -112,6 +112,7 @@ func fixedOriginAuthority(raw string) (string, error) {
 }
 
 func (p *policy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w = httperr.WithLanguage(w, r.Header.Get("Accept-Language"))
 	station := p.matcher.Match(r.Host)
 	info := p.requestInfo(r)
 

@@ -78,7 +78,9 @@ export function getErrorBody(
 }
 
 export function errorBytes(body: ErrorBody): Uint8Array<ArrayBuffer> {
-  if (body.body.length > 1_398_104 || body.bytes_saved > 1_048_576)
+  // Stored byte counts describe the original body; display redaction can change its size.
+  const maxDisplayBytes = 2 * 1024 * 1024;
+  if (body.body.length > 4 * Math.ceil(maxDisplayBytes / 3))
     throw new Error('Diagnostic is too large');
   let bytes: Uint8Array<ArrayBuffer>;
   if (body.encoding === 'utf-8') bytes = new TextEncoder().encode(body.body);
@@ -87,7 +89,6 @@ export function errorBytes(body: ErrorBody): Uint8Array<ArrayBuffer> {
     bytes = new Uint8Array(binary.length);
     for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
   }
-  if (bytes.byteLength !== body.bytes_saved || bytes.byteLength > 1_048_576)
-    throw new Error('Invalid diagnostic byte count');
+  if (bytes.byteLength > maxDisplayBytes) throw new Error('Diagnostic is too large');
   return bytes;
 }

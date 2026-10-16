@@ -42,10 +42,28 @@ describe('request diagnostics', () => {
     await waitFor(() => expect(requests.apiFetch).toHaveBeenCalledTimes(1));
     fireEvent.click(await screen.findByText('Error event 1 · HTTP 503 · 18 B'));
     expect(requests.apiFetch).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole('button', { name: 'Load original body' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Load error body' }));
     await waitFor(() => expect(requests.apiFetch).toHaveBeenCalledTimes(2));
     expect(await screen.findByText('<script>x</script>')).toBeInTheDocument();
     expect(document.querySelector('script')).toBeNull();
+  });
+  it('renders redacted bodies whose stored byte count differs', () => {
+    const body = {
+      event_seq: 1,
+      encoding: 'utf-8',
+      body: 'Failed at [redacted]',
+      bytes_saved: 25,
+      truncated: false,
+    } as ErrorBody;
+    render(<RawErrorViewer body={body} />);
+    expect(screen.getByText('Failed at [redacted]')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Download error body' })).toBeEnabled();
+    expect(screen.getByText(/Byte counts refer to the stored body/)).toBeInTheDocument();
+  });
+  it('keeps malformed body decoding failures inside the viewer', () => {
+    render(<RawErrorViewer body={{ body: 'not base64!', encoding: 'base64' } as ErrorBody} />);
+    expect(screen.getByRole('alert')).toHaveTextContent('Could not load the error body.');
+    expect(screen.queryByRole('button', { name: 'Download error body' })).toBeNull();
   });
   it('does not label non UTF-8 or truncated bytes as formattable JSON', () => {
     const body = {

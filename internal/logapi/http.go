@@ -1,7 +1,6 @@
 package logapi
 
 import (
-	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -453,10 +452,7 @@ func requireNoBody(writer http.ResponseWriter, request *http.Request) bool {
 }
 
 func writeLogJSON(writer http.ResponseWriter, status int, body any) {
-	writer.Header().Set("Content-Type", "application/json; charset=utf-8")
-	writer.Header().Set("Cache-Control", "no-store")
-	writer.WriteHeader(status)
-	_ = json.NewEncoder(writer).Encode(body)
+	httperr.WriteDisplayJSON(writer, status, body)
 }
 
 func writeLogError(writer http.ResponseWriter, err error) {

@@ -524,8 +524,8 @@ function IPs({ inspect, ...scope }: Scope & { inspect: (id: string) => void }) {
         scopeKey={scope.scopeKey}
         filters={filters}
         kind="shared_ips"
-        renderItem={(ip) => (
-          <Card key={ip.ip}>
+        renderItem={(ip, index) => (
+          <Card key={index}>
             <h2>{ip.ip}</h2>
             <p>
               {t('common.audit.distinctDiscord')}: {ip.users} · {c.count}: {ip.requests} ·{' '}
@@ -566,8 +566,8 @@ function UserIPWindows({ userID, ...scope }: Scope & { userID?: string }) {
           filters={scope.filters}
           kind="user_ips"
           userID={userID}
-          renderItem={(item) => (
-            <Card key={item.ip}>
+          renderItem={(item, index) => (
+            <Card key={index}>
               <h3 className="mono audit-ip-address">{item.ip}</h3>
               <dl className="nb-facts nb-facts--inline">
                 <dt>{scope.c.count}</dt>
@@ -707,8 +707,8 @@ function UserIPWindows({ userID, ...scope }: Scope & { userID?: string }) {
             <details>
               <summary>{t('common.audit.windowIPs')}</summary>
               <ul>
-                {item.ips.map((ip) => (
-                  <li key={ip} className="mono">
+                {item.ips.map((ip, index) => (
+                  <li key={index} className="mono">
                     {ip}
                   </li>
                 ))}

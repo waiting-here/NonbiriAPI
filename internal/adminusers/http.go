@@ -19,6 +19,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
+	"github.com/waiting-here/NonbiriAPI/internal/textprivacy"
 )
 
 const (
@@ -168,7 +169,7 @@ func (api *httpAPI) listUsers(writer http.ResponseWriter, request *http.Request,
 			writeError(writer, err)
 			return
 		}
-		writeJSON(writer, http.StatusOK, page)
+		httperr.WriteDisplayJSON(writer, http.StatusOK, page)
 		return
 	}
 	page, err := api.service.listManagedAccounts(request.Context(), principal.UserID, api.role, query)
@@ -176,7 +177,7 @@ func (api *httpAPI) listUsers(writer http.ResponseWriter, request *http.Request,
 		writeError(writer, err)
 		return
 	}
-	writeJSON(writer, http.StatusOK, page)
+	httperr.WriteDisplayJSON(writer, http.StatusOK, page)
 }
 
 func (api *httpAPI) getDeletedUser(writer http.ResponseWriter, request *http.Request, principal AdminPrincipal) {
@@ -198,7 +199,7 @@ func (api *httpAPI) getDeletedUser(writer http.ResponseWriter, request *http.Req
 		writeError(writer, err)
 		return
 	}
-	writeJSON(writer, http.StatusOK, item)
+	httperr.WriteDisplayJSON(writer, http.StatusOK, item)
 }
 
 func (api *httpAPI) listDeletionDuelAborts(writer http.ResponseWriter, request *http.Request, principal AdminPrincipal) {
@@ -224,7 +225,7 @@ func (api *httpAPI) listDeletionDuelAborts(writer http.ResponseWriter, request *
 		writeError(writer, err)
 		return
 	}
-	writeJSON(writer, http.StatusOK, page)
+	httperr.WriteDisplayJSON(writer, http.StatusOK, page)
 }
 
 func (api *httpAPI) getUser(writer http.ResponseWriter, request *http.Request, principal AdminPrincipal) {
@@ -241,7 +242,7 @@ func (api *httpAPI) getUser(writer http.ResponseWriter, request *http.Request, p
 		writeError(writer, err)
 		return
 	}
-	writeJSON(writer, http.StatusOK, user)
+	httperr.WriteDisplayJSON(writer, http.StatusOK, user)
 }
 
 func (api *httpAPI) patchUser(writer http.ResponseWriter, request *http.Request, principal AdminPrincipal) {
@@ -275,7 +276,7 @@ func (api *httpAPI) patchUser(writer http.ResponseWriter, request *http.Request,
 			writeError(writer, err)
 			return
 		}
-		writeMutation(writer, result.Status, result.Body)
+		writeDisplayMutation(writer, result.Status, result.Body)
 	case "economy":
 		input, ok := decodeEconomyMutation(object)
 		if !ok {
@@ -291,7 +292,7 @@ func (api *httpAPI) patchUser(writer http.ResponseWriter, request *http.Request,
 			writeError(writer, err)
 			return
 		}
-		writeMutation(writer, result.Status, result.Body)
+		writeDisplayMutation(writer, result.Status, result.Body)
 	default:
 		writeError(writer, ErrInvalidRequest)
 	}
@@ -931,4 +932,10 @@ func writeError(writer http.ResponseWriter, err error) {
 	default:
 		httperr.WriteError(writer, httperr.New(httperr.CodeInternal, "internal error"))
 	}
+}
+
+// Profile and economy replies carry read-only restriction reasons. Keep their
+// durable receipt intact while applying the same display policy as GET.
+func writeDisplayMutation(writer http.ResponseWriter, status int, body []byte) {
+	writeMutation(writer, status, []byte(textprivacy.IPv4(string(body))))
 }

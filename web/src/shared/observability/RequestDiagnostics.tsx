@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { copyText } from '@shared/utils/clipboard';
 import {
@@ -179,7 +179,6 @@ function LazyErrorBody({
     setFailed(false);
     try {
       const result = await getErrorBody(role, requestID, attempt, event, request.signal);
-      errorBytes(result);
       if (!request.signal.aborted) setBody(result);
     } catch {
       if (!request.signal.aborted) setFailed(true);
@@ -206,7 +205,15 @@ function LazyErrorBody({
 
 export function RawErrorViewer({ body }: { body: ErrorBody }) {
   const { t } = useTranslation();
-  const raw = new TextDecoder().decode(errorBytes(body));
+  const decoded = useMemo(() => {
+    try {
+      const bytes = errorBytes(body);
+      return { bytes, text: new TextDecoder().decode(bytes) };
+    } catch {
+      return null;
+    }
+  }, [body]);
+  const raw = decoded?.text ?? '';
   const synthetic = body.content_type === 'application/vnd.nonbiriapi.image-diagnostic+json';
   const [formatted, setFormatted] = useState<string>();
   const [formatting, setFormatting] = useState(false);
@@ -258,8 +265,9 @@ export function RawErrorViewer({ body }: { body: ErrorBody }) {
     }
   }
   function download() {
+    if (!decoded) return;
     const url = URL.createObjectURL(
-      new Blob([errorBytes(body)], { type: 'application/octet-stream' }),
+      new Blob([decoded.bytes], { type: 'application/octet-stream' }),
     );
     const anchor = document.createElement('a');
     anchor.href = url;
@@ -267,8 +275,10 @@ export function RawErrorViewer({ body }: { body: ErrorBody }) {
     anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 0);
   }
+  if (!decoded) return <p role="alert">{t('common.diagnostics.couldNotLoadTheErrorBody')}</p>;
   return (
     <div className="request-diagnostics">
+      <p>{t('common.diagnostics.ipv4Redacted')}</p>
       {synthetic && (
         <p role="status">{t('common.diagnostics.thisIsASafeDiagnosticSummaryGenerated')}</p>
       )}
