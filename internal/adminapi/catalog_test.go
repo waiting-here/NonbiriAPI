@@ -2,6 +2,7 @@ package adminapi
 
 import (
 	"encoding/json"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -271,8 +272,8 @@ func TestGameCatalogUsesAuthoritativeRegistryDefaults(t *testing.T) {
 		byKey[entry.Key] = entry
 	}
 	registryKeys := builtinconfig.SiteConfigKeys()
-	if len(registryKeys) != 96 {
-		t.Fatalf("game registry keys=%d, want 96", len(registryKeys))
+	if len(registryKeys) != 97 {
+		t.Fatalf("game registry keys=%d, want 97", len(registryKeys))
 	}
 	for _, key := range registryKeys {
 		entry, ok := byKey[key]
@@ -290,6 +291,7 @@ func TestGameCatalogUsesAuthoritativeRegistryDefaults(t *testing.T) {
 		fishingconfig.FishingStandardRTPKey:              defaults.StandardRTPPercent,
 		fishingconfig.FishingPremiumRTPKey:               defaults.PremiumRTPPercent,
 		fishingconfig.FishingBlueFishChanceBPSKey:        defaults.BlueFishChanceBPS,
+		fishingconfig.FishingMilkCrabChanceBPSKey:        defaults.MilkCrabChanceBPS,
 		fishingconfig.FishingRakePlatformBPKey:           defaults.RakeBP.Platform,
 		fishingconfig.FishingRakeWelfareBPKey:            defaults.RakeBP.Welfare,
 		fishingconfig.FishingRakeThursdayBPKey:           defaults.RakeBP.Thursday,
@@ -318,6 +320,10 @@ func TestGameCatalogUsesAuthoritativeRegistryDefaults(t *testing.T) {
 	blueFish := byKey[fishingconfig.FishingBlueFishChanceBPSKey]
 	if blueFish.Minimum != 0 || blueFish.Maximum != fishing.MaximumBlueFishChanceBPS || blueFish.Step != 1 {
 		t.Fatalf("blue-fish probability range/step=%v..%v/%v", blueFish.Minimum, blueFish.Maximum, blueFish.Step)
+	}
+	milkCrab := byKey[fishingconfig.FishingMilkCrabChanceBPSKey]
+	if milkCrab.Minimum != 0 || milkCrab.Maximum != 10000 || milkCrab.Step != 1 || !slices.Contains(milkCrab.IndependentGates, fishingconfig.FishingBlueFishChanceBPSKey) {
+		t.Fatalf("milk-crab probability catalog=%+v", milkCrab)
 	}
 	for _, key := range []string{
 		fishingconfig.FishingTreasureBottleMultiplierKey,

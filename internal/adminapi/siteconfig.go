@@ -89,6 +89,7 @@ const (
 	KeyGameFishingRakeWelfare       = "game_fishing_rake_welfare_bp"
 	KeyGameFishingRakeThursday      = "game_fishing_rake_thursday_bp"
 	KeyGameFishingBlueFishChanceBPS = "game_fishing_blue_fish_chance_bps"
+	KeyGameFishingMilkCrabChanceBPS = "game_fishing_milk_crab_chance_bps"
 	// Charity / donation switches (implementation contract §4.1). Both default
 	// to off: the charity system and donation intake stay closed until the
 	// administrator opens them. They have no runtime singleton — every
@@ -310,6 +311,7 @@ var knownSiteConfig = func() map[string]keySpec {
 		KeyGameFishingRakeWelfare:           {kind: kindInt, min: 0, max: 9999, def: 100},
 		KeyGameFishingRakeThursday:          {kind: kindInt, min: 0, max: 9999, def: 100},
 		KeyGameFishingBlueFishChanceBPS:     {kind: kindInt, min: 0, max: 10000, def: 1000},
+		KeyGameFishingMilkCrabChanceBPS:     {kind: kindInt, min: 0, max: 10000, def: 1000},
 		KeyCharityEnabled:                   {kind: kindBool, def: 0},
 		KeyDonationAcceptEnabled:            {kind: kindBool, def: 0},
 		KeyCharityTokenReserveMilli:         {kind: kindOptionalAmount},

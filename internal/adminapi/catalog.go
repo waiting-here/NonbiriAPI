@@ -109,7 +109,8 @@ var catalogMetadataByKey = map[string]catalogMetadata{
 	KeyGameFishingRakePlatform:      {"games", catalogText("垂钓平台抽成", "Fishing platform cut"), catalogText("从每次渔获收入中收取的平台费用；100 基点为 1%，三项费用合计须低于 100%。", "Platform fee from each catch. 100 basis points is 1%; the three fees must total less than 100%."), unitBP, []string{KeyGameFishingRakeWelfare, KeyGameFishingRakeThursday}},
 	KeyGameFishingRakeWelfare:       {"games", catalogText("垂钓福利池抽成", "Fishing welfare-pool cut"), catalogText("从每次渔获收入划入福利池的比例；100 基点为 1%。", "Share of each catch allocated to the welfare pool. 100 basis points is 1%."), unitBP, []string{KeyGameFishingRakePlatform, KeyGameFishingRakeThursday}},
 	KeyGameFishingRakeThursday:      {"games", catalogText("垂钓周四池抽成", "Fishing Thursday-pool cut"), catalogText("从每次渔获收入划入周四池的比例；100 基点为 1%。", "Share of each catch allocated to the Thursday pool. 100 basis points is 1%."), unitBP, []string{KeyGameFishingRakePlatform, KeyGameFishingRakeWelfare}},
-	KeyGameFishingBlueFishChanceBPS: {"games", catalogText("蓝色大肥鱼概率", "Blue fat fish chance"), catalogText("传奇鱼变为蓝色大肥鱼的概率；100 基点为 1%，只影响新开始的垂钓批次。", "Chance that a legendary catch becomes a blue fat fish. 100 basis points is 1%; applies only to new fishing batches."), unitBP, nil},
+	KeyGameFishingBlueFishChanceBPS: {"games", catalogText("蓝色大肥鱼概率", "Blue fat fish chance"), catalogText("传奇鱼变为蓝色大肥鱼的概率；100 基点为 1%，与奶蟹概率合计不超过 100%，只影响新垂钓批次。", "Chance of a blue fat fish among legendary catches. 100 basis points is 1%; combined with milk crab, at most 100%. Applies to new batches."), unitBP, []string{KeyGameFishingMilkCrabChanceBPS}},
+	KeyGameFishingMilkCrabChanceBPS: {"games", catalogText("奶蟹概率", "Milk crab chance"), catalogText("传奇鱼变为奶蟹的概率；100 基点为 1%，与蓝色大肥鱼概率合计不超过 100%，只影响新垂钓批次。", "Chance of a milk crab among legendary catches. 100 basis points is 1%; combined with blue fat fish, at most 100%. Applies to new batches."), unitBP, []string{KeyGameFishingBlueFishChanceBPS}},
 
 	KeyCharityEnabled:           {"charity", catalogText("公益资源总开关", "Charity master switch"), catalogText("控制公益资源发现与调用是否开放。", "Controls whether charity discovery and calls are available."), unitNone, nil},
 	KeyDonationAcceptEnabled:    {"charity", catalogText("接受公益捐赠", "Donation intake"), catalogText("只控制新捐赠提交，不影响既有资源管理。", "Controls new donation submissions only; existing resources remain manageable."), unitNone, nil},
@@ -365,6 +366,8 @@ func catalogSemantics(key string, spec keySpec) (zero *localizedCatalogText, nul
 		zero = catalogTextPtr("该项不抽成。", "No cut for this destination.")
 	case KeyGameFishingBlueFishChanceBPS:
 		zero = catalogTextPtr("关闭新垂钓批次的蓝色大肥鱼彩蛋。", "Disables blue fat fish for newly accepted fishing batches.")
+	case KeyGameFishingMilkCrabChanceBPS:
+		zero = catalogTextPtr("关闭新垂钓批次的奶蟹彩蛋。", "Disables milk crab for newly accepted fishing batches.")
 	case KeyGameFishingRTP, KeyGameFishingRTPPremium:
 		zero = catalogTextPtr("可填写 0%；鱼饵价格与宝物倍率仍须形成可用组合。", "0% is allowed, but bait prices and treasure multipliers must still form a workable combination.")
 	case KeyAnnouncementEpoch:
