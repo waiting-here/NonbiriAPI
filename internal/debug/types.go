@@ -64,6 +64,8 @@ const (
 	RouteCharityChat       = requestkind.CharityChat
 	RouteCharityEmbeddings = requestkind.CharityEmbeddings
 	RouteCharityImages     = requestkind.CharityImages
+	RouteOpenAIDecisions   = requestkind.OpenAIDecisions
+	RouteCharityDecisions  = requestkind.CharityDecisions
 )
 
 type TraceState string
@@ -170,7 +172,7 @@ type DebugRequest struct {
 }
 
 func (request DebugRequest) valid() bool {
-	return request.RouteKind.IsModelCall() && (!request.Stream || request.RouteKind.Operation() != requestkind.OpenAIEmbeddings.Operation()) && utf8.ValidString(request.Model) &&
+	return request.RouteKind.IsModelCall() && (!request.Stream || request.RouteKind.Operation() != requestkind.OpenAIEmbeddings.Operation() && request.RouteKind.Operation() != requestkind.OpenAIDecisions.Operation()) && utf8.ValidString(request.Model) &&
 		utf8.RuneCountInString(request.Model) <= 512 && request.Body.valid()
 }
 

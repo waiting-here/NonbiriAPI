@@ -77,6 +77,8 @@ func (s *Service) RecordRejectionTx(ctx context.Context, tx *sql.Tx, user int64,
 		route = "openai_images_generations"
 	} else if fact.Path == "/v1/embeddings" {
 		route = "openai_embeddings"
+	} else if fact.Path == "/v1/decisions" {
+		route = "openai_decisions"
 	}
 	if modelname.IsCharity(model) {
 		route = strings.Replace(route, "openai_", "charity_", 1)

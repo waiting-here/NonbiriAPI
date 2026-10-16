@@ -65,6 +65,9 @@ const CONNECTOR_LABEL_KEYS: Record<MainstreamConnectorType, string> = {
   'openai-compatible': 'admin.mainstreamChannels.connector.openaiCompatible',
   'anthropic-compatible': 'admin.mainstreamChannels.connector.anthropicCompatible',
   'ai-sdk-gateway-v3': 'common.gatewayName',
+  'google-gemini': 'common.connectorGemini',
+  'openai-responses': 'common.connectorResponses',
+  'openai-decisions': 'common.connectorDecisions',
 };
 
 const STATE_LABEL_KEYS: Record<'active' | 'retired', string> = {

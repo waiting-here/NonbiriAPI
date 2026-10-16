@@ -158,12 +158,16 @@ func (environment *donationTestEnv) seedEndpointKey(t *testing.T, userID int64, 
 	return environment.seedEndpointKeyAt(t, userID, suffix, baseURL)
 }
 
-func (environment *donationTestEnv) seedEndpointKeyAt(t *testing.T, userID int64, suffix byte, baseURL string) (int64, int64) {
+func (environment *donationTestEnv) seedEndpointKeyAt(t *testing.T, userID int64, suffix byte, baseURL string, connectors ...string) (int64, int64) {
 	t.Helper()
+	kind := "openai-compatible"
+	if len(connectors) == 1 {
+		kind = connectors[0]
+	}
 	now := environment.clock.Load()
 	result, err := environment.store.DB().Exec(`INSERT INTO endpoints(
 user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at)
-VALUES(?,'openai-compatible',?,'private endpoint note',1,1,?,?)`, userID, baseURL, now, now)
+VALUES(?, ?,?,'private endpoint note',1,1,?,?)`, userID, kind, baseURL, now, now)
 	if err != nil {
 		t.Fatalf("seed endpoint: %v", err)
 	}
@@ -180,7 +184,7 @@ VALUES(?,'openai-compatible',?,'private endpoint note',1,1,?,?)`, userID, baseUR
 	}
 	result, err = environment.store.DB().Exec(`INSERT INTO endpoint_key_secrets(
 context_id,canonical_base_url,connector_type,encrypted_secret,created_at)
-VALUES(?,?,'openai-compatible',?,?)`, contextID, baseURL, encoded, now)
+VALUES(?,?,?,?,?)`, contextID, baseURL, kind, encoded, now)
 	if err != nil {
 		t.Fatalf("seed secret: %v", err)
 	}

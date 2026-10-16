@@ -373,7 +373,7 @@ function connectorType(value: unknown): Endpoint['connector_type'] {
   if (
     value === 'openai-compatible' ||
     value === 'anthropic-compatible' ||
-    value === 'ai-sdk-gateway-v3'
+    value === 'ai-sdk-gateway-v3' || value === 'google-gemini' || value === 'openai-responses' || value === 'openai-decisions'
   )
     return value;
   throw new ApiError('invalid_response', 'The server returned an invalid connector type.', 200);

@@ -26,6 +26,9 @@ export const MAINSTREAM_CONNECTOR_TYPES = [
   'openai-compatible',
   'anthropic-compatible',
   'ai-sdk-gateway-v3',
+  'google-gemini',
+  'openai-responses',
+  'openai-decisions',
 ] as const;
 export type MainstreamConnectorType = (typeof MAINSTREAM_CONNECTOR_TYPES)[number];
 

@@ -17,6 +17,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
@@ -454,7 +455,7 @@ ORDER BY id`, maxEndpointCredentialEnvelopeBytes)
 			return err
 		}
 		validRow := id > 0 && len(contextID) == 16 && utf8.ValidString(canonicalBaseURL) &&
-			(connector == "openai-compatible" || connector == "anthropic-compatible" || connector == "ai-sdk-gateway-v3") &&
+			connectorcontract.Type(connector).Valid() &&
 			ciphertextType == "text" && ciphertextBytes >= 1 && ciphertextBytes <= maxEndpointCredentialEnvelopeBytes &&
 			ciphertext.Valid && int64(len([]byte(ciphertext.String))) == ciphertextBytes && utf8.ValidString(ciphertext.String) &&
 			(!orphanedAt.Valid || (orphanedAt.Int64 >= 0 && orphanedAt.Int64 <= generationTwoMaxUnixSeconds))
@@ -527,7 +528,7 @@ ORDER BY ek.id`, maxStoredEndpointBaseURLBytes)
 		}
 		if keyID <= 0 || secretRefID <= 0 || baseType != "text" || baseBytes < 1 || baseBytes > maxStoredEndpointBaseURLBytes ||
 			!baseURL.Valid || int64(len([]byte(baseURL.String))) != baseBytes || !utf8.ValidString(baseURL.String) ||
-			(endpointConnector != "openai-compatible" && endpointConnector != "anthropic-compatible" && endpointConnector != "ai-sdk-gateway-v3") ||
+			!connectorcontract.Type(endpointConnector).Valid() ||
 			secretConnector != endpointConnector || orphanedAt.Valid {
 			baseURL.String = ""
 			return errors.New("invalid endpoint credential link")

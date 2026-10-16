@@ -199,7 +199,10 @@ function connectorType(value: unknown, field: string): string {
   if (
     candidate !== 'openai-compatible' &&
     candidate !== 'anthropic-compatible' &&
-    candidate !== 'ai-sdk-gateway-v3'
+    candidate !== 'ai-sdk-gateway-v3' &&
+    candidate !== 'google-gemini' &&
+    candidate !== 'openai-responses' &&
+    candidate !== 'openai-decisions'
   )
     invalid(field);
   return candidate;

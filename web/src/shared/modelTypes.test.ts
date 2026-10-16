@@ -3,7 +3,12 @@ import { normalizeModelTypes } from './modelTypes';
 
 describe('model API capabilities', () => {
   it('accepts an explicit set without rewriting legacy or image capabilities', () => {
-    for (const types of [['chat_completions', 'embeddings'], ['images_generations']]) {
+    for (const types of [
+      ['chat_completions', 'embeddings'],
+      ['images_generations'],
+      ['decisions'],
+      ['chat_completions', 'embeddings', 'images_generations', 'decisions'],
+    ]) {
       expect(normalizeModelTypes(types)).toEqual(types);
     }
   });

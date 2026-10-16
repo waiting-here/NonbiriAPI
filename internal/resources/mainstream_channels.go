@@ -45,9 +45,7 @@ func validMainstreamConnectorType(registry interface {
 	if err != nil || string(validated) != value {
 		return false
 	}
-	// Generation 2's authority table is intentionally closed to the two
-	// connectors currently supported by the endpoint schema.
-	return validated == connectorcontract.TypeOpenAICompatible || validated == connectorcontract.TypeAnthropicCompatible || validated == connectorcontract.TypeAISDKGatewayV3
+	return validated.Valid()
 }
 
 type mainstreamChannelRow struct {
@@ -77,7 +75,7 @@ func (row mainstreamChannelRow) dto() (MainstreamChannel, error) {
 	if row.state == mainstreamChannelStateRetired && (!row.retiredAt.Valid || row.enabled != 0 || row.retiredAt.Int64 < 0 || row.retiredAt.Int64 > maxUnixSecond) {
 		return MainstreamChannel{}, ErrUnavailable
 	}
-	if row.connectorType != string(connectorcontract.TypeOpenAICompatible) && row.connectorType != string(connectorcontract.TypeAnthropicCompatible) && row.connectorType != string(connectorcontract.TypeAISDKGatewayV3) {
+	if !connectorcontract.Type(row.connectorType).Valid() {
 		return MainstreamChannel{}, ErrUnavailable
 	}
 	var retiredAt *int64

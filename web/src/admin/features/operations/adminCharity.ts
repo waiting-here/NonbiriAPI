@@ -56,6 +56,9 @@ export const ADMIN_CHARITY_CONNECTOR_TYPES = [
   'openai-compatible',
   'anthropic-compatible',
   'ai-sdk-gateway-v3',
+  'google-gemini',
+  'openai-responses',
+  'openai-decisions',
 ] as const;
 export type AdminCharityConnectorType = (typeof ADMIN_CHARITY_CONNECTOR_TYPES)[number];
 
@@ -97,7 +100,10 @@ function validateAdminOwner(value: unknown): void {
     'administrator charity owner',
   );
   decimalID(root.user_id, 'administrator charity owner ID');
-  nullableString(root.discord_id, 'administrator charity owner Discord ID', { min: 1, ascii: true });
+  nullableString(root.discord_id, 'administrator charity owner Discord ID', {
+    min: 1,
+    ascii: true,
+  });
   string(root.display_name, 'administrator charity owner display name');
 }
 

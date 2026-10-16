@@ -1648,7 +1648,9 @@
           "openaiEmbeddings": "自用向量嵌入",
           "charityEmbeddings": "公益向量嵌入",
           "openaiImagesGenerations": "自用图像生成",
-          "charityImagesGenerations": "公益图像生成"
+          "charityImagesGenerations": "公益图像生成",
+          "openaiDecisions": "自用决策",
+          "charityDecisions": "公益决策"
         },
         "trace": {
           "capturing": "采集中",
@@ -2725,7 +2727,10 @@
       "accountPresentation.deleteAction": "删除账户…",
       "models.cacheBalanced": "综合优化负载均衡",
       "keys.charityModelExample": "[公益]服务商/模型名",
-      "keys.ownModelExample": "my/模型名"
+      "keys.ownModelExample": "my/模型名",
+      "connector.gemini": "Google Gemini (Chat)",
+      "connector.responses": "OpenAI Responses (Chat)",
+      "connector.decisions": "OpenAI Decisions"
     },
     "lakeNotes": {
       "exchangeAvailable": "垂钓免费入场。金币兑换已开放，可查看下方兑换。",
@@ -3588,7 +3593,7 @@
       "otherServiceHelp": "自己填写服务地址。",
       "existingService": "已添加的服务",
       "existingServiceHelp": "给它再加一把密钥。",
-      "connectorHelp": "不确定就选「OpenAI 兼容」，绝大多数服务商都支持。",
+      "connectorHelp": "按服务商接口选择。同一地址可分别添加不同协议；Gemini 和 Responses 用于聊天，Decisions 用于决策接口。",
       "manualLink": "需要设置请求头等高级选项？手动设置",
       "prefix": "模型名前缀",
       "modelSearch": "搜索模型",

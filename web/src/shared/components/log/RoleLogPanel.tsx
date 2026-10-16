@@ -54,6 +54,8 @@ const ROUTE_LABEL_KEYS: Record<LogRouteKind, string> = {
   charity_embeddings: 'common.operations.logs.route.charityEmbeddings',
   openai_images_generations: 'common.operations.logs.route.openaiImagesGenerations',
   charity_images_generations: 'common.operations.logs.route.charityImagesGenerations',
+  openai_decisions: 'common.operations.logs.route.openaiDecisions',
+  charity_decisions: 'common.operations.logs.route.charityDecisions',
   model_discovery: 'common.operations.logs.route.modelDiscovery',
 };
 

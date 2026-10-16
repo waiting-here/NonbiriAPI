@@ -227,6 +227,11 @@ func (service *Service) Images(ctx context.Context, writer http.ResponseWriter, 
 	service.execute(ctx, writer, userID, imageRequest(request), body, mediaType, language, nil)
 }
 
+// Decisions shares the same admission, dispatch, recovery and accounting rail.
+func (service *Service) Decisions(ctx context.Context, writer http.ResponseWriter, userID int64, request *openai.DecisionRequest, body []byte, mediaType, language string) {
+	service.execute(ctx, writer, userID, decisionRequest(request), body, mediaType, language, nil)
+}
+
 // Embeddings shares the same admission, dispatch, recovery and accounting rail.
 func (service *Service) Embeddings(ctx context.Context, writer http.ResponseWriter, userID int64, request *openai.EmbeddingRequest, body []byte, mediaType, language string) {
 	service.execute(ctx, writer, userID, embeddingRequest(request), body, mediaType, language, nil)

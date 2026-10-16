@@ -250,7 +250,7 @@ func (service *Service) runAttempts(
 		}
 		result := protocolConnector.Attempt(attemptContext, connector.AttemptInput{
 			Operation: attemptRequest.operation,
-			Target:    dispatch.Target(), Credential: credential, Ingress: attemptRequest.chat, Embedding: attemptRequest.embedding, Image: attemptRequest.image,
+			Target:    dispatch.Target(), Credential: credential, Ingress: attemptRequest.chat, Embedding: attemptRequest.embedding, Image: attemptRequest.image, Decision: attemptRequest.decision,
 			Policy: policy, Sink: sink, Observer: service.observer,
 			TraceID: traceID(trace, accepted.ID), AttemptIndex: index,
 		})

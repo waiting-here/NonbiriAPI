@@ -1,5 +1,5 @@
 import { ApiError } from '@shared/query/http';
-import { MODEL_CALL_ROUTES, isCharityRoute, isEmbeddingRoute, type ModelCallRoute } from '@shared/operations/requestKind';
+import { MODEL_CALL_ROUTES, isCharityRoute, isEmbeddingRoute, isDecisionRoute, type ModelCallRoute } from '@shared/operations/requestKind';
 import {
   boolean,
   decimal,
@@ -247,7 +247,7 @@ export function normalizeDebugTrace(value: unknown): DebugTrace {
     stream: boolean(requestRoot.stream, 'Debug stream flag'),
     body: normalizeDebugBody(requestRoot.body),
   };
-  if (isEmbeddingRoute(request.route_kind) && request.stream) {
+  if ((isEmbeddingRoute(request.route_kind) || isDecisionRoute(request.route_kind)) && request.stream) {
     invalidResponse('Embedding stream flag');
   }
   let upstream: DebugUpstreamResult | null = null;

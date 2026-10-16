@@ -332,7 +332,9 @@
           "charityEmbeddings": "公益向量嵌入",
           "modelDiscovery": "模型检查",
           "openaiImagesGenerations": "自用图像生成",
-          "charityImagesGenerations": "公益图像生成"
+          "charityImagesGenerations": "公益图像生成",
+          "openaiDecisions": "自用决策",
+          "charityDecisions": "公益决策"
         },
         "resultValue": {
           "success": "成功",
@@ -1452,7 +1454,8 @@
       "required": "请至少选择一种模型类型。",
       "chat_completions": "聊天补全",
       "embeddings": "向量化",
-      "images_generations": "图像生成"
+      "images_generations": "图像生成",
+      "decisions": "决策"
     },
     "rewards": {
       "navTitle": "兑换码",
@@ -1565,7 +1568,10 @@
       "redemptionBanned": "兑换码重复违规提交，账号已被暂时限制至 {{time}}。"
     },
     "resourceErrorTitle": "请重新加载页面",
-    "resourceErrorBody": "页面文件暂时无法加载。重新加载即可打开当前版本。"
+    "resourceErrorBody": "页面文件暂时无法加载。重新加载即可打开当前版本。",
+    "connectorGemini": "Google Gemini (Chat)",
+    "connectorResponses": "OpenAI Responses (Chat)",
+    "connectorDecisions": "OpenAI Decisions"
   },
   "logs": {
     "charityModel": "调用的公益模型",
@@ -1975,7 +1981,10 @@
       "protectionLeaves": "保护 JSON 中的字符串",
       "protectedPaths": "敏感字符串路径",
       "protectedPathsHelp": "每行一个相对 JSON Pointer，例如 /token 或 /credentials/0/key。仅选择字符串。",
-      "protectionHelp": "仅用于秘密值，普通参数无需开启。匹配时停止响应；流式输出中已发送的片段无法撤回。"
+      "protectionHelp": "仅用于秘密值，普通参数无需开启。匹配时停止响应；流式输出中已发送的片段无法撤回。",
+      "geminiSupport": "Gemini 用于聊天。原生参数支持 thinkingConfig 和 safetySettings；输出预算使用聊天令牌参数。",
+      "responsesSupport": "Responses 用于聊天，关闭上游存储。原生参数支持推理摘要和文本详细程度。",
+      "decisionsSupport": "Decisions 使用独立 JSON 接口，不支持流式和原生扩展。"
     },
     "service": {
       "title": "请求改写",

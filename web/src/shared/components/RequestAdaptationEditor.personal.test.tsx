@@ -33,6 +33,14 @@ it('preserves service inheritance while saving personal exclusions and a model h
     { station: 'user', role: 'user' },
   );
   await view.user.type(await screen.findByLabelText('Client parameters to exclude'), 'temperature');
+  for (const name of [
+    'Allowed client headers',
+    'Default parameters (when absent)',
+    'Fixed parameters (always override)',
+    'Extra parameters to keep',
+  ]) {
+    expect(screen.getByRole('group', { name })).toBeVisible();
+  }
   const headers = screen.getByRole('group', { name: 'Headers added to requests' });
   await view.user.selectOptions(within(headers).getByLabelText('Configuration source'), 'replace');
   await view.user.click(within(headers).getByRole('button', { name: 'Try this example' }));
@@ -45,4 +53,6 @@ it('preserves service inheritance while saving personal exclusions and a model h
     values: { 'x-client-version': { action: 'replace', value: '1' } },
   });
   expect(sent?.body_defaults).toEqual({ mode: 'inherit', values: {} });
+  expect(sent?.body_forced).toEqual({ mode: 'inherit', values: {} });
+  expect(sent?.native_extension_paths).toEqual({ mode: 'inherit', values: [] });
 });
