@@ -1,4 +1,4 @@
-package rc7
+package v1
 
 import (
 	"bytes"
@@ -43,6 +43,9 @@ func mustExec(t *testing.T, q interface {
 }
 
 func sourceFixture(t *testing.T) (string, *secret.Vault) {
+	return sourceFixtureFromDDL(t, sourceDDL, 16, SourceManifestHash)
+}
+func sourceFixtureFromDDL(t *testing.T, sourceDDL string, version int, manifest string) (string, *secret.Vault) {
 	t.Helper()
 	vault := testVault(t, 0x71)
 	directory := t.TempDir()
@@ -115,7 +118,14 @@ func sourceFixture(t *testing.T) (string, *secret.Vault) {
 		mustExec(t, tx, "INSERT INTO main."+quote(table)+" ("+projection+") SELECT "+projection+" FROM seed."+quote(table))
 	}
 	mustExec(t, tx, "DELETE FROM main.sqlite_sequence;INSERT INTO main.sqlite_sequence SELECT * FROM seed.sqlite_sequence WHERE name IN (SELECT name FROM main.sqlite_schema WHERE type='table')")
-	mustExec(t, tx, "UPDATE schema_state SET version=16;DELETE FROM site_config WHERE key IN ('redemption_ban_threshold','redemption_ban_window_seconds','redemption_ban_duration_seconds','game_fishing_milk_crab_chance_bps')")
+	mustExec(t, tx, "UPDATE schema_state SET version=?", version)
+	mustExec(t, tx, "DELETE FROM site_config WHERE key LIKE 'mfa_required_level_%'")
+	if version <= 17 {
+		mustExec(t, tx, "DELETE FROM site_config WHERE key='game_fishing_milk_crab_chance_bps'")
+	}
+	if version == 16 {
+		mustExec(t, tx, "DELETE FROM site_config WHERE key IN ('redemption_ban_threshold','redemption_ban_window_seconds','redemption_ban_duration_seconds')")
+	}
 	for _, name := range triggers {
 		mustExec(t, tx, triggerSQL[name])
 	}
@@ -124,7 +134,7 @@ func sourceFixture(t *testing.T) (string, *secret.Vault) {
 	}
 	mustExec(t, database, "DETACH DATABASE seed;PRAGMA foreign_keys=ON")
 	hash, err := db.SchemaManifestHash(t.Context(), database)
-	if err != nil || hash != SourceManifestHash {
+	if err != nil || hash != manifest {
 		t.Fatalf("source identity %s: %v", hash, err)
 	}
 	if err := database.Close(); err != nil {
@@ -254,7 +264,7 @@ func TestConversionTransactionRollsBackAllChangesOnFailureOrCancellation(t *test
 				}
 				return errors.New("injected conversion failure")
 			}}
-			_, err := db.ConvertOffline(ctx, path, codec, db.OfflineSchema{Version: 16, ManifestHash: SourceManifestHash}, true, nil, func(ctx context.Context, database *sql.DB, tx *sql.Tx) error {
+			_, err := ConvertOffline(ctx, path, codec, OfflineSchema{Version: 16, ManifestHash: SourceManifestHash}, true, nil, func(ctx context.Context, database *sql.DB, tx *sql.Tx) error {
 				if err := convert(ctx, database, tx, vault, ""); err != nil {
 					return err
 				}

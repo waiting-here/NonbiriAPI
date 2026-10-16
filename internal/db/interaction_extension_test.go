@@ -1,7 +1,6 @@
 package db
 
 import (
-	"context"
 	"strings"
 	"testing"
 )
@@ -29,7 +28,7 @@ func TestInteractionScanReasonsAndAccessPageIndex(t *testing.T) {
 		}
 		return strings.Join(details, ";")
 	}
-	if err := extendKnownGenerationTwoSchema(context.Background(), database); err != nil {
+	if err := validateGenerationTwoManifest(t.Context(), database); err != nil {
 		t.Fatal(err)
 	}
 	if after := queryPlan(); !strings.Contains(after, "idx_audit_access_time_page") || strings.Contains(after, "USE TEMP B-TREE") {

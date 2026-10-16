@@ -1,4 +1,4 @@
-package rc7
+package v1
 
 import (
 	"crypto/sha256"
@@ -124,12 +124,12 @@ func retainedFacts(t *testing.T, database *sql.DB) map[string][32]byte {
 	ignored := map[string]bool{"schema_state": true, "user_continuity_identities": true, "gateway_model_capabilities_state": true, "site_usage_totals": true}
 	result := map[string][32]byte{}
 	for _, table := range tables {
-		if ignored[table] {
+		if ignored[table] || strings.HasPrefix(table, "account_mfa_") {
 			continue
 		}
 		query := "SELECT * FROM " + table
 		if table == "site_config" {
-			query += " WHERE key NOT IN ('redemption_ban_threshold','redemption_ban_window_seconds','redemption_ban_duration_seconds','game_fishing_milk_crab_chance_bps')"
+			query += " WHERE key NOT IN ('redemption_ban_threshold','redemption_ban_window_seconds','redemption_ban_duration_seconds','game_fishing_milk_crab_chance_bps') AND key NOT LIKE 'mfa_required_level_%'"
 		}
 		rows, err := database.Query(query)
 		if err != nil {
