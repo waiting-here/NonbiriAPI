@@ -123,7 +123,7 @@ func (r *Runtime) InvalidateUnverifiedMFASessions(ctx context.Context) error {
 		return err
 	}
 	for _, id := range ids {
-		r.notifyUserSessionInvalidated(id)
+		r.notifyUserMFAChanged(id)
 	}
 	return nil
 }
@@ -351,7 +351,7 @@ func (r *Runtime) changeMFA(ctx context.Context, actor authz.Actor, action, code
 		return state, err
 	}
 	if confirm || disable {
-		r.notifyUserSessionInvalidated(actor.UserID)
+		r.notifyUserMFAChanged(actor.UserID)
 	}
 	return state, nil
 }

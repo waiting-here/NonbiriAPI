@@ -11,6 +11,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/accountstream"
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/game/rps"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -109,8 +110,20 @@ type accountEventVerifierStub struct {
 	err   error
 }
 
-func (stub accountEventVerifierStub) VerifyUserSessionBinding(context.Context, int64, string) (auth.UserSessionBindingState, error) {
-	return stub.state, stub.err
+func (stub accountEventVerifierStub) VerifyUserSessionMFA(context.Context, int64, string) (int64, error) {
+	if stub.err != nil {
+		return 0, stub.err
+	}
+	switch stub.state {
+	case auth.UserSessionBindingActive:
+		return 0, nil
+	case auth.UserSessionBindingBanned:
+		return 0, authz.ErrForbidden
+	case auth.UserSessionBindingUncertain:
+		return 0, errors.New("identity unavailable")
+	default:
+		return 0, authz.ErrUnauthorized
+	}
 }
 
 type accountEventRPSStub struct {

@@ -49,6 +49,40 @@ func enrollMFA(t *testing.T, f *runtimeFixture, actor authz.Actor) []byte {
 	}
 	return seed
 }
+
+type mfaChangeObserver struct{ revoked, changed []int64 }
+
+func (o *mfaChangeObserver) UserSessionInvalidated(id int64) { o.revoked = append(o.revoked, id) }
+func (o *mfaChangeObserver) UserMFAChanged(id int64)         { o.changed = append(o.changed, id) }
+
+func TestMFAChangesNotifyOnlyBrowserConnections(t *testing.T) {
+	f := newRuntimeFixture(t, nil)
+	observer := &mfaChangeObserver{}
+	if err := f.runtime.AttachUserSessionInvalidationObserver(observer); err != nil {
+		t.Fatal(err)
+	}
+	cookie := loginUser(t, f, "mfa-observer", "")
+	id, actor := userSessionIdentity(t, f, cookie)
+	seed := enrollMFA(t, f, actor)
+	if _, err := f.store.DB().Exec(`DELETE FROM account_mfa_proofs WHERE user_id=?`, id); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.runtime.InvalidateUnverifiedMFASessions(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	f.clock.Add(30 * time.Second)
+	if _, err := f.runtime.changeMFA(t.Context(), actor, "/api/auth/mfa/disable", totp.Code(seed, f.clock.Now().Unix()/30)); err != nil {
+		t.Fatal(err)
+	}
+	if len(observer.revoked) != 0 || len(observer.changed) != 3 {
+		t.Fatalf("first-factor revocations=%v MFA changes=%v", observer.revoked, observer.changed)
+	}
+	for _, changed := range observer.changed {
+		if changed != id {
+			t.Fatalf("changed another account: %v", observer.changed)
+		}
+	}
+}
 func TestAccountMFADefaultsAndLiveLevelPolicies(t *testing.T) {
 	f := newRuntimeFixture(t, nil)
 	cookie := loginUser(t, f, "mfa-policy", "")

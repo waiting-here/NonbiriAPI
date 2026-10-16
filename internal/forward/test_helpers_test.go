@@ -385,9 +385,11 @@ func newServiceFixture(t *testing.T, capture DebugCapture) *serviceFixture {
 	gateway := &fakeConnector{connectorType: connectorcontract.TypeAISDKGatewayV3, capabilities: gatewayDescriptor.Capabilities, consume: true}
 	connectors := []connector.Connector{openAI, anthropic, gateway}
 	for _, kind := range registry.Types() {
-		if kind == connectorcontract.TypeOpenAICompatible || kind == connectorcontract.TypeAnthropicCompatible || kind == connectorcontract.TypeAISDKGatewayV3 { continue }
+		if kind == connectorcontract.TypeOpenAICompatible || kind == connectorcontract.TypeAnthropicCompatible || kind == connectorcontract.TypeAISDKGatewayV3 {
+			continue
+		}
 		descriptor, _ := registry.Descriptor(kind)
-		connectors = append(connectors, &fakeConnector{connectorType:kind, capabilities:descriptor.Capabilities, consume:true})
+		connectors = append(connectors, &fakeConnector{connectorType: kind, capabilities: descriptor.Capabilities, consume: true})
 	}
 	safety, err := NewSafetyIdentifierFactory(fixedSubkeyDeriver{})
 	if err != nil {
@@ -444,6 +446,10 @@ func requireEvents(t *testing.T, got []string, want ...string) {
 type activeIdentityVerifier struct{}
 
 func (activeIdentityVerifier) VerifyDebugIdentity(context.Context, int64, string) (debug.IdentityState, error) {
+	return debug.IdentityActive, nil
+}
+
+func (activeIdentityVerifier) VerifyDebugBrowserIdentity(context.Context, int64, string) (debug.IdentityState, error) {
 	return debug.IdentityActive, nil
 }
 

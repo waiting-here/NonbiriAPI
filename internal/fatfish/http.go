@@ -587,6 +587,10 @@ func writeHTTPResult(w http.ResponseWriter, status int, value any, err error) {
 }
 
 func writeHTTPError(w http.ResponseWriter, err error) {
+	if errors.Is(err, authz.ErrMFARequired) {
+		httperr.WriteError(w, httperr.New(httperr.CodeMFARequired, "MFA verification is required."))
+		return
+	}
 	code, message := httperr.CodeServiceUnavailable, "The game is temporarily unavailable."
 	switch {
 	case errors.Is(err, ErrInvalid):

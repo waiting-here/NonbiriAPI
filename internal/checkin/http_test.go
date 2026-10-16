@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 )
@@ -181,6 +182,26 @@ func TestHTTPDomainErrorMapping(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		writeError(recorder, test.err)
 		assertHTTPError(t, recorder, test.status, test.code)
+	}
+}
+
+func TestHTTPFinalAuthorizationPreservesMFAChallenge(t *testing.T) {
+	fixture := newCheckinFixture(t)
+	fixture.configure(db.CheckinModeEnabled, "0", 1, 1, 100)
+	userID := fixture.seedUser("mfa-expired")
+	fixture.authorizer.setError(authz.ErrMFARequired)
+	registrar := &capturedUserRoutes{}
+	if err := RegisterRoutes(registrar, fixture.service); err != nil {
+		t.Fatal(err)
+	}
+	for _, route := range []string{Route, GameRoute} {
+		for _, method := range []string{http.MethodGet, http.MethodPost} {
+			response := invokeCheckinRoute(t, registrar, method, route, nil, userID)
+			assertHTTPError(t, response, http.StatusForbidden, httperr.CodeMFARequired)
+		}
+	}
+	if fixture.scalar(`SELECT COUNT(*) FROM checkins`) != 0 || fixture.scalar(`SELECT COUNT(*) FROM game_checkins`) != 0 {
+		t.Fatal("MFA rejection recorded a check-in")
 	}
 }
 

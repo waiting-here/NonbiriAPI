@@ -42,7 +42,7 @@ unset NONBIRI_UPGRADE_MASTER_KEY_FILE
     "$go_command" test -c -overlay "$temporary/overlay.json" -o "$temporary/released-wallet.test" ./internal/ledger
     "$temporary/released-wallet.test" -test.run '^TestWriteReleasedUpgradeFixture$' -test.v -test.timeout 2m
 )
-"$go_command" test -count=1 -v -timeout=10m -run '^TestConvertReleasedDatabase$' ./internal/upgrade/rc7
+"$go_command" test -count=1 -v -timeout=10m -run '^TestConvertReleasedDatabase$' ./internal/upgrade/v1
 NONBIRI_STABLE_UPGRADED_FIXTURE="$NONBIRI_RELEASED_FIXTURE" "$temporary/released-wallet.test" -test.run '^TestReleasedRejectsStableSchema$' -test.v -test.timeout 2m
 "$go_command" test -count=1 -v -timeout=2m -run '^TestEconomyAuditCatchUpFromReleasedBinary$' ./internal/economyaudit
 printf 'Released source: %s\n' "$released_commit"

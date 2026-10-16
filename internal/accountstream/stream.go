@@ -60,9 +60,12 @@ func (subscription *Subscription) Stream(ctx context.Context, writer http.Respon
 	defer heartbeat.Stop()
 
 	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		queued, hasFrame := subscription.popPending()
 		if hasFrame {
-			closed, err := subscription.writeQueued(writer, controller, queued)
+			closed, err := subscription.writeQueued(ctx, writer, controller, queued)
 			if err != nil {
 				return err
 			}
@@ -75,6 +78,11 @@ func (subscription *Subscription) Stream(ctx context.Context, writer http.Respon
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-heartbeat.C:
+			if subscription.recheckAuthorization != nil {
+				if err := subscription.recheckAuthorization(ctx); err != nil {
+					return err
+				}
+			}
 			if err := writeHeartbeat(writer, controller, subscription.hub.config.writeTimeout); err != nil {
 				return err
 			}
@@ -82,7 +90,7 @@ func (subscription *Subscription) Stream(ctx context.Context, writer http.Respon
 			if !ok {
 				return nil
 			}
-			closed, err := subscription.writeQueued(writer, controller, queued)
+			closed, err := subscription.writeQueued(ctx, writer, controller, queued)
 			if err != nil {
 				return err
 			}
@@ -93,9 +101,12 @@ func (subscription *Subscription) Stream(ctx context.Context, writer http.Respon
 	}
 }
 
-func (subscription *Subscription) writeQueued(writer http.ResponseWriter, controller *http.ResponseController, queued queuedFrame) (bool, error) {
+func (subscription *Subscription) writeQueued(ctx context.Context, writer http.ResponseWriter, controller *http.ResponseController, queued queuedFrame) (bool, error) {
 	subscription.deliveryMu.Lock()
 	defer subscription.deliveryMu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
 	if queued.sequence != subscription.sequence.Load() || subscription.closed.Load() {
 		return false, nil
 	}

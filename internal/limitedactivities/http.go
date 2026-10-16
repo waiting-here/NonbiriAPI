@@ -156,6 +156,10 @@ func writeJSON(w http.ResponseWriter, value any) {
 	httperr.WriteJSON(w, http.StatusOK, value)
 }
 func writeError(w http.ResponseWriter, err error) {
+	if errors.Is(err, authz.ErrMFARequired) {
+		httperr.WriteError(w, httperr.New(httperr.CodeMFARequired, "MFA verification is required."))
+		return
+	}
 	code, message := httperr.CodeServiceUnavailable, "The activity could not be loaded. Please try again."
 	switch {
 	case errors.Is(err, ErrInvalid):

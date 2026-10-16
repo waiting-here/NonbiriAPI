@@ -86,6 +86,10 @@ func RegisterStewardRoutes(registrar resources.UserRouteRegistrar, repository *R
 }
 
 func auditError(w http.ResponseWriter, err error) {
+	if errors.Is(err, authz.ErrMFARequired) {
+		httperr.WriteError(w, httperr.New(httperr.CodeMFARequired, "MFA verification is required."))
+		return
+	}
 	code, message := httperr.CodeServiceUnavailable, "audit unavailable"
 	switch {
 	case errors.Is(err, ErrInvalid):

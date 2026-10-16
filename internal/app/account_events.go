@@ -9,6 +9,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/accountstream"
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/game/rps"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
@@ -22,7 +23,7 @@ const (
 )
 
 type accountEventSessionVerifier interface {
-	VerifyUserSessionBinding(context.Context, int64, string) (auth.UserSessionBindingState, error)
+	VerifyUserSessionMFA(context.Context, int64, string) (int64, error)
 }
 
 type accountEventRPSReader interface {
@@ -88,11 +89,18 @@ func (handler *accountEventsHTTP) serve(writer http.ResponseWriter, request *htt
 		return
 	}
 	defer unregister()
-	if !handler.verifyBinding(writer, streamContext, principal) {
+	streamContext, cancelMFA, err := authorizedMFAStream(streamContext, handler.verifier, principal.UserID, principal.SessionBinding)
+	if err != nil {
+		writeMFAStreamError(writer, err)
 		return
 	}
+	defer cancelMFA()
 	subscription, err := handler.hub.Subscribe(streamContext, accountstream.SubscribeRequest{
 		AccountID: principal.UserID, Channels: channels, LastEventID: cursor,
+		RecheckAuthorization: func(ctx context.Context) error {
+			_, err := handler.verifier.VerifyUserSessionMFA(ctx, principal.UserID, principal.SessionBinding)
+			return err
+		},
 	})
 	if err != nil {
 		switch {
@@ -103,28 +111,9 @@ func (handler *accountEventsHTTP) serve(writer http.ResponseWriter, request *htt
 		}
 		return
 	}
-	if err := subscription.Stream(streamContext, writer); err != nil && streamContext.Err() == nil && request.Context().Err() == nil {
+	if err := subscription.Stream(streamContext, writer); err != nil && streamContext.Err() == nil && request.Context().Err() == nil && authz.StableCode(err) == "" {
 		slog.Warn("account event stream stopped", "err", err)
 	}
-}
-
-func (handler *accountEventsHTTP) verifyBinding(writer http.ResponseWriter, ctx context.Context, principal resources.ContinuationUserPrincipal) bool {
-	state, err := handler.verifier.VerifyUserSessionBinding(ctx, principal.UserID, principal.SessionBinding)
-	if err != nil || state == auth.UserSessionBindingUncertain {
-		if ctx.Err() == nil {
-			writeAccountEventError(writer, httperr.CodeServiceUnavailable, "service unavailable")
-		}
-		return false
-	}
-	switch state {
-	case auth.UserSessionBindingActive:
-		return true
-	case auth.UserSessionBindingBanned:
-		writeAccountEventError(writer, httperr.CodeForbidden, "access forbidden")
-	default:
-		writeAccountEventError(writer, httperr.CodeUnauthorized, "authentication required")
-	}
-	return false
 }
 
 func (handler *accountEventsHTTP) writeRPSError(writer http.ResponseWriter, request *http.Request, err error) {
@@ -132,6 +121,8 @@ func (handler *accountEventsHTTP) writeRPSError(writer http.ResponseWriter, requ
 		return
 	}
 	switch {
+	case errors.Is(err, authz.ErrMFARequired):
+		writeMFAStreamError(writer, err)
 	case errors.Is(err, rps.ErrMaintenance):
 		writeAccountEventError(writer, httperr.CodeMaintenance, "maintenance in progress")
 	case errors.Is(err, rps.ErrUnauthorized), errors.Is(err, rps.ErrNotFound):

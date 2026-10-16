@@ -17,7 +17,7 @@ import (
 func TestMutationRepositoryPersistentExactReplayConflictActorAndExpiry(t *testing.T) {
 	database := newDebugMutationDB(t)
 	clock := newDebugTestClock(130_000)
-	repository, err := newMutationRepository(database, clock.Now)
+	repository, err := newMutationRepository(database, clock.Now, debugFinalAuthority{&debugTestVerifier{state: IdentityActive}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +40,7 @@ func TestMutationRepositoryPersistentExactReplayConflictActorAndExpiry(t *testin
 	}
 
 	// A new repository instance proves replay is persisted, not a Hub map.
-	restarted, _ := newMutationRepository(database, clock.Now)
+	restarted, _ := newMutationRepository(database, clock.Now, debugFinalAuthority{&debugTestVerifier{state: IdentityActive}})
 	status, body, replayed, err = restarted.Execute(context.Background(), 1, input, operation)
 	if err != nil || status != 200 || !replayed || string(body) != "{\"safe\":true}\n" || calls.Load() != 1 {
 		t.Fatalf("replay Execute = (%d,%q,%v,%v), calls=%d", status, body, replayed, err, calls.Load())
@@ -75,7 +75,7 @@ func TestMutationRepositoryPersistentExactReplayConflictActorAndExpiry(t *testin
 func TestMutationRepositoryRollsBackFailureAndBoundsResponse(t *testing.T) {
 	database := newDebugMutationDB(t)
 	clock := newDebugTestClock(140_000)
-	repository, _ := newMutationRepository(database, clock.Now)
+	repository, _ := newMutationRepository(database, clock.Now, debugFinalAuthority{&debugTestVerifier{state: IdentityActive}})
 	input := resources.ControlMutation{IdempotencyKey: debugMutationKey('B'), Method: http.MethodPost, Route: "/api/debug/session"}
 	if _, _, _, err := repository.Execute(context.Background(), 1, input, func() (int, []byte, error) {
 		return 0, nil, ErrConflict
@@ -115,7 +115,7 @@ func TestMutationRepositoryRollsBackFailureAndBoundsResponse(t *testing.T) {
 func TestMutationRepositoryCallerCancellationAfterOperationStillCommitsReplay(t *testing.T) {
 	database := newDebugMutationDB(t)
 	clock := newDebugTestClock(145_000)
-	repository, _ := newMutationRepository(database, clock.Now)
+	repository, _ := newMutationRepository(database, clock.Now, debugFinalAuthority{&debugTestVerifier{state: IdentityActive}})
 	input := resources.ControlMutation{
 		IdempotencyKey: debugMutationKey('D'), Method: http.MethodPost,
 		Route: "/api/debug/session/stop", CanonicalBody: []byte(`{"confirm_inflight":true,"expected_revision":"1"}`),
@@ -158,7 +158,7 @@ func TestDebugHTTPStrictCanonicalReplayAttachAndAuthorization(t *testing.T) {
 	clock := newDebugTestClock(150_000)
 	verifier := &debugTestVerifier{state: IdentityActive}
 	hub, _ := newDebugTestHub(t, clock, verifier)
-	mutations, _ := newMutationRepository(newDebugMutationDB(t), clock.Now)
+	mutations, _ := newMutationRepository(newDebugMutationDB(t), clock.Now, debugFinalAuthority{verifier})
 	api, err := NewHTTPAPI(hub, mutations)
 	if err != nil {
 		t.Fatal(err)
@@ -297,7 +297,7 @@ func TestDebugHTTPDefiniteIdentityLossImmediatelyTerminatesSession(t *testing.T)
 			clock := newDebugTestClock(155_000)
 			verifier := &debugTestVerifier{state: IdentityActive}
 			hub, _ := newDebugTestHub(t, clock, verifier)
-			mutations, _ := newMutationRepository(newDebugMutationDB(t), clock.Now)
+			mutations, _ := newMutationRepository(newDebugMutationDB(t), clock.Now, debugFinalAuthority{verifier})
 			api, _ := NewHTTPAPI(hub, mutations)
 			principal := UserPrincipal{UserID: 155, SessionBinding: "binding-155"}
 			mustStartDebug(t, hub, principal.UserID, principal.SessionBinding)
@@ -345,8 +345,9 @@ func TestDebugHTTPDefiniteIdentityLossImmediatelyTerminatesSession(t *testing.T)
 
 func TestRegisterDebugRoutesIsExactClosedSet(t *testing.T) {
 	clock := newDebugTestClock(160_000)
-	hub, _ := newDebugTestHub(t, clock, &debugTestVerifier{state: IdentityActive})
-	mutations, _ := newMutationRepository(newDebugMutationDB(t), clock.Now)
+	verifier := &debugTestVerifier{state: IdentityActive}
+	hub, _ := newDebugTestHub(t, clock, verifier)
+	mutations, _ := newMutationRepository(newDebugMutationDB(t), clock.Now, debugFinalAuthority{verifier})
 	registrar := &debugRegistrar{}
 	if err := RegisterRoutes(registrar, hub, mutations); err != nil {
 		t.Fatal(err)
@@ -367,8 +368,9 @@ func TestRegisterDebugRoutesIsExactClosedSet(t *testing.T) {
 
 func TestDebugEventsHTTPStrictHeadersAndObserverCleanup(t *testing.T) {
 	clock := newDebugTestClock(170_000)
-	hub, _ := newDebugTestHub(t, clock, &debugTestVerifier{state: IdentityActive})
-	mutations, _ := newMutationRepository(newDebugMutationDB(t), clock.Now)
+	verifier := &debugTestVerifier{state: IdentityActive}
+	hub, _ := newDebugTestHub(t, clock, verifier)
+	mutations, _ := newMutationRepository(newDebugMutationDB(t), clock.Now, debugFinalAuthority{verifier})
 	api, _ := NewHTTPAPI(hub, mutations)
 	principal := UserPrincipal{UserID: 170, SessionBinding: "binding-170"}
 	mustStartDebug(t, hub, principal.UserID, principal.SessionBinding)
@@ -398,8 +400,8 @@ func TestDebugEventsHTTPStrictHeadersAndObserverCleanup(t *testing.T) {
 	api.events(streamRecorder, stream, principal)
 	body := streamRecorder.Body.String()
 	if streamRecorder.Code != http.StatusOK || streamRecorder.Header().Get("X-Nonbiri-Event-Version") != "2" ||
-		strings.Count(body, "event: gap\n") != 1 || strings.Count(body, "event: snapshot\n") != 1 {
-		t.Fatalf("SSE recovery = %d headers=%v body=%q", streamRecorder.Code, streamRecorder.Header(), body)
+		body != "" {
+		t.Fatalf("canceled SSE = %d headers=%v body=%q", streamRecorder.Code, streamRecorder.Header(), body)
 	}
 	noForbiddenDebugWire(t, streamRecorder.Body.Bytes(), "authorization", "set-cookie", "raw-upstream", "secret")
 	metadata, err := hub.Metadata(principal.UserID)

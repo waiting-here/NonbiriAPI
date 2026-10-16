@@ -19,10 +19,10 @@ func TestSchemaInfoDoesNotLoadEnvironmentOrOpenDatabase(t *testing.T) {
 	if err := json.Unmarshal(output.Bytes(), &descriptor); err != nil {
 		t.Fatal(err)
 	}
-	if descriptor.FormatVersion != 1 || descriptor.SchemaVersion != 18 || descriptor.MinimumSchemaVersion != 17 || descriptor.ManifestHash == "" {
+	if descriptor.FormatVersion != 1 || descriptor.SchemaVersion != 19 || descriptor.MinimumSchemaVersion != 19 || descriptor.ManifestHash == "" {
 		t.Fatal(descriptor)
 	}
-	if len(descriptor.OfflineConversions) != 1 || descriptor.OfflineConversions[0].SourceSchemaVersion != 16 || descriptor.OfflineConversions[0].TargetSchemaVersion != 18 {
+	if len(descriptor.OfflineConversions) != 0 || len(descriptor.SourceSchemaVersions) != 0 {
 		t.Fatal("offline conversion metadata", descriptor.OfflineConversions)
 	}
 }

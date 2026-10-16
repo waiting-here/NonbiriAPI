@@ -56,6 +56,9 @@ func (r *Repository) authorize(ctx context.Context, tx *sql.Tx, actor Actor, now
 		err = r.finalAuth.AuthorizeStewardMutation(ctx, tx, actor.UserID)
 	}
 	if err != nil {
+		if errors.Is(err, authz.ErrMFARequired) {
+			return err
+		}
 		if errors.Is(err, authz.ErrUnauthorized) || errors.Is(err, authz.ErrForbidden) {
 			return ErrForbidden
 		}

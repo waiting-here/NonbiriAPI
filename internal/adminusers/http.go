@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"io"
 	"math/big"
 	"net/http"
@@ -910,6 +911,10 @@ func writeMutation(writer http.ResponseWriter, status int, body []byte) {
 }
 
 func writeError(writer http.ResponseWriter, err error) {
+	if errors.Is(err, authz.ErrMFARequired) {
+		httperr.WriteError(writer, httperr.New(httperr.CodeMFARequired, "MFA verification is required."))
+		return
+	}
 	switch {
 	case errors.Is(err, ErrBlacklisted):
 		httperr.WriteError(writer, httperr.New(httperr.CodeConflict, "remove the Discord ID from the blacklist before changing its permanent ban"))

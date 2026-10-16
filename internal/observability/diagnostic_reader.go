@@ -148,6 +148,9 @@ func (r *DiagnosticReader) begin(ctx context.Context, actor DiagnosticActor) (*s
 	}
 	if err != nil {
 		tx.Rollback()
+		if errors.Is(err, authz.ErrMFARequired) {
+			return nil, err
+		}
 		if errors.Is(err, authz.ErrUnauthorized) || errors.Is(err, authz.ErrForbidden) {
 			return nil, ErrDiagnosticForbidden
 		}

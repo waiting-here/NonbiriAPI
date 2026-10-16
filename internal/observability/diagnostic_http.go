@@ -2,6 +2,7 @@ package observability
 
 import (
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/textprivacy"
 	"io"
@@ -93,6 +94,10 @@ func parseIndependentDiagnosticQuery(r *http.Request) (DiagnosticFilter, error) 
 	return out, nil
 }
 func writeIndependentDiagnosticError(w http.ResponseWriter, err error) {
+	if errors.Is(err, authz.ErrMFARequired) {
+		httperr.WriteError(w, httperr.New(httperr.CodeMFARequired, "MFA verification is required."))
+		return
+	}
 	code, message := httperr.CodeServiceUnavailable, "diagnostics unavailable"
 	switch {
 	case errors.Is(err, ErrInvalid):

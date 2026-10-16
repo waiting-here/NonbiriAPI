@@ -11,15 +11,16 @@ import (
 )
 
 type Subscription struct {
-	hub                *Hub
-	account            *accountState
-	accountID          int64
-	topics             map[Channel]bool
-	queue              chan queuedFrame
-	closed             atomic.Bool
-	sequence           atomic.Uint64
-	closing            bool // guarded by account.mu
-	activityRegistered bool
+	hub                  *Hub
+	account              *accountState
+	accountID            int64
+	topics               map[Channel]bool
+	queue                chan queuedFrame
+	closed               atomic.Bool
+	sequence             atomic.Uint64
+	closing              bool // guarded by account.mu
+	activityRegistered   bool
+	recheckAuthorization func(context.Context) error
 
 	pendingMu  sync.Mutex
 	pending    []queuedFrame
@@ -83,6 +84,7 @@ func (hub *Hub) Subscribe(ctx context.Context, request SubscribeRequest) (*Subsc
 	subscription := &Subscription{
 		hub: hub, account: state, accountID: request.AccountID,
 		topics: topics, queue: make(chan queuedFrame, hub.config.queueSize),
+		recheckAuthorization: request.RecheckAuthorization,
 	}
 	activitiesGeneration := hub.activitiesGeneration.Load()
 	if topics[ChannelActivities] {

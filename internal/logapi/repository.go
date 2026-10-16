@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"math/big"
 	"net/url"
 	"strconv"
@@ -63,6 +64,9 @@ func (repository *Repository) beginStewardRead(
 	}
 	if err := authorizer.AuthorizeStewardRead(ctx, tx, stewardUserID); err != nil {
 		_ = tx.Rollback()
+		if errors.Is(err, authz.ErrMFARequired) {
+			return nil, err
+		}
 		if errors.Is(err, ErrUnavailable) {
 			return nil, ErrUnavailable
 		}

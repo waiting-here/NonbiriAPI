@@ -15,6 +15,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 )
 
 type debugTestClock struct{ unix atomic.Int64 }
@@ -73,13 +75,43 @@ func testOpaqueID(prefix string, sequence uint64) string {
 }
 
 type debugTestVerifier struct {
-	mu        sync.Mutex
-	state     IdentityState
-	err       error
-	calls     int
-	blockOnce bool
-	entered   chan struct{}
-	release   chan struct{}
+	mu         sync.Mutex
+	state      IdentityState
+	err        error
+	browserErr error
+	calls      int
+	blockOnce  bool
+	entered    chan struct{}
+	release    chan struct{}
+}
+
+func (verifier *debugTestVerifier) VerifyDebugBrowserIdentity(ctx context.Context, userID int64, binding string) (IdentityState, error) {
+	verifier.mu.Lock()
+	err := verifier.browserErr
+	verifier.mu.Unlock()
+	if err != nil {
+		return IdentityActive, err
+	}
+	return verifier.VerifyDebugIdentity(ctx, userID, binding)
+}
+
+type debugFinalAuthority struct{ verifier *debugTestVerifier }
+
+func (authority debugFinalAuthority) AuthorizeUserMutation(ctx context.Context, _ *sql.Tx, userID int64) error {
+	state, err := authority.verifier.VerifyDebugBrowserIdentity(ctx, userID, "test-binding")
+	if err != nil {
+		return err
+	}
+	switch state {
+	case IdentityActive:
+		return nil
+	case IdentityBanned:
+		return authz.ErrForbidden
+	case IdentityRevoked, IdentityDeleted:
+		return authz.ErrUnauthorized
+	default:
+		return ErrClosed
+	}
 }
 
 func (verifier *debugTestVerifier) VerifyDebugIdentity(ctx context.Context, _ int64, _ string) (IdentityState, error) {

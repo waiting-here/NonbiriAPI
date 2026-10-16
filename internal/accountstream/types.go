@@ -128,4 +128,6 @@ type SubscribeRequest struct {
 	AccountID   int64
 	Channels    []Channel
 	LastEventID string
+	// RecheckAuthorization runs on the existing heartbeat, never for each frame.
+	RecheckAuthorization func(context.Context) error
 }

@@ -3,6 +3,7 @@ package issues
 import (
 	"errors"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"io"
 	"net/http"
 	"net/url"
@@ -105,6 +106,10 @@ func requireNoBody(writer http.ResponseWriter, request *http.Request) bool {
 }
 
 func writeError(writer http.ResponseWriter, err error) {
+	if errors.Is(err, authz.ErrMFARequired) {
+		httperr.WriteError(writer, httperr.New(httperr.CodeMFARequired, "MFA verification is required."))
+		return
+	}
 	switch {
 	case errors.Is(err, ErrInvalidRequest):
 		httperr.WriteError(writer, httperr.New(httperr.CodeInvalidRequest, "invalid request"))

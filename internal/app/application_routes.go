@@ -88,7 +88,7 @@ func (a *application) registerRoutes(store *db.Store, roleAuthorizer *roleFinalT
 	}); err != nil {
 		return fmt.Errorf("register maintenance routes: %w", err)
 	}
-	if err := debug.RegisterRoutes(debugRouteRegistrar{runtime: a.authRuntime}, a.debug, debugMutations); err != nil {
+	if err := debug.RegisterRoutes(debugRouteRegistrar{runtime: a.authRuntime, connections: a.accountEvents}, a.debug, debugMutations); err != nil {
 		return fmt.Errorf("register Debug routes: %w", err)
 	}
 	if err := logapi.RegisterUserRoutes(a.authRuntime, a.logs); err != nil {

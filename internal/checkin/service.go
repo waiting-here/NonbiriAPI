@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/continuity"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
@@ -313,6 +314,8 @@ func hasCheckinTx(ctx context.Context, tx *sql.Tx, userID int64, asset ledger.As
 func (service *Service) authorize(ctx context.Context, tx *sql.Tx, userID, now int64) error {
 	if err := service.finalAuth.AuthorizeUserMutation(ctx, tx, userID); err != nil {
 		switch {
+		case errors.Is(err, authz.ErrMFARequired):
+			return err
 		case errors.Is(err, resources.ErrUnauthorized):
 			return ErrUnauthorized
 		case errors.Is(err, resources.ErrForbidden):

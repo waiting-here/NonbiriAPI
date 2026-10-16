@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/accountstream"
@@ -261,7 +262,20 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	audits.outbound = outbound
 	adminConfigRepository, err := adminapi.NewSiteConfigRepository(adminapi.SiteConfigRepositoryOptions{
 		Store: store, FinalAuthorizer: roleAuthorizer,
-		Committed: audits.configurationChanged,
+		Committed: func(change adminapi.SiteConfigCommit) {
+			audits.configurationChanged(change)
+			for _, key := range change.Keys {
+				if strings.HasPrefix(key, "mfa_required_level_") {
+					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+					err := authRuntime.InvalidateUnverifiedMFASessions(ctx)
+					cancel()
+					if err != nil {
+						slog.Warn("MFA stream invalidation unavailable")
+					}
+					break
+				}
+			}
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create administrator site configuration repository: %w", err)
@@ -435,7 +449,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err != nil {
 		return nil, fmt.Errorf("create Debug hub: %w", err)
 	}
-	debugMutations, err := debug.NewMutationRepository(store.DB())
+	debugMutations, err := debug.NewMutationRepository(store.DB(), authRuntime)
 	if err != nil {
 		return nil, fmt.Errorf("create Debug mutation repository: %w", err)
 	}

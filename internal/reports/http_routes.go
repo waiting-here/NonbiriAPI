@@ -203,6 +203,10 @@ func writeMutationResult(writer http.ResponseWriter, result MutationResult) {
 }
 
 func writeReportError(writer http.ResponseWriter, err error) {
+	if errors.Is(err, authz.ErrMFARequired) {
+		httperr.WriteError(writer, httperr.New(httperr.CodeMFARequired, "MFA verification is required."))
+		return
+	}
 	code := httperr.CodeInternal
 	message := "report request failed"
 	switch {

@@ -10,6 +10,8 @@ import (
 
 type lifecycleInvalidationObserver struct{ userIDs []int64 }
 
+func (*lifecycleInvalidationObserver) UserMFAChanged(int64) {}
+
 func (observer *lifecycleInvalidationObserver) UserSessionInvalidated(userID int64) {
 	observer.userIDs = append(observer.userIDs, userID)
 }

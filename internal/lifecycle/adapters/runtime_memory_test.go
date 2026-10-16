@@ -106,6 +106,10 @@ func (runtimeMemoryDebugVerifier) VerifyDebugIdentity(context.Context, int64, st
 	return debug.IdentityActive, nil
 }
 
+func (runtimeMemoryDebugVerifier) VerifyDebugBrowserIdentity(context.Context, int64, string) (debug.IdentityState, error) {
+	return debug.IdentityActive, nil
+}
+
 type runtimeMemorySnapshot struct{}
 
 func (runtimeMemorySnapshot) Snapshot(context.Context, int64, accountstream.Channel) (accountstream.Snapshot, error) {

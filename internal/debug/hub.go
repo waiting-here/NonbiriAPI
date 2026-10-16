@@ -39,11 +39,12 @@ const (
 	IdentityDeleted   IdentityState = "deleted"
 )
 
-// IdentityVerifier rechecks the browser session binding and account state.
-// Capture calls it for every active Debug decision; SSE calls it at least once
-// per heartbeat. An unavailable/uncertain answer never permits live dispatch.
+// IdentityVerifier keeps capture's first-factor session binding authority
+// separate from browser control and observation, which also require MFA.
+// An unavailable/uncertain capture answer never permits live dispatch.
 type IdentityVerifier interface {
 	VerifyDebugIdentity(context.Context, int64, string) (IdentityState, error)
+	VerifyDebugBrowserIdentity(context.Context, int64, string) (IdentityState, error)
 }
 
 type hubConfig struct {
