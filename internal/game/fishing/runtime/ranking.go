@@ -12,7 +12,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
-	"github.com/waiting-here/NonbiriAPI/internal/game/fishing"
 	fishingconfig "github.com/waiting-here/NonbiriAPI/internal/game/fishing/config"
 )
 
@@ -281,35 +280,35 @@ type rankIdentity struct {
 
 func querySingleLeaderboard(ctx context.Context, tx *sql.Tx, userID, queryNow int64) (FishingLeaderboard, error) {
 	rows, err := tx.QueryContext(ctx, `WITH ranked AS (
-SELECT b.user_id,b.species_key,b.size_cm,l.length_cm AS blue_length,ROW_NUMBER() OVER(
+SELECT b.user_id,b.species_key,b.size_cm,CASE WHEN l.kind='blue' THEN l.length_cm END AS blue_length,CASE WHEN l.kind='milk' THEN l.length_cm END AS milk_length,ROW_NUMBER() OVER(
 ORDER BY length(COALESCE(l.length_cm,CAST(b.size_cm AS TEXT))) DESC,
 COALESCE(l.length_cm,CAST(b.size_cm AS TEXT)) COLLATE BINARY DESC,b.caught_at ASC,b.public_tie_key ASC) AS rank,
 CASE WHEN u.is_banned=1 AND (u.banned_until IS NULL OR u.banned_until>?) THEN 0 ELSE COALESCE(p.game_profile_public,u.game_profile_public) END AS game_profile_public,u.username,u.guild_nick,COALESCE(u.discord_id,'') AS discord_id,u.avatar,u.guild_avatar_url
 FROM game_fishing_best b JOIN users u ON u.id=b.user_id LEFT JOIN game_user_preferences p ON p.user_id=u.id
 LEFT JOIN game_fishing_best_lengths l ON l.user_id=b.user_id
 WHERE u.is_admin=0)
-SELECT user_id,species_key,size_cm,blue_length,rank,game_profile_public,username,guild_nick,discord_id,avatar,guild_avatar_url FROM ranked WHERE rank<=20 OR user_id=? ORDER BY rank`, queryNow, userID)
+SELECT user_id,species_key,size_cm,blue_length,milk_length,rank,game_profile_public,username,guild_nick,discord_id,avatar,guild_avatar_url FROM ranked WHERE rank<=20 OR user_id=? ORDER BY rank`, queryNow, userID)
 	return scanLengthLeaderboard(rows, err, userID, "single", nil)
 }
 
 func queryRecentSingleLeaderboard(ctx context.Context, tx *sql.Tx, userID, queryNow int64) (FishingLeaderboard, error) {
 	window := queryNow - int64(rankWindow/time.Second)
 	rows, err := tx.QueryContext(ctx, `WITH candidates AS (
-SELECT f.user_id,l.species_key,l.size_cm,l.blue_fat_fish_length_cm AS blue_length,l.caught_at,b.public_tie_key,
+SELECT f.user_id,l.species_key,l.size_cm,l.blue_fat_fish_length_cm AS blue_length,l.milk_crab_length_cm AS milk_length,l.caught_at,b.public_tie_key,
 ROW_NUMBER() OVER(PARTITION BY f.user_id ORDER BY
-length(COALESCE(l.blue_fat_fish_length_cm,CAST(l.size_cm AS TEXT))) DESC,
-COALESCE(l.blue_fat_fish_length_cm,CAST(l.size_cm AS TEXT)) COLLATE BINARY DESC,
+length(COALESCE(l.blue_fat_fish_length_cm,l.milk_crab_length_cm,CAST(l.size_cm AS TEXT))) DESC,
+COALESCE(l.blue_fat_fish_length_cm,l.milk_crab_length_cm,CAST(l.size_cm AS TEXT)) COLLATE BINARY DESC,
 l.caught_at ASC,l.batch_id_text ASC,l.ordinal ASC) AS pick
 FROM game_fishing_length_facts l JOIN game_fishing_rank_facts f ON f.batch_id_text=l.batch_id_text
 JOIN game_fishing_best b ON b.user_id=f.user_id
 WHERE f.aggregate_applied=1 AND f.settled_at>?), ranked AS (
-SELECT c.user_id,c.species_key,c.size_cm,c.blue_length,ROW_NUMBER() OVER(ORDER BY
-length(COALESCE(c.blue_length,CAST(c.size_cm AS TEXT))) DESC,
-COALESCE(c.blue_length,CAST(c.size_cm AS TEXT)) COLLATE BINARY DESC,c.caught_at ASC,c.public_tie_key ASC) AS rank,
+SELECT c.user_id,c.species_key,c.size_cm,c.blue_length,c.milk_length,ROW_NUMBER() OVER(ORDER BY
+length(COALESCE(c.blue_length,c.milk_length,CAST(c.size_cm AS TEXT))) DESC,
+COALESCE(c.blue_length,c.milk_length,CAST(c.size_cm AS TEXT)) COLLATE BINARY DESC,c.caught_at ASC,c.public_tie_key ASC) AS rank,
 CASE WHEN u.is_banned=1 AND (u.banned_until IS NULL OR u.banned_until>?) THEN 0 ELSE COALESCE(p.game_profile_public,u.game_profile_public) END AS game_profile_public,u.username,u.guild_nick,COALESCE(u.discord_id,'') AS discord_id,u.avatar,u.guild_avatar_url
 FROM candidates c JOIN users u ON u.id=c.user_id LEFT JOIN game_user_preferences p ON p.user_id=u.id
 WHERE c.pick=1 AND u.is_admin=0)
-SELECT user_id,species_key,size_cm,blue_length,rank,game_profile_public,username,guild_nick,discord_id,avatar,guild_avatar_url FROM ranked WHERE rank<=20 OR user_id=? ORDER BY rank`, window, queryNow, userID)
+SELECT user_id,species_key,size_cm,blue_length,milk_length,rank,game_profile_public,username,guild_nick,discord_id,avatar,guild_avatar_url FROM ranked WHERE rank<=20 OR user_id=? ORDER BY rank`, window, queryNow, userID)
 	return scanLengthLeaderboard(rows, err, userID, "recent_single", &window)
 }
 
@@ -323,17 +322,17 @@ func scanLengthLeaderboard(rows *sql.Rows, err error, userID int64, board string
 		var identity rankIdentity
 		var species string
 		var size int
-		var blueLength *string
+		var blueLength, milkLength *string
 		var rank int64
 		var public int
-		if err = rows.Scan(&identity.UserID, &species, &size, &blueLength, &rank, &public, &identity.Username, &identity.GuildNick, &identity.DiscordID, &identity.Avatar, &identity.GuildAvatar); err != nil {
+		if err = rows.Scan(&identity.UserID, &species, &size, &blueLength, &milkLength, &rank, &public, &identity.Username, &identity.GuildNick, &identity.DiscordID, &identity.Avatar, &identity.GuildAvatar); err != nil {
 			return FishingLeaderboard{}, classifyDB(err)
 		}
-		if blueLength != nil && (!fishing.ValidBlueFatFishLength(*blueLength) || species != "koi" && species != "yellowcheek" && species != "taimen") {
+		if !validPresentation(species, size, blueLength, milkLength) {
 			return FishingLeaderboard{}, ErrInvariant
 		}
 		identity.Public = public == 1
-		row := FishingLeaderboardRow{Rank: strconv.FormatInt(rank, 10), SpeciesKey: species, SizeCM: size, BlueFatFishLengthCM: blueLength, Identity: projectIdentity(identity), IsMe: identity.UserID == userID}
+		row := FishingLeaderboardRow{Rank: strconv.FormatInt(rank, 10), SpeciesKey: species, SizeCM: size, BlueFatFishLengthCM: blueLength, MilkCrabLengthCM: milkLength, Identity: projectIdentity(identity), IsMe: identity.UserID == userID}
 		placeRankRow(&result, row, rank)
 	}
 	if err = rows.Err(); err != nil {

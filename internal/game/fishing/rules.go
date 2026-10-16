@@ -58,6 +58,7 @@ const (
 	MinimumTreasureMultiplier       = 1
 	MaximumTreasureMultiplier       = 1000
 	DefaultBlueFishChanceBPS        = 1000
+	DefaultMilkCrabChanceBPS        = 1000
 	MaximumBlueFishChanceBPS        = 10000
 )
 
@@ -78,6 +79,7 @@ type Config struct {
 	StandardRTPPercent  int
 	PremiumRTPPercent   int
 	BlueFishChanceBPS   int
+	MilkCrabChanceBPS   int
 	RakeBP              RakeBasisPoints
 	TreasureMultipliers map[string]int
 }
@@ -93,6 +95,7 @@ func DefaultConfig() Config {
 		StandardRTPPercent: 100,
 		PremiumRTPPercent:  100,
 		BlueFishChanceBPS:  DefaultBlueFishChanceBPS,
+		MilkCrabChanceBPS:  DefaultMilkCrabChanceBPS,
 		RakeBP:             RakeBasisPoints{Platform: 100, Welfare: 100, Thursday: 100},
 		TreasureMultipliers: map[string]int{
 			"bottle": 2,
@@ -112,6 +115,7 @@ type Outcome struct {
 	// BlueFatFishLengthCM is a presentation-only decimal length. The original
 	// species and SizeCentimetre remain the inputs to the economic rules.
 	BlueFatFishLengthCM string
+	MilkCrabLengthCM    string
 }
 
 // SettlementIntent contains only checked milli-credit amounts. The central
@@ -525,7 +529,7 @@ func compileWithDefinitions(config Config, defs definitions) (*Ruleset, error) {
 }
 
 func validateConfig(config Config) (map[Bait]int64, error) {
-	if config.BlueFishChanceBPS < 0 || config.BlueFishChanceBPS > MaximumBlueFishChanceBPS {
+	if !ValidPresentationChances(config.BlueFishChanceBPS, config.MilkCrabChanceBPS) {
 		return nil, fmt.Errorf("%w: blue fish chance outside 0..10000", ErrInvalidConfig)
 	}
 	if !config.RakeBP.Valid() {

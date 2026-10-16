@@ -1391,14 +1391,15 @@
             "batchTitle": "One cast or one batch",
             "batchBody": "A single cast uses the displayed bait price. A ten-catch batch uses the same bait and displayed price for all ten catches, charges ten times that price once, and returns ten ordered results with one total.",
             "resultTitle": "What you receive",
-            "resultBody": "Results show the catch, length and net general credits after per-catch deductions. Expand a catch to see its gross reward and deductions. Once a legendary fish is caught, the current chance of the blue fat fish egg is {{chance}}: 201 cm or longer, with exponentially decreasing odds and no gameplay limit. Each new batch fixes its chance when accepted. Only artwork and length rankings change; original species and rewards stay unchanged.",
+            "resultBody": "Results show each catch, length and net general credits after fees. Expand a catch to see its original species and fee breakdown. Legendary catches have a {{chance}} chance to become a blue fat fish and a {{milkChance}} chance to become a milk crab; the two are mutually exclusive. Both start at 201 cm, with exponentially decreasing odds for longer lengths and no gameplay cap. Chances are fixed when each batch is accepted. These appearances affect artwork and length rankings while preserving the original species and rewards.",
             "recoveryTitle": "If you leave or refresh",
             "recoveryBody": "Continue a paid fishing trip after a refresh, sign-in, or lost connection. Your bait and catches stay the same, with no additional charge.",
             "scoresTitle": "Catch boards",
             "scoresBody": "Each catch can enter the length boards. The total board counts net catch income; newcomer rewards are separate.",
             "startTitle": "Before you start",
             "startBody": "Check your bait, number of casts, and total price. Payment uses game credits first, then general credits."
-          }
+          },
+          "milkCrab": "Milk crab"
         },
         "rps": {
           "eyebrow": "Three-player RPS",

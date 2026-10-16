@@ -114,7 +114,7 @@ func (adapter *FishingAdapter) ExportFishing(
 			}
 			outcomes[outcomeIndex] = lifecycle.FishingOutcomeExport{
 				Ordinal: outcome.Ordinal, SpeciesKey: outcome.SpeciesKey, Tier: outcome.Tier,
-				NetReward: outcome.NetReward, Rake: lifecycle.FishingRakeExport(outcome.Rake), SizeCM: outcome.SizeCM, Reward: outcome.Reward, BlueFatFishLengthCM: cloneString(outcome.BlueFatFishLengthCM),
+				NetReward: outcome.NetReward, Rake: lifecycle.FishingRakeExport(outcome.Rake), SizeCM: outcome.SizeCM, Reward: outcome.Reward, BlueFatFishLengthCM: cloneString(outcome.BlueFatFishLengthCM), MilkCrabLengthCM: cloneString(outcome.MilkCrabLengthCM),
 			}
 		}
 		out.Terminal[index] = lifecycle.FishingBatchExport{

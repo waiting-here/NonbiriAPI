@@ -29,7 +29,7 @@ func TestEasterEggSelectionTailAndEconomicIdentity(t *testing.T) {
 		for selected := uint64(0); selected < 10; selected++ {
 			input := []Result{{Outcome: Outcome{Bait: BaitPremium, Key: species, Tier: TierLegend, SizeCentimetre: 137}, Settlement: SettlementIntent{EntryMilli: 7500000, PayoutMilli: 121234567}}}
 			source := &eggSource{values: []uint64{selected, 99, 1, 0}}
-			got, err := DecorateBatch(context.Background(), input, source)
+			got, err := DecorateBatchWithChance(context.Background(), input, source, DefaultBlueFishChanceBPS)
 			if err != nil || len(got) != 1 {
 				t.Fatalf("%s/%d: %v %v", species, selected, got, err)
 			}

@@ -99,6 +99,7 @@ type LikesSnapshotModule struct {
 
 type FishingSnapshotModule struct {
 	BlueFishChanceBPS int                             `json:"blue_fish_chance_bps"`
+	MilkCrabChanceBPS int                             `json:"milk_crab_chance_bps"`
 	Enabled           bool                            `json:"enabled"`
 	Available         bool                            `json:"available"`
 	BaitPrices        fishingconfig.FishingBaitPrices `json:"bait_prices"`

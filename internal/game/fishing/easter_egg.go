@@ -19,7 +19,7 @@ var ErrEasterEggBudget = errors.New("fishing: presentation draw budget exhausted
 // DecorateBatch preserves the default probability for callers without a
 // configurable presentation snapshot.
 func DecorateBatch(ctx context.Context, results []Result, source IntSource) ([]Result, error) {
-	return DecorateBatchWithChance(ctx, results, source, DefaultBlueFishChanceBPS)
+	return DecorateBatchWithChances(ctx, results, source, DefaultBlueFishChanceBPS, DefaultMilkCrabChanceBPS)
 }
 
 // DecorateBatchWithChance runs after every economic outcome has been selected.
@@ -27,17 +27,29 @@ func DecorateBatch(ctx context.Context, results []Result, source IntSource) ([]R
 // where P(N>=n)=(99/100)^n. Rewards and original species are never changed.
 // No partial result is returned on cancellation, random failure or exhaustion.
 func DecorateBatchWithChance(ctx context.Context, results []Result, source IntSource, chanceBPS int) ([]Result, error) {
+	return DecorateBatchWithChances(ctx, results, source, chanceBPS, 0)
+}
+
+func ValidPresentationChances(blue, milk int) bool {
+	return blue >= 0 && milk >= 0 && blue <= MaximumBlueFishChanceBPS && milk <= MaximumBlueFishChanceBPS-blue
+}
+
+// DecorateBatchWithChances draws mutually exclusive presentations from one
+// partition of the legendary outcomes. Both share the same exact length law.
+func DecorateBatchWithChances(ctx context.Context, results []Result, source IntSource, blue, milk int) ([]Result, error) {
 	if ctx == nil {
 		return nil, errors.New("fishing: nil context")
 	}
-	if chanceBPS < 0 || chanceBPS > MaximumBlueFishChanceBPS {
+	if !ValidPresentationChances(blue, milk) {
 		return nil, ErrInvalidConfig
 	}
-	divisor, remainder := MaximumBlueFishChanceBPS, chanceBPS
-	for remainder != 0 {
-		divisor, remainder = remainder, divisor%remainder
+	divisor := MaximumBlueFishChanceBPS
+	for _, chance := range []int{blue, milk} {
+		for chance != 0 {
+			divisor, chance = chance, divisor%chance
+		}
 	}
-	denominator, numerator := uint64(MaximumBlueFishChanceBPS/divisor), uint64(chanceBPS/divisor)
+	denominator, blueBoundary, selectedBoundary := uint64(MaximumBlueFishChanceBPS/divisor), uint64(blue/divisor), uint64((blue+milk)/divisor)
 	decorated := append([]Result(nil), results...)
 	remaining := easterEggDrawBudget
 	next := func(bound uint64) (uint64, error) {
@@ -52,7 +64,7 @@ func DecorateBatchWithChance(ctx context.Context, results []Result, source IntSo
 	}
 	for index := range decorated {
 		outcome := &decorated[index].Outcome
-		if outcome.BlueFatFishLengthCM != "" {
+		if outcome.BlueFatFishLengthCM != "" || outcome.MilkCrabLengthCM != "" {
 			return nil, errors.New("fishing: outcome already decorated")
 		}
 		if outcome.Tier != TierLegend {
@@ -62,15 +74,17 @@ func DecorateBatchWithChance(ctx context.Context, results []Result, source IntSo
 			outcome.Key != "yellowcheek" && outcome.Key != "taimen" && outcome.Key != "koi" {
 			return nil, errors.New("fishing: invalid legend outcome")
 		}
-		if numerator == 0 {
+		if selectedBoundary == 0 {
 			continue
 		}
-		if numerator < denominator {
-			selected, err := next(denominator)
+		selected := uint64(0)
+		if denominator > 1 {
+			var err error
+			selected, err = next(denominator)
 			if err != nil {
 				return nil, err
 			}
-			if selected >= numerator {
+			if selected >= selectedBoundary {
 				continue
 			}
 		}
@@ -85,9 +99,14 @@ func DecorateBatchWithChance(ctx context.Context, results []Result, source IntSo
 			}
 			length.Add(length, big.NewInt(1))
 		}
-		outcome.BlueFatFishLengthCM = length.String()
-		if !ValidBlueFatFishLength(outcome.BlueFatFishLengthCM) {
+		value := length.String()
+		if !ValidPresentationLength(value) {
 			return nil, ErrEasterEggBudget
+		}
+		if selected < blueBoundary {
+			outcome.BlueFatFishLengthCM = value
+		} else {
+			outcome.MilkCrabLengthCM = value
 		}
 	}
 	if err := ctx.Err(); err != nil {
@@ -99,6 +118,10 @@ func DecorateBatchWithChance(ctx context.Context, results []Result, source IntSo
 // ValidBlueFatFishLength accepts the exact storage/wire decimal representation.
 // It must not pass through floating point or a machine-sized integer.
 func ValidBlueFatFishLength(value string) bool {
+	return ValidPresentationLength(value)
+}
+
+func ValidPresentationLength(value string) bool {
 	if len(value) < 3 || len(value) > MaximumLengthDigits || value[0] == '0' {
 		return false
 	}

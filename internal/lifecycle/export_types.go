@@ -399,6 +399,7 @@ type FishingOutcomeExport struct {
 	SizeCM              int               `json:"size_cm"`
 	Reward              string            `json:"reward"`
 	BlueFatFishLengthCM *string           `json:"blue_fat_fish_length_cm"`
+	MilkCrabLengthCM    *string           `json:"milk_crab_length_cm"`
 }
 
 type FishingRankExport struct {
@@ -407,6 +408,7 @@ type FishingRankExport struct {
 	SizeCM              *int    `json:"size_cm"`
 	TotalCredits        *string `json:"total_credits"`
 	BlueFatFishLengthCM *string `json:"blue_fat_fish_length_cm,omitempty"`
+	MilkCrabLengthCM    *string `json:"milk_crab_length_cm,omitempty"`
 }
 
 type LinkLinkExport struct {

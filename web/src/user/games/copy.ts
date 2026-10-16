@@ -146,6 +146,7 @@ const keys = {
   'fishing.tier.treasure': 'user.games.copy.fishing.tier.treasure',
   'fishing.size': 'user.games.copy.fishing.size',
   'fishing.reward': 'user.games.copy.fishing.reward',
+  'fishing.milkCrab': 'user.games.copy.fishing.milkCrab',
   'fishing.blueFatFish': 'user.games.copy.fishing.blueFatFish.label',
   'fishing.blueFatFish.original': 'user.games.copy.fishing.blueFatFish.original',
   'fishing.leaderboard.single': 'user.games.copy.fishing.leaderboard.single',

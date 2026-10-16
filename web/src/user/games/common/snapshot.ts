@@ -132,7 +132,7 @@ export function normalizeGamesSnapshot(value: unknown): GamesSnapshot {
   const fishing = responseRecord(
     record.fishing,
     ['enabled', 'available', 'bait_prices', 'blue_fish_chance_bps'],
-    [],
+    ['milk_crab_chance_bps'],
     'fishing module',
   );
   const baits = responseRecord(fishing.bait_prices, BAITS, [], 'bait prices');
@@ -245,6 +245,12 @@ export function normalizeGamesSnapshot(value: unknown): GamesSnapshot {
         0,
         10_000,
         'blue fat fish chance',
+      ),
+      milkCrabChanceBPS: safeInteger(
+        fishing.milk_crab_chance_bps ?? 0,
+        0,
+        10_000,
+        'milk crab chance',
       ),
       baitPrices: {
         worm: creditsValue(baits.worm, { positive: true }, 'worm price'),

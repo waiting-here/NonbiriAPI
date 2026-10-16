@@ -7,7 +7,6 @@ import (
 	"errors"
 
 	"github.com/waiting-here/NonbiriAPI/internal/game"
-	"github.com/waiting-here/NonbiriAPI/internal/game/fishing"
 )
 
 const (
@@ -56,6 +55,7 @@ type FishingOutcome struct {
 	SizeCM              int         `json:"size_cm"`
 	Reward              string      `json:"reward"`
 	BlueFatFishLengthCM *string     `json:"blue_fat_fish_length_cm"`
+	MilkCrabLengthCM    *string     `json:"milk_crab_length_cm"`
 }
 
 type FishingBatchResult struct {
@@ -131,6 +131,7 @@ type FishingLeaderboardRow struct {
 	Identity            Identity `json:"identity"`
 	IsMe                bool     `json:"is_me"`
 	BlueFatFishLengthCM *string  `json:"blue_fat_fish_length_cm,omitempty"`
+	MilkCrabLengthCM    *string  `json:"milk_crab_length_cm,omitempty"`
 }
 
 // MarshalJSON enforces the board-specific row union. In particular, zero is
@@ -142,8 +143,7 @@ func (row FishingLeaderboardRow) MarshalJSON() ([]byte, error) {
 	if single == total || row.Rank == "" {
 		return nil, errors.New("game runtime: invalid leaderboard row union")
 	}
-	if row.BlueFatFishLengthCM != nil && (!single || !fishing.ValidBlueFatFishLength(*row.BlueFatFishLengthCM) ||
-		row.SizeCM < 100 || row.SizeCM > 200 || row.SpeciesKey != "koi" && row.SpeciesKey != "taimen" && row.SpeciesKey != "yellowcheek") {
+	if !validPresentation(row.SpeciesKey, row.SizeCM, row.BlueFatFishLengthCM, row.MilkCrabLengthCM) {
 		return nil, errors.New("game runtime: invalid leaderboard presentation")
 	}
 	if single {
@@ -152,9 +152,10 @@ func (row FishingLeaderboardRow) MarshalJSON() ([]byte, error) {
 			SpeciesKey          string   `json:"species_key"`
 			SizeCM              int      `json:"size_cm"`
 			BlueFatFishLengthCM *string  `json:"blue_fat_fish_length_cm"`
+			MilkCrabLengthCM    *string  `json:"milk_crab_length_cm"`
 			Identity            Identity `json:"identity"`
 			IsMe                bool     `json:"is_me"`
-		}{Rank: row.Rank, SpeciesKey: row.SpeciesKey, SizeCM: row.SizeCM, BlueFatFishLengthCM: row.BlueFatFishLengthCM, Identity: row.Identity, IsMe: row.IsMe})
+		}{Rank: row.Rank, SpeciesKey: row.SpeciesKey, SizeCM: row.SizeCM, BlueFatFishLengthCM: row.BlueFatFishLengthCM, MilkCrabLengthCM: row.MilkCrabLengthCM, Identity: row.Identity, IsMe: row.IsMe})
 	}
 	return json.Marshal(struct {
 		Rank         string   `json:"rank"`

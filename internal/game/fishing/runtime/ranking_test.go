@@ -32,7 +32,7 @@ func TestZeroSizeOutcomeCreatesSingleBestAndExplicitWireSize(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"rank":"1","species_key":"boot","size_cm":0,"blue_fat_fish_length_cm":null,"identity":{"kind":"anonymous"},"is_me":true}`
+	want := `{"rank":"1","species_key":"boot","size_cm":0,"blue_fat_fish_length_cm":null,"milk_crab_length_cm":null,"identity":{"kind":"anonymous"},"is_me":true}`
 	if string(wire) != want || bytes.Contains(wire, []byte("total_credits")) {
 		t.Fatalf("single row wire = %s, want %s", wire, want)
 	}
