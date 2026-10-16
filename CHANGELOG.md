@@ -6,12 +6,33 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ## Unreleased — 1.0.0
 
-The stable database baseline is schema 17 with account export 19. The normal
+The stable database baseline is schema 17; the current schema is 18 with account
+export 20. Registered upgrades preserve existing settings and stored facts. The normal
 service accepts fresh or registered stable databases; the separate
 `nonbiri-upgrade-rc7` command converts the exact rc.7 schema 16. Deployments can
 use a verified commit and its matching artifacts without a release tag.
 
+### Added
+
+- Four SP themes with matching layered artwork, appearance wallpapers and
+  encounter replays. New SP pool templates contain no featured SR cards.
+- A milk-crab fishing presentation with independently configurable probability,
+  mutually exclusive with the blue fish and using the same length and reward rules.
+- Gemini and OpenAI Responses chat upstreams, plus OpenAI Decisions upstreams
+  and the `/v1/decisions` API. Endpoints can share a URL across protocol types.
+
 ### Changed
+
+- Localize platform API errors to the request language and redact IPv4 addresses
+  from displayed errors, logs and diagnostics while preserving editable settings
+  and normal model responses.
+- Require completion of first SSR/SP encounter scenes; owning a card once unlocks
+  both encounter replays.
+- Wake audit scans on demand, avoid charging transient database contention to the
+  scan failure budget, batch model-page summaries and mount adaptation editors
+  only when expanded.
+- Document independent management MFA and private origin authentication without
+  changing the deployment automatically.
 
 - Reduce redundant homepage requests, idle game polling and empty game-worker
   transactions. Aggregate charity catalog success rates for the whole page in
