@@ -38,6 +38,9 @@ const (
 	CodeRateLimited             = "rate_limited"
 	CodePayloadTooLarge         = "payload_too_large"
 	CodeElevationRequired       = "elevated_required"
+	CodeMFARequired             = "mfa_required"
+	CodeMFAInvalidCode          = "mfa_invalid_code"
+	CodeMFASetupExpired         = "mfa_setup_expired"
 	CodeUnboundModel            = "unbound_model"
 	CodeUpstream                = "upstream"
 	CodeMaintenance             = "maintenance"
@@ -119,7 +122,7 @@ func IsStableCode(code string) bool {
 	switch code {
 	case CodeInternal, CodeInvalidRequest, CodeUnauthorized, CodeForbidden,
 		CodeNotFound, CodeConflict, CodeRefreshRequired, CodeMethodNotAllowed, CodeRateLimited,
-		CodePayloadTooLarge, CodeElevationRequired, CodeUnboundModel,
+		CodePayloadTooLarge, CodeElevationRequired, CodeMFARequired, CodeMFAInvalidCode, CodeMFASetupExpired, CodeUnboundModel,
 		CodeUpstream, CodeMaintenance, CodeServiceUnavailable,
 		CodeResourceLimitExceeded, CodeResourceLocked, CodeInsufficientCredits,
 		CodeFeatureDisabled, CodeCharitySuspended, CodeContentTooShort,
@@ -140,12 +143,12 @@ func statusOf(code string) int {
 		return http.StatusBadRequest
 	case CodeUnauthorized:
 		return http.StatusUnauthorized
-	case CodeForbidden, CodeElevationRequired, CodeInsufficientCredits, CodeFeatureDisabled,
+	case CodeForbidden, CodeMFARequired, CodeMFAInvalidCode, CodeElevationRequired, CodeInsufficientCredits, CodeFeatureDisabled,
 		CodeCharitySuspended, CodeCheckinCapReached:
 		return http.StatusForbidden
 	case CodeNotFound:
 		return http.StatusNotFound
-	case CodeConflict, CodeRefreshRequired, CodeAlreadyCheckedIn:
+	case CodeConflict, CodeMFASetupExpired, CodeRefreshRequired, CodeAlreadyCheckedIn:
 		return http.StatusConflict
 	case CodeMethodNotAllowed:
 		return http.StatusMethodNotAllowed

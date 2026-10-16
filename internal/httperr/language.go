@@ -93,6 +93,9 @@ func Localize(e Error, language string) Error {
 }
 
 var chineseCodes = map[string]string{
+	CodeMFARequired:             "请先使用验证器验证身份，再使用账号功能。",
+	CodeMFAInvalidCode:          "验证码无效或已使用，请输入新的验证码。",
+	CodeMFASetupExpired:         "绑定已过期，请重新开始绑定。",
 	CodeInternal:                "服务暂时无法完成请求，请稍后重试。",
 	CodeInvalidRequest:          "请求格式或参数有误，请检查后重试。",
 	CodeUnauthorized:            "请先登录或提供有效的调用密钥。",

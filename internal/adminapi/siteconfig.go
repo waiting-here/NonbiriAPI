@@ -32,6 +32,12 @@ import (
 // Known site_config keys (the authoritative set enforced by the handler).
 const (
 	KeyDiscordRegisteredUserGateExempt = "discord_registered_user_gate_exempt"
+	KeyMFARequiredLevel1               = "mfa_required_level_1"
+	KeyMFARequiredLevel2               = "mfa_required_level_2"
+	KeyMFARequiredLevel3               = "mfa_required_level_3"
+	KeyMFARequiredLevel4               = "mfa_required_level_4"
+	KeyMFARequiredLevel5               = "mfa_required_level_5"
+	KeyMFARequiredLevel6               = "mfa_required_level_6"
 
 	KeySiteName                  = "site_name"
 	KeySiteLogoURL               = "site_logo_url"
@@ -265,31 +271,38 @@ var knownSiteConfig = func() map[string]keySpec {
 	known := map[string]keySpec{
 		KeyDiscordRegisteredUserGateExempt: {kind: kindBool, def: 0},
 
-		KeySiteName:                      {kind: kindText, allowEmpty: false, max: maxSiteNameBytes},
-		KeySiteLogoURL:                   {kind: kindText, allowEmpty: true, max: maxSiteLogoURLBytes},
-		KeyLegalPrivacyOverrideZh:        {kind: kindMultilineText, allowEmpty: true, max: maxLegalOverrideBytes},
-		KeyLegalPrivacyOverrideEn:        {kind: kindMultilineText, allowEmpty: true, max: maxLegalOverrideBytes},
-		KeyLegalTermsOverrideZh:          {kind: kindMultilineText, allowEmpty: true, max: maxLegalOverrideBytes},
-		KeyLegalTermsOverrideEn:          {kind: kindMultilineText, allowEmpty: true, max: maxLegalOverrideBytes},
-		KeyCharityDonationNoticeZh:       {kind: kindMultilineText, allowEmpty: true, max: maxDonationNoticeBytes},
-		KeyCharityDonationNoticeEn:       {kind: kindMultilineText, allowEmpty: true, max: maxDonationNoticeBytes},
-		KeyLegalAuthoritativeLocale:      {kind: kindLocaleOpt},
-		KeyDefaultEndpointLimit:          {kind: kindInt, min: 0, max: maxResourceLimitValue, def: db.DefaultEndpointLimit},
-		KeyDefaultEndpointKeyLimit:       {kind: kindInt, min: 1, max: maxResourceLimitValue, def: db.DefaultEndpointKeyLimit},
-		KeyDefaultModelLimit:             {kind: kindInt, min: 1, max: maxResourceLimitValue, def: db.DefaultModelLimit},
-		KeyDefaultBindingLimit:           {kind: kindInt, min: 1, max: maxResourceLimitValue, def: db.DefaultBindingLimit},
-		KeyDefaultRPMPerUser:             {kind: kindInt, min: 1, max: maxRPMValue, def: ratelimit.DefaultRPMPerUserLimit},
-		KeyGlobalRPMPerUser:              {kind: kindInt, min: 1, max: maxRPMValue, def: ratelimit.DefaultRPMPerUserLimit},
-		KeyGlobalRPM:                     {kind: kindInt, min: 1, max: maxRPMValue, def: ratelimit.DefaultRPMGlobalLimit},
-		KeyModelRequestBodyLimitMiB:      {kind: kindInt, min: 1, max: requestbody.MaximumMiB, def: requestbody.DefaultMiB},
-		KeyDefaultPerEndpointConc:        {kind: kindInt, min: 1, max: maxConcurrencyValue, def: egress.DefaultPerEndpointConcurrency},
-		KeyEgressGlobalConc:              {kind: kindInt, min: 1, max: maxConcurrencyValue, def: egress.DefaultGlobalConcurrency},
-		KeyDiscordGuildID:                {kind: kindText, allowEmpty: true, max: maxDiscordGateBytes},
-		KeyDiscordRoleID:                 {kind: kindText, allowEmpty: true, max: maxDiscordGateBytes},
-		KeyOAuthStartRateLimit:           {kind: kindInt, min: 0, max: maxOAuthStartRateLimit, def: ratelimit.DefaultOAuthStartRateLimit},
-		KeyOAuthStartRateWindowSecs:      {kind: kindInt, min: 1, max: maxOAuthStartRateWindowSecs, def: ratelimit.DefaultOAuthStartRateWindowSeconds},
-		KeyOAuthStartRatePenaltySecs:     {kind: kindInt, min: 0, max: maxOAuthStartRatePenaltySecs, def: ratelimit.DefaultOAuthStartRatePenaltySeconds},
-		KeyMaintenanceMode:               {kind: kindBool, def: 0},
+		KeySiteName:                  {kind: kindText, allowEmpty: false, max: maxSiteNameBytes},
+		KeySiteLogoURL:               {kind: kindText, allowEmpty: true, max: maxSiteLogoURLBytes},
+		KeyLegalPrivacyOverrideZh:    {kind: kindMultilineText, allowEmpty: true, max: maxLegalOverrideBytes},
+		KeyLegalPrivacyOverrideEn:    {kind: kindMultilineText, allowEmpty: true, max: maxLegalOverrideBytes},
+		KeyLegalTermsOverrideZh:      {kind: kindMultilineText, allowEmpty: true, max: maxLegalOverrideBytes},
+		KeyLegalTermsOverrideEn:      {kind: kindMultilineText, allowEmpty: true, max: maxLegalOverrideBytes},
+		KeyCharityDonationNoticeZh:   {kind: kindMultilineText, allowEmpty: true, max: maxDonationNoticeBytes},
+		KeyCharityDonationNoticeEn:   {kind: kindMultilineText, allowEmpty: true, max: maxDonationNoticeBytes},
+		KeyLegalAuthoritativeLocale:  {kind: kindLocaleOpt},
+		KeyDefaultEndpointLimit:      {kind: kindInt, min: 0, max: maxResourceLimitValue, def: db.DefaultEndpointLimit},
+		KeyDefaultEndpointKeyLimit:   {kind: kindInt, min: 1, max: maxResourceLimitValue, def: db.DefaultEndpointKeyLimit},
+		KeyDefaultModelLimit:         {kind: kindInt, min: 1, max: maxResourceLimitValue, def: db.DefaultModelLimit},
+		KeyDefaultBindingLimit:       {kind: kindInt, min: 1, max: maxResourceLimitValue, def: db.DefaultBindingLimit},
+		KeyDefaultRPMPerUser:         {kind: kindInt, min: 1, max: maxRPMValue, def: ratelimit.DefaultRPMPerUserLimit},
+		KeyGlobalRPMPerUser:          {kind: kindInt, min: 1, max: maxRPMValue, def: ratelimit.DefaultRPMPerUserLimit},
+		KeyGlobalRPM:                 {kind: kindInt, min: 1, max: maxRPMValue, def: ratelimit.DefaultRPMGlobalLimit},
+		KeyModelRequestBodyLimitMiB:  {kind: kindInt, min: 1, max: requestbody.MaximumMiB, def: requestbody.DefaultMiB},
+		KeyDefaultPerEndpointConc:    {kind: kindInt, min: 1, max: maxConcurrencyValue, def: egress.DefaultPerEndpointConcurrency},
+		KeyEgressGlobalConc:          {kind: kindInt, min: 1, max: maxConcurrencyValue, def: egress.DefaultGlobalConcurrency},
+		KeyDiscordGuildID:            {kind: kindText, allowEmpty: true, max: maxDiscordGateBytes},
+		KeyDiscordRoleID:             {kind: kindText, allowEmpty: true, max: maxDiscordGateBytes},
+		KeyOAuthStartRateLimit:       {kind: kindInt, min: 0, max: maxOAuthStartRateLimit, def: ratelimit.DefaultOAuthStartRateLimit},
+		KeyOAuthStartRateWindowSecs:  {kind: kindInt, min: 1, max: maxOAuthStartRateWindowSecs, def: ratelimit.DefaultOAuthStartRateWindowSeconds},
+		KeyOAuthStartRatePenaltySecs: {kind: kindInt, min: 0, max: maxOAuthStartRatePenaltySecs, def: ratelimit.DefaultOAuthStartRatePenaltySeconds},
+		KeyMaintenanceMode:           {kind: kindBool, def: 0},
+		KeyMFARequiredLevel1:         {kind: kindBool, def: 0},
+		KeyMFARequiredLevel2:         {kind: kindBool, def: 0},
+		KeyMFARequiredLevel3:         {kind: kindBool, def: 0},
+		KeyMFARequiredLevel4:         {kind: kindBool, def: 0},
+		KeyMFARequiredLevel5:         {kind: kindBool, def: 0},
+		KeyMFARequiredLevel6:         {kind: kindBool, def: 0},
+
 		KeyRegistrationOpen:              {kind: kindBool, def: 1},
 		KeyGatewayUserAttributionEnabled: {kind: kindBool, def: 0},
 		KeySiteTimezoneOffsetMinutes:     {kind: kindTimezoneOffset},
