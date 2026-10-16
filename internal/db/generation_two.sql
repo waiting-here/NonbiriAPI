@@ -6537,7 +6537,7 @@ CREATE TABLE schema_state (
 ) STRICT;
 INSERT INTO credit_compaction(id,through_seq,details_before,sweep_at,sweep_after_seq) VALUES(1,0,0,0,0);
 INSERT INTO game_blackjack_clock(id,observed_at) VALUES(1,0);
-INSERT INTO schema_state(id,version) VALUES(1,18);
+INSERT INTO schema_state(id,version) VALUES(1,19);
 
 CREATE TABLE game_ai_settings (
  game_key TEXT PRIMARY KEY NOT NULL,
@@ -6908,3 +6908,42 @@ CREATE INDEX idx_reward_claims_user ON reward_claims(user_id,id);
 
 CREATE INDEX idx_gacha_config_events_pool ON gacha_config_events(target,seq,created_at) WHERE substr(target,1,3)='gp_';
 CREATE INDEX idx_reward_redemption_attempts ON idempotency_records(actor_scope_hash,created_at) WHERE scope='reward_redemption';
+
+CREATE TABLE account_mfa_credentials (
+ user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+ context_id BLOB NOT NULL UNIQUE CHECK(typeof(context_id)='blob' AND length(context_id)=16),
+ encrypted_secret TEXT NOT NULL CHECK(length(encrypted_secret) BETWEEN 1 AND 256),
+ last_step INTEGER NOT NULL CHECK(last_step>=0)
+) STRICT;
+
+CREATE TABLE account_mfa_pending (
+ user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+ session_hash TEXT NOT NULL REFERENCES sessions(token_hash) ON DELETE CASCADE,
+ context_id BLOB NOT NULL UNIQUE CHECK(typeof(context_id)='blob' AND length(context_id)=16),
+ encrypted_secret TEXT NOT NULL CHECK(length(encrypted_secret) BETWEEN 1 AND 256),
+ expires_at INTEGER NOT NULL CHECK(expires_at BETWEEN 0 AND 253402300799)
+) STRICT;
+CREATE INDEX idx_account_mfa_pending_expiry ON account_mfa_pending(expires_at);
+
+CREATE TABLE account_mfa_attempts (
+ user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+ window_start INTEGER NOT NULL DEFAULT 0 CHECK(window_start BETWEEN 0 AND 253402300799),
+ failures INTEGER NOT NULL DEFAULT 0 CHECK(failures BETWEEN 0 AND 5),
+ blocked_until INTEGER NOT NULL DEFAULT 0 CHECK(blocked_until BETWEEN 0 AND 253402300799)
+) STRICT;
+
+CREATE TABLE account_mfa_proofs (
+ session_hash TEXT PRIMARY KEY REFERENCES sessions(token_hash) ON DELETE CASCADE,
+ user_id INTEGER NOT NULL REFERENCES account_mfa_credentials(user_id) ON DELETE CASCADE,
+ session_generation TEXT NOT NULL,
+ verified_until INTEGER NOT NULL CHECK(verified_until BETWEEN 0 AND 253402300799)
+) STRICT;
+CREATE INDEX idx_account_mfa_proofs_user ON account_mfa_proofs(user_id);
+
+CREATE TRIGGER account_mfa_security_revoke
+AFTER UPDATE OF is_admin,is_banned ON users
+WHEN NEW.is_admin<>0 OR NEW.is_banned<>0
+BEGIN
+ DELETE FROM account_mfa_proofs WHERE user_id=NEW.id;
+ DELETE FROM account_mfa_pending WHERE user_id=NEW.id;
+END;

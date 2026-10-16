@@ -1,4 +1,4 @@
-package rc7
+package v1
 
 import (
 	"bytes"

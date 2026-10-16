@@ -1,9 +1,10 @@
-package db
+package v1
 
 import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"strings"
 	"testing"
 )
@@ -87,7 +88,7 @@ INSERT INTO models(id,user_id,provider,model,full_name,created_at,updated_at) VA
 		t.Fatal("old resource changed", err, note)
 	}
 	for _, kind := range []string{"openai_decisions", "charity_decisions"} {
-		id, err := GenerateOpaqueID("req_")
+		id, err := db.GenerateOpaqueID("req_")
 		if err != nil {
 			t.Fatal(err)
 		}

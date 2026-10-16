@@ -119,6 +119,12 @@ func buildGenerationTwoConfigCatalog() map[string]generationTwoConfigSpec {
 
 	catalog := map[string]generationTwoConfigSpec{
 		"discord_registered_user_gate_exempt": boolSpec("0"),
+		"mfa_required_level_1":                boolSpec("0"),
+		"mfa_required_level_2":                boolSpec("0"),
+		"mfa_required_level_3":                boolSpec("0"),
+		"mfa_required_level_4":                boolSpec("0"),
+		"mfa_required_level_5":                boolSpec("0"),
+		"mfa_required_level_6":                boolSpec("0"),
 
 		"site_name":                        textSpec("", 256, true),
 		"site_logo_url":                    textSpec("", 2048, true),

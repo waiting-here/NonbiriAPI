@@ -342,37 +342,23 @@ func openSQLite(path, mode string) (*sql.DB, error) {
 }
 
 func validateReadOnlyDatabase(ctx context.Context, d *sql.DB, secrets secret.GenerationTwoContextCodec) error {
-	// Page one can itself be committed in the WAL. The raw source header is the
-	// pre-SQLite gate; these PRAGMAs verify the merged main+WAL view.
-	var applicationID, userVersion uint32
-	if err := d.QueryRowContext(ctx, `PRAGMA application_id`).Scan(&applicationID); err != nil {
-		return startupSQLFailure(ctx, err, StartupCorruptDatabase)
-	}
-	if applicationID != DatabaseApplicationID {
-		return startupError(StartupWrongIdentity)
-	}
-	if err := d.QueryRowContext(ctx, `PRAGMA user_version`).Scan(&userVersion); err != nil {
-		return startupSQLFailure(ctx, err, StartupCorruptDatabase)
-	}
-	if userVersion != DatabaseUserVersion {
-		return generationError(userVersion)
-	}
+	// InspectContext already checked the merged main+WAL identity and key.
 	if err := foreignKeyCheck(ctx, d); err != nil {
 		return startupSQLFailure(ctx, err, StartupCorruptDatabase)
 	}
 	if err := quickCheck(ctx, d); err != nil {
 		return startupSQLFailure(ctx, err, StartupCorruptDatabase)
 	}
-	if _, err := generationTwoExtensionNeeded(ctx, d); err != nil {
+	if err := validateGenerationTwoManifest(ctx, d); err != nil {
 		return startupSQLFailure(ctx, err, StartupSchemaMismatch)
 	}
 	if err := validateGenerationTwoSeedManifest(ctx, d); err != nil {
 		return startupSQLFailure(ctx, err, StartupSchemaMismatch)
 	}
-	if err := validateDatabaseMaterial(ctx, d, secrets); err != nil {
+	if err := ValidateStoredEndpointCredentials(ctx, d, secrets); err != nil {
 		return startupSQLFailure(ctx, err, StartupCredentialReject)
 	}
-	if err := validateEndpointKeyEnvelopes(ctx, d, secrets); err != nil {
+	if err := validateAccountMFAEnvelopes(ctx, d, secrets); err != nil {
 		return startupSQLFailure(ctx, err, StartupCredentialReject)
 	}
 	if err := validateSourceConfig(ctx, d); err != nil {
@@ -419,7 +405,9 @@ func foreignKeyCheck(ctx context.Context, q queryer) error {
 	return rows.Err()
 }
 
-func validateEndpointKeyEnvelopes(ctx context.Context, q queryer, generationTwoCodec secret.GenerationTwoContextCodec) error {
+// ValidateStoredEndpointCredentials audits every persisted endpoint envelope.
+// Ordinary startup validates only the fixed key material; offline checks use this scan.
+func ValidateStoredEndpointCredentials(ctx context.Context, q queryer, generationTwoCodec secret.GenerationTwoContextCodec) error {
 	if generationTwoCodec == nil {
 		return errors.New("generation-two secret codec unavailable")
 	}
@@ -728,11 +716,6 @@ func openValidatedSource(ctx context.Context, path string, expected *sourceSnaps
 	if err := inspectActiveDBFiles(path); err != nil {
 		return failError(startupError(StartupUnsafePath))
 	}
-	RecordStartupStage(ctx, StageSchemaUpgrade)
-	if err := upgradeStartupSchema(ctx, d, secrets); err != nil {
-		return failError(startupSQLFailure(ctx, err, StartupSchemaMismatch))
-	}
-	RecordStartupCheckpoint(ctx, StageSchemaUpgrade)
 	RecordStartupStage(ctx, StageDomainRecovery)
 	if err := checkpointAndRecoverBeforeListener(ctx, d, secrets); err != nil {
 		return failError(err)

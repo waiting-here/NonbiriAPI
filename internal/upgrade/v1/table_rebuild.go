@@ -1,4 +1,4 @@
-package db
+package v1
 
 import (
 	"context"
@@ -66,15 +66,20 @@ func rebuildTables(ctx context.Context, tx *sql.Tx, changes []tableRebuild) erro
 		}
 	}
 	for index, change := range changes {
-		manifest, err := readTableManifest(ctx, tx, change.Name)
+		rows, err := tx.QueryContext(ctx, "SELECT * FROM "+quoteSQLiteIdentifier(change.Name)+" LIMIT 0")
 		if err != nil {
 			return err
 		}
-		columns := make([]string, 0, len(manifest.Columns))
-		for _, column := range manifest.Columns {
-			if column.Hidden == 0 {
-				columns = append(columns, quoteSQLiteIdentifier(column.Name))
-			}
+		columns, err := rows.Columns()
+		closeErr := rows.Close()
+		if err != nil {
+			return err
+		}
+		if closeErr != nil {
+			return closeErr
+		}
+		for i := range columns {
+			columns[i] = quoteSQLiteIdentifier(columns[i])
 		}
 		if len(columns) == 0 {
 			return errors.New("table rebuild source is missing")
@@ -125,3 +130,9 @@ func rebuildTables(ctx context.Context, tx *sql.Tx, changes []tableRebuild) erro
 	}
 	return nil
 }
+
+func quoteSQLiteIdentifier(value string) string {
+	return `"` + strings.ReplaceAll(value, `"`, `""`) + `"`
+}
+
+type schemaObject struct{ Type, Name, Table, SQL string }

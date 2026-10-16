@@ -1,4 +1,4 @@
-package db
+package v1
 
 import (
 	"context"
@@ -60,13 +60,8 @@ func TestFishingPresentationMigrationFromExactSchema17(t *testing.T) {
 			if err = database.QueryRow(`SELECT blue_fat_fish_length_cm,milk_crab_length_cm FROM game_fishing_length_facts`).Scan(&got, &absent); err != nil || got != length || absent != nil {
 				t.Fatal(got, absent, err)
 			}
-			fresh := openGenerationTwoDDLForTest(t)
-			wantManifest, err := readGenerationManifest(ctx, fresh)
-			if err != nil {
-				t.Fatal(err)
-			}
 			gotManifest, err := readGenerationManifest(ctx, database)
-			if err != nil || generationManifestDigest(gotManifest) != generationManifestDigest(wantManifest) {
+			if err != nil || generationManifestDigest(gotManifest) != stableSchema18Manifest {
 				t.Fatal("upgraded and fresh definitions differ", err)
 			}
 			rows, err := database.Query(`PRAGMA foreign_key_check`)

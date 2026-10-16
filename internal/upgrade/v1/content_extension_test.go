@@ -1,4 +1,4 @@
-package db
+package v1
 
 import (
 	"bytes"
@@ -6,43 +6,20 @@ import (
 	"database/sql"
 	"errors"
 	"os"
-	"path/filepath"
 	"testing"
 
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
 func stableSourceFixture(t *testing.T) (string, *secret.Vault, string) {
 	t.Helper()
-	path := filepath.Join(privateDBDir(t), "stable-source.sqlite")
-	vault := bootstrapTestVault(t)
+	path, vault := sourceFixtureFromDDL(t, schema17SQLForTest(t), 17, stableSchema17Manifest)
 	database, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	database.SetMaxOpenConns(1)
-	hostileMustExec(t, database, schema17SQLForTest(t))
-	hostileMustExec(t, database, "PRAGMA application_id=0x4E425249; PRAGMA user_version=2;")
-	tx, err := database.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	epoch, err := GenerateOpaqueID("b1e_")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = seedGenerationTwo(t.Context(), tx, epoch); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = tx.Exec("DELETE FROM site_config WHERE key='game_fishing_milk_crab_chance_bps'"); err != nil {
-		t.Fatal(err)
-	}
-	if err = createDatabaseMaterial(t.Context(), tx, vault); err != nil {
-		t.Fatal(err)
-	}
-	if err = tx.Commit(); err != nil {
-		t.Fatal(err)
-	}
 	user := hostileInsertUser(t, database, "stable-source", 0, 1)
 	hostileInsertAccount(t, database, "user", user, nil, -1, hostileBlob16(123), 1)
 	hostileMustExec(t, database, "UPDATE site_config SET value='9500' WHERE key='game_fishing_blue_fish_chance_bps'")
@@ -68,7 +45,11 @@ func stableSourceFixture(t *testing.T) (string, *secret.Vault, string) {
 func TestStableContentUpgradePreservesSavedStateAndReopens(t *testing.T) {
 	path, vault, sealed := stableSourceFixture(t)
 	for range 2 {
-		store, err := Open(path, vault)
+		result, err := Run(t.Context(), path, vault, Options{Apply: true})
+		if err != nil {
+			t.Fatal(result, err)
+		}
+		store, err := db.Open(path, vault)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -76,7 +57,7 @@ func TestStableContentUpgradePreservesSavedStateAndReopens(t *testing.T) {
 		var version, sign int
 		var saved, title, blue, milk string
 		var magnitude []byte
-		if err = d.QueryRow("SELECT version FROM schema_state").Scan(&version); err != nil || version != 18 {
+		if err = d.QueryRow("SELECT version FROM schema_state").Scan(&version); err != nil || version != db.CurrentSchemaVersion {
 			t.Fatal(version, err)
 		}
 		if err = d.QueryRow("SELECT encrypted_secret FROM endpoint_key_secrets").Scan(&saved); err != nil || saved != sealed {
@@ -101,7 +82,7 @@ func TestStableContentUpgradePreservesSavedStateAndReopens(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := VerifyContext(t.Context(), path, vault, nil); err != nil {
+	if err := db.VerifyContext(t.Context(), path, vault, nil); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -121,7 +102,7 @@ func TestStableContentUpgradeCancellationRollsBackBothChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 	plan, err := storageSchema.plan(t.Context(), d)
-	if err != nil || len(plan.steps) != 1 || plan.steps[0].from != 17 {
+	if err != nil || len(plan.steps) != 2 || plan.steps[0].from != 17 {
 		t.Fatal("source not restored", err)
 	}
 	var count int
@@ -146,15 +127,21 @@ func TestStableContentUpgradeRejectsDriftBeforeWriting(t *testing.T) {
 	if err = d.Close(); err != nil {
 		t.Fatal(err)
 	}
-	before := snapshotBootstrapSources(t, path)
-	store, err := Open(path, vault)
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := db.Open(path, vault)
 	if store != nil {
 		store.Close()
 		t.Fatal("drifted source accepted")
 	}
-	var startup *StartupError
+	var startup *db.StartupError
 	if !errors.As(err, &startup) {
 		t.Fatal(err)
 	}
-	assertBootstrapSourcesUnchanged(t, path, before)
+	after, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(before, after) {
+		t.Fatal("rejection changed source", err)
+	}
 }

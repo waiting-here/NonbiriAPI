@@ -1,4 +1,4 @@
-// Package db owns the canonical SQLite schema and its supported upgrade paths.
+// Package db owns the canonical SQLite schema and current storage validation.
 package db
 
 import _ "embed"
