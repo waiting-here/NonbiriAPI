@@ -24,6 +24,7 @@ var (
 	ErrUnauthorized       = errors.New(httperr.CodeUnauthorized)
 	ErrForbidden          = errors.New(httperr.CodeForbidden)
 	ErrElevatedRequired   = errors.New(httperr.CodeElevationRequired)
+	ErrMFARequired        = errors.New(httperr.CodeMFARequired)
 	ErrNotFound           = errors.New(httperr.CodeNotFound)
 	ErrInvalidRequirement = errors.New("invalid final-transaction authorization requirement")
 )
@@ -137,17 +138,28 @@ func New(options Options) *Authorizer {
 // is safe for same-transaction audit rows; it is not reusable as a later
 // authorization ticket.
 type Principal struct {
-	UserID         int64
-	DiscordID      string
-	Role           Role
-	EffectiveLevel int
-	SessionBinding string
+	UserID           int64
+	DiscordID        string
+	Role             Role
+	EffectiveLevel   int
+	SessionBinding   string
+	MFAVerifiedUntil int64
 }
 
 // Authorize performs the final transaction check. The caller must invoke it
 // after opening the outer business transaction and immediately before domain
 // revision/CAS and final writes. Authorization is deliberately not cached.
 func (a *Authorizer) Authorize(ctx context.Context, tx *sql.Tx, actor Actor, requirement Requirement) (Principal, error) {
+	return a.authorize(ctx, tx, actor, requirement, false)
+}
+
+// AuthorizeMFAIdentity validates only the identity used by authentication
+// endpoints. It never grants account or management access.
+func (a *Authorizer) AuthorizeMFAIdentity(ctx context.Context, tx *sql.Tx, actor Actor) (Principal, error) {
+	return a.authorize(ctx, tx, actor, Requirement{Role: RoleUser}, true)
+}
+
+func (a *Authorizer) authorize(ctx context.Context, tx *sql.Tx, actor Actor, requirement Requirement, mfaIdentity bool) (Principal, error) {
 	if a == nil || tx == nil || ctx == nil || !actor.Kind.valid() || actor.UserID <= 0 || actor.SessionTokenHash == "" {
 		return Principal{}, ErrUnauthorized
 	}
@@ -167,15 +179,22 @@ func (a *Authorizer) Authorize(ctx context.Context, tx *sql.Tx, actor Actor, req
 		bannedUntil      sql.NullInt64
 		manualLevel      sql.NullInt64
 		autoLevel        int64
+		mfaPolicy        sql.NullString
+		mfaEnrolled      bool
+		mfaUntil         sql.NullInt64
 	)
 	err := tx.QueryRowContext(ctx, `
-SELECT s.cred_gen,u.discord_id,u.is_admin,u.is_banned,u.banned_until,u.level,u.auto_level
+SELECT s.cred_gen,u.discord_id,u.is_admin,u.is_banned,u.banned_until,u.level,u.auto_level,
+ cfg.value,c.user_id IS NOT NULL,p.verified_until
 FROM sessions s
 JOIN users u ON u.id=s.user_id
+LEFT JOIN site_config cfg ON cfg.key='mfa_required_level_'||COALESCE(u.level,u.auto_level)
+LEFT JOIN account_mfa_credentials c ON c.user_id=u.id
+LEFT JOIN account_mfa_proofs p ON p.session_hash=s.token_hash AND p.user_id=u.id AND p.session_generation=s.cred_gen
 WHERE s.token_hash=? AND s.user_id=?
   AND s.expires_at>? AND s.absolute_expires_at>?`,
 		actor.SessionTokenHash, actor.UserID, now, now,
-	).Scan(&storedGeneration, &discordID, &isAdmin, &isBanned, &bannedUntil, &manualLevel, &autoLevel)
+	).Scan(&storedGeneration, &discordID, &isAdmin, &isBanned, &bannedUntil, &manualLevel, &autoLevel, &mfaPolicy, &mfaEnrolled, &mfaUntil)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Principal{}, ErrUnauthorized
 	}
@@ -216,6 +235,18 @@ WHERE s.token_hash=? AND s.user_id=?
 		}
 	}
 
+	var mfaDeadline int64
+	if actor.Kind == ActorUserSession && !mfaIdentity {
+		if !mfaPolicy.Valid || mfaPolicy.String != "0" && mfaPolicy.String != "1" {
+			return Principal{}, fmt.Errorf("authorize final transaction: invalid MFA policy")
+		}
+		if mfaEnrolled || mfaPolicy.String == "1" {
+			if !mfaEnrolled || !mfaUntil.Valid || mfaUntil.Int64 <= now {
+				return Principal{}, ErrMFARequired
+			}
+			mfaDeadline = mfaUntil.Int64
+		}
+	}
 	if requirement.Owner != nil {
 		result, ownerErr := requirement.Owner.CheckOwner(ctx, tx, actor.UserID)
 		if ownerErr != nil {
@@ -244,11 +275,12 @@ WHERE s.token_hash=? AND s.user_id=?
 	}
 
 	return Principal{
-		UserID:         actor.UserID,
-		DiscordID:      discordID.String,
-		Role:           requirement.Role,
-		EffectiveLevel: int(effectiveLevel),
-		SessionBinding: actor.SessionTokenHash,
+		UserID:           actor.UserID,
+		DiscordID:        discordID.String,
+		Role:             requirement.Role,
+		EffectiveLevel:   int(effectiveLevel),
+		SessionBinding:   actor.SessionTokenHash,
+		MFAVerifiedUntil: mfaDeadline,
 	}, nil
 }
 
@@ -261,6 +293,8 @@ func StableCode(err error) string {
 		return httperr.CodeUnauthorized
 	case errors.Is(err, ErrForbidden):
 		return httperr.CodeForbidden
+	case errors.Is(err, ErrMFARequired):
+		return httperr.CodeMFARequired
 	case errors.Is(err, ErrElevatedRequired):
 		return httperr.CodeElevationRequired
 	case errors.Is(err, ErrNotFound):

@@ -24,12 +24,14 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/lifecyclegate"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
+	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
 var adminCredentialPurpose = []byte("NonbiriAPI/admin-session-credential-generation/v1")
 
 type Runtime struct {
 	db                                *sql.DB
+	mfaCodec                          secret.AccountMFACodec
 	provider                          DiscordProvider
 	clientID, redirectURI, siteOrigin string
 	adminUsername                     string
@@ -155,12 +157,22 @@ func NewRuntime(c RuntimeConfig) (*Runtime, error) {
 		now = time.Now
 	}
 	r := &Runtime{db: c.Store.DB(), provider: c.Provider, clientID: c.DiscordClientID, redirectURI: redirect, siteOrigin: origin, adminUsername: c.AdminUsername, adminPasswordDigest: sha256.Sum256([]byte(c.AdminPassword)), adminCredentialGeneration: generation, authorizer: c.Authorizer, maintenance: c.Maintenance, states: states, elevation: elev, oauthThrottle: oauthThrottle, adminThrottle: adminThrottle, now: now, idleTTL: idle, absoluteTTL: absolute, userMux: http.NewServeMux(), adminMux: http.NewServeMux(), routes: make(map[string]struct{})}
+	var codecOK bool
+	r.mfaCodec, codecOK = c.CredentialKeyDeriver.(secret.AccountMFACodec)
+	if !codecOK {
+		_ = r.Close()
+		return nil, errors.New("account MFA encryption unavailable")
+	}
 	r.continuity, err = continuity.New(c.Store.DB(), c.CredentialKeyDeriver)
 	if err != nil {
 		_ = r.Close()
 		return nil, err
 	}
 	if err := r.registerBuiltins(); err != nil {
+		_ = r.Close()
+		return nil, err
+	}
+	if err := r.registerMFARoutes(); err != nil {
 		_ = r.Close()
 		return nil, err
 	}
@@ -405,7 +417,7 @@ func (r *Runtime) wrapUser(next http.Handler, anonymous, maintenanceExempt, rene
 			r.writeSessionFailure(w, err)
 			return
 		}
-		requestContext, release, err := r.admitUserLifecycle(req.Context(), p.actor)
+		requestContext, release, err := r.admitUserLifecycle(req.Context(), p.actor, mfaBootstrapRequest(req))
 		if err != nil {
 			r.writeUserLifecycleFailure(w, err)
 			return
@@ -449,7 +461,7 @@ func (r *Runtime) wrapOptionalUser(next OptionalUserHandler) http.Handler {
 			r.writeSessionFailure(w, err)
 			return
 		}
-		requestContext, release, err := r.admitUserLifecycle(req.Context(), p.actor)
+		requestContext, release, err := r.admitUserLifecycle(req.Context(), p.actor, false)
 		if err != nil {
 			r.writeUserLifecycleFailure(w, err)
 			return
@@ -461,25 +473,44 @@ func (r *Runtime) wrapOptionalUser(next OptionalUserHandler) http.Handler {
 	})
 }
 
-func (r *Runtime) admitUserLifecycle(ctx context.Context, actor authz.Actor) (context.Context, func(), error) {
+func (r *Runtime) admitUserLifecycle(ctx context.Context, actor authz.Actor, identityOnly bool) (context.Context, func(), error) {
 	actorContext := withActor(ctx, actor)
+	validate := func(validateContext context.Context, userID int64, binding string) (bool, error) {
+		if identityOnly {
+			state, err := r.VerifyUserSessionBinding(validateContext, userID, binding)
+			return state == UserSessionBindingActive, err
+		}
+		// Check the session, live level policy, and proof together after acquiring
+		// the lifecycle lease; final business transactions still authorize again.
+		tx, err := r.db.BeginTx(validateContext, &sql.TxOptions{ReadOnly: true})
+		if err != nil {
+			return false, err
+		}
+		defer tx.Rollback()
+		_, err = r.authorizer.Authorize(validateContext, tx, actor, authz.Requirement{Role: authz.RoleUser})
+		return err == nil, err
+	}
 	r.mu.Lock()
 	gate := r.userLifecycle
 	r.mu.Unlock()
 	if gate == nil {
-		return actorContext, func() {}, nil
+		valid, err := validate(actorContext, actor.UserID, actor.SessionTokenHash)
+		if err == nil && !valid {
+			err = lifecyclegate.ErrInvalid
+		}
+		return actorContext, func() {}, err
 	}
-	return gate.Admit(actorContext, actor.UserID, actor.SessionTokenHash,
-		func(validateContext context.Context, userID int64, binding string) (bool, error) {
-			state, err := r.VerifyUserSessionBinding(validateContext, userID, binding)
-			return state == UserSessionBindingActive, err
-		})
+	return gate.Admit(actorContext, actor.UserID, actor.SessionTokenHash, validate)
 }
 
 func (r *Runtime) writeUserLifecycleFailure(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(err, lifecyclegate.ErrInvalid), errors.Is(err, lifecyclegate.ErrRetiring):
+	case errors.Is(err, authz.ErrMFARequired):
+		writeStableError(w, httperr.CodeMFARequired, "MFA verification is required.")
+	case errors.Is(err, lifecyclegate.ErrInvalid), errors.Is(err, lifecyclegate.ErrRetiring), errors.Is(err, authz.ErrUnauthorized):
 		writeStableError(w, httperr.CodeUnauthorized, "authentication required")
+	case errors.Is(err, authz.ErrForbidden):
+		writeStableError(w, httperr.CodeForbidden, "forbidden")
 	default:
 		writeStableError(w, httperr.CodeServiceUnavailable, "service unavailable")
 	}
@@ -549,6 +580,8 @@ func (r *Runtime) AuthorizeUserMutation(ctx context.Context, tx *sql.Tx, userID 
 	switch {
 	case err == nil:
 		return nil
+	case errors.Is(err, authz.ErrMFARequired):
+		return err
 	case errors.Is(err, authz.ErrUnauthorized):
 		return resources.ErrUnauthorized
 	case errors.Is(err, authz.ErrForbidden):
