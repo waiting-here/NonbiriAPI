@@ -13,14 +13,14 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   reporter: [['line']],
   outputDir: 'test-results/playwright',
-  preserveOutput: 'never',
+  preserveOutput: 'failures-only',
   globalSetup: './test/e2e/global-setup.mjs',
   use: {
     baseURL: FIXTURE_ORIGIN,
     headless: true,
     serviceWorkers: 'block',
     trace: 'off',
-    screenshot: 'off',
+    screenshot: 'only-on-failure',
     video: 'off',
   },
   projects: [
