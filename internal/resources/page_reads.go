@@ -154,11 +154,8 @@ func (r *Repository) FilterModelsPage(ctx context.Context, userID int64, filters
 		if err != nil {
 			return result, err
 		}
-		for i := range result.Data {
-			result.Data[i].Browse, err = modelBrowseTx(ctx, tx, userID, result.Data[i])
-			if err != nil {
-				return Page[Model]{}, err
-			}
+		if err = attachModelBrowseTx(ctx, tx, userID, result.Data); err != nil {
+			return Page[Model]{}, err
 		}
 		return result, nil
 	})
