@@ -20,7 +20,7 @@ has passed.
 
 ## Stable candidate
 
-- Validate fresh schema 18, the stable schema 17 upgrade, the exact rc.7 source conversion, target equality,
+- Validate fresh schema 19, offline schema 17/18 and exact rc.7 conversions, target equality,
   rollback/cancellation, re-entry and zero-write unsupported-source rejection.
   Preserve credentials, operator settings, legal overrides, balances, game saves,
   activities and receipts. Exercise successive stable migrations; see

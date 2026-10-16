@@ -252,16 +252,18 @@ This fallback also covers proxy timeouts or invalid upstream responses before re
 
 ## Database compatibility and version changes
 
-The stable application starts from an empty database or a registered stable
-schema, beginning at **17**. Schema **16** uses the standalone
-[rc.7 converter](../cmd/nonbiri-upgrade-rc7/README.md). Other prereleases and unknown
+The v1.0.0 application starts from an empty database or current schema **19**.
+Schema **16**, **17** and **18** use the standalone
+[v1 converter](../cmd/nonbiri-upgrade-v1/README.md). Other prereleases and unknown
 structures are rejected. SQLite identity remains Generation 2; exports use
-format **19**. See [database upgrades](database-upgrades.md) for manifests, stable
+format **20**. See [database upgrades](database-upgrades.md) for manifests, stable
 migration guarantees and content versions.
 
 Run `./nonbiriapi maintenance schema-info --json` without a production environment
 or database to inspect the target's compatibility descriptor. Deployment helpers
-must consume this output instead of parsing Go files. Use
+must consume this output and the matching converter's `--schema-info --json`
+instead of parsing Go files. The service descriptor has no historical sources;
+the converter declares its exact offline sources. Use
 `./nonbiriapi maintenance verify` on a stopped current database or consistent copy
 for a full offline audit; normal startup performs the current checks and recovers
 unfinished work. Historical cleanup commands are retired from the running binary.
@@ -287,12 +289,12 @@ instance legal text remain separate operator actions.
    protected recovery snapshot containing the database and existing sidecars,
    exact source release, environment, master key, unit, manifest and checksums.
    An unchanged stopped-state retry reuses that snapshot.
-4. For schema 16, run the converter with `--apply` under exclusive database access.
+4. For schema 16, 17 or 18, run the converter with `--apply` under exclusive database access.
    After any eligible legacy Gateway import, remove
    `NONBIRI_GATEWAY_MODEL_CAPABILITIES` and the six
    `NONBIRI_SMTP_HOST/PORT/USER/PASS/FROM/TLS` keys. Preserve other environment
-   lines and permissions; report key names, never values. Normal stable upgrades
-   use the application's registered migration chain.
+   lines and permissions; report key names, never values. The target application
+   itself does not perform this conversion.
 5. Switch to the prepared release and start it once. Confirm both local station
    health endpoints and the running binary identity, then reopen admission.
    Verify public hosts, login boundaries and changed pages alongside about

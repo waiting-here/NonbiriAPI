@@ -9,6 +9,12 @@ Content-Type: application/json
 
 The caller must remain an active level-6 steward. Level-5 trainees cannot use these automation routes. Session cookies cannot replace the CallerKey. Revocation, rotation, bans, deletion and loss of steward permission are checked again before writes. These controls grant no authority over another donor's private endpoint, key or model catalog. This document describes the current source; check the deployed build before using new routes.
 
+Account MFA applies to browser sessions. These CallerKey routes retain their
+existing credentials and do not require authenticator codes. Browser controls
+that reveal or rotate a CallerKey do require MFA when the account is enrolled or
+its level policy requires enrollment. Resetting MFA revokes browser sessions but
+does not rotate a CallerKey; revoke that credential separately if it is exposed.
+
 Creation and model binding accept only POST without query parameters. Failure-policy reads use GET with the two specified IDs; edits use PATCH without query parameters. Other methods, suffixes and path variants are rejected. JSON rejects unknown and duplicate fields. Each request is limited to 256 KiB, 100 keys, 16 recurring rules per key and 16,384 total object fields; responses are limited to 64 KiB. All controls share a maximum of four concurrent requests, with one per user and no queue, across personal reads/writes, charity reads and existing charity writes. A busy control returns HTTP 429. Maintenance admission and the existing resource, credential, discovery and outbound protections still apply. These management operations do not consume model-call credits or charity usage quotas.
 
 Endpoint protocols include `google-gemini`, `openai-responses` and `openai-decisions` alongside the existing types. Gemini and Responses bindings serve Chat only; Decisions bindings serve `/v1/decisions` with model type `decisions`. Same-URL endpoints can use distinct protocols. Discovery availability does not prove model-operation support. See [content protocols](content-protocols.md) for native base URLs, supported subsets, continuation fields and usage. Existing control authentication, revision, idempotency and request/response budgets remain unchanged.

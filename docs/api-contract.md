@@ -24,6 +24,52 @@ Account export/deletion and selected administrator legal-hold/user actions requi
 
 An incorrect password at `POST /admin/api/auth/elevate` returns `403 elevated_required`; the active session remains valid. A missing or expired session returns `401 unauthorized`.
 
+#### Account authenticator verification
+
+Ordinary accounts at levels 1–6 may enable TOTP. Administrators can require it
+independently for each effective level with `mfa_required_level_1` through
+`mfa_required_level_6`; all six default to false. An enrolled account requires
+verification even when its level policy is off. The administrator station keeps
+its separate authentication.
+
+An unverified enrolled or required account receives `403 mfa_required` from
+browser account routes, including `/api/session`, `/api/me`, CallerKey controls
+and steward pages. No profile or balance accompanies the challenge. OAuth,
+logout and the five exact MFA routes below remain available. CallerKey model
+calls and the finite CallerKey automation routes keep their existing authority;
+they cannot manage MFA.
+
+| Method / path | Body | Result |
+| --- | --- | --- |
+| GET `/api/auth/mfa` | none | `{enrolled,required,verified,verified_until}` |
+| POST `/api/auth/mfa/setup` | `{}` | `{secret,otpauth_uri,expires_at}` |
+| POST `/api/auth/mfa/confirm` | `{code}` | MFA status |
+| POST `/api/auth/mfa/verify` | `{code}` | MFA status |
+| POST `/api/auth/mfa/disable` | `{code}` | MFA status |
+
+These routes accept the current user cookie, no query parameters, and return
+`Cache-Control: no-store`. Times are UTC Unix seconds; `verified_until` is null
+without a valid proof. Setup lasts ten minutes and belongs to the current
+session. Only pending setup exposes its seed, for a local QR code or manual
+entry; an enrolled seed is never returned. Codes use six digits, SHA-1 and a
+30-second step with one neighboring step in each direction. A consumed step
+cannot be reused. Five failed attempts within fifteen minutes block further
+attempts for fifteen minutes with `429 rate_limited` and `Retry-After`; changing
+sessions or restarting setup does not clear this account-wide budget.
+
+Successful verification grants a fixed seven-day proof for that browser session.
+Session renewal does not extend it; logout, replacement and reset revoke it.
+Required accounts cannot disable MFA. Optional accounts must supply a fresh code
+to disable it. `mfa_invalid_code` is 403 and `mfa_setup_expired` is 409. The browser
+retains unfinished forms during a challenge and never automatically replays a
+failed mutation. Private streams also stop when their authorization expires.
+
+Administrators read enrollment with `GET /admin/api/users/{id}/mfa` and reset it
+with `POST /admin/api/users/{id}/mfa/reset`, an empty body and a fresh
+`X-Elevated-Token`. Both return `{enrolled:boolean}`. Reset removes enrollment and
+all target browser sessions; the user signs in again and follows current policy.
+Administrator targets are rejected. CallerKey credentials remain unchanged.
+
 `DELETE /admin/api/users/{id}` requires a fresh administrator capability, an `Idempotency-Key`, and `{"expected_revision":"<user revision>","confirmation":"DELETE"}`. It rejects administrator targets and stale revisions, drains accepted requests, and runs the account cleanup workflow. Success returns `204`; an identical retry with fresh verification replays that result without repeating deletion. Reusing the key for another target or revision returns `409 conflict`.
 
 #### Browser cross-origin access
@@ -71,10 +117,10 @@ Display projections replace valid IPv4 address strings with `[redacted]` in erro
 | ---: | --- |
 | 400 | `invalid_request`, `content_too_short` |
 | 401 | `unauthorized` |
-| 403 | `forbidden`, `elevated_required`, `feature_disabled`, `insufficient_credits`, `charity_suspended`, `checkin_cap_reached` |
+| 403 | `forbidden`, `elevated_required`, `mfa_required`, `mfa_invalid_code`, `feature_disabled`, `insufficient_credits`, `charity_suspended`, `checkin_cap_reached` |
 | 404 | `not_found` |
 | 405 | `method_not_allowed` |
-| 409 | `conflict`, `refresh_required`, `already_checked_in`, `debug_live_cancelled` |
+| 409 | `conflict`, `mfa_setup_expired`, `refresh_required`, `already_checked_in`, `debug_live_cancelled` |
 | 413 | `payload_too_large` |
 | 422 | `resource_limit_exceeded`, `debug_dry_run_intercepted`, `debug_live_result_captured` |
 | 423 | `resource_locked` |
@@ -90,7 +136,7 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with stable schema 18. Normal startup accepts fresh storage and registered stable sources; rc.7 schema 16 requires the offline converter. Unknown or partial structures are rejected before writes. Startup validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for explicit source/target versions and rollback requirements.
+The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 19. Normal startup accepts fresh storage and schema 19 only; schema 16, 17 and 18 require the separate offline converter. Unknown or partial structures are rejected before writes. Startup validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for explicit source/target versions and rollback requirements.
 
 Current account export `schema_version=20` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v20.json`. See §9 for its safe projections.
 

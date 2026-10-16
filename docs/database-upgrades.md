@@ -2,34 +2,37 @@
 
 ## Supported databases
 
-The stable baseline is schema **17**, and the current schema is **18**. The application accepts a new database or a
-registered stable schema from v1.0.0 onward. Later v1.x binaries must upgrade any
-earlier v1.x schema through the complete forward chain; intermediate binaries are
-not required. An older binary is not required to read a newer database.
+The v1.0.0 application accepts a new database or the current schema **19**.
+Existing schema 16, 17 and 18 databases require the separate one-time converter.
+The normal service contains only current DDL and validation; it does not import
+or embed historical schemas or conversion code. Later v1.x releases must provide
+a complete upgrade path from every earlier stable v1.x database. An older binary
+is not required to read a newer database.
 
 SQLite identity remains `application_id=0x4E425249`, `user_version=2`. Account
 exports use format **20**, independently of the storage schema. An unknown
-identity, version or structural manifest is rejected before writes. Schema 16
-requires the separate rc.7 converter and is not a normal startup source.
+identity, version or structural manifest is rejected before writes.
 
 ```sh
 ./nonbiriapi maintenance schema-info --json
+./nonbiri-upgrade-v1 --schema-info --json
 ```
 
-This command reads no environment or database. Its machine-readable descriptor
-contains the current identity, minimum supported version, registered migration
-sources and offline conversions. Deployment tools should use it instead of
-parsing Go source or deriving a version from the number of migrations.
+These commands load no application configuration or database. Each machine-readable descriptor
+contains the current identity and accepted versions. The application descriptor
+accepts only schema 19 and has empty migration and conversion lists. The converter
+descriptor lists its exact offline sources and target. Deployment tools use both
+descriptors instead of parsing Go source or deriving versions from array lengths.
 
-## Stable migrations
+## Schema changes
 
-`internal/db/generation_two.sql` is the complete fresh schema. The migration
-registry declares explicit source and target versions, structural manifests and
-transactional SQL or Go conversion callbacks. Released steps are immutable.
+`internal/db/generation_two.sql` is the complete fresh schema. Historical source
+manifests and transformations live under `internal/upgrade/`, outside the normal
+application dependency graph. Released source definitions are immutable.
 
 For a change to persistent semantics:
 
-1. Register a forward step from the previous stable version. Preserve stored
+1. Provide an explicit forward step from the previous supported version. Preserve stored
    operator choices and historical facts; seed only missing configuration.
 2. Update fresh DDL and seeds to produce the same target. Update the structural
    manifest, pinned hashes and configuration golden together.
@@ -37,7 +40,7 @@ For a change to persistent semantics:
    injected failure, retry, unknown-source rejection and repeated startup.
    Exercise successive steps as a chain, including data-only conversions.
 
-All required steps run atomically. Validation checks the registered source before
+All required offline steps run atomically. Validation checks the registered source before
 writes and the target before commit. A failed or cancelled chain rolls back.
 A database rollback restores its complete matching stopped recovery set; an old
 binary alone cannot reverse a migration.
@@ -56,17 +59,21 @@ only when needed to keep the existing blue-fish probability and a combined 100%
 limit. Encrypted credentials, financial encodings and existing content IDs do not
 change. Export format 20 adds milk-crab lengths and the new protocol identifiers.
 
-## One-time rc.7 conversion
+Schema 19 adds encrypted account authenticator seeds, temporary enrollment,
+per-account failed-code budgets and session-bound MFA proofs. Six level policies
+default to disabled. These authentication records are excluded from account
+exports; export format remains 20.
 
-Build `./cmd/nonbiri-upgrade-rc7` from the same commit as the target application.
-The converter accepts the registered rc.7 schema 16 identity and exact structure;
+## One-time conversion
+
+Build `./cmd/nonbiri-upgrade-v1` from the same commit as the target application.
+The converter accepts exact registered schema 16, 17 and 18 structures. For rc.7,
 the reference source is `82f1711b674425745a768f781e0e0c34dcb37ac3`. The database
 manifest determines eligibility, not a guess based on a release label.
 
 Use `--check` on an isolated consistent copy, then `--apply` with the service
 stopped and its existing master key available. The converter acquires exclusive
-database access, converts schema 16 to the stable baseline, then applies the
-registered forward chain to schema 18 in the same transaction. A matching
+database access and converts the source to schema 19 in one transaction. A matching
 current schema is a no-op; structural drift, an unknown source or a wrong key is
 rejected. Failure or cancellation rolls back.
 
@@ -76,11 +83,13 @@ remaining prerelease backfills out of normal startup. Existing database Gateway
 configuration remains authoritative; legacy environment import runs only when its
 import marker is absent. Remove obsolete environment keys after that step.
 
-See the [converter instructions](../cmd/nonbiri-upgrade-rc7/README.md) for commands
+See the [converter instructions](../cmd/nonbiri-upgrade-v1/README.md) for commands
 and the [deployment procedure](deployment.md#manual-same-generation-deployment-procedure)
 for the single recovery snapshot and cutover. The source and synthetic fixtures
 contain no instance addresses, keys or production records. Earlier prereleases
-are outside this converter's scope.
+are outside this converter's scope. `nonbiri-upgrade-rc7` remains a narrow wrapper
+for schema 16 and an already-current database; other supported sources use the
+general v1 converter.
 
 ## Content versions and accounting operations
 

@@ -12,7 +12,19 @@ family. The registered routes, export builder, deletion coordinator, retention w
 and bilingual privacy text are covered by their implementation and contract tests.
 Schema presence alone never creates a route or expands a response.
 
-Current account export format 20 includes safe `gacha` balances, owned cards, guarantees, claims, activity journals, draw details within 180 days and the saved appearance artwork key. Its filename is `nonbiriapi-account-export-v20.json`; SQLite `user_version` remains 2 and the stable storage baseline is schema 17, with current schema 18. All rows below describe current retained fields. This does not assert that a particular instance has been upgraded.
+Current account export format 20 includes safe `gacha` balances, owned cards, guarantees, claims, activity journals, draw details within 180 days and the saved appearance artwork key. Its filename is `nonbiriapi-account-export-v20.json`; SQLite `user_version` remains 2 and the current storage schema is 19. All rows below describe current retained fields. This does not assert that a particular instance has been upgraded.
+
+`account_mfa_credentials` holds purpose-encrypted authenticator seeds and the
+last consumed time step. `account_mfa_pending` holds a ten-minute enrollment
+bound to a browser session; bounded session retention removes expired setup.
+`account_mfa_attempts` keeps one failed-code budget per account across session
+replacement and process restarts. `account_mfa_proofs` grants at most seven days
+for a specific session and credential generation. All four are excluded from
+account exports and cascade on account deletion. Session removal cascades pending
+setup and proofs; removing enrollment removes its proofs. Administrator reset
+also removes all target browser sessions, retaining CallerKey credentials and
+the failed-code budget. Seeds, codes and QR payloads never enter logs or audit
+messages; offline credential verification checks the encrypted MFA material.
 
 Donated keys include the current U128 failure-disable threshold in owner, management and safe export projections. It follows the parent key/donation lifecycle and adds no retention window. Policy edits add no-secret donation review facts, retained under the existing donation-review policy; account deletion removes actor links. A zero threshold preserves error counting but never disables a key for errors. Expiry, withdrawal, bans, manual switches and quota limits remain effective.
 
@@ -218,7 +230,7 @@ manifest, and checksums. Snapshot retention/deletion is operator-controlled and 
 be disclosed by the instance policy; the service does not promise per-user erasure inside
 historical snapshots.
 
-Stable startup accepts fresh storage or registered stable schemas beginning at 17; rc.7 schema 16 uses the independent converter. Unknown or partial sources are rejected before writes. Fresh creation requires the main database and sidecars to be absent. Conversion and stable upgrades preserve accounts, economic facts, credentials, saved games, configuration and instance legal text. Full historical audits use offline `maintenance verify`. The [database upgrade guide](database-upgrades.md) identifies the exact source and restore requirements.
+Normal v1.0.0 startup accepts fresh storage or current schema 19; schema 16, 17 and 18 use the independent converter. Unknown or partial sources are rejected before writes. Fresh creation requires the main database and sidecars to be absent. Conversion preserves accounts, economic facts, credentials, saved games, configuration and instance legal text. Full historical audits use offline `maintenance verify`. The [database upgrade guide](database-upgrades.md) identifies the exact source and restore requirements.
 
 Starting fresh from an unsupported version uses a separate empty path and resets active application state. A complete old recovery set remains sensitive until its retention purpose ends. Never combine an old binary with a newer database or restore a stale snapshot over newly accepted data automatically.
 

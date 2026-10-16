@@ -54,6 +54,17 @@ The database directory and file hold encrypted upstream credentials and private 
 
 ## Runtime administrator settings
 
+### Account MFA
+
+`mfa_required_level_1` through `mfa_required_level_6` are independent boolean
+site-config settings, all false by default. They require accounts at the current
+effective level to enroll and verify an authenticator before browser account
+access. Users at any level may enroll voluntarily; turning a policy off does not
+disable an existing enrollment. Verification lasts seven days per login session.
+CallerKey model calls and existing CallerKey automation are unchanged. See the
+[authentication contract](api-contract.md#account-authenticator-verification)
+for enrollment, recovery and administrator reset.
+
 ### Loans, quick stakes and ranking privacy
 
 `PATCH /admin/api/activities/config` extends the existing revision-controlled
