@@ -179,6 +179,7 @@ func buildGenerationTwoConfigCatalog() map[string]generationTwoConfigSpec {
 		"game_fishing_rake_welfare_bp":      uintSpec("100", 0, 9999),
 		"game_fishing_rake_thursday_bp":     uintSpec("100", 0, 9999),
 		"game_fishing_blue_fish_chance_bps": uintSpec("1000", 0, 10000),
+		"game_fishing_milk_crab_chance_bps": uintSpec("1000", 0, 10000),
 		"charity_enabled":                   boolSpec("0"),
 		"donation_accept_enabled":           boolSpec("0"),
 		"games_enabled":                     boolSpec("0"),

@@ -27,7 +27,7 @@ const RC7SourceManifestHash = "484bf7ee92aec1dfb9c8750e9bb1a73b2b4b5d1e9761e1f86
 func SchemaDescriptor() StorageSchemaDescriptor {
 	return StorageSchemaDescriptor{FormatVersion: 1, ApplicationID: DatabaseApplicationID,
 		UserVersion: DatabaseUserVersion, GenerationTwoCompatibility: GenerationTwoCompatibilityDescriptor(),
-		OfflineConversions: []OfflineConversionDescriptor{{Tool: "nonbiri-upgrade-rc7", SourceCommit: RC7SourceCommit, SourceSchemaVersion: RC7SourceSchemaVersion, SourceManifestHash: RC7SourceManifestHash, TargetSchemaVersion: 17}}}
+		OfflineConversions: []OfflineConversionDescriptor{{Tool: "nonbiri-upgrade-rc7", SourceCommit: RC7SourceCommit, SourceSchemaVersion: RC7SourceSchemaVersion, SourceManifestHash: RC7SourceManifestHash, TargetSchemaVersion: CurrentSchemaVersion}}}
 }
 
 func SchemaManifestHash(ctx context.Context, q queryer) (string, error) {

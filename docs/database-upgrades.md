@@ -2,13 +2,13 @@
 
 ## Supported databases
 
-The stable baseline is schema **17**. The application accepts a new database or a
+The stable baseline is schema **17**, and the current schema is **18**. The application accepts a new database or a
 registered stable schema from v1.0.0 onward. Later v1.x binaries must upgrade any
 earlier v1.x schema through the complete forward chain; intermediate binaries are
 not required. An older binary is not required to read a newer database.
 
 SQLite identity remains `application_id=0x4E425249`, `user_version=2`. Account
-exports use format **19**, independently of the storage schema. An unknown
+exports use format **20**, independently of the storage schema. An unknown
 identity, version or structural manifest is rejected before writes. Schema 16
 requires the separate rc.7 converter and is not a normal startup source.
 
@@ -48,6 +48,14 @@ when used. Missing or invalid key-check material is an error, never a reason to
 silently create new material. Full credential and historical accounting audits
 belong to `nonbiriapi maintenance verify` on a stopped database or consistent copy.
 
+Schema 18 adds the Gemini, Responses and Decisions protocol identifiers and
+mutually exclusive milk-crab fishing presentations. Existing fish lengths remain
+blue-fish facts; accepted batches keep their original probabilities and get zero
+milk-crab probability. Missing milk-crab configuration defaults to 10%, reduced
+only when needed to keep the existing blue-fish probability and a combined 100%
+limit. Encrypted credentials, financial encodings and existing content IDs do not
+change. Export format 20 adds milk-crab lengths and the new protocol identifiers.
+
 ## One-time rc.7 conversion
 
 Build `./cmd/nonbiri-upgrade-rc7` from the same commit as the target application.
@@ -57,8 +65,9 @@ manifest determines eligibility, not a guess based on a release label.
 
 Use `--check` on an isolated consistent copy, then `--apply` with the service
 stopped and its existing master key available. The converter acquires exclusive
-database access and transforms schema 16 to 17 in one transaction. A matching
-schema 17 is a no-op; structural drift, an unknown source or a wrong key is
+database access, converts schema 16 to the stable baseline, then applies the
+registered forward chain to schema 18 in the same transaction. A matching
+current schema is a no-op; structural drift, an unknown source or a wrong key is
 rejected. Failure or cancellation rolls back.
 
 The conversion preserves accounts, encrypted credentials, configuration, instance

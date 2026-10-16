@@ -129,7 +129,7 @@ func retainedFacts(t *testing.T, database *sql.DB) map[string][32]byte {
 		}
 		query := "SELECT * FROM " + table
 		if table == "site_config" {
-			query += " WHERE key NOT IN ('redemption_ban_threshold','redemption_ban_window_seconds','redemption_ban_duration_seconds')"
+			query += " WHERE key NOT IN ('redemption_ban_threshold','redemption_ban_window_seconds','redemption_ban_duration_seconds','game_fishing_milk_crab_chance_bps')"
 		}
 		rows, err := database.Query(query)
 		if err != nil {
@@ -158,6 +158,13 @@ func retainedFacts(t *testing.T, database *sql.DB) map[string][32]byte {
 					continue
 				}
 				if table == "donation_keys" && (column == "key_body_review_hmac" || column == "review_revision") {
+					continue
+				}
+				// New presentation fields have no source value to compare. Every
+				// original probability, length and other business column remains.
+				if table == "game_fishing_batches" && column == "milk_crab_chance_bps" ||
+					(table == "game_fishing_outcome_lengths" || table == "game_fishing_best_lengths") && column == "kind" ||
+					table == "game_fishing_length_facts" && column == "milk_crab_length_cm" {
 					continue
 				}
 				kind := "null"

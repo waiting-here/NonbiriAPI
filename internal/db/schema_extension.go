@@ -37,14 +37,17 @@ type schemaRegistry struct {
 }
 
 const MinimumSchemaVersion = 17
-const CurrentSchemaVersion = 17
+const CurrentSchemaVersion = 18
+
+const stableSchema17Manifest = "7289b13cd57bb2d6a50a31ffde33cae17ceac2e1e130e0cd759dd2f0c2a98d4b"
 
 // Only published stable versions belong to this append-only registry.
 var storageSchema = schemaRegistry{
 	baseline: MinimumSchemaVersion,
 	target:   CurrentSchemaVersion,
 	versions: []schemaMigration{
-		{version: CurrentSchemaVersion, manifest: PinnedGenerationTwoManifestHash},
+		{version: 17, manifest: stableSchema17Manifest},
+		{from: 17, version: 18, manifest: PinnedGenerationTwoManifestHash, apply: extendContentAndProtocols},
 	},
 }
 

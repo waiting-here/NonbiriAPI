@@ -125,6 +125,13 @@ func ConvertOffline(ctx context.Context, path string, codec secret.GenerationTwo
 		if err := convert(ctx, database, tx); err != nil {
 			return err
 		}
+		plan, err := storageSchema.plan(ctx, tx)
+		if err != nil {
+			return err
+		}
+		if err := plan.apply(ctx, tx); err != nil {
+			return err
+		}
 		if err := validateGenerationTwoManifest(ctx, tx); err != nil {
 			return err
 		}

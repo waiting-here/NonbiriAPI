@@ -1,10 +1,13 @@
-# Convert rc.7 storage to the stable baseline
+# Convert rc.7 storage to the current stable schema
 
-`nonbiri-upgrade-rc7` converts the schema 16 database used by rc.7 to schema 17.
+`nonbiri-upgrade-rc7` converts the schema 16 database used by rc.7 to schema 18,
+including the intermediate schema 17 conversion in the same transaction.
 It accepts the exact SQLite identity and structure published at
 `82f1711b674425745a768f781e0e0c34dcb37ac3`. The deployed executable need not have
 that commit if its database has the same identity and structure. Other
-prerelease schemas and locally modified structures are rejected.
+prerelease schemas and locally modified structures are rejected. Existing
+stable schema 17 databases upgrade through normal server startup; this tool
+does not accept them as prerelease sources.
 
 Build the tool from the same reviewed source as the target server:
 
@@ -45,7 +48,8 @@ printing database contents or environment values.
 Checking opens the database read-only and verifies schema and encryption
 material. SQLite may create WAL coordination sidecars. Applying requires
 exclusive access and converts in one transaction; cancellation or failure
-rolls it back. A matching schema 17 database returns `current` without changes.
+rolls back both conversion stages. A matching schema 18 database returns
+`current` without changes.
 The tool creates no additional backup. Recovery uses the deployment snapshot.
 
 The conversion preserves business, configuration, legal, encrypted credential,
@@ -55,6 +59,12 @@ unset, and imports `NONBIRI_GATEWAY_MODEL_CAPABILITIES` only when the old import
 marker is absent. Existing database model policies remain authoritative.
 It also preserves prior abuse and idempotency facts while enabling the
 redemption-code window; the three new ban settings are inserted only if absent.
+The stable migration enables the additional upstream protocol identities and
+milk-crab presentation. Existing fishing probabilities and outcomes remain
+unchanged: accepted batches retain a zero milk-crab probability, and existing
+length records remain blue-fish records. The new site probability defaults to
+10%, capped by the remaining probability after the configured blue-fish share;
+an explicit stored value is preserved.
 Remove that variable and `NONBIRI_SMTP_HOST`, `NONBIRI_SMTP_PORT`,
 `NONBIRI_SMTP_USER`, `NONBIRI_SMTP_PASS`, `NONBIRI_SMTP_FROM`, and
 `NONBIRI_SMTP_TLS` after a successful conversion.
