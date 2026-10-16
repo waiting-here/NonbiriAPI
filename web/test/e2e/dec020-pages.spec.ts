@@ -378,20 +378,10 @@ test('administrator mainstream channel CRUD keeps channel details and archive co
   await expect(page.getByRole('heading', { name: 'Mainstream channels', level: 1 })).toBeVisible();
   await page.getByRole('button', { name: /New channel/ }).click();
   await page.getByLabel('Channel name').fill('Fixture channel');
+  await page.getByRole('combobox', { name: 'Category', exact: true }).selectOption('api_platform');
   await page
-    .getByRole('radiogroup', { name: 'Category', exact: true })
-    .getByText('Mainstream API platform', { exact: true })
-    .click();
-  await expect(
-    page.getByRole('radio', { name: 'Mainstream API platform', exact: true }),
-  ).toBeChecked();
-  await page
-    .getByRole('radiogroup', { name: 'API format', exact: true })
-    .getByText('Anthropic-compatible', { exact: true })
-    .click();
-  await expect(
-    page.getByRole('radio', { name: 'Anthropic-compatible', exact: true }),
-  ).toBeChecked();
+    .getByRole('combobox', { name: 'API format', exact: true })
+    .selectOption('anthropic-compatible');
   await page.getByLabel('API base URL').fill('https://channel.example.test/v1');
   await page.getByRole('button', { name: 'Create channel' }).click();
 

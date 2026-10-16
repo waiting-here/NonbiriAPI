@@ -1,3 +1,4 @@
+import type { ConnectorType } from './types';
 import en from '../../i18n/en.json';
 import zh from '../../i18n/zh.json';
 import { useRegisteredCopy, type CopyParameters } from '@shared/i18n/useRegisteredCopy';
@@ -352,6 +353,16 @@ const keys = {
 } as const;
 
 export type CoreCopyKey = keyof typeof keys;
+
+export const CONNECTOR_COPY_KEYS = {
+  'openai-compatible': 'connector.openai',
+  'anthropic-compatible': 'connector.anthropic',
+  'ai-sdk-gateway-v3': 'connector.gateway',
+  'google-gemini': 'connector.gemini',
+  'openai-responses': 'connector.responses',
+  'openai-decisions': 'connector.decisions',
+} as const satisfies Record<ConnectorType, CoreCopyKey>;
+
 export const CORE_COPY_KEYS = Object.keys(keys) as CoreCopyKey[];
 export const CORE_COPY_DESCRIPTORS = CORE_COPY_KEYS.map((key) => ({
   key,

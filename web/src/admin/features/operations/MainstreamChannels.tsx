@@ -10,7 +10,7 @@ import {
   StationSessionChangedError,
   stationSessionMatches,
 } from '@shared/charityManagement';
-import { DataTable, Segmented, Toggle } from '@shared/components/ui';
+import { DataTable, Field, Toggle } from '@shared/components/ui';
 import { ExpandablePanel } from '@shared/components/ui/ExpandablePanel';
 import './mainstream-channels.css';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
@@ -173,26 +173,45 @@ function ChannelForm({
             onChange={(event) => setDraft({ ...draft, name: event.target.value })}
           />
         </label>
-        <Segmented
-          label={t('admin.mainstreamChannels.form.category')}
-          value={draft.category}
-          disabled={!canEdit || busy}
-          options={MAINSTREAM_CHANNEL_CATEGORIES.map((value) => ({
-            value,
-            label: t(CATEGORY_LABEL_KEYS[value]),
-          }))}
-          onChange={(category) => setDraft({ ...draft, category })}
-        />
-        <Segmented
-          label={t('admin.mainstreamChannels.form.connector')}
-          value={draft.connector_type}
-          disabled={!canEdit || busy}
-          options={MAINSTREAM_CONNECTOR_TYPES.map((value) => ({
-            value,
-            label: t(CONNECTOR_LABEL_KEYS[value]),
-          }))}
-          onChange={(connector_type) => setDraft({ ...draft, connector_type })}
-        />
+        <Field label={t('admin.mainstreamChannels.form.category')}>
+          {(field) => (
+            <select
+              {...field}
+              value={draft.category}
+              disabled={!canEdit || busy}
+              onChange={(event) =>
+                setDraft({ ...draft, category: event.target.value as MainstreamChannelCategory })
+              }
+            >
+              {MAINSTREAM_CHANNEL_CATEGORIES.map((value) => (
+                <option key={value} value={value}>
+                  {t(CATEGORY_LABEL_KEYS[value])}
+                </option>
+              ))}
+            </select>
+          )}
+        </Field>
+        <Field label={t('admin.mainstreamChannels.form.connector')}>
+          {(field) => (
+            <select
+              {...field}
+              value={draft.connector_type}
+              disabled={!canEdit || busy}
+              onChange={(event) =>
+                setDraft({
+                  ...draft,
+                  connector_type: event.target.value as MainstreamConnectorType,
+                })
+              }
+            >
+              {MAINSTREAM_CONNECTOR_TYPES.map((value) => (
+                <option key={value} value={value}>
+                  {t(CONNECTOR_LABEL_KEYS[value])}
+                </option>
+              ))}
+            </select>
+          )}
+        </Field>
         <label>
           <span>{t('admin.mainstreamChannels.form.baseUrl')}</span>
           <input

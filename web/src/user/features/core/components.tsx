@@ -3,7 +3,7 @@ import { AuthRequired } from '@shared/components/States';
 import { Icon, type IconName } from '@shared/components/Icon';
 import { copyText } from '@shared/utils/clipboard';
 import { isApiError, isNotFoundError, isUnauthorized } from '@shared/query/http';
-import { useCoreCopy } from './copy';
+import { CONNECTOR_COPY_KEYS, useCoreCopy } from './copy';
 import { OutcomeNote } from '@shared/components/ui';
 import { callerSafeError } from './request';
 import { useCoreMe, useCoreSession, type CoreSessionBoundary } from './queries';
@@ -204,23 +204,7 @@ export function StatusPill({
 
 export function ConnectorLabel({ value }: { value: ConnectorType }) {
   const { t } = useCoreCopy();
-  return (
-    <>
-      {t(
-        value === 'openai-compatible'
-          ? 'connector.openai'
-          : value === 'anthropic-compatible'
-            ? 'connector.anthropic'
-            : value === 'google-gemini'
-              ? 'connector.gemini'
-              : value === 'openai-responses'
-                ? 'connector.responses'
-                : value === 'openai-decisions'
-                  ? 'connector.decisions'
-                  : 'connector.gateway',
-      )}
-    </>
-  );
+  return <>{t(CONNECTOR_COPY_KEYS[value])}</>;
 }
 
 export function DiscoveryStatus({ evidence }: { evidence: DiscoveryEvidence }) {

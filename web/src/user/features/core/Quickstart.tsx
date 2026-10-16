@@ -1,5 +1,5 @@
 import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
-import { Fold, Note, OptionCards, Segmented } from '@shared/components/ui';
+import { Field, Fold, Note, OptionCards } from '@shared/components/ui';
 import { TransportRuleField } from '@shared/components/TransportRuleField';
 import type { TransportRule } from '@shared/transportRule';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
@@ -24,7 +24,7 @@ import {
   validatePersonalProviderName,
 } from './normalizers';
 import { ConnectorLabel, CoreErrorPanel, CoreLoading, SafeCopyValue } from './components';
-import { useCoreCopy } from './copy';
+import { CONNECTOR_COPY_KEYS, useCoreCopy } from './copy';
 import { useQuickstartCopy } from './quickstartCopy';
 import {
   executeResource,
@@ -717,17 +717,24 @@ export function Quickstart({
                           />
                           <small>{text('addressHelp')}</small>
                         </label>
-                        <Segmented
-                          label={text('connector')}
-                          value={connector}
-                          disabled={locked}
-                          options={(options.data?.base_connector_types ?? []).map((value) => ({
-                            value,
-                            label: <ConnectorLabel value={value} />,
-                          }))}
-                          onChange={setConnector}
-                        />
-                        <small>{ui('user.services.connectorHelp')}</small>
+                        <Field label={text('connector')} help={ui('user.services.connectorHelp')}>
+                          {(field) => (
+                            <select
+                              {...field}
+                              value={connector}
+                              disabled={locked}
+                              onChange={(event) =>
+                                setConnector(event.target.value as ConnectorType)
+                              }
+                            >
+                              {(options.data?.base_connector_types ?? []).map((value) => (
+                                <option key={value} value={value}>
+                                  {core(CONNECTOR_COPY_KEYS[value])}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        </Field>
                       </>
                     )}
                     <label>
