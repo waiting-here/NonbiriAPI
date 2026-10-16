@@ -5,7 +5,7 @@
 `internal/gacha` owns the catalog, rules, balances, transactions and HTTP API;
 `web/src/user/activities/gacha` implements the activity presentation. Card
 and theme IDs are stable. Catalog and `presets.json` content versions are separate
-from database schema 17. Adding cards, pool templates or a new period of an
+from the database schema. Adding cards, pool templates or a new period of an
 existing activity type requires no DDL; new persistent semantics still require a
 registered migration.
 
@@ -119,7 +119,7 @@ Cards use their theme’s static background and an independent foreground. SSR a
 
 ## Records and HTTP access
 
-Draw history retains the most recent 180 days. Collection, first-acquisition times, pity and claimed/redeemed states remain while the account exists. Ticket/shard accounting remains independently of draw-detail expiry. Account export schema 19 includes these records and the appearance selection, saved artwork key, unlocked designs and selection timestamp. Deletion removes personal activity state and clears user and retry-key associations from retained accounting/configuration events.
+Draw history retains the most recent 180 days. Collection, first-acquisition times, pity and claimed/redeemed states remain while the account exists. Ticket/shard accounting remains independently of draw-detail expiry. Account export schema 20 includes these records and the appearance selection, saved artwork key, unlocked designs and selection timestamp. Deletion removes personal activity state and clears user and retry-key associations from retained accounting/configuration events.
 
 These routes use station sessions and existing same-origin checks; they are not CallerKey automation endpoints:
 

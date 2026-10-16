@@ -151,6 +151,8 @@ The administrator station exposes the following authoritative keys. Unknown keys
 | `game_fishing_bait_worm_price_milli` | canonical positive decimal string | `"2500000"`; exact Fishing entry price |
 | `game_fishing_bait_lure_price_milli` | canonical positive decimal string | `"5000000"`; exact Fishing entry price |
 | `game_fishing_bait_premium_price_milli` | canonical positive decimal string | `"7500000"`; exact Fishing entry price |
+| `game_fishing_blue_fat_fish_chance_bps` | integer `[0,10000]` | 1000; chance within legendary catches; mutually exclusive with milk crab |
+| `game_fishing_milk_crab_chance_bps` | integer `[0,10000]` | 1000 on fresh storage; combined presentation chances must not exceed 10000. Upgrade defaults to `min(1000, 10000 - blue)` when absent. Both probabilities are frozen when a batch is accepted; rewards remain unchanged |
 | `game_fishing_rtp` | integer `[0,100]` | 100 on fresh databases; worm/lure gross target RTP; existing configured values are preserved |
 | `game_fishing_rtp_premium` | integer `[0,100]` | 100 on fresh databases; premium gross target RTP; existing configured values are preserved |
 | `game_fishing_rake_{platform,welfare,thursday}_bp` | integer `[0,9999]` | 100 each; sum below 10000; freeze at admission and floor each outcome's cuts separately |
