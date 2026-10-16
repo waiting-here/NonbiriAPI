@@ -38,7 +38,7 @@ Use responsive image candidates for full illustrations and pool covers. Continue
 | SSR | Layered animated illustration, static fallback and pause | Full-viewport spectacle and individual close-up; wait for interaction |
 | SP | Individually composed character scene, continuously animated background and coordinated character motion; static fallback and pause | More prominent spectacle than SSR, distinct rarity treatment and close-up; wait for interaction |
 
-N and R continue automatically. SR and higher wait for a click on the presentation surface or Continue, while their artwork keeps moving. Skip always reaches the final results. Ten-pulls end with all ten cards visible; duplicate cards additionally animate their conversion into shards. Music, sound effects, supported-device vibration and reduced motion remain controllable.
+N and R continue automatically. SR and higher wait for a click on the presentation surface or Continue, while their artwork keeps moving. First-acquisition SSR/SP scenes keep Skip, close, Escape and Continue unavailable until their full dialogue is visible. After all required encounters finish, Skip reaches the final results. Owned SSR/SP cards offer both encounter replays, which remain freely closable. Ten-pulls end with all ten cards visible; duplicate cards additionally animate their conversion into shards. Music, sound effects, supported-device vibration and reduced motion remain controllable.
 
 ## Animation quality
 
@@ -99,7 +99,7 @@ N/R lines are light and everyday; SR grows more personal; SSR and SP can express
 
 Keep voices in the presentation catalogue, separate from theme taglines. Show individual lines in SR focus, SSR/SP close-ups and owned-card appreciation; use theme taglines for theme memories. New SP encounters include a short prelude and a delayed second paragraph. Reunions use a distinct line without replaying the prelude. New voices require editorial approval before final adoption.
 
-Ten-pulls share one card board and reveal in receipt order. SR focuses within the board; SSR/SP charge before their full-screen close-up. Optional card-back hints apply only to SR and higher. Turning hints off keeps the portal neutral and all unrevealed backs identical. Pausing or hiding the page retains scene time and freezes artwork; skipping and reduced motion show the unchanged complete receipt without another draw.
+Ten-pulls share one card board and reveal in receipt order. SR focuses within the board; SSR/SP charge before their full-screen close-up. Optional card-back hints apply only to SR and higher. Turning hints off keeps the portal neutral and all unrevealed backs identical. Pausing or hiding the page retains scene time and freezes artwork; skipping shows the unchanged complete receipt without another draw once first encounters finish. Reduced motion presents the complete static first-encounter dialogue before the receipt.
 
 ### Eyelids and animation timing
 
@@ -108,3 +108,7 @@ SSR and SP card eyes have separate contours calibrated to their open and closed 
 Cards and appearance wallpapers share the blink envelope and phase-preserving frame cadence. Use elapsed time, preserve fractional frame budgets, pause while hidden and avoid a jump on resume. Check the actual painted frame rate in a regular browser. A smooth timing curve does not compensate for a low refresh rate or misaligned artwork.
 
 For layered scenery, establish the far-to-near order before adding motion. Apply water highlights inside their own scenery layers, preserve rigid architecture and celestial silhouettes, and inspect overlap at both extremes of the movement. Static fallback and high-resolution variants must use the same accepted composition.
+
+## Additional SP content
+
+Across the Mirror Sea uses mirror-edge light and reflected scenery; Amber Vow uses refined portrait and eyelid registration; Run Away with You keeps its offered hand settled; A Notice to Steal Your Heart keeps its head and arms steady while breathing, hair and cloth continue. Each includes standard and enhanced stills, matching dedicated wallpapers and separate heartfelt-moment scenery/character derivatives. These scenes contain no encounter videos or additional background music. See the [asset notice](../web/public/assets/gacha/NOTICE.md) for specific clothing and content guidance.

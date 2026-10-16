@@ -31,6 +31,7 @@ export function DrawReveal({
   english,
   onClose,
   onAgain,
+  replay = false,
 }: {
   receipt: DrawReceipt;
   preferences: Preferences;
@@ -38,11 +39,24 @@ export function DrawReveal({
   english: boolean;
   onClose(): void;
   onAgain?: () => void;
+  replay?: boolean;
 }) {
   const t = (zh: string, en: string) => (english ? en : zh);
-  const [scene, setScene] = useState<Scene>({
-    phase: preferences.reduced ? 'done' : 'gather',
-    index: 0,
+  const required = receipt.items.flatMap((item, i) =>
+    !replay && !item.duplicate && isRare(cardById[item.card_id].rarity) ? [i] : [],
+  );
+  const staticScene = (i: number): Scene => ({
+    index: i,
+    phase:
+      cardById[receipt.items[i].card_id].rarity === 'SP' && !receipt.items[i].duplicate
+        ? 'prelude'
+        : 'closeup',
+  });
+  const [seen, setSeen] = useState<number[]>([]);
+  const [scene, setScene] = useState<Scene>(() => {
+    if (!preferences.reduced) return { phase: 'gather', index: 0 };
+    if (replay || required.length) return staticScene(required[0] ?? 0);
+    return { phase: 'done', index: 0 };
   });
   const [paused, setPaused] = useState(false),
     [hidden, setHidden] = useState(document.hidden);
@@ -64,6 +78,9 @@ export function DrawReveal({
     settled = complete || phase === 'settle';
   const waiting = phase === 'closeup' || (phase === 'flip' && card.rarity === 'SR');
   const suspended = paused || hidden;
+  const pendingFirst = required.some((i) => !seen.includes(i));
+  const readingFirst = phase === 'closeup' && required.includes(index) && !seen.includes(index);
+  const canContinue = waiting && !suspended && !readingFirst;
   const revealed = phase === 'flip' || phase === 'prelude' || phase === 'closeup';
   const cueKey =
     phase === 'gather'
@@ -74,13 +91,19 @@ export function DrawReveal({
           ? 'card-' + index
           : null;
   const skip = () => {
+    if (pendingFirst) return;
     navigator.vibrate?.(0);
     audio.stopEffects();
     setInstant(true);
     setScene({ phase: 'done', index });
     setPaused(false);
   };
-  const advance = () =>
+  const advance = () => {
+    if (suspended || readingFirst) return;
+    if (replay && waiting) {
+      onClose();
+      return;
+    }
     setScene((previous) => {
       if (previous.phase !== phase || previous.index !== index) return previous;
       if (phase === 'gather') return { phase: 'deal', index: 0 };
@@ -89,10 +112,15 @@ export function DrawReveal({
         return { phase: card.rarity === 'SP' && !current.duplicate ? 'prelude' : 'closeup', index };
       if (phase === 'prelude') return { phase: 'closeup', index };
       if (phase === 'settle') return { phase: 'done', index };
+      if (preferences.reduced) {
+        const next = required.find((i) => i > index);
+        return next === undefined ? { phase: 'done', index } : staticScene(next);
+      }
       if (index + 1 < receipt.items.length)
         return { phase: firstPhase(receipt, index + 1), index: index + 1 };
       return { phase: 'settle', index };
     });
+  };
   const milliseconds =
     phase === 'gather'
       ? 2200
@@ -166,9 +194,12 @@ export function DrawReveal({
           ? t('此次相遇', 'These encounters')
           : t('星光回应了你的期待', 'The stars have answered')
       }
-      onClose={complete ? onClose : skip}
-      onSurfaceClick={waiting && !suspended ? advance : undefined}
-      closeLabel={complete ? t('关闭结果', 'Close results') : t('跳过演出', 'Skip animation')}
+      onClose={complete || replay ? onClose : skip}
+      closeDisabled={!replay && pendingFirst}
+      onSurfaceClick={canContinue ? advance : undefined}
+      closeLabel={
+        complete || replay ? t('关闭结果', 'Close results') : t('跳过演出', 'Skip animation')
+      }
       className={
         'gacha-cinema gacha-cinema--' +
         color +
@@ -182,6 +213,14 @@ export function DrawReveal({
         <div className="gacha-cinema__horizon" />
       </div>
       <div className="gacha-draw-stage" data-phase={phase} data-instant={instant || undefined}>
+        {readingFirst && (
+          <SceneClock
+            key={'read-' + index}
+            milliseconds={card.rarity === 'SP' ? 4800 : 1200}
+            paused={paused}
+            advance={() => setSeen((previous) => [...previous, index])}
+          />
+        )}
         {milliseconds > 0 && (
           <SceneClock
             key={phase + index}
@@ -271,7 +310,7 @@ export function DrawReveal({
                     if (complete) {
                       setInspect(i);
                       setInspectMotion(true);
-                    } else if (waiting && !suspended) advance();
+                    } else if (canContinue) advance();
                   }}
                 >
                   <span className="gacha-draw-burst" aria-hidden="true" />
@@ -339,7 +378,7 @@ export function DrawReveal({
               {card.rarity}
             </div>
             <div className="gacha-cinema__art">
-              <Artwork card={card} full animated paused={suspended} />
+              <Artwork card={card} full animated={!preferences.reduced} paused={suspended} />
             </div>
             <div className="gacha-cinema__caption">
               <span className="gacha-cinema__eyebrow">{EYEBROW[card.rarity][english ? 1 : 0]}</span>
@@ -352,14 +391,18 @@ export function DrawReveal({
               </p>
               <span className="gacha-cinema__status">
                 <Icon name={current.duplicate ? 'models' : 'spark'} />
-                {current.duplicate
-                  ? t(
-                      '重逢 · ' + tierOf(card.rarity) + ' 碎片 +1',
-                      'Together again · +1 ' + tierOf(card.rarity) + ' shard',
-                    )
-                  : t('初次相遇 · 已收入图鉴', 'First encounter · collected')}
+                {replay
+                  ? current.duplicate
+                    ? t('重逢回忆', 'Reunion memory')
+                    : t('初遇回忆', 'First encounter memory')
+                  : current.duplicate
+                    ? t(
+                        '重逢 · ' + tierOf(card.rarity) + ' 碎片 +1',
+                        'Together again · +1 ' + tierOf(card.rarity) + ' shard',
+                      )
+                    : t('初次相遇 · 已收入图鉴', 'First encounter · collected')}
               </span>
-              {card.appearance && !current.duplicate && (
+              {card.appearance && !current.duplicate && !replay && (
                 <span className="gacha-cinema__unlock">
                   <Icon name="check" />
                   {t('同名主题装扮已解锁', 'Matching appearance unlocked')}
@@ -411,12 +454,14 @@ export function DrawReveal({
                       receipt.items.length +
                       ' · ' +
                       (waiting
-                        ? t('点击任意位置继续', 'Click anywhere to continue')
+                        ? readingFirst
+                          ? t('初次相遇，听她说完', 'Your first encounter · let her finish')
+                          : t('点击任意位置继续', 'Click anywhere to continue')
                         : t('自动播放', 'Playing automatically'))}
             </span>
             <div>
               {waiting && !paused && (
-                <Button variant="ghost" onClick={advance}>
+                <Button variant="ghost" onClick={advance} disabled={!canContinue}>
                   {t('继续', 'Continue')}
                 </Button>
               )}
@@ -431,8 +476,12 @@ export function DrawReveal({
                 <Icon name={paused ? 'play' : 'pause'} />
                 {paused ? t('继续播放', 'Resume') : t('暂停', 'Pause')}
               </Button>
-              <Button variant="ghost" onClick={skip}>
-                {t('跳过 · 查看全部', 'Skip · view all')}
+              <Button
+                variant="ghost"
+                onClick={replay ? onClose : skip}
+                disabled={!replay && pendingFirst}
+              >
+                {replay ? t('关闭回看', 'Close replay') : t('跳过 · 查看全部', 'Skip · view all')}
               </Button>
             </div>
           </footer>

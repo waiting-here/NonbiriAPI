@@ -2,8 +2,10 @@ import { act, render, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { AppearanceBackdrop } from './AppearanceBackdrop';
 import { renderWallpaper } from './wallpaper-motion';
+import { renderSpecial } from '../activities/gacha/special-renderer';
 
 vi.mock('./wallpaper-motion', () => ({ renderWallpaper: vi.fn() }));
+vi.mock('../activities/gacha/special-renderer', () => ({ renderSpecial: vi.fn() }));
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.clearAllMocks();
@@ -86,3 +88,32 @@ it('replaces texture quality when crossing the display threshold without restart
   expect(renderWallpaper).toHaveBeenCalledTimes(2);
   view.unmount();
 });
+
+it.each(['mirrorsea', 'amber', 'elopement', 'heart-thief'])(
+  'uses matching %s scenery and cancels late renders',
+  async (selected) => {
+    const preference = motionPreference();
+    document.documentElement.dataset.theme = 'light';
+    let finish!: (stop: () => void) => void;
+    vi.mocked(renderSpecial).mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const view = render(<AppearanceBackdrop selected={selected} />);
+    await waitFor(() => expect(renderSpecial).toHaveBeenCalledOnce());
+    const call = vi.mocked(renderSpecial).mock.calls[0];
+    expect(call[1]).toBe(selected);
+    expect(call[2]).toMatchObject({ landscape: true, dark: false });
+    expect(view.container.querySelector('img')).toHaveAttribute(
+      'src',
+      '/assets/gacha/appearances/' + selected + '-light.webp',
+    );
+    await act(async () => preference(true));
+    expect(call[2]?.signal?.aborted).toBe(true);
+    const stop = vi.fn();
+    await act(async () => finish(stop));
+    expect(stop).toHaveBeenCalledOnce();
+    expect(view.container.querySelector('canvas')).toHaveAttribute('data-ready', 'false');
+  },
+);

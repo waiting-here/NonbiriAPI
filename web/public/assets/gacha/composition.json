@@ -13,7 +13,11 @@
     "j": "backgrounds/j.webp",
     "k": "backgrounds/k.webp",
     "l": "backgrounds/l.webp",
-    "m": "backgrounds/m.webp"
+    "m": "backgrounds/m.webp",
+    "n": "backgrounds/n.webp",
+    "o": "backgrounds/o.webp",
+    "p": "backgrounds/p.webp",
+    "q": "backgrounds/q.webp"
   },
   "characters": {
     "a-chatgpt": "layers/a-chatgpt.webp",
@@ -72,7 +76,11 @@
     "k-deepseek": "layers/k-deepseek.webp",
     "k-gemini": "layers/k-gemini.webp",
     "l-chatgpt": "motion/l-chatgpt/hero.webp",
-    "m-deepseek": "motion/m-deepseek/hero.webp"
+    "m-deepseek": "motion/m-deepseek/hero.webp",
+    "n-gemini": "motion/n-gemini/hero.webp",
+    "o-claude": "motion/o-claude/hero.webp",
+    "p-claude": "motion/p-claude/hero.webp",
+    "q-glm": "motion/q-glm/hero.webp"
   },
   "cards": {
     "a-chatgpt": {
@@ -559,6 +567,128 @@
       "source": "registered-motion-layers",
       "background": "motion/m-deepseek/background.webp",
       "character": "motion/m-deepseek/hero.webp"
+    },
+    "n-gemini": {
+      "source": "registered-motion-layers",
+      "background": "backgrounds/n.webp",
+      "character": "motion/n-gemini/hero.webp",
+      "scene": "mirrorsea",
+      "inputs": [
+        "motion/n-gemini/background-light.webp",
+        "motion/n-gemini/background-dark.webp",
+        "motion/n-gemini/portrait.webp",
+        "motion/n-gemini/closed.webp",
+        "motion/n-gemini/shadow.webp"
+      ],
+      "portrait_window": [
+        0.115,
+        0.082,
+        0.77,
+        0.77
+      ],
+      "moment_layers": {
+        "background": "landscape scenery pass at time 0",
+        "character": "transparent portrait pass at time 0; same crop as animated character",
+        "standard": [
+          1024,
+          1536
+        ],
+        "high_resolution": [
+          2560,
+          3840
+        ]
+      }
+    },
+    "o-claude": {
+      "source": "registered-motion-layers",
+      "background": "backgrounds/o.webp",
+      "character": "motion/o-claude/hero.webp",
+      "scene": "amber",
+      "inputs": [
+        "motion/o-claude/background-light.webp",
+        "motion/o-claude/background-dark.webp",
+        "motion/o-claude/books.webp",
+        "motion/o-claude/hero.png",
+        "motion/o-claude/closed.png"
+      ],
+      "portrait_window": [
+        0.065,
+        0.025,
+        0.87,
+        0.87
+      ],
+      "moment_layers": {
+        "background": "landscape scenery pass at time 0",
+        "character": "transparent portrait pass at time 0; same crop as animated character",
+        "standard": [
+          1024,
+          1536
+        ],
+        "high_resolution": [
+          2560,
+          3840
+        ]
+      }
+    },
+    "p-claude": {
+      "source": "registered-motion-layers",
+      "background": "backgrounds/p.webp",
+      "character": "motion/p-claude/hero.webp",
+      "scene": "elopement",
+      "inputs": [
+        "motion/p-claude/background.png",
+        "motion/p-claude/offer.png",
+        "motion/p-claude/arrival.png",
+        "motion/p-claude/closed.png",
+        "motion/p-claude/clean.png"
+      ],
+      "portrait_window": [
+        0.13,
+        0.027,
+        0.75,
+        0.75
+      ],
+      "moment_layers": {
+        "background": "landscape scenery pass at time 0",
+        "character": "transparent portrait pass at time 0; same crop as animated character",
+        "standard": [
+          1024,
+          1536
+        ],
+        "high_resolution": [
+          2560,
+          3840
+        ]
+      }
+    },
+    "q-glm": {
+      "source": "registered-motion-layers",
+      "background": "backgrounds/q.webp",
+      "character": "motion/q-glm/hero.webp",
+      "scene": "heart-thief",
+      "inputs": [
+        "motion/q-glm/background.png",
+        "motion/q-glm/character.png",
+        "motion/q-glm/hair-backing-v3.png"
+      ],
+      "portrait_window": [
+        0.13,
+        0.025,
+        0.75,
+        0.75
+      ],
+      "moment_layers": {
+        "background": "landscape scenery pass at time 0",
+        "character": "transparent portrait pass at time 0; same crop as animated character",
+        "standard": [
+          1024,
+          1536
+        ],
+        "high_resolution": [
+          2560,
+          3840
+        ]
+      }
     }
   },
   "groups": {

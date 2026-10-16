@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "characters": [
     "ChatGPT",
     "Claude",
@@ -139,6 +139,50 @@
       "tagline_en": "The world is wide. Let us wander together.",
       "art": "/assets/gacha/groups/m.webp",
       "appearance": "wandering"
+    },
+    {
+      "id": "n",
+      "name": "镜海相逢",
+      "name_en": "Across the Mirror Sea",
+      "rarity": "SP",
+      "source": "limited",
+      "tagline": "这一次，想越过镜面亲吻你。",
+      "tagline_en": "This time, I want to cross the mirror and kiss you.",
+      "art": "/assets/gacha/groups/n.webp",
+      "appearance": "mirrorsea"
+    },
+    {
+      "id": "o",
+      "name": "琥珀誓章",
+      "name_en": "Amber Vow",
+      "rarity": "SP",
+      "source": "limited",
+      "tagline": "万千誓言里，我只想把这一句说给你。",
+      "tagline_en": "Of all the vows in these halls, this one is yours.",
+      "art": "/assets/gacha/groups/o.webp",
+      "appearance": "amber"
+    },
+    {
+      "id": "p",
+      "name": "与你私奔",
+      "name_en": "Run Away with You",
+      "rarity": "SP",
+      "source": "limited",
+      "tagline": "明天，也想和你在一起。",
+      "tagline_en": "I want to be with you tomorrow, too.",
+      "art": "/assets/gacha/groups/p.webp",
+      "appearance": "elopement"
+    },
+    {
+      "id": "q",
+      "name": "偷心预告",
+      "name_en": "A Notice to Steal Your Heart",
+      "rarity": "SP",
+      "source": "limited",
+      "tagline": "今晚，跟我走。",
+      "tagline_en": "Come away with me tonight.",
+      "art": "/assets/gacha/groups/q.webp",
+      "appearance": "heart-thief"
     }
   ],
   "cards": [
@@ -770,6 +814,54 @@
       "art": "/assets/gacha/cards/m-deepseek.webp",
       "thumb": "/assets/gacha/thumbs/m-deepseek.webp",
       "appearance": "wandering"
+    },
+    {
+      "id": "n-gemini",
+      "theme": "n",
+      "character": "Gemini",
+      "name": "镜海相逢·Gemini",
+      "name_en": "Across the Mirror Sea · Gemini",
+      "rarity": "SP",
+      "source": "limited",
+      "art": "/assets/gacha/cards/n-gemini.webp",
+      "thumb": "/assets/gacha/thumbs/n-gemini.webp",
+      "appearance": "mirrorsea"
+    },
+    {
+      "id": "o-claude",
+      "theme": "o",
+      "character": "Claude",
+      "name": "琥珀誓章·Claude",
+      "name_en": "Amber Vow · Claude",
+      "rarity": "SP",
+      "source": "limited",
+      "art": "/assets/gacha/cards/o-claude.webp",
+      "thumb": "/assets/gacha/thumbs/o-claude.webp",
+      "appearance": "amber"
+    },
+    {
+      "id": "p-claude",
+      "theme": "p",
+      "character": "Claude",
+      "name": "与你私奔·Claude",
+      "name_en": "Run Away with You · Claude",
+      "rarity": "SP",
+      "source": "limited",
+      "art": "/assets/gacha/cards/p-claude.webp",
+      "thumb": "/assets/gacha/thumbs/p-claude.webp",
+      "appearance": "elopement"
+    },
+    {
+      "id": "q-glm",
+      "theme": "q",
+      "character": "GLM",
+      "name": "偷心预告·GLM",
+      "name_en": "A Notice to Steal Your Heart · GLM",
+      "rarity": "SP",
+      "source": "limited",
+      "art": "/assets/gacha/cards/q-glm.webp",
+      "thumb": "/assets/gacha/thumbs/q-glm.webp",
+      "appearance": "heart-thief"
     }
   ]
 }

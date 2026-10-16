@@ -1019,6 +1019,9 @@
   border-radius: var(--nb-radius-sm);
   overflow: hidden;
 }
+.gacha-spotlight:has(.gacha-replay-actions) .gacha-spotlight__stage {
+  width: min(100%, calc(max(240px, 100dvh - 360px) * 2 / 3));
+}
 .gacha-spotlight__caption {
   position: absolute;
   inset: auto 0 0;
@@ -1850,4 +1853,11 @@
 html:has(.gacha-dialog[open]) {
   overflow: hidden;
   scrollbar-gutter: auto;
+}
+.gacha-replay-actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--nb-space-2);
+  margin-top: var(--nb-space-3);
 }

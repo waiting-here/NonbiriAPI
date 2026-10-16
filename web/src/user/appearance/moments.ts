@@ -19,6 +19,10 @@ const covers = [
   ['j', '童话剧场', 'Fairytale theatre'],
   ['l', '星月神话', 'A Myth of Moon and Stars'],
   ['m', '逍遥游', 'Wandering Free'],
+  ['n', '镜海相逢', 'Across the Mirror Sea'],
+  ['o', '琥珀誓章', 'Amber Vow'],
+  ['p', '与你私奔', 'Run Away with You'],
+  ['q', '偷心预告', 'A Notice to Steal Your Heart'],
 ];
 export const momentArtworks: MomentArtwork[] = [
   ...covers.map(([id, name, nameEN]) => ({
