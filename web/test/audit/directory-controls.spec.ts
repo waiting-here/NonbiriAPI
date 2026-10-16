@@ -386,7 +386,7 @@ test('administrator saves changed binding order, removes a connection and delete
   }
 });
 
-test('administrator applies log filters, exports them and downloads retained original error bytes', async ({
+test('administrator applies log filters, exports them and downloads retained diagnostic text', async ({
   browser,
 }) => {
   const state = fixture(),
@@ -429,10 +429,10 @@ test('administrator applies log filters, exports them and downloads retained ori
       .filter({ has: page.locator(':scope > summary', { hasText: 'Error event 1' }) })
       .first();
     await event.locator('summary').first().click();
-    await event.getByRole('button', { name: 'Load original body', exact: true }).click();
+    await event.getByRole('button', { name: 'Load error body', exact: true }).click();
     await expect(event.locator('pre')).toHaveText(state.json_body);
     const rawDownload = page.waitForEvent('download');
-    await event.getByRole('button', { name: 'Download original', exact: true }).click();
+    await event.getByRole('button', { name: 'Download error body', exact: true }).click();
     const raw = await rawDownload;
     expect(raw.suggestedFilename()).toBe('upstream-error-1.bin');
     expect(readFileSync((await raw.path())!, 'utf8')).toBe(state.json_body);

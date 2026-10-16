@@ -109,6 +109,11 @@ test('administrator saves report timing and approves matching credential deletio
       ownership_confirmed: true,
     });
     const baseURL = endpoint.base_url;
+    const existingReportIDs = new Set(
+      ((await read(context, state.admin_url, '/admin/api/reports')).data as ReportCase[]).map(
+        (entry) => entry.id,
+      ),
+    );
     await create(owner, state.user_url, '/api/reports/credential-theft', {
       connector_type: 'openai-compatible',
       base_url: baseURL,
@@ -121,7 +126,7 @@ test('administrator saves report timing and approves matching credential deletio
         async () => {
           const reports = await read(context, state.admin_url, '/admin/api/reports');
           report = (reports.data as ReportCase[]).find(
-            (entry) => entry.canonical_base_url === baseURL,
+            (entry) => !existingReportIDs.has(entry.id),
           );
           return report?.status;
         },
@@ -129,6 +134,8 @@ test('administrator saves report timing and approves matching credential deletio
       )
       .toBe('pending_review');
     const caseID = report!.id;
+    expect(report!.canonical_base_url).toContain('[redacted]');
+    expect(report!.canonical_base_url).not.toBe(baseURL);
     expect(report!.counts.targets).toBe('1');
     await page.goto(state.admin_url + '/reports/' + caseID);
     const copy = adminEn.admin.reports.detail;
