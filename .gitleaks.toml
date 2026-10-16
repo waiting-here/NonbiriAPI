@@ -62,3 +62,11 @@ targetRules = ["generic-api-key"]
 condition = "AND"
 paths = ['''^web[\\/]test[\\/]fixtures[\\/]loans\.ts$''']
 regexes = ['''^cXVvdGU\.c2lnbmF0dXJl$''']
+
+[[allowlists]]
+description = "Deterministic Discord identifier in display privacy regression"
+targetRules = ["discord-client-id"]
+condition = "AND"
+regexTarget = "line"
+paths = ['^internal[\/]adminusers[\/]display_privacy_test\.go$']
+regexes = ['const discord = "123456789012345678"']
