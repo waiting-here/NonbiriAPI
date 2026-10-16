@@ -1011,6 +1011,7 @@ function BindingsPanel({
     <>
       {showAdaptation ? (
         <Fold
+          lazy
           title={t('common.operations.charity.adaptationSettings', {
             defaultValue: 'Request adaptation',
           })}
@@ -1169,6 +1170,7 @@ function BindingsPanel({
         adaptationBinding &&
         bindings.data?.bindings.some((entry) => entry.id === adaptationBinding) ? (
           <Fold
+            lazy
             title={t('common.operations.charity.adaptationSettings', {
               defaultValue: 'Request adaptation',
             })}
