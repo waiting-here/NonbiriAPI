@@ -1,3 +1,4 @@
+import { MfaRecovery } from './features/mfa/MfaRecovery';
 import { createBrowserRouter } from 'react-router';
 import { NotFoundPage } from '@shared/components/NotFoundPage';
 import { LoadingState, NoticePage } from '@shared/components/States';
@@ -15,7 +16,7 @@ export const router = createBrowserRouter([
     element: (
       <>
         <NavigationProgress />
-        <UserLayout />
+        <MfaRecovery><UserLayout /></MfaRecovery>
       </>
     ),
     hydrateFallbackElement: <LoadingState />,

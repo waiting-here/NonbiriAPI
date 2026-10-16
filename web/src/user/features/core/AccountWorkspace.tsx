@@ -477,10 +477,12 @@ export function AccountWorkspace({
   user,
   lifecycleAdapter,
   activity,
+  security,
 }: {
   user: UserProfile;
   lifecycleAdapter?: AccountLifecycleAdapter;
   activity?: ReactNode;
+  security?: ReactNode;
 }) {
   const { t } = useCoreCopy();
   const me = useCoreMe(user.id);
@@ -553,6 +555,7 @@ export function AccountWorkspace({
         <LocalPreferences />
       </section>
       {activity}
+      {security}
       <AccountLifecyclePanel accountId={user.id} adapter={lifecycleAdapter} />
     </div>
   );

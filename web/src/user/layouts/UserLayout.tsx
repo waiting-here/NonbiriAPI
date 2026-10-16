@@ -1,3 +1,4 @@
+import { MfaChallenge } from '../features/mfa/MfaChallenge';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
@@ -10,7 +11,7 @@ import { PublicShell } from '@shared/components/PublicShell';
 import { ErrorState, LoadingState, NoticePage, PageFooter } from '@shared/components/States';
 import { Icon } from '@shared/components/Icon';
 import { useOptionalToast } from '@shared/components/Toast';
-import { apiFetch, isApiError, isNotFoundError, isUnauthorized } from '@shared/query/http';
+import { apiFetch, isApiError, isMfaRequired, isNotFoundError, isUnauthorized } from '@shared/query/http';
 import { ThemeToggle } from '@shared/theme/ThemeToggle';
 import { usePublicConfig } from '@shared/query/publicConfig';
 import { routePath } from '@shared/routing/routeRegistry';
@@ -239,6 +240,20 @@ export function UserLayout() {
             bodyKey="common.maintenanceBody"
             icon="maintenance"
           />
+        </div>
+      </PublicShell>
+    );
+  }
+
+  if (!profile && isMfaRequired(session.error)) {
+    return (
+      <PublicShell siteName={siteName} siteLogoURL={siteLogoURL} className="mfa-shell">
+        <div className="mfa-challenge-page">
+          <MfaChallenge onSuccess={async () => { await session.refetch(); }} />
+          <div className="mfa-actions">
+            <button type="button" className="nb-btn nb-btn--ghost" disabled={logout.isPending}
+              onClick={() => logout.mutate()}>{t('common.signOut')}</button>
+          </div>
         </div>
       </PublicShell>
     );

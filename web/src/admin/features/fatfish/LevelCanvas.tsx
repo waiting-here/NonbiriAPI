@@ -638,7 +638,7 @@ export function LevelCanvas({
           </div>
         )}
         <div className="fatfish-player__viewport fatfish-editor-viewport" ref={viewport}>
-          <div className="fatfish-level-stage" style={{ width: zoom * 100 + '%' }}>
+          <div className="fatfish-level-stage" style={{ width: `calc(min(100%, 70dvh * 736 / 816) * ${zoom})` }}>
             <span className="fatfish-workbench-label">{text('workbench')}</span>
             <FatFishCanvas
               level={shown}

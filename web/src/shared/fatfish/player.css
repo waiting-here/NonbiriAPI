@@ -42,7 +42,7 @@
   margin-inline: auto; border: 0; border-radius: 1rem;
   background: #f4f0e5; box-shadow: 0 5px 0 #9a785b33, 0 14px 26px #2d4c5933;
 }
-.fatfish-player__board { width: 100%; margin-inline: auto; }
+.fatfish-player__board { width: min(100%, calc(70dvh * 736 / 816)); margin-inline: auto; }
 .fatfish-player__viewport { width: 100%; min-width: 0; overflow: auto; border-radius: 1rem; }
 .fatfish-player__viewport[data-zoomed='true'] { max-height: min(80vh, 70rem); }
 .fatfish-player__viewport[data-zoomed='true'] .fatfish-player__board { width: max(100%, 1000px); }

@@ -129,6 +129,15 @@ describe('core query identity and cache projections', () => {
     expect(client.getMutationCache().getAll()).toHaveLength(0);
   });
 
+  it('retains the known account projection during an MFA challenge', async () => {
+    const client = new QueryClient();
+    const previous = JSON.parse(readFileSync(resolve(process.cwd(), '..', 'internal/auth/testdata/user_envelope.json'), 'utf8'));
+    client.setQueryData(coreKeys.session, previous);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { code: 'mfa_required', message: 'Verify authenticator.' } }), { status: 403, headers: { 'content-type': 'application/json' } })));
+    expect(await fetchCoreSession(client)).toEqual(previous);
+    expect(client.getQueryData(coreKeys.session)).toEqual(previous);
+  });
+
   it('does not let a late session response replace the logout null sentinel', async () => {
     const client = new QueryClient();
     client.setQueryData(coreKeys.session, { user: { id: '7' } });

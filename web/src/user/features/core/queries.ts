@@ -1,6 +1,8 @@
 import { CancelledError, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { clearManagementSession, clearStationSession } from '@shared/charityManagement';
-import { ApiError } from '@shared/query/http';
+import {
+  captureStationSession, stationSessionMatches, clearManagementSession, clearStationSession,
+} from '@shared/charityManagement';
+import { ApiError, isMfaRequired } from '@shared/query/http';
 import { userKeys } from '../../data';
 import {
   getBindings,
@@ -196,7 +198,24 @@ export async function fetchCoreSession(
 ): Promise<unknown> {
   const initial = queryClient.getQueryData(coreKeys.session);
   const initialBoundary = initial === undefined ? undefined : normalizeCoreSessionBoundary(initial);
-  const envelope = await getSession(signal);
+  let snapshot: ReturnType<typeof captureStationSession> | undefined;
+  if (initialBoundary) {
+    try {
+      snapshot = captureStationSession(queryClient, 'steward');
+    } catch {
+      // A partial bootstrap cache still needs an authoritative read.
+    }
+  }
+  let envelope;
+  try {
+    envelope = await getSession(signal);
+  } catch (error) {
+    if (
+      isMfaRequired(error) && initialBoundary && snapshot &&
+      stationSessionMatches(queryClient, 'steward', snapshot)
+    ) return initial;
+    throw error;
+  }
   const current = queryClient.getQueryData(coreKeys.session);
   if (current === null || (current === undefined && initial !== undefined))
     throw new CancelledError();

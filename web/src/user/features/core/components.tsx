@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useState, type ReactNode } from 'react';
 import { AuthRequired } from '@shared/components/States';
 import { Icon, type IconName } from '@shared/components/Icon';
@@ -32,9 +33,11 @@ export function CoreErrorPanel({
   compact?: boolean;
 }) {
   const { t } = useCoreCopy();
+  const { t: sharedCopy } = useTranslation();
   let body = t('common.errorBody');
   if (isApiError(error)) {
-    if (error.status === 409 || error.code === 'conflict') body = t('common.conflict');
+    if (error.code === 'mfa_required') body = sharedCopy('mfa.requiredError');
+    else if (error.status === 409 || error.code === 'conflict') body = t('common.conflict');
     else if (error.code === 'maintenance' || error.status === 503) body = t('common.maintenance');
     else if (error.status === 401 || error.status === 403) body = t('common.permissionLost');
     else body = callerSafeError(error) ?? t('common.errorBody');
