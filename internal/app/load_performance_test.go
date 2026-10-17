@@ -197,13 +197,18 @@ func newLoadFixture(t *testing.T, upstream *loadUpstream) *loadFixture {
 		seed.exec(t, `INSERT INTO model_bindings(model_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at) VALUES(?,?,'private-model',0,?,?)`, model, key, now, now)
 		f.users = append(f.users, loadIdentity{id: id, caller: caller})
 	}
-	// Fifty visible catalog entries exercise the page's real per-model work.
-	// They intentionally have no fabricated historical request outcomes.
-	for index := 2; index < 50; index++ {
+	modelCount := 50
+	if os.Getenv("NONBIRI_LOAD_SCALE") == "production" {
+		modelCount = 220
+	}
+	for index := 2; index < modelCount; index++ {
 		model := seed.exec(t, `INSERT INTO charity_models(provider,model,full_name,enabled,pricing_mode,request_user_price,request_donor_reward,revision,binding_revision,model_types,created_at,updated_at) VALUES('synthetic',?,?,1,'per_request',3000,1250,1,1,3,?,?)`, fmt.Sprintf("model%d", index), fmt.Sprintf("[公益]synthetic/model%d", index), now, now)
 		seed.exec(t, `INSERT INTO charity_model_access(model_id,allowed_level_mask,public_description) VALUES(?,31,'')`, model)
 		seed.exec(t, `INSERT INTO charity_routing_settings(model_id,revision,affinity_ttl_seconds) VALUES(?,1,300)`, model)
 		seed.exec(t, `INSERT INTO charity_model_bindings(charity_model_id,donation_key_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at) SELECT ?,donation_key_id,endpoint_key_id,upstream_model_id,0,?,? FROM charity_model_bindings LIMIT 1`, model, now, now)
+	}
+	if modelCount == 220 {
+		seedCatalogLoadHistory(t, seed, now)
 	}
 	stack, err := egress.NewStack(egress.StackOptions{AllowedOrigins: []string{u.URL}})
 	if err != nil {
@@ -387,7 +392,7 @@ func runSyntheticLoad(t *testing.T, n int, mode string, hold time.Duration) {
 	}
 	runtime.GC()
 	before := loadReadMemory()
-	stats := f.store.DB().Stats()
+	stats := f.store.Stats()
 	start := time.Now()
 	arrivalInterval := 10 * time.Millisecond
 	if mode == "short" {
@@ -395,14 +400,21 @@ func runSyntheticLoad(t *testing.T, n int, mode string, hold time.Duration) {
 	}
 	poolPhases := map[string]map[string]float64{}
 	previousStats, previousTime := stats, start
+	previousWriter, previousReader := f.store.StatsByPool()
 	recordPoolPhase := func(name string) {
-		current, at := f.store.DB().Stats(), time.Now()
+		current, at := f.store.Stats(), time.Now()
+		writer, reader := f.store.StatsByPool()
 		poolPhases[name] = map[string]float64{
-			"elapsed_ms": float64(at.Sub(previousTime)) / float64(time.Millisecond),
-			"wait_count": float64(current.WaitCount - previousStats.WaitCount),
-			"wait_ms":    float64(current.WaitDuration-previousStats.WaitDuration) / float64(time.Millisecond),
+			"elapsed_ms":        float64(at.Sub(previousTime)) / float64(time.Millisecond),
+			"writer_wait_count": float64(writer.WaitCount - previousWriter.WaitCount),
+			"reader_wait_count": float64(reader.WaitCount - previousReader.WaitCount),
+			"writer_wait_ms":    float64(writer.WaitDuration-previousWriter.WaitDuration) / float64(time.Millisecond),
+			"reader_wait_ms":    float64(reader.WaitDuration-previousReader.WaitDuration) / float64(time.Millisecond),
+			"wait_count":        float64(current.WaitCount - previousStats.WaitCount),
+			"wait_ms":           float64(current.WaitDuration-previousStats.WaitDuration) / float64(time.Millisecond),
 		}
 		previousStats, previousTime = current, at
+		previousWriter, previousReader = writer, reader
 	}
 	pageCtx, stopPages := context.WithCancel(ctx)
 	var pageWG sync.WaitGroup
@@ -498,7 +510,7 @@ func runSyntheticLoad(t *testing.T, n int, mode string, hold time.Duration) {
 	stopPages()
 	pageWG.Wait()
 	recordPoolPhase("recovered")
-	afterStats := f.store.DB().Stats()
+	afterStats := f.store.Stats()
 	f.client.CloseIdleConnections()
 	f.app.egress.CloseIdleConnections()
 	runtime.GC()
@@ -585,7 +597,7 @@ func runSyntheticLoad(t *testing.T, n int, mode string, hold time.Duration) {
 		}
 	}
 	report := map[string]any{
-		"mode": mode, "offered": n, "users": len(f.users), "catalog_models": 50, "input_bytes": 4096, "arrival_interval_ms": arrivalInterval.Milliseconds(),
+		"mode": mode, "offered": n, "users": len(f.users), "scale": os.Getenv("NONBIRI_LOAD_SCALE"), "input_bytes": 4096, "arrival_interval_ms": arrivalInterval.Milliseconds(),
 		"hold_seconds": hold.Seconds(), "elapsed_seconds": time.Since(start).Seconds(), "drain_ms": float64(drain) / float64(time.Millisecond),
 		"go": runtime.Version(), "os": runtime.GOOS, "arch": runtime.GOARCH, "gomaxprocs": runtime.GOMAXPROCS(0),
 		"egress_limits": limits, "global_rpm": rpm.GlobalLimit, "per_user_rpm": rpm.PerUserLimit,
@@ -611,6 +623,9 @@ func (f *loadFixture) get(ctx context.Context, path string, user loadIdentity) l
 	}
 	r.Host = auditUserHost
 	r.AddCookie(&http.Cookie{Name: auth.UserSessionCookieName, Value: user.session})
+	if path == "/v1/models" {
+		r.Header.Set("Authorization", "Bearer "+user.caller)
+	}
 	response, err := f.client.Do(r)
 	if err != nil {
 		return loadSample{route: path, duration: time.Since(start), err: "transport"}
