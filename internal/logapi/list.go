@@ -18,6 +18,14 @@ COALESCE((SELECT ce.delta_mag
    AND ce.account_kind_snapshot='platform' AND ce.delta_sign=1
  ORDER BY co.ledger_seq DESC,ce.line_no ASC LIMIT 1),zeroblob(16)),l.rejection_stage,l.rejection_reason,l.request_method,l.request_path,l.requested_streaming,l.automatic_actions`
 
+// Each condition can match a different attempt. Independent sets also prevent
+// repeated attempts from duplicating logical requests or their count.
+const (
+	endpointKeyPredicate   = ` AND l.id IN (SELECT request_log_id FROM request_attempts WHERE endpoint_key_id_snapshot=?)`
+	endpointURLPredicate   = ` AND l.id IN (SELECT request_log_id FROM request_attempts WHERE canonical_base_url=?)`
+	upstreamModelPredicate = ` AND l.id IN (SELECT request_log_id FROM request_attempts WHERE upstream_model_id=?)`
+)
+
 func (repository *Repository) ListUser(ctx context.Context, userID int64, filter ListFilter) (Page[UserLogRow], error) {
 	if repository == nil || ctx == nil || userID <= 0 {
 		return Page[UserLogRow]{}, ErrInvalid
@@ -32,8 +40,8 @@ func (repository *Repository) ListUser(ctx context.Context, userID int64, filter
 	}
 	owner := filterOwner("user", userID, filter)
 	var tx *sql.Tx
-	var reader logReadQueryer = repository.db
-	if filter.Page != nil {
+	var reader logReadQueryer = repository.readDB
+	if filter.Page != nil || repository.readAuth != nil {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, logPageTimeout)
 		defer cancel()
@@ -76,15 +84,13 @@ func (repository *Repository) ListUser(ctx context.Context, userID int64, filter
 		query += ` AND (l.started_at<? OR (l.started_at=? AND l.id<?))`
 		args = append(args, cursor.startedAt, cursor.startedAt, cursor.rowID)
 	}
-	selection := `SELECT ` + commonListColumns + `,l.model FROM request_logs l ` + query
-	countSelection := `SELECT COUNT(*) FROM request_logs l ` + query
-	query, args, metadata, err := logPageQuery(ctx, reader, selection, countSelection, ` ORDER BY l.started_at DESC,l.id DESC`, args, filter.Page, filter.Limit)
+	query, args, metadata, err := logListPageQuery(ctx, reader, commonListColumns+`,l.model`, "", query, args, filter.Page, filter.Limit)
 	if err != nil {
 		return Page[UserLogRow]{}, err
 	}
 	rows, err := reader.QueryContext(ctx, query, args...)
 	if err != nil {
-		return Page[UserLogRow]{}, translateSQLError(err)
+		return Page[UserLogRow]{}, translateReadError(ctx, err)
 	}
 	defer rows.Close()
 	capacity := filter.Limit
@@ -97,7 +103,7 @@ func (repository *Repository) ListUser(ctx context.Context, userID int64, filter
 		var model string
 		record, scanErr := scanCommon(rows, &model)
 		if scanErr != nil {
-			return Page[UserLogRow]{}, translateSQLError(scanErr)
+			return Page[UserLogRow]{}, translateReadError(ctx, scanErr)
 		}
 		usage, usageErr := usageFromRecord(record)
 		if usageErr != nil || !utf8Bound(model, 512) {
@@ -129,7 +135,7 @@ func (repository *Repository) ListUser(ctx context.Context, userID int64, filter
 		positions = append(positions, listCursor{startedAt: record.startedAt, rowID: record.rowID})
 	}
 	if err := rows.Err(); err != nil {
-		return Page[UserLogRow]{}, translateSQLError(err)
+		return Page[UserLogRow]{}, translateReadError(ctx, err)
 	}
 	if len(positions) > filter.Limit {
 		next, err := repository.encodeListCursor("logapi-user-list-v1", owner, positions[filter.Limit-1])
@@ -140,10 +146,10 @@ func (repository *Repository) ListUser(ctx context.Context, userID int64, filter
 	}
 	if tx != nil {
 		if err := rows.Close(); err != nil {
-			return Page[UserLogRow]{}, translateSQLError(err)
+			return Page[UserLogRow]{}, translateReadError(ctx, err)
 		}
 		if err := tx.Commit(); err != nil {
-			return Page[UserLogRow]{}, translateSQLError(err)
+			return Page[UserLogRow]{}, translateReadError(ctx, err)
 		}
 	}
 	return page, nil
@@ -163,8 +169,8 @@ func (repository *Repository) ListAdmin(ctx context.Context, filter ListFilter) 
 	}
 	owner := filterOwner("admin", 0, filter)
 	var tx *sql.Tx
-	var reader logReadQueryer = repository.db
-	if filter.Page != nil {
+	var reader logReadQueryer = repository.readDB
+	if filter.Page != nil || repository.readAuth != nil {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, logPageTimeout)
 		defer cancel()
@@ -188,11 +194,11 @@ func (repository *Repository) ListAdmin(ctx context.Context, filter ListFilter) 
 		args = append(args, *filter.UserID)
 	}
 	if filter.EndpointKeyID != nil {
-		query += ` AND EXISTS(SELECT 1 FROM request_attempts fk WHERE fk.request_log_id=l.id AND fk.endpoint_key_id_snapshot=?)`
+		query += endpointKeyPredicate
 		args = append(args, *filter.EndpointKeyID)
 	}
 	if filter.EndpointBaseURL != nil {
-		query += ` AND EXISTS(SELECT 1 FROM request_attempts fa WHERE fa.request_log_id=l.id AND fa.canonical_base_url=?)`
+		query += endpointURLPredicate
 		args = append(args, *filter.EndpointBaseURL)
 	}
 	if filter.CharityModel != nil {
@@ -200,7 +206,7 @@ func (repository *Repository) ListAdmin(ctx context.Context, filter ListFilter) 
 		args = append(args, *filter.CharityModel)
 	}
 	if filter.UpstreamModel != nil {
-		query += ` AND EXISTS(SELECT 1 FROM request_attempts fm WHERE fm.request_log_id=l.id AND fm.upstream_model_id=?)`
+		query += upstreamModelPredicate
 		args = append(args, *filter.UpstreamModel)
 	}
 	if filter.ErrorCode != nil {
@@ -227,15 +233,13 @@ func (repository *Repository) ListAdmin(ctx context.Context, filter ListFilter) 
 		query += ` AND (l.started_at<? OR (l.started_at=? AND l.id<?))`
 		args = append(args, cursor.startedAt, cursor.startedAt, cursor.rowID)
 	}
-	selection := `SELECT ` + commonListColumns + `,` + callerIdentityColumns + `,l.user_id FROM request_logs l` + callerIdentityJoin + query
-	countSelection := `SELECT COUNT(*) FROM request_logs l ` + query
-	query, args, metadata, err := logPageQuery(ctx, reader, selection, countSelection, ` ORDER BY l.started_at DESC,l.id DESC`, args, filter.Page, filter.Limit)
+	query, args, metadata, err := logListPageQuery(ctx, reader, commonListColumns+`,`+callerIdentityColumns+`,l.user_id`, callerIdentityJoin, query, args, filter.Page, filter.Limit)
 	if err != nil {
 		return Page[AdminLogRow]{}, err
 	}
 	rows, err := reader.QueryContext(ctx, query, args...)
 	if err != nil {
-		return Page[AdminLogRow]{}, translateSQLError(err)
+		return Page[AdminLogRow]{}, translateReadError(ctx, err)
 	}
 	defer rows.Close()
 	capacity := filter.Limit
@@ -248,7 +252,7 @@ func (repository *Repository) ListAdmin(ctx context.Context, filter ListFilter) 
 		var userID sql.NullInt64
 		record, identity, scanErr := scanManagementCommon(rows, &userID)
 		if scanErr != nil {
-			return Page[AdminLogRow]{}, translateSQLError(scanErr)
+			return Page[AdminLogRow]{}, translateReadError(ctx, scanErr)
 		}
 		usage, usageErr := usageFromRecord(record)
 		if usageErr != nil {
@@ -270,7 +274,7 @@ func (repository *Repository) ListAdmin(ctx context.Context, filter ListFilter) 
 		positions = append(positions, listCursor{startedAt: record.startedAt, rowID: record.rowID})
 	}
 	if err := rows.Err(); err != nil {
-		return Page[AdminLogRow]{}, translateSQLError(err)
+		return Page[AdminLogRow]{}, translateReadError(ctx, err)
 	}
 	if len(positions) > filter.Limit {
 		next, err := repository.encodeListCursor("logapi-admin-list-v1", owner, positions[filter.Limit-1])
@@ -281,10 +285,10 @@ func (repository *Repository) ListAdmin(ctx context.Context, filter ListFilter) 
 	}
 	if tx != nil {
 		if err := rows.Close(); err != nil {
-			return Page[AdminLogRow]{}, translateSQLError(err)
+			return Page[AdminLogRow]{}, translateReadError(ctx, err)
 		}
 		if err := tx.Commit(); err != nil {
-			return Page[AdminLogRow]{}, translateSQLError(err)
+			return Page[AdminLogRow]{}, translateReadError(ctx, err)
 		}
 	}
 	return page, nil
@@ -308,7 +312,7 @@ func (repository *Repository) ListSteward(
 		return Page[StewardLogRow]{}, err
 	}
 	owner := filterOwner("steward", stewardUserID, filter)
-	if filter.Page != nil {
+	if filter.Page != nil || repository.readAuth != nil {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, logPageTimeout)
 		defer cancel()
@@ -317,7 +321,7 @@ func (repository *Repository) ListSteward(
 	if err != nil {
 		return Page[StewardLogRow]{}, err
 	}
-	tx, err := repository.beginStewardRead(ctx, stewardUserID, authorizer)
+	tx, err := repository.beginStewardReadOn(ctx, repository.readDB, stewardUserID, authorizer)
 	if err != nil {
 		return Page[StewardLogRow]{}, err
 	}
@@ -332,11 +336,11 @@ func (repository *Repository) ListSteward(
 		args = append(args, *filter.UserID)
 	}
 	if filter.EndpointKeyID != nil {
-		query += ` AND EXISTS(SELECT 1 FROM request_attempts fk WHERE fk.request_log_id=l.id AND fk.endpoint_key_id_snapshot=?)`
+		query += endpointKeyPredicate
 		args = append(args, *filter.EndpointKeyID)
 	}
 	if filter.EndpointBaseURL != nil {
-		query += ` AND EXISTS(SELECT 1 FROM request_attempts sa WHERE sa.request_log_id=l.id AND sa.canonical_base_url=?)`
+		query += endpointURLPredicate
 		args = append(args, *filter.EndpointBaseURL)
 	}
 	if filter.CharityModel != nil {
@@ -344,7 +348,7 @@ func (repository *Repository) ListSteward(
 		args = append(args, *filter.CharityModel)
 	}
 	if filter.UpstreamModel != nil {
-		query += ` AND EXISTS(SELECT 1 FROM request_attempts sm WHERE sm.request_log_id=l.id AND sm.upstream_model_id=?)`
+		query += upstreamModelPredicate
 		args = append(args, *filter.UpstreamModel)
 	}
 	if filter.ErrorCode != nil {
@@ -371,16 +375,14 @@ func (repository *Repository) ListSteward(
 		query += ` AND (l.started_at<? OR (l.started_at=? AND l.id<?))`
 		args = append(args, cursor.startedAt, cursor.startedAt, cursor.rowID)
 	}
-	selection := `SELECT ` + commonListColumns + `,` + callerIdentityColumns + `,l.user_id FROM request_logs l` + callerIdentityJoin + query
-	countSelection := `SELECT COUNT(*) FROM request_logs l ` + query
-	query, args, metadata, err := logPageQuery(ctx, tx, selection, countSelection, ` ORDER BY l.started_at DESC,l.id DESC`, args, filter.Page, filter.Limit)
+	query, args, metadata, err := logListPageQuery(ctx, tx, commonListColumns+`,`+callerIdentityColumns+`,l.user_id`, callerIdentityJoin, query, args, filter.Page, filter.Limit)
 	if err != nil {
 		return Page[StewardLogRow]{}, err
 	}
 
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
-		return Page[StewardLogRow]{}, translateSQLError(err)
+		return Page[StewardLogRow]{}, translateReadError(ctx, err)
 	}
 	defer rows.Close()
 	capacity := filter.Limit
@@ -393,7 +395,7 @@ func (repository *Repository) ListSteward(
 		var userID sql.NullInt64
 		record, identity, scanErr := scanManagementCommon(rows, &userID)
 		if scanErr != nil {
-			return Page[StewardLogRow]{}, translateSQLError(scanErr)
+			return Page[StewardLogRow]{}, translateReadError(ctx, scanErr)
 		}
 		usage, usageErr := usageFromRecord(record)
 		if usageErr != nil {
@@ -417,10 +419,10 @@ func (repository *Repository) ListSteward(
 		positions = append(positions, listCursor{startedAt: record.startedAt, rowID: record.rowID})
 	}
 	if err := rows.Err(); err != nil {
-		return Page[StewardLogRow]{}, translateSQLError(err)
+		return Page[StewardLogRow]{}, translateReadError(ctx, err)
 	}
 	if err := rows.Close(); err != nil {
-		return Page[StewardLogRow]{}, translateSQLError(err)
+		return Page[StewardLogRow]{}, translateReadError(ctx, err)
 	}
 	if len(positions) > filter.Limit {
 		next, err := repository.encodeListCursor("logapi-steward-list-v1", owner, positions[filter.Limit-1])
@@ -430,7 +432,7 @@ func (repository *Repository) ListSteward(
 		page.NextCursor = &next
 	}
 	if err := tx.Commit(); err != nil {
-		return Page[StewardLogRow]{}, translateSQLError(err)
+		return Page[StewardLogRow]{}, translateReadError(ctx, err)
 	}
 	return page, nil
 }

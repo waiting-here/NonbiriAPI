@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
@@ -20,15 +21,28 @@ type logReadQueryer interface {
 // The route establishes the session identity; page reads repeat its current
 // account check in the same snapshot as the authorized count and rows.
 func (r *Repository) beginPageRead(ctx context.Context, role string, actorID, now int64) (*sql.Tx, error) {
-	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := r.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
-		return nil, translateSQLError(err)
+		return nil, translateReadError(ctx, err)
 	}
-	if err := authorizePageAccount(ctx, tx, role, actorID, now); err != nil {
+	if err := r.authorizeRead(ctx, tx, role, actorID, now); err != nil {
 		_ = tx.Rollback()
 		return nil, err
 	}
 	return tx, nil
+}
+
+func (r *Repository) authorizeRead(ctx context.Context, tx *sql.Tx, role string, actorID, now int64) error {
+	if r.readAuth == nil {
+		return authorizePageAccount(ctx, tx, role, actorID, now)
+	}
+	if err := r.readAuth.AuthorizeLogRead(ctx, tx, role, actorID); err != nil {
+		if ctx.Err() == nil && (errors.Is(err, authz.ErrUnauthorized) || errors.Is(err, authz.ErrForbidden)) {
+			return ErrForbidden
+		}
+		return translateReadError(ctx, err)
+	}
+	return nil
 }
 
 func authorizePageAccount(ctx context.Context, tx *sql.Tx, role string, actorID, now int64) error {
@@ -43,7 +57,7 @@ func authorizePageAccount(ctx context.Context, tx *sql.Tx, role string, actorID,
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrForbidden
 		}
-		return translateSQLError(err)
+		return translateReadError(ctx, err)
 	}
 	return nil
 }
@@ -54,13 +68,28 @@ func logPageQuery(ctx context.Context, reader logReadQueryer, selection, countSe
 	}
 	var total int64
 	if err := reader.QueryRowContext(ctx, countSelection, args...).Scan(&total); err != nil {
-		return "", nil, nil, translateSQLError(err)
+		return "", nil, nil, translateReadError(ctx, err)
 	}
 	metadata, offset, err := requested.Window(total)
 	if err != nil {
 		return "", nil, nil, ErrInvalid
 	}
 	return selection + order + ` LIMIT ? OFFSET ?`, append(args, requested.Size, offset), &metadata, nil
+}
+
+func logListPageQuery(ctx context.Context, reader logReadQueryer, columns, join, where string, args []any, requested *pagination.Request, limit int) (string, []any, *pagination.Metadata, error) {
+	const order = ` ORDER BY l.started_at DESC,l.id DESC`
+	selection, args, metadata, err := logPageQuery(ctx, reader,
+		`SELECT l.id FROM request_logs l `+where,
+		`SELECT COUNT(*) FROM request_logs l `+where, order, args, requested, limit)
+	if err != nil {
+		return "", nil, nil, err
+	}
+	// Apply the page window before projecting charges and caller history. A
+	// selective attempt filter may require sorting its matches; that work must
+	// not evaluate correlated display columns for every matching request.
+	return `WITH log_page AS MATERIALIZED (` + selection + `) SELECT ` + columns +
+		` FROM log_page p JOIN request_logs l ON l.id=p.id` + join + order, args, metadata, nil
 }
 
 func parseLogPage(values url.Values, prefix string) (*pagination.Request, error) {
