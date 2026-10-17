@@ -26,7 +26,7 @@ func (api *diagnosticAPI) accessObservations(w http.ResponseWriter, r *http.Requ
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), logPageTimeout)
 	defer cancel()
-	tx, err := api.beginAuthorizedRead(ctx, actorID)
+	tx, err := api.beginAuthorizedReadOn(ctx, api.repository.readDB, actorID)
 	if err != nil {
 		writeLogError(w, err)
 		return
@@ -44,11 +44,11 @@ func (api *diagnosticAPI) accessObservations(w http.ResponseWriter, r *http.Requ
 		if errors.Is(err, observability.ErrInvalid) {
 			err = ErrInvalid
 		}
-		writeLogError(w, translateSQLError(err))
+		writeLogError(w, translateReadError(ctx, err))
 		return
 	}
 	if err = tx.Commit(); err != nil {
-		writeLogError(w, translateSQLError(err))
+		writeLogError(w, translateReadError(ctx, err))
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
