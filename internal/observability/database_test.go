@@ -45,7 +45,7 @@ func TestMeasuredTransactionSeparatesAcquisitionAndReturnsConnection(t *testing.
 		t.Fatal("failed transaction retained a connection")
 	}
 	rows = p.Drain()
-	if len(rows) != 2 || rows[1].Route != "transaction.catalog" || rows[1].ServerErrors != 1 || rows[1].Completed != 1 {
+	if len(rows) != 2 || rows[1].Route != "transaction.catalog" || rows[1].Failures != 1 || rows[1].ServerErrors != 0 || rows[1].Completed != 1 {
 		t.Fatalf("transaction report = %+v", rows)
 	}
 	tx, finish, err = BeginMeasuredTx(ctx, database, nil, "catalog")

@@ -7,6 +7,7 @@ import (
 	"os"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -91,10 +92,12 @@ func TestApplicationCatalogLoad(t *testing.T) {
 				}
 			}
 			runtime.GC()
+			f.app.performance.Drain()
 			before := loadReadMemory()
 			writerBefore, readerBefore := f.store.StatsByPool()
 			measurements, schedule := &loadMeasurements{}, &loadMeasurements{}
 			var wg sync.WaitGroup
+			var submitted atomic.Int64
 			start := time.Now()
 			const seconds = 30
 			planned := seconds*tc.rps + tc.concurrent
@@ -110,6 +113,7 @@ func TestApplicationCatalogLoad(t *testing.T) {
 				wg.Add(1)
 				go func(i int, due time.Time, burst bool) {
 					defer wg.Done()
+					submitted.Add(1)
 					phase, route := "scheduled", routes[i%len(routes)]
 					if burst {
 						phase, route = "burst", routes[(i-seconds*tc.rps)%3]
@@ -132,12 +136,13 @@ func TestApplicationCatalogLoad(t *testing.T) {
 				}
 			}
 			report := map[string]any{
-				"rps": tc.rps, "directory_concurrency": tc.concurrent, "planned": planned, "submitted": completed, "completed": completed, "admitted": admitted, "rejected": rejected,
+				"rps": tc.rps, "directory_concurrency": tc.concurrent, "planned": planned, "submitted": submitted.Load(), "completed": completed, "admitted": admitted, "rejected": rejected,
 				"models": 220, "bindings": 600, "fishing_batches": 70000, "fishing_outcomes": 385000,
 				"elapsed_seconds": time.Since(start).Seconds(), "pages": measurements.summaries(), "schedule": schedule.summaries(),
 				"writer_waits": writerAfter.WaitCount - writerBefore.WaitCount, "writer_wait_ms": float64(writerAfter.WaitDuration-writerBefore.WaitDuration) / float64(time.Millisecond),
 				"reader_waits": readerAfter.WaitCount - readerBefore.WaitCount, "reader_wait_ms": float64(readerAfter.WaitDuration-readerBefore.WaitDuration) / float64(time.Millisecond),
 				"memory_before": before, "memory_after": loadReadMemory(), "go": runtime.Version(), "os": runtime.GOOS, "arch": runtime.GOARCH, "gomaxprocs": runtime.GOMAXPROCS(0),
+				"last_window_operations": f.app.performance.Drain(),
 			}
 			encoded, err := json.Marshal(report)
 			if err != nil {

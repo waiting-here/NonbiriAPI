@@ -69,6 +69,7 @@ type PerformanceRow struct {
 	Method       string `json:"method,omitempty"`
 	Completed    int64  `json:"completed"`
 	ServerErrors int64  `json:"server_errors,omitempty"`
+	Failures     int64  `json:"failures,omitempty"`
 	Canceled     int64  `json:"canceled,omitempty"`
 	Active       int64  `json:"active"`
 	Peak         int64  `json:"peak"`
@@ -200,13 +201,17 @@ func (p *Performance) drain() ([]PerformanceRow, HTTPPerformance) {
 		if s.count == 0 && s.peak == 0 {
 			continue
 		}
-		rows = append(rows, PerformanceRow{
+		row := PerformanceRow{
 			Route: key.route, Method: key.method, Completed: s.count,
 			ServerErrors: s.failed, Canceled: s.canceled, Active: s.active, Peak: s.peak,
 			P50MS: s.total.percentile(s.count, 50), P95MS: s.total.percentile(s.count, 95),
 			P99MS: s.total.percentile(s.count, 99), MaxMS: s.total.max.Milliseconds(),
 			FirstP95MS: s.first.percentile(s.count, 95),
-		})
+		}
+		if key.method == "" {
+			row.Failures, row.ServerErrors = s.failed, 0
+		}
+		rows = append(rows, row)
 		*s = performanceSeries{active: s.active, peak: s.active}
 	}
 	sort.Slice(rows, func(i, j int) bool {

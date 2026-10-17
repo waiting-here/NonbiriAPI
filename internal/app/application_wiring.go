@@ -616,8 +616,9 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 		return nil, err
 	}
 	performance := observability.NewPerformance()
+	app.performance = performance
 	workerContext = performance.Context(workerContext)
-	handler, err := stationBoundary(cfg, performance.Wrap(audits.Wrap(mux)))
+	handler, err := stationBoundary(cfg, audits.Wrap(mux))
 	if err != nil {
 		return nil, err
 	}
@@ -651,7 +652,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 		})
 	}()
 	app.performanceDone = performanceDone
-	app.readiness, app.handler, app.failures = readiness, handler, failures
+	app.readiness, app.handler, app.failures = readiness, performance.Wrap(handler), failures
 	app.lifecycleCancel, app.lifecycleDone = lifecycleCancel, lifecycleDone
 	app.rankingCancel, app.rankingDone = rankingCancel, rankingDone
 	return app, nil

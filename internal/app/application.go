@@ -27,6 +27,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
 	"github.com/waiting-here/NonbiriAPI/internal/logapi"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/reports"
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/resourcebridge"
@@ -61,6 +62,7 @@ type application struct {
 	lifecycleCancel context.CancelFunc
 	lifecycleDone   <-chan struct{}
 	performanceDone <-chan struct{}
+	performance     *observability.Performance
 	rankingCancel   context.CancelFunc
 	rankingDone     <-chan struct{}
 	debug           *debug.Hub

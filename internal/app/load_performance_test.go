@@ -34,9 +34,9 @@ import (
 // private SQLite database, synthetic identities and a loopback-only upstream.
 // Run with NONBIRI_LOAD_TEST=1 go test ./internal/app -run
 // '^TestApplicationSyntheticLoad$' -count=1 -v -timeout=10m.
-// The default workload holds model streams for eight seconds while six page
-// probes each issue at most 2.5 requests/second. This is an interference
-// experiment, not a claim about the number of supported browser sessions.
+// The default workload holds model streams for eight seconds with a fixed
+// arrival rate of 15 page requests/second, including all three model directories.
+// This measures interference, not supported browser-session capacity.
 func TestApplicationSyntheticLoad(t *testing.T) {
 	if os.Getenv("NONBIRI_LOAD_TEST") != "1" {
 		t.Skip("set NONBIRI_LOAD_TEST=1 to run the synthetic load experiment")
@@ -351,12 +351,13 @@ type loadMemory struct {
 	HeapBytes  uint64 `json:"heap_bytes"`
 	TotalAlloc uint64 `json:"total_alloc"`
 	PauseNS    uint64 `json:"gc_pause_ns"`
+	CPUTimeNS  int64  `json:"cpu_time_ns"`
 }
 
 func loadReadMemory() loadMemory {
 	var mem runtime.MemStats
 	runtime.ReadMemStats(&mem)
-	return loadMemory{runtime.NumGoroutine(), mem.HeapAlloc, mem.TotalAlloc, mem.PauseTotalNs}
+	return loadMemory{runtime.NumGoroutine(), mem.HeapAlloc, mem.TotalAlloc, mem.PauseTotalNs, loadCPUTimeNS()}
 }
 
 func loadRaisePeak(peak *atomic.Int64, value int64) {
@@ -382,7 +383,7 @@ func runSyntheticLoad(t *testing.T, n int, mode string, hold time.Duration) {
 	var phase atomic.Int32
 	phaseName := func() string { return []string{"ramp", "held", "completion", "recovered"}[phase.Load()] }
 	pages, models := &loadMeasurements{}, &loadMeasurements{}
-	routes := []string{"/api/session", "/api/me", "/api/games", "/api/games/blackjack/state", "/api/charity/models?view=catalog&page=1&page_size=50", "/api/home/game-summary"}
+	routes := []string{"/api/session", "/api/me", "/api/games", "/api/games/blackjack/state", "/api/charity/models?view=catalog&page=1&page_size=50", "/api/home/game-summary", "/v1/models", "/api/charity/models"}
 	// Warm the same paths before measuring; an invalid probe is a setup error.
 	for _, route := range routes {
 		s := f.get(ctx, route, f.users[0])
@@ -418,28 +419,33 @@ func runSyntheticLoad(t *testing.T, n int, mode string, hold time.Duration) {
 	}
 	pageCtx, stopPages := context.WithCancel(ctx)
 	var pageWG sync.WaitGroup
-	for index, route := range routes {
-		pageWG.Add(1)
-		go func(index int, route string) {
-			defer pageWG.Done()
-			ticker := time.NewTicker(400 * time.Millisecond)
-			defer ticker.Stop()
-			for seq := index; ; seq++ {
-				select {
-				case <-pageCtx.Done():
-					return
-				case <-ticker.C:
-				}
+	var pagesSubmitted atomic.Int64
+	pageWG.Add(1)
+	go func() {
+		defer pageWG.Done()
+		for seq := 0; ; seq++ {
+			due := start.Add(time.Duration(seq+1) * time.Second / 15)
+			timer := time.NewTimer(max(0, time.Until(due)))
+			select {
+			case <-pageCtx.Done():
+				timer.Stop()
+				return
+			case <-timer.C:
+			}
+			pagesSubmitted.Add(1)
+			pageWG.Add(1)
+			go func(seq int) {
+				defer pageWG.Done()
 				p := phaseName()
-				s := f.get(ctx, route, f.users[seq%len(f.users)])
+				s := f.get(ctx, routes[seq%len(routes)], f.users[seq%len(f.users)])
 				if endPhase := phaseName(); endPhase != p {
 					p += "->" + endPhase
 				}
 				s.phase = p
 				pages.add(s)
-			}
-		}(index, route)
-	}
+			}(seq)
+		}
+	}()
 	var modelWG sync.WaitGroup
 	cancels := make([]context.CancelFunc, n)
 	for index := range n {
@@ -566,13 +572,15 @@ func runSyntheticLoad(t *testing.T, n int, mode string, hold time.Duration) {
 		}
 	}
 	modelSummary := models.summaries()
-	completed, canceled := 0, 0
+	completed, canceled, accepted, rejected := 0, 0, 0, 0
 	for key, summary := range modelSummary {
 		if !strings.HasPrefix(key, "complete ") {
 			continue
 		}
 		completed += summary.Count
 		canceled += summary.Errors["canceled"]
+		accepted += summary.Status[200]
+		rejected += summary.Status[429] + summary.Status[503]
 		for kind := range summary.Errors {
 			if kind != "http_429" && kind != "http_503" && (kind != "canceled" || mode != "slow_cancel") {
 				t.Errorf("unexpected model error: %s %+v", key, summary)
@@ -598,6 +606,7 @@ func runSyntheticLoad(t *testing.T, n int, mode string, hold time.Duration) {
 	}
 	report := map[string]any{
 		"mode": mode, "offered": n, "users": len(f.users), "scale": os.Getenv("NONBIRI_LOAD_SCALE"), "input_bytes": 4096, "arrival_interval_ms": arrivalInterval.Milliseconds(),
+		"models_submitted": n, "models_completed": completed, "models_http_accepted": accepted, "models_rejected": rejected, "models_canceled": canceled,
 		"hold_seconds": hold.Seconds(), "elapsed_seconds": time.Since(start).Seconds(), "drain_ms": float64(drain) / float64(time.Millisecond),
 		"go": runtime.Version(), "os": runtime.GOOS, "arch": runtime.GOARCH, "gomaxprocs": runtime.GOMAXPROCS(0),
 		"egress_limits": limits, "global_rpm": rpm.GlobalLimit, "per_user_rpm": rpm.PerUserLimit,
@@ -606,7 +615,7 @@ func runSyntheticLoad(t *testing.T, n int, mode string, hold time.Duration) {
 		"db_max_connections": afterStats.MaxOpenConnections, "db_wait_count": afterStats.WaitCount - stats.WaitCount,
 		"db_wait_ms":    float64(afterStats.WaitDuration-stats.WaitDuration) / float64(time.Millisecond),
 		"memory_before": before, "memory_held": heldMemory, "memory_after_gc": after,
-		"pages": pageSummary, "models": modelSummary, "db_phases": poolPhases, "failure_facts": failures,
+		"page_rps": 15, "pages_submitted": pagesSubmitted.Load(), "pages": pageSummary, "models": modelSummary, "db_phases": poolPhases, "failure_facts": failures, "last_window_operations": f.app.performance.Drain(),
 	}
 	encoded, err := json.Marshal(report)
 	if err != nil {
