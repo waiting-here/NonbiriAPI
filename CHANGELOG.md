@@ -4,6 +4,14 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## Unreleased
+
+### Fixed
+
+- Avoid accounting-summary timeouts on busy ledgers by reusing hourly totals
+  and reading the smaller part of boundary hours. Opening and closing stocks
+  retain exact integer precision and the existing five-second read limit.
+
 ## 1.0.0 — 2026-10-17
 
 The first stable release uses database schema 21 and account export 20. The normal

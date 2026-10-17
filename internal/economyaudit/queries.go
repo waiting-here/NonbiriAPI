@@ -120,6 +120,10 @@ func aggregateMeasures(ctx context.Context, tx *sql.Tx, c checkpoint, f Filter, 
 	return rows.Err()
 }
 
+const edgeCountQuery = `SELECT count(*),count(CASE WHEN created_at>=? AND created_at<? THEN 1 END)
+FROM credit_operations INDEXED BY idx_credit_operations_created
+WHERE created_at>=? AND created_at<? AND ledger_seq<=?`
+
 func edgeMeasures(ctx context.Context, tx *sql.Tx, c checkpoint, f Filter, from, to int64, out map[dimension]*measures) error {
 	if from >= to {
 		return nil
@@ -127,10 +131,70 @@ func edgeMeasures(ctx context.Context, tx *sql.Tx, c checkpoint, f Filter, from,
 	if to <= aggregateBoundary(c) {
 		return aggregateMeasures(ctx, tx, c, f, "hour", bucketStart(from, c.offset, 3600), bucketStart(to-1, c.offset, 3600)+3600, out)
 	}
+	hourFrom := bucketStart(from, c.offset, 3600)
+	hourTo := hourFrom + 3600
+	if to > hourTo {
+		if err := edgeMeasures(ctx, tx, c, f, from, hourTo, out); err != nil {
+			return err
+		}
+		return edgeMeasures(ctx, tx, c, f, hourTo, to, out)
+	}
+
+	// Count from the covering time index before loading operation and entry
+	// records. A mostly selected hour is cheaper as its aggregate minus the
+	// smaller excluded portion, particularly for the current unfinished hour.
+	var total, selected int64
+	err := tx.QueryRowContext(ctx, edgeCountQuery, from, to, hourFrom, hourTo, c.last).Scan(&total, &selected)
+	if err != nil {
+		return err
+	}
+	if selected == 0 {
+		return nil
+	}
+	if selected == total {
+		return aggregateMeasures(ctx, tx, c, f, "hour", hourFrom, hourTo, out)
+	}
+	if selected <= total-selected {
+		return rawEdgeMeasures(ctx, tx, c, f, from, to, out)
+	}
+	whole, excluded := map[dimension]*measures{}, map[dimension]*measures{}
+	if err := aggregateMeasures(ctx, tx, c, f, "hour", hourFrom, hourTo, whole); err != nil {
+		return err
+	}
+	if err := rawEdgeMeasures(ctx, tx, c, f, hourFrom, from, excluded); err != nil {
+		return err
+	}
+	if err := rawEdgeMeasures(ctx, tx, c, f, to, hourTo, excluded); err != nil {
+		return err
+	}
+	for d, amount := range excluded {
+		value := whole[d]
+		if value == nil {
+			return ErrInvariant
+		}
+		if err := value.subtract(amount); err != nil {
+			return err
+		}
+		if value.count == 0 {
+			delete(whole, d)
+		}
+	}
+	for d, amount := range whole {
+		if err := addDimension(out, d, amount); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func rawEdgeMeasures(ctx context.Context, tx *sql.Tx, c checkpoint, f Filter, from, to int64, out map[dimension]*measures) error {
+	if from >= to {
+		return nil
+	}
 	afterAt, after := from, int64(0)
 	for {
-		query := `SELECT id,ledger_seq,kind,source_type,source_id,created_at FROM credit_operations WHERE created_at>=? AND created_at<? AND (created_at,ledger_seq)>(?,?) AND ledger_seq<=?`
-		args := []any{from, to, afterAt, after, c.last}
+		query := `SELECT id,ledger_seq,kind,source_type,source_id,created_at FROM credit_operations WHERE (created_at,ledger_seq)>(?,?) AND created_at<? AND ledger_seq<=?`
+		args := []any{afterAt, after, to, c.last}
 		if f.Kind != "" {
 			query += ` AND kind=?`
 			args = append(args, f.Kind)
@@ -229,7 +293,7 @@ func allTimeMeasures(ctx context.Context, tx *sql.Tx, asset ledger.Asset, offset
 }
 
 func inventoryTx(ctx context.Context, tx *sql.Tx, asset ledger.Asset) (Inventory, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT kind,COALESCE(code,''),balance_sign,balance_mag FROM credit_accounts WHERE asset_type=?`, string(asset))
+	rows, err := tx.QueryContext(ctx, `SELECT kind,COALESCE(code,''),balance_sign,balance_mag FROM credit_accounts WHERE asset_type=? AND balance_sign<>0`, string(asset))
 	if err != nil {
 		return Inventory{}, err
 	}

@@ -72,3 +72,26 @@ func TestBucketsRespectHalfHourOffsetsAndEpoch(t *testing.T) {
 		}
 	}
 }
+
+func TestAggregateSubtractionKeepsWideAmountsAndRejectsImpossibleRemainders(t *testing.T) {
+	wide := new(big.Int).Lsh(big.NewInt(1), 130)
+	whole := &measures{count: 2}
+	whole.issued.Mul(wide, big.NewInt(2))
+	part := &measures{count: 1}
+	part.issued.Set(wide)
+	if err := whole.subtract(part); err != nil || whole.count != 1 || whole.issued.Cmp(wide) != 0 {
+		t.Fatal("wide subtraction lost precision", whole, err)
+	}
+	if err := whole.subtract(part); err != nil || whole.count != 0 || whole.issued.Sign() != 0 {
+		t.Fatal("empty remainder changed", whole, err)
+	}
+	for _, test := range []struct{ count, amount int64 }{{2, 1}, {1, 11}, {1, 9}, {0, -1}} {
+		whole := &measures{count: 1}
+		whole.issued.SetInt64(10)
+		part := &measures{count: test.count}
+		part.issued.SetInt64(test.amount)
+		if err := whole.subtract(part); err == nil {
+			t.Fatalf("impossible remainder accepted: %+v", test)
+		}
+	}
+}
