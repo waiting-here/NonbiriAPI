@@ -273,7 +273,7 @@ CREATE TABLE model_discovery_evidence (
  state TEXT NOT NULL CHECK(state IN ('unknown','checking','succeeded','failed')),
  revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 9223372036854775807),
  operation_hash BLOB CHECK(operation_hash IS NULL OR (typeof(operation_hash)='blob' AND length(operation_hash)=32)),
- safe_class TEXT NOT NULL DEFAULT 'none' CHECK(safe_class IN ('auth','rate_limit','timeout','protocol','transport','interrupted','none')),
+ safe_class TEXT NOT NULL DEFAULT 'none' CHECK(safe_class IN ('auth','rate_limit','timeout','protocol','transport','interrupted','region','unavailable','none')),
  safe_diag TEXT NOT NULL DEFAULT '' CHECK(typeof(safe_diag)='text' AND length(CAST(safe_diag AS BLOB))<=4096),
  started_at INTEGER,
  completed_at INTEGER,
@@ -281,7 +281,7 @@ CREATE TABLE model_discovery_evidence (
  CHECK((state='unknown' AND operation_hash IS NULL AND safe_class='none' AND safe_diag='' AND started_at IS NULL AND completed_at IS NULL AND fetched_count=0)
    OR (state='checking' AND operation_hash IS NOT NULL AND safe_class='none' AND started_at IS NOT NULL AND completed_at IS NULL)
    OR (state='succeeded' AND operation_hash IS NULL AND safe_class='none' AND completed_at IS NOT NULL)
-   OR (state='failed' AND operation_hash IS NULL AND safe_class IN ('auth','rate_limit','timeout','protocol','transport','interrupted') AND completed_at IS NOT NULL)),
+   OR (state='failed' AND operation_hash IS NULL AND safe_class IN ('auth','rate_limit','timeout','protocol','transport','interrupted','region','unavailable') AND completed_at IS NOT NULL)),
  CHECK(started_at IS NULL OR started_at BETWEEN 0 AND 253402300799),
  CHECK(completed_at IS NULL OR completed_at BETWEEN 0 AND 253402300799),
  CHECK(started_at IS NULL OR completed_at IS NULL OR completed_at>=started_at)
@@ -6541,7 +6541,7 @@ CREATE TABLE schema_state (
 ) STRICT;
 INSERT INTO credit_compaction(id,through_seq,details_before,sweep_at,sweep_after_seq) VALUES(1,0,0,0,0);
 INSERT INTO game_blackjack_clock(id,observed_at) VALUES(1,0);
-INSERT INTO schema_state(id,version) VALUES(1,20);
+INSERT INTO schema_state(id,version) VALUES(1,21);
 
 CREATE TABLE game_ai_settings (
  game_key TEXT PRIMARY KEY NOT NULL,
@@ -6665,7 +6665,7 @@ INSERT INTO game_ai_settings(game_key) VALUES('bidding'),('gwent');
 
 CREATE TABLE admin_endpoint_tags (
  base_url TEXT NOT NULL CHECK(length(base_url) BETWEEN 1 AND 4096),
- tag TEXT NOT NULL CHECK(tag IN ('abusive_third_party','community_charity')),
+ tag TEXT NOT NULL CHECK(tag IN ('abusive_third_party','community_charity','noncommercial_gateway')),
  PRIMARY KEY(base_url,tag)
 ) STRICT, WITHOUT ROWID;
 CREATE INDEX idx_admin_endpoint_tags_tag ON admin_endpoint_tags(tag,base_url);

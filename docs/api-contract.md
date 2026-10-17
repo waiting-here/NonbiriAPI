@@ -1020,6 +1020,8 @@ Administrator and level-5/6 steward log rows, details and management exports inc
 
 `PATCH /admin/api/site-config` accepts the closed body `{expected_revision:string,values:object}` with 1–64 known generic configuration keys and a 256 KiB request limit. Values use the catalog's scalar types. It validates the combined configuration and commits all changes with one site revision increment and one idempotency receipt. Stale revisions return `409`; invalid combinations return an actionable dependency error. Unchanged values do not advance the revision. The response is `{revision:string,changed_keys:string[]}`; clients may read the complete configuration after saving. The existing single-key route remains available.
 
+Endpoint-overview tags are manual classifications: `abusive_third_party`, `community_charity`, and `noncommercial_gateway` (Non-commercial aggregation gateway). `tag=untagged` selects base URLs with no tags. Administrator-only `PATCH /admin/api/overview/endpoints/tags` accepts `{base_urls:string[],tag:string,add:boolean}` for 1–100 distinct canonical base URLs, using the existing idempotency contract. Multiple tags can coexist; a batch is atomic, and adding an existing tag or removing an absent tag is harmless. Classification does not change routing, availability, bans, donation eligibility or billing.
+
 ### 7.2 Mainstream channels
 
 | Method and path | Request / response |

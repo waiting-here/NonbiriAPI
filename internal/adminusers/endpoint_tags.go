@@ -19,7 +19,7 @@ type endpointTagsMutation struct {
 }
 
 func validEndpointTag(tag string) bool {
-	return tag == "abusive_third_party" || tag == "community_charity"
+	return tag == "abusive_third_party" || tag == "community_charity" || tag == "noncommercial_gateway"
 }
 
 func validEndpointTagFilter(tag string) bool {

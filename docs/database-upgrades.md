@@ -2,8 +2,8 @@
 
 ## Supported databases
 
-The v1.0.0 application accepts a new database or the current schema **20**.
-Existing schema 16, 17, 18 and 19 databases require the separate one-time converter.
+The v1.0.0 application accepts a new database or the current schema **21**.
+Existing schema 16, 17, 18, 19 and 20 databases require the separate one-time converter.
 The normal service contains only current DDL and validation; it does not import
 or embed historical schemas or conversion code. Later v1.x releases must provide
 a complete upgrade path from every earlier stable v1.x database. An older binary
@@ -20,7 +20,7 @@ identity, version or structural manifest is rejected before writes.
 
 These commands load no application configuration or database. Each machine-readable descriptor
 contains the current identity and accepted versions. The application descriptor
-accepts only schema 20 and has empty migration and conversion lists. The converter
+accepts only schema 21 and has empty migration and conversion lists. The converter
 descriptor lists its exact offline sources and target. Deployment tools use both
 descriptors instead of parsing Go source or deriving versions from array lengths.
 
@@ -71,16 +71,21 @@ connections after validated startup; business writes and held-log read audits
 stay on the writer. Authorization and page contents share one read snapshot.
 Shutdown drains readers before closing the writer and releasing database ownership.
 
+Schema 21 adds the manual `noncommercial_gateway` endpoint classification and the
+`region` and `unavailable` model-discovery failure classes. It widens the two
+existing constraints while preserving all saved tags and discovery outcomes.
+No new personal data is collected; account exports remain format 20.
+
 ## One-time conversion
 
 Build `./cmd/nonbiri-upgrade-v1` from the same commit as the target application.
-The converter accepts exact registered schema 16, 17, 18 and 19 structures. For rc.7,
+The converter accepts exact registered schema 16, 17, 18, 19 and 20 structures. For rc.7,
 the reference source is `82f1711b674425745a768f781e0e0c34dcb37ac3`. The database
 manifest determines eligibility, not a guess based on a release label.
 
 Use `--check` on an isolated consistent copy, then `--apply` with the service
 stopped and its existing master key available. The converter acquires exclusive
-database access and converts the source to schema 20 in one transaction. A matching
+database access and converts the source to schema 21 in one transaction. A matching
 current schema is a no-op; structural drift, an unknown source or a wrong key is
 rejected. Failure or cancellation rolls back.
 

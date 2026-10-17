@@ -171,11 +171,26 @@ describe('administrator paged operation pages', () => {
   it('formats exact account balances and uses the configured level name', async () => {
     installFetch((url) => {
       if (url.pathname === '/admin/api/users')
-        return page([{ ...adminUser, balance: '8007199254740.123', discord_id: '123456789012345678',
-          level: { ...adminUser.level, display_name: 'Trusted steward' } }], '1', 20);
+        return page(
+          [
+            {
+              ...adminUser,
+              balance: '8007199254740.123',
+              discord_id: '123456789012345678',
+              level: { ...adminUser.level, display_name: 'Trusted steward' },
+            },
+          ],
+          '1',
+          20,
+        );
       return ancillaryResponse(url);
     });
-    await renderWithProviders(<UsersPage />, { station: 'admin', role: 'admin', locale: 'en', route: '/users' });
+    await renderWithProviders(<UsersPage />, {
+      station: 'admin',
+      role: 'admin',
+      locale: 'en',
+      route: '/users',
+    });
     expect(await screen.findByText('8,007,199,254,740.123')).toBeVisible();
     expect(screen.getByText('Trusted steward')).toBeVisible();
     expect(screen.getByText(/1234…5678/)).toHaveAttribute('title', '123456789012345678');
@@ -343,74 +358,75 @@ describe('administrator paged operation pages', () => {
     expect(await screen.findByText('9')).toBeVisible();
   });
 
-  it('adds a tag to selected endpoints and filters the refreshed list', async () => {
-    const urls = ['https://first.example/v1', 'https://second.example/v1'];
-    let saved = false;
-    const requests = installFetch((url, method, init) => {
-      if (url.pathname === '/admin/api/session') return { admin: { username: 'fixture-admin' } };
-      if (method === 'PATCH' && url.pathname === '/admin/api/overview/endpoints/tags') {
-        expect(JSON.parse(String(init?.body))).toEqual({
-          base_urls: urls,
-          tag: 'abusive_third_party',
-          add: true,
-        });
-        expect(new Headers(init?.headers).get('Idempotency-Key')).toBeTruthy();
-        saved = true;
-        return new Response(null, { status: 204 });
-      }
-      if (method === 'GET' && url.pathname === '/admin/api/overview/endpoints') {
-        return page(
-          urls.map((base_url) => ({
-            base_url,
-            tags: saved ? ['abusive_third_party'] : [],
-            user_count: '1',
-            endpoint_count: '2',
-            key_count: '1',
-            users: [endpointUser],
-          })),
-          '1',
-          20,
-        );
-      }
-      throw new Error(`Unexpected request: ${method} ${url.pathname}`);
-    });
-    const view = await renderWithProviders(<EndpointsPage />, {
-      station: 'admin',
-      role: 'admin',
-      route: '/endpoints',
-    });
-    await screen.findByText(urls[0]);
-    expect(screen.getByRole('button', { name: 'Add tag' })).toBeDisabled();
-    await view.user.click(screen.getByRole('checkbox', { name: 'Select endpoints on this page' }));
-    await view.user.click(screen.getByRole('button', { name: 'Add tag' }));
-    await screen.findByText('Tags updated');
-    expect(screen.getByRole('button', { name: 'Add tag' })).toBeDisabled();
-    await view.user.selectOptions(
-      screen.getAllByRole('combobox', { name: 'Tags' })[0],
-      'abusive_third_party',
-    );
-    await waitFor(() =>
-      expect(requests.some((url) => url.searchParams.get('tag') === 'abusive_third_party')).toBe(
-        true,
-      ),
-    );
-    await view.user.type(screen.getByRole('textbox', { name: 'User ID' }), '42');
-    await view.user.click(screen.getByRole('button', { name: 'Apply filter' }));
-    await waitFor(() =>
-      expect(
-        requests.some(
-          (url) =>
-            url.searchParams.get('user_id') === '42' &&
-            url.searchParams.get('tag') === 'abusive_third_party' &&
-            url.searchParams.get('page') === '1',
-        ),
-      ).toBe(true),
-    );
-    expect(screen.getByRole('button', { name: 'Add tag' })).toBeDisabled();
-    await view.user.click(screen.getByRole('button', { name: 'Reset' }));
-    expect(screen.getAllByRole('combobox', { name: 'Tags' })[0]).toHaveValue('');
-    expect(screen.getByRole('textbox', { name: 'User ID' })).toHaveValue('');
-  });
+  it.each(['abusive_third_party', 'community_charity', 'noncommercial_gateway'])(
+    'adds %s to selected endpoints and filters the refreshed list',
+    async (tag) => {
+      const urls = ['https://first.example/v1', 'https://second.example/v1'];
+      let saved = false;
+      const requests = installFetch((url, method, init) => {
+        if (url.pathname === '/admin/api/session') return { admin: { username: 'fixture-admin' } };
+        if (method === 'PATCH' && url.pathname === '/admin/api/overview/endpoints/tags') {
+          expect(JSON.parse(String(init?.body))).toEqual({
+            base_urls: urls,
+            tag: tag,
+            add: true,
+          });
+          expect(new Headers(init?.headers).get('Idempotency-Key')).toBeTruthy();
+          saved = true;
+          return new Response(null, { status: 204 });
+        }
+        if (method === 'GET' && url.pathname === '/admin/api/overview/endpoints') {
+          return page(
+            urls.map((base_url) => ({
+              base_url,
+              tags: saved ? [tag] : [],
+              user_count: '1',
+              endpoint_count: '2',
+              key_count: '1',
+              users: [endpointUser],
+            })),
+            '1',
+            20,
+          );
+        }
+        throw new Error(`Unexpected request: ${method} ${url.pathname}`);
+      });
+      const view = await renderWithProviders(<EndpointsPage />, {
+        station: 'admin',
+        role: 'admin',
+        route: '/endpoints',
+      });
+      await screen.findByText(urls[0]);
+      expect(screen.getByRole('button', { name: 'Add tag' })).toBeDisabled();
+      await view.user.click(
+        screen.getByRole('checkbox', { name: 'Select endpoints on this page' }),
+      );
+      await view.user.selectOptions(screen.getAllByRole('combobox', { name: 'Tags' })[1], tag);
+      await view.user.click(screen.getByRole('button', { name: 'Add tag' }));
+      await screen.findByText('Tags updated');
+      expect(screen.getByRole('button', { name: 'Add tag' })).toBeDisabled();
+      await view.user.selectOptions(screen.getAllByRole('combobox', { name: 'Tags' })[0], tag);
+      await waitFor(() =>
+        expect(requests.some((url) => url.searchParams.get('tag') === tag)).toBe(true),
+      );
+      await view.user.type(screen.getByRole('textbox', { name: 'User ID' }), '42');
+      await view.user.click(screen.getByRole('button', { name: 'Apply filter' }));
+      await waitFor(() =>
+        expect(
+          requests.some(
+            (url) =>
+              url.searchParams.get('user_id') === '42' &&
+              url.searchParams.get('tag') === tag &&
+              url.searchParams.get('page') === '1',
+          ),
+        ).toBe(true),
+      );
+      expect(screen.getByRole('button', { name: 'Add tag' })).toBeDisabled();
+      await view.user.click(screen.getByRole('button', { name: 'Reset' }));
+      expect(screen.getAllByRole('combobox', { name: 'Tags' })[0]).toHaveValue('');
+      expect(screen.getByRole('textbox', { name: 'User ID' })).toHaveValue('');
+    },
+  );
 
   it('keeps pool filters and page size in URL page mode', async () => {
     const requests = installFetch((url, method) => {
