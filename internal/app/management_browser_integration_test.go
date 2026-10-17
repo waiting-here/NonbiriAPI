@@ -21,6 +21,7 @@ import (
 // routes create resources and donations; account deletion uses the coordinator.
 func seedManagementBrowser(t *testing.T, f *imageBrowserFixture, now int64) map[string]any {
 	t.Helper()
+	seedPolicyHistoryBrowser(t, f, now)
 	ctx := context.Background()
 	exec := func(query string, args ...any) {
 		t.Helper()
@@ -100,6 +101,13 @@ func seedManagementBrowser(t *testing.T, f *imageBrowserFixture, now int64) map[
 	}
 	exec(`INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at) VALUES(?,'Browser service','subscription','openai-compatible',?,1,'active',1,?,?)`, channel, f.upstream.URL+"/v1", now, now)
 	owner := f.users[0].Cookie
+	geminiChannel, err := db.GenerateOpaqueID("mch_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	exec(`INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at) VALUES(?,'Gemini discovery sample','subscription','google-gemini',?,1,'active',1,?,?)`, geminiChannel, f.upstream.URL+"/v1beta", now, now)
+	geminiEndpoint := f.call("POST", "/api/endpoints", map[string]any{"source": "mainstream", "channel_id": geminiChannel, "note": "Gemini discovery sample", "enabled": true}, owner, false)["id"].(string)
+	geminiKey := f.call("POST", "/api/endpoints/"+geminiEndpoint+"/keys", map[string]any{"secret": imageFixtureSecret, "note": "Gemini sample key", "enabled": true, "force_store_false": false, "ownership_confirmed": true}, owner, false)["id"].(string)
 	endpoint := f.call("POST", "/api/endpoints", map[string]any{"source": "mainstream", "channel_id": channel, "note": "Browser service", "enabled": true}, owner, false)["id"].(string)
 	donate := func(secret, description string) map[string]any {
 		key := f.call("POST", "/api/endpoints/"+endpoint+"/keys", map[string]any{"secret": secret, "note": "Browser credential", "enabled": true, "force_store_false": false, "ownership_confirmed": true}, owner, false)["id"].(string)
@@ -115,6 +123,35 @@ func seedManagementBrowser(t *testing.T, f *imageBrowserFixture, now int64) map[
 		"discount": map[string]any{"enabled": false, "percent": 100, "start_at": nil, "end_at": nil},
 	}, f.adminCookie, true)
 	return map[string]any{"old_user_id": old.ID, "current_user": current, "history_discord_id": historyDiscord, "history_record_id": historyID, "request_ids": requests,
+		"gemini_endpoint_id": geminiEndpoint, "gemini_key_id": geminiKey,
 		"disposable_user_id": disposable.ID,
 		"denials":            denials, "channel_id": channel, "endpoint_id": endpoint, "automatic_donation_id": automatic["id"], "pending_donation_id": pending["id"], "charity_model_id": model["id"]}
+}
+
+func seedPolicyHistoryBrowser(t *testing.T, f *imageBrowserFixture, now int64) {
+	t.Helper()
+	tx, err := f.store.DB().Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	for range 181 {
+		for _, kind := range []string{"runs", "audits"} {
+			id, err := db.GenerateOpaqueID("op_")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if kind == "runs" {
+				_, err = tx.Exec(`INSERT INTO inactivity_runs(id,user_id,policy_revision,activity_epoch,due_slot,action,general_milli,game_milli,created_at,deidentify_at,retain_until) VALUES(?,NULL,1,0,?,'decay','0','0',?,?,?)`, id, now, now, now+90*86400, now+400*86400)
+			} else {
+				_, err = tx.Exec(`INSERT INTO inactivity_audits(id,actor_user_id,action,policy_revision,details_json,created_at,deidentify_at,retain_until) VALUES(?,NULL,'preview',1,'{"count":0}',?,?,?)`, id, now, now+90*86400, now+400*86400)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
 }

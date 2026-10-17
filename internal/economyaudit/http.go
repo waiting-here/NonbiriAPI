@@ -120,11 +120,18 @@ func writeError(w http.ResponseWriter, err error) {
 			category = "invariant"
 		case errors.Is(err, ErrUnavailable):
 			category = "unavailable"
-		case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
-			category = "timeout_or_cancel"
+		case errors.Is(err, context.DeadlineExceeded):
+			category = "deadline"
+		case errors.Is(err, context.Canceled):
+			category = "canceled"
+		}
+		stage := "unknown"
+		var failure *readFailure
+		if errors.As(err, &failure) {
+			stage = failure.stage
 		}
 		// Do not log the raw error: SQLite text can include private row content.
-		slog.Error("economy audit read failed", "category", category)
+		slog.Error("economy audit read failed", "category", category, "stage", stage)
 	}
 	httperr.WriteError(w, httperr.New(code, message))
 }

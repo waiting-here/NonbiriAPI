@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { assertNoSensitiveQueryCache, renderWithProviders } from '../../../../test/unit/support';
 import { Quickstart } from './Quickstart';
 import { coreKeys } from './queries';
+import en from '../../i18n/en.json';
 
 function fixture(name: string): Record<string, unknown> {
   return JSON.parse(readFileSync(resolve(process.cwd(), '..', name), 'utf8')) as Record<
@@ -35,6 +36,74 @@ async function setup() {
 }
 afterEach(() => vi.unstubAllGlobals());
 describe('Optional resource setup recovery', () => {
+  it.each(['region', 'unavailable'] as const)(
+    'keeps the safe %s reason and retries without resaving a key',
+    async (safeClass) => {
+      let refreshes = 0,
+        keyWrites = 0;
+      const empty = fixture('internal/resources/testdata/catalog_succeeded_empty.json');
+      const failed = {
+        state: 'failed',
+        revision: '8',
+        result: null,
+        safe_class: safeClass,
+        observed_at: 1700000000,
+        count: null,
+      };
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+          const path = String(input);
+          if (path === '/api/endpoint-create-options')
+            return json({ base_connector_types: ['openai-compatible'], mainstream_channels: [] });
+          if (path === '/api/endpoints' && init?.method === 'POST') return json(endpoint, 201);
+          if (path === '/api/endpoints/11/keys' && init?.method === 'POST') {
+            keyWrites++;
+            return json(endpointKey, 201);
+          }
+          if (path.endsWith('/models/refresh')) {
+            refreshes++;
+            return json(
+              {
+                operation_id: 'op_AAAAAAAAAAAAAAAAAAAAAA',
+                evidence: { ...failed, state: 'checking', safe_class: 'none' },
+              },
+              202,
+            );
+          }
+          if (path.startsWith('/api/endpoints/11/keys/21/models?'))
+            return json({
+              ...empty,
+              evidence: refreshes < 2 ? failed : empty.evidence,
+              ...(path.includes('page=')
+                ? { pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' } }
+                : {}),
+            });
+          throw new Error('Unexpected request: ' + path);
+        }),
+      );
+      const rendered = await setup();
+      await rendered.user.type(screen.getByLabelText('Key'), 'synthetic-discovery-key');
+      await rendered.user.click(screen.getByLabelText(en.user.quickstart.ownership));
+      await rendered.user.click(screen.getByRole('button', { name: en.user.quickstart.addKey }));
+      const reason =
+        en.user.core[
+          safeClass === 'region'
+            ? 'endpoints.discoveryReasonRegion'
+            : 'endpoints.discoveryReasonUnavailable'
+        ];
+      expect(await screen.findByText(reason)).toBeVisible();
+      await rendered.user.click(screen.getByText(en.user.services.manualName));
+      expect(screen.getByLabelText(en.user.quickstart.upstream)).toBeVisible();
+      await rendered.user.click(
+        screen.getByRole('button', { name: en.user.services.retryDiscovery }),
+      );
+      await waitFor(() => expect(screen.queryByText(reason)).not.toBeInTheDocument());
+      expect(refreshes).toBe(2);
+      expect(keyWrites).toBe(1);
+      assertNoSensitiveQueryCache(rendered.queryClient, ['synthetic-discovery-key']);
+    },
+  );
   it('checks a missing receipt, clears the plaintext, and asks for the same key only before its original retry', async () => {
     const writes: { body: string; key: string | null }[] = [];
     let refreshes = 0;

@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"strconv"
+
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
 type Audit struct {
@@ -16,13 +18,22 @@ type Audit struct {
 	CreatedAt      int64           `json:"created_at"`
 }
 type AuditsPage struct {
-	Data       []Audit `json:"data"`
-	NextCursor *string `json:"next_cursor"`
+	Data       []Audit              `json:"data"`
+	NextCursor *string              `json:"next_cursor"`
+	Pagination *pagination.Metadata `json:"pagination,omitempty"`
 }
 
 func (s *Service) Audits(ctx context.Context, before int64, limit int) (AuditsPage, error) {
+	return s.audits(ctx, before, limit, nil)
+}
+
+func (s *Service) AuditsNumbered(ctx context.Context, page pagination.Request) (AuditsPage, error) {
+	return s.audits(ctx, 0, page.Size, &page)
+}
+
+func (s *Service) audits(ctx context.Context, before int64, limit int, page *pagination.Request) (AuditsPage, error) {
 	out := AuditsPage{Data: make([]Audit, 0)}
-	if before < 0 || limit < 1 || limit > 100 {
+	if before < 0 || limit < 1 || limit > 100 || page != nil && !page.Valid() {
 		return out, ErrInvalid
 	}
 	tx, _, err := s.beginAdmin(ctx, false)
@@ -33,7 +44,22 @@ func (s *Service) Audits(ctx context.Context, before int64, limit int) (AuditsPa
 	if before == 0 {
 		before = 9223372036854775807
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT rowid,id,actor_user_id,action,policy_revision,details_json,created_at FROM inactivity_audits WHERE rowid<? ORDER BY rowid DESC LIMIT ?`, before, limit+1)
+	query := `SELECT rowid,id,actor_user_id,action,policy_revision,details_json,created_at FROM inactivity_audits WHERE rowid<? ORDER BY rowid DESC LIMIT ?`
+	args := []any{before, limit + 1}
+	if page != nil {
+		var total int64
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM inactivity_audits`).Scan(&total); err != nil {
+			return out, err
+		}
+		metadata, offset, err := page.Window(total)
+		if err != nil {
+			return out, ErrInvalid
+		}
+		out.Pagination = &metadata
+		query = `SELECT rowid,id,actor_user_id,action,policy_revision,details_json,created_at FROM inactivity_audits ORDER BY rowid DESC LIMIT ? OFFSET ?`
+		args = []any{limit, offset}
+	}
+	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		return out, err
 	}

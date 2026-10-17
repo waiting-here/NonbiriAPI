@@ -68,3 +68,38 @@ func TestCaptureExplicitEventDoesNotRetainCallerBuffer(t *testing.T) {
 		t.Fatal("non UTF-8 event bytes changed")
 	}
 }
+
+func TestInspectionSharesBoundedReadAndClearsBorrowedBody(t *testing.T) {
+	for _, size := range []int{12, MaxBodyBytes + 1, MaxRawBodyBytes + 12} {
+		body := strings.Repeat("x", size)
+		var borrowed, captured []byte
+		var truncated bool
+		ctx := WithCapture(context.Background(), func(_ context.Context, event Event) {
+			captured = append([]byte(nil), event.Bytes()...)
+			truncated = event.Truncated()
+		})
+		InspectResponse(ctx, &http.Response{StatusCode: 400, Body: io.NopCloser(strings.NewReader(body))}, func(raw []byte) {
+			borrowed = raw
+			if string(raw) != body {
+				t.Fatal("inspection changed bytes")
+			}
+		})
+		if len(captured) != min(size, MaxRawBodyBytes) || truncated != (size > MaxRawBodyBytes) {
+			t.Fatal("capture bound changed")
+		}
+		if (borrowed != nil) != (size <= MaxBodyBytes) {
+			t.Fatal("inspection bound changed")
+		}
+		for _, value := range borrowed {
+			if value != 0 {
+				t.Fatal("inspection retained raw bytes")
+			}
+		}
+	}
+	called := false
+	InspectResponse(context.Background(), &http.Response{StatusCode: 400, Body: io.NopCloser(strings.NewReader(`{"error":{}}`))}, func([]byte) { called = true })
+	if !called {
+		t.Fatal("inspection requires a diagnostic sink")
+	}
+	InspectResponse(context.Background(), &http.Response{StatusCode: 400, Body: io.NopCloser(failedReader{})}, func([]byte) { t.Fatal("inspected unreadable response") })
+}

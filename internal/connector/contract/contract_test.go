@@ -121,8 +121,10 @@ func TestDiscoveryFailureKindsHaveFrozenSafeValues(t *testing.T) {
 		DiscoveryFailureProtocol,
 		DiscoveryFailureTransport,
 		DiscoveryFailureInterrupted,
+		DiscoveryFailureRegion,
+		DiscoveryFailureUnavailable,
 	}
-	got := []string{"none", "auth", "rate_limit", "timeout", "protocol", "transport", "interrupted"}
+	got := []string{"none", "auth", "rate_limit", "timeout", "protocol", "transport", "interrupted", "region", "unavailable"}
 	for index, kind := range want {
 		if string(kind) != got[index] {
 			t.Fatalf("failure kind %d = %q, want %q", index, kind, got[index])

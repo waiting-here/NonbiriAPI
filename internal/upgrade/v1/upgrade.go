@@ -16,11 +16,14 @@ const stableSchema18Manifest = "86c1689f93835a22c90c22234906433abe438b7883db4191
 
 const stableSchema19Manifest = "a44f84d8610b1141c53015e92cddce874603c2b0512d75528e403b46ff1123a1"
 
+const stableSchema20Manifest = "bb61658c873f8f3a300330f44abed6509f6d0d146ab6588175c4004b9cb39c71"
+
 var storageSchema = schemaRegistry{baseline: 17, target: db.CurrentSchemaVersion, versions: []schemaMigration{
 	{version: 17, manifest: stableSchema17Manifest},
 	{from: 17, version: 18, manifest: stableSchema18Manifest, apply: extendContentAndProtocols},
 	{from: 18, version: 19, manifest: stableSchema19Manifest, sql: accountMFASchema},
-	{from: 19, version: 20, manifest: db.PinnedGenerationTwoManifestHash, sql: logQueryIndexes},
+	{from: 19, version: 20, manifest: stableSchema20Manifest, sql: logQueryIndexes},
+	{from: 20, version: 21, manifest: db.PinnedGenerationTwoManifestHash, apply: extendServiceMetadata},
 }}
 
 type Options struct {
@@ -44,6 +47,7 @@ func SchemaDescriptor() db.StorageSchemaDescriptor {
 		{17, stableSchema17Manifest, "117c0cb009ab285451a3e0238ab97b383faebde3"},
 		{18, stableSchema18Manifest, "0f02e60704934b589b51ca91eb34bac9c5e77c02"},
 		{19, stableSchema19Manifest, "c4145513b1ca5bd20f0236763c247b8bd5c66df2"},
+		{20, stableSchema20Manifest, "51a1e6156cb164802b22fdd881a4ac2040dd1904"},
 	} {
 		descriptor.OfflineConversions = append(descriptor.OfflineConversions, db.OfflineConversionDescriptor{
 			Tool: "nonbiri-upgrade-v1", SourceCommit: source.commit, SourceSchemaVersion: source.version,
@@ -63,7 +67,7 @@ func RunRC7(ctx context.Context, path string, vault *secret.Vault, options Optio
 func run(ctx context.Context, path string, vault *secret.Vault, options Options, rc7Only bool) (Result, error) {
 	sources := []OfflineSchema{{Version: 16, ManifestHash: SourceManifestHash}}
 	if !rc7Only {
-		sources = append(sources, OfflineSchema{Version: 17, ManifestHash: stableSchema17Manifest}, OfflineSchema{Version: 18, ManifestHash: stableSchema18Manifest}, OfflineSchema{Version: 19, ManifestHash: stableSchema19Manifest})
+		sources = append(sources, OfflineSchema{Version: 17, ManifestHash: stableSchema17Manifest}, OfflineSchema{Version: 18, ManifestHash: stableSchema18Manifest}, OfflineSchema{Version: 19, ManifestHash: stableSchema19Manifest}, OfflineSchema{Version: 20, ManifestHash: stableSchema20Manifest})
 	}
 	sourceVersion := db.CurrentSchemaVersion
 	invalidLegacyConfiguration := false

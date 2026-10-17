@@ -232,8 +232,9 @@ type ErrorPage struct {
 }
 type ErrorBody struct {
 	ErrorMetadata
-	Encoding string `json:"encoding"`
-	Body     string `json:"body"`
+	IPv4Redacted bool   `json:"ipv4_redacted,omitempty"`
+	Encoding     string `json:"encoding"`
+	Body         string `json:"body"`
 }
 
 // ListErrorsTx and ErrorBodyTx require the caller to authorize the log root in

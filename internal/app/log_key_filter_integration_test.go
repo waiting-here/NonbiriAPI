@@ -15,7 +15,7 @@ func TestManagementKeyLogFilterLiveRoles(t *testing.T) {
 			path := "/api/steward/logs" + suffix + "?endpoint_key_id=123"
 			r := testApplicationRequest(t, f.app.handler, "GET", auditUserHost, path, "", f.cookies, nil)
 			want := 403
-			if level == 6 {
+			if level == 5 || level == 6 {
 				want = 200
 			}
 			if r.Code != want {

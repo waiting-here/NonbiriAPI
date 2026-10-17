@@ -14,6 +14,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/connector/chatwire"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
+	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
 
 type ModelDiscoverer struct{}
@@ -73,7 +74,7 @@ func (ModelDiscoverer) Discover(ctx context.Context, input contract.DiscoveryInp
 				response.Request.Header.Del("X-Goog-Api-Key")
 			}
 		}
-		if err != nil || response == nil || response.Body == nil {
+		if err != nil || response == nil {
 			if response != nil && response.Body != nil {
 				_ = response.Body.Close()
 			}
@@ -81,13 +82,37 @@ func (ModelDiscoverer) Discover(ctx context.Context, input contract.DiscoveryInp
 			return result
 		}
 		if response.StatusCode != 200 {
-			_ = response.Body.Close()
 			switch response.StatusCode {
 			case 401, 403:
 				result.Failure = contract.DiscoveryFailureAuth
 			case 429:
 				result.Failure = contract.DiscoveryFailureRateLimit
+			default:
+				if response.StatusCode >= 500 && response.StatusCode <= 599 {
+					result.Failure = contract.DiscoveryFailureUnavailable
+				}
 			}
+			upstreamerror.InspectResponse(ctx, response, func(raw []byte) {
+				media, params, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
+				if response.StatusCode != 400 || err != nil || media != "application/json" ||
+					len(response.Header.Values("Content-Type")) != 1 || response.Header.Get("Content-Encoding") != "" {
+					return
+				}
+				for name, value := range params {
+					if name != "charset" || !strings.EqualFold(value, "utf-8") {
+						return
+					}
+				}
+				if !guard.ContainsJSON(raw, raw) {
+					result.Failure = discoveryEnvelopeFailure(raw)
+				}
+			})
+			if response.Body != nil {
+				_ = response.Body.Close()
+			}
+			return result
+		}
+		if response.Body == nil {
 			return result
 		}
 		media, params, err := mime.ParseMediaType(response.Header.Get("Content-Type"))

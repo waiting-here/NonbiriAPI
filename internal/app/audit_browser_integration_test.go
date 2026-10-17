@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -26,9 +27,9 @@ import (
 
 const auditBrowserIP = "198.51.100.73"
 const auditBrowserClient = "AuditFixture/1.0"
-const auditBrowserJSON = `{"error":{"message":"audit-original-only <img src=x onerror=\"document.documentElement.dataset.auditExecuted='yes'\">","details":{"retry":false,"code":"synthetic_busy"}}}`
+const auditBrowserJSON = `{"error":{"message":"audit-original-only 203.0.113.19 <img src=x onerror=\"document.documentElement.dataset.auditExecuted='yes'\">","details":{"retry":false,"code":"synthetic_busy"}}}`
 const auditBrowserText = `<script>document.documentElement.dataset.auditExecuted='yes'</script>
-audit-text-only: model discovery failed
+audit-text-only: model discovery failed at 203.0.113.19
 <img src=x onerror="document.documentElement.dataset.auditExecuted='yes'">`
 
 // The opt-in browser fixture uses the real application and canonical schema.
@@ -190,6 +191,20 @@ VALUES('issue_projection_incomplete','synthetic projection checkpoint',?,?,0)`, 
 				http.Error(w, "fixture update failed", http.StatusInternalServerError)
 				return
 			}
+			writeImageFixtureJSON(w, map[string]bool{"ok": true})
+			return
+		}
+		if r.Method == http.MethodPost && r.URL.Path == "/gemini-discovery" && management != nil {
+			var input struct {
+				Mode string `json:"mode"`
+			}
+			if json.NewDecoder(io.LimitReader(r.Body, 1024)).Decode(&input) != nil || (input.Mode != "success" && input.Mode != "region") {
+				http.Error(w, "invalid mode", 400)
+				return
+			}
+			f.upstreamState.mu.Lock()
+			f.upstreamState.geminiDiscoveryMode = input.Mode
+			f.upstreamState.mu.Unlock()
 			writeImageFixtureJSON(w, map[string]bool{"ok": true})
 			return
 		}

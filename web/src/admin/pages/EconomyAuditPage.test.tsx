@@ -63,6 +63,51 @@ function response(body: unknown, status = 200) {
 }
 
 describe('administrator economy audit', () => {
+  it('recovers a failed summary without discarding the successful trend', async () => {
+    let summaryReads = 0;
+    let seriesReads = 0;
+    let recovered = false;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = new URL(
+          input instanceof Request ? input.url : String(input),
+          window.location.origin,
+        ).pathname;
+        if (path === '/admin/api/session') return response({ admin: { username: 'audit-admin' } });
+        if (path === '/admin/api/time-context')
+          return response({ mode: 'site', offset_minutes: 330 });
+        if (path.endsWith('/summary')) {
+          summaryReads++;
+          return !recovered
+            ? response(
+                { error: { code: 'service_unavailable', message: 'private database detail' } },
+                503,
+              )
+            : response(summary);
+        }
+        if (path.endsWith('/series')) {
+          seriesReads++;
+          return response({ metadata, bucket: 'hour', data: [] });
+        }
+        throw new Error(`Unexpected request: ${path}`);
+      }),
+    );
+    await renderWithProviders(<EconomyAuditPage />, { station: 'admin', locale: 'en' });
+    expect(
+      await screen.findByRole('heading', { name: 'Accounting audit unavailable' }),
+    ).toBeVisible();
+    expect(screen.queryByRole('heading', { name: 'Current stock' })).toBeNull();
+    await screen.findByText('No trend data for this interval.');
+    const readsBeforeRetry = { summary: summaryReads, series: seriesReads };
+    recovered = true;
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByRole('heading', { name: 'Current stock' })).toBeVisible();
+    expect(screen.queryByText(/private database detail/)).toBeNull();
+    expect(summaryReads).toBe(readsBeforeRetry.summary + 1);
+    expect(seriesReads).toBe(readsBeforeRetry.series);
+  });
+
   it('renders exact stock and flow values separately and treats ledger details as text', async () => {
     vi.stubGlobal(
       'fetch',

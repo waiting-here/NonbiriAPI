@@ -509,12 +509,13 @@ type imageFixtureJob struct {
 	released bool
 }
 type imageFixtureUpstream struct {
-	mu            sync.Mutex
-	jobs          map[string]*imageFixtureJob
-	png           string
-	submissions   int
-	discoveryMode string
-	polls         int
+	mu                  sync.Mutex
+	jobs                map[string]*imageFixtureJob
+	png                 string
+	submissions         int
+	discoveryMode       string
+	geminiDiscoveryMode string
+	polls               int
 }
 
 func newImageFixtureUpstream(t *testing.T) *imageFixtureUpstream {
@@ -545,13 +546,26 @@ func (u *imageFixtureUpstream) release() {
 	}
 }
 func (u *imageFixtureUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("Authorization") != "Bearer "+imageFixtureSecret {
+	geminiModels := r.URL.Path == "/v1beta/models" && r.Method == http.MethodGet
+	if (!geminiModels && r.Header.Get("Authorization") != "Bearer "+imageFixtureSecret) || (geminiModels && r.Header.Get("X-Goog-Api-Key") != imageFixtureSecret) {
 		http.Error(w, "wrong synthetic credential", 401)
 		return
 	}
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	switch {
+	case geminiModels:
+		if u.geminiDiscoveryMode != "success" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = io.WriteString(w, `{"error":{"code":400,"status":"FAILED_PRECONDITION","message":"User location is not supported for the API use.","source":"203.0.113.77","marker":"synthetic-private-discovery"}}`)
+			return
+		}
+		if r.URL.Query().Get("pageToken") == "second" {
+			writeImageFixtureJSON(w, map[string]any{"models": []any{map[string]any{"name": "models/gemini-browser-b", "supportedGenerationMethods": []string{"generateContent"}}}})
+		} else {
+			writeImageFixtureJSON(w, map[string]any{"models": []any{map[string]any{"name": "models/gemini-browser-a", "supportedGenerationMethods": []string{"generateContent"}}}, "nextPageToken": "second"})
+		}
 	case r.URL.Path == "/v1/models" && r.Method == http.MethodGet:
 		switch u.discoveryMode {
 		case "empty":

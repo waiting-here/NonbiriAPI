@@ -56,10 +56,22 @@ func WithCapture(ctx context.Context, sink Sink) context.Context {
 // ReadResponse is used only after a connector has classified a response as a
 // failure. It keeps raw diagnostics separate from the public, safe summary.
 func (c Context) ReadResponse(ctx context.Context, response *http.Response, summaryLimit ...int64) Detail {
+	return c.readResponse(ctx, response, nil, summaryLimit...)
+}
+
+// InspectResponse allows a connector to classify a complete, bounded error
+// envelope while preserving the existing private diagnostic capture. The bytes
+// are cleared on return and must not be retained or exposed by the inspector.
+// Unreadable, truncated or oversized envelopes are never passed to inspect.
+func InspectResponse(ctx context.Context, response *http.Response, inspect func([]byte)) {
+	_ = (Context{}).readResponse(ctx, response, inspect)
+}
+
+func (c Context) readResponse(ctx context.Context, response *http.Response, inspect func([]byte), summaryLimit ...int64) Detail {
 	if response == nil {
 		return Detail{}
 	}
-	if c.ContainsSecret == nil && !IsCapturing(ctx) {
+	if c.ContainsSecret == nil && inspect == nil && !IsCapturing(ctx) {
 		return Detail{}
 	}
 	if response.Body == nil {
@@ -75,6 +87,9 @@ func (c Context) ReadResponse(ctx context.Context, response *http.Response, summ
 	if err != nil {
 		event.body = nil
 		event.failureReason = "read_failure"
+	}
+	if err == nil && !event.truncated && len(body) <= MaxBodyBytes && inspect != nil {
+		inspect(body)
 	}
 	emit(ctx, event)
 	if err != nil || event.truncated {

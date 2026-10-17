@@ -157,13 +157,13 @@ func edgeMeasures(ctx context.Context, tx *sql.Tx, c checkpoint, f Filter, from,
 		if err := rows.Close(); err != nil {
 			return err
 		}
+		amounts, err := operationMeasuresBatch(ctx, tx, batch)
+		if err != nil {
+			return err
+		}
 		for _, o := range batch {
-			amounts, err := operationMeasures(ctx, tx, o.id)
-			if err != nil {
-				return err
-			}
 			classification := ledger.ClassifyForAudit(ledger.Kind(o.kind), o.sourceID)
-			if err := addDimension(out, dimension{o.kind, o.source, classification.Channel}, amounts[f.Asset]); err != nil {
+			if err := addDimension(out, dimension{o.kind, o.source, classification.Channel}, amounts[o.id][f.Asset]); err != nil {
 				return err
 			}
 			afterAt, after = o.at, o.seq

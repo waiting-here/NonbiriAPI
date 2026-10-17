@@ -23,7 +23,13 @@ import {
   validateLogicalName,
   validatePersonalProviderName,
 } from './normalizers';
-import { ConnectorLabel, CoreErrorPanel, CoreLoading, SafeCopyValue } from './components';
+import {
+  ConnectorLabel,
+  CoreErrorPanel,
+  CoreLoading,
+  DiscoveryFailureNotice,
+  SafeCopyValue,
+} from './components';
 import { CONNECTOR_COPY_KEYS, useCoreCopy } from './copy';
 import { useQuickstartCopy } from './quickstartCopy';
 import {
@@ -1030,9 +1036,8 @@ export function Quickstart({
               ) : (
                 <>
                   {catalog.data?.evidence.state === 'failed' ? (
-                    <Note
-                      tone="bad"
-                      title={text('checkFailed')}
+                    <DiscoveryFailureNotice
+                      failure={catalog.data.evidence.safe_class}
                       action={
                         <button
                           type="button"

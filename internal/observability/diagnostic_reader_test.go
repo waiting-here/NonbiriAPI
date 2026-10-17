@@ -34,6 +34,21 @@ func (a diagnosticTestAuthority) AuthorizeStewardRead(ctx context.Context, tx *s
 	return a.check(ctx, tx, id, authz.RoleSteward)
 }
 
+func (a diagnosticTestAuthority) AuthorizeStewardLogRead(ctx context.Context, tx *sql.Tx, id int64) (bool, error) {
+	actor, ok := ctx.Value(diagnosticActorKey{}).(authz.Actor)
+	if !ok || actor.UserID != id {
+		return false, authz.ErrUnauthorized
+	}
+	principal, err := a.auth.Authorize(ctx, tx, actor, authz.Requirement{Role: authz.RoleUser})
+	if err != nil {
+		return false, err
+	}
+	if principal.EffectiveLevel != 5 && principal.EffectiveLevel != 6 {
+		return false, authz.ErrForbidden
+	}
+	return principal.EffectiveLevel == 5, nil
+}
+
 type diagnosticFixture struct {
 	repository                        *Repository
 	reader                            *DiagnosticReader
@@ -151,7 +166,7 @@ func TestIndependentDiagnosticsFinalAuthorityAndBoundedPagination(t *testing.T) 
 	}
 	ordinary, _ := observedLog(t, f.repository, f.owner, now)
 	f.capture(t, DiagnosticRef{RequestID: ordinary, AttemptSeq: 1}, "text/plain", []byte("normal API diagnostic"))
-	for _, actor := range []authz.Actor{f.admin, f.steward} {
+	for _, actor := range []authz.Actor{f.admin, f.steward, f.trainee} {
 		page, err := f.reader.List(diagContext(actor), diagActor(actor), DiagnosticFilter{})
 		if err != nil || len(page.Data) != 20 || page.NextBefore == nil {
 			t.Fatalf("list %d %v", len(page.Data), err)
@@ -168,13 +183,20 @@ func TestIndependentDiagnosticsFinalAuthorityAndBoundedPagination(t *testing.T) 
 			t.Fatalf("detail %+v %v", detail, err)
 		}
 	}
-	for _, actor := range []authz.Actor{f.trainee, f.ordinary} {
+	for _, actor := range []authz.Actor{f.ordinary} {
 		if _, err := f.reader.List(diagContext(actor), diagActor(actor), DiagnosticFilter{}); !errors.Is(err, ErrDiagnosticForbidden) {
 			t.Fatalf("role allowed %v", err)
 		}
 	}
 	page, _ := f.reader.List(diagContext(f.steward), diagActor(f.steward), DiagnosticFilter{})
 	if _, err := f.repository.db.Exec("UPDATE users SET level=5 WHERE id=?", f.steward.UserID); err != nil {
+		t.Fatal(err)
+	}
+	projected, err := f.reader.Detail(diagContext(f.steward), diagActor(f.steward), page.Data[0].ID)
+	if err != nil || !projected.Body.IPv4Redacted {
+		t.Fatal("downgrade did not change projection", projected, err)
+	}
+	if _, err := f.repository.db.Exec("UPDATE users SET level=4 WHERE id=?", f.steward.UserID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.reader.Detail(diagContext(f.steward), diagActor(f.steward), page.Data[0].ID); !errors.Is(err, ErrDiagnosticForbidden) {

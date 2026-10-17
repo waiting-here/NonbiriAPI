@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { expect, test, type Browser, type BrowserContext } from '@playwright/test';
 import commonEn from '../../src/shared/i18n/common/en.json' with { type: 'json' };
 import adminEn from '../../src/admin/i18n/en.json' with { type: 'json' };
+import adminZh from '../../src/admin/i18n/zh.json' with { type: 'json' };
 
 type Cookie = { Name: string; Value: string };
 interface Fixture {
@@ -19,7 +21,7 @@ function fixture(): Fixture {
 }
 test.skip(process.env.NONBIRI_MANAGEMENT_BROWSER !== '1', 'Requires the management fixture.');
 
-async function session(browser: Browser, role: 'admin' | 1 | 6) {
+async function session(browser: Browser, role: 'admin' | 1 | 6, locale: 'en' | 'zh' = 'en') {
   const state = fixture();
   const origin = role === 'admin' ? state.admin_url : state.user_url;
   const cookie =
@@ -35,10 +37,10 @@ async function session(browser: Browser, role: 'admin' | 1 | 6) {
       sameSite: 'Lax',
     },
   ]);
-  await context.addInitScript(() => {
-    localStorage.setItem('nb.lang', 'en');
+  await context.addInitScript((locale) => {
+    localStorage.setItem('nb.lang', locale);
     localStorage.setItem('nb.theme', 'light');
-  });
+  }, locale);
   return context;
 }
 async function read(context: BrowserContext, origin: string, path: string) {
@@ -124,6 +126,92 @@ test('administrator submits endpoint search, resets it and pages actual shared m
   }
 });
 
+test('administrator labels and filters non-commercial aggregation gateways in both languages', async ({
+  browser,
+}) => {
+  const state = fixture();
+  const owner = await session(browser, 1);
+  const baseURL = 'https://gateway-classification.example.test/v1';
+  try {
+    await write(owner, state.user_url, '/api/endpoints', {
+      source: 'custom',
+      connector_type: 'openai-compatible',
+      base_url: baseURL,
+      note: 'Classification fixture',
+      enabled: true,
+    });
+  } finally {
+    await owner.close();
+  }
+  for (const locale of ['en', 'zh'] as const) {
+    const context = await session(browser, 'admin', locale);
+    const words = (locale === 'en' ? adminEn : adminZh).admin.endpoints;
+    try {
+      const page = await context.newPage();
+      await page.goto(state.admin_url + '/endpoints?q=gateway-classification.example.test');
+      await expect(page.locator('.ops-table tbody tr')).toHaveCount(1);
+      const batch = page.locator('fieldset.endpoint-batch');
+      await page
+        .getByRole('checkbox', {
+          name: words.selectEndpoint.replace('{{url}}', baseURL),
+          exact: true,
+        })
+        .check();
+      await batch.getByRole('combobox', { name: words.tags }).selectOption('noncommercial_gateway');
+      const add = batch.getByRole('button', { name: words.addTag, exact: true });
+      await add.focus();
+      await page.keyboard.press('Enter');
+      await expect(page.getByRole('status')).toContainText(words.tagsSaved);
+      await page
+        .getByRole('search')
+        .getByRole('combobox', { name: words.tags })
+        .selectOption('noncommercial_gateway');
+      await expect(page.locator('.ops-table tbody tr')).toHaveCount(1);
+      await expect(page.locator('.ops-table tbody')).toContainText(words.noncommercial_gateway);
+      expect(new URL(page.url()).searchParams.get('tag')).toBe('noncommercial_gateway');
+      if (process.env.NONBIRI_VISUAL_DIR) {
+        for (const theme of ['light', 'dark'])
+          for (const width of [1440, 390]) {
+            await page.evaluate((theme) => {
+              document.documentElement.dataset.theme = theme;
+              document.documentElement.style.colorScheme = theme;
+            }, theme);
+            await page.setViewportSize({ width, height: 900 });
+            await expect
+              .poll(() =>
+                page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+              )
+              .toBe(true);
+            await page.screenshot({
+              path: resolve(
+                process.env.NONBIRI_VISUAL_DIR,
+                `endpoint-tag-${locale}-${theme}-${width}.png`,
+              ),
+              animations: 'disabled',
+            });
+          }
+      }
+      await page
+        .getByRole('checkbox', {
+          name: words.selectEndpoint.replace('{{url}}', baseURL),
+          exact: true,
+        })
+        .check();
+      await batch.getByRole('combobox', { name: words.tags }).selectOption('noncommercial_gateway');
+      await batch.getByRole('button', { name: words.removeTag, exact: true }).click();
+      await expect(page.locator('.ops-table tbody tr')).toHaveCount(0);
+      const result = await read(
+        context,
+        state.admin_url,
+        '/admin/api/overview/endpoints?q=gateway-classification.example.test&tag=untagged&page=1&page_size=20',
+      );
+      expect(result.data).toMatchObject([{ base_url: baseURL, tags: [] }]);
+    } finally {
+      await context.close();
+    }
+  }
+});
+
 test('administrator submits user, blacklist and announcement list filters', async ({ browser }) => {
   const state = fixture(),
     admin = await session(browser, 'admin');
@@ -171,9 +259,7 @@ test('administrator submits user, blacklist and announcement list filters', asyn
     await page.getByLabel(commonEn.common.blacklist.search).fill('Synthetic directory filter');
     await page.getByText(commonEn.management.users.exactFilters, { exact: true }).click();
     await page.getByLabel(commonEn.common.blacklist.actorKind).selectOption('admin');
-    await page
-      .getByRole('button', { name: commonEn.common.applyFilter, exact: true })
-      .click();
+    await page.getByRole('button', { name: commonEn.common.applyFilter, exact: true }).click();
     await expect(
       page.locator('.nb-table tbody').getByText(discordID, { exact: true }),
     ).toBeVisible();

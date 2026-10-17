@@ -186,7 +186,7 @@ func TestModelDiscoveryFailureBoundaries(t *testing.T) {
 		}, wantFailure: connectorcontract.DiscoveryFailureRateLimit, wantStatus: http.StatusTooManyRequests, wantReceived: true, wantDiag: "upstream returned status 429", wantCalls: 1},
 		{name: "other non-2xx", do: func(*http.Request) (*http.Response, error) {
 			return fakeResponse(http.StatusBadGateway, "application/json", `{"private":"sk-boundary"}`), nil
-		}, wantFailure: connectorcontract.DiscoveryFailureProtocol, wantStatus: http.StatusBadGateway, wantReceived: true, wantDiag: "upstream returned status 502", wantCalls: 1},
+		}, wantFailure: connectorcontract.DiscoveryFailureUnavailable, wantStatus: http.StatusBadGateway, wantReceived: true, wantDiag: "upstream returned status 502", wantCalls: 1},
 		{name: "nonstandard response", do: func(*http.Request) (*http.Response, error) {
 			return fakeResponse(http.StatusOK, "application/json", `{"data":[],"has_more":false,"unknown":1}`), nil
 		}, wantFailure: connectorcontract.DiscoveryFailureProtocol, wantStatus: http.StatusOK, wantReceived: true, wantDiag: "invalid upstream models response", wantCalls: 1},

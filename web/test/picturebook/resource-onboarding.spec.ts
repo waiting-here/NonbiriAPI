@@ -277,7 +277,11 @@ test('existing resources support empty and failed discovery plus manual setup in
     await expect(page.getByText(copy('zh').empty, { exact: true })).toBeVisible();
     await control(user, 'failed');
     await page.getByRole('button', { name: copy('zh').check, exact: true }).click();
-    await expect(page.getByText(copy('zh').checkFailed, { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole('alert').filter({
+        hasText: zh.user.core['endpoints.discoveryReasonUnavailable'],
+      }),
+    ).toBeVisible();
     await manual(page, 'manual-chat-' + unique(), prefix, 'zh');
     await expect(
       page.getByText(copy('zh').selected.replace('{{count}}', '1'), { exact: true }),

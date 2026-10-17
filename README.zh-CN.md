@@ -4,7 +4,7 @@
 
 NonbiriAPI 是可自行部署的 AI 端点管理平台，提供 OpenAI-compatible 调用入口。用户管理端点、加密凭据、模型发现与路由，通过可撤销的 CallerKey 调用个人或公益模型。可选活动和小游戏共用服务端权威的账务及生命周期规则。
 
-当前代码用于筹备 **v1.0.0**。Tag 和 GitHub Release 单独发布；部署可使用经过审查的精确提交。已发布版本仅提供源码，版本沿革见 [CHANGELOG](CHANGELOG.md)。
+**v1.0.0 是首个正式版本。** GitHub Release 提供源码，构建方法见下文；版本沿革见 [CHANGELOG](CHANGELOG.md)。
 
 ## 架构
 
@@ -38,7 +38,7 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [首次配置](docs/first-run-setup.md) 涵盖私有目录、加密密钥、Discord OAuth 和公共域名。将 [admin.env.example](admin.env.example) 复制到检出目录外，替换占位值并在启动前加载。数据库与对应密钥须配套保留。
 
-新库默认开启维护并关闭公共功能。v1.0.0 正常程序仅接受 schema 19 或全新初始化，既有 schema 16、17、18 使用独立离线转换器，历史转换代码不进入正常服务。后续 v1.x 保持从任一更早 v1.x 正式库升级的路径，不承诺旧程序读取新版数据库。
+新库默认开启维护并关闭公共功能。v1.0.0 正常程序仅接受 schema 21 或全新初始化，既有 schema 16、17、18、19、20 使用独立离线转换器，历史转换代码不进入正常服务。后续 v1.x 保持从任一更早 v1.x 正式库升级的路径，不承诺旧程序读取新版数据库。
 
 [部署指南](docs/deployment.md) 说明 systemd、代理、不可变产物、升级和完整快照恢复；启动变量及在线设置统一维护在 [配置参考](docs/configuration.md)。
 

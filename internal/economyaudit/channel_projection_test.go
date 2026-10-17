@@ -124,6 +124,7 @@ func TestFatFishAndLakeChannelsProjectRetryAndAllReadAPIs(t *testing.T) {
 		}
 	}
 	f.fund(t, 1, auditNow-1)
+	f.project(t)
 	if ready, err := f.service.Advance(f.ctx); err != nil || !ready {
 		t.Fatal(ready, err)
 	}
@@ -202,6 +203,13 @@ func TestEconomyAuditCatchUpFromReleasedBinary(t *testing.T) {
 		t.Fatal("source new-channel operations did not catch up", channels)
 	}
 	f.fund(t, 1, auditNow-1)
+	pending, err := f.service.Summary(f.ctx, f.admin, filter)
+	if err != nil || pending.Metadata.ProjectedSeq != before.Metadata.ProjectedSeq || pending.Metadata.ProjectedSeq == pending.Metadata.LedgerSeq || pending.Reconciliation.Status != "catching_up" {
+		t.Fatal("reads must preserve the pending projection watermark", pending, err)
+	}
+	if ready, err := f.service.Advance(f.ctx); err != nil || !ready {
+		t.Fatal("background projection did not catch up", ready, err)
+	}
 	after, err := f.service.Summary(f.ctx, f.admin, filter)
 	if err != nil || after.Metadata.ProjectedSeq != after.Metadata.LedgerSeq || after.Reconciliation.Status != "matched" {
 		t.Fatal(after, err)

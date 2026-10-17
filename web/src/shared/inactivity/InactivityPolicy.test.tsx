@@ -1,3 +1,4 @@
+import { MemoryRouter } from 'react-router';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -36,7 +37,7 @@ function mount(component: React.ReactNode) {
   return render(
     <QueryClientProvider client={client}>
       <DisplayTimeContext.Provider value={{ mode: 'site', offset_minutes: 480 }}>
-        {component}
+        <MemoryRouter>{component}</MemoryRouter>
       </DisplayTimeContext.Provider>
     </QueryClientProvider>,
   );
@@ -252,8 +253,12 @@ it('validates enabled actions before previewing and reveals their required field
 it('loads execution and policy audit history only when their folds open', async () => {
   requests.apiFetch.mockImplementation((path: string) =>
     Promise.resolve(
-      path.endsWith('/runs') || path.endsWith('/audits')
-        ? { data: [], next_cursor: null }
+      path.includes('/runs?') || path.includes('/audits?')
+        ? {
+            data: [],
+            next_cursor: null,
+            pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
+          }
         : configuration,
     ),
   );
@@ -266,21 +271,21 @@ it('loads execution and policy audit history only when their folds open', async 
   fireEvent.click(runs.querySelector('summary')!);
   await waitFor(() =>
     expect(
-      requests.apiFetch.mock.calls.filter((call) => String(call[0]).endsWith('/runs')),
+      requests.apiFetch.mock.calls.filter((call) => String(call[0]).includes('/runs?')),
     ).toHaveLength(1),
   );
-  expect(requests.apiFetch.mock.calls.some((call) => String(call[0]).endsWith('/audits'))).toBe(
+  expect(requests.apiFetch.mock.calls.some((call) => String(call[0]).includes('/audits?'))).toBe(
     false,
   );
   fireEvent.click(runs.querySelector('summary')!);
   fireEvent.click(runs.querySelector('summary')!);
   expect(
-    requests.apiFetch.mock.calls.filter((call) => String(call[0]).endsWith('/runs')),
+    requests.apiFetch.mock.calls.filter((call) => String(call[0]).includes('/runs?')),
   ).toHaveLength(1);
   fireEvent.click(screen.getByText('Configuration and preview audit'));
   await waitFor(() =>
     expect(
-      requests.apiFetch.mock.calls.filter((call) => String(call[0]).endsWith('/audits')),
+      requests.apiFetch.mock.calls.filter((call) => String(call[0]).includes('/audits?')),
     ).toHaveLength(1),
   );
   expect(requests.apiFetch.mock.calls.some((call) => call[1]?.method)).toBe(false);

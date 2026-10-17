@@ -194,6 +194,9 @@ func failedDiscoveryResult(kind connectorcontract.DiscoveryFailureKind, response
 }
 
 func discoveryStatusFailure(status int) connectorcontract.DiscoveryFailureKind {
+	if status >= 500 && status <= 599 {
+		return connectorcontract.DiscoveryFailureUnavailable
+	}
 	switch status {
 	case http.StatusUnauthorized, http.StatusForbidden:
 		return connectorcontract.DiscoveryFailureAuth

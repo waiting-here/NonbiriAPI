@@ -11,6 +11,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/host"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"net/http"
 	"net/http/httptest"
@@ -199,6 +200,7 @@ func TestHTTPFinalSessionAuthorityRevisionAndReplay(t *testing.T) {
 	if w := call("GET", "/admin/api/inactivity-policy/runs?page_size=101", "", ""); w.Code != 400 {
 		t.Fatal("unbounded page accepted")
 	}
+	checkHistoryPagination(t, e, call)
 	ctx := context.WithoutCancel(final.last)
 	actor, ok := auth.ActorFromContext(ctx)
 	if !ok {
@@ -227,6 +229,12 @@ func TestHTTPFinalSessionAuthorityRevisionAndReplay(t *testing.T) {
 	}
 	if _, err = e.s.Audits(ctx, 0, 100); !errors.Is(err, ErrForbidden) {
 		t.Fatal("revoked admin read policy audit", err)
+	}
+	if _, err = e.s.RunsNumbered(ctx, pagination.Default()); !errors.Is(err, ErrForbidden) {
+		t.Fatal("revoked admin read numbered runs", err)
+	}
+	if _, err = e.s.AuditsNumbered(ctx, pagination.Default()); !errors.Is(err, ErrForbidden) {
+		t.Fatal("revoked admin read numbered audit", err)
 	}
 	token := strings.Repeat("A", 43)
 	hash := sha256.Sum256([]byte(token))

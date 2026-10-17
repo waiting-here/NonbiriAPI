@@ -59,8 +59,12 @@ func TestAttemptFiltersMatchIndependentAttemptsWithoutDuplicateRows(t *testing.T
 					t.Fatalf("tie order = %s / %s, want %s", admin.Data[i].ID, steward.Data[i].ID, want)
 				}
 			}
-			if _, err := f.repo.ListSteward(ctx, 5, filter, mismatchStewardAuthorizer{}); !errors.Is(err, ErrForbidden) {
-				t.Fatalf("level 5 read = %v", err)
+			trainee, err := f.repo.ListSteward(ctx, 5, filter, mismatchStewardAuthorizer{})
+			if err != nil || len(trainee.Data) != len(steward.Data) {
+				t.Fatal("L5 log page differs", trainee, err)
+			}
+			if _, err := f.repo.ListSteward(ctx, 4, filter, mismatchStewardAuthorizer{}); !errors.Is(err, ErrForbidden) {
+				t.Fatalf("ordinary account read = %v", err)
 			}
 			if _, err := f.repo.ListUser(ctx, logUserOne, filter); !errors.Is(err, ErrInvalid) {
 				t.Fatalf("private attempt filters exposed to ordinary user: %v", err)

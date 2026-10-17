@@ -213,13 +213,22 @@ func scanRun(rows *sql.Rows) (Run, error) {
 }
 
 type RunsPage struct {
-	Data       []Run   `json:"data"`
-	NextCursor *string `json:"next_cursor"`
+	Data       []Run                `json:"data"`
+	NextCursor *string              `json:"next_cursor"`
+	Pagination *pagination.Metadata `json:"pagination,omitempty"`
 }
 
 func (s *Service) Runs(ctx context.Context, before int64, limit int) (RunsPage, error) {
+	return s.runs(ctx, before, limit, nil)
+}
+
+func (s *Service) RunsNumbered(ctx context.Context, page pagination.Request) (RunsPage, error) {
+	return s.runs(ctx, 0, page.Size, &page)
+}
+
+func (s *Service) runs(ctx context.Context, before int64, limit int, page *pagination.Request) (RunsPage, error) {
 	out := RunsPage{Data: make([]Run, 0)}
-	if before < 0 || limit < 1 || limit > 100 {
+	if before < 0 || limit < 1 || limit > 100 || page != nil && !page.Valid() {
 		return out, ErrInvalid
 	}
 	tx, _, err := s.beginAdmin(ctx, false)
@@ -232,7 +241,21 @@ func (s *Service) Runs(ctx context.Context, before int64, limit int) (RunsPage, 
 	if before == 0 {
 		before = 9223372036854775807
 	}
-	rows, err := tx.QueryContext(ctx, query, before, limit+1)
+	args := []any{before, limit + 1}
+	if page != nil {
+		var total int64
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM inactivity_runs`).Scan(&total); err != nil {
+			return out, err
+		}
+		metadata, offset, err := page.Window(total)
+		if err != nil {
+			return out, ErrInvalid
+		}
+		out.Pagination = &metadata
+		query = `SELECT rowid,` + runColumns + ` FROM inactivity_runs ORDER BY rowid DESC LIMIT ? OFFSET ?`
+		args = []any{limit, offset}
+	}
+	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		return out, err
 	}

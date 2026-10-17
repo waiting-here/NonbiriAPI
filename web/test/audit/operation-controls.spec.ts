@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { expect, test, type Browser, type BrowserContext } from '@playwright/test';
 import commonEn from '../../src/shared/i18n/common/en.json' with { type: 'json' };
+import commonZh from '../../src/shared/i18n/common/zh.json' with { type: 'json' };
 import adminZh from '../../src/admin/i18n/zh.json' with { type: 'json' };
 
 interface Fixture {
@@ -61,7 +62,7 @@ test('administrator loads inactivity execution records and opens the persisted c
       },
     });
     expect(preview.ok()).toBe(true);
-    const runs = await read(context, '/admin/api/inactivity-policy/runs');
+    const runs = await read(context, '/admin/api/inactivity-policy/runs?page=1');
     const page = await context.newPage();
     await page.goto(origin + '/inactivity-policy');
     await page.getByLabel('Execution time (optional)', { exact: true }).fill('12:00');
@@ -116,6 +117,100 @@ test('administrator loads inactivity execution records and opens the persisted c
     });
   } finally {
     await context.close();
+  }
+});
+
+test('inactivity histories paginate independently with recovery in both languages and responsive themes', async ({
+  browser,
+}, info) => {
+  for (const [language, width, theme] of [
+    ['en', 1440, 'light'],
+    ['zh', 1440, 'dark'],
+    ['zh', 390, 'light'],
+    ['en', 390, 'dark'],
+  ] as const) {
+    const context = await administrator(browser);
+    try {
+      await context.addInitScript(
+        ({ language, theme }) => {
+          localStorage.setItem('nb.lang', language);
+          localStorage.setItem('nb.theme', theme);
+        },
+        { language, theme },
+      );
+      const page = await context.newPage();
+      await page.setViewportSize({ width, height: 900 });
+      const copy = (language === 'zh' ? commonZh : commonEn).common;
+      const runTitle = language === 'zh' ? '执行记录' : 'Execution records';
+      const auditTitle = language === 'zh' ? '配置与预览审计' : 'Configuration and preview audit';
+      await page.goto(fixture().admin_url + '/inactivity-policy');
+      const runs = page
+        .locator('details.nb-fold')
+        .filter({ has: page.locator(':scope > summary', { hasText: runTitle }) });
+      const audits = page
+        .locator('details.nb-fold')
+        .filter({ has: page.locator(':scope > summary', { hasText: auditTitle }) });
+      await runs.locator(':scope > summary').focus();
+      await page.keyboard.press('Enter');
+      await expect(runs.locator('tbody tr')).toHaveCount(20);
+      await expect(runs.getByRole('button', { name: copy.previous, exact: true })).toBeDisabled();
+      await runs.getByLabel(copy.pageControls.size, { exact: true }).selectOption('10');
+      await expect(runs.locator('tbody tr')).toHaveCount(10);
+      const jump = runs.getByLabel(copy.pageControls.jump, { exact: true });
+      await jump.fill('8');
+      await jump.press('Enter');
+      await expect(runs.locator('[aria-current="page"]')).toHaveText('8');
+      await runs.getByRole('button', { name: copy.previous, exact: true }).click();
+      await expect(runs.locator('[aria-current="page"]')).toHaveText('7');
+      await runs.getByRole('button', { name: copy.next, exact: true }).click();
+      await expect(runs.locator('[aria-current="page"]')).toHaveText('8');
+      for (const size of ['50', '100', '20']) {
+        await runs.getByLabel(copy.pageControls.size, { exact: true }).selectOption(size);
+        await expect(runs.locator('tbody tr')).toHaveCount(Number(size));
+        await expect(runs.locator('[aria-current="page"]')).toHaveText('1');
+      }
+      await audits.locator(':scope > summary').click();
+      await expect(audits.locator('ul > li')).toHaveCount(20);
+      await audits.getByRole('button', { name: copy.next, exact: true }).click();
+      await expect(audits.locator('[aria-current="page"]')).toHaveText('2');
+      await expect(runs.locator('[aria-current="page"]')).toHaveText('1');
+      if (language === 'en' && width === 1440) {
+        let fail = true;
+        await page.route('**/admin/api/inactivity-policy/runs?**', async (route) => {
+          if (fail && new URL(route.request().url()).searchParams.get('page') === '2') {
+            await route.fulfill({
+              status: 503,
+              contentType: 'application/json',
+              body: '{"error":{"code":"unavailable"}}',
+            });
+          } else await route.continue();
+        });
+        await runs.getByRole('button', { name: copy.next, exact: true }).click();
+        await expect(runs.getByRole('button', { name: copy.retry, exact: true })).toBeVisible();
+        await expect(runs.getByRole('button', { name: copy.next, exact: true })).toBeEnabled();
+        await expect(runs.locator('tbody tr')).toHaveCount(0);
+        fail = false;
+        await runs.getByRole('button', { name: copy.retry, exact: true }).click();
+        await expect(runs.locator('[aria-current="page"]')).toHaveText('2');
+      }
+      await jump.fill('10');
+      await runs.getByRole('button', { name: copy.pageControls.jumpAction, exact: true }).click();
+      await expect(runs.locator('tbody tr')).toHaveCount(1);
+      await expect(runs.getByRole('button', { name: copy.next, exact: true })).toBeDisabled();
+      await expect(audits.locator('[aria-current="page"]')).toHaveText('2');
+      await audits.getByLabel(copy.pageControls.size, { exact: true }).selectOption('100');
+      await expect(audits.locator('ul > li')).toHaveCount(100);
+      await audits.locator(':scope > summary').click();
+      await runs.scrollIntoViewIfNeeded();
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+      ).toBe(true);
+      await runs.screenshot({
+        path: info.outputPath(`inactivity-pager-${language}-${width}-${theme}.png`),
+      });
+    } finally {
+      await context.close();
+    }
   }
 });
 

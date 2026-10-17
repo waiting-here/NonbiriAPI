@@ -133,7 +133,7 @@ The application accepts forwarding metadata only from configured trusted proxy a
 
 Review upstream operators as a trust boundary. Their reported usage determines actual charges and donation rewards and may exceed the admission reserve; the platform cannot independently verify a provider's token accounting. Public HTTP endpoints remain supported, but send credentials and content without transport encryption. Prefer HTTPS and review any HTTP exception before approving a donated source.
 
-Original-error diagnostics may retain a credential or other private content echoed by an upstream. Only administrators and currently authorized level-6 stewards can read them; protect the database and its backups accordingly. Authorized log displays and downloads retain the complete saved content, including IP addresses and upstream-echoed private data. Ordinary user displays still redact IPv4 addresses. Silent retries before an accepted response can also duplicate provider work when delivery is uncertain. Personal routes default to retries off; charity routes stop retrying as soon as HTTP 200 is received. See the [API contract](api-contract.md) for billing and error behavior.
+Original-error diagnostics may retain a credential or other private content echoed by an upstream. Administrators and currently authorized level-6 stewards can read the complete saved content. Level-5 stewards can also read site-wide logs and diagnostics, with IPv4 addresses redacted from upstream error details. Source IPs and other authorized fields remain visible. Protect the database and its backups accordingly. Ordinary user displays still redact IPv4 addresses. Silent retries before an accepted response can also duplicate provider work when delivery is uncertain. Personal routes default to retries off; charity routes stop retrying as soon as HTTP 200 is received. See the [API contract](api-contract.md) for billing and error behavior.
 
 Source auditing distinguishes a direct peer, a validated forwarded client and a fallback peer. Before using shared-IP findings, verify the complete direct/CDN → Nginx → application chain for both IPv4 and IPv6, including an untrusted client-supplied forwarding header and malformed or duplicate values. A proxy address incorrectly treated as a client can associate many unrelated users. Fallback-quality addresses are excluded from shared-IP findings, but configuration still determines whether a forwarded address is trustworthy. Client headers are self-reported clues and cannot establish the identity of a relay or application.
 
@@ -252,8 +252,8 @@ This fallback also covers proxy timeouts or invalid upstream responses before re
 
 ## Database compatibility and version changes
 
-The v1.0.0 application starts from an empty database or current schema **20**.
-Schema **16**, **17**, **18** and **19** use the standalone
+The v1.0.0 application starts from an empty database or current schema **21**.
+Schema **16**, **17**, **18**, **19** and **20** use the standalone
 [v1 converter](../cmd/nonbiri-upgrade-v1/README.md). Other prereleases and unknown
 structures are rejected. SQLite identity remains Generation 2; exports use
 format **20**. See [database upgrades](database-upgrades.md) for manifests, stable
@@ -289,7 +289,7 @@ instance legal text remain separate operator actions.
    protected recovery snapshot containing the database and existing sidecars,
    exact source release, environment, master key, unit, manifest and checksums.
    An unchanged stopped-state retry reuses that snapshot.
-4. For schema 16, 17, 18 or 19, run the converter with `--apply` under exclusive database access.
+4. For schema 16, 17, 18, 19 or 20, run the converter with `--apply` under exclusive database access.
    After any eligible legacy Gateway import, remove
    `NONBIRI_GATEWAY_MODEL_CAPABILITIES` and the six
    `NONBIRI_SMTP_HOST/PORT/USER/PASS/FROM/TLS` keys. Preserve other environment

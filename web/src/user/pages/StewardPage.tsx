@@ -43,7 +43,9 @@ function StewardPageContent() {
   const trainee = authority.data?.effective_level === 5;
   const requestedTab = searchParams.get('tab');
   const section = trainee
-    ? 'charity'
+    ? requestedTab === 'logs'
+      ? 'logs'
+      : 'charity'
     : requestedTab === 'charity' ||
         requestedTab === 'maintenance' ||
         requestedTab === 'users' ||
@@ -128,7 +130,7 @@ function StewardPageContent() {
           value={section}
           onChange={setSection}
           tabs={(trainee
-            ? (['charity'] as const)
+            ? (['charity', 'logs'] as const)
             : ([
                 'risk',
                 'logs',
@@ -143,19 +145,19 @@ function StewardPageContent() {
             label: t(sectionKeys[value]),
           }))}
         />
-        {!trainee && section === 'logs' ? (
+        {section === 'logs' ? (
           <>
             <RoleLogPanel
-              key={`logs:${authority.data.id}`}
+              key={`logs:${authority.data.id}:${authority.data.effective_level}`}
               role="steward"
-              accountId={authority.data.id}
+              accountId={`${authority.data.id}:${authority.data.effective_level}`}
               scopeReady={allowed}
               enabled
               onAuthorityLoss={authorityLoss}
             />
             <IndependentDiagnostics
               role="steward"
-              accountId={authority.data.id}
+              accountId={`${authority.data.id}:${authority.data.effective_level}`}
               scopeReady={allowed}
               enabled
             />

@@ -283,6 +283,8 @@ type DiscoveryFailureKind string
 
 const (
 	DiscoveryFailureNone        DiscoveryFailureKind = "none"
+	DiscoveryFailureRegion      DiscoveryFailureKind = "region"
+	DiscoveryFailureUnavailable DiscoveryFailureKind = "unavailable"
 	DiscoveryFailureAuth        DiscoveryFailureKind = "auth"
 	DiscoveryFailureRateLimit   DiscoveryFailureKind = "rate_limit"
 	DiscoveryFailureTimeout     DiscoveryFailureKind = "timeout"

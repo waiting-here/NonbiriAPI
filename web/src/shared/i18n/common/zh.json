@@ -122,7 +122,9 @@
         "timeout": "服务商响应超时",
         "protocol": "服务商响应不可用",
         "transport": "网络请求失败",
-        "interrupted": "检查已中断"
+        "interrupted": "检查已中断",
+        "region": "上游不支持当前服务器所在地区",
+        "unavailable": "上游暂时不可用"
       }
     },
     "gatewayName": "AI SDK Gateway v3",
@@ -188,6 +190,7 @@
     "pageControls": {
       "size": "每页条数",
       "jump": "跳转页码",
+      "jumpAction": "跳转",
       "invalid": "请输入 1～2147483647 的整数页码。",
       "clamped": "原页码已超出当前范围，现显示第 {{page}} 页。",
       "totalOnly": "共 {{total}} 项",
@@ -1242,6 +1245,7 @@
       "copyText": "复制文本",
       "downloadDiagnosticSummary": "下载诊断摘要",
       "downloadOriginal": "下载错误正文",
+      "ipv4Redacted": "5级协管看到的此条错误已删减IPv4地址；复制和下载的内容与当前展示一致。",
       "bodyPreview": "正文预览",
       "rawBodyReadFailed": "读取上游原文失败。",
       "rawBodyStorageFailed": "原文已读取，但保存失败。",

@@ -122,7 +122,9 @@
         "timeout": "The provider timed out",
         "protocol": "The provider response is unavailable",
         "transport": "Network request failed",
-        "interrupted": "Check interrupted"
+        "interrupted": "Check interrupted",
+        "region": "Upstream does not support this server’s region",
+        "unavailable": "Upstream is temporarily unavailable"
       }
     },
     "gatewayName": "AI SDK Gateway v3",
@@ -188,6 +190,7 @@
     "pageControls": {
       "size": "Items per page",
       "jump": "Go to page",
+      "jumpAction": "Go",
       "invalid": "Enter a whole page number from 1 to 2147483647.",
       "clamped": "That page is no longer available. Showing page {{page}}.",
       "totalOnly": "{{total}} items",
@@ -1242,6 +1245,7 @@
       "copyText": "Copy text",
       "downloadDiagnosticSummary": "Download diagnostic summary",
       "downloadOriginal": "Download error body",
+      "ipv4Redacted": "IPv4 addresses in this error are hidden for level-5 stewards. Copies and downloads contain the same displayed content.",
       "bodyPreview": "Body preview",
       "rawBodyReadFailed": "The upstream body could not be read.",
       "rawBodyStorageFailed": "The body was read but could not be stored.",

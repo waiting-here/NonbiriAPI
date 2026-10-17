@@ -50,6 +50,10 @@ func safeError(err error) (string, string) {
 			switch failure.class {
 			case "auth":
 				message = "upstream rejected the key during model discovery"
+			case "region":
+				message = "upstream does not support this server's region"
+			case "unavailable":
+				message = "upstream is temporarily unavailable; retry model discovery later"
 			case "rate_limit":
 				message = "upstream rate limited model discovery"
 			case "timeout":

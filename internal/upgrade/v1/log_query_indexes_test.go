@@ -87,7 +87,7 @@ func TestLogIndexConversionPreservesEverySourceTable(t *testing.T) {
 		t.Fatal(err)
 	}
 	result, err := Run(t.Context(), path, vault, Options{Apply: true})
-	if err != nil || result.SourceSchemaVersion != 19 || result.TargetSchemaVersion != 20 {
+	if err != nil || result.SourceSchemaVersion != 19 || result.TargetSchemaVersion != 21 {
 		t.Fatal(result, err)
 	}
 	store, err := db.Open(path, vault)

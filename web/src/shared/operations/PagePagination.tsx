@@ -19,6 +19,7 @@ interface PagePaginationProps {
   /** Some existing domain protocols accept the full positive int64 range. */
   maxPage?: bigint;
   pageSizes?: readonly PageSize[];
+  alwaysShowJump?: boolean;
 }
 
 function windowPages(current: bigint, last: bigint): (bigint | 'gap')[] {
@@ -46,6 +47,7 @@ function PagePaginationControls({
   requestedPage,
   maxPage = MAX_PAGE,
   pageSizes = PAGE_SIZES,
+  alwaysShowJump = false,
 }: PagePaginationProps) {
   const { t } = useTranslation();
   const errorId = useId();
@@ -110,7 +112,7 @@ function PagePaginationControls({
           >
             ›
           </button>
-          {last > 7n ? (
+          {last > 7n || alwaysShowJump ? (
             <input
               className="nb-pager__jump nb-pager__number"
               inputMode="numeric"
@@ -132,6 +134,11 @@ function PagePaginationControls({
                 }
               }}
             />
+          ) : null}
+          {alwaysShowJump ? (
+            <button type="button" disabled={busy} onClick={go}>
+              {t('common.pageControls.jumpAction')}
+            </button>
           ) : null}
         </span>
       ) : null}

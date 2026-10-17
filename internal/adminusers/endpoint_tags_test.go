@@ -12,6 +12,12 @@ import (
 )
 
 func TestEndpointTagsBulkAtomicityFiltersAndAuthority(t *testing.T) {
+	for _, tag := range []string{"community_charity", "noncommercial_gateway"} {
+		t.Run(tag, func(t *testing.T) { checkEndpointTag(t, tag) })
+	}
+}
+
+func checkEndpointTag(t *testing.T, tag string) {
 	f := newAdminUsersFixture(t)
 	u := f.seedUser("tagged-endpoints", false)
 	urls := []string{"https://first.example/v1", "https://second.example/v1"}
@@ -25,31 +31,31 @@ func TestEndpointTagsBulkAtomicityFiltersAndAuthority(t *testing.T) {
 	}
 	key := "endpoint-tags-bulk-000001"
 	for range 2 {
-		if code := write(urls, "community_charity", true, key); code != 204 {
+		if code := write(urls, tag, true, key); code != 204 {
 			t.Fatal("add/replay", code)
 		}
 	}
-	if code := write(urls, "community_charity", false, key); code != 409 {
+	if code := write(urls, tag, false, key); code != 409 {
 		t.Fatal("changed replay", code)
 	}
 	if code := write(urls[:1], "abusive_third_party", true, "endpoint-tags-second-0001"); code != 204 {
 		t.Fatal(code)
 	}
 	page, err := f.service.EndpointOverview(context.Background(), f.adminID, EndpointOverviewQuery{Tag: "abusive_third_party", Limit: 10})
-	if err != nil || len(page.Data) != 1 || page.Data[0].UserCount != "2" || !slices.Equal(page.Data[0].Tags, []string{"abusive_third_party", "community_charity"}) {
+	if err != nil || len(page.Data) != 1 || page.Data[0].UserCount != "2" || !slices.Equal(page.Data[0].Tags, []string{"abusive_third_party", tag}) {
 		t.Fatalf("filter: %+v %v", page, err)
 	}
-	if code := write([]string{urls[0], "https://missing.example"}, "community_charity", false, "endpoint-tags-atomic-0001"); code != 404 {
+	if code := write([]string{urls[0], "https://missing.example"}, tag, false, "endpoint-tags-atomic-0001"); code != 404 {
 		t.Fatal("missing target", code)
 	}
-	page, err = f.service.EndpointOverview(context.Background(), f.adminID, EndpointOverviewQuery{Tag: "community_charity", Limit: 1})
+	page, err = f.service.EndpointOverview(context.Background(), f.adminID, EndpointOverviewQuery{Tag: tag, Limit: 1})
 	if err != nil || len(page.Data) != 1 || page.NextCursor == nil {
 		t.Fatalf("rollback/filter %+v %v", page, err)
 	}
 	if _, err = f.service.EndpointOverview(context.Background(), f.adminID, EndpointOverviewQuery{Tag: "abusive_third_party", Limit: 1, Cursor: *page.NextCursor}); err == nil {
 		t.Fatal("cursor escaped tag filter")
 	}
-	if code := write(urls, "community_charity", false, "endpoint-tags-remove-0001"); code != 204 {
+	if code := write(urls, tag, false, "endpoint-tags-remove-0001"); code != 204 {
 		t.Fatal(code)
 	}
 	page, err = f.service.EndpointOverview(context.Background(), f.adminID, EndpointOverviewQuery{Tag: "untagged", Limit: 10})
@@ -62,7 +68,7 @@ func TestEndpointTagsBulkAtomicityFiltersAndAuthority(t *testing.T) {
 		}
 	}
 	f.auth.err = authz.ErrForbidden
-	if code := write(urls, "community_charity", true, "endpoint-tags-denied-0001"); code != 403 {
+	if code := write(urls, tag, true, "endpoint-tags-denied-0001"); code != 403 {
 		t.Fatal("final authority", code)
 	}
 }

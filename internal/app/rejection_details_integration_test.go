@@ -16,6 +16,10 @@ import (
 
 type rejectionStewardReader struct{ denied bool }
 
+func (a rejectionStewardReader) AuthorizeStewardLogRead(ctx context.Context, tx *sql.Tx, id int64) (bool, error) {
+	return false, a.AuthorizeStewardRead(ctx, tx, id)
+}
+
 func (a rejectionStewardReader) AuthorizeStewardRead(context.Context, *sql.Tx, int64) error {
 	if a.denied {
 		return logapi.ErrForbidden

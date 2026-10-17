@@ -279,6 +279,7 @@ export function RawErrorViewer({ body }: { body: ErrorBody }) {
   if (!decoded) return <p role="alert">{t('common.diagnostics.couldNotLoadTheErrorBody')}</p>;
   return (
     <div className="request-diagnostics">
+      {body.ipv4_redacted && <p role="status">{t('common.diagnostics.ipv4Redacted')}</p>}
       {synthetic && (
         <p role="status">{t('common.diagnostics.thisIsASafeDiagnosticSummaryGenerated')}</p>
       )}

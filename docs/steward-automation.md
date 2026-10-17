@@ -7,7 +7,7 @@ Authorization: Bearer nbk_REPLACE_WITH_YOUR_CALLER_KEY
 Content-Type: application/json
 ```
 
-The caller must remain an active level-6 steward. Level-5 trainees cannot use these automation routes. Session cookies cannot replace the CallerKey. Revocation, rotation, bans, deletion and loss of steward permission are checked again before writes. These controls grant no authority over another donor's private endpoint, key or model catalog. This document describes the current source; check the deployed build before using new routes.
+The caller must remain an active level-6 steward. Level-5 trainees cannot use these automation routes. Session cookies cannot replace the CallerKey. Revocation, rotation, bans, deletion and loss of steward permission are checked again before writes. These controls grant no authority over another donor's private endpoint, key or model catalog. This document describes v1.0.0; use a matching server release.
 
 Account MFA applies to browser sessions. These CallerKey routes retain their
 existing credentials and do not require authenticator codes. Browser controls
@@ -180,6 +180,13 @@ Saving keeps the count and generation, immediately sets error-disablement when a
 PATCH uses the same 24-hour idempotency rules as creation, with a 30-second operation limit. Repeating the original key and body returns the original policy snapshot without another revision, audit or alert. Current permission and visibility are checked before replay. A stale revision or a reused key with a different request returns 409; re-read after a definite revision conflict and use a new key for the newly intended edit. An unknown result must first be resolved by retrying the original request. Invalid input returns 400, missing or no-longer-visible records 404, oversized input 413, and authentication or authority failures 401/403. Capacity and maintenance failures follow the shared controls.
 
 Creation, discovery and policy edits use existing account, donation, catalog, quota, review and replay records. Safe exports include the threshold. Policy audits contain no key secrets; alerts occur once per transition into error-disablement. Existing account export, deletion and anonymization rules apply. Discovery failures may also enter the restricted original-error store, which can contain content echoed by an upstream and is not part of an automation response or personal export.
+
+Discovery failures distinguish authentication, quota, timeout, protocol, transport,
+interruption, unsupported server region and temporary upstream unavailability.
+Google's explicit unsupported-location response refers to the server's outbound
+connection. Unknown HTTP 400 responses remain protocol failures. These fixed
+messages do not expose the upstream response body; `discovery_failed` and the
+existing retry and idempotency rules remain unchanged.
 
 ## Additional level-6 reads
 

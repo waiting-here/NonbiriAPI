@@ -681,6 +681,27 @@ export function EndpointWizard({
             />
           ) : null}
           <div className="core-form-actions">
+            {(liveCatalog.data?.evidence ?? catalog?.evidence ?? accepted?.evidence)?.state ===
+            'failed' ? (
+              <>
+                <button
+                  type="button"
+                  className="nb-btn nb-btn--secondary"
+                  disabled={busy}
+                  onClick={() => void checkModels()}
+                >
+                  {t('endpoints.refreshDiscovery')}
+                </button>
+                {endpoint ? (
+                  <Link
+                    className="nb-btn nb-btn--secondary"
+                    to={CORE_ROUTE_PATHS.endpointDetail(endpoint.id)}
+                  >
+                    {t('endpoints.manualTitle')}
+                  </Link>
+                ) : null}
+              </>
+            ) : null}
             <button type="button" className="nb-btn nb-btn--secondary" onClick={close}>
               {t('endpoints.finish')}
             </button>

@@ -5,10 +5,10 @@ import { Icon, type IconName } from '@shared/components/Icon';
 import { copyText } from '@shared/utils/clipboard';
 import { isApiError, isNotFoundError, isUnauthorized } from '@shared/query/http';
 import { CONNECTOR_COPY_KEYS, useCoreCopy } from './copy';
-import { OutcomeNote } from '@shared/components/ui';
+import { Note, OutcomeNote } from '@shared/components/ui';
 import { callerSafeError } from './request';
 import { useCoreMe, useCoreSession, type CoreSessionBoundary } from './queries';
-import type { ConnectorType, DiscoveryEvidence, UserProfile } from './types';
+import type { ConnectorType, DiscoveryEvidence, DiscoverySafeClass, UserProfile } from './types';
 
 export function CoreLoading({ compact = false }: { compact?: boolean }) {
   const { t } = useCoreCopy();
@@ -210,6 +210,31 @@ export function ConnectorLabel({ value }: { value: ConnectorType }) {
   return <>{t(CONNECTOR_COPY_KEYS[value])}</>;
 }
 
+export function DiscoveryFailureNotice({
+  failure,
+  action,
+}: {
+  failure: DiscoverySafeClass;
+  action?: ReactNode;
+}) {
+  const { t } = useCoreCopy();
+  const reasons = {
+    auth: 'endpoints.discoveryReasonAuth',
+    region: 'endpoints.discoveryReasonRegion',
+    rate_limit: 'endpoints.discoveryReasonRateLimit',
+    timeout: 'endpoints.discoveryReasonTimeout',
+    protocol: 'endpoints.discoveryReasonProtocol',
+    transport: 'endpoints.discoveryReasonTransport',
+    interrupted: 'endpoints.discoveryReasonInterrupted',
+    unavailable: 'endpoints.discoveryReasonUnavailable',
+  } as const;
+  return (
+    <Note tone="bad" title={t('endpoints.discoveryFailedTitle')} action={action}>
+      {t(reasons[failure === 'none' ? 'protocol' : failure])}
+    </Note>
+  );
+}
+
 export function DiscoveryStatus({ evidence }: { evidence: DiscoveryEvidence }) {
   const { t } = useCoreCopy();
   if (evidence.state === 'unknown') {
@@ -240,23 +265,7 @@ export function DiscoveryStatus({ evidence }: { evidence: DiscoveryEvidence }) {
       </StatusPill>
     );
   }
-  const reason =
-    evidence.safe_class === 'auth'
-      ? t('endpoints.discoveryReasonAuth')
-      : evidence.safe_class === 'rate_limit'
-        ? t('endpoints.discoveryReasonRateLimit')
-        : evidence.safe_class === 'timeout'
-          ? t('endpoints.discoveryReasonTimeout')
-          : evidence.safe_class === 'protocol'
-            ? t('endpoints.discoveryReasonProtocol')
-            : evidence.safe_class === 'transport'
-              ? t('endpoints.discoveryReasonTransport')
-              : t('endpoints.discoveryReasonInterrupted');
-  return (
-    <StatusPill tone="danger" icon="error">
-      {t('endpoints.discoveryFailed', { reason })}
-    </StatusPill>
-  );
+  return <DiscoveryFailureNotice failure={evidence.safe_class} />;
 }
 
 export function MutationNotice({

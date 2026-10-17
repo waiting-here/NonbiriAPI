@@ -262,6 +262,9 @@ function EndpointsPageContent({ account, scopeReady, sessionError }: EndpointsPa
                 {t('admin.endpoints.abusive_third_party')}
               </option>
               <option value="community_charity">{t('admin.endpoints.community_charity')}</option>
+              <option value="noncommercial_gateway">
+                {t('admin.endpoints.noncommercial_gateway')}
+              </option>
             </select>
           </label>
           <div className="endpoint-filter-actions">
@@ -302,6 +305,9 @@ function EndpointsPageContent({ account, scopeReady, sessionError }: EndpointsPa
                   {t('admin.endpoints.abusive_third_party')}
                 </option>
                 <option value="community_charity">{t('admin.endpoints.community_charity')}</option>
+                <option value="noncommercial_gateway">
+                  {t('admin.endpoints.noncommercial_gateway')}
+                </option>
               </select>
             </label>
             <button

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"strconv"
+	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
@@ -73,18 +74,31 @@ func operationsAfter(ctx context.Context, tx *sql.Tx, after, head int64) ([]oper
 	return out, rows.Err()
 }
 
-func operationMeasures(ctx context.Context, tx *sql.Tx, id string) (map[ledger.Asset]*measures, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT asset_type,account_kind_snapshot,delta_sign,delta_mag FROM credit_entries WHERE operation_id=? ORDER BY line_no`, id)
+// Read all assets together so batching never weakens per-operation conservation.
+func operationMeasuresBatch(ctx context.Context, tx *sql.Tx, operations []operation) (map[string]map[ledger.Asset]*measures, error) {
+	out := make(map[string]map[ledger.Asset]*measures, len(operations))
+	if len(operations) == 0 {
+		return out, nil
+	}
+	if len(operations) > batchSize {
+		return nil, ErrInvariant
+	}
+	marks, args := make([]string, len(operations)), make([]any, len(operations))
+	for i, o := range operations {
+		marks[i], args[i] = "?", o.id
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT operation_id,asset_type,account_kind_snapshot,delta_sign,delta_mag FROM credit_entries WHERE operation_id IN (`+strings.Join(marks, ",")+`) ORDER BY operation_id,line_no`, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	entries := []posting{}
+	entries := make(map[string][]posting, len(operations))
 	for rows.Next() {
+		var id string
 		var e posting
 		var sign int
 		var raw []byte
-		if err := rows.Scan(&e.asset, &e.kind, &sign, &raw); err != nil {
+		if err := rows.Scan(&id, &e.asset, &e.kind, &sign, &raw); err != nil {
 			return nil, err
 		}
 		amount, err := db.NewSM128(sign, raw)
@@ -92,15 +106,22 @@ func operationMeasures(ctx context.Context, tx *sql.Tx, id string) (map[ledger.A
 			return nil, ErrInvariant
 		}
 		e.delta = amount.Big()
-		entries = append(entries, e)
-		if len(entries) > 256 {
+		entries[id] = append(entries[id], e)
+		if len(entries[id]) > 256 {
 			return nil, ErrInvariant
 		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	return classifyPostings(entries)
+	for _, o := range operations {
+		amounts, err := classifyPostings(entries[o.id])
+		if err != nil {
+			return nil, err
+		}
+		out[o.id] = amounts
+	}
+	return out, nil
 }
 
 // AdvanceTx projects at most one bounded batch within the caller's transaction.
@@ -129,14 +150,15 @@ func AdvanceTx(ctx context.Context, tx *sql.Tx, now int64) (bool, error) {
 		}
 	}
 	previous := c.last
+	batch, err := operationMeasuresBatch(ctx, tx, operations)
+	if err != nil {
+		return false, err
+	}
 	for _, o := range operations {
 		if o.seq != c.last+1 || o.at < 0 || o.at > maxUnix {
 			return false, ErrInvariant
 		}
-		amounts, err := operationMeasures(ctx, tx, o.id)
-		if err != nil {
-			return false, err
-		}
+		amounts := batch[o.id]
 		classification := ledger.ClassifyForAudit(ledger.Kind(o.kind), o.sourceID)
 		if !classification.Known {
 			c.unknown++
