@@ -171,22 +171,6 @@ func (s *Service) Summary(ctx context.Context, admin int64, f Filter) (Summary, 
 		}
 		// Interval stock is a net quantity for the whole selected asset, not a
 		// channel-filtered balance. Financial categories never rewrite stocks.
-		before := f
-		before.From = 0
-		before.To = f.From
-		before.Kind = ""
-		before.Channel = ""
-		opening := &measures{}
-		if before.To > 0 {
-			values, err := rangeMeasures(ctx, tx, c, before)
-			if err != nil {
-				return err
-			}
-			opening, err = sumDimensions(values)
-			if err != nil {
-				return err
-			}
-		}
 		change := m
 		if f.Kind != "" {
 			interval := f
@@ -201,9 +185,24 @@ func (s *Service) Summary(ctx context.Context, admin int64, f Filter) (Summary, 
 				return err
 			}
 		}
-		a := new(big.Int).Sub(&opening.issued, &opening.reclaimed)
+		// Derive closing stock from all-time totals and later flows. This avoids
+		// reading the two sides of the opening edge in separate historical scans.
+		after := f
+		after.From, after.To = f.To, maxUnix+1
+		after.Kind, after.Channel = "", ""
+		later, err := rangeMeasures(ctx, tx, c, after)
+		if err != nil {
+			return err
+		}
+		tail, err := sumDimensions(later)
+		if err != nil {
+			return err
+		}
 		delta := new(big.Int).Sub(&change.issued, &change.reclaimed)
-		b := new(big.Int).Add(a, delta)
+		b := new(big.Int).Sub(&all.issued, &all.reclaimed)
+		b.Sub(b, &tail.issued)
+		b.Add(b, &tail.reclaimed)
+		a := new(big.Int).Sub(b, delta)
 		as, bs, ds := a.String(), b.String(), delta.String()
 		out.Reconciliation.IntervalOpeningNet = &as
 		out.Reconciliation.IntervalClosingNet = &bs

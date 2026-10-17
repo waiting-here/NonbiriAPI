@@ -32,6 +32,31 @@ func (m *measures) add(n *measures) error {
 	return nil
 }
 
+func (m *measures) subtract(n *measures) error {
+	if n == nil || n.count < 0 || n.count > m.count {
+		return ErrInvariant
+	}
+	left := []*big.Int{&m.issued, &m.reclaimed, &m.income, &m.expense, &m.transfer}
+	right := []*big.Int{&n.issued, &n.reclaimed, &n.income, &n.expense, &n.transfer}
+	for i := range left {
+		if right[i].Sign() < 0 || left[i].Cmp(right[i]) < 0 {
+			return ErrInvariant
+		}
+	}
+	for i := range left {
+		left[i].Sub(left[i], right[i])
+	}
+	m.count -= n.count
+	if m.count == 0 {
+		for _, amount := range left {
+			if amount.Sign() != 0 {
+				return ErrInvariant
+			}
+		}
+	}
+	return nil
+}
+
 func (m *measures) wire() Metrics {
 	return Metrics{m.issued.String(), m.reclaimed.String(), m.income.String(), m.expense.String(), m.transfer.String(), strconv.FormatInt(m.count, 10)}
 }
