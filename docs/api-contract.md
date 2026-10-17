@@ -160,6 +160,12 @@ Returns the caller's currently routable personal models plus currently available
 
 The list is sorted by external model ID. It never contains physical endpoint, key, binding, donation, price, or donor data. A charity model appears only while its feature gate is open, the caller's current effective level is allowed, and at least one real candidate is currently usable.
 
+The charity portion is evaluated in one read-only snapshot using a single
+decision time. Personal models remain owner-scoped. These are immediate reads
+with `Cache-Control: no-store`, without a complete-list cache or TTL. Candidate
+and model ceilings retain their existing errors; a failed query does not become
+an empty list. See [database access](database-access.md).
+
 ### 2.2 `POST /v1/chat/completions`
 
 The request is the OpenAI Chat Completions shape. Its body limit defaults to 10 MiB and is configured by administrators with `model_request_body_limit_mib` (integer 1–64 MiB). One MiB is 1,048,576 bytes; exactly the configured size is accepted, and one extra byte returns 413 `payload_too_large`. Each request keeps one configuration snapshot across parsing and forwarding; saved changes apply to new requests. Proxy limits can impose an earlier rejection. `model` is a required opaque platform model name (at most 133 Unicode runes). `stream` selects OpenAI-compatible SSE. `max_tokens` and `max_completion_tokens` may be absent or null; if both are integers they must be equal and in `1..2147483647`. For OpenAI and Anthropic, a caller-supplied safety identifier is replaced by the existing server-generated user-and-origin pseudonym. Gateway does not send that safety field; its separate optional cost-attribution tag is controlled only by the administrator and defaults off.
@@ -576,6 +582,12 @@ Every owner-visible key carries `safe_source`: a custom Connector/base URL or a 
 - `per_token`: canonical base and current price for uncached input, cache-write input, cache-read input, and output.
 
 `discount` contains `enabled,percent,start_at,end_at`; the interval is `[start_at,end_at)`, nullable at either end. Effective prices use the same integer ceiling rule as billing. `server_now` is the single decision time used for availability and promotion status. No donated-resource identity is exposed.
+
+The complete capability response shares one read-only snapshot, including current
+level, switches, models, availability and batched recent-success statistics.
+Browsing excludes expired keys by time without advancing their stored lifecycle
+state. Background maintenance and business paths continue that work. All model
+directory responses remain `no-store` and have no complete-list cache or TTL.
 
 The web directory uses `GET /api/charity/models?view=catalog`. Optional single-value parameters are `q` (at most 128 Unicode code points and 512 UTF-8 bytes, no NUL), `allowed_for_me=true|false`, `allowed_level=1|2|3|4|5|6`, `currently_available=true|false`, `model_type=chat_completions|embeddings|images_generations`, `page`, and `page_size`. Omit a filter to apply no restriction; the filters are combined as an intersection. The web UI initially sends `allowed_for_me=true` and `currently_available=true`, while omitting `allowed_level` and `model_type`. Model-type filtering matches any model that includes the selected operation and applies before counting and pagination. It rejects cursor/limit and unknown or repeated parameters. Page numbers are canonical decimal strings from 1 to 2147483647; sizes are 10, 20, 50, or 100, with defaults 1 and 20. The response is `{models,pagination,donation_intake,server_now}`. Pagination contains decimal-string `page,total_items,total_pages` and integer `page_size`; empty results use page 1 of 1, and an excessive requested page is clamped to the last page.
 

@@ -4,6 +4,25 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## 1.0.2 — 2026-10-17
+
+Database schema 21 and account export 20 are unchanged. This source-only patch
+keeps the existing runtime dependencies and single-instance deployment model.
+
+### Changed
+
+- Batch charity model availability and recent-success reads in one read-only
+  snapshot, including the complete OpenAI list and legacy directory. Personal
+  model lists and the paginated charity directory use the existing two-connection
+  read pool. Availability remains immediate, without a complete-list cache or TTL.
+- Keep expiry writes out of model browsing. Time predicates immediately exclude
+  expired donations; existing lifecycle and business paths advance stored state.
+- Scan fishing retention candidates through the existing settlement-time index,
+  retaining the 30-day window, 100-row batch and terminal-state deletion checks.
+- Report separate writer/reader pool waits, connection acquisition and transaction
+  work, background maintenance outcomes, and exact process-wide HTTP concurrency.
+  Metrics remain anonymous minute aggregates with no database log records.
+
 ## 1.0.1 — 2026-10-17
 
 Database schema 21 and account export 20 are unchanged. This source-only patch

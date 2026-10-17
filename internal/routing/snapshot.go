@@ -16,6 +16,7 @@ import (
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/modeltype"
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
 	"github.com/waiting-here/NonbiriAPI/internal/transportpolicy"
 )
@@ -34,14 +35,15 @@ const (
 )
 
 type Store struct {
-	db *sql.DB
+	db     *sql.DB
+	readDB *sql.DB
 }
 
 func New(store *db.Store) (*Store, error) {
-	if store == nil || store.DB() == nil {
+	if store == nil || store.DB() == nil || store.ReadDB() == nil {
 		return nil, errors.New("routing: store is required")
 	}
-	return &Store{db: store.DB()}, nil
+	return &Store{db: store.DB(), readDB: store.ReadDB()}, nil
 }
 
 type Identity struct {
@@ -204,11 +206,16 @@ func (s *Store) Preflight(ctx context.Context, ownerUserID int64, identifier str
 // ListRoutableModels returns only logical rows for which at least one current
 // usable binding exists. The EXISTS predicate does not materialize candidates,
 // and limit+1 turns a damaged/oversized projection into an explicit failure.
-func (s *Store) ListRoutableModels(ctx context.Context, ownerUserID int64, limit int) ([]RoutableModel, error) {
-	if s == nil || s.db == nil || ctx == nil || ownerUserID <= 0 || limit < 1 || limit > MaxRoutableModels {
+func (s *Store) ListRoutableModels(ctx context.Context, ownerUserID int64, limit int) (result []RoutableModel, resultErr error) {
+	if s == nil || s.readDB == nil || ctx == nil || ownerUserID <= 0 || limit < 1 || limit > MaxRoutableModels {
 		return nil, ErrInvalidIdentity
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT m.id,m.provider,m.full_name,m.created_at
+	tx, finish, err := observability.BeginMeasuredTx(ctx, s.readDB, &sql.TxOptions{ReadOnly: true}, "personal_models")
+	if err != nil {
+		return nil, fmt.Errorf("routing: begin routable models: %w", err)
+	}
+	defer func() { finish(resultErr) }()
+	rows, err := tx.QueryContext(ctx, `SELECT m.id,m.provider,m.full_name,m.created_at
 FROM models m
 WHERE m.user_id=? AND EXISTS(
  SELECT 1 FROM model_bindings b
@@ -241,6 +248,12 @@ ORDER BY m.full_name,m.id LIMIT ?`, ownerUserID, limit+1)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("routing: iterate routable models: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, fmt.Errorf("routing: close routable models: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("routing: commit routable models: %w", err)
 	}
 	return models, nil
 }

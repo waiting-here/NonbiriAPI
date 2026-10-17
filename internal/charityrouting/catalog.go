@@ -44,8 +44,8 @@ type CatalogFilter struct {
 	ModelType          *connectorcontract.Operation
 }
 
-func (s *Service) Catalog(ctx context.Context, userID int64, filter CatalogFilter, page pagination.Request) (Catalog, error) {
-	if s == nil || s.db == nil || ctx == nil || userID <= 0 || !page.Valid() ||
+func (s *Service) Catalog(ctx context.Context, userID int64, filter CatalogFilter, page pagination.Request) (result Catalog, resultErr error) {
+	if s == nil || s.readDB == nil || ctx == nil || userID <= 0 || !page.Valid() ||
 		!utf8.ValidString(filter.Query) || utf8.RuneCountInString(filter.Query) > 128 ||
 		len(filter.Query) > 512 || strings.ContainsRune(filter.Query, 0) ||
 		(filter.AllowedLevel != nil && (*filter.AllowedLevel < 1 || *filter.AllowedLevel > 6)) ||
@@ -54,13 +54,11 @@ func (s *Service) Catalog(ctx context.Context, userID int64, filter CatalogFilte
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, finish, err := observability.BeginMeasuredTx(ctx, s.readDB, &sql.TxOptions{ReadOnly: true}, "catalog")
 	if err != nil {
 		return Catalog{}, fmt.Errorf("charity routing: begin catalog: %w", err)
 	}
-	endTransaction := observability.TimeTransaction(ctx, "catalog")
-	defer endTransaction()
-	defer tx.Rollback()
+	defer func() { finish(resultErr) }()
 	now, err := s.nowUnix()
 	if err != nil {
 		return Catalog{}, err
@@ -179,7 +177,7 @@ cm.enabled,a.allowed_level_mask,a.public_description,cm.model_types,cm.context_p
 	if err := tx.Commit(); err != nil {
 		return Catalog{}, fmt.Errorf("charity routing: commit catalog: %w", err)
 	}
-	endTransaction()
+	finish(nil)
 	intake := "closed"
 	if charityGate == "1" && donationGate == "1" {
 		intake = "open"

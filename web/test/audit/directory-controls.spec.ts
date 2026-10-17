@@ -6,6 +6,83 @@ import commonEn from '../../src/shared/i18n/common/en.json' with { type: 'json' 
 import adminEn from '../../src/admin/i18n/en.json' with { type: 'json' };
 import adminZh from '../../src/admin/i18n/zh.json' with { type: 'json' };
 
+test('user browses current charity snapshots with search, pagination and committed changes', async ({
+  browser,
+}, info) => {
+  const state = fixture();
+  const admin = await session(browser, 'admin');
+  const user = await session(browser, 1);
+  try {
+    let first: { id: string; revision: string } | undefined;
+    for (let index = 1; index <= 21; index++) {
+      const model = await write(admin, state.admin_url, '/admin/api/charity-models', {
+        provider: 'snapshot-browser',
+        model: String(index).padStart(2, '0'),
+        enabled: true,
+        is_mainstream: false,
+        flatten_tool_calls: false,
+        allowed_levels: [1, 2, 3, 4, 5, 6],
+        pricing: { mode: 'per_request', user_price: '0', donor_reward: '0' },
+        discount: { enabled: false, percent: 100, start_at: null, end_at: null },
+      });
+      first ??= model;
+    }
+    const page = await user.newPage();
+    const loaded = page.waitForResponse((response) =>
+      response.url().includes('/api/charity/models?view=catalog'),
+    );
+    await page.goto(state.user_url + '/charity');
+    const response = await loaded;
+    expect(response.ok()).toBe(true);
+    expect(response.headers()['cache-control']).toContain('no-store');
+    await page.getByRole('button', { name: 'Clear filters', exact: true }).click();
+    const search = page.getByRole('searchbox', {
+      name: 'Search model name or public description',
+    });
+    await search.fill('snapshot-browser');
+    await search.press('Enter');
+    await expect(page.getByText('21 items', { exact: true })).toBeVisible();
+    await page.getByRole('combobox', { name: 'Items per page', exact: true }).selectOption('10');
+    await expect(page.locator('.charity-model-name')).toHaveCount(10);
+    const pager = page.getByRole('navigation', { name: 'Pagination', exact: true });
+    await pager.getByRole('button', { name: 'Next', exact: true }).click();
+    await expect(page.getByText('[公益]snapshot-browser/11', { exact: true })).toBeVisible();
+    await pager.getByRole('button', { name: '3', exact: true }).click();
+    await expect(page.locator('.charity-model-name')).toHaveCount(1);
+    await pager.getByRole('button', { name: 'Previous', exact: true }).click();
+    await expect(page.getByText('[公益]snapshot-browser/11', { exact: true })).toBeVisible();
+    await page.goBack();
+    await expect(page.getByText('[公益]snapshot-browser/21', { exact: true })).toBeVisible();
+    const changed = await admin.request.patch(
+      state.admin_url + '/admin/api/charity-models/' + first!.id,
+      {
+        headers: { Origin: state.admin_url, 'Idempotency-Key': randomUUID() },
+        data: {
+          expected_revision: first!.revision,
+          public_description: 'Committed directory update',
+        },
+      },
+    );
+    expect(changed.ok()).toBe(true);
+    await pager.getByRole('button', { name: '1', exact: true }).click();
+    await page.reload();
+    await expect(page.getByText('Committed directory update', { exact: true })).toBeVisible();
+    const legacy = await user.request.get(state.user_url + '/api/charity/models');
+    expect(legacy.ok()).toBe(true);
+    expect(legacy.headers()['cache-control']).toContain('no-store');
+    expect(Array.isArray((await legacy.json()).models)).toBe(true);
+    await page.screenshot({
+      path: process.env.NONBIRI_VISUAL_DIR
+        ? resolve(process.env.NONBIRI_VISUAL_DIR, 'current-charity-directory.png')
+        : info.outputPath('current-charity-directory.png'),
+      fullPage: true,
+    });
+  } finally {
+    await admin.close();
+    await user.close();
+  }
+});
+
 type Cookie = { Name: string; Value: string };
 interface Fixture {
   admin_url: string;

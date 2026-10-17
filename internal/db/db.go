@@ -185,6 +185,15 @@ func (s *Store) DB() *sql.DB { return s.db }
 // update lifecycle state during a read must continue using DB for that operation.
 func (s *Store) ReadDB() *sql.DB { return s.readDB }
 
+// StatsByPool separates writer contention from read-only query contention.
+func (s *Store) StatsByPool() (writer, reader sql.DBStats) {
+	writer = s.db.Stats()
+	if s.readDB != nil {
+		reader = s.readDB.Stats()
+	}
+	return writer, reader
+}
+
 // Stats includes both pools so existing performance and shutdown reports retain
 // all connection waits after query reads stop sharing the writer connection.
 func (s *Store) Stats() sql.DBStats {

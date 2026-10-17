@@ -13,6 +13,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	fishingconfig "github.com/waiting-here/NonbiriAPI/internal/game/fishing/config"
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 )
 
 type expiringFact struct {
@@ -141,14 +142,18 @@ func (service *Service) expireRankFactsInTx(ctx context.Context, tx *sql.Tx, que
 // cleanupTerminalBatches enforces the independent 30-day batch/outcome
 // retention window. Reserved batches are never selected; best rows retain
 // their denormalized safe snapshot through the schema's composite SET NULL.
-func (service *Service) cleanupTerminalBatches(ctx context.Context, now int64) (int, error) {
+// The table constraint makes settled_at NULL for every reserved batch. A
+// time-only candidate predicate therefore uses the existing covering index.
+const terminalBatchCandidatesSQL = `SELECT id FROM game_fishing_batches WHERE settled_at<=? ORDER BY settled_at,id LIMIT ?`
+
+func (service *Service) cleanupTerminalBatches(ctx context.Context, now int64) (processed int, resultErr error) {
 	cutoff := now - int64(rankWindow/time.Second)
-	tx, err := service.database.BeginTx(ctx, nil)
+	tx, finish, err := observability.BeginMeasuredTx(ctx, service.database, nil, "fishing_cleanup")
 	if err != nil {
 		return 0, classifyDB(err)
 	}
-	defer tx.Rollback()
-	rows, err := tx.QueryContext(ctx, `SELECT id FROM game_fishing_batches WHERE state IN ('committed','released') AND settled_at<=? ORDER BY settled_at,id LIMIT ?`, cutoff, workerBatchSize)
+	defer func() { finish(resultErr) }()
+	rows, err := tx.QueryContext(ctx, terminalBatchCandidatesSQL, cutoff, workerBatchSize)
 	if err != nil {
 		return 0, classifyDB(err)
 	}

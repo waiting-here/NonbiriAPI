@@ -10,6 +10,8 @@ NonbiriAPI 是可自行部署的 AI 端点管理平台，提供 OpenAI-compatibl
 
 单个 Go 进程提供两套内嵌 React 站点和一个本地 SQLite 数据库。用户站与管理员站采用独立主机名及权限边界。生产目标为 Linux/amd64；Windows 用于开发和构建验证。
 
+模型目录通过只读 SQLite 快照即时判断可用性，批量读取候选和近期成功率；个人模型列表也使用现有的有界读连接池。没有完整列表缓存或 TTL，用户身份、等级、捐赠归属和当前配额仍参与判定。实现约束见[数据库访问](docs/database-access.md)，运行指标见[部署指南](docs/deployment.md)。
+
 | 范围 | 源码与契约 |
 | --- | --- |
 | 启动、恢复与 HTTP 接线 | `main.go`、`internal/app/` |
@@ -38,7 +40,7 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [首次配置](docs/first-run-setup.md) 涵盖私有目录、加密密钥、Discord OAuth 和公共域名。将 [admin.env.example](admin.env.example) 复制到检出目录外，替换占位值并在启动前加载。数据库与对应密钥须配套保留。
 
-新库默认开启维护并关闭公共功能。v1.0.0 正常程序仅接受 schema 21 或全新初始化，既有 schema 16、17、18、19、20 使用独立离线转换器，历史转换代码不进入正常服务。后续 v1.x 保持从任一更早 v1.x 正式库升级的路径，不承诺旧程序读取新版数据库。
+新库默认开启维护并关闭公共功能。v1.0.2 正常程序仅接受 schema 21 或全新初始化，既有 schema 16、17、18、19、20 使用独立离线转换器，历史转换代码不进入正常服务。后续 v1.x 保持从任一更早 v1.x 正式库升级的路径，不承诺旧程序读取新版数据库。
 
 [部署指南](docs/deployment.md) 说明 systemd、代理、不可变产物、升级和完整快照恢复；启动变量及在线设置统一维护在 [配置参考](docs/configuration.md)。
 
