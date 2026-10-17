@@ -52,7 +52,7 @@ func newAuditRuntime(ctx context.Context, store *db.Store, vault *secret.Vault, 
 	if err != nil {
 		return nil, err
 	}
-	a.diagnostics, err = observability.NewDiagnosticReader(observability.DiagnosticReaderConfig{Database: store.DB(), FinalAuth: authorizer})
+	a.diagnostics, err = observability.NewDiagnosticReader(observability.DiagnosticReaderConfig{Database: store.ReadDB(), FinalAuth: authorizer})
 	if err != nil {
 		return nil, err
 	}

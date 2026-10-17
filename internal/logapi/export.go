@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"encoding/csv"
 	"encoding/json"
-	"github.com/waiting-here/NonbiriAPI/internal/textprivacy"
 	"strconv"
 	"strings"
 )
@@ -24,7 +23,28 @@ func (repository *Repository) ExportAdmin(ctx context.Context, filter ListFilter
 	if repository == nil || ctx == nil {
 		return nil, ErrInvalid
 	}
-	return repository.exportManagement(ctx, repository.db, filter)
+	ctx, cancel := context.WithTimeout(ctx, logPageTimeout)
+	defer cancel()
+	if repository.readAuth == nil {
+		return repository.exportManagement(ctx, repository.readDB, filter)
+	}
+	now, err := repository.decisionNow()
+	if err != nil {
+		return nil, err
+	}
+	tx, err := repository.beginPageRead(ctx, "admin", 0, now)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	rows, err := repository.exportManagement(ctx, tx, filter)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, translateReadError(ctx, err)
+	}
+	return rows, nil
 }
 
 // ExportSteward authorizes and reads the complete bounded file in one snapshot.
@@ -35,7 +55,7 @@ func (repository *Repository) ExportSteward(ctx context.Context, userID int64, f
 	}
 	ctx, cancel := context.WithTimeout(ctx, logPageTimeout)
 	defer cancel()
-	tx, err := repository.beginStewardRead(ctx, userID, authorizer)
+	tx, err := repository.beginStewardReadOn(ctx, repository.readDB, userID, authorizer)
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +65,7 @@ func (repository *Repository) ExportSteward(ctx context.Context, userID int64, f
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
-		return nil, translateSQLError(err)
+		return nil, translateReadError(ctx, err)
 	}
 	return rows, nil
 }
@@ -78,11 +98,11 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 		args = append(args, *normalized.UserID)
 	}
 	if normalized.EndpointBaseURL != nil {
-		query += ` AND EXISTS(SELECT 1 FROM request_attempts ea WHERE ea.request_log_id=l.id AND ea.canonical_base_url=?)`
+		query += endpointURLPredicate
 		args = append(args, *normalized.EndpointBaseURL)
 	}
 	if normalized.EndpointKeyID != nil {
-		query += ` AND EXISTS(SELECT 1 FROM request_attempts ek WHERE ek.request_log_id=l.id AND ek.endpoint_key_id_snapshot=?)`
+		query += endpointKeyPredicate
 		args = append(args, *normalized.EndpointKeyID)
 	}
 	if normalized.CharityModel != nil {
@@ -90,7 +110,7 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 		args = append(args, *normalized.CharityModel)
 	}
 	if normalized.UpstreamModel != nil {
-		query += ` AND EXISTS(SELECT 1 FROM request_attempts em WHERE em.request_log_id=l.id AND em.upstream_model_id=?)`
+		query += upstreamModelPredicate
 		args = append(args, *normalized.UpstreamModel)
 	}
 	if normalized.ErrorCode != nil {
@@ -117,7 +137,7 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 	args = append(args, maxExportRows+1)
 	rows, err := reader.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, translateSQLError(err)
+		return nil, translateReadError(ctx, err)
 	}
 	defer rows.Close()
 	result := make([]AdminLogRow, 0, 256)
@@ -125,7 +145,7 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 		var userID sql.NullInt64
 		record, identity, scanErr := scanManagementCommon(rows, &userID)
 		if scanErr != nil {
-			return nil, translateSQLError(scanErr)
+			return nil, translateReadError(ctx, scanErr)
 		}
 		if len(result) >= maxExportRows {
 			return nil, ErrCapacity
@@ -146,7 +166,7 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 		})
 	}
 	if err := rows.Err(); err != nil {
-		return nil, translateSQLError(err)
+		return nil, translateReadError(ctx, err)
 	}
 	return result, nil
 }
@@ -156,7 +176,7 @@ func MarshalAdminJSON(rows []AdminLogRow) ([]byte, error) {
 	if len(rows) > maxExportRows {
 		return nil, ErrCapacity
 	}
-	encoded, err := textprivacy.MarshalJSON(AdminLogExport{Data: rows})
+	encoded, err := json.Marshal(AdminLogExport{Data: rows})
 	if err != nil {
 		return nil, ErrInvariant
 	}
@@ -225,7 +245,6 @@ func MarshalAdminCSV(rows []AdminLogRow) ([]byte, error) {
 }
 
 func csvSafe(value string) string {
-	value = textprivacy.IPv4(value)
 	if value == "" {
 		return value
 	}

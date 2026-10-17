@@ -21,8 +21,8 @@ func (repository *Repository) GetUser(ctx context.Context, userID int64, request
 	if err != nil {
 		return nil, err
 	}
-	var reader logReadQueryer = repository.db
-	if filter.Page != nil {
+	var reader logReadQueryer = repository.readDB
+	if filter.Page != nil || repository.readAuth != nil {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, logPageTimeout)
 		defer cancel()
@@ -38,7 +38,7 @@ func (repository *Repository) GetUser(ctx context.Context, userID int64, request
 		`SELECT `+commonListColumns+`,l.model FROM request_logs l WHERE l.logical_request_id=? AND l.user_id=?`,
 		requestID, userID), &model)
 	if err != nil {
-		return nil, translateSQLError(err)
+		return nil, translateReadError(ctx, err)
 	}
 	if !requestLogOrdinarilyVisible(record.completedAt, now) {
 		return nil, ErrNotFound
@@ -96,18 +96,18 @@ func (repository *Repository) GetAdmin(ctx context.Context, requestID string, fi
 	if err != nil {
 		return AdminLogDetail{}, err
 	}
-	if filter.Page != nil {
+	if filter.Page != nil || repository.readAuth != nil {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, logPageTimeout)
 		defer cancel()
 	}
 	tx, err := repository.db.BeginTx(ctx, nil)
 	if err != nil {
-		return AdminLogDetail{}, translateSQLError(err)
+		return AdminLogDetail{}, translateReadError(ctx, err)
 	}
 	defer tx.Rollback()
-	if filter.Page != nil {
-		if err := authorizePageAccount(ctx, tx, "admin", 0, now); err != nil {
+	if filter.Page != nil || repository.readAuth != nil {
+		if err := repository.authorizeRead(ctx, tx, "admin", 0, now); err != nil {
 			return AdminLogDetail{}, err
 		}
 	}
@@ -115,19 +115,19 @@ func (repository *Repository) GetAdmin(ctx context.Context, requestID string, fi
 	record, identity, err := scanManagementCommon(tx.QueryRowContext(ctx,
 		`SELECT `+commonListColumns+`,`+callerIdentityColumns+`,l.user_id FROM request_logs l`+callerIdentityJoin+`WHERE l.logical_request_id=?`, requestID), &userID)
 	if err != nil {
-		return AdminLogDetail{}, translateSQLError(err)
+		return AdminLogDetail{}, translateReadError(ctx, err)
 	}
 	ordinary := requestLogOrdinarilyVisible(record.completedAt, now)
 	held := false
 	if repository.heldRead != nil {
 		held, err = repository.heldRead.AuthorizeHeldRequestLogRead(ctx, tx, record.rowID, now)
 		if err != nil {
-			return AdminLogDetail{}, err
+			return AdminLogDetail{}, translateReadError(ctx, err)
 		}
 	}
 	if !ordinary && !held {
 		if err := tx.Commit(); err != nil {
-			return AdminLogDetail{}, translateSQLError(err)
+			return AdminLogDetail{}, translateReadError(ctx, err)
 		}
 		return AdminLogDetail{}, ErrNotFound
 	}
@@ -150,7 +150,7 @@ func (repository *Repository) GetAdmin(ctx context.Context, requestID string, fi
 		return AdminLogDetail{}, err
 	}
 	if err := tx.Commit(); err != nil {
-		return AdminLogDetail{}, translateSQLError(err)
+		return AdminLogDetail{}, translateReadError(ctx, err)
 	}
 	metadata := attempts.Pagination
 	attempts.Pagination = nil
@@ -176,7 +176,7 @@ func (repository *Repository) GetSteward(
 	if err != nil {
 		return StewardLogDetail{}, err
 	}
-	if filter.Page != nil {
+	if filter.Page != nil || repository.readAuth != nil {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, logPageTimeout)
 		defer cancel()
@@ -190,19 +190,19 @@ func (repository *Repository) GetSteward(
 	record, identity, err := scanManagementCommon(tx.QueryRowContext(ctx,
 		`SELECT `+commonListColumns+`,`+callerIdentityColumns+`,l.user_id FROM request_logs l`+callerIdentityJoin+`WHERE l.logical_request_id=?`, requestID), &userID)
 	if err != nil {
-		return StewardLogDetail{}, translateSQLError(err)
+		return StewardLogDetail{}, translateReadError(ctx, err)
 	}
 	visible := requestLogOrdinarilyVisible(record.completedAt, now)
 	if hook, ok := repository.heldRead.(StewardHeldReadAuthorizer); !visible && ok {
 		held, err := hook.AuthorizeStewardHeldRequestLogRead(ctx, tx, stewardUserID, record.rowID, now)
 		if err != nil {
-			return StewardLogDetail{}, err
+			return StewardLogDetail{}, translateReadError(ctx, err)
 		}
 		visible = visible || held
 	}
 	if !visible {
 		if err := tx.Commit(); err != nil {
-			return StewardLogDetail{}, translateSQLError(err)
+			return StewardLogDetail{}, translateReadError(ctx, err)
 		}
 		return StewardLogDetail{}, ErrNotFound
 	}
@@ -225,7 +225,7 @@ func (repository *Repository) GetSteward(
 		return StewardLogDetail{}, err
 	}
 	if err := tx.Commit(); err != nil {
-		return StewardLogDetail{}, translateSQLError(err)
+		return StewardLogDetail{}, translateReadError(ctx, err)
 	}
 	metadata := attempts.Pagination
 	attempts.Pagination = nil
@@ -324,7 +324,7 @@ WHERE a.request_log_id=? AND a.attempt_seq>?`
 	}
 	rows, err := reader.QueryContext(ctx, query, args...)
 	if err != nil {
-		return Page[UserSelfLogAttempt]{}, translateSQLError(err)
+		return Page[UserSelfLogAttempt]{}, translateReadError(ctx, err)
 	}
 	defer rows.Close()
 	capacity := filter.Limit
@@ -338,7 +338,7 @@ WHERE a.request_log_id=? AND a.attempt_seq>?`
 		var endpointNote, keyNote string
 		record, scanErr := scanAttempt(rows, &endpointNote, &keyNote)
 		if scanErr != nil {
-			return Page[UserSelfLogAttempt]{}, translateSQLError(scanErr)
+			return Page[UserSelfLogAttempt]{}, translateReadError(ctx, scanErr)
 		}
 		if !utf8.ValidString(endpointNote) || !utf8.ValidString(keyNote) || len(endpointNote) > 4096 || len(keyNote) > 4096 {
 			return Page[UserSelfLogAttempt]{}, ErrInvariant
@@ -362,7 +362,7 @@ WHERE a.request_log_id=? AND a.attempt_seq>?`
 		last = record.sequence
 	}
 	if err := rows.Err(); err != nil {
-		return Page[UserSelfLogAttempt]{}, translateSQLError(err)
+		return Page[UserSelfLogAttempt]{}, translateReadError(ctx, err)
 	}
 	if more {
 		next, err := repository.encodeAttemptCursor("logapi-user-attempt-v1", owner, last)
@@ -375,7 +375,7 @@ WHERE a.request_log_id=? AND a.attempt_seq>?`
 }
 
 func (repository *Repository) listAdminAttempts(ctx context.Context, requestLogID int64, requestID string, filter AttemptFilter) (Page[AdminLogAttempt], error) {
-	return repository.listAdminAttemptsTx(ctx, repository.db, requestLogID, requestID, filter)
+	return repository.listAdminAttemptsTx(ctx, repository.readDB, requestLogID, requestID, filter)
 }
 
 type adminAttemptQueryer = logReadQueryer
@@ -403,7 +403,7 @@ WHERE a.request_log_id=? AND a.attempt_seq>?`
 	}
 	rows, err := queryer.QueryContext(ctx, query, args...)
 	if err != nil {
-		return Page[AdminLogAttempt]{}, translateSQLError(err)
+		return Page[AdminLogAttempt]{}, translateReadError(ctx, err)
 	}
 	defer rows.Close()
 	capacity := filter.Limit
@@ -416,7 +416,7 @@ WHERE a.request_log_id=? AND a.attempt_seq>?`
 	for rows.Next() {
 		record, scanErr := scanAttempt(rows)
 		if scanErr != nil {
-			return Page[AdminLogAttempt]{}, translateSQLError(scanErr)
+			return Page[AdminLogAttempt]{}, translateReadError(ctx, scanErr)
 		}
 		if len(page.Data) >= filter.Limit {
 			more = true
@@ -437,7 +437,7 @@ WHERE a.request_log_id=? AND a.attempt_seq>?`
 		last = record.sequence
 	}
 	if err := rows.Err(); err != nil {
-		return Page[AdminLogAttempt]{}, translateSQLError(err)
+		return Page[AdminLogAttempt]{}, translateReadError(ctx, err)
 	}
 	if more {
 		next, err := repository.encodeAttemptCursor("logapi-admin-attempt-v1", owner, last)
@@ -483,7 +483,7 @@ WHERE a.request_log_id=? AND a.attempt_seq>?`
 	}
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
-		return Page[StewardLogAttempt]{}, translateSQLError(err)
+		return Page[StewardLogAttempt]{}, translateReadError(ctx, err)
 	}
 	defer rows.Close()
 	capacity := filter.Limit
@@ -496,7 +496,7 @@ WHERE a.request_log_id=? AND a.attempt_seq>?`
 	for rows.Next() {
 		record, scanErr := scanAttempt(rows)
 		if scanErr != nil {
-			return Page[StewardLogAttempt]{}, translateSQLError(scanErr)
+			return Page[StewardLogAttempt]{}, translateReadError(ctx, scanErr)
 		}
 		if len(page.Data) >= filter.Limit {
 			more = true
@@ -517,7 +517,7 @@ WHERE a.request_log_id=? AND a.attempt_seq>?`
 		last = record.sequence
 	}
 	if err := rows.Err(); err != nil {
-		return Page[StewardLogAttempt]{}, translateSQLError(err)
+		return Page[StewardLogAttempt]{}, translateReadError(ctx, err)
 	}
 	if more {
 		next, err := repository.encodeAttemptCursor("logapi-steward-attempt-v1", owner, last)

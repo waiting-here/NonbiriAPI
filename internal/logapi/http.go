@@ -1,6 +1,7 @@
 package logapi
 
 import (
+	"context"
 	"errors"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"io"
@@ -138,7 +139,7 @@ func (api *HTTPAPI) adminList(writer http.ResponseWriter, request *http.Request)
 		writeLogError(writer, err)
 		return
 	}
-	writeLogJSON(writer, http.StatusOK, page)
+	writeManagementLogJSON(writer, http.StatusOK, page)
 }
 
 func (api *HTTPAPI) adminDetail(writer http.ResponseWriter, request *http.Request) {
@@ -155,7 +156,7 @@ func (api *HTTPAPI) adminDetail(writer http.ResponseWriter, request *http.Reques
 		writeLogError(writer, err)
 		return
 	}
-	writeLogJSON(writer, http.StatusOK, detail)
+	writeManagementLogJSON(writer, http.StatusOK, detail)
 }
 
 func (api *HTTPAPI) stewardList(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
@@ -172,7 +173,7 @@ func (api *HTTPAPI) stewardList(writer http.ResponseWriter, request *http.Reques
 		writeLogError(writer, err)
 		return
 	}
-	writeLogJSON(writer, http.StatusOK, page)
+	writeManagementLogJSON(writer, http.StatusOK, page)
 }
 
 func (api *HTTPAPI) stewardDetail(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
@@ -191,7 +192,7 @@ func (api *HTTPAPI) stewardDetail(writer http.ResponseWriter, request *http.Requ
 		writeLogError(writer, err)
 		return
 	}
-	writeLogJSON(writer, http.StatusOK, detail)
+	writeManagementLogJSON(writer, http.StatusOK, detail)
 }
 
 func (api *HTTPAPI) authorizeSteward(writer http.ResponseWriter, request *http.Request, userID int64) bool {
@@ -200,11 +201,7 @@ func (api *HTTPAPI) authorizeSteward(writer http.ResponseWriter, request *http.R
 		return false
 	}
 	if err := api.repository.authorizeStewardRead(request.Context(), userID, api.steward); err != nil {
-		if errors.Is(err, ErrUnavailable) {
-			writeLogError(writer, ErrUnavailable)
-		} else {
-			writeLogError(writer, ErrForbidden)
-		}
+		writeLogError(writer, err)
 		return false
 	}
 	return true
@@ -456,12 +453,20 @@ func writeLogJSON(writer http.ResponseWriter, status int, body any) {
 	httperr.WriteDisplayJSON(writer, status, body)
 }
 
+func writeManagementLogJSON(writer http.ResponseWriter, status int, body any) {
+	httperr.WriteJSON(writer, status, body)
+}
+
 func writeLogError(writer http.ResponseWriter, err error) {
 	if errors.Is(err, authz.ErrMFARequired) {
 		httperr.WriteError(writer, httperr.New(httperr.CodeMFARequired, "MFA verification is required."))
 		return
 	}
 	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		httperr.WriteError(writer, httperr.New(httperr.CodeServiceUnavailable, "log query timed out; narrow the filters and retry"))
+	case errors.Is(err, context.Canceled):
+		httperr.WriteError(writer, httperr.New(httperr.CodeServiceUnavailable, "log query was canceled"))
 	case errors.Is(err, ErrInvalid):
 		httperr.WriteError(writer, httperr.New(httperr.CodeInvalidRequest, "invalid log request"))
 	case errors.Is(err, ErrNotFound):

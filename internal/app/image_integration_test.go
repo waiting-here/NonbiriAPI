@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
-	"github.com/waiting-here/NonbiriAPI/internal/logapi"
 )
 
 func TestImageHTTPAccountingAndProjection(t *testing.T) {
@@ -135,14 +134,7 @@ func (f *embeddingHTTPFixture) assertImageLatest(t *testing.T, model string, unk
 			t.Fatalf("charge/reward/calls=%d/%d/%d want=%d/%d/%d", charge, reward, calls, wantCharge, wantReward, wantCalls)
 		}
 	}
-	detail, err := f.app.logs.GetUser(context.Background(), f.userID, id, logapi.AttemptFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	encoded, err := json.Marshal(detail)
-	if err != nil {
-		t.Fatal(err)
-	}
+	encoded := f.ownLogJSON(t, id)
 	for _, forbidden := range []string{"Draw a lake", "A quiet lake", "aGVsbG8=", "images.example.test"} {
 		if strings.Contains(string(encoded), forbidden) {
 			t.Fatalf("image content persisted in request log: %s", forbidden)

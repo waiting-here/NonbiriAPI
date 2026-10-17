@@ -92,11 +92,7 @@ func TestHTTPRejectionDetailsPersistAndRemainManagementOnly(t *testing.T) {
 			if _, err := f.app.logs.GetSteward(context.Background(), f.userID, id, logapi.AttemptFilter{}, rejectionStewardReader{denied: true}); !errors.Is(err, logapi.ErrForbidden) {
 				t.Fatal("unauthorized diagnostic", err)
 			}
-			own, err := f.app.logs.GetUser(context.Background(), f.userID, id, logapi.AttemptFilter{})
-			if err != nil {
-				t.Fatal(err)
-			}
-			encoded, _ := json.Marshal(own)
+			encoded := f.ownLogJSON(t, id)
 			if strings.Contains(string(encoded), "rejection_detail") || strings.Contains(string(encoded), tc.reason) {
 				t.Fatal("ordinary user received management detail", string(encoded))
 			}

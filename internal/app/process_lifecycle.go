@@ -252,11 +252,11 @@ func run() int {
 			_ = resources.CloseContext(context.Background())
 		}()
 		slog.Error("shutdown incomplete", "stage", "http_drain", "category", "cleanup_deadline",
-			"cleanup_pending", true, "unclosed_connections", resources.store.DB().Stats().OpenConnections)
+			"cleanup_pending", true, "unclosed_connections", resources.store.Stats().OpenConnections)
 		return 1
 	}
 	if err := resources.CloseContext(shutdownContext); err != nil {
-		connections := resources.store.DB().Stats().OpenConnections
+		connections := resources.store.Stats().OpenConnections
 		category := "cleanup_failed"
 		if errors.Is(err, context.DeadlineExceeded) {
 			category = "cleanup_deadline"

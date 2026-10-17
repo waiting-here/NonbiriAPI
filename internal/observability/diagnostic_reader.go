@@ -7,7 +7,6 @@ import (
 	"errors"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
-	"github.com/waiting-here/NonbiriAPI/internal/textprivacy"
 	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 	"strconv"
 	"time"
@@ -317,15 +316,12 @@ func (r *DiagnosticReader) Detail(ctx context.Context, actor DiagnosticActor, id
 		return out, ErrUnavailable
 	}
 	out.Body.ErrorMetadata = out.Item.ErrorMetadata
-	// Redact the returned copy before encoding binary diagnostics. Stored
-	// bytes and their audit counters remain unchanged.
-	display := textprivacy.IPv4(string(raw))
 	out.Body.Encoding = "utf-8"
-	if utf8.ValidString(display) {
-		out.Body.Body = display
+	if utf8.Valid(raw) {
+		out.Body.Body = string(raw)
 	} else {
 		out.Body.Encoding = "base64"
-		out.Body.Body = base64.StdEncoding.EncodeToString([]byte(display))
+		out.Body.Body = base64.StdEncoding.EncodeToString(raw)
 	}
 	var source string
 	if out.Item.Kind == "model_discovery" || out.Item.Kind == "api_request" {

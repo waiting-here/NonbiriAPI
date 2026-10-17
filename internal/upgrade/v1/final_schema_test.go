@@ -17,6 +17,26 @@ import (
 //go:embed testdata/schema18.sql.gz
 var schema18Compressed []byte
 
+//go:embed testdata/schema19.sql.gz
+var schema19Compressed []byte
+
+func schema19SQLForTest(t *testing.T) string {
+	t.Helper()
+	reader, err := gzip.NewReader(bytes.NewReader(schema19Compressed))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(reader)
+	closeErr := reader.Close()
+	if err != nil || closeErr != nil {
+		t.Fatal(err, closeErr)
+	}
+	if fmt.Sprintf("%x", sha256.Sum256(body)) != "940774f9249d558183e0a574655090277534244d845d567300931a8d9b79f58d" {
+		t.Fatal("schema 19 fixture identity changed")
+	}
+	return string(body)
+}
+
 func schema18SQLForTest(t *testing.T) string {
 	t.Helper()
 	reader, err := gzip.NewReader(bytes.NewReader(schema18Compressed))
@@ -35,11 +55,14 @@ func schema18SQLForTest(t *testing.T) string {
 }
 
 func TestFinalSchemaConversionAcceptsExactStableSources(t *testing.T) {
-	for _, version := range []int{17, 18} {
+	for _, version := range []int{17, 18, 19} {
 		t.Run(fmt.Sprint(version), func(t *testing.T) {
 			ddl, hash := schema17SQLForTest(t), stableSchema17Manifest
 			if version == 18 {
 				ddl, hash = schema18SQLForTest(t), stableSchema18Manifest
+			}
+			if version == 19 {
+				ddl, hash = schema19SQLForTest(t), stableSchema19Manifest
 			}
 			path, vault := sourceFixtureFromDDL(t, ddl, version, hash)
 			database, err := sql.Open("sqlite", path)
@@ -115,11 +138,11 @@ func TestFinalSchemaConversionAcceptsExactStableSources(t *testing.T) {
 
 func TestOfflineDescriptorContainsOnlyExactSupportedSources(t *testing.T) {
 	descriptor := SchemaDescriptor()
-	if descriptor.SchemaVersion != 19 || descriptor.MinimumSchemaVersion != 19 || len(descriptor.SourceSchemaVersions) != 0 || len(descriptor.OfflineConversions) != 3 {
+	if descriptor.SchemaVersion != 20 || descriptor.MinimumSchemaVersion != 20 || len(descriptor.SourceSchemaVersions) != 0 || len(descriptor.OfflineConversions) != 4 {
 		t.Fatal(descriptor)
 	}
 	for index, source := range descriptor.OfflineConversions {
-		if source.SourceSchemaVersion != 16+index || source.TargetSchemaVersion != 19 || len(source.SourceCommit) != 40 || len(source.SourceManifestHash) != 64 || source.Tool != "nonbiri-upgrade-v1" {
+		if source.SourceSchemaVersion != 16+index || source.TargetSchemaVersion != 20 || len(source.SourceCommit) != 40 || len(source.SourceManifestHash) != 64 || source.Tool != "nonbiri-upgrade-v1" {
 			t.Fatal(source)
 		}
 	}

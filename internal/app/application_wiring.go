@@ -453,7 +453,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err != nil {
 		return nil, fmt.Errorf("create Debug mutation repository: %w", err)
 	}
-	logRepository, err := logapi.NewRepository(store.DB(), vault)
+	logRepository, err := logapi.NewRepositoryWithReader(store.DB(), store.ReadDB(), vault, roleAuthorizer)
 	if err != nil {
 		return nil, fmt.Errorf("create log repository: %w", err)
 	}
@@ -645,7 +645,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	performanceDone := make(chan struct{})
 	go func() {
 		defer close(performanceDone)
-		performance.Run(workerContext, store.DB().Stats, func(window observability.PerformanceWindow) {
+		performance.Run(workerContext, store.Stats, func(window observability.PerformanceWindow) {
 			slog.Info("runtime performance", "metrics", window)
 		})
 	}()

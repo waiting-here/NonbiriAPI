@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func TestReportDisplayRedactsSourceAndNotesWithoutChangingEvidence(t *testing.T) {
+func TestReportDisplayPreservesSourceAndNotesWithoutChangingEvidence(t *testing.T) {
 	e := newReportTestEnvironment(t)
 	owner := e.seedActor(t, false, 1)
 	endpoint := e.seedEndpoint(t, owner.UserID, reportTestConnector, reportTestBaseURL)
@@ -34,14 +34,14 @@ func TestReportDisplayRedactsSourceAndNotesWithoutChangingEvidence(t *testing.T)
 	detail := read()
 	w := httptest.NewRecorder()
 	writeReportJSON(w, http.StatusOK, detail)
-	if w.Code != 200 || strings.Contains(w.Body.String(), "198.51.100.42") || strings.Contains(w.Body.String(), "203.0.113.8") {
-		t.Fatalf("unredacted report: %d %s", w.Code, w.Body)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), "198.51.100.42") || !strings.Contains(w.Body.String(), "203.0.113.8") {
+		t.Fatalf("incomplete report: %d %s", w.Code, w.Body)
 	}
 	var shown CaseDetail
 	if err := json.Unmarshal(w.Body.Bytes(), &shown); err != nil {
 		t.Fatal(err)
 	}
-	if len(shown.Materials.Data) != 1 || shown.Materials.Data[0].SourceIP != "[redacted]" || shown.Materials.Data[0].NoteText != "Observed at [redacted]" {
+	if len(shown.Materials.Data) != 1 || shown.Materials.Data[0].SourceIP != "198.51.100.42" || shown.Materials.Data[0].NoteText != input.Note {
 		t.Fatalf("unexpected display: %+v", shown.Materials)
 	}
 	stored := read().Materials.Data[0]

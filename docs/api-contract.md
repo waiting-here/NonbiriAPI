@@ -111,7 +111,7 @@ Shared numbered-page metadata is `{page:string,page_size:number,total_items:stri
 
 Platform error messages follow `Accept-Language` (`zh` or `en`, including regional variants and quality weights); unsupported or missing preferences use English. Both stations send their selected language. Stable codes, source, HTTP status and retry semantics do not change. Upstream messages are sanitized but not translated. This applies to platform errors emitted inside an active SSE response as well as ordinary JSON errors.
 
-Display projections replace valid IPv4 address strings with `[redacted]` in errors, logs, alerts and restricted diagnostics. Persisted source facts and matching rules remain unchanged. Editable endpoint addresses, IP-rule values and normal model output retain their original values.
+Ordinary user display projections replace valid IPv4 address strings with `[redacted]`. Current administrators and level-6 stewards receive complete saved content through their authorized log, audit, diagnostic and history routes and existing exports, without display redaction or text truncation. Collection limits, retention, role restrictions and safe JSON/CSV/text encoding remain. Editable endpoint addresses, IP-rule values and normal model output retain their original values.
 
 | HTTP | Stable code |
 | ---: | --- |
@@ -136,7 +136,7 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 19. Normal startup accepts fresh storage and schema 19 only; schema 16, 17 and 18 require the separate offline converter. Unknown or partial structures are rejected before writes. Startup validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for explicit source/target versions and rollback requirements.
+The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 20. Normal startup accepts fresh storage and schema 20 only; schema 16, 17, 18 and 19 require the separate offline converter. Unknown or partial structures are rejected before writes. Startup validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for explicit source/target versions and rollback requirements.
 
 Current account export `schema_version=20` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v20.json`. See §9 for its safe projections.
 
@@ -802,7 +802,7 @@ Administrator-only `/admin/api/games/blackjack/history` and `.../history/{id}` a
 
 `POST /admin/api/games/blackjack/history/export` accepts `{dataset,cursor?}` and returns `{format:"blackjack-history/v1",dataset,items,next_cursor}` in bounded batches of at most 10 records. Clients may save each successful batch as NDJSON and resume only from its returned cursor. Signed cursors expire after one hour and bind the account/session, dataset, limit, endpoint kind, high-water mark and page position. Exporting or reading history does not pause play.
 
-Restart cancels only the unfinished table and refunds original assets, preserving waiters and committed outcomes. Maintenance/closure releases waiters and undealt seats while dealt games finish. Ban stops a seat's actions and auto-stands it. Deletion detaches identity and continues settlement without cancelling other players; unavailable proceeds use the corresponding external asset account and cannot recreate a wallet. Queue game-credit reserves remain part of welfare assets. Account export schema 19 includes `blackjack:{current,history}` and safe per-game `randomness` proofs while retaining all previous fields and existing 10,000-row/16-MiB bounds.
+Restart cancels only the unfinished table and refunds original assets, preserving waiters and committed outcomes. Maintenance/closure releases waiters and undealt seats while dealt games finish. Ban stops a seat's actions and auto-stands it. Deletion detaches identity and continues settlement without cancelling other players; unavailable proceeds use the corresponding external asset account and cannot recreate a wallet. Queue game-credit reserves remain part of welfare assets. Account export schema 20 includes `blackjack:{current,history}` and safe per-game `randomness` proofs while retaining all previous fields and existing 10,000-row/16-MiB bounds.
 
 ### 5.9 Loans and leaderboards
 
@@ -931,6 +931,8 @@ Administrator and steward log list/detail/export entries contain nullable `user_
 Each management attempt displays its persisted nullable `endpoint_key_id` routing snapshot, including separate IDs for retries. It never returns the key secret. The logical request's `usage.charge` is the authoritative total charge shown in both list and detail. Attempt `usage.charge` remains a compatibility zero, not an independently settled fee; the page does not present it as a charge. CSV and JSON exports share the management row fields and existing 10,000-row/16 MiB all-or-error limits. CSV additionally includes `caller_discord_nickname,caller_discord_id` with spreadsheet-safe escaping. Steward export reads recheck authority in the export snapshot, and all exports are no-store.
 
 `GET /api/steward/logs` accepts `user_id,endpoint_key_id,error_code,status,from,to,endpoint_base_url,upstream_model,usage_total_mismatch` plus legacy `cursor,limit` or numbered `page,page_size`; `GET /api/steward/logs/{id}` accepts the corresponding `attempt_cursor,attempt_limit` or `attempt_page,attempt_page_size`. The numbered list/detail responses carry `pagination`/`attempt_pagination`. Export accepts the same filters without pagination; cursors remain bound to role, actor and filters.
+
+Log reads have a five-second budget, including connection waits. Timeouts and canceled reads return `503 service_unavailable`; callers may narrow the filters and retry the read without resending the original model request. Read-only queries use a bounded two-connection pool, with current session, role and MFA authority checked in the same snapshot. Reads that record access to legally held diagnostics retain a write transaction.
 
 | Method and path | Request / response |
 | --- | --- |
@@ -1256,7 +1258,7 @@ These browser-session reads require a current administrator on the administrator
 
 `{prefix}` is `/admin/api` or `/api/steward`. Reads use bounded filters and pages, not an unrestricted header or body search. Access-event filters include `user_id,key_generation,path_kind,status_class,from,to,lookback_hours`, with `page_size` up to 100 and a separate opaque cursor. A maximum 30-day range and coverage/drop counters keep incomplete observations explicit. A zero ratio denominator is no sample, never an infinite risk score. `coverage.last_gap_at` is null when no capture gap has been recorded. Audit users, user details, shared IPs and access reads accept `lookback_hours` (integer 1–720), anchored to server time and mutually exclusive with `from`/`to`. With no time filter the default is 24 hours, except shared IPs use the configured window.
 
-Restricted diagnostic reads and downloads apply the same IPv4 redaction before UTF-8 or base64 encoding. Stored bodies remain unchanged; byte counts and truncation metadata describe the stored capture, so they can differ from the displayed projection. Source-IP observations are similarly redacted when displayed; rule editing continues to use the configured address.
+Restricted diagnostic reads and downloads preserve the saved bytes. Valid UTF-8 bodies use text; other bodies use base64 without intermediate text conversion. Byte counts and truncation metadata describe the original stored capture. Authorized source-IP observations retain the saved address. Long previews mount when expanded and show all saved text; download retains the original bytes.
 
 Original failure capture covers personal/charity calls, retries, explicit streaming error events, model discovery and the image activity. It captures the HTTP-decoded error entity or error event, not TLS/chunk/compression wire bytes. Each body is capped at 1 MiB; truncation is explicit. JSON has formatted and original views, other text is rendered as text, and non-UTF-8 bytes use a base64 representation without pretending replacement text is the original. Local refusals have the site's safe reason and no invented upstream body. Successful response bodies, normal stream content, request bodies and Authorization headers are not actively logged. An upstream can echo inputs or credentials in an error; those original bytes may be retained in this restricted store.
 
@@ -1405,7 +1407,7 @@ RAM pickup window; successful generation is not refunded if a result is lost or
 not downloaded. Natural activity end lets accepted tasks finish; manual pause
 or maintenance cancels undispatched tasks with refunds. Ban, deletion, and
 model withdrawal follow the documented atomic cleanup rules. Safe task history
-lasts 30 days; accounting follows ledger retention and account export schema 19.
+lasts 30 days; accounting follows ledger retention and account export schema 20.
 
 ### Lake Notes API
 
@@ -1455,4 +1457,4 @@ Bidding Duel adds session-authenticated AI offers, preferences and unpaid admiss
 
 The session-authenticated card activity uses `/api/gacha/state`, `/api/gacha/history` and `/api/gacha/actions`; administrator configuration uses `/admin/api/gacha`. User site cosmetics use `GET/POST /api/appearance` and server-validated collection unlocks. See [The Gacha Simulator](gacha.md#records-and-http-access) for transaction, retry, revision and retention semantics.
 
-Reward receipts are included in export schema 19 under `rewards`. They contain the account’s successful site-wide and code rewards, quantities, duplicate conversions and skipped items, without code text, eligibility configuration, other recipients or retry hashes. Receipts remain for the account lifetime and are removed on deletion; campaign totals and used quota remain. See [rewards](rewards.md).
+Reward receipts are included in export schema 20 under `rewards`. They contain the account’s successful site-wide and code rewards, quantities, duplicate conversions and skipped items, without code text, eligibility configuration, other recipients or retry hashes. Receipts remain for the account lifetime and are removed on deletion; campaign totals and used quota remain. See [rewards](rewards.md).

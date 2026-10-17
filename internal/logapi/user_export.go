@@ -56,7 +56,7 @@ func (r *Repository) ExportUser(ctx context.Context, user int64, filter ListFilt
 	args = append(args, maxExportRows+1)
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, translateSQLError(err)
+		return nil, translateReadError(ctx, err)
 	}
 	defer rows.Close()
 	result := []UserLogRow{}
@@ -64,7 +64,7 @@ func (r *Repository) ExportUser(ctx context.Context, user int64, filter ListFilt
 		var model string
 		record, err := scanCommon(rows, &model)
 		if err != nil {
-			return nil, translateSQLError(err)
+			return nil, translateReadError(ctx, err)
 		}
 		if len(result) >= maxExportRows {
 			return nil, ErrCapacity
@@ -83,13 +83,13 @@ func (r *Repository) ExportUser(ctx context.Context, user int64, filter ListFilt
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return nil, translateSQLError(err)
+		return nil, translateReadError(ctx, err)
 	}
 	if err := rows.Close(); err != nil {
-		return nil, translateSQLError(err)
+		return nil, translateReadError(ctx, err)
 	}
 	if err := tx.Commit(); err != nil {
-		return nil, translateSQLError(err)
+		return nil, translateReadError(ctx, err)
 	}
 	return result, nil
 }
@@ -128,7 +128,11 @@ func MarshalUserCSV(rows []UserLogRow) ([]byte, error) {
 		default:
 			return nil, ErrInvariant
 		}
-		if err := w.Write([]string{csvSafe(v.ID), csvSafe(string(v.RouteKind)), csvSafe(v.Model), csvResultClass(v.CallerResultClass), csvInt(v.CallerStatus), csvString(v.CallerErrorCode), strconv.FormatInt(v.StartedAt, 10), csvInt64(v.CompletedAt), v.AttemptCount, v.Usage.UncachedInputTokens, v.Usage.CacheWriteInputTokens, v.Usage.CacheReadInputTokens, v.Usage.OutputTokens, v.Usage.TotalTokens, strconv.FormatBool(v.Usage.UsageUnknown), v.Usage.Charge, csvSafe(v.Phase), csvString(v.RejectionStage), csvString(v.RejectionReason), csvString(v.RequestMethod), csvString(v.RequestPath), csvBool(v.RequestedStreaming), csvActions(v.AutomaticActions)}); err != nil {
+		record := []string{csvSafe(v.ID), csvSafe(string(v.RouteKind)), csvSafe(v.Model), csvResultClass(v.CallerResultClass), csvInt(v.CallerStatus), csvString(v.CallerErrorCode), strconv.FormatInt(v.StartedAt, 10), csvInt64(v.CompletedAt), v.AttemptCount, v.Usage.UncachedInputTokens, v.Usage.CacheWriteInputTokens, v.Usage.CacheReadInputTokens, v.Usage.OutputTokens, v.Usage.TotalTokens, strconv.FormatBool(v.Usage.UsageUnknown), v.Usage.Charge, csvSafe(v.Phase), csvString(v.RejectionStage), csvString(v.RejectionReason), csvString(v.RequestMethod), csvString(v.RequestPath), csvBool(v.RequestedStreaming), csvActions(v.AutomaticActions)}
+		for index := range record {
+			record[index] = textprivacy.IPv4(record[index])
+		}
+		if err := w.Write(record); err != nil {
 			return nil, ErrUnavailable
 		}
 		w.Flush()

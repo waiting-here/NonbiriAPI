@@ -560,6 +560,10 @@ CREATE TABLE request_attempts (
  CHECK(typeof(usage_total_mismatch)='integer' AND usage_total_mismatch IN (0,1)), UNIQUE(request_log_id,attempt_seq), CHECK(upstream_code IS NULL OR (typeof(upstream_code)='text' AND length(CAST(upstream_code AS BLOB)) BETWEEN 1 AND 64 AND upstream_code NOT GLOB '*[^ -~]*')), CHECK(diag IS NULL OR (typeof(diag)='text' AND length(CAST(diag AS BLOB))<=4096))
 );
 CREATE INDEX idx_request_attempts_log_seq ON request_attempts(request_log_id,attempt_seq);
+CREATE INDEX idx_request_attempts_key_log ON request_attempts(endpoint_key_id_snapshot,request_log_id);
+CREATE INDEX idx_request_attempts_endpoint_log ON request_attempts(canonical_base_url,request_log_id);
+CREATE INDEX idx_request_attempts_model_log ON request_attempts(upstream_model_id,request_log_id);
+CREATE INDEX idx_request_logs_charity_model ON request_logs(route_kind,model,completed_at,id) WHERE route_kind IN ('charity_chat_completions','charity_embeddings','charity_images_generations','charity_decisions');
 CREATE INDEX idx_request_attempts_started ON request_attempts(started_at);
 CREATE INDEX idx_request_attempts_retention ON request_attempts(completed_at,request_log_id,attempt_seq) WHERE completed_at IS NOT NULL;
 CREATE TABLE worker_checkpoints (worker_key TEXT NOT NULL PRIMARY KEY, cursor_text TEXT NOT NULL DEFAULT '', generation INTEGER NOT NULL CHECK(generation BETWEEN 0 AND 9223372036854775807), attempt_count INTEGER NOT NULL CHECK(attempt_count BETWEEN 0 AND 2147483647), next_attempt_at INTEGER NOT NULL CHECK(next_attempt_at BETWEEN 0 AND 253402300799), last_error_class TEXT NOT NULL DEFAULT '' CHECK(last_error_class IN ('','db_busy','internal_retryable','invariant_violation')), updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799), last_success_at INTEGER CHECK(last_success_at IS NULL OR (typeof(last_success_at)='integer' AND last_success_at BETWEEN 0 AND 253402300799 AND last_success_at<=updated_at)));
@@ -6537,7 +6541,7 @@ CREATE TABLE schema_state (
 ) STRICT;
 INSERT INTO credit_compaction(id,through_seq,details_before,sweep_at,sweep_after_seq) VALUES(1,0,0,0,0);
 INSERT INTO game_blackjack_clock(id,observed_at) VALUES(1,0);
-INSERT INTO schema_state(id,version) VALUES(1,19);
+INSERT INTO schema_state(id,version) VALUES(1,20);
 
 CREATE TABLE game_ai_settings (
  game_key TEXT PRIMARY KEY NOT NULL,

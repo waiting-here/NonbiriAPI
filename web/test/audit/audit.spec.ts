@@ -201,8 +201,7 @@ async function requestDiagnostics(page: Page, admin: boolean, keyboard = false) 
   const dialog = page.locator('.nb-expandable-panel:not([hidden])');
   await expect(dialog).toBeVisible();
   const source = dialog.getByRole('region', { name: 'Request source' });
-  await expect(source).toContainText('[redacted]');
-  await expect(source).not.toContainText(f.source_ip);
+  await expect(source).toContainText(f.source_ip);
   await expect(dialog.getByRole('region', { name: 'Request source' })).toContainText(
     f.source_client,
   );
@@ -225,6 +224,34 @@ async function requestDiagnostics(page: Page, admin: boolean, keyboard = false) 
     await page.keyboard.press('Enter');
   } else await load.click();
   await expect(event.locator('pre')).toHaveText(f.json_body);
+  if (process.env.NONBIRI_VISUAL_DIR) {
+    const viewport = page.viewportSize();
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate((value) => {
+        localStorage.setItem('nb.theme', value);
+        document.documentElement.dataset.theme = value;
+      }, theme);
+      for (const width of [1440, 390]) {
+        await page.setViewportSize({ width, height: 900 });
+        await event.locator('pre').scrollIntoViewIfNeeded();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+          true,
+        );
+        await page.screenshot({
+          path: resolve(
+            process.env.NONBIRI_VISUAL_DIR,
+            `logs-${admin ? 'admin' : 'steward'}-${theme}-${width}.png`,
+          ),
+          animations: 'disabled',
+        });
+      }
+    }
+    if (viewport) await page.setViewportSize(viewport);
+    await page.evaluate(() => {
+      localStorage.setItem('nb.theme', 'light');
+      document.documentElement.dataset.theme = 'light';
+    });
+  }
   await event.getByRole('button', { name: 'Format JSON', exact: true }).click();
   await expect(event.locator('pre')).toHaveText(JSON.stringify(JSON.parse(f.json_body), null, 2));
   await event.getByRole('button', { name: 'Plain text', exact: true }).click();
@@ -246,8 +273,7 @@ async function discoveryDiagnostics(page: Page, admin: boolean) {
   await entry.getByRole('button', { name: 'Load error details and source' }).click();
   await expect(entry.locator('pre')).toHaveText(f.text_body);
   const source = entry.getByRole('region', { name: 'Request source' });
-  await expect(source).toContainText('[redacted]');
-  await expect(source).not.toContainText(f.source_ip);
+  await expect(source).toContainText(f.source_ip);
   await safeSink(page);
   await region.getByLabel('Category').selectOption('image_task');
   await region.getByLabel('Request, task or operation ID').fill(f.image_task_id);
@@ -316,8 +342,7 @@ async function riskEvidence(page: Page, sustained = true) {
   await group.getByRole('tab', { name: 'Shared IPs', exact: true }).click();
   await page.getByRole('button', { name: 'Start new scan', exact: true }).click();
   await expect(page.getByText('Completed', { exact: true })).toBeVisible();
-  await expect(page.getByRole('heading', { name: '[redacted]', exact: true })).toBeVisible();
-  await expect(page.getByRole('heading', { name: f.source_ip, exact: true })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: f.source_ip, exact: true })).toBeVisible();
   await expect(page.getByText('Distinct Discord identities: 4', { exact: false })).toBeVisible();
   await group.getByRole('tab', { name: 'Client matches', exact: true }).click();
   await page.getByRole('button', { name: 'Start new scan', exact: true }).click();
