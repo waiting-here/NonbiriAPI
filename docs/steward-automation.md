@@ -7,7 +7,7 @@ Authorization: Bearer nbk_REPLACE_WITH_YOUR_CALLER_KEY
 Content-Type: application/json
 ```
 
-The caller must remain an active level-6 steward. Level-5 trainees cannot use these automation routes. Session cookies cannot replace the CallerKey. Revocation, rotation, bans, deletion and loss of steward permission are checked again before writes. These controls grant no authority over another donor's private endpoint, key or model catalog. This document describes the current source; check the deployed build before using new routes.
+The caller must remain an active level-6 steward. Level-5 trainees cannot use these automation routes. Session cookies cannot replace the CallerKey. Revocation, rotation, bans, deletion and loss of steward permission are checked again before writes. These controls grant no authority over another donor's private endpoint, key or model catalog. This document describes v1.0.0; use a matching server release.
 
 Account MFA applies to browser sessions. These CallerKey routes retain their
 existing credentials and do not require authenticator codes. Browser controls

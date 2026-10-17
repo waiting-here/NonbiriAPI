@@ -191,7 +191,7 @@ interrupted download must be restarted; it does not contain a completion
 manifest. Existing paged JSON export endpoints retain their dataset and signed
 cursor semantics.
 
-Current presets have optional private names, included only in the owner's export and deleted with the account. Current changes are Unreleased source behavior; availability depends on the deployed build.
+Current presets have optional private names, included only in the owner's export and deleted with the account. These features are included in v1.0.0.
 
 ## 双人游戏
 

@@ -20,7 +20,7 @@ Host selection is a security boundary. A route on the wrong host is `404 not_fou
 
 User and administrator session cookies are host-only, HttpOnly, SameSite=Lax, and Secure on HTTPS. Unsafe cookie-authenticated methods require the same validated origin (and compatible Fetch Metadata when supplied). `/v1/*` accepts only `Authorization: Bearer nbk_<secret>`; an upstream credential is never a CallerKey.
 
-Account export/deletion and selected administrator legal-hold/user actions require a short-lived, single-use elevation capability bound to the active session. Current administrator/session authority and steward level are revalidated in sensitive read/write transactions. Levels 1–4 may be automatic; level 5 is a manually appointed trainee and level 6 a full steward. Administrators appoint or remove level 6; administrators and full stewards appoint or remove level 5. Full stewards cannot manage themselves, other level-6 users or administrators. Trainees have only the scoped charity permissions in §6.4.
+Account export/deletion and selected administrator legal-hold/user actions require a short-lived, single-use elevation capability bound to the active session. Current administrator/session authority and steward level are revalidated in sensitive read/write transactions. Levels 1–4 may be automatic; level 5 is a manually appointed trainee and level 6 a full steward. Administrators appoint or remove level 6; administrators and full stewards appoint or remove level 5. Full stewards cannot manage themselves, other level-6 users or administrators. Trainees have the scoped charity permissions in §6.4 and site-wide log reads in §11, with IPv4 addresses redacted from upstream error details.
 
 An incorrect password at `POST /admin/api/auth/elevate` returns `403 elevated_required`; the active session remains valid. A missing or expired session returns `401 unauthorized`.
 
@@ -136,7 +136,7 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 20. Normal startup accepts fresh storage and schema 20 only; schema 16, 17, 18 and 19 require the separate offline converter. Unknown or partial structures are rejected before writes. Startup validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for explicit source/target versions and rollback requirements.
+The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 21. Normal startup accepts fresh storage and schema 21 only; schema 16, 17, 18, 19 and 20 require the separate offline converter. Unknown or partial structures are rejected before writes. Startup validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for explicit source/target versions and rollback requirements.
 
 Current account export `schema_version=20` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v20.json`. See §9 for its safe projections.
 
@@ -247,7 +247,7 @@ The connector type is `ai-sdk-gateway-v3`. The base URL is the complete native m
 | Embeddings | String or string-array input, float vectors; no token-ID input, dimensions, base64 output or caller identity field |
 | Discovery | Native `/config`; explicit language and embedding entries only, full IDs retained; unknown/absent model types are skipped and manual entries remain available |
 
-Role-policy output must fit the native system/user/assistant/tool roles. Named messages, unknown fields, undeclared `providerOptions`, parallel-tool flags and non-equivalent options exclude this connector before credentials or reservations. The proven neutral options `n:1`, `logprobs:false`, empty `logit_bias` and `response_format:{"type":"text"}` are accepted. Other compatible candidates remain eligible; if none remain the request fails explicitly. The physical-key OpenAI no-store setting remains OpenAI-only; Gateway uses explicit model-scoped storage policy. Existing model tool flattening and request adaptation remain available. Documented provider warnings are advisory. Malformed warnings, tool arguments, invalid event order, missing native finish, truncated streams and cancellation cannot produce successful completion. Rejected stream events have bounded private diagnostics available under the existing administrator/level-6 permissions. Missing or ambiguous usage remains unknown and uses the existing conservative accounting rules.
+Role-policy output must fit the native system/user/assistant/tool roles. Named messages, unknown fields, undeclared `providerOptions`, parallel-tool flags and non-equivalent options exclude this connector before credentials or reservations. The proven neutral options `n:1`, `logprobs:false`, empty `logit_bias` and `response_format:{"type":"text"}` are accepted. Other compatible candidates remain eligible; if none remain the request fails explicitly. The physical-key OpenAI no-store setting remains OpenAI-only; Gateway uses explicit model-scoped storage policy. Existing model tool flattening and request adaptation remain available. Documented provider warnings are advisory. Malformed warnings, tool arguments, invalid event order, missing native finish, truncated streams and cancellation cannot produce successful completion. Rejected stream events have bounded private diagnostics available to administrators and level-5/6 stewards; level-5 error details redact IPv4 addresses. Missing or ambiguous usage remains unknown and uses the existing conservative accounting rules.
 
 Output-budget aliases accept integers from 1 to 2147483647, with null treated as absent and equal dual values accepted. Conflicting values reject. Explicit `reasoning_effort`, `store` and `cache_control` require an administrator-configured exact target capability; other unknown fields remain strict. See [Gateway model controls](gateway-model-controls.md) for provider profiles, native mappings, configuration and storage limitations.
 
@@ -883,7 +883,7 @@ The administrator workspace can save the clicked draft snapshot, create its immu
 
 Existing content is preserved by startup and the rc.7 conversion. Historical cleanup entry points are no longer part of the running application; retained cleanup receipts remain valid.
 
-## 6. Debug and level-6 steward surfaces
+## 6. Debug and steward surfaces
 
 ### 6.1 Debug
 
@@ -900,7 +900,7 @@ Dry mode intercepts before upstream dispatch. Live mode captures bounded safe pr
 
 ### 6.2 Steward
 
-The browser routes below require a currently effective L6 user session on the user host. Reads and final mutations recheck that role in their transaction. Log and donation management expose the same information as administrator views; ordinary user projections and unrelated administrator capabilities remain separate. The dedicated charity CallerKey routes are described separately in §6.3; personal routes are in §3.4.
+The browser routes below require a currently effective L6 user session on the user host, except that site-wide log reads also allow L5 with the error-detail IPv4 redaction described in §11. Other scoped L5 charity permissions are in §6.4. Reads and final mutations recheck the current role in their transaction. L6 log and donation management expose the same information as administrator views; ordinary user projections and unrelated administrator capabilities remain separate. The dedicated charity CallerKey routes are described separately in §6.3; personal routes are in §3.4.
 
 | Surface | Routes |
 | --- | --- |
@@ -1212,7 +1212,7 @@ Maintenance mode rejects new public inference, OAuth admission, ordinary pages, 
 
 New Fishing batches, LinkLink sessions and RPS queues always use rules version 2; clients cannot choose an older version. Old version-1 state drains through its saved rules and funding, including after restart. Already terminal fees and game results are never recalculated under current prices or rules.
 
-Ordinary startup keeps database ownership locking, current structure/configuration and constant-cost key checks, followed by unfinished request, ledger, game and account recovery. Historical backfills belong to the rc.7 converter; catalog synchronization only fills missing content defaults. Retention proceeds in the background. Full historical and credential audits run separately with `nonbiriapi maintenance verify`, using the normal private environment and a stopped database or trusted consistent copy. Verification never initializes, repairs, migrates, starts workers or opens a listener; SQLite may create coordination files. Success prints `{"status":"verified"}`; failure exits nonzero. `maintenance schema-info --json` only describes the binary's supported schemas and loads neither environment nor database.
+Ordinary startup keeps database ownership locking, current structure/configuration and constant-cost key checks, followed by unfinished request, ledger, game and account recovery. Historical backfills belong to the independent offline converter; catalog synchronization only fills missing content defaults. Retention proceeds in the background. Full historical and credential audits run separately with `nonbiriapi maintenance verify`, using the normal private environment and a stopped database or trusted consistent copy. Verification never initializes, repairs, migrates, starts workers or opens a listener; SQLite may create coordination files. Success prints `{"status":"verified"}`; failure exits nonzero. `maintenance schema-info --json` only describes the binary's supported schemas and loads neither environment nor database.
 
 Recovery runs before listeners open. Recovery of unfinished API requests drains once per process before accepting traffic; periodic maintenance cannot settle live requests as abandoned after a restart. Accepted requests, donation claims, report indexing/deletion, Thursday settlement, Fishing settlement, LinkLink deadlines, and RPS matching/phases/terminal processing resume from persisted state and exact-once operation identities. Non-terminal records are not removed by age. SQLite WAL/checkpoint restart is supported for a valid Generation 2 database, including after an explicitly supported additive update. Unsupported schemas remain outside the recovery boundary.
 

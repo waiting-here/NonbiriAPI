@@ -4,16 +4,20 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
-## Unreleased — 1.0.0
+## 1.0.0 — 2026-10-17
 
-The current database schema is 20 with account export 20. The normal service
-accepts fresh storage or schema 20 and contains no historical conversion chain.
-The separate `nonbiri-upgrade-v1` command converts exact schema 16, 17, 18 and 19
-sources while preserving existing settings and stored facts. Deployments can
-use a verified commit and its matching artifacts without a release tag.
+The first stable release uses database schema 21 and account export 20. The normal
+service accepts fresh storage or schema 21 and contains no historical conversion
+chain. The separate `nonbiri-upgrade-v1` command converts exact schema 16, 17, 18,
+19 and 20 sources while preserving existing settings and stored facts. The GitHub
+Release provides source code; build the server and converter from the same tag.
 
 ### Added
 
+- Site-wide request logs, details, sources and existing exports for level-5
+  stewards. Their upstream error details redact IPv4 addresses; other authorized
+  fields retain their existing values. Audit and automation permissions are unchanged.
+- A noncommercial aggregation gateway tag for endpoint classification.
 - Optional authenticator MFA for all user accounts, with independent default-off
   requirements for each account level, seven-day browser proofs and administrator
   reset. Existing CallerKey model calls and automation retain their credentials.
@@ -26,6 +30,13 @@ use a verified commit and its matching artifacts without a release tag.
 
 ### Changed
 
+- Read credit-audit summaries and trends through bounded read snapshots without
+  taking the business writer connection; batch operation posting reads.
+- Let inactivity execution and policy-audit history choose 10, 20, 50 or 100
+  rows, move both ways, jump to a page and recover after a failed load.
+- Explain model-discovery failures consistently in setup and key management.
+  Identify explicit Gemini server-region rejections and temporary upstream
+  failures, retain restricted diagnostics, and offer retry and manual model entry.
 - Optimize filtered request-log counts and pages with covering indexes and bounded
   read connections. Log queries no longer hold the sole business connection;
   deadlines return an explicit retryable error instead of an internal error.
@@ -100,6 +111,11 @@ use a verified commit and its matching artifacts without a release tag.
   recovery controls.
 
 ### Added
+
+- Site-wide request logs, details, sources and existing exports for level-5
+  stewards. Their upstream error details redact IPv4 addresses; other authorized
+  fields retain their existing values. Audit and automation permissions are unchanged.
+- A noncommercial aggregation gateway tag for endpoint classification.
 
 - Optional per-value sensitivity markers for request rewriting. Only marked
   strings present in the outgoing request participate in response leak checks;

@@ -230,7 +230,7 @@ manifest, and checksums. Snapshot retention/deletion is operator-controlled and 
 be disclosed by the instance policy; the service does not promise per-user erasure inside
 historical snapshots.
 
-Normal v1.0.0 startup accepts fresh storage or current schema 20; schema 16, 17, 18 and 19 use the independent converter. Unknown or partial sources are rejected before writes. Fresh creation requires the main database and sidecars to be absent. Conversion preserves accounts, economic facts, credentials, saved games, configuration and instance legal text. Full historical audits use offline `maintenance verify`. The [database upgrade guide](database-upgrades.md) identifies the exact source and restore requirements.
+Normal v1.0.0 startup accepts fresh storage or current schema 21; schema 16, 17, 18, 19 and 20 use the independent converter. Unknown or partial sources are rejected before writes. Fresh creation requires the main database and sidecars to be absent. Conversion preserves accounts, economic facts, credentials, saved games, configuration and instance legal text. Full historical audits use offline `maintenance verify`. The [database upgrade guide](database-upgrades.md) identifies the exact source and restore requirements.
 
 Starting fresh from an unsupported version uses a separate empty path and resets active application state. A complete old recovery set remains sensitive until its retention purpose ends. Never combine an old binary with a newer database or restore a stale snapshot over newly accepted data automatically.
 
