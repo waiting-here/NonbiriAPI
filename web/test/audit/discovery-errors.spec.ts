@@ -99,11 +99,8 @@ test('Google discovery explains server-region failures and recovers in setup and
       // The model-name form remains available even when discovery is rejected.
       await page
         .locator('summary')
-        .filter({
-          hasText: new RegExp(
-            copy.services.manualName + '|' + copy.services.manualModels.replace(/[?]/g, '\\?'),
-          ),
-        })
+        .filter({ hasText: copy.services.manualName })
+        .or(page.locator('summary').filter({ hasText: copy.services.manualModels }))
         .click();
       await expect(page.getByLabel(copy.quickstart.upstream, { exact: true })).toBeVisible();
       if (language === 'en' && width === 1440) {
