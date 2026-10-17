@@ -124,6 +124,8 @@ var chineseCodes = map[string]string{
 }
 
 var chineseMessages = map[string]string{
+	"log query timed out; narrow the filters and retry":                                       "日志查询超时，请缩小筛选范围后重试。",
+	"log query was canceled":                                                                  "日志查询已取消。",
 	"Accounting audits require administrator access.":                                         "只有管理员可以查看账务审计。",
 	"Activity not found.":                                                                     "未找到此活动。",
 	"Additional authorization is required.":                                                   "请先完成额外身份验证。",

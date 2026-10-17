@@ -119,7 +119,9 @@ func sourceFixtureFromDDL(t *testing.T, sourceDDL string, version int, manifest 
 	}
 	mustExec(t, tx, "DELETE FROM main.sqlite_sequence;INSERT INTO main.sqlite_sequence SELECT * FROM seed.sqlite_sequence WHERE name IN (SELECT name FROM main.sqlite_schema WHERE type='table')")
 	mustExec(t, tx, "UPDATE schema_state SET version=?", version)
-	mustExec(t, tx, "DELETE FROM site_config WHERE key LIKE 'mfa_required_level_%'")
+	if version < 19 {
+		mustExec(t, tx, "DELETE FROM site_config WHERE key LIKE 'mfa_required_level_%'")
+	}
 	if version <= 17 {
 		mustExec(t, tx, "DELETE FROM site_config WHERE key='game_fishing_milk_crab_chance_bps'")
 	}

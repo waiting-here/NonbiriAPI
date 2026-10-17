@@ -104,3 +104,59 @@ func TestStoreCloseWaitsForCancelledTransactionRollback(t *testing.T) {
 		t.Fatalf("second close=%v", err)
 	}
 }
+
+func TestStoreCloseDrainsCanceledReaderBeforeClosingWriter(t *testing.T) {
+	readerProbe := &closingConnector{make(chan struct{}), make(chan struct{}), make(chan struct{})}
+	writerProbe := &closingConnector{make(chan struct{}), make(chan struct{}), make(chan struct{})}
+	reader, writer := sql.OpenDB(readerProbe), sql.OpenDB(writerProbe)
+	store := &Store{db: writer, readDB: reader}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-readerProbe.finishRollback:
+		default:
+			close(readerProbe.finishRollback)
+		}
+		_ = store.Close()
+	})
+	if err := writer.Ping(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reader.BeginTx(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	select {
+	case <-readerProbe.rollbackStarted:
+	case <-time.After(time.Second):
+		t.Fatal("reader rollback did not start")
+	}
+	closeCtx, closeCancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer closeCancel()
+	if err := store.CloseContext(closeCtx); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("close with blocked reader rollback = %v", err)
+	}
+	select {
+	case <-writerProbe.connectionClosed:
+		t.Fatal("writer closed before the reader finished its rollback")
+	default:
+	}
+	if err := writer.Ping(); err != nil {
+		t.Fatalf("writer must remain open until the reader drains: %v", err)
+	}
+	close(readerProbe.finishRollback)
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for name, closed := range map[string]<-chan struct{}{"reader": readerProbe.connectionClosed, "writer": writerProbe.connectionClosed} {
+		select {
+		case <-closed:
+		default:
+			t.Fatalf("%s connection did not close", name)
+		}
+	}
+	if stats := store.Stats(); stats.OpenConnections != 0 {
+		t.Fatalf("open connections after close = %d", stats.OpenConnections)
+	}
+}

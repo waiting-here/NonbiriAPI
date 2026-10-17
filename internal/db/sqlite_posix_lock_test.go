@@ -4,6 +4,7 @@ package db
 
 import (
 	"context"
+	"database/sql/driver"
 	"errors"
 	"fmt"
 	"os"
@@ -329,6 +330,24 @@ func checkActualSQLiteLocks(t *testing.T, path string, store *Store) {
 	}
 	requireLockState(t, path, "shm_writer", probeConflict)
 	requireLockState(t, path, "sqlite_reader", probeFree)
+	requireLockState(t, path, "sqlite_writer", probeConflict)
+	reader, err := store.ReadDB().Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reader.QueryRowContext(ctx, `SELECT count(*) FROM site_config`).Scan(&count); err != nil {
+		reader.Close()
+		t.Fatal(err)
+	}
+	_ = reader.Raw(func(any) error { return driver.ErrBadConn })
+	_ = reader.Close()
+	if err := store.ReadDB().PingContext(ctx); err != nil {
+		t.Fatal(err)
+	}
+	// Closing and replacing a SQLite-managed reader must not release another
+	// connection's process-wide main-file or WAL locks.
+	requireLockState(t, path, "main_shared", probeConflict)
+	requireLockState(t, path, "shm_writer", probeConflict)
 	requireLockState(t, path, "sqlite_writer", probeConflict)
 	if _, err := connection.ExecContext(ctx, `ROLLBACK`); err != nil {
 		t.Fatalf("end application write transaction: %v", err)

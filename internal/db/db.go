@@ -22,6 +22,7 @@ import (
 // plaintext never has to become a database argument or a Store field.
 type Store struct {
 	db         *sql.DB
+	readDB     *sql.DB
 	secrets    secret.GenerationTwoContextCodec
 	closeOnce  sync.Once
 	closeErr   error
@@ -73,7 +74,14 @@ func OpenContext(ctx context.Context, path string, secrets secret.GenerationTwoC
 	if err := prepareDBDirectory(path); err != nil {
 		return nil, err
 	}
-	return openGenerationTwo(ActiveRecoveryContext(ctx), path, secrets)
+	opened, err := openGenerationTwo(ActiveRecoveryContext(ctx), path, secrets)
+	if err != nil {
+		return nil, err
+	}
+	if err := opened.openReadPool(ctx, path); err != nil {
+		return nil, appendStartupError(startupSQLFailure(ctx, err, StartupInitialization), opened.CloseContext(ctx))
+	}
+	return opened, nil
 }
 
 // prepareDBDirectory validates every existing parent component before it
@@ -173,6 +181,29 @@ func nilSecretCodec(codec secret.GenerationTwoContextCodec) bool {
 // DB returns the underlying handle for typed repositories.
 func (s *Store) DB() *sql.DB { return s.db }
 
+// ReadDB returns the bounded read-only pool. Repositories that record audits or
+// update lifecycle state during a read must continue using DB for that operation.
+func (s *Store) ReadDB() *sql.DB { return s.readDB }
+
+// Stats includes both pools so existing performance and shutdown reports retain
+// all connection waits after query reads stop sharing the writer connection.
+func (s *Store) Stats() sql.DBStats {
+	stats := s.db.Stats()
+	if s.readDB != nil {
+		read := s.readDB.Stats()
+		stats.MaxOpenConnections += read.MaxOpenConnections
+		stats.OpenConnections += read.OpenConnections
+		stats.InUse += read.InUse
+		stats.Idle += read.Idle
+		stats.WaitCount += read.WaitCount
+		stats.WaitDuration += read.WaitDuration
+		stats.MaxIdleClosed += read.MaxIdleClosed
+		stats.MaxIdleTimeClosed += read.MaxIdleTimeClosed
+		stats.MaxLifetimeClosed += read.MaxLifetimeClosed
+	}
+	return stats
+}
+
 // Close closes the database handle. The injected secret codec remains owned
 // by the caller.
 func (s *Store) Close() error {
@@ -194,17 +225,12 @@ func (s *Store) CloseContext(ctx context.Context) error {
 		s.closeDone = make(chan struct{})
 		go func() {
 			defer close(s.closeDone)
-			s.closeErr = s.db.Close()
-			// database/sql may return before a cancelled transaction releases its
-			// connection. SQLite must finish rollback and close its files before
-			// a subsequent startup can acquire SQLite ownership.
-			if s.db.Stats().OpenConnections != 0 {
-				ticker := time.NewTicker(time.Millisecond)
-				defer ticker.Stop()
-				for s.db.Stats().OpenConnections != 0 {
-					<-ticker.C
-				}
+			// The writable handle must close last: the last read-only connection
+			// cannot checkpoint and remove WAL sidecars during SQLite shutdown.
+			if s.readDB != nil {
+				s.closeErr = closeDatabaseHandle(s.readDB)
 			}
+			s.closeErr = appendStartupError(s.closeErr, closeDatabaseHandle(s.db))
 			if s.afterClose != nil {
 				s.closeErr = appendStartupError(s.closeErr, s.afterClose())
 			}
@@ -220,6 +246,20 @@ func (s *Store) CloseContext(ctx context.Context) error {
 	case <-s.closeDone:
 		return s.closeErr
 	case <-ctx.Done():
-		return &CloseDeadlineError{Cause: ctx.Err(), OpenConnections: s.db.Stats().OpenConnections}
+		return &CloseDeadlineError{Cause: ctx.Err(), OpenConnections: s.Stats().OpenConnections}
 	}
+}
+
+func closeDatabaseHandle(database *sql.DB) error {
+	err := database.Close()
+	// database/sql may return before a cancelled transaction releases its
+	// connection. Finish its rollback before closing the next pool or owner.
+	if database.Stats().OpenConnections != 0 {
+		ticker := time.NewTicker(time.Millisecond)
+		defer ticker.Stop()
+		for database.Stats().OpenConnections != 0 {
+			<-ticker.C
+		}
+	}
+	return err
 }

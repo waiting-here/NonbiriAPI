@@ -12,7 +12,7 @@ type GenerationTwoCompatibility struct {
 	SourceSchemaVersions []int    `json:"source_schema_versions"`
 }
 
-const CurrentSchemaVersion = 19
+const CurrentSchemaVersion = 20
 const MinimumSchemaVersion = CurrentSchemaVersion
 
 func GenerationTwoCompatibilityDescriptor() GenerationTwoCompatibility {

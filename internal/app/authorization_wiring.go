@@ -38,6 +38,7 @@ var _ adminapi.SiteConfigFinalAuthorizer = (*roleFinalTxAuthorizer)(nil)
 var _ adminalerts.AdminFinalAuthorizer = (*roleFinalTxAuthorizer)(nil)
 var _ adminusers.AdminFinalAuthorizer = (*roleFinalTxAuthorizer)(nil)
 var _ logapi.StewardAuthorizer = (*roleFinalTxAuthorizer)(nil)
+var _ logapi.ReadAuthorizer = (*roleFinalTxAuthorizer)(nil)
 var _ resources.AdminFinalTxAuthorizer = (*roleFinalTxAuthorizer)(nil)
 
 // timeContextResolver is the narrow bridge from the station-aware time API
@@ -100,6 +101,31 @@ func (resolver *timeContextResolver) read(ctx context.Context, userID int64, aut
 
 func (authorizer *roleFinalTxAuthorizer) AuthorizeAdminMutation(ctx context.Context, tx *sql.Tx, userID int64) error {
 	return authorizer.authorize(ctx, tx, userID, authz.ActorAdminSession, authz.RoleAdministrator)
+}
+
+func (authorizer *roleFinalTxAuthorizer) AuthorizeLogRead(ctx context.Context, tx *sql.Tx, role string, userID int64) error {
+	switch role {
+	case "admin":
+		actor, ok := auth.ActorFromContext(ctx)
+		if !ok || actor.Kind != authz.ActorAdminSession {
+			return authz.ErrUnauthorized
+		}
+		return authorizer.AuthorizeAdmin(ctx, tx, actor.UserID)
+	case "steward":
+		return authorizer.AuthorizeStewardRead(ctx, tx, userID)
+	case "user":
+		if _, ok := authz.PersonalCallerFromContext(ctx); ok {
+			_, err := authorizer.authorizer.AuthorizePersonalCaller(ctx, tx, userID)
+			return err
+		}
+		if _, ok := authz.StewardCallerFromContext(ctx); ok {
+			_, err := authorizer.authorizer.AuthorizeStewardCaller(ctx, tx, userID)
+			return err
+		}
+		return authorizer.authorize(ctx, tx, userID, authz.ActorUserSession, authz.RoleUser)
+	default:
+		return authz.ErrForbidden
+	}
 }
 
 func (authorizer *roleFinalTxAuthorizer) AuthorizeAdmin(ctx context.Context, tx *sql.Tx, userID int64) error {

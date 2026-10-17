@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -23,7 +24,6 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/httpmw"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
-	"github.com/waiting-here/NonbiriAPI/internal/logapi"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
@@ -34,6 +34,7 @@ type embeddingHTTPFixture struct {
 	forward                *publicForwardRuntime
 	server                 *httptest.Server
 	caller                 string
+	userCookies            []*http.Cookie
 	userID, donorID, keyID int64
 	mu                     sync.Mutex
 	upstreamRequests       []map[string]json.RawMessage
@@ -192,6 +193,22 @@ func (f *embeddingHTTPFixture) exec(t *testing.T, statement string, args ...any)
 		t.Fatal(err)
 	}
 	return id
+}
+
+func (f *embeddingHTTPFixture) ownLogJSON(t *testing.T, id string) []byte {
+	t.Helper()
+	if len(f.userCookies) == 0 {
+		const token = "model_http_log_session_01234567890123456789"
+		digest := sha256.Sum256([]byte(token))
+		now := time.Now().Unix()
+		f.exec(t, `INSERT INTO sessions(token_hash,user_id,last_seen_at,expires_at,absolute_expires_at,created_at,cred_gen) VALUES(?,?,?,?,?,?,?)`, fmt.Sprintf("%x", digest), f.userID, now, now+3600, now+3600, now, "model-log-session")
+		f.userCookies = []*http.Cookie{{Name: auth.UserSessionCookieName, Value: token}}
+	}
+	response := testApplicationRequest(t, f.app.handler, "GET", auditUserHost, "/api/logs/"+id, "", f.userCookies, nil)
+	if response.Code != http.StatusOK || !json.Valid(response.Body.Bytes()) {
+		t.Fatalf("own log read: %d %s", response.Code, response.Body)
+	}
+	return response.Body.Bytes()
 }
 
 func (f *embeddingHTTPFixture) seedModels(t *testing.T, vault *secret.Vault, base, connectorType string) {
@@ -412,14 +429,7 @@ func (f *embeddingHTTPFixture) assertLatest(t *testing.T, model string, tokens i
 			t.Fatalf("money/calls=%d/%d/%d want=%d/%d/%d", charge, reward, calls, wantCharge, wantReward, wantCalls)
 		}
 	}
-	detail, err := f.app.logs.GetUser(context.Background(), f.userID, id, logapi.AttemptFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	encoded, err := json.Marshal(detail)
-	if err != nil {
-		t.Fatal(err)
-	}
+	encoded := f.ownLogJSON(t, id)
 	if charity {
 		for _, forbidden := range []string{"attempts", "attempt_count", "private-model", "fixture key", "fixture endpoint", "embedding-fixture-secret"} {
 			if strings.Contains(string(encoded), forbidden) {
