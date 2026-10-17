@@ -59,8 +59,8 @@ func TestAuditReadersDoNotWaitForBusinessWriter(t *testing.T) {
 	if _, err := tx.ExecContext(f.ctx, `UPDATE economy_audit_checkpoint SET updated_at=updated_at+1 WHERE id=1`); err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithTimeout(f.ctx, 1500*time.Millisecond)
-	defer cancel()
+	// The service deadline bounds both reads; writer-pool waits are the invariant.
+	ctx := f.ctx
 	filter := Filter{Asset: ledger.General, From: auditNow - 86400, To: auditNow + 1, Bucket: "hour"}
 	var wg sync.WaitGroup
 	errs := make(chan error, 2)
@@ -87,6 +87,9 @@ func TestAuditReadersDoNotWaitForBusinessWriter(t *testing.T) {
 	wg.Wait()
 	close(errs)
 	t.Logf("concurrent reads with writer held: elapsed=%s writer_wait_count=%d writer_wait_duration=%s", time.Since(start), f.database.Stats().WaitCount-before.WaitCount, f.database.Stats().WaitDuration-before.WaitDuration)
+	if got := f.database.Stats().WaitCount; got != before.WaitCount {
+		t.Errorf("audit readers entered the occupied business pool: waits=%d", got-before.WaitCount)
+	}
 	for err := range errs {
 		t.Error(err)
 	}
