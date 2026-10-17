@@ -125,17 +125,14 @@ test('administrator saves report timing and approves matching credential deletio
       .poll(
         async () => {
           const reports = await read(context, state.admin_url, '/admin/api/reports');
-          report = (reports.data as ReportCase[]).find(
-            (entry) => !existingReportIDs.has(entry.id),
-          );
+          report = (reports.data as ReportCase[]).find((entry) => !existingReportIDs.has(entry.id));
           return report?.status;
         },
         { timeout: 40_000 },
       )
       .toBe('pending_review');
     const caseID = report!.id;
-    expect(report!.canonical_base_url).toContain('[redacted]');
-    expect(report!.canonical_base_url).not.toBe(baseURL);
+    expect(report!.canonical_base_url).toBe(baseURL);
     expect(report!.counts.targets).toBe('1');
     await page.goto(state.admin_url + '/reports/' + caseID);
     const copy = adminEn.admin.reports.detail;

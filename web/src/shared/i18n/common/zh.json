@@ -1233,7 +1233,6 @@
       "thisIsASafeDiagnosticSummaryGenerated": "本站生成的诊断摘要。",
       "theBodyWasTruncatedAt1Mib": "正文已在 1 MiB 处截断。",
       "nonutf8BytesAreReplacedForDisplayDownload": "非 UTF-8 字节在预览中显示为替换字符，下载仍保留这些字节。",
-      "ipv4Redacted": "预览、复制和下载中的 IPv4 地址均替换为 [redacted]；字节数仍为存储时的大小。",
       "formatJson": "格式化 JSON",
       "formatted": "格式化",
       "summaryText": "摘要文本",
@@ -1244,7 +1243,6 @@
       "downloadDiagnosticSummary": "下载诊断摘要",
       "downloadOriginal": "下载错误正文",
       "bodyPreview": "正文预览",
-      "previewShowsTheFirst65536CharactersCopy": "预览仅展示前 65,536 个字符，可复制或下载完整正文。",
       "rawBodyReadFailed": "读取上游原文失败。",
       "rawBodyStorageFailed": "原文已读取，但保存失败。",
       "rawBodyUnspecifiedFailure": "此旧记录未区分读取失败或保存失败。"

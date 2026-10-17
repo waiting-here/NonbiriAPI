@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"encoding/csv"
 	"encoding/json"
-	"github.com/waiting-here/NonbiriAPI/internal/textprivacy"
 	"strconv"
 	"strings"
 )
@@ -156,7 +155,7 @@ func MarshalAdminJSON(rows []AdminLogRow) ([]byte, error) {
 	if len(rows) > maxExportRows {
 		return nil, ErrCapacity
 	}
-	encoded, err := textprivacy.MarshalJSON(AdminLogExport{Data: rows})
+	encoded, err := json.Marshal(AdminLogExport{Data: rows})
 	if err != nil {
 		return nil, ErrInvariant
 	}
@@ -225,7 +224,6 @@ func MarshalAdminCSV(rows []AdminLogRow) ([]byte, error) {
 }
 
 func csvSafe(value string) string {
-	value = textprivacy.IPv4(value)
 	if value == "" {
 		return value
 	}

@@ -68,7 +68,7 @@ func (api *httpAPI) listBlacklistEvents(w http.ResponseWriter, r *http.Request, 
 		writeError(w, err)
 		return
 	}
-	httperr.WriteDisplayJSON(w, http.StatusOK, result)
+	httperr.WriteJSON(w, http.StatusOK, result)
 }
 
 func (api *httpAPI) addBlacklist(w http.ResponseWriter, r *http.Request, p AdminPrincipal) {
