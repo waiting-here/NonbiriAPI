@@ -140,6 +140,9 @@ test('Google discovery explains server-region failures and recovers in setup and
       await notice.screenshot({
         path: info.outputPath(`discovery-key-${language}-${width}-${theme}.png`),
       });
+      await page.locator('tr.core-key-card').screenshot({
+        path: info.outputPath(`discovery-key-controls-${language}-${width}-${theme}.png`),
+      });
     } finally {
       await context.close();
     }

@@ -936,6 +936,15 @@
   .services-key-table td[data-cell='meta'] .nb-btn {
     min-height: 40px;
   }
+  .services-key-table td.services-key-discovery {
+    flex-wrap: wrap;
+  }
+  .services-key-table .services-key-discovery > .nb-btn {
+    max-inline-size: 100%;
+    white-space: normal;
+    text-align: start;
+    justify-content: flex-start;
+  }
   .services-key-table td[data-cell='meta'] .nb-key-limits__summary {
     gap: var(--nb-space-1);
   }

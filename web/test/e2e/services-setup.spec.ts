@@ -468,13 +468,12 @@ for (const locale of ['en', 'zh'] as const) {
       .getByRole('button', { name: copy('Save and load models', '保存并读取模型'), exact: true })
       .click();
     await expect(
-      page.getByText(
-        copy(
-          'The model check did not complete. Try again or add a model name supplied by your provider.',
-          '未能读取可用模型。可以重试，或按服务商提供的名称手动添加。',
+      page.getByRole('alert').filter({
+        hasText: copy(
+          'The server could not connect to the upstream service. Check the service URL or contact the administrator, then retry.',
+          '服务器无法连接上游服务。请核对服务地址，或联系管理员后重试。',
         ),
-        { exact: true },
-      ),
+      }),
     ).toBeVisible();
     await shot('read-failed');
     await page

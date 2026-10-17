@@ -1129,7 +1129,11 @@ function EndpointKeyCard({
             </span>
           ) : null}
         </td>
-        <td data-cell="meta" data-label={t('endpoints.discovery')}>
+        <td
+          className="services-key-discovery"
+          data-cell="meta"
+          data-label={t('endpoints.discovery')}
+        >
           {evidence?.count !== null && evidence?.count !== undefined ? (
             <span className="nb-num">{evidence.count}</span>
           ) : evidence?.state === 'failed' ? (
