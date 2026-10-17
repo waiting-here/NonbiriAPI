@@ -181,6 +181,13 @@ PATCH uses the same 24-hour idempotency rules as creation, with a 30-second oper
 
 Creation, discovery and policy edits use existing account, donation, catalog, quota, review and replay records. Safe exports include the threshold. Policy audits contain no key secrets; alerts occur once per transition into error-disablement. Existing account export, deletion and anonymization rules apply. Discovery failures may also enter the restricted original-error store, which can contain content echoed by an upstream and is not part of an automation response or personal export.
 
+Discovery failures distinguish authentication, quota, timeout, protocol, transport,
+interruption, unsupported server region and temporary upstream unavailability.
+Google's explicit unsupported-location response refers to the server's outbound
+connection. Unknown HTTP 400 responses remain protocol failures. These fixed
+messages do not expose the upstream response body; `discovery_failed` and the
+existing retry and idempotency rules remain unchanged.
+
 ## Additional level-6 reads
 
 The following GET suffixes use `/api/steward/automation`: `/donations`, `/donations/{id}`, `/donations/{id}/keys`, `/donations/{id}/keys/{keyId}`, `/donations/{id}/keys/{keyId}/catalog`, `/charity-models`, `/charity-models/{id}`, `/charity-models/{id}/bindings`, and `/charity-models/{id}/binding-candidates`. GET donations shares the existing POST path by method. The original query-based failure-policy GET stays unchanged.

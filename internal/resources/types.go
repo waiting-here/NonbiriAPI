@@ -325,6 +325,8 @@ type ControlMutation struct {
 type DiscoveryFailureClass string
 
 const (
+	DiscoveryFailureRegion      DiscoveryFailureClass = "region"
+	DiscoveryFailureUnavailable DiscoveryFailureClass = "unavailable"
 	DiscoveryFailureAuth        DiscoveryFailureClass = "auth"
 	DiscoveryFailureRateLimit   DiscoveryFailureClass = "rate_limit"
 	DiscoveryFailureTimeout     DiscoveryFailureClass = "timeout"

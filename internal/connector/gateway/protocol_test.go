@@ -380,3 +380,15 @@ func TestDiscoverySkipsOtherKindsAndPreservesIDs(t *testing.T) {
 		}
 	}
 }
+
+func TestDiscoveryTemporaryUpstreamFailure(t *testing.T) {
+	b := &fakeBackend{do: func(*http.Request) (*http.Response, error) {
+		r := response("synthetic upstream failure", "text/plain")
+		r.StatusCode = http.StatusServiceUnavailable
+		return r, nil
+	}}
+	result := (ModelDiscoverer{}).Discover(context.Background(), contract.DiscoveryInput{Backend: b, Target: target(), Credential: secret()})
+	if result.Failure != contract.DiscoveryFailureUnavailable || !result.ResponseReceived || result.UpstreamStatus != 503 || len(result.Models) != 0 {
+		t.Fatalf("wrong temporary failure: %+v", result)
+	}
+}

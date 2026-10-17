@@ -634,7 +634,7 @@ func validDiscoveryOutcome(outcome DiscoveryClaimResult) bool {
 func validFailureClass(value DiscoveryFailureClass) bool {
 	switch value {
 	case DiscoveryFailureAuth, DiscoveryFailureRateLimit, DiscoveryFailureTimeout,
-		DiscoveryFailureProtocol, DiscoveryFailureTransport, DiscoveryFailureInterrupted:
+		DiscoveryFailureProtocol, DiscoveryFailureTransport, DiscoveryFailureInterrupted, DiscoveryFailureRegion, DiscoveryFailureUnavailable:
 		return true
 	default:
 		return false

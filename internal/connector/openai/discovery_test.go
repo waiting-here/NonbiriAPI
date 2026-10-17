@@ -153,7 +153,7 @@ func TestModelDiscoveryMapsHTTPFailuresWithoutReadingBody(t *testing.T) {
 		{name: "401", status: http.StatusUnauthorized, wantFailure: connectorcontract.DiscoveryFailureAuth},
 		{name: "403", status: http.StatusForbidden, wantFailure: connectorcontract.DiscoveryFailureAuth},
 		{name: "429", status: http.StatusTooManyRequests, wantFailure: connectorcontract.DiscoveryFailureRateLimit},
-		{name: "other non-2xx", status: http.StatusBadGateway, wantFailure: connectorcontract.DiscoveryFailureProtocol},
+		{name: "other non-2xx", status: http.StatusBadGateway, wantFailure: connectorcontract.DiscoveryFailureUnavailable},
 	}
 
 	for _, test := range tests {
@@ -268,7 +268,7 @@ func TestModelDiscoveryMapsContextAndTransportFailures(t *testing.T) {
 			do: func(*http.Request) (*http.Response, error) {
 				return openAIDiscoveryResponse(http.StatusBadGateway, "private response"), errors.New("private redirect detail")
 			},
-			wantFailure:  connectorcontract.DiscoveryFailureProtocol,
+			wantFailure:  connectorcontract.DiscoveryFailureUnavailable,
 			wantStatus:   http.StatusBadGateway,
 			wantReceived: true,
 			wantCalls:    1,

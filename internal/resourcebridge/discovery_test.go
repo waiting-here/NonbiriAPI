@@ -133,6 +133,8 @@ func TestDiscoveryTypedFailureMatrix(t *testing.T) {
 		wantStatus int64
 	}{
 		{name: "auth", typed: connectorcontract.DiscoveryResult{Failure: connectorcontract.DiscoveryFailureAuth, ResponseReceived: true, UpstreamStatus: 401, Diagnostic: "credential rejected"}, wantClass: resources.DiscoveryFailureAuth, wantKind: "response", wantStatus: 401},
+		{name: "region", typed: connectorcontract.DiscoveryResult{Failure: connectorcontract.DiscoveryFailureRegion, ResponseReceived: true, UpstreamStatus: 400, Diagnostic: "model discovery failed"}, wantClass: resources.DiscoveryFailureRegion, wantKind: "response", wantStatus: 400},
+		{name: "unavailable", typed: connectorcontract.DiscoveryResult{Failure: connectorcontract.DiscoveryFailureUnavailable, ResponseReceived: true, UpstreamStatus: 503, Diagnostic: "model discovery failed"}, wantClass: resources.DiscoveryFailureUnavailable, wantKind: "response", wantStatus: 503},
 		{name: "rate limit", typed: connectorcontract.DiscoveryResult{Failure: connectorcontract.DiscoveryFailureRateLimit, ResponseReceived: true, UpstreamStatus: 429, Diagnostic: "rate limited"}, wantClass: resources.DiscoveryFailureRateLimit, wantKind: "response", wantStatus: 429},
 		{name: "timeout", typed: connectorcontract.DiscoveryResult{Failure: connectorcontract.DiscoveryFailureTimeout, Diagnostic: "request timed out"}, wantClass: resources.DiscoveryFailureTimeout, wantKind: "synthetic"},
 		{name: "protocol on 2xx", typed: connectorcontract.DiscoveryResult{Failure: connectorcontract.DiscoveryFailureProtocol, ResponseReceived: true, UpstreamStatus: 200, Diagnostic: "invalid response shape"}, wantClass: resources.DiscoveryFailureProtocol, wantKind: "response", wantStatus: 200},

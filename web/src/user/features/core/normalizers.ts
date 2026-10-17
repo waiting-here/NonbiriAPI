@@ -1160,6 +1160,8 @@ export function normalizeDiscoveryEvidence(value: unknown): DiscoveryEvidence {
     };
   }
   const failureClasses: DiscoverySafeClass[] = [
+    'region',
+    'unavailable',
     'auth',
     'rate_limit',
     'timeout',

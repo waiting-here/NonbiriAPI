@@ -1,7 +1,9 @@
 package resources
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"reflect"
 	"strconv"
@@ -52,6 +54,33 @@ func waitForDiscoveryRailCalls(t *testing.T, environment *resourceTestEnvironmen
 func TestDiscoveryClaimInputExcludesSecretReference(t *testing.T) {
 	if _, exists := reflect.TypeOf(DiscoveryClaimInput{}).FieldByName("SecretRefID"); exists {
 		t.Fatal("DiscoveryClaimInput must not expose a secret reference")
+	}
+}
+
+func TestDiscoveryNewSafeClassesPersistWithoutPrivateDiagnostic(t *testing.T) {
+	for _, class := range []DiscoveryFailureClass{DiscoveryFailureRegion, DiscoveryFailureUnavailable} {
+		t.Run(string(class), func(t *testing.T) {
+			e := newResourceTestEnvironment(t)
+			user := e.seedUser(t, "safe-discovery")
+			endpoint := resourceTestID(t, e.createEndpoint(t, user, resourceTestKey('a')).ID)
+			key := resourceTestID(t, e.createEndpointKey(t, user, endpoint, resourceTestKey('b')).ID)
+			e.discovery.mu.Lock()
+			e.discovery.result = DiscoveryClaimResult{FailureClass: class, SafeDiagnostic: "private diagnostic marker"}
+			e.discovery.mu.Unlock()
+			accepted, err := e.repository.RefreshDiscovery(context.Background(), user, endpoint, key, discoveryMutation(resourceTestKey('c'), endpoint, key))
+			if err != nil {
+				t.Fatal(err)
+			}
+			waitForDiscoveryOperationState(t, e, accepted.Value.OperationID, "completed")
+			view, err := e.repository.GetCatalog(context.Background(), user, endpoint, key, 100, "")
+			if err != nil || view.Evidence.State != "failed" || view.Evidence.SafeClass != string(class) {
+				t.Fatalf("lost safe class %+v %v", view, err)
+			}
+			raw, err := json.Marshal(view)
+			if err != nil || bytes.Contains(raw, []byte("private diagnostic marker")) {
+				t.Fatal("diagnostic reached owner projection")
+			}
+		})
 	}
 }
 

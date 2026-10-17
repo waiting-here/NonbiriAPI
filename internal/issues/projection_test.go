@@ -65,6 +65,17 @@ func TestIssueThreeSourcesOwnershipRepeatRecoveryAndRefire(t *testing.T) {
 		t.Fatalf("repeated discovery projection: %+v", discovery)
 	}
 	firstID := discovery.ID
+	for _, class := range []string{"region", "unavailable"} {
+		environment.clock.Add(1)
+		environment.setDiscovery(t, keyID, "failed", class, environment.clock.Load())
+		if err := environment.service.ReconcileModelDiscovery(context.Background(), ownerID, keyID); err != nil {
+			t.Fatalf("new discovery class %s: %v", class, err)
+		}
+		current := findIssue(t, listIssues(t, environment, ownerID, "current").Data, SourceModelDiscovery, RootDiscoveryFailed)
+		if current.ID != firstID || current.SafeDetail != class {
+			t.Fatalf("discovery failure did not update its existing issue: %+v", current)
+		}
+	}
 
 	environment.clock.Add(1)
 	environment.setDiscovery(t, keyID, "succeeded", "none", environment.clock.Load())

@@ -553,10 +553,16 @@ dynamicCopyKeys.push(
       'status.' + leaf,
       'common.donationDiscovery.status.${item.status}',
     ]),
-    ...['auth', 'rate_limit', 'timeout', 'protocol', 'transport', 'interrupted'].map((leaf) => [
-      'reasons.' + leaf,
-      'common.donationDiscovery.reasons.${item.reason}',
-    ]),
+    ...[
+      'auth',
+      'rate_limit',
+      'timeout',
+      'protocol',
+      'transport',
+      'interrupted',
+      'region',
+      'unavailable',
+    ].map((leaf) => ['reasons.' + leaf, 'common.donationDiscovery.reasons.${item.reason}']),
   ].map(([leaf, anchor]) =>
     entry(
       'common',

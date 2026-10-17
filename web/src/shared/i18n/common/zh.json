@@ -122,7 +122,9 @@
         "timeout": "服务商响应超时",
         "protocol": "服务商响应不可用",
         "transport": "网络请求失败",
-        "interrupted": "检查已中断"
+        "interrupted": "检查已中断",
+        "region": "上游不支持当前服务器所在地区",
+        "unavailable": "上游暂时不可用"
       }
     },
     "gatewayName": "AI SDK Gateway v3",

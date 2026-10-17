@@ -98,7 +98,7 @@ SELECT state,safe_class,completed_at FROM model_discovery_evidence WHERE endpoin
 	detail := ""
 	if active {
 		switch safeClass {
-		case "auth", "rate_limit", "timeout", "protocol", "transport", "interrupted":
+		case "auth", "rate_limit", "timeout", "protocol", "transport", "interrupted", "region", "unavailable":
 			detail = safeClass
 		default:
 			return ErrUnavailable

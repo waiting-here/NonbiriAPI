@@ -991,6 +991,7 @@ function EndpointKeyCard({
           context.signal,
         );
       context.commit(() => {
+        if (intent.kind === 'refresh') openModels();
         if (intent.kind === 'patch' && intent.input.note !== undefined) setEditing(false);
         if (intent.kind === 'delete') setDeleteOpen(false);
       });
@@ -1131,6 +1132,10 @@ function EndpointKeyCard({
         <td data-cell="meta" data-label={t('endpoints.discovery')}>
           {evidence?.count !== null && evidence?.count !== undefined ? (
             <span className="nb-num">{evidence.count}</span>
+          ) : evidence?.state === 'failed' ? (
+            <button type="button" className="nb-btn nb-btn--ghost nb-btn--sm" onClick={openModels}>
+              {t('endpoints.discoveryFailedTitle')}
+            </button>
           ) : (
             <span>{evidence?.state === 'checking' ? t('common.working') : t('common.notSet')}</span>
           )}

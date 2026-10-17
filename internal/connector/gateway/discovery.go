@@ -78,6 +78,10 @@ func (ModelDiscoverer) Discover(ctx context.Context, input contract.DiscoveryInp
 			result.Failure = contract.DiscoveryFailureAuth
 		case 429:
 			result.Failure = contract.DiscoveryFailureRateLimit
+		default:
+			if response.StatusCode >= 500 && response.StatusCode <= 599 {
+				result.Failure = contract.DiscoveryFailureUnavailable
+			}
 		}
 		result.Diagnostic = "upstream model discovery returned an error"
 		return result

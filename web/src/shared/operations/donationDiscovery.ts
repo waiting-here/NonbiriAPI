@@ -25,7 +25,16 @@ export interface DiscoveryEvidence {
   state: 'unknown' | 'checking' | 'succeeded' | 'failed';
   revision: string;
   result: 'empty' | 'nonempty' | null;
-  safe_class: 'none' | 'auth' | 'rate_limit' | 'timeout' | 'protocol' | 'transport' | 'interrupted';
+  safe_class:
+    | 'none'
+    | 'auth'
+    | 'rate_limit'
+    | 'timeout'
+    | 'protocol'
+    | 'transport'
+    | 'interrupted'
+    | 'region'
+    | 'unavailable';
   observed_at: number | null;
   count: string | null;
 }
@@ -47,7 +56,17 @@ export function normalizeManagedDiscovery(value: unknown): DiscoveryEvidence {
       body.result === null ? null : oneOf(body.result, ['empty', 'nonempty'], 'discovery result'),
     safe_class: oneOf(
       body.safe_class,
-      ['none', 'auth', 'rate_limit', 'timeout', 'protocol', 'transport', 'interrupted'],
+      [
+        'none',
+        'auth',
+        'rate_limit',
+        'timeout',
+        'protocol',
+        'transport',
+        'interrupted',
+        'region',
+        'unavailable',
+      ],
       'discovery failure',
     ),
     observed_at: nullableUnixSecond(body.observed_at, 'discovery time'),

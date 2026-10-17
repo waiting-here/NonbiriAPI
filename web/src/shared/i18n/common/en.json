@@ -122,7 +122,9 @@
         "timeout": "The provider timed out",
         "protocol": "The provider response is unavailable",
         "transport": "Network request failed",
-        "interrupted": "Check interrupted"
+        "interrupted": "Check interrupted",
+        "region": "Upstream does not support this server’s region",
+        "unavailable": "Upstream is temporarily unavailable"
       }
     },
     "gatewayName": "AI SDK Gateway v3",

@@ -183,7 +183,15 @@ export interface CallerKeySecret {
 export type DiscoveryState = 'unknown' | 'checking' | 'succeeded' | 'failed';
 export type DiscoveryResult = 'empty' | 'nonempty' | null;
 export type DiscoverySafeClass =
-  'none' | 'auth' | 'rate_limit' | 'timeout' | 'protocol' | 'transport' | 'interrupted';
+  | 'none'
+  | 'auth'
+  | 'rate_limit'
+  | 'timeout'
+  | 'protocol'
+  | 'transport'
+  | 'interrupted'
+  | 'region'
+  | 'unavailable';
 
 export interface DiscoveryEvidence {
   state: DiscoveryState;

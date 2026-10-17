@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -190,6 +191,20 @@ VALUES('issue_projection_incomplete','synthetic projection checkpoint',?,?,0)`, 
 				http.Error(w, "fixture update failed", http.StatusInternalServerError)
 				return
 			}
+			writeImageFixtureJSON(w, map[string]bool{"ok": true})
+			return
+		}
+		if r.Method == http.MethodPost && r.URL.Path == "/gemini-discovery" && management != nil {
+			var input struct {
+				Mode string `json:"mode"`
+			}
+			if json.NewDecoder(io.LimitReader(r.Body, 1024)).Decode(&input) != nil || (input.Mode != "success" && input.Mode != "region") {
+				http.Error(w, "invalid mode", 400)
+				return
+			}
+			f.upstreamState.mu.Lock()
+			f.upstreamState.geminiDiscoveryMode = input.Mode
+			f.upstreamState.mu.Unlock()
 			writeImageFixtureJSON(w, map[string]bool{"ok": true})
 			return
 		}

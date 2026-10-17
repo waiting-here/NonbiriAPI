@@ -113,6 +113,10 @@ describe('managed donation discovery', () => {
     expect(io.read).not.toHaveBeenCalled();
     expect(normalizeManagedDiscovery(empty)).toEqual(empty);
     expect(normalizeManagedDiscovery({ ...empty, secret: 'unexpected' })).toEqual(empty);
+    for (const safe_class of ['region', 'unavailable']) {
+      const failed = { ...checking, state: 'failed', safe_class };
+      expect(normalizeManagedDiscovery(failed)).toEqual(failed);
+    }
     for (const malformed of [
       { ...empty, count: '1001' },
       { ...empty, result: 'nonempty' },

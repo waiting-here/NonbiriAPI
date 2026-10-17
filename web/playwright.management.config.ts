@@ -13,6 +13,7 @@ export default defineConfig({
     'moderation.spec.ts',
     'directory-controls.spec.ts',
     'operation-controls.spec.ts',
+    'discovery-errors.spec.ts',
   ],
   outputDir: 'test-results/management/browser',
 });

@@ -219,7 +219,8 @@ func validTypedFailure(value connectorcontract.DiscoveryFailureKind) bool {
 	switch value {
 	case connectorcontract.DiscoveryFailureAuth, connectorcontract.DiscoveryFailureRateLimit,
 		connectorcontract.DiscoveryFailureTimeout, connectorcontract.DiscoveryFailureProtocol,
-		connectorcontract.DiscoveryFailureTransport, connectorcontract.DiscoveryFailureInterrupted:
+		connectorcontract.DiscoveryFailureTransport, connectorcontract.DiscoveryFailureInterrupted,
+		connectorcontract.DiscoveryFailureRegion, connectorcontract.DiscoveryFailureUnavailable:
 		return true
 	default:
 		return false
@@ -228,6 +229,10 @@ func validTypedFailure(value connectorcontract.DiscoveryFailureKind) bool {
 
 func mapFailure(value connectorcontract.DiscoveryFailureKind) resources.DiscoveryFailureClass {
 	switch value {
+	case connectorcontract.DiscoveryFailureRegion:
+		return resources.DiscoveryFailureRegion
+	case connectorcontract.DiscoveryFailureUnavailable:
+		return resources.DiscoveryFailureUnavailable
 	case connectorcontract.DiscoveryFailureAuth:
 		return resources.DiscoveryFailureAuth
 	case connectorcontract.DiscoveryFailureRateLimit:
