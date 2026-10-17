@@ -616,6 +616,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 		return nil, err
 	}
 	performance := observability.NewPerformance()
+	workerContext = performance.Context(workerContext)
 	handler, err := stationBoundary(cfg, performance.Wrap(audits.Wrap(mux)))
 	if err != nil {
 		return nil, err
@@ -645,7 +646,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	performanceDone := make(chan struct{})
 	go func() {
 		defer close(performanceDone)
-		performance.Run(workerContext, store.Stats, func(window observability.PerformanceWindow) {
+		performance.Run(workerContext, store.StatsByPool, func(window observability.PerformanceWindow) {
 			slog.Info("runtime performance", "metrics", window)
 		})
 	}()

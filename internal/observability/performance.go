@@ -15,6 +15,7 @@ import (
 type Performance struct {
 	mu     sync.Mutex
 	series map[performanceKey]*performanceSeries
+	http   HTTPPerformance
 }
 
 type performanceKey struct{ route, method string }
@@ -78,13 +79,33 @@ type PerformanceRow struct {
 	FirstP95MS   int64  `json:"first_response_p95_ms,omitempty"`
 }
 
+type HTTPPerformance struct {
+	Completed int64 `json:"completed"`
+	Active    int64 `json:"active"`
+	Peak      int64 `json:"peak"`
+}
+
+type PoolPerformance struct {
+	InUse  int   `json:"in_use"`
+	Open   int   `json:"open"`
+	Waits  int64 `json:"waits"`
+	WaitMS int64 `json:"wait_ms"`
+}
+
+type PoolPerformanceWindow struct {
+	Writer PoolPerformance `json:"writer"`
+	Reader PoolPerformance `json:"reader"`
+}
+
 type PerformanceWindow struct {
-	WindowMS int64            `json:"window_ms"`
-	Rows     []PerformanceRow `json:"routes"`
-	DBInUse  int              `json:"db_in_use"`
-	DBOpen   int              `json:"db_open"`
-	DBWaits  int64            `json:"db_waits"`
-	DBWaitMS int64            `json:"db_wait_ms"`
+	HTTP     HTTPPerformance       `json:"http"`
+	Pools    PoolPerformanceWindow `json:"db_pools"`
+	WindowMS int64                 `json:"window_ms"`
+	Rows     []PerformanceRow      `json:"routes"`
+	DBInUse  int                   `json:"db_in_use"`
+	DBOpen   int                   `json:"db_open"`
+	DBWaits  int64                 `json:"db_waits"`
+	DBWaitMS int64                 `json:"db_wait_ms"`
 }
 
 type performanceContextKey struct{}
@@ -102,11 +123,19 @@ func (p *Performance) begin(key performanceKey) func(time.Duration, time.Duratio
 	}
 	s.active++
 	s.peak = max(s.peak, s.active)
+	if key.method != "" {
+		p.http.Active++
+		p.http.Peak = max(p.http.Peak, p.http.Active)
+	}
 	p.mu.Unlock()
 	return func(total, first time.Duration, failed, canceled bool) {
 		p.mu.Lock()
 		s.active--
 		s.count++
+		if key.method != "" {
+			p.http.Active--
+			p.http.Completed++
+		}
 		if failed {
 			s.failed++
 		}
@@ -135,7 +164,7 @@ func (p *Performance) Wrap(next http.Handler) http.Handler {
 			}
 			finish(elapsed, first, !returned || writer.status >= 500, r.Context().Err() != nil)
 		}()
-		next.ServeHTTP(writer, r.WithContext(context.WithValue(r.Context(), performanceContextKey{}, p)))
+		next.ServeHTTP(writer, r.WithContext(p.Context(r.Context())))
 		returned = true
 	})
 }
@@ -159,6 +188,11 @@ func TimeTransaction(ctx context.Context, operation string) func() {
 }
 
 func (p *Performance) Drain() []PerformanceRow {
+	rows, _ := p.drain()
+	return rows
+}
+
+func (p *Performance) drain() ([]PerformanceRow, HTTPPerformance) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	rows := make([]PerformanceRow, 0, len(p.series))
@@ -181,28 +215,39 @@ func (p *Performance) Drain() []PerformanceRow {
 		}
 		return rows[i].Route < rows[j].Route
 	})
-	return rows
+	http := p.http
+	p.http = HTTPPerformance{Active: http.Active, Peak: http.Active}
+	return rows, http
 }
 
 // Run emits one aggregate per minute. DB waiting is a pool-wide delta and
 // cannot be attributed to an individual route or request from this report.
-func (p *Performance) Run(ctx context.Context, stats func() sql.DBStats, emit func(PerformanceWindow)) {
+func (p *Performance) Run(ctx context.Context, stats func() (sql.DBStats, sql.DBStats), emit func(PerformanceWindow)) {
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
-	previous, since := stats(), time.Now()
+	previousWriter, previousReader := stats()
+	since := time.Now()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			now, current := time.Now(), stats()
+			now := time.Now()
+			writer, reader := stats()
+			rows, http := p.drain()
+			delta := func(current, previous sql.DBStats) PoolPerformance {
+				return PoolPerformance{InUse: current.InUse, Open: current.OpenConnections,
+					Waits:  current.WaitCount - previous.WaitCount,
+					WaitMS: (current.WaitDuration - previous.WaitDuration).Milliseconds()}
+			}
+			pools := PoolPerformanceWindow{Writer: delta(writer, previousWriter), Reader: delta(reader, previousReader)}
 			emit(PerformanceWindow{
-				WindowMS: now.Sub(since).Milliseconds(), Rows: p.Drain(),
-				DBInUse: current.InUse, DBOpen: current.OpenConnections,
-				DBWaits:  current.WaitCount - previous.WaitCount,
-				DBWaitMS: (current.WaitDuration - previous.WaitDuration).Milliseconds(),
+				WindowMS: now.Sub(since).Milliseconds(), Rows: rows, HTTP: http, Pools: pools,
+				DBInUse: writer.InUse + reader.InUse, DBOpen: writer.OpenConnections + reader.OpenConnections,
+				DBWaits:  pools.Writer.Waits + pools.Reader.Waits,
+				DBWaitMS: ((writer.WaitDuration - previousWriter.WaitDuration) + (reader.WaitDuration - previousReader.WaitDuration)).Milliseconds(),
 			})
-			previous, since = current, now
+			previousWriter, previousReader, since = writer, reader, now
 		}
 	}
 }

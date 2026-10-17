@@ -82,7 +82,7 @@ func (r *Runtime) createSessionTx(ctx context.Context, tx *sql.Tx, userID int64,
 	return token, expires, replaced > 0, nil
 }
 
-func (r *Runtime) authenticate(ctx context.Context, rawToken string, kind authz.ActorKind, elevationToken string) (sessionPrincipal, error) {
+func (r *Runtime) authenticate(ctx context.Context, rawToken string, kind authz.ActorKind, elevationToken string) (principal sessionPrincipal, resultErr error) {
 	if rawToken == "" || len(rawToken) > 4096 {
 		return sessionPrincipal{}, errSessionUnauthorized
 	}
@@ -91,12 +91,11 @@ func (r *Runtime) authenticate(ctx context.Context, rawToken string, kind authz.
 	if now < 0 || now > maxUnixSecond {
 		return sessionPrincipal{}, fmt.Errorf("authenticate session: invalid time")
 	}
-	tx, err := r.db.BeginTx(ctx, nil)
+	tx, finish, err := observability.BeginMeasuredTx(ctx, r.db, nil, "session")
 	if err != nil {
 		return sessionPrincipal{}, fmt.Errorf("authenticate session: begin: %w", err)
 	}
-	endTransaction := observability.TimeTransaction(ctx, "session")
-	defer endTransaction()
+	defer func() { finish(resultErr) }()
 	done := false
 	defer func() {
 		if !done {
@@ -127,7 +126,7 @@ func (r *Runtime) authenticate(ctx context.Context, rawToken string, kind authz.
 			deleted, rowsErr := result.RowsAffected()
 			if rowsErr == nil && deleted == 1 {
 				if commitErr := tx.Commit(); commitErr == nil {
-					endTransaction()
+					finish(nil)
 					done = true
 					if !expectedAdmin {
 						r.notifyUserSessionInvalidated(p.actor.UserID)
@@ -173,7 +172,7 @@ func (r *Runtime) authenticate(ctx context.Context, rawToken string, kind authz.
 		return sessionPrincipal{}, fmt.Errorf("authenticate session: commit: %w", err)
 	}
 	done = true
-	endTransaction()
+	finish(nil)
 	p.actor.Kind = kind
 	p.actor.SessionTokenHash = hash
 	p.actor.ElevationToken = elevationToken

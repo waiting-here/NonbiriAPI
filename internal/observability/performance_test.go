@@ -140,13 +140,16 @@ func TestPerformanceWindowPoolDeltasAndShutdown(t *testing.T) {
 		stats.Store(sql.DBStats{WaitCount: 10, WaitDuration: time.Second})
 		go func() {
 			defer close(done)
-			p.Run(ctx, func() sql.DBStats { return stats.Load().(sql.DBStats) }, func(window PerformanceWindow) { windows <- window })
+			p.Run(ctx, func() (sql.DBStats, sql.DBStats) {
+				current := stats.Load().(sql.DBStats)
+				return current, sql.DBStats{WaitCount: current.WaitCount * 2, WaitDuration: current.WaitDuration * 2}
+			}, func(window PerformanceWindow) { windows <- window })
 		}()
 		synctest.Wait()
 		stats.Store(sql.DBStats{WaitCount: 13, WaitDuration: 1500 * time.Millisecond, InUse: 1, OpenConnections: 1})
 		time.Sleep(time.Minute)
 		window := <-windows
-		if window.WindowMS != 60000 || window.DBWaits != 3 || window.DBWaitMS != 500 || window.DBInUse != 1 || window.DBOpen != 1 {
+		if window.WindowMS != 60000 || window.DBWaits != 9 || window.DBWaitMS != 1500 || window.Pools.Reader.Waits != 6 || window.Pools.Reader.WaitMS != 1000 || window.DBInUse != 1 || window.DBOpen != 1 {
 			t.Fatalf("pool delta: %+v", window)
 		}
 		cancel()

@@ -12,6 +12,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
@@ -443,15 +444,15 @@ GROUP BY dk.donation_id ORDER BY MIN(dk.expires_at),dk.donation_id LIMIT ?`, now
 
 // MaterializeExpiries is the bounded worker adapter. It shares the exact same
 // transaction state machine as read/claim-adjacent control paths.
-func (s *Service) MaterializeExpiries(ctx context.Context, decisionNow int64, limit int) (int, error) {
+func (s *Service) MaterializeExpiries(ctx context.Context, decisionNow int64, limit int) (processed int, resultErr error) {
 	if s == nil || s.db == nil || ctx == nil || decisionNow < 0 || decisionNow > maxUnixSecond || limit < 1 || limit > 100 {
 		return 0, ErrInvalidRequest
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, finish, err := observability.BeginMeasuredTx(ctx, s.db, nil, "donation_expiry")
 	if err != nil {
 		return 0, fmt.Errorf("donation: begin expiry worker: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { finish(resultErr) }()
 	rows, err := tx.QueryContext(ctx, `SELECT dk.donation_id
 FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id
 WHERE d.status IN ('pending','approved') AND dk.ended_at IS NULL
