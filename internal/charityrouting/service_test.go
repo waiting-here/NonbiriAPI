@@ -779,7 +779,7 @@ discount_percent=33 WHERE id=?`, modelID); err != nil {
 	}
 }
 
-func TestCapabilityFreezesIntakeBeforeCandidateSnapshots(t *testing.T) {
+func TestCapabilityDoesNotMaterializeDonationState(t *testing.T) {
 	environment := newRoutingTestEnv(t)
 	environment.setCapabilityGates(t, "1", "1")
 	environment.seedUser(t, true, nil)
@@ -809,8 +809,8 @@ func TestCapabilityFreezesIntakeBeforeCandidateSnapshots(t *testing.T) {
 	if err := environment.store.DB().QueryRow(`SELECT value FROM site_config WHERE key='donation_accept_enabled'`).Scan(&stored); err != nil {
 		t.Fatal(err)
 	}
-	if stored != "0" {
-		t.Fatalf("donation gate = %q, want candidate snapshot mutation", stored)
+	if stored != "1" || environment.state.dueCalls.Load() != 0 {
+		t.Fatalf("browse changed donation state: gate=%q calls=%d", stored, environment.state.dueCalls.Load())
 	}
 }
 

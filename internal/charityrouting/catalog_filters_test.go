@@ -134,6 +134,14 @@ func TestCatalogFilteredCountAndProjectionFollowResourceChangesWithoutWrites(t *
 		if (err == nil) != want {
 			t.Fatalf("runtime disagrees: want=%v err=%v", want, err)
 		}
+		models, err := env.service.ListAvailableModels(ctx, env.caller, env.clock.Load(), MaxAvailableModels)
+		if err != nil || (len(models) == 1) != want {
+			t.Fatalf("model list disagrees: want=%v models=%+v err=%v", want, models, err)
+		}
+		capability, err := env.service.Capability(ctx, env.caller, env.clock.Load())
+		if err != nil || (len(capability.Models) == 1) != want {
+			t.Fatalf("capability disagrees: want=%v value=%+v err=%v", want, capability, err)
+		}
 	}
 	exec := func(query string, args ...any) {
 		t.Helper()
@@ -359,6 +367,12 @@ func TestCatalogResourceAvailabilityHonorsCandidateCeiling(t *testing.T) {
 	}
 	if _, err := env.service.snapshot(context.Background(), modelID, env.clock.Load(), false, nil); !errors.Is(err, ErrResourceLimit) {
 		t.Fatalf("runtime ceiling: %v", err)
+	}
+	if _, err := env.service.ListAvailableModels(t.Context(), env.caller, env.clock.Load(), MaxAvailableModels); !errors.Is(err, ErrResourceLimit) {
+		t.Fatalf("model list hid oversized candidates: %v", err)
+	}
+	if _, err := env.service.Capability(t.Context(), env.caller, env.clock.Load()); !errors.Is(err, ErrResourceLimit) {
+		t.Fatalf("capability hid oversized candidates: %v", err)
 	}
 	if _, err := env.store.DB().Exec(`UPDATE donation_keys SET enabled=0 WHERE id=?`, firstKey); err != nil {
 		t.Fatal(err)

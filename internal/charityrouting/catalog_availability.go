@@ -20,11 +20,21 @@ func catalogAvailableSQL() string {
 // bindingID is an internal SQL expression, never request input. An empty
 // expression retains the public catalog's bounded model availability check.
 func catalogAvailableBindingSQL(bindingID string) string {
+	return `(` + availableCandidateCountSQL(bindingID, false) + ` BETWEEN 1 AND ` + strconv.Itoa(MaxRuntimeCandidates) + `)`
+}
+
+// Caller-scoped lists and the global catalog share every resource and quota
+// predicate. Only caller lists exclude the reader's own donations (except
+// level six, whose non-administrator identity is checked by CurrentLevel).
+func availableCandidateCountSQL(bindingID string, callerScoped bool) string {
 	scope := ""
 	if bindingID != "" {
 		scope = " AND b.id=" + bindingID
 	}
-	price := `(CASE cm.pricing_mode WHEN 'per_request' THEN cm.request_user_price ELSE COALESCE((SELECT amount_milli FROM charity_model_token_reserves WHERE model_id=cm.id),cx.token_reserve) END)`
+	if callerScoped {
+		scope += " AND (d.user_id<>cx.caller_id OR cx.caller_level=6)"
+	}
+	price := `(CASE cm.pricing_mode WHEN 'per_request' THEN cm.request_user_price ELSE COALESCE((SELECT amount_milli FROM charity_model_token_reserves WHERE model_id=cm.id),CAST(cx.token_reserve AS INTEGER)) END)`
 	return `(CASE WHEN cx.charity_enabled=1 AND cm.enabled=1 AND (cm.pricing_mode='per_request' OR ` + price + `>0) THEN (SELECT COUNT(*) FROM (
  SELECT 1 FROM charity_model_bindings b
  JOIN donation_keys dk ON dk.id=b.donation_key_id
@@ -46,5 +56,5 @@ func catalogAvailableBindingSQL(bindingID string) string {
  AND nbi_u128_remaining(dk.token_limit_mag,dk.tokens_used,dk.tokens_reserved,nbi_u128(0))>=nbi_u128(` + donationquota.EffectiveTokenReserveSQL("dk.id", "dk.token_reserve") + `)
  AND ` + donationquota.AvailabilityPredicate("dk.id", "cx.decision_now", price, "dk.token_reserve") + `
  ` + scope + `
-	 LIMIT ` + strconv.Itoa(MaxRuntimeCandidates+1) + `)) BETWEEN 1 AND ` + strconv.Itoa(MaxRuntimeCandidates) + ` ELSE 0 END)`
+	 LIMIT ` + strconv.Itoa(MaxRuntimeCandidates+1) + `)) ELSE 0 END)`
 }

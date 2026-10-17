@@ -77,6 +77,7 @@ type Config struct {
 
 type Service struct {
 	db            *sql.DB
+	readDB        *sql.DB
 	adaptations   *requestadaptation.Store
 	roleAuth      RoleFinalTxAuthorizer
 	donationState DonationStateOwner
@@ -86,7 +87,7 @@ type Service struct {
 }
 
 func New(config Config) (*Service, error) {
-	if config.Store == nil || config.Store.DB() == nil || nilDependency(config.DonationState) {
+	if config.Store == nil || config.Store.DB() == nil || config.Store.ReadDB() == nil || nilDependency(config.DonationState) {
 		return nil, errors.New("charity routing: store and donation state owner are required")
 	}
 	if config.Now == nil {
@@ -95,7 +96,7 @@ func New(config Config) (*Service, error) {
 	if nilDependency(config.Entropy) {
 		config.Entropy = cryptorand.Reader
 	}
-	return &Service{db: config.Store.DB(), adaptations: config.Adaptations, roleAuth: config.RoleAuth, donationState: config.DonationState,
+	return &Service{db: config.Store.DB(), readDB: config.Store.ReadDB(), adaptations: config.Adaptations, roleAuth: config.RoleAuth, donationState: config.DonationState,
 		cursorKeys: config.CursorKeys, entropy: config.Entropy, now: config.Now}, nil
 }
 

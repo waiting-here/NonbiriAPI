@@ -113,5 +113,5 @@ CASE (id-1)%3 WHEN 0 THEN 'success' WHEN 1 THEN 'failure' ELSE 'cancelled' END F
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	return &Service{db: database, now: func() time.Time { return time.Unix(routingTestNow, 0) }}, userID
+	return &Service{db: database, readDB: store.ReadDB(), now: func() time.Time { return time.Unix(routingTestNow, 0) }}, userID
 }

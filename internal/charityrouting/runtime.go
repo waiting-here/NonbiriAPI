@@ -192,15 +192,15 @@ WHERE kind='user' AND user_id=? AND asset_type='general'`, userID).Scan(&balance
 // public OpenAI list. Availability uses the same runtime eligibility checks,
 // but neither ordering entropy, donation/key identities, nor candidate counts
 // leave this method.
-func (s *Service) ListAvailableModels(ctx context.Context, userID, decisionNow int64, limit int) ([]AvailableModel, error) {
-	if s == nil || s.db == nil || ctx == nil || userID <= 0 || decisionNow < 0 || decisionNow > maxUnixSecond || limit < 1 || limit > MaxAvailableModels {
+func (s *Service) ListAvailableModels(ctx context.Context, userID, decisionNow int64, limit int) (result []AvailableModel, resultErr error) {
+	if s == nil || s.readDB == nil || ctx == nil || userID <= 0 || decisionNow < 0 || decisionNow > maxUnixSecond || limit < 1 || limit > MaxAvailableModels {
 		return nil, ErrInvalidRequest
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, finish, err := observability.BeginMeasuredTx(ctx, s.readDB, &sql.TxOptions{ReadOnly: true}, "charity_models")
 	if err != nil {
 		return nil, fmt.Errorf("charity routing: begin available model list: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { finish(resultErr) }()
 	level, err := charityaccess.CurrentLevel(ctx, tx, userID)
 	if err != nil {
 		if errors.Is(err, charityaccess.ErrUnavailable) {
@@ -243,15 +243,22 @@ JOIN charity_model_access a ON a.model_id=cm.id WHERE cm.enabled=1 AND (a.allowe
 	if err := rows.Close(); err != nil {
 		return nil, fmt.Errorf("charity routing: close available model list: %w", err)
 	}
+	ids := make([]int64, len(models))
+	for i, model := range models {
+		ids[i] = model.ModelID
+	}
+	availability, err := callerAvailabilityTx(ctx, tx, userID, level, decisionNow, ids)
+	if err != nil {
+		return nil, err
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("charity routing: commit available model list: %w", err)
 	}
+	finish(nil)
 	available := make([]AvailableModel, 0, len(models))
 	for _, model := range models {
-		if _, err := s.snapshot(ctx, model.ModelID, decisionNow, false, nil, userID); err == nil {
+		if availability[model.ModelID] {
 			available = append(available, model)
-		} else if !errors.Is(err, ErrUnavailable) && !errors.Is(err, ErrNotFound) && !errors.Is(err, donationquota.ErrLimited) {
-			return nil, err
 		}
 	}
 	sort.Slice(available, func(i, j int) bool {
@@ -548,15 +555,15 @@ func capacityAllows(limitBlob, usedBlob, reservedBlob []byte, increment *big.Int
 	return new(big.Int).Add(current, increment).Cmp(limit.Big()) <= 0, nil
 }
 
-func (s *Service) Capability(ctx context.Context, userID, decisionNow int64) (Capability, error) {
-	if s == nil || s.db == nil || ctx == nil || userID <= 0 || decisionNow < 0 || decisionNow > maxUnixSecond {
+func (s *Service) Capability(ctx context.Context, userID, decisionNow int64) (result Capability, resultErr error) {
+	if s == nil || s.readDB == nil || ctx == nil || userID <= 0 || decisionNow < 0 || decisionNow > maxUnixSecond {
 		return Capability{}, ErrInvalidRequest
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, finish, err := observability.BeginMeasuredTx(ctx, s.readDB, &sql.TxOptions{ReadOnly: true}, "charity_capability")
 	if err != nil {
 		return Capability{}, fmt.Errorf("charity routing: begin capability snapshot: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { finish(resultErr) }()
 	level, err := charityaccess.CurrentLevel(ctx, tx, userID)
 	if err != nil {
 		if errors.Is(err, charityaccess.ErrUnavailable) {
@@ -631,19 +638,25 @@ WHERE enabled=1 ORDER BY id`)
 	if err := rows.Close(); err != nil {
 		return Capability{}, fmt.Errorf("charity routing: close capability models: %w", err)
 	}
-	// Snapshot opens its own transaction and can materialize donation expiry.
+	rates, err := observability.RecentSuccessBatchTx(ctx, tx, modelIDs, decisionNow)
+	if err != nil {
+		return Capability{}, err
+	}
+	allowedIDs := make([]int64, 0, len(modelIDs))
 	for index, id := range modelIDs {
-		models[index].RecentSuccess, err = observability.RecentSuccessTx(ctx, tx, id, decisionNow)
-		if err != nil {
-			return Capability{}, err
+		models[index].RecentSuccess = rates[id]
+		if charityGate == "1" && allowed[index] {
+			allowedIDs = append(allowedIDs, id)
 		}
 	}
-	// Commit the complete gate/model fact snapshot first so a one-connection
-	// production pool cannot self-deadlock and later candidate changes cannot
-	// rewrite the intake fact observed above.
+	availability, err := callerAvailabilityTx(ctx, tx, userID, level, decisionNow, allowedIDs)
+	if err != nil {
+		return Capability{}, err
+	}
 	if err := tx.Commit(); err != nil {
 		return Capability{}, fmt.Errorf("charity routing: commit capability snapshot: %w", err)
 	}
+	finish(nil)
 	donationIntake := "closed"
 	if charityGate == "1" && donationGate == "1" {
 		donationIntake = "open"
@@ -659,10 +672,8 @@ WHERE enabled=1 ORDER BY id`)
 		if !allowed[index] {
 			continue
 		}
-		if _, err := s.snapshot(ctx, id, decisionNow, false, nil, userID); err == nil {
+		if availability[id] {
 			available = append(available, models[index])
-		} else if !errors.Is(err, ErrUnavailable) && !errors.Is(err, ErrNotFound) && !errors.Is(err, donationquota.ErrLimited) {
-			return Capability{}, err
 		}
 	}
 	if len(available) == 0 {
