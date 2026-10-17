@@ -6,9 +6,9 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ## Unreleased — 1.0.0
 
-The current database schema is 19 with account export 20. The normal service
-accepts fresh storage or schema 19 and contains no historical conversion chain.
-The separate `nonbiri-upgrade-v1` command converts exact schema 16, 17 and 18
+The current database schema is 20 with account export 20. The normal service
+accepts fresh storage or schema 20 and contains no historical conversion chain.
+The separate `nonbiri-upgrade-v1` command converts exact schema 16, 17, 18 and 19
 sources while preserving existing settings and stored facts. Deployments can
 use a verified commit and its matching artifacts without a release tag.
 
@@ -26,11 +26,18 @@ use a verified commit and its matching artifacts without a release tag.
 
 ### Changed
 
+- Optimize filtered request-log counts and pages with covering indexes and bounded
+  read connections. Log queries no longer hold the sole business connection;
+  deadlines return an explicit retryable error instead of an internal error.
+- Preserve complete saved management logs, audit history, diagnostics and exports
+  for administrators and level-6 stewards, including original binary error bodies.
+  Keep ordinary-user visibility and safe output encoding unchanged.
+
 - Fit fatfish editor, playtest and gameplay fields to both viewport dimensions,
   keeping the complete default field visible while retaining manual enlargement.
 - Localize platform API errors to the request language and redact IPv4 addresses
-  from displayed errors, logs and diagnostics while preserving editable settings
-  and normal model responses.
+  from ordinary user displays while preserving editable settings and normal model
+  responses. Administrators and level-6 stewards retain complete saved log content.
 - Require completion of first SSR/SP encounter scenes; owning a card once unlocks
   both encounter replays.
 - Wake audit scans on demand, avoid charging transient database contention to the

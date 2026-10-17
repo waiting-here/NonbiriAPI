@@ -1,6 +1,6 @@
 # Prepare existing storage for v1.0.0
 
-The v1.0.0 server creates fresh schema 19 databases and opens exact schema 19
+The v1.0.0 server creates fresh schema 20 databases and opens exact schema 20
 databases. `nonbiri-upgrade-v1` is the separate, one-time offline converter for
 the following exact source structures:
 
@@ -9,6 +9,7 @@ the following exact source structures:
 | 16 | `82f1711b674425745a768f781e0e0c34dcb37ac3` |
 | 17 | `117c0cb009ab285451a3e0238ab97b383faebde3` |
 | 18 | `0f02e60704934b589b51ca91eb34bac9c5e77c02` |
+| 19 | `c4145513b1ca5bd20f0236763c247b8bd5c66df2` |
 
 The executable that last used a database may differ from the listed commit if
 its stored application identity, generation, schema version and complete
@@ -62,8 +63,10 @@ matching final database returns `current`. The tool creates no backup or
 automatic repair.
 
 Business, configuration, legal, encrypted credential, game and ledger facts
-are preserved. All six MFA requirements start disabled; existing accounts have
-no MFA enrollment or proof. Export format remains 20.
+are preserved. Schema 19 sources keep their MFA requirements, enrollments and proofs unchanged.
+Earlier sources receive default-off MFA policies without enrollments or proofs.
+Schema 20 adds four covering indexes for request-log filtering; it changes no
+business records. Export format remains 20.
 
 Schema 17 additionally receives the protocol and fishing presentation changes
 already present in schema 18. Existing probabilities and outcomes remain:
@@ -83,8 +86,8 @@ conversion, remove the retired Gateway variable and `NONBIRI_SMTP_HOST`,
 `NONBIRI_SMTP_FROM` and `NONBIRI_SMTP_TLS` from the deployment environment.
 
 The [rc.7 command](../nonbiri-upgrade-rc7/README.md) remains a narrow wrapper
-accepting schema 16 and current schema 19. Both commands use one engine.
+accepting schema 16 and current schema 20. Both commands use one engine.
 `scripts/check-upgrade.sh` creates a populated synthetic source with the pinned
 rc.7 program, converts it, compares retained facts and resumes economy checks.
-The offline suite also covers independent schema 17 and 18 fixtures. No
+The offline suite also covers independent schema 17, 18 and 19 fixtures. No
 production database or instance configuration belongs in the repository.
