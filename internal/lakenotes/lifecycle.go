@@ -78,7 +78,7 @@ func (s *Service) RecoverBeforeListener(ctx context.Context, now int64, limit in
 		return lifecycle.WorkResult{}, e
 	}
 	defer tx.Rollback()
-	rows, e := tx.QueryContext(ctx, "SELECT id FROM lake_notes_casts WHERE paused=0 AND phase IN ('waiting','playing') ORDER BY id LIMIT ?", limit+1)
+	rows, e := tx.QueryContext(ctx, recoveryCandidatesSQL, limit+1)
 	if e != nil {
 		return lifecycle.WorkResult{}, e
 	}
@@ -168,6 +168,11 @@ func (s *Service) Retain(ctx context.Context, now int64, limit int, budget time.
 	out.Processed = len(items)
 	return out, tx.Commit()
 }
+
+// Read active casts through the partial index so retained history does not
+// consume the recovery batch's time budget.
+const recoveryCandidatesSQL = `SELECT id FROM lake_notes_casts INDEXED BY idx_lake_notes_active_cast_user
+WHERE paused=0 AND phase IN ('waiting','playing') ORDER BY id LIMIT ?`
 
 // Active and terminal casts are disjoint. Separate scans let both existing
 // partial indexes exclude retained history before the shared ordered limit.

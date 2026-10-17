@@ -3,6 +3,7 @@ package lakenotes
 import (
 	"database/sql"
 	"errors"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -258,5 +259,87 @@ func TestRetentionCandidatesUseActiveAndExpiryIndexes(t *testing.T) {
 	plan := strings.Join(steps, " | ")
 	if !strings.Contains(plan, "idx_lake_notes_active_cast_user") || !strings.Contains(plan, "idx_lake_notes_cast_retention (terminal_at<?)") {
 		t.Fatalf("retention must exclude retained terminal history: %s", plan)
+	}
+}
+
+func TestRecoveryCandidatesExcludeTerminalHistory(t *testing.T) {
+	f := newFixture(t)
+	rows, err := f.database.Query("EXPLAIN QUERY PLAN "+recoveryCandidatesSQL, 101)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var steps []string
+	for rows.Next() {
+		var id, parent, unused int
+		var detail string
+		if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+			t.Fatal(err)
+		}
+		steps = append(steps, detail)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if plan := strings.Join(steps, " | "); !strings.Contains(plan, "idx_lake_notes_active_cast_user") {
+		t.Fatalf("recovery must exclude retained terminal history: %s", plan)
+	}
+}
+
+func TestRecoveryBatchesPauseEachCastOnceWithoutAdvancingProgress(t *testing.T) {
+	f := newFixture(t)
+	f.enable(t)
+	type progress struct {
+		snapshot string
+		revision int64
+		elapsed  int64
+	}
+	read := func(id string) progress {
+		t.Helper()
+		var saved progress
+		if err := f.database.QueryRow("SELECT snapshot,revision,active_elapsed_ns FROM lake_notes_casts WHERE id=?", id).Scan(&saved.snapshot, &saved.revision, &saved.elapsed); err != nil {
+			t.Fatal(err)
+		}
+		return saved
+	}
+	before := map[string]progress{}
+	var ids []string
+	for i, user := range []int64{f.user, f.other} {
+		profile, err := f.service.Profile(f.ctx(user), user)
+		if err != nil {
+			t.Fatal(err)
+		}
+		started, err := f.service.Start(f.ctx(user), user, testKey(470+i), StartInput{profile.Revision})
+		if err != nil {
+			t.Fatal(err)
+		}
+		id := started.Value.Cast.ID
+		ids = append(ids, id)
+		before[id] = read(id)
+	}
+	sort.Strings(ids)
+	for batch := 0; batch < 3; batch++ {
+		work, err := f.service.RecoverBeforeListener(f.ctx(f.admin), testNow+3600, 1, time.Second)
+		wantProcessed := 1
+		if batch == 2 {
+			wantProcessed = 0
+		}
+		if err != nil || work.Processed != wantProcessed || work.More != (batch == 0) {
+			t.Fatal(batch, work, err)
+		}
+		for i, id := range ids {
+			want := before[id]
+			paused := i <= batch
+			if paused {
+				want.revision++
+			}
+			if actual := read(id); actual != want {
+				t.Fatalf("batch %d changed progress or repeated recovery: %+v != %+v", batch, actual, want)
+			}
+			var actualPaused bool
+			if err := f.database.QueryRow("SELECT paused FROM lake_notes_casts WHERE id=?", id).Scan(&actualPaused); err != nil || actualPaused != paused {
+				t.Fatal(batch, i, actualPaused, err)
+			}
+		}
 	}
 }
