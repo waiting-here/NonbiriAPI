@@ -64,6 +64,7 @@ export interface Run {
 export interface Runs {
   data: Run[];
   next_cursor: string | null;
+  pagination: PageMetadata;
 }
 export interface Audit {
   id: string;
@@ -76,6 +77,7 @@ export interface Audit {
 export interface Audits {
   data: Audit[];
   next_cursor: string | null;
+  pagination: PageMetadata;
 }
 const root = '/admin/api/inactivity-policy';
 export const getPolicy = (signal?: AbortSignal) => apiFetch<Configuration>(root, { signal });
@@ -97,8 +99,8 @@ export const previewPolicy = (
     method: 'POST',
     json: { expected_revision: revision, policy, page, page_size: pageSize },
   });
-export const getRuns = (cursor?: string, signal?: AbortSignal) =>
-  apiFetch<Runs>(`${root}/runs${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`, {
+export const getRuns = (page = '1', pageSize: PageSize = 20, signal?: AbortSignal) =>
+  apiFetch<Runs>(`${root}/runs?page=${page}&page_size=${pageSize}`, {
     signal,
   });
 
@@ -110,8 +112,8 @@ export function policyOnly(config: Configuration): Policy {
     protection: structuredClone(config.protection),
   };
 }
-export const getAudits = (cursor?: string, signal?: AbortSignal) =>
-  apiFetch<Audits>(`${root}/audits${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`, {
+export const getAudits = (page = '1', pageSize: PageSize = 20, signal?: AbortSignal) =>
+  apiFetch<Audits>(`${root}/audits?page=${page}&page_size=${pageSize}`, {
     signal,
   });
 export function credits(milli: string): string {

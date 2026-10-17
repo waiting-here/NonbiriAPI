@@ -11,6 +11,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
 )
 
@@ -150,13 +151,29 @@ func (s *Service) auditsHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) historyHTTP(w http.ResponseWriter, r *http.Request, audits bool) {
-	values, err := query(r, "cursor", "page_size")
+	values, err := query(r, "cursor", "page", "page_size")
 	if err != nil {
 		reply(w, nil, err)
 		return
 	}
 	if err = noBody(r); err != nil {
 		reply(w, nil, err)
+		return
+	}
+	// page_size alone retains the legacy cursor protocol and its 1..100 range.
+	if values.Has("page") {
+		page, _, err := pagination.Parse(values)
+		if err != nil {
+			reply(w, nil, ErrInvalid)
+			return
+		}
+		if audits {
+			out, err := s.AuditsNumbered(r.Context(), page)
+			reply(w, out, err)
+		} else {
+			out, err := s.RunsNumbered(r.Context(), page)
+			reply(w, out, err)
+		}
 		return
 	}
 	before, err := decodePosition(values.Get("cursor"))

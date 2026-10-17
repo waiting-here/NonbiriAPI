@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next';
 import {
   credits,
   getPolicy,
-  getRuns,
   policyOnly,
   previewPolicy,
   putPolicy,
@@ -12,10 +11,10 @@ import {
   type Configuration,
   type Policy,
   type Preview,
-  type Runs,
 } from './api';
 import { PolicySummary } from './InactivityStatus';
 import { PolicyAuditHistory } from './PolicyAuditHistory';
+import { PolicyRunHistory } from './PolicyRunHistory';
 import './inactivity.css';
 import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { Affix, DataTable, Fold, Toggle, PanelFoot } from '@shared/components/ui';
@@ -133,7 +132,6 @@ function Editor({
   const [policy, setPolicy] = useState<Policy>(() => policyOnly(configuration));
   const [preview, setPreview] = useState<Preview>();
   const [previewSize, setPreviewSize] = useState<PageSize>(20);
-  const [runs, setRuns] = useState<Runs>();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
   const form = useRef<HTMLFormElement>(null);
@@ -259,7 +257,7 @@ function Editor({
           if (validate()) void perform(save);
         }}
       >
-        <fieldset disabled={pending} aria-label={zh ? "政策配置" : "Policy configuration"}>
+        <fieldset disabled={pending} aria-label={zh ? '政策配置' : 'Policy configuration'}>
           <h2 className="inactivity-config-title">{zh ? '政策配置' : 'Policy configuration'}</h2>
           <label>
             {zh ? '执行时刻（选填）' : 'Execution time (optional)'}
@@ -475,74 +473,7 @@ function Editor({
           />
         </section>
       )}
-      <details
-        className="nb-fold"
-        onToggle={(event) => {
-          if (event.currentTarget.open && !runs && !pending)
-            void perform(async () => {
-              setRuns(await getRuns());
-            });
-        }}
-      >
-        <summary>
-          <span className="nb-fold__title">
-            <strong>{zh ? '执行记录' : 'Execution records'}</strong>
-          </span>
-        </summary>
-        <div className="nb-fold__body">
-          {runs && (
-            <>
-              <DataTable
-                caption={zh ? '执行记录' : 'Execution records'}
-                rows={runs.data}
-                rowKey={(item) => item.id}
-                columns={[
-                  {
-                    key: 'account',
-                    header: zh ? '账号' : 'Account',
-                    cell: 'title',
-                    render: (item) => item.user_id ?? (zh ? '已去标识' : 'Deidentified'),
-                  },
-                  {
-                    key: 'action',
-                    header: zh ? '动作' : 'Action',
-                    cell: 'status',
-                    render: (item) => actionLabel(item.action),
-                  },
-                  {
-                    key: 'date',
-                    header: zh ? '时间' : 'Time',
-                    cell: 'meta',
-                    mobileLabel: zh ? '时间' : 'Time',
-                    render: (item) => date(item.created_at),
-                  },
-                  {
-                    key: 'credits',
-                    header: zh ? '通用／游戏积分' : 'General / game credits',
-                    cell: 'meta',
-                    mobileLabel: zh ? '通用／游戏积分' : 'General / game credits',
-                    render: (item) =>
-                      `${credits(item.general_milli)} / ${credits(item.game_milli)}`,
-                  },
-                ]}
-              />
-              {runs.next_cursor && (
-                <button
-                  className="nb-btn nb-btn--secondary"
-                  disabled={pending}
-                  onClick={() =>
-                    void perform(async () => {
-                      setRuns(await getRuns(runs.next_cursor ?? undefined));
-                    })
-                  }
-                >
-                  {zh ? '下一页记录' : 'Next records page'}
-                </button>
-              )}
-            </>
-          )}
-        </div>
-      </details>
+      <PolicyRunHistory zh={zh} locale={locale} />
       <PolicyAuditHistory zh={zh} locale={locale} />
     </div>
   );
@@ -554,7 +485,7 @@ export function InactivityPolicyPage() {
   const [saved, setSaved] = useState(false);
   const [reloadID, setReloadID] = useState(0);
   const query = useQuery({
-    queryKey: ['admin-inactivity-policy'],
+    queryKey: ['admin', 'inactivity-policy'],
     queryFn: ({ signal }) => getPolicy(signal),
     staleTime: 60_000,
     refetchOnWindowFocus: false,
@@ -588,7 +519,7 @@ export function InactivityPolicyPage() {
           }}
           onDirty={() => setSaved(false)}
           onSaved={(value) => {
-            client.setQueryData(['admin-inactivity-policy'], value);
+            client.setQueryData(['admin', 'inactivity-policy'], value);
             setSaved(true);
           }}
           zh={zh}

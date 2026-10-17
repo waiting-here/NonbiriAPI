@@ -91,6 +91,15 @@
 .inactivity-panel .nb-panel__foot {
   margin-top: var(--nb-space-2);
 }
+.inactivity-panel .nb-pager .nb-pager__jump {
+  display: inline-block;
+}
+.inactivity-panel .nb-pager__pages {
+  flex-wrap: wrap;
+}
+.inactivity-panel label.nb-pager__size {
+  display: flex;
+}
 @media (width < 40rem) {
   .inactivity-panel fieldset {
     padding: var(--nb-space-3);
