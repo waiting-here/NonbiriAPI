@@ -106,8 +106,8 @@ function ScopedDiagnostics({ role, storage }: { role: DiagnosticRole; storage?: 
       </h2>
       <p>
         {words(
-          'Failure details from the last 30 days. Only administrators and full stewards can read these records.',
-          '最近30天内的失败详情，仅管理员和6级协管可查看。',
+          'Failure details from the last 30 days. Administrators and level-5/6 stewards can read these records. IPv4 addresses in upstream errors are hidden for level-5 stewards.',
+          '最近30天内的失败详情，管理员和5、6级协管可查看。5级协管看到的上游错误中，IPv4地址已删减。',
         )}
       </p>
       <form

@@ -26,9 +26,9 @@ import (
 
 const auditBrowserIP = "198.51.100.73"
 const auditBrowserClient = "AuditFixture/1.0"
-const auditBrowserJSON = `{"error":{"message":"audit-original-only <img src=x onerror=\"document.documentElement.dataset.auditExecuted='yes'\">","details":{"retry":false,"code":"synthetic_busy"}}}`
+const auditBrowserJSON = `{"error":{"message":"audit-original-only 203.0.113.19 <img src=x onerror=\"document.documentElement.dataset.auditExecuted='yes'\">","details":{"retry":false,"code":"synthetic_busy"}}}`
 const auditBrowserText = `<script>document.documentElement.dataset.auditExecuted='yes'</script>
-audit-text-only: model discovery failed
+audit-text-only: model discovery failed at 203.0.113.19
 <img src=x onerror="document.documentElement.dataset.auditExecuted='yes'">`
 
 // The opt-in browser fixture uses the real application and canonical schema.

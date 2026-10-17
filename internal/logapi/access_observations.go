@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
 )
 
@@ -26,12 +27,22 @@ func (api *diagnosticAPI) accessObservations(w http.ResponseWriter, r *http.Requ
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), logPageTimeout)
 	defer cancel()
-	tx, err := api.beginAuthorizedReadOn(ctx, api.repository.readDB, actorID)
+	tx, _, err := api.beginAuthorizedReadOn(ctx, api.repository.readDB, actorID)
 	if err != nil {
 		writeLogError(w, err)
 		return
 	}
 	defer tx.Rollback()
+	// Access observations belong to abuse auditing, not the L5 log grant.
+	if api.steward != nil {
+		if err := api.steward.AuthorizeStewardRead(ctx, tx, actorID); err != nil {
+			if ctx.Err() == nil && (errors.Is(err, authz.ErrForbidden) || errors.Is(err, authz.ErrUnauthorized)) {
+				err = ErrForbidden
+			}
+			writeLogError(w, translateReadError(ctx, err))
+			return
+		}
+	}
 	var value any
 	if summary {
 		value, err = observability.SummarizeAccessTx(ctx, tx, filter)

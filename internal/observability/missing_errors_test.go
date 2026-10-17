@@ -31,7 +31,7 @@ func TestMissingErrorRecordsClassifyFailuresWithoutRecounting(t *testing.T) {
 	if _, err := r.db.Exec(`UPDATE request_error_bodies SET failure_reason='' WHERE event_seq=3`); err != nil {
 		t.Fatal(err)
 	}
-	for _, actor := range []authz.Actor{f.admin, f.steward} {
+	for _, actor := range []authz.Actor{f.admin, f.steward, f.trainee} {
 		for _, reason := range []string{"read_failure", "storage_failure", "unspecified"} {
 			page, err := f.reader.List(diagContext(actor), diagActor(actor), DiagnosticFilter{Storage: reason})
 			if err != nil || len(page.Data) != 1 || page.Data[0].Kind != "api_request" {
@@ -42,9 +42,6 @@ func TestMissingErrorRecordsClassifyFailuresWithoutRecounting(t *testing.T) {
 				t.Fatalf("missing detail %+v %v", detail, err)
 			}
 		}
-	}
-	if _, err := f.reader.List(diagContext(f.trainee), diagActor(f.trainee), DiagnosticFilter{Storage: "missing"}); err == nil {
-		t.Fatal("trainee read missing records")
 	}
 	page, err := f.reader.List(diagContext(f.admin), diagActor(f.admin), DiagnosticFilter{Storage: "missing", Limit: 1})
 	if err != nil || len(page.Data) != 1 || page.NextBefore == nil {

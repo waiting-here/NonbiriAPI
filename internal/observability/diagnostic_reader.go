@@ -22,7 +22,7 @@ const imageDiagnosticMIME = "application/vnd.nonbiriapi.image-diagnostic+json"
 
 type DiagnosticFinalAuthorizer interface {
 	AuthorizeAdmin(context.Context, *sql.Tx, int64) error
-	AuthorizeStewardRead(context.Context, *sql.Tx, int64) error
+	AuthorizeStewardLogRead(context.Context, *sql.Tx, int64) (redactUpstreamIPv4 bool, err error)
 }
 type DiagnosticReaderConfig struct {
 	Database  *sql.DB
@@ -129,33 +129,34 @@ func normalizeDiagnosticFilter(f DiagnosticFilter, now int64) (DiagnosticFilter,
 	}
 	return f, nil
 }
-func (r *DiagnosticReader) begin(ctx context.Context, actor DiagnosticActor) (*sql.Tx, error) {
+func (r *DiagnosticReader) begin(ctx context.Context, actor DiagnosticActor) (*sql.Tx, bool, error) {
 	if r == nil || ctx == nil || actor.UserID <= 0 {
-		return nil, ErrDiagnosticForbidden
+		return nil, false, ErrDiagnosticForbidden
 	}
 	if _, ok := authz.StewardCallerFromContext(ctx); ok {
-		return nil, ErrDiagnosticForbidden
+		return nil, false, ErrDiagnosticForbidden
 	}
 	tx, err := r.config.Database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
-		return nil, ErrUnavailable
+		return nil, false, ErrUnavailable
 	}
+	redact := false
 	if actor.Admin {
 		err = r.config.FinalAuth.AuthorizeAdmin(ctx, tx, actor.UserID)
 	} else {
-		err = r.config.FinalAuth.AuthorizeStewardRead(ctx, tx, actor.UserID)
+		redact, err = r.config.FinalAuth.AuthorizeStewardLogRead(ctx, tx, actor.UserID)
 	}
 	if err != nil {
 		tx.Rollback()
 		if errors.Is(err, authz.ErrMFARequired) {
-			return nil, err
+			return nil, false, err
 		}
 		if errors.Is(err, authz.ErrUnauthorized) || errors.Is(err, authz.ErrForbidden) {
-			return nil, ErrDiagnosticForbidden
+			return nil, false, ErrDiagnosticForbidden
 		}
-		return nil, ErrUnavailable
+		return nil, false, ErrUnavailable
 	}
-	return tx, nil
+	return tx, redact, nil
 }
 
 // Each subject is joined through its actual foreign key. An operation must
@@ -216,7 +217,7 @@ func (r *DiagnosticReader) List(ctx context.Context, actor DiagnosticActor, filt
 	out.From, out.To = f.From, f.To
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	tx, err := r.begin(ctx, actor)
+	tx, _, err := r.begin(ctx, actor)
 	if err != nil {
 		return out, err
 	}
@@ -298,7 +299,7 @@ func (r *DiagnosticReader) Detail(ctx context.Context, actor DiagnosticActor, id
 	}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	tx, err := r.begin(ctx, actor)
+	tx, redact, err := r.begin(ctx, actor)
 	if err != nil {
 		return out, err
 	}
@@ -322,6 +323,12 @@ func (r *DiagnosticReader) Detail(ctx context.Context, actor DiagnosticActor, id
 	} else {
 		out.Body.Encoding = "base64"
 		out.Body.Body = base64.StdEncoding.EncodeToString(raw)
+	}
+	if redact {
+		out.Body, err = RedactErrorIPv4(out.Body)
+		if err != nil {
+			return DiagnosticDetail{}, err
+		}
 	}
 	var source string
 	if out.Item.Kind == "model_discovery" || out.Item.Kind == "api_request" {

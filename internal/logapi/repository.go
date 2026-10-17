@@ -62,9 +62,9 @@ func (repository *Repository) beginStewardRead(
 	ctx context.Context,
 	stewardUserID int64,
 	authorizer StewardAuthorizer,
-) (*sql.Tx, error) {
+) (*sql.Tx, bool, error) {
 	if repository == nil {
-		return nil, ErrInvalid
+		return nil, false, ErrInvalid
 	}
 	return repository.beginStewardReadOn(ctx, repository.db, stewardUserID, authorizer)
 }
@@ -74,28 +74,29 @@ func (repository *Repository) beginStewardReadOn(
 	database *sql.DB,
 	stewardUserID int64,
 	authorizer StewardAuthorizer,
-) (*sql.Tx, error) {
+) (*sql.Tx, bool, error) {
 	if repository == nil || database == nil || ctx == nil || stewardUserID <= 0 || authorizer == nil {
-		return nil, ErrInvalid
+		return nil, false, ErrInvalid
 	}
 	tx, err := database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
-		return nil, translateReadError(ctx, err)
+		return nil, false, translateReadError(ctx, err)
 	}
-	if err := authorizer.AuthorizeStewardRead(ctx, tx, stewardUserID); err != nil {
+	redact, err := authorizer.AuthorizeStewardLogRead(ctx, tx, stewardUserID)
+	if err != nil {
 		_ = tx.Rollback()
 		if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return nil, translateReadError(ctx, err)
+			return nil, false, translateReadError(ctx, err)
 		}
 		if errors.Is(err, authz.ErrMFARequired) {
-			return nil, err
+			return nil, false, err
 		}
 		if errors.Is(err, ErrUnavailable) {
-			return nil, ErrUnavailable
+			return nil, false, ErrUnavailable
 		}
-		return nil, ErrForbidden
+		return nil, false, ErrForbidden
 	}
-	return tx, nil
+	return tx, redact, nil
 }
 
 func (repository *Repository) authorizeStewardRead(
@@ -108,7 +109,7 @@ func (repository *Repository) authorizeStewardRead(
 	}
 	ctx, cancel := context.WithTimeout(ctx, logPageTimeout)
 	defer cancel()
-	tx, err := repository.beginStewardReadOn(ctx, repository.readDB, stewardUserID, authorizer)
+	tx, _, err := repository.beginStewardReadOn(ctx, repository.readDB, stewardUserID, authorizer)
 	if err != nil {
 		return err
 	}

@@ -157,7 +157,7 @@ func TestUsageTotalMismatchManagementProjectionFilterAndAuthority(t *testing.T) 
 	if ordinary.Code != http.StatusBadRequest || strings.Contains(ordinary.Body.String(), f.selfID) {
 		t.Fatalf("ordinary filter = %d %s", ordinary.Code, ordinary.Body.String())
 	}
-	for _, actorID := range []int64{6} {
+	for _, actorID := range []int64{5, 6} {
 		resp := callLogUserHandler(t, stewardRoutes.handlers["GET /api/steward/logs"], actorID, "/api/steward/logs?usage_total_mismatch=true", "", nil)
 		if resp.Code != http.StatusOK {
 			t.Fatalf("steward %d filter = %d %s", actorID, resp.Code, resp.Body.String())
@@ -167,7 +167,7 @@ func TestUsageTotalMismatchManagementProjectionFilterAndAuthority(t *testing.T) 
 			t.Fatalf("steward %d HTTP page = %d, %v", actorID, len(page.Data), err)
 		}
 	}
-	denied := callLogUserHandler(t, stewardRoutes.handlers["GET /api/steward/logs"], 5, "/api/steward/logs?usage_total_mismatch=true", "", nil)
+	denied := callLogUserHandler(t, stewardRoutes.handlers["GET /api/steward/logs"], 4, "/api/steward/logs?usage_total_mismatch=true", "", nil)
 	if denied.Code != http.StatusForbidden || strings.Contains(denied.Body.String(), f.selfID) {
 		t.Fatalf("ordinary steward read = %d %s", denied.Code, denied.Body.String())
 	}

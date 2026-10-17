@@ -55,7 +55,7 @@ func (repository *Repository) ExportSteward(ctx context.Context, userID int64, f
 	}
 	ctx, cancel := context.WithTimeout(ctx, logPageTimeout)
 	defer cancel()
-	tx, err := repository.beginStewardReadOn(ctx, repository.readDB, userID, authorizer)
+	tx, _, err := repository.beginStewardReadOn(ctx, repository.readDB, userID, authorizer)
 	if err != nil {
 		return nil, err
 	}

@@ -181,7 +181,7 @@ func (repository *Repository) GetSteward(
 		ctx, cancel = context.WithTimeout(ctx, logPageTimeout)
 		defer cancel()
 	}
-	tx, err := repository.beginStewardRead(ctx, stewardUserID, authorizer)
+	tx, redact, err := repository.beginStewardRead(ctx, stewardUserID, authorizer)
 	if err != nil {
 		return StewardLogDetail{}, err
 	}
@@ -223,6 +223,12 @@ func (repository *Repository) GetSteward(
 	attempts, err := repository.listStewardAttempts(ctx, tx, stewardUserID, record.rowID, requestID, filter)
 	if err != nil {
 		return StewardLogDetail{}, err
+	}
+	if redact {
+		for i := range attempts.Data {
+			attempts.Data[i].Diag = redactUpstreamText(attempts.Data[i].Diag)
+			attempts.Data[i].UpstreamCode = redactUpstreamText(attempts.Data[i].UpstreamCode)
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return StewardLogDetail{}, translateReadError(ctx, err)

@@ -2219,6 +2219,119 @@ describe('experimental policy and charity controls', () => {
     },
   );
 
+  test('changes steward log scope on exact role changes and discards late unredacted details', async () => {
+    let level = 6;
+    let detailReads = 0;
+    let finishOld!: (response: Response) => void;
+    const privateText = 'upstream peer 192.0.2.77';
+    const metadata = {
+      id: '3',
+      kind: 'model_discovery',
+      subject_id: `req_${'A'.repeat(22)}`,
+      user_id: '17',
+      attempt_seq: 1,
+      event_seq: 1,
+      http_status: 400,
+      content_type: 'text/plain',
+      bytes_saved: privateText.length,
+      truncated: false,
+      save_state: 'saved',
+      created_at: 1800000000,
+      expires_at: 1802592000,
+      synthetic: false,
+    };
+    const detail = (redacted: boolean) => ({
+      item: metadata,
+      source: null,
+      body: {
+        ...metadata,
+        encoding: 'utf-8',
+        body: redacted ? 'upstream peer [redacted]' : privateText,
+        ...(redacted ? { ipv4_redacted: true } : {}),
+      },
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request) => {
+        const path = new URL(
+          input instanceof Request ? input.url : String(input),
+          window.location.origin,
+        ).pathname;
+        if (path === '/api/session')
+          return jsonResponse({
+            ...coreSession,
+            user: { ...coreSession.user, effective_level: level },
+          });
+        if (path === '/api/steward/time-context')
+          return jsonResponse({ mode: 'site', offset_minutes: 0 });
+        if (path === '/api/time-zones') return jsonResponse({ version: 'test', zones: ['UTC'] });
+        if (path === '/api/steward/logs') return jsonResponse(coreNumberedPage([]));
+        if (path === '/api/steward/diagnostics')
+          return jsonResponse({
+            data: [metadata],
+            next_before: null,
+            from: 1799999999,
+            to: 1800000001,
+          });
+        if (path === '/api/steward/diagnostics/3') {
+          detailReads++;
+          if (detailReads === 2)
+            return new Promise<Response>((resolve) => {
+              finishOld = resolve;
+            });
+          return jsonResponse(detail(level === 5));
+        }
+        throw new Error(`Unexpected request: ${path}`);
+      }),
+    );
+    const rendered = await renderWithProviders(<StewardPage />, {
+      station: 'user',
+      route: '/steward?tab=logs',
+    });
+    const load = async () => {
+      fireEvent.click(await screen.findByRole('button', { name: 'Search diagnostics' }));
+      fireEvent.click(await screen.findByText(/req_AAAAA.*Attempt 1/));
+      fireEvent.click(screen.getByRole('button', { name: 'Load error details and source' }));
+    };
+    await load();
+    expect(await screen.findByText(privateText)).toBeVisible();
+    await act(async () => {
+      await rendered.queryClient.invalidateQueries({ queryKey: userKeys.session });
+    });
+    expect(screen.getByText(privateText)).toBeVisible();
+    expect(detailReads).toBe(1);
+    await load();
+    await waitFor(() => expect(detailReads).toBe(2));
+    level = 5;
+    await act(async () => {
+      await rendered.queryClient.invalidateQueries({ queryKey: userKeys.session });
+    });
+    await waitFor(() =>
+      expect(screen.queryByRole('tab', { name: 'Abuse audit' })).toBeNull(),
+    );
+    expect(screen.getByRole('tab', { name: 'Request logs' })).toBeVisible();
+    await act(async () => {
+      finishOld(jsonResponse(detail(false)));
+    });
+    expect(screen.queryByText(privateText)).toBeNull();
+    await load();
+    expect(await screen.findByText('upstream peer [redacted]')).toBeVisible();
+    level = 4;
+    await act(async () => {
+      await rendered.queryClient.invalidateQueries({ queryKey: userKeys.session });
+    });
+    expect(await screen.findByText(/does not have confirmed steward access/i)).toBeVisible();
+    expect(screen.queryByText('upstream peer [redacted]')).toBeNull();
+    expect(
+      JSON.stringify(
+        rendered.queryClient
+          .getQueryCache()
+          .getAll()
+          .map((q) => q.state.data),
+      ),
+    ).not.toContain(privateText);
+  });
+
   test('shares one session request between the station and capability view', async () => {
     let level = 6;
     const fetchMock = vi.fn(async () =>

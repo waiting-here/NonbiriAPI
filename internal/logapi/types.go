@@ -271,4 +271,5 @@ type AdminRouteRegistrar interface {
 
 type StewardAuthorizer interface {
 	AuthorizeStewardRead(context.Context, *sql.Tx, int64) error
+	AuthorizeStewardLogRead(context.Context, *sql.Tx, int64) (redactUpstreamIPv4 bool, err error)
 }

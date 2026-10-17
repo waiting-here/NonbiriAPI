@@ -74,13 +74,18 @@ async function api(
     headers: { Origin: origin, 'Idempotency-Key': randomBytes(16).toString('base64url') },
   });
 }
-function safeResponses(page: Page) {
+function safeResponses(page: Page, allowStewardLogs = false) {
   const bodies: string[] = [];
   const pending: Promise<void>[] = [];
   // Navigation can cancel a response after its headers arrive. Only collect
   // completed requests, so an abandoned response body cannot stall the audit.
   page.on('requestfinished', (request) => {
     const path = new URL(request.url()).pathname;
+    if (
+      allowStewardLogs &&
+      (path.startsWith('/api/steward/logs') || path.startsWith('/api/steward/diagnostics'))
+    )
+      return;
     if (path.startsWith('/api/') || path.startsWith('/admin/api/')) {
       pending.push(
         request
@@ -194,8 +199,11 @@ test('custom presets persist across reloads without matchmaking, payment or cros
     await other.close();
   }
 });
-async function requestDiagnostics(page: Page, admin: boolean, keyboard = false) {
+async function requestDiagnostics(page: Page, admin: boolean, keyboard = false, redacted = false) {
   const f = fixture();
+  const expectedBody = redacted
+    ? f.json_body.replaceAll('203.0.113.19', '[redacted]')
+    : f.json_body;
   const path = admin ? '/logs?' : '/steward?tab=logs&';
   await page.goto((admin ? f.admin_url : f.user_url) + path + 'request_id=' + f.request_ids[0]);
   const dialog = page.locator('.nb-expandable-panel:not([hidden])');
@@ -223,7 +231,21 @@ async function requestDiagnostics(page: Page, admin: boolean, keyboard = false) 
     await load.focus();
     await page.keyboard.press('Enter');
   } else await load.click();
-  await expect(event.locator('pre')).toHaveText(f.json_body);
+  await expect(event.locator('pre')).toHaveText(expectedBody);
+  if (redacted) {
+    await expect(event.getByRole('status')).toContainText(
+      'IPv4 addresses in this error are hidden',
+    );
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    await event.getByRole('button', { name: 'Copy text', exact: true }).click();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(expectedBody);
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      event.getByRole('button', { name: 'Download error body', exact: true }).click(),
+    ]);
+    expect(readFileSync((await download.path())!, 'utf8')).toBe(expectedBody);
+    await download.delete();
+  }
   if (process.env.NONBIRI_VISUAL_DIR) {
     const viewport = page.viewportSize();
     for (const theme of ['light', 'dark']) {
@@ -240,7 +262,7 @@ async function requestDiagnostics(page: Page, admin: boolean, keyboard = false) 
         await page.screenshot({
           path: resolve(
             process.env.NONBIRI_VISUAL_DIR,
-            `logs-${admin ? 'admin' : 'steward'}-${theme}-${width}.png`,
+            `logs-${admin ? 'admin' : redacted ? 'level5' : 'steward'}-${theme}-${width}.png`,
           ),
           animations: 'disabled',
         });
@@ -253,12 +275,12 @@ async function requestDiagnostics(page: Page, admin: boolean, keyboard = false) 
     });
   }
   await event.getByRole('button', { name: 'Format JSON', exact: true }).click();
-  await expect(event.locator('pre')).toHaveText(JSON.stringify(JSON.parse(f.json_body), null, 2));
+  await expect(event.locator('pre')).toHaveText(JSON.stringify(JSON.parse(expectedBody), null, 2));
   await event.getByRole('button', { name: 'Plain text', exact: true }).click();
-  await expect(event.locator('pre')).toHaveText(f.json_body);
+  await expect(event.locator('pre')).toHaveText(expectedBody);
   await safeSink(page);
 }
-async function discoveryDiagnostics(page: Page, admin: boolean) {
+async function discoveryDiagnostics(page: Page, admin: boolean, redacted = false) {
   const f = fixture();
   await page.goto(admin ? f.admin_url + '/logs' : f.user_url + '/steward?tab=logs');
   const region = page.getByRole('region', { name: 'Discovery and activity diagnostics' });
@@ -271,7 +293,9 @@ async function discoveryDiagnostics(page: Page, admin: boolean) {
     .first();
   await entry.locator('summary').first().click();
   await entry.getByRole('button', { name: 'Load error details and source' }).click();
-  await expect(entry.locator('pre')).toHaveText(f.text_body);
+  await expect(entry.locator('pre')).toHaveText(
+    redacted ? f.text_body.replaceAll('203.0.113.19', '[redacted]') : f.text_body,
+  );
   const source = entry.getByRole('region', { name: 'Request source' });
   await expect(source).toContainText(f.source_ip);
   await safeSink(page);
@@ -613,7 +637,7 @@ test.describe('administrator policy changes and subsequent steward review', () =
 for (const level of [5, 1] as const) {
   test(
     level === 5
-      ? 'trainee cannot open full-steward audit APIs or deep links'
+      ? 'trainee reads projected site logs while full-steward audit access remains denied'
       : 'ordinary account sees safe own logs without private source or raw error responses',
     async ({ browser }) => {
       const f = fixture();
@@ -624,7 +648,7 @@ for (const level of [5, 1] as const) {
         if (level === 5)
           expect(await timeContext.json()).toEqual({ mode: 'site', offset_minutes: 0 });
         const page = await context.newPage();
-        const noLeaks = safeResponses(page);
+        const noLeaks = safeResponses(page, level === 5);
         await page.goto(f.user_url + '/steward?tab=risk');
         await expect(page.getByRole('heading', { name: 'Abuse audit', exact: true })).toHaveCount(
           0,
@@ -634,15 +658,26 @@ for (const level of [5, 1] as const) {
           '/api/steward/abuse-audit/users',
           '/api/steward/abuse-audit/client-rules',
           '/api/steward/abuse-audit/client-scans',
+          '/api/steward/abuse-audit/access-events',
+          '/api/steward/abuse-audit/access-summary',
+          '/api/steward/logs',
+          '/api/steward/logs/export.json',
+          '/api/steward/logs/export.csv',
           '/api/steward/diagnostics',
           '/api/steward/diagnostics/' + f.diagnostic_id,
           '/api/steward/logs/' + f.request_ids[0] + '/source',
           '/api/steward/logs/' + f.request_ids[0] + '/attempts/1/errors/1',
         ]) {
           const response = await api(context, path);
-          expect(response.status()).toBe(403);
+          const allowed = level === 5 && !path.includes('/abuse-audit/');
+          expect(response.status()).toBe(allowed ? 200 : 403);
           const body = await response.text();
-          for (const marker of f.private_markers) expect(body).not.toContain(marker);
+          if (!allowed) for (const marker of f.private_markers) expect(body).not.toContain(marker);
+          if (allowed && path.endsWith('/errors/1')) {
+            expect(JSON.parse(body).ipv4_redacted).toBe(true);
+            expect(body).not.toContain('203.0.113.19');
+            expect(body).toContain('[redacted]');
+          }
         }
         const index = f.users.findIndex((u) => u.level === level);
         const own = await api(context, '/api/logs/' + f.request_ids[index]);
@@ -658,7 +693,11 @@ for (const level of [5, 1] as const) {
         await page.goto(f.user_url + '/steward?tab=logs');
         await expect(
           page.getByRole('region', { name: 'Discovery and activity diagnostics' }),
-        ).toHaveCount(0);
+        ).toHaveCount(level === 5 ? 1 : 0);
+        if (level === 5) {
+          await requestDiagnostics(page, false, true, true);
+          await discoveryDiagnostics(page, false, true);
+        }
         const economy = await api(context, '/admin/api/economy-audit/summary', true);
         expect(economy.status()).toBe(401);
         await page.goto(f.admin_url + '/economy-audit');
@@ -873,7 +912,7 @@ test('audit presentation keeps folds, role tabs and mobile content within the vi
       await page.emulateMedia({ reducedMotion: 'reduce' });
       await page.goto(f.user_url + '/steward?tab=charity');
       const tabs = page.locator('.page > .nb-tabs').first();
-      await expect(tabs.getByRole('tab')).toHaveCount(level === 5 ? 1 : 7);
+      await expect(tabs.getByRole('tab')).toHaveCount(level === 5 ? 2 : 7);
       for (const width of [1440, 768, 390]) {
         await page.setViewportSize({ width, height: 900 });
         await noOverflow(page);

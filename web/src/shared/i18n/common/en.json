@@ -1242,6 +1242,7 @@
       "copyText": "Copy text",
       "downloadDiagnosticSummary": "Download diagnostic summary",
       "downloadOriginal": "Download error body",
+      "ipv4Redacted": "IPv4 addresses in this error are hidden for level-5 stewards. Copies and downloads contain the same displayed content.",
       "bodyPreview": "Body preview",
       "rawBodyReadFailed": "The upstream body could not be read.",
       "rawBodyStorageFailed": "The body was read but could not be stored.",

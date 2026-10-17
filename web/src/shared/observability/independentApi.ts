@@ -226,7 +226,12 @@ export function decodeIndependentDetail(value: unknown): IndependentDetail {
     if (field !== entry[key as keyof ErrorMetadata]) invalid();
   if ((raw.encoding !== 'utf-8' && raw.encoding !== 'base64') || typeof raw.body !== 'string')
     invalid();
-  const body: ErrorBody = { ...meta, encoding: raw.encoding, body: raw.body };
+  const body: ErrorBody = {
+    ...meta,
+    encoding: raw.encoding,
+    body: raw.body,
+    ...(raw.ipv4_redacted === true ? { ipv4_redacted: true } : {}),
+  };
   return { item: entry, body, source: source(v.source) };
 }
 function root(role: DiagnosticRole) {

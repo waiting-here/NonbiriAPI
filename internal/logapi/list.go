@@ -321,7 +321,7 @@ func (repository *Repository) ListSteward(
 	if err != nil {
 		return Page[StewardLogRow]{}, err
 	}
-	tx, err := repository.beginStewardReadOn(ctx, repository.readDB, stewardUserID, authorizer)
+	tx, _, err := repository.beginStewardReadOn(ctx, repository.readDB, stewardUserID, authorizer)
 	if err != nil {
 		return Page[StewardLogRow]{}, err
 	}

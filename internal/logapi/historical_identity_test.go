@@ -43,6 +43,15 @@ func TestHistoricalOriginSurvivesDeletionButNewAccountCannotReadIt(t *testing.T)
 		t.Fatal(admin, err)
 	}
 	identity := admin.Data[0].OriginIdentity
+	for _, authority := range []StewardAuthorizer{allowLogStewardRead{}, traineeLogRead{}} {
+		page, err := f.repo.ListSteward(ctx, fresh, ListFilter{UserID: &old}, authority)
+		if err != nil || len(page.Data) != 1 || !page.Data[0].OriginIdentity.Deleted || page.Data[0].UserID != nil {
+			t.Fatal("retained steward history changed", page, err)
+		}
+		if _, err := f.repo.GetSteward(ctx, fresh, requestID, AttemptFilter{}, authority); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if identity.UserID == nil || identity.DiscordID == nil || *identity.DiscordID != "123456789012345678" || !identity.Deleted || identity.Unknown || admin.Data[0].UserID != nil {
 		t.Fatal(admin.Data[0])
 	}

@@ -28,6 +28,7 @@ export interface ErrorMetadata {
   expires_at: number;
 }
 export interface ErrorBody extends ErrorMetadata {
+  ipv4_redacted?: boolean;
   encoding: 'utf-8' | 'base64';
   body: string;
 }

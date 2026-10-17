@@ -112,7 +112,8 @@ func (authorizer *roleFinalTxAuthorizer) AuthorizeLogRead(ctx context.Context, t
 		}
 		return authorizer.AuthorizeAdmin(ctx, tx, actor.UserID)
 	case "steward":
-		return authorizer.AuthorizeStewardRead(ctx, tx, userID)
+		_, err := authorizer.AuthorizeStewardLogRead(ctx, tx, userID)
+		return err
 	case "user":
 		if _, ok := authz.PersonalCallerFromContext(ctx); ok {
 			_, err := authorizer.authorizer.AuthorizePersonalCaller(ctx, tx, userID)
@@ -142,6 +143,29 @@ func (authorizer *roleFinalTxAuthorizer) AuthorizeStewardMutation(ctx context.Co
 
 func (authorizer *roleFinalTxAuthorizer) AuthorizeStewardRead(ctx context.Context, tx *sql.Tx, userID int64) error {
 	return authorizer.authorize(ctx, tx, userID, authz.ActorUserSession, authz.RoleSteward)
+}
+
+// Log access has a separate permission and projection from management actions.
+// The returned flag is valid only for data read in this same transaction.
+func (authorizer *roleFinalTxAuthorizer) AuthorizeStewardLogRead(ctx context.Context, tx *sql.Tx, userID int64) (bool, error) {
+	if authorizer == nil || authorizer.authorizer == nil || ctx == nil || tx == nil {
+		return false, authz.ErrUnauthorized
+	}
+	if _, ok := authz.StewardCallerFromContext(ctx); ok {
+		return false, authz.ErrForbidden
+	}
+	actor, ok := auth.ActorFromContext(ctx)
+	if !ok || actor.Kind != authz.ActorUserSession || actor.UserID != userID {
+		return false, authz.ErrUnauthorized
+	}
+	principal, err := authorizer.authorizer.Authorize(ctx, tx, actor, authz.Requirement{Role: authz.RoleUser})
+	if err != nil {
+		return false, err
+	}
+	if principal.EffectiveLevel != 5 && principal.EffectiveLevel != 6 {
+		return false, authz.ErrForbidden
+	}
+	return principal.EffectiveLevel == 5, nil
 }
 
 func (authorizer *roleFinalTxAuthorizer) AuthorizeTraineeMutation(ctx context.Context, tx *sql.Tx, userID int64) error {
