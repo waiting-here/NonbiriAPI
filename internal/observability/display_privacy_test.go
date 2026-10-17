@@ -4,14 +4,16 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
+	"net/http/httptest"
 	"testing"
 )
 
-func TestDiagnosticCopiesRedactIPv4BeforeTextOrBinaryEncoding(t *testing.T) {
-	for _, prefix := range [][]byte{nil, {0xff}} {
+func TestDiagnosticCopiesPreserveTextAndBinaryBytes(t *testing.T) {
+	for _, prefix := range [][]byte{nil, {0xff, 0, 0xfe}} {
 		f := newDiagnosticFixture(t)
 		request := f.discovery(t, f.repository.now().Unix())
-		raw := append(append([]byte{}, prefix...), []byte("peer 192.0.2.15:443")...)
+		raw := append(append([]byte{}, prefix...), []byte("peer 192.0.2.15:443; mail person@example.invalid; https://example.invalid/path?token=test; Authorization: Bearer example-token; <script>x</script>"+string(bytes.Repeat([]byte("Z"), 70000)))...)
 		id := f.capture(t, DiagnosticRef{RequestID: request, AttemptSeq: 1}, "application/octet-stream", raw)
 		detail, err := f.reader.Detail(diagContext(f.admin), diagActor(f.admin), id)
 		if err != nil {
@@ -34,7 +36,19 @@ func TestDiagnosticCopiesRedactIPv4BeforeTextOrBinaryEncoding(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, result := range []ErrorBody{detail.Body, body} {
+		steward, err := f.reader.Detail(diagContext(f.steward), diagActor(f.steward), id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		httpRequest := httptest.NewRequest("GET", "/admin/api/diagnostics/"+id, nil).WithContext(diagContext(f.admin))
+		httpRequest.SetPathValue("id", id)
+		httpResponse := httptest.NewRecorder()
+		f.reader.serve(httpResponse, httpRequest, diagActor(f.admin))
+		var wire DiagnosticDetail
+		if httpResponse.Code != 200 || json.Unmarshal(httpResponse.Body.Bytes(), &wire) != nil || bytes.Contains(httpResponse.Body.Bytes(), []byte("<script>")) {
+			t.Fatal("incomplete or unsafe diagnostic HTTP", httpResponse.Code)
+		}
+		for _, result := range []ErrorBody{detail.Body, body, steward.Body, wire.Body} {
 			decoded := []byte(result.Body)
 			if result.Encoding == "base64" {
 				decoded, err = base64.StdEncoding.DecodeString(result.Body)
@@ -42,7 +56,7 @@ func TestDiagnosticCopiesRedactIPv4BeforeTextOrBinaryEncoding(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			want := append(append([]byte{}, prefix...), []byte("peer [redacted]:443")...)
+			want := raw
 			if !bytes.Equal(decoded, want) {
 				t.Fatalf("display=%q want=%q", decoded, want)
 			}

@@ -113,7 +113,7 @@ func (api *diagnosticAPI) diagnostic(w http.ResponseWriter, r *http.Request, act
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	writeLogJSON(w, http.StatusOK, value)
+	writeManagementLogJSON(w, http.StatusOK, value)
 }
 
 func (api *diagnosticAPI) diagnosticCapacity(w http.ResponseWriter, r *http.Request, actorID int64) {
@@ -142,7 +142,7 @@ func (api *diagnosticAPI) diagnosticCapacity(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	writeLogJSON(w, http.StatusOK, value)
+	writeManagementLogJSON(w, http.StatusOK, value)
 }
 
 type diagnosticQuery struct {

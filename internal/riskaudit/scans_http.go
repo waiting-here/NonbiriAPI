@@ -144,5 +144,5 @@ func serveScans(repository *Repository, action string, actor Actor, w http.Respo
 		auditError(w, err)
 		return
 	}
-	auditJSON(w, status, output, true)
+	auditJSON(w, status, output)
 }

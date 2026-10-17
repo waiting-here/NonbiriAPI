@@ -1,10 +1,10 @@
 package observability
 
 import (
+	"encoding/json"
 	"errors"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
-	"github.com/waiting-here/NonbiriAPI/internal/textprivacy"
 	"io"
 	"net/http"
 	"net/url"
@@ -136,7 +136,7 @@ func (r *DiagnosticReader) serve(w http.ResponseWriter, request *http.Request, a
 		writeIndependentDiagnosticError(w, err)
 		return
 	}
-	body, err := textprivacy.MarshalJSON(value)
+	body, err := json.Marshal(value)
 	if err != nil || len(body) > 8<<20 {
 		writeIndependentDiagnosticError(w, ErrUnavailable)
 		return

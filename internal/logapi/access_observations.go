@@ -52,7 +52,7 @@ func (api *diagnosticAPI) accessObservations(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	writeLogJSON(w, http.StatusOK, value)
+	writeManagementLogJSON(w, http.StatusOK, value)
 }
 
 func parseAccessFilter(raw string, now int64) (observability.AccessFilter, error) {

@@ -139,7 +139,7 @@ func (api *HTTPAPI) adminList(writer http.ResponseWriter, request *http.Request)
 		writeLogError(writer, err)
 		return
 	}
-	writeLogJSON(writer, http.StatusOK, page)
+	writeManagementLogJSON(writer, http.StatusOK, page)
 }
 
 func (api *HTTPAPI) adminDetail(writer http.ResponseWriter, request *http.Request) {
@@ -156,7 +156,7 @@ func (api *HTTPAPI) adminDetail(writer http.ResponseWriter, request *http.Reques
 		writeLogError(writer, err)
 		return
 	}
-	writeLogJSON(writer, http.StatusOK, detail)
+	writeManagementLogJSON(writer, http.StatusOK, detail)
 }
 
 func (api *HTTPAPI) stewardList(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
@@ -173,7 +173,7 @@ func (api *HTTPAPI) stewardList(writer http.ResponseWriter, request *http.Reques
 		writeLogError(writer, err)
 		return
 	}
-	writeLogJSON(writer, http.StatusOK, page)
+	writeManagementLogJSON(writer, http.StatusOK, page)
 }
 
 func (api *HTTPAPI) stewardDetail(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
@@ -192,7 +192,7 @@ func (api *HTTPAPI) stewardDetail(writer http.ResponseWriter, request *http.Requ
 		writeLogError(writer, err)
 		return
 	}
-	writeLogJSON(writer, http.StatusOK, detail)
+	writeManagementLogJSON(writer, http.StatusOK, detail)
 }
 
 func (api *HTTPAPI) authorizeSteward(writer http.ResponseWriter, request *http.Request, userID int64) bool {
@@ -451,6 +451,10 @@ func requireNoBody(writer http.ResponseWriter, request *http.Request) bool {
 
 func writeLogJSON(writer http.ResponseWriter, status int, body any) {
 	httperr.WriteDisplayJSON(writer, status, body)
+}
+
+func writeManagementLogJSON(writer http.ResponseWriter, status int, body any) {
+	httperr.WriteJSON(writer, status, body)
 }
 
 func writeLogError(writer http.ResponseWriter, err error) {

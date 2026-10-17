@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AttemptErrors, RawErrorViewer } from './RequestDiagnostics';
-import type { ErrorBody } from './api';
+import { errorBytes, type ErrorBody } from './api';
 
 const requests = vi.hoisted(() => ({ apiFetch: vi.fn() }));
 vi.mock('@shared/query/http', () => ({ apiFetch: requests.apiFetch }));
@@ -47,18 +47,29 @@ describe('request diagnostics', () => {
     expect(await screen.findByText('<script>x</script>')).toBeInTheDocument();
     expect(document.querySelector('script')).toBeNull();
   });
-  it('renders redacted bodies whose stored byte count differs', () => {
+  it('renders the complete saved body beyond the old preview limit as text', () => {
+    const text =
+      'Failed at 192.0.2.7 person@example.invalid <script>x</script> ' +
+      'x'.repeat(70_000) +
+      ' saved-tail';
     const body = {
       event_seq: 1,
       encoding: 'utf-8',
-      body: 'Failed at [redacted]',
-      bytes_saved: 25,
+      body: text,
+      bytes_saved: new TextEncoder().encode(text).length,
       truncated: false,
     } as ErrorBody;
-    render(<RawErrorViewer body={body} />);
-    expect(screen.getByText('Failed at [redacted]')).toBeInTheDocument();
+    const { container } = render(<RawErrorViewer body={body} />);
+    fireEvent.click(screen.getByText('Body preview'));
+    expect(container.querySelector('pre')?.textContent).toBe(text);
+    expect(container.querySelector('script')).toBeNull();
     expect(screen.getByRole('button', { name: 'Download error body' })).toBeEnabled();
-    expect(screen.getByText(/Byte counts refer to the stored body/)).toBeInTheDocument();
+    expect(screen.queryByText(/replaced with \[redacted\]/)).toBeNull();
+  });
+  it('decodes the complete original binary bytes without text conversion', () => {
+    const bytes = new Uint8Array([0xff, 0, ...new TextEncoder().encode('192.0.2.7 <script>')]);
+    const body = { encoding: 'base64', body: btoa(String.fromCharCode(...bytes)) } as ErrorBody;
+    expect(errorBytes(body)).toEqual(bytes);
   });
   it('keeps malformed body decoding failures inside the viewer', () => {
     render(<RawErrorViewer body={{ body: 'not base64!', encoding: 'base64' } as ErrorBody} />);
