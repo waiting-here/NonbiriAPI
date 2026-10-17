@@ -99,7 +99,8 @@ Use synthetic inputs and an isolated machine window for before/after comparisons
 
 ```sh
 CGO_ENABLED=0 go test ./internal/charityrouting -run '^$' -bench BenchmarkCatalogRecentSuccess -benchmem
-NONBIRI_LOAD_TEST=1 CGO_ENABLED=0 go test ./internal/app -run '^TestApplicationSyntheticLoad$' -count=1 -v -timeout=10m
+NONBIRI_LOAD_TEST=1 CGO_ENABLED=0 go test ./internal/app -run '^TestApplicationCatalogLoad$' -count=1 -v -timeout=10m
+NONBIRI_LOAD_TEST=1 NONBIRI_LOAD_SCALE=production CGO_ENABLED=0 go test ./internal/app -run '^TestApplicationSyntheticLoad$' -count=1 -v -timeout=10m
 ```
 
 The catalog benchmark varies page size and history size outside setup timing.
@@ -108,16 +109,31 @@ upstream with the real authentication, routing, game workers and settlement
 paths. It compares no model traffic, 50/100/200 long requests, a short-response
 burst and slow readers with cancellation. It retains default admission and
 egress budgets; offered, admitted and upstream-active counts are distinct.
-Its six independent page probes target 15 requests/second in total.
+Page probes offer 15 requests/second against a fixed clock, including all three
+directory entrances. Slow responses do not reduce the planned arrival rate.
+The catalog experiment separately offers 15/30 RPS for 30 seconds and bursts of
+25/50 concurrent directory requests. Its fixture has 220 models, 600 bindings,
+70,000 terminal fishing batches and 385,000 corresponding outcomes; the
+`production` scale selects that same fixture for the streaming experiment.
+All records are synthetic. Bindings share one approved donation key, so these
+tests characterize this fixed workload rather than every production resource mix.
 
-`LOAD_RESULT` JSON reports page and model percentiles, status/rejection counts,
-database-pool wait deltas by phase, memory and recovery. Pool wait time sums all
-waiters and can exceed wall time. Check completion bursts separately from steady
+`LOAD_RESULT` and `CATALOG_LOAD_RESULT` JSON report page/model percentiles,
+planned/submitted/completed requests, status/rejection counts, both pools' wait
+deltas, process CPU time, Go heap/allocation data and recovery. The catalog result
+also records submission lag. `last_window_operations` includes background work
+since the observer's last minute drain, so it is not necessarily the entire run.
+CPU timestamps are cumulative process totals; subtract before from after to
+exclude fixture preparation. Pool wait time sums all waiters and can exceed wall
+time. Check completion bursts separately from steady
 streams, and retain failed admissions when comparing throughput. The test checks
 protocol completion and releases of claims/reservations; it has no machine-speed
 pass threshold and is skipped by ordinary CI. Bind results to source, toolchain,
 configuration and hardware; these local measurements do not establish production
-capacity. Runtime aggregate interpretation is in [deployment.md](docs/deployment.md).
+capacity. For the fixed standard catalog workload, evaluate each directory at
+P95 <= 1 second and P99 <= 2 seconds with no unexpected timeout or 5xx. The double
+workload reports headroom, without becoming a production capacity promise.
+Runtime aggregate interpretation is in [deployment.md](docs/deployment.md).
 
 ## Security and data boundaries
 

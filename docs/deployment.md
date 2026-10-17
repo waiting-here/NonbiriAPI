@@ -217,18 +217,33 @@ The process logger emits a `runtime performance` aggregate at INFO once per minu
 Fixed route groups contain completed, active, peak, server-error and cancellation
 counts, plus duration p50/p95/p99 and maximum in milliseconds. Percentiles are
 histogram bucket upper bounds; `first_response_p95_ms` measures the first final
-header/body/flush, not the first model token. Requests rejected by the outer
-station boundary are excluded. Long streams span windows and complete in the
-window in which their handler returns.
+header/body/flush, not the first model token. The aggregate covers every request
+reaching the application, including station-boundary refusals. `http.completed`
+is the window's total completed requests, `http.active` is active work at emission,
+and `http.peak` is the true simultaneous peak across routes. Do not sum route
+peaks. Proxy refusals that never reach the process are outside these counters.
+Long streams span windows and complete when their handler returns.
 
 `db_waits` and `db_wait_ms` are database-pool deltas for the whole process;
-`db_in_use` and `db_open` are samples at emission. Transaction groups measure
-session authentication, catalog reads and game-state work after acquisition
-(game timing starts after the writer lock and decision clock), ending at commit
-or rollback. These aggregates contain no identities, raw paths, query strings,
-headers or bodies and add no database records. Apply ordinary process-log
-rotation. Compare page latency, pool waiting and model-call duration together;
-in-flight model counts alone do not establish page capacity.
+`db_in_use` and `db_open` are samples at emission. The same fields are separated
+under `db_pools.writer` and `db_pools.reader` as `waits,wait_ms,in_use,open`.
+Wait time sums all waiters and can exceed wall time; a fall in writer waiting
+must be compared with reader waiting too. Pool sizes remain one and two.
+
+`connection.<operation>` measures connection acquisition; `transaction.<operation>`
+measures work from begin through commit/rollback and connection return. Fixed
+operations are `session`, `personal_models`, `charity_models`,
+`charity_capability`, `catalog`, `fishing_cleanup` and `donation_expiry`.
+Database phases count non-cancellation errors in `failures` and interrupted work
+in `canceled`. HTTP groups retain `server_errors` for server failures. Game-state
+transaction timing retains its existing start after the writer lock and decision
+clock. Background workers use the same observer as requests.
+
+These aggregates contain no identities, raw paths, SQL, query strings, headers
+or bodies and add no database records. Apply ordinary process-log rotation.
+Collect CPU, RSS/available memory and network throughput using host tools;
+application concurrency alone does not establish capacity. Compare equivalent
+load windows and account for request mix when evaluating a deployment.
 
 Existing content-hashed JS/CSS files use a one-year immutable cache. HTML and
 SPA fallbacks remain `no-store`; fixed-path artwork and other files do not gain

@@ -10,6 +10,12 @@ NonbiriAPI is a self-hosted AI endpoint manager and OpenAI-compatible gateway. U
 
 One Go process serves two embedded React stations and one local SQLite database. User and administrator stations have separate hosts and authorization boundaries. Production targets Linux/amd64; Windows supports development and build verification.
 
+Model directories evaluate current availability in read-only SQLite snapshots,
+with batched candidate and success-rate queries. Personal model lists use the
+same bounded read pool. There is no complete-list cache or TTL; caller identity,
+level, donation ownership and current quotas still affect the result. See
+[database access](docs/database-access.md) and [runtime metrics](docs/deployment.md).
+
 | Area | Source and contract |
 | --- | --- |
 | Startup, recovery and HTTP composition | `main.go`, `internal/app/` |
@@ -38,7 +44,7 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [First-run setup](docs/first-run-setup.md) covers private paths, the encryption key, Discord OAuth and public origins. Copy [admin.env.example](admin.env.example) outside the checkout, replace placeholders and load it before starting. Preserve the database with its matching key.
 
-Fresh databases start in maintenance with public features closed. This v1.0.0 binary accepts schema 21 or fresh storage. Existing schema 16, 17, 18, 19 and 20 databases use the separate offline converter; historical conversion code is excluded from the service. Later v1.x releases retain an upgrade path from every earlier stable v1.x schema. Older binaries need not read newer databases.
+Fresh databases start in maintenance with public features closed. The v1.0.2 binary accepts schema 21 or fresh storage. Existing schema 16, 17, 18, 19 and 20 databases use the separate offline converter; historical conversion code is excluded from the service. Later v1.x releases retain an upgrade path from every earlier stable v1.x schema. Older binaries need not read newer databases.
 
 [Deployment](docs/deployment.md) covers systemd, proxies, immutable artifacts, upgrades and complete-snapshot recovery. Startup variables and online settings have one reference in [configuration](docs/configuration.md).
 
