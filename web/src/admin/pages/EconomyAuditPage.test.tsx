@@ -101,7 +101,7 @@ describe('administrator economy audit', () => {
     await screen.findByText('No trend data for this interval.');
     const readsBeforeRetry = { summary: summaryReads, series: seriesReads };
     recovered = true;
-    fireEvent.click(screen.getByRole('button', { name: 'Retry', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     expect(await screen.findByRole('heading', { name: 'Current stock' })).toBeVisible();
     expect(screen.queryByText(/private database detail/)).toBeNull();
     expect(summaryReads).toBe(readsBeforeRetry.summary + 1);
