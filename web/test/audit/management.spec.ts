@@ -154,7 +154,7 @@ test('administrator follows retained request identity through deletion history a
   }
 });
 
-test('level 5 saves only message-role fields for its mainstream model and cannot open history APIs', async ({
+test('level 5 saves only message-role fields, reads logs and cannot open abuse audits', async ({
   browser,
 }, info) => {
   const state = fixture(),
@@ -197,9 +197,11 @@ test('level 5 saves only message-role fields for its mainstream model and cannot
       '/api/steward/charity-models/' + state.management.charity_model_id,
     );
     expect(model.role_policy ?? model.data?.role_policy).toEqual(intent.role_policy);
-    const forbidden = await context.request.get(state.user_url + '/api/steward/logs');
+    const logs = await context.request.get(state.user_url + '/api/steward/logs');
+    expect(logs.status()).toBe(200);
+    const forbidden = await context.request.get(state.user_url + '/api/steward/abuse-audit/users');
     expect(forbidden.status()).toBe(403);
-    await expect(page.getByRole('tab', { name: 'Logs', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('tab', { name: 'Request logs', exact: true })).toBeVisible();
   } finally {
     await context.close();
   }
