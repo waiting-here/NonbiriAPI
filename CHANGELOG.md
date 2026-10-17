@@ -4,7 +4,10 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
-## Unreleased
+## 1.0.1 — 2026-10-17
+
+Database schema 21 and account export 20 are unchanged. This source-only patch
+uses the same build instructions and supported upgrade paths as v1.0.0.
 
 ### Fixed
 
