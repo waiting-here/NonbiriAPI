@@ -97,5 +97,5 @@ func (api *httpAPI) resolveMany(w http.ResponseWriter, r *http.Request, principa
 		writeError(w, err)
 		return
 	}
-	httperr.WriteDisplayJSON(w, http.StatusOK, result)
+	httperr.WriteJSON(w, http.StatusOK, result)
 }

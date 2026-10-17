@@ -15,7 +15,6 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/httpmw"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
-	"github.com/waiting-here/NonbiriAPI/internal/textprivacy"
 )
 
 type publicReportWire struct {
@@ -192,14 +191,14 @@ func adminActor(request *http.Request) (authz.Actor, error) {
 }
 
 func writeReportJSON(writer http.ResponseWriter, status int, value any) {
-	httperr.WriteDisplayJSON(writer, status, value)
+	httperr.WriteJSON(writer, status, value)
 }
 
 func writeMutationResult(writer http.ResponseWriter, result MutationResult) {
 	writer.Header().Set("Cache-Control", "no-store")
 	writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 	writer.WriteHeader(result.Status)
-	_, _ = writer.Write([]byte(textprivacy.IPv4(string(result.Body))))
+	_, _ = writer.Write(result.Body)
 }
 
 func writeReportError(writer http.ResponseWriter, err error) {

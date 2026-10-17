@@ -78,7 +78,6 @@ export function getErrorBody(
 }
 
 export function errorBytes(body: ErrorBody): Uint8Array<ArrayBuffer> {
-  // Stored byte counts describe the original body; display redaction can change its size.
   const maxDisplayBytes = 2 * 1024 * 1024;
   if (body.body.length > 4 * Math.ceil(maxDisplayBytes / 3))
     throw new Error('Diagnostic is too large');

@@ -234,5 +234,5 @@ func (api *httpAPI) targetDiagnostic(writer http.ResponseWriter, request *http.R
 		writeError(writer, err)
 		return
 	}
-	httperr.WriteDisplayJSON(writer, http.StatusOK, value)
+	httperr.WriteJSON(writer, http.StatusOK, value)
 }

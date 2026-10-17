@@ -178,7 +178,20 @@ func (api *httpAPI) listUsers(writer http.ResponseWriter, request *http.Request,
 		writeError(writer, err)
 		return
 	}
-	httperr.WriteDisplayJSON(writer, http.StatusOK, page)
+	items := make([]json.RawMessage, 0, len(page.Data))
+	for _, row := range page.Data {
+		encode := textprivacy.MarshalJSON
+		if row.Deleted != nil {
+			encode = json.Marshal
+		}
+		body, err := encode(row)
+		if err != nil {
+			writeError(writer, ErrInvariant)
+			return
+		}
+		items = append(items, body)
+	}
+	httperr.WriteJSON(writer, http.StatusOK, Page[json.RawMessage]{Data: items, NextCursor: page.NextCursor, Pagination: page.Pagination})
 }
 
 func (api *httpAPI) getDeletedUser(writer http.ResponseWriter, request *http.Request, principal AdminPrincipal) {
@@ -200,7 +213,7 @@ func (api *httpAPI) getDeletedUser(writer http.ResponseWriter, request *http.Req
 		writeError(writer, err)
 		return
 	}
-	httperr.WriteDisplayJSON(writer, http.StatusOK, item)
+	httperr.WriteJSON(writer, http.StatusOK, item)
 }
 
 func (api *httpAPI) listDeletionDuelAborts(writer http.ResponseWriter, request *http.Request, principal AdminPrincipal) {
@@ -226,7 +239,7 @@ func (api *httpAPI) listDeletionDuelAborts(writer http.ResponseWriter, request *
 		writeError(writer, err)
 		return
 	}
-	httperr.WriteDisplayJSON(writer, http.StatusOK, page)
+	httperr.WriteJSON(writer, http.StatusOK, page)
 }
 
 func (api *httpAPI) getUser(writer http.ResponseWriter, request *http.Request, principal AdminPrincipal) {

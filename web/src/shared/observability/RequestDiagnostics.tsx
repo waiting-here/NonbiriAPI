@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Fold } from '@shared/components/ui/Fold';
 import { copyText } from '@shared/utils/clipboard';
 import {
   errorBytes,
@@ -278,7 +279,6 @@ export function RawErrorViewer({ body }: { body: ErrorBody }) {
   if (!decoded) return <p role="alert">{t('common.diagnostics.couldNotLoadTheErrorBody')}</p>;
   return (
     <div className="request-diagnostics">
-      <p>{t('common.diagnostics.ipv4Redacted')}</p>
       {synthetic && (
         <p role="status">{t('common.diagnostics.thisIsASafeDiagnosticSummaryGenerated')}</p>
       )}
@@ -325,13 +325,13 @@ export function RawErrorViewer({ body }: { body: ErrorBody }) {
             : t('common.diagnostics.downloadOriginal')}
         </button>
       </div>
-      <details open={body.bytes_saved <= 16_384}>
-        <summary>{t('common.diagnostics.bodyPreview')}</summary>
-        <pre>{(showRaw ? raw : (formatted ?? raw)).slice(0, 65_536)}</pre>
-        {(showRaw ? raw : (formatted ?? raw)).length > 65_536 && (
-          <p>{t('common.diagnostics.previewShowsTheFirst65536CharactersCopy')}</p>
-        )}
-      </details>
+      <Fold
+        title={t('common.diagnostics.bodyPreview')}
+        defaultOpen={body.bytes_saved <= 16_384}
+        lazy
+      >
+        <pre>{showRaw ? raw : (formatted ?? raw)}</pre>
+      </Fold>
       {notice && <p role="status">{notice}</p>}
     </div>
   );

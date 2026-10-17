@@ -393,3 +393,20 @@ func requireAlertIDs(t *testing.T, alerts []AdminAlert, ids ...int64) {
 		}
 	}
 }
+
+func TestAlertHTTPPreservesSavedMessageAndReference(t *testing.T) {
+	environment := newAlertTestEnvironment(t)
+	message := "peer 192.0.2.7 person@example.invalid <script> & " + strings.Repeat("x", 900)
+	ref := "https://192.0.2.7/v1?token=saved"
+	id := environment.seedAlert(t, string(KindFetchFailed), message, ref, nil, alertTestNow, false)
+	list := invokeAlertHandler(t, environment.handler(t, http.MethodGet, routeAlerts), http.MethodGet, routeAlerts, nil, "", environment.adminID, nil)
+	shown := decodeAlertPage(t, list)
+	if len(shown.Data) != 1 || shown.Data[0].Message != message || shown.Data[0].Ref == nil || *shown.Data[0].Ref != ref || strings.Contains(list.Body.String(), "<script>") {
+		t.Fatal("alert list changed saved text", list.Code, list.Body)
+	}
+	detail := invokeAlertHandler(t, environment.handler(t, http.MethodGet, routeAlertDetail), http.MethodGet, "/admin/api/alerts/"+strconv.FormatInt(id, 10), nil, strconv.FormatInt(id, 10), environment.adminID, nil)
+	var value AlertDetail
+	if detail.Code != 200 || json.Unmarshal(detail.Body.Bytes(), &value) != nil || value.Alert.Message != message || value.Alert.Ref == nil || *value.Alert.Ref != ref {
+		t.Fatal("alert detail changed saved text", detail.Code, detail.Body)
+	}
+}

@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"github.com/waiting-here/NonbiriAPI/internal/textprivacy"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -288,15 +287,12 @@ func ErrorBodyTx(ctx context.Context, tx *sql.Tx, logID int64, attempt int, even
 	if len(body) > upstreamerror.MaxRawBodyBytes {
 		return ErrorBody{}, ErrUnavailable
 	}
-	// Redact the returned copy before encoding binary diagnostics. Stored
-	// bytes and their audit counters remain unchanged.
-	display := textprivacy.IPv4(string(body))
 	item.Encoding = "utf-8"
-	if utf8.ValidString(display) {
-		item.Body = display
+	if utf8.Valid(body) {
+		item.Body = string(body)
 	} else {
 		item.Encoding = "base64"
-		item.Body = base64.StdEncoding.EncodeToString([]byte(display))
+		item.Body = base64.StdEncoding.EncodeToString(body)
 	}
 	return item, nil
 }
