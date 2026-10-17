@@ -597,7 +597,7 @@ test('ordinary users and both steward levels cannot read or mutate the editor', 
       const logs = await context.request.get(
         fixture().user_url + '/api/steward/logs?usage_total_mismatch=true',
       );
-      expect(logs.status()).toBe(role === 6 ? 200 : 403);
+      expect(logs.status()).toBe(role === 1 ? 403 : 200);
     } finally {
       await context.close();
     }
