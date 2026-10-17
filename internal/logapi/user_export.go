@@ -56,7 +56,7 @@ func (r *Repository) ExportUser(ctx context.Context, user int64, filter ListFilt
 	args = append(args, maxExportRows+1)
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, translateSQLError(err)
+		return nil, translateReadError(ctx, err)
 	}
 	defer rows.Close()
 	result := []UserLogRow{}
@@ -64,7 +64,7 @@ func (r *Repository) ExportUser(ctx context.Context, user int64, filter ListFilt
 		var model string
 		record, err := scanCommon(rows, &model)
 		if err != nil {
-			return nil, translateSQLError(err)
+			return nil, translateReadError(ctx, err)
 		}
 		if len(result) >= maxExportRows {
 			return nil, ErrCapacity
@@ -83,13 +83,13 @@ func (r *Repository) ExportUser(ctx context.Context, user int64, filter ListFilt
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return nil, translateSQLError(err)
+		return nil, translateReadError(ctx, err)
 	}
 	if err := rows.Close(); err != nil {
-		return nil, translateSQLError(err)
+		return nil, translateReadError(ctx, err)
 	}
 	if err := tx.Commit(); err != nil {
-		return nil, translateSQLError(err)
+		return nil, translateReadError(ctx, err)
 	}
 	return result, nil
 }

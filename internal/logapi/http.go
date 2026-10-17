@@ -1,6 +1,7 @@
 package logapi
 
 import (
+	"context"
 	"errors"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"io"
@@ -200,11 +201,7 @@ func (api *HTTPAPI) authorizeSteward(writer http.ResponseWriter, request *http.R
 		return false
 	}
 	if err := api.repository.authorizeStewardRead(request.Context(), userID, api.steward); err != nil {
-		if errors.Is(err, ErrUnavailable) {
-			writeLogError(writer, ErrUnavailable)
-		} else {
-			writeLogError(writer, ErrForbidden)
-		}
+		writeLogError(writer, err)
 		return false
 	}
 	return true
@@ -462,6 +459,10 @@ func writeLogError(writer http.ResponseWriter, err error) {
 		return
 	}
 	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		httperr.WriteError(writer, httperr.New(httperr.CodeServiceUnavailable, "log query timed out; narrow the filters and retry"))
+	case errors.Is(err, context.Canceled):
+		httperr.WriteError(writer, httperr.New(httperr.CodeServiceUnavailable, "log query was canceled"))
 	case errors.Is(err, ErrInvalid):
 		httperr.WriteError(writer, httperr.New(httperr.CodeInvalidRequest, "invalid log request"))
 	case errors.Is(err, ErrNotFound):

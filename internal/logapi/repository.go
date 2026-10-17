@@ -34,9 +34,17 @@ type CursorKeyDeriver interface {
 
 type Repository struct {
 	db         *sql.DB
+	readDB     *sql.DB
+	readAuth   ReadAuthorizer
 	cursorKeys CursorKeyDeriver
 	heldRead   AdminHeldReadAuthorizer
 	now        func() time.Time
+}
+
+// ReadAuthorizer checks the current session or caller identity in the same
+// snapshot as the rows it may read, after waiting for a connection.
+type ReadAuthorizer interface {
+	AuthorizeLogRead(context.Context, *sql.Tx, string, int64) error
 }
 
 func (repository *Repository) decisionNow() (int64, error) {
@@ -55,15 +63,30 @@ func (repository *Repository) beginStewardRead(
 	stewardUserID int64,
 	authorizer StewardAuthorizer,
 ) (*sql.Tx, error) {
-	if repository == nil || repository.db == nil || ctx == nil || stewardUserID <= 0 || authorizer == nil {
+	if repository == nil {
 		return nil, ErrInvalid
 	}
-	tx, err := repository.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	return repository.beginStewardReadOn(ctx, repository.db, stewardUserID, authorizer)
+}
+
+func (repository *Repository) beginStewardReadOn(
+	ctx context.Context,
+	database *sql.DB,
+	stewardUserID int64,
+	authorizer StewardAuthorizer,
+) (*sql.Tx, error) {
+	if repository == nil || database == nil || ctx == nil || stewardUserID <= 0 || authorizer == nil {
+		return nil, ErrInvalid
+	}
+	tx, err := database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
-		return nil, translateSQLError(err)
+		return nil, translateReadError(ctx, err)
 	}
 	if err := authorizer.AuthorizeStewardRead(ctx, tx, stewardUserID); err != nil {
 		_ = tx.Rollback()
+		if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, translateReadError(ctx, err)
+		}
 		if errors.Is(err, authz.ErrMFARequired) {
 			return nil, err
 		}
@@ -80,13 +103,18 @@ func (repository *Repository) authorizeStewardRead(
 	stewardUserID int64,
 	authorizer StewardAuthorizer,
 ) error {
-	tx, err := repository.beginStewardRead(ctx, stewardUserID, authorizer)
+	if repository == nil || ctx == nil {
+		return ErrInvalid
+	}
+	ctx, cancel := context.WithTimeout(ctx, logPageTimeout)
+	defer cancel()
+	tx, err := repository.beginStewardReadOn(ctx, repository.readDB, stewardUserID, authorizer)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 	if err := tx.Commit(); err != nil {
-		return translateSQLError(err)
+		return translateReadError(ctx, err)
 	}
 	return nil
 }
@@ -95,14 +123,23 @@ func NewRepository(database *sql.DB, cursorKeys CursorKeyDeriver) (*Repository, 
 	if database == nil || cursorKeys == nil {
 		return nil, ErrInvalid
 	}
-	return &Repository{db: database, cursorKeys: cursorKeys, now: time.Now}, nil
+	return &Repository{db: database, readDB: database, cursorKeys: cursorKeys, now: time.Now}, nil
+}
+
+// NewRepositoryWithReader keeps retention and held-log audit writes on the
+// writer while ordinary browsing uses an independently bounded read pool.
+func NewRepositoryWithReader(database, reader *sql.DB, cursorKeys CursorKeyDeriver, authorizer ReadAuthorizer) (*Repository, error) {
+	if database == nil || reader == nil || cursorKeys == nil || authorizer == nil {
+		return nil, ErrInvalid
+	}
+	return &Repository{db: database, readDB: reader, readAuth: authorizer, cursorKeys: cursorKeys, now: time.Now}, nil
 }
 
 func newRepository(database *sql.DB, cursorKeys CursorKeyDeriver, now func() time.Time) (*Repository, error) {
 	if database == nil || cursorKeys == nil || now == nil {
 		return nil, ErrInvalid
 	}
-	return &Repository{db: database, cursorKeys: cursorKeys, now: now}, nil
+	return &Repository{db: database, readDB: database, cursorKeys: cursorKeys, now: now}, nil
 }
 
 type listCursor struct {
@@ -608,4 +645,13 @@ func translateSQLError(err error) error {
 		return fmt.Errorf("logapi repository: %w", err)
 	}
 	return nil
+}
+
+func translateReadError(ctx context.Context, err error) error {
+	// SQLite can report SQLITE_INTERRUPT, and database/sql can roll a
+	// transaction back, before the original context error reaches the caller.
+	if err != nil && ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return translateSQLError(err)
 }
