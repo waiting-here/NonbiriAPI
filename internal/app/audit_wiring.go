@@ -75,7 +75,7 @@ func newAuditRuntime(ctx context.Context, store *db.Store, vault *secret.Vault, 
 	if err != nil {
 		return nil, err
 	}
-	a.economy, err = economyaudit.New(economyaudit.Config{Database: store.DB(), FinalAuth: authorizer, CursorKeys: vault})
+	a.economy, err = economyaudit.New(economyaudit.Config{Database: store.DB(), ReadDatabase: store.ReadDB(), FinalAuth: authorizer, CursorKeys: vault})
 	if err != nil {
 		return nil, err
 	}

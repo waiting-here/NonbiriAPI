@@ -123,7 +123,7 @@ func newAuditFixtureFromSource(t *testing.T, source string) *auditFixture {
 	f.steward = seed("steward", 0, 6)
 	f.trainee = seed("trainee", 0, 5)
 	f.ctx = context.WithValue(context.Background(), testActorKey{}, f.actors[f.admin])
-	f.service, err = New(Config{Database: f.database, FinalAuth: testFinalAuthorizer{authz.New(authz.Options{Now: func() time.Time { return time.Unix(auditNow, 0) }})}, CursorKeys: vault, Now: func() time.Time { return time.Unix(auditNow, 0) }})
+	f.service, err = New(Config{Database: f.database, ReadDatabase: store.ReadDB(), FinalAuth: testFinalAuthorizer{authz.New(authz.Options{Now: func() time.Time { return time.Unix(auditNow, 0) }})}, CursorKeys: vault, Now: func() time.Time { return time.Unix(auditNow, 0) }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,6 +152,7 @@ func newAuditFixtureFromSource(t *testing.T, source string) *auditFixture {
 		}
 		f.database = store.DB()
 		f.service.database = f.database
+		f.service.readDB = store.ReadDB()
 	}
 	return f
 }
@@ -227,6 +228,9 @@ func TestProjectionBatchesRollbackAndReplayWithoutDoubleIssuance(t *testing.T) {
 	if last != 0 || rows != 0 {
 		t.Fatal("rollback left a partial projection")
 	}
+	if ready, err := f.service.Advance(f.ctx); err != nil || ready {
+		t.Fatal(ready, err)
+	}
 	first, err := f.service.Summary(f.ctx, f.admin, auditFilter(ledger.General))
 	if err != nil {
 		t.Fatal(err)
@@ -234,6 +238,11 @@ func TestProjectionBatchesRollbackAndReplayWithoutDoubleIssuance(t *testing.T) {
 	if first.Metadata.ProjectedSeq != "100" || first.Metadata.LedgerSeq != "101" || first.Inventory != nil || first.Reconciliation.Status != "catching_up" {
 		t.Fatalf("mixed-watermark summary: %+v", first)
 	}
+	stale, err := f.service.Summary(f.ctx, f.admin, auditFilter(ledger.General))
+	if err != nil || stale.Metadata.ProjectedSeq != "100" || stale.Inventory != nil {
+		t.Fatal("read advanced the projection", stale, err)
+	}
+	f.project(t)
 	second, err := f.service.Summary(f.ctx, f.admin, auditFilter(ledger.General))
 	if err != nil {
 		t.Fatal(err)
@@ -313,6 +322,7 @@ VALUES(?,?,?,1,1,?,?,'queued','reserved','none',?,?,?,?,1800)`, id, f.user, mode
 		p, e = ledger.NewImageReserve(f.meta(t, at+2), id, ledger.SketchAccounts{Paper: f.wallets[ledger.SketchPaper], Brush: f.wallets[ledger.SketchBrush]}, escrow, ledger.SketchPayment{Paper: ledger.AmountFromMilli(4000), Brush: ledger.AmountFromMilli(1000)})
 		applyAuditPlan(t, tx, p, e)
 	})
+	f.project(t)
 	for _, v := range []struct {
 		asset                                               ledger.Asset
 		issued, reclaimed, available, frozen, negative, net string
@@ -341,6 +351,7 @@ VALUES(?,?,?,1,1,?,?,'queued','reserved','none',?,?,?,?,1800)`, id, f.user, mode
 			t.Fatal(err)
 		}
 	})
+	f.project(t)
 	refunded, err := f.service.Summary(f.ctx, f.admin, auditFilter(ledger.SketchPaper))
 	if err != nil {
 		t.Fatal(err)
@@ -362,6 +373,7 @@ VALUES(?,?,?,1,1,?,?,'queued','reserved','none',?,?,?,?,1800)`, id, f.user, mode
 			t.Fatal(err)
 		}
 	})
+	f.project(t)
 	for _, asset := range ledger.Assets() {
 		got, err := f.service.Summary(f.ctx, f.admin, auditFilter(asset))
 		if err != nil || got.Inventory.Net != "0" || got.Reconciliation.Status != "matched" {
@@ -395,6 +407,7 @@ func TestExactTimeRangesUseSiteBucketsAndDoNotDoubleCount(t *testing.T) {
 		f.fund(t, 1, at)
 	}
 	filter := Filter{Asset: ledger.General, From: start, To: start + 3*86400, Bucket: "day"}
+	f.project(t)
 	got, err := f.service.Summary(f.ctx, f.admin, filter)
 	if err != nil {
 		t.Fatal(err)
@@ -443,6 +456,7 @@ func TestPoolAndPlatformTransfersAreNotReissuedAndLoansKeepSeparateAssets(t *tes
 		p, e = ledger.NewActivityLoan(f.meta(t, auditNow-6), ledger.AccountPair{General: f.wallets[ledger.General], Game: f.wallets[ledger.Game]}, ledger.AccountPair{General: f.external[ledger.General], Game: f.external[ledger.Game]}, ledger.AmountFromMilli(4000), ledger.AmountFromMilli(5000))
 		applyAuditPlan(t, tx, p, e)
 	})
+	f.project(t)
 	g, err := f.service.Summary(f.ctx, f.admin, auditFilter(ledger.General))
 	if err != nil {
 		t.Fatal(err)
@@ -654,6 +668,7 @@ func TestConcurrentLedgerWritesAndAuditReadsUseSameWatermark(t *testing.T) {
 	for err := range errs {
 		t.Error(err)
 	}
+	f.project(t)
 	got, err := f.service.Summary(f.ctx, f.admin, auditFilter(ledger.General))
 	if err != nil || got.Flows.Issued != "12000" {
 		t.Fatal("concurrent projection lost operations", got, err)

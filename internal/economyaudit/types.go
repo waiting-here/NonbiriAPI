@@ -32,14 +32,16 @@ type AdminRouteRegistrar interface {
 }
 
 type Config struct {
-	Database   *sql.DB
-	FinalAuth  FinalAuthorizer
-	CursorKeys CursorKeyDeriver
-	Now        func() time.Time
+	Database     *sql.DB
+	ReadDatabase *sql.DB
+	FinalAuth    FinalAuthorizer
+	CursorKeys   CursorKeyDeriver
+	Now          func() time.Time
 }
 
 type Service struct {
 	database *sql.DB
+	readDB   *sql.DB
 	auth     FinalAuthorizer
 	keys     CursorKeyDeriver
 	now      func() time.Time

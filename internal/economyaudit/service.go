@@ -16,13 +16,13 @@ import (
 )
 
 func New(config Config) (*Service, error) {
-	if config.Database == nil || config.FinalAuth == nil || config.CursorKeys == nil {
+	if config.Database == nil || config.ReadDatabase == nil || config.FinalAuth == nil || config.CursorKeys == nil {
 		return nil, ErrInvalid
 	}
 	if config.Now == nil {
 		config.Now = time.Now
 	}
-	return &Service{config.Database, config.FinalAuth, config.CursorKeys, config.Now}, nil
+	return &Service{database: config.Database, readDB: config.ReadDatabase, auth: config.FinalAuth, keys: config.CursorKeys, now: config.Now}, nil
 }
 
 func (s *Service) Advance(ctx context.Context) (bool, error) {
@@ -88,26 +88,43 @@ func (s *Service) read(ctx context.Context, admin int64, f Filter, fn func(conte
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	tx, err := s.database.BeginTx(ctx, nil)
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
-		return err
+		return readStage(ctx, "connection", err)
 	}
 	defer tx.Rollback()
 	if err := s.auth.AuthorizeAdmin(ctx, tx, admin); err != nil {
-		return err
+		return readStage(ctx, "authorization", err)
 	}
 	now := s.now().Unix()
-	if _, err := AdvanceTx(ctx, tx, now); err != nil {
-		return err
-	}
+	// Authorization, watermarks, aggregates and inventory all use this WAL
+	// snapshot. Only the background projector acquires the business writer.
 	c, err := readCheckpoint(ctx, tx)
 	if err != nil {
-		return err
+		return readStage(ctx, "checkpoint", err)
 	}
 	if err := fn(ctx, tx, c, now); err != nil {
-		return err
+		return readStage(ctx, "query", err)
 	}
-	return tx.Commit()
+	return readStage(ctx, "commit", tx.Commit())
+}
+
+type readFailure struct {
+	stage string
+	err   error
+}
+
+func (e *readFailure) Error() string { return "accounting audit " + e.stage + " failed" }
+func (e *readFailure) Unwrap() error { return e.err }
+
+func readStage(ctx context.Context, stage string, err error) error {
+	if err == nil {
+		return nil
+	}
+	if ctx.Err() != nil {
+		err = ctx.Err()
+	}
+	return &readFailure{stage: stage, err: err}
 }
 
 func (s *Service) Summary(ctx context.Context, admin int64, f Filter) (Summary, error) {

@@ -98,6 +98,7 @@ func TestLedgerRetentionPreservesBalancesAuditReceiptsAndRecovery(t *testing.T) 
 	from := bucketStart(old, 330, 3600)
 	filter := Filter{Asset: ledger.General, From: from, To: auditNow + 1, Bucket: "day"}
 	before := map[ledger.Asset]Summary{}
+	f.project(t)
 	for _, asset := range ledger.Assets() {
 		filter.Asset = asset
 		result, err := f.service.Summary(f.ctx, f.admin, filter)

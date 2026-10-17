@@ -124,6 +124,7 @@ func TestFatFishAndLakeChannelsProjectRetryAndAllReadAPIs(t *testing.T) {
 		}
 	}
 	f.fund(t, 1, auditNow-1)
+	f.project(t)
 	if ready, err := f.service.Advance(f.ctx); err != nil || !ready {
 		t.Fatal(ready, err)
 	}
