@@ -1,11 +1,10 @@
 import { blinkAt, PaintCadence, eyelidProfileWidth } from '@shared/animation/illustration';
 import { highResolutionArt } from '../art-resolution';
-import { amber } from './config';
 import { amberEyelids } from './eyelids';
-import { amberShader, characterShader } from './shader';
+import { amberShader, characterShader, foregroundShader } from './shader';
 import { characterVertex, createRigMesh, poseAt } from './rig';
 import { polishedAmberEyelids } from './polished-eyelids';
-import { portraitView } from '../portrait';
+import { amberLayout } from './layout';
 
 type Options = {
   polished?: boolean;
@@ -19,6 +18,8 @@ type Options = {
   frozenTime?: number;
   paused?: () => boolean;
   signal?: AbortSignal;
+  variant?: 'card' | 'cover' | 'illustration' | 'appearance';
+  characterPlate?: boolean;
 };
 
 function image(src: string, signal?: AbortSignal) {
@@ -59,11 +60,14 @@ export async function renderAmber(canvas: HTMLCanvasElement, options: Options = 
     const url = base + name + '.webp';
     return image(options.highResolution ? highResolutionArt(url) : url, options.signal);
   };
-  const [background, hero, closed, books] = await Promise.all([
+  const [background, hero, closed, books, boots, flags, lamps] = await Promise.all([
     options.characterOnly ? null : source(options.dark ? 'background-dark' : 'background-light'),
     source('hero-original'),
     source('hero-closed'),
-    source('books'),
+    options.characterOnly ? null : source('books'),
+    image(base + 'boots.webp', options.signal),
+    options.characterOnly ? null : source('flags'),
+    options.characterOnly ? null : source('lamps'),
   ]);
   if (options.signal?.aborted) return () => {};
   const context = canvas.getContext('2d');
@@ -130,7 +134,7 @@ export async function renderAmber(canvas: HTMLCanvasElement, options: Options = 
     gl!.bufferData(gl!.ARRAY_BUFFER, data, gl!.STATIC_DRAW);
     return buffer;
   }
-  let sceneProgram: WebGLProgram, heroProgram: WebGLProgram;
+  let sceneProgram: WebGLProgram, heroProgram: WebGLProgram, foregroundProgram: WebGLProgram;
   let sceneBuffer: WebGLBuffer, heroBuffer: WebGLBuffer;
   let vertexCount: number;
   try {
@@ -139,11 +143,24 @@ export async function renderAmber(canvas: HTMLCanvasElement, options: Options = 
       amberShader,
     );
     heroProgram = compile(characterVertex, characterShader);
+    foregroundProgram = compile(
+      'attribute vec2 a;varying vec2 uv;void main(){uv=a;gl_Position=vec4(a.x*2.-1.,1.-a.y*2.,0.,1.);}',
+      foregroundShader,
+    );
     sceneBuffer = makeBuffer(new Float32Array([0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1]));
     const mesh = createRigMesh();
     heroBuffer = makeBuffer(mesh);
     vertexCount = mesh.length / 10;
-    for (const [i, img] of [background ?? hero, hero, closed, null, books].entries()) {
+    for (const [i, img] of [
+      background ?? hero,
+      hero,
+      closed,
+      null,
+      books,
+      boots,
+      flags,
+      lamps,
+    ].entries()) {
       const texture = gl.createTexture();
       if (!texture) throw new Error('renderer-unavailable');
       textures.push(texture);
@@ -154,7 +171,7 @@ export async function renderAmber(canvas: HTMLCanvasElement, options: Options = 
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
       if (img) gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
-      else
+      else if (i === 3)
         gl.texImage2D(
           gl.TEXTURE_2D,
           0,
@@ -166,10 +183,25 @@ export async function renderAmber(canvas: HTMLCanvasElement, options: Options = 
           gl.UNSIGNED_BYTE,
           new Uint8Array(eyelids.flatMap((profile) => profile.rows.flat())),
         );
+      else
+        gl.texImage2D(
+          gl.TEXTURE_2D,
+          0,
+          gl.RGBA,
+          1,
+          1,
+          0,
+          gl.RGBA,
+          gl.UNSIGNED_BYTE,
+          new Uint8Array(4),
+        );
       for (const program of programs) {
         gl.useProgram(program);
         gl.uniform1i(
-          gl.getUniformLocation(program, ['scenery', 'art', 'closed', 'lids', 'books'][i]),
+          gl.getUniformLocation(
+            program,
+            ['scenery', 'art', 'closed', 'lids', 'books', 'boots', 'flags', 'lamps'][i],
+          ),
           i,
         );
       }
@@ -180,7 +212,12 @@ export async function renderAmber(canvas: HTMLCanvasElement, options: Options = 
       gl.uniform4f(gl.getUniformLocation(program, 'rightEye'), ...eyelids[1].bounds);
       gl.uniform1f(gl.getUniformLocation(program, 'night'), options.dark ? 1 : 0);
       gl.uniform1f(gl.getUniformLocation(program, 'polish'), options.polished ? 1 : 0);
+      gl.uniform1f(gl.getUniformLocation(program, 'landscape'), options.landscape ? 1 : 0);
       gl.uniform1f(gl.getUniformLocation(program, 'characterOnly'), options.characterOnly ? 1 : 0);
+      gl.uniform1f(
+        gl.getUniformLocation(program, 'characterPlate'),
+        options.characterPlate ? 1 : 0,
+      );
       gl.uniform1f(
         gl.getUniformLocation(program, 'backgroundOnly'),
         options.backgroundOnly ? 1 : 0,
@@ -194,6 +231,8 @@ export async function renderAmber(canvas: HTMLCanvasElement, options: Options = 
     blinkUniform = gl.getUniformLocation(heroProgram, 'blink'),
     bonesUniform = gl.getUniformLocation(heroProgram, 'bones');
   const sceneAttribute = gl.getAttribLocation(sceneProgram, 'a');
+  const foregroundAttribute = gl.getAttribLocation(foregroundProgram, 'a');
+  const foregroundTime = gl.getUniformLocation(foregroundProgram, 'time');
   const heroAttributes = ['position', 'joints', 'weights'].map((name) =>
     gl.getAttribLocation(heroProgram, name),
   );
@@ -210,25 +249,20 @@ export async function renderAmber(canvas: HTMLCanvasElement, options: Options = 
     layer.width = Math.round(canvas.width * sampling);
     layer.height = Math.round(canvas.height * sampling);
     gl.viewport(0, 0, layer.width, layer.height);
-    let view: readonly number[], heroBox: readonly number[];
-    if (options.landscape) {
-      const aspect = width / height,
-        original = 1672 / 941;
-      const vw = Math.min(1, aspect / original),
-        vh = Math.min(1, original / aspect);
-      // Keep the same top edge as the static painting, including on ultrawide screens.
-      view = [(1 - vw) * (options.polished ? 0.82 : amber.cropPosition), 0, vw, vh];
-      heroBox = amber.landscapeHero;
-    } else {
-      view = options.polished ? portraitView(amber.portraitCrop, 'amber') : amber.portraitCrop;
-      const [x, y, w, h] = amber.portraitHero,
-        [cx, cy, cw, ch] = amber.portraitCrop;
-      heroBox = [cx + x * cw, cy + y * ch, w * cw, h * ch];
-    }
+    const { view, heroBox } = options.characterPlate
+      ? { view: [0, 0, 1, 1], heroBox: [0, 0, 1, 1516 / 1560] }
+      : amberLayout(
+          width,
+          height,
+          !!options.landscape,
+          !!options.polished,
+          options.variant === 'appearance',
+        );
     for (const program of programs) {
       gl.useProgram(program);
       gl.uniform4fv(gl.getUniformLocation(program, 'view'), view);
       gl.uniform4fv(gl.getUniformLocation(program, 'heroBox'), heroBox);
+      gl.uniform1f(gl.getUniformLocation(program, 'aspect'), width / height);
     }
     painted = false;
     cadence.reset();
@@ -266,6 +300,16 @@ export async function renderAmber(canvas: HTMLCanvasElement, options: Options = 
         gl!.ONE_MINUS_SRC_ALPHA,
       );
       if (!options.backgroundOnly) gl!.drawArrays(gl!.TRIANGLES, 0, vertexCount);
+      if (!options.characterOnly) {
+        heroAttributes.forEach((attribute) => gl!.disableVertexAttribArray(attribute));
+        gl!.useProgram(foregroundProgram);
+        gl!.bindBuffer(gl!.ARRAY_BUFFER, sceneBuffer);
+        gl!.enableVertexAttribArray(foregroundAttribute);
+        gl!.vertexAttribPointer(foregroundAttribute, 2, gl!.FLOAT, false, 0, 0);
+        gl!.uniform1f(foregroundTime, t);
+        gl!.drawArrays(gl!.TRIANGLES, 0, 6);
+        gl!.disableVertexAttribArray(foregroundAttribute);
+      }
       painted = true;
       context!.clearRect(0, 0, canvas.width, canvas.height);
       context!.imageSmoothingQuality = 'high';

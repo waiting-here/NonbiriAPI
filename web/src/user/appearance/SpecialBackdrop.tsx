@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { SpecialTheme } from '../activities/gacha/special-scenes';
 import { artSourceSet } from '../activities/gacha/art-resolution';
+import { AmberStill } from './AmberStill';
 
 const settings = () => ({
   dark: document.documentElement.dataset.theme === 'dark',
@@ -46,6 +47,7 @@ export function SpecialBackdrop({ theme }: { theme: SpecialTheme }) {
         .then(({ renderSpecial }) =>
           renderSpecial(surface, theme, {
             landscape: true,
+            variant: theme === 'amber' ? 'appearance' : undefined,
             dark: quality.dark,
             highResolution: quality.high,
             signal: next.signal,
@@ -71,15 +73,19 @@ export function SpecialBackdrop({ theme }: { theme: SpecialTheme }) {
     '/assets/gacha/appearances/' + theme + '-' + (quality.dark ? 'dark' : 'light') + '.webp';
   return (
     <>
-      <img
-        className="nb-appearance-still"
-        data-scene={theme}
-        src={src}
-        srcSet={artSourceSet(src)}
-        sizes="(max-aspect-ratio: 16/9) 177.78vh, 100vw"
-        alt=""
-        aria-hidden="true"
-      />
+      {theme === 'amber' ? (
+        <AmberStill dark={quality.dark} />
+      ) : (
+        <img
+          className="nb-appearance-still"
+          data-scene={theme}
+          src={src}
+          srcSet={artSourceSet(src)}
+          sizes="(max-aspect-ratio: 16/9) 177.78vh, 100vw"
+          alt=""
+          aria-hidden="true"
+        />
+      )}
       <canvas
         ref={canvas}
         className="nb-appearance-backdrop"

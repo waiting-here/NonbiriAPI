@@ -33,6 +33,10 @@ game checkpoints, request accounting and background maintenance. In-flight
 elapsed time remains visible across reporting windows; see the runtime metrics
 guide before comparing completed latency with current occupancy.
 
+The optional Gacha Simulator includes layered SP artwork. Amber Vow keeps its
+character beside desktop content, with matching static fallback and enhanced
+artwork; composition and source details are in the [art guide](docs/gacha-art.md).
+
 ## Build and develop
 
 Use **Go 1.26.9**, **Node.js ≥22.22.3**, **npm 12.0.1** and Bash; Windows uses Git Bash. The finished binary needs neither Node.js nor a C runtime.

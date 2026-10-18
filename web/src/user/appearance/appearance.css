@@ -230,6 +230,13 @@ html:is(
 .nb-appearance-still[data-scene='amber'] {
   object-position: 82% top;
 }
+.nb-amber-still-character {
+  position: fixed;
+  z-index: -1;
+  pointer-events: none;
+  max-width: none;
+  object-fit: fill;
+}
 @media (prefers-reduced-motion: reduce) {
   .nb-appearance-backdrop {
     display: none;

@@ -8,6 +8,10 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Changed
 
+- Refine Amber Vow scenery and character lighting, add independent banners,
+  chandeliers, layered light and foreground books, and correct footwear contact.
+  Its site appearance places the character in the desktop side margin, with
+  matching responsive static fallback and refreshed standard/high-resolution art.
 - Extend anonymous database timing to game checkpoints, request accounting,
   reward delivery, activity projections and lifecycle maintenance. Report
   concurrent elapsed time for work that spans minute windows, with fixed

@@ -609,7 +609,10 @@
         "motion/o-claude/background-dark.webp",
         "motion/o-claude/books.webp",
         "motion/o-claude/hero.png",
-        "motion/o-claude/closed.png"
+        "motion/o-claude/closed.png",
+        "motion/o-claude/boots.webp",
+        "motion/o-claude/flags.webp",
+        "motion/o-claude/lamps.webp"
       ],
       "portrait_window": [
         0.065,
@@ -628,6 +631,16 @@
           2560,
           3840
         ]
+      },
+      "appearance_layers": {
+        "background": "appearances/amber-{light,dark}.webp",
+        "character": "motion/o-claude/appearance-hero-{light,dark}.webp",
+        "character_size": [
+          1037,
+          1560
+        ],
+        "character_content_height": 1516,
+        "layout": "independent viewport placement shared by static and animated appearance"
       }
     },
     "p-claude": {

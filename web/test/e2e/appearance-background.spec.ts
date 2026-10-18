@@ -4,14 +4,14 @@ import { collectConsoleViolations, mockPublicConfig, mockRoleSession } from './s
 import { USER_ORIGIN } from './ports';
 import { loanActivity } from '../fixtures/loans';
 
-for (const design of ['celestial', 'wandering'])
+for (const design of ['celestial', 'wandering', 'amber'])
   for (const mode of ['light', 'dark'])
     for (const width of [1440, 390])
       test(`background appreciation preserves page state ${design} ${mode} ${width}`, async ({
         page,
       }) => {
         const guard = collectConsoleViolations(page);
-        await page.setViewportSize({ width, height: 900 });
+        await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
         await page.emulateMedia({ reducedMotion: 'reduce' });
         await page.addInitScript((value) => {
           localStorage.setItem('nb.lang', 'zh');
