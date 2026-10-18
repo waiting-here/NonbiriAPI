@@ -193,7 +193,7 @@ func (s *Service) Claim(ctx context.Context, input ClaimInput) (_ Handle, result
 		handle, err = s.claimTx(ctx, tx, claimID, at, input)
 	}
 	if err != nil {
-		return Handle{}, s.quotaCapacityFailure(ctx, tx, at, err)
+		return Handle{}, s.quotaCapacityFailure(ctx, tx, at, err, finish)
 	}
 	if err := tx.Commit(); err != nil {
 		return Handle{}, fmt.Errorf("claim: commit claim: %w", err)
@@ -520,7 +520,7 @@ WHERE c.id=?`, handle.claimID).Scan(&stateText, &requestID, &attemptSeq, &purpos
 		}); err != nil {
 			clear(contextID)
 			clear(encrypted)
-			return nil, s.quotaCapacityFailure(ctx, tx, at, err)
+			return nil, s.quotaCapacityFailure(ctx, tx, at, err, nil)
 		}
 		if provider, ok := s.charity.(CharitySessionHeaders); ok {
 			managedHeaders, err = provider.SessionHeaders(ctx, tx, CharityDispatch{RequestID: requestID, ClaimID: handle.claimID, ActorUserID: callerID.Int64, DispatchedAt: at})

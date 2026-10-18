@@ -90,6 +90,7 @@ func boundedOperationTimer(ctx context.Context, label string) func(error) {
 // BeginMeasuredTx measures pool acquisition independently of transaction work.
 // Call finish with the operation's result after commit, or defer it on errors.
 // It rolls back an unfinished transaction and always returns its connection.
+// Finish before any follow-up operation that needs a connection from the same pool.
 func BeginMeasuredTx(ctx context.Context, database *sql.DB, options *sql.TxOptions, operation string) (*sql.Tx, func(error), error) {
 	acquired := databaseTimer(ctx, "connection", operation)
 	conn, err := database.Conn(ctx)

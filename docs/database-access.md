@@ -64,3 +64,8 @@ authentication, model directories and affected maintenance workers. See
 temporary-database workload and its limits.
 The [Lake Notes mixed-load experiment](performance-validation.md) adds real
 checkpoints, save-size gradients and subscription fan-out.
+
+A measured transaction owns an explicit connection until its finish callback.
+Call that callback after commit or rollback and before a follow-up operation
+uses the same pool, including capacity alerts. A transaction rollback alone
+does not return an explicitly acquired connection.
