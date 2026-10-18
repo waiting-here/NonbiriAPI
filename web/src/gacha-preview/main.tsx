@@ -17,6 +17,8 @@ import { appearanceKey } from '../user/appearance/context';
 import { localPort, localAppearancePort, appearancePreviewPort, resetPreview } from './local-port';
 import './preview.css';
 import { AppearancePreview } from './AppearancePreview';
+import { AmberPreview } from './AmberPreview';
+import { AmberExport } from './AmberExport';
 import { sampleReceipt, previewPreferences, type Scenario } from './scenarios';
 
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -143,11 +145,13 @@ function Preview() {
     </BrowserRouter>
   );
 }
+const amberPreview = new URLSearchParams(location.search).get('view') === 'amber';
+const amberExport = new URLSearchParams(location.search).get('view') === 'amber-export';
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={client}>
       <ThemeProvider>
-        <Preview />
+        {amberExport ? <AmberExport /> : amberPreview ? <AmberPreview /> : <Preview />}
       </ThemeProvider>
     </QueryClientProvider>
   </StrictMode>,

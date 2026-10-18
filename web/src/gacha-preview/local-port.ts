@@ -361,7 +361,7 @@ function appearanceState() {
   return {
     selected: unlocked.includes(memory.appearance ?? '') ? memory.appearance! : 'default',
     unlocked,
-    visible: ['default', 'heart-moment', 'celestial', 'wandering'],
+    visible: ['default', 'heart-moment', 'celestial', 'wandering', 'amber'],
     moment: memory.moment ?? 'cover:permanent',
     moments: [
       'cover:permanent',
@@ -395,20 +395,21 @@ export const localAppearancePort: AppearancePort = {
   },
 };
 
-let previewAppearance = 'celestial';
+let previewAppearance =
+  new URLSearchParams(location.search).get('appearance') === 'amber' ? 'amber' : 'celestial';
 export const appearancePreviewPort: AppearancePort = {
   scope: 'preview-appearance',
   async load() {
     return {
       selected: previewAppearance,
-      unlocked: ['default', 'heart-moment', 'celestial', 'wandering'],
+      unlocked: ['default', 'heart-moment', 'celestial', 'wandering', 'amber'],
       moment: 'cover:permanent',
       moments: ['cover:permanent'],
       updated_at: null,
     };
   },
   async select(selected) {
-    if (!['default', 'heart-moment', 'celestial', 'wandering'].includes(selected))
+    if (!['default', 'heart-moment', 'celestial', 'wandering', 'amber'].includes(selected))
       throw new Error('appearance-locked');
     previewAppearance = selected;
     return this.load();

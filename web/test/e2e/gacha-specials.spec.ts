@@ -28,7 +28,7 @@ for (const theme of ['light', 'dark'])
           return;
         if (message.type() === 'error' || message.type() === 'warning') errors.push(message.type());
       });
-      await page.setViewportSize({ width, height: 900 });
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
       await page.emulateMedia({ reducedMotion: 'reduce' });
       await page.addInitScript((theme) => {
         localStorage.setItem('nb.lang', 'zh');
@@ -94,7 +94,10 @@ for (const theme of ['light', 'dark'])
         await expect(page.locator('.gacha-draw-stage')).toHaveAttribute('data-phase', 'prelude');
         await page.keyboard.press('Escape');
         await expect(page.locator('.gacha-cinema')).toHaveCount(0);
-        await page.getByRole('button', { name: card.name + ', 已珍藏', exact: true }).click();
+        // Reopen through keyboard activation after focus returns from the cinema.
+        await page
+          .getByRole('button', { name: card.name + ', 已珍藏', exact: true })
+          .press('Enter');
         await page.getByRole('button', { name: '回看重逢', exact: true }).click();
         await expect(page.getByText('重逢回忆', { exact: true })).toBeVisible();
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
@@ -117,6 +120,19 @@ for (const theme of ['light', 'dark'])
           )
           .toBe(true);
         await page.emulateMedia({ reducedMotion: 'no-preference' });
+        if (appearance === 'amber') {
+          const character = page.locator('.nb-amber-still-character');
+          await expect
+            .poll(() =>
+              character.evaluate(
+                (image: HTMLImageElement) => image.complete && image.naturalWidth === 1037,
+              ),
+            )
+            .toBe(true);
+          const bounds = await character.boundingBox();
+          expect(bounds!.y).toBeGreaterThan(68);
+          expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(width === 390 ? 844 : 900);
+        }
         await expect(page.locator('.nb-appearance-backdrop')).toHaveAttribute(
           'data-ready',
           'true',
