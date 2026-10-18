@@ -238,6 +238,30 @@ func TestApplicationLakeMixedLoad(t *testing.T) {
 					}
 				}
 			}
+			if tc.users == 4 && rejected != 0 {
+				t.Error("standard load unexpectedly rejected model requests")
+			}
+			failures := map[string]int{}
+			rows, err := f.store.DB().QueryContext(ctx, `SELECT COALESCE(rejection_stage,''),COALESCE(rejection_reason,''),COALESCE(caller_error_code,''),count(*) FROM logical_requests WHERE caller_result_class='failed' GROUP BY 1,2,3`)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for rows.Next() {
+				var stage, reason, code string
+				var count int
+				if err := rows.Scan(&stage, &reason, &code, &count); err != nil {
+					_ = rows.Close()
+					t.Fatal(err)
+				}
+				failures[stage+":"+reason+":"+code] = count
+			}
+			if err := rows.Err(); err != nil {
+				_ = rows.Close()
+				t.Fatal(err)
+			}
+			if err := rows.Close(); err != nil {
+				t.Fatal(err)
+			}
 			var outstanding int
 			if err := f.store.DB().QueryRowContext(ctx, `SELECT
 			 (SELECT count(*) FROM dispatch_claims WHERE state IN ('claimed','dispatched')) +
@@ -261,7 +285,8 @@ func TestApplicationLakeMixedLoad(t *testing.T) {
 				"rps": tc.rps, "directory_concurrency": tc.burst, "seconds": seconds, "planned_pages": seconds*tc.rps + tc.burst, "submitted_pages": submitted.Load(), "planned_checkpoints": seconds / 2 * tc.users, "submitted_checkpoints": checkpoints.Load(),
 				"pages": pages.summaries(), "lake": lake.summaries(), "projections": projections.summaries(), "models": models.summaries(), "schedule": lag.summaries(),
 				"planned_models": tc.burst, "completed_models": completed, "accepted_models": accepted, "rejected_models": rejected, "outstanding_model_facts": outstanding,
-				"writer_waits": writerAfter.WaitCount - writerBefore.WaitCount, "writer_wait_ms": float64(writerAfter.WaitDuration-writerBefore.WaitDuration) / float64(time.Millisecond), "reader_waits": readerAfter.WaitCount - readerBefore.WaitCount, "reader_wait_ms": float64(readerAfter.WaitDuration-readerBefore.WaitDuration) / float64(time.Millisecond), "writer_changes": changesAfter - changesBefore,
+				"model_failure_facts": failures,
+				"writer_waits":        writerAfter.WaitCount - writerBefore.WaitCount, "writer_wait_ms": float64(writerAfter.WaitDuration-writerBefore.WaitDuration) / float64(time.Millisecond), "reader_waits": readerAfter.WaitCount - readerBefore.WaitCount, "reader_wait_ms": float64(readerAfter.WaitDuration-readerBefore.WaitDuration) / float64(time.Millisecond), "writer_changes": changesAfter - changesBefore,
 				"memory_before": before, "memory_after": after, "elapsed_seconds": elapsed, "last_window_operations": operations, "go": runtime.Version(), "os": runtime.GOOS, "arch": runtime.GOARCH, "gomaxprocs": runtime.GOMAXPROCS(0),
 			}
 			encoded, err := json.Marshal(report)

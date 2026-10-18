@@ -301,6 +301,7 @@ type loadSample struct {
 	duration     time.Duration
 	status       int
 	err          string
+	code         string
 }
 
 type loadMeasurements struct {
@@ -322,6 +323,7 @@ type loadPercentiles struct {
 	MaxMS  float64        `json:"max_ms"`
 	Status map[int]int    `json:"status"`
 	Errors map[string]int `json:"errors,omitempty"`
+	Codes  map[string]int `json:"codes,omitempty"`
 }
 
 func (m *loadMeasurements) summaries() map[string]loadPercentiles {
@@ -338,11 +340,14 @@ func (m *loadMeasurements) summaries() map[string]loadPercentiles {
 		percentile := func(q float64) float64 {
 			return float64(samples[int(math.Ceil(q*float64(len(samples))))-1].duration) / float64(time.Millisecond)
 		}
-		p := loadPercentiles{Count: len(samples), P50MS: percentile(.5), P95MS: percentile(.95), P99MS: percentile(.99), MaxMS: percentile(1), Status: map[int]int{}, Errors: map[string]int{}}
+		p := loadPercentiles{Count: len(samples), P50MS: percentile(.5), P95MS: percentile(.95), P99MS: percentile(.99), MaxMS: percentile(1), Status: map[int]int{}, Errors: map[string]int{}, Codes: map[string]int{}}
 		for _, sample := range samples {
 			p.Status[sample.status]++
 			if sample.err != "" {
 				p.Errors[sample.err]++
+			}
+			if sample.code != "" {
+				p.Codes[sample.code]++
 			}
 		}
 		out[key] = p
@@ -680,6 +685,7 @@ func (f *loadFixture) model(ctx context.Context, index int, mode string, metrics
 	defer response.Body.Close()
 	first := true
 	var tail string
+	var failureBody []byte
 	buffer := make([]byte, 32<<10)
 	if mode == "slow_cancel" && index%5 == 0 {
 		buffer = buffer[:1024]
@@ -687,6 +693,9 @@ func (f *loadFixture) model(ctx context.Context, index int, mode string, metrics
 	for {
 		n, readErr := response.Body.Read(buffer)
 		if n > 0 {
+			if response.StatusCode != 200 && len(failureBody) < 4096 {
+				failureBody = append(failureBody, buffer[:min(n, 4096-len(failureBody))]...)
+			}
 			if first {
 				metrics.add(loadSample{route: route, phase: "first_byte", duration: time.Since(start), status: response.StatusCode})
 				first = false
@@ -716,6 +725,14 @@ func (f *loadFixture) model(ctx context.Context, index int, mode string, metrics
 		s.err = "protocol_incomplete"
 	} else if response.StatusCode != 200 {
 		s.err = fmt.Sprintf("http_%d", response.StatusCode)
+		var body struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		}
+		if json.Unmarshal(failureBody, &body) == nil {
+			s.code = body.Error.Code
+		}
 	}
 	metrics.add(s)
 }

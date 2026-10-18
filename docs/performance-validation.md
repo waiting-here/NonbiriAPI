@@ -22,7 +22,9 @@ fan-out separately from game settlement.
 
 `LAKE_LOAD_RESULT` reports planned and submitted work, HTTP results, model
 admission, queue delay, both pool waits, connection-holding phases, process CPU
-time and memory. Game profiles must match their committed revisions and JSON;
+time and memory. Model error codes and anonymous rejection-stage totals help
+distinguish admission limits from unexpected service failures; HTTP 503 alone
+does not establish a capacity rejection. Game profiles must match their committed revisions and JSON;
 model claims, reservations and ledger recovery must converge. Transaction rows
 overlap their phase rows and must not be summed with them. The operation window
 contains only samples since the observer's last drain.
