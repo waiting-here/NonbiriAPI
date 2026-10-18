@@ -10,13 +10,14 @@ import (
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/useractivity"
 )
 
 // ReleaseUndispatched terminalizes a claim that never crossed the dispatch
 // marker. It releases only this claim's charity reservation/capacity and never
 // creates a request_attempt row.
-func (s *Service) ReleaseUndispatched(ctx context.Context, handle Handle) (Attempt, error) {
+func (s *Service) ReleaseUndispatched(ctx context.Context, handle Handle) (_ Attempt, resultErr error) {
 	if s == nil || s.db == nil || ctx == nil || !validHandle(handle) {
 		return Attempt{}, ErrInvalidInput
 	}
@@ -24,11 +25,11 @@ func (s *Service) ReleaseUndispatched(ctx context.Context, handle Handle) (Attem
 	if err != nil {
 		return Attempt{}, err
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, finish, err := observability.BeginMeasuredTx(ctx, s.db, nil, "claim_release")
 	if err != nil {
 		return Attempt{}, fmt.Errorf("claim: begin undispatched release: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { finish(resultErr) }()
 	record, err := loadClaimTx(ctx, tx, handle.claimID)
 	if err != nil {
 		return Attempt{}, err
@@ -58,7 +59,7 @@ func (s *Service) ReleaseUndispatched(ctx context.Context, handle Handle) (Attem
 // CompleteAttempt writes the connector-neutral actual attempt projection and
 // terminalizes one dispatched claim. ProtocolSuccess is explicit: an HTTP 200
 // or clean EOF does not establish success; streak disposition is independent.
-func (s *Service) CompleteAttempt(ctx context.Context, handle Handle, outcome AttemptOutcome) (Attempt, error) {
+func (s *Service) CompleteAttempt(ctx context.Context, handle Handle, outcome AttemptOutcome) (_ Attempt, resultErr error) {
 	outcome = normalizeAttemptOutcome(outcome)
 	if s == nil || s.db == nil || ctx == nil || !validHandle(handle) || !validAttemptOutcome(outcome) {
 		return Attempt{}, ErrInvalidInput
@@ -67,11 +68,11 @@ func (s *Service) CompleteAttempt(ctx context.Context, handle Handle, outcome At
 	if err != nil {
 		return Attempt{}, err
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, finish, err := observability.BeginMeasuredTx(ctx, s.db, nil, "claim_attempt")
 	if err != nil {
 		return Attempt{}, fmt.Errorf("claim: begin attempt completion: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { finish(resultErr) }()
 	record, err := loadClaimTx(ctx, tx, handle.claimID)
 	if err != nil {
 		return Attempt{}, err
@@ -126,7 +127,7 @@ func (s *Service) CompleteAttempt(ctx context.Context, handle Handle, outcome At
 
 // CompleteRequest writes only the caller-visible terminal result. Attempt
 // status/usage is intentionally independent and must already be terminal.
-func (s *Service) CompleteRequest(ctx context.Context, input CompleteRequestInput) (Request, error) {
+func (s *Service) CompleteRequest(ctx context.Context, input CompleteRequestInput) (_ Request, resultErr error) {
 	if s == nil || s.db == nil || ctx == nil || !validCompleteRequestInput(input) {
 		return Request{}, ErrInvalidInput
 	}
@@ -134,11 +135,11 @@ func (s *Service) CompleteRequest(ctx context.Context, input CompleteRequestInpu
 	if err != nil {
 		return Request{}, err
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, finish, err := observability.BeginMeasuredTx(ctx, s.db, nil, "claim_complete")
 	if err != nil {
 		return Request{}, fmt.Errorf("claim: begin request completion: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { finish(resultErr) }()
 	request, err := loadRequestTx(ctx, tx, input.RequestID)
 	if err != nil {
 		return Request{}, err

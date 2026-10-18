@@ -15,14 +15,38 @@ func (p *Performance) Context(ctx context.Context) context.Context {
 
 func databaseOperation(operation string) bool {
 	switch operation {
-	case "session", "catalog", "personal_models", "charity_models", "charity_capability", "fishing_cleanup", "donation_expiry":
+	case "session", "catalog", "personal_models", "charity_models", "charity_capability", "fishing_cleanup", "donation_expiry",
+		"lake_checkpoint", "lake_mutation", "lake_profile", "lake_recovery", "lake_retention",
+		"claim_accept", "claim_prepare", "claim_release", "claim_attempt", "claim_complete",
+		"fishing_settle", "reward_delivery", "activities_projection", "activities_publish",
+		"lifecycle_recovery", "lifecycle_retention":
 		return true
 	default:
 		return false
 	}
 }
 
+// DatabasePhase measures a fixed subphase within an operation. Subphases may
+// overlap their parent transaction and must not be added to transaction time.
+func DatabasePhase(ctx context.Context, operation, phase string) func(error) {
+	switch phase {
+	case "authorize", "config", "read", "rules", "encode", "write", "commit", "projection", "idempotency", "activity":
+		return databaseTimer(ctx, "phase."+phase, operation)
+	default:
+		return func(error) {}
+	}
+}
+
+// DatabaseOperation measures a whole operation, including any pool waits and
+// multiple transactions. It is distinct from connection-holding time.
+func DatabaseOperation(ctx context.Context, operation string) func(error) {
+	return databaseTimer(ctx, "operation", operation)
+}
+
 func databaseTimer(ctx context.Context, phase, operation string) func(error) {
+	if ctx == nil {
+		return func(error) {}
+	}
 	p, _ := ctx.Value(performanceContextKey{}).(*Performance)
 	if p == nil || !databaseOperation(operation) {
 		return func(error) {}

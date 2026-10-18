@@ -22,6 +22,16 @@ type performanceKey struct{ route, method string }
 type performanceSeries struct {
 	count, failed, canceled, active, peak int64
 	total, first                          latencyHistogram
+	activeSince                           time.Time
+	activeTime                            time.Duration
+}
+
+// Accumulate concurrent elapsed time in this window, including unfinished work.
+func (s *performanceSeries) accrue(now time.Time) {
+	if !s.activeSince.IsZero() {
+		s.activeTime += time.Duration(s.active) * now.Sub(s.activeSince)
+	}
+	s.activeSince = now
 }
 
 var latencyBounds = [...]time.Duration{
@@ -73,6 +83,7 @@ type PerformanceRow struct {
 	Canceled     int64  `json:"canceled,omitempty"`
 	Active       int64  `json:"active"`
 	Peak         int64  `json:"peak"`
+	ActiveMS     int64  `json:"active_ms"`
 	P50MS        int64  `json:"p50_ms"`
 	P95MS        int64  `json:"p95_ms"`
 	P99MS        int64  `json:"p99_ms"`
@@ -122,6 +133,7 @@ func (p *Performance) begin(key performanceKey) func(time.Duration, time.Duratio
 		s = &performanceSeries{}
 		p.series[key] = s
 	}
+	s.accrue(time.Now())
 	s.active++
 	s.peak = max(s.peak, s.active)
 	if key.method != "" {
@@ -131,6 +143,7 @@ func (p *Performance) begin(key performanceKey) func(time.Duration, time.Duratio
 	p.mu.Unlock()
 	return func(total, first time.Duration, failed, canceled bool) {
 		p.mu.Lock()
+		s.accrue(time.Now())
 		s.active--
 		s.count++
 		if key.method != "" {
@@ -197,14 +210,17 @@ func (p *Performance) drain() ([]PerformanceRow, HTTPPerformance) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	rows := make([]PerformanceRow, 0, len(p.series))
+	now := time.Now()
 	for key, s := range p.series {
 		if s.count == 0 && s.peak == 0 {
 			continue
 		}
+		s.accrue(now)
 		row := PerformanceRow{
 			Route: key.route, Method: key.method, Completed: s.count,
 			ServerErrors: s.failed, Canceled: s.canceled, Active: s.active, Peak: s.peak,
-			P50MS: s.total.percentile(s.count, 50), P95MS: s.total.percentile(s.count, 95),
+			ActiveMS: s.activeTime.Milliseconds(),
+			P50MS:    s.total.percentile(s.count, 50), P95MS: s.total.percentile(s.count, 95),
 			P99MS: s.total.percentile(s.count, 99), MaxMS: s.total.max.Milliseconds(),
 			FirstP95MS: s.first.percentile(s.count, 95),
 		}
@@ -212,7 +228,7 @@ func (p *Performance) drain() ([]PerformanceRow, HTTPPerformance) {
 			row.Failures, row.ServerErrors = s.failed, 0
 		}
 		rows = append(rows, row)
-		*s = performanceSeries{active: s.active, peak: s.active}
+		*s = performanceSeries{active: s.active, peak: s.active, activeSince: now}
 	}
 	sort.Slice(rows, func(i, j int) bool {
 		if rows[i].Route == rows[j].Route {

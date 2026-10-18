@@ -28,6 +28,11 @@ level, donation ownership and current quotas still affect the result. See
 
 The connector registry supports OpenAI-compatible, Anthropic-compatible, AI SDK Gateway v3, Google Gemini, OpenAI Responses and OpenAI Decisions upstreams. Public ingress includes `/v1/models`, `/v1/chat/completions`, `/v1/embeddings`, `/v1/images/generations` and `/v1/decisions`. Gemini and Responses translate Chat requests; Decisions uses its native endpoint. Operation support is connector-specific. The backend enforces ownership, credential protection, SSRF, accounting and cancellation. Wire formats and limits are in the [API contract](docs/api-contract.md).
 
+Anonymous minute metrics separate pool acquisition from transaction work for
+game checkpoints, request accounting and background maintenance. In-flight
+elapsed time remains visible across reporting windows; see the runtime metrics
+guide before comparing completed latency with current occupancy.
+
 ## Build and develop
 
 Use **Go 1.26.9**, **Node.js ≥22.22.3**, **npm 12.0.1** and Bash; Windows uses Git Bash. The finished binary needs neither Node.js nor a C runtime.

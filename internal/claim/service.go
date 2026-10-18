@@ -59,7 +59,7 @@ func New(dependencies Dependencies) (*Service, error) {
 
 // Accept freezes one economic logical request and its maximum future ledger
 // row count in the same transaction as the domain and accounting adapters.
-func (s *Service) Accept(ctx context.Context, input AcceptInput) (Request, error) {
+func (s *Service) Accept(ctx context.Context, input AcceptInput) (_ Request, resultErr error) {
 	if s == nil || s.db == nil || ctx == nil || !validAcceptInput(input) {
 		return Request{}, ErrInvalidInput
 	}
@@ -80,11 +80,11 @@ func (s *Service) Accept(ctx context.Context, input AcceptInput) (Request, error
 		}
 	}
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, finish, err := observability.BeginMeasuredTx(ctx, s.db, nil, "claim_accept")
 	if err != nil {
 		return Request{}, fmt.Errorf("claim: begin request acceptance: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { finish(resultErr) }()
 	if err := requireActiveUser(ctx, tx, input.UserID, at, input.Route.IsCharity()); err != nil {
 		return Request{}, err
 	}
@@ -164,7 +164,7 @@ VALUES(?,?,?,?,'accepted',?,'reserved',?,'user',?,?)`,
 
 // Claim atomically wins one attempt sequence and freezes the physical secret
 // reference. It returns no credential bytes.
-func (s *Service) Claim(ctx context.Context, input ClaimInput) (Handle, error) {
+func (s *Service) Claim(ctx context.Context, input ClaimInput) (_ Handle, resultErr error) {
 	if s == nil || s.db == nil || ctx == nil || !validClaimInput(input) {
 		return Handle{}, ErrInvalidInput
 	}
@@ -172,11 +172,11 @@ func (s *Service) Claim(ctx context.Context, input ClaimInput) (Handle, error) {
 	if err != nil {
 		return Handle{}, fmt.Errorf("claim: generate claim identity: %w", err)
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, finish, err := observability.BeginMeasuredTx(ctx, s.db, nil, "claim_prepare")
 	if err != nil {
 		return Handle{}, fmt.Errorf("claim: begin claim: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { finish(resultErr) }()
 	// Use the clock after acquiring the connection for the rolling window.
 	at, err := s.nowUnix()
 	if err != nil {

@@ -4,6 +4,15 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## Unreleased
+
+### Changed
+
+- Extend anonymous database timing to game checkpoints, request accounting,
+  reward delivery, activity projections and lifecycle maintenance. Report
+  concurrent elapsed time for work that spans minute windows, with fixed
+  checkpoint subphases and no per-request data.
+
 ## 1.0.2 — 2026-10-17
 
 Database schema 21 and account export 20 are unchanged. This source-only patch

@@ -100,7 +100,9 @@ func saveCastTx(ctx context.Context, tx *sql.Tx, c *castRow, now time.Time, ack 
 	state := c.state
 	state.Reward = nil
 
+	encode := lakePhase(ctx, "encode")
 	raw, e := rules.EncodeCast(state)
+	encode(e)
 	if e != nil {
 		return e
 	}
@@ -119,7 +121,9 @@ func saveCastTx(ctx context.Context, tx *sql.Tx, c *castRow, now time.Time, ack 
 	if c.state.Terminal() {
 		terminal = now.Unix()
 	}
+	write := lakePhase(ctx, "write")
 	r, e := tx.ExecContext(ctx, "UPDATE lake_notes_casts SET rules_id=?,storage_version=?,phase=?,paused=?,generation=?,revision=revision+1,last_tick=?,snapshot=?,reward_plan=?,held=?,active_elapsed_ns=?,active_started_at_ns=?,lease_until_ns=?,last_ack_json=?,terminal_at=?,updated_at=? WHERE id=? AND user_id=? AND revision=?", rules.RulesID, castStorageVersion, c.state.Phase, c.state.Paused, c.generation, c.state.Tick, raw, reward, c.state.Held, c.elapsed, c.started, c.lease, string(last), terminal, now.Unix(), c.id, c.user, c.revision)
+	write(e)
 	if e != nil {
 		return e
 	}
@@ -294,6 +298,7 @@ func (s *Service) budget(user int64, now time.Time) error {
 	return nil
 }
 func (s *Service) Checkpoint(ctx context.Context, user int64, id, key string, in CheckpointInput) (MutationResult[CastResult], error) {
+	ctx = context.WithValue(ctx, checkpointContextKey{}, true)
 	generation, e := revision(in.Generation, false)
 	if e != nil {
 		return MutationResult[CastResult]{}, e
@@ -358,7 +363,9 @@ func (s *Service) Checkpoint(ctx context.Context, user int64, id, key string, in
 		if e != nil {
 			return CastResult{}, e
 		}
+		advance := lakePhase(ctx, "rules")
 		row.profile, c.state, e = rules.Advance(row.profile, c.state, states)
+		advance(e)
 		if e != nil {
 			return CastResult{}, e
 		}

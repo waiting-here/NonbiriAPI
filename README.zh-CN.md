@@ -24,6 +24,8 @@ NonbiriAPI 是可自行部署的 AI 端点管理平台，提供 OpenAI-compatibl
 
 连接器注册表支持 OpenAI-compatible、Anthropic-compatible、AI SDK Gateway v3、Google Gemini、OpenAI Responses 和 OpenAI Decisions 上游。公共入口包括 `/v1/models`、`/v1/chat/completions`、`/v1/embeddings`、`/v1/images/generations` 和 `/v1/decisions`。Gemini 与 Responses 转换 Chat 请求，Decisions 使用原生接口；各连接器支持的操作不同。后端执行所有权、凭据、SSRF、账务和取消约束；格式及限制见 [API 契约](docs/api-contract.md)。
 
+匿名分钟指标分别记录游戏检查点、请求账务及后台维护的连接获取和事务执行；跨窗口尚未结束的工作也有累计占用时间。对照已完成请求延迟和当前占用时，请参阅运行指标说明。
+
 ## 构建与开发
 
 使用 **Go 1.26.9**、**Node.js ≥22.22.3**、**npm 12.0.1** 和 Bash；Windows 使用 Git Bash。最终程序无需 Node.js 或 C 运行时。

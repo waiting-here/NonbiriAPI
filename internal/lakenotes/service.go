@@ -21,6 +21,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/lakenotes/rules"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
@@ -80,7 +81,9 @@ func (s *Service) authorize(ctx context.Context, tx *sql.Tx, user int64, admin b
 	}
 	return s.users.AuthorizeUserMutation(ctx, tx, user)
 }
-func settingsTx(ctx context.Context, tx *sql.Tx) (Settings, error) {
+func settingsTx(ctx context.Context, tx *sql.Tx) (_ Settings, resultErr error) {
+	finish := lakePhase(ctx, "config")
+	defer func() { finish(resultErr) }()
 	raw := map[string]string{}
 	for _, key := range []string{game.GamesEnabledKey, lakeconfig.EnabledKey, lakeconfig.ExchangesKey} {
 		var value string
@@ -143,7 +146,7 @@ func (s *Service) begin(ctx context.Context, tx *sql.Tx, user int64, admin bool,
 	}
 	return d, e
 }
-func mutate[T any](ctx context.Context, s *Service, user int64, admin bool, key, method, route string, input any, fn func(*sql.Tx, time.Time) (T, error)) (MutationResult[T], error) {
+func mutate[T any](ctx context.Context, s *Service, user int64, admin bool, key, method, route string, input any, fn func(*sql.Tx, time.Time) (T, error)) (_ MutationResult[T], resultErr error) {
 	var out MutationResult[T]
 	if _, e := idempotency.KeyHash(key); e != nil {
 		return out, ErrInvalid
@@ -152,15 +155,20 @@ func mutate[T any](ctx context.Context, s *Service, user int64, admin bool, key,
 	if e != nil {
 		return out, e
 	}
-	tx, e := s.database.BeginTx(ctx, nil)
+	tx, finish, e := observability.BeginMeasuredTx(ctx, s.database, nil, lakeOperation(ctx))
 	if e != nil {
 		return out, e
 	}
-	defer tx.Rollback()
-	if e = s.authorize(ctx, tx, user, admin); e != nil {
+	defer func() { finish(resultErr) }()
+	authorize := lakePhase(ctx, "authorize")
+	e = s.authorize(ctx, tx, user, admin)
+	authorize(e)
+	if e != nil {
 		return out, e
 	}
+	idempotent := lakePhase(ctx, "idempotency")
 	d, e := s.begin(ctx, tx, user, admin, key, method, route, input, now.Unix())
+	idempotent(e)
 	if e != nil {
 		return out, e
 	}
@@ -174,20 +182,31 @@ func mutate[T any](ctx context.Context, s *Service, user int64, admin bool, key,
 		if e != nil {
 			return out, e
 		}
+		encode := lakePhase(ctx, "encode")
 		raw, e := json.Marshal(out.Value)
+		encode(e)
 		if e != nil || len(raw) > 65536 {
 			return out, ErrCapacity
 		}
-		if e = idempotency.Complete(ctx, tx, d, 200, raw); e != nil {
+		write := lakePhase(ctx, "write")
+		e = idempotency.Complete(ctx, tx, d, 200, raw)
+		write(e)
+		if e != nil {
 			return out, e
 		}
 		if !admin && s.activity != nil {
-			if e = s.activity(ctx, tx, user, now.Unix()); e != nil {
+			activity := lakePhase(ctx, "activity")
+			e = s.activity(ctx, tx, user, now.Unix())
+			activity(e)
+			if e != nil {
 				return out, e
 			}
 		}
 	}
-	return out, tx.Commit()
+	commit := lakePhase(ctx, "commit")
+	e = tx.Commit()
+	commit(e)
+	return out, e
 }
 
 type profileRow struct {
@@ -195,7 +214,9 @@ type profileRow struct {
 	revision int64
 }
 
-func profileTx(ctx context.Context, tx *sql.Tx, user int64, create bool, now int64) (profileRow, error) {
+func profileTx(ctx context.Context, tx *sql.Tx, user int64, create bool, now int64) (_ profileRow, resultErr error) {
+	finish := lakePhase(ctx, "read")
+	defer func() { finish(resultErr) }()
 	var row profileRow
 	var raw, coinRaw []byte
 	var version int
@@ -229,7 +250,9 @@ func saveProfileTx(ctx context.Context, tx *sql.Tx, user int64, row *profileRow,
 	if row.revision == math.MaxInt64 {
 		return ErrCapacity
 	}
+	encode := lakePhase(ctx, "encode")
 	raw, e := rules.EncodeProfile(row.profile)
+	encode(e)
 	if e != nil {
 		return e
 	}
@@ -237,7 +260,9 @@ func saveProfileTx(ctx context.Context, tx *sql.Tx, user int64, row *profileRow,
 	if e != nil {
 		return ErrInvariant
 	}
+	write := lakePhase(ctx, "write")
 	r, e := tx.ExecContext(ctx, "UPDATE lake_notes_profiles SET profile=?,coin_mag=?,rules_id=?,storage_version=?,revision=revision+1,updated_at=? WHERE user_id=? AND revision=?", raw, db.EncodeU128(coin), rules.RulesID, profileStorageVersion, now, user, row.revision)
+	write(e)
 	if e != nil {
 		return e
 	}
@@ -262,7 +287,9 @@ func walletTx(ctx context.Context, tx *sql.Tx, user int64) (Wallet, error) {
 	}
 	return w, nil
 }
-func (s *Service) profileViewTx(ctx context.Context, tx *sql.Tx, user int64, now time.Time) (ProfileView, error) {
+func (s *Service) profileViewTx(ctx context.Context, tx *sql.Tx, user int64, now time.Time) (_ ProfileView, resultErr error) {
+	finish := lakePhase(ctx, "projection")
+	defer func() { finish(resultErr) }()
 	row, e := profileTx(ctx, tx, user, false, now.Unix())
 	if e != nil {
 		return ProfileView{}, e
@@ -296,16 +323,16 @@ func (s *Service) profileViewTx(ctx context.Context, tx *sql.Tx, user int64, now
 	}
 	return out, nil
 }
-func (s *Service) Profile(ctx context.Context, user int64) (ProfileView, error) {
+func (s *Service) Profile(ctx context.Context, user int64) (_ ProfileView, resultErr error) {
 	now, e := s.clock()
 	if e != nil {
 		return ProfileView{}, e
 	}
-	tx, e := s.database.BeginTx(ctx, nil)
+	tx, finish, e := observability.BeginMeasuredTx(ctx, s.database, nil, "lake_profile")
 	if e != nil {
 		return ProfileView{}, e
 	}
-	defer tx.Rollback()
+	defer func() { finish(resultErr) }()
 	if e = s.authorize(ctx, tx, user, false); e != nil {
 		return ProfileView{}, e
 	}

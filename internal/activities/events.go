@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/waiting-here/NonbiriAPI/internal/accountstream"
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 )
 
 type AccountstreamPublisher struct {
@@ -24,7 +25,9 @@ func NewAccountstreamPublisher(repository *Repository, sink AccountEventSink) (*
 // Publish consumes only committed safe facts and rebuilds one complete
 // projection per account. Individual failures do not stop other accounts from
 // receiving their authoritative replacement snapshot.
-func (publisher *AccountstreamPublisher) Publish(ctx context.Context, facts PublishFacts) error {
+func (publisher *AccountstreamPublisher) Publish(ctx context.Context, facts PublishFacts) (resultErr error) {
+	finish := observability.DatabaseOperation(ctx, "activities_publish")
+	defer func() { finish(resultErr) }()
 	if publisher == nil || publisher.repository == nil || publisher.sink == nil || ctx == nil {
 		return ErrUnavailable
 	}

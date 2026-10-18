@@ -9,6 +9,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/game/host"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 )
 
 // pauseTx updates the authoritative controller columns. Decode overlays them
@@ -67,17 +68,17 @@ func (s *Service) PrepareDeleteTx(ctx context.Context, tx *sql.Tx, user, now int
 	}
 	return nil, nil
 }
-func (s *Service) RecoverBeforeListener(ctx context.Context, now int64, limit int, budget time.Duration) (lifecycle.WorkResult, error) {
+func (s *Service) RecoverBeforeListener(ctx context.Context, now int64, limit int, budget time.Duration) (_ lifecycle.WorkResult, resultErr error) {
 	if limit < 1 || limit > lifecycle.WorkerBatchLimit || budget <= 0 || budget > lifecycle.WorkerBudget {
 		return lifecycle.WorkResult{}, ErrInvalid
 	}
 	ctx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
-	tx, e := s.database.BeginTx(ctx, nil)
+	tx, finish, e := observability.BeginMeasuredTx(ctx, s.database, nil, "lake_recovery")
 	if e != nil {
 		return lifecycle.WorkResult{}, e
 	}
-	defer tx.Rollback()
+	defer func() { finish(resultErr) }()
 	rows, e := tx.QueryContext(ctx, recoveryCandidatesSQL, limit+1)
 	if e != nil {
 		return lifecycle.WorkResult{}, e
@@ -108,17 +109,17 @@ func (s *Service) RecoverBeforeListener(ctx context.Context, now int64, limit in
 	}
 	return out, tx.Commit()
 }
-func (s *Service) Retain(ctx context.Context, now int64, limit int, budget time.Duration) (lifecycle.WorkResult, error) {
+func (s *Service) Retain(ctx context.Context, now int64, limit int, budget time.Duration) (_ lifecycle.WorkResult, resultErr error) {
 	if limit < 1 || limit > lifecycle.WorkerBatchLimit || budget <= 0 || budget > lifecycle.WorkerBudget {
 		return lifecycle.WorkResult{}, ErrInvalid
 	}
 	ctx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
-	tx, e := s.database.BeginTx(ctx, nil)
+	tx, finish, e := observability.BeginMeasuredTx(ctx, s.database, nil, "lake_retention")
 	if e != nil {
 		return lifecycle.WorkResult{}, e
 	}
-	defer tx.Rollback()
+	defer func() { finish(resultErr) }()
 	rows, e := tx.QueryContext(ctx, retentionCandidatesSQL, now*int64(time.Second), now-30*86400, now-idempotency.ReplayWindowSeconds, limit+1)
 	if e != nil {
 		return lifecycle.WorkResult{}, e

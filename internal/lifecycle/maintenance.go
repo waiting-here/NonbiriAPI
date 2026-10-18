@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"time"
 )
 
@@ -153,7 +154,9 @@ func (coordinator *Coordinator) runObservedSchedule(ctx context.Context, retenti
 	return overall
 }
 
-func (coordinator *Coordinator) runRecovery(ctx context.Context, decisionNow int64) error {
+func (coordinator *Coordinator) runRecovery(ctx context.Context, decisionNow int64) (resultErr error) {
+	finish := observability.DatabaseOperation(ctx, "lifecycle_recovery")
+	defer func() { finish(resultErr) }()
 	if decisionNow < 0 || decisionNow > maximumUnixSecond {
 		return ErrInvariant
 	}
@@ -190,7 +193,9 @@ func drainRecoveryAdapter(ctx context.Context, adapter RecoveryAdapter, decision
 	}
 }
 
-func (coordinator *Coordinator) runRetention(ctx context.Context, decisionNow int64) error {
+func (coordinator *Coordinator) runRetention(ctx context.Context, decisionNow int64) (resultErr error) {
+	finish := observability.DatabaseOperation(ctx, "lifecycle_retention")
+	defer func() { finish(resultErr) }()
 	var failures []error
 	adapters := coordinator.retention.ordered()
 	for index, stage := range adapters {
