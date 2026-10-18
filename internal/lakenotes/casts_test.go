@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -153,6 +154,10 @@ func TestTerminalExactlyOnceAndExportDeletion(t *testing.T) {
 		out, e := f.service.Checkpoint(f.ctx(f.user), f.user, c.ID, k, in)
 		if e != nil {
 			t.Fatal(e)
+		}
+		stored, e := f.service.Cast(f.ctx(f.user), f.user, c.ID)
+		if e != nil || !reflect.DeepEqual(out.Value, stored) {
+			t.Fatalf("checkpoint projection differs from committed snapshot: %v", e)
 		}
 		c, profile = out.Value.Cast, out.Value.Profile.Profile
 		terminalInput, terminalKey, terminal = in, k, out.Value

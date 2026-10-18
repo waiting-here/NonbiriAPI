@@ -33,6 +33,14 @@ Routes use the cookie session at `/api/games/lake-notes`. Mutations require the 
 
 The frontend animates the shared deterministic rules immediately; the server verifies inputs and commits rewards. Cast leases stop offline progress. Resume takes control of the saved cast without resampling its encounter. Read-only state and pause remain available during maintenance.
 
+Each checkpoint advances at most 120 ticks at 60 Hz, with a six-second lease.
+The server reuses values within that checkpoint's transaction when building its
+response. Profile revision, cast revision, lease, active-action fact and replay
+receipt are still persisted atomically on every accepted checkpoint. It does not
+defer saves, cache authorization or change the four-per-user/256-global requests
+per second budget. See [performance validation](performance-validation.md) for
+the opt-in temporary-database experiment.
+
 Past periods are read-only at `GET /admin/api/games/lake-notes/periods?page=1&page_size=20`. Existing casts and exchange receipts may reference a source period. New exchanges reference a settings revision.
 
 ## Recovery and data

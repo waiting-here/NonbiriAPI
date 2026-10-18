@@ -33,7 +33,7 @@ func (r *Repository) ProjectActivities(ctx context.Context, userID int64) (_ Sna
 	if err != nil {
 		return SnapshotProjection{}, err
 	}
-	tx, finish, err := observability.BeginMeasuredTx(ctx, r.db, &sql.TxOptions{ReadOnly: true}, "activities_projection")
+	tx, finish, err := observability.BeginMeasuredTx(ctx, r.readDB, &sql.TxOptions{ReadOnly: true}, "activities_projection")
 	if err != nil {
 		return SnapshotProjection{}, classifyDatabaseError("begin activities projection", err)
 	}

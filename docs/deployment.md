@@ -248,9 +248,10 @@ clock. Background workers use the same observer as requests.
 `operation.lifecycle_retention` cover the complete operation, including waits
 and multiple transactions; they do not measure one continuous connection hold.
 Lake operations also expose fixed `phase.<phase>.<operation>` rows for
-authorization, configuration, profile reads, rules, encoding, writes,
+request preparation, authorization, configuration, profile reads, rules, encoding, writes,
 idempotency, active-action recording, response projection and commit.
-These rows overlap their parent transaction; do not sum them with the parent.
+Preparation runs before acquiring a connection. Other phase rows overlap their
+parent transaction; do not sum them with the parent.
 Each row's `active_ms` integrates concurrent elapsed time inside this window,
 including unfinished work. A transaction spanning two windows contributes to
 both windows even while `completed` and `max_ms` are still zero. Percentiles

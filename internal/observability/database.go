@@ -30,7 +30,7 @@ func databaseOperation(operation string) bool {
 // overlap their parent transaction and must not be added to transaction time.
 func DatabasePhase(ctx context.Context, operation, phase string) func(error) {
 	switch phase {
-	case "authorize", "config", "read", "rules", "encode", "write", "commit", "projection", "idempotency", "activity":
+	case "prepare", "authorize", "config", "read", "rules", "encode", "write", "commit", "projection", "idempotency", "activity":
 		return databaseTimer(ctx, "phase."+phase, operation)
 	default:
 		return func(error) {}

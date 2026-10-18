@@ -112,39 +112,35 @@ func (s *Service) qualifiedTx(ctx context.Context, tx *sql.Tx, user int64, _ int
 	}
 	return settings, err
 }
-func (s *Service) begin(ctx context.Context, tx *sql.Tx, user int64, admin bool, key, method, route string, body any, now int64) (idempotency.Decision, error) {
+func (s *Service) prepare(user int64, admin bool, key, method, route string, body any, now int64) (idempotency.BeginInput, error) {
 	actor := "user"
 	if admin {
 		actor = "admin"
 	}
 	ah, e := idempotency.ActorScopeHash(actor, rev(user))
 	if e != nil {
-		return idempotency.Decision{}, ErrInvalid
+		return idempotency.BeginInput{}, ErrInvalid
 	}
 	raw, e := idempotency.CanonicalJSON(body)
 	if e != nil || len(raw) > 16384 {
-		return idempotency.Decision{}, ErrInvalid
+		return idempotency.BeginInput{}, ErrInvalid
 	}
 	digest, e := idempotency.RequestDigest(idempotency.DigestInput{ActorScopeHash: ah, Method: method, Route: route, Body: raw})
 	if e != nil {
-		return idempotency.Decision{}, ErrInvalid
+		return idempotency.BeginInput{}, ErrInvalid
 	}
 	secret, e := s.keys.DeriveGenerationTwoSubkey([]byte("NonbiriAPI/lake-notes-idempotency/v1"))
 	if e != nil {
-		return idempotency.Decision{}, e
+		return idempotency.BeginInput{}, e
 	}
 	defer clear(secret)
 	if len(secret) != 32 {
-		return idempotency.Decision{}, ErrInvariant
+		return idempotency.BeginInput{}, ErrInvariant
 	}
 	h := hmac.New(sha256.New, secret)
 	_, _ = h.Write(digest[:])
 	copy(digest[:], h.Sum(nil))
-	d, e := idempotency.Begin(ctx, tx, idempotency.BeginInput{Scope: idempotency.ScopeLakeNotes, ActorHash: ah, Key: key, RequestHash: digest, DecisionNow: now})
-	if errors.Is(e, idempotency.ErrConflict) || errors.Is(e, idempotency.ErrInProgress) {
-		e = ErrConflict
-	}
-	return d, e
+	return idempotency.BeginInput{Scope: idempotency.ScopeLakeNotes, ActorHash: ah, Key: key, RequestHash: digest, DecisionNow: now}, nil
 }
 func mutate[T any](ctx context.Context, s *Service, user int64, admin bool, key, method, route string, input any, fn func(*sql.Tx, time.Time) (T, error)) (_ MutationResult[T], resultErr error) {
 	var out MutationResult[T]
@@ -155,6 +151,9 @@ func mutate[T any](ctx context.Context, s *Service, user int64, admin bool, key,
 	if e != nil {
 		return out, e
 	}
+	prepare := lakePhase(ctx, "prepare")
+	prepared, prepareErr := s.prepare(user, admin, key, method, route, input, now.Unix())
+	prepare(prepareErr)
 	tx, finish, e := observability.BeginMeasuredTx(ctx, s.database, nil, lakeOperation(ctx))
 	if e != nil {
 		return out, e
@@ -166,8 +165,15 @@ func mutate[T any](ctx context.Context, s *Service, user int64, admin bool, key,
 	if e != nil {
 		return out, e
 	}
+	// Preserve authorization precedence; pure preparation cannot reserve a key.
+	if prepareErr != nil {
+		return out, prepareErr
+	}
 	idempotent := lakePhase(ctx, "idempotency")
-	d, e := s.begin(ctx, tx, user, admin, key, method, route, input, now.Unix())
+	d, e := idempotency.Begin(ctx, tx, prepared)
+	if errors.Is(e, idempotency.ErrConflict) || errors.Is(e, idempotency.ErrInProgress) {
+		e = ErrConflict
+	}
 	idempotent(e)
 	if e != nil {
 		return out, e
@@ -299,16 +305,21 @@ func (s *Service) profileViewTx(ctx context.Context, tx *sql.Tx, user int64, now
 		return ProfileView{}, e
 	}
 	out := ProfileView{Revision: rev(row.revision), RulesID: rules.RulesID, Profile: row.profile, Wallet: w}
-	if _, e = s.qualifiedTx(ctx, tx, user, now.Unix()); e != nil {
+	out.Settings, e = s.qualifiedTx(ctx, tx, user, now.Unix())
+	if e != nil {
 		if !closedError(e) {
 			return out, e
 		}
 		out.Readonly = true
 	}
 
-	out.Settings, e = settingsTx(ctx, tx)
-	if e != nil {
-		return out, e
+	// A closed admission gate may return before settings are read. The view
+	// still needs those settings, but an open gate already read this snapshot.
+	if out.Settings.Revision == "" {
+		out.Settings, e = settingsTx(ctx, tx)
+		if e != nil {
+			return out, e
+		}
 	}
 	c, e := currentCastTx(ctx, tx, user)
 	if e == nil {

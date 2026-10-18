@@ -16,6 +16,11 @@ same bounded read pool. There is no complete-list cache or TTL; caller identity,
 level, donation ownership and current quotas still affect the result. See
 [database access](docs/database-access.md) and [runtime metrics](docs/deployment.md).
 
+Lake Notes checkpoints reuse authoritative values within their transaction, and
+activity event snapshots use the existing read pool. Revision, replay and lease
+writes remain atomic. The [mixed-load experiment](docs/performance-validation.md)
+reports both pools, real checkpoint completions and scheduling delay.
+
 | Area | Source and contract |
 | --- | --- |
 | Startup, recovery and HTTP composition | `main.go`, `internal/app/` |

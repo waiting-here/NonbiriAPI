@@ -12,6 +12,8 @@ NonbiriAPI 是可自行部署的 AI 端点管理平台，提供 OpenAI-compatibl
 
 模型目录通过只读 SQLite 快照即时判断可用性，批量读取候选和近期成功率；个人模型列表也使用现有的有界读连接池。没有完整列表缓存或 TTL，用户身份、等级、捐赠归属和当前配额仍参与判定。实现约束见[数据库访问](docs/database-access.md)，运行指标见[部署指南](docs/deployment.md)。
 
+《垂钓手记》检查点在同一事务内复用权威数据，活动通知快照使用现有读池；版本号、重放回执和租约仍原子保存。[混合负载实验](docs/performance-validation.md)同时报告两池等待、真实检查点完成数及发压延迟。
+
 | 范围 | 源码与契约 |
 | --- | --- |
 | 启动、恢复与 HTTP 接线 | `main.go`、`internal/app/` |

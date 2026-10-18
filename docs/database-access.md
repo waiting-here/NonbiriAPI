@@ -34,6 +34,20 @@ keys immediately, and existing lifecycle workers and dispatch paths advance
 stored state. A later request observes committed model, binding, switch and
 quota changes. A read already in progress completes against its own snapshot.
 
+## Game checkpoints and activity snapshots
+
+Lake Notes checkpoints reuse the profile, cast and eligibility/settings already
+read or saved in the same transaction. The response keeps the newly committed
+profile/cast revisions and omits the active cast after a terminal result. Wallet
+balances are still read authoritatively. Request canonicalization and its keyed
+digest run before connection acquisition; errors retain authorization precedence,
+and replay reservation/completion remain in the business transaction.
+
+Activity event projections use the existing read-only pool. Their configuration,
+account facts and event revision come from one committed snapshot. Publisher
+generation checks still reject stale publication plans. Reader waits are reported
+alongside writer waits; this does not increase either pool size.
+
 ## Retention and measurement
 
 Fishing cleanup selects `settled_at <= cutoff`, ordered by `settled_at,id`, using
@@ -48,3 +62,5 @@ authentication, model directories and affected maintenance workers. See
 [runtime metrics](deployment.md) for window semantics and
 [performance comparisons](../CONTRIBUTING.md#performance-comparisons) for the
 temporary-database workload and its limits.
+The [Lake Notes mixed-load experiment](performance-validation.md) adds real
+checkpoints, save-size gradients and subscription fan-out.
