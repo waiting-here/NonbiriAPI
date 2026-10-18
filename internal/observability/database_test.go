@@ -39,6 +39,8 @@ func TestDatabasePhasesRejectUnregisteredLabels(t *testing.T) {
 	DatabasePhase(ctx, "private-user", "read")(nil)
 	DatabasePhase(ctx, "lake_checkpoint", "private-query")(nil)
 	DatabaseOperation(ctx, "private-user")(nil)
+	LifecycleStage(ctx, "private-phase", "claims")(nil)
+	LifecycleStage(ctx, "recovery", "private-user")(nil)
 	if rows := p.Drain(); len(rows) != 0 {
 		t.Fatalf("unregistered labels recorded: %+v", rows)
 	}
@@ -47,6 +49,10 @@ func TestDatabasePhasesRejectUnregisteredLabels(t *testing.T) {
 	finish(nil)
 	if rows := p.Drain(); len(rows) != 1 || rows[0].Route != "phase.rules.lake_checkpoint" || rows[0].Failures != 1 || rows[0].Completed != 1 {
 		t.Fatalf("phase result = %+v", rows)
+	}
+	LifecycleStage(ctx, "retention", "sessions")(context.Canceled)
+	if rows := p.Drain(); len(rows) != 1 || rows[0].Route != "operation.lifecycle_retention.sessions" || rows[0].Canceled != 1 {
+		t.Fatalf("lifecycle result = %+v", rows)
 	}
 }
 

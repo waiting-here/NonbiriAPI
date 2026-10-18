@@ -6,11 +6,11 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
 )
 
-type checkpointContextKey struct{}
+type lakeOperationContextKey struct{}
 
 func lakeOperation(ctx context.Context) string {
-	if checkpoint, _ := ctx.Value(checkpointContextKey{}).(bool); checkpoint {
-		return "lake_checkpoint"
+	if operation, _ := ctx.Value(lakeOperationContextKey{}).(string); operation != "" {
+		return operation
 	}
 	return "lake_mutation"
 }

@@ -237,7 +237,8 @@ operations include `session`, `personal_models`, `charity_models`,
 `lake_checkpoint`, `lake_mutation`, `lake_profile`, `lake_recovery`,
 `lake_retention`, `claim_accept`, `claim_prepare`, `claim_release`,
 `claim_attempt`, `claim_complete`, `fishing_settle`, `reward_delivery` and
-`activities_projection`. Transaction timing includes `BeginTx` after pool
+`activities_projection`, `lifecycle_checkpoint`, `legal_hold_expiry` and
+`legal_hold_retention`. Transaction timing includes `BeginTx` after pool
 acquisition. Fishing settlement returns its connection before publishing events.
 Database phases count non-cancellation errors in `failures` and interrupted work
 in `canceled`. HTTP groups retain `server_errors` for server failures. Game-state
@@ -247,6 +248,11 @@ clock. Background workers use the same observer as requests.
 `operation.activities_publish`, `operation.lifecycle_recovery` and
 `operation.lifecycle_retention` cover the complete operation, including waits
 and multiple transactions; they do not measure one continuous connection hold.
+Lifecycle passes also expose `operation.lifecycle_recovery.<domain>` and
+`operation.lifecycle_retention.<domain>` using fixed domain names. These include
+all batches and pool waits for that domain, rather than attributing their whole
+elapsed time to the writer. Worker checkpoints and legal-hold batches separately
+measure actual connection acquisition and holding time.
 Lake operations also expose fixed `phase.<phase>.<operation>` rows for
 request preparation, authorization, configuration, profile reads, rules, encoding, writes,
 idempotency, active-action recording, response projection and commit.

@@ -69,6 +69,7 @@ func (s *Service) PrepareDeleteTx(ctx context.Context, tx *sql.Tx, user, now int
 	return nil, nil
 }
 func (s *Service) RecoverBeforeListener(ctx context.Context, now int64, limit int, budget time.Duration) (_ lifecycle.WorkResult, resultErr error) {
+	ctx = context.WithValue(ctx, lakeOperationContextKey{}, "lake_recovery")
 	if limit < 1 || limit > lifecycle.WorkerBatchLimit || budget <= 0 || budget > lifecycle.WorkerBudget {
 		return lifecycle.WorkResult{}, ErrInvalid
 	}
@@ -110,6 +111,7 @@ func (s *Service) RecoverBeforeListener(ctx context.Context, now int64, limit in
 	return out, tx.Commit()
 }
 func (s *Service) Retain(ctx context.Context, now int64, limit int, budget time.Duration) (_ lifecycle.WorkResult, resultErr error) {
+	ctx = context.WithValue(ctx, lakeOperationContextKey{}, "lake_retention")
 	if limit < 1 || limit > lifecycle.WorkerBatchLimit || budget <= 0 || budget > lifecycle.WorkerBudget {
 		return lifecycle.WorkResult{}, ErrInvalid
 	}

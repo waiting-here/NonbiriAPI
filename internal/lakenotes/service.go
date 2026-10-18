@@ -335,6 +335,7 @@ func (s *Service) profileViewTx(ctx context.Context, tx *sql.Tx, user int64, now
 	return out, nil
 }
 func (s *Service) Profile(ctx context.Context, user int64) (_ ProfileView, resultErr error) {
+	ctx = context.WithValue(ctx, lakeOperationContextKey{}, "lake_profile")
 	now, e := s.clock()
 	if e != nil {
 		return ProfileView{}, e

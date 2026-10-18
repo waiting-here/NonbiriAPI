@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/worker"
 )
 
@@ -28,15 +29,15 @@ func (coordinator *Coordinator) loadOrInitializeWorker(
 	ctx context.Context,
 	workerKey string,
 	decisionNow int64,
-) (worker.Checkpoint, error) {
+) (_ worker.Checkpoint, resultErr error) {
 	if coordinator == nil || ctx == nil || workerKey == "" || decisionNow < 0 || decisionNow > maximumUnixSecond {
 		return worker.Checkpoint{}, ErrInvalid
 	}
-	tx, err := coordinator.database.BeginTx(ctx, nil)
+	tx, finish, err := observability.BeginMeasuredTx(ctx, coordinator.database, nil, "lifecycle_checkpoint")
 	if err != nil {
 		return worker.Checkpoint{}, fmt.Errorf("lifecycle: begin worker checkpoint: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { finish(resultErr) }()
 	checkpoint, err := worker.Load(ctx, tx, workerKey)
 	if errors.Is(err, sql.ErrNoRows) {
 		checkpoint, err = worker.Initialize(ctx, tx, worker.Checkpoint{
@@ -58,7 +59,7 @@ func (coordinator *Coordinator) recordWorkerOutcome(
 	workerKey string,
 	decisionNow int64,
 	runErr error,
-) error {
+) (resultErr error) {
 	if ctx != nil && ctx.Err() != nil {
 		return nil
 	}
@@ -87,11 +88,11 @@ func (coordinator *Coordinator) recordWorkerOutcome(
 	if err != nil {
 		return fmt.Errorf("lifecycle: build worker checkpoint: %w", err)
 	}
-	tx, err := coordinator.database.BeginTx(ctx, nil)
+	tx, finish, err := observability.BeginMeasuredTx(ctx, coordinator.database, nil, "lifecycle_checkpoint")
 	if err != nil {
 		return fmt.Errorf("lifecycle: begin worker outcome: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { finish(resultErr) }()
 	swapped, err := worker.CompareAndSet(ctx, tx, previous, next)
 	if err != nil {
 		return fmt.Errorf("lifecycle: update worker checkpoint: %w", err)

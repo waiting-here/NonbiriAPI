@@ -12,6 +12,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/lakenotes/rules"
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 )
 
 type castRow struct {
@@ -245,7 +246,8 @@ func (s *Service) Start(ctx context.Context, user int64, key string, in StartInp
 	return result, e
 }
 
-func (s *Service) Cast(ctx context.Context, user int64, id string) (CastResult, error) {
+func (s *Service) Cast(ctx context.Context, user int64, id string) (_ CastResult, resultErr error) {
+	ctx = context.WithValue(ctx, lakeOperationContextKey{}, "lake_profile")
 	if !db.ValidateOpaqueID(id, "lnc_") {
 		return CastResult{}, ErrInvalid
 	}
@@ -253,11 +255,11 @@ func (s *Service) Cast(ctx context.Context, user int64, id string) (CastResult, 
 	if e != nil {
 		return CastResult{}, e
 	}
-	tx, e := s.database.BeginTx(ctx, nil)
+	tx, finish, e := observability.BeginMeasuredTx(ctx, s.database, nil, "lake_profile")
 	if e != nil {
 		return CastResult{}, e
 	}
-	defer tx.Rollback()
+	defer func() { finish(resultErr) }()
 	if e = s.authorize(ctx, tx, user, false); e != nil {
 		return CastResult{}, e
 	}
@@ -315,7 +317,7 @@ func (s *Service) budget(user int64, now time.Time) error {
 	return nil
 }
 func (s *Service) Checkpoint(ctx context.Context, user int64, id, key string, in CheckpointInput) (MutationResult[CastResult], error) {
-	ctx = context.WithValue(ctx, checkpointContextKey{}, true)
+	ctx = context.WithValue(ctx, lakeOperationContextKey{}, "lake_checkpoint")
 	generation, e := revision(in.Generation, false)
 	if e != nil {
 		return MutationResult[CastResult]{}, e
