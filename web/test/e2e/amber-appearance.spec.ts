@@ -82,6 +82,23 @@ for (const width of [1440, 390]) {
     await expect
       .poll(async () => Number(await canvas.getAttribute('data-time')))
       .toBeGreaterThan(lightTime + 0.2);
+    // Exercise the visibility lifecycle without relying on headless tab activation.
+    const hiddenTime = await page.evaluate(() => {
+      Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+      return document.querySelector('.nb-appearance-backdrop')?.getAttribute('data-time');
+    });
+    expect(hiddenTime).toBeTruthy();
+    // A bounded observation interval proves that no background frames keep advancing.
+    await page.waitForTimeout(250);
+    await expect(canvas).toHaveAttribute('data-time', hiddenTime!);
+    await page.evaluate(() => {
+      Reflect.deleteProperty(document, 'hidden');
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await expect
+      .poll(async () => Number(await canvas.getAttribute('data-time')))
+      .toBeGreaterThan(Number(hiddenTime) + 0.2);
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await expect(canvas).toHaveAttribute('data-ready', 'false');
     expect(await still.boundingBox()).toEqual(before);
