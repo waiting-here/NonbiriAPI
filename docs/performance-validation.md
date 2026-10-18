@@ -20,6 +20,16 @@ The test also varies stored basket size and active activity subscriptions.
 It publishes current activity snapshots every two seconds to measure projection
 fan-out separately from game settlement.
 
+Set `NONBIRI_LOAD_OVERLAP=1` to add 1,001 expired terminal fishing batches at the
+midpoint, create an actual broadcast reward through the administrator HTTP
+handler, and run the normal recovery/retention order while checkpoints, pages
+and model completions continue. The existing reward worker delivers the grant.
+The report records seeded/remaining history, matched/successful recipients,
+fixture-seeding time, maintenance-pass time and total overlap completion time;
+all deliveries and accounting must converge. The artificial history insertion
+also competes for the writer. Compare this mode only with another run that
+enables the same overlap.
+
 `LAKE_LOAD_RESULT` reports planned and submitted work, HTTP results, model
 admission, queue delay, both pool waits, connection-holding phases, process CPU
 time and memory. Model error codes and anonymous rejection-stage totals help

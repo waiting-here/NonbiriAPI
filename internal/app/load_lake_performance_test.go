@@ -37,6 +37,7 @@ func TestApplicationLakeMixedLoad(t *testing.T) {
 		t.Skip("set NONBIRI_LOAD_TEST=1 to run the synthetic load experiment")
 	}
 	t.Setenv("NONBIRI_LOAD_SCALE", "production")
+	overlap := os.Getenv("NONBIRI_LOAD_OVERLAP") == "1"
 	seconds := 30
 	if raw := os.Getenv("NONBIRI_LOAD_SECONDS"); raw != "" {
 		value, err := strconv.Atoi(raw)
@@ -92,6 +93,7 @@ func TestApplicationLakeMixedLoad(t *testing.T) {
 			routes := []string{"/v1/models", "/api/charity/models", "/api/charity/models?view=catalog&page=1&page_size=50", "/api/session", "/api/me", "/api/games/blackjack/state"}
 			pages, lake, lag, projections, models := &loadMeasurements{}, &loadMeasurements{}, &loadMeasurements{}, &loadMeasurements{}, &loadMeasurements{}
 			var submitted, checkpoints atomic.Int64
+			var maintenance loadMaintenanceResult
 			var work, players sync.WaitGroup
 			queues := make([]chan time.Time, tc.users)
 			runtime.GC()
@@ -182,6 +184,19 @@ func TestApplicationLakeMixedLoad(t *testing.T) {
 					})
 				}
 				if tick == seconds*tc.rps/2 {
+					if overlap {
+						work.Go(func() {
+							var err error
+							maintenance, err = f.maintenanceOverlap(streamCtx)
+							if err != nil {
+								t.Errorf("maintenance overlap: %v", err)
+								return
+							}
+							if maintenance.ExpiredRemaining != 0 || maintenance.RewardsSuccess != maintenance.RewardsMatched {
+								t.Errorf("maintenance did not converge: %+v", maintenance)
+							}
+						})
+					}
 					for i := range tc.burst {
 						work.Go(func() { f.model(ctx, i, "short", models) })
 					}
@@ -281,6 +296,7 @@ func TestApplicationLakeMixedLoad(t *testing.T) {
 			stopStreams()
 			consumers.Wait()
 			report := map[string]any{
+				"maintenance_overlap": overlap, "maintenance": maintenance,
 				"users": tc.users, "basket": tc.basket, "subscribers": tc.subscribers, "frames": frames.Load(), "seed": 123456789, "random_sample": .5,
 				"rps": tc.rps, "directory_concurrency": tc.burst, "seconds": seconds, "planned_pages": seconds*tc.rps + tc.burst, "submitted_pages": submitted.Load(), "planned_checkpoints": seconds / 2 * tc.users, "submitted_checkpoints": checkpoints.Load(),
 				"pages": pages.summaries(), "lake": lake.summaries(), "projections": projections.summaries(), "models": models.summaries(), "schedule": lag.summaries(),

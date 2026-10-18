@@ -139,6 +139,7 @@ type loadFixture struct {
 	app     *application
 	server  *httptest.Server
 	client  *http.Client
+	admin   *http.Cookie
 	users   []loadIdentity
 	inbound atomic.Int64
 	peak    atomic.Int64
@@ -225,6 +226,7 @@ func newLoadFixture(t *testing.T, upstream *loadUpstream, configure ...func(*app
 	t.Cleanup(func() { _ = f.app.Close() })
 	login := testApplicationRequest(t, f.app.handler, "POST", auditAdminHost, "/admin/api/login", `{"username":"operator","password":"correct horse battery staple"}`, nil, map[string]string{"Content-Type": "application/json"})
 	admin := []*http.Cookie{responseCookieNamed(t, login, auth.AdminSessionCookieName)}
+	f.admin = admin[0]
 	headers := map[string]string{"Content-Type": "application/json", "Origin": "http://" + auditAdminHost, "Idempotency-Key": strings.Repeat("L", 22)}
 	disable := testApplicationRequest(t, f.app.handler, "POST", auditAdminHost, "/admin/api/maintenance/disable", `{"expected_revision":"1","reason":"Synthetic load validation"}`, admin, headers)
 	if disable.Code != 200 {
