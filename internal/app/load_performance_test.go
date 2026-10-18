@@ -144,7 +144,7 @@ type loadFixture struct {
 	peak    atomic.Int64
 }
 
-func newLoadFixture(t *testing.T, upstream *loadUpstream) *loadFixture {
+func newLoadFixture(t *testing.T, upstream *loadUpstream, configure ...func(*applicationRuntimeOptions)) *loadFixture {
 	t.Helper()
 	u := httptest.NewServer(http.HandlerFunc(upstream.serve))
 	t.Cleanup(u.Close)
@@ -214,7 +214,11 @@ func newLoadFixture(t *testing.T, upstream *loadUpstream) *loadFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.app, err = buildApplicationWithRuntimeOptions(context.Background(), auditConfig(), store, vault, applicationRuntimeOptions{Egress: stack})
+	options := applicationRuntimeOptions{Egress: stack}
+	for _, setup := range configure {
+		setup(&options)
+	}
+	f.app, err = buildApplicationWithRuntimeOptions(context.Background(), auditConfig(), store, vault, options)
 	if err != nil {
 		t.Fatal(err)
 	}

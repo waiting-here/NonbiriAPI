@@ -314,6 +314,8 @@ func newGameRuntimeBundle(
 	accountEvents *accountstream.Hub,
 	sources *accountEventSources,
 	now func() time.Time,
+	lakeRandom interface{ Float53() (float64, error) },
+	lakeMotionSeed func() (uint32, error),
 ) (*gameRuntimeBundle, error) {
 	if store == nil || vault == nil || authRuntime == nil || roleAuthorizer == nil || continuation == nil ||
 		pools == nil || activityEvents == nil || accountEvents == nil || sources == nil {
@@ -327,6 +329,7 @@ func newGameRuntimeBundle(
 		return roleAuthorizer.AuthorizeAdminMutation(ctx, tx, actor.UserID)
 	})
 	return gamebuiltin.New(gamebuiltin.Options{
+		LakeRandom: lakeRandom, LakeMotionSeed: lakeMotionSeed,
 		Now:   now,
 		Store: store, Vault: vault, UserAuthorizer: authRuntime, AdminAuthorizer: adminAuthorization,
 		Continuation: continuation, Pools: pools, AccountEvents: accountEvents, ActivityEvents: activityEvents,

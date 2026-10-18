@@ -122,9 +122,11 @@ func buildApplicationWithGameClock(ctx context.Context, cfg *config.Config, stor
 // Runtime options are supplied only by the process composition root. Request
 // data and persisted configuration cannot replace the outbound policy.
 type applicationRuntimeOptions struct {
-	Egress      *egress.Stack
-	GameNow     func() time.Time
-	ActivityNow func() time.Time
+	Egress         *egress.Stack
+	GameNow        func() time.Time
+	ActivityNow    func() time.Time
+	LakeRandom     interface{ Float53() (float64, error) }
+	LakeMotionSeed func() (uint32, error)
 }
 
 func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *config.Config, store *db.Store, vault *secret.Vault, options applicationRuntimeOptions) (built *application, result error) {
@@ -460,7 +462,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	gameRuntimes, err = newGameRuntimeBundle(
 		store, vault, authRuntime, roleAuthorizer, maintenanceService, activityRepository,
 		activityPublisher, activityEvents, accountSources,
-		gameNow,
+		gameNow, options.LakeRandom, options.LakeMotionSeed,
 	)
 	if err != nil {
 		return nil, err
