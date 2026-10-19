@@ -139,12 +139,13 @@ type loadFixture struct {
 	app     *application
 	server  *httptest.Server
 	client  *http.Client
+	admin   *http.Cookie
 	users   []loadIdentity
 	inbound atomic.Int64
 	peak    atomic.Int64
 }
 
-func newLoadFixture(t *testing.T, upstream *loadUpstream) *loadFixture {
+func newLoadFixture(t *testing.T, upstream *loadUpstream, configure ...func(*applicationRuntimeOptions)) *loadFixture {
 	t.Helper()
 	u := httptest.NewServer(http.HandlerFunc(upstream.serve))
 	t.Cleanup(u.Close)
@@ -214,13 +215,18 @@ func newLoadFixture(t *testing.T, upstream *loadUpstream) *loadFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.app, err = buildApplicationWithRuntimeOptions(context.Background(), auditConfig(), store, vault, applicationRuntimeOptions{Egress: stack})
+	options := applicationRuntimeOptions{Egress: stack}
+	for _, setup := range configure {
+		setup(&options)
+	}
+	f.app, err = buildApplicationWithRuntimeOptions(context.Background(), auditConfig(), store, vault, options)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = f.app.Close() })
 	login := testApplicationRequest(t, f.app.handler, "POST", auditAdminHost, "/admin/api/login", `{"username":"operator","password":"correct horse battery staple"}`, nil, map[string]string{"Content-Type": "application/json"})
 	admin := []*http.Cookie{responseCookieNamed(t, login, auth.AdminSessionCookieName)}
+	f.admin = admin[0]
 	headers := map[string]string{"Content-Type": "application/json", "Origin": "http://" + auditAdminHost, "Idempotency-Key": strings.Repeat("L", 22)}
 	disable := testApplicationRequest(t, f.app.handler, "POST", auditAdminHost, "/admin/api/maintenance/disable", `{"expected_revision":"1","reason":"Synthetic load validation"}`, admin, headers)
 	if disable.Code != 200 {
@@ -297,6 +303,7 @@ type loadSample struct {
 	duration     time.Duration
 	status       int
 	err          string
+	code         string
 }
 
 type loadMeasurements struct {
@@ -318,14 +325,26 @@ type loadPercentiles struct {
 	MaxMS  float64        `json:"max_ms"`
 	Status map[int]int    `json:"status"`
 	Errors map[string]int `json:"errors,omitempty"`
+	Codes  map[string]int `json:"codes,omitempty"`
 }
 
 func (m *loadMeasurements) summaries() map[string]loadPercentiles {
+	return m.groupedSummaries(true)
+}
+
+func (m *loadMeasurements) overallSummaries() map[string]loadPercentiles {
+	return m.groupedSummaries(false)
+}
+
+func (m *loadMeasurements) groupedSummaries(byPhase bool) map[string]loadPercentiles {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	groups := map[string][]loadSample{}
 	for _, sample := range m.samples {
-		key := sample.phase + " " + sample.route
+		key := sample.route
+		if byPhase {
+			key = sample.phase + " " + key
+		}
 		groups[key] = append(groups[key], sample)
 	}
 	out := map[string]loadPercentiles{}
@@ -334,11 +353,14 @@ func (m *loadMeasurements) summaries() map[string]loadPercentiles {
 		percentile := func(q float64) float64 {
 			return float64(samples[int(math.Ceil(q*float64(len(samples))))-1].duration) / float64(time.Millisecond)
 		}
-		p := loadPercentiles{Count: len(samples), P50MS: percentile(.5), P95MS: percentile(.95), P99MS: percentile(.99), MaxMS: percentile(1), Status: map[int]int{}, Errors: map[string]int{}}
+		p := loadPercentiles{Count: len(samples), P50MS: percentile(.5), P95MS: percentile(.95), P99MS: percentile(.99), MaxMS: percentile(1), Status: map[int]int{}, Errors: map[string]int{}, Codes: map[string]int{}}
 		for _, sample := range samples {
 			p.Status[sample.status]++
 			if sample.err != "" {
 				p.Errors[sample.err]++
+			}
+			if sample.code != "" {
+				p.Codes[sample.code]++
 			}
 		}
 		out[key] = p
@@ -616,6 +638,7 @@ func runSyntheticLoad(t *testing.T, n int, mode string, hold time.Duration) {
 		"db_wait_ms":    float64(afterStats.WaitDuration-stats.WaitDuration) / float64(time.Millisecond),
 		"memory_before": before, "memory_held": heldMemory, "memory_after_gc": after,
 		"page_rps": 15, "pages_submitted": pagesSubmitted.Load(), "pages": pageSummary, "models": modelSummary, "db_phases": poolPhases, "failure_facts": failures, "last_window_operations": f.app.performance.Drain(),
+		"pages_overall": pages.overallSummaries(),
 	}
 	encoded, err := json.Marshal(report)
 	if err != nil {
@@ -676,6 +699,7 @@ func (f *loadFixture) model(ctx context.Context, index int, mode string, metrics
 	defer response.Body.Close()
 	first := true
 	var tail string
+	var failureBody []byte
 	buffer := make([]byte, 32<<10)
 	if mode == "slow_cancel" && index%5 == 0 {
 		buffer = buffer[:1024]
@@ -683,6 +707,9 @@ func (f *loadFixture) model(ctx context.Context, index int, mode string, metrics
 	for {
 		n, readErr := response.Body.Read(buffer)
 		if n > 0 {
+			if response.StatusCode != 200 && len(failureBody) < 4096 {
+				failureBody = append(failureBody, buffer[:min(n, 4096-len(failureBody))]...)
+			}
 			if first {
 				metrics.add(loadSample{route: route, phase: "first_byte", duration: time.Since(start), status: response.StatusCode})
 				first = false
@@ -712,6 +739,14 @@ func (f *loadFixture) model(ctx context.Context, index int, mode string, metrics
 		s.err = "protocol_incomplete"
 	} else if response.StatusCode != 200 {
 		s.err = fmt.Sprintf("http_%d", response.StatusCode)
+		var body struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		}
+		if json.Unmarshal(failureBody, &body) == nil {
+			s.code = body.Error.Code
+		}
 	}
 	metrics.add(s)
 }

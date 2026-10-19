@@ -24,6 +24,8 @@ import (
 const maxUnixSecond = int64(253402300799)
 
 type Service struct {
+	completion   completionQueue
+	performance  *observability.Performance
 	observations *observability.Repository
 	db           *sql.DB
 	secrets      secret.GenerationTwoContextCodec
@@ -47,6 +49,7 @@ func New(dependencies Dependencies) (*Service, error) {
 		dependencies.Charity = nil
 	}
 	return &Service{
+		performance:  dependencies.Performance,
 		observations: dependencies.Observations,
 		db:           dependencies.DB,
 		secrets:      dependencies.Secrets,
@@ -59,7 +62,7 @@ func New(dependencies Dependencies) (*Service, error) {
 
 // Accept freezes one economic logical request and its maximum future ledger
 // row count in the same transaction as the domain and accounting adapters.
-func (s *Service) Accept(ctx context.Context, input AcceptInput) (Request, error) {
+func (s *Service) Accept(ctx context.Context, input AcceptInput) (_ Request, resultErr error) {
 	if s == nil || s.db == nil || ctx == nil || !validAcceptInput(input) {
 		return Request{}, ErrInvalidInput
 	}
@@ -80,11 +83,11 @@ func (s *Service) Accept(ctx context.Context, input AcceptInput) (Request, error
 		}
 	}
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, finish, err := observability.BeginMeasuredTx(ctx, s.db, nil, "claim_accept")
 	if err != nil {
 		return Request{}, fmt.Errorf("claim: begin request acceptance: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { finish(resultErr) }()
 	if err := requireActiveUser(ctx, tx, input.UserID, at, input.Route.IsCharity()); err != nil {
 		return Request{}, err
 	}
@@ -164,7 +167,7 @@ VALUES(?,?,?,?,'accepted',?,'reserved',?,'user',?,?)`,
 
 // Claim atomically wins one attempt sequence and freezes the physical secret
 // reference. It returns no credential bytes.
-func (s *Service) Claim(ctx context.Context, input ClaimInput) (Handle, error) {
+func (s *Service) Claim(ctx context.Context, input ClaimInput) (_ Handle, resultErr error) {
 	if s == nil || s.db == nil || ctx == nil || !validClaimInput(input) {
 		return Handle{}, ErrInvalidInput
 	}
@@ -172,11 +175,11 @@ func (s *Service) Claim(ctx context.Context, input ClaimInput) (Handle, error) {
 	if err != nil {
 		return Handle{}, fmt.Errorf("claim: generate claim identity: %w", err)
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, finish, err := observability.BeginMeasuredTx(ctx, s.db, nil, "claim_prepare")
 	if err != nil {
 		return Handle{}, fmt.Errorf("claim: begin claim: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { finish(resultErr) }()
 	// Use the clock after acquiring the connection for the rolling window.
 	at, err := s.nowUnix()
 	if err != nil {
@@ -193,7 +196,7 @@ func (s *Service) Claim(ctx context.Context, input ClaimInput) (Handle, error) {
 		handle, err = s.claimTx(ctx, tx, claimID, at, input)
 	}
 	if err != nil {
-		return Handle{}, s.quotaCapacityFailure(ctx, tx, at, err)
+		return Handle{}, s.quotaCapacityFailure(ctx, tx, at, err, finish)
 	}
 	if err := tx.Commit(); err != nil {
 		return Handle{}, fmt.Errorf("claim: commit claim: %w", err)
@@ -520,7 +523,7 @@ WHERE c.id=?`, handle.claimID).Scan(&stateText, &requestID, &attemptSeq, &purpos
 		}); err != nil {
 			clear(contextID)
 			clear(encrypted)
-			return nil, s.quotaCapacityFailure(ctx, tx, at, err)
+			return nil, s.quotaCapacityFailure(ctx, tx, at, err, nil)
 		}
 		if provider, ok := s.charity.(CharitySessionHeaders); ok {
 			managedHeaders, err = provider.SessionHeaders(ctx, tx, CharityDispatch{RequestID: requestID, ClaimID: handle.claimID, ActorUserID: callerID.Int64, DispatchedAt: at})

@@ -100,12 +100,6 @@ func TestSavedHistoryDisplaysPreserveOriginalReasons(t *testing.T) {
 		detail := httptest.NewRecorder()
 		f.registrar.handler("GET", role.route(routeDeletedUser))(detail, req, AdminPrincipal{UserID: actor})
 		for _, response := range []*httptest.ResponseRecorder{list, detail} {
-			if actor == trainee {
-				if response.Code != http.StatusForbidden {
-					t.Fatal("L5 read saved history", response.Code, response.Body)
-				}
-				continue
-			}
 			if response.Code != 200 || !strings.Contains(response.Body.String(), "192.0.2.7") || strings.Contains(response.Body.String(), "<script>") {
 				t.Fatal("incomplete or unsafe history", response.Code, response.Body)
 			}

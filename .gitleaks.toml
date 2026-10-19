@@ -70,3 +70,10 @@ condition = "AND"
 regexTarget = "line"
 paths = ['^internal[\/]adminusers[\/]display_privacy_test\.go$']
 regexes = ['const discord = "123456789012345678"']
+
+[[allowlists]]
+description = "Exact synthetic Discord identifier in account and log authorization regressions"
+targetRules = ["discord-client-id"]
+condition = "AND"
+paths = ['''^internal[\\/]adminusers[\\/]trainee_test\.go$''', '''^internal[\\/]logapi[\\/]historical_identity_test\.go$''']
+regexes = ['''^123456789012345678$''']

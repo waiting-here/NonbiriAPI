@@ -91,6 +91,8 @@ Each duplicate card grants one shard of its rarity. Duplicate SP cards grant one
 
 While a limited pool is open, its limited SR cards cost ten SR shards each and SSR cards cost three SSR shards each. SP cards cost nine SSR shards each. A card shared by multiple open pools appears once. It remains available while at least one containing pool is open. Paused, future and ended pools do not make cards available. Offers are once per card and unavailable for owned cards, including on reruns. Redemptions do not alter pity.
 
+The **量大管饱 (Bulk bargains)** group offers ten standard tickets or ten limited tickets for 10,000 credits per bundle. Each account may buy each bundle once per calendar day, with independent limits. Both bundles use game credits first and cover any remainder with general credits. Daily availability resets at midnight in the configured site time zone. The charge, ten-ticket grant and daily limit are committed together. Failed purchases consume neither credits nor availability. These fixed offers do not use the configurable single-ticket prices or monthly shard-exchange limits.
+
 Price and monthly-cap changes affect future exchanges. They do not refund past purchases, reclaim rewards or reset usage.
 
 ## Administration
@@ -142,6 +144,8 @@ Gacha POST routes require `Idempotency-Key`. Retry uncertain operations with the
 
 Appearance POST accepts `selected` (`default`, `heart-moment`, `celestial` or `wandering`) and an optional `moment` artwork key, with a 1 KiB body limit. It is an idempotent desired-state update and does not require an idempotency key. The visible catalogue is derived at read time and is excluded from account exports. Both appearance routes return `selected,moment,moments,unlocked,visible,updated_at`, reject query parameters and use `Cache-Control: no-store`. Locked designs are forbidden; malformed or unknown selections are invalid requests.
 
+The state `redeemed` array contains redeemed product IDs: card IDs remain for the lifetime of the account; `bulk-permanent` and `bulk-limited` appear only when bought on the current site-calendar day. Another purchase of that bundle on the same day returns `{"rejection":"daily-limit"}`. Replaying a successful request after midnight returns the current state without purchasing again or consuming the new day's allowance. Exports include each bundle's latest claim timestamp and retained purchase operations; deletion follows the existing activity lifecycle.
+
 Example action bodies:
 
 | Action | Body |
@@ -149,6 +153,7 @@ Example action bodies:
 | Draw | `{"action":"draw","pool_id":"permanent","quantity":10}` |
 | Buy tickets | `{"action":"buy","ticket":"permanent","quantity":10,"revision":1}` |
 | Redeem | `{"action":"redeem","product":"ticket-n","revision":1}` |
+| Buy a daily bundle | `{"action":"redeem","product":"bulk-permanent","revision":1}` or `{"action":"redeem","product":"bulk-limited","revision":1}` |
 | Claim a theme reward | `{"action":"claim","theme":"a"}` |
 
 `GET /api/appearance` returns `selected`, `moment`, `moments`, `unlocked`, `visible` and `updated_at`. Artwork keys are `card:<card-id>`, `illustration:<theme-id>` or `cover:<cover-id>`. `POST /api/appearance` accepts `{ "selected": "heart-moment", "moment": "card:g-chatgpt" }`; omit `moment` to keep the remembered artwork. A supplied artwork requires `selected=heart-moment`. The server validates account access and collection/opening eligibility in the same transaction. Repeating a selection leaves its timestamp unchanged. Reads do not enter the activity or grant tickets.

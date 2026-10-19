@@ -5,8 +5,80 @@ import (
 	"database/sql"
 	"errors"
 	"testing"
+	"testing/synctest"
 	"time"
 )
+
+func TestDatabaseInFlightTimeSpansWindows(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		p := NewPerformance()
+		ctx := p.Context(context.Background())
+		finish := databaseTimer(ctx, "transaction", "lake_checkpoint")
+		time.Sleep(time.Minute)
+		row := p.Drain()[0]
+		if row.Completed != 0 || row.Active != 1 || row.ActiveMS != 60000 || row.MaxMS != 0 {
+			t.Fatalf("unfinished transaction = %+v", row)
+		}
+		time.Sleep(2 * time.Second)
+		finish(nil)
+		finish(nil)
+		row = p.Drain()[0]
+		if row.Completed != 1 || row.Active != 0 || row.ActiveMS != 2000 || row.MaxMS != 62000 {
+			t.Fatalf("completed transaction = %+v", row)
+		}
+		if rows := p.Drain(); len(rows) != 0 {
+			t.Fatalf("unexpected empty-window samples = %+v", rows)
+		}
+	})
+}
+
+func TestDatabasePhasesRejectUnregisteredLabels(t *testing.T) {
+	p := NewPerformance()
+	ctx := p.Context(context.Background())
+	DatabaseOperation(nil, "lake_checkpoint")(nil)
+	DatabasePhase(ctx, "private-user", "read")(nil)
+	DatabasePhase(ctx, "lake_checkpoint", "private-query")(nil)
+	DatabaseOperation(ctx, "private-user")(nil)
+	LifecycleStage(ctx, "private-phase", "claims")(nil)
+	LifecycleStage(ctx, "recovery", "private-user")(nil)
+	CompletionStage(ctx, "private-user")(nil)
+	if rows := p.Drain(); len(rows) != 0 {
+		t.Fatalf("unregistered labels recorded: %+v", rows)
+	}
+	finish := DatabasePhase(ctx, "lake_checkpoint", "rules")
+	finish(errors.New("private-error"))
+	finish(nil)
+	if rows := p.Drain(); len(rows) != 1 || rows[0].Route != "phase.rules.lake_checkpoint" || rows[0].Failures != 1 || rows[0].Completed != 1 {
+		t.Fatalf("phase result = %+v", rows)
+	}
+	LifecycleStage(ctx, "retention", "sessions")(context.Canceled)
+	if rows := p.Drain(); len(rows) != 1 || rows[0].Route != "operation.lifecycle_retention.sessions" || rows[0].Canceled != 1 {
+		t.Fatalf("lifecycle result = %+v", rows)
+	}
+}
+
+func TestCompletionQueueTimingAndFixedBatchCounts(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		p := NewPerformance()
+		ctx := p.Context(t.Context())
+		first := DatabasePhase(ctx, "claim_attempt", "queue")
+		second := DatabasePhase(ctx, "claim_attempt", "queue")
+		time.Sleep(10 * time.Millisecond)
+		rows := p.Drain()
+		if len(rows) != 1 || rows[0].Active != 2 || rows[0].Peak != 2 || rows[0].ActiveMS != 20 {
+			t.Fatalf("queue gauge and elapsed time: %+v", rows)
+		}
+		first(nil)
+		second(context.Canceled)
+		CompletionStage(ctx, "batch_4")(nil)
+		CompletionStage(ctx, "batch_5")(nil)
+		CompletionStage(ctx, "overflow")(nil)
+		rows = p.Drain()
+		if len(rows) != 3 || rows[0].Route != "completion.batch_4" || rows[0].Completed != 1 || rows[1].Route != "completion.overflow" || rows[2].Canceled != 1 || rows[2].Completed != 2 || rows[2].Active != 0 {
+			t.Fatalf("batch counts or queue outcomes: %+v", rows)
+		}
+	})
+}
 
 func TestMeasuredTransactionSeparatesAcquisitionAndReturnsConnection(t *testing.T) {
 	database, err := sql.Open("sqlite", ":memory:")

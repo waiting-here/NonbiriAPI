@@ -4,6 +4,45 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## 1.0.3 — 2026-10-19
+
+Database schema 21 and account export 20 are unchanged. This source-only release
+preserves immediate model availability, the existing connection limits and
+synchronous durable accounting.
+
+### Changed
+
+- Add model-discovery and key-management shortcuts to charity connection setup,
+  preserving the selected source, key and candidates when returning.
+- Add exact Discord ID filtering to management request logs, including pagination
+  and exports. Keep it and the called charity model visible in common filters;
+  move the upstream model into additional filters.
+- Add daily mystery-shop bundles of ten standard or limited tickets for 10,000
+  credits each, with independent daily limits and game-credit-first payment.
+- Give level-5 stewards user-management reads and permission to ban level 1–4
+  accounts, with current actor and target checks before writes and replay.
+  Profile, limits, level, credit, unban and active-ban replacement remain denied.
+- Commit attempt and request completion in synchronous batches of up to four,
+  with per-item savepoints, durable acknowledgements, bounded pending work and
+  independent recovery after a failed batch. Report queue time, batch sizes,
+  overflow and shutdown separately from database pool waits.
+- Reuse up to 128 prepared write and 64 SELECT statements per physical SQLite connection and
+  release them on eviction or connection close. Move independent configuration
+  reads to the existing read pool and reuse deterministic validation only for
+  identical current contents, preserving immediate changes and full write checks.
+- Reuse transaction-local Lake Notes checkpoint data and prepare request digests
+  before acquiring the writer. Preserve atomic revisions, leases, activity facts
+  and replay receipts. Move committed activity projections to the existing read
+  pool without increasing connection limits.
+- Refine Amber Vow scenery and character lighting, add independent banners,
+  chandeliers, layered light and foreground books, and correct footwear contact.
+  Its site appearance places the character in the desktop side margin, with
+  matching responsive static fallback and refreshed standard/high-resolution art.
+- Extend anonymous database timing to game checkpoints, request accounting,
+  reward delivery, activity projections and lifecycle maintenance. Report
+  concurrent elapsed time for work that spans minute windows, with fixed
+  checkpoint subphases and no per-request data.
+
 ## 1.0.2 — 2026-10-17
 
 Database schema 21 and account export 20 are unchanged. This source-only patch

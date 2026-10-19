@@ -13,22 +13,21 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
-
-	_ "modernc.org/sqlite"
 )
 
 // Store wraps the SQLite handle and the recoverable-secret boundary. The
 // caller owns the codec lifecycle; typed repositories use it internally so
 // plaintext never has to become a database argument or a Store field.
 type Store struct {
-	db         *sql.DB
-	readDB     *sql.DB
-	secrets    secret.GenerationTwoContextCodec
-	closeOnce  sync.Once
-	closeErr   error
-	closeDone  chan struct{}
-	owner      *databaseOwner
-	afterClose func() error
+	db               *sql.DB
+	readDB           *sql.DB
+	secrets          secret.GenerationTwoContextCodec
+	closeOnce        sync.Once
+	closeErr         error
+	closeDone        chan struct{}
+	owner            *databaseOwner
+	afterClose       func() error
+	configValidation siteConfigValidation
 }
 
 // Open classifies path as either completely fresh or current Generation 2.

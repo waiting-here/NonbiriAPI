@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"strconv"
 	"time"
 )
@@ -90,16 +91,16 @@ func (s *Service) ProcessBatch(ctx context.Context, limit int) (int, error) {
 	}
 	return done, nil
 }
-func (s *Service) processOne(ctx context.Context) (bool, error) {
+func (s *Service) processOne(ctx context.Context) (_ bool, resultErr error) {
 	at, err := s.now()
 	if err != nil {
 		return false, err
 	}
-	tx, err := s.config.Database.BeginTx(ctx, nil)
+	tx, finish, err := observability.BeginMeasuredTx(ctx, s.config.Database, nil, "reward_delivery")
 	if err != nil {
 		return false, err
 	}
-	defer tx.Rollback()
+	defer func() { finish(resultErr) }()
 	var id int64
 	var user, actor sql.NullInt64
 	var campaign string

@@ -10,6 +10,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/accountstream"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 )
 
 func (r *Repository) GetActivities(ctx context.Context, userID int64) (ActivitiesSnapshot, error) {
@@ -24,7 +25,7 @@ func (r *Repository) GetThursday(ctx context.Context, userID int64) (ThursdayVie
 
 // ProjectActivities rebuilds the complete account-safe activity projection.
 // It never includes participant IDs, operation/source facts, or other users.
-func (r *Repository) ProjectActivities(ctx context.Context, userID int64) (SnapshotProjection, error) {
+func (r *Repository) ProjectActivities(ctx context.Context, userID int64) (_ SnapshotProjection, resultErr error) {
 	if r == nil || ctx == nil || userID <= 0 {
 		return SnapshotProjection{}, ErrInvalidRequest
 	}
@@ -32,11 +33,11 @@ func (r *Repository) ProjectActivities(ctx context.Context, userID int64) (Snaps
 	if err != nil {
 		return SnapshotProjection{}, err
 	}
-	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, finish, err := observability.BeginMeasuredTx(ctx, r.readDB, &sql.TxOptions{ReadOnly: true}, "activities_projection")
 	if err != nil {
 		return SnapshotProjection{}, classifyDatabaseError("begin activities projection", err)
 	}
-	defer tx.Rollback()
+	defer func() { finish(resultErr) }()
 	var exists int
 	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE id=?)`, userID).Scan(&exists); err != nil {
 		return SnapshotProjection{}, classifyDatabaseError("read activities account", err)

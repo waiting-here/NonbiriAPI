@@ -102,6 +102,16 @@ func TestGachaRootSessionCSRFReplayExportAndDeletion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	for _, product := range []string{"bulk-permanent", "bulk-limited"} {
+		body := `{"action":"redeem","product":"` + product + `","revision":1}`
+		bought := call(product+"-0123456789", body)
+		replayed := call(product+"-0123456789", body)
+		if len(bought.Snapshot.Redeemed) == 0 || replayed.Snapshot.Credits != bought.Snapshot.Credits ||
+			replayed.Snapshot.Tickets["permanent"] != bought.Snapshot.Tickets["permanent"] ||
+			replayed.Snapshot.Tickets["limited"] != bought.Snapshot.Tickets["limited"] {
+			t.Fatal("bulk replay changed its grant", bought, replayed)
+		}
+	}
 	// Both acquisition sources unlock an appearance without switching it.
 	for _, card := range []struct{ id, source string }{{"l-chatgpt", "draw"}, {"m-deepseek", "shop"}} {
 		if _, err := f.store.DB().Exec("INSERT INTO gacha_owned(user_id,card_id,obtained_at,source) VALUES(?,?,1800000000,?)", userID, card.id, card.source); err != nil {
@@ -180,7 +190,7 @@ func TestGachaRootSessionCSRFReplayExportAndDeletion(t *testing.T) {
 		t.Fatal("appearance export", appearanceExport, err)
 	}
 	var exported gacha.UserExport
-	if err = json.Unmarshal(document.Gacha, &exported); err != nil || len(exported.Draws) != 1 || len(exported.Operations) != 3 || exported.Balance[0] != 1 || len(exported.Owned) == 0 {
+	if err = json.Unmarshal(document.Gacha, &exported); err != nil || len(exported.Draws) != 1 || len(exported.Operations) != 5 || exported.Balance[0] != 11 || exported.Balance[1] != 10 || len(exported.Claims) != 2 || len(exported.Owned) == 0 {
 		t.Fatal(exported, err)
 	}
 	if strings.Contains(string(document.Gacha), "request_hash") || strings.Contains(string(document.Gacha), "key_hash") {
@@ -194,7 +204,7 @@ func TestGachaRootSessionCSRFReplayExportAndDeletion(t *testing.T) {
 		}
 	}
 	var count int
-	if err = f.store.DB().QueryRow("SELECT count(*) FROM gacha_operations WHERE user_id IS NULL AND key_hash IS NULL AND request_hash IS NULL").Scan(&count); err != nil || count != 3 {
+	if err = f.store.DB().QueryRow("SELECT count(*) FROM gacha_operations WHERE user_id IS NULL AND key_hash IS NULL AND request_hash IS NULL").Scan(&count); err != nil || count != 5 {
 		t.Fatal(count, err)
 	}
 	if late := choose(user.Cookie, `{"selected":"default"}`, origin); late.Code != http.StatusUnauthorized {

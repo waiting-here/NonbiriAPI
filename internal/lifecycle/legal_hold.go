@@ -14,6 +14,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
@@ -658,17 +659,17 @@ func (coordinator *Coordinator) expireAllDueHolds(ctx context.Context, decisionN
 	}
 }
 
-func (coordinator *Coordinator) expireDueHolds(ctx context.Context, decisionNow int64, limit int, deadline time.Time) (WorkResult, error) {
+func (coordinator *Coordinator) expireDueHolds(ctx context.Context, decisionNow int64, limit int, deadline time.Time) (_ WorkResult, resultErr error) {
 	if ctx == nil || decisionNow < 0 || decisionNow > maximumUnixSecond || limit < 1 || limit > WorkerBatchLimit || deadline.IsZero() {
 		return WorkResult{}, ErrInvalid
 	}
 	batchCtx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
-	tx, err := coordinator.database.BeginTx(batchCtx, nil)
+	tx, finish, err := observability.BeginMeasuredTx(batchCtx, coordinator.database, nil, "legal_hold_expiry")
 	if err != nil {
 		return WorkResult{}, fmt.Errorf("lifecycle: begin legal hold expiry: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { finish(resultErr) }()
 	rows, err := tx.QueryContext(batchCtx, `
 SELECT id FROM legal_holds
 WHERE state='active' AND expires_at<=?
@@ -770,17 +771,17 @@ UPDATE legal_hold_read_audits SET retain_until=? WHERE hold_id_text=? AND retain
 	return nil
 }
 
-func (coordinator *Coordinator) retainEndedHolds(ctx context.Context, decisionNow int64, limit int, deadline time.Time) (WorkResult, error) {
+func (coordinator *Coordinator) retainEndedHolds(ctx context.Context, decisionNow int64, limit int, deadline time.Time) (_ WorkResult, resultErr error) {
 	if ctx == nil || decisionNow < 0 || decisionNow > maximumUnixSecond || limit < 1 || limit > WorkerBatchLimit || deadline.IsZero() {
 		return WorkResult{}, ErrInvalid
 	}
 	batchCtx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
-	tx, err := coordinator.database.BeginTx(batchCtx, nil)
+	tx, finish, err := observability.BeginMeasuredTx(batchCtx, coordinator.database, nil, "legal_hold_retention")
 	if err != nil {
 		return WorkResult{}, fmt.Errorf("lifecycle: begin legal hold retention: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { finish(resultErr) }()
 	rows, err := tx.QueryContext(batchCtx, `
 SELECT id FROM legal_holds
 WHERE state IN ('released','expired') AND retain_until<=?

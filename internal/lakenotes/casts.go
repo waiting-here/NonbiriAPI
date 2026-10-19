@@ -12,6 +12,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/lakenotes/rules"
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 )
 
 type castRow struct {
@@ -100,7 +101,9 @@ func saveCastTx(ctx context.Context, tx *sql.Tx, c *castRow, now time.Time, ack 
 	state := c.state
 	state.Reward = nil
 
+	encode := lakePhase(ctx, "encode")
 	raw, e := rules.EncodeCast(state)
+	encode(e)
 	if e != nil {
 		return e
 	}
@@ -119,7 +122,9 @@ func saveCastTx(ctx context.Context, tx *sql.Tx, c *castRow, now time.Time, ack 
 	if c.state.Terminal() {
 		terminal = now.Unix()
 	}
+	write := lakePhase(ctx, "write")
 	r, e := tx.ExecContext(ctx, "UPDATE lake_notes_casts SET rules_id=?,storage_version=?,phase=?,paused=?,generation=?,revision=revision+1,last_tick=?,snapshot=?,reward_plan=?,held=?,active_elapsed_ns=?,active_started_at_ns=?,lease_until_ns=?,last_ack_json=?,terminal_at=?,updated_at=? WHERE id=? AND user_id=? AND revision=?", rules.RulesID, castStorageVersion, c.state.Phase, c.state.Paused, c.generation, c.state.Tick, raw, reward, c.state.Held, c.elapsed, c.started, c.lease, string(last), terminal, now.Unix(), c.id, c.user, c.revision)
+	write(e)
 	if e != nil {
 		return e
 	}
@@ -143,6 +148,23 @@ func (s *Service) castResultTx(ctx context.Context, tx *sql.Tx, c castRow, now t
 	if p.Readonly && !c.state.Terminal() {
 		v.Readonly = true
 		v.RecoveryAction = "closed"
+	}
+	return CastResult{Cast: v, Profile: p}, nil
+}
+
+// The successful checkpoint already authorized and saved these values in this
+// transaction. Only wallet balances still need to be projected from the DB.
+func checkpointResultTx(ctx context.Context, tx *sql.Tx, c castRow, row profileRow, settings Settings) (_ CastResult, resultErr error) {
+	finish := lakePhase(ctx, "projection")
+	defer func() { finish(resultErr) }()
+	wallet, err := walletTx(ctx, tx, c.user)
+	if err != nil {
+		return CastResult{}, err
+	}
+	v := c.view(row.revision)
+	p := ProfileView{Revision: rev(row.revision), RulesID: rules.RulesID, Profile: row.profile, Wallet: wallet, Settings: settings}
+	if !c.state.Terminal() {
+		p.Cast = &v
 	}
 	return CastResult{Cast: v, Profile: p}, nil
 }
@@ -224,7 +246,8 @@ func (s *Service) Start(ctx context.Context, user int64, key string, in StartInp
 	return result, e
 }
 
-func (s *Service) Cast(ctx context.Context, user int64, id string) (CastResult, error) {
+func (s *Service) Cast(ctx context.Context, user int64, id string) (_ CastResult, resultErr error) {
+	ctx = context.WithValue(ctx, lakeOperationContextKey{}, "lake_profile")
 	if !db.ValidateOpaqueID(id, "lnc_") {
 		return CastResult{}, ErrInvalid
 	}
@@ -232,11 +255,11 @@ func (s *Service) Cast(ctx context.Context, user int64, id string) (CastResult, 
 	if e != nil {
 		return CastResult{}, e
 	}
-	tx, e := s.database.BeginTx(ctx, nil)
+	tx, finish, e := observability.BeginMeasuredTx(ctx, s.database, nil, "lake_profile")
 	if e != nil {
 		return CastResult{}, e
 	}
-	defer tx.Rollback()
+	defer func() { finish(resultErr) }()
 	if e = s.authorize(ctx, tx, user, false); e != nil {
 		return CastResult{}, e
 	}
@@ -294,6 +317,7 @@ func (s *Service) budget(user int64, now time.Time) error {
 	return nil
 }
 func (s *Service) Checkpoint(ctx context.Context, user int64, id, key string, in CheckpointInput) (MutationResult[CastResult], error) {
+	ctx = context.WithValue(ctx, lakeOperationContextKey{}, "lake_checkpoint")
 	generation, e := revision(in.Generation, false)
 	if e != nil {
 		return MutationResult[CastResult]{}, e
@@ -320,7 +344,7 @@ func (s *Service) Checkpoint(ctx context.Context, user int64, id, key string, in
 		if c.state.Terminal() {
 			return CastResult{}, ErrConflict
 		}
-		_, gateErr := s.qualifiedTx(ctx, tx, user, now.Unix())
+		settings, gateErr := s.qualifiedTx(ctx, tx, user, now.Unix())
 		if gateErr != nil && !closedError(gateErr) {
 			return CastResult{}, gateErr
 		}
@@ -358,7 +382,9 @@ func (s *Service) Checkpoint(ctx context.Context, user int64, id, key string, in
 		if e != nil {
 			return CastResult{}, e
 		}
+		advance := lakePhase(ctx, "rules")
 		row.profile, c.state, e = rules.Advance(row.profile, c.state, states)
+		advance(e)
 		if e != nil {
 			return CastResult{}, e
 		}
@@ -386,7 +412,7 @@ func (s *Service) Checkpoint(ctx context.Context, user int64, id, key string, in
 		if e = saveCastTx(ctx, tx, &c, now, ack); e != nil {
 			return CastResult{}, e
 		}
-		return s.castResultTx(ctx, tx, c, now)
+		return checkpointResultTx(ctx, tx, c, row, settings)
 	})
 	if e == nil && result.Replayed {
 		current, readErr := s.Cast(ctx, user, id)

@@ -10,6 +10,8 @@ import {
   normalizeUserLogRow,
   roleLogExportPath,
   roleLogKeys,
+  validLogDiscordID,
+  validateLogFilter,
 } from './data';
 
 const syntheticDiscordID = '1'.repeat(18);
@@ -402,4 +404,22 @@ it('keeps recorded call mode and actual penalties separate from unknown history'
       automatic_actions: ['client_rule_ban'],
     }),
   ).toMatchObject({ requested_streaming: true, automatic_actions: ['client_rule_ban'] });
+});
+
+it('keeps the exact unsigned Discord ID in management filters and rejects invalid values', () => {
+  const id = '18446744073709551615';
+  for (const role of ['admin', 'steward'] as const) {
+    expect(validateLogFilter(role, { discord_id: id, user_id: '7' })).toEqual({
+      user_id: '7',
+      discord_id: id,
+    });
+    expect(roleLogExportPath(role, { discord_id: id }, 'json')).toContain('discord_id=' + id);
+    for (const invalid of ['0', '01', '1e18', '18446744073709551616']) {
+      expect(validLogDiscordID(invalid)).toBe(false);
+      expect(validateLogFilter(role, { discord_id: invalid })).not.toHaveProperty('discord_id');
+    }
+  }
+  expect(validateLogFilter('user', { discord_id: id, model: 'personal' })).toEqual({
+    model: 'personal',
+  });
 });

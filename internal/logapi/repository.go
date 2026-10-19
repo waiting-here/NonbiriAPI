@@ -15,6 +15,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/waiting-here/NonbiriAPI/internal/blacklist"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
@@ -179,6 +180,9 @@ func normalizeListFilter(filter ListFilter, role string) (ListFilter, error) {
 	if filter.UserID != nil && *filter.UserID <= 0 {
 		return ListFilter{}, ErrInvalid
 	}
+	if filter.DiscordID != nil && !blacklist.ValidDiscordID(*filter.DiscordID) {
+		return ListFilter{}, ErrInvalid
+	}
 	if filter.EndpointKeyID != nil && *filter.EndpointKeyID <= 0 {
 		return ListFilter{}, ErrInvalid
 	}
@@ -191,7 +195,7 @@ func normalizeListFilter(filter ListFilter, role string) (ListFilter, error) {
 	}
 	switch role {
 	case "user":
-		if filter.UserID != nil || filter.EndpointKeyID != nil || filter.EndpointBaseURL != nil || filter.UpstreamModel != nil || filter.CharityModel != nil || filter.UsageTotalMismatch != nil {
+		if filter.UserID != nil || filter.DiscordID != nil || filter.EndpointKeyID != nil || filter.EndpointBaseURL != nil || filter.UpstreamModel != nil || filter.CharityModel != nil || filter.UsageTotalMismatch != nil {
 			return ListFilter{}, ErrInvalid
 		}
 	case "admin", "steward":
@@ -364,6 +368,9 @@ func filterOwner(role string, actorID int64, filter ListFilter) string {
 	}
 	if filter.CharityModel != nil {
 		writePart("charity_model=" + optionalString(filter.CharityModel))
+	}
+	if filter.DiscordID != nil {
+		writePart("discord_id=" + optionalString(filter.DiscordID))
 	}
 	return role + ":" + hex.EncodeToString(hash.Sum(nil))
 }

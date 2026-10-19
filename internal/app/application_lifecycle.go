@@ -217,6 +217,10 @@ func (a *application) CloseContext(ctx context.Context) error {
 			if a.bridge != nil {
 				closeResource(a.bridge.Close)
 			}
+			if a.claims != nil {
+				a.setClosePhase("claim_completions")
+				closeResource(a.claims.Close)
+			}
 			if a.egress != nil {
 				a.egress.CloseIdleConnections()
 			}

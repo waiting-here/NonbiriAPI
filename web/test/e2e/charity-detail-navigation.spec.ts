@@ -1611,3 +1611,123 @@ for (const scenario of [
     },
   );
 }
+
+for (const station of ['admin', 'user'] as const) {
+  test(
+    'binding key shortcuts fetch and return with context for ' + station,
+    async ({ context, page }) => {
+      const setup = await prepareStation(context, page, station, 1440, 'zh', 'light');
+      const state = initialState();
+      await installManagementRoutes(page, station, state);
+      let refreshed = false;
+      let starts = 0;
+      const gate = detailGate();
+      await page.route('**/binding-candidates?**', async (route) => {
+        const url = new URL(route.request().url());
+        await fulfillJSON(
+          route,
+          numberedPage(
+            [
+              {
+                donation_id: '1',
+                donation_key_id: '1000',
+                upstream_model_id: refreshed ? 'shortcut-new-model' : 'shortcut-old-model',
+                source: {
+                  connector_type: 'openai-compatible',
+                  canonical_base_url: 'https://detail-source-1.example.test/v1',
+                  display_head: 'detail-head',
+                  display_tail: '1',
+                },
+                source_types: ['automatic'],
+              },
+            ],
+            url.searchParams,
+          ),
+        );
+      });
+      await page.route(
+        /donations\/1\/keys\/1000\/models\/(refresh|discovery)(\?|$)/,
+        async (route) => {
+          const url = new URL(route.request().url());
+          if (station === 'user') expect(url.searchParams.get('charity_model_id')).toBe('1');
+          if (url.pathname.endsWith('/refresh')) {
+            expect(route.request().method()).toBe('POST');
+            expect(route.request().headers()['idempotency-key']).toMatch(/^[A-Za-z0-9_-]{22}$/);
+            starts++;
+            await fulfillJSON(route, {
+              operation_id: 'op_' + 'A'.repeat(22),
+              evidence: {
+                state: 'checking',
+                revision: '2',
+                result: null,
+                safe_class: 'none',
+                observed_at: NOW,
+                count: null,
+              },
+            });
+          } else {
+            await gate.promise;
+            refreshed = true;
+            await fulfillJSON(route, {
+              state: 'succeeded',
+              revision: '2',
+              result: 'nonempty',
+              safe_class: 'none',
+              observed_at: NOW,
+              count: '1',
+            });
+          }
+        },
+      );
+      if (station === 'user')
+        await page.route(/\/api\/steward\/donations\/1\/keys\/1000\?/, async (route) => {
+          expect(new URL(route.request().url()).searchParams.get('charity_model_id')).toBe('1');
+          await fulfillJSON(route, keyFor(0));
+        });
+      const base = station === 'admin' ? '/charity?' : '/steward?tab=charity&';
+      await page.goto(setup.origin + base + 'charity_section=models&charity_model=1');
+      const picker = page.locator('.ops-binding-picker');
+      await picker.getByRole('button', { name: /detail-source-1.example.test/ }).click();
+      await picker.getByRole('button', { name: /Synthetic detail note/ }).click();
+      const refresh = picker.getByRole('button', { name: '重新拉取模型列表', exact: true });
+      const manage = picker.getByRole('button', { name: '管理密钥', exact: true });
+      await expect(refresh).toBeEnabled();
+      await expect(manage).toBeEnabled();
+      await picker.getByRole('checkbox', { name: /shortcut-old-model/ }).check();
+      for (const theme of ['light', 'dark'] as const) {
+        await page.evaluate((theme) => {
+          document.documentElement.dataset.theme = theme;
+          localStorage.setItem('nb.theme', theme);
+        }, theme);
+        for (const width of [1440, 390]) {
+          await page.setViewportSize({ width, height: 900 });
+          await refresh.scrollIntoViewIfNeeded();
+          await expect(manage).toBeVisible();
+          expect(
+            await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+          ).toBe(true);
+          await saveScreenshot(page, 'binding-shortcuts-' + station + '-' + theme + '-' + width);
+        }
+      }
+      await refresh.click();
+      await expect(refresh).toBeDisabled();
+      expect(starts).toBe(1);
+      await saveScreenshot(page, 'binding-shortcuts-' + station + '-fetching');
+      gate.release();
+      await expect(picker.getByRole('checkbox', { name: /shortcut-new-model/ })).toBeVisible();
+      await expect(refresh).toBeEnabled();
+      await manage.click();
+      await expect(
+        page.getByRole('heading', { name: '管理密钥 #1000', exact: true }),
+      ).toBeVisible();
+      await expect(page.locator('.donation-key-editor')).toHaveCount(1);
+      await expect(picker).toBeHidden();
+      await saveScreenshot(page, 'binding-shortcuts-' + station + '-manage');
+      await page.getByRole('button', { name: '返回模型列表', exact: true }).click();
+      await expect(picker).toBeVisible();
+      await expect(picker.getByRole('heading', { name: /已选 1 个服务连接/ })).toBeVisible();
+      await expect(manage).toBeFocused();
+      await assertStationClean(page, setup);
+    },
+  );
+}

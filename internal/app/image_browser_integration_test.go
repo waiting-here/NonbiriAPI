@@ -547,7 +547,8 @@ func (u *imageFixtureUpstream) release() {
 }
 func (u *imageFixtureUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	geminiModels := r.URL.Path == "/v1beta/models" && r.Method == http.MethodGet
-	if (!geminiModels && r.Header.Get("Authorization") != "Bearer "+imageFixtureSecret) || (geminiModels && r.Header.Get("X-Goog-Api-Key") != imageFixtureSecret) {
+	donatedModels := r.URL.Path == "/v1/models" && r.Method == http.MethodGet && r.Header.Get("Authorization") == "Bearer synthetic-auto-donation"
+	if (!geminiModels && !donatedModels && r.Header.Get("Authorization") != "Bearer "+imageFixtureSecret) || (geminiModels && r.Header.Get("X-Goog-Api-Key") != imageFixtureSecret) {
 		http.Error(w, "wrong synthetic credential", 401)
 		return
 	}

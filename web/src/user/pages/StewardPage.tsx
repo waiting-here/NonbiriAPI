@@ -43,8 +43,8 @@ function StewardPageContent() {
   const trainee = authority.data?.effective_level === 5;
   const requestedTab = searchParams.get('tab');
   const section = trainee
-    ? requestedTab === 'logs'
-      ? 'logs'
+    ? requestedTab === 'logs' || requestedTab === 'users'
+      ? requestedTab
       : 'charity'
     : requestedTab === 'charity' ||
         requestedTab === 'maintenance' ||
@@ -130,7 +130,7 @@ function StewardPageContent() {
           value={section}
           onChange={setSection}
           tabs={(trainee
-            ? (['charity', 'logs'] as const)
+            ? (['charity', 'logs', 'users'] as const)
             : ([
                 'risk',
                 'logs',
@@ -177,8 +177,9 @@ function StewardPageContent() {
         ) : null}
         {section === 'users' ? (
           <UserManagement
-            key={`users:${authority.data.id}`}
+            key={`users:${authority.data.id}:${authority.data.effective_level}`}
             role="steward"
+            trainee={trainee}
             account={authority.data.id}
             scopeReady={allowed}
             sessionError={authority.error}

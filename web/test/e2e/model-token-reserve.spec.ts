@@ -556,7 +556,10 @@ for (const scenario of scenarios) {
 
     await page.goto(scenario.origin + (scenario.frame === 'admin' ? '/logs' : '/steward?tab=logs'));
     const filters = page.getByTestId('log-filters');
-    await filters.locator('summary').click();
+    await expect(filters.getByRole('textbox', { name: 'Discord ID' })).toBeVisible();
+    await expect(
+      filters.getByRole('textbox', { name: chinese ? '所用模型' : 'Model used' }),
+    ).toBeHidden();
     const charity = filters.getByRole('textbox', {
       name: chinese ? '调用的公益模型' : 'Called charity model',
     });

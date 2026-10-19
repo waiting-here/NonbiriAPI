@@ -88,10 +88,10 @@ func (s *Store) GetAllSiteConfigValues() (map[string]string, error) {
 }
 
 func (s *Store) GetAllSiteConfigValuesContext(ctx context.Context) (map[string]string, error) {
-	if s == nil || s.db == nil || ctx == nil {
+	if s == nil || s.db == nil || s.readDB == nil || ctx == nil {
 		return nil, ErrInvalidSiteConfig
 	}
-	values, err := validateCurrentGenerationTwoSiteConfig(ctx, s.db)
+	values, err := s.readValidatedSiteConfig(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list site configuration: %w", err)
 	}
@@ -107,13 +107,13 @@ func (s *Store) GetSiteConfigValue(key string) (string, error) {
 }
 
 func (s *Store) GetSiteConfigValueContext(ctx context.Context, key string) (string, error) {
-	if s == nil || s.db == nil || ctx == nil {
+	if s == nil || s.db == nil || s.readDB == nil || ctx == nil {
 		return "", ErrInvalidSiteConfig
 	}
 	if err := validateGenerationTwoConfigKey(key); err != nil {
 		return "", ErrNotFound
 	}
-	values, err := validateCurrentGenerationTwoSiteConfig(ctx, s.db)
+	values, err := s.readValidatedSiteConfig(ctx)
 	if err != nil {
 		return "", err
 	}

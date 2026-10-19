@@ -10,13 +10,14 @@ import (
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/useractivity"
 )
 
 // ReleaseUndispatched terminalizes a claim that never crossed the dispatch
 // marker. It releases only this claim's charity reservation/capacity and never
 // creates a request_attempt row.
-func (s *Service) ReleaseUndispatched(ctx context.Context, handle Handle) (Attempt, error) {
+func (s *Service) ReleaseUndispatched(ctx context.Context, handle Handle) (_ Attempt, resultErr error) {
 	if s == nil || s.db == nil || ctx == nil || !validHandle(handle) {
 		return Attempt{}, ErrInvalidInput
 	}
@@ -24,11 +25,11 @@ func (s *Service) ReleaseUndispatched(ctx context.Context, handle Handle) (Attem
 	if err != nil {
 		return Attempt{}, err
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, finish, err := observability.BeginMeasuredTx(ctx, s.db, nil, "claim_release")
 	if err != nil {
 		return Attempt{}, fmt.Errorf("claim: begin undispatched release: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { finish(resultErr) }()
 	record, err := loadClaimTx(ctx, tx, handle.claimID)
 	if err != nil {
 		return Attempt{}, err
@@ -67,11 +68,16 @@ func (s *Service) CompleteAttempt(ctx context.Context, handle Handle, outcome At
 	if err != nil {
 		return Attempt{}, err
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	value, err := s.submitCompletion(ctx, "claim_attempt", func(ctx context.Context, tx *sql.Tx) (any, error) {
+		return s.checkAttemptCompletionTx(ctx, tx, handle, outcome, at)
+	})
 	if err != nil {
-		return Attempt{}, fmt.Errorf("claim: begin attempt completion: %w", err)
+		return Attempt{}, err
 	}
-	defer tx.Rollback()
+	return value.(Attempt), nil
+}
+
+func (s *Service) checkAttemptCompletionTx(ctx context.Context, tx *sql.Tx, handle Handle, outcome AttemptOutcome, at int64) (Attempt, error) {
 	record, err := loadClaimTx(ctx, tx, handle.claimID)
 	if err != nil {
 		return Attempt{}, err
@@ -118,9 +124,6 @@ func (s *Service) CompleteAttempt(ctx context.Context, handle Handle, outcome At
 	if err != nil {
 		return Attempt{}, err
 	}
-	if err := tx.Commit(); err != nil {
-		return Attempt{}, fmt.Errorf("claim: commit attempt completion: %w", err)
-	}
 	return result, nil
 }
 
@@ -134,11 +137,16 @@ func (s *Service) CompleteRequest(ctx context.Context, input CompleteRequestInpu
 	if err != nil {
 		return Request{}, err
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	value, err := s.submitCompletion(ctx, "claim_complete", func(ctx context.Context, tx *sql.Tx) (any, error) {
+		return s.checkRequestCompletionTx(ctx, tx, input, at)
+	})
 	if err != nil {
-		return Request{}, fmt.Errorf("claim: begin request completion: %w", err)
+		return Request{}, err
 	}
-	defer tx.Rollback()
+	return value.(Request), nil
+}
+
+func (s *Service) checkRequestCompletionTx(ctx context.Context, tx *sql.Tx, input CompleteRequestInput, at int64) (Request, error) {
 	request, err := loadRequestTx(ctx, tx, input.RequestID)
 	if err != nil {
 		return Request{}, err
@@ -153,9 +161,6 @@ func (s *Service) CompleteRequest(ctx context.Context, input CompleteRequestInpu
 	result, err := s.completeRequestTx(ctx, tx, request, input, at)
 	if err != nil {
 		return Request{}, err
-	}
-	if err := tx.Commit(); err != nil {
-		return Request{}, fmt.Errorf("claim: commit request completion: %w", err)
 	}
 	return result, nil
 }

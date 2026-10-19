@@ -546,6 +546,7 @@ type CharityRequestCompletion struct {
 }
 
 type Dependencies struct {
+	Performance  *observability.Performance
 	Observations *observability.Repository
 	DB           *sql.DB
 	Secrets      secret.GenerationTwoContextCodec

@@ -1,4 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
+import { isBulkProduct } from './bulk';
 import { stationSessionWrite, StationSessionChangedError } from '@shared/charityManagement';
 import { apiFetch, ApiError } from '@shared/query/http';
 import { idempotentOptions, queryPath } from '@shared/operations/api';
@@ -39,7 +40,11 @@ export function createGachaPort(client: QueryClient, account: string): GachaPort
           throw new ApiError('invalid_response', 'The activity result was incomplete.', 0);
         return result;
       });
-      if (input.action === 'buy' || input.action === 'claim') {
+      if (
+        input.action === 'buy' ||
+        input.action === 'claim' ||
+        (input.action === 'redeem' && isBulkProduct(input.product))
+      ) {
         void client.invalidateQueries({ queryKey: ['user', 'session'] });
         void client.invalidateQueries({ queryKey: ['user', 'credits'] });
       }

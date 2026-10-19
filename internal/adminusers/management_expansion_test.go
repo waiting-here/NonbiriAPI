@@ -29,7 +29,7 @@ func TestForbiddenManagementWritesDoNotRetireTargetRequests(t *testing.T) {
 		return func() {}, nil
 	}
 	ctx := context.Background()
-	if _, _, err := f.service.lockUserIdentity(ctx, actor, target, roleSteward); !errors.Is(err, ErrForbidden) {
+	if _, _, err := f.service.lockUserIdentity(ctx, actor, target, roleSteward, false); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("peer identity preflight: %v", err)
 	}
 	if _, err := f.service.setBlacklist(ctx, actor, roleSteward, ControlMutation{}, discordID, "forbidden", true); !errors.Is(err, ErrForbidden) {
@@ -253,8 +253,8 @@ func TestDeletedAccountsMixedFiltersAndReadOnlyAuthorization(t *testing.T) {
 	if err != nil || detail.Ban.State != "unknown" || detail.RegisteredAt != nil || detail.EffectiveLevel != nil || detail.GeneralBalance == nil || *detail.GeneralBalance != "-2" || detail.AlertID != nil {
 		t.Fatalf("unknown=%+v %v", detail, err)
 	}
-	if _, err := f.service.getDeletedAccount(context.Background(), trainee, old1, roleSteward); err == nil {
-		t.Fatal("level five read history")
+	if got, err := f.service.getDeletedAccount(context.Background(), trainee, old1, roleSteward); err != nil || got.AlertID != nil || got.GeneralBalance == nil || *got.GeneralBalance != "-2" {
+		t.Fatalf("trainee history projection: %+v %v", got, err)
 	}
 	adminDetail, err := f.service.getDeletedAccount(context.Background(), f.adminID, old1, roleAdmin)
 	if err != nil || adminDetail.AlertID == nil || *adminDetail.AlertID != strconv.FormatInt(old1, 10) {

@@ -26,6 +26,7 @@ import { CallerIdentity } from './CallerIdentity';
 import {
   roleLogExportPath,
   validateLogFilter,
+  validLogDiscordID,
   type LogFiltersValue,
   type LogResultClass,
   type LogRole,
@@ -347,12 +348,19 @@ function ScopedRoleLogPanel({
     (keyParams.length !== 1 ||
       !/^[1-9][0-9]{0,18}$/.test(keyParams[0]) ||
       BigInt(keyParams[0]) > 9_223_372_036_854_775_807n);
+  const discordParams = searchParams.getAll('discord_id');
+  const invalidDiscordFilter =
+    role !== 'user' &&
+    discordParams.length > 0 &&
+    (discordParams.length !== 1 || !validLogDiscordID(discordParams[0]));
+  const invalidFilter = invalidKeyFilter || invalidDiscordFilter;
   const textParams = useMemo(
     () =>
       role === 'user'
         ? (['model', 'error_code', 'status', 'phase'] as const)
         : ([
             'user_id',
+            'discord_id',
             'endpoint_key_id',
             'endpoint_base_url',
             'upstream_model',
@@ -417,7 +425,7 @@ function ScopedRoleLogPanel({
   const [revoked, setRevoked] = useState(false);
   const [revokedError, setRevokedError] = useState<unknown>(null);
   const authorityClosedRef = useRef(false);
-  const observerEnabled = enabled && scopeReady && !revoked && !invalidKeyFilter;
+  const observerEnabled = enabled && scopeReady && !revoked && !invalidFilter;
   const logs = useRoleLogsPage(
     role,
     accountID,
@@ -489,6 +497,13 @@ function ScopedRoleLogPanel({
         maxLength: 39,
       });
     if (role !== 'user') {
+      values.push({
+        name: 'discord_id',
+        label: t('logs.callerDiscordId'),
+        ariaLabel: t('logs.callerDiscordId'),
+        placeholder: t('common.operations.logs.discordFilterHint'),
+        maxLength: 20,
+      });
       values.push({
         name: 'usage_total_mismatch',
         label: t('common.operations.logs.usageTotalMismatchFilter'),
@@ -969,13 +984,13 @@ function ScopedRoleLogPanel({
       </Card>
     );
 
-  const pageData = invalidKeyFilter ? undefined : logs.data;
+  const pageData = invalidFilter ? undefined : logs.data;
   const listBusy = logs.isFetching;
   return (
     <Card className={`ops-stack log-panel log-panel--${role}`}>
       <div className="card-title-row">
         {role !== 'user' && <h2>{title}</h2>}
-        {!invalidKeyFilter && (
+        {!invalidFilter && (
           <details className="nb-more log-export">
             <summary className="nb-btn nb-btn--secondary">
               {t('common.operations.logs.presentation.export')} ▾
@@ -995,9 +1010,13 @@ function ScopedRoleLogPanel({
         )}
       </div>
       <LogFilters station={station} fields={fields} state={urlState} onApply={applyFilters} />
-      {invalidKeyFilter ? (
+      {invalidFilter ? (
         <p className="field-error" role="alert">
-          {t('common.operations.logs.invalidKeyFilter')}
+          {t(
+            invalidDiscordFilter
+              ? 'common.operations.logs.invalidDiscordFilter'
+              : 'common.operations.logs.invalidKeyFilter',
+          )}
         </p>
       ) : null}
       {role !== 'user' && filter.endpoint_key_id ? (
@@ -1005,7 +1024,7 @@ function ScopedRoleLogPanel({
           {t('common.operations.logs.keyFilterNotice', { id: filter.endpoint_key_id })}
         </p>
       ) : null}
-      {invalidKeyFilter ? null : logs.error && !pageData ? (
+      {invalidFilter ? null : logs.error && !pageData ? (
         <ErrorState error={logs.error} onRetry={() => void logs.refetch()} />
       ) : pageData ? (
         <div className="ops-stack" aria-busy={listBusy}>
@@ -1046,7 +1065,7 @@ function ScopedRoleLogPanel({
       )}
       {role !== 'user' ? <RawStorageSummary key={`${role}:${accountID}`} role={role} /> : null}
       <LogDetailPanel
-        open={Boolean(selectedID) && !invalidKeyFilter}
+        open={Boolean(selectedID) && !invalidFilter}
         onClose={closeDetail}
         title={selectedID ? `${t('logs.drawerTitle')} ${selectedID}` : t('logs.drawerTitle')}
         fields={detailFields}

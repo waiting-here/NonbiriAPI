@@ -135,7 +135,7 @@ func openSQLiteContext(ctx context.Context, path, mode string) (*sql.DB, error) 
 	q.Add("_pragma", "foreign_keys(1)")
 	q.Add("_pragma", "busy_timeout("+strconv.Itoa(budget)+")")
 	u.RawQuery = q.Encode()
-	d, err := sql.Open("sqlite", u.String())
+	d, err := openSQLiteHandle(u.String(), mode)
 	if err != nil {
 		return nil, err
 	}

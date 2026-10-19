@@ -16,6 +16,25 @@ same bounded read pool. There is no complete-list cache or TTL; caller identity,
 level, donation ownership and current quotas still affect the result. See
 [database access](docs/database-access.md) and [runtime metrics](docs/deployment.md).
 
+Lake Notes checkpoints reuse authoritative values within their transaction, and
+activity event snapshots use the existing read pool. Revision, replay and lease
+writes remain atomic. The [mixed-load experiment](docs/performance-validation.md)
+reports both pools, real checkpoint completions and scheduling delay.
+
+Writer connections reuse a bounded set of prepared write and SELECT statements,
+with exclusive ownership for open result cursors. Independent
+configuration reads use the read pool and reuse validation only when the full
+current contents match. Database values are still read on every call; accounting,
+authorization and availability remain authoritative.
+
+Attempt and request completion use small synchronous transaction batches when
+work overlaps. Success still requires a durable commit, and anonymous queue
+metrics distinguish application waiting from database pool waiting.
+
+Level-5 stewards can inspect user accounts and ban level 1–4 users. They cannot
+change account settings or credits, lift a ban, or replace an active ban. Full
+steward and administrator permissions retain their existing boundaries.
+
 | Area | Source and contract |
 | --- | --- |
 | Startup, recovery and HTTP composition | `main.go`, `internal/app/` |
@@ -27,6 +46,22 @@ level, donation ownership and current quotas still affect the result. See
 | Verification and deployment examples | `scripts/`, `.github/workflows/`, `deploy/` |
 
 The connector registry supports OpenAI-compatible, Anthropic-compatible, AI SDK Gateway v3, Google Gemini, OpenAI Responses and OpenAI Decisions upstreams. Public ingress includes `/v1/models`, `/v1/chat/completions`, `/v1/embeddings`, `/v1/images/generations` and `/v1/decisions`. Gemini and Responses translate Chat requests; Decisions uses its native endpoint. Operation support is connector-specific. The backend enforces ownership, credential protection, SSRF, accounting and cancellation. Wire formats and limits are in the [API contract](docs/api-contract.md).
+
+Anonymous minute metrics separate pool acquisition from transaction work for
+game checkpoints, request accounting and background maintenance. In-flight
+elapsed time remains visible across reporting windows; see the runtime metrics
+guide before comparing completed latency with current occupancy.
+
+The optional Gacha Simulator includes layered SP artwork. Amber Vow keeps its
+character beside desktop content, with matching static fallback and enhanced
+artwork; composition and source details are in the [art guide](docs/gacha-art.md).
+
+The mystery shop offers daily bundles of ten standard or limited tickets for
+10,000 credits each, using game credits first. Each bundle has its own daily limit.
+Management request logs support an exact Discord ID filter alongside the called
+charity model; additional filters include the upstream model used.
+After choosing a key for a charity service connection, fetch its model list again
+or open its key settings directly, then return to the same selection.
 
 ## Build and develop
 
@@ -44,7 +79,7 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [First-run setup](docs/first-run-setup.md) covers private paths, the encryption key, Discord OAuth and public origins. Copy [admin.env.example](admin.env.example) outside the checkout, replace placeholders and load it before starting. Preserve the database with its matching key.
 
-Fresh databases start in maintenance with public features closed. The v1.0.2 binary accepts schema 21 or fresh storage. Existing schema 16, 17, 18, 19 and 20 databases use the separate offline converter; historical conversion code is excluded from the service. Later v1.x releases retain an upgrade path from every earlier stable v1.x schema. Older binaries need not read newer databases.
+Fresh databases start in maintenance with public features closed. The v1.0.3 binary accepts schema 21 or fresh storage. Existing schema 16, 17, 18, 19 and 20 databases use the separate offline converter; historical conversion code is excluded from the service. Later v1.x releases retain an upgrade path from every earlier stable v1.x schema. Older binaries need not read newer databases.
 
 [Deployment](docs/deployment.md) covers systemd, proxies, immutable artifacts, upgrades and complete-snapshot recovery. Startup variables and online settings have one reference in [configuration](docs/configuration.md).
 

@@ -10,12 +10,16 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 )
 
-func (s *Service) quotaCapacityFailure(ctx context.Context, tx *sql.Tx, at int64, cause error) error {
+func (s *Service) quotaCapacityFailure(ctx context.Context, tx *sql.Tx, at int64, cause error, finish func(error)) error {
 	if !errors.Is(cause, donationquota.ErrCapacity) {
 		return cause
 	}
 	if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
 		return errors.Join(cause, err)
+	}
+	// A measured transaction owns its connection until finish, even after rollback.
+	if finish != nil {
+		finish(cause)
 	}
 	alertCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 	defer cancel()

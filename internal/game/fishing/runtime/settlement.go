@@ -13,6 +13,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/game/finance"
 	"github.com/waiting-here/NonbiriAPI/internal/game/fishing"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 )
 
 type batchRecord struct {
@@ -53,17 +54,17 @@ const batchSelect = `SELECT ` + batchColumns + ` FROM game_fishing_batches WHERE
 
 // settle is the only reserved->committed primitive. HTTP, worker and recovery
 // all invoke it; no caller can supply new outcomes or amounts.
-func (service *Service) settle(ctx context.Context, batchID string, expectedUserID, decisionNow int64, worker bool) (*FishingBatchResult, error) {
+func (service *Service) settle(ctx context.Context, batchID string, expectedUserID, decisionNow int64, worker bool) (_ *FishingBatchResult, resultErr error) {
 	if service.beforeSettlement != nil {
 		if err := service.beforeSettlement(batchID); err != nil {
 			return nil, err
 		}
 	}
-	tx, err := service.database.BeginTx(ctx, nil)
+	tx, finish, err := observability.BeginMeasuredTx(ctx, service.database, nil, "fishing_settle")
 	if err != nil {
 		return nil, classifyDB(err)
 	}
-	defer tx.Rollback()
+	defer func() { finish(resultErr) }()
 	record, err := scanBatch(tx.QueryRowContext(ctx, batchSelect, batchID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -147,6 +148,7 @@ func (service *Service) settle(ctx context.Context, batchID string, expectedUser
 	if err = tx.Commit(); err != nil {
 		return nil, classifyDB(err)
 	}
+	finish(nil)
 	service.publishPoolTransfers(ctx, facts)
 	return result, nil
 }

@@ -82,6 +82,85 @@ afterEach(() => {
 });
 
 describe('shared account management', () => {
+  it('lets a level-five steward find an account and ban it without exposing other writes', async () => {
+    let target = userFixture('7', 4);
+    const calls = install((call) => {
+      if (call.path === '/api/session') return session(5);
+      if (call.path.startsWith('/api/steward/users?')) return page([target]);
+      if (call.path === '/api/steward/users/7' && call.method === 'GET') return target;
+      if (call.path.startsWith('/api/steward/users/7/penalties')) return page([]);
+      if (call.path === '/api/steward/users/7/ban' && call.method === 'POST') {
+        target = {
+          ...target,
+          is_banned: true,
+          banned_reason: String(call.body.reason),
+          revision: '2',
+        };
+        return new Response(null, { status: 204 });
+      }
+      throw new Error('Unexpected request ' + call.path);
+    });
+    const view = await renderWithProviders(<StewardPage />, {
+      station: 'user',
+      role: 'level5',
+      route: '/steward?tab=users&user=7',
+      locale: 'en',
+    });
+    await screen.findByRole('heading', { name: 'member-7' });
+    expect(screen.getByRole('tab', { name: 'Users' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByRole('tab', { name: 'Credits' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Inspect user IPs' })).toBeNull();
+    await view.user.click(screen.getByRole('tab', { name: 'Limits and level' }));
+    expect(screen.queryByRole('button', { name: 'Save settings' })).toBeNull();
+    expect(screen.queryByLabelText('Endpoint limit')).toBeNull();
+    await view.user.click(screen.getByRole('tab', { name: 'Penalties' }));
+    await view.user.type(screen.getByLabelText('Reason'), 'Account review');
+    await view.user.click(screen.getByRole('button', { name: 'Ban' }));
+    await view.user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Ban user' }),
+    );
+    await waitFor(() => expect(calls.filter((call) => call.method === 'POST')).toHaveLength(1));
+    expect(calls.find((call) => call.method === 'POST')?.body).toMatchObject({
+      expected_revision: '1',
+      reason: 'Account review',
+      duration_seconds: null,
+    });
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Ban' })).toBeNull());
+    expect(screen.queryByRole('button', { name: 'Unban' })).toBeNull();
+    expect(calls.some((call) => call.method === 'PATCH')).toBe(false);
+    await view.user.click(screen.getByRole('button', { name: 'Back to list' }));
+    await screen.findByRole('button', { name: 'member-7' });
+  });
+
+  it.each([
+    { id: '7', level: 5, banned: false },
+    { id: '7', level: 6, banned: false },
+    { id: '9', level: 5, banned: false },
+    { id: '7', level: 4, banned: true },
+  ])(
+    'hides ban writes for a protected trainee target $id/$level/$banned',
+    async ({ id, level, banned }) => {
+      const target = { ...userFixture(id, level), is_banned: banned };
+      install((call) => {
+        if (call.path === '/api/session') return session(5);
+        if (call.path.startsWith('/api/steward/users?')) return page([target]);
+        if (call.path === `/api/steward/users/${id}`) return target;
+        if (call.path.startsWith(`/api/steward/users/${id}/penalties`)) return page([]);
+        throw new Error('Unexpected request ' + call.path);
+      });
+      const view = await renderWithProviders(<StewardPage />, {
+        station: 'user',
+        role: 'level5',
+        route: `/steward?tab=users&user=${id}`,
+        locale: 'en',
+      });
+      await view.user.click(await screen.findByRole('tab', { name: 'Penalties' }));
+      expect(screen.queryByRole('button', { name: 'Ban' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Unban' })).toBeNull();
+      expect(screen.queryByLabelText('Reason')).toBeNull();
+    },
+  );
+
   it('saves each administrator Discord sign-in policy and restores it after reopening', async () => {
     let target = userFixture();
     const calls = install((call) => {

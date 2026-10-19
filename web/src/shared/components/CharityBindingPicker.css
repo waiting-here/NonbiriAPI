@@ -1,0 +1,16 @@
+.charity-binding-picker[hidden] {
+  display: none;
+}
+.charity-binding-key-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--nb-space-2);
+  margin-block: var(--nb-space-3);
+}
+.charity-binding-key-shortcuts > .donation-discovery {
+  margin: 0;
+}
+.charity-binding-key-shortcuts .nb-btn {
+  white-space: nowrap;
+}

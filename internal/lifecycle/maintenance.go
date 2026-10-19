@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 )
 
 type lifecycleStageError struct {
@@ -153,16 +155,24 @@ func (coordinator *Coordinator) runObservedSchedule(ctx context.Context, retenti
 	return overall
 }
 
-func (coordinator *Coordinator) runRecovery(ctx context.Context, decisionNow int64) error {
+func (coordinator *Coordinator) runRecovery(ctx context.Context, decisionNow int64) (resultErr error) {
+	finish := observability.DatabaseOperation(ctx, "lifecycle_recovery")
+	defer func() { finish(resultErr) }()
 	if decisionNow < 0 || decisionNow > maximumUnixSecond {
 		return ErrInvariant
 	}
 	var failures []error
-	if err := coordinator.expireAllDueHolds(ctx, decisionNow); err != nil {
+	holds := observability.LifecycleStage(ctx, "recovery", "legal_holds")
+	holdErr := coordinator.expireAllDueHolds(ctx, decisionNow)
+	holds(holdErr)
+	if err := holdErr; err != nil {
 		failures = append(failures, lifecycleStageError{phase: "expire legal holds", domain: "legal_holds", index: -1, err: err})
 	}
 	for index, stage := range coordinator.recovery.ordered() {
-		if err := drainRecoveryAdapter(ctx, stage.adapter, decisionNow); err != nil {
+		done := observability.LifecycleStage(ctx, "recovery", stage.domain)
+		err := drainRecoveryAdapter(ctx, stage.adapter, decisionNow)
+		done(err)
+		if err != nil {
 			failures = append(failures, lifecycleStageError{phase: "recovery", domain: stage.domain, index: index, err: err})
 		}
 	}
@@ -190,16 +200,23 @@ func drainRecoveryAdapter(ctx context.Context, adapter RecoveryAdapter, decision
 	}
 }
 
-func (coordinator *Coordinator) runRetention(ctx context.Context, decisionNow int64) error {
+func (coordinator *Coordinator) runRetention(ctx context.Context, decisionNow int64) (resultErr error) {
+	finish := observability.DatabaseOperation(ctx, "lifecycle_retention")
+	defer func() { finish(resultErr) }()
 	var failures []error
 	adapters := coordinator.retention.ordered()
 	for index, stage := range adapters {
-		if err := drainRetentionAdapter(ctx, stage.adapter, decisionNow); err != nil {
+		done := observability.LifecycleStage(ctx, "retention", stage.domain)
+		err := drainRetentionAdapter(ctx, stage.adapter, decisionNow)
+		done(err)
+		if err != nil {
 			failures = append(failures, lifecycleStageError{phase: "retention", domain: stage.domain, index: index, err: err})
 		}
 		if index == 1 {
 			for {
+				holds := observability.LifecycleStage(ctx, "retention", "legal_holds")
 				result, err := coordinator.retainEndedHolds(ctx, decisionNow, WorkerBatchLimit, time.Now().Add(WorkerBudget))
+				holds(err)
 				if err != nil {
 					failures = append(failures, lifecycleStageError{phase: "retain legal holds", domain: "legal_holds", index: -1, err: err})
 					break

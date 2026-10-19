@@ -95,6 +95,9 @@ Do not hide a command's exit status behind a truncating pipeline. Do not termina
 
 ## Performance comparisons
 
+The [Lake Notes mixed-load guide](docs/performance-validation.md) adds real
+checkpoint traffic, stored-profile gradients and activity subscription fan-out.
+
 Use synthetic inputs and an isolated machine window for before/after comparisons:
 
 ```sh

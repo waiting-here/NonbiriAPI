@@ -81,3 +81,62 @@ body,
     grid-template-columns: minmax(0, 1fr);
   }
 }
+.amber-preview {
+  max-width: 1440px;
+  margin: auto;
+  padding: 20px;
+  color: #efe6cf;
+  background: #24201a;
+  min-height: 100vh;
+}
+.amber-preview header {
+  margin-bottom: 20px;
+}
+.amber-preview h1 {
+  margin: 0 0 8px;
+  font-size: clamp(1.25rem, 3vw, 1.8rem);
+}
+.amber-preview p {
+  margin: 0 0 12px;
+  line-height: 1.6;
+}
+.amber-preview nav {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.amber-preview nav button,
+.amber-preview nav a {
+  background: #473b26;
+  color: #fff3d7;
+  border: 1px solid #9d7f4b;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.amber-preview figure {
+  margin: 0 auto 20px;
+}
+.amber-preview__wide {
+  width: min(100%, calc((100dvh - 240px) * 1672 / 941));
+}
+.amber-preview__portrait {
+  width: min(430px, 100%, calc((100dvh - 240px) * 2 / 3));
+}
+.amber-preview canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1672 / 941;
+}
+.amber-preview__portrait canvas {
+  aspect-ratio: 2 / 3;
+}
+.amber-preview figcaption {
+  padding: 8px 0;
+}
+.amber-preview details img {
+  width: 100%;
+  margin-top: 12px;
+}

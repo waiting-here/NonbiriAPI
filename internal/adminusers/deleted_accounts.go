@@ -118,7 +118,7 @@ func (service *Service) getDeletedAccount(ctx context.Context, actorID, recordID
 	}
 	ctx, cancel := context.WithTimeout(ctx, pageReadTimeout)
 	defer cancel()
-	tx, err := service.beginManagement(ctx, actorID, role, true)
+	tx, err := service.beginManagedUserRead(ctx, actorID, role, true)
 	if err != nil {
 		return DeletedAccount{}, err
 	}
@@ -209,7 +209,7 @@ func (service *Service) listManagedAccounts(ctx context.Context, actorID int64, 
 	if err != nil {
 		return empty, err
 	}
-	tx, err := service.beginManagement(ctx, actorID, role, query.Page != nil)
+	tx, err := service.beginManagedUserRead(ctx, actorID, role, query.Page != nil)
 	if err != nil {
 		return empty, err
 	}

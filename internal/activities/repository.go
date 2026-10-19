@@ -34,6 +34,7 @@ type RepositoryConfig struct {
 
 type Repository struct {
 	db             *sql.DB
+	readDB         *sql.DB
 	userFinalAuth  UserFinalTxAuthorizer
 	adminFinalAuth AdminFinalAuthorizer
 	userGate       UserMutationGate
@@ -70,7 +71,7 @@ func NewRepository(config RepositoryConfig) (*Repository, error) {
 		config.PoolID = func() (string, error) { return db.GenerateOpaqueID("pol_") }
 	}
 	return &Repository{
-		db: config.Store.DB(), userFinalAuth: config.UserFinalAuth,
+		db: config.Store.DB(), readDB: config.Store.ReadDB(), userFinalAuth: config.UserFinalAuth,
 		adminFinalAuth: config.AdminFinalAuth, userGate: config.UserGate,
 		cursors: cursorCodec{keys: config.CursorKeys}, random: config.Random,
 		now: config.Now, operationID: config.OperationID, periodID: config.PeriodID,

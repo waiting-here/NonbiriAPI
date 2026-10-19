@@ -232,12 +232,52 @@ must be compared with reader waiting too. Pool sizes remain one and two.
 
 `connection.<operation>` measures connection acquisition; `transaction.<operation>`
 measures work from begin through commit/rollback and connection return. Fixed
-operations are `session`, `personal_models`, `charity_models`,
-`charity_capability`, `catalog`, `fishing_cleanup` and `donation_expiry`.
+operations include `session`, `personal_models`, `charity_models`,
+`charity_capability`, `catalog`, `fishing_cleanup`, `donation_expiry`,
+`lake_checkpoint`, `lake_mutation`, `lake_profile`, `lake_recovery`,
+`lake_retention`, `claim_accept`, `claim_prepare`, `claim_release`,
+`claim_attempt`, `claim_complete`, `claim_batch`, `fishing_settle`, `reward_delivery` and
+`activities_projection`, `lifecycle_checkpoint`, `legal_hold_expiry` and
+`legal_hold_retention`. Transaction timing includes `BeginTx` after pool
+acquisition. Fishing settlement returns its connection before publishing events.
 Database phases count non-cancellation errors in `failures` and interrupted work
 in `canceled`. HTTP groups retain `server_errors` for server failures. Game-state
 transaction timing retains its existing start after the writer lock and decision
 clock. Background workers use the same observer as requests.
+
+`operation.activities_publish`, `operation.lifecycle_recovery` and
+`operation.lifecycle_retention` cover the complete operation, including waits
+and multiple transactions; they do not measure one continuous connection hold.
+Lifecycle passes also expose `operation.lifecycle_recovery.<domain>` and
+`operation.lifecycle_retention.<domain>` using fixed domain names. These include
+all batches and pool waits for that domain, rather than attributing their whole
+elapsed time to the writer. Worker checkpoints and legal-hold batches separately
+measure actual connection acquisition and holding time.
+Lake operations also expose fixed `phase.<phase>.<operation>` rows for
+request preparation, authorization, configuration, profile reads, rules, encoding, writes,
+idempotency, active-action recording, response projection and commit.
+Preparation runs before acquiring a connection. Other phase rows overlap their
+parent transaction; do not sum them with the parent.
+
+Completion scheduling exposes `operation.claim_attempt` and
+`operation.claim_complete` for each caller, `phase.queue.<operation>` until
+execution or cancellation, and `phase.execute.<operation>` for each body.
+Queue `active` and `peak` include the leading item waiting for the writer.
+`connection.claim_batch`, `transaction.claim_batch` and
+`phase.commit.claim_batch` describe the shared transaction. Independent retries
+and queue overflow retain the individual connection/transaction labels.
+`completion.batch_1` through `completion.batch_4` count attempted batch sizes;
+`completion.overflow` and `completion.hold_budget` count fallback admissions
+and early yields. `completion.fallback` measures independent recovery after a
+failed outer transaction, and `completion.close` measures scheduler drain.
+Queue time includes shared acquisition and earlier work in a batch: it overlaps
+pool waits and transaction time. Compare client latency and completed work;
+do not add these totals or treat a lower pool wait as eliminated queueing.
+
+Each row's `active_ms` integrates concurrent elapsed time inside this window,
+including unfinished work. A transaction spanning two windows contributes to
+both windows even while `completed` and `max_ms` are still zero. Percentiles
+and maximum continue to describe operations completed in the current window.
 
 These aggregates contain no identities, raw paths, SQL, query strings, headers
 or bodies and add no database records. Apply ordinary process-log rotation.

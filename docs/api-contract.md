@@ -912,7 +912,7 @@ Dry mode intercepts before upstream dispatch. Live mode captures bounded safe pr
 
 ### 6.2 Steward
 
-The browser routes below require a currently effective L6 user session on the user host, except that site-wide log reads also allow L5 with the error-detail IPv4 redaction described in §11. Other scoped L5 charity permissions are in §6.4. Reads and final mutations recheck the current role in their transaction. L6 log and donation management expose the same information as administrator views; ordinary user projections and unrelated administrator capabilities remain separate. The dedicated charity CallerKey routes are described separately in §6.3; personal routes are in §3.4.
+The browser routes below require a currently effective L6 user session on the user host, except that L5 may use user-management reads and restricted bans described in §7.1, and site-wide log reads with the error-detail IPv4 redaction described in §11. Other scoped L5 charity permissions are in §6.4. Reads and final mutations recheck the current role in their transaction. L6 log and donation management expose the same information as administrator views; ordinary user projections and unrelated administrator capabilities remain separate. The dedicated charity CallerKey routes are described separately in §6.3; personal routes are in §3.4.
 
 | Surface | Routes |
 | --- | --- |
@@ -944,7 +944,7 @@ Administrator and steward log list/detail/export entries contain nullable `user_
 
 Each management attempt displays its persisted nullable `endpoint_key_id` routing snapshot, including separate IDs for retries. It never returns the key secret. The logical request's `usage.charge` is the authoritative total charge shown in both list and detail. Attempt `usage.charge` remains a compatibility zero, not an independently settled fee; the page does not present it as a charge. CSV and JSON exports share the management row fields and existing 10,000-row/16 MiB all-or-error limits. CSV additionally includes `caller_discord_nickname,caller_discord_id` with spreadsheet-safe escaping. Steward export reads recheck authority in the export snapshot, and all exports are no-store.
 
-`GET /api/steward/logs` accepts `user_id,endpoint_key_id,error_code,status,from,to,endpoint_base_url,upstream_model,usage_total_mismatch` plus legacy `cursor,limit` or numbered `page,page_size`; `GET /api/steward/logs/{id}` accepts the corresponding `attempt_cursor,attempt_limit` or `attempt_page,attempt_page_size`. The numbered list/detail responses carry `pagination`/`attempt_pagination`. Export accepts the same filters without pagination; cursors remain bound to role, actor and filters.
+`GET /api/steward/logs` accepts `user_id,discord_id,endpoint_key_id,error_code,status,from,to,endpoint_base_url,upstream_model,charity_model,usage_total_mismatch,phase` plus legacy `cursor,limit` or numbered `page,page_size`; `GET /api/steward/logs/{id}` accepts the corresponding `attempt_cursor,attempt_limit` or `attempt_page,attempt_page_size`. The numbered list/detail responses carry `pagination`/`attempt_pagination`. Export accepts the same filters without pagination; cursors remain bound to role, actor and filters.
 
 Log reads have a five-second budget, including connection waits. Timeouts and canceled reads return `503 service_unavailable`; callers may narrow the filters and retry the read without resending the original model request. Read-only queries use a bounded two-connection pool, with current session, role and MFA authority checked in the same snapshot. Reads that record access to legally held diagnostics retain a write transaction.
 
@@ -984,7 +984,7 @@ L5 cannot use any charity automation GET/POST/PATCH, including replay. A downgra
 
 ### 6.4 Trainee steward scope
 
-Level-5 sessions may list and maintain only charity models whose administrator/L6-controlled `is_mainstream` flag is true. They cannot create/delete models, edit pricing, allowed levels, public descriptions, parameter exclusions or that flag. Removing the flag immediately removes trainee management authority. User management, donation review, global logs, announcements, maintenance, audit systems, activity configuration and charity CallerKey automation remain unavailable to trainees. Personal automation remains available for their own resources.
+Level-5 sessions may list and maintain only charity models whose administrator/L6-controlled `is_mainstream` flag is true. They cannot create/delete models, edit pricing, allowed levels, public descriptions, parameter exclusions or that flag. Removing the flag immediately removes trainee management authority. They also have user-management reads and restricted bans in §7.1, and site-wide log access in §11. Donation review, announcements, maintenance, abuse-audit systems, activity configuration and charity CallerKey automation remain unavailable to trainees. Personal automation remains available for their own resources.
 
 Within an authorized model, trainees may bind eligible mainstream-source keys, reorder/remove bindings, discover models, and edit charity enablement, `safe_note`, expiry, cumulative/recurring limits, Token reservations and failure state. The immutable donation-time source determines mainstream eligibility. Unbound mainstream candidates may receive these charity edits too. Keys already bound by a full manager remain manageable even when they have a non-mainstream source; after removal, a trainee cannot newly bind such a key. Physical endpoint/secret settings, personal-use settings and physical RPM/concurrency remain outside this scope.
 
@@ -1014,7 +1014,7 @@ All routes below are available only on the administrator host with an administra
 | Alerts | `GET /admin/api/alerts`; `POST /admin/api/alerts/{id}/resolve` with optional `{resolved:boolean}` (omission resolves) |
 | Maintenance | `GET /admin/api/maintenance`; `POST /admin/api/maintenance/enable`; `POST /admin/api/maintenance/disable` |
 
-User lists additionally accept `level=1|2|3|4|5|6` and exact `user_id` (canonical positive signed-64-bit decimal string). ID, text, level and status filters are combined with AND before pagination and counting; cursor identity includes every filter. Stewards can read non-administrator users, including themselves and other L6 users, but can mutate only other currently effective L1–L5 accounts. Actor and target authority are checked again in the final transaction before any replay or write. A hidden administrator target is 404; disallowed target or operation is 403.
+User lists additionally accept `level=1|2|3|4|5|6` and exact `user_id` (canonical positive signed-64-bit decimal string). ID, text, level and status filters are combined with AND before pagination and counting; cursor identity includes every filter. L5 and L6 stewards can read non-administrator users, including themselves and other stewards, with the same account, loan, penalty and deleted-account read projections. L6 can mutate only other currently effective L1–L5 accounts. L5 can only create a ban on another currently effective L1–L4 account; it cannot PATCH any profile/economy field, unban or replace an active ban. An expired ban does not prevent a new ban. Actor and target authority are checked again in the final transaction before any replay or write; an authorized replay of the original ban retains its original result. A hidden administrator target is 404; disallowed target or operation is 403. The existing ban body, expected revision, idempotency key and 204 response are unchanged. Blacklist, account deletion/export, abuse audits and other L6 actions do not gain L5 access; no CallerKey scope is added.
 
 User limits use decimal strings or null: `endpoint_limit` is "0"–"10000", `rpm_limit` is "1"–"4096", and `concurrency_limit` is "1"–"100000". Effective limit fields are strings. In profile PATCH, omission preserves a value and null inherits its default. Invalid input returns 400 with the affected field and range. Manual level can be null or a JSON integer; full stewards may set 1–5 on eligible other users, while only administrators may set level 6. The economy PATCH has `{mode:"economy",expected_revision,target,direction,amount,reason}`; targets are `balance|game_balance|donation_credit`, direction is `increase|decrease`, and amount is a positive credit string. Both wallets may become negative; stewards cannot use the donation-credit target.
 
@@ -1022,7 +1022,15 @@ The generic site-config patch rejects maintenance, announcement epoch, and all a
 
 The administrator list reads retain cursor mode and also accept numbered `page,page_size` with the shared metadata, except where noted: `GET /admin/api/users` accepts `is_banned=true|false`, `q`, and `level=1|2|3|4|5|6`; `GET /admin/api/usage?group_by=user` is paginated, while `group_by=site` is a complete non-paginated snapshot and rejects all page/cursor parameters; `GET /admin/api/activity` is paginated; and `GET /admin/api/overview/endpoints` accepts `q`, `tag`, and an exact positive `user_id`, combined with AND, and is paginated. The user filter selects base URLs used by that user; row totals and expanded user lists still cover all users of each base URL. Numbered endpoint-overview rows contain at most three user previews; the complete group can be read with `GET /admin/api/overview/endpoints/users?base_url=<exact>&page=<page>&page_size=<size>`, which is numbered-only and returns `{data,next_cursor:null,pagination}`. `base_url` is an exact canonical value, not a pattern.
 
-`GET /admin/api/logs` accepts `error_code,status,from,to,user_id,endpoint_key_id,endpoint_base_url,upstream_model,charity_model,usage_total_mismatch` plus cursor or numbered page parameters; `GET /admin/api/logs/{id}` accepts `attempt_cursor,attempt_limit` or `attempt_page,attempt_page_size` and returns `attempt_pagination` in numbered mode. `GET /admin/api/alerts` accepts `resolved=true|false` plus either pagination mode. Log exports accept the same role-scoped non-pagination filters but reject `cursor,limit,page,page_size`.
+`GET /admin/api/logs` accepts `error_code,status,from,to,user_id,discord_id,endpoint_key_id,endpoint_base_url,upstream_model,charity_model,usage_total_mismatch,phase` plus cursor or numbered page parameters; `GET /admin/api/logs/{id}` accepts `attempt_cursor,attempt_limit` or `attempt_page,attempt_page_size` and returns `attempt_pagination` in numbered mode. `GET /admin/api/alerts` accepts `resolved=true|false` plus either pagination mode. Log exports accept the same role-scoped non-pagination filters but reject `cursor,limit,page,page_size`.
+
+The optional management `discord_id` filter is a canonical positive decimal string
+from 1 through 18446744073709551615. It exactly matches the immutable
+`origin_discord_id` recorded at request time, including retained deleted-account
+logs. It intersects other filters, including `user_id`, and binds list counts,
+cursors and exports to the same selection. Omission imposes no Discord filter;
+empty, repeated, noncanonical or out-of-range values return 400. Personal log
+routes reject this parameter. Do not convert it to a JavaScript number.
 
 The `charity_model` filter on administrator and authorized level-5/6 steward log lists/exports matches a nonempty literal substring of at most 512 UTF-8 bytes against the platform model name saved at call time, ignoring ASCII case only. `%` and `_` are literal, and later model renames do not rewrite that name. Only charity chat/embedding calls match. The predicate is identical for rows, counts, cursor identity and CSV/JSON exports and combines with existing filters and role scope; ordinary-user routes reject it.
 
@@ -1474,5 +1482,15 @@ Bidding Duel adds session-authenticated AI offers, preferences and unpaid admiss
 ## Collectible-card activity
 
 The session-authenticated card activity uses `/api/gacha/state`, `/api/gacha/history` and `/api/gacha/actions`; administrator configuration uses `/admin/api/gacha`. User site cosmetics use `GET/POST /api/appearance` and server-validated collection unlocks. See [The Gacha Simulator](gacha.md#records-and-http-access) for transaction, retry, revision and retention semantics.
+
+`redeem` accepts `product=bulk-permanent|bulk-limited` with the current shop
+`revision`. Each grants ten tickets for 10,000 credits total, using game credits
+first, once per product per user per site-calendar day. Debit, grant and purchase
+claim commit atomically. A fresh repeat returns the existing action rejection
+`daily-limit`. The snapshot's `redeemed` product IDs include these two products
+only when purchased in the current day; existing card redemption IDs remain
+lifetime claims. Reusing an earlier day's idempotency key returns current state
+without purchasing again or consuming the new day's limit. Monthly ticket
+exchange caps and single-ticket prices do not affect these bundles.
 
 Reward receipts are included in export schema 20 under `rewards`. They contain the account’s successful site-wide and code rewards, quantities, duplicate conversions and skipped items, without code text, eligibility configuration, other recipients or retry hashes. Receipts remain for the account lifetime and are removed on deletion; campaign totals and used quota remain. See [rewards](rewards.md).

@@ -26,9 +26,16 @@ interface Props {
   role: CharityRole;
   target: DiscoveryTarget;
   disabled?: boolean;
+  buttonLabel?: string;
   onCapabilityLoss?: () => void;
 }
-export function DonationDiscoveryControl({ role, target, disabled, onCapabilityLoss }: Props) {
+export function DonationDiscoveryControl({
+  role,
+  target,
+  disabled,
+  buttonLabel,
+  onCapabilityLoss,
+}: Props) {
   const modelID = useCharityModelScope();
   const { t } = useTranslation();
   const client = useQueryClient();
@@ -119,7 +126,7 @@ export function DonationDiscoveryControl({ role, target, disabled, onCapabilityL
         aria-controls={single ? undefined : id}
         onClick={() => (single ? begin() : setConfirming((value) => !value))}
       >
-        {t(`common.donationDiscovery.${label}`)}
+        {buttonLabel ?? t(`common.donationDiscovery.${label}`)}
       </Button>
       {confirming ? (
         <div id={id} className="inline-notice">
