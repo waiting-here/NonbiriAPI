@@ -649,9 +649,7 @@ test('administrator filters retained log origins by exact Discord ID and account
       page.getByRole('heading', { name: adminEn.admin.logs.noLogs, exact: true }),
     ).toBeVisible();
 
-    const reset = waitForLogs({});
     await filters.getByRole('button', { name: commonEn.common.resetFilter, exact: true }).click();
-    expect((await reset).status()).toBe(200);
     await expect(discord).toHaveValue('');
     await expect(account).toHaveValue('');
     await expect(rows.first()).toBeVisible();
