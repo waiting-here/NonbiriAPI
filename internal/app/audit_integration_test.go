@@ -7,12 +7,15 @@ import (
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	"github.com/waiting-here/NonbiriAPI/internal/headerfacts"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
 )
 
 func TestAuditHTTPDispatchSourceAndPrivilegedReaders(t *testing.T) {
 	f := newEmbeddingHTTPFixture(t)
-	if _, err := f.store.DB().Exec(`INSERT INTO site_config(key,value,updated_at) VALUES('site_timezone_offset_minutes','0',0) ON CONFLICT(key) DO UPDATE SET value='0'`); err != nil { t.Fatal(err) }
+	if _, err := f.store.DB().Exec(`INSERT INTO site_config(key,value,updated_at) VALUES('site_timezone_offset_minutes','0',0) ON CONFLICT(key) DO UPDATE SET value='0'`); err != nil {
+		t.Fatal(err)
+	}
 	status, body := f.call(t, "provider/self", `"private input must not be logged"`, "float", "error")
 	if status != http.StatusTooManyRequests {
 		t.Fatalf("upstream failure: %d %s", status, body)
@@ -39,8 +42,27 @@ func TestAuditHTTPDispatchSourceAndPrivilegedReaders(t *testing.T) {
 	if raw.Code != 200 || json.Unmarshal(raw.Body.Bytes(), &original) != nil || original.Body != `{"error":{"message":"Capacity exhausted","code":"busy"}}` {
 		t.Fatalf("private raw capture: %d %s", raw.Code, raw.Body)
 	}
+	requestHeaders := testApplicationRequest(t, f.app.handler, "GET", auditAdminHost, "/admin/api/logs/"+requestID+"/headers", "", cookies, nil)
+	var requestView headerfacts.View
+	if requestHeaders.Code != 200 || json.Unmarshal(requestHeaders.Body.Bytes(), &requestView) != nil || requestView.SaveState != "saved" {
+		t.Fatalf("request headers: %d %s", requestHeaders.Code, requestHeaders.Body)
+	}
+	foundAuthorization := false
+	for _, entry := range requestView.Headers {
+		if entry.Name == "Authorization" {
+			foundAuthorization = entry.Value == "[redacted]"
+		}
+	}
+	if !foundAuthorization || strings.Contains(requestHeaders.Body.String(), f.caller) {
+		t.Fatal("inbound credential was not redacted")
+	}
+	responseHeaders := testApplicationRequest(t, f.app.handler, "GET", auditAdminHost, "/admin/api/logs/"+requestID+"/attempts/1/headers", "", cookies, nil)
+	var responseView headerfacts.CollectionView
+	if responseHeaders.Code != 200 || json.Unmarshal(responseHeaders.Body.Bytes(), &responseView) != nil || responseView.SaveState != "saved" || len(responseView.Responses) != 1 || *responseView.Responses[0].HTTPStatus != 429 {
+		t.Fatalf("response headers: %d %s", responseHeaders.Code, responseHeaders.Body)
+	}
 	for _, path := range []string{
-		"/admin/api/logs/" + requestID + "/source", "/admin/api/logs/diagnostic-capacity",
+		"/admin/api/logs/" + requestID + "/headers", "/admin/api/logs/" + requestID + "/attempts/1/headers", "/admin/api/logs/" + requestID + "/source", "/admin/api/logs/diagnostic-capacity",
 		"/admin/api/diagnostics",
 		"/admin/api/abuse-audit/users", "/admin/api/abuse-audit/access-summary", "/admin/api/economy-audit/summary",
 	} {

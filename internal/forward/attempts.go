@@ -280,7 +280,7 @@ func (service *Service) runAttempts(
 			result = connectorcontract.AttemptResult{Failure: connectorcontract.FailureInternal, Diagnostic: "invalid connector result"}
 		}
 		run.result, run.hasResult = result, true
-		settleContext, cancel := context.WithTimeout(context.WithoutCancel(parent), service.settlement)
+		settleContext, cancel := context.WithTimeout(context.WithoutCancel(attemptContext), service.settlement)
 		outcome := attemptOutcome(result)
 		acceptedByCharityUpstream := plan.charity && result.UpstreamStatus == http.StatusOK
 		if plan.charity && responseStart != nil && responseStart.retryAfterObserved && !outcome.ProtocolSuccess {

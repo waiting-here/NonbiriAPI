@@ -34,6 +34,11 @@ func RegisterAdminDiagnosticRoutes(registrar AdminRouteRegistrar, repository *Re
 	if err := registrar.RegisterAdminRoute(http.MethodGet, "/admin/api/logs/diagnostic-capacity", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { api.diagnosticCapacity(w, r, 0) })); err != nil {
 		return err
 	}
+	for _, path := range []string{"/admin/api/logs/{id}/headers", "/admin/api/logs/{id}/attempts/{seq}/headers"} {
+		if err := registrar.RegisterAdminRoute(http.MethodGet, path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { api.headers(w, r, 0) })); err != nil {
+			return err
+		}
+	}
 	for _, path := range []string{"/admin/api/logs/{id}/source", "/admin/api/logs/{id}/attempts/{seq}/errors", "/admin/api/logs/{id}/attempts/{seq}/errors/{event}"} {
 		if err := registrar.RegisterAdminRoute(http.MethodGet, path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { api.diagnostic(w, r, 0) })); err != nil {
 			return err
@@ -55,6 +60,11 @@ func RegisterStewardDiagnosticRoutes(registrar UserRouteRegistrar, repository *R
 	api := &diagnosticAPI{repository: repository, steward: authorizer}
 	if err := registrar.RegisterUserRoute(http.MethodGet, "/api/steward/logs/diagnostic-capacity", func(w http.ResponseWriter, r *http.Request, p UserPrincipal) { api.diagnosticCapacity(w, r, p.UserID) }); err != nil {
 		return err
+	}
+	for _, path := range []string{"/api/steward/logs/{id}/headers", "/api/steward/logs/{id}/attempts/{seq}/headers"} {
+		if err := registrar.RegisterUserRoute(http.MethodGet, path, func(w http.ResponseWriter, r *http.Request, p UserPrincipal) { api.headers(w, r, p.UserID) }); err != nil {
+			return err
+		}
 	}
 	for _, path := range []string{"/api/steward/logs/{id}/source", "/api/steward/logs/{id}/attempts/{seq}/errors", "/api/steward/logs/{id}/attempts/{seq}/errors/{event}"} {
 		if err := registrar.RegisterUserRoute(http.MethodGet, path, func(w http.ResponseWriter, r *http.Request, p UserPrincipal) { api.diagnostic(w, r, p.UserID) }); err != nil {
