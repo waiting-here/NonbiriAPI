@@ -2273,6 +2273,30 @@
         "keyFacts": "{{total}} 把密钥 · {{available}} 可用",
         "sourceDetails": "来源与密钥状态",
         "donationActions": "捐赠操作"
+      },
+      "ownerHistory": {
+        "views": "捐赠视图",
+        "current": "当前捐赠",
+        "history": "历史",
+        "hidden": "已收起",
+        "all": "全部",
+        "keyViews": "密钥视图",
+        "keys": {
+          "current": "当前密钥",
+          "ended": "已结束",
+          "all": "全部密钥"
+        },
+        "hideOne": "收起",
+        "restoreOne": "恢复显示",
+        "hideAll": "收起当前筛选的历史",
+        "restoreAll": "恢复当前筛选的历史",
+        "help": "收起后可在“已收起”中恢复。只整理你的列表，不会删除资源，也不改变管理人员的记录。恢复显示不会重新启用资源。",
+        "pause": "暂停整理",
+        "resume": "继续整理",
+        "running": "整理中",
+        "paused": "已暂停",
+        "complete": "已完成",
+        "progress": "{{action}}：已更改 {{changed}} 条，已检查 {{scanned}} 条 · {{state}}"
       }
     },
     "activities": {

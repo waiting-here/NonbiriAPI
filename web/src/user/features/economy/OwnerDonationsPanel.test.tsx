@@ -179,7 +179,9 @@ describe('owner donation pages', () => {
     expect(within(region).queryByText(/head1…tail/)).not.toBeInTheDocument();
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'needle' } });
     await view.user.click(screen.getByRole('button', { name: 'Search' }));
-    await waitFor(() => expect(requests).toContain('/api/donations?q=needle&page=1&page_size=20'));
+    await waitFor(() =>
+      expect(requests).toContain('/api/donations?view=current&q=needle&page=1&page_size=20'),
+    );
     expect(screen.getByTestId('location').textContent).toContain('donation_keys_page=2');
     await view.user.click(await screen.findByRole('link', { name: 'Open details' }));
     await view.user.click(screen.getByRole('link', { name: 'Return to donations' }));
@@ -218,7 +220,7 @@ describe('owner donation pages', () => {
     expect(screen.getByTestId('location').textContent).not.toContain('donation_expanded');
     expect(screen.getByTestId('location').textContent).not.toContain('donation_q');
     expect(requests.filter((request) => request.startsWith('8:'))).toEqual([
-      '8:/api/donations?page=1&page_size=20',
+      '8:/api/donations?view=current&page=1&page_size=20',
     ]);
   });
 
@@ -265,5 +267,147 @@ describe('owner donation pages', () => {
     await screen.findByText('Session closed');
     expect(screen.queryByText('Submission 1')).not.toBeInTheDocument();
     expect(view.queryClient.getQueryData(['user', 'session'])).toBeNull();
+  });
+  it('defaults to current donations and can hide and restore matching history', async () => {
+    let hidden = false;
+    const requests: string[] = [];
+    const writes: { body: unknown; key: string | null }[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async (input, options) => {
+        const url = new URL(String(input), 'https://fixture.example');
+        requests.push(url.pathname + url.search);
+        if (url.pathname === '/api/donations/history/batch') {
+          const body = JSON.parse(String(options?.body));
+          writes.push({ body, key: new Headers(options?.headers).get('Idempotency-Key') });
+          hidden = body.action === 'hide';
+          return json({ changed_count: '1', scanned_count: '1', next_cursor: null });
+        }
+        if (url.pathname === '/api/donations') {
+          const row = {
+            ...donation(1),
+            status: 'deleted',
+            owner_hidden_at: hidden ? 1800000100 : null,
+            state_counts: { ...counts, pending: '0', ended: '1' },
+          };
+          const scope = url.searchParams.get('view');
+          return json(
+            page(
+              scope === 'current' ? [donation(2)] : (scope === 'hidden') === hidden ? [row] : [],
+              url.searchParams,
+            ),
+          );
+        }
+        throw new Error('Unexpected request: ' + url.pathname);
+      }),
+    );
+    const view = await renderWithProviders(<App />, {
+      station: 'user',
+      role: 'user',
+      route: '/charity?tab=donations',
+    });
+    login(view.queryClient, '7');
+    await screen.findByText('Submission 2');
+    expect(requests[0]).toContain('view=current');
+    expect(screen.getByRole('tab', { name: 'Current donations' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await view.user.click(screen.getByRole('tab', { name: 'History' }));
+    await screen.findByText('Submission 1');
+    await view.user.click(screen.getByRole('button', { name: 'Hide matching history' }));
+    await waitFor(() => expect(screen.queryByText('Submission 1')).not.toBeInTheDocument());
+    expect(writes[0].body).toEqual({ action: 'hide', status: null, q: '', cursor: null });
+    expect(writes[0].key).toMatch(/^[A-Za-z0-9_-]{22}$/);
+    await view.user.click(screen.getByRole('tab', { name: 'Hidden' }));
+    await screen.findByText('Submission 1');
+    await view.user.click(screen.getByRole('button', { name: 'Show matching history again' }));
+    await waitFor(() => expect(writes).toHaveLength(2));
+    expect(writes[1].body).toEqual({ action: 'restore', status: null, q: '', cursor: null });
+    expect(writes[0].key).not.toBe(writes[1].key);
+  });
+
+  it('opens ended keys by default for a terminal donation', async () => {
+    const keyViews: (string | null)[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async (input) => {
+        const url = new URL(String(input), 'https://fixture.example');
+        if (url.pathname === '/api/donations')
+          return json(
+            page(
+              [
+                {
+                  ...donation(21),
+                  status: 'deleted',
+                  state_counts: { ...counts, pending: '0', ended: '21' },
+                },
+              ],
+              url.searchParams,
+            ),
+          );
+        if (url.pathname === '/api/donations/21/keys') {
+          keyViews.push(url.searchParams.get('view'));
+          return json(page([], url.searchParams));
+        }
+        throw new Error('Unexpected request');
+      }),
+    );
+    const view = await renderWithProviders(<App />, {
+      station: 'user',
+      role: 'user',
+      route: '/charity?tab=donations&donation_view=history&donation_expanded=21',
+    });
+    login(view.queryClient, '7');
+    const region = await screen.findByRole('region', { name: 'View donated keys' });
+    await within(region).findByRole('tab', { name: 'Ended', selected: true });
+    await waitFor(() => expect(keyViews).toEqual(['ended']));
+    await view.user.click(within(region).getByRole('tab', { name: 'All keys' }));
+    await waitFor(() => expect(keyViews).toEqual(['ended', 'all']));
+  });
+  it('does not follow a late batch cursor after the account changes', async () => {
+    let finish!: (response: Response) => void;
+    let writes = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async (input) => {
+        const url = new URL(String(input), 'https://fixture.example');
+        if (url.pathname === '/api/donations/history/batch') {
+          writes++;
+          return new Promise<Response>((resolve) => {
+            finish = resolve;
+          });
+        }
+        if (url.pathname === '/api/donations')
+          return json(
+            page(
+              [
+                {
+                  ...donation(1),
+                  status: 'deleted',
+                  state_counts: { ...counts, pending: '0', ended: '1' },
+                },
+              ],
+              url.searchParams,
+            ),
+          );
+        throw new Error('Unexpected request');
+      }),
+    );
+    const view = await renderWithProviders(<App />, {
+      station: 'user',
+      role: 'user',
+      route: '/charity?tab=donations&donation_view=history',
+    });
+    login(view.queryClient, '7');
+    await screen.findByText('Submission 1');
+    await view.user.click(screen.getByRole('button', { name: 'Hide matching history' }));
+    await waitFor(() => expect(writes).toBe(1));
+    login(view.queryClient, '8');
+    await screen.findByRole('tab', { name: 'Current donations', selected: true });
+    finish(json({ changed_count: '100', scanned_count: '100', next_cursor: 'old-account-cursor' }));
+    await waitFor(() => expect(view.queryClient.isFetching()).toBe(0));
+    expect(writes).toBe(1);
+    expect(screen.queryByText(/100 changed/)).not.toBeInTheDocument();
   });
 });

@@ -151,6 +151,7 @@ export interface DonationReviewResult {
 }
 
 export interface Donation {
+  ownerHiddenAt?: number | null;
   discordPublicThanks?: boolean | null;
   id: string;
   status: DonationStatus;

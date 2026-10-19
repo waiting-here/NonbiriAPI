@@ -678,7 +678,7 @@ export function normalizeDonation(value: unknown): Donation {
       'created_at',
       'updated_at',
     ],
-    ['discord_public_thanks'],
+    ['discord_public_thanks', 'owner_hidden_at'],
   );
   const status = enumValue(item.status, 'donation status', DONATION_STATUSES);
   const reviewResult = normalizeReviewResult(item.review_result);
@@ -753,6 +753,8 @@ export function normalizeDonation(value: unknown): Donation {
   }
   return {
     id: decimalID(item.id, 'donation id'),
+    ownerHiddenAt:
+      item.owner_hidden_at == null ? null : timestamp(item.owner_hidden_at, 'hidden timestamp'),
     status,
     revision: positiveDecimal(item.revision, 'donation revision'),
     discordPublicThanks:
