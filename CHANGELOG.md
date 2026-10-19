@@ -8,6 +8,10 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Changed
 
+- Reuse up to 128 prepared write statements per physical SQLite connection and
+  release them on eviction or connection close. Move independent configuration
+  reads to the existing read pool and reuse deterministic validation only for
+  identical current contents, preserving immediate changes and full write checks.
 - Reuse transaction-local Lake Notes checkpoint data and prepare request digests
   before acquiring the writer. Preserve atomic revisions, leases, activity facts
   and replay receipts. Move committed activity projections to the existing read

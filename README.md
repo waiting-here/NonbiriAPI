@@ -21,6 +21,11 @@ activity event snapshots use the existing read pool. Revision, replay and lease
 writes remain atomic. The [mixed-load experiment](docs/performance-validation.md)
 reports both pools, real checkpoint completions and scheduling delay.
 
+Writer connections reuse a bounded set of prepared SQL statements. Independent
+configuration reads use the read pool and reuse validation only when the full
+current contents match. Database values are still read on every call; accounting,
+authorization and availability remain authoritative.
+
 | Area | Source and contract |
 | --- | --- |
 | Startup, recovery and HTTP composition | `main.go`, `internal/app/` |

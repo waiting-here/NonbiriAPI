@@ -6,6 +6,27 @@ accounting and lifecycle work. `Store.ReadDB()` opens the same validated databas
 with `mode=ro` and `query_only`; repositories must not send writes to it. Both
 pools belong to the store and close with the application.
 
+## Prepared writes and configuration reads
+
+Writable connections retain at most 128 prepared single-statement
+`INSERT`, `UPDATE` or `DELETE` templates, each at most 16 KiB of SQL text. A
+connection-local LRU closes evicted statements; execution errors discard the
+affected statement, and closing or replacing a connection releases its complete
+set. Preparation uses the already acquired physical connection, so it never
+borrows a second writer during a transaction. The driver binds current arguments
+and resets each execution. Queries, scripts and explicitly prepared statements
+keep their normal ownership. Transactions, constraints, triggers and SQLite
+FULL synchronization remain unchanged; no results or parameter values are cached.
+
+Independent `Store` configuration getters read the full current `site_config`
+snapshot through the existing read pool. A store retains one privately owned
+validated snapshot and reuses deterministic validation only when every key and
+value still matches. Reads do not rely on a TTL or revision counter, and callers
+receive separate maps. New, missing or invalid contents are checked immediately;
+database failures cannot fall back to an older snapshot. Configuration mutations
+continue to validate the proposed full snapshot in their writer transaction.
+Domain readiness, authorization, quotas and model availability are not cached.
+
 ## Model directories
 
 `GET /v1/models` combines an owner-scoped personal-model read with a charity
