@@ -29,6 +29,13 @@ func (*collector) GoString() string { return "[private header collector]" }
 func WithRequest(ctx context.Context, r *http.Request) context.Context {
 	return context.WithValue(ctx, inboundKey{}, Capture(promoted(r.Header, r.TransferEncoding, r.Trailer), r.Host, 0, time.Now()))
 }
+
+// WithCapturedRequest carries an immutable, already redacted ingress snapshot
+// into work with an independent cancellation lifetime.
+func WithCapturedRequest(ctx context.Context, fact Fact) context.Context {
+	return context.WithValue(ctx, inboundKey{}, fact)
+}
+
 func Request(ctx context.Context) Fact {
 	fact, _ := ctx.Value(inboundKey{}).(Fact)
 	return fact
