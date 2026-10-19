@@ -912,7 +912,7 @@ test('audit presentation keeps folds, role tabs and mobile content within the vi
       await page.emulateMedia({ reducedMotion: 'reduce' });
       await page.goto(f.user_url + '/steward?tab=charity');
       const tabs = page.locator('.page > .nb-tabs').first();
-      await expect(tabs.getByRole('tab')).toHaveCount(level === 5 ? 2 : 7);
+      await expect(tabs.getByRole('tab')).toHaveCount(level === 5 ? 3 : 7);
       for (const width of [1440, 768, 390]) {
         await page.setViewportSize({ width, height: 900 });
         await noOverflow(page);
