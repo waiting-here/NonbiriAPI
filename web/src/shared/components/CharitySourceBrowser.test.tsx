@@ -245,6 +245,7 @@ describe('CharitySourceBrowser', () => {
       (request) => request.pathname === '/admin/api/donation-sources',
     );
     expect(sourceRequest?.searchParams.get('scope')).toBe('active');
+    expect(sourceRequest?.searchParams.get('key_state')).toBe('available');
     expect(sourceRequest?.searchParams.get('page')).toBe('1');
     expect(sourceRequest?.searchParams.get('page_size')).toBe('20');
     expect(sourceRequest?.searchParams.has('limit')).toBe(false);
@@ -252,6 +253,7 @@ describe('CharitySourceBrowser', () => {
     await chooseSource(view, view.container);
     const keyRequest = requests.find((request) => request.pathname.endsWith('/keys'));
     expect(keyRequest?.searchParams.get('scope')).toBe('active');
+    expect(keyRequest?.searchParams.get('key_state')).toBe('available');
     expect(keyRequest?.searchParams.get('page')).toBe('1');
     expect(keyRequest?.searchParams.get('page_size')).toBe('20');
     expect(within(keyPane(view.container)).queryByText('safe note')).not.toBeInTheDocument();

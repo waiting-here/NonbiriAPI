@@ -37,7 +37,23 @@ export function ContextPricingFields({
           label={t('common.operations.charity.context.long')}
           description={t('common.operations.charity.context.longHelp')}
           checked={value.longEnabled}
-          onChange={(longEnabled) => onChange({ longEnabled })}
+          onChange={(longEnabled) =>
+            onChange(
+              longEnabled
+                ? { longEnabled }
+                : {
+                    longEnabled,
+                    longThreshold: '',
+                    longRequest: '0',
+                    longPrices: {
+                      uncached_input: '0',
+                      cache_write_input: '0',
+                      cache_read_input: '0',
+                      output: '0',
+                    },
+                  },
+            )
+          }
         />
         {value.longEnabled && (
           <div className="nb-grid nb-grid--2">
@@ -64,7 +80,12 @@ export function ContextPricingFields({
               </Field>
             ) : (
               (Object.keys(value.longPrices) as (keyof TokenPrices)[]).map((field) => (
-                <Field key={field} label={t(tokenPriceCopyKey(role, 'userPrices', field))}>
+                <Field
+                  key={field}
+                  label={t('common.workflow.longPriceField', {
+                    field: t(tokenPriceCopyKey(role, 'userPrices', field)),
+                  })}
+                >
                   {(props) => (
                     <input
                       {...props}
@@ -84,7 +105,13 @@ export function ContextPricingFields({
           label={t('common.operations.charity.context.penalty')}
           description={t('common.operations.charity.context.penaltyHelp')}
           checked={value.penaltyEnabled}
-          onChange={(penaltyEnabled) => onChange({ penaltyEnabled })}
+          onChange={(penaltyEnabled) =>
+            onChange(
+              penaltyEnabled
+                ? { penaltyEnabled }
+                : { penaltyEnabled, penaltyThreshold: '', penaltyFine: '0' },
+            )
+          }
         />
         {value.penaltyEnabled && (
           <div className="nb-grid nb-grid--2">

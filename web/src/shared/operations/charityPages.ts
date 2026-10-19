@@ -1,4 +1,5 @@
 import { exactRecord } from '@shared/operations/wire';
+import { KEY_STATES, type KeyStateFilter } from './keyState';
 import { ApiError } from '@shared/query/http';
 import { decoded, queryPath } from './api';
 import { array, decimalID, invalidResponse, oneOf, record } from './wire';
@@ -18,6 +19,7 @@ import {
 import { managementResourceID, validManagementSearch } from './charityModelPages';
 
 export interface CharityBindingCandidatePageFilters {
+  key_state?: KeyStateFilter;
   donation_id?: string;
   donation_key_id?: string;
   source?: '' | 'automatic' | 'manual';
@@ -85,7 +87,7 @@ function inputOneOf<const T extends string>(
 function inputCandidateFilters(value: unknown): Required<CharityBindingCandidatePageFilters> {
   const root = inputRecord(
     value,
-    ['donation_id', 'donation_key_id', 'source', 'q'],
+    ['donation_id', 'donation_key_id', 'source', 'q', 'key_state'],
     'binding candidate page filters',
   );
   const donationID =
@@ -104,7 +106,11 @@ function inputCandidateFilters(value: unknown): Required<CharityBindingCandidate
       : typeof root.q === 'string' && validManagementSearch(root.q, 512)
         ? root.q
         : invalidInput('candidate search');
-  return { donation_id: donationID, donation_key_id: donationKeyID, source, q };
+  const key_state =
+    root.key_state === undefined
+      ? 'all'
+      : inputOneOf(root.key_state, KEY_STATES, 'key state filter');
+  return { donation_id: donationID, donation_key_id: donationKeyID, source, q, key_state };
 }
 
 function candidateFilters(
@@ -112,7 +118,7 @@ function candidateFilters(
 ): Required<CharityBindingCandidatePageFilters> {
   const root = exactRecord(
     value,
-    ['donation_id', 'donation_key_id', 'source', 'q'],
+    ['donation_id', 'donation_key_id', 'source', 'q', 'key_state'],
     'binding candidate page filters',
     [],
   );
@@ -127,7 +133,9 @@ function candidateFilters(
       ? ''
       : oneOf(root.source, ['', 'automatic', 'manual'] as const, 'candidate source filter');
   const q = root.q === undefined ? '' : queryText(root.q, 'candidate search');
-  return { donation_id: donationID, donation_key_id: donationKeyID, source, q };
+  const key_state =
+    root.key_state === undefined ? 'all' : oneOf(root.key_state, KEY_STATES, 'key state filter');
+  return { donation_id: donationID, donation_key_id: donationKeyID, source, q, key_state };
 }
 
 function normalizeCandidatePage(
@@ -208,6 +216,7 @@ export function getManagedBindingCandidatesPage(
       donation_key_id: normalizedFilters.donation_key_id || undefined,
       source: normalizedFilters.source || undefined,
       q: normalizedFilters.q || undefined,
+      key_state: filters.key_state === undefined ? undefined : normalizedFilters.key_state,
       page,
       page_size: pageSize,
     }),

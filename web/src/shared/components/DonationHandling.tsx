@@ -1,5 +1,5 @@
 import { Button } from '@shared/components/ui/Button';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useRetainedOperation } from '../../admin/features/operations/useRetainedOperation';
@@ -36,22 +36,40 @@ export function DonationHandlingControl({
   handling,
   refresh,
   onCapabilityLoss,
+  keyCount,
+  disabled = false,
 }: {
   donationID: string;
   role: CharityRole;
   handling: DonationHandling;
   refresh: () => Promise<unknown>;
   onCapabilityLoss?: () => void;
+  keyCount?: string;
+  disabled?: boolean;
 }) {
   const formatDateTime = useDateTimeFormatter();
   const client = useQueryClient();
   const { t } = useTranslation();
+  const [reading, setReading] = useState(false);
+  const [readError, setReadError] = useState<unknown>(null);
   const process = useRetainedOperation<{ revision: string }, DonationHandlingReceipt>(
     (input, key) => processManagedDonation(role, donationID, input.revision, key),
     refresh,
     charityKeys.root(role),
   );
   const lost = isUnauthorized(process.error) || isForbidden(process.error);
+  const reread = async () => {
+    setReading(true);
+    setReadError(null);
+    try {
+      await refresh();
+      process.reset();
+    } catch (error) {
+      setReadError(error);
+    } finally {
+      setReading(false);
+    }
+  };
   useEffect(() => {
     if (!lost) return;
     void client.cancelQueries({ queryKey: charityKeys.root(role) });
@@ -69,6 +87,7 @@ export function DonationHandlingControl({
       <h4>{t('common.donationHandling.title')}</h4>
       <DonationHandlingStatus handling={handling} />
       <p>{t(donationHandlingHelpKey[handling.state])}</p>
+      {keyCount ? <p>{t('common.workflow.wholeDonation', { count: keyCount })}</p> : null}
       {handling.processed_at !== null && handling.processed_by_role !== null ? (
         <p>
           {t('common.donationHandling.processedInfo', {
@@ -88,21 +107,51 @@ export function DonationHandlingControl({
       {process.error ? (
         <>
           <ErrorState error={process.error} />
-          <p>{t('common.donationHandling.conflictHint')}</p>
-          <Button type="button" onClick={() => void refresh()}>
-            {t('common.refresh')}
-          </Button>
+          {process.outcome === 'conflict' ? (
+            <>
+              <p>{t('common.donationHandling.conflictHint')}</p>
+              <Button type="button" disabled={reading} onClick={() => void reread()}>
+                {t('common.refresh')}
+              </Button>
+            </>
+          ) : null}
         </>
       ) : null}
+      {readError ? <ErrorState error={readError} onRetry={() => void reread()} /> : null}
       {handling.state === 'pending' ? (
         <Button
           type="button"
           variant="primary"
-          disabled={process.isPending}
+          disabled={
+            disabled ||
+            reading ||
+            process.isPending ||
+            process.outcome === 'unknown' ||
+            process.outcome === 'conflict' ||
+            process.outcome === 'refresh-failed'
+          }
           onClick={() => process.mutate({ revision: handling.revision })}
         >
-          {t('common.donationHandling.process')}
+          {t(keyCount ? 'common.workflow.processWhole' : 'common.donationHandling.process')}
         </Button>
+      ) : null}
+      {process.outcome === 'unknown' && process.variables ? (
+        <Button
+          type="button"
+          disabled={process.isPending}
+          onClick={() => process.mutate(process.variables!)}
+        >
+          {t('common.donationReview.retrySame')}
+        </Button>
+      ) : null}
+      {process.refreshError ? (
+        <ErrorState
+          error={process.refreshError}
+          onRetry={() => {
+            if (process.outcome === 'refresh-failed') void process.refresh();
+            else void reread();
+          }}
+        />
       ) : null}
     </section>
   );
