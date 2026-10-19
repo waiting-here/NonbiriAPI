@@ -1531,7 +1531,7 @@ describe('experimental policy and charity controls', () => {
           zones: [...new Set(['UTC', Intl.DateTimeFormat().resolvedOptions().timeZone])].sort(),
         });
       }
-      if (method === 'GET' && path === '/api/donations?page=1&page_size=20') {
+      if (method === 'GET' && path === '/api/donations?view=current&page=1&page_size=20') {
         const summary = Object.fromEntries(
           Object.entries(donation).filter(([name]) => name !== 'keys'),
         );
