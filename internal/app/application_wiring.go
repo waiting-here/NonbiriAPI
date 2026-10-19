@@ -548,7 +548,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	lifecycleCoordinator, err = newLifecycleCoordinator(
 		store, vault, authRuntime, roleAuthorizer, forwardRuntime, gameRuntimes,
 		claimService, resourceRepository, issueService, logRepository,
-		activityService, activityRepository, donationService, charityService,
+		activityService, activityRepository, donationService, charityService, charityRoutingService,
 		reportRepository, announcementRepository, maintenanceService,
 		activityEvents, debugHub, gameNow, audits, activityEngines, automationService,
 	)

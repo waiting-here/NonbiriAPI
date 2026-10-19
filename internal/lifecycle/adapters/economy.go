@@ -149,7 +149,8 @@ func (adapter *DonationAdapter) ExportDonations(
 	out := make([]lifecycle.DonationExport, len(values))
 	for index, value := range values {
 		out[index] = lifecycle.DonationExport{
-			ID: value.ID, Status: value.Status, Description: value.Description,
+			OwnerHiddenAt: value.OwnerHiddenAt,
+			ID:            value.ID, Status: value.Status, Description: value.Description,
 			ReviewResult: mapDonationReview(value.ReviewResult),
 			Keys:         mapDonationKeys(value.Keys),
 			CreatedAt:    value.CreatedAt,

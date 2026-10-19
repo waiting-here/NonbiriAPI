@@ -270,7 +270,11 @@ WHERE id=? AND user_id=? AND status='pending' AND revision=?`,
 		if err != nil {
 			return fmt.Errorf("donation: edit submission: %w", err)
 		}
-		return requireOne(result)
+		if err := requireOne(result); err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `INSERT INTO donation_reviews(donation_id,submission_revision,reviewer_user_id,reviewer_role,action,note,created_at) VALUES(?,?,NULL,'','note_update','',?)`, donationID, input.ExpectedRevision+1, now)
+		return err
 	})
 }
 

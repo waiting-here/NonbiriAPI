@@ -69,7 +69,7 @@ WHERE dk.donation_id=? GROUP BY state`, now, now, now, now, header.ID)
 
 func (s *Service) donationsPage(ctx context.Context, role reviewerRole, userID int64, filter ManagementFilter, page pagination.Request) (Page[AdminDonationSummary], error) {
 	var empty Page[AdminDonationSummary]
-	if ctx == nil || !page.Valid() || !validManagementFilter(filter) || role == recurringOwner && filter.Handling != "" {
+	if ctx == nil || !page.Valid() || !validManagementFilter(filter) || role == recurringOwner && (filter.Handling != "" || !validOwnerView(filter.OwnerView)) || role != recurringOwner && filter.OwnerView != "" {
 		return empty, ErrInvalidRequest
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -89,6 +89,7 @@ WHERE (d.status IN ('pending','approved') OR d.terminal_at>?)`
 	if role == recurringOwner {
 		query += ` AND d.user_id=?`
 		args = append(args, userID)
+		query, args = appendOwnerView(query, args, filter.OwnerView, now)
 	}
 	query, args = appendManagementFilter(query, args, filter, now)
 	ids, metadata, err := browseIDs(ctx, tx, query, args, page)
@@ -96,6 +97,13 @@ WHERE (d.status IN ('pending','approved') OR d.terminal_at>?)`
 		return empty, err
 	}
 	result := Page[AdminDonationSummary]{Data: make([]AdminDonationSummary, 0, len(ids)), Pagination: &metadata}
+	var hidden map[int64]*int64
+	if role == recurringOwner {
+		hidden, err = ownerHiddenPageTx(ctx, tx, userID, ids)
+		if err != nil {
+			return empty, err
+		}
+	}
 	for _, id := range ids {
 		header, err := logicalHeaderTx(ctx, tx, id, now)
 		if err != nil {
@@ -105,6 +113,9 @@ WHERE (d.status IN ('pending','approved') OR d.terminal_at>?)`
 		if err != nil {
 			return empty, err
 		}
+		if role == recurringOwner {
+			summary.OwnerHiddenAt = hidden[id]
+		}
 		result.Data = append(result.Data, AdminDonationSummary{DonationSummary: summary, Owner: header.Owner, Reviewer: header.Reviewer, Handling: header.Handling})
 	}
 	if err := tx.Commit(); err != nil {
@@ -113,14 +124,14 @@ WHERE (d.status IN ('pending','approved') OR d.terminal_at>?)`
 	return result, nil
 }
 
-func (s *Service) DonationsOwnerPage(ctx context.Context, userID int64, filter ManagementFilter, page pagination.Request) (Page[DonationSummary], error) {
+func (s *Service) DonationsOwnerPage(ctx context.Context, userID int64, filter ManagementFilter, page pagination.Request) (Page[OwnerDonationSummary], error) {
 	result, err := s.donationsPage(ctx, recurringOwner, userID, filter, page)
 	if err != nil {
-		return Page[DonationSummary]{}, err
+		return Page[OwnerDonationSummary]{}, err
 	}
-	out := Page[DonationSummary]{Data: make([]DonationSummary, 0, len(result.Data)), Pagination: result.Pagination}
+	out := Page[OwnerDonationSummary]{Data: make([]OwnerDonationSummary, 0, len(result.Data)), Pagination: result.Pagination}
 	for _, item := range result.Data {
-		out.Data = append(out.Data, item.DonationSummary)
+		out.Data = append(out.Data, OwnerDonationSummary{DonationSummary: item.DonationSummary, OwnerHiddenAt: item.OwnerHiddenAt})
 	}
 	return out, nil
 }

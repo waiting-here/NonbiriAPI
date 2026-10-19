@@ -29,7 +29,7 @@ const logicallyActiveDonationSQL = `(d.status IN ('pending','approved') AND EXIS
 SELECT 1 FROM donation_keys live WHERE live.donation_id=d.id AND live.ended_at IS NULL
  AND (live.expires_at IS NULL OR live.expires_at>?)))`
 
-type ManagementFilter struct{ Status, Handling, Query string }
+type ManagementFilter struct{ Status, Handling, Query, OwnerView string }
 
 func validManagementFilter(filter ManagementFilter) bool {
 	return validStatusFilter(filter.Status) && validHandlingFilter(filter.Handling) &&

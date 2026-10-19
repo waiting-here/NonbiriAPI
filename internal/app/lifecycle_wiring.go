@@ -17,6 +17,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/charity"
+	"github.com/waiting-here/NonbiriAPI/internal/charityrouting"
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	"github.com/waiting-here/NonbiriAPI/internal/continuity"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -338,6 +339,7 @@ func newLifecycleCoordinator(
 	activityRepository *activities.Repository,
 	donationService *donation.Service,
 	charityService *charity.Service,
+	charityRoutingService *charityrouting.Service,
 	reportRepository *reports.Repository,
 	announcementRepository *announcements.Repository,
 	maintenanceService *maintenance.Service,
@@ -352,7 +354,7 @@ func newLifecycleCoordinator(
 		forwardRuntime == nil || forwardRuntime.lifecycle == nil || forwardRuntime.flow == nil || forwardRuntime.adaptations == nil ||
 		gameRuntimes == nil || gameRuntimes.Service == nil || gameRuntimes.Limiter() == nil || claimService == nil ||
 		resourceRepository == nil || issueService == nil || logRepository == nil ||
-		activityService == nil || activityRepository == nil || donationService == nil || charityService == nil ||
+		activityService == nil || activityRepository == nil || donationService == nil || charityService == nil || charityRoutingService == nil ||
 		reportRepository == nil || announcementRepository == nil || maintenanceService == nil ||
 		activityEvents == nil || debugHub == nil || audits == nil || activityEngines == nil || activityEngines.fish == nil || automation == nil {
 		return nil, lifecycle.ErrInvalid
@@ -479,7 +481,7 @@ func newLifecycleCoordinator(
 			Governance:         activityEngines,
 			Sessions:           lifecycleadapters.NewAuthSessionRetention(authRuntime),
 			RequestLogs:        lifecycleadapters.NewRequestLogRetention(logRepository),
-			Audits:             lifecycleadapters.NewAuditRetention(maintenanceRetention, announcementRepository),
+			Audits:             lifecycleadapters.NewAuditRetention(maintenanceRetention, announcementRepository, charityRoutingService),
 			Observability:      diagnosticRetention{audits.observations},
 			RiskAudit:          riskRetention{repository: audits.risk, clientGuard: forwardRuntime.clientGuard},
 			Issues:             lifecycleadapters.NewIssueRetention(issueService),

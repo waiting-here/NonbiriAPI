@@ -337,12 +337,12 @@ func getOwnerDonationTx(ctx context.Context, tx *sql.Tx, userID, donationID, now
 	if admin.Owner == nil || admin.Owner.UserID != strconv.FormatInt(userID, 10) {
 		return Donation{}, ErrNotFound
 	}
-	return Donation{
-		DiscordPublicThanks: admin.DiscordPublicThanks,
-		ID:                  admin.ID, Status: admin.Status, Revision: admin.Revision, Description: admin.Description,
-		ReviewResult: admin.ReviewResult, Keys: ownerKeys(admin.Keys),
-		CreatedAt: admin.CreatedAt, UpdatedAt: admin.UpdatedAt,
-	}, nil
+	hidden, err := ownerHiddenAtTx(ctx, tx, donationID)
+	if err != nil {
+		return Donation{}, err
+	}
+	return Donation{OwnerHiddenAt: hidden, DiscordPublicThanks: admin.DiscordPublicThanks, ID: admin.ID, Status: admin.Status, Revision: admin.Revision, Description: admin.Description,
+		ReviewResult: admin.ReviewResult, Keys: ownerKeys(admin.Keys), CreatedAt: admin.CreatedAt, UpdatedAt: admin.UpdatedAt}, nil
 }
 
 func getAdminDonationTx(ctx context.Context, tx *sql.Tx, donationID, now int64) (AdminDonation, error) {

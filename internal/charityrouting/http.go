@@ -33,6 +33,11 @@ func RegisterAdminRoutes(registrar AdminRouteRegistrar, service *Service) error 
 		method, pattern string
 		handler         http.HandlerFunc
 	}{
+		{http.MethodGet, routeAdminPriceTemplates, api.listAdminPriceTemplates},
+		{http.MethodGet, routeAdminPriceTemplate, api.getAdminPriceTemplate},
+		{http.MethodPost, routeAdminPriceTemplates, api.mutateAdminPriceTemplate},
+		{http.MethodPut, routeAdminPriceTemplate, api.mutateAdminPriceTemplate},
+		{http.MethodDelete, routeAdminPriceTemplate, api.mutateAdminPriceTemplate},
 		{http.MethodGet, routeAdminModels, api.listAdminModels},
 		{http.MethodGet, routeAdminKeyModels, api.adminKeyModels},
 		{http.MethodPost, routeAdminManual, api.adminAddManual},
@@ -72,6 +77,8 @@ func RegisterStewardRoutes(registrar UserRouteRegistrar, service *Service) error
 		method, pattern string
 		handler         AuthorizedUserHandler
 	}{
+		{http.MethodGet, routeStewardPriceTemplates, api.listStewardPriceTemplates},
+		{http.MethodGet, routeStewardPriceTemplate, api.getStewardPriceTemplate},
 		{http.MethodGet, routeStewardModels, api.listStewardModels},
 		{http.MethodGet, routeStewardKeyModels, api.stewardKeyModels},
 		{http.MethodPost, routeStewardManual, api.stewardAddManual},
