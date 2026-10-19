@@ -329,11 +329,22 @@ type loadPercentiles struct {
 }
 
 func (m *loadMeasurements) summaries() map[string]loadPercentiles {
+	return m.groupedSummaries(true)
+}
+
+func (m *loadMeasurements) overallSummaries() map[string]loadPercentiles {
+	return m.groupedSummaries(false)
+}
+
+func (m *loadMeasurements) groupedSummaries(byPhase bool) map[string]loadPercentiles {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	groups := map[string][]loadSample{}
 	for _, sample := range m.samples {
-		key := sample.phase + " " + sample.route
+		key := sample.route
+		if byPhase {
+			key = sample.phase + " " + key
+		}
 		groups[key] = append(groups[key], sample)
 	}
 	out := map[string]loadPercentiles{}
@@ -627,6 +638,7 @@ func runSyntheticLoad(t *testing.T, n int, mode string, hold time.Duration) {
 		"db_wait_ms":    float64(afterStats.WaitDuration-stats.WaitDuration) / float64(time.Millisecond),
 		"memory_before": before, "memory_held": heldMemory, "memory_after_gc": after,
 		"page_rps": 15, "pages_submitted": pagesSubmitted.Load(), "pages": pageSummary, "models": modelSummary, "db_phases": poolPhases, "failure_facts": failures, "last_window_operations": f.app.performance.Drain(),
+		"pages_overall": pages.overallSummaries(),
 	}
 	encoded, err := json.Marshal(report)
 	if err != nil {

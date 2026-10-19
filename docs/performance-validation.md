@@ -45,6 +45,13 @@ runs are not release performance evidence. The existing
 `TestApplicationCatalogLoad` and `TestApplicationSyntheticLoad` cover page-only,
 long-stream, concentrated completion, slow-reader and cancellation scenarios.
 
+The streaming experiment reports `pages` grouped by phase and route, and
+`pages_overall` grouped by route across the complete measurement window. A
+completion phase may contain only a few page requests: its P95 can be its maximum
+and must not be presented as a whole-window percentile. Always report the sample
+count. CPU time includes the in-process load clients and mock upstream; Go heap
+snapshots are neither process RSS nor a peak memory measurement.
+
 Compare identical seeds, data, build inputs, toolchain and machine. Record the
 commit/tree and real exit status alongside each result. Report workload mix and
 admitted/completed work, not only latency. Release targets are evaluated in the
