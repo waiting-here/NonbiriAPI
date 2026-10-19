@@ -60,6 +60,8 @@ The mystery shop offers daily bundles of ten standard or limited tickets for
 10,000 credits each, using game credits first. Each bundle has its own daily limit.
 Management request logs support an exact Discord ID filter alongside the called
 charity model; additional filters include the upstream model used.
+After choosing a key for a charity service connection, fetch its model list again
+or open its key settings directly, then return to the same selection.
 
 ## Build and develop
 
@@ -77,7 +79,7 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [First-run setup](docs/first-run-setup.md) covers private paths, the encryption key, Discord OAuth and public origins. Copy [admin.env.example](admin.env.example) outside the checkout, replace placeholders and load it before starting. Preserve the database with its matching key.
 
-Fresh databases start in maintenance with public features closed. The v1.0.2 binary accepts schema 21 or fresh storage. Existing schema 16, 17, 18, 19 and 20 databases use the separate offline converter; historical conversion code is excluded from the service. Later v1.x releases retain an upgrade path from every earlier stable v1.x schema. Older binaries need not read newer databases.
+Fresh databases start in maintenance with public features closed. The v1.0.3 binary accepts schema 21 or fresh storage. Existing schema 16, 17, 18, 19 and 20 databases use the separate offline converter; historical conversion code is excluded from the service. Later v1.x releases retain an upgrade path from every earlier stable v1.x schema. Older binaries need not read newer databases.
 
 [Deployment](docs/deployment.md) covers systemd, proxies, immutable artifacts, upgrades and complete-snapshot recovery. Startup variables and online settings have one reference in [configuration](docs/configuration.md).
 

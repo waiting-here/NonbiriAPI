@@ -4,10 +4,16 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
-## Unreleased
+## 1.0.3 — 2026-10-19
+
+Database schema 21 and account export 20 are unchanged. This source-only release
+preserves immediate model availability, the existing connection limits and
+synchronous durable accounting.
 
 ### Changed
 
+- Add model-discovery and key-management shortcuts to charity connection setup,
+  preserving the selected source, key and candidates when returning.
 - Add exact Discord ID filtering to management request logs, including pagination
   and exports. Keep it and the called charity model visible in common filters;
   move the upstream model into additional filters.
