@@ -8,6 +8,10 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Changed
 
+- Give level-5 stewards user-management reads and permission to ban level 1–4
+  accounts, with current actor and target checks before writes and replay.
+  Profile, limits, level, credit, unban and active-ban replacement remain denied.
+
 - Commit attempt and request completion in synchronous batches of up to four,
   with per-item savepoints, durable acknowledgements, bounded pending work and
   independent recovery after a failed batch. Report queue time, batch sizes,

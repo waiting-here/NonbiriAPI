@@ -31,36 +31,51 @@ func (role managementRole) route(adminRoute string) string {
 }
 
 func (s *Service) beginManagement(ctx context.Context, actorID int64, role managementRole, readOnly bool) (*sql.Tx, error) {
+	tx, _, err := s.beginManagementAccess(ctx, actorID, role, readOnly, false)
+	return tx, err
+}
+
+func (s *Service) beginManagedUserRead(ctx context.Context, actorID int64, role managementRole, readOnly bool) (*sql.Tx, error) {
+	tx, _, err := s.beginManagementAccess(ctx, actorID, role, readOnly, true)
+	return tx, err
+}
+
+func (s *Service) beginManagementAccess(ctx context.Context, actorID int64, role managementRole, readOnly, allowTrainee bool) (*sql.Tx, bool, error) {
 	if s == nil || s.database == nil || ctx == nil || actorID <= 0 {
-		return nil, ErrUnauthorized
+		return nil, false, ErrUnauthorized
 	}
 	tx, err := s.database.BeginTx(ctx, &sql.TxOptions{ReadOnly: readOnly})
 	if err != nil {
-		return nil, classifyDatabaseError("begin management transaction", err)
+		return nil, false, classifyDatabaseError("begin management transaction", err)
 	}
+	trainee := false
 	switch role {
 	case roleAdmin:
 		err = s.finalAuth.AuthorizeAdmin(ctx, tx, actorID)
 	case roleSteward:
-		err = s.finalAuth.AuthorizeStewardMutation(ctx, tx, actorID)
+		if allowTrainee {
+			trainee, err = s.finalAuth.AuthorizeUserManagement(ctx, tx, actorID)
+		} else {
+			err = s.finalAuth.AuthorizeStewardMutation(ctx, tx, actorID)
+		}
 	default:
 		err = ErrForbidden
 	}
 	if err != nil {
 		tx.Rollback()
-		return nil, classifyAuthorizationError(err)
+		return nil, false, classifyAuthorizationError(err)
 	}
-	return tx, nil
+	return tx, trainee, nil
 }
 
 // The preflight is deliberately outside the write transaction. Identity
 // resolution may use another SQL connection, and the target is rechecked
 // inside the subsequent write transaction after the identity gate is held.
-func (s *Service) lockUserIdentity(ctx context.Context, actorID, userID int64, role managementRole) (string, func(), error) {
+func (s *Service) lockUserIdentity(ctx context.Context, actorID, userID int64, role managementRole, allowTrainee bool) (string, func(), error) {
 	if s == nil || userID <= 0 || ctx == nil {
 		return "", nil, ErrNotFound
 	}
-	tx, err := s.beginManagement(ctx, actorID, role, true)
+	tx, trainee, err := s.beginManagementAccess(ctx, actorID, role, true, allowTrainee)
 	if err != nil {
 		return "", nil, err
 	}
@@ -69,7 +84,7 @@ func (s *Service) lockUserIdentity(ctx context.Context, actorID, userID int64, r
 	if err != nil {
 		return "", nil, err
 	}
-	if role == roleSteward && (actorID == userID || row.manualLevel.Valid && row.manualLevel.Int64 == 6) {
+	if role == roleSteward && !canManageUser(row, actorID, trainee) {
 		return "", nil, ErrForbidden
 	}
 	if !row.discordID.Valid || row.discordID.String == "" {
@@ -87,21 +102,26 @@ func (s *Service) lockUserIdentity(ctx context.Context, actorID, userID int64, r
 
 // The target check precedes replay for stewards. A cached response cannot
 // authorize editing oneself or an account that has since become a steward.
-func (s *Service) beginUserMutation(ctx context.Context, actorID, userID int64, role managementRole, control ControlMutation, now int64) (*sql.Tx, userRow, idempotency.Decision, error) {
-	tx, err := s.beginManagement(ctx, actorID, role, false)
+func (s *Service) beginUserMutation(ctx context.Context, actorID, userID int64, role managementRole, control ControlMutation, now int64, allowTraineeBan bool) (*sql.Tx, userRow, idempotency.Decision, error) {
+	tx, trainee, err := s.beginManagementAccess(ctx, actorID, role, false, allowTraineeBan)
 	if err != nil {
 		return nil, userRow{}, idempotency.Decision{}, err
 	}
 	var row userRow
 	if role == roleSteward {
 		row, err = readUserRow(ctx, tx, userID)
-		if err == nil && (userID == actorID || row.manualLevel.Valid && row.manualLevel.Int64 == 6) {
+		if err == nil && !canManageUser(row, actorID, trainee) {
 			err = ErrForbidden
 		}
 	}
 	var decision idempotency.Decision
 	if err == nil {
 		decision, err = beginControlMutation(ctx, tx, actorID, role, control, now)
+	}
+	// Changing an existing ban could shorten it, effectively granting an unban.
+	// An identical replay remains valid after the target-level check above.
+	if err == nil && trainee && decision.Kind != idempotency.Replay && row.isBanned == 1 && (!row.bannedUntil.Valid || row.bannedUntil.Int64 > now) {
+		err = ErrForbidden
 	}
 	if err == nil && role == roleAdmin && decision.Kind != idempotency.Replay {
 		row, err = readUserRow(ctx, tx, userID)
@@ -111,6 +131,14 @@ func (s *Service) beginUserMutation(ctx context.Context, actorID, userID int64, 
 		return nil, userRow{}, idempotency.Decision{}, err
 	}
 	return tx, row, decision, nil
+}
+
+func canManageUser(row userRow, actorID int64, trainee bool) bool {
+	limit := int64(6)
+	if trainee {
+		limit = 5
+	}
+	return row.id != actorID && (!row.manualLevel.Valid || row.manualLevel.Int64 < limit)
 }
 
 func usersCursorOwner(query UserListQuery, role managementRole, actorID int64) string {

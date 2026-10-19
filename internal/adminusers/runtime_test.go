@@ -46,19 +46,27 @@ func (auth *testAdminAuth) AuthorizeAdmin(context.Context, *sql.Tx, int64) error
 }
 
 func (auth *testAdminAuth) AuthorizeStewardMutation(ctx context.Context, tx *sql.Tx, actorID int64) error {
+	trainee, err := auth.AuthorizeUserManagement(ctx, tx, actorID)
+	if err == nil && trainee {
+		return authz.ErrForbidden
+	}
+	return err
+}
+
+func (auth *testAdminAuth) AuthorizeUserManagement(ctx context.Context, tx *sql.Tx, actorID int64) (bool, error) {
 	auth.calls++
 	if auth.err != nil {
-		return auth.err
+		return false, auth.err
 	}
 	var admin, level, banned int
 	var until sql.NullInt64
 	if err := tx.QueryRowContext(ctx, "SELECT is_admin,COALESCE(level,auto_level),is_banned,banned_until FROM users WHERE id=?", actorID).Scan(&admin, &level, &banned, &until); err != nil {
-		return authz.ErrUnauthorized
+		return false, authz.ErrUnauthorized
 	}
-	if admin != 0 || level != 6 || banned == 1 && (!until.Valid || until.Int64 > adminUsersTestNow) {
-		return authz.ErrForbidden
+	if admin != 0 || level != 5 && level != 6 || banned == 1 && (!until.Valid || until.Int64 > adminUsersTestNow) {
+		return false, authz.ErrForbidden
 	}
-	return nil
+	return level == 5, nil
 }
 
 type testInvalidator struct{ users []int64 }

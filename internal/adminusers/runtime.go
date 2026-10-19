@@ -266,7 +266,7 @@ func (service *Service) listUsers(ctx context.Context, adminID int64, role manag
 	if query.Cursor != "" && (after == 0 || after > math.MaxInt64) {
 		return Page[AdminUser]{}, ErrInvalidRequest
 	}
-	tx, err := service.beginManagement(ctx, adminID, role, query.Page != nil)
+	tx, err := service.beginManagedUserRead(ctx, adminID, role, query.Page != nil)
 	if err != nil {
 		return Page[AdminUser]{}, err
 	}
@@ -368,7 +368,7 @@ func (service *Service) getUser(ctx context.Context, adminID, userID int64, role
 	if !validNow(now) {
 		return AdminUser{}, ErrUnavailable
 	}
-	tx, err := service.beginManagement(ctx, adminID, role, false)
+	tx, err := service.beginManagedUserRead(ctx, adminID, role, false)
 	if err != nil {
 		return AdminUser{}, err
 	}
@@ -746,13 +746,13 @@ func (service *Service) profile(ctx context.Context, adminID, userID int64, role
 	if input.LevelSet {
 		var release func()
 		var err error
-		lockedDiscord, release, err = service.lockUserIdentity(ctx, adminID, userID, role)
+		lockedDiscord, release, err = service.lockUserIdentity(ctx, adminID, userID, role, false)
 		if err != nil {
 			return MutationResult[AdminUser]{}, err
 		}
 		defer release()
 	}
-	tx, row, decision, err := service.beginUserMutation(ctx, adminID, userID, role, control, now)
+	tx, row, decision, err := service.beginUserMutation(ctx, adminID, userID, role, control, now, false)
 	if err != nil {
 		return MutationResult[AdminUser]{}, err
 	}
@@ -848,7 +848,7 @@ func (service *Service) economy(ctx context.Context, adminID, userID int64, role
 	if !validNow(now) {
 		return MutationResult[AdminUser]{}, ErrUnavailable
 	}
-	tx, row, decision, err := service.beginUserMutation(ctx, adminID, userID, role, control, now)
+	tx, row, decision, err := service.beginUserMutation(ctx, adminID, userID, role, control, now, false)
 	if err != nil {
 		return MutationResult[AdminUser]{}, err
 	}
@@ -996,12 +996,12 @@ func (service *Service) setBan(ctx context.Context, adminID, userID int64, role 
 	if !validNow(now) {
 		return MutationResult[struct{}]{}, ErrUnavailable
 	}
-	lockedDiscord, release, err := service.lockUserIdentity(ctx, adminID, userID, role)
+	lockedDiscord, release, err := service.lockUserIdentity(ctx, adminID, userID, role, banned)
 	if err != nil {
 		return MutationResult[struct{}]{}, err
 	}
 	defer release()
-	tx, row, decision, err := service.beginUserMutation(ctx, adminID, userID, role, control, now)
+	tx, row, decision, err := service.beginUserMutation(ctx, adminID, userID, role, control, now, banned)
 	if err != nil {
 		return MutationResult[struct{}]{}, err
 	}

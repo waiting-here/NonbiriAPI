@@ -127,11 +127,13 @@ function UserAuthority({
   renderDeletion,
   renderSecurity,
   onAuthorityLoss,
+  trainee = false,
 }: {
   user: AdminUser;
   refresh: () => Promise<unknown>;
   onClose: () => void;
   role: ManagementRole;
+  trainee?: boolean;
   account: string;
   onAuthorityLoss?: () => void;
   renderDeletion?: (user: AdminUser, refresh: () => Promise<unknown>) => ReactNode;
@@ -147,7 +149,10 @@ function UserAuthority({
   const [confirmedUser, setConfirmedUser] = useState<AdminUser | null>(null);
   const [confirm, setConfirm] = useState<'ban' | 'unban' | null>(null);
   const [economyConfirm, setEconomyConfirm] = useState<EconomyIntent | null>(null);
-  const editable = role === 'admin' || (user.id !== account && user.level.effective < 6);
+  const editable =
+    !trainee && (role === 'admin' || (user.id !== account && user.level.effective < 6));
+  const canBan =
+    editable || (trainee && user.id !== account && user.level.effective <= 4 && !user.is_banned);
   const root = managementRoot(role);
   const reconcile = async () => {
     await refresh();
@@ -280,8 +285,60 @@ function UserAuthority({
       </div>
     ) : null;
 
+  const banControls = canBan ? (
+    <Card>
+      <h2>{t('management.users.banSectionTitle')}</h2>
+      <div className="ops-field-grid">
+        <Field label={t('management.users.banReason')}>
+          {(field) => (
+            <input
+              {...field}
+              maxLength={1024}
+              value={draft.banReason}
+              onChange={(event) => setDraft({ ...draft, banReason: event.target.value })}
+            />
+          )}
+        </Field>
+        <Field label={t('management.users.banDurationDays')}>
+          {(field) => (
+            <input
+              {...field}
+              type="number"
+              min="1"
+              max="3660"
+              value={draft.banDuration}
+              onChange={(event) => setDraft({ ...draft, banDuration: event.target.value })}
+            />
+          )}
+        </Field>
+      </div>
+      <div className="ops-actions">
+        {user.is_banned ? (
+          <Button variant="danger-outline" type="button" onClick={() => setConfirm('unban')}>
+            {t('management.users.unban')}
+          </Button>
+        ) : (
+          <Button
+            variant="danger-outline"
+            type="button"
+            disabled={
+              !draft.banReason.trim() ||
+              (draft.banDuration !== '' &&
+                (!Number.isSafeInteger(banSeconds) || (banSeconds ?? 0) < 1))
+            }
+            onClick={() => setConfirm('ban')}
+          >
+            {t('management.users.ban')}
+          </Button>
+        )}
+      </div>
+      {ban.error || unban.error ? <ErrorState error={ban.error ?? unban.error} /> : null}
+    </Card>
+  ) : null;
+
   return (
     <div className="ops-stack user-authority">
+      {trainee ? <Note>{t('management.users.traineeReadOnly')}</Note> : null}
       <Card>
         <div className="ops-actions">
           <h2>{user.username}</h2>
@@ -317,7 +374,7 @@ function UserAuthority({
         tabs={[
           { value: 'overview', label: t('management.users.tabOverview') },
           { value: 'limits', label: t('management.users.tabLimits') },
-          { value: 'economy', label: t('management.users.tabEconomy') },
+          ...(trainee ? [] : [{ value: 'economy', label: t('management.users.tabEconomy') }]),
           { value: 'penalties', label: t('management.users.tabPenalties') },
         ].map(({ value, label }) => ({
           value: value as typeof tab,
@@ -346,9 +403,9 @@ function UserAuthority({
             </dd>
             <dt>{t('management.users.balances')}</dt>
             <dd>
-              {user.balance} {t('management.users.creditsBalance')} · {user.game_balance}{' '}
-              {t('management.users.gameBalance')} · {user.donation_credit}{' '}
-              {t('management.users.donationBalance')}
+              {formatCredits(user.balance)} {t('management.users.creditsBalance')} ·{' '}
+              {formatCredits(user.game_balance)} {t('management.users.gameBalance')} ·{' '}
+              {formatCredits(user.donation_credit)} {t('management.users.donationBalance')}
             </dd>
             <dt>
               {t('management.users.created')} / {t('management.users.updated')}
@@ -383,17 +440,19 @@ function UserAuthority({
             >
               {t('management.users.viewLogs')}
             </Link>
-            <Link
-              className="nb-btn nb-btn--secondary"
-              to={
-                role === 'admin'
-                  ? routePath('admin', 'admin-risk-audit') +
-                    `?audit_tab=user_ips&audit_ip_user=${user.id}`
-                  : `/steward?tab=risk&audit_tab=user_ips&audit_ip_user=${user.id}`
-              }
-            >
-              {t('common.audit.inspectUserIPs')}
-            </Link>
+            {!trainee ? (
+              <Link
+                className="nb-btn nb-btn--secondary"
+                to={
+                  role === 'admin'
+                    ? routePath('admin', 'admin-risk-audit') +
+                      `?audit_tab=user_ips&audit_ip_user=${user.id}`
+                    : `/steward?tab=risk&audit_tab=user_ips&audit_ip_user=${user.id}`
+                }
+              >
+                {t('common.audit.inspectUserIPs')}
+              </Link>
+            ) : null}
             <LoanHistory role={role} account={account} userID={user.id} />
           </div>
         </Card>
@@ -638,54 +697,7 @@ function UserAuthority({
                 <PenaltyHistory inline role={role} account={account} userID={user.id} />
               </Card>
             ) : null}
-            <Card>
-              <h2>{t('management.users.banSectionTitle')}</h2>
-              <div className="ops-field-grid">
-                <label>
-                  <span>{t('management.users.banReason')}</span>
-                  <input
-                    maxLength={1024}
-                    value={draft.banReason}
-                    onChange={(event) => setDraft({ ...draft, banReason: event.target.value })}
-                  />
-                </label>
-                <label>
-                  <span>{t('management.users.banDurationDays')}</span>
-                  <input
-                    type="number"
-                    min="1"
-                    max="3660"
-                    value={draft.banDuration}
-                    onChange={(event) => setDraft({ ...draft, banDuration: event.target.value })}
-                  />
-                </label>
-              </div>
-              <div className="ops-actions">
-                {user.is_banned ? (
-                  <Button
-                    variant="danger-outline"
-                    type="button"
-                    onClick={() => setConfirm('unban')}
-                  >
-                    {t('management.users.unban')}
-                  </Button>
-                ) : (
-                  <Button
-                    variant="danger-outline"
-                    type="button"
-                    disabled={
-                      !draft.banReason.trim() ||
-                      (draft.banDuration !== '' &&
-                        (!Number.isSafeInteger(banSeconds) || (banSeconds ?? 0) < 1))
-                    }
-                    onClick={() => setConfirm('ban')}
-                  >
-                    {t('management.users.ban')}
-                  </Button>
-                )}
-              </div>
-              {ban.error || unban.error ? <ErrorState error={ban.error ?? unban.error} /> : null}
-            </Card>
+            {banControls}
           </section>
           <Card className="user-danger">
             <h2>{t('management.users.dangerTitle')}</h2>
@@ -722,7 +734,7 @@ function UserAuthority({
             hidden={tab !== 'limits'}
           >
             <Card>
-              <p>{t('management.users.readOnly')}</p>
+              {!trainee ? <p>{t('management.users.readOnly')}</p> : null}
               <dl className="ops-kv">
                 <dt>{t('management.users.endpointLimit')}</dt>
                 <dd>{user.effective_endpoint_limit}</dd>
@@ -742,7 +754,7 @@ function UserAuthority({
             hidden={tab !== 'economy'}
           >
             <Card>
-              <p>{t('management.users.readOnly')}</p>
+              <p>{t(trainee ? 'management.users.traineeReadOnly' : 'management.users.readOnly')}</p>
             </Card>
           </section>
           <section
@@ -756,6 +768,7 @@ function UserAuthority({
                 <PenaltyHistory inline role={role} account={account} userID={user.id} />
               </Card>
             ) : null}
+            {banControls}
           </section>
         </>
       )}
@@ -775,7 +788,7 @@ function UserAuthority({
           busy={ban.isPending || unban.isPending}
           onCancel={() => setConfirm(null)}
           onConfirm={() => {
-            if (confirm === 'ban')
+            if (confirm === 'ban' && canBan)
               ban.mutate(
                 {
                   revision: user.revision,
@@ -784,7 +797,7 @@ function UserAuthority({
                 },
                 { onSuccess: () => setConfirm(null) },
               );
-            else if (confirm === 'unban')
+            else if (confirm === 'unban' && editable)
               unban.mutate({ revision: user.revision }, { onSuccess: () => setConfirm(null) });
           }}
         />
@@ -833,6 +846,7 @@ function UserAuthority({
 }
 
 interface UserManagementProps {
+  trainee?: boolean;
   account: string;
   scopeReady: boolean;
   sessionError: unknown;
@@ -850,6 +864,7 @@ export function UserManagement({
   onAuthorityLoss,
   renderDeletion,
   renderSecurity,
+  trainee = false,
 }: UserManagementProps) {
   const { t } = useTranslation();
   const accountLabels = accountCopy(t);
@@ -1072,7 +1087,9 @@ export function UserManagement({
     <div className="page ops-page user-management">
       <PageHeader
         title={role === 'admin' ? t('admin.navigation.users') : t('management.users.title')}
-        description={t('management.users.description')}
+        description={t(
+          trainee ? 'management.users.traineeDescription' : 'management.users.description',
+        )}
       />
       <div className={`nb-md${selection ? ' has-selection' : ''}`}>
         <div className="nb-md__list ops-stack" ref={listRef} tabIndex={-1}>
@@ -1335,7 +1352,9 @@ export function UserManagement({
           {!selection ? (
             <EmptyState
               title={t('management.users.selectUser')}
-              body={t('management.users.selectUserBody')}
+              body={t(
+                trainee ? 'management.users.traineeSelectBody' : 'management.users.selectUserBody',
+              )}
             />
           ) : !selected ||
             detailUnavailable ||
@@ -1361,6 +1380,7 @@ export function UserManagement({
                 user={detail.data}
                 role={role}
                 account={account}
+                trainee={trainee}
                 renderDeletion={renderDeletion}
                 renderSecurity={renderSecurity}
                 onAuthorityLoss={onAuthorityLoss}

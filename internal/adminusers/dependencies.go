@@ -19,6 +19,7 @@ type CursorKeyDeriver interface {
 type AdminFinalAuthorizer interface {
 	AuthorizeAdmin(context.Context, *sql.Tx, int64) error
 	AuthorizeStewardMutation(context.Context, *sql.Tx, int64) error
+	AuthorizeUserManagement(context.Context, *sql.Tx, int64) (trainee bool, err error)
 }
 
 // PostCommitInvalidator revokes process-local account authority after commit.

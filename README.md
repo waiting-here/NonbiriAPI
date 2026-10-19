@@ -31,6 +31,10 @@ Attempt and request completion use small synchronous transaction batches when
 work overlaps. Success still requires a durable commit, and anonymous queue
 metrics distinguish application waiting from database pool waiting.
 
+Level-5 stewards can inspect user accounts and ban level 1–4 users. They cannot
+change account settings or credits, lift a ban, or replace an active ban. Full
+steward and administrator permissions retain their existing boundaries.
+
 | Area | Source and contract |
 | --- | --- |
 | Startup, recovery and HTTP composition | `main.go`, `internal/app/` |

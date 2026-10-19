@@ -269,6 +269,10 @@ func (a snapshotPageAdminAuth) AuthorizeStewardMutation(context.Context, *sql.Tx
 	return authz.ErrForbidden
 }
 
+func (a snapshotPageAdminAuth) AuthorizeUserManagement(context.Context, *sql.Tx, int64) (bool, error) {
+	return false, authz.ErrForbidden
+}
+
 func TestAdminNumberedLiveAuthorityAndBanTimeFiltering(t *testing.T) {
 	f := newAdminUsersFixture(t)
 	a := f.seedUser("permanent", false)
