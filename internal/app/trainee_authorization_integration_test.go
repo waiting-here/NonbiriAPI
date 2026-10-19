@@ -140,7 +140,10 @@ VALUES(?,?,?,'synthetic/maintained',0,?,?)`, other, customKey.key, customKey.phy
 		}
 	}
 
-	patchBody := fmt.Sprintf(`{"expected_revision":%q,"safe_note":"Scoped maintenance applied","calls_limit":"7"}`, keyView.DonationRevision)
+	if keyView.KeyLimitsRevision == nil || *keyView.KeyLimitsRevision != "1" {
+		t.Fatalf("physical revision missing from scoped view: %s", view.Body)
+	}
+	patchBody := fmt.Sprintf(`{"expected_revision":%q,"expected_key_limits_revision":%q,"max_concurrency":3,"max_rpm":120,"safe_note":"Scoped maintenance applied","calls_limit":"7"}`, keyView.DonationRevision, *keyView.KeyLimitsRevision)
 	for _, wrong := range []string{"", "?charity_model_id=" + strconv.FormatInt(other, 10), "?charity_model_id=9223372036854775807"} {
 		requireStatus(call(http.MethodGet, keyPath+wrong, "", "", false), http.StatusNotFound)
 		requireStatus(call(http.MethodPatch, keyPath+wrong, patchBody, nextKey(), false), http.StatusNotFound)
@@ -154,7 +157,7 @@ VALUES(?,?,?,'synthetic/maintained',0,?,?)`, other, customKey.key, customKey.phy
 	patched := call(http.MethodPatch, keyPath+scope, patchBody, patchKey, false)
 	requireStatus(patched, http.StatusOK)
 	var receipt donation.ManagedKeyReceipt
-	if err := json.Unmarshal(patched.Body.Bytes(), &receipt); err != nil || receipt.Key.SafeNote != "Scoped maintenance applied" || receipt.Key.Limits.Calls == nil || *receipt.Key.Limits.Calls != "7" {
+	if err := json.Unmarshal(patched.Body.Bytes(), &receipt); err != nil || receipt.Key.SafeNote != "Scoped maintenance applied" || receipt.Key.Limits.Calls == nil || *receipt.Key.Limits.Calls != "7" || receipt.Key.KeyLimitsRevision == nil || *receipt.Key.KeyLimitsRevision != "2" || *receipt.Key.MaxConcurrency != 3 || *receipt.Key.MaxRPM != 120 || receipt.Key.EndpointKeyID != nil {
 		t.Fatalf("scoped configuration receipt: %s; %v", patched.Body, err)
 	}
 	replayed := call(http.MethodPatch, keyPath+scope, patchBody, patchKey, false)
@@ -178,19 +181,21 @@ VALUES(?,?,?,'synthetic/maintained',0,?,?)`, other, customKey.key, customKey.phy
 
 	snapshot := func() string {
 		t.Helper()
-		var revision, reviews, bindings int64
+		var revision, reviews, bindings, physicalRevision, concurrency, rpm int64
 		var note string
 		var limit []byte
 		if err := f.store.DB().QueryRow(`SELECT d.revision,k.safe_note,k.call_limit_mag,
 (SELECT count(*) FROM donation_reviews WHERE donation_id=d.id),
-(SELECT count(*) FROM charity_model_bindings WHERE charity_model_id=?)
-FROM donation_keys k JOIN donations d ON d.id=k.donation_id WHERE k.id=?`, model, mainKey.key).Scan(&revision, &note, &limit, &reviews, &bindings); err != nil {
+(SELECT count(*) FROM charity_model_bindings WHERE charity_model_id=?),physical.revision,l.max_concurrency,l.max_rpm
+FROM donation_keys k JOIN donations d ON d.id=k.donation_id
+JOIN endpoint_keys physical ON physical.id=k.endpoint_key_id JOIN endpoint_key_limits l ON l.endpoint_key_id=physical.id
+WHERE k.id=?`, model, mainKey.key).Scan(&revision, &note, &limit, &reviews, &bindings, &physicalRevision, &concurrency, &rpm); err != nil {
 			t.Fatal(err)
 		}
 		if bindings != 1 {
 			t.Fatalf("binding count = %d, want 1", bindings)
 		}
-		return fmt.Sprintf("%d:%s:%x:%d:%d", revision, note, limit, reviews, bindings)
+		return fmt.Sprintf("%d:%s:%x:%d:%d:%d:%d:%d", revision, note, limit, reviews, bindings, physicalRevision, concurrency, rpm)
 	}
 	before := snapshot()
 	denyReplays := func(status int) {
