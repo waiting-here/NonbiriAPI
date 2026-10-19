@@ -66,6 +66,7 @@ const errorCopy: Record<string, [string, string]> = {
   ],
   'fragments-insufficient': ['卡牌碎片不足。', 'Not enough card shards.'],
   'monthly-limit': ['本月剩余额度不足。', 'This exceeds your remaining monthly limit.'],
+  'daily-limit': ['这件商品今天已经买过了。', 'You have already bought this offer today.'],
   'already-owned': ['这张卡已经在你的收藏中了。', 'This card is already in your collection.'],
   'already-claimed': ['这份奖励已经领取。', 'This reward has already been claimed.'],
   'pool-closed': [

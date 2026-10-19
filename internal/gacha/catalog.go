@@ -76,6 +76,9 @@ func readCatalog() Catalog {
 	}
 	seen := map[string]bool{}
 	for _, card := range out.Cards {
+		if _, reserved := bulkTicket(card.ID); reserved {
+			panic("card identifier is reserved for a shop product")
+		}
 		if seen[card.ID] || card.ID == "" {
 			panic("duplicate or empty card identifier")
 		}

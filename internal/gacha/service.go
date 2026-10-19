@@ -368,20 +368,27 @@ func (s *Service) snapshotWithSettings(ctx context.Context, tx *sql.Tx, user, at
 		return out, err
 	}
 	out.Donation = points(donation.Big())
-	rows, err := tx.QueryContext(ctx, "SELECT kind,target FROM gacha_claims WHERE user_id=? ORDER BY kind,target", user)
+	rows, err := tx.QueryContext(ctx, "SELECT kind,target,created_at FROM gacha_claims WHERE user_id=? ORDER BY kind,target", user)
 	if err != nil {
 		return out, err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var kind, id string
-		if err = rows.Scan(&kind, &id); err != nil {
+		var claimedAt int64
+		if err = rows.Scan(&kind, &id, &claimedAt); err != nil {
 			return out, err
 		}
 		if kind == "theme" {
 			out.Claimed = append(out.Claimed, id)
 		} else {
-			out.Redeemed = append(out.Redeemed, id)
+			active, e := productClaimActive(ctx, tx, id, claimedAt, day)
+			if e != nil {
+				return out, e
+			}
+			if active {
+				out.Redeemed = append(out.Redeemed, id)
+			}
 		}
 	}
 	return out, rows.Err()
