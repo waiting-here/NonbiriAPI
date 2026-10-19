@@ -29,13 +29,15 @@ func (s *Service) pauseTx(ctx context.Context, tx *sql.Tx, nowNS int64, where st
 	_, e := tx.ExecContext(ctx, query, params...)
 	return e
 }
-func (s *Service) expireUserTx(ctx context.Context, tx *sql.Tx, user int64, now time.Time) error {
+
+// The caller supplies its transaction's admission result. Pausing changes cast
+// controller columns, so a cast must be read after this operation.
+func (s *Service) expireUserTx(ctx context.Context, tx *sql.Tx, user int64, now time.Time, closed bool) (resultErr error) {
+	finish := lakePhase(ctx, "expire")
+	defer func() { finish(resultErr) }()
 	where := "user_id=? AND lease_until_ns<=?"
 	args := []any{user, now.UnixNano()}
-	if _, e := s.qualifiedTx(ctx, tx, user, now.Unix()); e != nil {
-		if !closedError(e) {
-			return e
-		}
+	if closed {
 		where = "user_id=?"
 		args = []any{user}
 	}
