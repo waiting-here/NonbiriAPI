@@ -25,6 +25,7 @@ const DISCORD_ID = '1'.repeat(18);
 const CALLER_NICKNAME = 'Ada Example';
 const DONATION_STATES = [
   'available',
+  'rate_limited',
   'pending',
   'disabled',
   'suspended',

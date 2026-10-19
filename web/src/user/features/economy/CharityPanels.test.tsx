@@ -848,6 +848,7 @@ describe('donation composer recovery', () => {
       },
       physicalEnabled: true,
       charityState: 'available' as const,
+      rateLimitedUntil: null,
       limits: { price: '5', calls: '6', tokens: '7' },
       usage: {
         priceUsed: '1',
@@ -908,7 +909,7 @@ describe('donation composer recovery', () => {
     expect(screen.getByText('sk-head…ended-tail')).toBeInTheDocument();
   });
 
-  it('keeps physical, failure, and each exhausted dimension visibly separate', async () => {
+  it('keeps physical, failure, quota and temporary rate-limit states visibly separate', async () => {
     const key: DonationKey = {
       id: '51',
       endpointKeyId: '61',
@@ -921,6 +922,7 @@ describe('donation composer recovery', () => {
       },
       physicalEnabled: false,
       charityState: 'disabled',
+      rateLimitedUntil: null,
       limits: { price: null, calls: null, tokens: null },
       usage: {
         priceUsed: '0',
@@ -957,6 +959,21 @@ describe('donation composer recovery', () => {
     expect(screen.getByText(charityCopy.keyState.price_exhausted)).toBeInTheDocument();
     expect(screen.getByText(charityCopy.keyState.calls_exhausted)).toBeInTheDocument();
     expect(screen.getByText(charityCopy.keyState.tokens_exhausted)).toBeInTheDocument();
+    rendered.rerender(
+      <DonationKeyPanel
+        donationKey={{
+          ...key,
+          physicalEnabled: true,
+          charityState: 'rate_limited',
+          rateLimitedUntil: 1_900_000_000,
+          streak: { generation: '1', count: '0', failureDisabled: false },
+        }}
+      />,
+    );
+    expect(screen.getAllByText(charityCopy.keyState.rate_limited).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Expected recovery:/)).toBeInTheDocument();
+    expect(screen.queryByText(charityCopy.keyState.physical_disabled)).not.toBeInTheDocument();
+    expect(screen.queryByText(charityCopy.keyState.disabled)).not.toBeInTheDocument();
   });
 
   it.each([

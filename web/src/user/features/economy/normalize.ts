@@ -485,6 +485,7 @@ const DONATION_STATUSES: readonly DonationStatus[] = [
 ];
 const DONATION_KEY_STATES: readonly DonationKeyState[] = [
   'pending',
+  'rate_limited',
   'disabled',
   'suspended',
   'exhausted',
@@ -542,7 +543,13 @@ export function normalizeDonationKey(value: unknown): DonationKey {
       'streak',
       'ended_reason',
     ],
-    ['review', 'input_token_reserve', 'output_token_reserve', 'breakdown_started_at'],
+    [
+      'review',
+      'input_token_reserve',
+      'output_token_reserve',
+      'breakdown_started_at',
+      'rate_limited_until',
+    ],
   );
   const source = normalizeDonationSafeSource(item.safe_source);
   const limits = record(
@@ -589,6 +596,10 @@ export function normalizeDonationKey(value: unknown): DonationKey {
     source,
     physicalEnabled: bool(item.physical_enabled, 'donation key physical state'),
     charityState: enumValue(item.charity_state, 'donation key charity state', DONATION_KEY_STATES),
+    rateLimitedUntil:
+      item.rate_limited_until == null
+        ? null
+        : timestamp(item.rate_limited_until, 'donation key rate limit expiry'),
     limits: {
       price: nullableDecimal(limits.price, 'donation price limit', true, MAX_MONEY_MILLI),
       calls: nullableDecimal(limits.calls, 'donation call limit', false, MAX_MONEY_MILLI),

@@ -220,7 +220,15 @@
       "concurrency": "最大并发",
       "rpm": "最大 RPM",
       "unlimited": "不限制",
-      "readOnly": "所有者配置（只读）",
+      "readOnly": "当前限制（只读）",
+      "managedHint": "自用和所有公益绑定共用这些限制，修改也会影响密钥所有者的自用调用。",
+      "invalid": "请填写 0–2,147,483,647 的整数。",
+      "unavailable": "当前无法编辑这把密钥的共享限制，可重新读取最新设置。",
+      "conflict": "设置已被修改，输入已保留。请刷新后核对，再保存。",
+      "save": "保存共享限制",
+      "saved": "共享限制已保存。",
+      "refreshKeepDraft": "刷新并保留输入",
+      "rateLimitedUntil": "预计恢复时间：{{time}}",
       "hint": "0 表示不限制。自用和公益模型调用共用额度。RPM 统计最近 60 秒发出的请求，流式请求占用并发直至结束。达到上限后会尝试其他可用连接。"
     },
     "itemId": "捐赠 #{{id}}",
@@ -496,6 +504,7 @@
           "failureDisabledReason": "连续失败保护已生效，此密钥暂时不可用。",
           "endedReason": "已结束：{{reason}}",
           "stateReason": {
+            "rate_limited": "上游临时限流，公益调用将暂时绕开此密钥。",
             "pending": "此捐赠密钥正在等待审核。",
             "disabled": "此密钥已停止用于公益共享。",
             "suspended": "此密钥的公益共享已暂时暂停。",
@@ -557,6 +566,7 @@
         "callLimit": "调用次数上限",
         "calls": "调用次数",
         "charityState": {
+          "rate_limited": "限流中",
           "pending": "待审核",
           "available": "可用",
           "disabled": "已停用",

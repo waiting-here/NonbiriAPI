@@ -139,6 +139,7 @@ function keyForDonation(index: number): JSONRecord {
 function stateCounts(): JSONRecord {
   return {
     available: '1',
+    rate_limited: '0',
     pending: '0',
     disabled: '0',
     suspended: '0',
@@ -338,6 +339,7 @@ async function installManagementRoutes(
       state_counts: {
         ...stateCounts(),
         available: '0',
+        rate_limited: '0',
         [status === 'expired' ? 'expired' : 'ended']: '1',
       },
     };

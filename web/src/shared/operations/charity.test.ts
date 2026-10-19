@@ -3,10 +3,43 @@ import {
   getManagedBindings,
   normalizeAdminCharityModel,
   normalizeAdminDonation,
+  normalizeManagedKey,
   normalizeCharityBindingCandidate,
   normalizeStewardCharityModel,
   normalizeStewardDonation,
 } from './charity';
+
+describe('managed key routing fields', () => {
+  it('preserves cooldown seconds and the current shared limit revision', () => {
+    const key = normalizeManagedKey(
+      {
+        ...managedKey,
+        charity_state: 'rate_limited',
+        rate_limited_until: 1_900_000_000,
+        key_limits_revision: '8',
+      },
+      'key',
+      'admin',
+    );
+    expect(key).toMatchObject({
+      charity_state: 'rate_limited',
+      rate_limited_until: 1_900_000_000,
+      key_limits_revision: '8',
+    });
+    expect(normalizeManagedKey(managedKey, 'legacy receipt', 'admin')).toMatchObject({
+      rate_limited_until: null,
+      key_limits_revision: null,
+    });
+    for (const value of ['1900000000', -1, 1.5])
+      expect(() =>
+        normalizeManagedKey({ ...managedKey, rate_limited_until: value }, 'key', 'admin'),
+      ).toThrow();
+    for (const value of ['0', 2, '-1'])
+      expect(() =>
+        normalizeManagedKey({ ...managedKey, key_limits_revision: value }, 'key', 'admin'),
+      ).toThrow();
+  });
+});
 
 const common = {
   id: '1',

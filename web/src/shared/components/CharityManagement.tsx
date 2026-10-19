@@ -75,6 +75,9 @@ import type { CharityPickerKeyManagerProps } from './CharityBindingPicker';
 import { FailurePolicyControl } from './FailurePolicyControl';
 import { FailureResetControl } from './FailureResetControl';
 import { KeyLimitSummary } from './KeyRoutingLimits';
+import { ManagedKeyLimitsControl, type ManagedKeyLimitsAuthority } from './ManagedKeyLimitsControl';
+import { KeyRateLimitTime } from './KeyRateLimitTime';
+import { useRateLimitRefresh } from '@shared/operations/useRateLimitRefresh';
 import { MarkdownText } from './MarkdownText';
 import { RecurringLimitsDisclosure } from './RecurringLimitsDisclosure';
 import { TimeInput } from './TimeInput';
@@ -379,7 +382,31 @@ function KeyQuotaFields({
   );
 }
 
-function DonationKeyEditor({
+function DonationKeyEditor(
+  props: Parameters<typeof DonationKeySettings>[0] & {
+    refreshLimits: () => Promise<ManagedKeyLimitsAuthority>;
+  },
+) {
+  const { t } = useTranslation();
+  return (
+    <section className="ops-subcard ops-unframed donation-key-editor">
+      <h4>
+        {t('common.donationReview.memberHeading', {
+          head: props.item.display_head,
+          tail: props.item.display_tail,
+        })}
+      </h4>
+      <p>{safeSourceLabel(props.item.safe_source, t)}</p>
+      {props.item.charity_state === 'rate_limited' ? (
+        <KeyRateLimitTime until={props.item.rate_limited_until} />
+      ) : null}
+      <ManagedKeyLimitsControl {...props} refresh={props.refreshLimits} />
+      <DonationKeySettings key={props.donation.revision} {...props} />
+    </section>
+  );
+}
+
+function DonationKeySettings({
   item,
   donation,
   role,
@@ -444,14 +471,7 @@ function DonationKeyEditor({
     );
   }
   return (
-    <section className="ops-subcard ops-unframed donation-key-editor">
-      <h4>
-        {t('common.donationReview.memberHeading', {
-          head: item.display_head,
-          tail: item.display_tail,
-        })}
-      </h4>
-      <p>{safeSourceLabel(item.safe_source, t)}</p>
+    <div className="ops-stack">
       {!modelID ? (
         item.endpoint_key_id ? (
           <div className="ops-actions">
@@ -473,7 +493,6 @@ function DonationKeyEditor({
       <p className="muted">
         {item.safe_source.connector_type} · {item.safe_source.base_url}
       </p>
-      <KeyLimitSummary concurrency={item.max_concurrency} rpm={item.max_rpm} readOnly />
       <Fold
         title={t('common.operations.charity.failureStrategy', { defaultValue: 'Failure strategy' })}
       >
@@ -651,7 +670,7 @@ function DonationKeyEditor({
           )}
         </p>
       )}
-    </section>
+    </div>
   );
 }
 
@@ -1119,6 +1138,7 @@ function DonationKeyPages({
   onCapabilityLoss?: () => void;
 }) {
   const { t } = useTranslation();
+  const client = useQueryClient();
   const [params, setParams] = useSearchState();
   const pager = useUrlPagePager({
     station: role === 'admin' ? 'admin' : 'user',
@@ -1159,6 +1179,12 @@ function DonationKeyPages({
       samePageFamily(query?.queryKey, queryKey) ? previous : undefined,
   });
   const capabilityLost = isForbidden(keys.error) || isUnauthorized(keys.error);
+  useRateLimitRefresh(
+    keys.data?.data
+      .filter((key) => key.charity_state === 'rate_limited')
+      .map((key) => key.rate_limited_until) ?? [],
+    () => keys.refetch({ throwOnError: true }),
+  );
   useEffect(() => {
     if (capabilityLost) onCapabilityLoss?.();
   }, [capabilityLost, onCapabilityLoss]);
@@ -1225,11 +1251,19 @@ function DonationKeyPages({
                 key={key.id}
               >
                 <DonationKeyEditor
-                  key={item.revision}
+                  key={key.id}
                   item={key}
                   donation={item}
                   role={role}
                   refresh={refresh}
+                  refreshLimits={async () => {
+                    await refresh();
+                    const current = client
+                      .getQueryData<NonNullable<typeof keys.data>>(queryKey)
+                      ?.data.find((entry) => entry.id === key.id);
+                    if (!current) throw new ApiError('not_found', 'Donation key not found.', 404);
+                    return { item: current, donationRevision: current.donation_revision };
+                  }}
                   onCapabilityLoss={onCapabilityLoss}
                 />
                 <DonationKeyModels
@@ -1405,7 +1439,8 @@ function DonationsPanel({
   useEffect(() => {
     if (capabilityLost) onCapabilityLoss?.();
   }, [capabilityLost, onCapabilityLoss]);
-  const refresh = () => client.invalidateQueries({ queryKey: charityKeys.root(role) });
+  const refresh = () =>
+    client.invalidateQueries({ queryKey: charityKeys.root(role) }, { throwOnError: true });
   if (capabilityLost) {
     return (
       <Card>
@@ -1430,7 +1465,7 @@ function DonationsPanel({
                     <span>{t('common.donationHandling.search')}</span>
                     <input
                       type="search"
-                      placeholder={t("common.donationHandling.searchPlaceholder")}
+                      placeholder={t('common.donationHandling.searchPlaceholder')}
                       value={queryDraft}
                       aria-invalid={!queryValid}
                       onChange={(event) => setQueryDraft(event.target.value)}
@@ -1895,21 +1930,27 @@ function ScopedKeyBrowser({
   const [selected, setSelected] = useState<{ donationID: string; keyID: string } | null>(null);
   const copy = charityControlCopy(useTranslation().i18n.language);
   const client = useQueryClient();
+  const detailKey = [
+    ...charityKeys.root('steward'),
+    'scoped-key',
+    accountId,
+    modelID,
+    selected?.donationID,
+    selected?.keyID,
+  ] as const;
   const detail = useQuery({
-    queryKey: [
-      ...charityKeys.root('steward'),
-      'scoped-key',
-      accountId,
-      modelID,
-      selected?.donationID,
-      selected?.keyID,
-    ],
+    queryKey: detailKey,
     queryFn: ({ signal }) =>
       getScopedDonationKey(modelID, selected!.donationID, selected!.keyID, signal),
     enabled: selected !== null,
     retry: false,
   });
-  const refresh = () => client.invalidateQueries({ queryKey: charityKeys.root('steward') });
+  const refresh = () =>
+    client.invalidateQueries({ queryKey: charityKeys.root('steward') }, { throwOnError: true });
+  useRateLimitRefresh(
+    detail.data?.charity_state === 'rate_limited' ? [detail.data.rate_limited_until] : [],
+    () => detail.refetch({ throwOnError: true }),
+  );
   const lost = isUnauthorized(detail.error) || isForbidden(detail.error);
   useEffect(() => {
     if (lost) onCapabilityLoss?.();
@@ -1932,7 +1973,7 @@ function ScopedKeyBrowser({
         ) : detail.error ? (
           <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
         ) : detail.data ? (
-          <Card key={`${modelID}:${detail.data.key_id}:${detail.data.donation_revision}`}>
+          <Card key={`${modelID}:${detail.data.key_id}`}>
             <p>{copy.shared}</p>
             <p>
               {copy.totalBindings}: {detail.data.binding_count}
@@ -1957,6 +1998,12 @@ function ScopedKeyBrowser({
               }}
               role="steward"
               refresh={refresh}
+              refreshLimits={async () => {
+                await refresh();
+                const current = client.getQueryData<NonNullable<typeof detail.data>>(detailKey);
+                if (!current) throw new ApiError('not_found', 'Donation key not found.', 404);
+                return { item: current, donationRevision: current.donation_revision };
+              }}
               onCapabilityLoss={onCapabilityLoss}
             />
             <DonationDiscoveryControl
@@ -2004,8 +2051,16 @@ function PickerKeyManager({
 }) {
   const { t } = useTranslation();
   const client = useQueryClient();
+  const detailKey = [
+    ...charityKeys.root(role),
+    'picker-key',
+    accountId,
+    modelID,
+    donationID,
+    keyID,
+  ] as const;
   const detail = useQuery({
-    queryKey: [...charityKeys.root(role), 'picker-key', accountId, modelID, donationID, keyID],
+    queryKey: detailKey,
     queryFn: ({ signal }) =>
       stationSessionWrite(client, role, async () => {
         if (role === 'steward') {
@@ -2031,7 +2086,12 @@ function PickerKeyManager({
   useEffect(() => {
     if (lost) onCapabilityLoss?.();
   }, [lost, onCapabilityLoss]);
-  const refresh = () => client.invalidateQueries({ queryKey: charityKeys.root(role) });
+  const refresh = () =>
+    client.invalidateQueries({ queryKey: charityKeys.root(role) }, { throwOnError: true });
+  useRateLimitRefresh(
+    detail.data?.key.charity_state === 'rate_limited' ? [detail.data.key.rate_limited_until] : [],
+    () => detail.refetch({ throwOnError: true }),
+  );
   return (
     <div className="ops-stack">
       <PageHeader
@@ -2049,11 +2109,17 @@ function PickerKeyManager({
       ) : (
         <Card>
           <DonationKeyEditor
-            key={detail.data.donation.revision}
+            key={detail.data.key.id}
             item={detail.data.key}
             donation={detail.data.donation}
             role={role}
             refresh={refresh}
+            refreshLimits={async () => {
+              await refresh();
+              const current = client.getQueryData<NonNullable<typeof detail.data>>(detailKey);
+              if (!current) throw new ApiError('not_found', 'Donation key not found.', 404);
+              return { item: current.key, donationRevision: current.donation.revision };
+            }}
             onCapabilityLoss={onCapabilityLoss}
           />
           <DonationDiscoveryControl

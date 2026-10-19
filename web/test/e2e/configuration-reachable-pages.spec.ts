@@ -23,6 +23,7 @@ const SOURCE_KEY = `dsg_${'A'.repeat(43)}`;
 
 const DONATION_STATES = [
   'available',
+  'rate_limited',
   'pending',
   'disabled',
   'suspended',

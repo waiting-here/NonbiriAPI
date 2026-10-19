@@ -22,6 +22,7 @@ const RULE_ID = `qlr_${'A'.repeat(21)}Q`;
 const MARKER = 'quota-draft-ephemeral-7e49a2c1';
 const DONATION_STATES = [
   'available',
+  'rate_limited',
   'pending',
   'disabled',
   'suspended',

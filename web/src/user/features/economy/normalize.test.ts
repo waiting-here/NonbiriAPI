@@ -608,6 +608,7 @@ describe('economy closed-wire normalizers', () => {
         streak: { ...base.streak, failure_disabled: true },
       },
       { ...base, charity_state: 'suspended' },
+      { ...base, charity_state: 'rate_limited', rate_limited_until: 1_900_000_000 },
       {
         ...base,
         charity_state: 'exhausted',
@@ -623,6 +624,7 @@ describe('economy closed-wire normalizers', () => {
       'disabled',
       'disabled',
       'suspended',
+      'rate_limited',
       'exhausted',
       'expired',
       'ended',

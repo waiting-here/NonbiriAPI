@@ -32,7 +32,14 @@ import {
 export type CharityRole = 'admin' | 'steward';
 export type DonationStatus = 'pending' | 'approved' | 'rejected' | 'deleted' | 'expired';
 export type CharityState =
-  'pending' | 'available' | 'disabled' | 'suspended' | 'exhausted' | 'expired' | 'ended';
+  | 'pending'
+  | 'available'
+  | 'rate_limited'
+  | 'disabled'
+  | 'suspended'
+  | 'exhausted'
+  | 'expired'
+  | 'ended';
 export type DonationEndedReason =
   'withdrawn' | 'terminated' | 'expired' | 'member_removed' | 'account_deleted';
 
@@ -91,6 +98,8 @@ export interface ManagedDonationKey {
   safe_source: ManagedSafeSource;
   physical_enabled: boolean;
   charity_state: CharityState;
+  rate_limited_until: number | null;
+  key_limits_revision: string | null;
   limits: {
     price: string | null;
     calls: string | null;
@@ -267,6 +276,8 @@ export function normalizeManagedKey(
       ...required,
       'max_concurrency',
       'max_rpm',
+      'key_limits_revision',
+      'rate_limited_until',
       'input_token_reserve',
       'output_token_reserve',
       'breakdown_started_at',
@@ -317,7 +328,16 @@ export function normalizeManagedKey(
   );
   const state = oneOf(
     root.charity_state,
-    ['pending', 'available', 'disabled', 'suspended', 'exhausted', 'expired', 'ended'] as const,
+    [
+      'pending',
+      'available',
+      'rate_limited',
+      'disabled',
+      'suspended',
+      'exhausted',
+      'expired',
+      'ended',
+    ] as const,
     `${label} state`,
   );
   const endedReason =
@@ -369,6 +389,14 @@ export function normalizeManagedKey(
     safe_source: normalizeManagedSource(root.safe_source, `${label} source`, role),
     physical_enabled: boolean(root.physical_enabled, `${label} physical switch`),
     charity_state: state,
+    rate_limited_until: nullableUnixSecond(
+      root.rate_limited_until ?? null,
+      `${label} rate limit expiry`,
+    ),
+    key_limits_revision:
+      root.key_limits_revision == null
+        ? null
+        : decimal(root.key_limits_revision, `${label} key limits revision`, { positive: true }),
     limits: {
       price: nullableAmount(limits.price, `${label} price limit`),
       calls: nullableDecimal(limits.calls, `${label} call limit`),
