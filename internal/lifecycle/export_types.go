@@ -279,6 +279,7 @@ type DonationKeyExport struct {
 	SafeSource          DonationSafeSourceExport    `json:"safe_source"`
 	PhysicalEnabled     bool                        `json:"physical_enabled"`
 	CharityState        string                      `json:"charity_state"`
+	RateLimitedUntil    *int64                      `json:"rate_limited_until"`
 	Limits              DonationLimitsExport        `json:"limits"`
 	Usage               DonationUsageExport         `json:"usage"`
 	TokenReserve        int64                       `json:"token_reserve"`

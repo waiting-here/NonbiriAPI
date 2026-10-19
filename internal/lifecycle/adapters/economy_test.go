@@ -169,7 +169,7 @@ func TestEconomyAdaptersMapClosedExportDTOs(t *testing.T) {
 	priceLimit, callsLimit, tokensLimit := "10.5", "20", "3000"
 	endedReason := "expired"
 	channelID, channelName := "mch_safe", "Safe channel"
-	authorizedExpiresAt, expiresAt := int64(100), int64(99)
+	authorizedExpiresAt, expiresAt, rateLimitedUntil := int64(100), int64(99), int64(98)
 	donationOwner := &fakeDonationOwner{export: []donation.ExportDonation{{
 		ID: "donation", Status: "approved", Description: "description",
 		ReviewResult: &donation.ReviewResult{Decision: "approve", Reason: "accepted", ReviewedAt: 80},
@@ -180,7 +180,7 @@ func TestEconomyAdaptersMapClosedExportDTOs(t *testing.T) {
 				Kind: "mainstream", BaseURL: "https://example.invalid", ConnectorType: "openai-compatible",
 				ChannelID: &channelID, Name: &channelName,
 			},
-			PhysicalEnabled: true, CharityState: "enabled",
+			PhysicalEnabled: true, CharityState: "rate_limited", RateLimitedUntil: &rateLimitedUntil,
 			Limits: donation.DonationLimits{Price: &priceLimit, Calls: &callsLimit, Tokens: &tokensLimit},
 			Usage: donation.DonationUsage{
 				PriceUsed: "1", PriceInflight: "2", CallsUsed: "3", CallsInflight: "4",
@@ -214,8 +214,8 @@ func TestEconomyAdaptersMapClosedExportDTOs(t *testing.T) {
 				ChannelID: &channelID, Name: &channelName,
 			},
 			PhysicalEnabled: true,
-			CharityState:    "enabled",
-			Limits:          lifecycle.DonationLimitsExport{Price: &priceLimit, Calls: &callsLimit, Tokens: &tokensLimit},
+			CharityState:    "rate_limited", RateLimitedUntil: &rateLimitedUntil,
+			Limits: lifecycle.DonationLimitsExport{Price: &priceLimit, Calls: &callsLimit, Tokens: &tokensLimit},
 			Usage: lifecycle.DonationUsageExport{
 				PriceUsed: "1", PriceInflight: "2", CallsUsed: "3", CallsInflight: "4",
 				TokensUsed: "5", TokensInflight: "6",

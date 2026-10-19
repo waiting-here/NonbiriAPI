@@ -117,6 +117,7 @@ type DonationKey struct {
 	SafeSource              SafeSource     `json:"safe_source"`
 	PhysicalEnabled         bool           `json:"physical_enabled"`
 	CharityState            string         `json:"charity_state"`
+	RateLimitedUntil        *int64         `json:"rate_limited_until"`
 	Limits                  DonationLimits `json:"limits"`
 	Usage                   DonationUsage  `json:"usage"`
 	TokenReserve            int64          `json:"token_reserve"`
@@ -139,6 +140,7 @@ type AdminDonationKey struct {
 	SafeSource              AdminSafeSource `json:"safe_source"`
 	PhysicalEnabled         bool            `json:"physical_enabled"`
 	CharityState            string          `json:"charity_state"`
+	RateLimitedUntil        *int64          `json:"rate_limited_until"`
 	Limits                  DonationLimits  `json:"limits"`
 	Usage                   DonationUsage   `json:"usage"`
 	TokenReserve            int64           `json:"token_reserve"`
@@ -343,6 +345,7 @@ type ExportDonationKey struct {
 	SafeSource              SafeSource               `json:"safe_source"`
 	PhysicalEnabled         bool                     `json:"physical_enabled"`
 	CharityState            string                   `json:"charity_state"`
+	RateLimitedUntil        *int64                   `json:"rate_limited_until"`
 	Limits                  DonationLimits           `json:"limits"`
 	Usage                   DonationUsage            `json:"usage"`
 	TokenReserve            int64                    `json:"token_reserve"`
