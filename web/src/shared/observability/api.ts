@@ -1,6 +1,27 @@
 import { apiFetch } from '@shared/query/http';
 
 export type DiagnosticRole = 'admin' | 'steward';
+export type HeaderSaveState =
+  'saved' | 'not_recorded' | 'capacity_exhausted' | 'too_large' | 'unavailable';
+export interface HeaderEntry {
+  name: string;
+  name_encoding: 'utf-8' | 'base64';
+  value: string;
+  value_encoding: 'utf-8' | 'base64';
+}
+export interface HeaderSnapshot {
+  save_state: HeaderSaveState;
+  captured_at: number | null;
+  http_status: number | null;
+  bytes_saved: number;
+  credentials_redacted: true;
+  ipv4_redacted: boolean;
+  headers: HeaderEntry[];
+}
+export interface ResponseHeaders {
+  save_state: HeaderSaveState;
+  responses: (HeaderSnapshot & { response_index: number })[];
+}
 export interface SourceFacts {
   effective_ip: string;
   ip_quality: 'direct_peer' | 'trusted_forwarded' | 'peer_fallback';
@@ -54,6 +75,19 @@ function root(role: DiagnosticRole, requestID: string) {
 }
 export function getSource(role: DiagnosticRole, requestID: string, signal?: AbortSignal) {
   return apiFetch<SourceFacts | null>(`${root(role, requestID)}/source`, { signal });
+}
+export function getRequestHeaders(role: DiagnosticRole, requestID: string, signal?: AbortSignal) {
+  return apiFetch<HeaderSnapshot>(`${root(role, requestID)}/headers`, { signal });
+}
+export function getResponseHeaders(
+  role: DiagnosticRole,
+  requestID: string,
+  attempt: number,
+  signal?: AbortSignal,
+) {
+  return apiFetch<ResponseHeaders>(`${root(role, requestID)}/attempts/${attempt}/headers`, {
+    signal,
+  });
 }
 export function getErrorList(
   role: DiagnosticRole,

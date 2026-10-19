@@ -14,6 +14,32 @@
     "accountMenu": "账号操作"
   },
   "common": {
+    "headers": {
+      "request": "完整请求头",
+      "response": "完整响应头",
+      "credentials": "凭据值已在保存前替换为 [redacted]。",
+      "ipv4": "5级协管查看时，头名称和值中的 IPv4 已隐藏；单独的观察到的 IP 字段保留现有可见范围。",
+      "binary": "非 UTF-8 的名称或值以 Base64 显示，保留原始字节。",
+      "physicalResponse": "第 {{index}} 次响应",
+      "responseColumn": "物理响应",
+      "status": "HTTP 状态",
+      "time": "采集时间",
+      "empty": "已采集头列表，内容为空。",
+      "emptyValue": "（空值）",
+      "name": "头名称",
+      "value": "完整值",
+      "list": "已保存的头条目",
+      "search": "搜索头列表",
+      "searchPlaceholder": "搜索完整名称或值，含 Base64 文本",
+      "noMatch": "没有匹配的头条目",
+      "noMatchBody": "修改或清空搜索，查看已保存的条目。",
+      "state": {
+        "not_recorded": "未记录头列表；可能是历史请求，或调用尚未完成保存。",
+        "capacity_exhausted": "头列表未保存：存储容量已满。",
+        "too_large": "完整头列表超过保存上限，未保存。",
+        "unavailable": "暂时无法读取已保存的头列表。"
+      }
+    },
     "capability": {
       "body": "此浏览器暂时无法提供安全开始和恢复此活动所需的全部功能。",
       "next": "请检查本站的存储权限，或换用支持这些功能的浏览器，再重新检查后开始。",
