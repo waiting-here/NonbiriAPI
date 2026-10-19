@@ -44,7 +44,7 @@ func parseRetryAfterValue(raw string, extended bool, received time.Time) (int64,
 		}
 		return max(0, at.Unix()), true
 	}
-	n, err := strconv.ParseUint(value, 10, 64)
+	n, err := strconv.ParseInt(value, 10, 64)
 	if err != nil {
 		return 0, false
 	}
@@ -52,9 +52,9 @@ func parseRetryAfterValue(raw string, extended bool, received time.Time) (int64,
 		switch {
 		case len(value) <= 9:
 		case len(value) == 10 && n >= 1_000_000_000:
-			return int64(n), true
+			return n, true
 		case len(value) == 13 && n >= 1_000_000_000_000:
-			return int64((n + 999) / 1000), true
+			return (n + 999) / 1000, true
 		default:
 			return 0, false
 		}
@@ -66,10 +66,10 @@ func parseRetryAfterValue(raw string, extended bool, received time.Time) (int64,
 	if received.Nanosecond() != 0 {
 		base++
 	}
-	if base > maxRetryAfterUnix || n > uint64(maxRetryAfterUnix-base) {
+	if base > maxRetryAfterUnix || n > maxRetryAfterUnix-base {
 		return 0, false
 	}
-	return base + int64(n), true
+	return base + n, true
 }
 
 // ResponseObservation is a normalized, non-billing fact captured at headers.
