@@ -85,10 +85,10 @@ it('updates tickets and remaining availability after buying each bundle', async 
   );
   fireEvent.click(await screen.findByRole('tab', { name: '神秘商店' }));
   const shop = within(screen.getByRole('region', { name: '量大管饱' }));
-  fireEvent.click(shop.getAllByRole('button', { name: '购买', exact: true })[0]);
+  fireEvent.click(shop.getAllByRole('button', { name: '购买' })[0]);
   await waitFor(() => expect(shop.getAllByRole('button', { name: '今日已购买' })).toHaveLength(1));
   expect(screen.getByText('购买成功，10张抽奖券已到账')).toBeVisible();
-  fireEvent.click(shop.getByRole('button', { name: '购买', exact: true }));
+  fireEvent.click(shop.getByRole('button', { name: '购买' }));
   await waitFor(() => expect(shop.getAllByRole('button', { name: '今日已购买' })).toHaveLength(2));
   expect(shop.getAllByText('今日剩余：0/1')).toHaveLength(2);
   expect(state.tickets).toEqual({ permanent: 20, limited: 10 });
