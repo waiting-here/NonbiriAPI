@@ -115,9 +115,12 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, "bridge-"+label, label, zero, zero, zero, zero
 	return userID
 }
 
-func (f *bridgeFixture) seedEndpointKey(t testing.TB, ownerID int64, label string, connectorType connectorcontract.Type, plaintext string) seededKey {
+func (f *bridgeFixture) seedEndpointKey(t testing.TB, ownerID int64, label string, connectorType connectorcontract.Type, plaintext string, urls ...string) seededKey {
 	t.Helper()
 	baseURL := "https://" + label + ".example.test/v1"
+	if len(urls) > 0 {
+		baseURL = urls[0]
+	}
 	result, err := f.store.DB().Exec(`INSERT INTO endpoints(
 user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at)
 VALUES(?,?,?,'',1,1,?,?)`, ownerID, connectorType, baseURL, f.clock.Load(), f.clock.Load())

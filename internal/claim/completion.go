@@ -9,6 +9,7 @@ import (
 
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
+	"github.com/waiting-here/NonbiriAPI/internal/headerfacts"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/useractivity"
@@ -68,6 +69,7 @@ func (s *Service) CompleteAttempt(ctx context.Context, handle Handle, outcome At
 	if err != nil {
 		return Attempt{}, err
 	}
+	ctx = headerfacts.PrepareResponse(ctx, handle.requestID, handle.attemptSeq)
 	value, err := s.submitCompletion(ctx, "claim_attempt", func(ctx context.Context, tx *sql.Tx) (any, error) {
 		return s.checkAttemptCompletionTx(ctx, tx, handle, outcome, at)
 	})
@@ -465,6 +467,9 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			record.dispatchedAt.Int64, at)
 		if err != nil {
 			return fmt.Errorf("claim: persist request attempt: %w", err)
+		}
+		if err := observability.RecordResponseHeadersTx(callbackCtx, callbackTx, record.requestID, record.attemptSeq); err != nil {
+			return err
 		}
 		result, err := callbackTx.ExecContext(callbackCtx, `UPDATE dispatch_claims
 SET state='committed',secret_ref_id=NULL,donor_reward_actual_milli=?,donor_reward_state=?,terminal_at=?,streak_disposition=?,failure_origin=?

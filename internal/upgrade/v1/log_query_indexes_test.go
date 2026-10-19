@@ -33,10 +33,10 @@ func allIndexSourceFacts(t *testing.T, database *sql.DB) map[string][]string {
 	}
 	out := make(map[string][]string, len(tables))
 	for _, table := range tables {
-		if table == "donation_key_cooldowns" || table == "dispatch_retry_after_observations" {
+		if table == "donation_key_cooldowns" || table == "dispatch_retry_after_observations" || table == "request_header_facts" {
 			var count int
 			if err := database.QueryRow("SELECT count(*) FROM " + table).Scan(&count); err != nil || count != 0 {
-				t.Fatalf("new retry table %s is not empty: %d %v", table, count, err)
+				t.Fatalf("new diagnostic table %s is not empty: %d %v", table, count, err)
 			}
 			continue
 		}
@@ -57,6 +57,19 @@ func allIndexSourceFacts(t *testing.T, database *sql.DB) map[string][]string {
 			}
 			if err := rows.Scan(refs...); err != nil {
 				t.Fatal(err)
+			}
+			if table == "observability_state" {
+				retained := make([]any, 0, len(values))
+				for i, column := range columns {
+					if column == "header_bytes" {
+						if values[i] != int64(0) {
+							t.Fatal("upgrade header counter is not empty")
+						}
+						continue
+					}
+					retained = append(retained, values[i])
+				}
+				values = retained
 			}
 			encoded, err := json.Marshal(values)
 			if err != nil {
@@ -94,7 +107,7 @@ func TestLogIndexConversionPreservesEverySourceTable(t *testing.T) {
 		t.Fatal(err)
 	}
 	result, err := Run(t.Context(), path, vault, Options{Apply: true})
-	if err != nil || result.SourceSchemaVersion != 19 || result.TargetSchemaVersion != 22 {
+	if err != nil || result.SourceSchemaVersion != 19 || result.TargetSchemaVersion != 23 {
 		t.Fatal(result, err)
 	}
 	store, err := db.Open(path, vault)

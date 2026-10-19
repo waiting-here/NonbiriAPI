@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/headerfacts"
 	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
 
@@ -49,10 +50,17 @@ func (r *Repository) RecordSourceTx(ctx context.Context, tx *sql.Tx, requestID s
 	if _, err = ParseSource(encoded); err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO request_source_facts(request_log_id,user_id,kind,effective_ip,ip_quality,source_json,occurred_at)
+	result, err := tx.ExecContext(ctx, `INSERT INTO request_source_facts(request_log_id,user_id,kind,effective_ip,ip_quality,source_json,occurred_at)
 		SELECT id,user_id,?,?,?,?,? FROM request_logs WHERE logical_request_id=? AND origin_user_id=?
 		ON CONFLICT(request_log_id) DO UPDATE SET kind=excluded.kind WHERE request_source_facts.kind='unclassified'`, kind, source.EffectiveIP, source.IPQuality, string(encoded), at, requestID, userID)
-	return err
+	if err != nil {
+		return err
+	}
+	changed, err := result.RowsAffected()
+	if err != nil || changed == 0 {
+		return err
+	}
+	return RecordRequestHeadersTx(ctx, tx, requestID)
 }
 
 type DiagnosticRef struct {
@@ -103,7 +111,7 @@ func (r *Repository) ErrorScope(ctx context.Context, ref DiagnosticRef) context.
 }
 
 func (r *Repository) DiscoveryScope(ctx context.Context, requestID string, attempt int) context.Context {
-	return r.ErrorScope(ctx, DiagnosticRef{RequestID: requestID, AttemptSeq: attempt})
+	return r.ErrorScope(headerfacts.WithResponse(ctx, requestID, attempt), DiagnosticRef{RequestID: requestID, AttemptSeq: attempt})
 }
 
 func (r *Repository) recordError(ctx context.Context, ref DiagnosticRef, seq int64, event upstreamerror.Event) error {
@@ -211,7 +219,7 @@ func FinalizeRequestTx(ctx context.Context, tx *sql.Tx, requestID string, comple
 
 // ReconcileCounters is an explicit repair operation, never a startup hook.
 func (r *Repository) ReconcileCounters(ctx context.Context) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE observability_state SET raw_body_bytes=(SELECT COALESCE(SUM(bytes_saved),0) FROM request_error_bodies),access_rows=(SELECT count(*) FROM audit_access_events) WHERE id=1`)
+	_, err := r.db.ExecContext(ctx, `UPDATE observability_state SET raw_body_bytes=(SELECT COALESCE(SUM(bytes_saved),0) FROM request_error_bodies),header_bytes=(SELECT COALESCE(SUM(bytes_saved),0) FROM request_header_facts),access_rows=(SELECT count(*) FROM audit_access_events) WHERE id=1`)
 	return err
 }
 

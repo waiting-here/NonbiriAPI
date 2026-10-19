@@ -13,6 +13,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/headerfacts"
 	"github.com/waiting-here/NonbiriAPI/internal/host"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
@@ -41,6 +42,12 @@ func TestManagementDiagnosticRoutesKeepUserDTOsClean(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := observability.WithSource(context.Background(), observability.Source{EffectiveIP: "192.0.2.91", IPQuality: "direct_peer", UserAgent: "private-client"})
+	inbound := httptest.NewRequest("POST", "https://example.invalid/v1/chat/completions", nil)
+	inbound.Header.Set("Authorization", "synthetic-caller-secret")
+	inbound.Header.Set("X-192.0.2.20", "original-header-private 198.51.100.21")
+	inbound.Header.Add("X-Repeated", "first")
+	inbound.Header.Add("X-Repeated", "second")
+	ctx = headerfacts.WithRequest(ctx, inbound)
 	tx, err := database.Begin()
 	if err != nil {
 		t.Fatal(err)
@@ -95,6 +102,30 @@ func TestManagementDiagnosticRoutesKeepUserDTOsClean(t *testing.T) {
 	if writer.Header().Get("Cache-Control") != "no-store" {
 		t.Fatal("raw response can be cached")
 	}
+	headerRequest := httptest.NewRequest("GET", "https://admin.example.invalid/admin/api/logs/"+id+"/headers", nil)
+	headerRequest.SetPathValue("id", id)
+	headerRequest.AddCookie(cookie)
+	headerRequest = headerRequest.WithContext(host.WithStation(headerRequest.Context(), host.StationAdmin))
+	headerWriter := httptest.NewRecorder()
+	handler.ServeHTTP(headerWriter, headerRequest)
+	var headerView headerfacts.View
+	if headerWriter.Code != 200 || json.Unmarshal(headerWriter.Body.Bytes(), &headerView) != nil || headerView.SaveState != "saved" || !strings.Contains(headerWriter.Body.String(), "original-header-private 198.51.100.21") || strings.Contains(headerWriter.Body.String(), "synthetic-caller-secret") || headerWriter.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("header read: %d %s", headerWriter.Code, headerWriter.Body.String())
+	}
+	headerRequest = headerRequest.WithContext(context.WithoutCancel(final.lastContext))
+	trainee := &diagnosticAPI{repository: env.repo, steward: traineeLogRead{}}
+	headerWriter = httptest.NewRecorder()
+	trainee.headers(headerWriter, headerRequest, userID)
+	if headerWriter.Code != 200 || strings.Contains(headerWriter.Body.String(), "198.51.100.21") || strings.Contains(headerWriter.Body.String(), "192.0.2.20") || !strings.Contains(headerWriter.Body.String(), "original-header-private [redacted]") {
+		t.Fatal("trainee header privacy", headerWriter.Code, headerWriter.Body.String())
+	}
+	sourceRequest := httptest.NewRequest("GET", "https://example.invalid/api/steward/logs/"+id+"/source", nil)
+	sourceRequest.SetPathValue("id", id)
+	sourceWriter := httptest.NewRecorder()
+	trainee.diagnostic(sourceWriter, sourceRequest, userID)
+	if sourceWriter.Code != 200 || !strings.Contains(sourceWriter.Body.String(), "192.0.2.91") {
+		t.Fatal("independent effective IP changed", sourceWriter.Body.String())
+	}
 	userRequest := httptest.NewRequest("GET", "https://example.invalid/api/logs/"+id, nil)
 	userRequest.SetPathValue("id", id)
 	writer = httptest.NewRecorder()
@@ -103,7 +134,7 @@ func TestManagementDiagnosticRoutesKeepUserDTOsClean(t *testing.T) {
 	if writer.Code != 200 {
 		t.Fatalf("user read: %d %s", writer.Code, writer.Body.String())
 	}
-	for _, private := range []string{"private-original-payload", "private-client", "192.0.2.91", "source", "errors"} {
+	for _, private := range []string{"private-original-payload", "private-client", "192.0.2.91", "source", "errors", "headers", "original-header-private"} {
 		if strings.Contains(writer.Body.String(), private) {
 			t.Fatalf("user DTO exposed %s", private)
 		}
@@ -111,6 +142,11 @@ func TestManagementDiagnosticRoutesKeepUserDTOsClean(t *testing.T) {
 	denied := &diagnosticAPI{repository: env.repo, steward: refuseDiagnosticRead{}}
 	writer = httptest.NewRecorder()
 	denied.diagnostic(writer, request, userID)
+	headerWriter = httptest.NewRecorder()
+	denied.headers(headerWriter, headerRequest, userID)
+	if headerWriter.Code != 403 {
+		t.Fatal("ordinary actor read headers", headerWriter.Code)
+	}
 	if writer.Code != 403 || strings.Contains(writer.Body.String(), "private-original") {
 		t.Fatal("unauthorized management read")
 	}
@@ -120,6 +156,11 @@ func TestManagementDiagnosticRoutesKeepUserDTOsClean(t *testing.T) {
 	if writer.Code != 404 {
 		t.Fatalf("expired diagnostic visible: %d", writer.Code)
 	}
+	headerWriter = httptest.NewRecorder()
+	api.headers(headerWriter, headerRequest, 0)
+	if headerWriter.Code != 404 {
+		t.Fatal("expired headers visible", headerWriter.Code)
+	}
 	held := &requestLogHeldReadStub{allow: true}
 	if err = env.repo.AttachAdminHeldReadAuthorizer(held); err != nil {
 		t.Fatal(err)
@@ -128,6 +169,11 @@ func TestManagementDiagnosticRoutesKeepUserDTOsClean(t *testing.T) {
 	api.diagnostic(writer, request, 0)
 	if writer.Code != 200 || held.calls != 1 {
 		t.Fatalf("held diagnostic inaccessible: %d", writer.Code)
+	}
+	headerWriter = httptest.NewRecorder()
+	api.headers(headerWriter, headerRequest, 0)
+	if headerWriter.Code != 200 {
+		t.Fatal("held headers inaccessible", headerWriter.Code)
 	}
 	missing := request.WithContext(context.Background())
 	writer = httptest.NewRecorder()
@@ -152,6 +198,11 @@ func TestManagementDiagnosticRoutesKeepUserDTOsClean(t *testing.T) {
 	if writer.Code != 403 {
 		t.Fatal("changed session generation was accepted")
 	}
+	headerWriter = httptest.NewRecorder()
+	api.headers(headerWriter, headerRequest, 0)
+	if headerWriter.Code != 403 {
+		t.Fatal("changed session read headers", headerWriter.Code)
+	}
 	if _, err = database.Exec(`DELETE FROM sessions WHERE token_hash=?`, actor.SessionTokenHash); err != nil {
 		t.Fatal(err)
 	}
@@ -159,6 +210,11 @@ func TestManagementDiagnosticRoutesKeepUserDTOsClean(t *testing.T) {
 	api.diagnosticCapacity(writer, request, 0)
 	if writer.Code != 403 {
 		t.Fatal("revoked session read capacity")
+	}
+	headerWriter = httptest.NewRecorder()
+	api.headers(headerWriter, headerRequest, 0)
+	if headerWriter.Code != 403 {
+		t.Fatal("revoked session read headers", headerWriter.Code)
 	}
 	writer = httptest.NewRecorder()
 	api.accessObservations(writer, request, 0, true)

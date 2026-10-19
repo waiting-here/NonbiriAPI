@@ -20,11 +20,31 @@ var schema18Compressed []byte
 //go:embed testdata/schema19.sql.gz
 var schema19Compressed []byte
 
+//go:embed testdata/schema22.sql.gz
+var schema22Compressed []byte
+
 //go:embed testdata/schema21.sql.gz
 var schema21Compressed []byte
 
 //go:embed testdata/schema20.sql.gz
 var schema20Compressed []byte
+
+func schema22SQLForTest(t *testing.T) string {
+	t.Helper()
+	reader, err := gzip.NewReader(bytes.NewReader(schema22Compressed))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(reader)
+	closeErr := reader.Close()
+	if err != nil || closeErr != nil {
+		t.Fatal(err, closeErr)
+	}
+	if fmt.Sprintf("%x", sha256.Sum256(body)) != "ae9a082c9717af119eef519338bb72e5479cd5ffb81c54303bf1415b6099acc7" {
+		t.Fatal("schema 22 fixture identity changed")
+	}
+	return string(body)
+}
 
 func schema21SQLForTest(t *testing.T) string {
 	t.Helper()
@@ -95,7 +115,7 @@ func schema18SQLForTest(t *testing.T) string {
 }
 
 func TestFinalSchemaConversionAcceptsExactStableSources(t *testing.T) {
-	for _, version := range []int{17, 18, 19, 20, 21} {
+	for _, version := range []int{17, 18, 19, 20, 21, 22} {
 		t.Run(fmt.Sprint(version), func(t *testing.T) {
 			ddl, hash := schema17SQLForTest(t), stableSchema17Manifest
 			if version == 18 {
@@ -110,6 +130,9 @@ func TestFinalSchemaConversionAcceptsExactStableSources(t *testing.T) {
 			if version == 21 {
 				ddl, hash = schema21SQLForTest(t), stableSchema21Manifest
 			}
+			if version == 22 {
+				ddl, hash = schema22SQLForTest(t), stableSchema22Manifest
+			}
 			path, vault := sourceFixtureFromDDL(t, ddl, version, hash)
 			database, err := sql.Open("sqlite", path)
 			if err != nil {
@@ -121,6 +144,7 @@ func TestFinalSchemaConversionAcceptsExactStableSources(t *testing.T) {
 			user := hostileInsertUser(t, database, "preserved", 0, 1)
 			hostileInsertAccount(t, database, "user", user, nil, -1, hostileBlob16(77), 1)
 			mustExec(t, database, "UPDATE game_ai_settings SET enabled=1,revision=revision+1 WHERE game_key='bidding'")
+			mustExec(t, database, "DELETE FROM site_config WHERE key='request_header_budget_mib'")
 			beforeFacts := retainedFacts(t, database)
 			if err := database.Close(); err != nil {
 				t.Fatal(err)
@@ -162,6 +186,10 @@ func TestFinalSchemaConversionAcceptsExactStableSources(t *testing.T) {
 			if len(beforeFacts) != len(afterFacts) {
 				t.Fatal("unrelated table set changed")
 			}
+			var headerBudget string
+			if err := store.DB().QueryRow("SELECT value FROM site_config WHERE key='request_header_budget_mib'").Scan(&headerBudget); err != nil || headerBudget != "1024" {
+				t.Fatal(headerBudget, err)
+			}
 			var policies int
 			if err := store.DB().QueryRow("SELECT count(*) FROM site_config WHERE key GLOB 'mfa_required_level_[1-6]' AND value='0'").Scan(&policies); err != nil || policies != 6 {
 				t.Fatal(policies, err)
@@ -185,11 +213,11 @@ func TestFinalSchemaConversionAcceptsExactStableSources(t *testing.T) {
 
 func TestOfflineDescriptorContainsOnlyExactSupportedSources(t *testing.T) {
 	descriptor := SchemaDescriptor()
-	if descriptor.SchemaVersion != 22 || descriptor.MinimumSchemaVersion != 22 || len(descriptor.SourceSchemaVersions) != 0 || len(descriptor.OfflineConversions) != 6 {
+	if descriptor.SchemaVersion != 23 || descriptor.MinimumSchemaVersion != 23 || len(descriptor.SourceSchemaVersions) != 0 || len(descriptor.OfflineConversions) != 7 {
 		t.Fatal(descriptor)
 	}
 	for index, source := range descriptor.OfflineConversions {
-		if source.SourceSchemaVersion != 16+index || source.TargetSchemaVersion != 22 || len(source.SourceCommit) != 40 || len(source.SourceManifestHash) != 64 || source.Tool != "nonbiri-upgrade-v1" {
+		if source.SourceSchemaVersion != 16+index || source.TargetSchemaVersion != 23 || len(source.SourceCommit) != 40 || len(source.SourceManifestHash) != 64 || source.Tool != "nonbiri-upgrade-v1" {
 			t.Fatal(source)
 		}
 	}

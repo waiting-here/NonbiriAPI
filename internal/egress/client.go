@@ -14,6 +14,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
+	"github.com/waiting-here/NonbiriAPI/internal/headerfacts"
 )
 
 const (
@@ -310,10 +311,14 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	outbound.URL.Scheme = c.originScheme
 	outbound.URL.Host = c.originHost
 	outbound.Host = c.originHost
+	// Match Transport's automatic gzip negotiation while retaining the original
+	// response headers for diagnostics before its transparent decoding.
+	automaticGzip := preserveGzipHeaders(outbound, c.httpClient)
 	// #nosec G704 -- this is the unified SSRF boundary: NewClient validated the
 	// canonical origin and installed a DNS-pinning dialer; the checks above bind
 	// both URL and Host to that exact origin before the request is dispatched.
 	resp, err := c.httpClient.Do(outbound)
+	headerfacts.CaptureResponse(ctx, resp)
 	if err != nil {
 		ctxErr := ctx.Err()
 		permit.Release()
@@ -335,6 +340,9 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		return resp, networkFailure(newBoundedError("egress request failed", unwrapURLError(err)))
 	}
 
+	if automaticGzip {
+		restoreAutomaticGzip(resp)
+	}
 	managed := newManagedResponseBody(resp.Body, c.maxResponseBytes, ctx, cancel, permit.Release)
 	resp.Body = managed
 	return resp, nil
