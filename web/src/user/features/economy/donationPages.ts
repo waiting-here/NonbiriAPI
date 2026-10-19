@@ -99,6 +99,7 @@ const OWNER_KEY_FIELDS = [
 
 const OWNER_DONATION_STATES = [
   'available',
+  'rate_limited',
   'pending',
   'disabled',
   'suspended',
@@ -373,6 +374,7 @@ function normalizeOwnerKey(
     [
       ...OWNER_KEY_FIELDS,
       'review',
+      'rate_limited_until',
       'input_token_reserve',
       'output_token_reserve',
       'breakdown_started_at',
@@ -388,6 +390,7 @@ function normalizeOwnerKey(
     safe_source: root.safe_source,
     physical_enabled: root.physical_enabled,
     charity_state: root.charity_state,
+    rate_limited_until: root.rate_limited_until,
     limits: root.limits,
     usage: root.usage,
     token_reserve: root.token_reserve,

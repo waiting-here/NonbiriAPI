@@ -74,6 +74,7 @@ function summary(value: ReturnType<typeof donation>) {
     source_count: '1',
     sources: [safeSource],
     state_counts: {
+      rate_limited: '0',
       pending: value.status === 'pending' ? String(keys.length) : '0',
       available: value.status === 'approved' ? String(keys.length) : '0',
       disabled: '0',

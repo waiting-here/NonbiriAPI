@@ -16,6 +16,7 @@ const source = {
 };
 const counts = {
   available: '0',
+  rate_limited: '0',
   pending: '1',
   disabled: '0',
   suspended: '0',

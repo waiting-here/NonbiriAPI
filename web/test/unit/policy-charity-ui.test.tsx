@@ -350,6 +350,7 @@ function managementNumberedPage<T>(data: T[]) {
 function managedDonationPageSummary(donation: ReturnType<typeof pendingDonationFixture>) {
   const stateCounts: Record<string, string> = {
     available: '0',
+    rate_limited: '0',
     pending: '0',
     disabled: '0',
     suspended: '0',
@@ -1542,6 +1543,7 @@ describe('experimental policy and charity controls', () => {
                     key_count: '1',
                     state_counts: {
                       available: '0',
+                      rate_limited: '0',
                       pending: '1',
                       disabled: '0',
                       suspended: '0',
@@ -2306,9 +2308,7 @@ describe('experimental policy and charity controls', () => {
     await act(async () => {
       await rendered.queryClient.invalidateQueries({ queryKey: userKeys.session });
     });
-    await waitFor(() =>
-      expect(screen.queryByRole('tab', { name: 'Abuse audit' })).toBeNull(),
-    );
+    await waitFor(() => expect(screen.queryByRole('tab', { name: 'Abuse audit' })).toBeNull());
     expect(screen.getByRole('tab', { name: 'Request logs' })).toBeVisible();
     await act(async () => {
       finishOld(jsonResponse(detail(false)));

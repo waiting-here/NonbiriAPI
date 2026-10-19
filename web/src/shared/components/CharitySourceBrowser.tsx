@@ -23,6 +23,8 @@ import { isForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { DonationHandlingStatus } from './DonationHandling';
 import { KeyLimitSummary } from './KeyRoutingLimits';
+import { KeyRateLimitTime } from './KeyRateLimitTime';
+import { useRateLimitRefresh } from '@shared/operations/useRateLimitRefresh';
 import { FailureResetControl } from './FailureResetControl';
 import { copyForRecurringLimits } from './recurringLimitsCopy';
 import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from './States';
@@ -61,6 +63,7 @@ const BASE64URL_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz
 const keyStateLabel: Record<ManagedDonationKeySummary['charity_state'], string> = {
   pending: 'common.operations.charity.charityState.pending',
   available: 'common.operations.charity.charityState.available',
+  rate_limited: 'common.operations.charity.charityState.rate_limited',
   disabled: 'common.operations.charity.charityState.disabled',
   suspended: 'common.operations.charity.charityState.suspended',
   exhausted: 'common.operations.charity.charityState.exhausted',
@@ -208,6 +211,8 @@ function keyReason(
   if (key.streak.failure_disabled)
     return t('common.operations.charity.sourceBrowser.failureDisabledReason');
   if (key.charity_state === 'available') return null;
+  if (key.charity_state === 'rate_limited')
+    return t('common.operations.charity.sourceBrowser.stateReason.rate_limited');
   if (key.charity_state === 'ended' && key.ended_reason !== null) {
     return t('common.operations.charity.sourceBrowser.endedReason', {
       reason: t(endedReasonLabel[key.ended_reason]),
@@ -376,6 +381,9 @@ function KeySummary({
         donor={keyValue.donation_note}
         approval={keyValue.approval_note}
       />
+      {keyValue.charity_state === 'rate_limited' ? (
+        <KeyRateLimitTime until={keyValue.rate_limited_until} />
+      ) : null}
       <dl className="ops-kv">
         <dt>{t('common.operations.charity.sourceBrowser.donation')}</dt>
         <dd className="ops-id">{keyValue.donation_id}</dd>
@@ -597,6 +605,12 @@ export function CharitySourceBrowser({
         ? previous
         : undefined,
   });
+  useRateLimitRefresh(
+    sourceKeys.data?.data
+      .filter((key) => key.charity_state === 'rate_limited')
+      .map((key) => key.rate_limited_until) ?? [],
+    () => sourceKeys.refetch({ throwOnError: true }),
+  );
   const authorityError = [sources.error, sourceKeys.error].find(
     (error) => isUnauthorized(error) || isForbidden(error),
   );

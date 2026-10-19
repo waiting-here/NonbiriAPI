@@ -220,7 +220,15 @@
       "concurrency": "Maximum concurrency",
       "rpm": "Maximum RPM",
       "unlimited": "Unlimited",
-      "readOnly": "Owner's limits (read only)",
+      "readOnly": "Current limits (read only)",
+      "managedHint": "Personal calls and all charity bindings share these limits. Changes also affect the key owner's personal calls.",
+      "invalid": "Enter whole numbers from 0 to 2,147,483,647.",
+      "unavailable": "Shared limits cannot be edited for this key right now. Reload the latest settings.",
+      "conflict": "The settings changed. Your input is preserved. Refresh, review, and save again.",
+      "save": "Save shared limits",
+      "saved": "Shared limits saved.",
+      "refreshKeepDraft": "Refresh and keep input",
+      "rateLimitedUntil": "Expected recovery: {{time}}",
       "hint": "0 means unlimited. Personal and charity model calls share these limits. RPM counts requests dispatched in the last 60 seconds; streaming occupies concurrency until it ends. When full, the next available connection is tried."
     },
     "itemId": "Donation #{{id}}",
@@ -496,6 +504,7 @@
           "failureDisabledReason": "The failure safeguard is active, so this key is temporarily unavailable.",
           "endedReason": "Ended: {{reason}}",
           "stateReason": {
+            "rate_limited": "The upstream is rate limiting this key. Charity calls will temporarily skip it.",
             "pending": "This donation key is awaiting approval.",
             "disabled": "Charity sharing is disabled for this key.",
             "suspended": "Charity sharing is temporarily suspended for this key.",
@@ -557,6 +566,7 @@
         "callLimit": "Call limit",
         "calls": "Calls",
         "charityState": {
+          "rate_limited": "Rate limited",
           "pending": "Pending",
           "available": "Available",
           "disabled": "Disabled",

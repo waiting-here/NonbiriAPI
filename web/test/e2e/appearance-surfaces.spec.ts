@@ -65,6 +65,7 @@ async function fixtures(page: Page, design: string) {
               },
             ],
             state_counts: {
+              rate_limited: '0',
               available: status === 'approved' ? '1' : '0',
               pending: '0',
               disabled: '0',

@@ -21,6 +21,7 @@ import { DonationThanks } from '@shared/components/DonationControlFacts';
 import { CreditAmount, ExactCount } from './ExactValue';
 import { maskedKey } from './format';
 import { isDimensionExhausted } from './normalize';
+import { KeyRateLimitTime } from '@shared/components/KeyRateLimitTime';
 import { DonationResourcePicker } from './DonationResourcePicker';
 import { OwnerFailureReset } from './OwnerFailureReset';
 import {
@@ -558,6 +559,7 @@ export function DonationComposer({
             <li>{t('user.charity.disclosureDeletion')}</li>
           </ul>
         </Fold>
+        <Note>{t('user.charity.sharedKeyLimitsNotice')}</Note>
         <label className="checkbox-label economy-authorization">
           <input
             type="checkbox"
@@ -758,6 +760,14 @@ export function DonationKeyPanel({
         </div>
       </div>
       <dl className="detail-grid economy-key-status-details">
+        {donationKey.charityState === 'rate_limited' ? (
+          <div className="detail-row">
+            <dt>{t('user.charity.keyState.rate_limited')}</dt>
+            <dd>
+              <KeyRateLimitTime until={donationKey.rateLimitedUntil} />
+            </dd>
+          </div>
+        ) : null}
         {blockingReasons.length > 0 ? (
           <div className="detail-row">
             <dt>{t('user.charity.blockingReasons')}</dt>

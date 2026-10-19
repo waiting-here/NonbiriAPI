@@ -181,6 +181,7 @@ function ownerDonationPageItem(donation: ReturnType<typeof userDonation>): Recor
   const keys = donation.keys as Array<Record<string, unknown>>;
   const stateCounts = {
     available: '0',
+    rate_limited: '0',
     pending: '0',
     disabled: '0',
     suspended: '0',

@@ -68,6 +68,7 @@ function mainstreamSource(overrides: Record<string, unknown> = {}) {
 function zeroStateCounts() {
   return {
     available: '0',
+    rate_limited: '0',
     pending: '0',
     disabled: '0',
     suspended: '0',

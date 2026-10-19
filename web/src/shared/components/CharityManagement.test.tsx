@@ -119,6 +119,10 @@ const managedKey = (overrides: Partial<ManagedDonationKey> = {}): ManagedDonatio
   },
   physical_enabled: true,
   charity_state: 'available',
+  rate_limited_until: null,
+  key_limits_revision: '1',
+  max_concurrency: 2,
+  max_rpm: 30,
   limits: { price: null, calls: null, tokens: null },
   usage: {
     price_used: '0',
@@ -164,6 +168,7 @@ function approvedDonation(key = managedKey()): AdminDonation {
 function donationSummary(donation: AdminDonation) {
   const stateCounts = {
     available: '0',
+    rate_limited: '0',
     pending: '0',
     disabled: '0',
     suspended: '0',

@@ -108,7 +108,14 @@ export interface StewardDonationPageOwner {
 }
 
 export type DonationState =
-  'available' | 'pending' | 'disabled' | 'suspended' | 'exhausted' | 'expired' | 'ended';
+  | 'available'
+  | 'pending'
+  | 'rate_limited'
+  | 'disabled'
+  | 'suspended'
+  | 'exhausted'
+  | 'expired'
+  | 'ended';
 
 export type DonationStateCounts = Record<DonationState, string>;
 
@@ -166,6 +173,7 @@ export interface DonationSourceSummary {
 
 const DONATION_STATES = [
   'available',
+  'rate_limited',
   'pending',
   'disabled',
   'suspended',
@@ -202,6 +210,8 @@ const DONATION_COMMON_FIELDS = [
 
 const DONATION_KEY_FIELDS = [
   'review',
+  'key_limits_revision',
+  'rate_limited_until',
   'input_token_reserve',
   'output_token_reserve',
   'breakdown_started_at',
@@ -531,6 +541,8 @@ export function normalizeKeySummary(value: unknown, index: number): ManagedDonat
       (field) =>
         ![
           'review',
+          'key_limits_revision',
+          'rate_limited_until',
           'donation_note',
           'approval_note',
           'visible_models',
@@ -554,6 +566,8 @@ export function normalizeKeySummary(value: unknown, index: number): ManagedDonat
       safe_source: root.safe_source,
       physical_enabled: root.physical_enabled,
       charity_state: root.charity_state,
+      rate_limited_until: root.rate_limited_until,
+      key_limits_revision: root.key_limits_revision,
       limits: root.limits,
       usage: root.usage,
       token_reserve: root.token_reserve,

@@ -34,6 +34,8 @@ import {
 import type { PageMetadata } from '@shared/operations/pageNumbers';
 import { EmptyState, ErrorState, LoadingState } from './States';
 import { KeyLimitSummary } from './KeyRoutingLimits';
+import { KeyRateLimitTime } from './KeyRateLimitTime';
+import { useRateLimitRefresh } from '@shared/operations/useRateLimitRefresh';
 import { DonationKeyNotes } from './DonationControlFacts';
 import { DonationDiscoveryControl } from './DonationDiscoveryControl';
 import './CharityBindingPicker.css';
@@ -373,6 +375,14 @@ function CharityBindingPickerBody({
   const selectedKey =
     sourceKeys.data?.data.find((entry) => entry.key_id === selectedKeySnapshot?.key_id) ??
     selectedKeySnapshot;
+  useRateLimitRefresh(
+    readEnabled
+      ? (sourceKeys.data?.data
+          .filter((key) => key.charity_state === 'rate_limited')
+          .map((key) => key.rate_limited_until) ?? [])
+      : [],
+    () => sourceKeys.refetch({ throwOnError: true }),
+  );
   const candidates = useQuery({
     queryKey: candidateQueryKey,
     queryFn: ({ signal }) =>
@@ -756,6 +766,9 @@ function CharityBindingPickerBody({
                                   rpm={entry.max_rpm}
                                   readOnly
                                 />
+                                {entry.charity_state === 'rate_limited' ? (
+                                  <KeyRateLimitTime until={entry.rate_limited_until} />
+                                ) : null}
                                 <small>
                                   {entry.idle
                                     ? t('common.donationHandling.idle')

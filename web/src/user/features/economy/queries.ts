@@ -27,6 +27,7 @@ import {
   type CreateDonationInput,
 } from './api';
 import { connectActivityAccountEvents } from './accountEvents';
+import { useRateLimitRefresh } from '@shared/operations/useRateLimitRefresh';
 import type { ActivitiesSnapshot, Donation } from './types';
 
 export const economyKeys = {
@@ -76,7 +77,7 @@ export function useCharityCapability(enabled = true) {
 
 export function useDonation(id: string | undefined, enabled = true) {
   const queryClient = useQueryClient();
-  return useQuery({
+  const query = useQuery({
     queryKey: id ? economyKeys.donation(id) : ([...economyKeys.donations, 'none'] as const),
     queryFn: ({ signal }) => {
       if (!id) throw new Error('A donation id is required.');
@@ -84,6 +85,15 @@ export function useDonation(id: string | undefined, enabled = true) {
     },
     enabled: enabled && Boolean(id),
   });
+  useRateLimitRefresh(
+    enabled
+      ? (query.data?.keys
+          .filter((key) => key.charityState === 'rate_limited')
+          .map((key) => key.rateLimitedUntil) ?? [])
+      : [],
+    () => query.refetch({ throwOnError: true }),
+  );
+  return query;
 }
 
 async function reconcileDonations(

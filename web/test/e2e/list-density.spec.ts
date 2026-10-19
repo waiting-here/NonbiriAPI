@@ -15,6 +15,7 @@ type Locale = 'en' | 'zh';
 const NOW = 1_800_000_000;
 const DONATION_STATES = [
   'available',
+  'rate_limited',
   'pending',
   'disabled',
   'suspended',

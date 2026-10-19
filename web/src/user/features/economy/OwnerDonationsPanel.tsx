@@ -12,6 +12,7 @@ import { isStationSessionChanged } from '@shared/charityManagement';
 import { listReturnPath } from '@shared/operations/listReturn';
 import { copyForRecurringLimits } from '@shared/components/recurringLimitsCopy';
 import { DonationKeyPanel } from './CharityPanels';
+import { useRateLimitRefresh } from '@shared/operations/useRateLimitRefresh';
 import { DonationThanks } from '@shared/components/DonationControlFacts';
 import { Fold, MoreMenu } from '@shared/components/ui';
 import { DonationConnectorLabel } from './DonationConnectorLabel';
@@ -336,7 +337,11 @@ function DonationSummary({
             {t('user.charity.openDonationDetail')}
           </span>
         ) : (
-          <Link className="nb-btn nb-btn--ghost" to={`/charity/donations/${item.id}`} state={{ returnTo }}>
+          <Link
+            className="nb-btn nb-btn--ghost"
+            to={`/charity/donations/${item.id}`}
+            state={{ returnTo }}
+          >
             {t('user.charity.openDonationDetail')}
           </Link>
         )}
@@ -387,6 +392,14 @@ export function OwnerDonationKeys({
     placeholderData: (previous, previousQuery) =>
       inFamily(previousQuery?.queryKey, family) ? previous : undefined,
   });
+  useRateLimitRefresh(
+    enabled
+      ? (query.data?.data
+          .filter((key) => key.charityState === 'rate_limited')
+          .map((key) => key.rateLimitedUntil) ?? [])
+      : [],
+    () => query.refetch({ throwOnError: true }),
+  );
   return (
     <div>
       {query.error ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : null}
