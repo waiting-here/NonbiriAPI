@@ -6,9 +6,13 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/waiting-here/NonbiriAPI/internal/headerfacts"
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 )
 
 func discoveryTestHTTPHandler(t *testing.T, environment *resourceTestEnvironment) AuthorizedUserHandler {
@@ -69,6 +73,16 @@ func TestDiscoveryHTTPAcceptanceDoesNotWaitAndDetachesRequestCancellation(t *tes
 	request := httptest.NewRequest(http.MethodPost,
 		"https://user.example/api/endpoints/"+endpoint.ID+"/keys/"+key.ID+"/models/refresh", nil).WithContext(requestContext)
 	request.Header.Set("Idempotency-Key", resourceTestKey('C'))
+	request.Header.Set("User-Agent", "discovery-client 198.51.100.8")
+	request.Header.Set("Authorization", "Bearer synthetic-credential")
+	request.Header.Add("X-Original", "first 198.51.100.9")
+	request.Header.Add("X-Original", "second")
+	type unrelatedKey struct{}
+	ingress := context.WithValue(request.Context(), unrelatedKey{}, "http-only")
+	source := observability.CaptureSource(request)
+	ingress = observability.WithSource(ingress, source)
+	ingress = headerfacts.WithRequest(ingress, request)
+	request = request.WithContext(ingress)
 	request.SetPathValue("id", endpoint.ID)
 	request.SetPathValue("keyId", key.ID)
 	recorder := httptest.NewRecorder()
@@ -95,6 +109,32 @@ func TestDiscoveryHTTPAcceptanceDoesNotWaitAndDetachesRequestCancellation(t *tes
 	case <-started:
 	case <-time.After(time.Second):
 		t.Fatal("accepted discovery did not reach the worker")
+	}
+	environment.discovery.mu.Lock()
+	workerContext := environment.discovery.contexts[0]
+	environment.discovery.mu.Unlock()
+	capturedSource, present := observability.SourceFromContext(workerContext)
+	if !present || !reflect.DeepEqual(capturedSource, source) || workerContext.Value(unrelatedKey{}) != nil {
+		t.Fatal("asynchronous discovery lost its source or inherited unrelated HTTP state")
+	}
+	request.Header.Set("X-Original", "changed after acceptance")
+	fact := headerfacts.Request(workerContext)
+	viewHeaders, err := headerfacts.Decode(fact.State(), nil, nil, fact.Compressed(), false)
+	if err != nil || viewHeaders.SaveState != "saved" {
+		t.Fatalf("asynchronous request header facts: %v", err)
+	}
+	originalValues := []string{}
+	credentialRedacted := false
+	for _, entry := range viewHeaders.Headers {
+		switch entry.Name {
+		case "X-Original":
+			originalValues = append(originalValues, entry.Value)
+		case "Authorization":
+			credentialRedacted = entry.Value == "[redacted]"
+		}
+	}
+	if !reflect.DeepEqual(originalValues, []string{"first 198.51.100.9", "second"}) || !credentialRedacted {
+		t.Fatal("asynchronous request headers lost duplicate values, snapshot isolation, or credential redaction")
 	}
 	cancelRequest()
 	select {

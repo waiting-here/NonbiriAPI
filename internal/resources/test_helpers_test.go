@@ -377,6 +377,7 @@ type resourceTestDiscoveryRail struct {
 	err      error
 	calls    int
 	inputs   []DiscoveryClaimInput
+	contexts []context.Context
 	started  chan struct{}
 	release  <-chan struct{}
 	finished chan error
@@ -386,6 +387,7 @@ func (rail *resourceTestDiscoveryRail) Discover(ctx context.Context, input Disco
 	rail.mu.Lock()
 	rail.calls++
 	rail.inputs = append(rail.inputs, input)
+	rail.contexts = append(rail.contexts, ctx)
 	result := rail.result
 	result.Models = append([]DiscoveredModel(nil), rail.result.Models...)
 	err := rail.err
