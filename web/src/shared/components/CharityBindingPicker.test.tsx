@@ -7,6 +7,10 @@ import {
   noteManagementSessionSuccess,
 } from '@shared/charityManagement';
 import { charityKeys } from '@shared/operations/charity';
+import {
+  normalizeKeySummary,
+  type ManagedDonationKeySummary,
+} from '@shared/operations/donationPages';
 import type { CharityPickerKeyManagerProps, CharitySelection } from './CharityBindingPicker';
 import { CharityBindingPicker } from './CharityBindingPicker';
 import { disposeTestProviders, renderWithProviders } from '../../../test/unit/support';
@@ -156,17 +160,23 @@ function PickerHarness({
   locked = false,
   modelId = '31',
   renderKeyManager,
+  fixedKey,
+  capacity,
 }: {
   onReadStateChange?: (blocked: boolean) => void;
   locked?: boolean;
   modelId?: string;
   renderKeyManager?: (props: CharityPickerKeyManagerProps) => ReactNode;
+  fixedKey?: ManagedDonationKeySummary;
+  capacity?: number;
 } = {}) {
   const [selected, setSelected] = useState<Record<string, CharitySelection>>({});
   return (
     <CharityBindingPicker
       role="admin"
       modelId={modelId}
+      fixedKey={fixedKey}
+      capacity={capacity}
       selected={selected}
       onChange={setSelected}
       locked={locked}
@@ -192,6 +202,89 @@ afterEach(async () => {
 });
 
 describe('CharityBindingPicker numbered source flow', () => {
+  it('keeps 144 fixed-key selections across candidate pages and searches and renders only each page', async () => {
+    const catalog = Array.from({ length: 144 }, (_, index) =>
+      candidate({ modelID: `provider/model-${String(index).padStart(3, '0')}-2026-10` }),
+    );
+    const requests: URL[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async (input) => {
+        const url = new URL(String(input), 'https://example.test');
+        requests.push(url);
+        if (!url.pathname.endsWith('/binding-candidates'))
+          throw new Error(`Unexpected fixed-key read: ${url.pathname}`);
+        expect(url.searchParams.get('donation_id')).toBe('7');
+        expect(url.searchParams.get('donation_key_id')).toBe('21');
+        expect(url.searchParams.get('key_state')).toBe('all');
+        const filtered = catalog.filter((row) =>
+          row.upstream_model_id.includes(url.searchParams.get('q') ?? ''),
+        );
+        const page = Number(url.searchParams.get('page') ?? '1');
+        const size = Number(url.searchParams.get('page_size') ?? '20');
+        return jsonResponse(
+          sourcePage(
+            filtered.slice((page - 1) * size, page * size),
+            String(page),
+            filtered.length,
+            size,
+          ),
+        );
+      }),
+    );
+    const view = await renderWithProviders(
+      <PickerHarness fixedKey={normalizeKeySummary(key(), 0)} />,
+      { station: 'admin' },
+    );
+    authorize(view.queryClient);
+    await screen.findByRole('checkbox', { name: /provider\/model-000/ });
+    const candidatePager = () => screen.getAllByRole('navigation', { name: 'Pagination' })[0];
+    await view.user.selectOptions(within(candidatePager()).getByRole('combobox'), '100');
+    await screen.findByRole('button', { name: 'Select this page (100)' });
+    expect(screen.getAllByRole('checkbox')).toHaveLength(100);
+    await view.user.click(screen.getByRole('button', { name: 'Select this page (100)' }));
+    await view.user.click(within(candidatePager()).getByRole('button', { name: 'Next' }));
+    await screen.findByRole('button', { name: 'Select this page (44)' });
+    await view.user.click(screen.getByRole('button', { name: 'Select this page (44)' }));
+    expect(
+      screen.getByRole('heading', { name: '144 service connection(s) selected' }),
+    ).toBeVisible();
+    expect(screen.getAllByRole('checkbox')).toHaveLength(44);
+    await view.user.click(within(candidatePager()).getByRole('button', { name: 'Previous' }));
+    expect(await screen.findByRole('checkbox', { name: /provider\/model-000/ })).toBeChecked();
+    await view.user.type(
+      screen.getByRole('searchbox', { name: 'Search selected upstream IDs' }),
+      'model-143',
+    );
+    await view.user.click(
+      screen.getByRole('button', { name: 'Remove selected provider/model-143-2026-10' }),
+    );
+    expect(
+      screen.getByRole('heading', { name: '143 service connection(s) selected' }),
+    ).toBeVisible();
+    expect(screen.getByRole('searchbox', { name: 'Search selected upstream IDs' })).toHaveFocus();
+    await view.user.click(screen.getByRole('button', { name: 'Clear all selections' }));
+    expect(screen.getByRole('heading', { name: '0 service connection(s) selected' })).toBeVisible();
+    expect(screen.getByRole('searchbox', { name: 'Search selected upstream IDs' })).toHaveFocus();
+    expect(requests.every((url) => url.pathname.endsWith('/binding-candidates'))).toBe(true);
+  });
+
+  it('does not silently select part of a page when the remaining capacity is smaller', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(sourcePage([candidate(), candidate({ modelID: 'model-b' })]))),
+    );
+    const view = await renderWithProviders(
+      <PickerHarness fixedKey={normalizeKeySummary(key(), 0)} capacity={1} />,
+      { station: 'admin' },
+    );
+    authorize(view.queryClient);
+    expect(await screen.findByRole('button', { name: 'Select this page (2)' })).toBeDisabled();
+    await view.user.click(modelCheckbox('model-a'));
+    expect(modelCheckbox('model-b')).toBeDisabled();
+    expect(modelCheckbox('model-a')).toBeChecked();
+  });
+
   it('reads source, key, and candidate pages only after an administrator session is authorized', async () => {
     const requests: string[] = [];
     vi.stubGlobal(
@@ -218,16 +311,18 @@ describe('CharityBindingPicker numbered source flow', () => {
     authorize(view.queryClient);
 
     await screen.findByRole('button', { name: /Custom endpoint/ });
-    expect(requests[0]).toBe('/admin/api/donation-sources?scope=active&page=1&page_size=20');
+    expect(requests[0]).toBe(
+      '/admin/api/donation-sources?scope=active&key_state=available&page=1&page_size=20',
+    );
     await view.user.click(screen.getByRole('button', { name: /Custom endpoint/ }));
     await view.user.click(await screen.findByRole('button', { name: /safe key note/ }));
     await view.user.click(await screen.findByRole('checkbox', { name: /model-a/ }));
 
     expect(requests).toContain(
-      `/admin/api/donation-sources/${encodeURIComponent(SOURCE_KEY)}/keys?scope=active&page=1&page_size=20`,
+      `/admin/api/donation-sources/${encodeURIComponent(SOURCE_KEY)}/keys?scope=active&key_state=available&page=1&page_size=20`,
     );
     expect(requests).toContain(
-      '/admin/api/charity-models/31/binding-candidates?donation_id=7&donation_key_id=21&page=1&page_size=20',
+      '/admin/api/charity-models/31/binding-candidates?donation_id=7&donation_key_id=21&key_state=available&page=1&page_size=20',
     );
     expect(screen.getByRole('heading', { name: '1 service connection(s) selected' })).toBeVisible();
   });
@@ -394,7 +489,7 @@ describe('CharityBindingPicker numbered source flow', () => {
     await view.user.click(screen.getByRole('button', { name: /Choose source/ }));
     expect(await screen.findByRole('button', { name: /source-21/ })).toBeVisible();
     expect(requests).toContain(
-      '/admin/api/charity-models/31/binding-candidates?donation_id=22&donation_key_id=22&page=2&page_size=20',
+      '/admin/api/charity-models/31/binding-candidates?donation_id=22&donation_key_id=22&key_state=available&page=2&page_size=20',
     );
   });
 
@@ -470,7 +565,7 @@ describe('CharityBindingPicker numbered source flow', () => {
     await view.user.click(screen.getByRole('button', { name: 'Search' }));
     await waitFor(() =>
       expect(requests).toContain(
-        `/admin/api/donation-sources?q=${encodeURIComponent(query)}&scope=active&page=1&page_size=20`,
+        `/admin/api/donation-sources?q=${encodeURIComponent(query)}&scope=active&key_state=available&page=1&page_size=20`,
       ),
     );
   });

@@ -1,3 +1,4 @@
+vi.mock('@shared/components/AsyncLeaveDialog', () => ({ AsyncLeaveDialog: () => null }));
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { useEffect, type ReactNode } from 'react';
@@ -1989,7 +1990,7 @@ describe('experimental policy and charity controls', () => {
           name: flattenLabel,
         }),
       );
-      await rendered.user.click(within(editForm).getByRole('button', { name: 'Save model' }));
+      await rendered.user.click(within(editForm).getByRole('button', { name: /^Save model / }));
       await waitFor(() =>
         expect(lastBody(fetchMock, 'PATCH', `${basePath}/charity-models/7`)).toMatchObject({
           transport_rule: 'passthrough',
@@ -1997,7 +1998,9 @@ describe('experimental policy and charity controls', () => {
         }),
       );
 
-      const createSummary = screen.getByText('Add charity model', { selector: 'summary strong' });
+      await rendered.user.click(screen.getByRole('button', { name: 'Return to list' }));
+      await rendered.user.click(screen.getByRole('button', { name: 'Create charity model' }));
+      const createSummary = screen.getByRole('button', { name: 'Add charity model' });
       const createForm = createSummary.closest('.card');
       if (!(createForm instanceof HTMLElement))
         throw new Error('Missing charity model creation form');
@@ -2096,7 +2099,7 @@ describe('experimental policy and charity controls', () => {
         name: '[Experimental] Turn tool calls into plain text (chat only)',
       }),
     );
-    await rendered.user.click(within(editForm).getByRole('button', { name: 'Save model' }));
+    await rendered.user.click(within(editForm).getByRole('button', { name: /^Save model / }));
 
     await waitFor(() => {
       expect(screen.getByText(/Charity management access is no longer available/i)).toBeVisible();

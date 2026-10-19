@@ -1,3 +1,4 @@
+vi.mock('@shared/components/AsyncLeaveDialog', () => ({ AsyncLeaveDialog: () => null }));
 import { CharityManagement } from '@shared/components/CharityManagement';
 import type {
   AdminDonation,
@@ -491,6 +492,7 @@ describe('Generation 2 charity management policy', () => {
     });
 
     await view.user.click(await screen.findByRole('tab', { name: 'Charity models and bindings' }));
+    await view.user.click(screen.getByRole('button', { name: 'Create charity model' }));
     await view.user.type(screen.getByLabelText('Provider'), 'provider');
     await view.user.type(screen.getByLabelText('Model'), 'model');
     fireEvent.change(screen.getByLabelText('Request user price'), {

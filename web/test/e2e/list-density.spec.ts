@@ -420,7 +420,7 @@ test('administrator source grouping accepts current key limits on narrow and wid
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: '/admin/api/donation-sources?scope=active&page=1&page_size=20',
+    path: '/admin/api/donation-sources?scope=active&key_state=available&page=1&page_size=20',
     body: numberedResponse(
       [
         {
@@ -439,7 +439,7 @@ test('administrator source grouping accepts current key limits on narrow and wid
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: `/admin/api/donation-sources/${SOURCE_KEY}/keys?scope=active&page=1&page_size=20`,
+    path: `/admin/api/donation-sources/${SOURCE_KEY}/keys?scope=active&key_state=available&page=1&page_size=20`,
     body: numberedResponse([donationKeyPageItem(donation, donationKey)], '1', 20),
   });
   await page.goto(`${ADMIN_ORIGIN}/charity`);
@@ -1063,7 +1063,7 @@ for (const role of ['admin', 'steward'] as const)
           ),
         });
       }
-      if (path === '/charity-models/7/bindings/batch' && request.method() === 'POST') {
+      if (path === '/charity-models/7/bindings/batch-receipt' && request.method() === 'POST') {
         submitted = request.postDataJSON();
         const selections = submitted!.selections as Array<{
           donation_key_id: string;
@@ -1077,7 +1077,14 @@ for (const role of ['admin', 'steward'] as const)
           source: sharedSource(Math.floor(Number(entry.donation_key_id) / 1000)),
           source_types: ['automatic'],
         }));
-        return route.fulfill({ json: { bindings, binding_revision: '1' } });
+        return route.fulfill({
+          json: {
+            model_id: '7',
+            binding_revision: '1',
+            added_count: String(selections.length),
+            binding_count: String(bindings.length),
+          },
+        });
       }
       return route.fallback();
     });
@@ -1128,7 +1135,7 @@ for (const role of ['admin', 'steward'] as const)
     await screenshot(page, `${role}-review-mobile`);
     await page.getByRole('tab', { name: /Charity models/ }).click();
     await page
-      .locator('.ops-table tbody tr')
+      .locator('.nb-table tbody tr')
       .filter({ has: page.getByText(managedModel.full_name, { exact: true }) })
       .getByRole('button', { name: 'Manage', exact: true })
       .click();
@@ -1156,7 +1163,7 @@ for (const role of ['admin', 'steward'] as const)
     }
     await screenshot(page, `${role}-shared-selected-desktop`);
     const editor = picker.locator('..');
-    await editor.getByRole('button', { name: /Add selected/ }).click();
+    await editor.getByRole('button', { name: /Add \d+ connections/ }).click();
     await expect
       .poll(() => submitted)
       .toMatchObject({

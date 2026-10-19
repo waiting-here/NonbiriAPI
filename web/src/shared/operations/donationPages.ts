@@ -1,4 +1,5 @@
 import { exactRecord } from '@shared/operations/wire';
+import { KEY_STATES, type KeyStateFilter } from './keyState';
 import { ApiError } from '@shared/query/http';
 import {
   normalizeDonationHandling,
@@ -43,6 +44,7 @@ export interface ManagedDonationPageFilters {
 }
 
 export interface DonationSourcePageFilters {
+  key_state?: KeyStateFilter;
   q?: string;
   scope?: 'active' | 'all';
   handling?: 'pending';
@@ -301,6 +303,7 @@ function donationFilters(value: unknown): Required<ManagedDonationPageFilters> {
 }
 
 interface NormalizedSourceFilters {
+  key_state: KeyStateFilter | '';
   q: string;
   scope: '' | 'active' | 'all';
   handling: '' | 'pending';
@@ -308,7 +311,9 @@ interface NormalizedSourceFilters {
 }
 
 function sourceFilters(value: unknown, allowIdle: boolean): NormalizedSourceFilters {
-  const fields = allowIdle ? ['q', 'scope', 'handling', 'idle'] : ['q', 'scope', 'handling'];
+  const fields = allowIdle
+    ? ['q', 'scope', 'handling', 'idle', 'key_state']
+    : ['q', 'scope', 'handling', 'key_state'];
   const root = exactRecord(
     value,
     fields,
@@ -328,7 +333,9 @@ function sourceFilters(value: unknown, allowIdle: boolean): NormalizedSourceFilt
       ? ''
       : oneOf(root.idle, ['yes', 'no'] as const, 'source idle filter');
   const q = root.q === undefined ? '' : queryText(root.q, 'source search');
-  return { q, scope, handling, idle };
+  const key_state =
+    root.key_state === undefined ? '' : oneOf(root.key_state, KEY_STATES, 'key state filter');
+  return { q, scope, handling, idle, key_state };
 }
 
 function sharedSource(value: unknown, label: string): DonationPageSafeSource {
@@ -895,6 +902,7 @@ export function getDonationSourcesPage(
         q: normalizedFilters.q || undefined,
         scope: normalizedFilters.scope || undefined,
         handling: normalizedFilters.handling || undefined,
+        key_state: normalizedFilters.key_state || undefined,
         page,
         page_size: pageSize,
       }),
@@ -925,6 +933,7 @@ export function getDonationSourceKeysPage(
         scope: normalizedFilters.scope || undefined,
         handling: normalizedFilters.handling || undefined,
         idle: normalizedFilters.idle || undefined,
+        key_state: normalizedFilters.key_state || undefined,
         page,
         page_size: pageSize,
       }),

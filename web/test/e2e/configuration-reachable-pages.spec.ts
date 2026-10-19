@@ -802,7 +802,7 @@ test('reachable admin charity edits flatten policy with keyboard input at 390px'
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: `/admin/api/donation-sources?scope=active&page=1&page_size=20`,
+    path: `/admin/api/donation-sources?scope=active&key_state=available&page=1&page_size=20`,
     body: {
       data: [
         {
@@ -821,7 +821,7 @@ test('reachable admin charity edits flatten policy with keyboard input at 390px'
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: `/admin/api/donation-sources/${SOURCE_KEY}/keys?scope=active&page=1&page_size=20`,
+    path: `/admin/api/donation-sources/${SOURCE_KEY}/keys?scope=active&key_state=available&page=1&page_size=20`,
     body: numberedResponse(
       [
         managedKeyPageItem(pendingAdminDonation, {
@@ -896,7 +896,7 @@ test('reachable admin charity edits flatten policy with keyboard input at 390px'
   await flatten.focus();
   await page.keyboard.press('Space');
   await expect(flatten).toBeChecked();
-  await editor.getByRole('button', { name: 'Save model' }).click();
+  await editor.getByRole('button', { name: 'Save model #7' }).click();
   await expect
     .poll(() => patchBody)
     .toMatchObject({ expected_revision: '1', flatten_tool_calls: true });

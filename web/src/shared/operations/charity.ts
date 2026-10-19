@@ -777,51 +777,15 @@ export interface CharityBindings {
   binding_revision: string;
 }
 
-function normalizeModel(value: unknown, label: string): CharityModel {
-  const required = [
-    'model_types',
-    'id',
-    'provider',
-    'model',
-    'full_name',
-    'enabled',
-    'allowed_levels',
-    'public_description',
-    'pricing',
-    'discount',
-    'flatten_tool_calls',
-    'transport_rule',
-    'revision',
-    'binding_revision',
-    'binding_count',
-    'rolling_success',
-    'created_at',
-    'updated_at',
-  ];
-  const root = record(
-    value,
-    [
-      ...required,
-      'route_strategy',
-      'affinity_ttl_seconds',
-      'token_reserve_credits',
-      'is_mainstream',
-      'excluded_request_fields',
-      'role_policy',
-      'session_headers',
-    ],
-    label,
-    required,
-  );
-  const provider = string(root.provider, `${label} provider`, { min: 1 });
-  const model = string(root.model, `${label} model`, { min: 1 });
-  const fullName = string(root.full_name, `${label} full name`, { min: 7 });
-  if (fullName !== `[公益]${provider}/${model}`) invalidResponse(`${label} full name`);
-  const allowedLevels = normalizeAllowedLevels(root.allowed_levels, `${label} allowed levels`);
-  const publicDescription = normalizePublicDescription(
-    root.public_description,
-    `${label} public description`,
-  );
+export type CharityPriceConfig = Pick<
+  CharityModel,
+  'pricing' | 'token_reserve_credits' | 'discount'
+>;
+
+export function normalizeCharityPriceConfig(
+  root: Record<string, unknown>,
+  label: string,
+): CharityPriceConfig {
   const pricingRoot = record(
     root.pricing,
     [
@@ -903,6 +867,67 @@ function normalizeModel(value: unknown, label: string): CharityModel {
   const endAt = nullableUnixSecond(discount.end_at, `${label} discount end`);
   if (startAt !== null && endAt !== null && startAt > endAt)
     invalidResponse(`${label} discount window`);
+  return {
+    pricing,
+    token_reserve_credits: normalizeTokenReserveCredits(
+      root.token_reserve_credits,
+      label + ' token reserve credits',
+    ),
+    discount: {
+      enabled: boolean(discount.enabled, label + ' discount enabled'),
+      percent: integer(discount.percent, label + ' discount percent', 0, 100),
+      start_at: startAt,
+      end_at: endAt,
+    },
+  };
+}
+
+function normalizeModel(value: unknown, label: string): CharityModel {
+  const required = [
+    'model_types',
+    'id',
+    'provider',
+    'model',
+    'full_name',
+    'enabled',
+    'allowed_levels',
+    'public_description',
+    'pricing',
+    'discount',
+    'flatten_tool_calls',
+    'transport_rule',
+    'revision',
+    'binding_revision',
+    'binding_count',
+    'rolling_success',
+    'created_at',
+    'updated_at',
+  ];
+  const root = record(
+    value,
+    [
+      ...required,
+      'route_strategy',
+      'affinity_ttl_seconds',
+      'token_reserve_credits',
+      'is_mainstream',
+      'excluded_request_fields',
+      'role_policy',
+      'session_headers',
+    ],
+    label,
+    required,
+  );
+  const provider = string(root.provider, `${label} provider`, { min: 1 });
+  const model = string(root.model, `${label} model`, { min: 1 });
+  const fullName = string(root.full_name, `${label} full name`, { min: 7 });
+  if (fullName !== `[公益]${provider}/${model}`) invalidResponse(`${label} full name`);
+  const allowedLevels = normalizeAllowedLevels(root.allowed_levels, `${label} allowed levels`);
+  const publicDescription = normalizePublicDescription(
+    root.public_description,
+    `${label} public description`,
+  );
+  const priceConfig = normalizeCharityPriceConfig(root, label);
   const rolling = record(
     root.rolling_success,
     ['sample_count', 'success_count', 'percent'],
@@ -953,17 +978,7 @@ function normalizeModel(value: unknown, label: string): CharityModel {
     enabled: boolean(root.enabled, `${label} enabled`),
     allowed_levels: allowedLevels,
     public_description: publicDescription,
-    token_reserve_credits: normalizeTokenReserveCredits(
-      root.token_reserve_credits,
-      `${label} token reserve credits`,
-    ),
-    pricing,
-    discount: {
-      enabled: boolean(discount.enabled, `${label} discount enabled`),
-      percent: integer(discount.percent, `${label} discount percent`, 0, 100),
-      start_at: startAt,
-      end_at: endAt,
-    },
+    ...priceConfig,
     transport_rule: normalizeTransportRule(root.transport_rule),
     flatten_tool_calls: boolean(root.flatten_tool_calls, `${label} flatten tool calls`),
     role_policy: normalizeRolePolicy(root.role_policy, `${label} role policy`),
@@ -1428,6 +1443,48 @@ export const addManagedBindings = (
   decoded(
     `${base(role)}/charity-models/${encodeURIComponent(decimalID(id, `${role} charity model id`))}/bindings/batch`,
     (value) => normalizeBindings(value, `${role} charity bindings`),
+    idempotentOptions(key, {
+      method: 'POST',
+      json: { expected_binding_revision: revision, selections },
+    }),
+  );
+export interface BindingBatchReceipt {
+  model_id: string;
+  binding_revision: string;
+  added_count: string;
+  binding_count: string;
+}
+
+export const addManagedBindingsReceipt = (
+  role: CharityRole,
+  id: string,
+  revision: string,
+  selections: { donation_key_id: string; upstream_model_id: string }[],
+  key: string,
+): Promise<BindingBatchReceipt> =>
+  decoded(
+    `${base(role)}/charity-models/${encodeURIComponent(decimalID(id, 'charity model id'))}/bindings/batch-receipt`,
+    (value) => {
+      const row = record(
+        value,
+        ['model_id', 'binding_revision', 'added_count', 'binding_count'],
+        'binding receipt',
+      );
+      const receipt = {
+        model_id: decimalID(row.model_id, 'binding receipt model'),
+        binding_revision: decimal(row.binding_revision, 'binding receipt revision'),
+        added_count: decimal(row.added_count, 'binding receipt added'),
+        binding_count: decimal(row.binding_count, 'binding receipt count'),
+      };
+      if (
+        receipt.model_id !== id ||
+        receipt.added_count !== String(selections.length) ||
+        BigInt(receipt.binding_count) > 256n ||
+        BigInt(receipt.binding_count) < BigInt(receipt.added_count)
+      )
+        invalidResponse('binding receipt identity');
+      return receipt;
+    },
     idempotentOptions(key, {
       method: 'POST',
       json: { expected_binding_revision: revision, selections },

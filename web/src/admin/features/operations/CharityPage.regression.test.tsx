@@ -1,3 +1,4 @@
+vi.mock('@shared/components/AsyncLeaveDialog', () => ({ AsyncLeaveDialog: () => null }));
 import { screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../../test/unit/support';
@@ -65,7 +66,7 @@ describe('administrator charity page composition', () => {
           );
         }
         if (url.pathname === '/admin/api/donation-sources') {
-          expect(url.search).toBe('?scope=active&page=1&page_size=20');
+          expect(url.search).toBe('?scope=active&key_state=available&page=1&page_size=20');
           return new Response(
             JSON.stringify({
               data: [],
