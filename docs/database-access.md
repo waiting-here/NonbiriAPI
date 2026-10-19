@@ -6,16 +6,21 @@ accounting and lifecycle work. `Store.ReadDB()` opens the same validated databas
 with `mode=ro` and `query_only`; repositories must not send writes to it. Both
 pools belong to the store and close with the application.
 
-## Prepared writes and configuration reads
+## Prepared statements and configuration reads
 
 Writable connections retain at most 128 prepared single-statement
-`INSERT`, `UPDATE` or `DELETE` templates, each at most 16 KiB of SQL text. A
+`INSERT`, `UPDATE` or `DELETE` templates and 64 `SELECT` templates, each at most
+16 KiB of SQL text. A
 connection-local LRU closes evicted statements; execution errors discard the
 affected statement, and closing or replacing a connection releases its complete
 set. Preparation uses the already acquired physical connection, so it never
 borrows a second writer during a transaction. The driver binds current arguments
-and resets each execution. Queries, scripts and explicitly prepared statements
-keep their normal ownership. Transactions, constraints, triggers and SQLite
+and resets each execution. An open result cursor pins its SELECT statement;
+nested use of the same SQL or a full set of pinned statements uses the ordinary
+driver query path. Early close releases the pin, while query errors or cancellation
+discard the statement. Column metadata and schema re-preparation retain driver
+behavior. Scripts and explicitly prepared statements keep their normal ownership.
+Transactions, constraints, triggers and SQLite
 FULL synchronization remain unchanged; no results or parameter values are cached.
 
 Independent `Store` configuration getters read the full current `site_config`

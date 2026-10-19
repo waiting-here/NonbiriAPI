@@ -8,7 +8,7 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Changed
 
-- Reuse up to 128 prepared write statements per physical SQLite connection and
+- Reuse up to 128 prepared write and 64 SELECT statements per physical SQLite connection and
   release them on eviction or connection close. Move independent configuration
   reads to the existing read pool and reuse deterministic validation only for
   identical current contents, preserving immediate changes and full write checks.

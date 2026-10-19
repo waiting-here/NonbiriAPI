@@ -58,6 +58,8 @@ type dmlConnection struct {
 	sqliteConnection
 	statements map[string]*list.Element
 	recent     list.List
+	queries    map[string]*list.Element
+	queryLRU   list.List
 }
 
 func openSQLiteHandle(dsn, mode string) (*sql.DB, error) {
@@ -134,7 +136,7 @@ func (c *dmlConnection) remove(entry *list.Element) error {
 }
 
 func (c *dmlConnection) Close() error {
-	var result error
+	result := c.closeQueries()
 	for c.recent.Len() != 0 {
 		result = errors.Join(result, c.remove(c.recent.Back()))
 	}
