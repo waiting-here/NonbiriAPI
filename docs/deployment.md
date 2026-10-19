@@ -307,11 +307,11 @@ This fallback also covers proxy timeouts or invalid upstream responses before re
 
 ## Database compatibility and version changes
 
-The v1.0.0 application starts from an empty database or current schema **21**.
-Schema **16**, **17**, **18**, **19** and **20** use the standalone
+The v1.0.4 application starts from an empty database or current schema **24**.
+Exact registered schema **16–23** structures use the standalone
 [v1 converter](../cmd/nonbiri-upgrade-v1/README.md). Other prereleases and unknown
 structures are rejected. SQLite identity remains Generation 2; exports use
-format **20**. See [database upgrades](database-upgrades.md) for manifests, stable
+format **22**. See [database upgrades](database-upgrades.md) for manifests, stable
 migration guarantees and content versions.
 
 Run `./nonbiriapi maintenance schema-info --json` without a production environment

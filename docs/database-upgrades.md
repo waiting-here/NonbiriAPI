@@ -2,15 +2,15 @@
 
 ## Supported databases
 
-The v1.0.0 application accepts a new database or the current schema **21**.
-Existing schema 16, 17, 18, 19 and 20 databases require the separate one-time converter.
+The v1.0.4 application accepts a new database or the current schema **24**.
+Existing exact schema 16–23 databases require the separate one-time converter.
 The normal service contains only current DDL and validation; it does not import
 or embed historical schemas or conversion code. Later v1.x releases must provide
 a complete upgrade path from every earlier stable v1.x database. An older binary
 is not required to read a newer database.
 
 SQLite identity remains `application_id=0x4E425249`, `user_version=2`. Account
-exports use format **20**, independently of the storage schema. An unknown
+exports use format **22**, independently of the storage schema. An unknown
 identity, version or structural manifest is rejected before writes.
 
 ```sh
@@ -20,7 +20,7 @@ identity, version or structural manifest is rejected before writes.
 
 These commands load no application configuration or database. Each machine-readable descriptor
 contains the current identity and accepted versions. The application descriptor
-accepts only schema 21 and has empty migration and conversion lists. The converter
+accepts only schema 24 and has empty migration and conversion lists. The converter
 descriptor lists its exact offline sources and target. Deployment tools use both
 descriptors instead of parsing Go source or deriving versions from array lengths.
 
@@ -76,16 +76,31 @@ Schema 21 adds the manual `noncommercial_gateway` endpoint classification and th
 existing constraints while preserving all saved tags and discovery outcomes.
 No new personal data is collected; account exports remain format 20.
 
+Schema 22 adds donated-key temporary cooldowns and claim-bound response-header
+observations. Export format 21 adds the owner's safe `rate_limited_until` field;
+raw response headers and claim observations are not exported.
+
+Schema 23 adds credential-redacted request/response header facts, capacity
+accounting and the independent `request_header_budget_mib` setting, default 1024.
+Headers follow request-root retention and holds; they remain excluded from
+personal exports.
+
+Schema 24 adds shared price templates, 90-day safe template audits and private
+donation-history preferences. Export format 22 adds nullable `owner_hidden_at`
+without filtering hidden donations out of the export. Migration seeds no model
+prices or templates, preserves existing instance legal text and does not change
+donation terminal clocks, expiry, balances or historical settlements.
+
 ## One-time conversion
 
 Build `./cmd/nonbiri-upgrade-v1` from the same commit as the target application.
-The converter accepts exact registered schema 16, 17, 18, 19 and 20 structures. For rc.7,
+The converter accepts exact registered schema 16–23 structures. For rc.7,
 the reference source is `82f1711b674425745a768f781e0e0c34dcb37ac3`. The database
 manifest determines eligibility, not a guess based on a release label.
 
 Use `--check` on an isolated consistent copy, then `--apply` with the service
 stopped and its existing master key available. The converter acquires exclusive
-database access and converts the source to schema 21 in one transaction. A matching
+database access and converts the source to schema 24 in one transaction. A matching
 current schema is a no-op; structural drift, an unknown source or a wrong key is
 rejected. Failure or cancellation rolls back.
 

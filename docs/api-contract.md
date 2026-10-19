@@ -136,9 +136,9 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 21. Normal startup accepts fresh storage and schema 21 only; schema 16, 17, 18, 19 and 20 require the separate offline converter. Unknown or partial structures are rejected before writes. Startup validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for explicit source/target versions and rollback requirements.
+The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 24. Normal startup accepts fresh storage and schema 24 only; exact schema 16–23 structures require the separate offline converter. Unknown or partial structures are rejected before writes. Startup validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for explicit source/target versions and rollback requirements.
 
-Current account export `schema_version=20` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v20.json`. See §9 for its safe projections.
+Current account export `schema_version=22` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v22.json`. See §9 for its safe projections.
 
 ### 1.5 Display time context
 
@@ -360,7 +360,7 @@ OpenAI-compatible discovery validates every original entry before merging duplic
 
 Manual catalog `provider` remains the wire/storage name for optional display metadata. The user-station form labels it **Note (optional)**. It does not contribute to the exact upstream model ID or binding identity; personal/charity model naming uses a separate provider field.
 
-`EndpointKey` also returns numeric `max_concurrency` and `max_rpm`. Both accept whole numbers from 0 to 2147483647; 0 disables that key's additional limit. Omitted creation values default to 0; omitted patch values remain unchanged. Null, strings, negative numbers, fractions and out-of-range values are rejected. Only the owner can edit them, using the existing revision and idempotency contract. Existing site and endpoint safeguards still apply. Numbered endpoint, key, and model rows add the corresponding `browse` summary; legacy cursor rows and single-item/mutation responses keep the existing resource shape. Endpoint/key `q` filters are single-value literal text searches of at most 128 Unicode code points (and no more than 512 UTF-8 bytes), with controls rejected.
+`EndpointKey` also returns numeric `max_concurrency` and `max_rpm`. Both accept whole numbers from 0 to 2147483647; 0 disables that key's additional limit. Omitted creation values default to 0; omitted patch values remain unchanged. Null, strings, negative numbers, fractions and out-of-range values are rejected. The owner can edit them using the existing revision and idempotency contract. Authorized donation managers can edit the same shared values under the dual-revision contract below. Existing site and endpoint safeguards still apply. Numbered endpoint, key, and model rows add the corresponding `browse` summary; legacy cursor rows and single-item/mutation responses keep the existing resource shape. Endpoint/key `q` filters are single-value literal text searches of at most 128 Unicode code points (and no more than 512 UTF-8 bytes), with controls rejected.
 
 All personal, charity and live diagnostic model calls using the same EndpointKey share these limits across bindings. Discovery requests use their separate safeguards. Concurrency includes admitted work until its attempt finishes or is canceled, including the full streaming lifetime. RPM uses a rolling 60-second window with server-second precision. Undispatched claims reserve a slot until dispatch or release; a released undispatched attempt returns the slot. A dispatch consumes one slot even on failure, and each retry counts separately. Pending work cannot age out of its reservation. Lowering limits affects new admissions without canceling already admitted work. Recent dispatch counts survive process restarts.
 
@@ -378,7 +378,7 @@ In the editor, header names have no slash or colon: `User-Agent` with plain-text
 
 The complete configuration is limited to 64 KiB and depth 16, at most 64 header names and 128 body paths. Each header name is at most 128 bytes, each value 4,096 bytes, added headers 16 KiB in total, and each JSON Pointer at most 512 bytes. Protected protocol/authentication headers and server-owned model, safety, stream, usage, tool structure, routing, accounting and credential fields cannot be overridden. Header matching is case-insensitive; an unlisted client header is never forwarded. Defaults fill only absent object fields, forced values replace their leaves, and the resulting request is validated again before dispatch. Unsupported native fields require an explicit declared path for Anthropic-compatible or Gateway v3 conversion; no adaptation expands picture-book or discovery request bodies. A 409 means the revision or effective rules conflict; refetch before retrying with a new body. The same key and identical body replay under the existing control-plane rules.
 
-Administrator and level-6 steward donation-key projections include read-only `max_concurrency`/`max_rpm`; both are null after the physical key is gone. Their shared binding menu/candidate/binding `source` includes the current integer limits. These fields do not expand donation ownership or expose private owner notes, and management mutation bodies reject them. Ordinary charity callers do not receive underlying key configuration. Owner resource exports include the values; key deletion cascades to its configuration. Historical idempotent responses may omit these additive fields; an authoritative read returns current values.
+Authorized donation-key projections include numeric `max_concurrency,max_rpm` and decimal-string `key_limits_revision`; all three are null after the physical key is gone. Their shared binding menu/candidate/binding `source` includes the current integer limits. Management PATCH accepts either or both limits, as integers 0–2147483647, plus required `expected_key_limits_revision` whenever either is present and the ordinary donation `expected_revision`. Null is invalid for these new fields. Omitted limits stay unchanged; 0 adds no per-key limit. The final transaction compares both donation and physical-key revisions, updates the shared `endpoint_key_limits`, advances both revisions and records safe old/new limit values in the donation audit. An owner edit to the physical key can therefore produce a 409; refetch both revisions. Suspended physical resources return `resource_locked`. Administrators and L6 may use this capability; L5 remains confined to its existing model/source scope with `charity_model_id`. The shared physical limits affect personal and charity calls using the key. The mutation grants no secret, endpoint or private-note access. Ordinary charity callers do not receive underlying key configuration. Owner resource exports include the values; key deletion cascades to its configuration. Historical idempotent responses may omit these additive fields; an authoritative read returns current values.
 
 ### 3.2 Personal models and bindings
 
@@ -559,8 +559,8 @@ Receipts use the original fixed 24-hour replay window. Missing or expired receip
 
 | Method and path | Request / response |
 | --- | --- |
-| `GET /api/donations` | Legacy `cursor,limit` or numbered `page,page_size`; numbered mode also accepts `status,q` and returns donation summaries with `pagination`. |
-| `GET /api/donations/{id}/keys` | Numbered `page,page_size` only; owner key-level donation projection with `pagination`. |
+| `GET /api/donations` | Legacy `cursor,limit` or numbered `page,page_size`; numbered mode also accepts `status,q,view=current|history|hidden|all` and returns donation summaries with `pagination`. |
+| `GET /api/donations/{id}/keys` | Numbered `page,page_size` only, optional `view=current|ended|all`; owner key-level donation projection with `pagination`. |
 | `GET /api/donations/{id}` | Owner detail with key states and review history. |
 | `POST /api/donations` | `{description,keys:[{endpoint_key_id,expires_at}],ownership_authorized:true}`; 1–100 unique keys; returns 201. |
 | `PATCH /api/donations/{id}` | Pending-only `{description,expected_revision}`. |
@@ -605,11 +605,69 @@ Level permission is rechecked at admission, claim and immediately before the dis
 
 `recent_success` contains `window_start,as_of,success,failure,cancelled,sample_count,rate,insufficient_sample,capture_started_at`. It measures completed logical requests actually dispatched in the preceding 24 hours: a retry that finally succeeds counts once, undispatched refusals do not count, and cancellations are listed separately outside the denominator. `rate` is a number from 0 to 1 or null when there is no sample. Fewer than 20 samples is explicitly insufficient; zero samples never implies 100% success. Coverage start is visible and any cache is at most 60 seconds old.
 
+### 4.1.1 Owner donation history
+
+An explicit owner-list `view` selects numbered mode. Omission preserves legacy
+`all`. `current` means logically live pending/approved donations; `history` means
+unhidden terminal or logically expired donations; `hidden` means hidden history;
+`all` includes hidden rows. An owner key page defaults to `all`; `current` and
+`ended` partition keys by their current logical membership/expiry.
+
+`PUT /api/donations/{id}/history` takes `{"hidden":true}` or false and returns
+`{donation_id,owner_hidden_at}`, with a nullable Unix-second timestamp. Only the
+owner's terminal history may be hidden or restored. It changes a private display
+preference, never deletes a donation, advances its business revision or restarts
+its 400-day terminal retention. Management views do not expose this preference.
+
+`POST /api/donations/history/batch` requires all four fields:
+
+```json
+{"action":"hide","status":null,"q":"","cursor":null}
+```
+
+`action` is `hide|restore`; `status` is null or `rejected|deleted|expired`. Each
+step scans at most 100 candidates and returns decimal-string
+`changed_count,scanned_count` and nullable `next_cursor`. Continue with the same
+action/filter and returned cursor, even when no rows changed. A one-hour cursor
+freezes time and donation/review/preference-ID boundaries; later donations,
+terminal transitions and preference changes are not silently absorbed. Current
+owner authority is checked on each step. Both routes use browser sessions,
+strict JSON and ordinary mutation idempotency. Retain the original body/key on
+uncertain results; use a fresh key only for the next cursor step. Canceling stops
+future steps and keeps committed preferences. Export 22 includes all owned
+donations and their `owner_hidden_at`, including hidden history.
+
+### 4.1.2 Temporary donated-key cooldown
+
+On any upstream HTTP status, valid `Retry-After` or `X-Retry-After` values
+temporarily remove that donated key from charity selection until
+`rate_limited_until` (nullable Unix seconds). This does not change personal-call
+limits. The latest valid deadline across both names and repeated values wins;
+an HTTP date's comma is not a value separator. A later observation cannot shorten
+an existing cooldown. Basic unavailable states take precedence over
+`rate_limited`. An elapsed deadline immediately stops limiting without a reset
+or administrator action.
+
+| Header | Accepted values |
+| --- | --- |
+| `Retry-After` | Nonnegative integer waiting seconds or an HTTP date. Integers are never interpreted as Unix timestamps. |
+| `X-Retry-After` | HTTP date; 0–999999999 as waiting seconds; exactly ten digits at least 1000000000 as Unix seconds; exactly thirteen digits at least 1000000000000 as Unix milliseconds, rounded up to seconds. Other numeric lengths are not guessed. |
+
+Invalid, negative, empty or overflowing values do not establish a hint. A valid
+zero or past deadline records that this response carried a retry hint without
+creating active cooldown. A non-200 response carrying such a hint is neutral for
+consecutive failures; errors still return and log normally. Initial HTTP 200
+resets the streak, including later protocol/read failures. These counter rules
+do not establish protocol success or alter quota/credit settlement. Claim-bound
+observations survive recovery; another attempt's cooldown is not evidence that
+this attempt carried a valid hint. Existing cancellation, manual enablement,
+approval, expiry, donor restrictions and quota rules still apply.
+
 ### 4.2 Donation failure-streak reset
 
 Each key's `failure_disable_threshold` is a canonical decimal U128 string, default `"10"` on creation and migration. Owners, administrators and current stewards can independently `PATCH {prefix}/donations/{id}/keys/{keyId}/failure-policy`, using `/api`, `/admin/api` or `/api/steward` respectively. The body is `{expected_revision,failure_disable_threshold}` with `Idempotency-Key`; the safe response is `{donation_id,donation_key_id,failure_disable_threshold,failure_streak,failure_disabled,revision}`.
 
-Saving retains the current count and generation and atomically recalculates error-disablement: `0` clears it; a positive threshold disables when the count reaches that threshold. Zero still records failures. Upstream HTTP 200 or a protocol-complete success clears the count, regardless of later errors. Without either, upstream response/protocol/DNS/connect/timeout failures increase it; caller cancellation, downstream failure, Debug stop, platform rejection and internal failure leave it unchanged. A confirmed upstream failure still counts after a later cancellation. Recovery uses a persisted HTTP 200 stream checkpoint when available; an unknown outcome is neutral. Fees and quotas follow the billing rules above. Ordered in-flight results use the latest saved threshold; old-generation completions cannot change current state. Manual disablement, expiry, withdrawal, bans, quotas and ownership checks continue to apply. Pages warn when zero is entered or saved, without extra confirmation. Each real save has a no-secret review audit; replay repeats no write or alarm. Only a transition into error-disablement alerts; clearing and later disabling can alert again.
+Saving retains the current count and generation and atomically recalculates error-disablement: `0` clears it; a positive threshold disables when the count reaches that threshold. Zero still records failures. Upstream HTTP 200 or a protocol-complete success clears the count, regardless of later errors. Without either, a non-200 response with a valid retry hint is neutral; other upstream response/protocol/DNS/connect/timeout failures increase it; caller cancellation, downstream failure, Debug stop, platform rejection and internal failure leave it unchanged. A confirmed upstream failure still counts after a later cancellation. Recovery uses a persisted HTTP 200 stream checkpoint when available; an unknown outcome is neutral. Fees and quotas follow the billing rules above. Ordered in-flight results use the latest saved threshold; old-generation completions cannot change current state. Manual disablement, expiry, withdrawal, bans, quotas and ownership checks continue to apply. Pages warn when zero is entered or saved, without extra confirmation. Each real save has a no-secret review audit; replay repeats no write or alarm. Only a transition into error-disablement alerts; clearing and later disabling can alert again.
 
 Owners can `POST /api/donations/{id}/keys/{keyId}/failure-streak-reset` with `{expected_revision}` and `Idempotency-Key`. Only their own approved, unexpired, active donated key is eligible. The response is `{donation_id,key_id,revision,failure_streak:"0"}`. Missing ownership returns 404; stale or ineligible state returns 409.
 
@@ -816,7 +874,7 @@ Administrator-only `/admin/api/games/blackjack/history` and `.../history/{id}` a
 
 `POST /admin/api/games/blackjack/history/export` accepts `{dataset,cursor?}` and returns `{format:"blackjack-history/v1",dataset,items,next_cursor}` in bounded batches of at most 10 records. Clients may save each successful batch as NDJSON and resume only from its returned cursor. Signed cursors expire after one hour and bind the account/session, dataset, limit, endpoint kind, high-water mark and page position. Exporting or reading history does not pause play.
 
-Restart cancels only the unfinished table and refunds original assets, preserving waiters and committed outcomes. Maintenance/closure releases waiters and undealt seats while dealt games finish. Ban stops a seat's actions and auto-stands it. Deletion detaches identity and continues settlement without cancelling other players; unavailable proceeds use the corresponding external asset account and cannot recreate a wallet. Queue game-credit reserves remain part of welfare assets. Account export schema 20 includes `blackjack:{current,history}` and safe per-game `randomness` proofs while retaining all previous fields and existing 10,000-row/16-MiB bounds.
+Restart cancels only the unfinished table and refunds original assets, preserving waiters and committed outcomes. Maintenance/closure releases waiters and undealt seats while dealt games finish. Ban stops a seat's actions and auto-stands it. Deletion detaches identity and continues settlement without cancelling other players; unavailable proceeds use the corresponding external asset account and cannot recreate a wallet. Queue game-credit reserves remain part of welfare assets. Account export schema 22 includes `blackjack:{current,history}` and safe per-game `randomness` proofs while retaining all previous fields and existing 10,000-row/16-MiB bounds.
 
 ### 5.9 Loans and leaderboards
 
@@ -964,6 +1022,24 @@ Log reads have a five-second budget, including connection waits. Timeouts and ca
 | `GET /api/steward/donation-sources` | Numbered `page,page_size` only; filters `q,scope=active|all` (default `active`), `handling=pending`. |
 | `GET /api/steward/donation-sources/{source_key}/keys` | Numbered `page,page_size` only; filters `q,scope=active|all` (default `active`), `handling=pending`, `idle=yes|no`. |
 
+L5 and L6 browser sessions can also read `GET /api/steward/donation-handling`.
+It accepts numbered `page,page_size`, `handling=pending|processed|all` (default
+`pending`), and optional exact `donation_id`. Its `{data,pagination}` contains only
+`donation_id,created_at,key_count,bound_key_count,handling`; counts are decimal
+strings and handling exposes safe role/time/state fields. No donor identity,
+description, source URL, secret fragment, physical-key ID or review materials are
+returned. Only approved, logically live donations appear, from every source,
+including automatic approvals. Disabled, exhausted or unbound keys do not by
+themselves exclude an otherwise-live approved donation.
+
+L5 may use the existing processed POST above on that same set. It marks the whole
+donation, including all its keys; it is not a per-key or per-manager operation.
+Pending/rejected/expired/deleted donations and closed/legacy handling are outside
+this L5 capability. Expected handling revision, replay and final current session,
+role, approval and lifetime checks still apply. A losing concurrent revision
+returns 409. This grants no full donation list/detail, review, model creation,
+pricing or template access and does not depend on a mainstream-source flag.
+
 ### 6.3 Steward CallerKey automation
 
 `GET|PATCH /api/steward/automation/donation-key-failure-policy` uses the same current L6, CallerKey, lifecycle, maintenance and four-global/one-per-user concurrency gates. GET accepts only `donation_id` and `donation_key_id` query parameters and no body. PATCH accepts only those IDs, `expected_revision` and `failure_disable_threshold`, requires `Idempotency-Key`, and returns the safe policy receipt described in `4.2. Its 30-second bound and shared mutation limits apply. Policy management follows ordinary retained donation-management visibility; it cannot access or modify another user's private credentials. Unknown fields, noncanonical values and forbidden methods fail; stale revision gives 409, missing/unavailable objects 404 and revoked authority 401/403. Current authority and object visibility are checked before replay.
@@ -986,7 +1062,7 @@ L5 cannot use any charity automation GET/POST/PATCH, including replay. A downgra
 
 Level-5 sessions may list and maintain only charity models whose administrator/L6-controlled `is_mainstream` flag is true. They cannot create/delete models, edit pricing, allowed levels, public descriptions, parameter exclusions or that flag. Removing the flag immediately removes trainee management authority. They also have user-management reads and restricted bans in §7.1, and site-wide log access in §11. Donation review, announcements, maintenance, abuse-audit systems, activity configuration and charity CallerKey automation remain unavailable to trainees. Personal automation remains available for their own resources.
 
-Within an authorized model, trainees may bind eligible mainstream-source keys, reorder/remove bindings, discover models, and edit charity enablement, `safe_note`, expiry, cumulative/recurring limits, Token reservations and failure state. The immutable donation-time source determines mainstream eligibility. Unbound mainstream candidates may receive these charity edits too. Keys already bound by a full manager remain manageable even when they have a non-mainstream source; after removal, a trainee cannot newly bind such a key. Physical endpoint/secret settings, personal-use settings and physical RPM/concurrency remain outside this scope.
+Within an authorized model, trainees may bind eligible mainstream-source keys, reorder/remove bindings, discover models, and edit charity enablement, `safe_note`, expiry, cumulative/recurring limits, Token reservations and failure state. The immutable donation-time source determines mainstream eligibility. Unbound mainstream candidates may receive these charity edits too. Keys already bound by a full manager remain manageable even when they have a non-mainstream source; after removal, a trainee cannot newly bind such a key. Physical endpoint/secret settings and other personal-use settings remain outside this scope. Shared physical RPM/concurrency edits are permitted only within this same existing model/source scope, using both revisions in §3.1.
 
 Key/source/discovery routes that need a model context require `charity_model_id` for a trainee. Full stewards may omit it. The server checks the current model and key relation again before reads, dispatch and writes; a supplied ID is not authorization by itself. Key-level charity settings are shared by all bindings, and the UI exposes the affected count and authorized model summaries before changes. Scoped key projections include `safe_note`, `donation_note` and nullable `approval_note` as text, without a secret or unrelated private resource fields.
 
@@ -1125,6 +1201,115 @@ Request-adaptation reads are `GET /admin/api/charity-models/{id}/request-adaptat
 
 For both administrator and current level-6 steward charity management, an existing binding may have `source_types:[]` when no current source confirms it. The binding remains readable and the page presents its source as unavailable. A new binding candidate requires at least one known source type (`automatic` or `manual`); empty, repeated, or unknown values are invalid. Deleting a charity binding compacts the order. Reordering preserves each binding ID and its binding-scoped request-adaptation settings and revision.
 
+### 7.4.1 Price templates
+
+Templates contain pricing settings, not model definitions. Administrators maintain
+them; current level-6 browser sessions can read enabled templates. Level 5 and
+CallerKeys have no template access. Applying a template fills the open model
+create/edit pricing form; it does not save the model. The next ordinary model
+mutation checks its current authority, revision and values. Later template edits,
+disablement or deletion never change models that previously copied it.
+
+| Method and path | Contract |
+| --- | --- |
+| `GET /admin/api/charity-price-templates` | Numbered `page,page_size`, optional `q,state=enabled|disabled|all`; default state `enabled`. |
+| `POST /admin/api/charity-price-templates` | Complete template; HTTP 201. |
+| `GET /admin/api/charity-price-templates/{id}` | One template. |
+| `PUT /admin/api/charity-price-templates/{id}` | Complete replacement plus `expected_revision`; HTTP 200. |
+| `DELETE /admin/api/charity-price-templates/{id}` | `{expected_revision}`; HTTP 204. |
+| `GET /api/steward/charity-price-templates` and `GET .../{id}` | Current L6 session only; list state must be `enabled`; disabled detail returns 404. |
+
+Lists return `{data,pagination}`. A template has `id,name,description,enabled,
+revision,pricing,token_reserve_credits,discount,created_at,updated_at`. IDs and
+revisions are decimal strings; timestamps are Unix seconds. Names are trimmed,
+1–80 Unicode code points without controls; descriptions are LF-normalized text
+of at most 500 code points. There are at most 256 templates, including disabled
+ones. Search uses `q` of at most 128 code points, with no NUL. Numbered pages use
+the common 10/20/50/100 sizes and a five-second read budget.
+
+POST/PUT require `name,description,enabled,pricing,token_reserve_credits,discount`;
+`token_reserve_credits` must be present even when null. POST rejects
+`expected_revision`; PUT and DELETE require it. Mutations use the ordinary
+`Idempotency-Key`, strict JSON, current-authorization and replay contract. GETs
+have no body; mutations have no query parameters.
+
+| Copied field | Meaning and replacement behavior |
+| --- | --- |
+| `pricing.mode` | `per_request` or `per_token`; replaces the form's billing mode. |
+| `pricing.user_price,donor_reward` | Per-request credit strings. Clear both when applying Token pricing. |
+| `pricing.user_prices,donor_rewards` | Per-token four-bucket objects: `uncached_input,cache_write_input,cache_read_input,output`, in credits per million tokens. Clear both when applying request pricing. |
+| `pricing.long_context` | Null/absent disables it and clears its threshold and alternate prices. Otherwise copy `input_threshold` and the active-mode `user_price` or four-bucket `user_prices`; clear the other mode's fields. Donor rewards keep the base settings. |
+| `pricing.context_penalty` | Null/absent disables it and clears its values; otherwise copy `input_threshold,fine`. |
+| `token_reserve_credits` | Null clears the form override to inherited global reserve; otherwise copy the canonical credit string. It remains stored but inactive in request mode. |
+| `discount` | Replace all of `enabled,percent,start_at,end_at`, including false, zero and null; do not merge with stale form values. Percent is an integer 0–100; nullable times use Unix seconds and a configured start must precede the end. |
+
+Prices, rewards, thresholds, reserve bounds and context behavior use the model's
+existing validators and [context pricing contract](charity-context-pricing.md).
+Inactive mode fields must be omitted or null in the complete pricing object.
+For example, this is a complete request-pricing template creation body:
+
+```json
+{"name":"Request pricing","description":"","enabled":true,"pricing":{"mode":"per_request","user_price":"1","donor_reward":"0.5","long_context":null,"context_penalty":null},"token_reserve_credits":null,"discount":{"enabled":false,"percent":100,"start_at":null,"end_at":null}}
+```
+
+Template audits retain the template ID, action, previous/new revision, time and
+actor link for 90 days; deleted actor identity becomes null. They do not store
+price-field differences. Shared templates and audits are excluded from personal exports.
+
+### 7.4.2 Binding selection and compact receipts
+
+Both management prefixes expose `GET {prefix}/charity-models/{id}/binding-donations`
+and `GET .../binding-donations/{donationId}/keys`, alongside binding candidates.
+These retain their legacy cursor or numbered pagination protocols. The permitted
+donation/key set and trainee model/source restrictions apply before counting and
+paging; a supplied identifier does not grant access.
+
+`POST {prefix}/charity-models/{id}/bindings/batch-receipt` takes the same
+`{expected_binding_revision,selections:[{donation_key_id,upstream_model_id}]}` as
+the existing `/bindings/batch`. It returns HTTP 201 with only four decimal strings:
+
+```json
+{"model_id":"1","binding_revision":"4","added_count":"200","binding_count":"200"}
+```
+
+The request remains limited to 256 KiB, at most 256 selections and 256 total
+bindings per model. Duplicate selections, existing duplicates, over-capacity or
+any invalid selection roll back the whole batch. Only this compact route admits
+up to 514 JSON object fields so real 200–256-item requests fit. It avoids the
+64 KiB complete-response limit for long upstream IDs; the old route still returns
+its complete response. Binding revisions, model/source authorization and current
+session checks apply to both paths.
+
+Keep the original key, route and ordered selection body after an uncertain
+result. Reusing a key with the other route, changed contents or selection order
+conflicts. A replay still checks current authority. After a successful compact
+receipt, fetch bindings separately; a failed refresh does not justify adding the
+same batch again with a fresh key.
+
+### 7.4.3 Key-state filters
+
+`key_state` accepts `available|disabled|suspended|exhausted|rate_limited|pending|
+expired|ended|all`. Omission preserves `all`; an explicit empty or unknown value
+is invalid. It applies to management donation source groups and source-key lists,
+binding donation/key menus and binding-candidate queries. Source endpoints remain
+numbered-only; binding selectors retain their existing cursor and numbered forms.
+Group menus include a group only when at least one otherwise-visible key matches.
+Filtering precedes count and pagination in the same snapshot.
+
+State uses the same current projection as each key: terminal/expiry and base
+unavailability win before temporary cooldown; an elapsed cooldown no longer
+produces `rate_limited`. The filter never widens an endpoint's base set. Binding
+candidates still require approved, unended donations, so `all` does not expose
+pending or ended donations. All trainee source/model checks remain in force.
+The new workbench sends `available` explicitly for its initial view.
+
+Failure-reset `/selection` accepts the same `key_state` inside `sources` and
+`source_keys` selectors. It is part of the cursor-bound selection, applies before
+enumeration and appears in the selection summary; omitted `all` stays compatible.
+The existing one-hour cursor, fixed key-ID boundary and per-step current-state
+checks apply. A key changing state between steps may stop matching; this is not
+a database snapshot across the whole multi-step operation.
+
 ### 7.5 Recurring donation-key limits
 
 `GET /admin/api/donations/{id}/keys/{keyId}/recurring-limits` and the matching `/api/steward/` path return `{donation_id,key_id,donation_revision,server_now,rules}`. The owner-only `/api/donations/{id}/keys/{keyId}/recurring-limits` path reads the same safe rule projection for the caller's own donation. Administrator/owner GET accepts no query or body; trainee steward calls require the charity_model_id query scope. Administrators, current level-6 stewards and scoped level-5 trainees can PUT the complete set on their management paths; ordinary owners cannot write it. Pending keys may be configured, while ended or expired keys cannot.
@@ -1143,7 +1328,7 @@ Each rule view adds `{used,reserved,remaining,state,period_start,period_end,next
 
 All current recurring rules and total limits apply together to charity calls, including charity live calls. Personal calls, personal live calls, discovery and dry previews do not consume these rules. Claims reserve one call, the current per-key Token fallback and the existing undiscounted price reservation. Dispatch atomically rechecks current configuration and replaces its own old reservations. Calls already dispatched finish under their captured rules; later sends recheck the new set. Changing only a limit or display order preserves usage; changing mode, interval, alignment, anchor, zone, week start or metric starts a new counting period for subsequent sends without altering historical total usage or balances.
 
-Only validated upstream output establishes the durable first-success time, including output buffered before a JSON caller response. Calls become used once at that checkpoint; tokens and credits remain reserved until terminal settlement records their full actual or existing conservative amount. Usage exceeding the reservation is never truncated. No validated output means zero recurring consumption. If every unsent candidate is blocked by quota, the caller receives `429 rate_limited`; storage-capacity exhaustion returns `503 service_unavailable` and a deduplicated administrator alert. These failures do not count as upstream failures or disclose physical resources. Later admission failures do not replace the outcome of an earlier dispatched attempt.
+Recurring consumption uses the same durable billable-response checkpoint as ordinary donation accounting: upstream HTTP 200 acceptance for a stream, including empty or subsequently failed streams, or a valid non-stream response. Calls count once; tokens and credits settle with the full actual or existing conservative amount. First-success alignment follows that persisted checkpoint, including output buffered before a JSON caller response. Usage exceeding the reservation is never truncated. Without a billable response there is zero recurring consumption. If every unsent candidate is blocked by quota, the caller receives `429 rate_limited`; storage-capacity exhaustion returns `503 service_unavailable` and a deduplicated administrator alert. These failures do not count as upstream failures or disclose physical resources. Later admission failures do not replace the outcome of an earlier dispatched attempt.
 
 ### 7.6 Duel history and bulk export
 
@@ -1181,7 +1366,7 @@ Lineage items are exactly `{donation_id,donation_key_id,donation_status,key_stat
 
 ## 9. Export, privacy, and account deletion
 
-`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v20.json`, with `schema_version:20` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema.
+`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v22.json`, with `schema_version:22` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema.
 
 The top-level fields include `limited_activities`, `image_tasks` and `inactivity`. Limited activities contain the safe general/paper/brush wallet projection and own exchange receipts; the existing game wallet remains separate. Image tasks contain only local ID, state, requested/actual image counts, times, billing state and two-currency charge/refund facts. Inactivity contains safe own activity timestamps and retained execution outcomes. No prompts, complete execution parameters, images, source facts, raw errors, risk rules, private adapter/configuration or upstream task identifiers are included.
 
@@ -1193,13 +1378,13 @@ Secrets, ciphertext, fingerprints, request/response bodies, report data, IP mate
 
 ### Adaptation, continuity and activity projections
 
-Pond-fishing safe outcomes add nullable `milk_crab_length_cm` alongside `blue_fat_fish_length_cm`; the two presentations are mutually exclusive. Exact lengths remain decimal strings. `milk_crab_chance_bps` and `blue_fish_chance_bps` are individual integer basis-point probabilities whose sum cannot exceed 10,000. Export format 20 carries the safe milk-crab length projection; private randomness and configuration internals remain excluded.
+Pond-fishing safe outcomes add nullable `milk_crab_length_cm` alongside `blue_fat_fish_length_cm`; the two presentations are mutually exclusive. Exact lengths remain decimal strings. `milk_crab_chance_bps` and `blue_fish_chance_bps` are individual integer basis-point probabilities whose sum cannot exceed 10,000. The current export carries the safe milk-crab length projection; private randomness and configuration internals remain excluded.
 
 The following fields are top-level (an excerpt, not a complete export):
 
 ```json
 {
-  "schema_version": 20,
+  "schema_version": 22,
   "request_adaptations": [],
   "continuity": [],
   "fat_fish": {"summaries": [], "progress": []}
@@ -1267,6 +1452,8 @@ Log and diagnostic browser-session reads require a current administrator on the 
 
 | Method and path | Purpose |
 | --- | --- |
+| `GET {prefix}/logs/{id}/headers` | Saved inbound request headers, fetched only when opened. |
+| `GET {prefix}/logs/{id}/attempts/{seq}/headers` | Saved physical response-header collection for one attempt. |
 | `GET {prefix}/logs/{id}/source` | Approved source facts for one authorized logical request. |
 | `GET {prefix}/logs/{id}/attempts/{seq}/errors` | Failure events, including failed attempts before eventual success. |
 | `GET {prefix}/logs/{id}/attempts/{seq}/errors/{event}` | Bounded original event body and capture state. |
@@ -1283,6 +1470,41 @@ Log and diagnostic browser-session reads require a current administrator on the 
 `{prefix}` is `/admin/api` or `/api/steward`. Reads use bounded filters and pages, not an unrestricted header or body search. Access-event filters include `user_id,key_generation,path_kind,status_class,from,to,lookback_hours`, with `page_size` up to 100 and a separate opaque cursor. A maximum 30-day range and coverage/drop counters keep incomplete observations explicit. A zero ratio denominator is no sample, never an infinite risk score. `coverage.last_gap_at` is null when no capture gap has been recorded. Audit users, user details, shared IPs and access reads accept `lookback_hours` (integer 1–720), anchored to server time and mutually exclusive with `from`/`to`. With no time filter the default is 24 hours, except shared IPs use the configured window.
 
 Administrator and level-6 diagnostic reads and downloads preserve the saved bytes. For level 5, valid IPv4 addresses in error payloads are replaced with `[redacted]` and error-body responses include `ipv4_redacted:true`; other roles omit this flag. Valid UTF-8 bodies use text. Other bodies retain base64 encoding after the same replacement in the decoded bytes, preserving all other bytes. Copies and downloads use this role-authorized payload. Byte counts and truncation metadata describe the original stored capture. Authorized source-IP observations retain the saved address. Long previews mount when expanded and show the complete authorized text. Exact role/account changes clear prior diagnostic state and reject late responses; refreshing the same identity and role preserves current views.
+
+Full-header GETs accept no body or query. The request response is
+`{save_state,captured_at,http_status,bytes_saved,credentials_redacted,ipv4_redacted,headers}`;
+each header is `{name,name_encoding,value,value_encoding}`. An attempt returns
+`{save_state,responses}`, each response adding a one-based `response_index` to the
+same header view. Repeated values remain separate. Encoding is `utf-8` or
+`base64`; base64 preserves non-UTF-8 bytes rather than substituting text. Values
+remain untrusted data. These are Go-parsed HTTP headers, not a packet capture:
+wire casing/order and transport framing are not promised. The request includes
+Host; response collections preserve separate discovery pages/polls when captured.
+
+Authorization, cookies and recognized credential-header values are replaced by
+`[redacted]` before encoding/storage. This is name-based credential protection,
+not a promise that arbitrary upstream text contains no secrets. Administrators
+and L6 receive all other saved bytes. For L5, IPv4 addresses in both header names
+and values are replaced before text/base64 encoding; the separate approved source
+IP observation keeps its existing address. Ordinary callers have no full-header
+route, even for their own requests. The new GETs reuse request/attempt authority,
+retention and held-log access, and send `no-store`.
+
+Each physical header capture is bounded at 1 MiB; a response collection supports
+at most 20 physical responses and 8 MiB of decoded/encoded collection material.
+`save_state` is `saved|too_large|unavailable|capacity_exhausted|not_recorded`;
+absence or an over-limit collection is explicit, not a fabricated empty capture.
+The independent `request_header_budget_mib` defaults to 1024, accepts 1–65536,
+and counts encoded saved payload bytes including held headers. At capacity new
+collections are omitted atomically; existing unexpired data is not evicted.
+Lowering the budget pauses new storage until space is available. The diagnostic
+capacity endpoint continues to describe the separate raw-error store; it does not
+return a header-capacity subobject.
+Headers follow their request root's original 30-day deadline or approved hold;
+account deletion preserves only the same authorized deidentified request graph.
+They are excluded from ordinary list/detail/export payloads and personal export.
+The normalized source-fact origin fields below still omit paths; the separate
+full-header capture can retain complete Origin/Referer values and other headers.
 
 Original failure capture covers personal/charity calls, retries, explicit streaming error events, model discovery and the image activity. It captures the HTTP-decoded error entity or error event, not TLS/chunk/compression wire bytes. Each body is capped at 1 MiB; truncation is explicit. JSON has formatted and original views, other text is rendered as text, and non-UTF-8 bytes use a base64 representation without pretending replacement text is the original. Local refusals have the site's safe reason and no invented upstream body. Successful response bodies, normal stream content, request bodies and Authorization headers are not actively logged. An upstream can echo inputs or credentials in an error; those original bytes may be retained in this restricted store.
 
@@ -1433,7 +1655,7 @@ RAM pickup window; successful generation is not refunded if a result is lost or
 not downloaded. Natural activity end lets accepted tasks finish; manual pause
 or maintenance cancels undispatched tasks with refunds. Ban, deletion, and
 model withdrawal follow the documented atomic cleanup rules. Safe task history
-lasts 30 days; accounting follows ledger retention and account export schema 20.
+lasts 30 days; accounting follows ledger retention and account export schema 22.
 
 ### Lake Notes API
 
@@ -1493,4 +1715,4 @@ lifetime claims. Reusing an earlier day's idempotency key returns current state
 without purchasing again or consuming the new day's limit. Monthly ticket
 exchange caps and single-ticket prices do not affect these bundles.
 
-Reward receipts are included in export schema 20 under `rewards`. They contain the account’s successful site-wide and code rewards, quantities, duplicate conversions and skipped items, without code text, eligibility configuration, other recipients or retry hashes. Receipts remain for the account lifetime and are removed on deletion; campaign totals and used quota remain. See [rewards](rewards.md).
+Reward receipts are included in export schema 22 under `rewards`. They contain the account’s successful site-wide and code rewards, quantities, duplicate conversions and skipped items, without code text, eligibility configuration, other recipients or retry hashes. Receipts remain for the account lifetime and are removed on deletion; campaign totals and used quota remain. See [rewards](rewards.md).
