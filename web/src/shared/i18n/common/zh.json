@@ -439,6 +439,9 @@
         "selectedKeyMissing": "所选密钥已不在这份捐赠中。",
         "changedWhileReading": "读取密钥时捐赠已发生变化，请刷新后再编辑。",
         "returnToList": "返回列表",
+        "refetchModels": "重新拉取模型列表",
+        "manageSelectedKey": "管理密钥",
+        "returnToCandidates": "返回模型列表",
         "returnToModel": "返回模型配置",
         "sourcePreview": "显示 {{total}} 个来源中的 {{shown}} 个",
         "sourceBrowser": {

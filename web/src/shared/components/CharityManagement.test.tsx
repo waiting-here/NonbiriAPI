@@ -1543,3 +1543,108 @@ describe('trainee model capabilities', () => {
     },
   );
 });
+
+describe('CharityManagement candidate key shortcuts', () => {
+  it.each(['admin', 'level6', 'level5'] as const)(
+    'opens and returns from only the selected key using existing %s permissions',
+    async (access) => {
+      const frame = access === 'admin' ? 'admin' : 'steward';
+      const prefix = frame === 'admin' ? '/admin/api' : '/api/steward';
+      const donation = approvedDonation(managedKey({ safe_note: 'Shortcut key' }));
+      const model = { ...charityModel(10, 20), is_mainstream: true };
+      const requests: string[] = [];
+      vi.stubGlobal(
+        'fetch',
+        vi.fn<typeof fetch>(async (input, init) => {
+          const url = new URL(String(input), 'https://example.test');
+          requests.push(url.pathname + url.search);
+          if ((init?.method ?? 'GET') !== 'GET') throw new Error('Unexpected write');
+          if (url.pathname === '/admin/api/session') return jsonResponse(adminSession);
+          if (url.pathname === '/api/session')
+            return jsonResponse({
+              ...stewardSession,
+              user: { ...stewardSession.user, effective_level: access === 'level5' ? 5 : 6 },
+            });
+          if (url.pathname.endsWith('/time-context')) return jsonResponse(siteTimeContext);
+          if (url.pathname.endsWith('/time-zones'))
+            return jsonResponse({
+              version: 'go1.26.6-zoneinfo',
+              zones: ['UTC', 'America/Indianapolis'],
+            });
+          if (url.pathname === prefix + '/charity-models')
+            return jsonResponse(numberedPage([model], url));
+          if (url.pathname === prefix + '/charity-models/1') return jsonResponse(model);
+          if (url.pathname.endsWith('/bindings'))
+            return jsonResponse({ bindings: [], binding_revision: '0' });
+          if (url.pathname === prefix + '/donations')
+            return jsonResponse(numberedPage([donationSummary(donation)], url));
+          if (url.pathname === prefix + '/donations/1') {
+            expect(frame).toBe('admin');
+            return jsonResponse(donation);
+          }
+          if (url.pathname === prefix + '/donations/1/keys/11') {
+            expect(frame).toBe('steward');
+            expect(url.searchParams.get('charity_model_id')).toBe('1');
+            return jsonResponse(keySummary(donation, donation.keys[0]));
+          }
+          if (url.pathname === prefix + '/donation-sources')
+            return jsonResponse(
+              numberedPage(
+                [
+                  {
+                    source_key: 'dsg_' + 'A'.repeat(43),
+                    safe_source: donation.keys[0].safe_source,
+                    donation_count: '1',
+                    key_count: '1',
+                    usable_key_count: '1',
+                    pending_donation_count: '0',
+                  },
+                ],
+                url,
+              ),
+            );
+          if (url.pathname.endsWith('/keys'))
+            return jsonResponse(numberedPage([keySummary(donation, donation.keys[0])], url));
+          if (url.pathname.endsWith('/binding-candidates'))
+            return jsonResponse(
+              numberedPage([bindingCandidate(donation, donation.keys[0], 'shortcut-model')], url),
+            );
+          throw new Error('Unexpected request: ' + url.pathname);
+        }),
+      );
+      const view = await renderWithProviders(<SessionBackedManagement frame={frame} />, {
+        station: frame === 'admin' ? 'admin' : 'user',
+        role: access,
+      });
+      if (access !== 'level5')
+        await view.user.click(await screen.findByRole('tab', { name: /Charity models and/ }));
+      await view.user.click(await screen.findByRole('button', { name: 'Manage' }));
+      const pickerNode = await waitFor(() => {
+        const node = view.container.querySelector('.ops-binding-picker');
+        expect(node).not.toBeNull();
+        return node as HTMLElement;
+      });
+      const picker = within(pickerNode);
+      await view.user.click(
+        await picker.findByRole('button', { name: /https:\/\/example.test\/v1/ }),
+      );
+      await view.user.click(await picker.findByRole('button', { name: /Shortcut key/ }));
+      await view.user.click(await picker.findByRole('checkbox', { name: /shortcut-model/ }));
+      await view.user.click(picker.getByRole('button', { name: 'Manage key' }));
+      await screen.findByRole('heading', { name: 'Manage key #11' });
+      const save = await screen.findByRole('button', { name: 'Save key limits' });
+      expect(save).toBeEnabled();
+      expect(screen.getByRole('button', { name: 'Add selected connections' })).toBeDisabled();
+      await view.user.click(screen.getByRole('button', { name: 'Return to model list' }));
+      await waitFor(() =>
+        expect(picker.getByRole('checkbox', { name: /shortcut-model/ })).toBeEnabled(),
+      );
+      expect(picker.getByRole('checkbox', { name: /shortcut-model/ })).toBeChecked();
+      expect(screen.getByRole('button', { name: 'Add selected connections' })).toBeEnabled();
+      if (frame === 'steward') {
+        expect(requests).toContain(prefix + '/donations/1/keys/11?charity_model_id=1');
+        expect(requests).not.toContain(prefix + '/donations/1');
+      }
+    },
+  );
+});

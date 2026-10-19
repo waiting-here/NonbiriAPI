@@ -40,11 +40,15 @@ import '@shared/styles/charity-management.css';
 import { createTimeDraft, timeDraftValue, type TimeDraft } from '@shared/time';
 import type { TransportRule } from '@shared/transportRule';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router';
 import { useRetainedOperation } from '../../../admin/features/operations/useRetainedOperation';
-import { CharityBindingPicker, type CharitySelection } from '../CharityBindingPicker';
+import {
+  CharityBindingPicker,
+  type CharityPickerKeyManagerProps,
+  type CharitySelection,
+} from '../CharityBindingPicker';
 import { charityControlCopy } from '../charityControlCopy';
 import { CharityModelScope } from '../CharityModelScope';
 import { CharityRolePolicyForm } from '../CharityRolePolicyForm';
@@ -905,6 +909,7 @@ function BindingsPanel({
   model,
   onCapabilityLoss,
   showAdaptation,
+  renderKeyManager,
 }: {
   role: CharityRole;
   accountId: string;
@@ -912,6 +917,7 @@ function BindingsPanel({
   model: CharityModel;
   onCapabilityLoss?: () => void;
   showAdaptation: boolean;
+  renderKeyManager: (props: CharityPickerKeyManagerProps) => ReactNode;
 }) {
   const { t } = useTranslation();
   const adaptationCopy = useRequestAdaptationCopy();
@@ -1211,16 +1217,19 @@ function BindingsPanel({
           </div>
         ) : null}
         <h3>{t('common.operations.charity.bindingCandidates')}</h3>
-        <CharityBindingPicker
-          key={model.id}
-          role={role}
-          modelId={model.id}
-          selected={selected}
-          onChange={setSelected}
-          locked={busy || !bindings.data}
-          onCapabilityLoss={onCapabilityLoss}
-          onReadStateChange={setPickerBlocked}
-        />
+        <CharityModelScope modelID={role === 'steward' ? model.id : undefined}>
+          <CharityBindingPicker
+            key={model.id}
+            role={role}
+            modelId={model.id}
+            selected={selected}
+            onChange={setSelected}
+            locked={busy || !bindings.data}
+            onCapabilityLoss={onCapabilityLoss}
+            onReadStateChange={setPickerBlocked}
+            renderKeyManager={renderKeyManager}
+          />
+        </CharityModelScope>
         <div className="ops-actions">
           <button
             className="nb-btn nb-btn--primary"
@@ -1254,6 +1263,7 @@ function BindingsPanel({
 
 export function ModelsPanel({
   renderScopedKeys,
+  renderKeyManager,
   role,
   accountId,
   onCapabilityLoss,
@@ -1264,6 +1274,7 @@ export function ModelsPanel({
     accountId: string;
     onCapabilityLoss?: () => void;
   }) => import('react').ReactNode;
+  renderKeyManager: (props: CharityPickerKeyManagerProps) => ReactNode;
   role: CharityRole;
   accountId: string;
   onCapabilityLoss?: () => void;
@@ -1574,6 +1585,7 @@ export function ModelsPanel({
                 refresh={refresh}
                 onCapabilityLoss={onCapabilityLoss}
                 showAdaptation={!trainee}
+                renderKeyManager={renderKeyManager}
               />
               {trainee ? (
                 <CharityModelScope modelID={selected.id}>
