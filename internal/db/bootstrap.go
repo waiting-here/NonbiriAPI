@@ -332,7 +332,7 @@ func openSQLite(path, mode string) (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	d, err := sql.Open("sqlite", dsn)
+	d, err := openSQLiteHandle(dsn, mode)
 	if err != nil {
 		return nil, err
 	}
