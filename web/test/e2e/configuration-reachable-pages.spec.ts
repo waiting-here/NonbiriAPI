@@ -413,7 +413,7 @@ test('reachable user charity shows the neutral upstream warning without the stat
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',
-    path: '/api/donations?page=1&page_size=20',
+    path: '/api/donations?view=current&page=1&page_size=20',
     body: numberedResponse([], '1', 20),
   });
 

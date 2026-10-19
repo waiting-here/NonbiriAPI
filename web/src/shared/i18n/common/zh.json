@@ -585,7 +585,7 @@
         "searchModels": "搜索模型",
         "selectedModels": "已选模型",
         "selectedCount": "已选 {{count}} 个服务连接",
-        "crossSelectionHelp": "可返回选择其他捐赠和密钥，已选项会保留；单次最多添加 100 个。",
+        "crossSelectionHelp": "可返回选择其他捐赠和密钥，已选项会保留。每个目标最多 256 个连接，请按剩余容量选择。",
         "accessLost": "公益管理权限已失效。",
         "bindingCandidates": "可添加的服务连接",
         "callLimit": "调用次数上限",

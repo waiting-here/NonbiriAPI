@@ -585,7 +585,7 @@
         "searchModels": "Search models",
         "selectedModels": "Selected models",
         "selectedCount": "{{count}} service connection(s) selected",
-        "crossSelectionHelp": "Return to choose other donations and keys while keeping your selections. Add up to 100 at a time.",
+        "crossSelectionHelp": "Return to choose other donations and keys while keeping your selections. Each target holds up to 256 connections; choose within its available slots.",
         "accessLost": "Charity management access is no longer available.",
         "bindingCandidates": "Connections available to add",
         "callLimit": "Call limit",

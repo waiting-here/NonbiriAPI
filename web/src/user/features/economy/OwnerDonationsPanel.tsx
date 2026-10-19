@@ -304,6 +304,7 @@ function OwnerDonationsAccount({ accountID, enabled }: { accountID: string; enab
       {query.data && !accessLost(query.error) ? (
         <>
           <PagePagination
+            alwaysShowJump
             metadata={query.data.pagination}
             requestedPage={pager.page}
             onPageChange={pager.setPage}
@@ -514,7 +515,7 @@ export function OwnerDonationKeys({
     () => query.refetch({ throwOnError: true }),
   );
   return (
-    <div>
+    <div className="economy-owner-keys">
       <Tabs
         label={t('user.charity.ownerHistory.keyViews')}
         value={view}
@@ -536,6 +537,7 @@ export function OwnerDonationKeys({
       {query.data && !accessLost(query.error) ? (
         <>
           <PagePagination
+            alwaysShowJump
             metadata={query.data.pagination}
             requestedPage={pager.page}
             onPageChange={pager.setPage}
