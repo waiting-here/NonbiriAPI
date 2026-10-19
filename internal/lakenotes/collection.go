@@ -17,7 +17,7 @@ func (s *Service) ClaimCollection(ctx context.Context, user int64, key string, i
 	if _, _, ok := rules.CollectionProgress(rules.InitialProfile(), input.Location); !ok {
 		return MutationResult[ProfileView]{}, ErrInvalid
 	}
-	return mutate(ctx, s, user, false, key, "POST", baseRoute+"/collection-claims", input, func(tx *sql.Tx, now time.Time) (ProfileView, error) {
+	return mutate(ctx, s, user, false, key, "POST", baseRoute+"/collection-claims", input, func(tx *sql.Tx, now time.Time, _ []byte) (ProfileView, error) {
 		if _, err := s.qualifiedTx(ctx, tx, user, now.Unix()); err != nil {
 			return ProfileView{}, err
 		}
@@ -45,6 +45,8 @@ func (s *Service) ClaimCollection(ctx context.Context, user int64, key string, i
 		if err = saveProfileTx(ctx, tx, user, &row, now.Unix()); err != nil {
 			return ProfileView{}, err
 		}
+		// Reward hooks invalidate wallet/admission snapshots. Keep this fresh
+		// projection rather than reusing values obtained before the hook.
 		return s.profileViewTx(ctx, tx, user, now)
 	})
 }
