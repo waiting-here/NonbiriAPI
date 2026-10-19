@@ -1,6 +1,13 @@
 import { NullableValue } from './charity/NullableValue';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
-import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
+import {
+  Card,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  PageHeader,
+  StatusBadge,
+} from '@shared/components/States';
 import { DataTable, FilterBar, Fold, MoreMenu, Tabs } from '@shared/components/ui';
 import {
   charityKeys,
@@ -28,7 +35,7 @@ import { useDetailNavigation } from '@shared/operations/useDetailNavigation';
 import { usePagePager } from '@shared/operations/usePagePager';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
-import { isForbidden, isUnauthorized } from '@shared/query/http';
+import { ApiError, isForbidden, isUnauthorized } from '@shared/query/http';
 import '@shared/styles/charity-management.css';
 import { createTimeDraft, timeDraftValue, type TimeDraft, type TimeStation } from '@shared/time';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
@@ -62,6 +69,9 @@ import { DonationDiscoveryControl } from './DonationDiscoveryControl';
 import { DonationHandlingControl, DonationHandlingStatus } from './DonationHandling';
 import { donationHandlingStateKey } from './donationHandlingCopy';
 import { DonationKeyModels } from './DonationKeyModels';
+import { Button } from './ui/Button';
+import { stationSessionWrite } from '@shared/charityManagement';
+import type { CharityPickerKeyManagerProps } from './CharityBindingPicker';
 import { FailurePolicyControl } from './FailurePolicyControl';
 import { FailureResetControl } from './FailureResetControl';
 import { KeyLimitSummary } from './KeyRoutingLimits';
@@ -1829,6 +1839,15 @@ function CharityManagementAccount({
           <DonationsPanel role={frame} accountId={accountId} onCapabilityLoss={clearCapability} />
         ) : section === 'models' ? (
           <ModelsPanel
+            renderKeyManager={(props) => (
+              <PickerKeyManager
+                key={`${props.modelID}:${props.donationID}:${props.keyID}`}
+                {...props}
+                role={frame}
+                accountId={accountId}
+                onCapabilityLoss={clearCapability}
+              />
+            )}
             renderScopedKeys={(props) => <ScopedKeyBrowser key={props.modelID} {...props} />}
             role={frame}
             accountId={accountId}
@@ -1966,6 +1985,108 @@ function ScopedKeyBrowser({
           </Card>
         ) : null
       ) : null}
+    </div>
+  );
+}
+
+function PickerKeyManager({
+  modelID,
+  donationID,
+  keyID,
+  onBack,
+  role,
+  accountId,
+  onCapabilityLoss,
+}: CharityPickerKeyManagerProps & {
+  role: CharityRole;
+  accountId: string;
+  onCapabilityLoss?: () => void;
+}) {
+  const { t } = useTranslation();
+  const client = useQueryClient();
+  const detail = useQuery({
+    queryKey: [...charityKeys.root(role), 'picker-key', accountId, modelID, donationID, keyID],
+    queryFn: ({ signal }) =>
+      stationSessionWrite(client, role, async () => {
+        if (role === 'steward') {
+          const key = await getScopedDonationKey(modelID, donationID, keyID, signal);
+          return {
+            key,
+            donation: {
+              id: key.donation_id,
+              revision: key.donation_revision,
+              status:
+                key.charity_state === 'pending' ? ('pending' as const) : ('approved' as const),
+            },
+          };
+        }
+        const donation = await getManagedDonation(role, donationID, signal);
+        const key = donation.keys.find((item) => item.id === keyID);
+        if (!key) throw new ApiError('not_found', 'Donation key not found.', 404);
+        return { key, donation };
+      }),
+    retry: false,
+  });
+  const lost = isUnauthorized(detail.error) || isForbidden(detail.error);
+  useEffect(() => {
+    if (lost) onCapabilityLoss?.();
+  }, [lost, onCapabilityLoss]);
+  const refresh = () => client.invalidateQueries({ queryKey: charityKeys.root(role) });
+  return (
+    <div className="ops-stack">
+      <PageHeader
+        title={t('common.operations.charity.sourceBrowser.manageKey', { id: keyID })}
+        back={
+          <Button type="button" variant="ghost" onClick={onBack}>
+            {t('common.operations.charity.returnToCandidates')}
+          </Button>
+        }
+      />
+      {detail.isPending ? (
+        <LoadingState />
+      ) : detail.error ? (
+        <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
+      ) : (
+        <Card>
+          <DonationKeyEditor
+            key={detail.data.donation.revision}
+            item={detail.data.key}
+            donation={detail.data.donation}
+            role={role}
+            refresh={refresh}
+            onCapabilityLoss={onCapabilityLoss}
+          />
+          <DonationDiscoveryControl
+            role={role}
+            target={{ donation_id: donationID, key_id: keyID }}
+            disabled={detail.data.key.charity_state !== 'available'}
+            onCapabilityLoss={onCapabilityLoss}
+          />
+          <DonationKeyModels
+            role={role}
+            accountId={accountId}
+            donationId={donationID}
+            keyId={keyID}
+            editable={
+              detail.data.key.charity_state !== 'ended' &&
+              detail.data.key.charity_state !== 'expired'
+            }
+            onCapabilityLoss={onCapabilityLoss}
+          />
+          <RecurringLimitsDisclosure
+            role={role}
+            accountId={accountId}
+            donationId={donationID}
+            keyId={keyID}
+            readOnly={
+              detail.data.key.charity_state === 'ended' ||
+              detail.data.key.charity_state === 'expired'
+            }
+            onSaved={() => void refresh()}
+            onCapabilityLoss={onCapabilityLoss}
+          />
+        </Card>
+      )}
     </div>
   );
 }

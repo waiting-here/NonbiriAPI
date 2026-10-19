@@ -1,5 +1,5 @@
 import { Button } from '@shared/components/ui/Button';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
@@ -18,6 +18,7 @@ import {
   type DonationSourceSummary,
   type ManagedDonationKeySummary,
 } from '@shared/operations/donationPages';
+import { useDetailNavigation } from '@shared/operations/useDetailNavigation';
 import { PagePagination } from '@shared/operations/PagePagination';
 import {
   getManagedBindingCandidatesPage,
@@ -34,6 +35,8 @@ import type { PageMetadata } from '@shared/operations/pageNumbers';
 import { EmptyState, ErrorState, LoadingState } from './States';
 import { KeyLimitSummary } from './KeyRoutingLimits';
 import { DonationKeyNotes } from './DonationControlFacts';
+import { DonationDiscoveryControl } from './DonationDiscoveryControl';
+import './CharityBindingPicker.css';
 
 export type CharitySelection = CharityBindingCandidate & { note: string };
 
@@ -152,6 +155,13 @@ function pagePlaceholder<T>(
   return previous;
 }
 
+export interface CharityPickerKeyManagerProps {
+  modelID: string;
+  donationID: string;
+  keyID: string;
+  onBack: () => void;
+}
+
 interface CharityBindingPickerProps {
   role: CharityRole;
   modelId: string;
@@ -160,6 +170,7 @@ interface CharityBindingPickerProps {
   locked: boolean;
   onCapabilityLoss?: () => void;
   onReadStateChange?: (blocked: boolean) => void;
+  renderKeyManager?: (props: CharityPickerKeyManagerProps) => ReactNode;
 }
 
 type ManagementCapability = ReturnType<typeof useManagementCapability>;
@@ -212,6 +223,7 @@ function CharityBindingPickerBody({
   locked,
   onCapabilityLoss,
   onReadStateChange,
+  renderKeyManager,
   account,
   management,
   sessionError,
@@ -228,11 +240,15 @@ function CharityBindingPickerBody({
   const [selectedSource, setSelectedSource] = useState<DonationSourceSummary | null>(null);
   const [keyQueryDraft, setKeyQueryDraft] = useState('');
   const [keyQuery, setKeyQuery] = useState('');
-  const [selectedKey, setSelectedKey] = useState<ManagedDonationKeySummary | null>(null);
+  const [selectedKeySnapshot, setSelectedKey] = useState<ManagedDonationKeySummary | null>(null);
   const [candidateQueryDraft, setCandidateQueryDraft] = useState('');
   const [candidateQuery, setCandidateQuery] = useState('');
   const [candidateSource, setCandidateSource] = useState<CandidateSource>('');
   const lossNotified = useRef(false);
+  const [managingKey, setManagingKey] = useState(false);
+  const { listRef, detailRef, remember } = useDetailNavigation(
+    managingKey ? (selectedKeySnapshot?.key_id ?? '') : '',
+  );
 
   const station = role === 'admin' ? 'admin' : 'user';
   const sourcePager = usePagePager({
@@ -250,7 +266,7 @@ function CharityBindingPickerBody({
   const candidatePager = usePagePager({
     station,
     listType: candidatePageList,
-    scopeKey: `${account ?? 'no-account'}:${modelId}:${selectedKey?.key_id ?? 'no-key'}`,
+    scopeKey: `${account ?? 'no-account'}:${modelId}:${selectedKeySnapshot?.key_id ?? 'no-key'}`,
     resetKey: `${candidateQuery}:${candidateSource}`,
   });
   const selectedPager = usePagePager({
@@ -263,6 +279,7 @@ function CharityBindingPickerBody({
   const sessionErrorLost = isUnauthorized(sessionError) || isForbidden(sessionError);
   const canRead =
     Boolean(account) && management.authorityReady && !sessionCapabilityLost && !sessionError;
+  const readEnabled = canRead && !managingKey;
   const sourceQueryIdentity = [
     ...charityKeys.root(role),
     'binding-picker',
@@ -295,7 +312,7 @@ function CharityBindingPickerBody({
     modelId,
     'candidates',
     selectedSource?.source_key ?? 'no-source',
-    selectedKey?.key_id ?? 'no-key',
+    selectedKeySnapshot?.key_id ?? 'no-key',
     candidateQuery,
     candidateSource,
   ] as const;
@@ -317,7 +334,7 @@ function CharityBindingPickerBody({
           role === 'steward' ? modelId : undefined,
         ),
       ),
-    enabled: canRead,
+    enabled: readEnabled,
     placeholderData: (previous, previousQuery) =>
       pagePlaceholder(
         previous,
@@ -342,7 +359,7 @@ function CharityBindingPickerBody({
           role === 'steward' ? modelId : undefined,
         ),
       ),
-    enabled: canRead && Boolean(selectedSource),
+    enabled: readEnabled && Boolean(selectedSource),
     placeholderData: (previous, previousQuery) =>
       pagePlaceholder(
         previous,
@@ -353,6 +370,9 @@ function CharityBindingPickerBody({
       ),
     retry: false,
   });
+  const selectedKey =
+    sourceKeys.data?.data.find((entry) => entry.key_id === selectedKeySnapshot?.key_id) ??
+    selectedKeySnapshot;
   const candidates = useQuery({
     queryKey: candidateQueryKey,
     queryFn: ({ signal }) =>
@@ -366,7 +386,7 @@ function CharityBindingPickerBody({
           signal,
         ),
       ),
-    enabled: canRead && Boolean(selectedSource && selectedKey),
+    enabled: readEnabled && Boolean(selectedSource && selectedKey),
     placeholderData: (previous, previousQuery) =>
       pagePlaceholder(
         previous,
@@ -402,6 +422,7 @@ function CharityBindingPickerBody({
     (candidates.isPending || candidates.isFetching || Boolean(candidates.error));
   const readStateBlocked =
     !canRead ||
+    managingKey ||
     requestCapabilityLost ||
     sourceReadBlocked ||
     sourceKeyReadBlocked ||
@@ -484,8 +505,13 @@ function CharityBindingPickerBody({
     selectedPage * selectedPageSize,
   );
 
-  return (
-    <div className="ops-binding-picker">
+  const picker = (
+    <div
+      className="ops-binding-picker charity-binding-picker"
+      hidden={managingKey}
+      ref={listRef}
+      tabIndex={-1}
+    >
       <nav className="ops-actions" aria-label={t('common.operations.charity.bindingCandidates')}>
         <Button
           type="button"
@@ -778,6 +804,30 @@ function CharityBindingPickerBody({
                 })}{' '}
                 · {selectedKey.safe_source.base_url}
               </p>
+              <div className="charity-binding-key-shortcuts">
+                {!managingKey ? (
+                  <DonationDiscoveryControl
+                    key={selectedKey.key_id}
+                    role={role}
+                    target={{ donation_id: selectedKey.donation_id, key_id: selectedKey.key_id }}
+                    buttonLabel={t('common.operations.charity.refetchModels')}
+                    disabled={locked || !canRead || selectedKey.charity_state !== 'available'}
+                    onCapabilityLoss={onCapabilityLoss}
+                  />
+                ) : null}
+                {renderKeyManager ? (
+                  <Button
+                    type="button"
+                    disabled={locked || !canRead}
+                    onClick={() => {
+                      remember();
+                      setManagingKey(true);
+                    }}
+                  >
+                    {t('common.operations.charity.manageSelectedKey')}
+                  </Button>
+                ) : null}
+              </div>
               {sourceKeys.error ? (
                 <ErrorState error={sourceKeys.error} onRetry={() => void sourceKeys.refetch()} />
               ) : null}
@@ -947,5 +997,20 @@ function CharityBindingPickerBody({
         />
       </section>
     </div>
+  );
+  return (
+    <>
+      {managingKey && selectedKey && renderKeyManager ? (
+        <div ref={detailRef} tabIndex={-1}>
+          {renderKeyManager({
+            modelID: modelId,
+            donationID: selectedKey.donation_id,
+            keyID: selectedKey.key_id,
+            onBack: () => setManagingKey(false),
+          })}
+        </div>
+      ) : null}
+      {picker}
+    </>
   );
 }

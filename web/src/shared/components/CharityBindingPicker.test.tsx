@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   beginManagementSessionRequest,
   charityManagementKeys,
   noteManagementSessionSuccess,
 } from '@shared/charityManagement';
 import { charityKeys } from '@shared/operations/charity';
-import type { CharitySelection } from './CharityBindingPicker';
+import type { CharityPickerKeyManagerProps, CharitySelection } from './CharityBindingPicker';
 import { CharityBindingPicker } from './CharityBindingPicker';
 import { disposeTestProviders, renderWithProviders } from '../../../test/unit/support';
 
@@ -155,10 +155,12 @@ function PickerHarness({
   onReadStateChange,
   locked = false,
   modelId = '31',
+  renderKeyManager,
 }: {
   onReadStateChange?: (blocked: boolean) => void;
   locked?: boolean;
   modelId?: string;
+  renderKeyManager?: (props: CharityPickerKeyManagerProps) => ReactNode;
 } = {}) {
   const [selected, setSelected] = useState<Record<string, CharitySelection>>({});
   return (
@@ -169,6 +171,7 @@ function PickerHarness({
       onChange={setSelected}
       locked={locked}
       onReadStateChange={onReadStateChange}
+      renderKeyManager={renderKeyManager}
     />
   );
 }
@@ -622,5 +625,227 @@ describe('CharityBindingPicker numbered source flow', () => {
     expect(
       fetchMock.mock.calls.some(([input]) => String(input).includes('binding-candidates')),
     ).toBe(false);
+  });
+});
+
+function discoveryEvidence(state: 'checking' | 'succeeded' | 'failed') {
+  return {
+    state,
+    revision: '2',
+    result: state === 'succeeded' ? 'nonempty' : null,
+    safe_class: state === 'failed' ? 'auth' : 'none',
+    observed_at: 1_800_000_000,
+    count: state === 'succeeded' ? '1' : null,
+  };
+}
+
+describe('CharityBindingPicker key shortcuts', () => {
+  it('starts discovery for the selected key, prevents duplicate sends, and updates candidates after completion', async () => {
+    const completed = deferred<Response>();
+    let modelID = 'model-before';
+    let posts = 0;
+    let candidateReads = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async (input, init) => {
+        const url = new URL(String(input), 'https://example.test');
+        if (url.pathname.endsWith('/models/refresh')) {
+          expect(url.pathname).toBe('/admin/api/donations/7/keys/21/models/refresh');
+          expect(init?.method).toBe('POST');
+          expect(new Headers(init?.headers).get('Idempotency-Key')).toMatch(/^[A-Za-z0-9_-]{22}$/);
+          posts++;
+          return jsonResponse({
+            operation_id: 'op_' + 'A'.repeat(22),
+            evidence: discoveryEvidence('checking'),
+          });
+        }
+        if (url.pathname.endsWith('/models/discovery')) return completed.promise;
+        if (url.pathname === '/admin/api/donation-sources')
+          return jsonResponse(sourcePage([source()]));
+        if (url.pathname.endsWith('/keys')) return jsonResponse(sourcePage([key()]));
+        if (url.pathname.endsWith('/binding-candidates')) {
+          candidateReads++;
+          return jsonResponse(sourcePage([candidate({ modelID })]));
+        }
+        throw new Error('Unexpected request: ' + url.pathname);
+      }),
+    );
+    const view = await renderWithProviders(<PickerHarness />, { station: 'admin', role: 'admin' });
+    authorize(view.queryClient);
+    await view.user.click(await screen.findByRole('button', { name: /Custom endpoint/ }));
+    await view.user.click(await screen.findByRole('button', { name: /safe key note/ }));
+    await screen.findByRole('checkbox', { name: /model-before/ });
+    const refresh = screen.getByRole('button', { name: 'Fetch model list again' });
+    await view.user.click(refresh);
+    expect(refresh).toBeDisabled();
+    await view.user.click(refresh);
+    expect(posts).toBe(1);
+    expect(candidateReads).toBe(1);
+    modelID = 'model-after';
+    completed.resolve(jsonResponse(discoveryEvidence('succeeded')));
+    await screen.findByRole('checkbox', { name: /model-after/ });
+    expect(screen.queryByRole('checkbox', { name: /model-before/ })).not.toBeInTheDocument();
+    await waitFor(() => expect(refresh).toBeEnabled());
+    expect(candidateReads).toBe(2);
+  });
+
+  it('keeps a failed upstream check recoverable and starts a new check on retry', async () => {
+    let attempts = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async (input) => {
+        const url = new URL(String(input), 'https://example.test');
+        if (url.pathname.endsWith('/models/refresh')) {
+          attempts++;
+          return jsonResponse({
+            operation_id: 'op_' + 'A'.repeat(22),
+            evidence: discoveryEvidence('checking'),
+          });
+        }
+        if (url.pathname.endsWith('/models/discovery'))
+          return jsonResponse(discoveryEvidence(attempts === 1 ? 'failed' : 'succeeded'));
+        if (url.pathname === '/admin/api/donation-sources')
+          return jsonResponse(sourcePage([source()]));
+        if (url.pathname.endsWith('/keys')) return jsonResponse(sourcePage([key()]));
+        if (url.pathname.endsWith('/binding-candidates'))
+          return jsonResponse(sourcePage([candidate()]));
+        throw new Error('Unexpected request: ' + url.pathname);
+      }),
+    );
+    const view = await renderWithProviders(<PickerHarness />, { station: 'admin', role: 'admin' });
+    authorize(view.queryClient);
+    await view.user.click(await screen.findByRole('button', { name: /Custom endpoint/ }));
+    await view.user.click(await screen.findByRole('button', { name: /safe key note/ }));
+    await screen.findByRole('checkbox', { name: /model-a/ });
+    const refresh = screen.getByRole('button', { name: 'Fetch model list again' });
+    await view.user.click(refresh);
+    await screen.findByText('0 succeeded · 1 failed · 0 skipped');
+    await waitFor(() => expect(refresh).toBeEnabled());
+    await view.user.click(refresh);
+    await screen.findByText('1 succeeded · 0 failed · 0 skipped');
+    expect(attempts).toBe(2);
+  });
+
+  it('stops the previous control when switching keys and ignores its late forbidden response', async () => {
+    const oldSend = deferred<Response>();
+    const onCapabilityLoss = vi.fn();
+    const paths: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async (input) => {
+        const url = new URL(String(input), 'https://example.test');
+        paths.push(url.pathname);
+        if (url.pathname.endsWith('/models/refresh')) return oldSend.promise;
+        if (url.pathname === '/admin/api/donation-sources')
+          return jsonResponse(sourcePage([source()]));
+        if (url.pathname.endsWith('/keys'))
+          return jsonResponse(sourcePage([key(), key({ keyID: '22', safeNote: 'second key' })]));
+        if (url.pathname.endsWith('/binding-candidates')) {
+          const keyID = url.searchParams.get('donation_key_id')!;
+          return jsonResponse(sourcePage([candidate({ keyID, modelID: 'model-' + keyID })]));
+        }
+        throw new Error('Unexpected request: ' + url.pathname);
+      }),
+    );
+    const view = await renderWithProviders(
+      <CharityBindingPicker
+        role="admin"
+        modelId="31"
+        selected={{}}
+        onChange={vi.fn()}
+        locked={false}
+        onCapabilityLoss={onCapabilityLoss}
+      />,
+      { station: 'admin', role: 'admin' },
+    );
+    authorize(view.queryClient);
+    await view.user.click(await screen.findByRole('button', { name: /Custom endpoint/ }));
+    await view.user.click(await screen.findByRole('button', { name: /safe key note/ }));
+    await screen.findByRole('checkbox', { name: /model-21/ });
+    await view.user.click(screen.getByRole('button', { name: 'Fetch model list again' }));
+    await view.user.click(screen.getByRole('button', { name: /Choose key/ }));
+    await view.user.click(await screen.findByRole('button', { name: /second key/ }));
+    await screen.findByRole('checkbox', { name: /model-22/ });
+    await act(async () => oldSend.resolve(new Response('', { status: 403 })));
+    expect(screen.getByRole('checkbox', { name: /model-22/ })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Fetch model list again' })).toBeEnabled();
+    expect(onCapabilityLoss).not.toHaveBeenCalled();
+    expect(paths.some((path) => path.endsWith('/models/discovery'))).toBe(false);
+    expect(screen.queryByText(/Fetching models/)).not.toBeInTheDocument();
+  });
+});
+
+describe('CharityBindingPicker management return', () => {
+  it('opens the exact key, pauses candidate reads, and returns to the same page and selections', async () => {
+    let candidateReads = 0;
+    let safeNote = 'safe key note';
+    const targets: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async (input) => {
+        const url = new URL(String(input), 'https://example.test');
+        if (url.pathname === '/admin/api/donation-sources')
+          return jsonResponse(sourcePage([source()]));
+        if (url.pathname.endsWith('/keys')) return jsonResponse(sourcePage([key({ safeNote })]));
+        if (url.pathname.endsWith('/binding-candidates')) {
+          candidateReads++;
+          const page = url.searchParams.get('page') ?? '1';
+          return jsonResponse(
+            sourcePage(
+              page === '2'
+                ? [candidate({ modelID: 'second-page-model' })]
+                : Array.from({ length: 20 }, (_, index) =>
+                    candidate({ modelID: 'first-page-' + index }),
+                  ),
+              page,
+              21,
+            ),
+          );
+        }
+        throw new Error('Unexpected request: ' + url.pathname);
+      }),
+    );
+    const view = await renderWithProviders(
+      <PickerHarness
+        renderKeyManager={({ modelID, donationID, keyID, onBack }) => {
+          targets.push(modelID + ':' + donationID + ':' + keyID);
+          return (
+            <button
+              type="button"
+              onClick={() => {
+                safeNote = 'Updated key note';
+                onBack();
+              }}
+            >
+              Return to model list
+            </button>
+          );
+        }}
+      />,
+      { station: 'admin', role: 'admin' },
+    );
+    authorize(view.queryClient);
+    await view.user.click(await screen.findByRole('button', { name: /Custom endpoint/ }));
+    await view.user.click(await screen.findByRole('button', { name: /safe key note/ }));
+    await screen.findByRole('checkbox', { name: /first-page-0/ });
+    const pagination = screen.getAllByRole('navigation', { name: 'Pagination' })[0];
+    await view.user.click(within(pagination).getByRole('button', { name: 'Next' }));
+    await view.user.click(await screen.findByRole('checkbox', { name: /second-page-model/ }));
+    await view.user.click(screen.getByRole('button', { name: 'Manage key' }));
+    await screen.findByRole('button', { name: 'Return to model list' });
+    expect(targets.every((target) => target === '31:7:21')).toBe(true);
+    expect(screen.queryByRole('checkbox', { name: /second-page-model/ })).not.toBeInTheDocument();
+    const readsBeforeManagement = candidateReads;
+    await view.queryClient.invalidateQueries({ queryKey: charityKeys.root('admin') });
+    expect(candidateReads).toBe(readsBeforeManagement);
+    await view.user.click(screen.getByRole('button', { name: 'Return to model list' }));
+    await waitFor(() =>
+      expect(screen.getByRole('checkbox', { name: /second-page-model/ })).toBeEnabled(),
+    );
+    expect(screen.getByRole('checkbox', { name: /second-page-model/ })).toBeChecked();
+    expect(screen.getByRole('heading', { name: '1 service connection(s) selected' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Manage key' })).toHaveFocus();
+    expect(candidateReads).toBe(readsBeforeManagement + 1);
+    expect(screen.getByText(/Updated key note/)).toBeVisible();
   });
 });
