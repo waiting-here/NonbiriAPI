@@ -8,10 +8,14 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Changed
 
+- Add exact Discord ID filtering to management request logs, including pagination
+  and exports. Keep it and the called charity model visible in common filters;
+  move the upstream model into additional filters.
+- Add daily mystery-shop bundles of ten standard or limited tickets for 10,000
+  credits each, with independent daily limits and game-credit-first payment.
 - Give level-5 stewards user-management reads and permission to ban level 1–4
   accounts, with current actor and target checks before writes and replay.
   Profile, limits, level, credit, unban and active-ban replacement remain denied.
-
 - Commit attempt and request completion in synchronous batches of up to four,
   with per-item savepoints, durable acknowledgements, bounded pending work and
   independent recovery after a failed batch. Report queue time, batch sizes,

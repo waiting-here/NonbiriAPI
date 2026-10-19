@@ -14,6 +14,7 @@ interface Fixture {
   admin_cookie: Cookie;
   users: { id: string; level: number; cookie: Cookie }[];
   management: {
+    trainee_target_id: string;
     old_user_id: string;
     history_record_id: string;
     history_discord_id: string;
@@ -80,6 +81,72 @@ async function write(context: BrowserContext, origin: string, path: string, data
   expect(response.ok(), 'Synthetic setup ' + path + ': ' + response.status()).toBe(true);
   return response.json();
 }
+
+test('level 5 reads accounts and only bans a lower-level user', async ({ browser }) => {
+  const state = fixture();
+  const context = await session(browser, 5);
+  const id = state.management.trainee_target_id;
+  const root = '/api/steward/users/' + id;
+  const copy = commonEn.management.users;
+  try {
+    const page = await context.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    const before = await read(context, state.user_url, root);
+    await page.goto(state.user_url + '/steward?tab=users&user=' + id);
+    await expect(page.getByRole('tab', { name: copy.tabEconomy, exact: true })).toHaveCount(0);
+    await expect(page.getByText(copy.traineeReadOnly, { exact: true }).first()).toBeVisible();
+    await page.getByRole('tab', { name: copy.tabPenalties, exact: true }).click();
+    await page.getByLabel(copy.banReason, { exact: true }).fill('Synthetic account restriction');
+    await page.getByLabel(copy.banDurationDays, { exact: true }).fill('1');
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate((mode) => {
+        document.documentElement.dataset.theme = mode;
+      }, theme);
+      for (const width of [1440, 390]) {
+        await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+        await page.getByLabel(copy.banReason, { exact: true }).scrollIntoViewIfNeeded();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+          true,
+        );
+        if (process.env.NONBIRI_VISUAL_DIR)
+          await page.screenshot({
+            path: resolve(process.env.NONBIRI_VISUAL_DIR, `trainee-users-${theme}-${width}.png`),
+          });
+      }
+    }
+    const denied = await context.request.patch(state.user_url + root, {
+      headers: { Origin: state.user_url, 'Idempotency-Key': randomUUID() },
+      data: { mode: 'profile', expected_revision: before.revision, level: 3 },
+    });
+    expect(denied.status()).toBe(403);
+    await page.getByRole('button', { name: copy.ban, exact: true }).click();
+    const confirmation = page.getByRole('alertdialog');
+    await expect(confirmation).toBeVisible();
+    if (process.env.NONBIRI_VISUAL_DIR)
+      await page.screenshot({
+        path: resolve(process.env.NONBIRI_VISUAL_DIR, 'trainee-ban-confirm.png'),
+      });
+    await confirmation.getByRole('button', { name: copy.banConfirm, exact: true }).click();
+    await expect(confirmation).not.toBeVisible();
+    const after = await read(context, state.user_url, root);
+    expect(after.is_banned).toBe(true);
+    expect(after.level.effective).toBe(4);
+    await page.reload();
+    await expect(page.getByText(copy.traineeReadOnly, { exact: true }).first()).toBeVisible();
+    await page.getByRole('tab', { name: copy.tabPenalties, exact: true }).click();
+    await expect(page.getByRole('button', { name: copy.unban, exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: copy.ban, exact: true })).toHaveCount(0);
+    const unban = await context.request.post(state.user_url + root + '/unban', {
+      headers: { Origin: state.user_url, 'Idempotency-Key': randomUUID() },
+      data: { expected_revision: after.revision },
+    });
+    expect(unban.status()).toBe(403);
+    expect(errors).toEqual([]);
+  } finally {
+    await context.close();
+  }
+});
 
 test('owner reads donation keys and details from current API responses', async ({ browser }) => {
   const state = fixture(),

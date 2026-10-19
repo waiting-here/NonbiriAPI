@@ -56,6 +56,11 @@ The optional Gacha Simulator includes layered SP artwork. Amber Vow keeps its
 character beside desktop content, with matching static fallback and enhanced
 artwork; composition and source details are in the [art guide](docs/gacha-art.md).
 
+The mystery shop offers daily bundles of ten standard or limited tickets for
+10,000 credits each, using game credits first. Each bundle has its own daily limit.
+Management request logs support an exact Discord ID filter alongside the called
+charity model; additional filters include the upstream model used.
+
 ## Build and develop
 
 Use **Go 1.26.9**, **Node.js ≥22.22.3**, **npm 12.0.1** and Bash; Windows uses Git Bash. The finished binary needs neither Node.js nor a C runtime.

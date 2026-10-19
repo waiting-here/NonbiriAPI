@@ -53,6 +53,7 @@ func seedManagementBrowser(t *testing.T, f *imageBrowserFixture, now int64) map[
 	}
 	current := f.seedUser(11, 1, admin, historyDiscord)
 	disposable := f.seedUser(15, 1, admin, "100000000000000301")
+	traineeTarget := f.seedUser(16, 4, admin)
 	requests := []string{oldRequest}
 	for i, ip := range []string{"198.51.100.82", "198.51.100.83"} {
 		requests = append(requests, seedAuditBrowserRequest(t, f, current.ID, "openai_chat_completions", "self", now+int64(i), ip))
@@ -125,6 +126,7 @@ func seedManagementBrowser(t *testing.T, f *imageBrowserFixture, now int64) map[
 	return map[string]any{"old_user_id": old.ID, "current_user": current, "history_discord_id": historyDiscord, "history_record_id": historyID, "request_ids": requests,
 		"gemini_endpoint_id": geminiEndpoint, "gemini_key_id": geminiKey,
 		"disposable_user_id": disposable.ID,
+		"trainee_target_id":  traineeTarget.ID,
 		"denials":            denials, "channel_id": channel, "endpoint_id": endpoint, "automatic_donation_id": automatic["id"], "pending_donation_id": pending["id"], "charity_model_id": model["id"]}
 }
 
