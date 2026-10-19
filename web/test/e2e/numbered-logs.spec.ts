@@ -413,6 +413,47 @@ for (const role of ['admin', 'steward', 'user'] as const)
         );
         await expect(page.locator('.log-filters summary')).toBeVisible();
         await expect(page.locator('.log-filters .nb-filter__fields')).toBeHidden();
+        if (role !== 'user') {
+          const filters = page.getByTestId('log-filters');
+          const discord = filters.getByRole('textbox', { name: 'Discord ID', exact: true });
+          const charity = filters.getByRole('textbox', {
+            name: 'Called charity model',
+            exact: true,
+          });
+          const upstream = filters.getByRole('textbox', { name: 'Model used', exact: true });
+          await expect(discord).toBeVisible();
+          await expect(filters.getByLabel('User ID', { exact: true })).toBeVisible();
+          await expect(charity).toBeVisible();
+          await expect(upstream).toBeHidden();
+          if (width === 1440 || width === 390) {
+            if (process.env.NONBIRI_VISUAL_DIR)
+              await filters.screenshot({
+                path: resolve(
+                  process.env.NONBIRI_VISUAL_DIR,
+                  `logs-filters-${role}-${theme}-${width}.png`,
+                ),
+                animations: 'disabled',
+              });
+            const more = filters.locator('.nb-filter__more > summary');
+            await more.click();
+            await expect(upstream).toBeVisible();
+            await expect(discord).toBeVisible();
+            await expect(charity).toBeVisible();
+            expect(
+              await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+            ).toBe(true);
+            if (process.env.NONBIRI_VISUAL_DIR)
+              await filters.screenshot({
+                path: resolve(
+                  process.env.NONBIRI_VISUAL_DIR,
+                  `logs-filters-more-${role}-${theme}-${width}.png`,
+                ),
+                animations: 'disabled',
+              });
+            await more.click();
+            await expect(upstream).toBeHidden();
+          }
+        }
         if (width === 390) {
           expect(
             await page

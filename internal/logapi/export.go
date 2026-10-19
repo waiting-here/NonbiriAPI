@@ -76,7 +76,7 @@ func (repository *Repository) exportManagement(ctx context.Context, reader logRe
 	}
 	normalized, err := normalizeListFilter(ListFilter{
 		Phase:  filter.Phase,
-		UserID: filter.UserID, EndpointKeyID: filter.EndpointKeyID, EndpointBaseURL: filter.EndpointBaseURL,
+		UserID: filter.UserID, DiscordID: filter.DiscordID, EndpointKeyID: filter.EndpointKeyID, EndpointBaseURL: filter.EndpointBaseURL,
 		UpstreamModel: filter.UpstreamModel, CharityModel: filter.CharityModel, ErrorCode: filter.ErrorCode,
 		Status: filter.Status, UsageTotalMismatch: filter.UsageTotalMismatch,
 		From: filter.From, To: filter.To, Limit: maximumLimit,
@@ -96,6 +96,10 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 	if normalized.UserID != nil {
 		query += ` AND l.origin_user_id=?`
 		args = append(args, *normalized.UserID)
+	}
+	if normalized.DiscordID != nil {
+		query += ` AND l.origin_discord_id=?`
+		args = append(args, *normalized.DiscordID)
 	}
 	if normalized.EndpointBaseURL != nil {
 		query += endpointURLPredicate

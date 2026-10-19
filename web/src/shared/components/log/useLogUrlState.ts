@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from 'react';
 import { useSearchState } from '@shared/operations/useSearchState';
+import { validLogDiscordID } from './data';
 
 // URL-backed state for the shared log screens. Page, page size, text filters,
 // and the unix-second time range live in the query string so a filtered view
@@ -45,6 +46,7 @@ function parseState(
       (!/^[1-9][0-9]{0,18}$/.test(trimmed) || BigInt(trimmed) > 9_223_372_036_854_775_807n)
     )
       continue;
+    if (name === 'discord_id' && !validLogDiscordID(trimmed)) continue;
     if (name === 'status' && !/^[1-5][0-9]{2}$/.test(trimmed)) continue;
     if (name === 'phase' && trimmed !== 'handler' && trimmed !== 'pre_handler') continue;
     if (name === 'usage_total_mismatch' && trimmed !== 'true') continue;

@@ -193,6 +193,10 @@ func (repository *Repository) ListAdmin(ctx context.Context, filter ListFilter) 
 		query += ` AND l.origin_user_id=?`
 		args = append(args, *filter.UserID)
 	}
+	if filter.DiscordID != nil {
+		query += ` AND l.origin_discord_id=?`
+		args = append(args, *filter.DiscordID)
+	}
 	if filter.EndpointKeyID != nil {
 		query += endpointKeyPredicate
 		args = append(args, *filter.EndpointKeyID)
@@ -334,6 +338,10 @@ func (repository *Repository) ListSteward(
 	if filter.UserID != nil {
 		query += ` AND l.origin_user_id=?`
 		args = append(args, *filter.UserID)
+	}
+	if filter.DiscordID != nil {
+		query += ` AND l.origin_discord_id=?`
+		args = append(args, *filter.DiscordID)
 	}
 	if filter.EndpointKeyID != nil {
 		query += endpointKeyPredicate

@@ -287,6 +287,7 @@ func parseListFilter(rawQuery, role string, export bool) (ListFilter, error) {
 		allowed["model"] = true
 	case "admin", "steward":
 		allowed["user_id"] = true
+		allowed["discord_id"] = true
 		allowed["usage_total_mismatch"] = true
 		allowed["endpoint_key_id"] = true
 		allowed["endpoint_base_url"] = true
@@ -322,6 +323,8 @@ func parseListFilter(rawQuery, role string, export bool) (ListFilter, error) {
 				return ListFilter{}, ErrInvalid
 			}
 			filter.UserID = &parsed
+		case "discord_id":
+			filter.DiscordID = &value
 		case "endpoint_base_url":
 			if value == "" || !utf8.ValidString(value) {
 				return ListFilter{}, ErrInvalid
