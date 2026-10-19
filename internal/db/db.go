@@ -19,15 +19,16 @@ import (
 // caller owns the codec lifecycle; typed repositories use it internally so
 // plaintext never has to become a database argument or a Store field.
 type Store struct {
-	db               *sql.DB
-	readDB           *sql.DB
-	secrets          secret.GenerationTwoContextCodec
-	closeOnce        sync.Once
-	closeErr         error
-	closeDone        chan struct{}
-	owner            *databaseOwner
-	afterClose       func() error
-	configValidation siteConfigValidation
+	db                 *sql.DB
+	readDB             *sql.DB
+	secrets            secret.GenerationTwoContextCodec
+	closeOnce          sync.Once
+	closeErr           error
+	closeDone          chan struct{}
+	owner              *databaseOwner
+	afterClose         func() error
+	configValidation   siteConfigValidation
+	connectionObserver *connectionObserverSlot
 }
 
 // Open classifies path as either completely fresh or current Generation 2.
@@ -70,6 +71,7 @@ func OpenContext(ctx context.Context, path string, secrets secret.GenerationTwoC
 		}
 	}()
 	ctx = context.WithValue(ctx, databaseOwnerKey{}, owner)
+	ctx = context.WithValue(ctx, connectionObserverKey{}, &connectionObserverSlot{})
 	if err := prepareDBDirectory(path); err != nil {
 		return nil, err
 	}

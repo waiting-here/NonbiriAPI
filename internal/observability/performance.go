@@ -178,7 +178,9 @@ func (p *Performance) Wrap(next http.Handler) http.Handler {
 			}
 			finish(elapsed, first, !returned || writer.status >= 500, r.Context().Err() != nil)
 		}()
-		next.ServeHTTP(writer, r.WithContext(p.Context(r.Context())))
+		root := "http." + performanceMethod(r.Method) + "." + performanceRoute(r.URL.Path)
+		ctx := context.WithValue(p.Context(r.Context()), connectionRootKey{}, root)
+		next.ServeHTTP(writer, r.WithContext(ctx))
 		returned = true
 	})
 }

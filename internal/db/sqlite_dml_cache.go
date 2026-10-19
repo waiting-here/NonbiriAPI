@@ -30,7 +30,10 @@ type sqliteConnection interface {
 	sqlite.DBStatus
 }
 
-type dmlConnector struct{ driver.Connector }
+type dmlConnector struct {
+	driver.Connector
+	observer *connectionObserverSlot
+}
 
 func (c dmlConnector) Connect(ctx context.Context) (driver.Conn, error) {
 	conn, err := c.Connector.Connect(ctx)
@@ -41,7 +44,11 @@ func (c dmlConnector) Connect(ctx context.Context) (driver.Conn, error) {
 	if !ok {
 		return nil, errors.Join(errors.New("SQLite connection interfaces unavailable"), conn.Close())
 	}
-	return &dmlConnection{sqliteConnection: base, statements: make(map[string]*list.Element)}, nil
+	cached := &dmlConnection{sqliteConnection: base, statements: make(map[string]*list.Element)}
+	if c.observer != nil {
+		return &observedConnection{sqliteConnection: cached, slot: c.observer}, nil
+	}
+	return cached, nil
 }
 
 type executableStatement interface {
@@ -63,6 +70,10 @@ type dmlConnection struct {
 }
 
 func openSQLiteHandle(dsn, mode string) (*sql.DB, error) {
+	return openObservedSQLiteHandle(dsn, mode, nil)
+}
+
+func openObservedSQLiteHandle(dsn, mode string, observer *connectionObserverSlot) (*sql.DB, error) {
 	if mode == "ro" {
 		return sql.Open("sqlite", dsn)
 	}
@@ -70,7 +81,7 @@ func openSQLiteHandle(dsn, mode string) (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	return sql.OpenDB(dmlConnector{connector}), nil
+	return sql.OpenDB(dmlConnector{Connector: connector, observer: observer}), nil
 }
 
 func reusableDML(query string) bool {
