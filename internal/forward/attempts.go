@@ -235,6 +235,12 @@ func (service *Service) runAttempts(
 				return service.claims.MarkResponseStarted(checkpointContext, handle, responseStart.upstreamStatus)
 			})
 			responseStart.acceptedStreams = plan.charity
+			responseStart.now = service.now
+			responseStart.observe = func(observation connectorcontract.ResponseObservation) error {
+				checkpointContext, cancel := context.WithTimeout(context.WithoutCancel(parent), service.settlement)
+				defer cancel()
+				return service.claims.ObserveResponseHeaders(checkpointContext, handle, observation)
+			}
 		}
 		protocolConnector := service.connectors[candidate.ConnectorType]
 		if protocolConnector == nil {
@@ -277,6 +283,9 @@ func (service *Service) runAttempts(
 		settleContext, cancel := context.WithTimeout(context.WithoutCancel(parent), service.settlement)
 		outcome := attemptOutcome(result)
 		acceptedByCharityUpstream := plan.charity && result.UpstreamStatus == http.StatusOK
+		if plan.charity && responseStart != nil && responseStart.retryAfterObserved && !outcome.ProtocolSuccess {
+			outcome.StreakDisposition = connectorcontract.StreakNeutral
+		}
 		if acceptedByCharityUpstream {
 			// Key availability follows HTTP acceptance. Protocol completion and
 			// the durable billing checkpoint retain their own facts.

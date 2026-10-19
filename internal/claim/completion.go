@@ -85,6 +85,10 @@ func (s *Service) checkAttemptCompletionTx(ctx context.Context, tx *sql.Tx, hand
 	if err := verifyHandle(record, handle); err != nil {
 		return Attempt{}, err
 	}
+	outcome, err = retryAfterOutcomeTx(ctx, tx, record, outcome)
+	if err != nil {
+		return Attempt{}, err
+	}
 	switch record.state {
 	case StateCommitted:
 		if record.purpose == PurposeCharity && outcome.ResponseStarted {

@@ -17,7 +17,7 @@ func databaseOperation(operation string) bool {
 	switch operation {
 	case "session", "catalog", "personal_models", "charity_models", "charity_capability", "fishing_cleanup", "donation_expiry",
 		"lake_checkpoint", "lake_mutation", "lake_profile", "lake_recovery", "lake_retention",
-		"claim_accept", "claim_prepare", "claim_release", "claim_attempt", "claim_complete", "claim_batch",
+		"claim_accept", "claim_prepare", "claim_release", "claim_attempt", "claim_complete", "claim_batch", "claim_response_headers",
 		"fishing_settle", "reward_delivery", "activities_projection", "activities_publish",
 		"lifecycle_recovery", "lifecycle_retention", "lifecycle_checkpoint", "legal_hold_expiry", "legal_hold_retention":
 		return true

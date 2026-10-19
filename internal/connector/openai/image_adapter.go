@@ -78,6 +78,11 @@ func (a *Adapter) AttemptImage(ctx context.Context, writer http.ResponseWriter, 
 	if response != nil && response.Request != nil {
 		response.Request.Header.Del("Authorization")
 	}
+	if response != nil && err != nil {
+		if err := connectorcontract.ObserveUpstreamResponse(writer, response.StatusCode, request.Stream, response.Header); err != nil {
+			return AttemptResult{Failure: FailureInternal, Diagnostic: "upstream response checkpoint failed"}
+		}
+	}
 	if err != nil {
 		failed := upstreamFailure(classifyTransportFailure(err), 0)
 		if ctx.Err() != nil {
@@ -86,7 +91,7 @@ func (a *Adapter) AttemptImage(ctx context.Context, writer http.ResponseWriter, 
 		return connectorcontract.TransportFailed(failed, err, ctx)
 	}
 	defer response.Body.Close()
-	if err := connectorcontract.ObserveUpstreamResponse(writer, response.StatusCode, request.Stream); err != nil {
+	if err := connectorcontract.ObserveUpstreamResponse(writer, response.StatusCode, request.Stream, response.Header); err != nil {
 		return AttemptResult{Failure: FailureInternal, Diagnostic: "upstream response checkpoint failed"}
 	}
 	if response.StatusCode != http.StatusOK {

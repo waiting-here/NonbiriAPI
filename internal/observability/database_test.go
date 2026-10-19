@@ -51,6 +51,10 @@ func TestDatabasePhasesRejectUnregisteredLabels(t *testing.T) {
 	if rows := p.Drain(); len(rows) != 1 || rows[0].Route != "phase.rules.lake_checkpoint" || rows[0].Failures != 1 || rows[0].Completed != 1 {
 		t.Fatalf("phase result = %+v", rows)
 	}
+	DatabaseOperation(ctx, "claim_response_headers")(nil)
+	if rows := p.Drain(); len(rows) != 1 || rows[0].Route != "operation.claim_response_headers" || rows[0].Completed != 1 {
+		t.Fatalf("response headers label missing: %+v", rows)
+	}
 	LifecycleStage(ctx, "retention", "sessions")(context.Canceled)
 	if rows := p.Drain(); len(rows) != 1 || rows[0].Route != "operation.lifecycle_retention.sessions" || rows[0].Canceled != 1 {
 		t.Fatalf("lifecycle result = %+v", rows)

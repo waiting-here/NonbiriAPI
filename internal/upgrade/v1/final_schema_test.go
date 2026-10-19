@@ -20,8 +20,28 @@ var schema18Compressed []byte
 //go:embed testdata/schema19.sql.gz
 var schema19Compressed []byte
 
+//go:embed testdata/schema21.sql.gz
+var schema21Compressed []byte
+
 //go:embed testdata/schema20.sql.gz
 var schema20Compressed []byte
+
+func schema21SQLForTest(t *testing.T) string {
+	t.Helper()
+	reader, err := gzip.NewReader(bytes.NewReader(schema21Compressed))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(reader)
+	closeErr := reader.Close()
+	if err != nil || closeErr != nil {
+		t.Fatal(err, closeErr)
+	}
+	if fmt.Sprintf("%x", sha256.Sum256(body)) != "3e62561173fbde9e2ffa5f393c414465765eab9fde3be37000c93d65929d1351" {
+		t.Fatal("schema 21 fixture identity changed")
+	}
+	return string(body)
+}
 
 func schema20SQLForTest(t *testing.T) string {
 	t.Helper()
@@ -75,7 +95,7 @@ func schema18SQLForTest(t *testing.T) string {
 }
 
 func TestFinalSchemaConversionAcceptsExactStableSources(t *testing.T) {
-	for _, version := range []int{17, 18, 19, 20} {
+	for _, version := range []int{17, 18, 19, 20, 21} {
 		t.Run(fmt.Sprint(version), func(t *testing.T) {
 			ddl, hash := schema17SQLForTest(t), stableSchema17Manifest
 			if version == 18 {
@@ -86,6 +106,9 @@ func TestFinalSchemaConversionAcceptsExactStableSources(t *testing.T) {
 			}
 			if version == 20 {
 				ddl, hash = schema20SQLForTest(t), stableSchema20Manifest
+			}
+			if version == 21 {
+				ddl, hash = schema21SQLForTest(t), stableSchema21Manifest
 			}
 			path, vault := sourceFixtureFromDDL(t, ddl, version, hash)
 			database, err := sql.Open("sqlite", path)
@@ -129,6 +152,7 @@ func TestFinalSchemaConversionAcceptsExactStableSources(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			t.Cleanup(func() { _ = store.Close() })
 			afterFacts := retainedFacts(t, store.DB())
 			for table, digest := range beforeFacts {
 				if afterFacts[table] != digest {
@@ -161,11 +185,11 @@ func TestFinalSchemaConversionAcceptsExactStableSources(t *testing.T) {
 
 func TestOfflineDescriptorContainsOnlyExactSupportedSources(t *testing.T) {
 	descriptor := SchemaDescriptor()
-	if descriptor.SchemaVersion != 21 || descriptor.MinimumSchemaVersion != 21 || len(descriptor.SourceSchemaVersions) != 0 || len(descriptor.OfflineConversions) != 5 {
+	if descriptor.SchemaVersion != 22 || descriptor.MinimumSchemaVersion != 22 || len(descriptor.SourceSchemaVersions) != 0 || len(descriptor.OfflineConversions) != 6 {
 		t.Fatal(descriptor)
 	}
 	for index, source := range descriptor.OfflineConversions {
-		if source.SourceSchemaVersion != 16+index || source.TargetSchemaVersion != 21 || len(source.SourceCommit) != 40 || len(source.SourceManifestHash) != 64 || source.Tool != "nonbiri-upgrade-v1" {
+		if source.SourceSchemaVersion != 16+index || source.TargetSchemaVersion != 22 || len(source.SourceCommit) != 40 || len(source.SourceManifestHash) != 64 || source.Tool != "nonbiri-upgrade-v1" {
 			t.Fatal(source)
 		}
 	}

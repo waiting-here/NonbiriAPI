@@ -27,6 +27,9 @@ func (s *Service) revalidateDispatchKey(ctx context.Context, tx *sql.Tx, input c
 	if row.status != "approved" || row.endedReason != "" || row.keyEnabled != 1 || row.failureDisabled != 0 || row.endpointEnabled != 1 || row.physicalKeyEnabled != 1 || (row.expiresAt.Valid && row.expiresAt.Int64 <= input.DispatchedAt) {
 		return claim.ErrNotFound
 	}
+	if row.rateLimitedUntil.Valid && row.rateLimitedUntil.Int64 > input.DispatchedAt {
+		return claim.ErrKeyRateLimited
+	}
 	reservation, err := readUsageReservation(ctx, tx, input.RequestID, input.ClaimID)
 	if err != nil {
 		return err

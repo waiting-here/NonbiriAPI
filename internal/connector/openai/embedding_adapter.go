@@ -76,6 +76,11 @@ func (a *Adapter) AttemptEmbedding(ctx context.Context, writer http.ResponseWrit
 	if response != nil && response.Request != nil {
 		response.Request.Header.Del("Authorization")
 	}
+	if response != nil && err != nil {
+		if err := connectorcontract.ObserveUpstreamResponse(writer, response.StatusCode, false, response.Header); err != nil {
+			return connectorcontract.AttemptResult{Failure: connectorcontract.FailureInternal, Diagnostic: "response checkpoint failed"}
+		}
+	}
 	if err != nil {
 		failed := upstreamFailure(classifyTransportFailure(err), 0)
 		if ctx.Err() != nil {
@@ -84,6 +89,9 @@ func (a *Adapter) AttemptEmbedding(ctx context.Context, writer http.ResponseWrit
 		return connectorcontract.TransportFailed(failed, err, ctx)
 	}
 	defer response.Body.Close()
+	if err := connectorcontract.ObserveUpstreamResponse(writer, response.StatusCode, false, response.Header); err != nil {
+		return connectorcontract.AttemptResult{Failure: connectorcontract.FailureInternal, Diagnostic: "response checkpoint failed"}
+	}
 	if response.StatusCode != http.StatusOK {
 		result = connectorcontract.UpstreamFailed(upstreamFailure(statusDiagnostic(response.StatusCode), response.StatusCode), connectorcontract.OriginUpstreamResponse)
 		result.ErrorDetail = errorContext.ReadResponse(ctx, response, a.maxEmbeddingResponseBytes)
