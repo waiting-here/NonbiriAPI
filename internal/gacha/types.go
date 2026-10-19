@@ -24,6 +24,7 @@ const (
 	ErrCredits   Rejection = "credits-insufficient"
 	ErrFragments Rejection = "fragments-insufficient"
 	ErrMonthly   Rejection = "monthly-limit"
+	ErrDaily     Rejection = "daily-limit"
 	ErrOwned     Rejection = "already-owned"
 	ErrClaimed   Rejection = "already-claimed"
 	ErrClosed    Rejection = "pool-closed"

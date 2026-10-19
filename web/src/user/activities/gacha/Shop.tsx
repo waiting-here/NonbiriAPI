@@ -4,6 +4,9 @@ import { formatCount } from '@shared/utils/formatNumber';
 import { Panel, PanelHead, PanelBody } from '@shared/components/ui/Panel';
 import { cards, rarities, tierOf } from './catalog';
 import { poolOpen } from './rules';
+import { bulkTicketOffers, bulkTicketPrice, bulkTicketQuantity } from './bulk';
+import { creditsToMilli, formatCredits } from '../../games/common/strict';
+import { spendableGameMilli } from '../../games/common/spendable';
 import { CardTile } from './CardTile';
 import type { Action, Card, Snapshot } from './types';
 
@@ -45,6 +48,11 @@ export function Shop({
 }) {
   const t = (zh: string, en: string) => (english ? en : zh);
   const s = state.shop;
+  const available = spendableGameMilli({
+    balance: state.credits.general,
+    gameBalance: state.credits.game,
+  });
+  const bulkInsufficient = available.total < creditsToMilli(bulkTicketPrice);
   const ticketOffers = [
     {
       id: 'ticket-n',
@@ -108,6 +116,61 @@ export function Shop({
           </div>
         ))}
       </div>
+      <Panel className="gacha-bulk-shop" aria-label={t('量大管饱', 'Bulk bargains')}>
+        <PanelHead
+          title={t('量大管饱', 'Bulk bargains')}
+          description={t(
+            '每件每天限购一次，按站点时区（' +
+              state.time_zone +
+              '）零点重置。优先使用游戏积分，不足部分使用通用积分。',
+            'Each offer can be bought once per day, resetting at midnight in ' +
+              state.time_zone +
+              '. Game credits are used first, then general credits.',
+          )}
+        />
+        <PanelBody>
+          <div className="gacha-bulk-offers">
+            {bulkTicketOffers.map((offer) => {
+              const used = state.redeemed.includes(offer.id);
+              const label =
+                offer.ticket === 'permanent'
+                  ? t('10张常驻抽奖券', '10 standard tickets')
+                  : t('10张限定抽奖券', '10 limited tickets');
+              return (
+                <div className="gacha-offer" key={offer.id}>
+                  <TicketIcon limited={offer.ticket === 'limited'} />
+                  <h3>{label}</h3>
+                  <p className="gacha-bulk-offer__number">
+                    {formatCredits(bulkTicketPrice)} {t('悠哉积分', 'credits')}
+                  </p>
+                  <p className="gacha-bulk-offer__number">
+                    {t('今日剩余：', 'Remaining today: ')}
+                    {used ? 0 : 1}/1
+                  </p>
+                  <Button
+                    disabled={busy || used || bulkInsufficient}
+                    onClick={() =>
+                      act(
+                        { action: 'redeem', product: offer.id, revision: s.revision },
+                        t(
+                          '购买成功，' + bulkTicketQuantity + '张抽奖券已到账',
+                          'Purchase complete. ' + bulkTicketQuantity + ' tickets added.',
+                        ),
+                      )
+                    }
+                  >
+                    {used
+                      ? t('今日已购买', 'Purchased today')
+                      : bulkInsufficient
+                        ? t('积分不足', 'Need more credits')
+                        : t('购买', 'Buy')}
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        </PanelBody>
+      </Panel>
       <Panel>
         <PanelHead
           title={t('再一次相遇', 'One more encounter')}

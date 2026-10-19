@@ -182,7 +182,12 @@ func (s *Service) Act(ctx context.Context, user int64, key string, input Action)
 		if input.Revision != shop.Revision {
 			return out, ErrPrice
 		}
-		err = redeem(ctx, tx, user, at, input.Product, shop, &p)
+		if _, bulk := bulkTicket(input.Product); bulk {
+			err = purchaseBundle(ctx, tx, user, at, operation, input.Product, &p)
+			creditOperation = operation
+		} else {
+			err = redeem(ctx, tx, user, at, input.Product, shop, &p)
+		}
 	case "claim":
 		err = claim(ctx, tx, user, at, operation, input.Theme, &p)
 		creditOperation = operation
@@ -309,6 +314,10 @@ func purchase(ctx context.Context, tx *sql.Tx, user, at int64, id string, input 
 	if err != nil || cost.Big().Cmp(big.NewInt(db.MaxMoneyMilli)) > 0 {
 		return ErrInvalid
 	}
+	return purchaseTickets(ctx, tx, user, at, id, cost, input.Quantity, wallet, wallet == 0, p)
+}
+
+func purchaseTickets(ctx context.Context, tx *sql.Tx, user, at int64, id string, cost ledger.Amount, quantity, wallet int, gameFirst bool, p *profile) error {
 	general, err := ledger.UserAssetAccount(ctx, tx, user, ledger.General)
 	if err != nil {
 		return err
@@ -318,7 +327,7 @@ func purchase(ctx context.Context, tx *sql.Tx, user, at int64, id string, input 
 		return err
 	}
 	availableGame := game.Balance
-	if wallet == 1 {
+	if !gameFirst {
 		availableGame = ledger.Amount{}
 	}
 	payment, err := ledger.SplitGamePayment(cost, general.Balance, availableGame)
@@ -344,7 +353,7 @@ func purchase(ctx context.Context, tx *sql.Tx, user, at int64, id string, input 
 	if _, err = ledger.Apply(ctx, tx, plan); err != nil {
 		return err
 	}
-	p.Balance[wallet] += int64(input.Quantity)
+	p.Balance[wallet] += int64(quantity)
 	return nil
 }
 func claimed(ctx context.Context, tx *sql.Tx, user int64, kind, id string) (bool, error) {
