@@ -13,6 +13,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
+	"github.com/waiting-here/NonbiriAPI/internal/donationstate"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
@@ -29,6 +30,7 @@ func validSourceFilter(filter SourceFilter, keys bool) bool {
 	return (filter.Scope == "" || filter.Scope == "active" || filter.Scope == "all") &&
 		(filter.Handling == "" || filter.Handling == "pending") &&
 		(filter.Idle == "" || keys && (filter.Idle == "yes" || filter.Idle == "no")) &&
+		donationstate.Valid(filter.KeyState) &&
 		utf8.ValidString(filter.Query) && len(filter.Query) <= 512 && utf8.RuneCountInString(filter.Query) <= 128 && !strings.ContainsRune(filter.Query, 0)
 }
 
@@ -39,12 +41,20 @@ func sourceSelectionSQL(filter SourceFilter, source *sourceIdentity, now int64, 
 	if len(candidates) > 0 {
 		index = ""
 	}
+	physical := ""
+	if donationstate.Filtered(filter.KeyState) {
+		physical = donationstate.PhysicalJoins
+	}
 	query := `SELECT dk.id AS id,d.id AS donation_id,d.revision AS revision,d.status AS donation_status,` + sourceChannelSQL + ` AS source_channel,` + sourceConnectorSQL + ` AS source_connector,` + sourceURLSQL + ` AS source_url,
 CASE WHEN h.state='pending' AND ` + logicallyActiveDonationSQL + ` THEN 1 ELSE 0 END AS pending
 FROM donation_keys dk` + index + ` CROSS JOIN donations d ON d.id=dk.donation_id
-JOIN donation_handling h ON h.donation_id=d.id
+JOIN donation_handling h ON h.donation_id=d.id` + physical + `
 WHERE (d.status IN ('pending','approved') OR d.terminal_at>?)`
 	args := []any{now, now - terminalRetention}
+	if donationstate.Filtered(filter.KeyState) {
+		query += ` AND (` + donationstate.SQL() + `)=?`
+		args = append(args, now, now, now, now, filter.KeyState)
+	}
 	if filter.traineeModelID > 0 {
 		query += ` AND ` + charityscope.KeyPredicate()
 		args = append(args, filter.traineeModelID, now)

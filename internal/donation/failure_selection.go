@@ -56,6 +56,11 @@ func (s *Service) selectFailureReset(ctx context.Context, role reviewerRole, use
 		return empty, ErrUnavailable
 	}
 	defer clear(key)
+	// The omitted/all selector retains the existing cursor digest. Other states
+	// bind the digest while membership is checked again for each bounded ID page.
+	if selection.Source.KeyState == "all" {
+		selection.Source.KeyState = ""
+	}
 	canonical, err := json.Marshal(selection)
 	if err != nil {
 		return empty, err

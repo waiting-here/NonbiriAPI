@@ -401,6 +401,8 @@ type BindingDelete struct {
 }
 
 type CandidateQuery struct {
+	KeyState      string
+	traineeOnly   bool
 	DonationID    int64
 	DonationKeyID int64
 	Source        string

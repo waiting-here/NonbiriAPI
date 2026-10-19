@@ -147,7 +147,7 @@ func (api *httpAPI) sourcesNumbered(writer http.ResponseWriter, request *http.Re
 	if !ok {
 		return
 	}
-	allowed := []string{"q", "scope", "handling"}
+	allowed := []string{"q", "scope", "handling", "key_state"}
 	if keys {
 		allowed = append(allowed, "idle")
 	}
@@ -156,7 +156,11 @@ func (api *httpAPI) sourcesNumbered(writer http.ResponseWriter, request *http.Re
 		writeDonationError(writer, err)
 		return
 	}
-	filter := SourceFilter{Query: values.Get("q"), Scope: values.Get("scope"), Handling: values.Get("handling"), Idle: values.Get("idle")}
+	filter := SourceFilter{Query: values.Get("q"), Scope: values.Get("scope"), Handling: values.Get("handling"), Idle: values.Get("idle"), KeyState: values.Get("key_state")}
+	if value, present := values["key_state"]; present && value[0] == "" {
+		writeDonationError(writer, ErrInvalidRequest)
+		return
+	}
 	if value, present := values["scope"]; present && value[0] == "" {
 		writeDonationError(writer, ErrInvalidRequest)
 		return
