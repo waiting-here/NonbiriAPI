@@ -17,7 +17,7 @@ func databaseOperation(operation string) bool {
 	switch operation {
 	case "session", "catalog", "personal_models", "charity_models", "charity_capability", "fishing_cleanup", "donation_expiry",
 		"lake_checkpoint", "lake_mutation", "lake_profile", "lake_recovery", "lake_retention",
-		"claim_accept", "claim_prepare", "claim_release", "claim_attempt", "claim_complete",
+		"claim_accept", "claim_prepare", "claim_release", "claim_attempt", "claim_complete", "claim_batch",
 		"fishing_settle", "reward_delivery", "activities_projection", "activities_publish",
 		"lifecycle_recovery", "lifecycle_retention", "lifecycle_checkpoint", "legal_hold_expiry", "legal_hold_retention":
 		return true
@@ -30,8 +30,19 @@ func databaseOperation(operation string) bool {
 // overlap their parent transaction and must not be added to transaction time.
 func DatabasePhase(ctx context.Context, operation, phase string) func(error) {
 	switch phase {
-	case "prepare", "authorize", "config", "read", "rules", "encode", "write", "commit", "projection", "idempotency", "activity":
+	case "prepare", "authorize", "config", "read", "rules", "encode", "write", "commit", "projection", "idempotency", "activity", "queue", "execute":
 		return databaseTimer(ctx, "phase."+phase, operation)
+	default:
+		return func(error) {}
+	}
+}
+
+// CompletionStage records bounded scheduler stages. Batch-size and overflow
+// rows are event counts; queue, connection and transaction times overlap.
+func CompletionStage(ctx context.Context, stage string) func(error) {
+	switch stage {
+	case "batch_1", "batch_2", "batch_3", "batch_4", "overflow", "fallback", "close", "hold_budget":
+		return boundedOperationTimer(ctx, "completion."+stage)
 	default:
 		return func(error) {}
 	}

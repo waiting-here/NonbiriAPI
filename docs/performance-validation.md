@@ -52,6 +52,14 @@ and must not be presented as a whole-window percentile. Always report the sample
 count. CPU time includes the in-process load clients and mock upstream; Go heap
 snapshots are neither process RSS nor a peak memory measurement.
 
+Completion queue, execution, shared transaction and commit rows appear in
+`last_window_operations`, alongside attempted batch-size counts, overflow and
+independent recovery. This remains the observer's most recent window, not an
+invented sum across its automatic minute drains. Inspect any emitted runtime
+windows too when a case spans a drain. Queue and pool waiting overlap. Check
+handler drain, caller percentiles and accounting convergence before attributing
+an improvement to reduced waiting.
+
 Compare identical seeds, data, build inputs, toolchain and machine. Record the
 commit/tree and real exit status alongside each result. Report workload mix and
 admitted/completed work, not only latency. Release targets are evaluated in the

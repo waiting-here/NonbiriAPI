@@ -8,6 +8,10 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Changed
 
+- Commit attempt and request completion in synchronous batches of up to four,
+  with per-item savepoints, durable acknowledgements, bounded pending work and
+  independent recovery after a failed batch. Report queue time, batch sizes,
+  overflow and shutdown separately from database pool waits.
 - Reuse up to 128 prepared write and 64 SELECT statements per physical SQLite connection and
   release them on eviction or connection close. Move independent configuration
   reads to the existing read pool and reuse deterministic validation only for

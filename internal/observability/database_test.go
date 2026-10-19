@@ -41,6 +41,7 @@ func TestDatabasePhasesRejectUnregisteredLabels(t *testing.T) {
 	DatabaseOperation(ctx, "private-user")(nil)
 	LifecycleStage(ctx, "private-phase", "claims")(nil)
 	LifecycleStage(ctx, "recovery", "private-user")(nil)
+	CompletionStage(ctx, "private-user")(nil)
 	if rows := p.Drain(); len(rows) != 0 {
 		t.Fatalf("unregistered labels recorded: %+v", rows)
 	}
@@ -54,6 +55,29 @@ func TestDatabasePhasesRejectUnregisteredLabels(t *testing.T) {
 	if rows := p.Drain(); len(rows) != 1 || rows[0].Route != "operation.lifecycle_retention.sessions" || rows[0].Canceled != 1 {
 		t.Fatalf("lifecycle result = %+v", rows)
 	}
+}
+
+func TestCompletionQueueTimingAndFixedBatchCounts(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		p := NewPerformance()
+		ctx := p.Context(t.Context())
+		first := DatabasePhase(ctx, "claim_attempt", "queue")
+		second := DatabasePhase(ctx, "claim_attempt", "queue")
+		time.Sleep(10 * time.Millisecond)
+		rows := p.Drain()
+		if len(rows) != 1 || rows[0].Active != 2 || rows[0].Peak != 2 || rows[0].ActiveMS != 20 {
+			t.Fatalf("queue gauge and elapsed time: %+v", rows)
+		}
+		first(nil)
+		second(context.Canceled)
+		CompletionStage(ctx, "batch_4")(nil)
+		CompletionStage(ctx, "batch_5")(nil)
+		CompletionStage(ctx, "overflow")(nil)
+		rows = p.Drain()
+		if len(rows) != 3 || rows[0].Route != "completion.batch_4" || rows[0].Completed != 1 || rows[1].Route != "completion.overflow" || rows[2].Canceled != 1 || rows[2].Completed != 2 || rows[2].Active != 0 {
+			t.Fatalf("batch counts or queue outcomes: %+v", rows)
+		}
+	})
 }
 
 func TestMeasuredTransactionSeparatesAcquisitionAndReturnsConnection(t *testing.T) {

@@ -24,6 +24,8 @@ import (
 const maxUnixSecond = int64(253402300799)
 
 type Service struct {
+	completion   completionQueue
+	performance  *observability.Performance
 	observations *observability.Repository
 	db           *sql.DB
 	secrets      secret.GenerationTwoContextCodec
@@ -47,6 +49,7 @@ func New(dependencies Dependencies) (*Service, error) {
 		dependencies.Charity = nil
 	}
 	return &Service{
+		performance:  dependencies.Performance,
 		observations: dependencies.Observations,
 		db:           dependencies.DB,
 		secrets:      dependencies.Secrets,

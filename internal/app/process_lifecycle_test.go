@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
@@ -175,6 +176,50 @@ func TestApplicationCloseWaitsForPerformanceReporter(t *testing.T) {
 	release()
 	if err := app.CloseContext(context.Background()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestApplicationCloseJoinsClaimCompletions(t *testing.T) {
+	vault := processTestVault(t)
+	store := processTestStore(t, filepath.Join(t.TempDir(), "completion-close.sqlite"), vault)
+	claims, err := claim.New(claim.Dependencies{DB: store.DB(), Secrets: vault})
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := &application{claims: claims}
+	blocker, err := store.DB().Conn(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer blocker.Close()
+	input := claim.CompleteRequestInput{RequestID: "missing", Caller: claim.CallerResult{Class: claim.ResultCancelled}, Disposition: claim.AccountingRelease}
+	done := make(chan error, 1)
+	waits := store.DB().Stats().WaitCount
+	go func() { _, err := claims.CompleteRequest(t.Context(), input); done <- err }()
+	deadline := time.Now().Add(5 * time.Second)
+	for store.DB().Stats().WaitCount == waits {
+		if time.Now().After(deadline) {
+			t.Fatal("completion did not enter acquisition")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	short, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
+	defer cancel()
+	if err := app.CloseContext(short); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("root did not wait for completion: %v", err)
+	}
+	blocker.Close()
+	if err := <-done; !errors.Is(err, claim.ErrNotFound) {
+		t.Fatalf("accepted completion was discarded: %v", err)
+	}
+	if err := app.CloseContext(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := claims.CompleteRequest(t.Context(), input); !errors.Is(err, claim.ErrDependencyUnavailable) {
+		t.Fatalf("root did not close completion admission: %v", err)
+	}
+	if store.DB().Stats().InUse != 0 {
+		t.Fatal("root close retained the writer")
 	}
 }
 

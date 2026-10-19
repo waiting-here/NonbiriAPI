@@ -27,6 +27,10 @@ configuration reads use the read pool and reuse validation only when the full
 current contents match. Database values are still read on every call; accounting,
 authorization and availability remain authoritative.
 
+Attempt and request completion use small synchronous transaction batches when
+work overlaps. Success still requires a durable commit, and anonymous queue
+metrics distinguish application waiting from database pool waiting.
+
 | Area | Source and contract |
 | --- | --- |
 | Startup, recovery and HTTP composition | `main.go`, `internal/app/` |

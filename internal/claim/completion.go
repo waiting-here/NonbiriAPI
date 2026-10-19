@@ -59,7 +59,7 @@ func (s *Service) ReleaseUndispatched(ctx context.Context, handle Handle) (_ Att
 // CompleteAttempt writes the connector-neutral actual attempt projection and
 // terminalizes one dispatched claim. ProtocolSuccess is explicit: an HTTP 200
 // or clean EOF does not establish success; streak disposition is independent.
-func (s *Service) CompleteAttempt(ctx context.Context, handle Handle, outcome AttemptOutcome) (_ Attempt, resultErr error) {
+func (s *Service) CompleteAttempt(ctx context.Context, handle Handle, outcome AttemptOutcome) (Attempt, error) {
 	outcome = normalizeAttemptOutcome(outcome)
 	if s == nil || s.db == nil || ctx == nil || !validHandle(handle) || !validAttemptOutcome(outcome) {
 		return Attempt{}, ErrInvalidInput
@@ -68,11 +68,16 @@ func (s *Service) CompleteAttempt(ctx context.Context, handle Handle, outcome At
 	if err != nil {
 		return Attempt{}, err
 	}
-	tx, finish, err := observability.BeginMeasuredTx(ctx, s.db, nil, "claim_attempt")
+	value, err := s.submitCompletion(ctx, "claim_attempt", func(ctx context.Context, tx *sql.Tx) (any, error) {
+		return s.checkAttemptCompletionTx(ctx, tx, handle, outcome, at)
+	})
 	if err != nil {
-		return Attempt{}, fmt.Errorf("claim: begin attempt completion: %w", err)
+		return Attempt{}, err
 	}
-	defer func() { finish(resultErr) }()
+	return value.(Attempt), nil
+}
+
+func (s *Service) checkAttemptCompletionTx(ctx context.Context, tx *sql.Tx, handle Handle, outcome AttemptOutcome, at int64) (Attempt, error) {
 	record, err := loadClaimTx(ctx, tx, handle.claimID)
 	if err != nil {
 		return Attempt{}, err
@@ -119,15 +124,12 @@ func (s *Service) CompleteAttempt(ctx context.Context, handle Handle, outcome At
 	if err != nil {
 		return Attempt{}, err
 	}
-	if err := tx.Commit(); err != nil {
-		return Attempt{}, fmt.Errorf("claim: commit attempt completion: %w", err)
-	}
 	return result, nil
 }
 
 // CompleteRequest writes only the caller-visible terminal result. Attempt
 // status/usage is intentionally independent and must already be terminal.
-func (s *Service) CompleteRequest(ctx context.Context, input CompleteRequestInput) (_ Request, resultErr error) {
+func (s *Service) CompleteRequest(ctx context.Context, input CompleteRequestInput) (Request, error) {
 	if s == nil || s.db == nil || ctx == nil || !validCompleteRequestInput(input) {
 		return Request{}, ErrInvalidInput
 	}
@@ -135,11 +137,16 @@ func (s *Service) CompleteRequest(ctx context.Context, input CompleteRequestInpu
 	if err != nil {
 		return Request{}, err
 	}
-	tx, finish, err := observability.BeginMeasuredTx(ctx, s.db, nil, "claim_complete")
+	value, err := s.submitCompletion(ctx, "claim_complete", func(ctx context.Context, tx *sql.Tx) (any, error) {
+		return s.checkRequestCompletionTx(ctx, tx, input, at)
+	})
 	if err != nil {
-		return Request{}, fmt.Errorf("claim: begin request completion: %w", err)
+		return Request{}, err
 	}
-	defer func() { finish(resultErr) }()
+	return value.(Request), nil
+}
+
+func (s *Service) checkRequestCompletionTx(ctx context.Context, tx *sql.Tx, input CompleteRequestInput, at int64) (Request, error) {
 	request, err := loadRequestTx(ctx, tx, input.RequestID)
 	if err != nil {
 		return Request{}, err
@@ -154,9 +161,6 @@ func (s *Service) CompleteRequest(ctx context.Context, input CompleteRequestInpu
 	result, err := s.completeRequestTx(ctx, tx, request, input, at)
 	if err != nil {
 		return Request{}, err
-	}
-	if err := tx.Commit(); err != nil {
-		return Request{}, fmt.Errorf("claim: commit request completion: %w", err)
 	}
 	return result, nil
 }

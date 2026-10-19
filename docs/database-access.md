@@ -32,6 +32,32 @@ database failures cannot fall back to an older snapshot. Configuration mutations
 continue to validate the proposed full snapshot in their writer transaction.
 Domain readiness, authorization, quotas and model availability are not cached.
 
+## Synchronous completion batches
+
+Attempt and request completion share the writer in batches of at most four
+operations. Each operation still checks current durable state and performs its
+accounting in the transaction. A savepoint isolates each body when work is
+batched; success is returned only after the outer commit succeeds. Failed outer
+transactions release the connection before retrying each idempotent completion
+independently. Acceptance, reservation, dispatch and response-start checkpoints
+keep their original transaction boundaries.
+
+There is no delay to fill a batch. With no waiting peer, the operation uses a
+single transaction without savepoints. With a backlog, the worker stops taking
+more items after eight milliseconds of connection holding, or four items,
+whichever comes first; it cannot interrupt an individual SQL statement to meet
+that budget. At most 256 tasks wait behind the worker. Overflow uses the original
+synchronous transaction path and the caller's existing deadline, rather than
+rejecting an already admitted settlement. Each caller retains its settlement
+context. Cancellation of the transaction's leading context rolls back the batch;
+remaining live callers retry with their own original contexts.
+
+Canceled waiting tasks are removed promptly. Shutdown stops new completion
+submissions and joins both queued work and synchronous overflow before the store
+closes. A timed-out shutdown can be awaited again. The queue holds no durable
+acknowledgements or deferred accounting; crash recovery uses the existing stored
+claim and ledger state.
+
 ## Model directories
 
 `GET /v1/models` combines an owner-scoped personal-model read with a charity

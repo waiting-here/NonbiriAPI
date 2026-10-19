@@ -236,7 +236,7 @@ operations include `session`, `personal_models`, `charity_models`,
 `charity_capability`, `catalog`, `fishing_cleanup`, `donation_expiry`,
 `lake_checkpoint`, `lake_mutation`, `lake_profile`, `lake_recovery`,
 `lake_retention`, `claim_accept`, `claim_prepare`, `claim_release`,
-`claim_attempt`, `claim_complete`, `fishing_settle`, `reward_delivery` and
+`claim_attempt`, `claim_complete`, `claim_batch`, `fishing_settle`, `reward_delivery` and
 `activities_projection`, `lifecycle_checkpoint`, `legal_hold_expiry` and
 `legal_hold_retention`. Transaction timing includes `BeginTx` after pool
 acquisition. Fishing settlement returns its connection before publishing events.
@@ -258,6 +258,22 @@ request preparation, authorization, configuration, profile reads, rules, encodin
 idempotency, active-action recording, response projection and commit.
 Preparation runs before acquiring a connection. Other phase rows overlap their
 parent transaction; do not sum them with the parent.
+
+Completion scheduling exposes `operation.claim_attempt` and
+`operation.claim_complete` for each caller, `phase.queue.<operation>` until
+execution or cancellation, and `phase.execute.<operation>` for each body.
+Queue `active` and `peak` include the leading item waiting for the writer.
+`connection.claim_batch`, `transaction.claim_batch` and
+`phase.commit.claim_batch` describe the shared transaction. Independent retries
+and queue overflow retain the individual connection/transaction labels.
+`completion.batch_1` through `completion.batch_4` count attempted batch sizes;
+`completion.overflow` and `completion.hold_budget` count fallback admissions
+and early yields. `completion.fallback` measures independent recovery after a
+failed outer transaction, and `completion.close` measures scheduler drain.
+Queue time includes shared acquisition and earlier work in a batch: it overlaps
+pool waits and transaction time. Compare client latency and completed work;
+do not add these totals or treat a lower pool wait as eliminated queueing.
+
 Each row's `active_ms` integrates concurrent elapsed time inside this window,
 including unfinished work. A transaction spanning two windows contributes to
 both windows even while `completed` and `max_ms` are still zero. Percentiles

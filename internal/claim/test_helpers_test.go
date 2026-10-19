@@ -640,6 +640,7 @@ kind TEXT NOT NULL,source_id TEXT NOT NULL,PRIMARY KEY(kind,source_id)) WITHOUT 
 		t.Fatalf("new claim service: %v", err)
 	}
 	fixture.service = service
+	t.Cleanup(func() { _ = service.Close() })
 	return fixture
 }
 

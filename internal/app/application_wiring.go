@@ -196,6 +196,8 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	var forwardRuntime *publicForwardRuntime
 	var gameRuntimes *gameRuntimeBundle
 	var audits *auditRuntime
+	var claimService *claim.Service
+	performance := observability.NewPerformance()
 	defer func() {
 		if built != nil {
 			return
@@ -206,7 +208,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 			games: gameRuntimes, forward: forwardRuntime, audits: audits,
 			activityEvents: activityEvents, authRuntime: authRuntime, elevation: elevationManager,
 			discoveryWorker: discoveryWorker, bridge: bridgeRuntime, egress: outbound,
-			workerCancel: workerCancel, automation: automationService,
+			workerCancel: workerCancel, automation: automationService, claims: claimService,
 		}
 		if err := partial.CloseContext(startupContext); err != nil {
 			var pending *applicationCleanupError
@@ -313,7 +315,8 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err != nil {
 		return nil, fmt.Errorf("create charity service: %w", err)
 	}
-	claimService, err := claim.New(claim.Dependencies{
+	claimService, err = claim.New(claim.Dependencies{
+		Performance:  performance,
 		Observations: audits.observations,
 		DB:           store.DB(),
 		Secrets:      vault,
@@ -617,7 +620,6 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err != nil {
 		return nil, err
 	}
-	performance := observability.NewPerformance()
 	app.performance = performance
 	workerContext = performance.Context(workerContext)
 	handler, err := stationBoundary(cfg, audits.Wrap(mux))
