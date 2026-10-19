@@ -123,6 +123,13 @@
   white-space: nowrap;
 }
 
+:is(.nb-workflow-price-editor, .nb-workflow-price-reference) .nb-btn {
+  min-height: 2.5rem;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 @media (width < 40rem) {
   .charity-management .nb-pager .nb-pager__jump,
   .charity-management .nb-pager__size {

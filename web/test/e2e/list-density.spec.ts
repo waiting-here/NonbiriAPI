@@ -73,7 +73,25 @@ async function screenshot(page: Page, name: string) {
 }
 
 async function fitsPage(page: Page) {
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  const layout = await page.evaluate(() => ({
+    width: innerWidth,
+    scroll: document.documentElement.scrollWidth,
+    overflow: Array.from(document.querySelectorAll('main *'))
+      .filter(
+        (node) =>
+          node.getBoundingClientRect().right > innerWidth + 1 &&
+          node.getBoundingClientRect().right <= document.documentElement.scrollWidth + 1,
+      )
+      .slice(0, 8)
+      .map((node) => ({
+        tag: node.tagName,
+        className: node.className,
+        text: node.textContent?.slice(0, 70),
+        parent: node.parentElement?.className,
+        right: node.getBoundingClientRect().right,
+      })),
+  }));
+  expect(layout.scroll, JSON.stringify(layout.overflow)).toBeLessThanOrEqual(layout.width);
 }
 
 function publicModel(index: number) {
@@ -267,7 +285,7 @@ for (const [timezoneId, expectedTime] of [
       await mockJson(page, {
         origin: USER_ORIGIN,
         method: 'GET',
-        path: '/api/donations?page=1&page_size=20',
+        path: '/api/donations?view=current&page=1&page_size=20',
         body: numberedResponse([], '1', 20),
       });
       await mockJson(page, {
@@ -375,7 +393,10 @@ test('donation guidance renders Markdown without overflowing mobile or desktop p
     path: '/api/charity/models?view=catalog&page=1&page_size=20&allowed_for_me=true&currently_available=true',
     body: catalogPage([publicModel(1)], 'open'),
   });
-  for (const path of ['/api/donations?page=1&page_size=20', '/api/endpoints?page=1&page_size=20'])
+  for (const path of [
+    '/api/donations?view=current&page=1&page_size=20',
+    '/api/endpoints?page=1&page_size=20',
+  ])
     await mockJson(page, {
       origin: USER_ORIGIN,
       method: 'GET',
@@ -511,7 +532,7 @@ for (const locale of ['en', 'zh'] as const) {
     await mockJson(page, {
       origin: USER_ORIGIN,
       method: 'GET',
-      path: '/api/donations?page=1&page_size=20',
+      path: '/api/donations?view=current&page=1&page_size=20',
       body: numberedResponse([], '1', 20),
     });
     await page.setViewportSize({ width: 1935, height: 1000 });

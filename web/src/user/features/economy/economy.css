@@ -59,6 +59,26 @@
   overflow-wrap: anywhere;
 }
 
+.economy-owner-keys {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+:is(.economy-owner-pages, .economy-owner-keys) .nb-pager :is(button, input, select) {
+  min-height: 2.5rem;
+}
+
+@media (width < 40rem) {
+  :is(.economy-owner-pages, .economy-owner-keys) .nb-pager .nb-pager__jump,
+  :is(.economy-owner-pages, .economy-owner-keys) .nb-pager__size {
+    display: inline-flex;
+  }
+
+  :is(.economy-owner-pages, .economy-owner-keys) .nb-pager__pages {
+    flex-wrap: wrap;
+  }
+}
+
 .economy-owner-rule-preview {
   min-width: 0;
   overflow-wrap: anywhere;

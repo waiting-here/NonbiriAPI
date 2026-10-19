@@ -14,6 +14,7 @@ export default defineConfig({
     'directory-controls.spec.ts',
     'operation-controls.spec.ts',
     'discovery-errors.spec.ts',
+    'workflow.spec.ts',
   ],
   outputDir: 'test-results/management/browser',
 });

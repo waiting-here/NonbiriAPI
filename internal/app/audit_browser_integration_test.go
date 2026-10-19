@@ -48,7 +48,15 @@ func TestAuditBrowserFixture(t *testing.T) {
 		path: filepath.Join(t.TempDir(), "audit.db")}
 	dbfixture.Materialize(t, f.path, vault)
 	f.upstreamState = newImageFixtureUpstream(t)
-	f.upstream = httptest.NewServer(f.upstreamState)
+	workflowBrowser := os.Getenv("NONBIRI_WORKFLOW_BROWSER") == "1"
+	f.upstream = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if workflowBrowser {
+			w.Header().Add("X-Workflow-Origin", "198.51.100.91")
+			w.Header().Add("X-Workflow-Origin", "198.51.100.92")
+			w.Header().Add("Set-Cookie", "synthetic-response-credential=private")
+		}
+		f.upstreamState.ServeHTTP(w, r)
+	}))
 	defer f.upstream.Close()
 	proxy := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.app.Load().handler.ServeHTTP(w, r)
@@ -130,6 +138,9 @@ VALUES('issue_projection_incomplete','synthetic projection checkpoint',?,?,0)`, 
 	var mfaUser imageBrowserUser
 	if os.Getenv("NONBIRI_MANAGEMENT_BROWSER") == "1" {
 		management = seedManagementBrowser(t, f, now)
+		if workflowBrowser {
+			management["workflow"] = seedWorkflowBrowser(t, f, management, users.URL)
+		}
 		var adminID int64
 		if err := f.store.DB().QueryRow(`SELECT id FROM users WHERE is_admin=1`).Scan(&adminID); err != nil {
 			t.Fatal(err)

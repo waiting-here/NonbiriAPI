@@ -215,9 +215,25 @@ for (const [width, locale, theme] of [
     await expect(keys.getByText('head21…tail', { exact: true })).toBeVisible();
     await page.reload();
     await expect(keys.getByText('head21…tail', { exact: true })).toBeVisible();
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
-      true,
-    );
+    const layout = await page.evaluate(() => ({
+      width: innerWidth,
+      scroll: document.documentElement.scrollWidth,
+      overflow: Array.from(document.querySelectorAll('main *'))
+        .filter(
+          (node) =>
+            node.getBoundingClientRect().right > innerWidth + 1 &&
+            node.getBoundingClientRect().right <= document.documentElement.scrollWidth + 1,
+        )
+        .slice(0, 8)
+        .map((node) => ({
+          tag: node.tagName,
+          className: node.className,
+          text: node.textContent?.slice(0, 70),
+          parent: node.parentElement?.className,
+          right: node.getBoundingClientRect().right,
+        })),
+    }));
+    expect(layout.scroll, JSON.stringify(layout.overflow)).toBeLessThanOrEqual(layout.width);
     if (width < 640) {
       for (const navigation of await panel
         .getByRole('navigation', { name: common.pagination })
@@ -232,8 +248,19 @@ for (const [width, locale, theme] of [
         expect(
           boxes.every((box) => box && box.width > 0 && box.x >= 0 && box.x + box.width <= width),
         ).toBe(true);
-        const bottoms = boxes.map((box) => box!.y + box!.height);
-        expect(Math.max(...bottoms) - Math.min(...bottoms)).toBeLessThanOrEqual(1);
+        expect(boxes.every((box) => box && box.height >= 40)).toBe(true);
+        for (let i = 0; i < boxes.length; i++) {
+          for (let j = i + 1; j < boxes.length; j++) {
+            const first = boxes[i]!,
+              second = boxes[j]!;
+            expect(
+              first.x + first.width <= second.x ||
+                second.x + second.width <= first.x ||
+                first.y + first.height <= second.y ||
+                second.y + second.height <= first.y,
+            ).toBe(true);
+          }
+        }
       }
     }
     if (process.env.NONBIRI_VISUAL_DIR) {
