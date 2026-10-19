@@ -168,9 +168,14 @@ func checkpointResultTx(ctx context.Context, tx *sql.Tx, c castRow, row profileR
 	}
 	return CastResult{Cast: v, Profile: p}, nil
 }
+
+// Terminal casts are paused by the schema constraint. Naming the active phases
+// lets SQLite use the partial index instead of scanning retained history.
+const liveLeaseCountSQL = "SELECT count(*) FROM lake_notes_casts WHERE phase IN ('waiting','playing') AND paused=0 AND lease_until_ns>? AND id<>?"
+
 func (s *Service) capacityTx(ctx context.Context, tx *sql.Tx, now int64, except string) error {
 	var count int
-	e := tx.QueryRowContext(ctx, "SELECT count(*) FROM lake_notes_casts WHERE paused=0 AND lease_until_ns>? AND id<>?", now, except).Scan(&count)
+	e := tx.QueryRowContext(ctx, liveLeaseCountSQL, now, except).Scan(&count)
 	if e != nil {
 		return e
 	}
