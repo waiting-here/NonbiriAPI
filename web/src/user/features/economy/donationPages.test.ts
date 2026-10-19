@@ -139,6 +139,7 @@ describe('owner donation numbered-page normalizers', () => {
     });
     expect(result.data[0]).toEqual({
       id: OWNER_ID,
+      ownerHiddenAt: null,
       status: 'pending',
       revision: '1',
       description: 'owner summary',

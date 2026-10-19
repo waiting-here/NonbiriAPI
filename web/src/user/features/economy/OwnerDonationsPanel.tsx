@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { Link, useLocation } from 'react-router';
 import { useSearchState } from '@shared/operations/useSearchState';
@@ -14,18 +14,45 @@ import { copyForRecurringLimits } from '@shared/components/recurringLimitsCopy';
 import { DonationKeyPanel } from './CharityPanels';
 import { useRateLimitRefresh } from '@shared/operations/useRateLimitRefresh';
 import { DonationThanks } from '@shared/components/DonationControlFacts';
-import { Fold, MoreMenu } from '@shared/components/ui';
+import {
+  Button,
+  Field,
+  FilterBar,
+  Fold,
+  MoreMenu,
+  Panel,
+  PanelBody,
+  PanelHead,
+  Tabs,
+} from '@shared/components/ui';
 import { DonationConnectorLabel } from './DonationConnectorLabel';
 import { economyKeys, economySessionRequest } from './queries';
 import {
   getOwnerDonationsPage,
   getOwnerDonationKeysPage,
   type OwnerDonationSummary,
+  type OwnerDonationView,
+  type OwnerDonationKeyView,
 } from './donationPages';
+import { DonationHistoryBatch, DonationHistoryToggle } from './DonationHistoryControls';
 import { ExactCount } from './ExactValue';
 import type { DonationStatus } from './types';
 
+const VIEWS = ['current', 'history', 'hidden', 'all'] as const;
+const viewLabel = {
+  current: 'user.charity.ownerHistory.current',
+  history: 'user.charity.ownerHistory.history',
+  hidden: 'user.charity.ownerHistory.hidden',
+  all: 'user.charity.ownerHistory.all',
+} as const;
+const keyViewLabel = {
+  current: 'user.charity.ownerHistory.keys.current',
+  ended: 'user.charity.ownerHistory.keys.ended',
+  all: 'user.charity.ownerHistory.keys.all',
+} as const;
 const STATUSES = ['', 'pending', 'approved', 'rejected', 'deleted', 'expired'] as const;
+const terminal = (status?: DonationStatus) =>
+  status !== undefined && ['rejected', 'deleted', 'expired'].includes(status);
 const single = (params: URLSearchParams, name: string) =>
   params.getAll(name).length === 1 ? params.get(name)! : '';
 function searchValid(value: string): boolean {
@@ -67,6 +94,8 @@ export function OwnerDonationsPanel({
   const changingAccount = contextAccount !== accountID;
   const accountParameters = [
     'donation_q',
+    'donation_view',
+    'donation_keys_view',
     'donation_status',
     'donation_expanded',
     'donations_page',
@@ -79,6 +108,8 @@ export function OwnerDonationsPanel({
     const next = new URLSearchParams(params);
     for (const name of [
       'donation_q',
+      'donation_view',
+      'donation_keys_view',
       'donation_status',
       'donation_expanded',
       'donations_page',
@@ -98,8 +129,18 @@ function OwnerDonationsAccount({ accountID, enabled }: { accountID: string; enab
   const [params, setParams] = useSearchState();
   const rawQ = single(params, 'donation_q');
   const q = searchValid(rawQ) ? rawQ : '';
+  const rawView = single(params, 'donation_view');
+  const view: OwnerDonationView = VIEWS.includes(rawView as OwnerDonationView)
+    ? (rawView as OwnerDonationView)
+    : 'current';
+  const statuses =
+    view === 'current'
+      ? (['', 'pending', 'approved'] as const)
+      : view === 'all'
+        ? STATUSES
+        : (['', 'rejected', 'deleted', 'expired'] as const);
   const rawStatus = single(params, 'donation_status');
-  const status = STATUSES.includes(rawStatus as DonationStatus)
+  const status = (statuses as readonly string[]).includes(rawStatus)
     ? (rawStatus as DonationStatus | '')
     : '';
   const expanded = donationID(single(params, 'donation_expanded'));
@@ -116,6 +157,7 @@ function OwnerDonationsAccount({ accountID, enabled }: { accountID: string; enab
     const next = new URLSearchParams(params);
     for (const [key, value] of [
       ['donation_q', q],
+      ['donation_view', view],
       ['donation_status', status],
       ['donation_expanded', expanded],
     ]) {
@@ -125,14 +167,14 @@ function OwnerDonationsAccount({ accountID, enabled }: { accountID: string; enab
       }
     }
     if (next.toString() !== params.toString()) setParams(next, { replace: true });
-  }, [params, setParams, q, status, expanded]);
-  const family = [...economyKeys.donations, 'pages', accountID, status, q];
+  }, [params, setParams, q, status, expanded, view]);
+  const family = [...economyKeys.donations, 'pages', accountID, view, status, q];
   const query = useQuery({
     queryKey: [...family, pager.page, pager.pageSize],
     queryFn: ({ signal }) =>
       economySessionRequest(
         client,
-        () => getOwnerDonationsPage({ status, q }, pager.page, pager.pageSize, signal),
+        () => getOwnerDonationsPage({ view, status, q }, pager.page, pager.pageSize, signal),
         accountID,
       ),
     enabled,
@@ -148,8 +190,7 @@ function OwnerDonationsAccount({ accountID, enabled }: { accountID: string; enab
       next.delete('donations_page');
       return next;
     });
-  const search = (event: FormEvent) => {
-    event.preventDefault();
+  const search = () => {
     if (!searchValid(shownDraft.value)) {
       setDraft({ ...shownDraft, invalid: true });
       return;
@@ -162,54 +203,101 @@ function OwnerDonationsAccount({ accountID, enabled }: { accountID: string; enab
       const next = new URLSearchParams(previous);
       next.delete('donation_expanded');
       next.delete('donation_keys_page');
+      next.delete('donation_keys_view');
       if (id) next.set('donation_expanded', id);
       return next;
     });
   return (
     <div className="economy-owner-pages">
-      <form className="economy-owner-filters" onSubmit={search}>
-        <label>
-          <span>{t('user.charity.ownerPages.search')}</span>
-          <input
-            type="search"
-            placeholder={t('user.charity.ownerPages.searchPlaceholder')}
-            maxLength={256}
-            value={shownDraft.value}
-            aria-invalid={shownDraft.invalid}
-            onChange={(event) => setDraft({ source: q, value: event.target.value, invalid: false })}
-          />
-        </label>
-        <label>
-          <span>{t('user.charity.ownerPages.status')}</span>
-          <select
-            value={status}
-            onChange={(event) => setFilter('donation_status', event.target.value)}
-          >
-            {STATUSES.map((value) => (
-              <option key={value} value={value}>
-                {value ? t(`user.charity.status.${value}`) : t('common.all')}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button type="submit" className="nb-btn nb-btn--secondary">
-          {t('common.search')}
-        </button>
-        <button
-          type="button"
-          className="nb-btn nb-btn--ghost"
-          onClick={() => {
-            setDraft({ source: '', value: '', invalid: false });
-            setFilter('donation_q', '');
+      <Tabs
+        label={t('user.charity.ownerHistory.views')}
+        value={view}
+        tabs={VIEWS.map((value) => ({ value, label: t(viewLabel[value]) }))}
+        onChange={(value) =>
+          setParams((previous) => {
+            const next = new URLSearchParams(previous);
+            next.set('donation_view', value);
+            for (const key of [
+              'donation_status',
+              'donations_page',
+              'donation_expanded',
+              'donation_keys_view',
+            ])
+              next.delete(key);
+            return next;
+          })
+        }
+      />
+      <FilterBar
+        secondaryLabel={t('user.charity.ownerPages.status')}
+        activeCount={status ? 1 : 0}
+        secondaryAlwaysVisible
+        onSubmit={search}
+        search={
+          <>
+            <Field
+              label={t('user.charity.ownerPages.search')}
+              error={shownDraft.invalid ? t('user.charity.ownerPages.invalidSearch') : undefined}
+            >
+              {(props) => (
+                <input
+                  {...props}
+                  type="search"
+                  placeholder={t('user.charity.ownerPages.searchPlaceholder')}
+                  maxLength={256}
+                  value={shownDraft.value}
+                  onChange={(event) =>
+                    setDraft({ source: q, value: event.target.value, invalid: false })
+                  }
+                />
+              )}
+            </Field>
+            <div className="form-actions">
+              <Button type="submit">{t('common.search')}</Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setDraft({ source: '', value: '', invalid: false });
+                  setFilter('donation_q', '');
+                }}
+              >
+                {t('user.charity.ownerPages.clear')}
+              </Button>
+            </div>
+          </>
+        }
+        secondary={
+          <Field label={t('user.charity.ownerPages.status')}>
+            {(props) => (
+              <select
+                {...props}
+                value={status}
+                onChange={(event) => setFilter('donation_status', event.target.value)}
+              >
+                {statuses.map((value) => (
+                  <option key={value} value={value}>
+                    {value ? t(`user.charity.status.${value}`) : t('common.all')}
+                  </option>
+                ))}
+              </select>
+            )}
+          </Field>
+        }
+      />
+      {view === 'history' || view === 'hidden' ? (
+        <DonationHistoryBatch
+          accountID={accountID}
+          scope={{
+            action: view === 'hidden' ? 'restore' : 'hide',
+            q,
+            status:
+              status === 'deleted' || status === 'expired' || status === 'rejected' ? status : null,
           }}
-        >
-          {t('user.charity.ownerPages.clear')}
-        </button>
-      </form>
-      {shownDraft.invalid ? (
-        <p className="field-error" role="alert">
-          {t('user.charity.ownerPages.invalidSearch')}
-        </p>
+          disabled={
+            !enabled || query.isFetching || Boolean(query.error) || !query.data?.data.length
+          }
+        />
       ) : null}
       {query.error ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : null}
       {query.isPending ? <LoadingState /> : null}
@@ -242,20 +330,29 @@ function OwnerDonationsAccount({ accountID, enabled }: { accountID: string; enab
         </>
       ) : null}
       {expanded && !accessLost(query.error) ? (
-        <section className="ops-subcard" aria-label={t('user.charity.ownerPages.keys')}>
-          <div className="item-header">
-            <h3>{t('user.charity.donationNumber', { id: expanded })}</h3>
-            <button type="button" className="nb-btn nb-btn--ghost" onClick={() => select('')}>
-              {t('common.close')}
-            </button>
-          </div>
-          <OwnerDonationKeys
-            key={`${accountID}:${expanded}`}
-            accountID={accountID}
-            donationID={expanded}
-            enabled={enabled}
+        <Panel aria-label={t('user.charity.ownerPages.keys')}>
+          <PanelHead
+            level={3}
+            title={t('user.charity.donationNumber', { id: expanded })}
+            actions={
+              <Button type="button" variant="ghost" onClick={() => select('')}>
+                {t('common.close')}
+              </Button>
+            }
           />
-        </section>
+          <PanelBody>
+            <OwnerDonationKeys
+              key={`${accountID}:${expanded}`}
+              accountID={accountID}
+              donationID={expanded}
+              enabled={enabled && !query.isPending}
+              status={
+                query.data?.data.find((item) => item.id === expanded)?.status ??
+                (view === 'history' || view === 'hidden' ? 'deleted' : undefined)
+              }
+            />
+          </PanelBody>
+        </Panel>
       ) : null}
     </div>
   );
@@ -332,6 +429,13 @@ function DonationSummary({
         </Fold>
       </div>
       <div className="donation-summary-actions">
+        {terminal(item.status) ? (
+          <DonationHistoryToggle
+            id={item.id}
+            hidden={item.ownerHiddenAt !== null}
+            disabled={disabled}
+          />
+        ) : null}
         {disabled ? (
           <span className="nb-btn nb-btn--ghost" aria-disabled="true">
             {t('user.charity.openDonationDetail')}
@@ -357,15 +461,24 @@ function DonationSummary({
 export function OwnerDonationKeys({
   accountID,
   donationID,
+  status,
   enabled = true,
 }: {
   accountID: string;
   donationID: string;
+  status?: DonationStatus;
   enabled?: boolean;
 }) {
   const { t, i18n } = useTranslation();
   const copy = copyForRecurringLimits(i18n.language);
   const location = useLocation();
+  const [params, setParams] = useSearchState();
+  const rawView = single(params, 'donation_keys_view');
+  const view: OwnerDonationKeyView = ['current', 'ended', 'all'].includes(rawView)
+    ? (rawView as OwnerDonationKeyView)
+    : terminal(status)
+      ? 'ended'
+      : 'current';
   const returnTo =
     location.pathname === '/charity'
       ? `${location.pathname}${location.search}`
@@ -378,13 +491,13 @@ export function OwnerDonationKeys({
     pageParam: 'donation_keys_page',
     pageSizeParam: 'donation_keys_page_size',
   });
-  const family = [...economyKeys.donations, 'keys-page', accountID, donationID];
+  const family = [...economyKeys.donations, 'keys-page', accountID, donationID, view];
   const query = useQuery({
     queryKey: [...family, pager.page, pager.pageSize],
     queryFn: ({ signal }) =>
       economySessionRequest(
         client,
-        () => getOwnerDonationKeysPage(donationID, pager.page, pager.pageSize, signal),
+        () => getOwnerDonationKeysPage(donationID, pager.page, pager.pageSize, signal, view),
         accountID,
       ),
     enabled,
@@ -402,6 +515,22 @@ export function OwnerDonationKeys({
   );
   return (
     <div>
+      <Tabs
+        label={t('user.charity.ownerHistory.keyViews')}
+        value={view}
+        tabs={(['current', 'ended', 'all'] as const).map((value) => ({
+          value,
+          label: t(keyViewLabel[value]),
+        }))}
+        onChange={(value) =>
+          setParams((previous) => {
+            const next = new URLSearchParams(previous);
+            next.set('donation_keys_view', value);
+            next.delete('donation_keys_page');
+            return next;
+          })
+        }
+      />
       {query.error ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : null}
       {query.isPending ? <LoadingState /> : null}
       {query.data && !accessLost(query.error) ? (
