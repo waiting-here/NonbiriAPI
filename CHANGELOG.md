@@ -4,7 +4,7 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
-## Unreleased — 1.0.4
+## 1.0.4 — 2026-10-20
 
 Storage schema 24 requires the matching offline converter for exact registered
 schema 16–23 databases. Account exports use format 22. Publishing this source
