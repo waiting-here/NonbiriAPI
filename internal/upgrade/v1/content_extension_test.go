@@ -102,7 +102,7 @@ func TestStableContentUpgradeCancellationRollsBackBothChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 	plan, err := storageSchema.plan(t.Context(), d)
-	if err != nil || len(plan.steps) != 6 || plan.steps[0].from != 17 || plan.steps[5].version != 23 {
+	if err != nil || len(plan.steps) != 7 || plan.steps[0].from != 17 || plan.steps[6].version != 24 {
 		t.Fatal("source not restored", err)
 	}
 	var count int
