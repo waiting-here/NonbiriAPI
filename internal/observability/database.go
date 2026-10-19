@@ -30,7 +30,7 @@ func databaseOperation(operation string) bool {
 // overlap their parent transaction and must not be added to transaction time.
 func DatabasePhase(ctx context.Context, operation, phase string) func(error) {
 	switch phase {
-	case "prepare", "authorize", "config", "read", "rules", "encode", "write", "commit", "projection", "idempotency", "activity", "queue", "execute":
+	case "prepare", "authorize", "config", "read", "rules", "encode", "write", "commit", "projection", "idempotency", "activity", "queue", "execute", "capacity", "current_cast", "decode", "expire", "insert":
 		return databaseTimer(ctx, "phase."+phase, operation)
 	default:
 		return func(error) {}
@@ -103,6 +103,9 @@ func boundedOperationTimer(ctx context.Context, label string) func(error) {
 // It rolls back an unfinished transaction and always returns its connection.
 // Finish before any follow-up operation that needs a connection from the same pool.
 func BeginMeasuredTx(ctx context.Context, database *sql.DB, options *sql.TxOptions, operation string) (*sql.Tx, func(error), error) {
+	if databaseOperation(operation) {
+		ctx = context.WithValue(ctx, connectionRootKey{}, "operation."+operation)
+	}
 	acquired := databaseTimer(ctx, "connection", operation)
 	conn, err := database.Conn(ctx)
 	acquired(err)

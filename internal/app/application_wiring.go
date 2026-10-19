@@ -198,6 +198,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	var audits *auditRuntime
 	var claimService *claim.Service
 	performance := observability.NewPerformance()
+	store.SetConnectionObserver(performance)
 	defer func() {
 		if built != nil {
 			return
