@@ -44,19 +44,28 @@ func (api *httpAPI) listNumbered(writer http.ResponseWriter, request *http.Reque
 		writeDonationError(writer, ErrInvalidRequest)
 		return true
 	}
+	if role == recurringOwner && values.Has("view") {
+		if values.Get("view") == "" {
+			writeDonationError(writer, ErrInvalidRequest)
+			return true
+		}
+		numbered = true
+	}
 	if !numbered {
 		return false
 	}
 	allowed := []string{"status", "q"}
 	if role != recurringOwner {
 		allowed = append(allowed, "handling")
+	} else {
+		allowed = append(allowed, "view")
 	}
 	page, err := parseNumberedQuery(values, allowed...)
 	if err != nil {
 		writeDonationError(writer, err)
 		return true
 	}
-	filter := ManagementFilter{Status: values.Get("status"), Query: values.Get("q"), Handling: values.Get("handling")}
+	filter := ManagementFilter{Status: values.Get("status"), Query: values.Get("q"), Handling: values.Get("handling"), OwnerView: values.Get("view")}
 	switch role {
 	case recurringOwner:
 		out, err := api.service.DonationsOwnerPage(request.Context(), principal.UserID, filter, page)
@@ -104,13 +113,21 @@ func (api *httpAPI) keysNumbered(writer http.ResponseWriter, request *http.Reque
 	if !ok {
 		return
 	}
-	page, err := parseNumberedQuery(values)
+	allowed := []string{}
+	if role == recurringOwner {
+		if values.Has("view") && values.Get("view") == "" {
+			writeDonationError(writer, ErrInvalidRequest)
+			return
+		}
+		allowed = append(allowed, "view")
+	}
+	page, err := parseNumberedQuery(values, allowed...)
 	if err != nil {
 		writeDonationError(writer, err)
 		return
 	}
 	if role == recurringOwner {
-		out, err := api.service.KeysOwnerPage(request.Context(), principal.UserID, id, page)
+		out, err := api.service.KeysOwnerPage(request.Context(), principal.UserID, id, page, values.Get("view"))
 		if err != nil {
 			writeDonationError(writer, err)
 		} else {

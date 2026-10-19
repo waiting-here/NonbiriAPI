@@ -165,6 +165,7 @@ type ReviewResult struct {
 }
 
 type Donation struct {
+	OwnerHiddenAt       *int64        `json:"owner_hidden_at"`
 	DiscordPublicThanks *bool         `json:"discord_public_thanks"`
 	ID                  string        `json:"id"`
 	Status              string        `json:"status"`
@@ -315,6 +316,7 @@ type KeyManagementInput struct {
 }
 
 type ExportDonation struct {
+	OwnerHiddenAt       *int64              `json:"owner_hidden_at"`
 	DiscordPublicThanks *bool               `json:"discord_public_thanks"`
 	ID                  string              `json:"id"`
 	Status              string              `json:"status"`

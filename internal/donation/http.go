@@ -19,6 +19,8 @@ func RegisterOwnerRoutes(registrar UserRouteRegistrar, service *Service) error {
 		method, pattern string
 		handler         AuthorizedUserHandler
 	}{
+		{http.MethodPut, routeOwnerHistory, api.setOwnerHistory},
+		{http.MethodPost, routeOwnerHistoryBatch, api.ownerHistoryBatch},
 		{http.MethodGet, routeDonations, api.listOwner},
 		{http.MethodPost, routeDonations, api.createOwner},
 		{http.MethodGet, routeDonation, api.getOwner},

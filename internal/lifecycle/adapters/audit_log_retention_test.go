@@ -171,3 +171,30 @@ func TestAuditRetentionZeroesPartialWorkOnLaterError(t *testing.T) {
 		}
 	}
 }
+
+type extraAuditProbe struct {
+	limit    int
+	now      int64
+	deadline time.Time
+	result   lifecycle.WorkResult
+}
+
+func (p *extraAuditProbe) Retain(_ context.Context, now int64, limit int, deadline time.Time) (lifecycle.WorkResult, error) {
+	p.now, p.limit, p.deadline = now, limit, deadline
+	return p.result, nil
+}
+func TestAuditRetentionAdditionalOwnerSharesRemainingBudget(t *testing.T) {
+	order := []string{}
+	deadline := time.Unix(3000, 0)
+	maintenanceOwner := &maintenanceAuditRetentionProbe{order: &order, result: maintenance.LifecycleRetentionResult{EventsDeleted: 1, Processed: 1}}
+	announcementOwner := &announcementAuditRetentionProbe{order: &order, result: announcements.LifecycleAuditRetentionResult{AuditsDeleted: 2, Processed: 2}}
+	extra := &extraAuditProbe{result: lifecycle.WorkResult{Processed: 2, More: true}}
+	result, err := NewAuditRetention(maintenanceOwner, announcementOwner, extra).Retain(context.Background(), 2000, 5, deadline)
+	if err != nil || result.Processed != 5 || !result.More || extra.limit != 2 || extra.now != 2000 || extra.deadline != deadline {
+		t.Fatal(result, extra, err)
+	}
+	extra.result.Processed = 3
+	if _, err = NewAuditRetention(maintenanceOwner, announcementOwner, extra).Retain(context.Background(), 2000, 5, deadline); !errors.Is(err, lifecycle.ErrInvariant) {
+		t.Fatal(err)
+	}
+}
