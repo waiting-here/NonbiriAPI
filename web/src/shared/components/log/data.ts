@@ -186,6 +186,7 @@ export interface LogFiltersValue {
   phase?: 'handler' | 'pre_handler';
   model?: string;
   user_id?: string;
+  discord_id?: string;
   endpoint_key_id?: string;
   endpoint_base_url?: string;
   upstream_model?: string;
@@ -727,6 +728,10 @@ export function adminLogExportPath(filter: LogFiltersValue, format: 'csv' | 'jso
   return roleLogExportPath('admin', filter, format);
 }
 
+export function validLogDiscordID(value: string): boolean {
+  return /^[1-9][0-9]{0,19}$/.test(value) && BigInt(value) <= 18_446_744_073_709_551_615n;
+}
+
 export function validateLogFilter(role: LogRole, raw: Record<string, string>): LogFiltersValue {
   const result: LogFiltersValue = {};
   if (raw.phase === 'handler' || raw.phase === 'pre_handler') result.phase = raw.phase;
@@ -741,6 +746,8 @@ export function validateLogFilter(role: LogRole, raw: Record<string, string>): L
       result.user_id = decimalID(userID, 'user id filter');
   }
   if (role !== 'user') {
+    const discordID = raw.discord_id?.trim();
+    if (discordID && validLogDiscordID(discordID)) result.discord_id = discordID;
     assign('endpoint_base_url', 512);
     assign('upstream_model', 512);
     assign('charity_model', 512);

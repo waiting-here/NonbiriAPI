@@ -1,10 +1,12 @@
 import { Button } from '@shared/components/ui/Button';
+import { Field } from '@shared/components/ui/Field';
 import { useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { TimeInput } from '@shared/components/TimeInput';
 import { TimeContextNotice } from '@shared/components/TimeContext';
 import { createTimeDraft, timeDraftValue, type TimeDraft, type TimeStation } from '@shared/time';
 import './logs.css';
+import { validLogDiscordID } from './data';
 import type { LogUrlState } from './useLogUrlState';
 
 // Shared filter bar for both log screens. Text fields are declared by the
@@ -48,6 +50,7 @@ export function LogFilters({ station, fields, state, onApply }: LogFiltersProps)
   );
   const [draftTo, setDraftTo] = useState<TimeDraft>(() => createTimeDraft(state.toUnix ?? null));
   const [invalidRange, setInvalidRange] = useState(false);
+  const [invalidDiscord, setInvalidDiscord] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
   // Re-seed the drafts whenever the applied state changes (including when a
@@ -61,6 +64,7 @@ export function LogFilters({ station, fields, state, onApply }: LogFiltersProps)
   const [seededFor, setSeededFor] = useState(stateSeed);
   if (seededFor !== stateSeed) {
     setSeededFor(stateSeed);
+    setInvalidDiscord(false);
     setInvalidRange(false);
     setDrafts({ ...state.filters });
     setDraftFrom(createTimeDraft(state.fromUnix ?? null));
@@ -80,6 +84,12 @@ export function LogFilters({ station, fields, state, onApply }: LogFiltersProps)
   };
 
   const applyRange = (fromUnix: number | undefined, toUnix: number | undefined) => {
+    const discordID = drafts.discord_id?.trim();
+    if (discordID && !validLogDiscordID(discordID)) {
+      setInvalidDiscord(true);
+      return;
+    }
+    setInvalidDiscord(false);
     setInvalidRange(false);
     onApply({ filters: collectFilters(), fromUnix, toUnix });
   };
@@ -105,11 +115,12 @@ export function LogFilters({ station, fields, state, onApply }: LogFiltersProps)
   };
 
   const reset = () => {
+    setInvalidDiscord(false);
     setInvalidRange(false);
     onApply({ filters: {}, fromUnix: undefined, toUnix: undefined });
   };
 
-  const primaryNames = ['user_id', 'model', 'upstream_model'];
+  const primaryNames = ['user_id', 'discord_id', 'model', 'charity_model'];
   const primary = fields.filter((field) => primaryNames.includes(field.name));
   const secondary = fields.filter((field) => !primaryNames.includes(field.name));
   const count =
@@ -118,44 +129,49 @@ export function LogFilters({ station, fields, state, onApply }: LogFiltersProps)
   const renderFields = (values: readonly LogFilterField[]) => (
     <>
       {values.map((field) => (
-        <label key={field.name}>
-          <span>{field.label}</span>
-          {field.options ? (
-            <select
-              value={drafts[field.name] ?? ''}
-              aria-label={field.ariaLabel}
-              onChange={(event) =>
-                setDrafts((prev) => ({ ...prev, [field.name]: event.target.value }))
-              }
-            >
-              {field.options.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <input
-              type={field.inputType ?? 'text'}
-              value={drafts[field.name] ?? ''}
-              maxLength={field.maxLength ?? 512}
-              inputMode={field.inputType === 'number' ? 'numeric' : undefined}
-              list={field.suggestions?.length ? `log-filter-${field.name}-options` : undefined}
-              onChange={(event) =>
-                setDrafts((prev) => ({ ...prev, [field.name]: event.target.value }))
-              }
-              aria-label={field.ariaLabel}
-              placeholder={field.placeholder}
-            />
+        <Field key={field.name} label={field.label}>
+          {(inputProps) => (
+            <>
+              {field.options ? (
+                <select
+                  {...inputProps}
+                  value={drafts[field.name] ?? ''}
+                  aria-label={field.ariaLabel}
+                  onChange={(event) =>
+                    setDrafts((prev) => ({ ...prev, [field.name]: event.target.value }))
+                  }
+                >
+                  {field.options.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  {...inputProps}
+                  type={field.inputType ?? 'text'}
+                  value={drafts[field.name] ?? ''}
+                  maxLength={field.maxLength ?? 512}
+                  inputMode={field.inputType === 'number' ? 'numeric' : undefined}
+                  list={field.suggestions?.length ? `log-filter-${field.name}-options` : undefined}
+                  onChange={(event) =>
+                    setDrafts((prev) => ({ ...prev, [field.name]: event.target.value }))
+                  }
+                  aria-label={field.ariaLabel}
+                  placeholder={field.placeholder}
+                />
+              )}
+              {field.suggestions?.length ? (
+                <datalist id={`log-filter-${field.name}-options`}>
+                  {field.suggestions.map((option) => (
+                    <option key={option} value={option} />
+                  ))}
+                </datalist>
+              ) : null}
+            </>
           )}
-          {field.suggestions?.length ? (
-            <datalist id={`log-filter-${field.name}-options`}>
-              {field.suggestions.map((option) => (
-                <option key={option} value={option} />
-              ))}
-            </datalist>
-          ) : null}
-        </label>
+        </Field>
       ))}
     </>
   );
@@ -257,6 +273,11 @@ export function LogFilters({ station, fields, state, onApply }: LogFiltersProps)
         </div>
       ) : null}
       <TimeContextNotice station={station} />
+      {invalidDiscord ? (
+        <p className="field-error" role="alert">
+          {t('common.operations.logs.invalidDiscordFilter')}
+        </p>
+      ) : null}
       {invalidRange ? (
         <p className="field-error" role="alert">
           {t('common.operations.logs.filterInvalid')}

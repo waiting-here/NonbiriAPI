@@ -17,6 +17,7 @@ import {
   normalizeStewardLogRow,
   normalizeUserLogAttempt,
   normalizeUserLogRow,
+  validLogDiscordID,
   type AdminLogAttempt,
   type AdminLogRow,
   type CallerIdentity,
@@ -81,6 +82,7 @@ const LOG_FILTER_KEYS: Record<LogRole, readonly (keyof LogFiltersValue)[]> = {
   user: ['model', 'error_code', 'status', 'from', 'to', 'phase'],
   steward: [
     'user_id',
+    'discord_id',
     'endpoint_key_id',
     'endpoint_base_url',
     'upstream_model',
@@ -94,6 +96,7 @@ const LOG_FILTER_KEYS: Record<LogRole, readonly (keyof LogFiltersValue)[]> = {
   ],
   admin: [
     'user_id',
+    'discord_id',
     'endpoint_key_id',
     'endpoint_base_url',
     'upstream_model',
@@ -154,6 +157,7 @@ function requestFilter(role: LogRole, value: LogFiltersValue): LogFiltersValue {
     if (text === '') continue;
     if (key === 'phase' && text !== 'handler' && text !== 'pre_handler')
       invalidRequest('log phase filter');
+    if (key === 'discord_id' && !validLogDiscordID(text)) invalidRequest('log Discord ID filter');
     if (key === 'status' && !/^[1-5][0-9]{2}$/.test(text)) invalidRequest('log status filter');
     if (
       (key === 'user_id' || key === 'endpoint_key_id') &&

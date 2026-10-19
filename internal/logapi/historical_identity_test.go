@@ -11,7 +11,8 @@ func TestHistoricalOriginSurvivesDeletionButNewAccountCannotReadIt(t *testing.T)
 	ctx := context.Background()
 	now := int64(1700000100)
 	f.repo.now = func() time.Time { return time.Unix(now, 0) }
-	old := seedLifecycleLogUser(t, f.store.DB(), "123456789012345678", false)
+	discordID := "123456789012345678"
+	old := seedLifecycleLogUser(t, f.store.DB(), discordID, false)
 	requestID := logOpaqueID("req_", 42)
 	root := insertLifecycleRequestLog(t, f.store.DB(), requestID, old, string(ResultSuccess), int64(200), nil, now-10, now-5, 5, 0)
 	tx, err := f.store.DB().BeginTx(ctx, nil)
@@ -38,13 +39,13 @@ func TestHistoricalOriginSurvivesDeletionButNewAccountCannotReadIt(t *testing.T)
 	if err != nil || len(page.Data) != 0 {
 		t.Fatal("new account gained historical ownership", page, err)
 	}
-	admin, err := f.repo.ListAdmin(ctx, ListFilter{UserID: &old})
+	admin, err := f.repo.ListAdmin(ctx, ListFilter{UserID: &old, DiscordID: &discordID})
 	if err != nil || len(admin.Data) != 1 {
 		t.Fatal(admin, err)
 	}
 	identity := admin.Data[0].OriginIdentity
 	for _, authority := range []StewardAuthorizer{allowLogStewardRead{}, traineeLogRead{}} {
-		page, err := f.repo.ListSteward(ctx, fresh, ListFilter{UserID: &old}, authority)
+		page, err := f.repo.ListSteward(ctx, fresh, ListFilter{UserID: &old, DiscordID: &discordID}, authority)
 		if err != nil || len(page.Data) != 1 || !page.Data[0].OriginIdentity.Deleted || page.Data[0].UserID != nil {
 			t.Fatal("retained steward history changed", page, err)
 		}

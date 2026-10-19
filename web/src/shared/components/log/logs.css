@@ -19,12 +19,13 @@
 .log-origin-compact .nb-badge {
   margin-left: var(--nb-space-2);
 }
-.log-filters label {
+.log-filters label,
+.log-filters .nb-field {
   display: grid;
   gap: var(--nb-space-1);
   min-width: 0;
 }
-.log-filters .nb-filter__row > label {
+.log-filters .nb-filter__row > .nb-field {
   flex: 1 1 10rem;
 }
 .log-filters .quick-ranges {
@@ -97,7 +98,7 @@
     width: 100%;
     min-height: 2.5rem;
   }
-  .log-filters .nb-filter__row > label {
+  .log-filters .nb-filter__row > .nb-field {
     flex-basis: 100%;
   }
   .log-filters .nb-filter__row > button {

@@ -241,6 +241,7 @@ type ListFilter struct {
 	CharityModel       *string
 	Phase              string
 	UserID             *int64
+	DiscordID          *string
 	EndpointKeyID      *int64
 	EndpointBaseURL    *string
 	UpstreamModel      *string

@@ -91,7 +91,13 @@ interface Fixture {
   users: { id: string; level: number; cookie: Cookie }[];
   request_ids: string[];
   json_body: string;
-  management: { automatic_donation_id: string; pending_donation_id: string };
+  management: {
+    automatic_donation_id: string;
+    pending_donation_id: string;
+    old_user_id: string;
+    history_discord_id: string;
+    request_ids: string[];
+  };
 }
 function fixture(): Fixture {
   return JSON.parse(readFileSync(process.env.NONBIRI_AUDIT_BROWSER_STATE!, 'utf8')) as Fixture;
@@ -544,6 +550,113 @@ test('administrator saves changed binding order, removes a connection and delete
       state.admin_url + '/admin/api/charity-models/' + model.id,
     );
     expect(removed.status()).toBe(404);
+  } finally {
+    await admin.close();
+  }
+});
+
+test('administrator filters retained log origins by exact Discord ID and account intersection', async ({
+  browser,
+}) => {
+  const state = fixture(),
+    admin = await session(browser, 'admin');
+  try {
+    const page = await admin.newPage();
+    await page.goto(state.admin_url + '/logs');
+    const rows = page.locator('.log-table tbody tr');
+    await expect(rows.first()).toBeVisible();
+    const filters = page.getByTestId('log-filters');
+    const discord = filters.getByRole('textbox', {
+      name: commonEn.logs.callerDiscordId,
+      exact: true,
+    });
+    const account = filters.getByLabel(commonEn.common.userId, { exact: true });
+    await expect(discord).toBeVisible();
+    await expect(
+      filters.getByRole('textbox', {
+        name: commonEn.common.operations.logs.charityModelFilter,
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(
+      filters.getByRole('textbox', { name: commonEn.logs.upstreamModel, exact: true }),
+    ).toBeHidden();
+
+    const waitForLogs = (expected: Record<string, string>) =>
+      page.waitForResponse((response) => {
+        const url = new URL(response.url());
+        return (
+          response.request().method() === 'GET' &&
+          url.origin === state.admin_url &&
+          url.pathname === '/admin/api/logs' &&
+          ['discord_id', 'user_id'].every(
+            (key) => url.searchParams.get(key) === (expected[key] ?? null),
+          )
+        );
+      });
+    const apply = async (expected: Record<string, string>) => {
+      const pending = waitForLogs(expected);
+      await filters.getByRole('button', { name: commonEn.common.applyFilter, exact: true }).click();
+      const response = await pending;
+      expect(response.status()).toBe(200);
+      expect(response.headers()['cache-control']).toContain('no-store');
+      return response.json() as Promise<{
+        data: {
+          id: string;
+          origin_discord_id: string;
+          origin_user_id: string;
+          origin_deleted: boolean;
+        }[];
+        pagination: { total_items: string };
+      }>;
+    };
+
+    const discordID = state.management.history_discord_id;
+    await discord.fill(discordID);
+    const exact = await apply({ discord_id: discordID });
+    expect(exact.data.map((row) => row.id).sort()).toEqual(
+      [...state.management.request_ids].sort(),
+    );
+    expect(exact.data.every((row) => row.origin_discord_id === discordID)).toBe(true);
+    expect(exact.data.some((row) => row.origin_deleted)).toBe(true);
+    expect(exact.pagination.total_items).toBe(String(state.management.request_ids.length));
+    await expect(rows).toHaveCount(state.management.request_ids.length);
+    expect(new URL(page.url()).searchParams.get('discord_id')).toBe(discordID);
+    await expect(discord).toHaveValue(discordID);
+
+    await account.fill(state.management.old_user_id);
+    const historical = await apply({
+      discord_id: discordID,
+      user_id: state.management.old_user_id,
+    });
+    expect(historical.data).toMatchObject([
+      {
+        id: state.management.request_ids[0],
+        origin_user_id: state.management.old_user_id,
+        origin_discord_id: discordID,
+        origin_deleted: true,
+      },
+    ]);
+    await expect(rows).toHaveCount(1);
+
+    const unrelated = state.users.find((user) => user.level === 1)!.id;
+    await account.fill(unrelated);
+    const empty = await apply({ discord_id: discordID, user_id: unrelated });
+    expect(empty.data).toEqual([]);
+    expect(empty.pagination.total_items).toBe('0');
+    await expect(rows).toHaveCount(0);
+    await expect(
+      page.getByRole('heading', { name: adminEn.admin.logs.noLogs, exact: true }),
+    ).toBeVisible();
+
+    const reset = waitForLogs({});
+    await filters.getByRole('button', { name: commonEn.common.resetFilter, exact: true }).click();
+    expect((await reset).status()).toBe(200);
+    await expect(discord).toHaveValue('');
+    await expect(account).toHaveValue('');
+    await expect(rows.first()).toBeVisible();
+    expect(new URL(page.url()).searchParams.has('discord_id')).toBe(false);
+    expect(new URL(page.url()).searchParams.has('user_id')).toBe(false);
   } finally {
     await admin.close();
   }
