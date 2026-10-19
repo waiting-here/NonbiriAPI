@@ -28,7 +28,7 @@ func ValidOutcome(disposition StreakDisposition, origin FailureOrigin) bool {
 	case StreakUpstreamFailure:
 		return origin == OriginUpstreamResponse || origin == OriginUpstreamProtocol || origin == OriginNetwork || origin == OriginTimeout
 	case StreakNeutral:
-		return origin == OriginClientCancel || origin == OriginDownstream || origin == OriginPlatform || origin == OriginLegacyUnknown || origin == OriginRecoveryUnknown
+		return origin == OriginUpstreamResponse || origin == OriginUpstreamProtocol || origin == OriginNetwork || origin == OriginTimeout || origin == OriginClientCancel || origin == OriginDownstream || origin == OriginPlatform || origin == OriginLegacyUnknown || origin == OriginRecoveryUnknown
 	}
 	return false
 }

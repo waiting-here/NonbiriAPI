@@ -461,3 +461,7 @@ var (
 	_ connector.Connector        = (*fakeConnector)(nil)
 	_ GenerationTwoSubkeyDeriver = fixedSubkeyDeriver{}
 )
+
+func (rail *fakeClaimRail) ObserveResponseHeaders(context.Context, claim.Handle, connectorcontract.ResponseObservation) error {
+	return nil
+}

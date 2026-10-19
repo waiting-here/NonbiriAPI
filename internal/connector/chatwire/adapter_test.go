@@ -32,7 +32,7 @@ type observedWriter struct {
 	refused        bool
 }
 
-func (w *observedWriter) ObserveUpstreamResponse(status int, physical bool) error {
+func (w *observedWriter) ObserveUpstreamResponse(status int, physical bool, _ http.Header) error {
 	w.headers++
 	w.status = status
 	w.physical = physical

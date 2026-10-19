@@ -531,19 +531,39 @@ func TestEgressPolicyDisablesRedirects(t *testing.T) {
 	}))
 	defer target.Close()
 	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/ok" {
+			_, _ = io.WriteString(w, "ok")
+			return
+		}
+		w.Header().Set("Retry-After", "60")
 		http.Redirect(w, r, target.URL+r.URL.Path, http.StatusFound)
 	}))
 	defer redirect.Close()
 
-	client := newLoopbackClient(t, redirect.URL, nil)
+	client := newLoopbackClient(t, redirect.URL, func(options *StackOptions) {
+		options.Concurrency = ConcurrencyLimits{Global: 1, PerEndpoint: 1}
+		options.RequestTimeout = time.Second
+	})
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, client.BaseURL()+"/models", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = client.Do(req)
-	if !errors.Is(err, ErrRedirectBlocked) {
+	response, err := client.Do(req)
+	if !errors.Is(err, ErrRedirectBlocked) || ExecutionFailure(err) != FailurePlatform {
 		t.Fatalf("redirect error = %T %v", err, err)
 	}
+	if response == nil || response.StatusCode != http.StatusFound || response.Header.Get("Retry-After") != "60" {
+		t.Fatalf("lost response metadata: %+v", response)
+	}
+	if n, err := response.Body.Read(make([]byte, 1)); n != 0 || err == nil {
+		t.Fatalf("error body remains readable: %d %v", n, err)
+	}
+	next, _ := http.NewRequest(http.MethodGet, client.BaseURL()+"/ok", nil)
+	continued, err := client.Do(next)
+	if err != nil {
+		t.Fatal("rejected redirect retained permit", err)
+	}
+	_ = continued.Body.Close()
 	if targetHits.Load() != 0 {
 		t.Fatalf("redirect target was contacted %d times", targetHits.Load())
 	}

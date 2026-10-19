@@ -114,14 +114,17 @@ WHERE state IN ('claimed','dispatched') ORDER BY claim_now,id LIMIT 1`).Scan(&cl
 			Kind: ResultSynthetic, UpstreamStatus: 502, Diagnostic: "dispatch outcome unavailable after restart",
 		}
 		if record.purpose == PurposeCharity {
-			var accepted bool
-			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM dispatch_response_starts WHERE claim_id=? AND http_status=200)`, record.claimID).Scan(&accepted); err != nil {
+			var acceptedStream, acceptedHint bool
+			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM dispatch_response_starts WHERE claim_id=?1 AND http_status=200), EXISTS(SELECT 1 FROM dispatch_retry_after_observations WHERE claim_id=?1 AND http_status=200)`, record.claimID).Scan(&acceptedStream, &acceptedHint); err != nil {
 				return "", err
 			}
-			if accepted {
+			if acceptedStream || acceptedHint {
 				outcome.Kind, outcome.UpstreamStatus = ResultResponse, 200
 				outcome.StreakDisposition = connectorcontract.StreakSuccess
-				outcome.Diagnostic = "upstream stream outcome unavailable after restart"
+				outcome.Diagnostic = "upstream response outcome unavailable after restart"
+				if acceptedStream {
+					outcome.Diagnostic = "upstream stream outcome unavailable after restart"
+				}
 			}
 		}
 		if _, err := s.completeAttemptTx(ctx, tx, record, candidateSnapshot{

@@ -200,7 +200,7 @@ type keyReservation struct {
 	donationID, donationKeyID, endpointKeyID, endpointID, receiverUserID int64
 	modelID, modelEnabled, keyEnabled, failureDisabled                   int64
 	endpointEnabled, physicalKeyEnabled                                  int64
-	expiresAt                                                            sql.NullInt64
+	expiresAt, rateLimitedUntil                                          sql.NullInt64
 	status, endedReason                                                  string
 	priceLimit, callLimit, tokenLimit                                    []byte
 	priceUsed, priceReserved, callsUsed, callsReserved                   []byte
@@ -253,6 +253,10 @@ func (s *Service) Claim(ctx context.Context, tx *sql.Tx, input claim.CharityClai
 		row.modelEnabled != 1 || row.endpointEnabled != 1 || row.physicalKeyEnabled != 1 ||
 		row.expiresAt.Valid && input.ClaimedAt >= row.expiresAt.Int64 {
 		return claim.CharityReservation{}, claim.ErrNotFound
+	}
+
+	if row.rateLimitedUntil.Valid && row.rateLimitedUntil.Int64 > input.ClaimedAt {
+		return claim.CharityReservation{}, claim.ErrKeyRateLimited
 	}
 
 	priceReserve := row.pricing.tokenReserve
@@ -392,7 +396,8 @@ cr.pricing_mode,cr.discount_percent,cr.request_user_price_milli,cr.request_donor
 cr.uncached_user_price_milli,cr.cache_write_user_price_milli,cr.cache_read_user_price_milli,cr.output_user_price_milli,
 cr.uncached_donor_reward_milli,cr.cache_write_donor_reward_milli,cr.cache_read_donor_reward_milli,cr.output_donor_reward_milli,
 cr.token_reserve_milli,
-EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=k.id)
+EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=k.id),
+(SELECT rate_limited_until FROM donation_key_cooldowns WHERE donation_key_id=dk.id)
 FROM charity_reservations cr
 JOIN logical_requests lr ON lr.id=cr.logical_request_id
 JOIN donation_keys dk ON dk.id=?
@@ -418,7 +423,7 @@ LIMIT 1`, input.DonationKeyID, input.UpstreamModelID, input.UpstreamModelID,
 		&row.pricing.mode, &row.pricing.discount, &row.pricing.requestUser, &row.pricing.requestReward,
 		&row.pricing.uncachedUser, &row.pricing.writeUser, &row.pricing.readUser, &row.pricing.outputUser,
 		&row.pricing.uncachedReward, &row.pricing.writeReward, &row.pricing.readReward, &row.pricing.outputReward,
-		&row.pricing.tokenReserve, &suspended)
+		&row.pricing.tokenReserve, &suspended, &row.rateLimitedUntil)
 	if errors.Is(err, sql.ErrNoRows) {
 		return keyReservation{}, claim.ErrNotFound
 	}

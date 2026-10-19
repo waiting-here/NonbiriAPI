@@ -33,6 +33,13 @@ func allIndexSourceFacts(t *testing.T, database *sql.DB) map[string][]string {
 	}
 	out := make(map[string][]string, len(tables))
 	for _, table := range tables {
+		if table == "donation_key_cooldowns" || table == "dispatch_retry_after_observations" {
+			var count int
+			if err := database.QueryRow("SELECT count(*) FROM " + table).Scan(&count); err != nil || count != 0 {
+				t.Fatalf("new retry table %s is not empty: %d %v", table, count, err)
+			}
+			continue
+		}
 		rows, err := database.Query(`SELECT * FROM "` + strings.ReplaceAll(table, `"`, `""`) + `"`)
 		if err != nil {
 			t.Fatal(err)
@@ -87,7 +94,7 @@ func TestLogIndexConversionPreservesEverySourceTable(t *testing.T) {
 		t.Fatal(err)
 	}
 	result, err := Run(t.Context(), path, vault, Options{Apply: true})
-	if err != nil || result.SourceSchemaVersion != 19 || result.TargetSchemaVersion != 21 {
+	if err != nil || result.SourceSchemaVersion != 19 || result.TargetSchemaVersion != 22 {
 		t.Fatal(result, err)
 	}
 	store, err := db.Open(path, vault)
