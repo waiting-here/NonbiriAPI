@@ -88,6 +88,7 @@ func RegisterStewardRoutes(registrar UserRouteRegistrar, service *Service) error
 		{http.MethodPost, routeStewardFailureReset, api.failureResetSteward},
 		{http.MethodPost, routeStewardFailureReset + "/selection", api.failureSelectionSteward},
 		{http.MethodGet, routeStewardBadge, api.badgeSteward},
+		{http.MethodGet, routeStewardHandling, api.handlingQueueSteward},
 		{http.MethodPost, routeStewardProcessed, api.processSteward},
 		{http.MethodGet, routeStewardDonation, api.getSteward},
 		{http.MethodGet, routeStewardRecurring, api.recurringSteward},

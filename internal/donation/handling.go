@@ -20,6 +20,7 @@ const (
 	routeStewardBadge     = "/api/steward/donations/badge"
 	routeAdminProcessed   = "/admin/api/donations/{id}/handling/processed"
 	routeStewardProcessed = "/api/steward/donations/{id}/handling/processed"
+	routeStewardHandling  = "/api/steward/donation-handling"
 )
 
 // A disabled or unbound key does not end a donation. Logical expiry is checked
@@ -72,7 +73,12 @@ FROM donation_handling WHERE donation_id=?`, donationID).Scan(&out.State, &revis
 	if err != nil {
 		return out, fmt.Errorf("donation: read handling: %w", err)
 	}
+	return projectHandling(out, revision, role, reason), nil
+}
+
+func projectHandling(out DonationHandling, revision int64, role, reason string) DonationHandling {
 	out.Revision = strconv.FormatInt(revision, 10)
+	out.ProcessedByRole, out.ClosedReason = nil, nil
 	if role != "" {
 		if role == string(reviewerSteward) || role == "level5" {
 			role = "steward"
@@ -82,7 +88,7 @@ FROM donation_handling WHERE donation_id=?`, donationID).Scan(&out.State, &revis
 	if reason != "" {
 		out.ClosedReason = &reason
 	}
-	return out, nil
+	return out
 }
 
 func closePendingHandlingTx(ctx context.Context, tx *sql.Tx, donationID, now int64, reason string) error {
@@ -150,7 +156,7 @@ func (s *Service) process(ctx context.Context, role reviewerRole, userID, donati
 	if ctx == nil || donationID <= 0 || expectedRevision <= 0 {
 		return empty, ErrInvalidRequest
 	}
-	tx, actorID, err := s.beginRoleTx(ctx, role, userID)
+	tx, actor, err := s.beginHandlingTx(ctx, role, userID, false)
 	if err != nil {
 		return empty, err
 	}
@@ -163,31 +169,38 @@ func (s *Service) process(ctx context.Context, role reviewerRole, userID, donati
 	if err := requireManagedDonationTx(ctx, tx, role, donationID, now); err != nil {
 		return empty, err
 	}
-	decision, err := beginMutation(ctx, tx, string(role), actorID, idempotency.ScopeControlMutation, mutation, now)
+	if actor.trainee {
+		if err := requireApprovedHandlingTx(ctx, tx, donationID, now); err != nil {
+			return empty, err
+		}
+	}
+	decision, err := beginMutation(ctx, tx, actor.hashKind, actor.id, idempotency.ScopeControlMutation, mutation, now)
 	if err != nil {
 		return empty, err
 	}
 	if decision.Kind == idempotency.Replay {
 		return replay[HandlingReceipt](decision)
 	}
-	expiry, err := materializeDonationExpiryStateTx(ctx, tx, donationID, now)
-	if err != nil {
-		return empty, err
-	}
-	if expiry.terminal {
-		if err := tx.Rollback(); err != nil {
+	if !actor.trainee {
+		expiry, err := materializeDonationExpiryStateTx(ctx, tx, donationID, now)
+		if err != nil {
 			return empty, err
 		}
-		committed = true
-		if err := s.materializeRoleExpiryStandalone(ctx, role, actorID, donationID, now); err != nil {
-			return empty, err
+		if expiry.terminal {
+			if err := tx.Rollback(); err != nil {
+				return empty, err
+			}
+			committed = true
+			if err := s.materializeRoleExpiryStandalone(ctx, role, actor.id, donationID, now); err != nil {
+				return empty, err
+			}
+			return empty, ErrConflict
 		}
-		return empty, ErrConflict
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE donation_handling SET state='processed',revision=revision+1,
 processed_at=?,processed_by_user_id=?,processed_by_role=?,updated_at=?
 WHERE donation_id=? AND state='pending' AND revision=? AND revision<9223372036854775807
- AND EXISTS(SELECT 1 FROM donations d WHERE d.id=donation_id AND `+logicallyActiveDonationSQL+`)`, now, actorID, string(role), now, donationID, expectedRevision, now)
+ AND EXISTS(SELECT 1 FROM donations d WHERE d.id=donation_id AND `+logicallyActiveDonationSQL+`)`, now, actor.id, actor.storedRole, now, donationID, expectedRevision, now)
 	if err != nil {
 		return empty, fmt.Errorf("donation: process handling: %w", err)
 	}
