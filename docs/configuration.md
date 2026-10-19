@@ -212,7 +212,7 @@ The administrator user APIs expose both nullable raw values and their current fa
 
 `PATCH /admin/api/users/{id}` accepts `endpoint_limit` (`0..10000`), `rpm_limit` (`1..4096`), and `concurrency_limit` (`1..100000`) as canonical decimal strings in profile mode. Effective projections are also strings. The matching `/api/steward/users/{id}` route lets a current L6 steward change another current L1–L5 user's settings, subject to a final transaction permission check. An absent field is unchanged and JSON `null` restores its fallback. The user RPM override applies to charity calls. An explicit override may be lower, equal to, or higher than the corresponding default; defaults are not clamps. The global RPM and egress gates remain independent. A concurrency value of `0` is invalid and never means unlimited.
 
-Donation-key charity limits use a different explicit contract: `max_concurrency` is `[0,100000]`, `rpm_limit` is `[0,4096]`, and `0` means unlimited without falling back to a site, user, or endpoint default. Donation creation/replacement normalizes omitted or JSON-null fields to zero. In a reviewer/admin/level-6 partial update, omission or null means unchanged and an explicit zero removes the limit.
+Donated-key `max_concurrency` and `max_rpm` edit the same physical `endpoint_key_limits` used by personal calls. Both are JSON integers 0–2147483647; zero adds no per-key limit and existing site/user gates still apply. Management PATCH requires the donation `expected_revision` and, when either field is present, the physical `expected_key_limits_revision`. Null is invalid; omission preserves the value. A concurrent owner edit conflicts. Administrators and L6 may edit authorized donated keys; L5 remains limited to its existing model/source scope with `charity_model_id`. This shared effect must be shown when submitting a donation. See [API revision and replay rules](api-contract.md#31-endpoints-and-keys).
 
 ### Registration gate
 
@@ -224,7 +224,7 @@ A brand-new account is accepted only when all of these are true:
 
 If either ID is blank, registration and sign-in without an exemption cannot complete. Existing accounts can sign in while registration is closed, but by default must still satisfy the guild and role checks. Administrators may enable `discord_registered_user_gate_exempt` globally or set `discord_gate_policy` in a user's profile to `inherit` (the default), `require`, or `exempt`. The per-user setting takes priority. Only administrators can change this setting through `PATCH /admin/api/users/{id}` in profile mode; stewards and users cannot change it. The current value is included in the user's account export and disappears with account deletion.
 
-Changes apply at the next OAuth sign-in. Existing sessions and API keys keep their current lifetime and authority checks. Exemption never bypasses Discord identity verification, bans, blacklists, account deletion or new-registration requirements. Normal users may update their interface language and `game_profile_public` leaderboard preference through `PATCH /api/me`; endpoint, RPM, and concurrency limits are managed by administrators or authorized current L6 stewards; level-5 trainees cannot change user limits or physical-key RPM/concurrency and receive only their scoped charity-maintenance permissions.
+Changes apply at the next OAuth sign-in. Existing sessions and API keys keep their current lifetime and authority checks. Exemption never bypasses Discord identity verification, bans, blacklists, account deletion or new-registration requirements. Normal users may update their interface language and `game_profile_public` leaderboard preference through `PATCH /api/me`; endpoint, RPM, and concurrency limits are managed by administrators or authorized current L6 stewards; level-5 trainees cannot change user limits and receive only their scoped charity-maintenance permissions, including shared physical-key limits within that scope.
 
 ### Mainstream channel catalog
 
@@ -278,3 +278,18 @@ Model settings may define random session headers, shared by the same user and mo
 ## Charity context prices
 
 Charity model pricing can enable independent input thresholds for full long-context prices and a one-time extra-long penalty. Both default off and follow existing pricing permissions. See [configuration and billing behavior](charity-context-pricing.md).
+
+## Header diagnostics and price templates
+
+`request_header_budget_mib` is an administrator runtime setting, default 1024
+MiB, range 1–65536. It is independent of the raw-error budget and includes saved
+header payloads under legal hold. Lowering it below usage stops new captures
+until capacity becomes available, without evicting retained captures. See
+[header capture and privacy](api-contract.md#11-restricted-diagnostics-and-manual-risk-auditing).
+
+Price templates are shared resources managed by administrators and readable by
+L6 browser sessions. Applying one copies the complete price/reward, Token
+reserve, context and discount values into a model form, including clearing
+disabled settings. Model save remains explicit. There is no template CallerKey
+scope, L5 access or automatic propagation to existing models. See
+[the template API](api-contract.md#741-price-templates).

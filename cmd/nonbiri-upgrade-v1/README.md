@@ -1,6 +1,6 @@
-# Prepare existing storage for v1.0.0
+# Prepare existing storage for v1.0.4
 
-The v1.0.0 server creates fresh schema 21 databases and opens exact schema 21
+The v1.0.4 server creates fresh schema 24 databases and opens exact schema 24
 databases. `nonbiri-upgrade-v1` is the separate, one-time offline converter for
 the following exact source structures:
 
@@ -11,6 +11,10 @@ the following exact source structures:
 | 18 | `0f02e60704934b589b51ca91eb34bac9c5e77c02` |
 | 19 | `c4145513b1ca5bd20f0236763c247b8bd5c66df2` |
 | 20 | `51a1e6156cb164802b22fdd881a4ac2040dd1904` |
+
+The converter additionally accepts exact registered schema 21, 22 and 23
+structures; its machine-readable descriptor is authoritative for their pinned
+manifest hashes. All supported sources convert atomically to schema 24.
 
 The executable that last used a database may differ from the listed commit if
 its stored application identity, generation, schema version and complete
@@ -27,7 +31,7 @@ CGO_ENABLED=0 go build -trimpath -o nonbiri-upgrade-v1 ./cmd/nonbiri-upgrade-v1
 
 Both metadata commands need no database or environment. The converter reports
 its exact sources in `offline_conversions`. The server reports current schema
-21, with empty source and offline-conversion lists.
+24, with empty source and offline-conversion lists.
 
 1. Rehearse on a consistent copy of the intended source using its existing
    encryption root and the reviewed target binaries.
@@ -89,8 +93,8 @@ conversion, remove the retired Gateway variable and `NONBIRI_SMTP_HOST`,
 `NONBIRI_SMTP_FROM` and `NONBIRI_SMTP_TLS` from the deployment environment.
 
 The [rc.7 command](../nonbiri-upgrade-rc7/README.md) remains a narrow wrapper
-accepting schema 16 and current schema 21. Both commands use one engine.
+accepting schema 16 and current schema 24. Both commands use one engine.
 `scripts/check-upgrade.sh` creates a populated synthetic source with the pinned
 rc.7 program, converts it, compares retained facts and resumes economy checks.
-The offline suite also covers independent schema 17, 18, 19 and 20 fixtures. No
+The offline suite also covers the registered schema 17–23 fixtures. No
 production database or instance configuration belongs in the repository.

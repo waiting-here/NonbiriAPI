@@ -4,6 +4,48 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## Unreleased — 1.0.4
+
+Storage schema 24 requires the matching offline converter for exact registered
+schema 16–23 databases. Account exports use format 22. Publishing this source
+does not upgrade an instance.
+
+### Changed
+
+- Separate charity model lists from creation and editing workspaces. Add
+  searchable, paginated model and upstream-candidate selection, preserve choices
+  across pages and show selected-item summaries and a return to the same list.
+- Add administrator-managed price templates for administrators and level-6
+  stewards to copy into pricing forms, including rewards, Token reserves,
+  discounts, long-context prices and penalties. Existing models do not follow
+  later template edits.
+- Give level-5 stewards a minimal list of approved active donations from all
+  sources and permission to mark a whole donation processed. Existing review,
+  model creation and pricing permissions stay in force.
+- Add compact atomic binding-batch receipts and consistent donated-key state
+  filters without increasing the 256-binding limit or broadening visible keys.
+- Allow authorized donation managers to edit the shared physical key's RPM and
+  concurrency with both donation and physical-key revision checks. These limits
+  also apply to the donor's personal calls.
+- Honor valid `Retry-After` and `X-Retry-After` hints on any HTTP status as a
+  temporary donated-key cooldown. Initial HTTP 200 resets consecutive failures;
+  a non-200 response with a valid hint does not increment them. Later errors,
+  protocol completion and accounting keep their ordinary behavior.
+- Add owner current/history/hidden donation views and resumable hide/restore
+  batches. Hiding changes a private preference and keeps the 400-day retention.
+- Retain credential-redacted request and physical-response headers for explicit
+  management reads, with a separate storage budget and level-5 IPv4 redaction.
+  Ordinary callers receive no full-header access.
+- Reuse Lake Notes configuration and decoded state within a transaction and
+  reuse canonical checkpoint bytes without changing save formats or economics.
+  Restrict capacity checks to active casts so the existing partial index can
+  exclude terminal history.
+  Compress header facts before persistence and decode them after the authorized
+  read transaction.
+- Add anonymous connection-occupancy measurements for transactions, queries,
+  direct execution and statement preparation, separately from connection waits.
+  Fixed categories exclude SQL, parameters, resource identities and content.
+
 ## 1.0.3 — 2026-10-19
 
 Database schema 21 and account export 20 are unchanged. This source-only release
