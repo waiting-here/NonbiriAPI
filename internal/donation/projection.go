@@ -487,7 +487,7 @@ EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=dk.endpo
 EXISTS(SELECT 1 FROM donation_key_memberships m WHERE m.donation_key_id=dk.id),
 CASE WHEN k.id IS NOT NULL THEN COALESCE(kl.max_concurrency,0) END,
 CASE WHEN k.id IS NOT NULL THEN COALESCE(kl.max_rpm,0) END,
-k.revision,
+k.revision,cooldown.rate_limited_until,
 (SELECT COUNT(*) FROM charity_model_bindings b WHERE b.donation_key_id=dk.id),
 dk.key_body_review_hmac IS NOT NULL,COALESCE(rr.required,0),rr.revision
 FROM donation_keys dk
@@ -495,6 +495,7 @@ LEFT JOIN donation_key_review_requirements rr ON rr.hmac=dk.key_body_review_hmac
 LEFT JOIN endpoint_keys k ON k.id=dk.endpoint_key_id
 LEFT JOIN endpoint_key_limits kl ON kl.endpoint_key_id=k.id
 LEFT JOIN endpoints e ON e.id=k.endpoint_id
+LEFT JOIN donation_key_cooldowns cooldown ON cooldown.donation_key_id=dk.id
 WHERE `+where+` ORDER BY dk.id`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("donation: read key projections: %w", err)
@@ -520,7 +521,7 @@ WHERE `+where+` ORDER BY dk.id`, args...)
 			&channelName, &channelCategory, &endpointEnabled, &keyPhysicalEnabled,
 			&priceLimit, &callLimit, &tokenLimit, &priceUsed, &priceReserved, &callsUsed, &callsReserved,
 			&tokensUsed, &tokensReserved, &item.TokenReserve, &enabled, &failureDisabled, &streak,
-			&generation, &item.FailureDisableThreshold, &item.SafeNote, &authorizedExpires, &expires, &ended, &suspended, &member, &item.MaxConcurrency, &item.MaxRPM, &item.KeyLimitsRevision, &bindingCount, &item.Review.MaterialAvailable, &item.Review.Required, &reviewRevision); err != nil {
+			&generation, &item.FailureDisableThreshold, &item.SafeNote, &authorizedExpires, &expires, &ended, &suspended, &member, &item.MaxConcurrency, &item.MaxRPM, &item.KeyLimitsRevision, &item.RateLimitedUntil, &bindingCount, &item.Review.MaterialAvailable, &item.Review.Required, &reviewRevision); err != nil {
 			return nil, fmt.Errorf("donation: scan key projection: %w", err)
 		}
 		item.ID = strconv.FormatInt(id, 10)
@@ -631,6 +632,13 @@ WHERE `+where+` ORDER BY dk.id`, args...)
 		if err := readSplitTokenProjection(ctx, tx, id, &item); err != nil {
 			return nil, err
 		}
+		if item.RateLimitedUntil != nil {
+			if *item.RateLimitedUntil <= now {
+				item.RateLimitedUntil = nil
+			} else if item.CharityState == "available" {
+				item.CharityState = "rate_limited"
+			}
+		}
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {
@@ -684,7 +692,7 @@ func ownerKey(value AdminDonationKey) DonationKey {
 		FailureDisableThreshold: value.FailureDisableThreshold,
 		ID:                      value.ID, EndpointKeyID: value.EndpointKeyID, DisplayHead: value.DisplayHead,
 		DisplayTail: value.DisplayTail, SafeSource: source, PhysicalEnabled: value.PhysicalEnabled,
-		CharityState: value.CharityState, Limits: value.Limits, Usage: value.Usage,
+		CharityState: value.CharityState, RateLimitedUntil: value.RateLimitedUntil, Limits: value.Limits, Usage: value.Usage,
 		TokenReserve: value.TokenReserve, ExpiresAt: value.ExpiresAt, Streak: value.Streak,
 		EndedReason: value.EndedReason,
 	}

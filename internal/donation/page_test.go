@@ -219,6 +219,14 @@ func testSourceUsability(t *testing.T, kind string) {
 		}
 	}
 	assertUsable("1")
+	if _, err := e.store.DB().Exec("INSERT INTO donation_key_cooldowns(donation_key_id,rate_limited_until,updated_at) VALUES(?,?,?)", keyID, e.clock.Load()+60, e.clock.Load()); err != nil {
+		t.Fatal(err)
+	}
+	assertUsable("0")
+	if _, err := e.store.DB().Exec("UPDATE donation_key_cooldowns SET rate_limited_until=? WHERE donation_key_id=?", e.clock.Load(), keyID); err != nil {
+		t.Fatal(err)
+	}
+	assertUsable("1")
 	// A newer pending donation supplies the source preview, while the older
 	// approved key still makes the complete group usable.
 	pending, _ := createBrowseDonation(t, e, owner, 'p', "https://k.example.test/v1", kind)

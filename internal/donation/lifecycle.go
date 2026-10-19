@@ -660,7 +660,7 @@ func exportDonationKeys(values []AdminDonationKey) []ExportDonationKey {
 			ID:                      owner.ID, EndpointKeyID: owner.EndpointKeyID,
 			DisplayHead: owner.DisplayHead, DisplayTail: owner.DisplayTail,
 			SafeSource: owner.SafeSource, PhysicalEnabled: owner.PhysicalEnabled,
-			CharityState: owner.CharityState, Limits: owner.Limits, Usage: owner.Usage,
+			CharityState: owner.CharityState, RateLimitedUntil: owner.RateLimitedUntil, Limits: owner.Limits, Usage: owner.Usage,
 			TokenReserve: owner.TokenReserve, AuthorizedExpiresAt: value.AuthorizedExpiresAt,
 			ExpiresAt: owner.ExpiresAt, Streak: owner.Streak, EndedReason: owner.EndedReason,
 		}

@@ -13,7 +13,7 @@ func donationSummaryTx(ctx context.Context, tx *sql.Tx, header AdminDonation, no
 	out := DonationSummary{DiscordPublicThanks: header.DiscordPublicThanks, ID: header.ID, Status: header.Status, Revision: header.Revision, Description: header.Description,
 		ReviewResult: header.ReviewResult, CreatedAt: header.CreatedAt, UpdatedAt: header.UpdatedAt,
 		StateCounts: map[string]string{}, Sources: []SafeSource{}}
-	for _, state := range []string{"available", "pending", "disabled", "suspended", "exhausted", "expired", "ended"} {
+	for _, state := range []string{"available", "rate_limited", "pending", "disabled", "suspended", "exhausted", "expired", "ended"} {
 		out.StateCounts[state] = "0"
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT CASE
@@ -28,9 +28,10 @@ func donationSummaryTx(ctx context.Context, tx *sql.Tx, header AdminDonation, no
  OR nbi_u128_remaining(dk.token_limit_mag,dk.tokens_used,dk.tokens_reserved,nbi_u128(0))=nbi_u128(0)
  OR nbi_u128_remaining(dk.input_token_limit_mag,dk.input_tokens_used,dk.input_tokens_reserved,nbi_u128(0))=nbi_u128(0)
  OR nbi_u128_remaining(dk.output_token_limit_mag,dk.output_tokens_used,dk.output_tokens_reserved,nbi_u128(0))=nbi_u128(0) THEN 'exhausted'
+ WHEN EXISTS(SELECT 1 FROM donation_key_cooldowns cooldown WHERE cooldown.donation_key_id=dk.id AND cooldown.rate_limited_until>?) THEN 'rate_limited'
  ELSE 'available' END AS state,COUNT(*)
 FROM donation_keys dk LEFT JOIN endpoint_keys k ON k.id=dk.endpoint_key_id LEFT JOIN endpoints e ON e.id=k.endpoint_id
-WHERE dk.donation_id=? GROUP BY state`, header.Status, now, header.Status, header.Status, header.ID)
+WHERE dk.donation_id=? GROUP BY state`, header.Status, now, header.Status, header.Status, now, header.ID)
 	if err != nil {
 		return out, err
 	}
