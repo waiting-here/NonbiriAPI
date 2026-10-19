@@ -568,15 +568,18 @@ func (api *httpAPI) reviewRole(writer http.ResponseWriter, request *http.Request
 
 type keyManagementWire struct {
 	splitTokenWire
-	ExpectedRevision   requiredField[string] `json:"expected_revision"`
-	Enabled            requiredField[bool]   `json:"enabled"`
-	PriceLimit         nullableField[string] `json:"price_limit"`
-	CallsLimit         nullableField[string] `json:"calls_limit"`
-	TokensLimit        nullableField[string] `json:"tokens_limit"`
-	TokenReserve       requiredField[int64]  `json:"token_reserve"`
-	SafeNote           requiredField[string] `json:"safe_note"`
-	ExpiresAt          nullableField[int64]  `json:"expires_at"`
-	ResetFailureStreak requiredField[bool]   `json:"reset_failure_streak"`
+	ExpectedRevision          requiredField[string] `json:"expected_revision"`
+	ExpectedKeyLimitsRevision requiredField[string] `json:"expected_key_limits_revision"`
+	MaxConcurrency            requiredField[int64]  `json:"max_concurrency"`
+	MaxRPM                    requiredField[int64]  `json:"max_rpm"`
+	Enabled                   requiredField[bool]   `json:"enabled"`
+	PriceLimit                nullableField[string] `json:"price_limit"`
+	CallsLimit                nullableField[string] `json:"calls_limit"`
+	TokensLimit               nullableField[string] `json:"tokens_limit"`
+	TokenReserve              requiredField[int64]  `json:"token_reserve"`
+	SafeNote                  requiredField[string] `json:"safe_note"`
+	ExpiresAt                 nullableField[int64]  `json:"expires_at"`
+	ResetFailureStreak        requiredField[bool]   `json:"reset_failure_streak"`
 }
 
 func parseKeyManagementWire(wire keyManagementWire) (KeyManagementInput, map[string]any, error) {
@@ -586,7 +589,7 @@ func parseKeyManagementWire(wire keyManagementWire) (KeyManagementInput, map[str
 	}
 	revision, err := requiredRevision(wire.ExpectedRevision)
 	if err != nil || !wire.Enabled.Set && !wire.PriceLimit.Set && !wire.CallsLimit.Set && !wire.TokensLimit.Set &&
-		!wire.TokenReserve.Set && !wire.SafeNote.Set && !wire.ExpiresAt.Set && !wire.ResetFailureStreak.Set && !splitTokenChanged(split) ||
+		!wire.TokenReserve.Set && !wire.SafeNote.Set && !wire.ExpiresAt.Set && !wire.ResetFailureStreak.Set && !wire.MaxConcurrency.Set && !wire.MaxRPM.Set && !splitTokenChanged(split) ||
 		wire.ResetFailureStreak.Set && !wire.ResetFailureStreak.Value {
 		return KeyManagementInput{}, nil, ErrInvalidRequest
 	}
@@ -594,6 +597,26 @@ func parseKeyManagementWire(wire keyManagementWire) (KeyManagementInput, map[str
 	input.ExpectedRevision, input.ResetFailureStreak = revision, wire.ResetFailureStreak.Set
 	canonical := fields
 	canonical["expected_revision"] = wire.ExpectedRevision.Value
+	if wire.ExpectedKeyLimitsRevision.Set {
+		input.ExpectedKeyLimitsRevision, err = requiredRevision(wire.ExpectedKeyLimitsRevision)
+		if err != nil {
+			return KeyManagementInput{}, nil, err
+		}
+		canonical["expected_key_limits_revision"] = wire.ExpectedKeyLimitsRevision.Value
+	}
+	if wire.MaxConcurrency.Set {
+		value := wire.MaxConcurrency.Value
+		input.MaxConcurrency = &value
+		canonical["max_concurrency"] = value
+	}
+	if wire.MaxRPM.Set {
+		value := wire.MaxRPM.Value
+		input.MaxRPM = &value
+		canonical["max_rpm"] = value
+	}
+	if !validSharedKeyLimits(input) {
+		return KeyManagementInput{}, nil, ErrInvalidRequest
+	}
 	if wire.Enabled.Set {
 		value := wire.Enabled.Value
 		input.Enabled = &value

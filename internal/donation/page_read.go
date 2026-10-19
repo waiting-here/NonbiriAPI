@@ -127,7 +127,7 @@ func managedKeySummary(key AdminDonationKey, header AdminDonation, rules Recurri
 	return ManagedKeySummary{DonationNote: header.Description, ApprovalNote: approval, VisibleModels: []charityscope.VisibleModel{}, DonationKey: ownerKey(key), RecurringReceipt: RecurringReceipt{
 		DonationID: header.ID, KeyID: key.ID, DonationRevision: header.Revision}, RecurringSummary: rules,
 		AuthorizedExpiresAt: key.AuthorizedExpiresAt, SafeNote: key.SafeNote,
-		MaxConcurrency: key.MaxConcurrency, MaxRPM: key.MaxRPM, BindingCount: key.BindingCount, Idle: key.Idle, Handling: header.Handling}
+		MaxConcurrency: key.MaxConcurrency, MaxRPM: key.MaxRPM, KeyLimitsRevision: key.KeyLimitsRevision, BindingCount: key.BindingCount, Idle: key.Idle, Handling: header.Handling}
 }
 
 func (s *Service) keysPage(ctx context.Context, role reviewerRole, userID, donationID int64, page pagination.Request) (Page[ManagedKeySummary], error) {

@@ -57,6 +57,7 @@ type ManagedKeySummary struct {
 	SafeNote               string                      `json:"safe_note"`
 	MaxConcurrency         *int64                      `json:"max_concurrency"`
 	MaxRPM                 *int64                      `json:"max_rpm"`
+	KeyLimitsRevision      *string                     `json:"key_limits_revision"`
 	BindingCount           string                      `json:"binding_count"`
 	Idle                   bool                        `json:"idle"`
 	Handling               DonationHandling            `json:"handling"`

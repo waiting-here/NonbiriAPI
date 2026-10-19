@@ -149,6 +149,7 @@ type AdminDonationKey struct {
 	SafeNote                string          `json:"safe_note"`
 	MaxConcurrency          *int64          `json:"max_concurrency"`
 	MaxRPM                  *int64          `json:"max_rpm"`
+	KeyLimitsRevision       *string         `json:"key_limits_revision"`
 	BindingCount            string          `json:"binding_count"`
 	Idle                    bool            `json:"idle"`
 }
@@ -293,19 +294,22 @@ type ReviewInput struct {
 }
 
 type KeyManagementInput struct {
-	InputTokensLimit   **string
-	OutputTokensLimit  **string
-	InputTokenReserve  **string
-	OutputTokenReserve **string
-	ExpectedRevision   int64
-	Enabled            *bool
-	PriceLimit         **string
-	CallsLimit         **string
-	TokensLimit        **string
-	TokenReserve       *int64
-	SafeNote           *string
-	ExpiresAt          **int64
-	ResetFailureStreak bool
+	InputTokensLimit          **string
+	OutputTokensLimit         **string
+	InputTokenReserve         **string
+	OutputTokenReserve        **string
+	ExpectedRevision          int64
+	ExpectedKeyLimitsRevision int64
+	MaxConcurrency            *int64
+	MaxRPM                    *int64
+	Enabled                   *bool
+	PriceLimit                **string
+	CallsLimit                **string
+	TokensLimit               **string
+	TokenReserve              *int64
+	SafeNote                  *string
+	ExpiresAt                 **int64
+	ResetFailureStreak        bool
 }
 
 type ExportDonation struct {
