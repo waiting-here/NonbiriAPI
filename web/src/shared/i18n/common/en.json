@@ -14,6 +14,32 @@
     "accountMenu": "Account actions"
   },
   "common": {
+    "headers": {
+      "request": "Complete request headers",
+      "response": "Complete response headers",
+      "credentials": "Credential values were replaced with [redacted] before storage.",
+      "ipv4": "IPv4 addresses in header names and values are hidden for level 5 stewards. The separate observed IP field keeps its existing visibility.",
+      "binary": "Non-UTF-8 names or values are shown as Base64, preserving their original bytes.",
+      "physicalResponse": "Response {{index}}",
+      "responseColumn": "Physical response",
+      "status": "HTTP status",
+      "time": "Captured at",
+      "empty": "Headers were captured; the list is empty.",
+      "emptyValue": "(empty value)",
+      "name": "Header name",
+      "value": "Complete value",
+      "list": "Saved header entries",
+      "search": "Search headers",
+      "searchPlaceholder": "Search complete names or values, including Base64 text",
+      "noMatch": "No matching headers",
+      "noMatchBody": "Change or clear the search to view the saved entries.",
+      "state": {
+        "not_recorded": "No headers were recorded. This may be an older request or a call that has not finished saving.",
+        "capacity_exhausted": "Headers were not saved because storage was full.",
+        "too_large": "The complete header list exceeded the storage limit and was not saved.",
+        "unavailable": "Saved headers are currently unavailable."
+      }
+    },
     "capability": {
       "body": "This browser could not provide everything needed to safely start and resume this activity.",
       "next": "Check this site's storage permissions or try another supported browser, then check again before starting.",

@@ -1,0 +1,71 @@
+.log-headers {
+  display: grid;
+  gap: var(--nb-space-4);
+  min-width: 0;
+}
+.log-headers p {
+  margin: 0;
+}
+.log-headers__snapshots {
+  display: grid;
+  gap: var(--nb-space-3);
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.log-headers__snapshots li {
+  border-bottom: 1px solid var(--nb-color-border);
+  padding-bottom: var(--nb-space-3);
+}
+.log-headers__snapshots h4 {
+  font-size: var(--nb-font-size-sm);
+  margin: 0 0 var(--nb-space-2);
+}
+.log-headers__text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.log-headers__text .status-badge {
+  margin-inline-end: var(--nb-space-2);
+}
+.log-headers .nb-table {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 0;
+}
+.log-headers .nb-table td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+.log-headers .nb-pager__pages {
+  flex-wrap: wrap;
+}
+.log-headers .nb-filter__search input {
+  width: 100%;
+}
+.log-headers .nb-pager button {
+  min-width: var(--nb-space-10);
+}
+.log-headers .nb-pager__size {
+  display: flex;
+}
+.log-headers .nb-pager__jump {
+  display: inline-block;
+}
+.log-headers .nb-pager button,
+.log-headers .nb-pager input,
+.log-headers .nb-pager select {
+  min-height: var(--nb-space-10);
+}
+@media (width < 48rem) {
+  .log-headers .nb-table td[data-cell='meta'] {
+    display: block;
+  }
+  .log-headers .nb-table td[data-cell='meta']::before {
+    display: block;
+    min-width: 0;
+    margin-bottom: var(--nb-space-1);
+  }
+}
