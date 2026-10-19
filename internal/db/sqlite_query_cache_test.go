@@ -157,10 +157,25 @@ func TestQueryReuseFailureCancellationAndConnectionClose(t *testing.T) {
 	if err := database.QueryRow(badRow).Scan(&n); err == nil {
 		t.Fatal("row evaluation error lost")
 	}
+	const laterRow = `SELECT 1 UNION ALL SELECT abs(-9223372036854775808)`
+	rows, err := database.Query(laterRow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rows.Next() {
+		t.Fatal("first row unavailable", rows.Err())
+	}
+	if err := rows.Scan(&n); err != nil || n != 1 {
+		t.Fatal(n, err)
+	}
+	if rows.Next() || rows.Err() == nil {
+		t.Fatal("later row evaluation error lost")
+	}
+	rows.Close()
 	var old *dmlConnection
 	inspectDMLConnection(t, database, func(c *dmlConnection) {
 		old = c
-		if c.queries[slow] != nil || c.queries[badRow] != nil {
+		if c.queries[slow] != nil || c.queries[badRow] != nil || c.queries[laterRow] != nil {
 			t.Fatal("failed statement retained")
 		}
 	})

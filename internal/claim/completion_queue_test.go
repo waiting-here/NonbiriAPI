@@ -294,6 +294,71 @@ func TestCompletionOverflowUsesSynchronousPathAndJoins(t *testing.T) {
 	}
 }
 
+func TestCompletionNonLeadingCancellationRollsBackWrittenItem(t *testing.T) {
+	f := newClaimFixture(t)
+	if _, err := f.db.Exec(`CREATE TABLE completed_peer_cancel(id INTEGER PRIMARY KEY)`); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	blocker, err := f.db.Conn(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer blocker.Close()
+	waits := f.db.Stats().WaitCount
+	insert := func(id int) func(context.Context, *sql.Tx) (any, error) {
+		return func(ctx context.Context, tx *sql.Tx) (any, error) {
+			_, err := tx.ExecContext(ctx, `INSERT INTO completed_peer_cancel VALUES(?)`, id)
+			return id, err
+		}
+	}
+	first := submitTestCompletion(f.service, t.Context(), insert(1))
+	awaitCompletionCondition(t, func() bool { return f.db.Stats().WaitCount > waits })
+	entered, release := make(chan struct{}), make(chan struct{})
+	enterOnce := sync.OnceFunc(func() { close(entered) })
+	releaseOnce := sync.OnceFunc(func() { close(release) })
+	defer releaseOnce()
+	second := submitTestCompletion(f.service, ctx, func(ctx context.Context, tx *sql.Tx) (any, error) {
+		result, err := insert(2)(ctx, tx)
+		enterOnce()
+		<-release
+		return result, err
+	})
+	awaitCompletionCondition(t, func() bool { return pendingCompletions(f.service) == 1 })
+	third := submitTestCompletion(f.service, t.Context(), insert(3))
+	awaitCompletionCondition(t, func() bool { return pendingCompletions(f.service) == 2 })
+	blocker.Close()
+	awaitCompletionCondition(t, func() bool {
+		select {
+		case <-entered:
+			return true
+		default:
+			return false
+		}
+	})
+	cancel()
+	releaseOnce()
+	if err := awaitCompletionResult(t, second); !errors.Is(err, context.Canceled) {
+		t.Fatal("non-leading cancellation lost", err)
+	}
+	for _, result := range []<-chan error{first, third} {
+		if err := awaitCompletionResult(t, result); err != nil {
+			t.Fatal("live peer lost", err)
+		}
+	}
+	if err := f.service.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var rows, total int
+	if err := f.db.QueryRow(`SELECT COUNT(*),SUM(id) FROM completed_peer_cancel`).Scan(&rows, &total); err != nil || rows != 2 || total != 4 {
+		t.Fatalf("canceled item persisted or peer duplicated: rows=%d sum=%d err=%v", rows, total, err)
+	}
+	if f.db.Stats().InUse != 0 {
+		t.Fatal("canceled batch retained a connection")
+	}
+}
+
 func TestCompletionClosedDatabaseReturnsFailure(t *testing.T) {
 	f := newClaimFixture(t)
 	f.db.Close()

@@ -49,8 +49,10 @@ whichever comes first; it cannot interrupt an individual SQL statement to meet
 that budget. At most 256 tasks wait behind the worker. Overflow uses the original
 synchronous transaction path and the caller's existing deadline, rather than
 rejecting an already admitted settlement. Each caller retains its settlement
-context. Cancellation of the transaction's leading context rolls back the batch;
-remaining live callers retry with their own original contexts.
+context. Cancellation observed before commit rolls back the batch; remaining
+live callers retry with their own original contexts. Once commit has started,
+a cancellation response cannot prove that no changes were committed. Subsequent
+completion follows the persisted state and the existing idempotency rules.
 
 Canceled waiting tasks are removed promptly. Shutdown stops new completion
 submissions and joins both queued work and synchronous overflow before the store
