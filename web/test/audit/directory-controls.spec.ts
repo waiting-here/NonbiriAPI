@@ -482,7 +482,7 @@ test('administrator saves changed binding order, removes a connection and delete
     const modelsPath = '/admin/api/donations/' + donation.id + '/keys/' + keyID + '/models';
     const catalog = await read(admin, state.admin_url, modelsPath + '?page=1&page_size=20');
     await write(admin, state.admin_url, modelsPath + '/manual', {
-      entries: ['browser-order-one', 'browser-order-two'],
+      entries: ['browser-order-one', 'browser-order-two', 'browser-shortcut-selection'],
       expected_manual_catalog_revision: catalog.manual_catalog_revision,
     });
     const page = await admin.newPage();
@@ -506,6 +506,36 @@ test('administrator saves changed binding order, removes a connection and delete
       })),
     });
     await page.goto(state.admin_url + '/charity?charity_section=models&charity_model=' + model.id);
+    const picker = page.locator('.ops-binding-picker');
+    await picker.getByRole('button', { name: /Browser service/ }).click();
+    await picker
+      .getByRole('button', { name: new RegExp('Donation #' + donation.id + '\\b') })
+      .click();
+    const selection = picker.getByRole('checkbox', { name: /browser-shortcut-selection/ });
+    await selection.check();
+    const refetch = picker.getByRole('button', {
+      name: copy.operations.charity.refetchModels,
+      exact: true,
+    });
+    const discovery = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        new URL(response.url()).pathname === modelsPath + '/refresh',
+    );
+    await refetch.click();
+    expect((await discovery).status()).toBe(202);
+    await expect(refetch).toBeEnabled();
+    expect((await read(admin, state.admin_url, modelsPath + '/discovery')).state).toBe('succeeded');
+    await picker
+      .getByRole('button', { name: copy.operations.charity.manageSelectedKey, exact: true })
+      .click();
+    await expect(page.locator('.donation-key-editor')).toHaveCount(1);
+    await expect(picker).toBeHidden();
+    await page
+      .getByRole('button', { name: copy.operations.charity.returnToCandidates, exact: true })
+      .click();
+    await expect(selection).toBeChecked();
+    await expect(selection).toBeEnabled();
     const ordered = page.locator('section.card').filter({
       has: page.getByRole('heading', {
         name: copy.operations.charity.orderedBindings,
