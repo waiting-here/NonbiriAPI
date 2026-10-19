@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/waiting-here/NonbiriAPI/internal/donationstate"
 	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
@@ -39,16 +40,21 @@ func (api *httpAPI) candidates(writer http.ResponseWriter, request *http.Request
 	if !ok {
 		return
 	}
-	numberedPage, numbered, pageErr := parseNumberedQuery(values, "donation_id", "donation_key_id", "source", "q")
+	numberedPage, numbered, pageErr := parseNumberedQuery(values, "donation_id", "donation_key_id", "source", "q", "key_state")
 	if pageErr != nil {
 		writeRoutingError(writer, pageErr)
+		return
+	}
+	keyState := values.Get("key_state")
+	if !donationstate.Valid(keyState) || values.Has("key_state") && keyState == "" {
+		writeRoutingError(writer, ErrInvalidRequest)
 		return
 	}
 	if numbered {
 		api.numberedCandidates(writer, request, role, actorID, modelID, values, numberedPage)
 		return
 	}
-	limit, cursor, ok := parsePage(values, "donation_id", "donation_key_id", "source", "q", "cursor", "limit")
+	limit, cursor, ok := parsePage(values, "donation_id", "donation_key_id", "source", "q", "cursor", "limit", "key_state")
 	if !ok {
 		writeRoutingError(writer, ErrInvalidRequest)
 		return
@@ -74,7 +80,11 @@ func (api *httpAPI) candidates(writer http.ResponseWriter, request *http.Request
 		return
 	}
 	scope := string(role) + "-charity-binding-candidates"
-	owner, err := api.service.managementCursorOwner(request.Context(), role, actorID, modelID, candidateFilterOwner(role, actorID, modelID, donationID, donationKeyID, source, query))
+	filterOwner := candidateFilterOwner(role, actorID, modelID, donationID, donationKeyID, source, query)
+	if donationstate.Filtered(keyState) {
+		filterOwner += ":key_state=" + keyState
+	}
+	owner, err := api.service.managementCursorOwner(request.Context(), role, actorID, modelID, filterOwner)
 	if err != nil {
 		writeRoutingError(writer, err)
 		return
@@ -84,7 +94,7 @@ func (api *httpAPI) candidates(writer http.ResponseWriter, request *http.Request
 		writeRoutingError(writer, err)
 		return
 	}
-	input := CandidateQuery{DonationID: donationID, DonationKeyID: donationKeyID, Source: source, Query: query,
+	input := CandidateQuery{DonationID: donationID, DonationKeyID: donationKeyID, Source: source, Query: query, KeyState: keyState,
 		AfterKeyID: afterKey, AfterModelID: afterModel, Limit: limit}
 	if role == roleAdmin {
 		items, nextKey, nextModel, err := api.service.BindingCandidatesAdmin(request.Context(), modelID, input)

@@ -93,7 +93,7 @@ func TestSourcePagesUseCompleteIndexedCollectionsAtScale(t *testing.T) {
 				source := seedBrowseScale(t, e, owner, count, distinct)
 				ctx := context.Background()
 				for _, size := range []int{10, 20, 50, 100} {
-					out, err := e.service.SourcesAdminPage(ctx, SourceFilter{}, pagination.Request{Page: pagination.MaxPage, Size: size})
+					out, err := e.service.SourcesAdminPage(ctx, SourceFilter{KeyState: "pending"}, pagination.Request{Page: pagination.MaxPage, Size: size})
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -109,7 +109,7 @@ func TestSourcePagesUseCompleteIndexedCollectionsAtScale(t *testing.T) {
 							t.Fatal(row)
 						}
 					}
-					keys, err := e.service.SourceKeysAdminPage(ctx, source, SourceFilter{}, pagination.Request{Page: pagination.MaxPage, Size: size})
+					keys, err := e.service.SourceKeysAdminPage(ctx, source, SourceFilter{KeyState: "pending"}, pagination.Request{Page: pagination.MaxPage, Size: size})
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -121,7 +121,7 @@ func TestSourcePagesUseCompleteIndexedCollectionsAtScale(t *testing.T) {
 						t.Fatal(keys.Pagination, len(keys.Data))
 					}
 				}
-				query, args := sourceSelectionSQL(SourceFilter{}, nil, e.clock.Load())
+				query, args := sourceSelectionSQL(SourceFilter{KeyState: "pending"}, nil, e.clock.Load())
 				rows, err := e.store.DB().Query(`EXPLAIN QUERY PLAN SELECT `+sourceGroupColumns+`,COUNT(*) FROM (`+query+`) GROUP BY `+sourceGroupColumns+` ORDER BY `+sourceGroupColumns+` LIMIT 100 OFFSET 10000`, args...)
 				if err != nil {
 					t.Fatal(err)

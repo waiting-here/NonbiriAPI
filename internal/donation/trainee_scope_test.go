@@ -89,6 +89,22 @@ func TestTraineeKeyScopeAllowsUnboundMainstreamAndOnlyBoundCustom(t *testing.T) 
 	if err != nil || sources.Pagination.TotalItems != "2" {
 		t.Fatalf("scoped sources: %+v %v", sources, err)
 	}
+	for _, state := range []string{"all", "available", "pending", "disabled"} {
+		filtered, err := e.service.SourcesStewardPage(ctx, trainee, SourceFilter{KeyState: state}, pagination.Default())
+		want := "2"
+		if state == "pending" || state == "disabled" {
+			want = "0"
+		}
+		if err != nil || filtered.Pagination.TotalItems != want {
+			t.Fatalf("scoped state %s: %+v %v", state, filtered, err)
+		}
+		for _, source := range filtered.Data {
+			keys, err := e.service.SourceKeysStewardPage(ctx, trainee, source.SourceKey, SourceFilter{KeyState: state}, pagination.Default())
+			if err != nil || len(keys.Data) != 1 || keys.Data[0].EndpointKeyID != nil {
+				t.Fatalf("scoped keys %s: %+v %v", state, keys, err)
+			}
+		}
+	}
 	note := "maintained without a model discovery"
 	input := KeyManagementInput{ExpectedRevision: parseTestID(t, view.DonationRevision), SafeNote: &note}
 	mutation := donationMutation(t, 'q', http.MethodPatch, routeStewardKey, []int64{mainID, mainKey}, map[string]any{"safe_note": note})

@@ -63,7 +63,7 @@ func (api *httpAPI) numberedCandidates(w http.ResponseWriter, r *http.Request, r
 		return
 	}
 	result, err := api.service.candidatesPage(r.Context(), role, actorID, modelID,
-		CandidateQuery{DonationID: donationID, DonationKeyID: keyID, Source: values.Get("source"), Query: values.Get("q")}, page)
+		CandidateQuery{DonationID: donationID, DonationKeyID: keyID, Source: values.Get("source"), Query: values.Get("q"), KeyState: values.Get("key_state")}, page)
 	if err != nil {
 		writeRoutingError(w, err)
 		return

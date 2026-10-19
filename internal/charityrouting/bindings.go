@@ -14,6 +14,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/donationstate"
 	"github.com/waiting-here/NonbiriAPI/internal/gatewaypolicy"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -39,7 +40,7 @@ func (s *Service) bindingCandidates(ctx context.Context, role roleKind, actorUse
 	if s == nil || s.db == nil || ctx == nil || modelID <= 0 || query.DonationID < 0 || query.DonationKeyID < 0 ||
 		query.AfterKeyID < 0 || query.Limit < 1 || query.Limit > maxPageLimit ||
 		(role != roleAdmin && role != roleSteward || role == roleSteward && actorUserID <= 0) ||
-		(query.Source != "" && query.Source != "automatic" && query.Source != "manual") ||
+		(query.Source != "" && query.Source != "automatic" && query.Source != "manual") || !donationstate.Valid(query.KeyState) ||
 		!utf8.ValidString(query.Query) || utf8.RuneCountInString(query.Query) > 512 {
 		return nil, 0, "", ErrInvalidRequest
 	}
@@ -59,10 +60,8 @@ func (s *Service) bindingCandidates(ctx context.Context, role roleKind, actorUse
 	if err := s.donationState.MaterializeDueExpiriesTx(ctx, tx, now, 100); err != nil {
 		return nil, 0, "", fmt.Errorf("charity routing: materialize candidate expiry: %w", err)
 	}
+	query.traineeOnly = scope.Trainee
 	statement, args := candidatePageSelection(modelID, now, query)
-	if scope.Trainee {
-		statement = strings.ReplaceAll(statement, "WHERE cm.id=?", "WHERE cm.id=? AND dk.mainstream_channel_id IS NOT NULL")
-	}
 	statement += ` ORDER BY dk.id,pc.normalized_model_id LIMIT ?`
 	args = append(args, query.Limit+1)
 	rows, err := tx.QueryContext(ctx, statement, args...)

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/donationstate"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
@@ -16,22 +17,9 @@ func donationSummaryTx(ctx context.Context, tx *sql.Tx, header AdminDonation, no
 	for _, state := range []string{"available", "rate_limited", "pending", "disabled", "suspended", "exhausted", "expired", "ended"} {
 		out.StateCounts[state] = "0"
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT CASE
- WHEN dk.ended_reason IS NOT NULL OR NOT EXISTS(SELECT 1 FROM donation_key_memberships m WHERE m.donation_key_id=dk.id)
- THEN CASE WHEN dk.ended_reason='expired' OR ?='expired' THEN 'expired' ELSE 'ended' END
- WHEN dk.expires_at<=? OR ?='expired' THEN 'expired'
- WHEN ?='pending' THEN 'pending'
- WHEN COALESCE(e.enabled,0)=0 OR COALESCE(k.enabled,0)=0 OR dk.enabled=0 OR dk.failure_disabled=1 THEN 'disabled'
- WHEN EXISTS(SELECT 1 FROM endpoint_key_suspensions x WHERE x.endpoint_key_id=k.id) THEN 'suspended'
- WHEN nbi_u128_remaining(dk.price_limit_mag,dk.price_used_mag,dk.price_reserved_mag,nbi_u128(0))=nbi_u128(0)
- OR nbi_u128_remaining(dk.call_limit_mag,dk.calls_used,dk.calls_reserved,nbi_u128(0))=nbi_u128(0)
- OR nbi_u128_remaining(dk.token_limit_mag,dk.tokens_used,dk.tokens_reserved,nbi_u128(0))=nbi_u128(0)
- OR nbi_u128_remaining(dk.input_token_limit_mag,dk.input_tokens_used,dk.input_tokens_reserved,nbi_u128(0))=nbi_u128(0)
- OR nbi_u128_remaining(dk.output_token_limit_mag,dk.output_tokens_used,dk.output_tokens_reserved,nbi_u128(0))=nbi_u128(0) THEN 'exhausted'
- WHEN EXISTS(SELECT 1 FROM donation_key_cooldowns cooldown WHERE cooldown.donation_key_id=dk.id AND cooldown.rate_limited_until>?) THEN 'rate_limited'
- ELSE 'available' END AS state,COUNT(*)
-FROM donation_keys dk LEFT JOIN endpoint_keys k ON k.id=dk.endpoint_key_id LEFT JOIN endpoints e ON e.id=k.endpoint_id
-WHERE dk.donation_id=? GROUP BY state`, header.Status, now, header.Status, header.Status, now, header.ID)
+	rows, err := tx.QueryContext(ctx, `SELECT `+donationstate.SQL()+` AS state,COUNT(*)
+FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id `+donationstate.PhysicalJoins+`
+WHERE dk.donation_id=? GROUP BY state`, now, now, now, now, header.ID)
 	if err != nil {
 		return out, err
 	}
