@@ -74,11 +74,24 @@ func (s *Service) donationsPage(ctx context.Context, role reviewerRole, userID i
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	tx, err := s.beginBrowseTx(ctx, role, userID)
+	var tx *sql.Tx
+	var err error
+	reviewRole := role
+	if role == reviewerSteward {
+		tx, reviewRole, _, err = s.beginReviewTx(ctx, role, userID, true)
+	} else {
+		tx, err = s.beginBrowseTx(ctx, role, userID)
+	}
 	if err != nil {
 		return empty, err
 	}
 	defer tx.Rollback()
+	if reviewRole == reviewerTrainee {
+		filter, err = pendingReviewFilter(filter)
+		if err != nil {
+			return empty, err
+		}
+	}
 	now, err := s.nowUnix()
 	if err != nil {
 		return empty, err
@@ -108,6 +121,9 @@ WHERE (d.status IN ('pending','approved') OR d.terminal_at>?)`
 		header, err := logicalHeaderTx(ctx, tx, id, now)
 		if err != nil {
 			return empty, err
+		}
+		if reviewRole == reviewerTrainee {
+			header = traineeReviewProjection(header)
 		}
 		summary, err := donationSummaryTx(ctx, tx, header, now)
 		if err != nil {
