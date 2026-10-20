@@ -17,7 +17,7 @@ const (
 	routeStewardKeyBindingBatch    = "/api/steward/donations/{id}/keys/{keyId}/bindings/batch"
 	routeAdminApplyBindingPreset   = "/admin/api/donations/{id}/bindings/apply-preset"
 	routeStewardApplyBindingPreset = "/api/steward/donations/{id}/bindings/apply-preset"
-	maxKeyBindingTargets           = 64
+	maxKeyBindingTargets           = maxBindingBatch
 	maxChannelBindingMappings      = 16
 )
 

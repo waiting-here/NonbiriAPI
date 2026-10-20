@@ -255,19 +255,28 @@ func TestManualMultiTargetBindingRollbackAuthorizationAndRevision(t *testing.T) 
 	}
 }
 func TestBindingMatrixReceiptFitsExistingLimit(t *testing.T) {
-	result := BindingMatrixReceipt{Items: []BindingMatrixRow{}, Models: []BindingModelRevision{}, AddedCount: "1600"}
-	for range 100 {
-		row := BindingMatrixRow{DonationKeyID: "9223372036854775807", Results: []string{}}
-		for range maxChannelBindingMappings {
-			row.Results = append(row.Results, "capacity_exceeded")
-		}
-		result.Items = append(result.Items, row)
-	}
-	for range maxKeyBindingTargets {
-		result.Models = append(result.Models, BindingModelRevision{"9223372036854775807", "9223372036854775807"})
-	}
-	body, err := json.Marshal(result)
-	if err != nil || len(body) > idempotency.MaxResponseBytes {
-		t.Fatal(len(body), err)
+	for _, test := range []struct {
+		name          string
+		keys, targets int
+	}{
+		{"manual", 1, maxKeyBindingTargets}, {"preset", 100, maxChannelBindingMappings},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			result := BindingMatrixReceipt{Items: []BindingMatrixRow{}, Models: []BindingModelRevision{}, AddedCount: fmt.Sprint(test.keys * test.targets)}
+			for range test.keys {
+				row := BindingMatrixRow{DonationKeyID: "9223372036854775807", Results: []string{}}
+				for range test.targets {
+					row.Results = append(row.Results, "capacity_exceeded")
+				}
+				result.Items = append(result.Items, row)
+			}
+			for range test.targets {
+				result.Models = append(result.Models, BindingModelRevision{"9223372036854775807", "9223372036854775807"})
+			}
+			body, err := json.Marshal(result)
+			if err != nil || len(body) > idempotency.MaxResponseBytes {
+				t.Fatal(len(body), err)
+			}
+		})
 	}
 }
