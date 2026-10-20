@@ -20,6 +20,7 @@ interface Fixture {
   admin_cookie: Cookie;
   users: { id: string; level: number; cookie: Cookie }[];
   management: {
+    automatic_backoff_key_ids: string[];
     workflow: {
       owner: { id: string; cookie: Cookie };
       models: string[];
@@ -827,13 +828,22 @@ test('level 5 handles all four custom-source keys and edits shared limits only i
     const sourceState = page.getByRole('combobox', { name: workflow.keyState, exact: true }).last();
     await expect(sourceState).toHaveValue('available');
     await sourceState.selectOption('disabled');
-    await expect(page.getByText(operations.sourceBrowser.noSources, { exact: true })).toBeVisible();
-    await expect(page.locator('.charity-source-browser__source-button')).toHaveCount(0);
-    await sourceState.selectOption('available');
-    await page
+    const browserSource = page
       .locator('.charity-source-browser__source-button')
-      .filter({ has: page.getByText('Mainstream channel: Browser service', { exact: true }) })
-      .click();
+      .filter({ has: page.getByText('Mainstream channel: Browser service', { exact: true }) });
+    await browserSource.click();
+    const sourceKeys = page.locator('.charity-source-browser');
+    await expect(
+      sourceKeys.getByRole('button', {
+        name: `Manage key #${state.management.automatic_backoff_key_ids[1]}`,
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(
+      sourceKeys.getByRole('button', { name: `Manage key #${data.pending_key_id}`, exact: true }),
+    ).toHaveCount(0);
+    await sourceState.selectOption('available');
+    await browserSource.click();
     await page
       .locator('.charity-source-browser')
       .getByRole('button', { name: `Manage key #${data.pending_key_id}`, exact: true })
