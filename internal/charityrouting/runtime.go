@@ -388,7 +388,8 @@ FROM charity_models WHERE id=?`, modelID).Scan(&snapshot.ModelID, &snapshot.Prov
 	rows, err := tx.QueryContext(ctx, `SELECT b.id,b.donation_key_id,e.id,k.id,e.connector_type,e.base_url,b.upstream_model_id,
 k.force_store_false,dk.token_reserve,dk.expires_at,
 dk.price_limit_mag,dk.call_limit_mag,dk.token_limit_mag,
-dk.price_used_mag,dk.price_reserved_mag,dk.calls_used,dk.calls_reserved,dk.tokens_used,dk.tokens_reserved
+dk.price_used_mag,dk.price_reserved_mag,dk.calls_used,dk.calls_reserved,dk.tokens_used,dk.tokens_reserved,
+(SELECT rate_limited_until FROM donation_key_cooldowns WHERE donation_key_id=dk.id)
 FROM charity_model_bindings b
 JOIN donation_keys dk ON dk.id=b.donation_key_id
 JOIN donations d ON d.id=dk.donation_id
@@ -416,13 +417,13 @@ ORDER BY b.ord,b.id LIMIT ?`, modelID, callerID, callerID, callerID, decisionNow
 		var connector string
 		var forceStore int
 		var tokenReserve int64
-		var expiresAt sql.NullInt64
+		var expiresAt, rateLimitedUntil sql.NullInt64
 		var priceLimit, callLimit, tokenLimit []byte
 		var priceUsed, priceInflight, callsUsed, callsInflight, tokensUsed, tokensInflight []byte
 		if err := rows.Scan(&candidate.BindingID, &candidate.DonationKeyID, &candidate.EndpointID, &candidate.EndpointKeyID,
 			&connector, &candidate.CanonicalBaseURL, &candidate.UpstreamModelID, &forceStore, &tokenReserve, &expiresAt,
 			&priceLimit, &callLimit, &tokenLimit, &priceUsed, &priceInflight, &callsUsed, &callsInflight,
-			&tokensUsed, &tokensInflight); err != nil {
+			&tokensUsed, &tokensInflight, &rateLimitedUntil); err != nil {
 			return RuntimeSnapshot{}, fmt.Errorf("charity routing: scan runtime candidate: %w", err)
 		}
 		candidate.ConnectorType = connectorcontract.Type(connector)
@@ -441,6 +442,10 @@ ORDER BY b.ord,b.id LIMIT ?`, modelID, callerID, callerID, callerID, decisionNow
 			return RuntimeSnapshot{}, err
 		}
 		if !eligible {
+			continue
+		}
+		if rateLimitedUntil.Valid && rateLimitedUntil.Int64 > decisionNow {
+			sawRecurringLimit = true
 			continue
 		}
 		priceReserve := snapshot.ReservedMilli

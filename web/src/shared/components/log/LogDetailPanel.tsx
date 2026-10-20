@@ -19,6 +19,7 @@ interface LogDetailPanelProps {
   fields: readonly LogDetailField[];
   diagnostics?: { label: string; text: string };
   result?: ReactNode;
+  headers?: ReactNode;
 }
 export function LogDetailPanel({
   open,
@@ -27,6 +28,7 @@ export function LogDetailPanel({
   fields,
   diagnostics,
   result,
+  headers,
 }: LogDetailPanelProps) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
@@ -52,6 +54,7 @@ export function LogDetailPanel({
     <ExpandablePanel open={open} onClose={onClose} title={title} closeLabel={t('common.close')}>
       <div className="log-detail-content">
         {result}
+        {headers}
         {renderFields(fields.filter((field) => !field.technical))}
         {technical.length || diagnostics ? (
           <Fold plain title={t('common.operations.logs.presentation.technical')}>

@@ -191,6 +191,11 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, w http.ResponseWriter, 
 	if response != nil && response.Body != nil {
 		defer response.Body.Close()
 	}
+	if response != nil && err != nil {
+		if err := contract.ObserveUpstreamResponse(w, response.StatusCode, stream, response.Header); err != nil {
+			return contract.AttemptResult{Failure: contract.FailureInternal, Diagnostic: "upstream response checkpoint failed"}
+		}
+	}
 	if err != nil {
 		failed := upstreamFailure("upstream transport failed", 0)
 		if ctx.Err() != nil {
@@ -201,7 +206,7 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, w http.ResponseWriter, 
 	if response == nil || response.Body == nil {
 		return upstreamFailure("upstream response was unavailable", 0)
 	}
-	if err := contract.ObserveUpstreamResponse(w, response.StatusCode, stream); err != nil {
+	if err := contract.ObserveUpstreamResponse(w, response.StatusCode, stream, response.Header); err != nil {
 		return contract.AttemptResult{Failure: contract.FailureInternal, Diagnostic: "upstream response checkpoint failed"}
 	}
 	if response.StatusCode < 200 || response.StatusCode > 299 || stream && response.StatusCode != 200 {

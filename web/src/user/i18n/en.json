@@ -2121,6 +2121,7 @@
       "submitDonation": "Submit a charity donation",
       "donationNoticeTitle": "Donation notice",
       "donationNoticeDefault": "Thank you for sharing spare API resources. Before submitting, confirm that you own these keys or have permission to share them; the connected service may charge you while they are shared. You can set a separate end time for each key and review or stop sharing here at any time.",
+      "sharedKeyLimitsNotice": "Administrators and authorized stewards can adjust this key's concurrency and requests-per-minute limits. Personal and charity calls share these limits, so changes also affect your personal calls.",
       "mutationResponseUnknown": "The action may have completed, but its result could not be confirmed yet.",
       "mutationConflictRefreshed": "The resource changed before this action completed.",
       "mutationReconciled": "The latest state has been loaded. Review it before deciding whether to act again.",
@@ -2168,6 +2169,7 @@
         "expired": "Expired"
       },
       "keyState": {
+        "rate_limited": "Rate limited",
         "pending": "Pending review",
         "disabled": "Charity use disabled",
         "physical_disabled": "Key disabled",
@@ -2271,6 +2273,30 @@
         "keyFacts": "{{total}} keys · {{available}} available",
         "sourceDetails": "Sources and key status",
         "donationActions": "Donation actions"
+      },
+      "ownerHistory": {
+        "views": "Donation views",
+        "current": "Current donations",
+        "history": "History",
+        "hidden": "Hidden",
+        "all": "All",
+        "keyViews": "Key views",
+        "keys": {
+          "current": "Current keys",
+          "ended": "Ended",
+          "all": "All keys"
+        },
+        "hideOne": "Hide",
+        "restoreOne": "Show again",
+        "hideAll": "Hide matching history",
+        "restoreAll": "Show matching history again",
+        "help": "Hidden history can be shown again from Hidden. This only organizes your list; it does not delete resources or change staff records. Showing a record again does not reactivate it.",
+        "pause": "Pause",
+        "resume": "Continue",
+        "running": "In progress",
+        "paused": "Paused",
+        "complete": "Complete",
+        "progress": "{{action}}: {{changed}} changed, {{scanned}} checked · {{state}}"
       }
     },
     "activities": {

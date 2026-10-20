@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 
-/** Keep inline details and their originating list reachable after navigation. */
+/** Keep details and their originating list reachable after navigation. */
 export function useDetailNavigation<
   ListElement extends HTMLElement = HTMLDivElement,
   DetailElement extends HTMLElement = HTMLDivElement,
@@ -66,7 +66,13 @@ export function useDetailNavigation<
       target.focus({ preventScroll: true });
       target.scrollIntoView?.({ block: 'start', behavior: 'instant' });
     } else {
-      const target = returnTarget.current?.isConnected ? returnTarget.current : listNode.current;
+      const remembered = returnTarget.current;
+      const remounted = remembered?.id ? document.getElementById(remembered.id) : null;
+      const target = remembered?.isConnected
+        ? remembered
+        : remounted && listNode.current?.contains(remounted)
+          ? remounted
+          : listNode.current;
       if (!target) return;
       target.focus({ preventScroll: true });
       target.scrollIntoView?.({ block: 'nearest', behavior: 'instant' });

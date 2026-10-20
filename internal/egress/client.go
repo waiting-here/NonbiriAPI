@@ -14,6 +14,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
+	"github.com/waiting-here/NonbiriAPI/internal/headerfacts"
 )
 
 const (
@@ -248,7 +249,8 @@ func (c *Client) BaseURL() string { return c.baseURL }
 // Do validates that req still targets this client's exact origin, waits for
 // both concurrency slots, applies the request timeout, and returns a response
 // whose decompressed body is bounded. The slots are released on request error,
-// body EOF, body Close, cancellation, or timeout.
+// body EOF, body Close, cancellation, or timeout. A response received before
+// an error retains its status and headers with its body already closed.
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	if req == nil {
 		return nil, errors.New("egress request is nil")
@@ -309,29 +311,38 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	outbound.URL.Scheme = c.originScheme
 	outbound.URL.Host = c.originHost
 	outbound.Host = c.originHost
+	// Match Transport's automatic gzip negotiation while retaining the original
+	// response headers for diagnostics before its transparent decoding.
+	automaticGzip := preserveGzipHeaders(outbound, c.httpClient)
 	// #nosec G704 -- this is the unified SSRF boundary: NewClient validated the
 	// canonical origin and installed a DNS-pinning dialer; the checks above bind
 	// both URL and Host to that exact origin before the request is dispatched.
 	resp, err := c.httpClient.Do(outbound)
+	headerfacts.CaptureResponse(ctx, resp)
 	if err != nil {
 		ctxErr := ctx.Err()
 		permit.Release()
 		cancel()
+		// Match http.Client's error contract: the body is closed, while
+		// received status and headers remain available to response observers.
 		if resp != nil && resp.Body != nil {
 			_ = resp.Body.Close()
 		}
 		if errors.Is(err, ErrRedirectBlocked) {
-			return nil, executionFailure(FailurePlatform, ErrRedirectBlocked)
+			return resp, executionFailure(FailurePlatform, ErrRedirectBlocked)
 		}
 		if ExecutionFailure(err) == FailurePlatform {
-			return nil, err
+			return resp, err
 		}
 		if ctxErr != nil {
-			return nil, networkFailure(ctxErr)
+			return resp, networkFailure(ctxErr)
 		}
-		return nil, networkFailure(newBoundedError("egress request failed", unwrapURLError(err)))
+		return resp, networkFailure(newBoundedError("egress request failed", unwrapURLError(err)))
 	}
 
+	if automaticGzip {
+		restoreAutomaticGzip(resp)
+	}
 	managed := newManagedResponseBody(resp.Body, c.maxResponseBytes, ctx, cancel, permit.Release)
 	resp.Body = managed
 	return resp, nil

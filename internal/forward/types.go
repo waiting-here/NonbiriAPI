@@ -155,6 +155,7 @@ type ClaimRail interface {
 	Claim(context.Context, claim.ClaimInput) (claim.Handle, error)
 	TakeForDispatch(context.Context, claim.Handle) (DispatchGrant, error)
 	MarkResponseStarted(context.Context, claim.Handle, ...int) error
+	ObserveResponseHeaders(context.Context, claim.Handle, connectorcontract.ResponseObservation) error
 	ReleaseUndispatched(context.Context, claim.Handle) (claim.Attempt, error)
 	RevokeUndelivered(context.Context, claim.Handle) error
 	CompleteAttempt(context.Context, claim.Handle, claim.AttemptOutcome) (claim.Attempt, error)

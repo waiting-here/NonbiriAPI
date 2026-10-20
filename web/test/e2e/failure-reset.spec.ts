@@ -62,6 +62,7 @@ for (const scenario of [
                 ],
                 state_counts: {
                   available: '101',
+                  rate_limited: '0',
                   pending: '0',
                   disabled: '0',
                   suspended: '0',

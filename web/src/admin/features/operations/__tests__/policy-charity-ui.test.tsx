@@ -1,3 +1,4 @@
+vi.mock('@shared/components/AsyncLeaveDialog', () => ({ AsyncLeaveDialog: () => null }));
 import { CharityManagement } from '@shared/components/CharityManagement';
 import type {
   AdminDonation,
@@ -79,6 +80,8 @@ const managedKey = (overrides: Partial<ManagedDonationKey> = {}): ManagedDonatio
   },
   physical_enabled: true,
   charity_state: 'pending',
+  rate_limited_until: null,
+  key_limits_revision: '1',
   limits: { price: '0', calls: '0', tokens: '0' },
   usage: {
     price_used: '0',
@@ -160,6 +163,7 @@ function expectNumberedPageQuery(url: URL) {
 function donationPageSummary(donation: AdminDonation | StewardDonation) {
   const stateCounts: Record<string, string> = {
     available: '0',
+    rate_limited: '0',
     pending: '0',
     disabled: '0',
     suspended: '0',
@@ -242,6 +246,8 @@ function approve(current: AdminDonation, body: Record<string, unknown>): AdminDo
     keys: current.keys.map((key) => ({
       ...key,
       charity_state: 'available',
+      rate_limited_until: null,
+      key_limits_revision: '1',
       expires_at:
         settings.find((setting) => setting.donation_key_id === key.id)?.expires_at ?? null,
     })),
@@ -486,6 +492,7 @@ describe('Generation 2 charity management policy', () => {
     });
 
     await view.user.click(await screen.findByRole('tab', { name: 'Charity models and bindings' }));
+    await view.user.click(screen.getByRole('button', { name: 'Create charity model' }));
     await view.user.type(screen.getByLabelText('Provider'), 'provider');
     await view.user.type(screen.getByLabelText('Model'), 'model');
     fireEvent.change(screen.getByLabelText('Request user price'), {

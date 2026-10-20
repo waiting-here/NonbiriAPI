@@ -384,6 +384,13 @@ type BindingBatch struct {
 	Selections              []BindingSelection `json:"selections"`
 }
 
+type BindingBatchReceipt struct {
+	ModelID         string `json:"model_id"`
+	BindingRevision string `json:"binding_revision"`
+	AddedCount      string `json:"added_count"`
+	BindingCount    string `json:"binding_count"`
+}
+
 type BindingOrder struct {
 	ExpectedBindingRevision string   `json:"expected_binding_revision"`
 	Order                   []string `json:"order"`
@@ -394,6 +401,8 @@ type BindingDelete struct {
 }
 
 type CandidateQuery struct {
+	KeyState      string
+	traineeOnly   bool
 	DonationID    int64
 	DonationKeyID int64
 	Source        string

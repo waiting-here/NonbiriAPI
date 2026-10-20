@@ -4,10 +4,12 @@ import "net/http"
 
 // ObserveUpstreamResponse reports received headers before reading the body.
 // Accounting sinks decide whether this response establishes their checkpoint.
-func ObserveUpstreamResponse(writer http.ResponseWriter, status int, stream bool) error {
+func ObserveUpstreamResponse(writer http.ResponseWriter, status int, stream bool, headers http.Header) error {
 	for writer != nil {
-		if observer, ok := writer.(interface{ ObserveUpstreamResponse(int, bool) error }); ok {
-			return observer.ObserveUpstreamResponse(status, stream)
+		if observer, ok := writer.(interface {
+			ObserveUpstreamResponse(int, bool, http.Header) error
+		}); ok {
+			return observer.ObserveUpstreamResponse(status, stream, headers)
 		}
 		wrapper, ok := writer.(interface{ Unwrap() http.ResponseWriter })
 		if !ok {

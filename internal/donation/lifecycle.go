@@ -483,6 +483,9 @@ func (s *Service) PrepareAccountDeletion(ctx context.Context, tx *sql.Tx, userID
 	if s == nil || ctx == nil || tx == nil || userID <= 0 || decisionNow < 0 || decisionNow > maxUnixSecond {
 		return ErrInvalidRequest
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM donation_owner_preferences WHERE user_id=?`, userID); err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM donation_key_manual_models WHERE donation_key_id IN (SELECT dk.id FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id WHERE d.user_id=?)`, userID); err != nil {
 		return err
 	}
@@ -639,7 +642,12 @@ ORDER BY id LIMIT ?`, userID, cutoff, limit+1)
 				return nil, quotaError(err)
 			}
 		}
+		hidden, err := ownerHiddenAtTx(ctx, tx, id)
+		if err != nil {
+			return nil, err
+		}
 		items = append(items, ExportDonation{
+			OwnerHiddenAt:       hidden,
 			DiscordPublicThanks: projection.DiscordPublicThanks,
 			ID:                  projection.ID, Status: projection.Status, Description: projection.Description,
 			ReviewResult: projection.ReviewResult, Keys: keys,
@@ -660,7 +668,7 @@ func exportDonationKeys(values []AdminDonationKey) []ExportDonationKey {
 			ID:                      owner.ID, EndpointKeyID: owner.EndpointKeyID,
 			DisplayHead: owner.DisplayHead, DisplayTail: owner.DisplayTail,
 			SafeSource: owner.SafeSource, PhysicalEnabled: owner.PhysicalEnabled,
-			CharityState: owner.CharityState, Limits: owner.Limits, Usage: owner.Usage,
+			CharityState: owner.CharityState, RateLimitedUntil: owner.RateLimitedUntil, Limits: owner.Limits, Usage: owner.Usage,
 			TokenReserve: owner.TokenReserve, AuthorizedExpiresAt: value.AuthorizedExpiresAt,
 			ExpiresAt: owner.ExpiresAt, Streak: owner.Streak, EndedReason: owner.EndedReason,
 		}

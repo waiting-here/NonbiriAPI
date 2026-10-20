@@ -7,7 +7,7 @@ Authorization: Bearer nbk_REPLACE_WITH_YOUR_CALLER_KEY
 Content-Type: application/json
 ```
 
-The caller must remain an active level-6 steward. Level-5 trainees cannot use these automation routes. Session cookies cannot replace the CallerKey. Revocation, rotation, bans, deletion and loss of steward permission are checked again before writes. These controls grant no authority over another donor's private endpoint, key or model catalog. This document describes v1.0.0; use a matching server release.
+The caller must remain an active level-6 steward. Level-5 trainees cannot use these automation routes. Session cookies cannot replace the CallerKey. Revocation, rotation, bans, deletion and loss of steward permission are checked again before writes. These controls grant no authority over another donor's private endpoint, key or model catalog. This document describes the current source contract; use a matching server release. Price templates, donation processing/history and compact management binding receipts are browser-session APIs, not additions to this CallerKey allowlist.
 
 Account MFA applies to browser sessions. These CallerKey routes retain their
 existing credentials and do not require authenticator codes. Browser controls
@@ -175,7 +175,7 @@ Idempotency-Key: REPLACE_WITH_A_UNIQUE_RANDOM_KEY
 
 All four body fields are required strings. The threshold has the same U128 range as creation; no signs, leading zeros, fractions, exponents or `null`. IDs and revisions fit positive signed 64-bit integers. Never convert these strings through JavaScript `Number`.
 
-Saving keeps the count and generation, immediately sets error-disablement when a positive threshold is reached, and clears that flag otherwise. Zero keeps counting errors but never disables for them. Validated upstream protocol success clears the count. Confirmed upstream response/protocol/DNS/connect/timeout failure increases it; caller or downstream cancellation, Debug stop, platform rejection/internal failure and unknown recovery neither increase nor clear it. An already confirmed upstream failure is not erased by a later cancellation. This is separate from billing or quota settlement. Manual disabling, expiry, withdrawal, bans and quotas are unchanged. An in-flight result uses the threshold saved when its result is folded; results from an older generation remain isolated. No second confirmation is required; browser pages display a persistent warning for zero.
+Saving keeps the count and generation, immediately sets error-disablement when a positive threshold is reached, and clears that flag otherwise. Zero keeps counting errors but never disables for them. Initial upstream HTTP 200 or validated protocol success clears the count, regardless of later errors. Without either, a non-200 response with a valid retry hint leaves it unchanged; other confirmed upstream response/protocol/DNS/connect/timeout failure increases it; caller or downstream cancellation, Debug stop, platform rejection/internal failure and unknown recovery neither increase nor clear it. An already confirmed upstream failure is not erased by a later cancellation. This is separate from billing or quota settlement. Manual disabling, expiry, withdrawal, bans and quotas are unchanged. An in-flight result uses the threshold saved when its result is folded; results from an older generation remain isolated. No second confirmation is required; browser pages display a persistent warning for zero.
 
 PATCH uses the same 24-hour idempotency rules as creation, with a 30-second operation limit. Repeating the original key and body returns the original policy snapshot without another revision, audit or alert. Current permission and visibility are checked before replay. A stale revision or a reused key with a different request returns 409; re-read after a definite revision conflict and use a new key for the newly intended edit. An unknown result must first be resolved by retrying the original request. Invalid input returns 400, missing or no-longer-visible records 404, oversized input 413, and authentication or authority failures 401/403. Capacity and maintenance failures follow the shared controls.
 
@@ -202,3 +202,15 @@ Donation projections use `first_approval_origin: "none"` for pending requests
 and requests directly rejected before approval. `unknown` remains reserved
 for historical approvals whose origin cannot be established. This display
 field does not grant review or forced-rejection permission.
+
+## Temporary upstream cooldowns
+
+A valid `Retry-After` or `X-Retry-After` hint on any upstream HTTP status can
+put the donated key into temporary cooldown across its charity bindings.
+The latest valid deadline wins and cannot shorten an existing cooldown.
+Initial HTTP 200 resets consecutive failures even if later transport/stream
+validation fails; those later failures still return/log normally and retain the
+ordinary protocol-completion and billing rules. A non-200 response with a valid
+hint does not increment consecutive failures, including zero or past deadlines.
+Other failures keep their ordinary counter behavior. This does not change automation authentication,
+creation limits, response budgets or failure-policy fields.

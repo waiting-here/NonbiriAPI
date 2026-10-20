@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
+
+	"github.com/waiting-here/NonbiriAPI/internal/donationstate"
 )
 
 // These menu projections expose only shared configuration facts. Donation
@@ -39,8 +42,19 @@ AND (EXISTS(SELECT 1 FROM model_pair_catalog pc WHERE pc.endpoint_key_id=k.id
  AND NOT EXISTS(SELECT 1 FROM charity_model_bindings b WHERE b.charity_model_id=cm.id
  AND b.donation_key_id=dk.id AND b.upstream_model_id=dm.normalized_model_id)))`
 
-func (s *Service) bindingSources(ctx context.Context, role roleKind, actorID, modelID, donationID, afterID int64, limit int) ([]BindingDonation, []BindingSourceKey, int64, error) {
-	if s == nil || ctx == nil || modelID <= 0 || donationID < 0 || afterID < 0 || limit < 1 || limit > maxPageLimit || (role != roleAdmin && role != roleSteward) || role == roleSteward && actorID <= 0 {
+func bindingSourceSelection(modelID, now int64, keyState string) (string, []any) {
+	from := bindingSourceFrom
+	args := []any{modelID, now}
+	if donationstate.Filtered(keyState) {
+		from = strings.Replace(from, "WHERE cm.id=?", "LEFT JOIN endpoints e ON e.id=k.endpoint_id WHERE cm.id=?", 1)
+		from += ` AND (` + donationstate.SQL() + `)=?`
+		args = append(args, now, now, now, now, keyState)
+	}
+	return from, args
+}
+
+func (s *Service) bindingSources(ctx context.Context, role roleKind, actorID, modelID, donationID, afterID int64, limit int, keyState string) ([]BindingDonation, []BindingSourceKey, int64, error) {
+	if s == nil || ctx == nil || modelID <= 0 || donationID < 0 || afterID < 0 || limit < 1 || limit > maxPageLimit || (role != roleAdmin && role != roleSteward) || role == roleSteward && actorID <= 0 || !donationstate.Valid(keyState) {
 		return nil, nil, 0, ErrInvalidRequest
 	}
 	if s.db == nil || nilDependency(s.donationState) {
@@ -62,15 +76,16 @@ func (s *Service) bindingSources(ctx context.Context, role roleKind, actorID, mo
 	if err := s.donationState.MaterializeDueExpiriesTx(ctx, tx, now, 100); err != nil {
 		return nil, nil, 0, err
 	}
-	from := bindingSourceFrom
+	from, args := bindingSourceSelection(modelID, now, keyState)
 	if scope.Trainee {
 		from += ` AND dk.mainstream_channel_id IS NOT NULL`
 	}
 	query := `SELECT d.id,d.description,COUNT(DISTINCT dk.id)` + from + ` AND d.id>? GROUP BY d.id,d.description ORDER BY d.id LIMIT ?`
-	args := []any{modelID, now, afterID, limit + 1}
+	args = append(args, afterID, limit+1)
 	if donationID != 0 {
 		query = `SELECT dk.id,dk.connector_type,dk.canonical_base_url,dk.display_head,dk.display_tail,dk.safe_note,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0),d.description,d.review_note` + from + ` AND d.id=? AND dk.id>? ORDER BY dk.id LIMIT ?`
-		args = []any{modelID, now, donationID, afterID, limit + 1}
+		_, args = bindingSourceSelection(modelID, now, keyState)
+		args = append(args, donationID, afterID, limit+1)
 	}
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -147,13 +162,18 @@ func (api *httpAPI) bindingSources(w http.ResponseWriter, r *http.Request, role 
 	if !ok {
 		return
 	}
-	page, numbered, pageErr := parseNumberedQuery(values)
+	page, numbered, pageErr := parseNumberedQuery(values, "key_state")
 	if pageErr != nil {
 		writeRoutingError(w, pageErr)
 		return
 	}
+	keyState := values.Get("key_state")
+	if !donationstate.Valid(keyState) || values.Has("key_state") && keyState == "" {
+		writeRoutingError(w, ErrInvalidRequest)
+		return
+	}
 	if numbered {
-		donations, sourceKeys, err := api.service.bindingSourcesPage(r.Context(), role, actorID, modelID, donationID, page)
+		donations, sourceKeys, err := api.service.bindingSourcesPage(r.Context(), role, actorID, modelID, donationID, keyState, page)
 		if err != nil {
 			writeRoutingError(w, err)
 			return
@@ -165,7 +185,7 @@ func (api *httpAPI) bindingSources(w http.ResponseWriter, r *http.Request, role 
 		}
 		return
 	}
-	limit, cursor, ok := parsePage(values, "cursor", "limit")
+	limit, cursor, ok := parsePage(values, "cursor", "limit", "key_state")
 	if !ok {
 		writeRoutingError(w, ErrInvalidRequest)
 		return
@@ -179,7 +199,11 @@ func (api *httpAPI) bindingSources(w http.ResponseWriter, r *http.Request, role 
 	if keys {
 		scope = string(role) + "-charity-binding-keys"
 	}
-	owner, err := api.service.managementCursorOwner(r.Context(), role, actorID, modelID, paginationOwner(role, actorID, strconv.FormatInt(modelID, 10), strconv.FormatInt(donationID, 10)))
+	filterOwner := paginationOwner(role, actorID, strconv.FormatInt(modelID, 10), strconv.FormatInt(donationID, 10))
+	if donationstate.Filtered(keyState) {
+		filterOwner += ":key_state=" + keyState
+	}
+	owner, err := api.service.managementCursorOwner(r.Context(), role, actorID, modelID, filterOwner)
 	if err != nil {
 		writeRoutingError(w, err)
 		return
@@ -189,7 +213,7 @@ func (api *httpAPI) bindingSources(w http.ResponseWriter, r *http.Request, role 
 		writeRoutingError(w, err)
 		return
 	}
-	donations, sourceKeys, next, err := api.service.bindingSources(r.Context(), role, actorID, modelID, donationID, after, limit)
+	donations, sourceKeys, next, err := api.service.bindingSources(r.Context(), role, actorID, modelID, donationID, after, limit, keyState)
 	if err != nil {
 		writeRoutingError(w, err)
 		return

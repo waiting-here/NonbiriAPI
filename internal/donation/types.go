@@ -117,6 +117,7 @@ type DonationKey struct {
 	SafeSource              SafeSource     `json:"safe_source"`
 	PhysicalEnabled         bool           `json:"physical_enabled"`
 	CharityState            string         `json:"charity_state"`
+	RateLimitedUntil        *int64         `json:"rate_limited_until"`
 	Limits                  DonationLimits `json:"limits"`
 	Usage                   DonationUsage  `json:"usage"`
 	TokenReserve            int64          `json:"token_reserve"`
@@ -139,6 +140,7 @@ type AdminDonationKey struct {
 	SafeSource              AdminSafeSource `json:"safe_source"`
 	PhysicalEnabled         bool            `json:"physical_enabled"`
 	CharityState            string          `json:"charity_state"`
+	RateLimitedUntil        *int64          `json:"rate_limited_until"`
 	Limits                  DonationLimits  `json:"limits"`
 	Usage                   DonationUsage   `json:"usage"`
 	TokenReserve            int64           `json:"token_reserve"`
@@ -149,6 +151,7 @@ type AdminDonationKey struct {
 	SafeNote                string          `json:"safe_note"`
 	MaxConcurrency          *int64          `json:"max_concurrency"`
 	MaxRPM                  *int64          `json:"max_rpm"`
+	KeyLimitsRevision       *string         `json:"key_limits_revision"`
 	BindingCount            string          `json:"binding_count"`
 	Idle                    bool            `json:"idle"`
 }
@@ -162,6 +165,7 @@ type ReviewResult struct {
 }
 
 type Donation struct {
+	OwnerHiddenAt       *int64        `json:"owner_hidden_at"`
 	DiscordPublicThanks *bool         `json:"discord_public_thanks"`
 	ID                  string        `json:"id"`
 	Status              string        `json:"status"`
@@ -293,22 +297,26 @@ type ReviewInput struct {
 }
 
 type KeyManagementInput struct {
-	InputTokensLimit   **string
-	OutputTokensLimit  **string
-	InputTokenReserve  **string
-	OutputTokenReserve **string
-	ExpectedRevision   int64
-	Enabled            *bool
-	PriceLimit         **string
-	CallsLimit         **string
-	TokensLimit        **string
-	TokenReserve       *int64
-	SafeNote           *string
-	ExpiresAt          **int64
-	ResetFailureStreak bool
+	InputTokensLimit          **string
+	OutputTokensLimit         **string
+	InputTokenReserve         **string
+	OutputTokenReserve        **string
+	ExpectedRevision          int64
+	ExpectedKeyLimitsRevision int64
+	MaxConcurrency            *int64
+	MaxRPM                    *int64
+	Enabled                   *bool
+	PriceLimit                **string
+	CallsLimit                **string
+	TokensLimit               **string
+	TokenReserve              *int64
+	SafeNote                  *string
+	ExpiresAt                 **int64
+	ResetFailureStreak        bool
 }
 
 type ExportDonation struct {
+	OwnerHiddenAt       *int64              `json:"owner_hidden_at"`
 	DiscordPublicThanks *bool               `json:"discord_public_thanks"`
 	ID                  string              `json:"id"`
 	Status              string              `json:"status"`
@@ -339,6 +347,7 @@ type ExportDonationKey struct {
 	SafeSource              SafeSource               `json:"safe_source"`
 	PhysicalEnabled         bool                     `json:"physical_enabled"`
 	CharityState            string                   `json:"charity_state"`
+	RateLimitedUntil        *int64                   `json:"rate_limited_until"`
 	Limits                  DonationLimits           `json:"limits"`
 	Usage                   DonationUsage            `json:"usage"`
 	TokenReserve            int64                    `json:"token_reserve"`

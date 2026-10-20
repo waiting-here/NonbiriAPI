@@ -110,6 +110,7 @@ for (const role of ['owner', 'admin', 'steward'] as const) {
         sources: [source],
         state_counts: {
           available: '0',
+          rate_limited: '0',
           pending: '0',
           disabled: '1',
           suspended: '0',

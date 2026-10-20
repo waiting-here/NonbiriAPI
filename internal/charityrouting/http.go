@@ -33,6 +33,11 @@ func RegisterAdminRoutes(registrar AdminRouteRegistrar, service *Service) error 
 		method, pattern string
 		handler         http.HandlerFunc
 	}{
+		{http.MethodGet, routeAdminPriceTemplates, api.listAdminPriceTemplates},
+		{http.MethodGet, routeAdminPriceTemplate, api.getAdminPriceTemplate},
+		{http.MethodPost, routeAdminPriceTemplates, api.mutateAdminPriceTemplate},
+		{http.MethodPut, routeAdminPriceTemplate, api.mutateAdminPriceTemplate},
+		{http.MethodDelete, routeAdminPriceTemplate, api.mutateAdminPriceTemplate},
 		{http.MethodGet, routeAdminModels, api.listAdminModels},
 		{http.MethodGet, routeAdminKeyModels, api.adminKeyModels},
 		{http.MethodPost, routeAdminManual, api.adminAddManual},
@@ -49,6 +54,7 @@ func RegisterAdminRoutes(registrar AdminRouteRegistrar, service *Service) error 
 		{http.MethodGet, routeAdminBindingKeys, api.adminBindingKeys},
 		{http.MethodGet, routeAdminBindings, api.getAdminBindings},
 		{http.MethodPost, routeAdminBindingBatch, api.addAdminBindings},
+		{http.MethodPost, routeAdminBindingReceipt, api.addAdminBindingsReceipt},
 		{http.MethodPut, routeAdminBindingOrder, api.orderAdminBindings},
 		{http.MethodDelete, routeAdminBinding, api.deleteAdminBinding},
 		{http.MethodGet, routeAdminBindingAdaptation, api.getAdminBindingAdaptation},
@@ -71,6 +77,8 @@ func RegisterStewardRoutes(registrar UserRouteRegistrar, service *Service) error
 		method, pattern string
 		handler         AuthorizedUserHandler
 	}{
+		{http.MethodGet, routeStewardPriceTemplates, api.listStewardPriceTemplates},
+		{http.MethodGet, routeStewardPriceTemplate, api.getStewardPriceTemplate},
 		{http.MethodGet, routeStewardModels, api.listStewardModels},
 		{http.MethodGet, routeStewardKeyModels, api.stewardKeyModels},
 		{http.MethodPost, routeStewardManual, api.stewardAddManual},
@@ -86,6 +94,7 @@ func RegisterStewardRoutes(registrar UserRouteRegistrar, service *Service) error
 		{http.MethodGet, routeStewardBindingKeys, api.stewardBindingKeys},
 		{http.MethodGet, routeStewardBindings, api.getStewardBindings},
 		{http.MethodPost, routeStewardBindingBatch, api.addStewardBindings},
+		{http.MethodPost, routeStewardBindingReceipt, api.addStewardBindingsReceipt},
 		{http.MethodPut, routeStewardBindingOrder, api.orderStewardBindings},
 		{http.MethodDelete, routeStewardBinding, api.deleteStewardBinding},
 		{http.MethodGet, routeStewardBindingAdaptation, api.getStewardBindingAdaptation},

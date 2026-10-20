@@ -92,7 +92,7 @@ func (s *Service) Exchange(ctx context.Context, user int64, key string, in Excha
 	if e != nil {
 		return MutationResult[ExchangeResult]{}, e
 	}
-	return mutate(ctx, s, user, false, key, "POST", baseRoute+"/exchange", in, func(tx *sql.Tx, now time.Time) (ExchangeResult, error) {
+	return mutate(ctx, s, user, false, key, "POST", baseRoute+"/exchange", in, func(tx *sql.Tx, now time.Time, _ []byte) (ExchangeResult, error) {
 		p, e := s.qualifiedTx(ctx, tx, user, now.Unix())
 		if e != nil {
 			return ExchangeResult{}, e
@@ -190,7 +190,9 @@ func (s *Service) Exchange(ctx context.Context, user int64, key string, in Excha
 		if e != nil {
 			return ExchangeResult{}, e
 		}
-		v, e := s.profileViewTx(ctx, tx, user, now)
+		// Ledger.Apply invalidates the earlier account balance. q.Wallet was
+		// read after posting; no later write changes it or the saved profile.
+		v, e := s.profileViewFromTx(ctx, tx, user, now, profileProjection{row: &row, wallet: &q.Wallet, settings: &p})
 		return ExchangeResult{ExchangeReceipt{ID: id, Quote: q, OperationID: op, LedgerSeq: rev(posted.LedgerSeq), CreatedAt: now.Unix()}, v}, e
 	})
 }

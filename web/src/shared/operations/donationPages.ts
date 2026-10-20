@@ -1,4 +1,5 @@
 import { exactRecord } from '@shared/operations/wire';
+import { KEY_STATES, type KeyStateFilter } from './keyState';
 import { ApiError } from '@shared/query/http';
 import {
   normalizeDonationHandling,
@@ -43,6 +44,7 @@ export interface ManagedDonationPageFilters {
 }
 
 export interface DonationSourcePageFilters {
+  key_state?: KeyStateFilter;
   q?: string;
   scope?: 'active' | 'all';
   handling?: 'pending';
@@ -108,7 +110,14 @@ export interface StewardDonationPageOwner {
 }
 
 export type DonationState =
-  'available' | 'pending' | 'disabled' | 'suspended' | 'exhausted' | 'expired' | 'ended';
+  | 'available'
+  | 'pending'
+  | 'rate_limited'
+  | 'disabled'
+  | 'suspended'
+  | 'exhausted'
+  | 'expired'
+  | 'ended';
 
 export type DonationStateCounts = Record<DonationState, string>;
 
@@ -166,6 +175,7 @@ export interface DonationSourceSummary {
 
 const DONATION_STATES = [
   'available',
+  'rate_limited',
   'pending',
   'disabled',
   'suspended',
@@ -202,6 +212,8 @@ const DONATION_COMMON_FIELDS = [
 
 const DONATION_KEY_FIELDS = [
   'review',
+  'key_limits_revision',
+  'rate_limited_until',
   'input_token_reserve',
   'output_token_reserve',
   'breakdown_started_at',
@@ -291,6 +303,7 @@ function donationFilters(value: unknown): Required<ManagedDonationPageFilters> {
 }
 
 interface NormalizedSourceFilters {
+  key_state: KeyStateFilter | '';
   q: string;
   scope: '' | 'active' | 'all';
   handling: '' | 'pending';
@@ -298,7 +311,9 @@ interface NormalizedSourceFilters {
 }
 
 function sourceFilters(value: unknown, allowIdle: boolean): NormalizedSourceFilters {
-  const fields = allowIdle ? ['q', 'scope', 'handling', 'idle'] : ['q', 'scope', 'handling'];
+  const fields = allowIdle
+    ? ['q', 'scope', 'handling', 'idle', 'key_state']
+    : ['q', 'scope', 'handling', 'key_state'];
   const root = exactRecord(
     value,
     fields,
@@ -318,7 +333,9 @@ function sourceFilters(value: unknown, allowIdle: boolean): NormalizedSourceFilt
       ? ''
       : oneOf(root.idle, ['yes', 'no'] as const, 'source idle filter');
   const q = root.q === undefined ? '' : queryText(root.q, 'source search');
-  return { q, scope, handling, idle };
+  const key_state =
+    root.key_state === undefined ? '' : oneOf(root.key_state, KEY_STATES, 'key state filter');
+  return { q, scope, handling, idle, key_state };
 }
 
 function sharedSource(value: unknown, label: string): DonationPageSafeSource {
@@ -531,6 +548,8 @@ export function normalizeKeySummary(value: unknown, index: number): ManagedDonat
       (field) =>
         ![
           'review',
+          'key_limits_revision',
+          'rate_limited_until',
           'donation_note',
           'approval_note',
           'visible_models',
@@ -554,6 +573,8 @@ export function normalizeKeySummary(value: unknown, index: number): ManagedDonat
       safe_source: root.safe_source,
       physical_enabled: root.physical_enabled,
       charity_state: root.charity_state,
+      rate_limited_until: root.rate_limited_until,
+      key_limits_revision: root.key_limits_revision,
       limits: root.limits,
       usage: root.usage,
       token_reserve: root.token_reserve,
@@ -881,6 +902,7 @@ export function getDonationSourcesPage(
         q: normalizedFilters.q || undefined,
         scope: normalizedFilters.scope || undefined,
         handling: normalizedFilters.handling || undefined,
+        key_state: normalizedFilters.key_state || undefined,
         page,
         page_size: pageSize,
       }),
@@ -911,6 +933,7 @@ export function getDonationSourceKeysPage(
         scope: normalizedFilters.scope || undefined,
         handling: normalizedFilters.handling || undefined,
         idle: normalizedFilters.idle || undefined,
+        key_state: normalizedFilters.key_state || undefined,
         page,
         page_size: pageSize,
       }),

@@ -181,6 +181,7 @@ function ownerDonationPageItem(donation: ReturnType<typeof userDonation>): Recor
   const keys = donation.keys as Array<Record<string, unknown>>;
   const stateCounts = {
     available: '0',
+    rate_limited: '0',
     pending: '0',
     disabled: '0',
     suspended: '0',
@@ -604,9 +605,15 @@ test.describe('donation expiry in UTC', () => {
       const url = new URL(route.request().url());
       const donations = [donationOne, donationTwo];
       const status = url.searchParams.get('status');
+      const view = url.searchParams.get('view');
       return route.fulfill({
         json: numberedResponse(
-          donations.filter((item) => !status || item.status === status).map(ownerDonationPageItem),
+          donations
+            .filter((item) =>
+              view === 'history' ? item.status === 'expired' : item.status !== 'expired',
+            )
+            .filter((item) => !status || item.status === status)
+            .map(ownerDonationPageItem),
           '1',
           20,
         ),
@@ -616,7 +623,7 @@ test.describe('donation expiry in UTC', () => {
       await mockJson(page, {
         origin: USER_ORIGIN,
         method: 'GET',
-        path: `/api/donations/${donation.id}/keys?page=1&page_size=20`,
+        path: `/api/donations/${donation.id}/keys?view=${donation.status === 'expired' ? 'ended' : 'current'}&page=1&page_size=20`,
         body: numberedResponse(
           donation.keys.map((value) => {
             const key = value as Record<string, unknown>;
@@ -713,7 +720,7 @@ test.describe('donation expiry in UTC', () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.getByRole('tab', { name: 'My donations', exact: true }).click();
     const donations = page.locator('.economy-donation-list');
-    await expect(donations.locator('.economy-donation-summary')).toHaveCount(2);
+    await expect(donations.locator('.economy-donation-summary')).toHaveCount(1);
     const first = donations
       .locator('.economy-donation-summary')
       .filter({ has: page.getByRole('heading', { name: 'Donation #9', exact: true }) });
@@ -725,6 +732,7 @@ test.describe('donation expiry in UTC', () => {
     await page.getByRole('menuitem', { name: 'View donated keys', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'key-available…tail' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'key-blocked…tail' })).toBeVisible();
+    await page.getByRole('tab', { name: 'History', exact: true }).click();
     const filter = page.getByRole('combobox', { name: 'Review status', exact: true });
     await filter.selectOption('expired');
     await expect(donations.locator('.economy-donation-summary')).toHaveCount(1);
@@ -738,8 +746,8 @@ test.describe('donation expiry in UTC', () => {
     await page.getByRole('menuitem', { name: 'View donated keys', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'key-ended…tail' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'key-available…tail' })).toHaveCount(0);
-    await filter.selectOption('');
-    await expect(donations.locator('.economy-donation-summary')).toHaveCount(2);
+    await page.getByRole('tab', { name: 'Current donations', exact: true }).click();
+    await expect(donations.locator('.economy-donation-summary')).toHaveCount(1);
 
     await page.getByRole('tab', { name: 'Donate my keys', exact: true }).click();
     const composer = page.locator('.economy-donation-composer');
@@ -877,7 +885,7 @@ for (const locale of ['en', 'zh'] as const) {
     await mockJson(page, {
       origin: USER_ORIGIN,
       method: 'GET',
-      path: '/api/donations?page=1&page_size=20',
+      path: '/api/donations?view=current&page=1&page_size=20',
       body: numberedResponse([], '1', 20),
     });
     await mockJson(page, {
@@ -927,7 +935,7 @@ test('user charity overview fails closed on an invalid numbered page and privacy
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',
-    path: '/api/donations?page=1&page_size=20',
+    path: '/api/donations?view=current&page=1&page_size=20',
     body: {
       ...numberedResponse([ownerDonationPageItem(firstDonation)], '1', 20),
       next_cursor: 'unexpected-cursor',
@@ -1111,13 +1119,13 @@ test('administrator charity provenance grouping and report lineage expose safe d
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: '/admin/api/donation-sources?scope=active&page=1&page_size=20',
+    path: '/admin/api/donation-sources?scope=active&key_state=available&page=1&page_size=20',
     body: numberedResponse([sourceKeys], '1', 20),
   });
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: `/admin/api/donation-sources/${sourceKey}/keys?scope=active&page=1&page_size=20`,
+    path: `/admin/api/donation-sources/${sourceKey}/keys?scope=active&key_state=available&page=1&page_size=20`,
     body: numberedResponse([managedKeyPage], '1', 20),
   });
   await mockJson(page, {

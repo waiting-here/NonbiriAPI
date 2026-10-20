@@ -23,6 +23,10 @@ import { isForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { DonationHandlingStatus } from './DonationHandling';
 import { KeyLimitSummary } from './KeyRoutingLimits';
+import { KeyRateLimitTime } from './KeyRateLimitTime';
+import { KeyStateFilter } from './charity/KeyStateFilter';
+import { KEY_STATES, type KeyStateFilter as KeyState } from '@shared/operations/keyState';
+import { useRateLimitRefresh } from '@shared/operations/useRateLimitRefresh';
 import { FailureResetControl } from './FailureResetControl';
 import { copyForRecurringLimits } from './recurringLimitsCopy';
 import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from './States';
@@ -61,6 +65,7 @@ const BASE64URL_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz
 const keyStateLabel: Record<ManagedDonationKeySummary['charity_state'], string> = {
   pending: 'common.operations.charity.charityState.pending',
   available: 'common.operations.charity.charityState.available',
+  rate_limited: 'common.operations.charity.charityState.rate_limited',
   disabled: 'common.operations.charity.charityState.disabled',
   suspended: 'common.operations.charity.charityState.suspended',
   exhausted: 'common.operations.charity.charityState.exhausted',
@@ -80,7 +85,12 @@ function stationForRole(role: DonationPageRole): 'admin' | 'user' {
   return role === 'admin' ? 'admin' : 'user';
 }
 
-function sourceBrowserKeys(role: DonationPageRole, accountId: string, modelID?: string) {
+function sourceBrowserKeys(
+  role: DonationPageRole,
+  accountId: string,
+  modelID?: string,
+  keyState: KeyState = 'available',
+) {
   const root = [...charityKeys.root(role), 'source-browser', accountId, modelID ?? ''] as const;
   return {
     root,
@@ -90,7 +100,7 @@ function sourceBrowserKeys(role: DonationPageRole, accountId: string, modelID?: 
       handling: HandlingFilter,
       page: string,
       pageSize: number,
-    ) => [...root, 'sources', q, scope, handling, page, pageSize] as const,
+    ) => [...root, 'sources', keyState, q, scope, handling, page, pageSize] as const,
     keys: (
       sourceKey: string,
       q: string,
@@ -99,7 +109,19 @@ function sourceBrowserKeys(role: DonationPageRole, accountId: string, modelID?: 
       idle: IdleFilter,
       page: string,
       pageSize: number,
-    ) => [...root, 'source-keys', sourceKey, q, scope, handling, idle, page, pageSize] as const,
+    ) =>
+      [
+        ...root,
+        'source-keys',
+        keyState,
+        sourceKey,
+        q,
+        scope,
+        handling,
+        idle,
+        page,
+        pageSize,
+      ] as const,
   };
 }
 
@@ -208,6 +230,8 @@ function keyReason(
   if (key.streak.failure_disabled)
     return t('common.operations.charity.sourceBrowser.failureDisabledReason');
   if (key.charity_state === 'available') return null;
+  if (key.charity_state === 'rate_limited')
+    return t('common.operations.charity.sourceBrowser.stateReason.rate_limited');
   if (key.charity_state === 'ended' && key.ended_reason !== null) {
     return t('common.operations.charity.sourceBrowser.endedReason', {
       reason: t(endedReasonLabel[key.ended_reason]),
@@ -376,6 +400,9 @@ function KeySummary({
         donor={keyValue.donation_note}
         approval={keyValue.approval_note}
       />
+      {keyValue.charity_state === 'rate_limited' ? (
+        <KeyRateLimitTime until={keyValue.rate_limited_until} />
+      ) : null}
       <dl className="ops-kv">
         <dt>{t('common.operations.charity.sourceBrowser.donation')}</dt>
         <dd className="ops-id">{keyValue.donation_id}</dd>
@@ -479,6 +506,10 @@ export function CharitySourceBrowser({
   const sourceSearch = readSearchParameter(searchParams, SOURCE_QUERY_PARAM);
   const keySearch = readSearchParameter(searchParams, KEY_QUERY_PARAM);
   const scope = readScopeParameter(searchParams);
+  const rawKeyState = singleParameter(searchParams, 'source_key_state');
+  const keyState: KeyState = KEY_STATES.includes(rawKeyState as KeyState)
+    ? (rawKeyState as KeyState)
+    : 'available';
   const handling = readEnumParameter(searchParams, HANDLING_PARAM, ['pending'] as const);
   const idle = readEnumParameter(searchParams, IDLE_PARAM, ['yes', 'no'] as const);
   const rawSourceKey = singleParameter(searchParams, SOURCE_KEY_PARAM) ?? '';
@@ -512,14 +543,16 @@ export function CharitySourceBrowser({
     pageParam: SOURCE_KEYS_PAGE_PARAM,
     pageSizeParam: SOURCE_KEYS_PAGE_SIZE_PARAM,
   });
-  const browserKeys = sourceBrowserKeys(role, accountId, charityModelID);
+  const browserKeys = sourceBrowserKeys(role, accountId, charityModelID, keyState);
   const readEnabled = enabled && accountId.length > 0 && !identityTransitioning && !revoked;
   const sourceFilters: DonationSourcePageFilters = {
+    key_state: keyState,
     q: sourceSearch.value,
     scope: scope.value,
     ...(handling.value ? { handling: handling.value } : {}),
   };
   const sourceKeysFilters: DonationSourceKeysPageFilters = {
+    key_state: keyState,
     q: keySearch.value,
     scope: scope.value,
     ...(handling.value ? { handling: handling.value } : {}),
@@ -597,6 +630,12 @@ export function CharitySourceBrowser({
         ? previous
         : undefined,
   });
+  useRateLimitRefresh(
+    sourceKeys.data?.data
+      .filter((key) => key.charity_state === 'rate_limited')
+      .map((key) => key.rate_limited_until) ?? [],
+    () => sourceKeys.refetch({ throwOnError: true }),
+  );
   const authorityError = [sources.error, sourceKeys.error].find(
     (error) => isUnauthorized(error) || isForbidden(error),
   );
@@ -885,6 +924,19 @@ export function CharitySourceBrowser({
               <option value="all">{t('common.operations.charity.sourceBrowser.all')}</option>
             </select>
           </label>
+          <KeyStateFilter
+            value={keyState}
+            onChange={(state) =>
+              setSearchParams((current) => {
+                const next = new URLSearchParams(current);
+                next.set('source_key_state', state);
+                next.set(SCOPE_PARAM, 'all');
+                next.set(SOURCE_PAGE_PARAM, '1');
+                next.set(SOURCE_KEYS_PAGE_PARAM, '1');
+                return next;
+              })
+            }
+          />
           <label>
             <span>{t('common.operations.charity.sourceBrowser.handlingFilter')}</span>
             <select

@@ -1,7 +1,15 @@
 package charityrouting
 
 import (
+	"errors"
 	"net/http"
+
+	"github.com/waiting-here/NonbiriAPI/internal/donationstate"
+	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
+	"github.com/waiting-here/NonbiriAPI/internal/resources"
+	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
 )
 
 func optionalQueryID(values map[string][]string, key string) (int64, error) {
@@ -32,16 +40,21 @@ func (api *httpAPI) candidates(writer http.ResponseWriter, request *http.Request
 	if !ok {
 		return
 	}
-	numberedPage, numbered, pageErr := parseNumberedQuery(values, "donation_id", "donation_key_id", "source", "q")
+	numberedPage, numbered, pageErr := parseNumberedQuery(values, "donation_id", "donation_key_id", "source", "q", "key_state")
 	if pageErr != nil {
 		writeRoutingError(writer, pageErr)
+		return
+	}
+	keyState := values.Get("key_state")
+	if !donationstate.Valid(keyState) || values.Has("key_state") && keyState == "" {
+		writeRoutingError(writer, ErrInvalidRequest)
 		return
 	}
 	if numbered {
 		api.numberedCandidates(writer, request, role, actorID, modelID, values, numberedPage)
 		return
 	}
-	limit, cursor, ok := parsePage(values, "donation_id", "donation_key_id", "source", "q", "cursor", "limit")
+	limit, cursor, ok := parsePage(values, "donation_id", "donation_key_id", "source", "q", "cursor", "limit", "key_state")
 	if !ok {
 		writeRoutingError(writer, ErrInvalidRequest)
 		return
@@ -67,7 +80,11 @@ func (api *httpAPI) candidates(writer http.ResponseWriter, request *http.Request
 		return
 	}
 	scope := string(role) + "-charity-binding-candidates"
-	owner, err := api.service.managementCursorOwner(request.Context(), role, actorID, modelID, candidateFilterOwner(role, actorID, modelID, donationID, donationKeyID, source, query))
+	filterOwner := candidateFilterOwner(role, actorID, modelID, donationID, donationKeyID, source, query)
+	if donationstate.Filtered(keyState) {
+		filterOwner += ":key_state=" + keyState
+	}
+	owner, err := api.service.managementCursorOwner(request.Context(), role, actorID, modelID, filterOwner)
 	if err != nil {
 		writeRoutingError(writer, err)
 		return
@@ -77,7 +94,7 @@ func (api *httpAPI) candidates(writer http.ResponseWriter, request *http.Request
 		writeRoutingError(writer, err)
 		return
 	}
-	input := CandidateQuery{DonationID: donationID, DonationKeyID: donationKeyID, Source: source, Query: query,
+	input := CandidateQuery{DonationID: donationID, DonationKeyID: donationKeyID, Source: source, Query: query, KeyState: keyState,
 		AfterKeyID: afterKey, AfterModelID: afterModel, Limit: limit}
 	if role == roleAdmin {
 		items, nextKey, nextModel, err := api.service.BindingCandidatesAdmin(request.Context(), modelID, input)
@@ -157,6 +174,21 @@ type bindingBatchWire struct {
 	Selections              requiredField[[]bindingSelectionWire] `json:"selections"`
 }
 
+func decodeBindingBatchReceipt(w http.ResponseWriter, r *http.Request, wire *bindingBatchWire) bool {
+	body, err := httpapi.ReadJSON(w, r, wire, httpapi.BodyOptions{MaxBytes: idempotency.MaxControlBodyBytes,
+		Validate: func(body []byte) error { return strictjson.ValidateObjectWithFieldLimit(body, 2+2*maxBindingBatch) }})
+	if err != nil {
+		if errors.Is(err, httpapi.ErrTooLarge) {
+			httperr.WriteError(w, httperr.New(httperr.CodePayloadTooLarge, "request body is too large"))
+		} else {
+			writeRoutingError(w, ErrInvalidRequest)
+		}
+		return false
+	}
+	clear(body)
+	return true
+}
+
 func parseBindingBatch(wire bindingBatchWire) (BindingBatch, map[string]any, error) {
 	if !wire.ExpectedBindingRevision.Set || !wire.Selections.Set {
 		return BindingBatch{}, nil, ErrInvalidRequest
@@ -183,20 +215,32 @@ func parseBindingBatch(wire bindingBatchWire) (BindingBatch, map[string]any, err
 }
 
 func (api *httpAPI) addAdminBindings(writer http.ResponseWriter, request *http.Request) {
-	api.addBindings(writer, request, roleAdmin, 0)
+	api.addBindings(writer, request, roleAdmin, 0, false)
 }
 
 func (api *httpAPI) addStewardBindings(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
-	api.addBindings(writer, request, roleSteward, principal.UserID)
+	api.addBindings(writer, request, roleSteward, principal.UserID, false)
 }
 
-func (api *httpAPI) addBindings(writer http.ResponseWriter, request *http.Request, role roleKind, actorID int64) {
+func (api *httpAPI) addAdminBindingsReceipt(writer http.ResponseWriter, request *http.Request) {
+	api.addBindings(writer, request, roleAdmin, 0, true)
+}
+
+func (api *httpAPI) addStewardBindingsReceipt(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
+	api.addBindings(writer, request, roleSteward, principal.UserID, true)
+}
+
+func (api *httpAPI) addBindings(writer http.ResponseWriter, request *http.Request, role roleKind, actorID int64, compact bool) {
 	modelID, ok := parsePathID(writer, request, "id")
 	if !ok || !requireEmptyQuery(writer, request) {
 		return
 	}
 	var wire bindingBatchWire
-	if !decodeStrictObject(writer, request, &wire) {
+	if compact {
+		if !decodeBindingBatchReceipt(writer, request, &wire) {
+			return
+		}
+	} else if !decodeStrictObject(writer, request, &wire) {
 		return
 	}
 	input, canonical, err := parseBindingBatch(wire)
@@ -208,8 +252,29 @@ func (api *httpAPI) addBindings(writer http.ResponseWriter, request *http.Reques
 	if role == roleSteward {
 		route = routeStewardBindingBatch
 	}
+	if compact {
+		if role == roleAdmin {
+			route = routeAdminBindingReceipt
+		} else {
+			route = routeStewardBindingReceipt
+		}
+	}
 	mutation, ok := mutationFor(writer, request, route, []int64{modelID}, canonical)
 	if !ok {
+		return
+	}
+	if compact {
+		var result resources.MutationResult[BindingBatchReceipt]
+		if role == roleAdmin {
+			result, err = api.service.AddBindingsReceiptAdmin(request.Context(), modelID, mutation, input)
+		} else {
+			result, err = api.service.AddBindingsReceiptSteward(request.Context(), actorID, modelID, mutation, input)
+		}
+		if err != nil {
+			writeRoutingError(writer, err)
+			return
+		}
+		writeMutation(writer, result)
 		return
 	}
 	if role == roleAdmin {

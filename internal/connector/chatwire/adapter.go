@@ -170,6 +170,11 @@ func (a *Adapter) Attempt(ctx context.Context, w http.ResponseWriter, target con
 			response.Request.Header.Del(a.protocol.Header)
 		}
 	}
+	if response != nil && err != nil {
+		if err := contract.ObserveUpstreamResponse(w, response.StatusCode, request.Stream, response.Header); err != nil {
+			return result
+		}
+	}
 	if err != nil {
 		if response != nil && response.Body != nil {
 			_ = response.Body.Close()
@@ -180,7 +185,7 @@ func (a *Adapter) Attempt(ctx context.Context, w http.ResponseWriter, target con
 		return failure("upstream response unavailable")
 	}
 	defer response.Body.Close()
-	if err := contract.ObserveUpstreamResponse(w, response.StatusCode, request.Stream); err != nil {
+	if err := contract.ObserveUpstreamResponse(w, response.StatusCode, request.Stream, response.Header); err != nil {
 		return result
 	}
 	if response.StatusCode != 200 {

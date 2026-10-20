@@ -168,6 +168,7 @@ func init() {
 	}
 	add(KeyAnnouncementEpoch, "announcements", "公告缓存标识", "Announcement cache identifier", "安装时自动生成，用于区分公告缓存；无需修改。", "Generated automatically on installation to distinguish announcement caches. No editing is needed.", unitNone)
 	add(KeyRequestErrorBodyBudgetMiB, "limits", "错误原文容量上限", "Raw error storage budget", "错误原文的全站容量上限；达到上限后继续处理请求并保存安全摘要。", "Site-wide raw error budget; requests continue with safe summaries when full.", catalogText("MiB", "MiB"))
+	add(KeyRequestHeaderBudgetMiB, "limits", "请求与响应头容量上限", "Request and response header budget", "请求与响应头的全站保存容量；达到上限后请求继续，日志会注明未保存。", "Site-wide storage budget for request and response headers. Requests continue when full; logs indicate headers were not saved.", catalogText("MiB", "MiB"))
 	for level, key := range []string{KeyLevelDisplayName1, KeyLevelDisplayName2, KeyLevelDisplayName3, KeyLevelDisplayName4, KeyLevelDisplayName5, KeyLevelDisplayName6} {
 		label := strconv.Itoa(level + 1)
 		add(key, "economy", "等级 "+label+" 显示名", "Level "+label+" display name", "覆盖该等级的纯文本显示名；留空使用内置名称。", "Plain-text display override for this level; empty uses the built-in name.", unitNone)

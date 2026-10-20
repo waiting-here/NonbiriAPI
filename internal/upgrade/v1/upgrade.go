@@ -18,12 +18,21 @@ const stableSchema19Manifest = "a44f84d8610b1141c53015e92cddce874603c2b0512d7552
 
 const stableSchema20Manifest = "bb61658c873f8f3a300330f44abed6509f6d0d146ab6588175c4004b9cb39c71"
 
+const stableSchema21Manifest = "56039de6b1c224d85eac5639b9e8d41bbac00136ccb0564514369a863160e7b9"
+
+const stableSchema22Manifest = "0b4eb3ccafe3ae94ff4eae1b45ad1c054d1a7a8037d8aad14ceec38872c0db3a"
+
+const stableSchema23Manifest = "0d4b8dfe2106df2d5688d3a13e6ef2f419825da711e5914fef712c1d93c9c6ea"
+
 var storageSchema = schemaRegistry{baseline: 17, target: db.CurrentSchemaVersion, versions: []schemaMigration{
 	{version: 17, manifest: stableSchema17Manifest},
 	{from: 17, version: 18, manifest: stableSchema18Manifest, apply: extendContentAndProtocols},
 	{from: 18, version: 19, manifest: stableSchema19Manifest, sql: accountMFASchema},
 	{from: 19, version: 20, manifest: stableSchema20Manifest, sql: logQueryIndexes},
-	{from: 20, version: 21, manifest: db.PinnedGenerationTwoManifestHash, apply: extendServiceMetadata},
+	{from: 20, version: 21, manifest: stableSchema21Manifest, apply: extendServiceMetadata},
+	{from: 21, version: 22, manifest: stableSchema22Manifest, sql: keyCooldownSchema},
+	{from: 22, version: 23, manifest: stableSchema23Manifest, sql: headerDiagnosticsSchema},
+	{from: 23, version: 24, manifest: db.PinnedGenerationTwoManifestHash, sql: pricingHistorySchema},
 }}
 
 type Options struct {
@@ -48,6 +57,9 @@ func SchemaDescriptor() db.StorageSchemaDescriptor {
 		{18, stableSchema18Manifest, "0f02e60704934b589b51ca91eb34bac9c5e77c02"},
 		{19, stableSchema19Manifest, "c4145513b1ca5bd20f0236763c247b8bd5c66df2"},
 		{20, stableSchema20Manifest, "51a1e6156cb164802b22fdd881a4ac2040dd1904"},
+		{21, stableSchema21Manifest, "bd49471c3e4da5a94bd85292805b17b318f50ddd"},
+		{22, stableSchema22Manifest, "ffe31ab3918ec96151b62533fd1ead4c22c466bd"},
+		{23, stableSchema23Manifest, "75044b0e685e0f2c3a0d41b19be6e54fd54d7b5b"},
 	} {
 		descriptor.OfflineConversions = append(descriptor.OfflineConversions, db.OfflineConversionDescriptor{
 			Tool: "nonbiri-upgrade-v1", SourceCommit: source.commit, SourceSchemaVersion: source.version,
@@ -67,7 +79,7 @@ func RunRC7(ctx context.Context, path string, vault *secret.Vault, options Optio
 func run(ctx context.Context, path string, vault *secret.Vault, options Options, rc7Only bool) (Result, error) {
 	sources := []OfflineSchema{{Version: 16, ManifestHash: SourceManifestHash}}
 	if !rc7Only {
-		sources = append(sources, OfflineSchema{Version: 17, ManifestHash: stableSchema17Manifest}, OfflineSchema{Version: 18, ManifestHash: stableSchema18Manifest}, OfflineSchema{Version: 19, ManifestHash: stableSchema19Manifest}, OfflineSchema{Version: 20, ManifestHash: stableSchema20Manifest})
+		sources = append(sources, OfflineSchema{Version: 17, ManifestHash: stableSchema17Manifest}, OfflineSchema{Version: 18, ManifestHash: stableSchema18Manifest}, OfflineSchema{Version: 19, ManifestHash: stableSchema19Manifest}, OfflineSchema{Version: 20, ManifestHash: stableSchema20Manifest}, OfflineSchema{Version: 21, ManifestHash: stableSchema21Manifest}, OfflineSchema{Version: 22, ManifestHash: stableSchema22Manifest}, OfflineSchema{Version: 23, ManifestHash: stableSchema23Manifest})
 	}
 	sourceVersion := db.CurrentSchemaVersion
 	invalidLegacyConfiguration := false

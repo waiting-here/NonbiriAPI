@@ -317,11 +317,11 @@ async function exerciseScenario(
   await installManagementRoutes(page, scenario, state);
   await page.goto(scenario.origin + scenario.pagePath);
   await expect(page.getByRole('tab', { name: scenario.modelsTab })).toBeVisible();
-  const row = page.locator('.ops-table tbody tr').filter({ hasText: MODEL_NAME });
+  const row = page.getByRole('row').filter({ hasText: MODEL_NAME });
   await expect(row).toBeVisible();
   await row.getByRole('button', { name: /Manage|管理/ }).click();
   const editor = page.locator('.card').filter({
-    has: page.getByRole('heading', { name: MODEL_NAME }),
+    has: page.getByRole('heading', { name: MODEL_NAME, exact: true }),
   });
   await expect(editor).toBeVisible();
   const pricing = editor.getByRole('combobox', { name: scenario.pricingLabel });
@@ -371,7 +371,17 @@ async function exerciseScenario(
   await reserve.fill('0');
   await expect(save).toBeDisabled();
   await pricing.selectOption('per_request');
-  await expect(editor.getByRole('textbox', { name: scenario.reserveLabel })).toHaveCount(0);
+  await expect(reserve).toHaveValue('0');
+  await expect(save).toBeDisabled();
+  await expect(
+    editor.getByText(
+      scenario.locale === 'zh'
+        ? '当前按次计价，此预留设置会在切换按Token后使用。'
+        : 'This model charges per request. The reserve setting is used if you switch to token pricing.',
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await reserve.fill('1.111');
   await expect(save).toBeEnabled();
   const modeSaved = page.waitForResponse(
     (response) =>
@@ -388,12 +398,9 @@ async function exerciseScenario(
 
   consoleGuard.beforeConflict();
   await pricing.selectOption('per_token');
-  await editor
-    .locator('.nb-fold > summary')
-    .filter({ hasText: /Quota and reserve|额度与预留/ })
-    .click();
   reserve = editor.getByRole('textbox', { name: scenario.reserveLabel });
-  await expect(reserve).toHaveValue('0');
+  await expect(reserve).toHaveValue('1.111');
+  await reserve.fill('0');
   await expect(save).toBeDisabled();
 
   await reserve.fill('1.222');
@@ -412,7 +419,7 @@ async function exerciseScenario(
   await page.reload();
   await expect(page.getByRole('tab', { name: scenario.modelsTab })).toBeVisible();
   const reloadedEditor = page.locator('.card').filter({
-    has: page.getByRole('heading', { name: MODEL_NAME }),
+    has: page.getByRole('heading', { name: MODEL_NAME, exact: true }),
   });
   await expect(reloadedEditor).toBeVisible();
   const reloadedPricing = reloadedEditor.getByRole('combobox', { name: scenario.pricingLabel });
@@ -444,7 +451,7 @@ async function exerciseScenario(
   await page.reload();
   await expect(page.getByRole('tab', { name: scenario.modelsTab })).toBeVisible();
   const clearedEditor = page.locator('.card').filter({
-    has: page.getByRole('heading', { name: MODEL_NAME }),
+    has: page.getByRole('heading', { name: MODEL_NAME, exact: true }),
   });
   await expect(clearedEditor).toBeVisible();
   await expect(clearedEditor.getByRole('combobox', { name: scenario.pricingLabel })).toHaveValue(
@@ -520,10 +527,10 @@ for (const scenario of scenarios) {
           'Always fetch as a stream',
         ];
     await page.goto(scenario.origin + scenario.pagePath);
-    const row = page.locator('.ops-table tbody tr').filter({ hasText: MODEL_NAME });
+    const row = page.getByRole('row').filter({ hasText: MODEL_NAME });
     await row.getByRole('button', { name: /Manage|管理/ }).click();
     const editor = page.locator('.card').filter({
-      has: page.getByRole('heading', { name: MODEL_NAME }),
+      has: page.getByRole('heading', { name: MODEL_NAME, exact: true }),
     });
     const transport = editor.getByRole('radiogroup', { name: ruleLabel });
     await expect(transport.getByRole('radio', { name: options[0], exact: true })).toBeChecked();
@@ -644,12 +651,12 @@ for (const width of [390, 1440] as const) {
       await installManagementRoutes(page, scenario, state);
       await page.goto(scenario.origin + scenario.pagePath);
       await page
-        .locator('.ops-table tbody tr')
+        .getByRole('row')
         .filter({ hasText: MODEL_NAME })
         .getByRole('button', { name: /Manage|管理/ })
         .click();
       const editor = page.locator('.card').filter({
-        has: page.getByRole('heading', { name: MODEL_NAME }),
+        has: page.getByRole('heading', { name: MODEL_NAME, exact: true }),
       });
       await expect(editor).toBeVisible();
       await saveScreenshot(page, 'charity-model-' + width + '-' + theme);
@@ -670,13 +677,13 @@ for (const scenario of scenarios) {
       await installManagementRoutes(page, scenario, state);
       await page.goto(scenario.origin + scenario.pagePath);
       await page
-        .locator('.ops-table tbody tr')
+        .getByRole('row')
         .filter({ hasText: MODEL_NAME })
         .getByRole('button', { name: /Manage|管理/ })
         .click();
       const editor = page
         .locator('.card')
-        .filter({ has: page.getByRole('heading', { name: MODEL_NAME }) });
+        .filter({ has: page.getByRole('heading', { name: MODEL_NAME, exact: true }) });
       const types = editor.getByRole('group', { name: /Model types|模型类型/ });
       const chat = types.getByRole('checkbox', { name: /Chat completions|聊天补全/ });
       const embeddings = types.getByRole('checkbox', { name: /Embeddings|向量化/ });
@@ -726,13 +733,13 @@ test('level-five model view keeps capabilities read-only and hides chat policies
   await installManagementRoutes(page, scenario, state);
   await page.goto(scenario.origin + scenario.pagePath);
   await page
-    .locator('.ops-table tbody tr')
+    .getByRole('row')
     .filter({ hasText: MODEL_NAME })
     .getByRole('button', { name: /Manage|管理/ })
     .click();
   const editor = page
     .locator('.card')
-    .filter({ has: page.getByRole('heading', { name: MODEL_NAME }) });
+    .filter({ has: page.getByRole('heading', { name: MODEL_NAME, exact: true }) });
   await expect(editor.locator('.model-types-summary')).toHaveText('图像生成');
   await expect(editor.getByRole('checkbox')).toHaveCount(0);
   await expect(editor.getByRole('button', { name: /Save model|保存模型/ })).toHaveCount(0);

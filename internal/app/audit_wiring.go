@@ -15,6 +15,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/economyaudit"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/flowcontrol"
+	"github.com/waiting-here/NonbiriAPI/internal/headerfacts"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
 	"github.com/waiting-here/NonbiriAPI/internal/logapi"
@@ -121,7 +122,7 @@ func (a *auditRuntime) configurationChanged(change adminapi.SiteConfigCommit) {
 func (a *auditRuntime) Wrap(next http.Handler) http.Handler {
 	observed := a.access.Wrap(next)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := observability.WithSource(r.Context(), observability.CaptureSource(r))
+		ctx := observability.WithSource(headerfacts.WithRequest(r.Context(), r), observability.CaptureSource(r))
 		observed.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

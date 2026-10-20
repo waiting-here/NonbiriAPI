@@ -151,6 +151,182 @@ async function prepare(page: Page, role: Role, locale: 'en' | 'zh', width: numbe
   return { origin, guard };
 }
 
+test('complete header lists fetch lazily and remain usable in light and dark desktop and mobile views', async ({
+  page,
+}) => {
+  const { origin } = await prepare(page, 'admin', 'en', 1440);
+  const messages: { type: string; text: string }[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error' || message.type() === 'warning')
+      messages.push({ type: message.type(), text: message.text() });
+  });
+  page.on('pageerror', (error) => messages.push({ type: 'pageerror', text: error.message }));
+  const path = '/admin/api/logs';
+  const root = `${path}/${requestID(1)}`;
+  let requestReads = 0;
+  let responseReads = 0;
+  const headers = Array.from({ length: 125 }, (_, index) => ({
+    name: 'X-Header-' + index,
+    name_encoding: 'utf-8',
+    value:
+      index === 124 ? 'long-value-'.repeat(30) + 'full-tail' : index === 0 ? '' : 'value-' + index,
+    value_encoding: 'utf-8',
+  }));
+  const snapshot = {
+    save_state: 'saved',
+    captured_at: 1_800_000_000,
+    http_status: 200,
+    bytes_saved: 5000,
+    credentials_redacted: true,
+    ipv4_redacted: true,
+    headers,
+  };
+  await page.route(`**${path}**`, async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === path)
+      return route.fulfill({
+        json: {
+          data: [row('admin', 1)],
+          next_cursor: null,
+          pagination: windowFor(1, 1, 20),
+        },
+      });
+    if (url.pathname === root)
+      return route.fulfill({
+        json: {
+          request: row('admin', 1),
+          attempts: { data: [attempt('admin', 1)], next_cursor: null },
+          attempt_pagination: windowFor(1, 1, 20),
+        },
+      });
+    if (url.pathname === root + '/source')
+      return route.fulfill({
+        json: {
+          effective_ip: '192.0.2.17',
+          ip_quality: 'direct_peer',
+          user_agent: 'Saved browser agent',
+        },
+      });
+    if (url.pathname === root + '/headers') {
+      requestReads++;
+      return route.fulfill(
+        requestReads === 1
+          ? {
+              status: 503,
+              json: {
+                error: {
+                  code: 'upstream_unavailable',
+                  message: 'Header read temporarily unavailable',
+                },
+              },
+            }
+          : { json: snapshot },
+      );
+    }
+    if (url.pathname === root + '/attempts/1/headers') {
+      responseReads++;
+      return route.fulfill({
+        json: {
+          save_state: 'saved',
+          responses: [
+            { ...snapshot, response_index: 1, headers: [headers[0]] },
+            {
+              ...snapshot,
+              response_index: 2,
+              http_status: 503,
+              captured_at: 1_800_000_002,
+              headers: [
+                {
+                  name: 'Binary',
+                  name_encoding: 'utf-8',
+                  value: '/wD+',
+                  value_encoding: 'base64',
+                },
+              ],
+            },
+          ],
+        },
+      });
+    }
+    return route.fallback();
+  });
+  await page.goto(`${origin}/logs?from=&to=`);
+  await page.getByRole('button', { name: 'Details', exact: true }).click();
+  const dialog = page.locator('.nb-expandable-panel:not([hidden])');
+  await expect(dialog.getByText('192.0.2.17', { exact: true })).toBeVisible();
+  expect(requestReads).toBe(0);
+  expect(responseReads).toBe(0);
+  await dialog.locator('summary').filter({ hasText: 'Complete request headers' }).click();
+  await expect(dialog.getByRole('button', { name: 'Retry', exact: true })).toBeVisible();
+  if (process.env.NONBIRI_VISUAL_DIR)
+    await page.screenshot({
+      path: resolve(process.env.NONBIRI_VISUAL_DIR, 'headers-retry.png'),
+    });
+  await dialog.getByRole('button', { name: 'Retry', exact: true }).click();
+  const request = dialog.getByRole('region', {
+    name: 'Complete request headers',
+  });
+  await expect(request.getByText('(empty value)', { exact: true })).toBeVisible();
+  await request.getByRole('textbox', { name: 'Go to page' }).fill('7');
+  await request.getByRole('button', { name: 'Go', exact: true }).click();
+  await expect(request.getByText('X-Header-124', { exact: true })).toBeVisible();
+  await dialog.locator('summary').filter({ hasText: 'Service call attempts' }).click();
+  expect(responseReads).toBe(0);
+  await dialog.locator('summary').filter({ hasText: 'Complete response headers' }).click();
+  const response = dialog.getByRole('region', {
+    name: 'Complete response headers',
+  });
+  await expect(response.getByRole('heading', { name: 'Response 2' })).toBeVisible();
+  await expect(response.getByText('/wD+', { exact: true })).toBeVisible();
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate((value) => {
+      localStorage.setItem('nb.theme', value);
+      document.documentElement.dataset.theme = value;
+    }, theme);
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await request.getByRole('searchbox').fill('full-tail');
+      await expect(request.locator('tbody tr')).toHaveCount(1);
+      await request.getByRole('searchbox').focus();
+      await request.evaluate((element) => {
+        element.scrollIntoView({ block: 'start' });
+        window.scrollBy(0, -80);
+      });
+      if (process.env.NONBIRI_VISUAL_DIR)
+        await page.screenshot({
+          path: resolve(process.env.NONBIRI_VISUAL_DIR, `headers-search-${theme}-${width}.png`),
+        });
+      await request.getByRole('searchbox').fill('');
+      await expect(request.getByRole('combobox', { name: 'Items per page' })).toBeVisible();
+      await request.getByRole('combobox', { name: 'Items per page' }).selectOption('10');
+      await request.getByRole('textbox', { name: 'Go to page' }).fill('13');
+      await request.getByRole('button', { name: 'Go', exact: true }).click();
+      await expect(request.getByText('X-Header-124', { exact: true })).toBeVisible();
+      await request.getByRole('navigation').scrollIntoViewIfNeeded();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      expect(await request.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
+        true,
+      );
+      if (process.env.NONBIRI_VISUAL_DIR)
+        await page.screenshot({
+          path: resolve(process.env.NONBIRI_VISUAL_DIR, `headers-${theme}-${width}.png`),
+        });
+      await response.scrollIntoViewIfNeeded();
+      if (process.env.NONBIRI_VISUAL_DIR)
+        await page.screenshot({
+          path: resolve(process.env.NONBIRI_VISUAL_DIR, `headers-response-${theme}-${width}.png`),
+        });
+    }
+  }
+  expect(requestReads).toBe(2);
+  expect(responseReads).toBe(1);
+  expect(messages).toHaveLength(1);
+  expect(messages[0].type).toBe('error');
+  expect(messages[0].text).toMatch(/Failed to load resource:.*503/);
+});
+
 for (const scenario of [
   { role: 'admin', locale: 'en', width: 390 },
   { role: 'admin', locale: 'zh', width: 1280 },

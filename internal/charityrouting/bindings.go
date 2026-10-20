@@ -14,6 +14,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/donationstate"
 	"github.com/waiting-here/NonbiriAPI/internal/gatewaypolicy"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -39,7 +40,7 @@ func (s *Service) bindingCandidates(ctx context.Context, role roleKind, actorUse
 	if s == nil || s.db == nil || ctx == nil || modelID <= 0 || query.DonationID < 0 || query.DonationKeyID < 0 ||
 		query.AfterKeyID < 0 || query.Limit < 1 || query.Limit > maxPageLimit ||
 		(role != roleAdmin && role != roleSteward || role == roleSteward && actorUserID <= 0) ||
-		(query.Source != "" && query.Source != "automatic" && query.Source != "manual") ||
+		(query.Source != "" && query.Source != "automatic" && query.Source != "manual") || !donationstate.Valid(query.KeyState) ||
 		!utf8.ValidString(query.Query) || utf8.RuneCountInString(query.Query) > 512 {
 		return nil, 0, "", ErrInvalidRequest
 	}
@@ -59,10 +60,8 @@ func (s *Service) bindingCandidates(ctx context.Context, role roleKind, actorUse
 	if err := s.donationState.MaterializeDueExpiriesTx(ctx, tx, now, 100); err != nil {
 		return nil, 0, "", fmt.Errorf("charity routing: materialize candidate expiry: %w", err)
 	}
+	query.traineeOnly = scope.Trainee
 	statement, args := candidatePageSelection(modelID, now, query)
-	if scope.Trainee {
-		statement = strings.ReplaceAll(statement, "WHERE cm.id=?", "WHERE cm.id=? AND dk.mainstream_channel_id IS NOT NULL")
-	}
 	statement += ` ORDER BY dk.id,pc.normalized_model_id LIMIT ?`
 	args = append(args, query.Limit+1)
 	rows, err := tx.QueryContext(ctx, statement, args...)
@@ -139,17 +138,19 @@ func (s *Service) AddBindingsAdmin(ctx context.Context, modelID int64, mutation 
 	if !validMutation(mutation, http.MethodPost, routeAdminBindingBatch, modelID) {
 		return resources.MutationResult[AdminBindings]{}, ErrInvalidRequest
 	}
-	return s.addBindings(ctx, roleAdmin, 0, modelID, mutation, input)
+	result, err := s.addBindings(ctx, roleAdmin, 0, modelID, mutation, input, false)
+	return result.full, err
 }
 
 func (s *Service) AddBindingsSteward(ctx context.Context, actorUserID, modelID int64, mutation resources.ControlMutation, input BindingBatch) (resources.MutationResult[StewardBindings], error) {
 	if actorUserID <= 0 || !validMutation(mutation, http.MethodPost, routeStewardBindingBatch, modelID) {
 		return resources.MutationResult[StewardBindings]{}, ErrInvalidRequest
 	}
-	admin, err := s.addBindings(ctx, roleSteward, actorUserID, modelID, mutation, input)
+	result, err := s.addBindings(ctx, roleSteward, actorUserID, modelID, mutation, input, false)
 	if err != nil {
 		return resources.MutationResult[StewardBindings]{}, err
 	}
+	admin := result.full
 	value := stewardBindings(admin.Value)
 	body, err := json.Marshal(value)
 	if err != nil {
@@ -158,19 +159,41 @@ func (s *Service) AddBindingsSteward(ctx context.Context, actorUserID, modelID i
 	return resources.MutationResult[StewardBindings]{Value: value, Status: admin.Status, Body: body, Replayed: admin.Replayed}, nil
 }
 
-func (s *Service) addBindings(ctx context.Context, role roleKind, actorUserID, modelID int64, mutation resources.ControlMutation, input BindingBatch) (resources.MutationResult[AdminBindings], error) {
+func (s *Service) AddBindingsReceiptAdmin(ctx context.Context, modelID int64, mutation resources.ControlMutation, input BindingBatch) (resources.MutationResult[BindingBatchReceipt], error) {
+	if !validMutation(mutation, http.MethodPost, routeAdminBindingReceipt, modelID) {
+		return resources.MutationResult[BindingBatchReceipt]{}, ErrInvalidRequest
+	}
+	result, err := s.addBindings(ctx, roleAdmin, 0, modelID, mutation, input, true)
+	return result.receipt, err
+}
+
+func (s *Service) AddBindingsReceiptSteward(ctx context.Context, actorUserID, modelID int64, mutation resources.ControlMutation, input BindingBatch) (resources.MutationResult[BindingBatchReceipt], error) {
+	if actorUserID <= 0 || !validMutation(mutation, http.MethodPost, routeStewardBindingReceipt, modelID) {
+		return resources.MutationResult[BindingBatchReceipt]{}, ErrInvalidRequest
+	}
+	result, err := s.addBindings(ctx, roleSteward, actorUserID, modelID, mutation, input, true)
+	return result.receipt, err
+}
+
+type bindingBatchMutation struct {
+	full    resources.MutationResult[AdminBindings]
+	receipt resources.MutationResult[BindingBatchReceipt]
+}
+
+func (s *Service) addBindings(ctx context.Context, role roleKind, actorUserID, modelID int64, mutation resources.ControlMutation, input BindingBatch, compact bool) (bindingBatchMutation, error) {
+	var result bindingBatchMutation
 	expected, err := parseNonnegativeRevision(input.ExpectedBindingRevision)
 	selections, validateErr := validateSelections(input.Selections)
 	if s == nil || ctx == nil || modelID <= 0 || err != nil || validateErr != nil {
-		return resources.MutationResult[AdminBindings]{}, ErrInvalidRequest
+		return result, ErrInvalidRequest
 	}
 	now, err := s.nowUnix()
 	if err != nil {
-		return resources.MutationResult[AdminBindings]{}, err
+		return result, err
 	}
 	tx, scope, err := s.beginManagementTx(ctx, role, actorUserID, modelID, false, false)
 	if err != nil {
-		return resources.MutationResult[AdminBindings]{}, err
+		return result, err
 	}
 	committed := false
 	defer finishTx(tx, &committed)
@@ -178,30 +201,35 @@ func (s *Service) addBindings(ctx context.Context, role roleKind, actorUserID, m
 		var donationID int64
 		if err := tx.QueryRowContext(ctx, `SELECT donation_id FROM donation_keys WHERE id=?`, selection.donationKeyID).Scan(&donationID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				return resources.MutationResult[AdminBindings]{}, ErrNotFound
+				return result, ErrNotFound
 			}
-			return resources.MutationResult[AdminBindings]{}, err
+			return result, err
 		}
 		if err := scope.RequireKey(ctx, tx, donationID, selection.donationKeyID, now, true); err != nil {
-			return resources.MutationResult[AdminBindings]{}, managementScopeError(err)
+			return result, managementScopeError(err)
 		}
 	}
 	decision, err := beginMutation(ctx, tx, roleKind(scope.AuditRole(role == roleAdmin)), scope.ActorID, mutation, now)
 	if err != nil {
-		return resources.MutationResult[AdminBindings]{}, err
+		return result, err
 	}
 	if decision.Kind == idempotency.Replay {
-		return replayScopedBindings(ctx, tx, decision, scope, now)
+		if compact {
+			result.receipt, err = replay[BindingBatchReceipt](decision)
+		} else {
+			result.full, err = replayScopedBindings(ctx, tx, decision, scope, now)
+		}
+		return result, err
 	}
 	current, count, err := readBindingHeadTx(ctx, tx, modelID)
 	if err != nil {
-		return resources.MutationResult[AdminBindings]{}, err
+		return result, err
 	}
 	if current != expected {
-		return resources.MutationResult[AdminBindings]{}, ErrConflict
+		return result, ErrConflict
 	}
 	if count+len(selections) > maxBindingBatch {
-		return resources.MutationResult[AdminBindings]{}, ErrResourceLimit
+		return result, ErrResourceLimit
 	}
 	for index, selection := range selections {
 		var endpointKeyID int64
@@ -213,33 +241,38 @@ WHERE `+charityscope.SupportSQL("dk.id", "m.endpoint_key_id", "?")+` AND dk.id=?
 AND dk.ended_at IS NULL`,
 			selection.upstreamModelID, selection.upstreamModelID, selection.donationKeyID, now).Scan(&endpointKeyID)
 		if errors.Is(err, sql.ErrNoRows) {
-			return resources.MutationResult[AdminBindings]{}, ErrNotFound
+			return result, ErrNotFound
 		}
 		if err != nil {
-			return resources.MutationResult[AdminBindings]{}, fmt.Errorf("charity routing: validate binding candidate: %w", err)
+			return result, fmt.Errorf("charity routing: validate binding candidate: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO charity_model_bindings(
 charity_model_id,donation_key_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at)
 VALUES(?,?,?,?,?,?,?)`, modelID, selection.donationKeyID, endpointKeyID, selection.upstreamModelID,
 			count+index, now, now); err != nil {
-			return resources.MutationResult[AdminBindings]{}, classifyWrite("add charity binding", err)
+			return result, classifyWrite("add charity binding", err)
 		}
 	}
 	if err := advanceBindingRevisionTx(ctx, tx, modelID, expected, now); err != nil {
-		return resources.MutationResult[AdminBindings]{}, err
+		return result, err
 	}
-	value, err := readAdminBindingsTx(ctx, tx, modelID)
-	if err != nil {
-		return resources.MutationResult[AdminBindings]{}, err
+	if compact {
+		value := BindingBatchReceipt{ModelID: strconv.FormatInt(modelID, 10), BindingRevision: strconv.FormatInt(expected+1, 10), AddedCount: strconv.Itoa(len(selections)), BindingCount: strconv.Itoa(count + len(selections))}
+		result.receipt, err = finishJSON(ctx, tx, decision, http.StatusCreated, value)
+	} else {
+		var value AdminBindings
+		value, err = readAdminBindingsTx(ctx, tx, modelID)
+		if err == nil {
+			result.full, err = finishJSON(ctx, tx, decision, http.StatusCreated, value)
+		}
 	}
-	out, err := finishJSON(ctx, tx, decision, http.StatusCreated, value)
 	if err != nil {
-		return resources.MutationResult[AdminBindings]{}, err
+		return result, err
 	}
 	if err := commitTx(tx, &committed); err != nil {
-		return resources.MutationResult[AdminBindings]{}, err
+		return bindingBatchMutation{}, err
 	}
-	return out, nil
+	return result, nil
 }
 
 func (s *Service) OrderBindingsAdmin(ctx context.Context, modelID int64, mutation resources.ControlMutation, input BindingOrder) (resources.MutationResult[AdminBindings], error) {

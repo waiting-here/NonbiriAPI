@@ -7,7 +7,13 @@ import (
 
 // DonationSummary contains no key records or management-only fields. Source
 // previews are bounded to three distinct sources; source_count is authoritative.
+type OwnerDonationSummary struct {
+	DonationSummary
+	OwnerHiddenAt *int64 `json:"owner_hidden_at"`
+}
+
 type DonationSummary struct {
+	OwnerHiddenAt       *int64            `json:"-"`
 	DiscordPublicThanks *bool             `json:"discord_public_thanks"`
 	ID                  string            `json:"id"`
 	Status              string            `json:"status"`
@@ -57,6 +63,7 @@ type ManagedKeySummary struct {
 	SafeNote               string                      `json:"safe_note"`
 	MaxConcurrency         *int64                      `json:"max_concurrency"`
 	MaxRPM                 *int64                      `json:"max_rpm"`
+	KeyLimitsRevision      *string                     `json:"key_limits_revision"`
 	BindingCount           string                      `json:"binding_count"`
 	Idle                   bool                        `json:"idle"`
 	Handling               DonationHandling            `json:"handling"`
@@ -77,5 +84,6 @@ type DonationSource struct {
 
 type SourceFilter struct {
 	Query, Scope, Handling, Idle string
+	KeyState                     string `json:",omitempty"`
 	traineeModelID               int64
 }

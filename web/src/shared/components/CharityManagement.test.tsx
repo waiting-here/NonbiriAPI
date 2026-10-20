@@ -1,3 +1,4 @@
+vi.mock('@shared/components/AsyncLeaveDialog', () => ({ AsyncLeaveDialog: () => null }));
 import type { AdminDonation, CharityModel, ManagedDonationKey } from '@shared/operations/charity';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
@@ -39,6 +40,8 @@ function expectNumberedPageQuery(url: URL, filters: Record<string, string> = {})
   expect(page).toMatch(/^[1-9]\d*$/);
   expect(pageSize).toMatch(/^(10|20|50|100)$/);
   const expected = new URLSearchParams(filters);
+  if (url.pathname.includes('/donation-sources') || url.pathname.endsWith('/binding-candidates'))
+    expected.set('key_state', 'available');
   expected.set('page', page!);
   expected.set('page_size', pageSize!);
   expect(url.search).toBe(`?${expected.toString()}`);
@@ -119,6 +122,10 @@ const managedKey = (overrides: Partial<ManagedDonationKey> = {}): ManagedDonatio
   },
   physical_enabled: true,
   charity_state: 'available',
+  rate_limited_until: null,
+  key_limits_revision: '1',
+  max_concurrency: 2,
+  max_rpm: 30,
   limits: { price: null, calls: null, tokens: null },
   usage: {
     price_used: '0',
@@ -164,6 +171,7 @@ function approvedDonation(key = managedKey()): AdminDonation {
 function donationSummary(donation: AdminDonation) {
   const stateCounts = {
     available: '0',
+    rate_limited: '0',
     pending: '0',
     disabled: '0',
     suspended: '0',
@@ -348,10 +356,179 @@ const charityModel = (start: number, end: number): CharityModel => ({
 const siteDateTime = (epoch: number) => `${new Date(epoch * 1_000).toISOString().slice(0, 19)}.000`;
 
 describe('CharityManagement corrective controls', () => {
+  it('fills and undoes complete prices inside the fixed editor and saves explicit request reserve clearing', async () => {
+    const token = {
+      pricing: {
+        mode: 'per_token' as const,
+        user_prices: {
+          uncached_input: '20',
+          cache_write_input: '24',
+          cache_read_input: '2',
+          output: '60',
+        },
+        donor_rewards: {
+          uncached_input: '10',
+          cache_write_input: '12',
+          cache_read_input: '1',
+          output: '30',
+        },
+        long_context: {
+          input_threshold: '100000',
+          user_prices: {
+            uncached_input: '40',
+            cache_write_input: '48',
+            cache_read_input: '4',
+            output: '120',
+          },
+        },
+        context_penalty: { input_threshold: '200000', fine: '500' },
+      },
+      token_reserve_credits: '25.125',
+      discount: { enabled: true, percent: 80, start_at: null, end_at: null },
+    };
+    const request = {
+      pricing: { mode: 'per_request' as const, user_price: '3.5', donor_reward: '1.75' },
+      token_reserve_credits: null,
+      discount: { enabled: false, percent: 0, start_at: null, end_at: null },
+    };
+    const templates = [
+      {
+        ...token,
+        id: '1',
+        name: 'Token template',
+        description: '',
+        enabled: true,
+        revision: '1',
+        created_at: 1,
+        updated_at: 1,
+      },
+      {
+        ...request,
+        id: '2',
+        name: 'Request template',
+        description: '',
+        enabled: true,
+        revision: '1',
+        created_at: 1,
+        updated_at: 1,
+      },
+    ];
+    let current = {
+      ...charityModel(10, 20),
+      enabled: false,
+      route_strategy: 'ordered' as const,
+      token_reserve_credits: '7' as string | null,
+    };
+    const reference = {
+      ...charityModel(10, 20),
+      ...token,
+      id: '2',
+      provider: 'Other',
+      model: 'reference',
+      full_name: '[公益]Other/reference',
+      enabled: true,
+    };
+    const writes: { path: string; body: Record<string, unknown> }[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async (input, init) => {
+        const url = new URL(String(input), 'https://example.test');
+        const method = init?.method ?? 'GET';
+        if (url.pathname === '/admin/api/session') return jsonResponse(adminSession);
+        if (url.pathname.endsWith('/time-context')) return jsonResponse(siteTimeContext);
+        if (url.pathname.endsWith('/time-zones'))
+          return jsonResponse({ version: 'go1.26.6-zoneinfo', zones: ['UTC'] });
+        if (url.pathname === '/admin/api/charity-price-templates')
+          return jsonResponse(numberedPage(templates, url));
+        if (url.pathname === '/admin/api/charity-models')
+          return jsonResponse(numberedPage([current, reference], url));
+        if (url.pathname === '/admin/api/charity-models/1') {
+          if (method === 'PATCH') {
+            const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+            writes.push({ path: url.pathname, body });
+            current = { ...current, ...body, revision: String(Number(current.revision) + 1) };
+          }
+          return jsonResponse(current);
+        }
+        if (url.pathname.endsWith('/bindings'))
+          return jsonResponse({ bindings: [], binding_revision: '0' });
+        if (url.pathname.endsWith('/donation-sources')) return jsonResponse(numberedPage([], url));
+        throw new Error(`Unexpected price workspace request: ${method} ${url.pathname}`);
+      }),
+    );
+    const view = await renderWithProviders(<SessionBackedManagement frame="admin" />, {
+      station: 'admin',
+      route: '/charity?charity_section=models&charity_model=1',
+    });
+    const heading = await screen.findByRole('heading', { name: '[公益]provider/model' });
+    const editor = within(heading.closest('.card') as HTMLElement);
+    await view.user.click(editor.getByRole('button', { name: 'Choose a template or reference' }));
+    await view.user.click(editor.getByText('Price templates', { selector: 'strong' }));
+    const tokenRow = await editor.findByRole('row', { name: /Token template/ });
+    await view.user.click(within(tokenRow).getByRole('button', { name: 'View full prices' }));
+    await view.user.click(editor.getByRole('button', { name: 'Fill all prices' }));
+    expect(editor.getByRole('combobox', { name: 'Pricing mode' })).toHaveValue('per_token');
+    expect(editor.getByLabelText('Output user price')).toHaveValue('60');
+    expect(editor.getByLabelText('Output donor reward')).toHaveValue('30');
+    expect(editor.getByLabelText('Call reservation (credits)')).toHaveValue('25.125');
+    expect(editor.getByLabelText('Provider')).toHaveValue('provider');
+    expect(editor.getByRole('checkbox', { name: 'Enable charity model' })).not.toBeChecked();
+    expect(writes).toHaveLength(0);
+    await view.user.click(editor.getByRole('button', { name: 'Return to current price draft' }));
+    expect(editor.getByRole('button', { name: 'Choose a template or reference' })).toHaveFocus();
+    expect(editor.getByLabelText('Output user price')).toHaveValue('60');
+    await view.user.click(editor.getByRole('button', { name: 'Choose a template or reference' }));
+    expect(editor.getByRole('heading', { name: /Token template · Revision 1/ })).toBeVisible();
+    await view.user.click(editor.getByRole('button', { name: 'Undo the last price fill' }));
+    expect(editor.getByRole('combobox', { name: 'Pricing mode' })).toHaveFocus();
+    expect(editor.getByLabelText('Request user price')).toHaveValue('1');
+    expect(editor.getByLabelText('Call reservation (credits)')).toHaveValue('7');
+    await view.user.click(editor.getByRole('button', { name: 'Fill all prices' }));
+    await view.user.click(
+      within(editor.getByRole('row', { name: /Request template/ })).getByRole('button', {
+        name: 'View full prices',
+      }),
+    );
+    await view.user.click(editor.getByRole('button', { name: 'Fill all prices' }));
+    await view.user.click(editor.getByRole('button', { name: /^Save model / }));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0]).toMatchObject({
+      path: '/admin/api/charity-models/1',
+      body: {
+        ...request,
+        provider: 'provider',
+        model: 'model',
+        enabled: false,
+        route_strategy: 'ordered',
+        expected_revision: '1',
+      },
+    });
+    await view.user.click(
+      editor.getByText("Reference an existing model's prices", { selector: 'strong' }),
+    );
+    const referenceRow = await editor.findByRole('row', { name: /\[公益\]Other\/reference/ });
+    await view.user.click(within(referenceRow).getByRole('button', { name: 'View full prices' }));
+    await view.user.click(editor.getByRole('button', { name: 'Fill these prices' }));
+    await view.user.click(editor.getByRole('button', { name: /^Save model / }));
+    await waitFor(() => expect(writes).toHaveLength(2));
+    expect(writes[1]).toMatchObject({
+      path: '/admin/api/charity-models/1',
+      body: {
+        ...token,
+        provider: 'provider',
+        model: 'model',
+        enabled: false,
+        route_strategy: 'ordered',
+        expected_revision: '2',
+      },
+    });
+  });
+
   it.each(['admin', 'steward'] as const)(
-    'keeps the new model draft while folded and defaults balanced routing for %s',
+    'keeps a separate new model draft and defaults balanced routing for %s',
     async (frame) => {
       const writes: Record<string, unknown>[] = [];
+      let created: CharityModel | null = null;
       vi.stubGlobal(
         'fetch',
         vi.fn<typeof fetch>(async (input, init) => {
@@ -365,11 +542,22 @@ describe('CharityManagement corrective controls', () => {
           if (method === 'GET' && path.endsWith('/time-zones'))
             return jsonResponse({ version: 'go1.26.6-zoneinfo', zones: ['UTC'] });
           if (method === 'GET' && /\/(donations|charity-models|donation-sources)$/.test(path))
-            return jsonResponse(numberedPage([], url));
+            return jsonResponse(
+              numberedPage(path.endsWith('/charity-models') && created ? [created] : [], url),
+            );
+          if (method === 'GET' && path === '/admin/api/charity-models/1')
+            return jsonResponse(created);
+          if (method === 'GET' && path.endsWith('/bindings'))
+            return jsonResponse({ bindings: [], binding_revision: '0' });
           if (method === 'POST' && path === '/admin/api/charity-models') {
             const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
             writes.push(body);
-            return jsonResponse({ ...charityModel(10, 20), ...body });
+            created = {
+              ...charityModel(10, 20),
+              ...body,
+              full_name: '[公益]saved-prefix/saved-model',
+            };
+            return jsonResponse(created);
           }
           throw new Error(`Unexpected request: ${method} ${path}`);
         }),
@@ -379,19 +567,14 @@ describe('CharityManagement corrective controls', () => {
         role: frame === 'admin' ? 'admin' : 'user',
       });
       await view.user.click(await screen.findByRole('tab', { name: /Charity models and/ }));
-      const title = screen.getByText('Add charity model', { selector: 'strong' });
-      const disclosure = title.closest('details')!;
-      expect(disclosure).toHaveAttribute('open');
+      expect(screen.queryByLabelText('Provider')).not.toBeInTheDocument();
+      await view.user.click(screen.getByRole('button', { name: 'Create charity model' }));
       const strategy = screen.getByRole('combobox', { name: /Routing strategy/ });
       expect(strategy).toHaveValue('cache_balanced');
       await view.user.type(screen.getByLabelText('Provider'), 'saved-prefix');
       await view.user.type(screen.getByLabelText('Model'), 'saved-model');
       await view.user.selectOptions(strategy, 'ordered');
-      await view.user.click(title);
-      await waitFor(() => expect(disclosure).not.toHaveAttribute('open'));
       expect(writes).toHaveLength(0);
-      await view.user.click(title);
-      await waitFor(() => expect(disclosure).toHaveAttribute('open'));
       expect(screen.getByLabelText('Provider')).toHaveValue('saved-prefix');
       expect(screen.getByLabelText('Model')).toHaveValue('saved-model');
       expect(strategy).toHaveValue('ordered');
@@ -403,6 +586,9 @@ describe('CharityManagement corrective controls', () => {
         model: 'saved-model',
         route_strategy: 'cache_balanced',
       });
+      await screen.findByRole('heading', { name: '[公益]saved-prefix/saved-model' });
+      expect(screen.queryByRole('button', { name: 'Add charity model' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Save model #1' })).toBeVisible();
     },
   );
 
@@ -531,7 +717,8 @@ describe('CharityManagement corrective controls', () => {
     });
     expect(await screen.findByText('[公益]provider/model')).toBeVisible();
     expect(screen.queryByRole('heading', { name: 'Add charity model' })).not.toBeInTheDocument();
-    expect(screen.getAllByRole('tab')).toHaveLength(1);
+    expect(screen.getAllByRole('tab')).toHaveLength(2);
+    expect(screen.getByRole('tab', { name: 'Approved donation handling' })).toBeVisible();
     expect(
       fetchMock.mock.calls.every(
         ([input]) =>
@@ -631,10 +818,15 @@ describe('CharityManagement corrective controls', () => {
               : [bindingCandidate(donation, key!, 'model-one')];
           return jsonResponse(numberedPage(models, url));
         }
-        if (method === 'POST' && url.pathname.endsWith('/bindings/batch')) {
+        if (method === 'POST' && url.pathname.endsWith('/bindings/batch-receipt')) {
           bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
           bindingRevision = '1';
-          return jsonResponse({ bindings: [], binding_revision: bindingRevision });
+          return jsonResponse({
+            model_id: '1',
+            binding_revision: bindingRevision,
+            added_count: String((bodies.at(-1)!.selections as unknown[]).length),
+            binding_count: String((bodies.at(-1)!.selections as unknown[]).length),
+          });
         }
         throw new Error(`Unexpected request: ${method} ${url.pathname}`);
       }),
@@ -645,7 +837,11 @@ describe('CharityManagement corrective controls', () => {
     });
     await view.user.click(await screen.findByRole('tab', { name: 'Charity models and bindings' }));
     await view.user.click(await screen.findByRole('button', { name: 'Manage' }));
-    const pickerNode = view.container.querySelector('.ops-binding-picker')! as HTMLElement;
+    const pickerNode = await waitFor(() => {
+      const node = view.container.querySelector('.ops-binding-picker');
+      expect(node).not.toBeNull();
+      return node as HTMLElement;
+    });
     const picker = within(pickerNode);
     await view.user.click(
       await picker.findByRole('button', { name: /https:\/\/example\.test\/v1/ }),
@@ -659,7 +855,7 @@ describe('CharityManagement corrective controls', () => {
     await view.user.click(await picker.findByRole('button', { name: /Second shared key/ }));
     await view.user.click(await picker.findByRole('checkbox', { name: /model-one/ }));
     expect(picker.getByRole('heading', { name: '3 service connection(s) selected' })).toBeVisible();
-    await view.user.click(screen.getByRole('button', { name: 'Add selected connections' }));
+    await view.user.click(screen.getByRole('button', { name: 'Add 3 connections' }));
     await waitFor(() => expect(bodies).toHaveLength(1));
     expect(bodies[0]).toEqual({
       expected_binding_revision: '0',
@@ -980,7 +1176,7 @@ describe('CharityManagement corrective controls', () => {
     expect(editor.getByLabelText('Idle expiry (seconds)')).toHaveValue(300);
     await view.user.selectOptions(editor.getByLabelText('Random value format'), 'hex_32');
 
-    await view.user.click(editor.getByRole('button', { name: 'Save model' }));
+    await view.user.click(editor.getByRole('button', { name: /^Save model / }));
 
     await waitFor(() => expect(patchBodies).toHaveLength(1));
     expect(patchBodies[0]).toEqual({
@@ -1150,11 +1346,13 @@ describe('CharityManagement corrective controls', () => {
         editor.getByRole('combobox', { name: fixture.pricingLabel }),
         'per_request',
       );
-      expect(editor.queryByLabelText(fixture.reserveLabel)).not.toBeInTheDocument();
+      expect(editor.getByLabelText(fixture.reserveLabel)).toHaveValue('0');
+      expect(editor.getByRole('button', { name: /Save model|保存模型/ })).toBeDisabled();
+      fireEvent.change(reserve, { target: { value: '2.345' } });
       expect(editor.getByRole('button', { name: /Save model|保存模型/ })).toBeEnabled();
       await view.user.click(editor.getByRole('button', { name: /Save model|保存模型/ }));
       await waitFor(() => expect(patchBodies).toHaveLength(1));
-      expect(patchBodies[0]).not.toHaveProperty('token_reserve_credits');
+      expect(patchBodies[0]).toHaveProperty('token_reserve_credits', '2.345');
       if (fixture.frame === 'steward') {
         expect(patchBodies[0]).not.toHaveProperty('affinity_ttl_seconds');
       }
@@ -1165,7 +1363,8 @@ describe('CharityManagement corrective controls', () => {
         'per_token',
       );
       const reserveAgain = editor.getByLabelText(fixture.reserveLabel);
-      expect(reserveAgain).toHaveValue('0');
+      expect(reserveAgain).toHaveValue('2.345');
+      fireEvent.change(reserveAgain, { target: { value: '0' } });
       expect(editor.getByRole('button', { name: /Save model|保存模型/ })).toBeDisabled();
       expect(editor.getByText(fixture.validation)).toBeVisible();
       fireEvent.change(reserveAgain, { target: { value: '9000000000000.001' } });
@@ -1222,6 +1421,7 @@ describe('CharityManagement corrective controls', () => {
     });
 
     await view.user.click(await screen.findByRole('tab', { name: 'Charity models and bindings' }));
+    await view.user.click(screen.getByRole('button', { name: 'Create charity model' }));
     expect(screen.getByRole('checkbox', { name: 'Chat completions' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Embeddings' })).not.toBeChecked();
     await view.user.click(screen.getByRole('checkbox', { name: 'Image generation' }));
@@ -1259,7 +1459,9 @@ describe('CharityManagement corrective controls', () => {
     fireEvent.change(hiddenReserve, { target: { value: '0' } });
     expect(screen.getByRole('button', { name: 'Add charity model' })).toBeDisabled();
     await view.user.selectOptions(pricing, 'per_request');
-    expect(screen.queryByLabelText('Call reservation (credits)')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Call reservation (credits)')).toHaveValue('0');
+    expect(screen.getByRole('button', { name: 'Add charity model' })).toBeDisabled();
+    fireEvent.change(hiddenReserve, { target: { value: '' } });
     expect(screen.getByRole('button', { name: 'Add charity model' })).toBeEnabled();
     await view.user.click(screen.getByRole('button', { name: 'Add charity model' }));
     await waitFor(() => expect(createBodies).toHaveLength(1));
@@ -1268,7 +1470,7 @@ describe('CharityManagement corrective controls', () => {
       allowed_levels: [2, 5],
       public_description: 'First line\n<b>literal</b>\t😀',
     });
-    expect(createBodies[0]).not.toHaveProperty('token_reserve_credits');
+    expect(createBodies[0]).toHaveProperty('token_reserve_credits', null);
   });
 
   it('retains a newer draft when a saved model response is slow', async () => {
@@ -1338,20 +1540,20 @@ describe('CharityManagement corrective controls', () => {
     const textarea = editor.getByLabelText('Public description (plain text, optional)');
     await view.user.click(editor.getByRole('radio', { name: 'Always wait for the full reply' }));
     fireEvent.change(textarea, { target: { value: 'submitted' } });
-    await view.user.click(editor.getByRole('button', { name: 'Save model' }));
+    await view.user.click(editor.getByRole('button', { name: /^Save model / }));
     await waitFor(() => expect(patchBodies).toHaveLength(1));
     expect(patchBodies[0]).toHaveProperty('transport_rule', 'force_non_stream');
     fireEvent.change(textarea, { target: { value: 'new draft' } });
 
     current = { ...current, revision: '2', public_description: 'submitted', updated_at: 2 };
     patchResponse.resolve(jsonResponse(current));
-    await waitFor(() => expect(editor.getByRole('button', { name: 'Save model' })).toBeEnabled());
+    await waitFor(() => expect(editor.getByRole('button', { name: /^Save model / })).toBeEnabled());
     expect(textarea).toHaveValue('new draft');
     expect(patchBodies[0]).toMatchObject({
       public_description: 'submitted',
       expected_revision: '1',
     });
-    await view.user.click(editor.getByRole('button', { name: 'Save model' }));
+    await view.user.click(editor.getByRole('button', { name: /^Save model / }));
     await waitFor(() => expect(patchBodies).toHaveLength(2));
     expect(patchBodies[1]).toMatchObject({
       public_description: 'new draft',
@@ -1432,12 +1634,12 @@ describe('CharityManagement corrective controls', () => {
     const editor = within(card);
     const text = editor.getByLabelText('Public description (plain text, optional)');
     fireEvent.change(text, { target: { value: 'first save' } });
-    await view.user.click(editor.getByRole('button', { name: 'Save model' }));
+    await view.user.click(editor.getByRole('button', { name: /^Save model / }));
     const retry = await editor.findByRole('button', { name: 'Retry the last save' });
     expect(editor.getByText(/This model has changed/)).toBeVisible();
     fireEvent.change(text, { target: { value: 'new draft' } });
     await view.user.click(retry);
-    await waitFor(() => expect(editor.getByRole('button', { name: 'Save model' })).toBeEnabled());
+    await waitFor(() => expect(editor.getByRole('button', { name: /^Save model / })).toBeEnabled());
     expect(sent).toHaveLength(2);
     expect(sent[1]).toEqual(sent[0]);
     expect(sent[1].body).toMatchObject({
@@ -1445,7 +1647,7 @@ describe('CharityManagement corrective controls', () => {
       public_description: 'first save',
     });
     expect(text).toHaveValue('new draft');
-    await view.user.click(editor.getByRole('button', { name: 'Save model' }));
+    await view.user.click(editor.getByRole('button', { name: /^Save model / }));
     await waitFor(() => expect(sent).toHaveLength(3));
     expect(sent[2].body).toMatchObject({ expected_revision: '2', public_description: 'new draft' });
     expect(sent[2].key).not.toBe(sent[0].key);
@@ -1539,7 +1741,7 @@ describe('trainee model capabilities', () => {
       });
       expect(screen.getByRole('heading', { name: model.full_name })).toBeVisible();
       expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Save model' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Save model / })).not.toBeInTheDocument();
     },
   );
 });
@@ -1634,13 +1836,13 @@ describe('CharityManagement candidate key shortcuts', () => {
       await screen.findByRole('heading', { name: 'Manage key #11' });
       const save = await screen.findByRole('button', { name: 'Save key limits' });
       expect(save).toBeEnabled();
-      expect(screen.getByRole('button', { name: 'Add selected connections' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Add 1 connections' })).toBeDisabled();
       await view.user.click(screen.getByRole('button', { name: 'Return to model list' }));
       await waitFor(() =>
         expect(picker.getByRole('checkbox', { name: /shortcut-model/ })).toBeEnabled(),
       );
       expect(picker.getByRole('checkbox', { name: /shortcut-model/ })).toBeChecked();
-      expect(screen.getByRole('button', { name: 'Add selected connections' })).toBeEnabled();
+      expect(screen.getByRole('button', { name: 'Add 1 connections' })).toBeEnabled();
       if (frame === 'steward') {
         expect(requests).toContain(prefix + '/donations/1/keys/11?charity_model_id=1');
         expect(requests).not.toContain(prefix + '/donations/1');

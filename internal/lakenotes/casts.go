@@ -26,6 +26,10 @@ type castRow struct {
 const castColumns = "id,user_id,coalesce(source_period_id,''),rules_id,storage_version,generation,revision,snapshot,reward_plan,phase,paused,last_tick,held,active_elapsed_ns,active_started_at_ns,lease_until_ns"
 
 func scanCast(scan func(...any) error) (castRow, error) {
+	return scanCastContext(context.Background(), scan)
+}
+
+func scanCastContext(ctx context.Context, scan func(...any) error) (_ castRow, resultErr error) {
 	var row castRow
 	var snapshot, reward []byte
 	var rulesID string
@@ -40,6 +44,8 @@ func scanCast(scan func(...any) error) (castRow, error) {
 	if e != nil {
 		return row, e
 	}
+	decode := lakePhase(ctx, "decode")
+	defer func() { decode(resultErr) }()
 	row.state, e = decodeStoredCast(version, rulesID, snapshot)
 	if e != nil {
 		return row, ErrInvariant
@@ -59,10 +65,18 @@ func scanCast(scan func(...any) error) (castRow, error) {
 	return row, nil
 }
 func castTx(ctx context.Context, tx *sql.Tx, user int64, id string) (castRow, error) {
-	return scanCast(tx.QueryRowContext(ctx, "SELECT "+castColumns+" FROM lake_notes_casts WHERE id=? AND user_id=?", id, user).Scan)
+	return scanCastContext(ctx, tx.QueryRowContext(ctx, "SELECT "+castColumns+" FROM lake_notes_casts WHERE id=? AND user_id=?", id, user).Scan)
 }
-func currentCastTx(ctx context.Context, tx *sql.Tx, user int64) (castRow, error) {
-	return scanCast(tx.QueryRowContext(ctx, "SELECT "+castColumns+" FROM lake_notes_casts WHERE user_id=? AND phase IN ('waiting','playing')", user).Scan)
+func currentCastTx(ctx context.Context, tx *sql.Tx, user int64) (_ castRow, resultErr error) {
+	finish := lakePhase(ctx, "current_cast")
+	defer func() {
+		if errors.Is(resultErr, ErrNotFound) {
+			finish(nil)
+		} else {
+			finish(resultErr)
+		}
+	}()
+	return scanCastContext(ctx, tx.QueryRowContext(ctx, "SELECT "+castColumns+" FROM lake_notes_casts WHERE user_id=? AND phase IN ('waiting','playing')", user).Scan)
 }
 func (c castRow) view(profileRevision int64) CastView {
 	action := ""
@@ -138,8 +152,13 @@ func saveCastTx(ctx context.Context, tx *sql.Tx, c *castRow, now time.Time, ack 
 	c.revision++
 	return nil
 }
-func (s *Service) castResultTx(ctx context.Context, tx *sql.Tx, c castRow, now time.Time) (CastResult, error) {
-	p, e := s.profileViewTx(ctx, tx, c.user, now)
+func (s *Service) castResultTx(ctx context.Context, tx *sql.Tx, c castRow, now time.Time, known profileProjection) (CastResult, error) {
+	// A live cast is the unique current cast for this user. A historical
+	// terminal target is not: its profile must still read the current cast.
+	if !c.state.Terminal() {
+		known.current, known.currentKnown = &c, true
+	}
+	p, e := s.profileViewFromTx(ctx, tx, c.user, now, known)
 	if e != nil {
 		return CastResult{}, e
 	}
@@ -168,9 +187,16 @@ func checkpointResultTx(ctx context.Context, tx *sql.Tx, c castRow, row profileR
 	}
 	return CastResult{Cast: v, Profile: p}, nil
 }
-func (s *Service) capacityTx(ctx context.Context, tx *sql.Tx, now int64, except string) error {
+
+// Terminal casts are paused by the schema constraint. Naming the active phases
+// lets SQLite use the partial index instead of scanning retained history.
+const liveLeaseCountSQL = "SELECT count(*) FROM lake_notes_casts WHERE phase IN ('waiting','playing') AND paused=0 AND lease_until_ns>? AND id<>?"
+
+func (s *Service) capacityTx(ctx context.Context, tx *sql.Tx, now int64, except string) (resultErr error) {
+	finish := lakePhase(ctx, "capacity")
+	defer func() { finish(resultErr) }()
 	var count int
-	e := tx.QueryRowContext(ctx, "SELECT count(*) FROM lake_notes_casts WHERE paused=0 AND lease_until_ns>? AND id<>?", now, except).Scan(&count)
+	e := tx.QueryRowContext(ctx, liveLeaseCountSQL, now, except).Scan(&count)
 	if e != nil {
 		return e
 	}
@@ -184,17 +210,17 @@ func (s *Service) Start(ctx context.Context, user int64, key string, in StartInp
 	if e != nil {
 		return MutationResult[CastResult]{}, e
 	}
-	result, e := mutate(ctx, s, user, false, key, "POST", baseRoute+"/casts", in, func(tx *sql.Tx, now time.Time) (CastResult, error) {
-		_, e := s.qualifiedTx(ctx, tx, user, now.Unix())
+	result, e := mutate(ctx, s, user, false, key, "POST", baseRoute+"/casts", in, func(tx *sql.Tx, now time.Time, _ []byte) (CastResult, error) {
+		settings, e := s.qualifiedTx(ctx, tx, user, now.Unix())
 		if e != nil {
 			return CastResult{}, e
 		}
-		if e = s.expireUserTx(ctx, tx, user, now); e != nil {
+		if e = s.expireUserTx(ctx, tx, user, now, false); e != nil {
 			return CastResult{}, e
 		}
 		c, e := currentCastTx(ctx, tx, user)
 		if e == nil {
-			return s.castResultTx(ctx, tx, c, now)
+			return s.castResultTx(ctx, tx, c, now, profileProjection{settings: &settings})
 		}
 		if !errors.Is(e, ErrNotFound) {
 			return CastResult{}, e
@@ -213,7 +239,9 @@ func (s *Service) Start(ctx context.Context, user int64, key string, in StartInp
 		if e != nil {
 			return CastResult{}, e
 		}
+		advance := lakePhase(ctx, "rules")
 		next, state, e := rules.Start(row.profile, s.random, seed)
+		advance(e)
 		if e != nil {
 			return CastResult{}, e
 		}
@@ -226,19 +254,23 @@ func (s *Service) Start(ctx context.Context, user int64, key string, in StartInp
 			return CastResult{}, e
 		}
 		deadline := now.Add(LeaseDuration).UnixNano()
+		encode := lakePhase(ctx, "encode")
 		raw, e := rules.EncodeCast(state)
+		encode(e)
 		if e != nil {
 			return CastResult{}, e
 		}
+		insert := lakePhase(ctx, "insert")
 		_, e = tx.ExecContext(ctx, "INSERT INTO lake_notes_casts(id,user_id,source_period_id,rules_id,storage_version,phase,paused,generation,revision,last_tick,snapshot,reward_plan,held,active_elapsed_ns,active_started_at_ns,lease_until_ns,created_at,updated_at) VALUES(?,?,?,?,?,?,0,1,1,0,?,X'7b7d',0,0,?,?,?,?)", id, user, nil, rules.RulesID, castStorageVersion, state.Phase, raw, now.UnixNano(), deadline, now.Unix(), now.Unix())
+		insert(e)
 		if e != nil {
 			return CastResult{}, e
 		}
-		c, e = castTx(ctx, tx, user, id)
-		if e != nil {
-			return CastResult{}, e
-		}
-		return s.castResultTx(ctx, tx, c, now)
+		// EncodeCast validated the new state. The insert stored these exact
+		// controller values; no hook or further mutation invalidates them.
+		c = castRow{id: id, user: user, generation: 1, revision: 1, state: state,
+			started: sql.NullInt64{Int64: now.UnixNano(), Valid: true}, lease: sql.NullInt64{Int64: deadline, Valid: true}}
+		return s.castResultTx(ctx, tx, c, now, profileProjection{row: &row, settings: &settings})
 	})
 	if e == nil && result.Replayed {
 		result.Value, e = s.Cast(ctx, user, result.Value.Cast.ID)
@@ -263,14 +295,18 @@ func (s *Service) Cast(ctx context.Context, user int64, id string) (_ CastResult
 	if e = s.authorize(ctx, tx, user, false); e != nil {
 		return CastResult{}, e
 	}
-	if e = s.expireUserTx(ctx, tx, user, now); e != nil {
+	settings, gateErr := s.qualifiedTx(ctx, tx, user, now.Unix())
+	if gateErr != nil && !closedError(gateErr) {
+		return CastResult{}, gateErr
+	}
+	if e = s.expireUserTx(ctx, tx, user, now, gateErr != nil); e != nil {
 		return CastResult{}, e
 	}
 	c, e := castTx(ctx, tx, user, id)
 	if e != nil {
 		return CastResult{}, e
 	}
-	out, e := s.castResultTx(ctx, tx, c, now)
+	out, e := s.castResultTx(ctx, tx, c, now, profileProjection{settings: &settings, readonly: gateErr != nil})
 	if e != nil {
 		return out, e
 	}
@@ -333,7 +369,7 @@ func (s *Service) Checkpoint(ctx context.Context, user int64, id, key string, in
 	if e = s.budget(user, now); e != nil {
 		return MutationResult[CastResult]{}, e
 	}
-	result, e := mutate(ctx, s, user, false, key, "POST", baseRoute+"/casts/"+id+"/checkpoint", in, func(tx *sql.Tx, now time.Time) (CastResult, error) {
+	result, e := mutate(ctx, s, user, false, key, "POST", baseRoute+"/casts/"+id+"/checkpoint", in, func(tx *sql.Tx, now time.Time, inputJSON []byte) (CastResult, error) {
 		c, e := castTx(ctx, tx, user, id)
 		if e != nil {
 			return CastResult{}, e
@@ -358,7 +394,7 @@ func (s *Service) Checkpoint(ctx context.Context, user int64, id, key string, in
 					return CastResult{}, e
 				}
 			}
-			out, e := s.castResultTx(ctx, tx, c, now)
+			out, e := s.castResultTx(ctx, tx, c, now, profileProjection{settings: &settings, readonly: gateErr != nil})
 			if gateErr != nil {
 				out.Cast.RecoveryAction = "closed"
 			}
@@ -406,8 +442,9 @@ func (s *Service) Checkpoint(ctx context.Context, user int64, id, key string, in
 		if e = saveProfileTx(ctx, tx, user, &row, now.Unix()); e != nil {
 			return CastResult{}, e
 		}
-		raw, _ := json.Marshal(in)
-		digest := sha256.Sum256(raw)
+		// CanonicalJSON and the former Marshal(in) use the same typed JSON.
+		// Reuse its bytes, keeping this plain input hash separate from HMAC.
+		digest := sha256.Sum256(inputJSON)
 		ack := map[string]any{"from_tick": in.FromTick, "ack_tick": c.state.Tick, "input_digest": hex.EncodeToString(digest[:])}
 		if e = saveCastTx(ctx, tx, &c, now, ack); e != nil {
 			return CastResult{}, e
@@ -447,7 +484,7 @@ func (s *Service) control(ctx context.Context, user int64, id, key string, in Co
 	if resume {
 		suffix = "/resume"
 	}
-	result, e := mutate(ctx, s, user, false, key, "POST", baseRoute+"/casts/"+id+suffix, in, func(tx *sql.Tx, now time.Time) (CastResult, error) {
+	result, e := mutate(ctx, s, user, false, key, "POST", baseRoute+"/casts/"+id+suffix, in, func(tx *sql.Tx, now time.Time, _ []byte) (CastResult, error) {
 		c, e := castTx(ctx, tx, user, id)
 		if e != nil {
 			return CastResult{}, e
@@ -456,15 +493,18 @@ func (s *Service) control(ctx context.Context, user int64, id, key string, in Co
 			if _, e = tx.ExecContext(ctx, "UPDATE lake_notes_casts SET updated_at=? WHERE id=? AND user_id=?", now.Unix(), id, user); e != nil {
 				return CastResult{}, e
 			}
-			return s.castResultTx(ctx, tx, c, now)
+			return s.castResultTx(ctx, tx, c, now, profileProjection{})
 		}
 		if c.revision != expected || c.generation != gen {
 			return CastResult{}, ErrConflict
 		}
+		known := profileProjection{}
 		if resume {
-			if _, e = s.qualifiedTx(ctx, tx, user, now.Unix()); e != nil {
-				return CastResult{}, e
+			settings, gateErr := s.qualifiedTx(ctx, tx, user, now.Unix())
+			if gateErr != nil {
+				return CastResult{}, gateErr
 			}
+			known.settings = &settings
 			if c.generation == math.MaxInt64 {
 				return CastResult{}, ErrCapacity
 			}
@@ -485,7 +525,7 @@ func (s *Service) control(ctx context.Context, user int64, id, key string, in Co
 		if e = saveCastTx(ctx, tx, &c, now, map[string]any{}); e != nil {
 			return CastResult{}, e
 		}
-		return s.castResultTx(ctx, tx, c, now)
+		return s.castResultTx(ctx, tx, c, now, known)
 	})
 	if e == nil && result.Replayed {
 		result.Value, e = s.Cast(ctx, user, id)

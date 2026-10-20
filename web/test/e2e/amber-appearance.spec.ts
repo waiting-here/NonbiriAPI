@@ -74,14 +74,22 @@ for (const width of [1440, 390]) {
     const before = await still.boundingBox();
     await record('staticLight');
     const canvas = page.locator('.nb-appearance-backdrop');
+    const expectAdvancingFrames = async (from: number) => {
+      let previous = from;
+      // Require continued painting without imposing a minimum rendering speed.
+      for (let frame = 0; frame < 2; frame++) {
+        await expect
+          .poll(async () => Number(await canvas.getAttribute('data-time')))
+          .toBeGreaterThan(previous);
+        previous = Number(await canvas.getAttribute('data-time'));
+      }
+    };
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     await expect(canvas).toHaveAttribute('data-ready', 'true', { timeout: 15_000 });
     await record('animatedLight');
     // Lifecycle regression is independent of the test runner's rendering speed.
     const lightTime = Number(await canvas.getAttribute('data-time'));
-    await expect
-      .poll(async () => Number(await canvas.getAttribute('data-time')))
-      .toBeGreaterThan(lightTime + 0.2);
+    await expectAdvancingFrames(lightTime);
     // Exercise the visibility lifecycle without relying on headless tab activation.
     const hiddenTime = await page.evaluate(() => {
       Object.defineProperty(document, 'hidden', { configurable: true, value: true });
@@ -96,9 +104,7 @@ for (const width of [1440, 390]) {
       Reflect.deleteProperty(document, 'hidden');
       document.dispatchEvent(new Event('visibilitychange'));
     });
-    await expect
-      .poll(async () => Number(await canvas.getAttribute('data-time')))
-      .toBeGreaterThan(Number(hiddenTime) + 0.2);
+    await expectAdvancingFrames(Number(hiddenTime));
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await expect(canvas).toHaveAttribute('data-ready', 'false');
     expect(await still.boundingBox()).toEqual(before);
@@ -111,16 +117,16 @@ for (const width of [1440, 390]) {
     await expect(canvas).toHaveAttribute('data-ready', 'true', { timeout: 15_000 });
     await record('animatedDark');
     const darkTime = Number(await canvas.getAttribute('data-time'));
-    await expect
-      .poll(async () => Number(await canvas.getAttribute('data-time')))
-      .toBeGreaterThan(darkTime + 0.2);
+    await expectAdvancingFrames(darkTime);
     if (process.env.NONBIRI_VISUAL_DIR)
       await page.screenshot({
         path: resolve(process.env.NONBIRI_VISUAL_DIR, `amber-animated-dark-${width}.png`),
       });
     await page.setViewportSize({ width: 3840, height: 2160 });
     await expect
-      .poll(() => sizes.has('/assets/gacha/hires/motion/o-claude/background-dark.webp'))
+      .poll(() => sizes.has('/assets/gacha/hires/motion/o-claude/background-dark.webp'), {
+        timeout: 15_000,
+      })
       .toBe(true);
     await expect(canvas).toHaveAttribute('data-ready', 'true', { timeout: 15_000 });
     await record('highDark');

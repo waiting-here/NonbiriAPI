@@ -92,7 +92,7 @@ func TestManagementBindingPagesShareExpiryFiltersWithoutWrites(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			donations, _, err := env.service.bindingSourcesPage(context.Background(), role, testRoleActor(role, steward), modelID, 0, request)
+			donations, _, err := env.service.bindingSourcesPage(context.Background(), role, testRoleActor(role, steward), modelID, 0, "", request)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -115,7 +115,7 @@ func TestManagementBindingPagesShareExpiryFiltersWithoutWrites(t *testing.T) {
 	if err != nil || auto.Pagination.TotalItems != "0" {
 		t.Fatalf("bound/unsupported candidate included: %+v %v", auto, err)
 	}
-	_, keys, err := env.service.bindingSourcesPage(context.Background(), roleSteward, steward, modelID, firstDonation, pagination.Request{Page: 99, Size: 10})
+	_, keys, err := env.service.bindingSourcesPage(context.Background(), roleSteward, steward, modelID, firstDonation, "", pagination.Request{Page: 99, Size: 10})
 	if err != nil || len(keys.Data) != 1 || keys.Data[0].Note != "safe label" || keys.Pagination.Page != "1" {
 		t.Fatalf("keys=%+v %v", keys, err)
 	}
@@ -142,7 +142,7 @@ func TestManagementBindingPagesShareExpiryFiltersWithoutWrites(t *testing.T) {
 	if _, err := env.service.candidatesPage(context.Background(), roleSteward, steward, 99999, CandidateQuery{}, pagination.Default()); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("parent leaked before authority=%v", err)
 	}
-	if _, _, err := env.service.bindingSourcesPage(context.Background(), roleSteward, steward, modelID, firstDonation, pagination.Default()); !errors.Is(err, ErrForbidden) {
+	if _, _, err := env.service.bindingSourcesPage(context.Background(), roleSteward, steward, modelID, firstDonation, "", pagination.Default()); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("key count authorized stale role=%v", err)
 	}
 }
@@ -225,7 +225,7 @@ func TestCandidatePagesUseIndexedPairOrderAtScale(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, size := range []int{10, 20, 50, 100} {
-		out, err := env.service.candidatesPage(context.Background(), roleAdmin, 0, modelID, CandidateQuery{}, pagination.Request{Page: pagination.MaxPage, Size: size})
+		out, err := env.service.candidatesPage(context.Background(), roleAdmin, 0, modelID, CandidateQuery{KeyState: "available"}, pagination.Request{Page: pagination.MaxPage, Size: size})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -234,7 +234,7 @@ func TestCandidatePagesUseIndexedPairOrderAtScale(t *testing.T) {
 			t.Fatalf("scale window: %+v rows=%d", out.Pagination, len(out.Data))
 		}
 	}
-	selection, args := candidatePageSelection(modelID, routingTestNow, CandidateQuery{})
+	selection, args := candidatePageSelection(modelID, routingTestNow, CandidateQuery{KeyState: "available"})
 	rows, err := env.store.DB().Query(`EXPLAIN QUERY PLAN `+selection+` ORDER BY dk.id,pc.normalized_model_id LIMIT 100 OFFSET 9900`, args...)
 	if err != nil {
 		t.Fatal(err)
@@ -252,6 +252,22 @@ func TestCandidatePagesUseIndexedPairOrderAtScale(t *testing.T) {
 		t.Fatal(err)
 	}
 	rows.Close()
+	endpointReady, pairBranches := false, 0
+	for _, detail := range plans {
+		if strings.HasPrefix(detail, "SEARCH e ") {
+			endpointReady = true
+		}
+		if strings.HasPrefix(detail, "SEARCH pc ") {
+			if !endpointReady {
+				t.Fatalf("candidate key state is evaluated inside the model-pair loop: %s", strings.Join(plans, "\n"))
+			}
+			endpointReady = false
+			pairBranches++
+		}
+	}
+	if pairBranches != 2 {
+		t.Fatalf("expected both physical and manual pair scans, got %d: %v", pairBranches, plans)
+	}
 	plan := strings.Join(plans, "\n")
 	t.Log(plan)
 	if !strings.Contains(plan, "model_pair_catalog") || strings.Contains(plan, "TEMP B-TREE FOR ORDER BY") {

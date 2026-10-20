@@ -58,13 +58,15 @@ func (adapter *RequestLogRetention) Retain(
 type AuditRetention struct {
 	maintenance   MaintenanceAuditRetentionOwner
 	announcements AnnouncementAuditRetentionOwner
+	additional    []lifecycle.RetentionAdapter
 }
 
 func NewAuditRetention(
 	maintenanceOwner MaintenanceAuditRetentionOwner,
 	announcementOwner AnnouncementAuditRetentionOwner,
+	additional ...lifecycle.RetentionAdapter,
 ) *AuditRetention {
-	return &AuditRetention{maintenance: maintenanceOwner, announcements: announcementOwner}
+	return &AuditRetention{maintenance: maintenanceOwner, announcements: announcementOwner, additional: additional}
 }
 
 func (adapter *AuditRetention) Retain(
@@ -108,10 +110,31 @@ func (adapter *AuditRetention) Retain(
 		announcementResult.Processed != announcementResult.ActorsDeidentified+announcementResult.AuditsDeleted {
 		return lifecycle.WorkResult{}, lifecycle.ErrInvariant
 	}
-	return lifecycle.WorkResult{
-		Processed: maintenanceResult.Processed + announcementResult.Processed,
-		More:      announcementResult.More,
-	}, nil
+	total := maintenanceResult.Processed + announcementResult.Processed
+	if announcementResult.More {
+		return lifecycle.WorkResult{Processed: total, More: true}, nil
+	}
+	for _, owner := range adapter.additional {
+		remaining = limit - total
+		if remaining == 0 {
+			return lifecycle.WorkResult{Processed: total, More: true}, nil
+		}
+		if owner == nil {
+			return lifecycle.WorkResult{}, lifecycle.ErrUnavailable
+		}
+		result, err := owner.Retain(ctx, decisionNow, remaining, budgetDeadline)
+		if err != nil {
+			return lifecycle.WorkResult{}, err
+		}
+		if !validRetentionResult(result.Processed, result.More, remaining) {
+			return lifecycle.WorkResult{}, lifecycle.ErrInvariant
+		}
+		total += result.Processed
+		if result.More {
+			return lifecycle.WorkResult{Processed: total, More: true}, nil
+		}
+	}
+	return lifecycle.WorkResult{Processed: total}, nil
 }
 
 func validRetentionResult(processed int, more bool, limit int) bool {

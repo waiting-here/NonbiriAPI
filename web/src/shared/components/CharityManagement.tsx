@@ -27,6 +27,7 @@ import {
   getManagedDonationKeysPage,
   getManagedDonationsPage,
   type ManagedDonationPageFilters,
+  type ManagedDonationKeySummary,
 } from '@shared/operations/donationPages';
 import '@shared/operations/operations.css';
 import { PagePagination } from '@shared/operations/PagePagination';
@@ -67,6 +68,9 @@ import { CharitySourceBrowser } from './CharitySourceBrowser';
 import { DonationThanks } from './DonationControlFacts';
 import { DonationDiscoveryControl } from './DonationDiscoveryControl';
 import { DonationHandlingControl, DonationHandlingStatus } from './DonationHandling';
+import { DonationHandlingPanel } from './charity/DonationHandlingPanel';
+import { DonationBindingWorkflow } from './charity/DonationBindingWorkflow';
+import './charity/workflow.css';
 import { donationHandlingStateKey } from './donationHandlingCopy';
 import { DonationKeyModels } from './DonationKeyModels';
 import { Button } from './ui/Button';
@@ -75,6 +79,9 @@ import type { CharityPickerKeyManagerProps } from './CharityBindingPicker';
 import { FailurePolicyControl } from './FailurePolicyControl';
 import { FailureResetControl } from './FailureResetControl';
 import { KeyLimitSummary } from './KeyRoutingLimits';
+import { ManagedKeyLimitsControl, type ManagedKeyLimitsAuthority } from './ManagedKeyLimitsControl';
+import { KeyRateLimitTime } from './KeyRateLimitTime';
+import { useRateLimitRefresh } from '@shared/operations/useRateLimitRefresh';
 import { MarkdownText } from './MarkdownText';
 import { RecurringLimitsDisclosure } from './RecurringLimitsDisclosure';
 import { TimeInput } from './TimeInput';
@@ -379,7 +386,31 @@ function KeyQuotaFields({
   );
 }
 
-function DonationKeyEditor({
+function DonationKeyEditor(
+  props: Parameters<typeof DonationKeySettings>[0] & {
+    refreshLimits: () => Promise<ManagedKeyLimitsAuthority>;
+  },
+) {
+  const { t } = useTranslation();
+  return (
+    <section className="ops-subcard ops-unframed donation-key-editor">
+      <h4>
+        {t('common.donationReview.memberHeading', {
+          head: props.item.display_head,
+          tail: props.item.display_tail,
+        })}
+      </h4>
+      <p>{safeSourceLabel(props.item.safe_source, t)}</p>
+      {props.item.charity_state === 'rate_limited' ? (
+        <KeyRateLimitTime until={props.item.rate_limited_until} />
+      ) : null}
+      <ManagedKeyLimitsControl {...props} refresh={props.refreshLimits} />
+      <DonationKeySettings key={props.donation.revision} {...props} />
+    </section>
+  );
+}
+
+function DonationKeySettings({
   item,
   donation,
   role,
@@ -444,14 +475,7 @@ function DonationKeyEditor({
     );
   }
   return (
-    <section className="ops-subcard ops-unframed donation-key-editor">
-      <h4>
-        {t('common.donationReview.memberHeading', {
-          head: item.display_head,
-          tail: item.display_tail,
-        })}
-      </h4>
-      <p>{safeSourceLabel(item.safe_source, t)}</p>
+    <div className="ops-stack">
       {!modelID ? (
         item.endpoint_key_id ? (
           <div className="ops-actions">
@@ -473,7 +497,6 @@ function DonationKeyEditor({
       <p className="muted">
         {item.safe_source.connector_type} · {item.safe_source.base_url}
       </p>
-      <KeyLimitSummary concurrency={item.max_concurrency} rpm={item.max_rpm} readOnly />
       <Fold
         title={t('common.operations.charity.failureStrategy', { defaultValue: 'Failure strategy' })}
       >
@@ -651,7 +674,7 @@ function DonationKeyEditor({
           )}
         </p>
       )}
-    </section>
+    </div>
   );
 }
 
@@ -666,9 +689,12 @@ interface DonationDetailProps {
 
 function DonationDetail(props: DonationDetailProps) {
   const [reviewPending, setReviewPending] = useState(false);
+  const [params] = useSearchState();
   return (
     <fieldset className="ops-stack ops-unframed" disabled={props.busy || reviewPending}>
-      <DonationReview key={props.item.revision} {...props} onPendingChange={setReviewPending} />
+      {!selectedID(params, 'binding_key') ? (
+        <DonationReview key={props.item.revision} {...props} onPendingChange={setReviewPending} />
+      ) : null}
       <DonationKeyPages
         item={props.item}
         role={props.role}
@@ -1119,7 +1145,10 @@ function DonationKeyPages({
   onCapabilityLoss?: () => void;
 }) {
   const { t } = useTranslation();
+  const client = useQueryClient();
   const [params, setParams] = useSearchState();
+  const [bindingSnapshot, setBindingSnapshot] = useState<ManagedDonationKeySummary | null>(null);
+  const bindingKey = selectedID(params, 'binding_key');
   const pager = useUrlPagePager({
     station: role === 'admin' ? 'admin' : 'user',
     listType: 'managed-donation-keys',
@@ -1159,15 +1188,54 @@ function DonationKeyPages({
       samePageFamily(query?.queryKey, queryKey) ? previous : undefined,
   });
   const capabilityLost = isForbidden(keys.error) || isUnauthorized(keys.error);
+  useRateLimitRefresh(
+    keys.data?.data
+      .filter((key) => key.charity_state === 'rate_limited')
+      .map((key) => key.rate_limited_until) ?? [],
+    () => keys.refetch({ throwOnError: true }),
+  );
   useEffect(() => {
     if (capabilityLost) onCapabilityLoss?.();
   }, [capabilityLost, onCapabilityLoss]);
   const staleRevision = keys.data?.data.some((key) => key.donation_revision !== item.revision);
+  const bindingItem =
+    keys.data?.data.find((key) => key.key_id === bindingKey) ??
+    (bindingSnapshot?.key_id === bindingKey ? bindingSnapshot : null);
   if (capabilityLost)
     return (
       <p className="field-error" role="alert">
         {t('common.operations.charity.accessLost')}
       </p>
+    );
+  if (bindingItem && item.status === 'approved')
+    return (
+      <DonationBindingWorkflow
+        key={`${item.id}:${bindingItem.key_id}`}
+        role={role}
+        accountId={accountId}
+        item={bindingItem}
+        initialTarget={selectedID(params, 'binding_target')}
+        onCapabilityLoss={onCapabilityLoss}
+        onBack={() =>
+          setParams((current) => {
+            const next = new URLSearchParams(current);
+            next.delete('binding_key');
+            next.delete('binding_target');
+            return next;
+          })
+        }
+        onCreate={() =>
+          setParams((current) => {
+            const next = new URLSearchParams(current);
+            next.set('charity_section', 'models');
+            next.set('model_workspace', 'new');
+            next.set('binding_donation', item.id);
+            next.set('binding_key', bindingItem.key_id);
+            next.delete('charity_model');
+            return next;
+          })
+        }
+      />
     );
   return (
     <Card>
@@ -1224,12 +1292,39 @@ function DonationKeyPages({
                 className={key.id === focusKey ? 'ops-subcard is-selected' : 'ops-subcard'}
                 key={key.id}
               >
+                {item.status === 'approved' &&
+                key.charity_state !== 'ended' &&
+                key.charity_state !== 'expired' ? (
+                  <Button
+                    type="button"
+                    variant="primary"
+                    onClick={() => {
+                      setBindingSnapshot(key);
+                      setParams((current) => {
+                        const next = new URLSearchParams(current);
+                        next.set('binding_key', key.key_id);
+                        next.delete('binding_target');
+                        return next;
+                      });
+                    }}
+                  >
+                    {t('common.workflow.bindThisKey')}
+                  </Button>
+                ) : null}
                 <DonationKeyEditor
-                  key={item.revision}
+                  key={key.id}
                   item={key}
                   donation={item}
                   role={role}
                   refresh={refresh}
+                  refreshLimits={async () => {
+                    await refresh();
+                    const current = client
+                      .getQueryData<NonNullable<typeof keys.data>>(queryKey)
+                      ?.data.find((entry) => entry.id === key.id);
+                    if (!current) throw new ApiError('not_found', 'Donation key not found.', 404);
+                    return { item: current, donationRevision: current.donation_revision };
+                  }}
                   onCapabilityLoss={onCapabilityLoss}
                 />
                 <DonationKeyModels
@@ -1405,7 +1500,8 @@ function DonationsPanel({
   useEffect(() => {
     if (capabilityLost) onCapabilityLoss?.();
   }, [capabilityLost, onCapabilityLoss]);
-  const refresh = () => client.invalidateQueries({ queryKey: charityKeys.root(role) });
+  const refresh = () =>
+    client.invalidateQueries({ queryKey: charityKeys.root(role) }, { throwOnError: true });
   if (capabilityLost) {
     return (
       <Card>
@@ -1430,7 +1526,7 @@ function DonationsPanel({
                     <span>{t('common.donationHandling.search')}</span>
                     <input
                       type="search"
-                      placeholder={t("common.donationHandling.searchPlaceholder")}
+                      placeholder={t('common.donationHandling.searchPlaceholder')}
                       value={queryDraft}
                       aria-invalid={!queryValid}
                       onChange={(event) => setQueryDraft(event.target.value)}
@@ -1747,13 +1843,82 @@ function DonationsPanel({
   );
 }
 
+const workflowNavigationSubjects = new WeakMap<ReturnType<typeof useQueryClient>, string>();
+const workflowSearchParameters = [
+  'charity_section',
+  'donation_id',
+  'donation_key',
+  'donation_from',
+  'donation_status',
+  'donations_page',
+  'donations_page_size',
+  'donation_keys_page',
+  'donation_keys_page_size',
+  'handling',
+  'q',
+  'charity_model',
+  'model_q',
+  'model_enabled',
+  'models_page',
+  'models_page_size',
+  'model_from_key',
+  'model_from_donation',
+  'model_workspace',
+  'binding_donation',
+  'binding_key',
+  'binding_target',
+  'source_key',
+  'source_scope',
+  'source_q',
+  'source_key_q',
+  'source_handling',
+  'source_idle',
+  'source_key_state',
+  'sources_page',
+  'sources_page_size',
+  'source_keys_page',
+  'source_keys_page_size',
+  'handling_view',
+  'handling_donation',
+  'handling_page',
+  'handling_page_size',
+] as const;
+
 export function CharityManagement(props: {
   frame: CharityRole;
   accountId?: string;
   onCapabilityLoss?: () => void;
   trainee?: boolean;
 }) {
-  if (!props.accountId) return <LoadingState />;
+  const client = useQueryClient();
+  const [params, setParams] = useSearchState();
+  const identity = props.accountId
+    ? `${props.frame}:${props.accountId}:${props.trainee ? 'trainee' : 'full'}`
+    : '';
+  const [navigationIdentity, setNavigationIdentity] = useState(
+    () => workflowNavigationSubjects.get(client) ?? identity,
+  );
+  const identityChanged = Boolean(
+    identity && navigationIdentity && navigationIdentity !== identity,
+  );
+  const needsCleanup = identityChanged && workflowSearchParameters.some((name) => params.has(name));
+  if (identity && navigationIdentity !== identity && !needsCleanup) setNavigationIdentity(identity);
+  useEffect(() => {
+    if (!identity) return;
+    if (needsCleanup) {
+      setParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          for (const name of workflowSearchParameters) next.delete(name);
+          return next;
+        },
+        { replace: true },
+      );
+      return;
+    }
+    workflowNavigationSubjects.set(client, identity);
+  }, [client, identity, needsCleanup, setParams]);
+  if (!props.accountId || identityChanged) return <LoadingState />;
   return (
     <CharityManagementAccount
       key={`${props.frame}:${props.accountId}:${props.trainee ? 'trainee' : 'full'}`}
@@ -1778,11 +1943,13 @@ function CharityManagementAccount({
   const [params, setParams] = useSearchState();
   const rawSection = oneParam(params, 'charity_section');
   const section = trainee
-    ? 'models'
+    ? rawSection === 'handling'
+      ? 'handling'
+      : 'models'
     : rawSection === 'models' || rawSection === 'sources'
       ? rawSection
       : 'donations';
-  const setSection = (nextSection: 'donations' | 'models' | 'sources') =>
+  const setSection = (nextSection: 'donations' | 'models' | 'sources' | 'handling') =>
     setParams((current) => {
       const next = new URLSearchParams(current);
       next.set('charity_section', nextSection);
@@ -1810,6 +1977,12 @@ function CharityManagementAccount({
         tabs={(
           [
             {
+              value: 'handling',
+              label: t('common.workflow.approvedDonations'),
+              id: 'charity-tab-handling',
+              panelId: 'charity-panel',
+            },
+            {
               value: 'donations',
               label: t(
                 frame === 'admin' ? 'admin.charity.donationsTitle' : 'user.steward.donationsTitle',
@@ -1832,10 +2005,14 @@ function CharityManagementAccount({
               panelId: 'charity-panel',
             },
           ] as const
-        ).filter((tab) => !trainee || tab.value === 'models')}
+        ).filter((tab) =>
+          trainee ? tab.value === 'models' || tab.value === 'handling' : tab.value !== 'handling',
+        )}
       />
       <div id="charity-panel" role="tabpanel" aria-labelledby={`charity-tab-${section}`}>
-        {section === 'donations' ? (
+        {section === 'handling' ? (
+          <DonationHandlingPanel accountId={accountId} onCapabilityLoss={clearCapability} />
+        ) : section === 'donations' ? (
           <DonationsPanel role={frame} accountId={accountId} onCapabilityLoss={clearCapability} />
         ) : section === 'models' ? (
           <ModelsPanel
@@ -1893,23 +2070,31 @@ function ScopedKeyBrowser({
   onCapabilityLoss?: () => void;
 }) {
   const [selected, setSelected] = useState<{ donationID: string; keyID: string } | null>(null);
+  const { t } = useTranslation();
+  const [, setParams] = useSearchState();
   const copy = charityControlCopy(useTranslation().i18n.language);
   const client = useQueryClient();
+  const detailKey = [
+    ...charityKeys.root('steward'),
+    'scoped-key',
+    accountId,
+    modelID,
+    selected?.donationID,
+    selected?.keyID,
+  ] as const;
   const detail = useQuery({
-    queryKey: [
-      ...charityKeys.root('steward'),
-      'scoped-key',
-      accountId,
-      modelID,
-      selected?.donationID,
-      selected?.keyID,
-    ],
+    queryKey: detailKey,
     queryFn: ({ signal }) =>
       getScopedDonationKey(modelID, selected!.donationID, selected!.keyID, signal),
     enabled: selected !== null,
     retry: false,
   });
-  const refresh = () => client.invalidateQueries({ queryKey: charityKeys.root('steward') });
+  const refresh = () =>
+    client.invalidateQueries({ queryKey: charityKeys.root('steward') }, { throwOnError: true });
+  useRateLimitRefresh(
+    detail.data?.charity_state === 'rate_limited' ? [detail.data.rate_limited_until] : [],
+    () => detail.refetch({ throwOnError: true }),
+  );
   const lost = isUnauthorized(detail.error) || isForbidden(detail.error);
   useEffect(() => {
     if (lost) onCapabilityLoss?.();
@@ -1932,7 +2117,21 @@ function ScopedKeyBrowser({
         ) : detail.error ? (
           <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
         ) : detail.data ? (
-          <Card key={`${modelID}:${detail.data.key_id}:${detail.data.donation_revision}`}>
+          <Card key={`${modelID}:${detail.data.key_id}`}>
+            <Button
+              type="button"
+              onClick={() =>
+                setParams((next) => {
+                  next.set('charity_section', 'handling');
+                  next.set('handling_donation', detail.data.donation_id);
+                  next.set('handling_view', 'all');
+                  next.delete('handling_page');
+                  return next;
+                })
+              }
+            >
+              {t('common.workflow.openDonationHandling')}
+            </Button>
             <p>{copy.shared}</p>
             <p>
               {copy.totalBindings}: {detail.data.binding_count}
@@ -1957,6 +2156,12 @@ function ScopedKeyBrowser({
               }}
               role="steward"
               refresh={refresh}
+              refreshLimits={async () => {
+                await refresh();
+                const current = client.getQueryData<NonNullable<typeof detail.data>>(detailKey);
+                if (!current) throw new ApiError('not_found', 'Donation key not found.', 404);
+                return { item: current, donationRevision: current.donation_revision };
+              }}
               onCapabilityLoss={onCapabilityLoss}
             />
             <DonationDiscoveryControl
@@ -2004,8 +2209,16 @@ function PickerKeyManager({
 }) {
   const { t } = useTranslation();
   const client = useQueryClient();
+  const detailKey = [
+    ...charityKeys.root(role),
+    'picker-key',
+    accountId,
+    modelID,
+    donationID,
+    keyID,
+  ] as const;
   const detail = useQuery({
-    queryKey: [...charityKeys.root(role), 'picker-key', accountId, modelID, donationID, keyID],
+    queryKey: detailKey,
     queryFn: ({ signal }) =>
       stationSessionWrite(client, role, async () => {
         if (role === 'steward') {
@@ -2031,7 +2244,12 @@ function PickerKeyManager({
   useEffect(() => {
     if (lost) onCapabilityLoss?.();
   }, [lost, onCapabilityLoss]);
-  const refresh = () => client.invalidateQueries({ queryKey: charityKeys.root(role) });
+  const refresh = () =>
+    client.invalidateQueries({ queryKey: charityKeys.root(role) }, { throwOnError: true });
+  useRateLimitRefresh(
+    detail.data?.key.charity_state === 'rate_limited' ? [detail.data.key.rate_limited_until] : [],
+    () => detail.refetch({ throwOnError: true }),
+  );
   return (
     <div className="ops-stack">
       <PageHeader
@@ -2049,11 +2267,17 @@ function PickerKeyManager({
       ) : (
         <Card>
           <DonationKeyEditor
-            key={detail.data.donation.revision}
+            key={detail.data.key.id}
             item={detail.data.key}
             donation={detail.data.donation}
             role={role}
             refresh={refresh}
+            refreshLimits={async () => {
+              await refresh();
+              const current = client.getQueryData<NonNullable<typeof detail.data>>(detailKey);
+              if (!current) throw new ApiError('not_found', 'Donation key not found.', 404);
+              return { item: current.key, donationRevision: current.donation.revision };
+            }}
             onCapabilityLoss={onCapabilityLoss}
           />
           <DonationDiscoveryControl

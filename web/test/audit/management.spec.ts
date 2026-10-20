@@ -156,8 +156,17 @@ test('owner reads donation keys and details from current API responses', async (
     const copy = en.user.charity;
     await page.goto(state.user_url + '/charity?tab=donations');
     const panel = page.locator('.economy-owner-pages');
-    const donations = await read(context, state.user_url, '/api/donations?page=1&page_size=20');
-    expect(donations.data).toHaveLength(3);
+    const donations = await read(
+      context,
+      state.user_url,
+      '/api/donations?view=current&page=1&page_size=20',
+    );
+    expect(donations.data).toHaveLength(2);
+    expect(
+      donations.data.every((item: { status: string }) =>
+        ['pending', 'approved'].includes(item.status),
+      ),
+    ).toBe(true);
     for (const { id } of donations.data as { id: string }[]) {
       const detail = page.locator('a[href="/charity/donations/' + id + '"]');
       const card = panel.locator('.economy-donation-summary').filter({ has: detail });

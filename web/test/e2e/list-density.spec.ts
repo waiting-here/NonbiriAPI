@@ -15,6 +15,7 @@ type Locale = 'en' | 'zh';
 const NOW = 1_800_000_000;
 const DONATION_STATES = [
   'available',
+  'rate_limited',
   'pending',
   'disabled',
   'suspended',
@@ -72,7 +73,25 @@ async function screenshot(page: Page, name: string) {
 }
 
 async function fitsPage(page: Page) {
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  const layout = await page.evaluate(() => ({
+    width: innerWidth,
+    scroll: document.documentElement.scrollWidth,
+    overflow: Array.from(document.querySelectorAll('main *'))
+      .filter(
+        (node) =>
+          node.getBoundingClientRect().right > innerWidth + 1 &&
+          node.getBoundingClientRect().right <= document.documentElement.scrollWidth + 1,
+      )
+      .slice(0, 8)
+      .map((node) => ({
+        tag: node.tagName,
+        className: node.className,
+        text: node.textContent?.slice(0, 70),
+        parent: node.parentElement?.className,
+        right: node.getBoundingClientRect().right,
+      })),
+  }));
+  expect(layout.scroll, JSON.stringify(layout.overflow)).toBeLessThanOrEqual(layout.width);
 }
 
 function publicModel(index: number) {
@@ -266,7 +285,7 @@ for (const [timezoneId, expectedTime] of [
       await mockJson(page, {
         origin: USER_ORIGIN,
         method: 'GET',
-        path: '/api/donations?page=1&page_size=20',
+        path: '/api/donations?view=current&page=1&page_size=20',
         body: numberedResponse([], '1', 20),
       });
       await mockJson(page, {
@@ -374,7 +393,10 @@ test('donation guidance renders Markdown without overflowing mobile or desktop p
     path: '/api/charity/models?view=catalog&page=1&page_size=20&allowed_for_me=true&currently_available=true',
     body: catalogPage([publicModel(1)], 'open'),
   });
-  for (const path of ['/api/donations?page=1&page_size=20', '/api/endpoints?page=1&page_size=20'])
+  for (const path of [
+    '/api/donations?view=current&page=1&page_size=20',
+    '/api/endpoints?page=1&page_size=20',
+  ])
     await mockJson(page, {
       origin: USER_ORIGIN,
       method: 'GET',
@@ -419,7 +441,7 @@ test('administrator source grouping accepts current key limits on narrow and wid
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: '/admin/api/donation-sources?scope=active&page=1&page_size=20',
+    path: '/admin/api/donation-sources?scope=active&key_state=available&page=1&page_size=20',
     body: numberedResponse(
       [
         {
@@ -438,7 +460,7 @@ test('administrator source grouping accepts current key limits on narrow and wid
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: `/admin/api/donation-sources/${SOURCE_KEY}/keys?scope=active&page=1&page_size=20`,
+    path: `/admin/api/donation-sources/${SOURCE_KEY}/keys?scope=active&key_state=available&page=1&page_size=20`,
     body: numberedResponse([donationKeyPageItem(donation, donationKey)], '1', 20),
   });
   await page.goto(`${ADMIN_ORIGIN}/charity`);
@@ -510,7 +532,7 @@ for (const locale of ['en', 'zh'] as const) {
     await mockJson(page, {
       origin: USER_ORIGIN,
       method: 'GET',
-      path: '/api/donations?page=1&page_size=20',
+      path: '/api/donations?view=current&page=1&page_size=20',
       body: numberedResponse([], '1', 20),
     });
     await page.setViewportSize({ width: 1935, height: 1000 });
@@ -1062,7 +1084,7 @@ for (const role of ['admin', 'steward'] as const)
           ),
         });
       }
-      if (path === '/charity-models/7/bindings/batch' && request.method() === 'POST') {
+      if (path === '/charity-models/7/bindings/batch-receipt' && request.method() === 'POST') {
         submitted = request.postDataJSON();
         const selections = submitted!.selections as Array<{
           donation_key_id: string;
@@ -1076,7 +1098,14 @@ for (const role of ['admin', 'steward'] as const)
           source: sharedSource(Math.floor(Number(entry.donation_key_id) / 1000)),
           source_types: ['automatic'],
         }));
-        return route.fulfill({ json: { bindings, binding_revision: '1' } });
+        return route.fulfill({
+          json: {
+            model_id: '7',
+            binding_revision: '1',
+            added_count: String(selections.length),
+            binding_count: String(bindings.length),
+          },
+        });
       }
       return route.fallback();
     });
@@ -1127,7 +1156,7 @@ for (const role of ['admin', 'steward'] as const)
     await screenshot(page, `${role}-review-mobile`);
     await page.getByRole('tab', { name: /Charity models/ }).click();
     await page
-      .locator('.ops-table tbody tr')
+      .locator('.nb-table tbody tr')
       .filter({ has: page.getByText(managedModel.full_name, { exact: true }) })
       .getByRole('button', { name: 'Manage', exact: true })
       .click();
@@ -1155,7 +1184,7 @@ for (const role of ['admin', 'steward'] as const)
     }
     await screenshot(page, `${role}-shared-selected-desktop`);
     const editor = picker.locator('..');
-    await editor.getByRole('button', { name: /Add selected/ }).click();
+    await editor.getByRole('button', { name: /Add \d+ connections/ }).click();
     await expect
       .poll(() => submitted)
       .toMatchObject({

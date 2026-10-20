@@ -38,6 +38,7 @@ function summary(overrides: Record<string, unknown> = {}) {
     key_count: '1',
     state_counts: {
       available: '0',
+      rate_limited: '0',
       pending: '1',
       disabled: '0',
       suspended: '0',
@@ -138,6 +139,7 @@ describe('owner donation numbered-page normalizers', () => {
     });
     expect(result.data[0]).toEqual({
       id: OWNER_ID,
+      ownerHiddenAt: null,
       status: 'pending',
       revision: '1',
       description: 'owner summary',
@@ -148,6 +150,7 @@ describe('owner donation numbered-page normalizers', () => {
       keyCount: '1',
       stateCounts: {
         available: '0',
+        rate_limited: '0',
         pending: '1',
         disabled: '0',
         suspended: '0',
@@ -222,6 +225,7 @@ describe('owner donation numbered-page normalizers', () => {
           key_count: largeCount,
           state_counts: {
             available: '0',
+            rate_limited: '0',
             pending: largeCount,
             disabled: '0',
             suspended: '0',

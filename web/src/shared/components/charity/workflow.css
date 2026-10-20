@@ -1,0 +1,146 @@
+.nb-workflow-id,
+.ops-binding-picker .ops-picker-selection strong,
+.ops-binding-picker .ops-picker-choice span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.nb-workflow-price-tools {
+  display: grid;
+  gap: var(--nb-space-3);
+  margin-block: var(--nb-space-3);
+}
+
+.nb-workflow-price-workspace {
+  display: grid;
+  gap: var(--nb-space-4);
+  align-items: start;
+}
+
+.nb-workflow-price-workspace.is-reference-open {
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem);
+}
+
+.nb-workflow-price-editor,
+.nb-workflow-price-reference {
+  min-width: 0;
+}
+
+.nb-workflow-price-reference .nb-panel__head {
+  flex-direction: column;
+  align-items: start;
+}
+
+.nb-workflow-price-reference .nb-panel__head p {
+  overflow-wrap: anywhere;
+}
+
+.nb-workflow-price-reference .nb-workflow-prices > div {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.nb-workflow-price-reference strong {
+  overflow-wrap: anywhere;
+}
+
+.charity-management .nb-workflow-price-reference fieldset {
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.nb-workflow-price-reference :is(input, textarea, select) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.nb-workflow-price-reference-body {
+  max-height: 40rem;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.nb-workflow-price-reference .nb-table {
+  min-width: 0;
+}
+
+.charity-management .nb-pager button,
+.charity-management .nb-pager input,
+.charity-management .nb-pager select {
+  min-height: 2.5rem;
+}
+
+.nb-workflow-price-reference-mobile-return {
+  display: none;
+}
+
+@media (width < 64rem) {
+  .nb-workflow-price-workspace.is-reference-open {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .nb-workflow-price-workspace.is-reference-open .nb-workflow-price-editor {
+    display: none;
+  }
+
+  .nb-workflow-price-reference-body {
+    max-height: none;
+    overflow: visible;
+    scrollbar-gutter: auto;
+  }
+
+  .nb-workflow-price-reference-mobile-return {
+    display: block;
+  }
+}
+
+.nb-workflow-prices {
+  display: grid;
+  gap: var(--nb-space-2);
+  margin-block: var(--nb-space-3);
+}
+
+.nb-workflow-prices > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--nb-space-2);
+}
+
+.nb-workflow-prices dd {
+  margin: 0;
+}
+
+.nb-workflow-price-brief {
+  display: flex;
+  flex-direction: column;
+  gap: var(--nb-space-1);
+}
+
+.nb-workflow-price-tools .nb-btn,
+.ops-binding-picker .nb-btn {
+  min-height: 2.5rem;
+  white-space: nowrap;
+}
+
+:is(.nb-workflow-price-editor, .nb-workflow-price-reference) .nb-btn {
+  min-height: 2.5rem;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (width < 40rem) {
+  .charity-management .nb-pager .nb-pager__jump,
+  .charity-management .nb-pager__size {
+    display: inline-flex;
+  }
+
+  .charity-management .nb-pager__pages {
+    flex-wrap: wrap;
+  }
+
+  .nb-workflow-prices > div {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

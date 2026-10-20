@@ -55,7 +55,14 @@ export type DonationIntakeState = 'open' | 'closed';
 export type DonationStatus = 'pending' | 'approved' | 'rejected' | 'deleted' | 'expired';
 
 export type DonationKeyState =
-  'pending' | 'disabled' | 'suspended' | 'exhausted' | 'expired' | 'ended' | 'available';
+  | 'pending'
+  | 'disabled'
+  | 'suspended'
+  | 'exhausted'
+  | 'expired'
+  | 'ended'
+  | 'available'
+  | 'rate_limited';
 
 export type DonationKeyEndedReason =
   'member_removed' | 'withdrawn' | 'terminated' | 'expired' | 'account_deleted';
@@ -128,6 +135,7 @@ export interface DonationKey {
   source: DonationKeySource;
   physicalEnabled: boolean;
   charityState: DonationKeyState;
+  rateLimitedUntil: number | null;
   limits: DonationLimits;
   usage: DonationUsage;
   tokenReserve: number;
@@ -143,6 +151,7 @@ export interface DonationReviewResult {
 }
 
 export interface Donation {
+  ownerHiddenAt?: number | null;
   discordPublicThanks?: boolean | null;
   id: string;
   status: DonationStatus;

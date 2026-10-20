@@ -125,7 +125,7 @@ type decisionCheckpoint struct {
 	stream            bool
 }
 
-func (w *decisionCheckpoint) ObserveUpstreamResponse(status int, stream bool) error {
+func (w *decisionCheckpoint) ObserveUpstreamResponse(status int, stream bool, _ http.Header) error {
 	w.observed++
 	w.status = status
 	w.stream = stream

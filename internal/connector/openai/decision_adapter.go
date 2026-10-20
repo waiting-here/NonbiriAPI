@@ -71,6 +71,11 @@ func (a *Adapter) AttemptDecision(ctx context.Context, writer http.ResponseWrite
 			response.Request.Header.Del("Authorization")
 		}
 	}
+	if response != nil && err != nil {
+		if err := contract.ObserveUpstreamResponse(writer, response.StatusCode, false, response.Header); err != nil {
+			return AttemptResult{Failure: FailureInternal, Diagnostic: "upstream response checkpoint failed"}
+		}
+	}
 	if err != nil {
 		if response != nil && response.Body != nil {
 			_ = response.Body.Close()
@@ -85,7 +90,7 @@ func (a *Adapter) AttemptDecision(ctx context.Context, writer http.ResponseWrite
 		return upstreamFailure("upstream response was unavailable", 0)
 	}
 	defer response.Body.Close()
-	if err := contract.ObserveUpstreamResponse(writer, response.StatusCode, false); err != nil {
+	if err := contract.ObserveUpstreamResponse(writer, response.StatusCode, false, response.Header); err != nil {
 		return AttemptResult{Failure: FailureInternal, Diagnostic: "upstream response checkpoint failed"}
 	}
 	if response.StatusCode != http.StatusOK {

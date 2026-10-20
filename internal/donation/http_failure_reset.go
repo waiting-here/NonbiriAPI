@@ -119,19 +119,20 @@ type failureSelectionWire struct {
 	Scope      requiredField[string] `json:"scope"`
 	Handling   requiredField[string] `json:"handling"`
 	Idle       requiredField[string] `json:"idle"`
+	KeyState   requiredField[string] `json:"key_state"`
 }
 
 func parseFailureSelection(w failureSelectionWire) (failureSelection, error) {
 	out := failureSelection{View: w.View.Value, SourceKey: w.SourceKey.Value,
 		Management: ManagementFilter{Status: w.Status.Value, Query: w.Query.Value, Handling: w.Handling.Value},
-		Source:     SourceFilter{Query: w.Query.Value, Scope: w.Scope.Value, Handling: w.Handling.Value, Idle: w.Idle.Value}}
+		Source:     SourceFilter{Query: w.Query.Value, Scope: w.Scope.Value, Handling: w.Handling.Value, Idle: w.Idle.Value, KeyState: w.KeyState.Value}}
 	switch out.View {
 	case "donations":
-		if w.DonationID.Set || w.SourceKey.Set || w.Scope.Set || w.Idle.Set || !validManagementFilter(out.Management) {
+		if w.DonationID.Set || w.SourceKey.Set || w.Scope.Set || w.Idle.Set || w.KeyState.Set || !validManagementFilter(out.Management) {
 			return out, ErrInvalidRequest
 		}
 	case "donation_keys":
-		if w.SourceKey.Set || w.Status.Set || w.Query.Set || w.Scope.Set || w.Handling.Set || w.Idle.Set {
+		if w.SourceKey.Set || w.Status.Set || w.Query.Set || w.Scope.Set || w.Handling.Set || w.Idle.Set || w.KeyState.Set {
 			return out, ErrInvalidRequest
 		}
 		id, err := requiredID(w.DonationID)
@@ -141,7 +142,7 @@ func parseFailureSelection(w failureSelectionWire) (failureSelection, error) {
 		out.DonationID = id
 	case "sources", "source_keys":
 		if w.DonationID.Set || w.Status.Set || w.Scope.Set && w.Scope.Value == "" ||
-			w.Handling.Set && w.Handling.Value == "" || w.Idle.Set && w.Idle.Value == "" ||
+			w.Handling.Set && w.Handling.Value == "" || w.Idle.Set && w.Idle.Value == "" || w.KeyState.Set && w.KeyState.Value == "" ||
 			!validSourceFilter(out.Source, out.View == "source_keys") {
 			return out, ErrInvalidRequest
 		}

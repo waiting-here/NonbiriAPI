@@ -270,7 +270,11 @@ WHERE id=? AND user_id=? AND status='pending' AND revision=?`,
 		if err != nil {
 			return fmt.Errorf("donation: edit submission: %w", err)
 		}
-		return requireOne(result)
+		if err := requireOne(result); err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `INSERT INTO donation_reviews(donation_id,submission_revision,reviewer_user_id,reviewer_role,action,note,created_at) VALUES(?,?,NULL,'','note_update','',?)`, donationID, input.ExpectedRevision+1, now)
+		return err
 	})
 }
 
@@ -965,6 +969,11 @@ AND EXISTS(SELECT 1 FROM donation_key_memberships m WHERE m.donation_key_id=dona
 		return fmt.Errorf("donation: read managed key: %w", err)
 	}
 	updates := []string{"updated_at=?"}
+	if sharedKeyLimitsChanged(input) {
+		if err := updateSharedKeyLimitsTx(ctx, tx, donationID, keyID, actorID, role, input, now); err != nil {
+			return err
+		}
+	}
 	if err := applySplitTokenControlsTx(ctx, tx, keyID, input); err != nil {
 		return err
 	}
@@ -1051,11 +1060,13 @@ WHERE id=? AND status='approved' AND revision=?`, now, donationID, input.Expecte
 	if err := requireOne(result); err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO donation_reviews(
+	if !sharedKeyLimitsChanged(input) || action != "limit_update" {
+		_, err = tx.ExecContext(ctx, `INSERT INTO donation_reviews(
 donation_id,submission_revision,reviewer_user_id,reviewer_role,action,note,created_at)
 VALUES(?,?,?,?,?,?,?)`, donationID, input.ExpectedRevision+1, actorID, role, action, "", now)
-	if err != nil {
-		return fmt.Errorf("donation: record key management: %w", err)
+		if err != nil {
+			return fmt.Errorf("donation: record key management: %w", err)
+		}
 	}
 	_, err = materializeDonationExpiryTx(ctx, tx, donationID, now)
 	return err
@@ -1290,10 +1301,10 @@ func validReviewInput(input ReviewInput) bool {
 
 func validKeyManagement(input KeyManagementInput) bool {
 	if input.ExpectedRevision <= 0 || input.Enabled == nil && input.PriceLimit == nil && input.CallsLimit == nil &&
-		input.TokensLimit == nil && input.TokenReserve == nil && input.SafeNote == nil && input.ExpiresAt == nil && !input.ResetFailureStreak && !splitTokenChanged(input) {
+		input.TokensLimit == nil && input.TokenReserve == nil && input.SafeNote == nil && input.ExpiresAt == nil && !input.ResetFailureStreak && !splitTokenChanged(input) && !sharedKeyLimitsChanged(input) {
 		return false
 	}
-	if input.TokenReserve != nil && (*input.TokenReserve < 0 || *input.TokenReserve > 2147483647) ||
+	if !validSharedKeyLimits(input) || input.TokenReserve != nil && (*input.TokenReserve < 0 || *input.TokenReserve > 2147483647) ||
 		input.SafeNote != nil && !validSafeNote(*input.SafeNote) ||
 		input.ExpiresAt != nil && !validExpiryValue(*input.ExpiresAt) {
 		return false

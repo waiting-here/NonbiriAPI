@@ -15,7 +15,9 @@ import (
 
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/headerfacts"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 )
 
 const (
@@ -369,8 +371,14 @@ WHERE endpoint_key_id=? AND revision=? AND state<>'checking'`, newRevision, oper
 	}
 	reservationStarted = true
 	done := make(chan error, 1)
+	requestSource, hasRequestSource := observability.SourceFromContext(ctx)
+	requestHeaders := headerfacts.Request(ctx)
 	start(func(workerContext context.Context) {
 		if !wait {
+			if hasRequestSource {
+				workerContext = observability.WithSource(workerContext, requestSource)
+			}
+			workerContext = headerfacts.WithCapturedRequest(workerContext, requestHeaders)
 			r.runDiscovery(workerContext, job)
 			return
 		}

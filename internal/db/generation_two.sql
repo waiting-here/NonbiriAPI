@@ -6387,28 +6387,28 @@ WHEN NOT COALESCE((NEW.state IN ('reserved') AND NEW.streak_disposition IS NULL 
  OR (NEW.state IN ('committed','released') AND (
   (NEW.state='committed' AND NEW.streak_disposition='success' AND ((NEW.failure_origin='none' AND NEW.protocol_success=1) OR (NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout','client_cancel','downstream','platform','recovery_unknown') AND NEW.protocol_success=0)))
   OR (NEW.streak_disposition='upstream_failure' AND NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout') AND COALESCE(NEW.protocol_success,0)=0)
-  OR (NEW.streak_disposition='neutral' AND NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown') AND COALESCE(NEW.protocol_success,0)=0))),0)
+  OR (NEW.streak_disposition='neutral' AND (NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown') OR (NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout') AND EXISTS(SELECT 1 FROM dispatch_retry_after_observations r WHERE r.claim_id=NEW.claim_id AND r.http_status<>200))) AND COALESCE(NEW.protocol_success,0)=0))),0)
 BEGIN SELECT RAISE(ABORT,'invalid terminal outcome'); END;
 CREATE TRIGGER donation_usage_reservations_outcome_update_guard BEFORE UPDATE ON donation_usage_reservations
 WHEN NOT COALESCE((NEW.state IN ('reserved') AND NEW.streak_disposition IS NULL AND NEW.failure_origin IS NULL)
  OR (NEW.state IN ('committed','released') AND (
   (NEW.state='committed' AND NEW.streak_disposition='success' AND ((NEW.failure_origin='none' AND NEW.protocol_success=1) OR (NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout','client_cancel','downstream','platform','recovery_unknown') AND NEW.protocol_success=0)))
   OR (NEW.streak_disposition='upstream_failure' AND NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout') AND COALESCE(NEW.protocol_success,0)=0)
-  OR (NEW.streak_disposition='neutral' AND NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown') AND COALESCE(NEW.protocol_success,0)=0))),0)
+  OR (NEW.streak_disposition='neutral' AND (NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown') OR (NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout') AND (EXISTS(SELECT 1 FROM dispatch_retry_after_observations r WHERE r.claim_id=NEW.claim_id AND r.http_status<>200) OR (OLD.streak_disposition='neutral' AND OLD.failure_origin=NEW.failure_origin)))) AND COALESCE(NEW.protocol_success,0)=0))),0)
 BEGIN SELECT RAISE(ABORT,'invalid terminal outcome'); END;
 CREATE TRIGGER dispatch_claims_outcome_insert_guard BEFORE INSERT ON dispatch_claims
 WHEN NOT COALESCE((NEW.state IN ('claimed','dispatched') AND NEW.streak_disposition IS NULL AND NEW.failure_origin IS NULL)
  OR (NEW.state IN ('committed','released') AND (
   (NEW.state='committed' AND NEW.streak_disposition='success' AND NEW.failure_origin IN ('none','upstream_response','upstream_protocol','network','timeout','client_cancel','downstream','platform','recovery_unknown'))
   OR (NEW.streak_disposition='upstream_failure' AND NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout'))
-  OR (NEW.streak_disposition='neutral' AND NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown')))),0)
+  OR (NEW.streak_disposition='neutral' AND (NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown') OR (NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout') AND EXISTS(SELECT 1 FROM dispatch_retry_after_observations r WHERE r.claim_id=NEW.id AND r.http_status<>200)))))),0)
 BEGIN SELECT RAISE(ABORT,'invalid terminal outcome'); END;
 CREATE TRIGGER dispatch_claims_outcome_update_guard BEFORE UPDATE ON dispatch_claims
 WHEN NOT COALESCE((NEW.state IN ('claimed','dispatched') AND NEW.streak_disposition IS NULL AND NEW.failure_origin IS NULL)
  OR (NEW.state IN ('committed','released') AND (
   (NEW.state='committed' AND NEW.streak_disposition='success' AND NEW.failure_origin IN ('none','upstream_response','upstream_protocol','network','timeout','client_cancel','downstream','platform','recovery_unknown'))
   OR (NEW.streak_disposition='upstream_failure' AND NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout'))
-  OR (NEW.streak_disposition='neutral' AND NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown')))),0)
+  OR (NEW.streak_disposition='neutral' AND (NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown') OR (NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout') AND (EXISTS(SELECT 1 FROM dispatch_retry_after_observations r WHERE r.claim_id=NEW.id AND r.http_status<>200) OR (OLD.streak_disposition='neutral' AND OLD.failure_origin=NEW.failure_origin))))))),0)
 BEGIN SELECT RAISE(ABORT,'invalid terminal outcome'); END;
 CREATE TRIGGER request_log_origin_capture AFTER INSERT ON request_logs
 WHEN NEW.user_id IS NOT NULL AND NEW.origin_user_id IS NULL
@@ -6541,7 +6541,7 @@ CREATE TABLE schema_state (
 ) STRICT;
 INSERT INTO credit_compaction(id,through_seq,details_before,sweep_at,sweep_after_seq) VALUES(1,0,0,0,0);
 INSERT INTO game_blackjack_clock(id,observed_at) VALUES(1,0);
-INSERT INTO schema_state(id,version) VALUES(1,21);
+INSERT INTO schema_state(id,version) VALUES(1,24);
 
 CREATE TABLE game_ai_settings (
  game_key TEXT PRIMARY KEY NOT NULL,
@@ -6951,3 +6951,72 @@ BEGIN
  DELETE FROM account_mfa_proofs WHERE user_id=NEW.id;
  DELETE FROM account_mfa_pending WHERE user_id=NEW.id;
 END;
+
+CREATE TABLE donation_key_cooldowns (
+ donation_key_id INTEGER PRIMARY KEY REFERENCES donation_keys(id) ON DELETE CASCADE,
+ rate_limited_until INTEGER NOT NULL CHECK(rate_limited_until BETWEEN 0 AND 253402300799),
+ updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799)
+) STRICT;
+CREATE TABLE dispatch_retry_after_observations (
+ claim_id TEXT PRIMARY KEY REFERENCES dispatch_claims(id) ON DELETE CASCADE,
+ http_status INTEGER NOT NULL CHECK(http_status BETWEEN 100 AND 599),
+ observed_at INTEGER NOT NULL CHECK(observed_at BETWEEN 0 AND 253402300799),
+ rate_limited_until INTEGER NOT NULL CHECK(rate_limited_until BETWEEN 0 AND 253402300799)
+) STRICT;
+
+ALTER TABLE observability_state ADD COLUMN header_bytes INTEGER NOT NULL DEFAULT 0 CHECK(header_bytes>=0);
+CREATE TABLE request_header_facts (
+ request_log_id INTEGER NOT NULL REFERENCES request_logs(id) ON DELETE CASCADE,
+ attempt_seq INTEGER NOT NULL CHECK(attempt_seq BETWEEN 0 AND 100),
+ captured_at INTEGER NOT NULL CHECK(captured_at BETWEEN 0 AND 253402300799),
+ http_status INTEGER CHECK(http_status BETWEEN 100 AND 599),
+ save_state TEXT NOT NULL CHECK(save_state IN ('saved','capacity_exhausted','too_large','unavailable')),
+ encoded BLOB,
+ bytes_saved INTEGER NOT NULL CHECK(bytes_saved>=0 AND bytes_saved<=8388608),
+ PRIMARY KEY(request_log_id,attempt_seq),
+ CHECK((save_state='saved' AND encoded IS NOT NULL AND bytes_saved=length(encoded)) OR (save_state<>'saved' AND encoded IS NULL AND bytes_saved=0)),
+ CHECK((attempt_seq=0 AND http_status IS NULL) OR attempt_seq>0)
+) STRICT;
+CREATE TRIGGER request_header_insert_count AFTER INSERT ON request_header_facts
+BEGIN UPDATE observability_state SET header_bytes=header_bytes+NEW.bytes_saved WHERE id=1; END;
+CREATE TRIGGER request_header_delete_count AFTER DELETE ON request_header_facts
+BEGIN UPDATE observability_state SET header_bytes=header_bytes-OLD.bytes_saved WHERE id=1; END;
+CREATE TABLE charity_price_templates (
+ id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0),
+ name TEXT NOT NULL CHECK(length(name) BETWEEN 1 AND 80),
+ description TEXT NOT NULL CHECK(length(description)<=500),
+ enabled INTEGER NOT NULL CHECK(enabled IN (0,1)),
+ revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 9223372036854775807),
+ pricing TEXT NOT NULL CHECK(json_valid(pricing) AND json_type(pricing)='object' AND length(CAST(pricing AS BLOB))<=8192),
+ token_reserve_credits TEXT CHECK(token_reserve_credits IS NULL OR length(token_reserve_credits) BETWEEN 1 AND 32),
+ discount TEXT NOT NULL CHECK(json_valid(discount) AND json_type(discount)='object' AND length(CAST(discount AS BLOB))<=512),
+ created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799),
+ updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN created_at AND 253402300799)
+) STRICT;
+CREATE TRIGGER charity_price_template_capacity BEFORE INSERT ON charity_price_templates
+WHEN (SELECT COUNT(*) FROM charity_price_templates)>=256
+BEGIN SELECT RAISE(ABORT,'price template capacity reached'); END;
+CREATE TABLE charity_price_template_audits (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ template_id INTEGER NOT NULL CHECK(template_id>0),
+ actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+ action TEXT NOT NULL CHECK(action IN ('create','replace','delete')),
+ from_revision INTEGER NOT NULL CHECK(from_revision>=0),
+ to_revision INTEGER NOT NULL CHECK(to_revision>from_revision),
+ created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799)
+) STRICT;
+CREATE INDEX idx_price_template_audits_expiry ON charity_price_template_audits(created_at,id);
+CREATE INDEX idx_price_template_audits_actor ON charity_price_template_audits(actor_user_id,id);
+CREATE TRIGGER price_template_audit_immutable BEFORE UPDATE ON charity_price_template_audits
+WHEN NOT (OLD.actor_user_id IS NOT NULL AND NEW.actor_user_id IS NULL
+ AND NOT EXISTS(SELECT 1 FROM users WHERE id=OLD.actor_user_id)
+ AND NEW.id=OLD.id AND NEW.template_id=OLD.template_id AND NEW.action=OLD.action
+ AND NEW.from_revision=OLD.from_revision AND NEW.to_revision=OLD.to_revision AND NEW.created_at=OLD.created_at)
+BEGIN SELECT RAISE(ABORT,'price template audit is immutable'); END;
+CREATE TABLE donation_owner_preferences (
+ id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0),
+ donation_id INTEGER NOT NULL UNIQUE REFERENCES donations(id) ON DELETE CASCADE,
+ user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ owner_hidden_at INTEGER CHECK(owner_hidden_at BETWEEN 0 AND 253402300799)
+) STRICT;
+CREATE INDEX idx_donation_owner_preferences_user ON donation_owner_preferences(user_id,donation_id);

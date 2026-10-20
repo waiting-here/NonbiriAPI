@@ -1,16 +1,37 @@
 import { SessionHeaderFields } from './SessionHeaderFields';
+import { PriceTools } from './PriceTools';
+import {
+  draftPriceConfig,
+  priceDraft,
+  priceDraftSignature,
+  snapshotPriceDraft,
+  switchPriceMode,
+  type PriceDraft,
+} from './priceDraft';
+import { AsyncLeaveDialog } from '../AsyncLeaveDialog';
+import { PageHeader } from '../States';
 import type { SessionHeader } from '@shared/operations/charity';
 import { ContextPricingFields } from './ContextPricingFields';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { ModelTypesField, ModelTypesSummary } from '@shared/components/ModelTypesField';
 import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
 import { TransportRuleField } from '@shared/components/TransportRuleField';
-import { Fold } from '@shared/components/ui';
+import {
+  Button,
+  DataTable,
+  Field,
+  FilterBar,
+  Fold,
+  Panel,
+  PanelBody,
+  PanelFoot,
+  PanelHead,
+} from '@shared/components/ui';
+import { PriceConfigBrief } from './PriceConfigSummary';
 import { GatewayCapabilitySummary } from '@shared/gateway/GatewayCapabilitySummary';
 import type { ModelType } from '@shared/modelTypes';
 import { responseOutcomeUnknown } from '@shared/operations/api';
 import {
-  addManagedBindings,
   charityKeys,
   createManagedCharityModel,
   deleteManagedBinding,
@@ -37,18 +58,15 @@ import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
 import { buildRolePolicy, draftFromRolePolicy, type RolePolicyDraft } from '@shared/rolePolicy';
 import '@shared/styles/charity-management.css';
-import { createTimeDraft, timeDraftValue, type TimeDraft } from '@shared/time';
+import { timeDraftValue, type TimeDraft } from '@shared/time';
 import type { TransportRule } from '@shared/transportRule';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router';
 import { useRetainedOperation } from '../../../admin/features/operations/useRetainedOperation';
-import {
-  CharityBindingPicker,
-  type CharityPickerKeyManagerProps,
-  type CharitySelection,
-} from '../CharityBindingPicker';
+import type { CharityPickerKeyManagerProps } from '../CharityBindingPicker';
+import { BindingAddForm } from './BindingAddForm';
 import { charityControlCopy } from '../charityControlCopy';
 import { CharityModelScope } from '../CharityModelScope';
 import { CharityRolePolicyForm } from '../CharityRolePolicyForm';
@@ -108,23 +126,10 @@ interface ModelDraft {
   discountEnd: TimeDraft;
   flatten: boolean;
 }
-const zeroPrices = (): TokenPrices => ({
-  uncached_input: '0',
-  cache_write_input: '0',
-  cache_read_input: '0',
-  output: '0',
-});
-
 function modelDraft(model?: CharityModel): ModelDraft {
   return {
-    sessionHeaders: model?.session_headers?.map((v) => ({ ...v })) ?? [],
-    longEnabled: Boolean(model?.pricing.long_context),
-    longThreshold: model?.pricing.long_context?.input_threshold ?? '',
-    longRequest: model?.pricing.long_context?.user_price ?? '0',
-    longPrices: model?.pricing.long_context?.user_prices ?? zeroPrices(),
-    penaltyEnabled: Boolean(model?.pricing.context_penalty),
-    penaltyThreshold: model?.pricing.context_penalty?.input_threshold ?? '',
-    penaltyFine: model?.pricing.context_penalty?.fine ?? '0',
+    ...priceDraft(model),
+    sessionHeaders: model?.session_headers?.map((value) => ({ ...value })) ?? [],
     modelTypes: model ? [...model.model_types] : ['chat_completions'],
     transportRule: model?.transport_rule ?? 'passthrough',
     rolePolicy: draftFromRolePolicy(model?.role_policy),
@@ -136,17 +141,7 @@ function modelDraft(model?: CharityModel): ModelDraft {
     model: model?.model ?? '',
     enabled: model?.enabled ?? true,
     allowedLevels: model ? [...model.allowed_levels] : [...MODEL_LEVELS],
-    publicDescription: model ? model.public_description : '',
-    tokenReserveCredits: model?.token_reserve_credits ?? null,
-    mode: model?.pricing.mode ?? 'per_request',
-    requestUser: model?.pricing.mode === 'per_request' ? model.pricing.user_price : '0',
-    requestDonor: model?.pricing.mode === 'per_request' ? model.pricing.donor_reward : '0',
-    userPrices: model?.pricing.mode === 'per_token' ? model.pricing.user_prices : zeroPrices(),
-    donorRewards: model?.pricing.mode === 'per_token' ? model.pricing.donor_rewards : zeroPrices(),
-    discountEnabled: model?.discount.enabled ?? false,
-    discountPercent: model?.discount.percent ?? 0,
-    discountStart: createTimeDraft(model?.discount.start_at ?? null, 'second'),
-    discountEnd: createTimeDraft(model?.discount.end_at ?? null, 'second'),
+    publicDescription: model?.public_description ?? '',
     flatten: model?.flatten_tool_calls ?? false,
   };
 }
@@ -281,8 +276,7 @@ function modelDraftError(draft: ModelDraft): ModelValidation | null {
   if (prices.some((value) => !validAmount(value))) {
     return 'modelPrices';
   }
-  if (draft.mode === 'per_token' && !validTokenReserveCredits(draft.tokenReserveCredits))
-    return 'tokenReserveCredits';
+  if (!validTokenReserveCredits(draft.tokenReserveCredits)) return 'tokenReserveCredits';
   if (
     !Number.isInteger(draft.discountPercent) ||
     draft.discountPercent < 0 ||
@@ -297,7 +291,7 @@ function modelDraftError(draft: ModelDraft): ModelValidation | null {
     end === undefined ||
     (start !== null && (!Number.isSafeInteger(start) || start < 0 || start > MAX_UNIX_SECOND)) ||
     (end !== null && (!Number.isSafeInteger(end) || end < 0 || end > MAX_UNIX_SECOND)) ||
-    (start !== null && end !== null && end <= start)
+    (start !== null && end !== null && end < start)
   ) {
     return 'discountDates';
   }
@@ -310,19 +304,40 @@ function ModelForm({
   refresh,
   onDeleted,
   onCapabilityLoss,
+  onCreated,
 }: {
   role: CharityRole;
   model?: CharityModel;
   refresh: () => Promise<unknown>;
   onDeleted?: () => void;
   onCapabilityLoss?: () => void;
+  onCreated?: (model: CharityModel) => void;
 }) {
   const { t, i18n } = useTranslation();
   const [draft, updateDraft] = useState(() => modelDraft(model));
   const [baseRevision, setBaseRevision] = useState(model?.revision);
+  const [savedDraft, setSavedDraft] = useState(() => priceDraftSignature(modelDraft(model)));
+  const [undoPrice, setUndoPrice] = useState<PriceDraft | null>(null);
+  const [priceSource, setPriceSource] = useState('');
+  const [createdModel, setCreatedModel] = useState<CharityModel | null>(null);
+  useEffect(() => {
+    if (createdModel) onCreated?.(createdModel);
+  }, [createdModel, onCreated]);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [halfError, setHalfError] = useState(false);
   const priceInputs = useRef<Record<string, HTMLInputElement | null>>({});
+  const pricingModeInput = useRef<HTMLSelectElement>(null);
+  const [referenceOpen, setReferenceOpen] = useState(false);
+  const referenceTrigger = useRef<HTMLButtonElement>(null);
+  const referencePanel = useRef<HTMLDivElement>(null);
+  const wasReferenceOpen = useRef(false);
+  useEffect(() => {
+    if (wasReferenceOpen.current === referenceOpen) return;
+    wasReferenceOpen.current = referenceOpen;
+    const target = referenceOpen ? referencePanel.current : referenceTrigger.current;
+    target?.focus({ preventScroll: true });
+    target?.scrollIntoView?.({ block: 'nearest', behavior: 'instant' });
+  }, [referenceOpen]);
   const discountDisclosure = useRef<HTMLDetailsElement>(null);
   const save = useRetainedOperation<
     { body: ReturnType<typeof modelBody>; revision?: string },
@@ -382,306 +397,319 @@ function ModelForm({
   const copy = charityControlCopy(i18n.language);
   const content = (
     <>
-      {model ? <h3>{model.full_name}</h3> : null}
-      <p>{t('common.operations.charity.namingHelp')}</p>
-      <p className="ops-model-preview">
-        <span>{t('common.operations.charity.namePreview')}</span>
-        <output>{`[公益]${draft.provider.trim() || t(charityCopyKey(role, 'provider'))}/${draft.model.trim() || t(charityCopyKey(role, 'model'))}`}</output>
-      </p>
-      {model ? (
-        <p>
-          {t('common.operations.charity.modelSummary', {
-            revision: model.revision,
-            bindings: model.binding_count,
-            success:
-              model.rolling_success.percent === null
-                ? t('common.operations.charity.noSample')
-                : t(charityCopyKey(role, 'successRate'), {
-                    rate: model.rolling_success.percent,
-                    count: model.rolling_success.sample_count,
-                  }),
-          })}
+      <fieldset
+        className="ops-unframed"
+        disabled={
+          (!model && save.isPending) ||
+          remove.isPending ||
+          Boolean(unknownSave) ||
+          save.outcome === 'refresh-failed'
+        }
+      >
+        {model ? <h3>{model.full_name}</h3> : null}
+        <p>{t('common.operations.charity.namingHelp')}</p>
+        <p className="ops-model-preview">
+          <span>{t('common.operations.charity.namePreview')}</span>
+          <output>{`[公益]${draft.provider.trim() || t(charityCopyKey(role, 'provider'))}/${draft.model.trim() || t(charityCopyKey(role, 'model'))}`}</output>
         </p>
-      ) : null}
-      <fieldset className="ops-form-section">
-        <legend>{copy.basicSettings}</legend>
-        <div className="ops-field-grid">
-          <label>
-            <span>{t(charityCopyKey(role, 'provider'))}</span>
-            <input
-              value={draft.provider}
-              onChange={(event) => setDraft({ ...draft, provider: event.target.value })}
-            />
-          </label>
-          <label>
-            <span>{t(charityCopyKey(role, 'model'))}</span>
-            <input
-              value={draft.model}
-              onChange={(event) => setDraft({ ...draft, model: event.target.value })}
-            />
-          </label>
-          <label className="checkbox-label">
-            <input
-              type="checkbox"
-              checked={draft.enabled}
-              onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })}
-            />
-            <span>{t('common.operations.charity.enableCharityModel')}</span>
-          </label>
-        </div>
-      </fieldset>
-      <ModelTypesField
-        value={draft.modelTypes}
-        onChange={(modelTypes) => setDraft({ ...draft, modelTypes })}
-        disabled={save.isPending || remove.isPending || Boolean(unknownSave)}
-        showError
-      />
-      <p className="nb-sub">{t('common.operations.charity.operationHelp')}</p>
-      {draft.modelTypes.includes('embeddings') ? (
-        <p className="nb-sub">{t('common.operations.charity.embeddingBillingHelp')}</p>
-      ) : null}
-      {draft.modelTypes.includes('images_generations') ? (
-        <p className="nb-sub">{t('common.operations.charity.imageBillingHelp')}</p>
-      ) : null}
-      <fieldset className="ops-form-section">
-        <legend>{copy.accessRouting}</legend>
-        <div className="ops-field-grid">
-          <label>
-            <span>{t('common.operations.charity.routeStrategy')}</span>
-            <select
-              value={draft.routeStrategy}
-              onChange={(event) =>
-                setDraft({
-                  ...draft,
-                  routeStrategy: event.target.value as ModelDraft['routeStrategy'],
-                })
-              }
-            >
-              <option value="ordered">{t('common.operations.charity.routeOrdered')}</option>
-              <option value="random">{t('common.operations.charity.routeRandom')}</option>
-              <option value="expiry_weighted">
-                {t('common.operations.charity.routeExpiryWeighted')}
-              </option>
-              <option value="cache_balanced">
-                {t('common.operations.charity.routeCacheBalanced')}
-              </option>
-            </select>
-            <small>
-              {t(
-                draft.routeStrategy === 'ordered'
-                  ? 'common.operations.charity.routeOrderedHelp'
-                  : draft.routeStrategy === 'random'
-                    ? 'common.operations.charity.routeRandomHelp'
-                    : draft.routeStrategy === 'cache_balanced'
-                      ? 'common.operations.charity.routeCacheBalancedHelp'
-                      : 'common.operations.charity.routeExpiryWeightedHelp',
-              )}
-            </small>
-          </label>
-          {role === 'admin' ? (
-            <label>
-              <span>{t('common.operations.charity.routeAffinityTTL')}</span>
-              <input
-                type="number"
-                min={1}
-                max={86_400}
-                step={1}
-                value={draft.affinityTTLSeconds}
-                onChange={(event) =>
-                  setDraft({ ...draft, affinityTTLSeconds: Number(event.target.value) })
-                }
-              />
-              <small>{t('common.operations.charity.routeAffinityTTLHelp')}</small>
-            </label>
-          ) : null}
-          {draft.modelTypes.includes('chat_completions') ? (
-            <>
-              <TransportRuleField
-                value={draft.transportRule}
-                onChange={(transportRule) => setDraft({ ...draft, transportRule })}
-              />
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={draft.flatten}
-                  onChange={(event) => setDraft({ ...draft, flatten: event.target.checked })}
-                />
-                <span>{t(charityCopyKey(role, 'flattenExperimental'))}</span>
-              </label>
-            </>
-          ) : null}
-        </div>
-        <div className="ops-model-settings">
-          <fieldset className="ops-model-levels">
-            <legend>{t('common.operations.charity.allowedLevels')}</legend>
-            <div className="ops-model-level-actions">
-              <button
-                className="nb-btn nb-btn--secondary"
-                type="button"
-                onClick={() =>
-                  setDraft((current) => ({ ...current, allowedLevels: [...MODEL_LEVELS] }))
-                }
-              >
-                {t('common.operations.charity.selectAllLevels')}
-              </button>
-              <button
-                className="nb-btn nb-btn--secondary"
-                type="button"
-                onClick={() => setDraft((current) => ({ ...current, allowedLevels: [] }))}
-              >
-                {t('common.operations.charity.clearAllLevels')}
-              </button>
-            </div>
-            <div className="ops-model-level-options">
-              {MODEL_LEVELS.map((level) => (
-                <label className="checkbox-label" key={level}>
-                  <input
-                    type="checkbox"
-                    checked={draft.allowedLevels.includes(level)}
-                    onChange={(event) =>
-                      setDraft((current) => ({
-                        ...current,
-                        allowedLevels: event.target.checked
-                          ? MODEL_LEVELS.filter(
-                              (candidate) =>
-                                candidate === level || current.allowedLevels.includes(candidate),
-                            )
-                          : current.allowedLevels.filter((candidate) => candidate !== level),
-                      }))
-                    }
-                  />
-                  <span>{t('common.operations.charity.levelLabel', { level })}</span>
-                </label>
-              ))}
-            </div>
-            {draft.allowedLevels.length === 0 ? (
-              <small className="ops-model-level-empty">
-                {t('common.operations.charity.noAllowedLevels')}
-              </small>
-            ) : null}
-          </fieldset>
-          <label className="checkbox-label">
-            <input
-              type="checkbox"
-              checked={draft.isMainstream}
-              onChange={(event) => setDraft({ ...draft, isMainstream: event.target.checked })}
-            />
-            <span>{copy.mainstream}</span>
-          </label>
-          <label>
-            <span>{copy.excluded}</span>
-            <textarea
-              value={draft.excluded}
-              onChange={(event) => setDraft({ ...draft, excluded: event.target.value })}
-            />
-            <small>{copy.excludedHint}</small>
-          </label>
-          <label className="ops-model-description">
-            <span>{t('common.operations.charity.publicDescription')}</span>
-            <textarea
-              rows={5}
-              value={draft.publicDescription}
-              aria-label={t('common.operations.charity.publicDescription')}
-              onChange={(event) =>
-                setDraft((current) => ({ ...current, publicDescription: event.target.value }))
-              }
-            />
-            <small>{t('common.operations.charity.publicDescriptionHelp')}</small>
-          </label>
-        </div>
-      </fieldset>
-      {draft.modelTypes.includes('chat_completions') ? (
-        <RolePolicyEditor
-          value={draft.rolePolicy}
-          onChange={(rolePolicy) => {
-            if (save.isPending || remove.isPending || unknownSave) return;
-            setDraft((current) => ({ ...current, rolePolicy }));
-            save.reset();
-          }}
-          disabled={save.isPending || remove.isPending || Boolean(unknownSave)}
-        />
-      ) : null}
-      <fieldset className="ops-form-section">
-        <legend>{copy.pricingRewards}</legend>
-        <div className="ops-field-grid">
-          <label>
-            <span>{t(charityCopyKey(role, 'pricingMode'))}</span>
-            <select
-              value={draft.mode}
-              onChange={(event) =>
-                setDraft({ ...draft, mode: event.target.value as ModelDraft['mode'] })
-              }
-            >
-              <option value="per_request">{t(charityCopyKey(role, 'perRequest'))}</option>
-              <option value="per_token">{t(charityCopyKey(role, 'perToken'))}</option>
-            </select>
-          </label>
-        </div>
-        <div className="ops-actions">
-          <button
-            className="nb-btn nb-btn--secondary"
-            type="button"
-            onClick={() => {
-              const prices =
-                draft.mode === 'per_request'
-                  ? [['request', draft.requestUser]]
-                  : Object.entries(draft.userPrices);
-              const invalid = prices.find(([, value]) => halfPrice(value) === null);
-              if (invalid) {
-                setHalfError(true);
-                priceInputs.current[invalid[0]]?.focus();
-                return;
-              }
-              setHalfError(false);
-              if (draft.mode === 'per_request') {
-                const reward = halfPrice(draft.requestUser);
-                if (reward !== null) setDraft({ ...draft, requestDonor: reward });
-              } else {
-                const entries = Object.entries(draft.userPrices).map(([key, value]) => [
-                  key,
-                  halfPrice(value),
-                ]);
-                if (entries.every(([, value]) => value !== null))
-                  setDraft({ ...draft, donorRewards: Object.fromEntries(entries) as TokenPrices });
-              }
-            }}
-          >
-            {copy.halfPrice}
-          </button>
-          {halfError ? (
-            <p className="field-error" role="alert">
-              {copy.halfInvalid}
-            </p>
-          ) : null}
-        </div>
-        {draft.mode === 'per_request' ? (
+        {model ? (
+          <p>
+            {t('common.operations.charity.modelSummary', {
+              revision: model.revision,
+              bindings: model.binding_count,
+              success:
+                model.rolling_success.percent === null
+                  ? t('common.operations.charity.noSample')
+                  : t(charityCopyKey(role, 'successRate'), {
+                      rate: model.rolling_success.percent,
+                      count: model.rolling_success.sample_count,
+                    }),
+            })}
+          </p>
+        ) : null}
+        <fieldset className="ops-form-section">
+          <legend>{copy.basicSettings}</legend>
           <div className="ops-field-grid">
             <label>
-              <span>{t(charityCopyKey(role, 'request_user_price_milli'))}</span>
+              <span>{t(charityCopyKey(role, 'provider'))}</span>
               <input
-                value={draft.requestUser}
-                ref={(element) => {
-                  priceInputs.current.request = element;
-                }}
-                onChange={(event) => setDraft({ ...draft, requestUser: event.target.value })}
+                value={draft.provider}
+                onChange={(event) => setDraft({ ...draft, provider: event.target.value })}
               />
             </label>
             <label>
-              <span>{t(charityCopyKey(role, 'request_donor_reward_milli'))}</span>
+              <span>{t(charityCopyKey(role, 'model'))}</span>
               <input
-                value={draft.requestDonor}
-                onChange={(event) => setDraft({ ...draft, requestDonor: event.target.value })}
+                value={draft.model}
+                onChange={(event) => setDraft({ ...draft, model: event.target.value })}
               />
             </label>
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={draft.enabled}
+                onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })}
+              />
+              <span>{t('common.operations.charity.enableCharityModel')}</span>
+            </label>
           </div>
-        ) : (
-          <>
-            <Fold
-              title={t('common.operations.charity.quotaReserve', {
-                defaultValue: 'Quota and reserve',
-              })}
-            >
+        </fieldset>
+        <ModelTypesField
+          value={draft.modelTypes}
+          onChange={(modelTypes) => setDraft({ ...draft, modelTypes })}
+          disabled={save.isPending || remove.isPending || Boolean(unknownSave)}
+          showError
+        />
+        <p className="nb-sub">{t('common.operations.charity.operationHelp')}</p>
+        {draft.modelTypes.includes('embeddings') ? (
+          <p className="nb-sub">{t('common.operations.charity.embeddingBillingHelp')}</p>
+        ) : null}
+        {draft.modelTypes.includes('images_generations') ? (
+          <p className="nb-sub">{t('common.operations.charity.imageBillingHelp')}</p>
+        ) : null}
+        <fieldset className="ops-form-section">
+          <legend>{copy.accessRouting}</legend>
+          <div className="ops-field-grid">
+            <label>
+              <span>{t('common.operations.charity.routeStrategy')}</span>
+              <select
+                value={draft.routeStrategy}
+                onChange={(event) =>
+                  setDraft({
+                    ...draft,
+                    routeStrategy: event.target.value as ModelDraft['routeStrategy'],
+                  })
+                }
+              >
+                <option value="ordered">{t('common.operations.charity.routeOrdered')}</option>
+                <option value="random">{t('common.operations.charity.routeRandom')}</option>
+                <option value="expiry_weighted">
+                  {t('common.operations.charity.routeExpiryWeighted')}
+                </option>
+                <option value="cache_balanced">
+                  {t('common.operations.charity.routeCacheBalanced')}
+                </option>
+              </select>
+              <small>
+                {t(
+                  draft.routeStrategy === 'ordered'
+                    ? 'common.operations.charity.routeOrderedHelp'
+                    : draft.routeStrategy === 'random'
+                      ? 'common.operations.charity.routeRandomHelp'
+                      : draft.routeStrategy === 'cache_balanced'
+                        ? 'common.operations.charity.routeCacheBalancedHelp'
+                        : 'common.operations.charity.routeExpiryWeightedHelp',
+                )}
+              </small>
+            </label>
+            {role === 'admin' ? (
+              <label>
+                <span>{t('common.operations.charity.routeAffinityTTL')}</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={86_400}
+                  step={1}
+                  value={draft.affinityTTLSeconds}
+                  onChange={(event) =>
+                    setDraft({ ...draft, affinityTTLSeconds: Number(event.target.value) })
+                  }
+                />
+                <small>{t('common.operations.charity.routeAffinityTTLHelp')}</small>
+              </label>
+            ) : null}
+            {draft.modelTypes.includes('chat_completions') ? (
+              <>
+                <TransportRuleField
+                  value={draft.transportRule}
+                  onChange={(transportRule) => setDraft({ ...draft, transportRule })}
+                />
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={draft.flatten}
+                    onChange={(event) => setDraft({ ...draft, flatten: event.target.checked })}
+                  />
+                  <span>{t(charityCopyKey(role, 'flattenExperimental'))}</span>
+                </label>
+              </>
+            ) : null}
+          </div>
+          <div className="ops-model-settings">
+            <fieldset className="ops-model-levels">
+              <legend>{t('common.operations.charity.allowedLevels')}</legend>
+              <div className="ops-model-level-actions">
+                <button
+                  className="nb-btn nb-btn--secondary"
+                  type="button"
+                  onClick={() =>
+                    setDraft((current) => ({ ...current, allowedLevels: [...MODEL_LEVELS] }))
+                  }
+                >
+                  {t('common.operations.charity.selectAllLevels')}
+                </button>
+                <button
+                  className="nb-btn nb-btn--secondary"
+                  type="button"
+                  onClick={() => setDraft((current) => ({ ...current, allowedLevels: [] }))}
+                >
+                  {t('common.operations.charity.clearAllLevels')}
+                </button>
+              </div>
+              <div className="ops-model-level-options">
+                {MODEL_LEVELS.map((level) => (
+                  <label className="checkbox-label" key={level}>
+                    <input
+                      type="checkbox"
+                      checked={draft.allowedLevels.includes(level)}
+                      onChange={(event) =>
+                        setDraft((current) => ({
+                          ...current,
+                          allowedLevels: event.target.checked
+                            ? MODEL_LEVELS.filter(
+                                (candidate) =>
+                                  candidate === level || current.allowedLevels.includes(candidate),
+                              )
+                            : current.allowedLevels.filter((candidate) => candidate !== level),
+                        }))
+                      }
+                    />
+                    <span>{t('common.operations.charity.levelLabel', { level })}</span>
+                  </label>
+                ))}
+              </div>
+              {draft.allowedLevels.length === 0 ? (
+                <small className="ops-model-level-empty">
+                  {t('common.operations.charity.noAllowedLevels')}
+                </small>
+              ) : null}
+            </fieldset>
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={draft.isMainstream}
+                onChange={(event) => setDraft({ ...draft, isMainstream: event.target.checked })}
+              />
+              <span>{copy.mainstream}</span>
+            </label>
+            <label>
+              <span>{copy.excluded}</span>
+              <textarea
+                value={draft.excluded}
+                onChange={(event) => setDraft({ ...draft, excluded: event.target.value })}
+              />
+              <small>{copy.excludedHint}</small>
+            </label>
+            <label className="ops-model-description">
+              <span>{t('common.operations.charity.publicDescription')}</span>
+              <textarea
+                rows={5}
+                value={draft.publicDescription}
+                aria-label={t('common.operations.charity.publicDescription')}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, publicDescription: event.target.value }))
+                }
+              />
+              <small>{t('common.operations.charity.publicDescriptionHelp')}</small>
+            </label>
+          </div>
+        </fieldset>
+        {draft.modelTypes.includes('chat_completions') ? (
+          <RolePolicyEditor
+            value={draft.rolePolicy}
+            onChange={(rolePolicy) => {
+              if (save.isPending || remove.isPending || unknownSave) return;
+              setDraft((current) => ({ ...current, rolePolicy }));
+              save.reset();
+            }}
+            disabled={save.isPending || remove.isPending || Boolean(unknownSave)}
+          />
+        ) : null}
+        <div className={`nb-workflow-price-workspace${referenceOpen ? ' is-reference-open' : ''}`}>
+          <div className="nb-workflow-price-editor">
+            <fieldset className="ops-form-section">
+              <legend>{copy.pricingRewards}</legend>
+              <Button
+                type="button"
+                ref={referenceTrigger}
+                aria-expanded={referenceOpen}
+                onClick={() => setReferenceOpen(true)}
+              >
+                {t('common.workflow.openPriceReference')}
+              </Button>
+              {priceSource ? (
+                <p role="status">{t('common.workflow.priceApplied', { source: priceSource })}</p>
+              ) : null}
+              {undoPrice ? (
+                <button
+                  type="button"
+                  className="nb-btn nb-btn--secondary"
+                  onClick={() => {
+                    setDraft((current) => ({ ...current, ...structuredClone(undoPrice) }));
+                    setUndoPrice(null);
+                    setPriceSource('');
+                    pricingModeInput.current?.focus();
+                  }}
+                >
+                  {t('common.workflow.undoPrice')}
+                </button>
+              ) : null}
               <div className="ops-field-grid">
+                <label>
+                  <span>{t(charityCopyKey(role, 'pricingMode'))}</span>
+                  <select
+                    ref={pricingModeInput}
+                    value={draft.mode}
+                    onChange={(event) =>
+                      setDraft(switchPriceMode(draft, event.target.value as ModelDraft['mode']))
+                    }
+                  >
+                    <option value="per_request">{t(charityCopyKey(role, 'perRequest'))}</option>
+                    <option value="per_token">{t(charityCopyKey(role, 'perToken'))}</option>
+                  </select>
+                </label>
+              </div>
+              <div className="ops-actions">
+                <button
+                  className="nb-btn nb-btn--secondary"
+                  type="button"
+                  onClick={() => {
+                    const prices =
+                      draft.mode === 'per_request'
+                        ? [['request', draft.requestUser]]
+                        : Object.entries(draft.userPrices);
+                    const invalid = prices.find(([, value]) => halfPrice(value) === null);
+                    if (invalid) {
+                      setHalfError(true);
+                      priceInputs.current[invalid[0]]?.focus();
+                      return;
+                    }
+                    setHalfError(false);
+                    if (draft.mode === 'per_request') {
+                      const reward = halfPrice(draft.requestUser);
+                      if (reward !== null) setDraft({ ...draft, requestDonor: reward });
+                    } else {
+                      const entries = Object.entries(draft.userPrices).map(([key, value]) => [
+                        key,
+                        halfPrice(value),
+                      ]);
+                      if (entries.every(([, value]) => value !== null))
+                        setDraft({
+                          ...draft,
+                          donorRewards: Object.fromEntries(entries) as TokenPrices,
+                        });
+                    }
+                  }}
+                >
+                  {copy.halfPrice}
+                </button>
+                {halfError ? (
+                  <p className="field-error" role="alert">
+                    {copy.halfInvalid}
+                  </p>
+                ) : null}
+              </div>
+              <Fold title={t('common.operations.charity.quotaReserve')}>
                 <label>
                   <span>{t('common.operations.charity.tokenReserveCredits')}</span>
                   <input
@@ -689,111 +717,183 @@ function ModelForm({
                     inputMode="decimal"
                     value={draft.tokenReserveCredits ?? ''}
                     onChange={(event) =>
-                      setDraft((current) => ({
-                        ...current,
-                        tokenReserveCredits: event.target.value || null,
-                      }))
+                      setDraft({ ...draft, tokenReserveCredits: event.target.value || null })
                     }
                   />
                   <small>{t('common.operations.charity.tokenReserveCreditsHelp')}</small>
                 </label>
-              </div>
-            </Fold>
-            <div className="charity-price-grid">
-              <div className="charity-price-headings" aria-hidden="true">
-                {(['userPrices', 'donorRewards'] as const).map((side) => (
-                  <strong key={side}>
-                    {t(
-                      `common.operations.charity.${side === 'userPrices' ? 'userPrices' : 'donorRewards'}`,
-                    )}
-                  </strong>
-                ))}
-              </div>
-              {(Object.keys(draft.userPrices) as (keyof TokenPrices)[]).map((field) => (
-                <div className="charity-price-row" key={field}>
-                  {(['userPrices', 'donorRewards'] as const).map((side) => (
-                    <label key={side}>
-                      <span>{t(tokenPriceCopyKey(role, side, field))}</span>
-                      <input
-                        value={draft[side][field]}
-                        ref={(element) => {
-                          if (side === 'userPrices') priceInputs.current[field] = element;
-                        }}
-                        onChange={(event) => setPrice(side, field, event.target.value)}
-                      />
-                    </label>
-                  ))}
+                {draft.mode === 'per_request' ? <p>{t('common.workflow.reserveLater')}</p> : null}
+              </Fold>
+              {draft.mode === 'per_request' ? (
+                <div className="ops-field-grid">
+                  <label>
+                    <span>{t(charityCopyKey(role, 'request_user_price_milli'))}</span>
+                    <input
+                      value={draft.requestUser}
+                      ref={(element) => {
+                        priceInputs.current.request = element;
+                      }}
+                      onChange={(event) => setDraft({ ...draft, requestUser: event.target.value })}
+                    />
+                  </label>
+                  <label>
+                    <span>{t(charityCopyKey(role, 'request_donor_reward_milli'))}</span>
+                    <input
+                      value={draft.requestDonor}
+                      onChange={(event) => setDraft({ ...draft, requestDonor: event.target.value })}
+                    />
+                  </label>
                 </div>
-              ))}
-            </div>
-          </>
-        )}
-      </fieldset>
-      <SessionHeaderFields
-        value={draft.sessionHeaders}
-        onChange={(sessionHeaders) => setDraft((value) => ({ ...value, sessionHeaders }))}
-      />
-      <ContextPricingFields
-        value={draft}
-        role={role}
-        onChange={(fields) => setDraft((current) => ({ ...current, ...fields }))}
-      />
-      <details className="ops-advanced" ref={discountDisclosure}>
-        <summary>
-          <strong>{copy.discountSettings}</strong>
-          {' · '}
-          {draft.discountEnabled
-            ? t('common.operations.charity.discountSummary', { percent: draft.discountPercent })
-            : t('common.disabled')}
-        </summary>
-        <fieldset className="ops-form-section">
-          <legend>{copy.discountSettings}</legend>
-          <div className="ops-field-grid ops-paired-fields">
-            <TimeContextNotice station={role === 'admin' ? 'admin' : 'steward'} />
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={draft.discountEnabled}
-                onChange={(event) => setDraft({ ...draft, discountEnabled: event.target.checked })}
-              />
-              <span>{t(charityCopyKey(role, 'discountEnabled'))}</span>
-            </label>
-            <label>
-              <span>{t(charityCopyKey(role, 'discountPercent'))}</span>
-              <input
-                type="number"
-                min="0"
-                max="100"
-                value={draft.discountPercent}
-                onChange={(event) =>
-                  setDraft({ ...draft, discountPercent: Number(event.target.value) })
+              ) : (
+                <>
+                  <div className="charity-price-grid">
+                    <div className="charity-price-headings" aria-hidden="true">
+                      {(['userPrices', 'donorRewards'] as const).map((side) => (
+                        <strong key={side}>
+                          {t(
+                            `common.operations.charity.${side === 'userPrices' ? 'userPrices' : 'donorRewards'}`,
+                          )}
+                        </strong>
+                      ))}
+                    </div>
+                    {(Object.keys(draft.userPrices) as (keyof TokenPrices)[]).map((field) => (
+                      <div className="charity-price-row" key={field}>
+                        {(['userPrices', 'donorRewards'] as const).map((side) => (
+                          <label key={side}>
+                            <span>{t(tokenPriceCopyKey(role, side, field))}</span>
+                            <input
+                              value={draft[side][field]}
+                              ref={(element) => {
+                                if (side === 'userPrices') priceInputs.current[field] = element;
+                              }}
+                              onChange={(event) => setPrice(side, field, event.target.value)}
+                            />
+                          </label>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </fieldset>
+            <ContextPricingFields
+              value={draft}
+              role={role}
+              onChange={(fields) => setDraft((current) => ({ ...current, ...fields }))}
+            />
+            <details className="ops-advanced" ref={discountDisclosure}>
+              <summary>
+                <strong>{copy.discountSettings}</strong>
+                {' · '}
+                {draft.discountEnabled
+                  ? t('common.operations.charity.discountSummary', {
+                      percent: draft.discountPercent,
+                    })
+                  : t('common.disabled')}
+              </summary>
+              <fieldset className="ops-form-section">
+                <legend>{copy.discountSettings}</legend>
+                <div className="ops-field-grid ops-paired-fields">
+                  <TimeContextNotice station={role === 'admin' ? 'admin' : 'steward'} />
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={draft.discountEnabled}
+                      onChange={(event) =>
+                        setDraft({ ...draft, discountEnabled: event.target.checked })
+                      }
+                    />
+                    <span>{t(charityCopyKey(role, 'discountEnabled'))}</span>
+                  </label>
+                  <label>
+                    <span>{t(charityCopyKey(role, 'discountPercent'))}</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={draft.discountPercent}
+                      onChange={(event) =>
+                        setDraft({ ...draft, discountPercent: Number(event.target.value) })
+                      }
+                    />
+                  </label>
+                  <TimeInput
+                    label={t(charityCopyKey(role, 'discountStart'))}
+                    station={role === 'admin' ? 'admin' : 'steward'}
+                    draft={draft.discountStart}
+                    showZoneHint={false}
+                    onChange={(update) =>
+                      setDraft((current) => ({
+                        ...current,
+                        discountStart: update(current.discountStart),
+                      }))
+                    }
+                  />
+                  <TimeInput
+                    label={t(charityCopyKey(role, 'discountEnd'))}
+                    station={role === 'admin' ? 'admin' : 'steward'}
+                    draft={draft.discountEnd}
+                    showZoneHint={false}
+                    onChange={(update) =>
+                      setDraft((current) => ({
+                        ...current,
+                        discountEnd: update(current.discountEnd),
+                      }))
+                    }
+                  />
+                </div>
+              </fieldset>
+            </details>
+          </div>
+          <div
+            className="nb-workflow-price-reference"
+            hidden={!referenceOpen}
+            ref={referencePanel}
+            tabIndex={-1}
+          >
+            <Panel aria-label={t('common.workflow.priceReferencePanel')}>
+              <PanelHead
+                title={t('common.workflow.priceReferencePanel')}
+                level={3}
+                description={t('common.workflow.currentPriceTarget', {
+                  name: model?.full_name ?? `[公益]${draft.provider}/${draft.model}`,
+                })}
+                actions={
+                  <Button type="button" onClick={() => setReferenceOpen(false)}>
+                    {t('common.workflow.returnPriceDraft')}
+                  </Button>
                 }
               />
-            </label>
-            <TimeInput
-              label={t(charityCopyKey(role, 'discountStart'))}
-              station={role === 'admin' ? 'admin' : 'steward'}
-              draft={draft.discountStart}
-              showZoneHint={false}
-              onChange={(update) =>
-                setDraft((current) => ({
-                  ...current,
-                  discountStart: update(current.discountStart),
-                }))
-              }
-            />
-            <TimeInput
-              label={t(charityCopyKey(role, 'discountEnd'))}
-              station={role === 'admin' ? 'admin' : 'steward'}
-              draft={draft.discountEnd}
-              showZoneHint={false}
-              onChange={(update) =>
-                setDraft((current) => ({ ...current, discountEnd: update(current.discountEnd) }))
-              }
-            />
+              <PanelBody>
+                <div className="nb-workflow-price-reference-body">
+                  <PriceTools
+                    role={role}
+                    current={draftPriceConfig(draft)}
+                    onCapabilityLoss={onCapabilityLoss}
+                    onApply={(config, name, revision) => {
+                      setUndoPrice(snapshotPriceDraft(draft));
+                      setDraft((current) => ({ ...current, ...priceDraft(config) }));
+                      setPriceSource(`${name} · ${revision}`);
+                      if (window.matchMedia?.('(width < 64rem)').matches) setReferenceOpen(false);
+                    }}
+                  />
+                </div>
+              </PanelBody>
+              <div className="nb-workflow-price-reference-mobile-return">
+                <PanelFoot>
+                  <Button type="button" onClick={() => setReferenceOpen(false)}>
+                    {t('common.workflow.returnWithoutFilling')}
+                  </Button>
+                </PanelFoot>
+              </div>
+            </Panel>
           </div>
-        </fieldset>
-      </details>
+        </div>
+        <SessionHeaderFields
+          value={draft.sessionHeaders}
+          onChange={(sessionHeaders) => setDraft((value) => ({ ...value, sessionHeaders }))}
+        />
+      </fieldset>
       {save.error ? (
         <ErrorState error={save.error} />
       ) : remove.error ? (
@@ -820,29 +920,49 @@ function ModelForm({
           className="nb-btn nb-btn--primary"
           type="button"
           disabled={
-            Boolean(validationError) || save.isPending || remove.isPending || Boolean(unknownSave)
+            Boolean(validationError) ||
+            save.isPending ||
+            remove.isPending ||
+            Boolean(unknownSave) ||
+            save.outcome === 'refresh-failed'
           }
           onClick={() => {
             if (!modelDraftError(draft))
-              save.mutate({
-                body: modelBody(
-                  draft,
-                  draft.mode === 'per_token' &&
-                    (!model || draft.tokenReserveCredits !== (model.token_reserve_credits ?? null)),
-                  role === 'admin',
-                ),
-                revision: baseRevision,
-              });
+              save.mutate(
+                {
+                  body: modelBody(
+                    draft,
+                    !model || draft.tokenReserveCredits !== (model.token_reserve_credits ?? null),
+                    role === 'admin',
+                  ),
+                  revision: baseRevision,
+                },
+                {
+                  onSuccess: (result) => {
+                    setSavedDraft(priceDraftSignature(draft));
+                    if (!model) setCreatedModel(result);
+                  },
+                },
+              );
           }}
         >
-          {model ? t('common.operations.charity.saveModel') : t(charityCopyKey(role, 'newModel'))}
+          {model
+            ? t('common.workflow.saveTarget', { id: model.id })
+            : t(charityCopyKey(role, 'newModel'))}
         </button>
         {unknownSave && save.variables ? (
           <button
             type="button"
             className="nb-btn nb-btn--secondary"
             disabled={save.isPending || remove.isPending}
-            onClick={() => save.mutate(save.variables!)}
+            onClick={() =>
+              save.mutate(save.variables!, {
+                onSuccess: (result) => {
+                  setSavedDraft(priceDraftSignature(draft));
+                  if (!model) setCreatedModel(result);
+                },
+              })
+            }
           >
             {t('common.operations.charity.retrySavedModel')}
           </button>
@@ -851,9 +971,15 @@ function ModelForm({
           <button
             type="button"
             className="nb-btn nb-btn--secondary"
-            disabled={save.isPending || remove.isPending}
+            disabled={
+              save.isPending ||
+              remove.isPending ||
+              Boolean(unknownSave) ||
+              save.outcome === 'refresh-failed'
+            }
             onClick={() => {
               setDraft(modelDraft(model));
+              setSavedDraft(priceDraftSignature(modelDraft(model)));
               setBaseRevision(model.revision);
               save.reset();
             }}
@@ -865,7 +991,12 @@ function ModelForm({
           <button
             className="nb-btn nb-btn--danger"
             type="button"
-            disabled={save.isPending || remove.isPending || Boolean(unknownSave)}
+            disabled={
+              save.isPending ||
+              remove.isPending ||
+              Boolean(unknownSave) ||
+              save.outcome === 'refresh-failed'
+            }
             onClick={() => setConfirmDelete(true)}
           >
             {t('common.operations.charity.deleteModel')}
@@ -891,13 +1022,11 @@ function ModelForm({
   );
   return (
     <Card className="charity-model-editor">
-      {model ? (
-        content
-      ) : (
-        <Fold title={t(charityCopyKey(role, 'newModel'))} defaultOpen plain>
-          {content}
-        </Fold>
-      )}
+      <AsyncLeaveDialog dirty={priceDraftSignature(draft) !== savedDraft} />
+      {content}
+      {save.refreshError ? (
+        <ErrorState error={save.refreshError} onRetry={() => void save.refresh()} />
+      ) : null}
     </Card>
   );
 }
@@ -928,8 +1057,6 @@ function BindingsPanel({
     listType: 'charity-binding-order',
     scopeKey: `${accountId}:${model.id}`,
   });
-  const [selected, setSelected] = useState<Record<string, CharitySelection>>({});
-  const [pickerBlocked, setPickerBlocked] = useState(true);
   const [orderDraft, setOrderDraft] = useState<{ revision: string; ids: string[] } | null>(null);
   const bindings = useQuery({
     queryKey: [...charityKeys.bindings(role, model.id), accountId],
@@ -944,17 +1071,6 @@ function BindingsPanel({
   const reconcile = async () => {
     await refresh();
   };
-  const add = useRetainedOperation(
-    (
-      input: {
-        selections: { donation_key_id: string; upstream_model_id: string }[];
-        revision: string;
-      },
-      key,
-    ) => addManagedBindings(role, model.id, input.revision, input.selections, key),
-    reconcile,
-    charityKeys.root(role),
-  );
   const order = useRetainedOperation(
     (input: { ids: string[]; revision: string }, key) =>
       orderManagedBindings(role, model.id, input.revision, input.ids, key),
@@ -968,8 +1084,6 @@ function BindingsPanel({
     charityKeys.root(role),
   );
   const mutationCapabilityLost =
-    isUnauthorized(add.error) ||
-    isForbidden(add.error) ||
     isUnauthorized(order.error) ||
     isForbidden(order.error) ||
     isUnauthorized(remove.error) ||
@@ -995,15 +1109,7 @@ function BindingsPanel({
   );
   const bindingPage = snapshotPage(orderedBindings, pager.page, pager.pageSize);
   const busy =
-    bindings.isFetching ||
-    Boolean(bindings.error) ||
-    order.isPending ||
-    add.isPending ||
-    remove.isPending;
-  const chosen = Object.values(selected).map((entry) => ({
-    donation_key_id: entry.donation_key_id,
-    upstream_model_id: entry.upstream_model_id,
-  }));
+    bindings.isFetching || Boolean(bindings.error) || order.isPending || remove.isPending;
   if (capabilityLost || mutationCapabilityLost) {
     return (
       <Card>
@@ -1216,42 +1322,15 @@ function BindingsPanel({
             <span>{t('common.operations.charity.saveOrderHelp')}</span>
           </div>
         ) : null}
-        <h3>{t('common.operations.charity.bindingCandidates')}</h3>
-        <CharityModelScope modelID={role === 'steward' ? model.id : undefined}>
-          <CharityBindingPicker
-            key={model.id}
-            role={role}
-            modelId={model.id}
-            selected={selected}
-            onChange={setSelected}
-            locked={busy || !bindings.data}
-            onCapabilityLoss={onCapabilityLoss}
-            onReadStateChange={setPickerBlocked}
-            renderKeyManager={renderKeyManager}
-          />
-        </CharityModelScope>
-        <div className="ops-actions">
-          <button
-            className="nb-btn nb-btn--primary"
-            type="button"
-            disabled={
-              !bindings.data || chosen.length === 0 || busy || orderChanged || pickerBlocked
-            }
-            onClick={() =>
-              bindings.data &&
-              !pickerBlocked &&
-              add.mutate(
-                { selections: chosen, revision: bindings.data.binding_revision },
-                { onSuccess: () => setSelected({}) },
-              )
-            }
-          >
-            {t('common.operations.charity.addSelected')}
-          </button>
-        </div>
-        {add.error ? (
-          <ErrorState error={add.error} />
-        ) : order.error ? (
+        <BindingAddForm
+          role={role}
+          accountId={accountId}
+          model={model}
+          refresh={refresh}
+          onCapabilityLoss={onCapabilityLoss}
+          renderKeyManager={renderKeyManager}
+        />
+        {order.error ? (
           <ErrorState error={order.error} />
         ) : remove.error ? (
           <ErrorState error={remove.error} />
@@ -1282,6 +1361,7 @@ export function ModelsPanel({
 }) {
   const { t } = useTranslation();
   const location = useLocation();
+  const manageTriggerId = useId();
   const client = useQueryClient();
   const [params, setParams] = useSearchState();
   const rawQuery = oneParam(params, 'model_q');
@@ -1289,6 +1369,7 @@ export function ModelsPanel({
   const rawEnabled = oneParam(params, 'model_enabled');
   const enabled = ['true', 'false'].includes(rawEnabled) ? rawEnabled : '';
   const selectedId = selectedID(params, 'charity_model');
+  const creating = !trainee && oneParam(params, 'model_workspace') === 'new' && !selectedId;
   const [draft, setDraft] = useState({ query, text: query });
   const queryDraft = draft.query === query ? draft.text : query;
   const setQueryDraft = (text: string) => setDraft({ query, text });
@@ -1322,6 +1403,17 @@ export function ModelsPanel({
         const next = new URLSearchParams(current);
         if (id) next.set('charity_model', id);
         else next.delete('charity_model');
+        next.delete('model_workspace');
+        const bindingDonation = selectedID(current, 'binding_donation');
+        const bindingKey = selectedID(current, 'binding_key');
+        if (bindingDonation && bindingKey) {
+          next.set('charity_section', 'donations');
+          next.set('donation_id', bindingDonation);
+          next.set('donation_key', bindingKey);
+          if (id) next.set('binding_target', id);
+          next.delete('charity_model');
+          next.delete('binding_donation');
+        }
         if (returnKey && returnDonation) {
           next.set('charity_section', 'donations');
           next.set('donation_id', returnDonation);
@@ -1369,6 +1461,7 @@ export function ModelsPanel({
     queryFn: ({ signal }) =>
       getManagedCharityModelsPage(role, query, enabled, pager.page, pager.pageSize, signal),
     retry: false,
+    enabled: !selectedId && !creating,
     placeholderData: (previous, previousQuery) =>
       samePageFamily(previousQuery?.queryKey, listKey) ? previous : undefined,
   });
@@ -1386,7 +1479,7 @@ export function ModelsPanel({
   });
   const selected = detail.data;
   const navigationReady = selectedId
-    ? !models.isPending && !models.isFetching && !detail.isPending && !detail.isFetching
+    ? !detail.isPending && !detail.isFetching
     : !models.isPending && !models.isFetching;
   const { listRef, detailRef, remember } = useDetailNavigation(selectedId, navigationReady);
   const capabilityLost = [models.error, detail.error].some(
@@ -1395,7 +1488,8 @@ export function ModelsPanel({
   useEffect(() => {
     if (capabilityLost) onCapabilityLoss?.();
   }, [capabilityLost, onCapabilityLoss]);
-  const refresh = () => client.invalidateQueries({ queryKey: charityKeys.root(role) });
+  const refresh = () =>
+    client.invalidateQueries({ queryKey: charityKeys.root(role) }, { throwOnError: true });
   if (capabilityLost) {
     return (
       <Card>
@@ -1407,159 +1501,210 @@ export function ModelsPanel({
   }
   return (
     <div className="ops-stack" ref={listRef} tabIndex={-1}>
-      {!trainee ? (
-        <ModelForm role={role} refresh={refresh} onCapabilityLoss={onCapabilityLoss} />
-      ) : null}
-      <Card>
-        <form
-          className="ops-toolbar"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (validManagementSearch(queryDraft)) updateFilters(queryDraft.trim());
-          }}
-        >
-          <label>
-            <span>{t('common.operations.charity.searchModels')}</span>
-            <input
-              maxLength={256}
-              placeholder={t("common.operations.logs.presentation.modelPlaceholder")}
-              aria-invalid={!validManagementSearch(queryDraft)}
-              value={queryDraft}
-              onChange={(event) => setQueryDraft(event.target.value)}
-            />
-          </label>
-          <label>
-            <span>{t(charityCopyKey(role, 'enabled'))}</span>
-            <select
-              value={enabled}
-              onChange={(event) => {
-                updateFilters(query, event.target.value);
-              }}
+      <PageHeader
+        title={t(
+          creating
+            ? 'common.workflow.newModel'
+            : selectedId
+              ? 'common.workflow.editModel'
+              : 'common.workflow.models',
+        )}
+        description={selected ? `${selected.full_name} · #${selected.id}` : undefined}
+        back={
+          creating || selectedId ? (
+            <button className="nb-btn nb-btn--ghost" type="button" onClick={() => setSelected('')}>
+              {t(
+                selectedID(params, 'binding_donation')
+                  ? 'common.workflow.returnDonation'
+                  : selectedID(params, 'model_from_key')
+                    ? 'common.keyModels.returnToKey'
+                    : 'common.operations.charity.returnToList',
+              )}
+            </button>
+          ) : undefined
+        }
+        actions={
+          !trainee && !creating && !selectedId ? (
+            <button
+              type="button"
+              className="nb-btn nb-btn--primary"
+              onClick={() =>
+                setParams((current) => {
+                  const next = new URLSearchParams(current);
+                  next.set('model_workspace', 'new');
+                  next.delete('charity_model');
+                  return next;
+                })
+              }
             >
-              <option value="">{t('common.all')}</option>
-              <option value="true">{t(charityCopyKey(role, 'enabled'))}</option>
-              <option value="false">{t(charityCopyKey(role, 'disabled'))}</option>
-            </select>
-          </label>
-          <button
-            className="nb-btn nb-btn--secondary"
-            type="submit"
-            disabled={!validManagementSearch(queryDraft)}
-          >
-            {t('common.applyFilter')}
-          </button>
-        </form>
-        {models.isPending ? (
-          <LoadingState />
-        ) : models.error ? (
-          <ErrorState error={models.error} onRetry={() => void models.refetch()} />
-        ) : models.data.data.length === 0 ? (
-          <EmptyState
-            title={t(charityCopyKey(role, 'noModels'))}
-            body={t(charityCopyKey(role, 'noModelsBody'))}
+              {t('common.workflow.newModel')}
+            </button>
+          ) : undefined
+        }
+      />
+      {creating ? (
+        <ModelForm
+          role={role}
+          refresh={refresh}
+          onCapabilityLoss={onCapabilityLoss}
+          onCreated={(model) => setSelected(model.id)}
+        />
+      ) : null}
+      {!selectedId && !creating ? (
+        <Card>
+          <FilterBar
+            activeCount={[query, enabled].filter(Boolean).length}
+            secondaryAlwaysVisible
+            secondaryLabel={t('common.workflow.filters')}
+            onSubmit={() => {
+              if (validManagementSearch(queryDraft)) updateFilters(queryDraft.trim());
+            }}
+            search={
+              <>
+                <Field label={t('common.operations.charity.searchModels')}>
+                  {(props) => (
+                    <input
+                      {...props}
+                      value={queryDraft}
+                      maxLength={256}
+                      placeholder={t('common.workflow.modelSearch')}
+                      aria-invalid={!validManagementSearch(queryDraft)}
+                      onChange={(event) => setQueryDraft(event.target.value)}
+                    />
+                  )}
+                </Field>
+                <Button type="submit" disabled={!validManagementSearch(queryDraft)}>
+                  {t('common.applyFilter')}
+                </Button>
+              </>
+            }
+            secondary={
+              <Field label={t(charityCopyKey(role, 'enabled'))}>
+                {(props) => (
+                  <select
+                    {...props}
+                    value={enabled}
+                    onChange={(event) => updateFilters(query, event.target.value)}
+                  >
+                    <option value="">{t('common.all')}</option>
+                    <option value="true">{t(charityCopyKey(role, 'enabled'))}</option>
+                    <option value="false">{t(charityCopyKey(role, 'disabled'))}</option>
+                  </select>
+                )}
+              </Field>
+            }
           />
-        ) : (
-          <>
-            <div className="ops-table-scroll">
-              <table className="ops-table ops-table--responsive">
-                <thead>
-                  <tr>
-                    <th>{t(charityCopyKey(role, 'model'))}</th>
-                    <th>{t('common.operations.charity.state')}</th>
-                    <th>{t('common.operations.charity.publicDescription')}</th>
-                    <th>{t('common.operations.charity.allowedLevels')}</th>
-                    <th>{t('common.operations.charity.pricing')}</th>
-                    <th>{t(charityCopyKey(role, 'bindings'))}</th>
-                    <th>{t('common.operations.charity.open')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {models.data.data.map((model) => (
-                    <tr key={model.id}>
-                      <td className="ops-cell-wide" data-label={t(charityCopyKey(role, 'model'))}>
-                        <span className="charity-model-call-name" title={model.full_name}>
+          {models.isPending ? (
+            <LoadingState />
+          ) : models.error ? (
+            <ErrorState error={models.error} onRetry={() => void models.refetch()} />
+          ) : models.data.data.length === 0 ? (
+            <EmptyState
+              title={t(charityCopyKey(role, 'noModels'))}
+              body={t(charityCopyKey(role, 'noModelsBody'))}
+            />
+          ) : (
+            <>
+              <DataTable
+                caption={t('common.workflow.models')}
+                rowKey={(model) => model.id}
+                rows={models.data.data}
+                columns={[
+                  {
+                    key: 'model',
+                    header: t(charityCopyKey(role, 'model')),
+                    cell: 'title',
+                    render: (model) => (
+                      <>
+                        <span
+                          className="charity-model-call-name nb-workflow-id"
+                          title={model.full_name}
+                        >
                           {model.full_name}
                         </span>
                         <ModelTypesSummary value={model.model_types} />
-                      </td>
-                      <td data-label={t('common.operations.charity.state')}>
-                        <StatusBadge
-                          active={model.enabled}
-                          label={t(charityCopyKey(role, model.enabled ? 'enabled' : 'disabled'))}
-                        />
-                      </td>
-                      <td
-                        className="ops-cell-wide ops-model-description-cell"
-                        data-label={t('common.operations.charity.publicDescription')}
+                      </>
+                    ),
+                  },
+                  {
+                    key: 'state',
+                    header: t('common.operations.charity.state'),
+                    cell: 'status',
+                    render: (model) => (
+                      <StatusBadge
+                        active={model.enabled}
+                        label={t(charityCopyKey(role, model.enabled ? 'enabled' : 'disabled'))}
+                      />
+                    ),
+                  },
+                  {
+                    key: 'description',
+                    header: t('common.operations.charity.publicDescription'),
+                    cell: 'meta',
+                    render: (model) => model.public_description,
+                  },
+                  {
+                    key: 'levels',
+                    header: t('common.operations.charity.allowedLevels'),
+                    cell: 'meta',
+                    render: (model) =>
+                      model.allowed_levels.length
+                        ? model.allowed_levels
+                            .map((level) => t('common.operations.charity.levelLabel', { level }))
+                            .join(', ')
+                        : t('common.operations.charity.noAllowedLevels'),
+                  },
+                  {
+                    key: 'pricing',
+                    header: t('common.operations.charity.pricing'),
+                    cell: 'meta',
+                    render: (model) => <PriceConfigBrief config={model} role={role} />,
+                  },
+                  {
+                    key: 'bindings',
+                    header: t(charityCopyKey(role, 'bindings')),
+                    cell: 'meta',
+                    align: 'num',
+                    render: (model) => model.binding_count,
+                  },
+                  {
+                    key: 'open',
+                    header: t('common.workflow.actions'),
+                    cell: 'action',
+                    render: (model) => (
+                      <Button
+                        id={manageTriggerId + '-' + model.id}
+                        type="button"
+                        disabled={models.isFetching}
+                        onClick={() => setSelected(model.id)}
                       >
-                        {model.public_description}
-                      </td>
-                      <td data-label={t('common.operations.charity.allowedLevels')}>
-                        {model.allowed_levels.length > 0
-                          ? model.allowed_levels
-                              .map((level) => t('common.operations.charity.levelLabel', { level }))
-                              .join(', ')
-                          : t('common.operations.charity.noAllowedLevels')}
-                      </td>
-                      <td data-label={t('common.operations.charity.pricing')}>
-                        {t(
-                          charityCopyKey(
-                            role,
-                            model.pricing.mode === 'per_request' ? 'perRequest' : 'perToken',
-                          ),
-                        )}
-                      </td>
-                      <td data-label={t(charityCopyKey(role, 'bindings'))}>
-                        {model.binding_count}
-                      </td>
-                      <td
-                        className="ops-cell-wide"
-                        data-label={t('common.operations.charity.open')}
-                      >
-                        <button
-                          className="nb-btn nb-btn--secondary ops-row-action"
-                          type="button"
-                          disabled={models.isFetching}
-                          onClick={() => setSelected(model.id)}
-                        >
-                          {t('common.operations.charity.manage')}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-        {models.data && !models.error ? (
-          <PagePagination
-            metadata={models.data.pagination}
-            requestedPage={pager.page}
-            onPageChange={pager.setPage}
-            onPageSizeChange={pager.setPageSize}
-            busy={models.isFetching}
-          />
-        ) : null}
-      </Card>
+                        {t('common.operations.charity.manage')}
+                      </Button>
+                    ),
+                  },
+                ]}
+              />
+            </>
+          )}
+          {models.data && !models.error ? (
+            <PagePagination
+              metadata={models.data.pagination}
+              requestedPage={pager.page}
+              onPageChange={pager.setPage}
+              onPageSizeChange={pager.setPageSize}
+              busy={models.isFetching}
+            />
+          ) : null}
+        </Card>
+      ) : null}
       {selectedId ? (
         <div className="ops-stack ops-detail-target" ref={detailRef} tabIndex={-1}>
-          <button className="nb-btn nb-btn--ghost" type="button" onClick={() => setSelected('')}>
-            {t(
-              selectedID(params, 'model_from_key')
-                ? 'common.keyModels.returnToKey'
-                : 'common.operations.charity.returnToList',
-            )}
-          </button>
           {detail.isPending ? (
             <LoadingState />
           ) : detail.error ? (
             <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
           ) : selected ? (
-            <fieldset
-              className="ops-stack ops-unframed"
-              disabled={detail.isFetching || models.isFetching || Boolean(models.error)}
-            >
+            <fieldset className="ops-stack ops-unframed" disabled={detail.isFetching}>
               {trainee ? (
                 <CharityRolePolicyForm
                   key={`roles:${selected.id}`}

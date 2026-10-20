@@ -1,6 +1,8 @@
+vi.mock('@shared/components/AsyncLeaveDialog', () => ({ AsyncLeaveDialog: () => null }));
 import { charityKeys } from '@shared/operations/charity';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { useLocation, useNavigate } from 'react-router';
+import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
 import { CharityPage } from '../../admin/pages/CharityPage';
@@ -74,6 +76,7 @@ function summary(value: ReturnType<typeof donation>) {
     source_count: '1',
     sources: [safeSource],
     state_counts: {
+      rate_limited: '0',
       pending: value.status === 'pending' ? String(keys.length) : '0',
       available: value.status === 'approved' ? String(keys.length) : '0',
       disabled: '0',
@@ -250,6 +253,54 @@ function installBindingNavigation(
 afterEach(() => vi.unstubAllGlobals());
 
 describe('managed donation page integration', () => {
+  it('clears only workflow parameters on account and role changes even when only new parameters remain', async () => {
+    const newParameters =
+      'source_key_state=disabled&handling_donation=7&handling_view=all&handling_page=3&handling_page_size=50&model_workspace=new&binding_donation=7&binding_key=21&binding_target=1&keep=other';
+    function IdentityHarness() {
+      const [step, setStep] = useState(0);
+      const navigate = useNavigate();
+      const frame = step < 2 ? 'admin' : 'steward';
+      const account = step === 0 ? 'first-account' : 'second-account';
+      return (
+        <>
+          <button type="button" onClick={() => setStep((current) => current + 1)}>
+            Change management identity
+          </button>
+          <button type="button" onClick={() => navigate(`?${newParameters}`)}>
+            Restore workflow query
+          </button>
+          <CharityManagement
+            key={`${frame}:${account}`}
+            frame={frame}
+            accountId={account}
+            trainee={step === 2}
+          />
+          <Probe />
+        </>
+      );
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async (input) => {
+        const url = new URL(String(input), 'http://admin.test');
+        if (url.pathname.endsWith('/time-context'))
+          return json({ mode: 'site', offset_minutes: 0 });
+        return json(page([], url));
+      }),
+    );
+    const view = await renderWithProviders(<IdentityHarness />, {
+      station: 'admin',
+      route: `/charity?${newParameters}`,
+    });
+    expect(screen.getByTestId('url')).toHaveTextContent('source_key_state=disabled');
+    await view.user.click(screen.getByRole('button', { name: 'Change management identity' }));
+    await waitFor(() => expect(screen.getByTestId('url')).toHaveTextContent(/^\?keep=other$/));
+    await view.user.click(screen.getByRole('button', { name: 'Restore workflow query' }));
+    await waitFor(() => expect(screen.getByTestId('url')).toHaveTextContent('binding_target=1'));
+    await view.user.click(screen.getByRole('button', { name: 'Change management identity' }));
+    await waitFor(() => expect(screen.getByTestId('url')).toHaveTextContent(/^\?keep=other$/));
+  });
+
   it.each([
     { role: 'admin', locale: 'zh', unavailable: '来源已不可用' },
     { role: 'admin', locale: 'en', unavailable: 'Source no longer available' },
@@ -300,7 +351,7 @@ describe('managed donation page integration', () => {
       ).toBe(true);
       await view.user.click(screen.getByRole('button', { name: 'Return to model configuration' }));
       expect(await screen.findByRole('heading', { name: '[公益]Provider/Model1' })).toBeVisible();
-      expect(await screen.findByText('[公益]Provider/Model21')).toBeVisible();
+      expect(screen.queryByText('[公益]Provider/Model21')).not.toBeInTheDocument();
       const params = new URLSearchParams(screen.getByTestId('url').textContent ?? '');
       expect(params.get('charity_model')).toBe('1');
       expect(params.get('models_page')).toBe('2');
@@ -472,22 +523,24 @@ describe('managed donation page integration', () => {
       { station: 'admin', route: '/charity?charity_section=models&models_page=2&charity_model=1' },
     );
     expect(await screen.findByRole('heading', { name: '[公益]Provider/Model1' })).toBeVisible();
+    expect(screen.queryByText('[公益]Provider/Model21')).not.toBeInTheDocument();
+    await view.user.click(screen.getByRole('button', { name: 'Return to list' }));
     expect(await screen.findByText('[公益]Provider/Model21')).toBeVisible();
     const filter = screen.getByRole('button', { name: 'Apply filter' }).closest('form')!;
     await view.user.type(within(filter).getByRole('textbox'), 'absent');
     await view.user.click(within(filter).getByRole('button', { name: 'Apply filter' }));
     expect(await screen.findByRole('heading', { name: 'No charity models' })).toBeVisible();
-    expect(screen.getByRole('heading', { name: '[公益]Provider/Model1' })).toBeVisible();
-    expect(detailReads).toBe(1);
-    await view.user.click(screen.getByRole('button', { name: 'Return to list' }));
     expect(
       screen.queryByRole('heading', { name: '[公益]Provider/Model1' }),
     ).not.toBeInTheDocument();
+    expect(detailReads).toBe(1);
     expect(screen.getByTestId('url')).toHaveTextContent('model_q=absent');
+    await view.user.click(screen.getByRole('button', { name: 'Browser back' }));
+    expect(await screen.findByText('[公益]Provider/Model21')).toBeVisible();
     await view.user.click(screen.getByRole('button', { name: 'Browser back' }));
     expect(await screen.findByRole('heading', { name: '[公益]Provider/Model1' })).toBeVisible();
     expect(screen.getByTestId('url')).toHaveTextContent('charity_model=1');
-    expect(screen.getByTestId('url')).toHaveTextContent('model_q=absent');
+    expect(screen.getByTestId('url')).toHaveTextContent('models_page=2');
   });
   it('opens an off-page source key and returns to both original page contexts', async () => {
     const { requests } = install();

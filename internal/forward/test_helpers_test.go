@@ -186,6 +186,7 @@ type fakeClaimRail struct {
 	completeError  error
 	acceptError    error
 	acceptHook     func(context.Context)
+	attemptHook    func(context.Context, int)
 	claimCall      int
 	takeCall       int
 	releaseCall    int
@@ -257,14 +258,18 @@ func (rail *fakeClaimRail) MarkResponseStarted(context.Context, claim.Handle, ..
 	return nil
 }
 
-func (rail *fakeClaimRail) CompleteAttempt(_ context.Context, _ claim.Handle, outcome claim.AttemptOutcome) (claim.Attempt, error) {
+func (rail *fakeClaimRail) CompleteAttempt(ctx context.Context, _ claim.Handle, outcome claim.AttemptOutcome) (claim.Attempt, error) {
 	rail.mu.Lock()
 	index := rail.attemptCall
 	rail.attemptCall++
 	rail.events = append(rail.events, "attempt_terminal")
 	rail.outcomes = append(rail.outcomes, outcome)
 	err := rail.attemptErrors[index]
+	hook := rail.attemptHook
 	rail.mu.Unlock()
+	if hook != nil {
+		hook(ctx, index)
+	}
 	return claim.Attempt{}, err
 }
 
@@ -461,3 +466,7 @@ var (
 	_ connector.Connector        = (*fakeConnector)(nil)
 	_ GenerationTwoSubkeyDeriver = fixedSubkeyDeriver{}
 )
+
+func (rail *fakeClaimRail) ObserveResponseHeaders(context.Context, claim.Handle, connectorcontract.ResponseObservation) error {
+	return nil
+}

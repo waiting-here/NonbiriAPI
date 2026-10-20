@@ -8,7 +8,7 @@ import (
 )
 
 func TestFrozenBoundsAndHeldObjectKinds(t *testing.T) {
-	if SchemaVersion != 20 || CollectionLimit != 10_000 || MaxExportBytes != 16<<20 || WorkerBatchLimit != 100 {
+	if SchemaVersion != 22 || CollectionLimit != 10_000 || MaxExportBytes != 16<<20 || WorkerBatchLimit != 100 {
 		t.Fatalf("frozen bounds changed: schema=%d collection=%d bytes=%d batch=%d",
 			SchemaVersion, CollectionLimit, MaxExportBytes, WorkerBatchLimit)
 	}
@@ -84,11 +84,11 @@ func TestExportEndpointAndDonationSchemasAreClosed(t *testing.T) {
 	}, "kind", "channel_id", "name")
 
 	assertClosedJSONKeys(t, ModelExport{}, "model_types", "transport_rule", "role_policy", "id", "provider", "model", "full_name", "route_strategy", "silent_retry", "flatten_tool_calls", "created_at", "updated_at", "bindings")
-	assertClosedJSONKeys(t, DonationExport{},
+	assertClosedJSONKeys(t, DonationExport{}, "owner_hidden_at",
 		"id", "status", "description", "review_result", "keys", "created_at", "updated_at")
 	assertClosedJSONKeys(t, DonationKeyExport{},
 		"id", "endpoint_key_id", "display_head", "display_tail", "safe_source",
-		"physical_enabled", "charity_state", "limits", "usage", "token_reserve",
+		"physical_enabled", "charity_state", "rate_limited_until", "limits", "usage", "token_reserve",
 		"authorized_expires_at", "expires_at", "streak", "ended_reason", "recurring_limits", "review", "manual_models")
 	assertClosedJSONKeys(t, DonationKeyReviewExport{}, "required", "revision", "material_available")
 	assertClosedJSONKeys(t, DonationManualModelExport{}, "upstream_model_id", "display_name")

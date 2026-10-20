@@ -2121,6 +2121,7 @@
       "submitDonation": "提交公益捐赠",
       "donationNoticeTitle": "捐赠说明",
       "donationNoticeDefault": "感谢你愿意分享闲置的 API 资源。提交前请确认这些密钥由你合法持有并获准共享；共享期间，所连接的服务可能产生费用。你可以为每把密钥分别设置截止时间，并随时在此查看或停止共享。",
+      "sharedKeyLimitsNotice": "管理员和获授权的协管可调整这把密钥的并发数和每分钟请求数。自用与公益调用共用这些限制，调整后也会影响你的自用调用。",
       "mutationResponseUnknown": "操作可能已经完成，但暂时无法确认结果。",
       "mutationConflictRefreshed": "操作完成前资源已发生变化。",
       "mutationReconciled": "已载入最新状态；请检查后再决定是否继续操作。",
@@ -2168,6 +2169,7 @@
         "expired": "已过期"
       },
       "keyState": {
+        "rate_limited": "限流中",
         "pending": "待审核",
         "disabled": "公益使用已停用",
         "physical_disabled": "密钥已停用",
@@ -2271,6 +2273,30 @@
         "keyFacts": "{{total}} 把密钥 · {{available}} 可用",
         "sourceDetails": "来源与密钥状态",
         "donationActions": "捐赠操作"
+      },
+      "ownerHistory": {
+        "views": "捐赠视图",
+        "current": "当前捐赠",
+        "history": "历史",
+        "hidden": "已收起",
+        "all": "全部",
+        "keyViews": "密钥视图",
+        "keys": {
+          "current": "当前密钥",
+          "ended": "已结束",
+          "all": "全部密钥"
+        },
+        "hideOne": "收起",
+        "restoreOne": "恢复显示",
+        "hideAll": "收起当前筛选的历史",
+        "restoreAll": "恢复当前筛选的历史",
+        "help": "收起后可在“已收起”中恢复。只整理你的列表，不会删除资源，也不改变管理人员的记录。恢复显示不会重新启用资源。",
+        "pause": "暂停整理",
+        "resume": "继续整理",
+        "running": "整理中",
+        "paused": "已暂停",
+        "complete": "已完成",
+        "progress": "{{action}}：已更改 {{changed}} 条，已检查 {{scanned}} 条 · {{state}}"
       }
     },
     "activities": {

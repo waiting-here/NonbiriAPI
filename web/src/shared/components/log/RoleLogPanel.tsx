@@ -46,6 +46,7 @@ import {
 } from './numberedQueries';
 import { rejectionDescriptionKeys } from './rejectionDescriptions';
 import { TokenBuckets } from './TokenBuckets';
+import { HeaderFacts } from './HeaderFacts';
 import { useLogUrlState } from './useLogUrlState';
 
 const ROUTE_LABEL_KEYS: Record<LogRouteKind, string> = {
@@ -151,6 +152,7 @@ function useStationScope(
 function AttemptTable({
   detail,
   role,
+  accountID,
   endpointKeyID,
   page,
   busy,
@@ -159,6 +161,7 @@ function AttemptTable({
 }: {
   detail: NumberedRoleLogDetail;
   role: LogRole;
+  accountID: string;
   endpointKeyID?: string;
   page: string;
   busy: boolean;
@@ -259,6 +262,14 @@ function AttemptTable({
                 </div>
               </dl>
               {role !== 'user' ? (
+                <HeaderFacts
+                  role={role}
+                  accountID={accountID}
+                  requestID={detail.request.id}
+                  attempt={Number(attempt.attempt_seq)}
+                />
+              ) : null}
+              {role !== 'user' ? (
                 <AttemptErrors
                   role={role}
                   requestID={detail.request.id}
@@ -303,7 +314,7 @@ export function RoleLogPanel(props: RoleLogPanelProps) {
       (previous.role === props.role && previous.accountID === scope.accountID)
     )
       return;
-    for (const kind of ['page', 'detail-page']) {
+    for (const kind of ['page', 'detail-page', 'headers']) {
       queryClient.removeQueries({
         queryKey: [...numberedLogKeys.root(previous.role), kind, previous.accountID],
       });
@@ -926,6 +937,7 @@ function ScopedRoleLogPanel({
                       <AttemptTable
                         detail={detailData}
                         role={role}
+                        accountID={accountID}
                         endpointKeyID={role === 'user' ? undefined : filter.endpoint_key_id}
                         page={attemptPager.page}
                         busy={detail.isFetching}
@@ -1069,6 +1081,11 @@ function ScopedRoleLogPanel({
         onClose={closeDetail}
         title={selectedID ? `${t('logs.drawerTitle')} ${selectedID}` : t('logs.drawerTitle')}
         fields={detailFields}
+        headers={
+          role !== 'user' && detailRequest ? (
+            <HeaderFacts role={role} accountID={accountID} requestID={detailRequest.id} />
+          ) : null
+        }
         diagnostics={
           detailRequest
             ? {

@@ -1,3 +1,4 @@
+vi.mock('@shared/components/AsyncLeaveDialog', () => ({ AsyncLeaveDialog: () => null }));
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { useEffect, type ReactNode } from 'react';
@@ -350,6 +351,7 @@ function managementNumberedPage<T>(data: T[]) {
 function managedDonationPageSummary(donation: ReturnType<typeof pendingDonationFixture>) {
   const stateCounts: Record<string, string> = {
     available: '0',
+    rate_limited: '0',
     pending: '0',
     disabled: '0',
     suspended: '0',
@@ -1529,7 +1531,7 @@ describe('experimental policy and charity controls', () => {
           zones: [...new Set(['UTC', Intl.DateTimeFormat().resolvedOptions().timeZone])].sort(),
         });
       }
-      if (method === 'GET' && path === '/api/donations?page=1&page_size=20') {
+      if (method === 'GET' && path === '/api/donations?view=current&page=1&page_size=20') {
         const summary = Object.fromEntries(
           Object.entries(donation).filter(([name]) => name !== 'keys'),
         );
@@ -1542,6 +1544,7 @@ describe('experimental policy and charity controls', () => {
                     key_count: '1',
                     state_counts: {
                       available: '0',
+                      rate_limited: '0',
                       pending: '1',
                       disabled: '0',
                       suspended: '0',
@@ -1987,7 +1990,7 @@ describe('experimental policy and charity controls', () => {
           name: flattenLabel,
         }),
       );
-      await rendered.user.click(within(editForm).getByRole('button', { name: 'Save model' }));
+      await rendered.user.click(within(editForm).getByRole('button', { name: /^Save model / }));
       await waitFor(() =>
         expect(lastBody(fetchMock, 'PATCH', `${basePath}/charity-models/7`)).toMatchObject({
           transport_rule: 'passthrough',
@@ -1995,7 +1998,9 @@ describe('experimental policy and charity controls', () => {
         }),
       );
 
-      const createSummary = screen.getByText('Add charity model', { selector: 'summary strong' });
+      await rendered.user.click(screen.getByRole('button', { name: 'Return to list' }));
+      await rendered.user.click(screen.getByRole('button', { name: 'Create charity model' }));
+      const createSummary = screen.getByRole('button', { name: 'Add charity model' });
       const createForm = createSummary.closest('.card');
       if (!(createForm instanceof HTMLElement))
         throw new Error('Missing charity model creation form');
@@ -2094,7 +2099,7 @@ describe('experimental policy and charity controls', () => {
         name: '[Experimental] Turn tool calls into plain text (chat only)',
       }),
     );
-    await rendered.user.click(within(editForm).getByRole('button', { name: 'Save model' }));
+    await rendered.user.click(within(editForm).getByRole('button', { name: /^Save model / }));
 
     await waitFor(() => {
       expect(screen.getByText(/Charity management access is no longer available/i)).toBeVisible();
@@ -2306,9 +2311,7 @@ describe('experimental policy and charity controls', () => {
     await act(async () => {
       await rendered.queryClient.invalidateQueries({ queryKey: userKeys.session });
     });
-    await waitFor(() =>
-      expect(screen.queryByRole('tab', { name: 'Abuse audit' })).toBeNull(),
-    );
+    await waitFor(() => expect(screen.queryByRole('tab', { name: 'Abuse audit' })).toBeNull());
     expect(screen.getByRole('tab', { name: 'Request logs' })).toBeVisible();
     await act(async () => {
       finishOld(jsonResponse(detail(false)));

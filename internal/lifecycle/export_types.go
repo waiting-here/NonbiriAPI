@@ -242,13 +242,14 @@ type ThursdayExport struct {
 }
 
 type DonationExport struct {
-	ID           string                `json:"id"`
-	Status       string                `json:"status"`
-	Description  string                `json:"description"`
-	ReviewResult *DonationReviewExport `json:"review_result"`
-	Keys         []DonationKeyExport   `json:"keys"`
-	CreatedAt    int64                 `json:"created_at"`
-	UpdatedAt    int64                 `json:"updated_at"`
+	OwnerHiddenAt *int64                `json:"owner_hidden_at"`
+	ID            string                `json:"id"`
+	Status        string                `json:"status"`
+	Description   string                `json:"description"`
+	ReviewResult  *DonationReviewExport `json:"review_result"`
+	Keys          []DonationKeyExport   `json:"keys"`
+	CreatedAt     int64                 `json:"created_at"`
+	UpdatedAt     int64                 `json:"updated_at"`
 }
 
 type DonationReviewExport struct {
@@ -279,6 +280,7 @@ type DonationKeyExport struct {
 	SafeSource          DonationSafeSourceExport    `json:"safe_source"`
 	PhysicalEnabled     bool                        `json:"physical_enabled"`
 	CharityState        string                      `json:"charity_state"`
+	RateLimitedUntil    *int64                      `json:"rate_limited_until"`
 	Limits              DonationLimitsExport        `json:"limits"`
 	Usage               DonationUsageExport         `json:"usage"`
 	TokenReserve        int64                       `json:"token_reserve"`

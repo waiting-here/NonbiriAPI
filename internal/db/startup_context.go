@@ -15,7 +15,8 @@ import (
 func sourceStore(ctx context.Context, d *sql.DB, secrets secret.GenerationTwoContextCodec) *Store {
 	owner, _ := ctx.Value(databaseOwnerKey{}).(*databaseOwner)
 	owner.activate()
-	return &Store{db: d, secrets: secrets, owner: owner}
+	observer, _ := ctx.Value(connectionObserverKey{}).(*connectionObserverSlot)
+	return &Store{db: d, secrets: secrets, owner: owner, connectionObserver: observer}
 }
 
 func startupContextCause(ctx context.Context, cause error) error {
@@ -135,7 +136,8 @@ func openSQLiteContext(ctx context.Context, path, mode string) (*sql.DB, error) 
 	q.Add("_pragma", "foreign_keys(1)")
 	q.Add("_pragma", "busy_timeout("+strconv.Itoa(budget)+")")
 	u.RawQuery = q.Encode()
-	d, err := openSQLiteHandle(u.String(), mode)
+	observer, _ := ctx.Value(connectionObserverKey{}).(*connectionObserverSlot)
+	d, err := openObservedSQLiteHandle(u.String(), mode, observer)
 	if err != nil {
 		return nil, err
 	}

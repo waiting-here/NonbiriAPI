@@ -127,11 +127,21 @@ func managedKeySummary(key AdminDonationKey, header AdminDonation, rules Recurri
 	return ManagedKeySummary{DonationNote: header.Description, ApprovalNote: approval, VisibleModels: []charityscope.VisibleModel{}, DonationKey: ownerKey(key), RecurringReceipt: RecurringReceipt{
 		DonationID: header.ID, KeyID: key.ID, DonationRevision: header.Revision}, RecurringSummary: rules,
 		AuthorizedExpiresAt: key.AuthorizedExpiresAt, SafeNote: key.SafeNote,
-		MaxConcurrency: key.MaxConcurrency, MaxRPM: key.MaxRPM, BindingCount: key.BindingCount, Idle: key.Idle, Handling: header.Handling}
+		MaxConcurrency: key.MaxConcurrency, MaxRPM: key.MaxRPM, KeyLimitsRevision: key.KeyLimitsRevision, BindingCount: key.BindingCount, Idle: key.Idle, Handling: header.Handling}
 }
 
-func (s *Service) keysPage(ctx context.Context, role reviewerRole, userID, donationID int64, page pagination.Request) (Page[ManagedKeySummary], error) {
+func (s *Service) keysPage(ctx context.Context, role reviewerRole, userID, donationID int64, page pagination.Request, views ...string) (Page[ManagedKeySummary], error) {
 	var empty Page[ManagedKeySummary]
+	view := ""
+	if len(views) > 0 {
+		view = views[0]
+	}
+	if view != "" && view != "all" && view != "current" && view != "ended" {
+		return empty, ErrInvalidRequest
+	}
+	if role != recurringOwner && view != "" {
+		return empty, ErrInvalidRequest
+	}
 	if ctx == nil || donationID <= 0 || !page.Valid() {
 		return empty, ErrInvalidRequest
 	}
@@ -180,6 +190,15 @@ func (s *Service) keysPage(ctx context.Context, role reviewerRole, userID, donat
 		return empty, err
 	}
 	query, args := `SELECT dk.id FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id WHERE dk.donation_id=?`, []any{donationID}
+	if view == "current" || view == "ended" {
+		active := `(d.status IN ('pending','approved') AND dk.ended_at IS NULL AND (dk.expires_at IS NULL OR dk.expires_at>?))`
+		if view == "current" {
+			query += ` AND ` + active
+		} else {
+			query += ` AND NOT ` + active
+		}
+		args = append(args, now)
+	}
 	if scope.Trainee {
 		query += ` AND ` + charityscope.KeyPredicate()
 		args = append(args, scope.ModelID, now)
@@ -221,8 +240,8 @@ func (s *Service) keysPage(ctx context.Context, role reviewerRole, userID, donat
 	return result, nil
 }
 
-func (s *Service) KeysOwnerPage(ctx context.Context, userID, donationID int64, page pagination.Request) (Page[OwnerKeySummary], error) {
-	result, err := s.keysPage(ctx, recurringOwner, userID, donationID, page)
+func (s *Service) KeysOwnerPage(ctx context.Context, userID, donationID int64, page pagination.Request, views ...string) (Page[OwnerKeySummary], error) {
+	result, err := s.keysPage(ctx, recurringOwner, userID, donationID, page, views...)
 	if err != nil {
 		return Page[OwnerKeySummary]{}, err
 	}

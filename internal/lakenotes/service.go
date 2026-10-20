@@ -112,37 +112,37 @@ func (s *Service) qualifiedTx(ctx context.Context, tx *sql.Tx, user int64, _ int
 	}
 	return settings, err
 }
-func (s *Service) prepare(user int64, admin bool, key, method, route string, body any, now int64) (idempotency.BeginInput, error) {
+func (s *Service) prepare(user int64, admin bool, key, method, route string, body any, now int64) (idempotency.BeginInput, []byte, error) {
 	actor := "user"
 	if admin {
 		actor = "admin"
 	}
 	ah, e := idempotency.ActorScopeHash(actor, rev(user))
 	if e != nil {
-		return idempotency.BeginInput{}, ErrInvalid
+		return idempotency.BeginInput{}, nil, ErrInvalid
 	}
 	raw, e := idempotency.CanonicalJSON(body)
 	if e != nil || len(raw) > 16384 {
-		return idempotency.BeginInput{}, ErrInvalid
+		return idempotency.BeginInput{}, nil, ErrInvalid
 	}
 	digest, e := idempotency.RequestDigest(idempotency.DigestInput{ActorScopeHash: ah, Method: method, Route: route, Body: raw})
 	if e != nil {
-		return idempotency.BeginInput{}, ErrInvalid
+		return idempotency.BeginInput{}, nil, ErrInvalid
 	}
 	secret, e := s.keys.DeriveGenerationTwoSubkey([]byte("NonbiriAPI/lake-notes-idempotency/v1"))
 	if e != nil {
-		return idempotency.BeginInput{}, e
+		return idempotency.BeginInput{}, nil, e
 	}
 	defer clear(secret)
 	if len(secret) != 32 {
-		return idempotency.BeginInput{}, ErrInvariant
+		return idempotency.BeginInput{}, nil, ErrInvariant
 	}
 	h := hmac.New(sha256.New, secret)
 	_, _ = h.Write(digest[:])
 	copy(digest[:], h.Sum(nil))
-	return idempotency.BeginInput{Scope: idempotency.ScopeLakeNotes, ActorHash: ah, Key: key, RequestHash: digest, DecisionNow: now}, nil
+	return idempotency.BeginInput{Scope: idempotency.ScopeLakeNotes, ActorHash: ah, Key: key, RequestHash: digest, DecisionNow: now}, raw, nil
 }
-func mutate[T any](ctx context.Context, s *Service, user int64, admin bool, key, method, route string, input any, fn func(*sql.Tx, time.Time) (T, error)) (_ MutationResult[T], resultErr error) {
+func mutate[T any](ctx context.Context, s *Service, user int64, admin bool, key, method, route string, input any, fn func(*sql.Tx, time.Time, []byte) (T, error)) (_ MutationResult[T], resultErr error) {
 	var out MutationResult[T]
 	if _, e := idempotency.KeyHash(key); e != nil {
 		return out, ErrInvalid
@@ -152,7 +152,7 @@ func mutate[T any](ctx context.Context, s *Service, user int64, admin bool, key,
 		return out, e
 	}
 	prepare := lakePhase(ctx, "prepare")
-	prepared, prepareErr := s.prepare(user, admin, key, method, route, input, now.Unix())
+	prepared, inputJSON, prepareErr := s.prepare(user, admin, key, method, route, input, now.Unix())
 	prepare(prepareErr)
 	tx, finish, e := observability.BeginMeasuredTx(ctx, s.database, nil, lakeOperation(ctx))
 	if e != nil {
@@ -184,7 +184,7 @@ func mutate[T any](ctx context.Context, s *Service, user int64, admin bool, key,
 		}
 		out.Replayed = true
 	} else {
-		out.Value, e = fn(tx, now)
+		out.Value, e = fn(tx, now, inputJSON)
 		if e != nil {
 			return out, e
 		}
@@ -242,7 +242,9 @@ func profileTx(ctx context.Context, tx *sql.Tx, user int64, create bool, now int
 	if e != nil {
 		return row, e
 	}
+	decode := lakePhase(ctx, "decode")
 	row.profile, e = decodeStoredProfile(version, raw)
+	decode(e)
 	if e != nil {
 		return row, ErrInvariant
 	}
@@ -293,24 +295,56 @@ func walletTx(ctx context.Context, tx *sql.Tx, user int64) (Wallet, error) {
 	}
 	return w, nil
 }
-func (s *Service) profileViewTx(ctx context.Context, tx *sql.Tx, user int64, now time.Time) (_ ProfileView, resultErr error) {
+
+// Inputs are valid only in this transaction after the caller's last mutation.
+// Rules/save update row and cast in place; ledger writes invalidate wallet.
+// Reward hooks may change any of these values and must use a fresh projection.
+type profileProjection struct {
+	row          *profileRow
+	wallet       *Wallet
+	settings     *Settings
+	readonly     bool
+	current      *castRow
+	currentKnown bool
+}
+
+func (s *Service) profileViewTx(ctx context.Context, tx *sql.Tx, user int64, now time.Time) (ProfileView, error) {
+	return s.profileViewFromTx(ctx, tx, user, now, profileProjection{})
+}
+
+func (s *Service) profileViewFromTx(ctx context.Context, tx *sql.Tx, user int64, now time.Time, known profileProjection) (_ ProfileView, resultErr error) {
 	finish := lakePhase(ctx, "projection")
 	defer func() { finish(resultErr) }()
-	row, e := profileTx(ctx, tx, user, false, now.Unix())
-	if e != nil {
-		return ProfileView{}, e
+	var row profileRow
+	var e error
+	if known.row != nil {
+		row = *known.row
+	} else {
+		row, e = profileTx(ctx, tx, user, false, now.Unix())
+		if e != nil {
+			return ProfileView{}, e
+		}
 	}
-	w, e := walletTx(ctx, tx, user)
-	if e != nil {
-		return ProfileView{}, e
+	var w Wallet
+	if known.wallet != nil {
+		w = *known.wallet
+	} else {
+		w, e = walletTx(ctx, tx, user)
+		if e != nil {
+			return ProfileView{}, e
+		}
 	}
 	out := ProfileView{Revision: rev(row.revision), RulesID: rules.RulesID, Profile: row.profile, Wallet: w}
-	out.Settings, e = s.qualifiedTx(ctx, tx, user, now.Unix())
-	if e != nil {
-		if !closedError(e) {
-			return out, e
+	if known.settings != nil {
+		out.Settings, out.Readonly = *known.settings, known.readonly
+	} else {
+		out.Settings, e = s.qualifiedTx(ctx, tx, user, now.Unix())
+		if e != nil {
+			if !closedError(e) {
+				return out, e
+			}
+			out.Readonly = true
 		}
-		out.Readonly = true
 	}
 
 	// A closed admission gate may return before settings are read. The view
@@ -321,16 +355,22 @@ func (s *Service) profileViewTx(ctx context.Context, tx *sql.Tx, user int64, now
 			return out, e
 		}
 	}
-	c, e := currentCastTx(ctx, tx, user)
-	if e == nil {
+	c := known.current
+	if !known.currentKnown {
+		value, err := currentCastTx(ctx, tx, user)
+		if err == nil {
+			c = &value
+		} else if !errors.Is(err, ErrNotFound) {
+			return out, err
+		}
+	}
+	if c != nil {
 		v := c.view(row.revision)
 		if out.Readonly && !c.state.Terminal() {
 			v.Readonly = true
 			v.RecoveryAction = "closed"
 		}
 		out.Cast = &v
-	} else if !errors.Is(e, ErrNotFound) {
-		return out, e
 	}
 	return out, nil
 }
@@ -348,10 +388,14 @@ func (s *Service) Profile(ctx context.Context, user int64) (_ ProfileView, resul
 	if e = s.authorize(ctx, tx, user, false); e != nil {
 		return ProfileView{}, e
 	}
-	if e = s.expireUserTx(ctx, tx, user, now); e != nil {
+	settings, gateErr := s.qualifiedTx(ctx, tx, user, now.Unix())
+	if gateErr != nil && !closedError(gateErr) {
+		return ProfileView{}, gateErr
+	}
+	if e = s.expireUserTx(ctx, tx, user, now, gateErr != nil); e != nil {
 		return ProfileView{}, e
 	}
-	out, e := s.profileViewTx(ctx, tx, user, now)
+	out, e := s.profileViewFromTx(ctx, tx, user, now, profileProjection{settings: &settings, readonly: gateErr != nil})
 	if e != nil {
 		return out, e
 	}
@@ -362,8 +406,9 @@ func (s *Service) Action(ctx context.Context, user int64, key string, input Acti
 	if e != nil {
 		return MutationResult[ActionResult]{}, e
 	}
-	return mutate(ctx, s, user, false, key, "POST", baseRoute+"/actions", input, func(tx *sql.Tx, now time.Time) (ActionResult, error) {
-		if _, e := s.qualifiedTx(ctx, tx, user, now.Unix()); e != nil {
+	return mutate(ctx, s, user, false, key, "POST", baseRoute+"/actions", input, func(tx *sql.Tx, now time.Time, _ []byte) (ActionResult, error) {
+		settings, e := s.qualifiedTx(ctx, tx, user, now.Unix())
+		if e != nil {
 			return ActionResult{}, e
 		}
 		if _, e := currentCastTx(ctx, tx, user); e == nil {
@@ -386,7 +431,9 @@ func (s *Service) Action(ctx context.Context, user int64, key string, input Acti
 		if e = saveProfileTx(ctx, tx, user, &row, now.Unix()); e != nil {
 			return ActionResult{}, e
 		}
-		v, e := s.profileViewTx(ctx, tx, user, now)
+		// ApplyAction/saveProfile change only this row; the verified absence of
+		// a current cast and the admission/config snapshot remain valid.
+		v, e := s.profileViewFromTx(ctx, tx, user, now, profileProjection{row: &row, settings: &settings, currentKnown: true})
 		return ActionResult{v, action.CoinDelta}, e
 	})
 }

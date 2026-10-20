@@ -1,4 +1,7 @@
 import { Button } from '@shared/components/ui/Button';
+import { Field } from './ui/Field';
+import { KeyStateFilter } from './charity/KeyStateFilter';
+import type { KeyStateFilter as KeyState } from '@shared/operations/keyState';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -34,6 +37,8 @@ import {
 import type { PageMetadata } from '@shared/operations/pageNumbers';
 import { EmptyState, ErrorState, LoadingState } from './States';
 import { KeyLimitSummary } from './KeyRoutingLimits';
+import { KeyRateLimitTime } from './KeyRateLimitTime';
+import { useRateLimitRefresh } from '@shared/operations/useRateLimitRefresh';
 import { DonationKeyNotes } from './DonationControlFacts';
 import { DonationDiscoveryControl } from './DonationDiscoveryControl';
 import './CharityBindingPicker.css';
@@ -112,24 +117,26 @@ function isTerminalKey(key: ManagedDonationKeySummary): boolean {
   return key.charity_state === 'ended' || key.charity_state === 'expired';
 }
 
-function sourcePageFilters(query: string, scope: SourceScope) {
-  return { q: query || undefined, scope } as const;
+function sourcePageFilters(query: string, scope: SourceScope, key_state: KeyState) {
+  return { q: query || undefined, scope, key_state } as const;
 }
 
-function sourceKeyPageFilters(query: string, scope: SourceScope) {
-  return { q: query || undefined, scope } as const;
+function sourceKeyPageFilters(query: string, scope: SourceScope, key_state: KeyState) {
+  return { q: query || undefined, scope, key_state } as const;
 }
 
 function candidatePageFilters(
   key: ManagedDonationKeySummary,
   query: string,
   source: CandidateSource,
+  key_state: KeyState,
 ): CharityBindingCandidatePageFilters {
   return {
     donation_id: key.donation_id,
     donation_key_id: key.key_id,
     q: query || undefined,
     source: source || undefined,
+    key_state,
   };
 }
 
@@ -163,6 +170,8 @@ export interface CharityPickerKeyManagerProps {
 }
 
 interface CharityBindingPickerProps {
+  fixedKey?: ManagedDonationKeySummary;
+  capacity?: number;
   role: CharityRole;
   modelId: string;
   selected: Record<string, CharitySelection>;
@@ -189,7 +198,7 @@ export function CharityBindingPicker(props: CharityBindingPickerProps) {
     retry: false,
   });
   const account = sessionAccount(props.role, session.data);
-  const identity = `${props.role}:${props.modelId}:${account ?? 'none'}`;
+  const identity = `${props.role}:${props.modelId}:${props.fixedKey?.key_id ?? 'any-key'}:${account ?? 'none'}`;
   const [selectionScope, setSelectionScope] = useState<{
     identity: string;
     previousSelection?: Record<string, CharitySelection>;
@@ -227,6 +236,8 @@ function CharityBindingPickerBody({
   account,
   management,
   sessionError,
+  fixedKey,
+  capacity = 256,
 }: CharityBindingPickerProps & {
   account: string | undefined;
   management: ManagementCapability;
@@ -234,13 +245,29 @@ function CharityBindingPickerBody({
 }) {
   const { t } = useTranslation();
   const client = useQueryClient();
+  const [keyState, setKeyState] = useState<KeyState>('available');
+  const [selectedSearch, setSelectedSearch] = useState('');
+  const selectedSearchInput = useRef<HTMLInputElement>(null);
   const [scope, setScope] = useState<SourceScope>('active');
   const [sourceQueryDraft, setSourceQueryDraft] = useState('');
   const [sourceQuery, setSourceQuery] = useState('');
-  const [selectedSource, setSelectedSource] = useState<DonationSourceSummary | null>(null);
+  const [selectedSource, setSelectedSource] = useState<DonationSourceSummary | null>(() =>
+    fixedKey
+      ? {
+          source_key: '',
+          safe_source: fixedKey.safe_source,
+          donation_count: '1',
+          key_count: '1',
+          usable_key_count: fixedKey.charity_state === 'available' ? '1' : '0',
+          pending_donation_count: '0',
+        }
+      : null,
+  );
   const [keyQueryDraft, setKeyQueryDraft] = useState('');
   const [keyQuery, setKeyQuery] = useState('');
-  const [selectedKeySnapshot, setSelectedKey] = useState<ManagedDonationKeySummary | null>(null);
+  const [selectedKeySnapshot, setSelectedKey] = useState<ManagedDonationKeySummary | null>(
+    fixedKey ?? null,
+  );
   const [candidateQueryDraft, setCandidateQueryDraft] = useState('');
   const [candidateQuery, setCandidateQuery] = useState('');
   const [candidateSource, setCandidateSource] = useState<CandidateSource>('');
@@ -255,13 +282,13 @@ function CharityBindingPickerBody({
     station,
     listType: sourcePageList,
     scopeKey: account ?? 'no-account',
-    resetKey: `${scope}:${sourceQuery}`,
+    resetKey: `${scope}:${sourceQuery}:${keyState}`,
   });
   const sourceKeyPager = usePagePager({
     station,
     listType: sourceKeyPageList,
     scopeKey: `${account ?? 'no-account'}:${selectedSource?.source_key ?? 'no-source'}`,
-    resetKey: `${scope}:${keyQuery}`,
+    resetKey: `${scope}:${keyQuery}:${keyState}`,
   });
   const candidatePager = usePagePager({
     station,
@@ -273,6 +300,7 @@ function CharityBindingPickerBody({
     station,
     listType: 'charity-binding-selected',
     scopeKey: `${account ?? 'no-account'}:${modelId}`,
+    resetKey: selectedSearch,
   });
 
   const sessionCapabilityLost = management.data === true;
@@ -288,6 +316,7 @@ function CharityBindingPickerBody({
     'sources',
     scope,
     sourceQuery,
+    keyState,
   ] as const;
   const sourceQueryKey = [...sourceQueryIdentity, sourcePager.page, sourcePager.pageSize] as const;
   const sourceKeyQueryIdentity = [
@@ -299,6 +328,7 @@ function CharityBindingPickerBody({
     selectedSource?.source_key ?? 'no-source',
     scope,
     keyQuery,
+    keyState,
   ] as const;
   const sourceKeyQueryKey = [
     ...sourceKeyQueryIdentity,
@@ -315,6 +345,7 @@ function CharityBindingPickerBody({
     selectedKeySnapshot?.key_id ?? 'no-key',
     candidateQuery,
     candidateSource,
+    keyState,
   ] as const;
   const candidateQueryKey = [
     ...candidateQueryIdentity,
@@ -327,14 +358,14 @@ function CharityBindingPickerBody({
       guardedRead(client, role, account, () =>
         getDonationSourcesPage(
           role,
-          sourcePageFilters(sourceQuery, scope),
+          sourcePageFilters(sourceQuery, scope, keyState),
           sourcePager.page,
           sourcePager.pageSize,
           signal,
           role === 'steward' ? modelId : undefined,
         ),
       ),
-    enabled: readEnabled,
+    enabled: readEnabled && !fixedKey,
     placeholderData: (previous, previousQuery) =>
       pagePlaceholder(
         previous,
@@ -352,14 +383,14 @@ function CharityBindingPickerBody({
         getDonationSourceKeysPage(
           role,
           selectedSource?.source_key ?? '',
-          sourceKeyPageFilters(keyQuery, scope),
+          sourceKeyPageFilters(keyQuery, scope, keyState),
           sourceKeyPager.page,
           sourceKeyPager.pageSize,
           signal,
           role === 'steward' ? modelId : undefined,
         ),
       ),
-    enabled: readEnabled && Boolean(selectedSource),
+    enabled: readEnabled && Boolean(selectedSource) && !fixedKey,
     placeholderData: (previous, previousQuery) =>
       pagePlaceholder(
         previous,
@@ -373,6 +404,14 @@ function CharityBindingPickerBody({
   const selectedKey =
     sourceKeys.data?.data.find((entry) => entry.key_id === selectedKeySnapshot?.key_id) ??
     selectedKeySnapshot;
+  useRateLimitRefresh(
+    readEnabled
+      ? (sourceKeys.data?.data
+          .filter((key) => key.charity_state === 'rate_limited')
+          .map((key) => key.rate_limited_until) ?? [])
+      : [],
+    () => sourceKeys.refetch({ throwOnError: true }),
+  );
   const candidates = useQuery({
     queryKey: candidateQueryKey,
     queryFn: ({ signal }) =>
@@ -380,7 +419,12 @@ function CharityBindingPickerBody({
         getManagedBindingCandidatesPage(
           role,
           modelId,
-          candidatePageFilters(selectedKey!, candidateQuery, candidateSource),
+          candidatePageFilters(
+            selectedKey!,
+            candidateQuery,
+            candidateSource,
+            fixedKey ? 'all' : keyState,
+          ),
           candidatePager.page,
           candidatePager.pageSize,
           signal,
@@ -409,8 +453,8 @@ function CharityBindingPickerBody({
     onCapabilityLoss?.();
   }, [onCapabilityLoss, requestCapabilityLost, sessionCapabilityLost]);
 
-  const sourceReadActive = canRead;
-  const sourceKeyReadActive = canRead && Boolean(selectedSource);
+  const sourceReadActive = canRead && !fixedKey;
+  const sourceKeyReadActive = canRead && Boolean(selectedSource) && !fixedKey;
   const candidateReadActive = canRead && Boolean(selectedSource && selectedKey);
   const sourceReadBlocked =
     sourceReadActive && (sources.isPending || sources.isFetching || Boolean(sources.error));
@@ -490,7 +534,10 @@ function CharityBindingPickerBody({
   const sourceBusy = interactionBlocked;
   const keyBusy = interactionBlocked;
   const candidateBusy = interactionBlocked;
-  const selectedEntries = Object.entries(selected);
+  const allSelectedEntries = Object.entries(selected);
+  const selectedEntries = allSelectedEntries.filter(([, entry]) =>
+    entry.upstream_model_id.toLowerCase().includes(selectedSearch.toLowerCase()),
+  );
   const selectedPageSize = selectedPager.pageSize;
   const selectedTotalPages = Math.max(1, Math.ceil(selectedEntries.length / selectedPageSize));
   const selectedPage = Math.min(Number(selectedPager.page), selectedTotalPages);
@@ -512,41 +559,53 @@ function CharityBindingPickerBody({
       ref={listRef}
       tabIndex={-1}
     >
-      <nav className="ops-actions" aria-label={t('common.operations.charity.bindingCandidates')}>
-        <Button
-          type="button"
-          variant="ghost"
-          aria-current={!selectedSource ? 'step' : undefined}
-          disabled={interactionBlocked}
-          onClick={clearSource}
-        >
-          {t('common.operations.charity.chooseSource')}
-        </Button>
-        {selectedSource ? (
-          <>
-            <span aria-hidden="true">/</span>
-            <Button
-              type="button"
-              variant="ghost"
-              aria-current={!selectedKey ? 'step' : undefined}
-              disabled={interactionBlocked}
-              onClick={clearKey}
-            >
-              {t('common.operations.charity.chooseKey')}
-            </Button>
-          </>
-        ) : null}
-        {selectedKey ? (
-          <>
-            <span aria-hidden="true">/</span>
-            <span aria-current="step">{t('common.operations.charity.chooseModels')}</span>
-          </>
-        ) : null}
-      </nav>
+      {!fixedKey ? (
+        <nav className="ops-actions" aria-label={t('common.operations.charity.bindingCandidates')}>
+          <Button
+            type="button"
+            variant="ghost"
+            aria-current={!selectedSource ? 'step' : undefined}
+            disabled={interactionBlocked}
+            onClick={clearSource}
+          >
+            {t('common.operations.charity.chooseSource')}
+          </Button>
+          {selectedSource ? (
+            <>
+              <span aria-hidden="true">/</span>
+              <Button
+                type="button"
+                variant="ghost"
+                aria-current={!selectedKey ? 'step' : undefined}
+                disabled={interactionBlocked}
+                onClick={clearKey}
+              >
+                {t('common.operations.charity.chooseKey')}
+              </Button>
+            </>
+          ) : null}
+          {selectedKey ? (
+            <>
+              <span aria-hidden="true">/</span>
+              <span aria-current="step">{t('common.operations.charity.chooseModels')}</span>
+            </>
+          ) : null}
+        </nav>
+      ) : null}
 
       {!selectedSource ? (
         <>
           <div className="ops-toolbar">
+            <KeyStateFilter
+              value={keyState}
+              disabled={interactionBlocked}
+              onChange={(state) => {
+                setKeyState(state);
+                setScope('all');
+                setSelectedSource(null);
+                resetKeySelection();
+              }}
+            />
             <form
               onSubmit={(event) => {
                 event.preventDefault();
@@ -756,6 +815,9 @@ function CharityBindingPickerBody({
                                   rpm={entry.max_rpm}
                                   readOnly
                                 />
+                                {entry.charity_state === 'rate_limited' ? (
+                                  <KeyRateLimitTime until={entry.rate_limited_until} />
+                                ) : null}
                                 <small>
                                   {entry.idle
                                     ? t('common.donationHandling.idle')
@@ -843,6 +905,7 @@ function CharityBindingPickerBody({
                     <input
                       type="search"
                       value={candidateQueryDraft}
+                      placeholder={t('common.workflow.upstreamSearch')}
                       maxLength={1024}
                       disabled={interactionBlocked}
                       aria-invalid={!candidateQueryValid}
@@ -904,7 +967,7 @@ function CharityBindingPickerBody({
                                   type="checkbox"
                                   disabled={
                                     interactionBlocked ||
-                                    (!selected[key] && Object.keys(selected).length >= 100)
+                                    (!selected[key] && Object.keys(selected).length >= capacity)
                                   }
                                   checked={Boolean(selected[key])}
                                   onChange={(event) => {
@@ -912,7 +975,7 @@ function CharityBindingPickerBody({
                                       interactionBlocked ||
                                       (event.target.checked &&
                                         !selected[key] &&
-                                        Object.keys(selected).length >= 100)
+                                        Object.keys(selected).length >= capacity)
                                     )
                                       return;
                                     const next = { ...selected };
@@ -946,6 +1009,40 @@ function CharityBindingPickerBody({
                     onPageChange={candidatePager.setPage}
                     onPageSizeChange={candidatePager.setPageSize}
                   />
+                  <div className="nb-actions">
+                    <Button
+                      type="button"
+                      disabled={
+                        candidateBusy ||
+                        candidatePage.data.filter((entry) => !selected[charitySelectionKey(entry)])
+                          .length >
+                          capacity - allSelectedEntries.length
+                      }
+                      onClick={() => {
+                        const next = { ...selected };
+                        for (const entry of candidatePage.data)
+                          next[charitySelectionKey(entry)] ??= {
+                            ...entry,
+                            note: selectedKey.safe_note,
+                          };
+                        onChange(next);
+                      }}
+                    >
+                      {t('common.workflow.selectPage', { count: candidatePage.data.length })}
+                    </Button>
+                    <Button
+                      type="button"
+                      disabled={candidateBusy}
+                      onClick={() => {
+                        const next = { ...selected };
+                        for (const entry of candidatePage.data)
+                          delete next[charitySelectionKey(entry)];
+                        onChange(next);
+                      }}
+                    >
+                      {t('common.workflow.clearPage')}
+                    </Button>
+                  </div>
                 </div>
               ) : (
                 <LoadingState />
@@ -963,11 +1060,45 @@ function CharityBindingPickerBody({
           {t('common.operations.charity.selectedCount', { count: Object.keys(selected).length })}
         </h4>
         <p>{t('common.operations.charity.crossSelectionHelp')}</p>
+        <p role="status" aria-live="polite">
+          {t('common.workflow.selectionCapacity', {
+            selected: allSelectedEntries.length,
+            capacity,
+            outside: allSelectedEntries.filter(
+              ([key]) => !candidatePage?.data.some((entry) => charitySelectionKey(entry) === key),
+            ).length,
+          })}
+        </p>
+        <Field label={t('common.workflow.searchSelected')}>
+          {(props) => (
+            <input
+              {...props}
+              type="search"
+              placeholder={t('common.workflow.upstreamSearch')}
+              value={selectedSearch}
+              ref={selectedSearchInput}
+              onChange={(event) => setSelectedSearch(event.target.value)}
+            />
+          )}
+        </Field>
+        <Button
+          type="button"
+          disabled={locked || allSelectedEntries.length === 0}
+          onClick={() => {
+            onChange({});
+            selectedSearchInput.current?.focus();
+          }}
+        >
+          {t('common.workflow.clearSelected')}
+        </Button>
         <ul>
           {selectedPageEntries.map(([key, entry]) => (
             <li key={key}>
               <div>
-                <strong>{entry.upstream_model_id}</strong>
+                <strong>
+                  {allSelectedEntries.findIndex(([id]) => id === key) + 1}.{' '}
+                  {entry.upstream_model_id}
+                </strong>
                 <span>
                   {t('common.operations.charity.donationNumber', { id: entry.donation_id })} ·{' '}
                   {entry.note} · {entry.source.display_head}…{entry.source.display_tail}
@@ -976,11 +1107,13 @@ function CharityBindingPickerBody({
               <Button
                 type="button"
                 variant="ghost"
+                aria-label={t('common.workflow.removeSelection', { id: entry.upstream_model_id })}
                 disabled={interactionBlocked}
                 onClick={() => {
                   const next = { ...selected };
                   delete next[key];
                   onChange(next);
+                  selectedSearchInput.current?.focus();
                 }}
               >
                 {t('common.operations.charity.remove')}

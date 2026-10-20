@@ -180,10 +180,14 @@ func (adapter *CharityRoutingAdapter) PreflightImage(ctx context.Context, userID
 }
 
 func (adapter *CharityRoutingAdapter) PreflightDecision(ctx context.Context, userID int64, fullName string, request *openai.DecisionRequest, now int64) (CharityPreflight, error) {
-	if adapter == nil || adapter.service == nil { return CharityPreflight{}, ErrInternal }
+	if adapter == nil || adapter.service == nil {
+		return CharityPreflight{}, ErrInternal
+	}
 	value, err := adapter.service.PreflightDecision(ctx, userID, fullName, request, now)
-	if err != nil { return CharityPreflight{}, err }
-	return CharityPreflight{ModelTypes:value.ModelTypes.Clone(), TransportRule:value.TransportRule, RolePolicy:value.RolePolicy.Clone(), Revision:value.Revision, ModelID:value.ModelID, Provider:value.Provider, Model:value.Model, FullName:value.FullName, ReservedMilli:value.ReservedMilli}, nil
+	if err != nil {
+		return CharityPreflight{}, err
+	}
+	return CharityPreflight{ModelTypes: value.ModelTypes.Clone(), TransportRule: value.TransportRule, RolePolicy: value.RolePolicy.Clone(), Revision: value.Revision, ModelID: value.ModelID, Provider: value.Provider, Model: value.Model, FullName: value.FullName, ReservedMilli: value.ReservedMilli}, nil
 }
 
 func (adapter *CharityRoutingAdapter) RequestPolicy(ctx context.Context, userID int64, fullName string, now int64) (CharityRequestPolicy, error) {
@@ -261,3 +265,7 @@ var (
 	_ PersonalRouter = (*PersonalRoutingAdapter)(nil)
 	_ CharityRouter  = (*CharityRoutingAdapter)(nil)
 )
+
+func (adapter *ClaimServiceAdapter) ObserveResponseHeaders(ctx context.Context, handle claim.Handle, observation connectorcontract.ResponseObservation) error {
+	return adapter.service.ObserveResponseHeaders(ctx, handle, observation)
+}

@@ -124,12 +124,19 @@ func retainedFacts(t *testing.T, database *sql.DB) map[string][32]byte {
 	ignored := map[string]bool{"schema_state": true, "user_continuity_identities": true, "gateway_model_capabilities_state": true, "site_usage_totals": true}
 	result := map[string][32]byte{}
 	for _, table := range tables {
+		if table == "donation_key_cooldowns" || table == "dispatch_retry_after_observations" || table == "request_header_facts" || table == "charity_price_templates" || table == "charity_price_template_audits" || table == "donation_owner_preferences" {
+			var count int
+			if err := database.QueryRow("SELECT count(*) FROM " + table).Scan(&count); err != nil || count != 0 {
+				t.Fatalf("new diagnostic table %s is not empty: %d %v", table, count, err)
+			}
+			continue
+		}
 		if ignored[table] || strings.HasPrefix(table, "account_mfa_") {
 			continue
 		}
 		query := "SELECT * FROM " + table
 		if table == "site_config" {
-			query += " WHERE key NOT IN ('redemption_ban_threshold','redemption_ban_window_seconds','redemption_ban_duration_seconds','game_fishing_milk_crab_chance_bps') AND key NOT LIKE 'mfa_required_level_%'"
+			query += " WHERE key NOT IN ('redemption_ban_threshold','redemption_ban_window_seconds','redemption_ban_duration_seconds','game_fishing_milk_crab_chance_bps','request_header_budget_mib') AND key NOT LIKE 'mfa_required_level_%'"
 		}
 		rows, err := database.Query(query)
 		if err != nil {
@@ -151,6 +158,12 @@ func retainedFacts(t *testing.T, database *sql.DB) map[string][32]byte {
 			}
 			var retained []any
 			for i, column := range columns {
+				if table == "observability_state" && column == "header_bytes" {
+					if values[i] != int64(0) {
+						t.Fatal("upgrade header counter is not empty")
+					}
+					continue
+				}
 				if table == "users" && strings.HasPrefix(column, "total_") {
 					continue
 				}

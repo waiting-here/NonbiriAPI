@@ -23,7 +23,11 @@ import { normalizeRuleView, type RecurringLimitRuleView } from '@shared/operatio
 import { normalizeDonationKey, normalizeDonationSafeSource } from './normalize';
 import type { DonationKey, DonationKeySource, DonationReviewResult, DonationStatus } from './types';
 
+export type OwnerDonationView = 'current' | 'history' | 'hidden' | 'all';
+export type OwnerDonationKeyView = 'current' | 'ended' | 'all';
+
 export interface OwnerDonationPageFilters {
+  view?: OwnerDonationView;
   status?: DonationStatus | '';
   q?: string;
 }
@@ -32,6 +36,7 @@ export type OwnerDonationStateCounts = Record<DonationKey['charityState'], strin
 
 export interface OwnerDonationSummary {
   id: string;
+  ownerHiddenAt: number | null;
   discordPublicThanks?: boolean | null;
   status: DonationStatus;
   revision: string;
@@ -99,6 +104,7 @@ const OWNER_KEY_FIELDS = [
 
 const OWNER_DONATION_STATES = [
   'available',
+  'rate_limited',
   'pending',
   'disabled',
   'suspended',
@@ -174,7 +180,7 @@ function normalizeOwnerFilters(value: unknown): Required<OwnerDonationPageFilter
     invalidInput('donation page filters');
   }
   const root = value as Record<string, unknown>;
-  if (Object.keys(root).some((key) => key !== 'status' && key !== 'q')) {
+  if (Object.keys(root).some((key) => key !== 'status' && key !== 'q' && key !== 'view')) {
     invalidInput('donation page filters');
   }
   let status: DonationStatus | '' = '';
@@ -190,7 +196,10 @@ function normalizeOwnerFilters(value: unknown): Required<OwnerDonationPageFilter
     status = root.status as DonationStatus | '';
   }
   const q = root.q === undefined ? '' : requestSearch(root.q);
-  return { status, q };
+  const view = root.view ?? 'all';
+  if (!['current', 'history', 'hidden', 'all'].includes(view as string))
+    invalidInput('donation view');
+  return { status, q, view: view as OwnerDonationView };
 }
 
 function pageResponse<T>(
@@ -317,7 +326,7 @@ function normalizeOwnerDonation(
   rejectLoneSurrogates(value, label);
   const root = record(
     value,
-    [...OWNER_DONATION_FIELDS, 'discord_public_thanks'],
+    [...OWNER_DONATION_FIELDS, 'discord_public_thanks', 'owner_hidden_at'],
     label,
     OWNER_DONATION_FIELDS,
   );
@@ -344,6 +353,8 @@ function normalizeOwnerDonation(
   validateSummaryState(status, reviewResult, keyCount, stateCounts, label);
   return {
     id: decimalID(root.id, `${label} id`),
+    ownerHiddenAt:
+      root.owner_hidden_at == null ? null : unixSecond(root.owner_hidden_at, 'hidden time'),
     discordPublicThanks:
       root.discord_public_thanks == null
         ? null
@@ -373,6 +384,7 @@ function normalizeOwnerKey(
     [
       ...OWNER_KEY_FIELDS,
       'review',
+      'rate_limited_until',
       'input_token_reserve',
       'output_token_reserve',
       'breakdown_started_at',
@@ -388,6 +400,7 @@ function normalizeOwnerKey(
     safe_source: root.safe_source,
     physical_enabled: root.physical_enabled,
     charity_state: root.charity_state,
+    rate_limited_until: root.rate_limited_until,
     limits: root.limits,
     usage: root.usage,
     token_reserve: root.token_reserve,
@@ -496,6 +509,7 @@ export async function getOwnerDonationsPage(
   const window = requestPage(page, pageSize);
   const payload = await apiFetch<unknown>(
     queryPath('/api/donations', {
+      view: filters.view === undefined ? undefined : normalizedFilters.view,
       status: normalizedFilters.status || undefined,
       q: normalizedFilters.q || undefined,
       page: window.page,
@@ -511,11 +525,13 @@ export async function getOwnerDonationKeysPage(
   page: string,
   pageSize: PageSize,
   signal?: AbortSignal,
+  view?: OwnerDonationKeyView,
 ): Promise<OwnerDonationPage<OwnerDonationKeySummary>> {
   const id = requestDonationID(donationID);
   const window = requestPage(page, pageSize);
   const payload = await apiFetch<unknown>(
     queryPath(`/api/donations/${encodeURIComponent(id)}/keys`, {
+      view,
       page: window.page,
       page_size: window.pageSize,
     }),

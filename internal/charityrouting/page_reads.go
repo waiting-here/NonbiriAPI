@@ -8,6 +8,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/waiting-here/NonbiriAPI/internal/donationstate"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
@@ -102,6 +103,16 @@ func candidatePageSelection(modelID, now int64, query CandidateQuery) (string, [
 	statement := `SELECT dk.id,d.id,dk.connector_type,dk.canonical_base_url,dk.display_head,dk.display_tail,
 pc.normalized_model_id,pc.automatic_supports,pc.manual_supports,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0)` + candidatePageFrom
 	args := []any{modelID, now}
+	if donationstate.Filtered(query.KeyState) {
+		// Evaluate key state before expanding its model pairs.
+		statement = strings.Replace(statement, "CROSS JOIN endpoint_keys k ON k.id=m.endpoint_key_id",
+			"CROSS JOIN endpoint_keys k ON k.id=m.endpoint_key_id LEFT JOIN endpoints e ON e.id=k.endpoint_id", 1)
+		statement += ` AND (` + donationstate.SQL() + `)=?`
+		args = append(args, now, now, now, now, query.KeyState)
+	}
+	if query.traineeOnly {
+		statement += ` AND dk.mainstream_channel_id IS NOT NULL`
+	}
 	if query.DonationID > 0 {
 		statement += ` AND d.id=?`
 		args = append(args, query.DonationID)
@@ -138,7 +149,7 @@ func (s *Service) candidatesPage(ctx context.Context, role roleKind, actorID, mo
 	var empty Page[AdminBindingCandidate]
 	if ctx == nil || modelID <= 0 || !page.Valid() || query.DonationID < 0 || query.DonationKeyID < 0 ||
 		query.AfterKeyID != 0 || query.AfterModelID != "" || query.Source != "" && query.Source != "automatic" && query.Source != "manual" ||
-		!utf8.ValidString(query.Query) || utf8.RuneCountInString(query.Query) > 512 {
+		!utf8.ValidString(query.Query) || utf8.RuneCountInString(query.Query) > 512 || !donationstate.Valid(query.KeyState) {
 		return empty, ErrInvalidRequest
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -156,10 +167,8 @@ func (s *Service) candidatesPage(ctx context.Context, role roleKind, actorID, mo
 	if err != nil {
 		return empty, err
 	}
+	query.traineeOnly = scope.Trainee
 	selection, args := candidatePageSelection(modelID, now, query)
-	if scope.Trainee {
-		selection += ` AND dk.mainstream_channel_id IS NOT NULL`
-	}
 	metadata, offset, err := pageWindow(ctx, tx, selection, args, page)
 	if err != nil {
 		return empty, err
@@ -192,10 +201,10 @@ func (s *Service) candidatesPage(ctx context.Context, role roleKind, actorID, mo
 	return result, nil
 }
 
-func (s *Service) bindingSourcesPage(ctx context.Context, role roleKind, actorID, modelID, donationID int64, page pagination.Request) (Page[BindingDonation], Page[BindingSourceKey], error) {
+func (s *Service) bindingSourcesPage(ctx context.Context, role roleKind, actorID, modelID, donationID int64, keyState string, page pagination.Request) (Page[BindingDonation], Page[BindingSourceKey], error) {
 	var donations Page[BindingDonation]
 	var keys Page[BindingSourceKey]
-	if ctx == nil || modelID <= 0 || donationID < 0 || !page.Valid() {
+	if ctx == nil || modelID <= 0 || donationID < 0 || !page.Valid() || !donationstate.Valid(keyState) {
 		return donations, keys, ErrInvalidRequest
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -213,13 +222,12 @@ func (s *Service) bindingSourcesPage(ctx context.Context, role roleKind, actorID
 	if err != nil {
 		return donations, keys, err
 	}
-	from := bindingSourceFrom
+	from, args := bindingSourceSelection(modelID, now, keyState)
 	if scope.Trainee {
 		from += ` AND dk.mainstream_channel_id IS NOT NULL`
 	}
 	selection := `SELECT d.id,d.description,COUNT(DISTINCT dk.id)` + from + ` GROUP BY d.id,d.description`
 	order := ` ORDER BY d.id`
-	args := []any{modelID, now}
 	if donationID > 0 {
 		selection = `SELECT dk.id,dk.connector_type,dk.canonical_base_url,dk.display_head,dk.display_tail,dk.safe_note,
 COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0),d.description,d.review_note` + from + ` AND d.id=?`
