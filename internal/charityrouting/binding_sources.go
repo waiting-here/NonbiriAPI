@@ -42,8 +42,14 @@ AND (EXISTS(SELECT 1 FROM model_pair_catalog pc WHERE pc.endpoint_key_id=k.id
  AND NOT EXISTS(SELECT 1 FROM charity_model_bindings b WHERE b.charity_model_id=cm.id
  AND b.donation_key_id=dk.id AND b.upstream_model_id=dm.normalized_model_id)))`
 
-func bindingSourceSelection(modelID, now int64, keyState string) (string, []any) {
+func bindingSourceSelection(modelID, now int64, keyState string, includeBound ...bool) (string, []any) {
 	from := bindingSourceFrom
+	if len(includeBound) > 0 && includeBound[0] {
+		from = strings.ReplaceAll(from, `AND NOT EXISTS(SELECT 1 FROM charity_model_bindings b WHERE b.charity_model_id=cm.id
+  AND b.donation_key_id=dk.id AND b.upstream_model_id=pc.normalized_model_id)`, "")
+		from = strings.ReplaceAll(from, `AND NOT EXISTS(SELECT 1 FROM charity_model_bindings b WHERE b.charity_model_id=cm.id
+ AND b.donation_key_id=dk.id AND b.upstream_model_id=dm.normalized_model_id)`, "")
+	}
 	args := []any{modelID, now}
 	if donationstate.Filtered(keyState) {
 		from = strings.Replace(from, "WHERE cm.id=?", "LEFT JOIN endpoints e ON e.id=k.endpoint_id WHERE cm.id=?", 1)
@@ -53,7 +59,7 @@ func bindingSourceSelection(modelID, now int64, keyState string) (string, []any)
 	return from, args
 }
 
-func (s *Service) bindingSources(ctx context.Context, role roleKind, actorID, modelID, donationID, afterID int64, limit int, keyState string) ([]BindingDonation, []BindingSourceKey, int64, error) {
+func (s *Service) bindingSources(ctx context.Context, role roleKind, actorID, modelID, donationID, afterID int64, limit int, keyState string, includeBound ...bool) ([]BindingDonation, []BindingSourceKey, int64, error) {
 	if s == nil || ctx == nil || modelID <= 0 || donationID < 0 || afterID < 0 || limit < 1 || limit > maxPageLimit || (role != roleAdmin && role != roleSteward) || role == roleSteward && actorID <= 0 || !donationstate.Valid(keyState) {
 		return nil, nil, 0, ErrInvalidRequest
 	}
@@ -76,7 +82,7 @@ func (s *Service) bindingSources(ctx context.Context, role roleKind, actorID, mo
 	if err := s.donationState.MaterializeDueExpiriesTx(ctx, tx, now, 100); err != nil {
 		return nil, nil, 0, err
 	}
-	from, args := bindingSourceSelection(modelID, now, keyState)
+	from, args := bindingSourceSelection(modelID, now, keyState, includeBound...)
 	if scope.Trainee {
 		from += ` AND dk.mainstream_channel_id IS NOT NULL`
 	}
@@ -84,7 +90,7 @@ func (s *Service) bindingSources(ctx context.Context, role roleKind, actorID, mo
 	args = append(args, afterID, limit+1)
 	if donationID != 0 {
 		query = `SELECT dk.id,dk.connector_type,dk.canonical_base_url,dk.display_head,dk.display_tail,dk.safe_note,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0),d.description,d.review_note` + from + ` AND d.id=? AND dk.id>? ORDER BY dk.id LIMIT ?`
-		_, args = bindingSourceSelection(modelID, now, keyState)
+		_, args = bindingSourceSelection(modelID, now, keyState, includeBound...)
 		args = append(args, donationID, afterID, limit+1)
 	}
 	rows, err := tx.QueryContext(ctx, query, args...)
@@ -162,18 +168,23 @@ func (api *httpAPI) bindingSources(w http.ResponseWriter, r *http.Request, role 
 	if !ok {
 		return
 	}
-	page, numbered, pageErr := parseNumberedQuery(values, "key_state")
+	page, numbered, pageErr := parseNumberedQuery(values, "key_state", "include_bound")
 	if pageErr != nil {
 		writeRoutingError(w, pageErr)
 		return
 	}
+	if values.Has("include_bound") && values.Get("include_bound") != "true" && values.Get("include_bound") != "false" {
+		writeRoutingError(w, ErrInvalidRequest)
+		return
+	}
+	includeBound := values.Get("include_bound") == "true"
 	keyState := values.Get("key_state")
 	if !donationstate.Valid(keyState) || values.Has("key_state") && keyState == "" {
 		writeRoutingError(w, ErrInvalidRequest)
 		return
 	}
 	if numbered {
-		donations, sourceKeys, err := api.service.bindingSourcesPage(r.Context(), role, actorID, modelID, donationID, keyState, page)
+		donations, sourceKeys, err := api.service.bindingSourcesPage(r.Context(), role, actorID, modelID, donationID, keyState, page, includeBound)
 		if err != nil {
 			writeRoutingError(w, err)
 			return
@@ -185,7 +196,7 @@ func (api *httpAPI) bindingSources(w http.ResponseWriter, r *http.Request, role 
 		}
 		return
 	}
-	limit, cursor, ok := parsePage(values, "cursor", "limit", "key_state")
+	limit, cursor, ok := parsePage(values, "cursor", "limit", "key_state", "include_bound")
 	if !ok {
 		writeRoutingError(w, ErrInvalidRequest)
 		return
@@ -203,6 +214,9 @@ func (api *httpAPI) bindingSources(w http.ResponseWriter, r *http.Request, role 
 	if donationstate.Filtered(keyState) {
 		filterOwner += ":key_state=" + keyState
 	}
+	if includeBound {
+		filterOwner += ":include_bound=true"
+	}
 	owner, err := api.service.managementCursorOwner(r.Context(), role, actorID, modelID, filterOwner)
 	if err != nil {
 		writeRoutingError(w, err)
@@ -213,7 +227,7 @@ func (api *httpAPI) bindingSources(w http.ResponseWriter, r *http.Request, role 
 		writeRoutingError(w, err)
 		return
 	}
-	donations, sourceKeys, next, err := api.service.bindingSources(r.Context(), role, actorID, modelID, donationID, after, limit, keyState)
+	donations, sourceKeys, next, err := api.service.bindingSources(r.Context(), role, actorID, modelID, donationID, after, limit, keyState, includeBound)
 	if err != nil {
 		writeRoutingError(w, err)
 		return

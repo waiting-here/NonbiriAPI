@@ -123,7 +123,8 @@ func seedManagementBrowser(t *testing.T, f *imageBrowserFixture, now int64) map[
 		"pricing":  map[string]any{"mode": "per_request", "user_price": "0", "donor_reward": "0"},
 		"discount": map[string]any{"enabled": false, "percent": 100, "start_at": nil, "end_at": nil},
 	}, f.adminCookie, true)
-	return map[string]any{"old_user_id": old.ID, "current_user": current, "history_discord_id": historyDiscord, "history_record_id": historyID, "request_ids": requests,
+	bindings := seedBindingManagementBrowser(t, f, now)
+	return map[string]any{"binding_donation_id": bindings["donation_id"], "binding_key_ids": bindings["key_ids"], "binding_model_ids": bindings["model_ids"], "binding_channel_id": bindings["channel_id"], "old_user_id": old.ID, "current_user": current, "history_discord_id": historyDiscord, "history_record_id": historyID, "request_ids": requests,
 		"gemini_endpoint_id": geminiEndpoint, "gemini_key_id": geminiKey,
 		"disposable_user_id": disposable.ID,
 		"trainee_target_id":  traineeTarget.ID,
@@ -156,4 +157,52 @@ func seedPolicyHistoryBrowser(t *testing.T, f *imageBrowserFixture, now int64) {
 	if err = tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func seedBindingManagementBrowser(t *testing.T, f *imageBrowserFixture, now int64) map[string]any {
+	t.Helper()
+	channel, err := db.GenerateOpaqueID("mch_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.DB().Exec(`INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at) VALUES(?,'Binding browser service','subscription','openai-compatible',?,1,'active',1,?,?)`, channel, f.upstream.URL+"/v1", now, now); err != nil {
+		t.Fatal(err)
+	}
+	owner := f.users[0].Cookie
+	endpoint := f.call("POST", "/api/endpoints", map[string]any{"source": "mainstream", "channel_id": channel, "note": "Binding browser service", "enabled": true}, owner, false)["id"].(string)
+	physical := []string{}
+	donationKeys := []map[string]any{}
+	for i := range 3 {
+		key := f.call("POST", "/api/endpoints/"+endpoint+"/keys", map[string]any{"secret": fmt.Sprint("synthetic-binding-donation-", i), "note": fmt.Sprint("Binding credential ", i+1), "enabled": true, "force_store_false": false, "ownership_confirmed": true}, owner, false)["id"].(string)
+		physical = append(physical, key)
+		donationKeys = append(donationKeys, map[string]any{"endpoint_key_id": key, "expires_at": nil})
+		for j := range 6 {
+			if i == 1 && j == 3 {
+				continue
+			}
+			if _, err := f.store.DB().Exec(`INSERT INTO model_pair_catalog(endpoint_key_id,normalized_model_id,automatic_supports,manual_supports,automatic_revision,pair_revision,updated_at) VALUES(?,?,1,0,1,1,?)`, key, fmt.Sprint("binding-up-", j), now); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	donation := f.call("POST", "/api/donations", map[string]any{"description": "Binding preset browser donation", "discord_public_thanks": false, "ownership_authorized": true, "keys": donationKeys}, owner, false)
+	did := donation["id"].(string)
+	keyIDs := []string{}
+	for _, key := range physical {
+		var id string
+		if err := f.store.DB().QueryRow(`SELECT CAST(id AS TEXT) FROM donation_keys WHERE donation_id=? AND endpoint_key_id=?`, did, key).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.store.DB().Exec(`UPDATE donation_keys SET safe_note=? WHERE id=?`, fmt.Sprint("Binding browser key ", len(keyIDs)+1), id); err != nil {
+			t.Fatal(err)
+		}
+		keyIDs = append(keyIDs, id)
+	}
+	modelIDs := []string{}
+	for i := range 6 {
+		model := f.call("POST", "/admin/api/charity-models", map[string]any{"provider": "binding-browser", "model": fmt.Sprint("target-", i), "enabled": true, "is_mainstream": i < 5, "flatten_tool_calls": false, "pricing": map[string]any{"mode": "per_request", "user_price": "0", "donor_reward": "0"}, "discount": map[string]any{"enabled": false, "percent": 100, "start_at": nil, "end_at": nil}}, f.adminCookie, true)
+		modelIDs = append(modelIDs, model["id"].(string))
+	}
+	f.call("POST", "/admin/api/charity-models/"+modelIDs[0]+"/bindings/batch-receipt", map[string]any{"expected_binding_revision": "0", "selections": []map[string]any{{"donation_key_id": keyIDs[0], "upstream_model_id": "binding-up-0"}}}, f.adminCookie, true)
+	return map[string]any{"channel_id": channel, "donation_id": did, "key_ids": keyIDs, "model_ids": modelIDs}
 }

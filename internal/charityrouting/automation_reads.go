@@ -83,9 +83,23 @@ func (s *Service) AutomationBindings(ctx context.Context, userID, modelID int64,
 	}
 	return out, tx.Commit()
 }
-func (s *Service) AutomationCandidates(ctx context.Context, userID, modelID int64, q string, page pagination.Request) (AutomationPage[AdminBindingCandidate], error) {
-	value, err := s.candidatesPage(ctx, roleSteward, userID, modelID, CandidateQuery{Query: q}, page)
-	return AutomationPage[AdminBindingCandidate]{Data: value.Data, Pagination: value.Pagination}, err
+
+// Automation keeps its established projection when web management adds markers.
+type AutomationBindingCandidate struct {
+	DonationKeyID   string          `json:"donation_key_id"`
+	DonationID      string          `json:"donation_id"`
+	Source          CandidateSource `json:"source"`
+	UpstreamModelID string          `json:"upstream_model_id"`
+	SourceTypes     []string        `json:"source_types"`
+}
+
+func (s *Service) AutomationCandidates(ctx context.Context, userID, modelID int64, q string, page pagination.Request) (AutomationPage[AutomationBindingCandidate], error) {
+	value, err := s.candidatesPage(ctx, roleSteward, userID, modelID, CandidateQuery{Query: q, omitBindingMarkers: true}, page)
+	out := AutomationPage[AutomationBindingCandidate]{Data: []AutomationBindingCandidate{}, Pagination: value.Pagination}
+	for _, item := range value.Data {
+		out.Data = append(out.Data, AutomationBindingCandidate{item.DonationKeyID, item.DonationID, item.Source, item.UpstreamModelID, item.SourceTypes})
+	}
+	return out, err
 }
 
 type AutomationCatalog struct {

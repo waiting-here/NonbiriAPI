@@ -40,9 +40,13 @@ func (api *httpAPI) candidates(writer http.ResponseWriter, request *http.Request
 	if !ok {
 		return
 	}
-	numberedPage, numbered, pageErr := parseNumberedQuery(values, "donation_id", "donation_key_id", "source", "q", "key_state")
+	numberedPage, numbered, pageErr := parseNumberedQuery(values, "donation_id", "donation_key_id", "source", "q", "key_state", "include_bound")
 	if pageErr != nil {
 		writeRoutingError(writer, pageErr)
+		return
+	}
+	if values.Has("include_bound") && values.Get("include_bound") != "true" && values.Get("include_bound") != "false" {
+		writeRoutingError(writer, ErrInvalidRequest)
 		return
 	}
 	keyState := values.Get("key_state")
@@ -54,7 +58,7 @@ func (api *httpAPI) candidates(writer http.ResponseWriter, request *http.Request
 		api.numberedCandidates(writer, request, role, actorID, modelID, values, numberedPage)
 		return
 	}
-	limit, cursor, ok := parsePage(values, "donation_id", "donation_key_id", "source", "q", "cursor", "limit", "key_state")
+	limit, cursor, ok := parsePage(values, "donation_id", "donation_key_id", "source", "q", "cursor", "limit", "key_state", "include_bound")
 	if !ok {
 		writeRoutingError(writer, ErrInvalidRequest)
 		return
@@ -84,6 +88,9 @@ func (api *httpAPI) candidates(writer http.ResponseWriter, request *http.Request
 	if donationstate.Filtered(keyState) {
 		filterOwner += ":key_state=" + keyState
 	}
+	if values.Get("include_bound") == "true" {
+		filterOwner += ":include_bound=true"
+	}
 	owner, err := api.service.managementCursorOwner(request.Context(), role, actorID, modelID, filterOwner)
 	if err != nil {
 		writeRoutingError(writer, err)
@@ -94,7 +101,7 @@ func (api *httpAPI) candidates(writer http.ResponseWriter, request *http.Request
 		writeRoutingError(writer, err)
 		return
 	}
-	input := CandidateQuery{DonationID: donationID, DonationKeyID: donationKeyID, Source: source, Query: query, KeyState: keyState,
+	input := CandidateQuery{IncludeBound: values.Get("include_bound") == "true", DonationID: donationID, DonationKeyID: donationKeyID, Source: source, Query: query, KeyState: keyState,
 		AfterKeyID: afterKey, AfterModelID: afterModel, Limit: limit}
 	if role == roleAdmin {
 		items, nextKey, nextModel, err := api.service.BindingCandidatesAdmin(request.Context(), modelID, input)
