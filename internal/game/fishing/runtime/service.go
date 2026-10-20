@@ -63,6 +63,7 @@ type Service struct {
 	activityEvents ActivityPublisher
 	finance        finance.Fishing
 	database       *sql.DB
+	readDatabase   *sql.DB
 	userAuthorizer resources.FinalTxAuthorizer
 
 	limiter           *game.StartLimiter
@@ -89,6 +90,7 @@ type Service struct {
 	// Narrow deterministic fault/transition seams used only by package tests.
 	beforeSettlement       func(string) error
 	afterSettlementFailure func(string)
+	beforeLeaderboardQuery func(context.Context, *sql.Tx) error
 }
 
 func New(options Options) (*Service, error) {
@@ -128,7 +130,8 @@ func New(options Options) (*Service, error) {
 	key := append([]byte(nil), options.LeaderboardTieKey...)
 	return &Service{
 		pools: options.Pools, activityEvents: options.ActivityEvents,
-		database: options.Store.DB(), userAuthorizer: options.UserAuthorizer, finance: options.Finance,
+		database: options.Store.DB(), readDatabase: options.Store.ReadDB(),
+		userAuthorizer: options.UserAuthorizer, finance: options.Finance,
 		limiter: options.Limiter, ownsLimiter: ownsLimiter,
 		random: options.Random, proofs: proofs, now: options.Now, generateID: options.GenerateID,
 		leaderboardTieKey: key, capability: options.Capability,
