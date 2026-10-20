@@ -1,4 +1,4 @@
-import { useLocation } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { UserManagement } from '@shared/components/UserManagement';
 import { BlacklistManagement } from '../../admin/pages/BlacklistPage';
 import { AnnouncementManagement } from '@shared/components/AnnouncementManagement';
@@ -124,6 +124,17 @@ function StewardPageContent() {
             title={t('user.steward.title')}
             description={t('user.steward.presentation.description')}
           />
+        ) : null}
+        {!trainee ? (
+          <div className="nb-actions">
+            <Link
+              className="nb-btn nb-btn--secondary"
+              to="/endpoint-policies"
+              state={{ returnTo: location.pathname + location.search }}
+            >
+              {t('common.endpointPolicies.title')}
+            </Link>
+          </div>
         ) : null}
         <Tabs
           label={t('user.steward.sectionsLabel')}

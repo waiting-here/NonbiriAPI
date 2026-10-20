@@ -122,6 +122,12 @@ export const router = createBrowserRouter([
         lazy: async () => ({ Component: (await import('./pages/CharityPage')).CharityPage }),
       },
       {
+        path: pathFor('admin-endpoint-policies'),
+        lazy: async () => ({
+          Component: (await import('./pages/EndpointPoliciesPage')).EndpointPoliciesPage,
+        }),
+      },
+      {
         path: pathFor('admin-channel-binding-presets'),
         lazy: async () => ({
           Component: (await import('./pages/ChannelBindingPresetsPage')).ChannelBindingPresetsPage,
