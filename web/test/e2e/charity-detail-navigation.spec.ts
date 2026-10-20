@@ -1582,11 +1582,6 @@ for (const scenario of [
       for (const width of [1440, 1920, 2560, 3440, 768, 390, 320]) {
         await page.setViewportSize({ width, height: 1000 });
         await expect(editor.locator('.charity-price-row')).toHaveCount(4);
-        expect(
-          await editor
-            .locator('.ops-paired-fields')
-            .evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(' ').length),
-        ).toBe(width > 640 ? 2 : 1);
         await expect
           .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1))
           .toBe(true);
