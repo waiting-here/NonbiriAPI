@@ -1,8 +1,4 @@
-import {
-  normalizeSmartBackoffFields,
-  type SmartBackoffConfiguration,
-  type SmartBackoffFields,
-} from './smartBackoff';
+import { normalizeSmartBackoffFields, type SmartBackoffFields } from './smartBackoff';
 import { ApiError } from '@shared/query/http';
 import { decoded, idempotentOptions } from './api';
 import { charityScopePath } from './charityScope';
@@ -19,7 +15,7 @@ export interface FailurePolicy extends SmartBackoffFields {
   failure_disabled: boolean;
   revision: string;
 }
-export interface FailurePolicyInput extends Partial<SmartBackoffConfiguration> {
+export interface FailurePolicyInput {
   expected_revision: string;
   failure_disable_threshold: string;
 }
@@ -46,8 +42,6 @@ export function saveFailurePolicy(
           'donation_id',
           'donation_key_id',
           'failure_disable_threshold',
-          'smart_backoff_profile',
-          'smart_backoff_rules',
           'smart_backoff',
           'failure_streak',
           'failure_disabled',

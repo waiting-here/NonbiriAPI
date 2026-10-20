@@ -823,7 +823,7 @@ function CharityBindingPickerBody({
                                   rpm={entry.max_rpm}
                                   readOnly
                                 />
-                                {entry.charity_state === 'rate_limited' || entry.smart_backoff ? (
+                                {entry.rate_limited_until !== null || entry.smart_backoff ? (
                                   <KeyRateLimitTime
                                     until={entry.rate_limited_until}
                                     smartBackoff={entry.smart_backoff}

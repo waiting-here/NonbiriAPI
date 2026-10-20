@@ -103,8 +103,6 @@ function key({
     expires_at: null,
     authorized_expires_at: null,
     failure_disable_threshold: '10',
-    smart_backoff_profile: 'none' as const,
-    smart_backoff_rules: [],
     smart_backoff: null,
     streak: { generation: '1', count: '0', failure_disabled: false },
     ended_reason: endedReason,

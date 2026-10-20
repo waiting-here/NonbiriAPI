@@ -233,8 +233,6 @@ function normalizeAdminCharityKey(value: unknown): AdminCharityKey {
   // identity fields are intentionally not read into the returned object.
   const required = [
     'failure_disable_threshold',
-    'smart_backoff_profile',
-    'smart_backoff_rules',
     'smart_backoff',
     'id',
     'binding_count',

@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
+import { resolve } from 'node:path';
 import {
   expect,
   test,
@@ -7,14 +8,11 @@ import {
   type BrowserContext,
   type Locator,
   type Page,
+  type TestInfo,
 } from '@playwright/test';
 import common from '../../src/shared/i18n/common/en.json' with { type: 'json' };
 import user from '../../src/user/i18n/en.json' with { type: 'json' };
-import type {
-  SmartBackoffFields,
-  SmartBackoffProfile,
-  SmartBackoffRule,
-} from '../../src/shared/operations/smartBackoff';
+import type { SmartBackoffFields } from '../../src/shared/operations/smartBackoff';
 
 type Cookie = { Name: string; Value: string };
 type Role = 'admin' | 1 | 5 | 6;
@@ -23,11 +21,19 @@ interface Fixture {
   user_url: string;
   admin_cookie: Cookie;
   users: { id: string; level: number; cookie: Cookie }[];
+  management: {
+    automatic_backoff_donation_id: string;
+    automatic_backoff_key_ids: string[];
+    automatic_backoff_model_id: string;
+  };
 }
 interface Key extends SmartBackoffFields {
   id: string;
   failure_disable_threshold: string;
   streak: { count: string };
+  charity_state: string;
+  rate_limited_until: number | null;
+  safe_source: { base_url: string };
 }
 interface Donation {
   id: string;
@@ -113,15 +119,6 @@ async function endpoint(owner: BrowserContext, label: string) {
   });
   return { keyID: key.id, baseURL, label };
 }
-async function fill(control: Locator, profile: SmartBackoffProfile, rule: SmartBackoffRule) {
-  await control.getByLabel(backoff.profile, { exact: true }).selectOption(profile);
-  await control.getByText(backoff.advanced, { exact: true }).click();
-  if ((await control.getByLabel('Rule 1 value', { exact: true }).count()) === 0)
-    await control.getByRole('button', { name: backoff.addRule, exact: true }).click();
-  await control.getByLabel('Rule 1 type', { exact: true }).selectOption(rule.kind);
-  await control.getByLabel('Rule 1 value', { exact: true }).fill(rule.value);
-  await control.getByLabel('Rule 1 allowance cycle', { exact: true }).selectOption(rule.period);
-}
 async function save(page: Page, control: Locator, path: string, modelID?: string) {
   const saved = page.waitForResponse(
     (response) =>
@@ -130,11 +127,15 @@ async function save(page: Page, control: Locator, path: string, modelID?: string
   await control.getByRole('button', { name: policy.save, exact: true }).click();
   const response = await saved;
   expect(response.ok()).toBe(true);
+  expect(Object.keys(response.request().postDataJSON()).sort()).toEqual([
+    'expected_revision',
+    'failure_disable_threshold',
+  ]);
   expect(new URL(response.url()).searchParams.get('charity_model_id')).toBe(modelID ?? null);
   await expect(control.getByText(policy.done, { exact: true })).toBeVisible();
 }
 
-test('owner creates per-key backoff and edits it through the mobile donation page', async ({
+test('owner submits with automatic recovery and edits its threshold through the mobile donation page', async ({
   browser,
 }, info) => {
   const state = fixture(),
@@ -161,8 +162,10 @@ test('owner creates per-key backoff and edits it through the mobile donation pag
       .getByRole('checkbox', { name: new RegExp(source.label) })
       .check();
     await picker.getByLabel(policy.label, { exact: true }).fill('13');
-    const creationRule: SmartBackoffRule = { kind: 'code', value: '1310', period: 'month' };
-    await fill(picker, 'day_month', creationRule);
+    await expect(
+      picker.locator('..').getByText(backoff.automaticHelp, { exact: true }),
+    ).toBeVisible();
+    await expect(picker.locator('.smart-backoff-input')).toHaveCount(0);
     await page
       .getByRole('button', { name: charity.presentation.selectionDone, exact: true })
       .click();
@@ -182,23 +185,22 @@ test('owner creates per-key backoff and edits it through the mobile donation pag
     await page.getByRole('button', { name: charity.submit, exact: true }).click();
     const response = await submitted;
     expect(response.ok()).toBe(true);
+    expect(response.request().postDataJSON()).toEqual({
+      description: 'Synthetic smart backoff donation',
+      ownership_authorized: true,
+      discord_public_thanks: false,
+      keys: [{ endpoint_key_id: source.keyID, expires_at: null, failure_disable_threshold: '13' }],
+    });
     const created = (await response.json()) as Donation;
     expect(created.keys[0]).toMatchObject({
       failure_disable_threshold: '13',
-      smart_backoff_profile: 'day_month',
-      smart_backoff_rules: [creationRule],
       smart_backoff: null,
     });
     await page.goto(state.user_url + '/charity/donations/' + created.id);
     const control = page.locator('.failure-policy-control').first();
-    await expect(control.getByLabel(backoff.profile, { exact: true })).toHaveValue('day_month');
+    await expect(control.getByLabel(policy.label, { exact: true })).toHaveValue('13');
+    await expect(control.getByRole('combobox')).toHaveCount(0);
     await control.getByLabel(policy.label, { exact: true }).fill('17');
-    const editedRule: SmartBackoffRule = {
-      kind: 'message',
-      value: 'Daily allowance exhausted',
-      period: 'day',
-    };
-    await fill(control, 'day', editedRule);
     await save(
       page,
       control,
@@ -207,14 +209,12 @@ test('owner creates per-key backoff and edits it through the mobile donation pag
     const saved = await read<Donation>(owner, state.user_url, '/api/donations/' + created.id);
     expect(saved.keys[0]).toMatchObject({
       failure_disable_threshold: '17',
-      smart_backoff_profile: 'day',
-      smart_backoff_rules: [editedRule],
       smart_backoff: null,
       streak: { count: '0' },
     });
     await page.reload();
-    await expect(control.getByLabel(backoff.profile, { exact: true })).toHaveValue('day');
-    await expect(control.getByLabel('Rule 1 value', { exact: true })).toHaveValue(editedRule.value);
+    await expect(control.getByLabel(policy.label, { exact: true })).toHaveValue('17');
+    await expect(control.getByRole('combobox')).toHaveCount(0);
     await control.getByRole('button', { name: policy.save, exact: true }).scrollIntoViewIfNeeded();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
@@ -302,11 +302,15 @@ async function openManagement(
   page: Page,
   role: 'admin' | 5 | 6,
   data: Awaited<ReturnType<typeof boundDonation>>,
+  allKeys = false,
 ) {
   const state = fixture();
   if (role === 5) {
     await page.goto(
-      state.user_url + '/steward?tab=charity&charity_section=models&charity_model=' + data.modelID,
+      state.user_url +
+        '/steward?tab=charity&charity_section=models&charity_model=' +
+        data.modelID +
+        (allKeys ? '&source_key_state=all' : ''),
     );
     await page
       .locator('.charity-source-browser__source-button')
@@ -326,7 +330,7 @@ async function openManagement(
   return page.locator('.failure-policy-control').first();
 }
 
-test('administrator and collaborators persist backoff while level five stays within its bound model', async ({
+test('administrator and collaborators edit thresholds while level five stays within its bound model', async ({
   browser,
 }, info) => {
   const state = fixture(),
@@ -340,29 +344,12 @@ test('administrator and collaborators persist backoff while level five stays wit
       '/admin/api/donations/' + data.donationID,
     );
     expect(initial.keys[0]).toMatchObject({
-      smart_backoff_profile: 'none',
-      smart_backoff_rules: [],
       smart_backoff: null,
     });
     for (const entry of [
-      {
-        role: 'admin',
-        profile: 'five_hour_week',
-        threshold: '11',
-        rule: { kind: 'code', value: '1308', period: 'five_hour' },
-      },
-      {
-        role: 6,
-        profile: 'five_hour_week_month',
-        threshold: '12',
-        rule: { kind: 'code', value: '1310', period: 'month' },
-      },
-      {
-        role: 5,
-        profile: 'day',
-        threshold: '13',
-        rule: { kind: 'message', value: 'Daily allowance exhausted', period: 'day' },
-      },
+      { role: 'admin', threshold: '11' },
+      { role: 6, threshold: '12' },
+      { role: 5, threshold: '13' },
     ] as const) {
       const context =
         entry.role === 'admin' ? admin : await session(browser, entry.role, entry.role === 6);
@@ -372,7 +359,7 @@ test('administrator and collaborators persist backoff while level five stays wit
         page.on('pageerror', (error) => errors.push(error.message));
         const control = await openManagement(page, entry.role, data);
         await control.getByLabel(policy.label, { exact: true }).fill(entry.threshold);
-        await fill(control, entry.profile, entry.rule);
+        await expect(control.getByRole('combobox')).toHaveCount(0);
         const path =
           (entry.role === 'admin' ? '/admin/api' : '/api/steward') +
           '/donations/' +
@@ -388,8 +375,6 @@ test('administrator and collaborators persist backoff while level five stays wit
         );
         expect(saved.keys[0]).toMatchObject({
           failure_disable_threshold: entry.threshold,
-          smart_backoff_profile: entry.profile,
-          smart_backoff_rules: [entry.rule],
           smart_backoff: null,
           streak: { count: '0' },
         });
@@ -397,10 +382,7 @@ test('administrator and collaborators persist backoff while level five stays wit
           const keyPath = '/api/steward/donations/' + data.donationID + '/keys/' + data.keyID;
           expect(
             await read<Key>(context, state.user_url, keyPath + '?charity_model_id=' + data.modelID),
-          ).toMatchObject({
-            smart_backoff_profile: entry.profile,
-            smart_backoff_rules: [entry.rule],
-          });
+          ).toMatchObject({ smart_backoff: null });
           for (const suffix of ['', '?charity_model_id=' + data.unboundModelID]) {
             const rejected = await context.request.patch(
               state.user_url + keyPath + '/failure-policy' + suffix,
@@ -409,8 +391,6 @@ test('administrator and collaborators persist backoff while level five stays wit
                 data: {
                   expected_revision: saved.revision,
                   failure_disable_threshold: '99',
-                  smart_backoff_profile: 'day_month',
-                  smart_backoff_rules: [],
                 },
               },
             );
@@ -424,12 +404,10 @@ test('administrator and collaborators persist backoff while level five stays wit
           expect(unchanged).toEqual(saved);
         }
         const reloaded = await openManagement(page, entry.role, data);
-        await expect(reloaded.getByLabel(backoff.profile, { exact: true })).toHaveValue(
-          entry.profile,
+        await expect(reloaded.getByLabel(policy.label, { exact: true })).toHaveValue(
+          entry.threshold,
         );
-        await expect(reloaded.getByLabel('Rule 1 value', { exact: true })).toHaveValue(
-          entry.rule.value,
-        );
+        await expect(reloaded.getByRole('combobox')).toHaveCount(0);
         await reloaded
           .getByRole('button', { name: policy.save, exact: true })
           .scrollIntoViewIfNeeded();
@@ -445,6 +423,145 @@ test('administrator and collaborators persist backoff while level five stays wit
     }
   } finally {
     await owner.close();
+    await admin.close();
+  }
+});
+
+async function statusVisuals(page: Page, info: TestInfo, role: Role, index: number) {
+  for (const theme of ['light', 'dark'])
+    for (const width of [1440, 390]) {
+      await page.evaluate((value) => {
+        document.documentElement.dataset.theme = value;
+      }, theme);
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+      const status = page.getByRole('region', { name: backoff.statusTitle }).nth(index);
+      await status.scrollIntoViewIfNeeded();
+      await expect(status).toBeInViewport();
+      const geometry = await status.evaluate((element) => ({
+        width: element.clientWidth,
+        scroll: element.scrollWidth,
+      }));
+      expect(geometry.scroll).toBeLessThanOrEqual(geometry.width);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      const name = `automatic-recovery-${role}-${index}-${theme}-${width}.png`;
+      await page.screenshot({
+        path: process.env.NONBIRI_VISUAL_DIR
+          ? resolve(process.env.NONBIRI_VISUAL_DIR, name)
+          : info.outputPath(name),
+        animations: 'disabled',
+      });
+    }
+}
+
+test('existing recovery states and independent upstream waits remain visible across key permissions', async ({
+  browser,
+}, info) => {
+  const state = fixture(),
+    data = state.management;
+  const admin = await session(browser, 'admin');
+  try {
+    const donation = await read<Donation>(
+      admin,
+      state.admin_url,
+      '/admin/api/donations/' + data.automatic_backoff_donation_id,
+    );
+    const [waiting, header, ready] = data.automatic_backoff_key_ids.map((id) =>
+      donation.keys.find((key) => key.id === id)!,
+    );
+    expect(waiting.smart_backoff).toMatchObject({
+      state: 'waiting',
+      reason: 'day_quota',
+      source: 'custom_rule',
+    });
+    expect(waiting.rate_limited_until).not.toBeNull();
+    expect(waiting.rate_limited_until).toBeLessThan(waiting.smart_backoff!.retry_at);
+    expect(header.charity_state).toBe('disabled');
+    expect(header.smart_backoff).toBeNull();
+    expect(header.rate_limited_until).toBeGreaterThan(Date.now() / 1000);
+    expect(ready.smart_backoff).toMatchObject({
+      state: 'ready',
+      reason: 'week_quota',
+      source: 'builtin',
+    });
+    for (const role of [1, 'admin', 6, 5] as const) {
+      const context = role === 'admin' ? admin : await session(browser, role, role === 6);
+      try {
+        const page = await context.newPage();
+        if (role === 5) {
+          for (const key of [waiting, header, ready]) {
+            const scoped = await read<Key>(
+              context,
+              state.user_url,
+              `/api/steward/donations/${donation.id}/keys/${key.id}?charity_model_id=${data.automatic_backoff_model_id}`,
+            );
+            expect(scoped.smart_backoff).toEqual(key.smart_backoff);
+            expect(scoped.rate_limited_until).toBe(key.rate_limited_until);
+            await openManagement(
+              page,
+              role,
+              {
+                donationID: donation.id,
+                keyID: key.id,
+                modelID: data.automatic_backoff_model_id,
+                unboundModelID: '0',
+                baseURL: key.safe_source.base_url,
+              },
+              true,
+            );
+            const status = page.getByRole('region', { name: backoff.statusTitle });
+            await expect(status).toBeVisible();
+            if (key.smart_backoff)
+              await expect(status).toContainText(backoff.states[key.smart_backoff.state]);
+            if (key.rate_limited_until !== null)
+              await expect(status).toContainText(backoff.headerTitle);
+          }
+        } else {
+          await page.goto(
+            role === 1
+              ? `${state.user_url}/charity/donations/${donation.id}`
+              : role === 'admin'
+                ? `${state.admin_url}/charity?donation_id=${donation.id}`
+                : `${state.user_url}/steward?tab=charity&donation_id=${donation.id}`,
+          );
+          const statuses = page.getByRole('region', { name: backoff.statusTitle });
+          await expect(statuses).toHaveCount(3);
+          await expect(statuses.nth(0)).toContainText(backoff.states.waiting);
+          await expect(statuses.nth(0)).toContainText(backoff.sources.custom_rule);
+          await expect(statuses.nth(0)).toContainText(backoff.independentHelp);
+          expect(
+            await statuses
+              .nth(0)
+              .locator('time')
+              .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('datetime'))),
+          ).toEqual([
+            new Date(waiting.rate_limited_until! * 1000).toISOString(),
+            new Date(waiting.smart_backoff!.retry_at * 1000).toISOString(),
+          ]);
+          await expect(statuses.nth(1)).toContainText(backoff.headerTitle);
+          await expect(
+            statuses.nth(1).getByText(backoff.automaticTitle, { exact: true }),
+          ).toHaveCount(0);
+          await expect(statuses.nth(2)).toContainText(backoff.states.ready);
+          await expect(statuses.nth(2)).toContainText(backoff.sources.builtin);
+          if (role === 1 || role === 'admin') {
+            await statusVisuals(page, info, role, 0);
+            await statusVisuals(page, info, role, 1);
+          }
+        }
+        await page.close();
+      } finally {
+        if (role !== 'admin') await context.close();
+      }
+    }
+    const unchanged = await read<Donation>(
+      admin,
+      state.admin_url,
+      '/admin/api/donations/' + donation.id,
+    );
+    expect(unchanged).toEqual(donation);
+  } finally {
     await admin.close();
   }
 });

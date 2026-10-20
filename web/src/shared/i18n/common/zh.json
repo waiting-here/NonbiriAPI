@@ -170,57 +170,10 @@
       "invalid": "请填写有效的连续失败阈值。"
     },
     "smartBackoff": {
-      "details": "退避说明",
-      "ruleHeading": "规则 {{index}}",
-      "kindLabel": "类型",
-      "valueLabel": "内容",
-      "periodLabel": "额度周期",
-      "recognitionHelp": "先使用内置识别。补充规则仅匹配错误响应，区分大小写。",
-      "successHelp": "上游返回 HTTP 200 即清零连续失败次数并停止重试，后续错误仍会显示。",
-      "profile": "智能额度退避",
-      "help": "额度错误暂避且不增加失败次数，其他错误仍计入下架阈值。",
-      "profiles": {
-        "none": "关闭",
-        "five_hour_week": "5 小时＋周",
-        "five_hour_week_month": "5 小时＋周＋月",
-        "day": "日",
-        "day_month": "日＋月"
-      },
-      "advanced": "补充错误识别（可选）",
-      "ruleCount_zero": "仅使用内置识别",
-      "ruleCount_one": "{{count}} 条补充规则",
-      "ruleCount_other": "{{count}} 条补充规则",
-      "rulesHelp": "最多 8 条规则，按顺序使用首条匹配项。",
-      "rulesInactive": "关闭时仍会保存这些规则，重新开启后生效。",
-      "ruleKind": "规则 {{index}} 类型",
-      "ruleValue": "规则 {{index}} 内容",
-      "rulePeriod": "规则 {{index}} 额度周期",
-      "kinds": {
-        "code": "业务错误码",
-        "message": "固定错误文字"
-      },
-      "valueHelp": {
-        "code": "1–64 个字母、数字、点、下划线、冒号或连字符，与错误码或错误类型完整匹配。",
-        "message": "从错误信息中选取 1–160 个字符的固定片段，请勿填写个人信息。"
-      },
-      "placeholder": {
-        "code": "例如：1308",
-        "message": "例如：本周用量已耗尽"
-      },
-      "periods": {
-        "auto": "自动识别",
-        "five_hour": "5 小时",
-        "day": "日",
-        "week": "周",
-        "month": "月"
-      },
-      "removeRule": "删除规则 {{index}}",
-      "addRule": "添加规则",
-      "invalid": "请检查规则内容，并选择当前情景包含的额度周期。",
       "states": {
-        "waiting": "智能退避：等待中",
-        "ready": "智能退避：可试用",
-        "probing": "智能退避：试用中"
+        "waiting": "等待恢复",
+        "ready": "可以发起试用请求",
+        "probing": "正在进行试用请求"
       },
       "reasons": {
         "five_hour_quota": "5 小时额度耗尽",
@@ -231,12 +184,15 @@
       },
       "sources": {
         "builtin": "内置识别",
-        "custom_rule": "补充规则"
+        "custom_rule": "历史规则"
       },
       "reasonSource": "{{reason}} · {{source}}",
       "retryAt": "可试时间：{{time}}",
-      "timingHelp": "没有可靠恢复时间时，依次等待 15、30、60 分钟；明确周额度等待 6 小时，月额度等待 12 小时。到时由下一次公益请求试用。",
-      "editingHelp": "修改情景或补充规则会重新开始智能退避。上游指定的冷却时间继续有效。"
+      "statusTitle": "恢复状态",
+      "automaticHelp": "遇到可恢复的额度限制时会自动等待，到期后的下一次公益请求会尝试恢复。",
+      "headerTitle": "上游等待",
+      "automaticTitle": "智能退避",
+      "independentHelp": "两项等待分别生效，其它密钥限制仍然有效。"
     },
     "refresh": "刷新",
     "donationHandling": {

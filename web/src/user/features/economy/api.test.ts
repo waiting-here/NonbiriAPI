@@ -34,8 +34,6 @@ const DONATION_RESPONSE = {
       token_reserve: 0,
       expires_at: null,
       failure_disable_threshold: '10',
-      smart_backoff_profile: 'none' as const,
-      smart_backoff_rules: [],
       smart_backoff: null,
       streak: { generation: '1', count: '0', failure_disabled: false },
       ended_reason: null,
@@ -99,8 +97,6 @@ describe('economy mutation boundary', () => {
         {
           endpointKeyId: '62',
           expiresAt: 1_900_000_000,
-          smartBackoffProfile: 'day_month',
-          smartBackoffRules: [{ kind: 'code', value: '1308', period: 'day' }],
         },
       ],
       ownershipAuthorized: true,
@@ -117,8 +113,6 @@ describe('economy mutation boundary', () => {
         {
           endpoint_key_id: '62',
           expires_at: 1_900_000_000,
-          smart_backoff_profile: 'day_month',
-          smart_backoff_rules: [{ kind: 'code', value: '1308', period: 'day' }],
         },
       ],
       ownership_authorized: true,

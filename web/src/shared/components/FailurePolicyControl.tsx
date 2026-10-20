@@ -10,13 +10,6 @@ import {
   type FailurePolicy,
   type FailurePolicyInput,
 } from '@shared/operations/failurePolicy';
-import {
-  smartBackoffInput,
-  validSmartBackoff,
-  type SmartBackoffProfile,
-  type SmartBackoffRule,
-} from '@shared/operations/smartBackoff';
-import { SmartBackoffInput } from './SmartBackoffInput';
 import { Field } from './ui/Field';
 import { Note } from './ui/Note';
 import { OutcomeNote } from './ui/OutcomeNote';
@@ -71,8 +64,6 @@ export function FailurePolicyControl({
   keyID,
   revision,
   threshold,
-  profile,
-  rules,
   refresh,
 }: {
   role: 'owner' | 'admin' | 'steward';
@@ -80,17 +71,11 @@ export function FailurePolicyControl({
   keyID: string;
   revision: string;
   threshold: string;
-  profile: SmartBackoffProfile;
-  rules: SmartBackoffRule[];
   refresh?: () => Promise<unknown>;
 }) {
   const { t } = useTranslation();
   const client = useQueryClient();
   const [draft, setDraft] = useState(threshold);
-  const [backoff, setBackoff] = useState({
-    smart_backoff_profile: profile,
-    smart_backoff_rules: rules,
-  });
   const [receipt, setReceipt] = useState<FailurePolicy | null>(null);
   const modelID = useCharityModelScope();
   const root = role === 'owner' ? ['user', 'economy', 'donations'] : charityKeys.root(role);
@@ -108,17 +93,8 @@ export function FailurePolicyControl({
       : {
           revision,
           failure_disable_threshold: threshold,
-          smart_backoff_profile: profile,
-          smart_backoff_rules: rules,
         };
-  const valid = validFailureThreshold(draft) && validSmartBackoff(backoff);
-  const config = validSmartBackoff(backoff) ? smartBackoffInput(backoff) : backoff;
-  const backoffChanged =
-    JSON.stringify(config) !==
-    JSON.stringify({
-      smart_backoff_profile: current.smart_backoff_profile,
-      smart_backoff_rules: current.smart_backoff_rules,
-    });
+  const valid = validFailureThreshold(draft);
   const refreshFailed = save.outcome === 'refresh-failed';
   return (
     <section className="failure-policy-control">
@@ -132,21 +108,14 @@ export function FailurePolicyControl({
         }}
         disabled={save.isPending || unknown}
       />
-      <SmartBackoffInput
-        value={backoff}
-        disabled={save.isPending || unknown}
-        onChange={(value) => {
-          save.reset();
-          setBackoff(value);
-        }}
-      />
+      <p className="muted">{t('common.smartBackoff.automaticHelp')}</p>
       <p className="muted">{t('common.failurePolicy.recalculate')}</p>
       <Button
         type="button"
         disabled={
           save.isPending ||
           refreshFailed ||
-          (!unknown && (!valid || (draft === current.failure_disable_threshold && !backoffChanged)))
+          (!unknown && (!valid || draft === current.failure_disable_threshold))
         }
         onClick={() => {
           save.mutate(
@@ -155,7 +124,6 @@ export function FailurePolicyControl({
               : {
                   expected_revision: current.revision,
                   failure_disable_threshold: draft,
-                  ...(backoffChanged ? config : {}),
                 },
             { onSuccess: setReceipt },
           );

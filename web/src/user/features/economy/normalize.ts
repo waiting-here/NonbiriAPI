@@ -530,8 +530,6 @@ export function normalizeDonationKey(value: unknown): DonationKey {
     'donation key',
     [
       'failure_disable_threshold',
-      'smart_backoff_profile',
-      'smart_backoff_rules',
       'smart_backoff',
       'id',
       'endpoint_key_id',
@@ -592,8 +590,6 @@ export function normalizeDonationKey(value: unknown): DonationKey {
       : enumValue(item.ended_reason, 'donation key ended reason', ENDED_REASONS);
   const smartBackoff = normalizeSmartBackoffFields(item);
   const result: DonationKey = {
-    smartBackoffProfile: smartBackoff.smart_backoff_profile,
-    smartBackoffRules: smartBackoff.smart_backoff_rules,
     smartBackoff: smartBackoff.smart_backoff,
     failureDisableThreshold: decimal(item.failure_disable_threshold, 'failure threshold'),
     id: decimalID(item.id, 'donation key id'),
