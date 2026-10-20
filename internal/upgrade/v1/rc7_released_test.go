@@ -164,6 +164,12 @@ func retainedFacts(t *testing.T, database *sql.DB) map[string][32]byte {
 					}
 					continue
 				}
+				if table == "charity_models" && column == "recurring_discount" {
+					if values[i] != `{"enabled":false,"time_zone":"UTC","default_percent":100,"periods":[]}` {
+						t.Fatal("upgrade recurring discount is not the disabled default")
+					}
+					continue
+				}
 				if table == "users" && strings.HasPrefix(column, "total_") {
 					continue
 				}
