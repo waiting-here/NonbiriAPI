@@ -15,6 +15,21 @@ Each version entry describes its source and compatibility boundary; a release ta
   an initial HTTP 200 restores them without waiting for stream completion.
 - Donor and authorized management controls for profiles, supplemental recognition
   and visible retry state. Existing level-5 key scope remains unchanged.
+- A dedicated administrator price-template workspace with full pricing fields,
+  search, state filters, numbered pagination, creation, editing and deletion.
+  Model forms retain template selection and independent editable snapshots.
+
+### Changed
+
+- Allow level-5 browser sessions to approve or reject all active pending
+  donations, with a pending-only queue and redacted review receipts.
+- Allow administrators and level-6 stewards to force-reject any approved
+  donation, regardless of its original manual or automatic approval source.
+  Existing review-material, revision and transaction safeguards still apply.
+- Validate ordinary offline upgrades against the registered migration's affected
+  relationships instead of scanning unrelated history. Explicit `--check`
+  retains credential, integrity and full foreign-key checks. Conversion progress
+  and elapsed-time heartbeats use stderr; the final result remains JSON on stdout.
 
 ### Compatibility
 

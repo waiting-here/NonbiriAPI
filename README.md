@@ -32,8 +32,13 @@ work overlaps. Success still requires a durable commit, and anonymous queue
 metrics distinguish application waiting from database pool waiting.
 
 Level-5 stewards can inspect user accounts and ban level 1–4 users. They cannot
-change account settings or credits, lift a ban, or replace an active ban. Full
-steward and administrator permissions retain their existing boundaries.
+change account settings or credits, lift a ban, or replace an active ban. They
+can approve or reject every pending donation. Administrators and level-6
+stewards can force-reject any approved donation, including manual approvals.
+
+Administrators manage complete price templates in a dedicated charity workspace,
+with search, pagination, creation, editing and deletion. Administrators and
+level-6 stewards can copy a template into a model form and adjust it before saving.
 
 | Area | Source and contract |
 | --- | --- |

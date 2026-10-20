@@ -104,11 +104,25 @@ The converter accepts exact registered schema 16–24 structures. For rc.7,
 the reference source is `82f1711b674425745a768f781e0e0c34dcb37ac3`. The database
 manifest determines eligibility, not a guess based on a release label.
 
-Use `--check` on an isolated consistent copy, then `--apply` with the service
-stopped and its existing master key available. The converter acquires exclusive
+Use `--check` when a full offline credential, integrity and foreign-key audit is
+needed. Ordinary `--apply` validates the exact source, encryption-root identity,
+required configuration and migration-affected relationships, without scanning
+unrelated historical tables. Run it with the service stopped and its existing
+master key available. The converter acquires exclusive
 database access and converts the source to schema 25 in one transaction. A matching
 current schema is a no-op; structural drift, an unknown source or a wrong key is
 rejected. Failure or cancellation rolls back.
+
+Each compiled migration declares its new structures, table rebuilds, relation
+changes and credential impact. Relationship checks include affected child tables
+and direct incoming references to rebuilt parents from both source and target
+schemas. Schema 16 retains full validation; schema 17 retains credential and
+protocol/fishing migration checks. Missing classifications are rejected. Successful
+ordinary conversion does not certify an unrelated full-database audit.
+
+The command writes stage events and elapsed-time heartbeats to stderr and the
+final JSON result to stdout. Heartbeats indicate that the process can report its
+state; they do not claim row progress or extend the configured deadline.
 
 The conversion preserves accounts, encrypted credentials, configuration, instance
 legal text, game progress, activities, balances and financial receipts. It moves
