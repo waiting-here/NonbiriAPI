@@ -56,13 +56,25 @@ func routedRequest(ctx context.Context, path string) *http.Request {
 	return req
 }
 func TestCloudflareRoutePathQueryAndPrivateRequest(t *testing.T) {
+	for _, retain := range []bool{false, true} {
+		t.Run(fmt.Sprintf("retain=%t", retain), func(t *testing.T) {
+			testCloudflareRoutePathQueryAndPrivateRequest(t, retain)
+		})
+	}
+}
+
+func testCloudflareRoutePathQueryAndPrivateRequest(t *testing.T, retain bool) {
+	wantHeader := ""
+	if retain {
+		wantHeader = routeKey
+	}
 	var calls atomic.Int32
 	client, _, server := routedClient(t, func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
 		if r.URL.EscapedPath() != "/gateway/v1/models/a%2Fb:stream" || r.URL.RawQuery != "alt=sse&pageToken=a%2fb&key="+url.QueryEscape(routeKey) {
 			t.Error("path/query changed", r.URL.EscapedPath(), r.URL.RawQuery)
 		}
-		if r.Header.Get("X-Api-Key") != "" || r.Header.Get("Cf-Aig-Authorization") != "Bearer "+routeToken {
+		if r.Header.Get("X-Api-Key") != wantHeader || r.Header.Get("Cf-Aig-Authorization") != "Bearer "+routeToken {
 			t.Error("private auth adaptation failed")
 		}
 		for name, want := range map[string]string{"Cf-Aig-Collect-Log": "false", "Cf-Aig-Collect-Log-Payload": "false", "Cf-Aig-Skip-Cache": "true", "Cf-Aig-Max-Attempts": "1", "Cf-Aig-No-Wholesale": "true"} {
@@ -75,7 +87,7 @@ func TestCloudflareRoutePathQueryAndPrivateRequest(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		io.WriteString(w, `{"ok":true}`)
-	}, nil)
+	}, func(o *StackOptions) { o.CloudflareRoutes[0].RetainCredentialHeader = retain })
 	req := routedRequest(context.Background(), "/models/a%2Fb:stream?alt=sse&pageToken=a%2fb")
 	original := req.URL.String()
 	req.Header.Set("Cf-Aig-Authorization", "caller-token")
@@ -94,7 +106,7 @@ func TestCloudflareRoutePathQueryAndPrivateRequest(t *testing.T) {
 	if req.URL.String() != original || req.Header.Get("X-Api-Key") != routeKey || req.Header.Get("Cf-Aig-Authorization") != "caller-token" {
 		t.Fatal("original request was mutated")
 	}
-	if resp.Request.URL.String() != original || resp.Request.Header.Get("X-Api-Key") != "" || strings.Contains(fmt.Sprint(resp.Request), server.URL) || strings.Contains(fmt.Sprint(resp.Request), routeToken) {
+	if resp.Request.URL.String() != original || resp.Request.Header.Get("X-Api-Key") != "" || strings.Contains(fmt.Sprint(resp.Request), server.URL) || strings.Contains(fmt.Sprint(resp.Request), routeToken) || strings.Contains(fmt.Sprint(resp.Request), routeKey) {
 		t.Fatal("private request escaped")
 	}
 }
@@ -254,7 +266,7 @@ func TestCloudflareResponseReflectionBeforeCapture(t *testing.T) {
 				w.Header().Set("X-Query", url.QueryEscape(routeKey))
 				w.WriteHeader(400)
 				io.WriteString(w, tc.body)
-			}, nil)
+			}, func(o *StackOptions) { o.CloudflareRoutes[0].RetainCredentialHeader = true })
 			ctx := headerfacts.WithResponse(context.Background(), "request", 1)
 			captured := false
 			ctx = upstreamerror.WithCapture(ctx, func(_ context.Context, event upstreamerror.Event) {
@@ -311,7 +323,7 @@ func TestCloudflareSSEIncrementalAndSemanticReflection(t *testing.T) {
 				}
 				io.WriteString(w, "data: {\"text\":\""+value+"\"}\n\n")
 				w.(http.Flusher).Flush()
-			}, nil)
+			}, func(o *StackOptions) { o.CloudflareRoutes[0].RetainCredentialHeader = true })
 			response, err := client.Do(routedRequest(context.Background(), "/stream?alt=sse"))
 			if err != nil {
 				t.Fatal(err)

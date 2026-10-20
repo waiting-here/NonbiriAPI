@@ -17,7 +17,8 @@ Each route has these fields:
 | `gateway_base_url` | HTTPS provider-native or custom-provider mount at the gateway. Include any API version required before the remaining request path. |
 | `token_env` | Name of a separate environment variable containing the gateway Run token. |
 | `credential_header` | The provider credential header required on each matching request. |
-| `credential_query_parameter` | Optional query parameter receiving that header's value instead of the header. Use only when the gateway requires this compatibility setting. |
+| `credential_query_parameter` | Optional query parameter receiving that header's value. The credential header is removed by default. |
+| `retain_credential_header` | Optional boolean, default `false`. Set `true` with a query parameter to send the credential in both places. Requires `credential_query_parameter`. |
 
 For example, a Gemini endpoint using `/v1beta` can use:
 
@@ -28,10 +29,14 @@ For example, a Gemini endpoint using `/v1beta` can use:
     "gateway_base_url": "https://gateway.ai.cloudflare.com/v1/ACCOUNT_ID/GATEWAY_ID/google-ai-studio/v1beta",
     "token_env": "NONBIRI_CF_GATEWAY_TOKEN",
     "credential_header": "x-goog-api-key",
-    "credential_query_parameter": "key"
+    "credential_query_parameter": "key",
+    "retain_credential_header": true
   }
 ]
 ```
+
+Discovery and generation may require different credential forms at the gateway.
+This example keeps the provider header and adds the query parameter for both.
 
 Put the actual token in `NONBIRI_CF_GATEWAY_TOKEN` in the same private environment,
 and restart after changing either value. The route JSON contains a variable
