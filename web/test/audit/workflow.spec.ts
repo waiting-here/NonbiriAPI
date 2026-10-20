@@ -490,7 +490,7 @@ test('edit keeps its identity through complete template and model-reference fill
       state.admin_url,
       `/admin/api/charity-models/${data.models[239]}`,
     );
-    for (const key of ['pricing', 'token_reserve_credits', 'discount'])
+    for (const key of ['pricing', 'token_reserve_credits', 'discount', 'recurring_discount'])
       expect(token[key]).toEqual(referenceModel[key]);
     for (const key of ['id', 'provider', 'model', 'enabled', 'route_strategy', 'allowed_levels'])
       expect(token[key]).toEqual(before[key]);
@@ -617,7 +617,7 @@ test('edit keeps its identity through complete template and model-reference fill
       .fill(referenceModel.pricing.context_penalty.fine);
     await templateEditor
       .locator('summary')
-      .filter({ has: page.getByText('Discount', { exact: true }) })
+      .filter({ has: page.getByText(common.common.recurringDiscount.fixedTitle, { exact: true }) })
       .click();
     await templateEditor
       .getByRole('switch', { name: priceLabels.discountEnabled, exact: true })
@@ -638,7 +638,7 @@ test('edit keeps its identity through complete template and model-reference fill
       state.admin_url,
       '/admin/api/charity-price-templates/' + template.id,
     );
-    for (const field of ['pricing', 'token_reserve_credits', 'discount'])
+    for (const field of ['pricing', 'token_reserve_credits', 'discount', 'recurring_discount'])
       expect(currentTemplate[field]).toEqual(referenceModel[field]);
     expect(currentTemplate).toMatchObject({
       enabled: true,
@@ -659,7 +659,9 @@ test('edit keeps its identity through complete template and model-reference fill
         ).status(),
       )
       .toBe(404);
-    expect(await read(context, state.admin_url, root)).toEqual(request);
+    const unchangedModel = await read(context, state.admin_url, root);
+    expect(unchangedModel.server_now).toBeGreaterThanOrEqual(request.server_now);
+    expect({ ...unchangedModel, server_now: request.server_now }).toEqual(request);
     await page.getByRole('button', { name: 'Return to model draft', exact: true }).click();
     await page.getByRole('button', { name: workflow.returnPriceDraft, exact: true }).click();
     await page.getByRole('button', { name: operations.returnToList, exact: true }).first().click();

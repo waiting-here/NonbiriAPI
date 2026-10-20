@@ -201,12 +201,18 @@ for (const locale of ['en', 'zh'] as const) {
       route.fulfill({ json: numberedResponse([], '1', 20) }),
     );
     const model = {
+      recurring_discount: { enabled: false, time_zone: 'UTC', default_percent: 100, periods: [] },
+      effective_discount: { source: 'none', percent: 100, next_change_at: null },
+
       model_types: ['chat_completions', 'embeddings'],
       id: '1',
       provider: 'Example',
       model: 'chat',
       full_name: '[公益]Example/chat',
       pricing: {
+        current_user_price_milli: '1000',
+        current_user_prices_milli: null,
+
         mode: 'per_request',
         user_price_milli: '1000',
         discounted_user_price_milli: '1000',

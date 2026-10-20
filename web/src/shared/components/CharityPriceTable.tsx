@@ -1,5 +1,6 @@
+import type { EffectiveDiscount, RecurringDiscount } from '@shared/operations/recurringDiscount';
 import { formatCount } from '@shared/utils/formatNumber';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Amount, formatAmount } from '@shared/components/Amount';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
@@ -9,7 +10,7 @@ export interface CharityPriceRow {
   label: string;
   compactLabel?: string;
   userMilli: string;
-  discountedUserMilli: string;
+  currentUserMilli: string;
   rewardMilli?: string;
 }
 
@@ -20,17 +21,9 @@ export interface CharityPriceTableProps {
   mode: 'per_request' | 'per_token';
   rows: CharityPriceRow[];
   serverNow: number;
+  effectiveDiscount: EffectiveDiscount;
+  recurringDiscount: RecurringDiscount;
   discount?: { percent: number; enabled: boolean; startAt?: number; endAt?: number };
-}
-
-function discountPhase(
-  discount: CharityPriceTableProps['discount'],
-  now: number,
-): 'none' | 'scheduled' | 'active' {
-  if (!discount?.enabled || discount.percent === 100) return 'none';
-  if (discount.endAt !== undefined && now >= discount.endAt) return 'none';
-  if (discount.startAt !== undefined && now < discount.startAt) return 'scheduled';
-  return 'active';
 }
 
 function formatCountdown(seconds: number): string {
@@ -63,7 +56,7 @@ function timestampISO(value: number): string | undefined {
 
 /**
  * Shared, display-only charity price table. It never participates in routing
- * or accounting. Base and discounted prices are server projections; the
+ * or accounting. Base and current prices are server projections; the
  * server clock keeps offer boundaries independent of the device clock.
  * Donor rewards, when a management view supplies them, are never discounted.
  */
@@ -72,6 +65,8 @@ export function CharityPriceTable({
   rows,
   serverNow,
   discount,
+  effectiveDiscount,
+  recurringDiscount,
   compact = false,
   longContext,
   contextPenalty,
@@ -84,29 +79,27 @@ export function CharityPriceTable({
     const update = () =>
       setNow(serverNow + Math.floor((window.performance.now() - observedAt) / 1000));
     update();
-    if (discount?.endAt === undefined && discount?.startAt === undefined) return undefined;
+    if (effectiveDiscount.next_change_at === null) return undefined;
     const timer = window.setInterval(update, 1000);
     return () => window.clearInterval(timer);
-  }, [discount?.endAt, discount?.startAt, serverNow]);
+  }, [effectiveDiscount.next_change_at, serverNow]);
 
-  const phase = discountPhase(discount, now);
-  const active = phase === 'active';
-  const countdown = useMemo(() => {
-    if (!discount || !active) return null;
-    const target = discount.endAt;
-    if (target === undefined) return null;
-    return formatCountdown(target - now);
-  }, [active, discount, now]);
+  const active = effectiveDiscount.percent < 100;
+  const nextChange = effectiveDiscount.next_change_at;
+  const countdown = nextChange === null ? null : formatCountdown(nextChange - now);
   const showRewards = rows.length > 0 && rows.every((row) => row.rewardMilli !== undefined);
   const deadline =
-    discount?.endAt !== undefined ? (
-      <span>
-        <time dateTime={timestampISO(discount.endAt)}>
-          {t('user.charity.discountEndsAt', { time: formatDateTime(discount.endAt) })}
-        </time>
-      </span>
+    nextChange !== null ? (
+      <time dateTime={timestampISO(nextChange)}>
+        {t('common.recurringDiscount.nextChange', { time: formatDateTime(nextChange) })}
+      </time>
     ) : null;
-
+  const scheduleNote = recurringDiscount.enabled ? (
+    <p className="nb-sub">
+      {t('common.recurringDiscount.zoneSummary', { zone: recurringDiscount.time_zone })}
+      {discount?.enabled ? <> · {t('common.recurringDiscount.paused')}</> : null}
+    </p>
+  ) : null;
   const penaltyNote = contextPenalty && (
     <p className="nb-sub charity-context-note">
       <strong>
@@ -130,11 +123,8 @@ export function CharityPriceTable({
             <div key={row.label}>
               <dt>{row.compactLabel ?? row.label}</dt>
               <dd>
-                <ExactAmount
-                  value={active ? row.discountedUserMilli : row.userMilli}
-                  label={t('user.charity.currentPrice')}
-                />
-                {active && row.discountedUserMilli !== row.userMilli ? (
+                <ExactAmount value={row.currentUserMilli} label={t('user.charity.currentPrice')} />
+                {row.currentUserMilli !== row.userMilli ? (
                   <s>
                     <ExactAmount value={row.userMilli} label={t('user.charity.originalPrice')} />
                   </s>
@@ -146,39 +136,40 @@ export function CharityPriceTable({
         {longContext && (
           <p className="nb-sub">{t('common.operations.charity.context.longAvailable')}</p>
         )}
+        {scheduleNote}
+        {deadline ? <p className="nb-sub">{deadline}</p> : null}
         {penaltyNote}
       </div>
     );
 
   return (
     <div className="charity-price-wrap">
-      {active ? (
+      {effectiveDiscount.source !== 'none' ? (
         <p className="charity-discount" role="status">
           <strong>
-            {discount?.percent === 0
-              ? t('user.charity.discountFree')
-              : t('user.charity.discountPercent', { percent: 100 - (discount?.percent ?? 100) })}
+            {active
+              ? effectiveDiscount.percent === 0
+                ? t('user.charity.discountFree')
+                : t('user.charity.discountPercent', { percent: 100 - effectiveDiscount.percent })
+              : t('common.recurringDiscount.currentPercent', {
+                  percent: effectiveDiscount.percent,
+                })}
           </strong>
+          {effectiveDiscount.source === 'fixed' &&
+          effectiveDiscount.percent === 100 &&
+          nextChange !== null ? (
+            <span>
+              {t('user.charity.discountUpcoming')} ·{' '}
+              {t('user.charity.discountPercent', { percent: 100 - (discount?.percent ?? 100) })}
+            </span>
+          ) : null}
           {deadline}
           {countdown ? (
-            <span>{t('user.charity.discountRemaining', { time: countdown })}</span>
+            <span>{t('common.recurringDiscount.nextRemaining', { time: countdown })}</span>
           ) : null}
         </p>
-      ) : phase === 'scheduled' && discount?.startAt !== undefined ? (
-        <p className="charity-discount" role="status">
-          <strong>{t('user.charity.discountUpcoming')}</strong>
-          <span>
-            {discount.percent === 0
-              ? t('user.charity.discountFree')
-              : t('user.charity.discountPercent', { percent: 100 - discount.percent })}
-            {' · '}
-            <time dateTime={timestampISO(discount.startAt)}>
-              {t('user.charity.discountStartsAt', { time: formatDateTime(discount.startAt) })}
-            </time>
-          </span>
-          {deadline}
-        </p>
       ) : null}
+      {scheduleNote}
       <div className="table-scroll">
         <table
           className={`charity-price-table${showRewards ? '' : ' charity-price-table--compact'}`}
@@ -208,12 +199,12 @@ export function CharityPriceTable({
                 </tr>
               )}
               {group.rows.map((row) => {
-                const current = active ? row.discountedUserMilli : undefined;
+                const current = row.currentUserMilli;
                 return (
                   <tr key={row.label}>
                     <th scope="row">{row.label}</th>
                     <td>
-                      {active && current !== undefined && current !== row.userMilli ? (
+                      {current !== row.userMilli ? (
                         <span className="charity-price-pair">
                           <s className="charity-original">
                             <ExactAmount
@@ -226,7 +217,7 @@ export function CharityPriceTable({
                           </strong>
                         </span>
                       ) : (
-                        <ExactAmount value={row.userMilli} label={t('user.charity.userPrice')} />
+                        <ExactAmount value={current} label={t('user.charity.currentPrice')} />
                       )}
                     </td>
                     {showRewards && row.rewardMilli !== undefined ? (

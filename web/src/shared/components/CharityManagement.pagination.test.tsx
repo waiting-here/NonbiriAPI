@@ -197,6 +197,10 @@ function installBindingNavigation(
   const root = role === 'admin' ? '/admin/api' : '/api/steward';
   const previousFetch = globalThis.fetch;
   const models = Array.from({ length: 21 }, (_, index) => ({
+    recurring_discount: { enabled: false, time_zone: 'UTC', default_percent: 100, periods: [] },
+    effective_discount: { source: 'none', percent: 100, next_change_at: null },
+    server_now: 1800000000,
+
     model_types: ['chat_completions', 'embeddings'],
     route_strategy: 'expiry_weighted',
     id: String(index + 1),
@@ -468,6 +472,10 @@ describe('managed donation page integration', () => {
 
   it('keeps a selected model outside the current page and search, including browser return', async () => {
     const models = Array.from({ length: 21 }, (_, index) => ({
+      recurring_discount: { enabled: false, time_zone: 'UTC', default_percent: 100, periods: [] },
+      effective_discount: { source: 'none', percent: 100, next_change_at: null },
+      server_now: 1800000000,
+
       model_types: ['chat_completions', 'embeddings'],
       route_strategy: 'expiry_weighted',
       id: String(index + 1),

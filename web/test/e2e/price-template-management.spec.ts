@@ -30,6 +30,8 @@ for (const width of [1440, 390])
       await mockPublicConfig(page, 'admin');
       await mockRoleSession(page, 'admin', 'admin');
       const templates = Array.from({ length: 45 }, (_, index) => ({
+        recurring_discount: { enabled: false, time_zone: 'UTC', default_percent: 100, periods: [] },
+
         id: String(index + 1),
         name: `Template ${String(index + 1).padStart(2, '0')}`,
         description: 'Full saved prices',

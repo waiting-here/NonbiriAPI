@@ -457,6 +457,15 @@ describe('Generation 2 charity management policy', () => {
         createRequests.push(init ?? {});
         const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
         const model: CharityModel = {
+          recurring_discount: {
+            enabled: false,
+            time_zone: 'UTC',
+            default_percent: 100,
+            periods: [],
+          },
+          effective_discount: { source: 'none', percent: 100, next_change_at: null },
+          server_now: 1800000000,
+
           model_types: ['chat_completions', 'embeddings'],
           route_strategy: body.route_strategy as CharityModel['route_strategy'],
           id: '1',

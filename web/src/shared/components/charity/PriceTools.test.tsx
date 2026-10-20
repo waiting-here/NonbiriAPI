@@ -8,6 +8,7 @@ const request: CharityPriceConfig = {
   pricing: { mode: 'per_request', user_price: '3.5', donor_reward: '1.75' },
   token_reserve_credits: null,
   discount: { enabled: false, percent: 0, start_at: null, end_at: null },
+  recurring_discount: { enabled: false, time_zone: 'UTC', default_percent: 0, periods: [] },
 };
 const token: CharityPriceConfig = {
   pricing: {
@@ -37,9 +38,17 @@ const token: CharityPriceConfig = {
   },
   token_reserve_credits: '25.125',
   discount: { enabled: true, percent: 80, start_at: null, end_at: null },
+  recurring_discount: {
+    enabled: true,
+    time_zone: 'Asia/Tokyo',
+    default_percent: 50,
+    periods: [{ weekdays: [1, 7], start_time: '22:00', end_time: '02:00', percent: 0 }],
+  },
 };
 const model = (index: number): CharityModel => ({
   ...request,
+  effective_discount: { source: 'none', percent: 100, next_change_at: null },
+  server_now: 1800000000,
   id: String(index),
   provider: 'Provider',
   model: `model-${index}`,
@@ -109,6 +118,7 @@ describe('prices inside a model workspace', () => {
     expect(Object.keys(apply.mock.calls[0]![0]).sort()).toEqual([
       'discount',
       'pricing',
+      'recurring_discount',
       'token_reserve_credits',
     ]);
     expect(writes).toHaveLength(0);

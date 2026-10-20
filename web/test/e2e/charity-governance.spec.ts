@@ -252,12 +252,18 @@ function donationPageItem(donation: JSONRecord): JSONRecord {
 
 function capabilityModel(model: string): JSONRecord {
   return {
+    recurring_discount: { enabled: false, time_zone: 'UTC', default_percent: 100, periods: [] },
+    effective_discount: { source: 'fixed', percent: 80, next_change_at: null },
+
     model_types: ['chat_completions', 'embeddings'],
     id: '1',
     provider: 'provider',
     model,
     full_name: `[公益]provider/${model}`,
     pricing: {
+      current_user_price_milli: '2400',
+      current_user_prices_milli: null,
+
       mode: 'per_request',
       user_price_milli: '3000',
       discounted_user_price_milli: '2400',

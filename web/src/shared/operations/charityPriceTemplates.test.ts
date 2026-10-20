@@ -7,6 +7,8 @@ import {
 } from './charityPriceTemplates';
 
 const template = {
+  recurring_discount: { enabled: false, time_zone: 'UTC', default_percent: 100, periods: [] },
+
   id: '3',
   name: 'Reference prices',
   description: 'A complete price snapshot',
@@ -53,6 +55,7 @@ describe('charity price template contract', () => {
       },
       token_reserve_credits: null,
       discount: template.discount,
+      recurring_discount: template.recurring_discount,
     };
     await savePriceTemplate('admin', { id: '3', expected_revision: '4', ...input }, 'original-key');
     const [path, options] = fetchMock.mock.calls[0]!;
