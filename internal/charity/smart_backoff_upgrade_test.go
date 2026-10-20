@@ -52,7 +52,14 @@ func (e *backoffEnv) upgradeFromConfiguredSchema(t *testing.T, profile string) {
 	if err := e.store.DB().QueryRow("PRAGMA database_list").Scan(&seq, &name, &seed); err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(t.TempDir(), "configured.sqlite")
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "configured.sqlite")
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
 	target, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
