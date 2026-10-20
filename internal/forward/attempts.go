@@ -13,6 +13,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 )
 
 type attemptRun struct {
@@ -183,6 +184,13 @@ func (service *Service) runAttempts(
 			run.completeUndeliveredSynthetic(parent, service, handle, "request snapshot unavailable")
 			break
 		}
+		backoffConfig, backoffTrial := smartbackoff.Default(), false
+		if info, ok := dispatch.(interface {
+			BackoffConfig() smartbackoff.Config
+			IsBackoffTrial() bool
+		}); ok {
+			backoffConfig, backoffTrial = info.BackoffConfig(), info.IsBackoffTrial()
+		}
 		policy := dispatch.Policy()
 		policy.GatewayModel = candidate.Policy.GatewayModel
 		policy.SafetyIdentifier = safety
@@ -235,6 +243,7 @@ func (service *Service) runAttempts(
 				return service.claims.MarkResponseStarted(checkpointContext, handle, responseStart.upstreamStatus)
 			})
 			responseStart.acceptedStreams = plan.charity
+			responseStart.backoffTrial = backoffTrial
 			responseStart.now = service.now
 			responseStart.observe = func(observation connectorcontract.ResponseObservation) error {
 				checkpointContext, cancel := context.WithTimeout(context.WithoutCancel(parent), service.settlement)
@@ -250,7 +259,7 @@ func (service *Service) runAttempts(
 			run.completeUndeliveredSynthetic(parent, service, handle, "connector unavailable")
 			break
 		}
-		attemptContext := executionContext
+		attemptContext := smartbackoff.WithConfig(executionContext, backoffConfig)
 		if service.errorScope != nil {
 			attemptContext = service.errorScope(attemptContext, accepted.ID, index+1)
 		}

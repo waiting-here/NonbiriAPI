@@ -19,6 +19,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
+	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
 
@@ -270,7 +271,7 @@ func (a *Adapter) attempt(ctx context.Context, writer http.ResponseWriter, targe
 			result.Committed = sink.Committed()
 		}()
 	}
-	errorContext := upstreamerror.Context{
+	errorContext := upstreamerror.Context{Backoff: smartbackoff.FromContext(ctx),
 		BaseURL: target.baseURL, PrivateModel: target.upstreamModel,
 		ContainsSecret: func(value []byte) bool {
 			scanner := wireGuard.clone()

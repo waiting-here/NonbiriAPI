@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 )
 
 type httpAPI struct{ service *Service }
@@ -169,9 +171,11 @@ func (api *httpAPI) getOwner(writer http.ResponseWriter, request *http.Request, 
 }
 
 type createKeyWire struct {
-	FailureDisableThreshold requiredField[string] `json:"failure_disable_threshold"`
-	EndpointKeyID           requiredField[string] `json:"endpoint_key_id"`
-	ExpiresAt               nullableField[int64]  `json:"expires_at"`
+	SmartBackoffProfile     requiredField[string]              `json:"smart_backoff_profile"`
+	SmartBackoffRules       requiredField[[]smartbackoff.Rule] `json:"smart_backoff_rules"`
+	FailureDisableThreshold requiredField[string]              `json:"failure_disable_threshold"`
+	EndpointKeyID           requiredField[string]              `json:"endpoint_key_id"`
+	ExpiresAt               nullableField[int64]               `json:"expires_at"`
 }
 
 type createWire struct {
@@ -203,6 +207,14 @@ func (api *httpAPI) createOwner(writer http.ResponseWriter, request *http.Reques
 		}
 		keys[index] = CreateKeyInput{EndpointKeyID: id, ExpiresAt: key.ExpiresAt.Value}
 		canonicalKeys[index] = map[string]any{"endpoint_key_id": key.EndpointKeyID.Value, "expires_at": key.ExpiresAt.Value}
+		if key.SmartBackoffProfile.Set {
+			keys[index].SmartBackoffProfile = &key.SmartBackoffProfile.Value
+			canonicalKeys[index]["smart_backoff_profile"] = key.SmartBackoffProfile.Value
+		}
+		if key.SmartBackoffRules.Set {
+			keys[index].SmartBackoffRules = &key.SmartBackoffRules.Value
+			canonicalKeys[index]["smart_backoff_rules"] = key.SmartBackoffRules.Value
+		}
 		if key.FailureDisableThreshold.Set {
 			value := key.FailureDisableThreshold.Value
 			keys[index].FailureDisableThreshold = &value

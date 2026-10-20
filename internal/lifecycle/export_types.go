@@ -6,6 +6,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/modeltype"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
+	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 	"github.com/waiting-here/NonbiriAPI/internal/transportpolicy"
 )
 
@@ -270,6 +271,9 @@ type DonationManualModelExport struct {
 }
 
 type DonationKeyExport struct {
+	SmartBackoffProfile string                      `json:"smart_backoff_profile"`
+	SmartBackoffRules   []smartbackoff.Rule         `json:"smart_backoff_rules"`
+	SmartBackoff        *smartbackoff.Status        `json:"smart_backoff"`
 	Review              DonationKeyReviewExport     `json:"review"`
 	ManualModels        []DonationManualModelExport `json:"manual_models"`
 	RecurringLimits     []RecurringLimitExport      `json:"recurring_limits"`

@@ -74,6 +74,7 @@ func parseRetryAfterValue(raw string, extended bool, received time.Time) (int64,
 
 // ResponseObservation is a normalized, non-billing fact captured at headers.
 type ResponseObservation struct {
+	HasRetryAfter    bool
 	Status           int
 	Stream           bool
 	ObservedAt       int64

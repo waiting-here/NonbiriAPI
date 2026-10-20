@@ -30,7 +30,7 @@ func TestRetryAfterBlocksNewAndPendingDispatchAcrossModels(t *testing.T) {
 		t.Fatal(err)
 	}
 	third := e.billingRequest(t, rail, e.tokenModel, 5, 1)
-	observation := contract.ResponseObservation{Status: 503, ObservedAt: charityTestNow + 30, RateLimitedUntil: charityTestNow + 90}
+	observation := contract.ResponseObservation{HasRetryAfter: true, Status: 503, ObservedAt: charityTestNow + 30, RateLimitedUntil: charityTestNow + 90}
 	if err := rail.ObserveResponseHeaders(ctx, active, observation); err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestRetryAfterPreservesFailureOriginAndBillingThroughRecovery(t *testing.T)
 				request := e.billingRequest(t, rail, e.requestModel, 2400, 1)
 				handle := e.billingDispatch(t, rail, request.ID, 1)
 				// An expired hint still proves this response must not count as a new failure.
-				if err := rail.ObserveResponseHeaders(ctx, handle, contract.ResponseObservation{Status: status, ObservedAt: charityTestNow + 30, RateLimitedUntil: charityTestNow + 30}); err != nil {
+				if err := rail.ObserveResponseHeaders(ctx, handle, contract.ResponseObservation{HasRetryAfter: true, Status: status, ObservedAt: charityTestNow + 30, RateLimitedUntil: charityTestNow + 30}); err != nil {
 					t.Fatal(err)
 				}
 				origin := contract.OriginUpstreamResponse
@@ -176,7 +176,7 @@ func TestRetryAfterConcurrentObservationsOnlyExtendAndReplayDoesNotRestart(t *te
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			errs <- rail.ObserveResponseHeaders(ctx, handle, contract.ResponseObservation{Status: 503, ObservedAt: charityTestNow + 30, RateLimitedUntil: charityTestNow + int64(60+i*60)})
+			errs <- rail.ObserveResponseHeaders(ctx, handle, contract.ResponseObservation{HasRetryAfter: true, Status: 503, ObservedAt: charityTestNow + 30, RateLimitedUntil: charityTestNow + int64(60+i*60)})
 		}()
 	}
 	wg.Wait()
@@ -186,7 +186,7 @@ func TestRetryAfterConcurrentObservationsOnlyExtendAndReplayDoesNotRestart(t *te
 			t.Fatal(err)
 		}
 	}
-	if err := rail.ObserveResponseHeaders(ctx, handles[0], contract.ResponseObservation{Status: 200, Stream: true, ObservedAt: charityTestNow + 40, RateLimitedUntil: charityTestNow + 999}); err != nil {
+	if err := rail.ObserveResponseHeaders(ctx, handles[0], contract.ResponseObservation{HasRetryAfter: true, Status: 200, Stream: true, ObservedAt: charityTestNow + 40, RateLimitedUntil: charityTestNow + 999}); err != nil {
 		t.Fatal(err)
 	}
 	var until int64
@@ -235,7 +235,7 @@ func TestRetryAfterDeletedKeyCannotBeResurrectedAndFactsCascade(t *testing.T) {
 	a := e.billingDispatch(t, rail, first.ID, 1)
 	second := e.billingRequest(t, rail, e.tokenModel, 5, 1)
 	b := e.billingDispatch(t, rail, second.ID, 1)
-	observation := contract.ResponseObservation{Status: 503, ObservedAt: charityTestNow + 30, RateLimitedUntil: charityTestNow + 90}
+	observation := contract.ResponseObservation{HasRetryAfter: true, Status: 503, ObservedAt: charityTestNow + 30, RateLimitedUntil: charityTestNow + 90}
 	if err := rail.ObserveResponseHeaders(ctx, a, observation); err != nil {
 		t.Fatal(err)
 	}
@@ -282,7 +282,7 @@ func TestRetryAfterStreamAcceptanceRetainsBillingAndFailureReset(t *testing.T) {
 	request := e.billingRequest(t, rail, e.requestModel, 2400, 1)
 	handle := e.billingDispatch(t, rail, request.ID, 1)
 	for range 2 {
-		if err := rail.ObserveResponseHeaders(ctx, handle, contract.ResponseObservation{Status: 200, Stream: true, ObservedAt: charityTestNow + 30, RateLimitedUntil: charityTestNow + 90}); err != nil {
+		if err := rail.ObserveResponseHeaders(ctx, handle, contract.ResponseObservation{HasRetryAfter: true, Status: 200, Stream: true, ObservedAt: charityTestNow + 30, RateLimitedUntil: charityTestNow + 90}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -313,7 +313,7 @@ func TestRetryAfterFinalAdmissionRecoversAtExpiry(t *testing.T) {
 	active := e.billingDispatch(t, rail, first.ID, 1)
 	second := e.billingRequest(t, rail, e.tokenModel, 5, 1)
 	third := e.billingRequest(t, rail, e.tokenModel, 5, 1)
-	if err := rail.ObserveResponseHeaders(ctx, active, contract.ResponseObservation{Status: 503, ObservedAt: charityTestNow + 30, RateLimitedUntil: charityTestNow + 90}); err != nil {
+	if err := rail.ObserveResponseHeaders(ctx, active, contract.ResponseObservation{HasRetryAfter: true, Status: 503, ObservedAt: charityTestNow + 30, RateLimitedUntil: charityTestNow + 90}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := rail.Claim(ctx, e.retryClaimInput(second.ID)); !errors.Is(err, claim.ErrKeyRateLimited) {

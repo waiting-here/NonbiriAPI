@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
+	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 )
 
 const DonationsPath = "/api/steward/automation/donations"
@@ -54,6 +55,8 @@ type endpointInput struct {
 }
 
 type keyInput struct {
+	SmartBackoffProfile     *string                   `json:"smart_backoff_profile"`
+	SmartBackoffRules       *[]smartbackoff.Rule      `json:"smart_backoff_rules"`
 	FailureDisableThreshold *string                   `json:"failure_disable_threshold"`
 	Secret                  string                    `json:"secret"`
 	Note                    string                    `json:"note"`

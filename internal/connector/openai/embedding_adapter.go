@@ -9,6 +9,7 @@ import (
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
+	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
 
@@ -54,7 +55,7 @@ func (a *Adapter) AttemptEmbedding(ctx context.Context, writer http.ResponseWrit
 	errorGuard := newSensitiveGuard(append([][]byte{target.credential.bearer, target.credential.ciphertext, identifier}, sentSecrets...)...)
 	clear(identifier)
 	defer errorGuard.Clear()
-	errorContext := upstreamerror.Context{
+	errorContext := upstreamerror.Context{Backoff: smartbackoff.FromContext(ctx),
 		BaseURL: target.baseURL, PrivateModel: target.upstreamModel,
 		ContainsSecret: func(value []byte) bool {
 			scanner := errorGuard.clone()

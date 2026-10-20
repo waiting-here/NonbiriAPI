@@ -20,6 +20,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
+	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 )
 
 const (
@@ -389,7 +390,7 @@ FROM charity_models WHERE id=?`, modelID).Scan(&snapshot.ModelID, &snapshot.Prov
 k.force_store_false,dk.token_reserve,dk.expires_at,
 dk.price_limit_mag,dk.call_limit_mag,dk.token_limit_mag,
 dk.price_used_mag,dk.price_reserved_mag,dk.calls_used,dk.calls_reserved,dk.tokens_used,dk.tokens_reserved,
-(SELECT rate_limited_until FROM donation_key_cooldowns WHERE donation_key_id=dk.id)
+`+smartbackoff.EffectiveUntilSQL("dk.id")+`
 FROM charity_model_bindings b
 JOIN donation_keys dk ON dk.id=b.donation_key_id
 JOIN donations d ON d.id=dk.donation_id

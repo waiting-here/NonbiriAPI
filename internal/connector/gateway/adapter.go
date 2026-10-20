@@ -18,6 +18,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/gatewaypolicy"
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
+	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
 
@@ -172,7 +173,7 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, w http.ResponseWriter, 
 		}()
 	}
 	clear(label)
-	errorContext := upstreamerror.Context{BaseURL: target.BaseURL(), PrivateModel: target.UpstreamModel(), ContainsSecret: errorGuard.ContainsBytes}
+	errorContext := upstreamerror.Context{Backoff: smartbackoff.FromContext(ctx), BaseURL: target.BaseURL(), PrivateModel: target.UpstreamModel(), ContainsSecret: errorGuard.ContainsBytes}
 	if policy.HasAdaptation || len(policy.ManagedHeaders) > 0 {
 		errorContext.ContainsSecret = func(value []byte) bool { return len(value) != 0 }
 	}

@@ -15,6 +15,7 @@ type responseStartWriter struct {
 	observe            func(connectorcontract.ResponseObservation) error
 	now                func() time.Time
 	retryAfterObserved bool
+	backoffTrial       bool
 	acceptedStreams    bool
 	upstreamStatus     int
 	started            bool
@@ -28,7 +29,7 @@ func (w *responseStartWriter) ObserveUpstreamResponse(status int, stream bool, h
 			if w.err != nil {
 				return w.err
 			}
-			w.err = w.observe(connectorcontract.ResponseObservation{Status: status, Stream: stream, ObservedAt: received.Unix(), RateLimitedUntil: until})
+			w.err = w.observe(connectorcontract.ResponseObservation{HasRetryAfter: true, Status: status, Stream: stream, ObservedAt: received.Unix(), RateLimitedUntil: until})
 			if w.err != nil {
 				return w.err
 			}
@@ -38,6 +39,20 @@ func (w *responseStartWriter) ObserveUpstreamResponse(status int, stream bool, h
 			}
 			return nil
 		}
+	}
+	if w.acceptedStreams && w.backoffTrial && status == http.StatusOK && w.observe != nil {
+		if w.err != nil {
+			return w.err
+		}
+		received := w.now()
+		w.err = w.observe(connectorcontract.ResponseObservation{Status: status, Stream: stream, ObservedAt: received.Unix()})
+		if w.err != nil {
+			return w.err
+		}
+		if stream {
+			w.upstreamStatus, w.started = status, true
+		}
+		return nil
 	}
 	if w.acceptedStreams && stream && status == http.StatusOK {
 		w.upstreamStatus = status
