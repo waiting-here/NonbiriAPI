@@ -698,7 +698,7 @@ test('owner current and ended defaults, mobile numbered controls, single and bat
     await expect(panel.locator('.economy-donation-summary')).toHaveCount(0);
     await panel.getByRole('tab', { name: history.history, exact: true }).click();
     await panel.getByRole('button', { name: history.hideAll, exact: true }).click();
-    await expect(panel.getByText(/Hide.*167 changed.*169 checked.*Complete/)).toBeVisible();
+    await expect(panel.getByText(/Hide.*167 changed.*170 checked.*Complete/)).toBeVisible();
     const hidden = await read(
       context,
       state.user_url,
@@ -708,7 +708,7 @@ test('owner current and ended defaults, mobile numbered controls, single and bat
     expect(
       (await read(context, state.user_url, '/api/donations?view=current&page=1&page_size=20'))
         .pagination.total_items,
-    ).toBe('2');
+    ).toBe('3');
     await panel.getByRole('tab', { name: history.hidden, exact: true }).click();
     await panel.getByRole('button', { name: history.restoreAll, exact: true }).click();
     await expect
