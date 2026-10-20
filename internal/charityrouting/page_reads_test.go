@@ -252,6 +252,22 @@ func TestCandidatePagesUseIndexedPairOrderAtScale(t *testing.T) {
 		t.Fatal(err)
 	}
 	rows.Close()
+	endpointReady, pairBranches := false, 0
+	for _, detail := range plans {
+		if strings.HasPrefix(detail, "SEARCH e ") {
+			endpointReady = true
+		}
+		if strings.HasPrefix(detail, "SEARCH pc ") {
+			if !endpointReady {
+				t.Fatalf("candidate key state is evaluated inside the model-pair loop: %s", strings.Join(plans, "\n"))
+			}
+			endpointReady = false
+			pairBranches++
+		}
+	}
+	if pairBranches != 2 {
+		t.Fatalf("expected both physical and manual pair scans, got %d: %v", pairBranches, plans)
+	}
 	plan := strings.Join(plans, "\n")
 	t.Log(plan)
 	if !strings.Contains(plan, "model_pair_catalog") || strings.Contains(plan, "TEMP B-TREE FOR ORDER BY") {

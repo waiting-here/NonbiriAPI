@@ -104,7 +104,9 @@ func candidatePageSelection(modelID, now int64, query CandidateQuery) (string, [
 pc.normalized_model_id,pc.automatic_supports,pc.manual_supports,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0)` + candidatePageFrom
 	args := []any{modelID, now}
 	if donationstate.Filtered(query.KeyState) {
-		statement = strings.Replace(statement, "WHERE cm.id=?", "LEFT JOIN endpoints e ON e.id=k.endpoint_id WHERE cm.id=?", 1)
+		// Evaluate key state before expanding its model pairs.
+		statement = strings.Replace(statement, "CROSS JOIN endpoint_keys k ON k.id=m.endpoint_key_id",
+			"CROSS JOIN endpoint_keys k ON k.id=m.endpoint_key_id LEFT JOIN endpoints e ON e.id=k.endpoint_id", 1)
 		statement += ` AND (` + donationstate.SQL() + `)=?`
 		args = append(args, now, now, now, now, query.KeyState)
 	}

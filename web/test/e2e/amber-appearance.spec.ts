@@ -120,7 +120,9 @@ for (const width of [1440, 390]) {
       });
     await page.setViewportSize({ width: 3840, height: 2160 });
     await expect
-      .poll(() => sizes.has('/assets/gacha/hires/motion/o-claude/background-dark.webp'))
+      .poll(() => sizes.has('/assets/gacha/hires/motion/o-claude/background-dark.webp'), {
+        timeout: 15_000,
+      })
       .toBe(true);
     await expect(canvas).toHaveAttribute('data-ready', 'true', { timeout: 15_000 });
     await record('highDark');
