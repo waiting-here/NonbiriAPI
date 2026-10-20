@@ -31,9 +31,19 @@ func rebuildTables(ctx context.Context, tx *sql.Tx, changes []tableRebuild) erro
 		return nil
 	}
 	seen := map[string]bool{}
+	declared, classified := ctx.Value(migrationImpactKey{}).(*migrationImpact)
 	for _, change := range changes {
 		if change.Name == "" || seen[change.Name] || !strings.HasPrefix(change.SQL, "CREATE TABLE "+change.Name+" ") {
 			return errors.New("invalid table rebuild definition")
+		}
+		if classified {
+			found := false
+			for _, name := range declared.rebuiltTables {
+				found = found || name == change.Name
+			}
+			if !found {
+				return errors.New("table rebuild is missing migration classification")
+			}
 		}
 		seen[change.Name] = true
 	}
@@ -66,61 +76,72 @@ func rebuildTables(ctx context.Context, tx *sql.Tx, changes []tableRebuild) erro
 		}
 	}
 	for index, change := range changes {
-		rows, err := tx.QueryContext(ctx, "SELECT * FROM "+quoteSQLiteIdentifier(change.Name)+" LIMIT 0")
+		err := func() (result error) {
+			finish := beginProgress(ctx, "rebuild", 0, change.Name)
+			defer func() { finish(result) }()
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			rows, err := tx.QueryContext(ctx, "SELECT * FROM "+quoteSQLiteIdentifier(change.Name)+" LIMIT 0")
+			if err != nil {
+				return err
+			}
+			columns, err := rows.Columns()
+			closeErr := rows.Close()
+			if err != nil {
+				return err
+			}
+			if closeErr != nil {
+				return closeErr
+			}
+			for i := range columns {
+				columns[i] = quoteSQLiteIdentifier(columns[i])
+			}
+			if len(columns) == 0 {
+				return errors.New("table rebuild source is missing")
+			}
+			var sequence sql.NullInt64
+			var sequenceTable int
+			if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM sqlite_schema WHERE name='sqlite_sequence'`).Scan(&sequenceTable); err != nil {
+				return err
+			}
+			if sequenceTable != 0 {
+				err := tx.QueryRowContext(ctx, `SELECT seq FROM sqlite_sequence WHERE name=?`, change.Name).Scan(&sequence)
+				if err != nil && !errors.Is(err, sql.ErrNoRows) {
+					return err
+				}
+			}
+			staging := quoteSQLiteIdentifier(fmt.Sprintf("schema_rebuild_%d", index))
+			table := quoteSQLiteIdentifier(change.Name)
+			columnSQL := strings.Join(columns, ",")
+			// Staging keeps only one table at a time and lives in the transaction.
+			if _, err := tx.ExecContext(ctx, "CREATE TEMP TABLE "+staging+" AS SELECT "+columnSQL+" FROM "+table); err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, "DROP TABLE "+table); err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, change.SQL); err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, "INSERT INTO "+table+" ("+columnSQL+") SELECT "+columnSQL+" FROM temp."+staging); err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, "DROP TABLE temp."+staging); err != nil {
+				return err
+			}
+			if sequence.Valid {
+				if _, err := tx.ExecContext(ctx, `INSERT INTO sqlite_sequence(name,seq) SELECT ?,? WHERE NOT EXISTS(SELECT 1 FROM sqlite_sequence WHERE name=?)`, change.Name, sequence.Int64, change.Name); err != nil {
+					return err
+				}
+				if _, err := tx.ExecContext(ctx, `UPDATE sqlite_sequence SET seq=max(seq,?) WHERE name=?`, sequence.Int64, change.Name); err != nil {
+					return err
+				}
+			}
+			return nil
+		}()
 		if err != nil {
 			return err
-		}
-		columns, err := rows.Columns()
-		closeErr := rows.Close()
-		if err != nil {
-			return err
-		}
-		if closeErr != nil {
-			return closeErr
-		}
-		for i := range columns {
-			columns[i] = quoteSQLiteIdentifier(columns[i])
-		}
-		if len(columns) == 0 {
-			return errors.New("table rebuild source is missing")
-		}
-		var sequence sql.NullInt64
-		var sequenceTable int
-		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM sqlite_schema WHERE name='sqlite_sequence'`).Scan(&sequenceTable); err != nil {
-			return err
-		}
-		if sequenceTable != 0 {
-			err := tx.QueryRowContext(ctx, `SELECT seq FROM sqlite_sequence WHERE name=?`, change.Name).Scan(&sequence)
-			if err != nil && !errors.Is(err, sql.ErrNoRows) {
-				return err
-			}
-		}
-		staging := quoteSQLiteIdentifier(fmt.Sprintf("schema_rebuild_%d", index))
-		table := quoteSQLiteIdentifier(change.Name)
-		columnSQL := strings.Join(columns, ",")
-		// Staging keeps only one table at a time and lives in the transaction.
-		if _, err := tx.ExecContext(ctx, "CREATE TEMP TABLE "+staging+" AS SELECT "+columnSQL+" FROM "+table); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, "DROP TABLE "+table); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, change.SQL); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, "INSERT INTO "+table+" ("+columnSQL+") SELECT "+columnSQL+" FROM temp."+staging); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, "DROP TABLE temp."+staging); err != nil {
-			return err
-		}
-		if sequence.Valid {
-			if _, err := tx.ExecContext(ctx, `INSERT INTO sqlite_sequence(name,seq) SELECT ?,? WHERE NOT EXISTS(SELECT 1 FROM sqlite_sequence WHERE name=?)`, change.Name, sequence.Int64, change.Name); err != nil {
-				return err
-			}
-			if _, err := tx.ExecContext(ctx, `UPDATE sqlite_sequence SET seq=max(seq,?) WHERE name=?`, sequence.Int64, change.Name); err != nil {
-				return err
-			}
 		}
 	}
 	for _, object := range saved {
