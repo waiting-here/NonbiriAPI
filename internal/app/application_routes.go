@@ -23,6 +23,9 @@ import (
 )
 
 func (a *application) registerRoutes(store *db.Store, roleAuthorizer *roleFinalTxAuthorizer, debugMutations *debug.MutationRepository) error {
+	if err := a.registerCloudflareRoutes(store); err != nil {
+		return fmt.Errorf("register Cloudflare route status: %w", err)
+	}
 	if err := adminapi.RegisterSiteConfigRoutes(siteConfigRouteRegistrar{runtime: a.authRuntime}, a.adminConfig); err != nil {
 		return fmt.Errorf("register administrator site configuration routes: %w", err)
 	}
