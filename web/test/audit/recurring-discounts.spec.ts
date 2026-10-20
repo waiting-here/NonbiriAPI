@@ -127,6 +127,27 @@ async function visuals(page: Page, info: TestInfo, name: string, focus: Locator)
           expect(box.x + box.width).toBeLessThanOrEqual(width + 1);
         }
       }
+      for (const label of await focus.locator('label:has(input[type=checkbox])').all()) {
+        const box = await label.boundingBox();
+        expect(box?.height).toBeGreaterThanOrEqual(40);
+        expect(box?.width).toBeGreaterThanOrEqual(40);
+      }
+      for (const row of await focus.locator('.charity-price-table tr:has(td)').all()) {
+        const label = await row.locator('th').boundingBox();
+        const amount = await row.locator('td').first().boundingBox();
+        expect(label).not.toBeNull();
+        expect(amount).not.toBeNull();
+        expect(
+          label!.x + label!.width <= amount!.x + 1 || label!.y + label!.height <= amount!.y + 1,
+        ).toBe(true);
+      }
+      for (const note of await focus.locator('.charity-context-note').all()) {
+        const heading = await note.locator('strong').boundingBox();
+        const text = await note.locator('span').boundingBox();
+        expect(heading).not.toBeNull();
+        expect(text).not.toBeNull();
+        expect(text!.y).toBeGreaterThanOrEqual(heading!.y + heading!.height);
+      }
       await page.screenshot({
         path: process.env.NONBIRI_VISUAL_DIR
           ? resolve(process.env.NONBIRI_VISUAL_DIR, `${name}-${theme}-${width}.png`)
@@ -266,6 +287,9 @@ test('complete templates keep false, zero and empty periods through conflict rec
     );
     const level6 = await steward.newPage();
     await openModel(level6, 6, data.request_model_id);
+    await expect(level6.locator('.nb-recurring-discount datalist option[value="UTC"]')).toHaveCount(
+      1,
+    );
     await level6.getByRole('button', { name: workflow.openPriceReference, exact: true }).click();
     const templates = level6
       .locator('summary')

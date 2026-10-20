@@ -13,6 +13,7 @@ import {
 import common from '../../src/shared/i18n/common/en.json' with { type: 'json' };
 import user from '../../src/user/i18n/en.json' with { type: 'json' };
 import type { SmartBackoffFields } from '../../src/shared/operations/smartBackoff';
+import type { DonationPageSafeSource } from '../../src/shared/operations/donationPages';
 
 type Cookie = { Name: string; Value: string };
 type Role = 'admin' | 1 | 5 | 6;
@@ -33,7 +34,7 @@ interface Key extends SmartBackoffFields {
   streak: { count: string };
   charity_state: string;
   rate_limited_until: number | null;
-  safe_source: { base_url: string };
+  safe_source: DonationPageSafeSource;
 }
 interface Donation {
   id: string;
@@ -294,7 +295,7 @@ async function boundDonation(owner: BrowserContext, admin: BrowserContext) {
     keyID,
     modelID: models[0],
     unboundModelID: models[1],
-    baseURL: source.baseURL,
+    safeSource: current.keys[0].safe_source,
   };
 }
 
@@ -312,9 +313,19 @@ async function openManagement(
         data.modelID +
         (allKeys ? '&source_key_state=all' : ''),
     );
+    const sourceName =
+      data.safeSource.kind === 'mainstream'
+        ? common.common.operations.charity.sourceBrowser.mainstreamSource.replace(
+            '{{name}}',
+            data.safeSource.name,
+          )
+        : common.common.operations.charity.sourceBrowser.customSource.replace(
+            '{{baseUrl}}',
+            data.safeSource.base_url,
+          );
     await page
       .locator('.charity-source-browser__source-button')
-      .filter({ hasText: data.baseURL })
+      .filter({ has: page.getByText(sourceName, { exact: true }) })
       .click();
     await page
       .locator('.charity-source-browser')
@@ -506,11 +517,13 @@ test('existing recovery states and independent upstream waits remain visible acr
                 keyID: key.id,
                 modelID: data.automatic_backoff_model_id,
                 unboundModelID: '0',
-                baseURL: key.safe_source.base_url,
+                safeSource: key.safe_source,
               },
               true,
             );
-            const status = page.getByRole('region', { name: backoff.statusTitle });
+            const status = page
+              .locator('.donation-key-editor')
+              .getByRole('region', { name: backoff.statusTitle });
             await expect(status).toBeVisible();
             if (key.smart_backoff)
               await expect(status).toContainText(backoff.states[key.smart_backoff.state]);

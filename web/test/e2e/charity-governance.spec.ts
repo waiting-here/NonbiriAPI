@@ -600,7 +600,7 @@ test('user catalog searches, filters levels, paginates, and expands plain descri
   const priceTable = detail.getByRole('table', { name: '公益模型价格', exact: true });
   await expect(priceTable).toBeVisible();
   await expect(priceTable.locator('[aria-label="原价: 3"]')).toBeVisible();
-  await expect(priceTable.locator('[aria-label="优惠价: 2.4"]')).toBeVisible();
+  await expect(priceTable.locator('[aria-label="当前价格: 2.4"]')).toBeVisible();
   await expect(firstCard.getByRole('button', { name: '复制模型名称', exact: true })).toBeVisible();
   await saveScreenshot(page, 'catalog-expanded-320-dark-zh');
 

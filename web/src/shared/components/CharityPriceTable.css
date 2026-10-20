@@ -30,9 +30,59 @@
   overflow-wrap: anywhere;
 }
 
-.charity-context-note {
+.charity-price-wrap .nb-sub.charity-context-note,
+.charity-prices-compact .nb-sub.charity-context-note {
   display: grid;
   gap: var(--nb-space-1);
+}
+.charity-price-wrap table.charity-price-table tbody {
+  display: table-row-group;
+}
+.charity-price-wrap table.charity-price-table tr {
+  display: table-row;
+}
+.charity-price-wrap table.charity-price-table th,
+.charity-price-wrap table.charity-price-table td {
+  display: table-cell;
+  position: static;
+  padding: var(--nb-space-2) var(--nb-space-3);
+  vertical-align: top;
+}
+.charity-price-wrap table.charity-price-table--compact th {
+  white-space: normal;
+  text-transform: none;
+}
+.charity-price-wrap table.charity-price-table--compact .charity-amount {
+  white-space: nowrap;
+}
+@media (width < 40rem) {
+  .charity-price-wrap table.charity-price-table--compact thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .charity-price-wrap table.charity-price-table--compact tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    padding: 0;
+  }
+  .charity-price-wrap table.charity-price-table--compact th,
+  .charity-price-wrap table.charity-price-table--compact td {
+    display: block;
+    width: auto;
+    text-align: left;
+    font-size: var(--nb-font-size-sm);
+  }
+  .charity-price-wrap table.charity-price-table--compact th {
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+  .charity-price-wrap table.charity-price-table--compact .charity-price-pair {
+    justify-content: flex-start;
+  }
 }
 .charity-context-heading {
   background: var(--nb-color-surface-muted);
