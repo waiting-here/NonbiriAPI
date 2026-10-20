@@ -249,7 +249,7 @@ for (const design of ['celestial', 'wandering', 'heart-moment'])
           await expect(list.getByText('捐赠服务 1', { exact: true })).toBeVisible();
           await expect(list).not.toHaveCSS('background-image', 'none');
           if (width === 1440) await readableText(page, design === 'heart-moment');
-          await expect(page.locator('.economy-owner-filters')).not.toHaveCSS(
+          await expect(page.locator('.economy-owner-pages .nb-filter')).not.toHaveCSS(
             'background-color',
             'rgba(0, 0, 0, 0)',
           );
