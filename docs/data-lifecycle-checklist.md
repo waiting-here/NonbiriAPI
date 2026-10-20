@@ -1,6 +1,6 @@
 # Data Lifecycle Checklist (Generation 2 export / delete / retention / privacy)
 
-> Status: **v1.0.4 source contract** — this checklist describes the
+> Status: **v1.0.5 development contract** — this checklist describes the
 > release's export, deletion, retention, and privacy boundary. Source publication does
 > not itself upgrade an instance; deployment status is specific to each operator.
 >
@@ -12,7 +12,7 @@ family. The registered routes, export builder, deletion coordinator, retention w
 and bilingual privacy text are covered by their implementation and contract tests.
 Schema presence alone never creates a route or expands a response.
 
-Current account export format 22 includes safe `gacha` balances, owned cards, guarantees, claims, activity journals, draw details within 180 days and the saved appearance artwork key. Its filename is `nonbiriapi-account-export-v22.json`; SQLite `user_version` remains 2 and the current storage schema is 24. All rows below describe current retained fields. This does not assert that a particular instance has been upgraded.
+Current account export format 23 includes safe `gacha` balances, owned cards, guarantees, claims, activity journals, draw details within 180 days and the saved appearance artwork key. Its filename is `nonbiriapi-account-export-v23.json`; SQLite `user_version` remains 2 and the current storage schema is 25. All rows below describe current retained fields. This does not assert that a particular instance has been upgraded.
 
 `account_mfa_credentials` holds purpose-encrypted authenticator seeds and the
 last consumed time step. `account_mfa_pending` holds a ten-minute enrollment
@@ -230,7 +230,7 @@ manifest, and checksums. Snapshot retention/deletion is operator-controlled and 
 be disclosed by the instance policy; the service does not promise per-user erasure inside
 historical snapshots.
 
-Normal v1.0.4 startup accepts fresh storage or current schema 24; exact schema 16–23 structures use the independent converter. Unknown or partial sources are rejected before writes. Fresh creation requires the main database and sidecars to be absent. Conversion preserves accounts, economic facts, credentials, saved games, configuration and instance legal text. Full historical audits use offline `maintenance verify`. The [database upgrade guide](database-upgrades.md) identifies the exact source and restore requirements.
+Normal v1.0.5 startup accepts fresh storage or current schema 25; exact schema 16–24 structures use the independent converter. Unknown or partial sources are rejected before writes. Fresh creation requires the main database and sidecars to be absent. Conversion preserves accounts, economic facts, credentials, saved games, configuration and instance legal text. Full historical audits use offline `maintenance verify`. The [database upgrade guide](database-upgrades.md) identifies the exact source and restore requirements.
 
 Starting fresh from an unsupported version uses a separate empty path and resets active application state. A complete old recovery set remains sensitive until its retention purpose ends. Never combine an old binary with a newer database or restore a stale snapshot over newly accepted data automatically.
 
@@ -287,14 +287,24 @@ Redemption protection reuses `abuse_windows/events`, cases, actions and safe pen
 
 The `reward_redemption` idempotency scope retains a safe outcome and keyed request digest for at least 24 hours and the initial effective violation window. It follows existing account deletion and bounded receipt cleanup, is excluded from export, and prevents retries from increasing the count. Automatic-ban evidence records the rule snapshot, counts and times without code text; ended cases follow the existing 90-day policy.
 
-Reward receipts are included in export schema 22 under `rewards`. They contain the account’s successful site-wide and code rewards, quantities, duplicate conversions and skipped items, without code text, eligibility configuration, other recipients or retry hashes. Receipts remain for the account lifetime and are removed on deletion; campaign totals and used quota remain. See [rewards](rewards.md).
+Reward receipts are included in current account exports under `rewards`. They contain the account’s successful site-wide and code rewards, quantities, duplicate conversions and skipped items, without code text, eligibility configuration, other recipients or retry hashes. Receipts remain for the account lifetime and are removed on deletion; campaign totals and used quota remain. See [rewards](rewards.md).
 
 ## Shared pricing, owner history and header facts
+
+Smart-backoff configuration and current safe state are included in account export
+23 and authorized key projections. Configuration contains a profile and at most
+eight exact code or fixed-message rules; users should enter only the fragment
+needed for recognition. Runtime state contains a limited reason, source and retry
+time. It does not copy raw upstream errors. Settings and the current episode
+follow the donated key; internal trial and classification facts follow the claim.
+Account deletion and retained-record cleanup remove their associations through
+the existing lifecycle, without an additional retention period. Late callbacks
+cannot recreate deleted resources or overwrite a newer policy or episode.
 
 | Family | Access and export | Deletion, retention and late work |
 | --- | --- | --- |
 | `charity_price_templates` and `charity_price_template_audits` | Shared price/reward/reserve/context/discount settings; administrator maintenance and enabled-only L6 session reads. No L5/CallerKey access or personal export. Applying copies values, never links a model to future changes. | Templates persist until deleted; safe audits expire after 90 days and actor deletion sets identity null. No credentials or caller content. |
-| `donation_owner_preferences` | Owner-only nullable `owner_hidden_at` is included for every owned donation in export 22, including hidden history. Management does not receive it. | Cascades with user/donation deletion. Hide/restore does not delete records, change the donation revision or reset its 400-day terminal clock. Resumable batches use fixed time and ID boundaries and expire after one hour. |
+| `donation_owner_preferences` | Owner-only nullable `owner_hidden_at` is included for every owned donation in account exports, including hidden history. Management does not receive it. | Cascades with user/donation deletion. Hide/restore does not delete records, change the donation revision or reset its 400-day terminal clock. Resumable batches use fixed time and ID boundaries and expire after one hour. |
 | `donation_key_cooldowns` and `dispatch_retry_after_observations` | Safe owner/authorized key projections expose `rate_limited_until`; raw observations are internal. No header body or secret is exported. | Cooldown follows the donation key; observations follow the claim. Atomic writes preserve the latest valid deadline. Neither can recreate a retired key, claim or account. Elapsed deadlines stop limiting immediately. |
 | `request_header_facts` | Separate explicit administrator/L5/L6 log GETs only; no ordinary log list/export or owner export. Recognized credential values are redacted before storage. L5 additionally redacts IPv4 in names and values, including bytes represented as base64; the separately authorized source IP remains unchanged. | Request-root cascade, completion-plus-30-day expiry and existing legal holds apply, including deidentified retained logs after account deletion. Insert-from-live-root prevents late capture resurrection. Each physical capture is at most 1 MiB, a collection at most 20 responses/8 MiB. Encoded payloads have a separate default 1024 MiB budget including held rows; omissions are explicit and unexpired rows are not evicted. |
 

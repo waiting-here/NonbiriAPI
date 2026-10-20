@@ -136,9 +136,9 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 24. Normal startup accepts fresh storage and schema 24 only; exact schema 16–23 structures require the separate offline converter. Unknown or partial structures are rejected before writes. Startup validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for explicit source/target versions and rollback requirements.
+The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 25. Normal startup accepts fresh storage and schema 25 only; exact schema 16–24 structures require the separate offline converter. Unknown or partial structures are rejected before writes. Startup validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for explicit source/target versions and rollback requirements.
 
-Current account export `schema_version=22` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v22.json`. See §9 for its safe projections.
+Current account export `schema_version=23` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v23.json`. See §9 for its safe projections.
 
 ### 1.5 Display time context
 
@@ -663,17 +663,77 @@ observations survive recovery; another attempt's cooldown is not evidence that
 this attempt carried a valid hint. Existing cancellation, manual enablement,
 approval, expiry, donor restrictions and quota rules still apply.
 
+### 4.1.3 Smart donated-key backoff
+
+Smart backoff is optional per donated key and applies to charity calls. It keeps
+the normal consecutive-failure policy: only a recognized quota error leaves the
+current streak unchanged. Initial HTTP 200 still resets it, including later
+read or protocol failure. A valid retry header, including zero or a past deadline,
+takes precedence over error classification.
+
+Authorized key projections and failure-policy responses include:
+
+| Field | Shape |
+| --- | --- |
+| `smart_backoff_profile` | `none` (default), `five_hour_week`, `five_hour_week_month`, `day`, or `day_month`. |
+| `smart_backoff_rules` | Ordered array of at most eight supplemental rules; default `[]`. |
+| `smart_backoff` | Null, or `{state,reason,source,retry_at}`; `retry_at` is Unix seconds. |
+
+A rule is `{kind,value,period}`. `kind:"code"` matches `error.code` or
+`error.type` exactly and case-sensitively; its trimmed value contains 1–64
+ASCII letters, digits, dots, underscores, colons or hyphens.
+`kind:"message"` matches a fixed, case-sensitive substring of `error.message`;
+its trimmed value contains 1–160 Unicode characters without control characters.
+No regular expressions are supported. `period` is
+`auto|five_hour|day|week|month`, defaults to `auto` on input, and is always
+present in responses. An explicit period must belong to the profile; a disabled
+profile may retain rules without running them. The first matching rule wins.
+`auto` uses an explicit period when available, otherwise the short schedule.
+
+Classification uses bounded, complete structured error JSON from a non-200
+response without a valid retry header. Built-ins require evidence of recoverable
+periodic quota exhaustion: recognized business codes with matching quota context
+or explicit quota/reset wording. HTTP status alone, generic quota words, billing
+failures, expired plans, permission failures, context limits, ordinary RPM/TPM
+limits and overload are insufficient. An applicable built-in result takes
+precedence; otherwise supplemental rules can identify an upstream-specific error.
+Unknown, malformed or truncated responses keep the existing failure policy.
+Successful content is never searched.
+
+Without a reliable reset time, a short or unknown quota period waits 15 minutes,
+then 30, then 60 after successive quota failures from actual trial requests,
+capped at 60 minutes. Explicit weekly and monthly exhaustion waits six and twelve
+hours respectively. A reliable reset time with an explicit time zone is preferred.
+Profiles limit applicable periods; elapsed waiting never implies a longer quota.
+
+State is `waiting|ready|probing`; reason is
+`five_hour_quota|day_quota|week_quota|month_quota|quota`, and source is
+`builtin|custom_rule`. These fields contain no raw error or internal claim ID.
+At the deadline, the next eligible real charity request atomically claims one
+trial across all models using the key. No traffic means no probe. The trial's
+initial HTTP 200 clears the smart episode before a stream completes.
+Ordinary trial failures count normally and reuse the current interval;
+cancellation or unknown recovery does not count or advance the interval.
+Old in-flight results cannot clear or advance a newer episode or policy.
+
+Changing the profile or rules clears the previous smart episode. Saving the same
+configuration, changing only the threshold, or resetting the failure streak does
+not. These actions never clear header cooldown. `rate_limited_until` remains
+header-only; smart `waiting` and `probing` also project
+`charity_state:"rate_limited"`. Ready state still requires every ordinary
+ownership, approval, enablement, expiry, quota and admission check.
+
 ### 4.2 Donation failure-streak reset
 
-Each key's `failure_disable_threshold` is a canonical decimal U128 string, default `"10"` on creation and migration. Owners, administrators and current stewards can independently `PATCH {prefix}/donations/{id}/keys/{keyId}/failure-policy`, using `/api`, `/admin/api` or `/api/steward` respectively. The body is `{expected_revision,failure_disable_threshold}` with `Idempotency-Key`; the safe response is `{donation_id,donation_key_id,failure_disable_threshold,failure_streak,failure_disabled,revision}`.
+Each key's `failure_disable_threshold` is a canonical decimal U128 string, default `"10"` on creation and migration. Owners, administrators and current stewards can independently `PATCH {prefix}/donations/{id}/keys/{keyId}/failure-policy`, using `/api`, `/admin/api` or `/api/steward` respectively. The body requires `{expected_revision,failure_disable_threshold}` with `Idempotency-Key` and accepts optional `smart_backoff_profile` and `smart_backoff_rules` (§4.1.3). Omission preserves configuration, null is rejected, and `[]` clears rules. Idempotency distinguishes omission from an explicit value. The safe response includes `donation_id,donation_key_id,failure_disable_threshold,failure_streak,failure_disabled,revision` and the three smart-backoff fields. New donations accept the same optional configuration per key, defaulting to `none/[]`.
 
-Saving retains the current count and generation and atomically recalculates error-disablement: `0` clears it; a positive threshold disables when the count reaches that threshold. Zero still records failures. Upstream HTTP 200 or a protocol-complete success clears the count, regardless of later errors. Without either, a non-200 response with a valid retry hint is neutral; other upstream response/protocol/DNS/connect/timeout failures increase it; caller cancellation, downstream failure, Debug stop, platform rejection and internal failure leave it unchanged. A confirmed upstream failure still counts after a later cancellation. Recovery uses a persisted HTTP 200 stream checkpoint when available; an unknown outcome is neutral. Fees and quotas follow the billing rules above. Ordered in-flight results use the latest saved threshold; old-generation completions cannot change current state. Manual disablement, expiry, withdrawal, bans, quotas and ownership checks continue to apply. Pages warn when zero is entered or saved, without extra confirmation. Each real save has a no-secret review audit; replay repeats no write or alarm. Only a transition into error-disablement alerts; clearing and later disabling can alert again.
+Saving retains the current count and generation and atomically recalculates error-disablement: `0` clears it; a positive threshold disables when the count reaches that threshold. Zero still records failures. Upstream HTTP 200 or a protocol-complete success clears the count, regardless of later errors. Without either, a non-200 response with a valid retry hint or an error recognized by its smart-backoff policy is neutral; other upstream response/protocol/DNS/connect/timeout failures increase it; caller cancellation, downstream failure, Debug stop, platform rejection and internal failure leave it unchanged. A confirmed upstream failure still counts after a later cancellation. Recovery uses a persisted HTTP 200 acceptance checkpoint when available; an unknown outcome is neutral. Fees and quotas follow the billing rules above. Ordered in-flight results use the latest saved threshold; old-generation completions cannot change current state. Manual disablement, expiry, withdrawal, bans, quotas and ownership checks continue to apply. Pages warn when zero is entered or saved, without extra confirmation. Each real save has a no-secret review audit; replay repeats no write or alarm. Only a transition into error-disablement alerts; clearing and later disabling can alert again.
 
 Owners can `POST /api/donations/{id}/keys/{keyId}/failure-streak-reset` with `{expected_revision}` and `Idempotency-Key`. Only their own approved, unexpired, active donated key is eligible. The response is `{donation_id,key_id,revision,failure_streak:"0"}`. Missing ownership returns 404; stale or ineligible state returns 409.
 
 Administrators and current stewards can `POST {prefix}/donation-keys/failure-streak-reset`, where the prefix is `/admin/api` or `/api/steward`. The strict body is `{items:[{donation_id,key_id,expected_revision}]}`, with 1–100 unique keys and one expected revision per donation. The response is `{results:[{donation_id,key_id,status,revision}],counts:{processed,reset,skipped}}` in input order. Status is `reset|conflict|ineligible|not_found`; counts are decimal strings and revision is a string or null. A donation's revision advances once per reset key; every result in that donation reports the final revision from the batch. A stale donation skips all its submitted keys; an ineligible key does not prevent eligible keys in other donations from succeeding. Replays require current authority. These control requests have the shared 256 KiB body limit.
 
-Reset clears only the consecutive-failure disabling state and starts a new failure generation. It preserves usage, quotas, expiry, bindings and manual disablement. Late callbacks from the previous generation cannot rebuild the cleared streak. Each actual reset records a no-secret review audit.
+Reset clears only the consecutive-failure disabling state and starts a new failure generation. It preserves usage, quotas, expiry, bindings, manual disablement, header cooldown and smart backoff. Late callbacks from the previous generation cannot rebuild the cleared streak. Each actual reset records a no-secret review audit.
 
 Before processing all matching results, `POST {prefix}/donation-keys/failure-streak-reset/selection` accepts `{selection:{view,...filters},cursor:null|string}`. The cursor is required; start with null. Views are `donations|donation_keys|sources|source_keys`. Donation filters are `q,status,handling`; `donation_keys` requires only `donation_id`; source filters are `q,scope,handling`; source-key filters additionally require `source_key` and accept `idle`. These match the corresponding list filters, with no pagination fields. Each call has a five-second budget, scans at most 100 saved key IDs and returns `{items:[{donation_id,key_id,expected_revision}],next_cursor}`; an empty item page may still have a next cursor. The signed cursor fixes the upper key-ID boundary, role, actor and filters for one hour. This read-only operation writes no selection, job or replay record. The browser gathers the fixed selection before sending batches of at most 100, yields between steps, supports interruption and retains the exact batch and idempotency key when a response is uncertain.
 
@@ -1042,9 +1102,9 @@ pricing or template access and does not depend on a mainstream-source flag.
 
 ### 6.3 Steward CallerKey automation
 
-`GET|PATCH /api/steward/automation/donation-key-failure-policy` uses the same current L6, CallerKey, lifecycle, maintenance and four-global/one-per-user concurrency gates. GET accepts only `donation_id` and `donation_key_id` query parameters and no body. PATCH accepts only those IDs, `expected_revision` and `failure_disable_threshold`, requires `Idempotency-Key`, and returns the safe policy receipt described in `4.2. Its 30-second bound and shared mutation limits apply. Policy management follows ordinary retained donation-management visibility; it cannot access or modify another user's private credentials. Unknown fields, noncanonical values and forbidden methods fail; stale revision gives 409, missing/unavailable objects 404 and revoked authority 401/403. Current authority and object visibility are checked before replay.
+`GET|PATCH /api/steward/automation/donation-key-failure-policy` uses the same current L6, CallerKey, lifecycle, maintenance and four-global/one-per-user concurrency gates. GET accepts only `donation_id` and `donation_key_id` query parameters and no body. PATCH requires those IDs, `expected_revision` and `failure_disable_threshold`, accepts optional `smart_backoff_profile` and `smart_backoff_rules`, requires `Idempotency-Key`, and returns the safe policy receipt described in §4.2. Its 30-second bound and shared mutation limits apply. Policy management follows ordinary retained donation-management visibility; it cannot access or modify another user's private credentials. Unknown fields, noncanonical values and forbidden methods fail; stale revision gives 409, missing/unavailable objects 404 and revoked authority 401/403. Current authority and object visibility are checked before replay.
 
-`POST /api/steward/automation/donations` atomically creates one custom endpoint and 1–100 owned keys, submits them in one donation and approves it as the calling steward. It requires `Idempotency-Key` and returns 201 `{endpoint_id,donation_id,keys:[{endpoint_key_id,donation_key_id}]}`. Explicit `connector_type` and URL are required; OpenAI-compatible, Anthropic-compatible and AI SDK Gateway v3 custom sources are supported. Optional per-key settings include recurring limits and `failure_disable_threshold` (canonical U128 string, default `"10"`). Channel IDs and ownership-confirmation fields are not accepted by this dedicated operation.
+`POST /api/steward/automation/donations` atomically creates one custom endpoint and 1–100 owned keys, submits them in one donation and approves it as the calling steward. It requires `Idempotency-Key` and returns 201 `{endpoint_id,donation_id,keys:[{endpoint_key_id,donation_key_id}]}`. Explicit `connector_type` and URL are required; OpenAI-compatible, Anthropic-compatible and AI SDK Gateway v3 custom sources are supported. Optional per-key settings include recurring limits and `failure_disable_threshold` (canonical U128 string, default `"10"`). Per-key `smart_backoff_profile` and `smart_backoff_rules` are optional and default to `none/[]` (§4.1.3). Channel IDs and ownership-confirmation fields are not accepted by this dedicated operation.
 
 `POST /api/steward/automation/model-bindings` accepts `{charity_model_id,donation_key_ids,upstream_model_id,manual?}` and processes only the caller's own donation keys. Automatic mode requires this request's successful fresh discovery; manual mode ensures an exact entry with empty new metadata, preserving existing metadata. Repeated identical bindings succeed without reordering. The response is `{charity_model_id,results:[{donation_key_id,status,code?,message?}]}`, with `success|failed|incomplete` in input order. At least one success gives 200; zero successes gives 504 for any incomplete item, otherwise 422. This endpoint has no whole-batch replay receipt.
 
@@ -1366,7 +1426,7 @@ Lineage items are exactly `{donation_id,donation_key_id,donation_status,key_stat
 
 ## 9. Export, privacy, and account deletion
 
-`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v22.json`, with `schema_version:22` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema.
+`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v23.json`, with `schema_version:23` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema.
 
 The top-level fields include `limited_activities`, `image_tasks` and `inactivity`. Limited activities contain the safe general/paper/brush wallet projection and own exchange receipts; the existing game wallet remains separate. Image tasks contain only local ID, state, requested/actual image counts, times, billing state and two-currency charge/refund facts. Inactivity contains safe own activity timestamps and retained execution outcomes. No prompts, complete execution parameters, images, source facts, raw errors, risk rules, private adapter/configuration or upstream task identifiers are included.
 

@@ -4,6 +4,25 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## Unreleased
+
+### Added
+
+- Optional donated-key smart backoff for five-hour/weekly, five-hour/weekly/monthly,
+  daily and daily/monthly quotas. Built-in recognition and optional exact business
+  codes or fixed message fragments leave recognized quota failures out of the
+  consecutive-failure count. Waiting keys resume through one real charity trial;
+  an initial HTTP 200 restores them without waiting for stream completion.
+- Donor and authorized management controls for profiles, supplemental recognition
+  and visible retry state. Existing level-5 key scope remains unchanged.
+
+### Compatibility
+
+- Storage schema 25 and account export 23 include smart-backoff settings and safe
+  current state. The separate converter supports exact registered schema 16–24.
+  Existing keys default to smart backoff disabled. Retry headers retain priority,
+  ordinary failure thresholds remain effective, and billing rules are unchanged.
+
 ## 1.0.4 — 2026-10-20
 
 Storage schema 24 requires the matching offline converter for exact registered
