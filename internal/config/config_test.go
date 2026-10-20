@@ -28,6 +28,7 @@ func allEnvs(t *testing.T) {
 	}
 	// Ensure no master key file leaks between tests.
 	t.Setenv("NONBIRI_MASTER_KEY_FILE", "")
+	t.Setenv("NONBIRI_CLOUDFLARE_ROUTES", "")
 }
 
 func closeLoadedVault(t *testing.T, c *Config) {

@@ -14,6 +14,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/connector/chatwire"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
+	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
 
@@ -65,6 +66,7 @@ func (ModelDiscoverer) Discover(ctx context.Context, input contract.DiscoveryInp
 		}
 		request.Header.Set("X-Goog-Api-Key", string(key))
 		request.Header.Set("Accept", "application/json")
+		request = egress.WithResponseLimits(request, egress.ResponseLimits{JSONBytes: max(1, min(int64(openai.MaxModelsBodyBytes), input.Backend.MaxResponseBytes())-total)})
 		response, err := client.Do(request)
 		request.Header.Del("X-Goog-Api-Key")
 		if response != nil {
