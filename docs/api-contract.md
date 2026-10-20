@@ -576,12 +576,12 @@ Administrator and current level-6 steward donation projections contain the same 
 
 Every owner-visible key carries `safe_source`: a custom Connector/base URL or a mainstream channel/name/Connector/base URL. Internal source IDs, channel category/revision, report fingerprints, secrets, and management notes are excluded. A donation containing only keys from one immutable mainstream channel is approved atomically at creation. A fully custom donation remains pending. Mixed custom/mainstream or multiple-channel submissions are `invalid_request`.
 
-`CharityCapability.state` is `feature_disabled|no_models|no_candidates|available`; `donation_intake` is `open|closed`. Only models allowed for the caller's current level and with a usable candidate are listed. Charity candidates exclude the caller's own donated keys unless the caller is currently level 6; personal calls are unchanged. Level-6 self-donation calls receive normal rewards and cumulative donation credit. Each model contains `id,provider,model,full_name,pricing,discount,recent_success`. Pricing is a tagged union:
+`CharityCapability.state` is `feature_disabled|no_models|no_candidates|available`; `donation_intake` is `open|closed`. Only models allowed for the caller's current level and with a usable candidate are listed. Charity candidates exclude the caller's own donated keys unless the caller is currently level 6; personal calls are unchanged. Level-6 self-donation calls receive normal rewards and cumulative donation credit. Each model contains `id,provider,model,full_name,model_types,pricing,discount,recurring_discount,effective_discount,recent_success`. Pricing is a tagged union:
 
-- `per_request`: canonical base and current discounted user price;
-- `per_token`: canonical base and current price for uncached input, cache-write input, cache-read input, and output.
+- `per_request`: canonical base `user_price_milli`, configured fixed-percentage `discounted_user_price_milli`, and current payable `current_user_price_milli`;
+- `per_token`: corresponding `user_prices_milli`, `discounted_user_prices_milli` and `current_user_prices_milli` objects for uncached input, cache-write input, cache-read input, and output. The irrelevant mode fields are null.
 
-`discount` contains `enabled,percent,start_at,end_at`; the interval is `[start_at,end_at)`, nullable at either end. Effective prices use the same integer ceiling rule as billing. `server_now` is the single decision time used for availability and promotion status. No donated-resource identity is exposed.
+`discount` contains `enabled,percent,start_at,end_at`; the interval is `[start_at,end_at)`, nullable at either end. Enabling it pauses the recurring schedule even outside the fixed window, where full price applies. `recurring_discount` supplies a time zone, default payable percentage and at most 16 weekly periods. `effective_discount` contains `source,percent,next_change_at`; the latter is the next actual percentage change as a Unix second or null. Effective prices use the same integer ceiling rule as billing. `server_now` is the single decision time used for availability and pricing. Existing `discounted_*` fields use the configured fixed percentage regardless of the active window; consumers should use `current_user_*` for current prices. No donated-resource identity is exposed. See [weekly configuration, precedence, DST and frozen settlement](charity-discounts.md).
 
 The complete capability response shares one read-only snapshot, including current
 level, switches, models, availability and batched recent-success statistics.
@@ -591,7 +591,7 @@ directory responses remain `no-store` and have no complete-list cache or TTL.
 
 The web directory uses `GET /api/charity/models?view=catalog`. Optional single-value parameters are `q` (at most 128 Unicode code points and 512 UTF-8 bytes, no NUL), `allowed_for_me=true|false`, `allowed_level=1|2|3|4|5|6`, `currently_available=true|false`, `model_type=chat_completions|embeddings|images_generations`, `page`, and `page_size`. Omit a filter to apply no restriction; the filters are combined as an intersection. The web UI initially sends `allowed_for_me=true` and `currently_available=true`, while omitting `allowed_level` and `model_type`. Model-type filtering matches any model that includes the selected operation and applies before counting and pagination. It rejects cursor/limit and unknown or repeated parameters. Page numbers are canonical decimal strings from 1 to 2147483647; sizes are 10, 20, 50, or 100, with defaults 1 and 20. The response is `{models,pagination,donation_intake,server_now}`. Pagination contains decimal-string `page,total_items,total_pages` and integer `page_size`; empty results use page 1 of 1, and an excessive requested page is clamped to the last page.
 
-Catalog entries contain the six capability fields plus `public_description,enabled,allowed_levels,level_allowed,currently_available,availability`. They include unavailable models so users can understand the reason. Availability is `feature_disabled|model_disabled|level_denied|no_usable_key|available`, in that precedence. `currently_available` reports the current charity resource state independently of the caller's level; `availability` remains the caller-facing explanation. Ordinary active donor bans exclude that donor's bindings from resource availability; a permanent protective-inactivity ban remains exempt. Unbanning or expiry restores eligible supply without rebuilding bindings, and other eligible donors can keep the model available. The same donor rule applies to runtime candidates and management key-model availability. Search, count, ordered page, pricing and availability share one read-only snapshot and a five-second query budget. No donor rewards, bindings, physical resources or private notes appear in the directory.
+Catalog entries contain the capability model fields plus `public_description,enabled,allowed_levels,level_allowed,currently_available,availability`. They include unavailable models so users can understand the reason. Availability is `feature_disabled|model_disabled|level_denied|no_usable_key|available`, in that precedence. `currently_available` reports the current charity resource state independently of the caller's level; `availability` remains the caller-facing explanation. Ordinary active donor bans exclude the donor's bindings from resource availability; a permanent protective-inactivity ban remains exempt. Unbanning or expiry restores eligible supply without rebuilding bindings, and other eligible donors can keep the model available. The same donor rule applies to runtime candidates and management key-model availability. Search, count, ordered page, pricing and availability share one read-only snapshot and a five-second query budget. No donor rewards, bindings, physical resources or private notes appear in the directory.
 
 Administrator and steward model create/patch bodies accept `allowed_levels` and `public_description` within a 16 KiB request limit. Levels are unique integers 1–6, returned sorted. Omitted creation fields mean all six levels and an empty description; omitted patch fields remain unchanged. An explicit empty array blocks every ordinary caller, including L6. Null and duplicate/out-of-range levels are invalid. Descriptions are plain text, at most 1,024 code points and 4,096 UTF-8 bytes after CRLF-to-LF normalization; controls other than LF and TAB, including lone CR, are rejected. These fields use the existing model revision and idempotency rules.
 
@@ -600,6 +600,13 @@ Management model detail, create, and patch DTOs also carry the top-level `token_
 Pricing optionally includes independent `long_context` and `context_penalty` configurations. Their thresholds use reported input across ordinary, cache-write and cache-read buckets. Full alternate prices receive existing discounts; the one-time penalty does not. Request acceptance freezes both options. See [context pricing fields, replacement semantics and billing rules](charity-context-pricing.md).
 
 Model configuration also accepts optional `session_headers` for generated upstream session values. See the [field defaults, authority, lifetime and header-precedence contract](charity-session-headers.md). Public catalogue and capability DTOs do not expose this management configuration.
+
+Administrator and level-6 model writes accept top-level `recurring_discount`.
+Creation defaults to disabled; PATCH omission preserves it and an explicit object
+replaces it completely. Level 5 cannot write it, including within a model scope.
+Management model projections return the configuration, `effective_discount` and
+`server_now`; list entries share one decision time. The existing revision,
+idempotency and 16 KiB body limits apply.
 
 Level permission is rechecked at admission, claim and immediately before the dispatch marker. A denied level returns `403 forbidden`; an unavailable model returns `404 not_found`. A blocked unsent attempt releases its reservations. Already dispatched attempts finish under their accepted accounting, while later sends and retries must pass current access rules. Debug dry and live calls follow the same caller-level restriction.
 
@@ -1279,7 +1286,7 @@ disablement or deletion never change models that previously copied it.
 | `GET /api/steward/charity-price-templates` and `GET .../{id}` | Current L6 session only; list state must be `enabled`; disabled detail returns 404. |
 
 Lists return `{data,pagination}`. A template has `id,name,description,enabled,
-revision,pricing,token_reserve_credits,discount,created_at,updated_at`. IDs and
+revision,pricing,token_reserve_credits,discount,recurring_discount,created_at,updated_at`. IDs and
 revisions are decimal strings; timestamps are Unix seconds. Names are trimmed,
 1–80 Unicode code points without controls; descriptions are LF-normalized text
 of at most 500 code points. There are at most 256 templates, including disabled
@@ -1290,7 +1297,9 @@ POST/PUT require `name,description,enabled,pricing,token_reserve_credits,discoun
 `token_reserve_credits` must be present even when null. POST rejects
 `expected_revision`; PUT and DELETE require it. Mutations use the ordinary
 `Idempotency-Key`, strict JSON, current-authorization and replay contract. GETs
-have no body; mutations have no query parameters.
+have no body; mutations have no query parameters. Optional `recurring_discount`
+defaults to the disabled object on both POST and PUT. PUT is a complete
+replacement, so omission clears any previously configured schedule.
 
 | Copied field | Meaning and replacement behavior |
 | --- | --- |
@@ -1301,6 +1310,7 @@ have no body; mutations have no query parameters.
 | `pricing.context_penalty` | Null/absent disables it and clears its values; otherwise copy `input_threshold,fine`. |
 | `token_reserve_credits` | Null clears the form override to inherited global reserve; otherwise copy the canonical credit string. It remains stored but inactive in request mode. |
 | `discount` | Replace all of `enabled,percent,start_at,end_at`, including false, zero and null; do not merge with stale form values. Percent is an integer 0–100; nullable times use Unix seconds and a configured start must precede the end. |
+| `recurring_discount` | Replace `enabled,time_zone,default_percent,periods` completely, including false, zero and an empty array. Applying a template copies both discount configurations; it never merges them with previous form values. |
 
 Prices, rewards, thresholds, reserve bounds and context behavior use the model's
 existing validators and [context pricing contract](charity-context-pricing.md).

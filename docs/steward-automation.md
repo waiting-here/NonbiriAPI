@@ -196,7 +196,7 @@ Saving keeps the count and generation, immediately sets error-disablement when a
 
 PATCH uses the same 24-hour idempotency rules as creation, with a 30-second operation limit. Repeating the original key and body returns the original policy snapshot without another revision, audit or alert. Current permission and visibility are checked before replay. A stale revision or a reused key with a different request returns 409; re-read after a definite revision conflict and use a new key for the newly intended edit. An unknown result must first be resolved by retrying the original request. Invalid input returns 400, missing or no-longer-visible records 404, oversized input 413, and authentication or authority failures 401/403. Capacity and maintenance failures follow the shared controls.
 
-Creation, discovery and policy edits use existing account, donation, catalog, quota, review and replay records. Safe exports include the threshold, smart-backoff configuration and current safe state. Policy audits contain no key secrets; alerts occur once per transition into error-disablement. Existing account export, deletion and anonymization rules apply. Discovery failures may also enter the restricted original-error store, which can contain content echoed by an upstream and is not part of an automation response or personal export.
+Creation, discovery and policy edits use existing account, donation, catalog, quota, review and replay records. Safe exports include the threshold and current safe backoff state; retired configuration is omitted. Policy audits contain no key secrets; alerts occur once per transition into error-disablement. Existing account export, deletion and anonymization rules apply. Discovery failures may also enter the restricted original-error store, which can contain content echoed by an upstream and is not part of an automation response or personal export.
 
 Discovery failures distinguish authentication, quota, timeout, protocol, transport,
 interruption, unsupported server region and temporary upstream unavailability.
@@ -219,6 +219,14 @@ Donation projections use `first_approval_origin: "none"` for pending requests
 and requests directly rejected before approval. `unknown` remains reserved
 for historical approvals whose origin cannot be established. This display
 field does not grant review or forced-rejection permission.
+
+## Model price reads
+
+Existing authorized model reads include `recurring_discount`, `effective_discount`
+and `server_now`. List entries share one decision time. These fields add no
+CallerKey price-write or template permissions. Use the current-price fields in
+capability and catalog responses for the payable price; the older `discounted_*`
+fields retain their fixed-percentage meaning. See [charity discounts](charity-discounts.md).
 
 ## Temporary upstream cooldowns
 

@@ -308,21 +308,22 @@ Reward receipts are included in current account exports under `rewards`. They co
 
 ## Shared pricing, owner history and header facts
 
-Smart-backoff configuration and current safe state are included in account export
-23 and authorized key projections. Configuration contains a profile and at most
-eight exact code or fixed-message rules; users should enter only the fragment
-needed for recognition. Runtime state contains a limited reason, source and retry
-time. It does not copy raw upstream errors. Settings and the current episode
-follow the donated key; internal trial and classification facts follow the claim.
+Smart backoff runs automatically for charity calls. Current safe state is included
+in account export 24 and authorized key projections. Runtime state contains a
+limited reason, source and retry time; it does not copy raw upstream errors.
+The current episode follows the donated key; internal trial and classification
+facts follow the claim.
 Account deletion and retained-record cleanup remove their associations through
 the existing lifecycle, without an additional retention period. Late callbacks
-cannot recreate deleted resources or overwrite a newer policy or episode.
+cannot recreate deleted resources or overwrite a newer episode. Historical
+idempotency receipts keep their original stored bytes and expiry. Retired profile
+and rule fields are removed from replay responses without repeating the mutation.
 
 | Family | Access and export | Deletion, retention and late work |
 | --- | --- | --- |
 | `donation_key_backoffs` | Owner and authorized management may read safe current state, also included in account export 24. Internal generation, episode and trial identifiers are excluded. There is no per-key recognition configuration. | Current state cascades with the key. Schema 26 discards old profiles and supplemental-rule text while preserving active recovery facts. Account deletion removes the state. |
 | `dispatch_smart_backoff_facts` | Internal per-claim recovery identity, trial ownership, HTTP acceptance and finite quota classification; no raw error or copied rule text and no personal export. | Claim deletion cascades; key deletion clears its key reference. Existing request retention and holds apply. Generation and episode checks prevent late results from changing a newer episode. Historical supplemental-rule classifications remain valid recovery facts after configuration removal. |
-| `charity_price_templates` and `charity_price_template_audits` | Shared price/reward/reserve/context/discount settings; administrator maintenance and enabled-only L6 session reads. No L5/CallerKey access or personal export. Applying copies values, never links a model to future changes. | Templates persist until deleted; safe audits expire after 90 days and actor deletion sets identity null. No credentials or caller content. |
+| `charity_price_templates` and `charity_price_template_audits` | Shared price/reward/reserve/context/fixed and recurring discount settings; administrator maintenance and enabled-only L6 session reads. No L5/CallerKey access or personal export. Applying copies values, never links a model to future changes. | Templates persist until deleted; safe audits expire after 90 days and actor deletion sets identity null. No credentials or caller content. |
 | `donation_owner_preferences` | Owner-only nullable `owner_hidden_at` is included for every owned donation in account exports, including hidden history. Management does not receive it. | Cascades with user/donation deletion. Hide/restore does not delete records, change the donation revision or reset its 400-day terminal clock. Resumable batches use fixed time and ID boundaries and expire after one hour. |
 | `donation_key_cooldowns` and `dispatch_retry_after_observations` | Safe owner/authorized key projections expose `rate_limited_until`; raw observations are internal. No header body or secret is exported. | Cooldown follows the donation key; observations follow the claim. Atomic writes preserve the latest valid deadline. Neither can recreate a retired key, claim or account. Elapsed deadlines stop limiting immediately. |
 | `request_header_facts` | Separate explicit administrator/L5/L6 log GETs only; no ordinary log list/export or owner export. Recognized credential values are redacted before storage. L5 additionally redacts IPv4 in names and values, including bytes represented as base64; the separately authorized source IP remains unchanged. | Request-root cascade, completion-plus-30-day expiry and existing legal holds apply, including deidentified retained logs after account deletion. Insert-from-live-root prevents late capture resurrection. Each physical capture is at most 1 MiB, a collection at most 20 responses/8 MiB. Encoded payloads have a separate default 1024 MiB budget including held rows; omissions are explicit and unexpired rows are not evicted. |

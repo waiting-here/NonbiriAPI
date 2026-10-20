@@ -39,6 +39,9 @@ stewards can force-reject any approved donation, including manual approvals.
 Administrators manage complete price templates in a dedicated charity workspace,
 with search, pagination, creation, editing and deletion. Administrators and
 level-6 stewards can copy a template into a model form and adjust it before saving.
+Models and templates support [recurring weekly discounts](docs/charity-discounts.md)
+with configurable time zones and percentages. An enabled fixed-window discount
+pauses the recurring schedule. Accepted requests keep their captured price.
 
 Binding selectors show existing connections. Authorized managers can bind one
 donated key to several charity models in one operation. Administrators and

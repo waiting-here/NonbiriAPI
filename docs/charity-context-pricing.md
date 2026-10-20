@@ -38,7 +38,7 @@ This fragment belongs inside a complete token-pricing object; it is not a standa
 
 Omitting or setting an option to null in a complete pricing replacement disables that option. Omitting the entire pricing object from a model PATCH preserves it. Normal expected-revision, idempotency, authorization, size and strict unknown-field checks apply.
 
-Management responses return configured credit strings. Public pricing responses use optional `long_context` and `context_penalty` fields: the former contains `input_threshold` and the existing original/discounted milli-price fields, with irrelevant mode fields null; the latter contains `input_threshold,fine_milli`. Public responses expose no donor reward or reserve configuration.
+Management responses return configured credit strings. Public pricing responses use optional `long_context` and `context_penalty` fields: the former contains `input_threshold`, original milli-prices, historical fixed-percentage `discounted_*` prices and effective `current_user_*` prices, with irrelevant mode fields null; the latter contains `input_threshold,fine_milli`. See [discount precedence and current-price fields](charity-discounts.md). Public responses expose no donor reward or reserve configuration.
 
 ## Price-template copying
 
@@ -54,9 +54,12 @@ Administrator-maintained price templates can fill the pricing section of a new
 or existing model for administrators and current level-6 stewards. They copy the
 billing mode, all active user prices and donor rewards, Token reserve override,
 long-context threshold/alternate prices, penalty threshold/fine, and every
-discount field. Applying a disabled option clears its old values; switching mode
+fixed and recurring discount field. Disabling long-context pricing or the penalty
+clears its old fields; switching mode
 clears inactive prices. Null reserve means inherit; false, zero and null discount
-values replace the form rather than being skipped. The form remains editable and
+values replace the form rather than being skipped. Both discount configurations
+are copied completely, including a disabled recurring schedule's saved periods.
+The form remains editable and
 requires an explicit ordinary model save. Templates carry no model name, source
 or binding, and later edits never update models automatically. Level 5 and
 CallerKeys cannot use them. See [complete template fields and routes](api-contract.md#741-price-templates).

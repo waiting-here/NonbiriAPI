@@ -41,6 +41,12 @@ trials; removing settings does not make a waiting key immediately available.
 Account export 24 omits the two configuration fields and retains safe current
 state. New classifications use built-in recognition; an existing episode may
 still report its historical supplemental-rule source.
+Historical idempotency receipts retain their stored outcome and original expiry;
+replay removes retired configuration fields from the response.
+
+Schema 26 also adds recurring weekly discount configuration to charity models
+and price templates. Existing records start with it disabled; fixed-window
+discounts and accepted request price snapshots are preserved.
 
 Schema 25 adds per-donated-key smart-backoff configuration, a current waiting or
 trial episode and claim-bound recovery facts. Smart backoff defaults to off for
