@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
 	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
@@ -63,6 +64,7 @@ func (a *Adapter) AttemptDecision(ctx context.Context, writer http.ResponseWrite
 	}
 	httpRequest.Header.Set("Authorization", "Bearer "+string(target.credential.bearer))
 	target.credential.clear()
+	httpRequest = egress.WithResponseLimits(httpRequest, egress.ResponseLimits{JSONBytes: a.maxJSONResponseBytes})
 	response, err := client.Do(httpRequest)
 	httpRequest.Header.Del("Authorization")
 	clear(body)

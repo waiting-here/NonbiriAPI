@@ -241,6 +241,7 @@ type CandidateSource struct {
 }
 
 type AdminBindingCandidate struct {
+	BindingMarkers
 	DonationKeyID   string          `json:"donation_key_id"`
 	DonationID      string          `json:"donation_id"`
 	Source          CandidateSource `json:"source"`
@@ -258,6 +259,7 @@ type StewardCandidateSource struct {
 }
 
 type StewardBindingCandidate struct {
+	BindingMarkers
 	DonationKeyID   string                 `json:"donation_key_id"`
 	DonationID      string                 `json:"donation_id"`
 	Source          StewardCandidateSource `json:"source"`
@@ -401,15 +403,17 @@ type BindingDelete struct {
 }
 
 type CandidateQuery struct {
-	KeyState      string
-	traineeOnly   bool
-	DonationID    int64
-	DonationKeyID int64
-	Source        string
-	Query         string
-	AfterKeyID    int64
-	AfterModelID  string
-	Limit         int
+	omitBindingMarkers bool
+	IncludeBound       bool
+	KeyState           string
+	traineeOnly        bool
+	DonationID         int64
+	DonationKeyID      int64
+	Source             string
+	Query              string
+	AfterKeyID         int64
+	AfterModelID       string
+	Limit              int
 }
 
 // RuntimeCandidate is a frozen, credential-free candidate. String/log

@@ -162,6 +162,7 @@ func (a *Adapter) Attempt(ctx context.Context, w http.ResponseWriter, target con
 	req.Header.Set(a.protocol.Header, auth)
 	clear(key)
 	clear(ciphertext)
+	req = egress.WithResponseLimits(req, egress.ResponseLimits{JSONBytes: MaxJSONBytes, StreamBytes: MaxStreamBytes, LineBytes: MaxLineBytes, EventBytes: MaxEventBytes})
 	response, err := client.Do(req)
 	req.Header.Del(a.protocol.Header)
 	clear(body)

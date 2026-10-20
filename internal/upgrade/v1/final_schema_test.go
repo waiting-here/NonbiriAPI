@@ -20,6 +20,9 @@ var schema18Compressed []byte
 //go:embed testdata/schema19.sql.gz
 var schema19Compressed []byte
 
+//go:embed testdata/schema25.sql.gz
+var schema25Compressed []byte
+
 //go:embed testdata/schema24.sql.gz
 var schema24Compressed []byte
 
@@ -34,6 +37,23 @@ var schema21Compressed []byte
 
 //go:embed testdata/schema20.sql.gz
 var schema20Compressed []byte
+
+func schema25SQLForTest(t *testing.T) string {
+	t.Helper()
+	reader, err := gzip.NewReader(bytes.NewReader(schema25Compressed))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(reader)
+	closeErr := reader.Close()
+	if err != nil || closeErr != nil {
+		t.Fatal(err, closeErr)
+	}
+	if fmt.Sprintf("%x", sha256.Sum256(body)) != "f2fcd20ed52e4e434228d0ef017f4e2cb76b1ab00d090011297e018a841cca65" {
+		t.Fatal("schema 25 fixture identity changed")
+	}
+	return string(body)
+}
 
 func schema24SQLForTest(t *testing.T) string {
 	t.Helper()
@@ -155,7 +175,7 @@ func schema18SQLForTest(t *testing.T) string {
 }
 
 func TestFinalSchemaConversionAcceptsExactStableSources(t *testing.T) {
-	for _, version := range []int{17, 18, 19, 20, 21, 22, 23, 24} {
+	for _, version := range []int{17, 18, 19, 20, 21, 22, 23, 24, 25} {
 		t.Run(fmt.Sprint(version), func(t *testing.T) {
 			ddl, hash := schema17SQLForTest(t), stableSchema17Manifest
 			if version == 18 {
@@ -178,6 +198,9 @@ func TestFinalSchemaConversionAcceptsExactStableSources(t *testing.T) {
 			}
 			if version == 24 {
 				ddl, hash = schema24SQLForTest(t), stableSchema24Manifest
+			}
+			if version == 25 {
+				ddl, hash = schema25SQLForTest(t), stableSchema25Manifest
 			}
 			path, vault := sourceFixtureFromDDL(t, ddl, version, hash)
 			database, err := sql.Open("sqlite", path)
@@ -261,11 +284,11 @@ func TestFinalSchemaConversionAcceptsExactStableSources(t *testing.T) {
 
 func TestOfflineDescriptorContainsOnlyExactSupportedSources(t *testing.T) {
 	descriptor := SchemaDescriptor()
-	if descriptor.SchemaVersion != 25 || descriptor.MinimumSchemaVersion != 25 || len(descriptor.SourceSchemaVersions) != 0 || len(descriptor.OfflineConversions) != 9 {
+	if descriptor.SchemaVersion != 26 || descriptor.MinimumSchemaVersion != 26 || len(descriptor.SourceSchemaVersions) != 0 || len(descriptor.OfflineConversions) != 10 {
 		t.Fatal(descriptor)
 	}
 	for index, source := range descriptor.OfflineConversions {
-		if source.SourceSchemaVersion != 16+index || source.TargetSchemaVersion != 25 || len(source.SourceCommit) != 40 || len(source.SourceManifestHash) != 64 || source.Tool != "nonbiri-upgrade-v1" {
+		if source.SourceSchemaVersion != 16+index || source.TargetSchemaVersion != 26 || len(source.SourceCommit) != 40 || len(source.SourceManifestHash) != 64 || source.Tool != "nonbiri-upgrade-v1" {
 			t.Fatal(source)
 		}
 	}

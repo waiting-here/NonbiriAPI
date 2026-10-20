@@ -33,6 +33,12 @@ func RegisterAdminRoutes(registrar AdminRouteRegistrar, service *Service) error 
 		method, pattern string
 		handler         http.HandlerFunc
 	}{
+		{http.MethodGet, routeAdminKeyBindingOptions, api.adminKeyBindingOptions},
+		{http.MethodPost, routeAdminKeyBindingBatch, api.adminKeyBindingBatch},
+		{http.MethodPost, routeAdminApplyBindingPreset, api.adminApplyBindingPreset},
+		{http.MethodGet, routeAdminBindingPresets, api.adminBindingPresets},
+		{http.MethodGet, routeAdminBindingPreset, api.adminBindingPreset},
+		{http.MethodPut, routeAdminBindingPreset, api.adminSaveBindingPreset},
 		{http.MethodGet, routeAdminPriceTemplates, api.listAdminPriceTemplates},
 		{http.MethodGet, routeAdminPriceTemplate, api.getAdminPriceTemplate},
 		{http.MethodPost, routeAdminPriceTemplates, api.mutateAdminPriceTemplate},
@@ -77,6 +83,12 @@ func RegisterStewardRoutes(registrar UserRouteRegistrar, service *Service) error
 		method, pattern string
 		handler         AuthorizedUserHandler
 	}{
+		{http.MethodGet, routeStewardKeyBindingOptions, api.stewardKeyBindingOptions},
+		{http.MethodPost, routeStewardKeyBindingBatch, api.stewardKeyBindingBatch},
+		{http.MethodPost, routeStewardApplyBindingPreset, api.stewardApplyBindingPreset},
+		{http.MethodGet, routeStewardBindingPresets, api.stewardBindingPresets},
+		{http.MethodGet, routeStewardBindingPreset, api.stewardBindingPreset},
+		{http.MethodPut, routeStewardBindingPreset, api.stewardSaveBindingPreset},
 		{http.MethodGet, routeStewardPriceTemplates, api.listStewardPriceTemplates},
 		{http.MethodGet, routeStewardPriceTemplate, api.getStewardPriceTemplate},
 		{http.MethodGet, routeStewardModels, api.listStewardModels},

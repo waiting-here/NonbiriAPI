@@ -1324,6 +1324,11 @@ price-field differences. Shared templates and audits are excluded from personal 
 
 ### 7.4.2 Binding selection and compact receipts
 
+The [binding workflow contract](charity-bindings.md) defines existing-binding
+markers, manual single-key batches spanning several charity models, and shared
+channel presets. Those new batch routes return per-item skip results. The
+per-model routes below retain their original behavior.
+
 Both management prefixes expose `GET {prefix}/charity-models/{id}/binding-donations`
 and `GET .../binding-donations/{donationId}/keys`, alongside binding candidates.
 These retain their legacy cursor or numbered pagination protocols. The permitted

@@ -6541,7 +6541,7 @@ CREATE TABLE schema_state (
 ) STRICT;
 INSERT INTO credit_compaction(id,through_seq,details_before,sweep_at,sweep_after_seq) VALUES(1,0,0,0,0);
 INSERT INTO game_blackjack_clock(id,observed_at) VALUES(1,0);
-INSERT INTO schema_state(id,version) VALUES(1,25);
+INSERT INTO schema_state(id,version) VALUES(1,26);
 
 CREATE TABLE game_ai_settings (
  game_key TEXT PRIMARY KEY NOT NULL,
@@ -7049,3 +7049,16 @@ CREATE TABLE dispatch_smart_backoff_facts (
 ) STRICT;
 CREATE UNIQUE INDEX idx_donation_backoffs_trial ON donation_key_backoffs(trial_claim_id) WHERE trial_claim_id IS NOT NULL;
 CREATE INDEX idx_dispatch_backoff_key ON dispatch_smart_backoff_facts(donation_key_id);
+
+CREATE TABLE channel_charity_binding_presets (
+ channel_id TEXT PRIMARY KEY REFERENCES mainstream_channels(id) ON DELETE CASCADE,
+ revision INTEGER NOT NULL CHECK(revision>=1)
+) STRICT;
+CREATE TABLE channel_charity_binding_mappings (
+ channel_id TEXT NOT NULL REFERENCES channel_charity_binding_presets(channel_id) ON DELETE CASCADE,
+ ord INTEGER NOT NULL CHECK(ord BETWEEN 0 AND 15),
+ upstream_model_id TEXT NOT NULL CHECK(length(upstream_model_id) BETWEEN 1 AND 512 AND instr(upstream_model_id,char(0))=0),
+ charity_model_id INTEGER NOT NULL CHECK(charity_model_id>0),
+ PRIMARY KEY(channel_id,ord),
+ UNIQUE(channel_id,upstream_model_id,charity_model_id)
+) STRICT;

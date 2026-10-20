@@ -38,6 +38,7 @@ Copy [admin.env.example](../admin.env.example) to a private path outside the che
 | `NONBIRI_SITE_BASE_URL` | yes | canonical public origin of the user station |
 | `NONBIRI_ADMIN_HOST` | no | separate admin host; blank/unset derives `admin.<user-host>` (explicit value required for IPv6 user hosts) |
 | `NONBIRI_TRUSTED_PROXY_CIDRS` | no | peers allowed to supply forwarding metadata; defaults to loopback ranges; `none` disables trust |
+| `NONBIRI_CLOUDFLARE_ROUTES` | no | JSON array of exact endpoint-to-gateway routes; unset, blank or `[]` disables forwarding. See [Cloudflare forwarding](cloudflare-egress.md). |
 
 The timeout variables accept integer seconds only; decimals and out-of-range values are rejected. Blank or unset values use the defaults. Budgets cover the whole process phase rather than restarting for each step. Opening the database alone does not mean the application is ready; readiness follows full initialization and listener binding. See the [API contract](api-contract.md) for `/readyz`.
 

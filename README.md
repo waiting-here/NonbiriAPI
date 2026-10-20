@@ -40,6 +40,16 @@ Administrators manage complete price templates in a dedicated charity workspace,
 with search, pagination, creation, editing and deletion. Administrators and
 level-6 stewards can copy a template into a model form and adjust it before saving.
 
+Binding selectors show existing connections. Authorized managers can bind one
+donated key to several charity models in one operation. Administrators and
+level-6 stewards can maintain channel presets and apply them to every key in an
+approved donation; missing models and existing bindings are reported individually.
+
+Operators can route selected endpoint bases through
+[Cloudflare AI Gateway](docs/cloudflare-egress.md), including explicit credential
+compatibility settings. Matching uses deployment configuration and works across
+providers while preserving the shared outbound limits.
+
 | Area | Source and contract |
 | --- | --- |
 | Startup, recovery and HTTP composition | `main.go`, `internal/app/` |
@@ -92,7 +102,7 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [First-run setup](docs/first-run-setup.md) covers private paths, the encryption key, Discord OAuth and public origins. Copy [admin.env.example](admin.env.example) outside the checkout, replace placeholders and load it before starting. Preserve the database with its matching key.
 
-Fresh databases start in maintenance with public features closed. The v1.0.5 source accepts schema 25 or fresh storage and produces account export 23. Existing schema 16–24 databases use the separate offline converter; historical conversion code is excluded from the service. Later v1.x releases retain an upgrade path from every earlier stable v1.x schema. Older binaries need not read newer databases.
+Fresh databases start in maintenance with public features closed. The v1.0.6 source accepts schema 26 or fresh storage and produces account export 23. Existing schema 16–25 databases use the separate offline converter; historical conversion code is excluded from the service. Later v1.x releases retain an upgrade path from every earlier stable v1.x schema. Older binaries need not read newer databases.
 
 [Deployment](docs/deployment.md) covers systemd, proxies, immutable artifacts, upgrades and complete-snapshot recovery. Startup variables and online settings have one reference in [configuration](docs/configuration.md).
 
