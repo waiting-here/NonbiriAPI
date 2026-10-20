@@ -27,7 +27,7 @@ export function RecurringDiscountFields({
   const listId = useId();
   const registry = useQuery({
     queryKey: ['time-zones', role],
-    queryFn: ({ signal }) => fetchTimeZones(role, signal),
+    queryFn: ({ signal }) => fetchTimeZones(role === 'admin' ? 'admin' : 'user', signal),
     staleTime: Infinity,
     retry: false,
   });

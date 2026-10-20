@@ -239,6 +239,15 @@
   align-items: center;
   gap: var(--nb-space-1);
 }
+.nb-recurring-discount__weekdays label,
+.nb-recurring-discount label.nb-inline {
+  min-block-size: var(--nb-space-10);
+  min-inline-size: var(--nb-space-10);
+  cursor: pointer;
+}
+.nb-recurring-discount .nb-field {
+  align-content: start;
+}
 .nb-recurring-discount input {
   min-width: 0;
   max-width: 100%;
