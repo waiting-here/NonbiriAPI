@@ -842,7 +842,7 @@ async function exerciseSourceNavigation(
     pageSize: String(PAGE_SIZE),
   });
   expect(state.sourceReads).toContain(
-    '?q=detail&scope=active&key_state=available&include_bound=true&page=2&page_size=10',
+    '?q=detail&scope=active&key_state=available&page=2&page_size=10',
   );
   expect(state.sourceKeyReads.length).toBeGreaterThanOrEqual(1);
   await saveScreenshot(page, setup.station + '-source-detail-1280-light-en');
