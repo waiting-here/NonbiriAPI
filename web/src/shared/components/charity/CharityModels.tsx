@@ -62,7 +62,8 @@ import type { TransportRule } from '@shared/transportRule';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useLocation } from 'react-router';
+import { Link, useLocation, useNavigate } from 'react-router';
+import { logManagementReturnPath } from '../log/managementNavigation';
 import { useRetainedOperation } from '../../../admin/features/operations/useRetainedOperation';
 import type { CharityPickerKeyManagerProps } from '../CharityBindingPicker';
 import { BindingAddForm } from './BindingAddForm';
@@ -1140,6 +1141,8 @@ export function ModelsPanel({
 }) {
   const { t } = useTranslation();
   const location = useLocation();
+  const navigate = useNavigate();
+  const logReturnTo = logManagementReturnPath(location.state, role);
   const manageTriggerId = useId();
   const client = useQueryClient();
   const [params, setParams] = useSearchState();
@@ -1148,6 +1151,9 @@ export function ModelsPanel({
   const rawEnabled = oneParam(params, 'model_enabled');
   const enabled = ['true', 'false'].includes(rawEnabled) ? rawEnabled : '';
   const selectedId = selectedID(params, 'charity_model');
+  const managedDonation = selectedID(params, 'managed_donation');
+  const managedKey = selectedID(params, 'managed_key');
+  const managingKey = Boolean(selectedId && managedDonation && managedKey);
   const creating = !trainee && oneParam(params, 'model_workspace') === 'new' && !selectedId;
   const [draft, setDraft] = useState({ query, text: query });
   const queryDraft = draft.query === query ? draft.text : query;
@@ -1182,6 +1188,8 @@ export function ModelsPanel({
         const next = new URLSearchParams(current);
         if (id) next.set('charity_model', id);
         else next.delete('charity_model');
+        next.delete('managed_donation');
+        next.delete('managed_key');
         next.delete('model_workspace');
         const bindingDonation = selectedID(current, 'binding_donation');
         const bindingKey = selectedID(current, 'binding_key');
@@ -1264,12 +1272,18 @@ export function ModelsPanel({
   const capabilityLost = [models.error, detail.error].some(
     (error) => isUnauthorized(error) || isForbidden(error),
   );
+  const resourceDenied = Boolean(
+    logReturnTo &&
+      isForbidden(detail.error) &&
+      !isUnauthorized(models.error) &&
+      !isForbidden(models.error),
+  );
   useEffect(() => {
-    if (capabilityLost) onCapabilityLoss?.();
-  }, [capabilityLost, onCapabilityLoss]);
+    if (capabilityLost && !resourceDenied) onCapabilityLoss?.();
+  }, [capabilityLost, resourceDenied, onCapabilityLoss]);
   const refresh = () =>
     client.invalidateQueries({ queryKey: charityKeys.root(role) }, { throwOnError: true });
-  if (capabilityLost) {
+  if (capabilityLost && !resourceDenied) {
     return (
       <Card>
         <p className="field-error" role="alert">
@@ -1290,7 +1304,11 @@ export function ModelsPanel({
         )}
         description={selected ? `${selected.full_name} · #${selected.id}` : undefined}
         back={
-          creating || selectedId ? (
+          logReturnTo && (!managingKey || !selected) ? (
+            <Link className="nb-btn nb-btn--ghost" to={logReturnTo}>
+              {t('common.operations.logs.returnToLogs')}
+            </Link>
+          ) : !managingKey && (creating || selectedId) ? (
             <button className="nb-btn nb-btn--ghost" type="button" onClick={() => setSelected('')}>
               {t(
                 selectedID(params, 'binding_donation')
@@ -1482,6 +1500,25 @@ export function ModelsPanel({
             <LoadingState />
           ) : detail.error ? (
             <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
+          ) : selected && managingKey ? (
+            <CharityModelScope modelID={role === 'steward' ? selected.id : undefined}>
+              {renderKeyManager({
+                modelID: selected.id,
+                donationID: managedDonation,
+                keyID: managedKey,
+                backLabel: logReturnTo ? t('common.operations.logs.returnToLogs') : undefined,
+                onBack: () => {
+                  if (logReturnTo) navigate(logReturnTo);
+                  else
+                    setParams((current) => {
+                      const next = new URLSearchParams(current);
+                      next.delete('managed_donation');
+                      next.delete('managed_key');
+                      return next;
+                    });
+                },
+              })}
+            </CharityModelScope>
           ) : selected ? (
             <fieldset className="ops-stack ops-unframed" disabled={detail.isFetching}>
               {trainee ? (

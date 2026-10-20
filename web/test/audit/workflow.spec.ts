@@ -29,6 +29,9 @@ interface Fixture {
       processing_donation_id: string;
       ended_donation_id: string;
       header_request_id: string;
+      shortcut_request_id: string;
+      shortcut_model_id: string;
+      shortcut_attempt_targets: { donation_id: string; donation_key_id: string }[];
     };
   };
 }
@@ -96,6 +99,116 @@ async function visuals(page: Page, info: TestInfo, name: string, focus: () => Pr
     }
   }
 }
+
+test('charity request and attempt shortcuts preserve the log window for administrators and level 5', async ({
+  browser,
+}, info) => {
+  const state = fixture(),
+    data = state.management.workflow;
+  for (const role of ['admin', 5] as const) {
+    const context = await session(browser, role);
+    try {
+      const origin = role === 'admin' ? state.admin_url : state.user_url;
+      const prefix = role === 'admin' ? '/admin/api' : '/api/steward';
+      const page = await context.newPage();
+      const model = await read(
+        context,
+        origin,
+        `${prefix}/charity-models/${data.shortcut_model_id}`,
+      );
+      const detail = await read(
+        context,
+        origin,
+        `${prefix}/logs/${data.shortcut_request_id}?attempt_page=1&attempt_page_size=20`,
+      );
+      expect(detail.request.charity_model_id).toBe(data.shortcut_model_id);
+      expect(
+        detail.attempts.data.map((attempt: { donation_id: string; donation_key_id: string }) => ({
+          donation_id: attempt.donation_id,
+          donation_key_id: attempt.donation_key_id,
+        })),
+      ).toEqual(data.shortcut_attempt_targets);
+      const search = new URLSearchParams({
+        ...(role === 'admin' ? {} : { tab: 'logs' }),
+        charity_model: model.full_name,
+        page: '1',
+        page_size: '10',
+        from: '',
+        to: '',
+        request_id: data.shortcut_request_id,
+        attempt_page: '1',
+        attempt_page_size: '20',
+      });
+      await page.goto(origin + (role === 'admin' ? '/logs?' : '/steward?') + search);
+      const panel = page.locator('.nb-expandable-panel:not([hidden])');
+      await expect(
+        panel.getByRole('link', { name: common.common.operations.logs.manageCharityModel }),
+      ).toBeVisible();
+      const original = page.url();
+      await panel
+        .getByRole('link', { name: common.common.operations.logs.manageCharityModel })
+        .click();
+      await expect(page).toHaveURL(new RegExp(`charity_model=${data.shortcut_model_id}`));
+      await expect(
+        page.getByRole('heading', { name: workflow.editModel, exact: true }),
+      ).toBeVisible();
+      await page
+        .getByRole('link', { name: common.common.operations.logs.returnToLogs, exact: true })
+        .click();
+      await expect(page).toHaveURL(original);
+      for (let index = 0; index < data.shortcut_attempt_targets.length; index++) {
+        const toggle = panel
+          .locator('summary')
+          .filter({ hasText: common.common.operations.logs.attempts });
+        if ((await toggle.locator('..').getAttribute('open')) === null) await toggle.click();
+        const link = panel
+          .getByRole('link', { name: common.common.operations.logs.manageCharityKey })
+          .nth(index);
+        const target = data.shortcut_attempt_targets[index];
+        await expect(link).toHaveAttribute(
+          'href',
+          new RegExp(
+            `managed_donation=${target.donation_id}&managed_key=${target.donation_key_id}$`,
+          ),
+        );
+        const scopeRead =
+          role === 5
+            ? page.waitForResponse(
+                (response) =>
+                  new URL(response.url()).pathname ===
+                  `/api/steward/donations/${target.donation_id}/keys/${target.donation_key_id}`,
+              )
+            : undefined;
+        await link.click();
+        await expect(
+          page.getByRole('heading', { name: `Manage key #${target.donation_key_id}`, exact: true }),
+        ).toBeVisible();
+        await expect(
+          page.getByLabel(common.common.keyLimits.concurrency, { exact: true }),
+        ).toBeVisible();
+        if (scopeRead)
+          expect(new URL((await scopeRead).url()).searchParams.get('charity_model_id')).toBe(
+            data.shortcut_model_id,
+          );
+        if (role === 'admin' && index === 0)
+          await visuals(page, info, 'workflow-log-key-shortcut', () =>
+            page
+              .getByRole('button', {
+                name: common.common.operations.logs.returnToLogs,
+                exact: true,
+              })
+              .scrollIntoViewIfNeeded(),
+          );
+        await page
+          .getByRole('button', { name: common.common.operations.logs.returnToLogs, exact: true })
+          .click();
+        await expect(page).toHaveURL(original);
+      }
+    } finally {
+      await context.close();
+    }
+  }
+});
 
 test('approve a fixed key, page 240 targets and bind 144 cross-page selections with a compact receipt', async ({
   browser,

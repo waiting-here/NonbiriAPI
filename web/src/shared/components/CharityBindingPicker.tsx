@@ -168,6 +168,7 @@ export interface CharityPickerKeyManagerProps {
   donationID: string;
   keyID: string;
   onBack: () => void;
+  backLabel?: string;
 }
 
 interface CharityBindingPickerProps {

@@ -54,7 +54,8 @@ import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
+import { logManagementReturnPath } from './log/managementNavigation';
 import { useRetainedOperation } from '../../admin/features/operations/useRetainedOperation';
 import { ModelsPanel } from './charity/CharityModels';
 import { PriceTemplateManagement } from './charity/PriceTemplateManagement';
@@ -1904,6 +1905,8 @@ const workflowSearchParameters = [
   'handling',
   'q',
   'charity_model',
+  'managed_donation',
+  'managed_key',
   'model_q',
   'model_enabled',
   'models_page',
@@ -2294,6 +2297,7 @@ function ScopedKeyBrowser({
 }
 
 function PickerKeyManager({
+  backLabel,
   modelID,
   donationID,
   keyID,
@@ -2307,6 +2311,8 @@ function PickerKeyManager({
   onCapabilityLoss?: () => void;
 }) {
   const { t } = useTranslation();
+  const location = useLocation();
+  const logReturnTo = logManagementReturnPath(location.state, role);
   const client = useQueryClient();
   const detailKey = [
     ...charityKeys.root(role),
@@ -2341,8 +2347,8 @@ function PickerKeyManager({
   });
   const lost = isUnauthorized(detail.error) || isForbidden(detail.error);
   useEffect(() => {
-    if (lost) onCapabilityLoss?.();
-  }, [lost, onCapabilityLoss]);
+    if (lost && !(logReturnTo && isForbidden(detail.error))) onCapabilityLoss?.();
+  }, [lost, logReturnTo, detail.error, onCapabilityLoss]);
   const refresh = () =>
     client.invalidateQueries({ queryKey: charityKeys.root(role) }, { throwOnError: true });
   useRateLimitRefresh(
@@ -2357,7 +2363,7 @@ function PickerKeyManager({
         title={t('common.operations.charity.sourceBrowser.manageKey', { id: keyID })}
         back={
           <Button type="button" variant="ghost" onClick={onBack}>
-            {t('common.operations.charity.returnToCandidates')}
+            {backLabel ?? t('common.operations.charity.returnToCandidates')}
           </Button>
         }
       />

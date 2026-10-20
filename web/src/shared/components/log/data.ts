@@ -113,6 +113,7 @@ export interface RejectionDetail {
 export interface AdminLogRow extends LogRowCommon, LogOrigin {
   rejection_detail?: RejectionDetail | null;
   charity_model?: string | null;
+  charity_model_id?: string | null;
   role: 'admin';
   usage_total_mismatch: boolean;
   user_id: string | null;
@@ -123,6 +124,7 @@ export interface AdminLogRow extends LogRowCommon, LogOrigin {
 export interface StewardLogRow extends LogRowCommon, LogOrigin {
   rejection_detail?: RejectionDetail | null;
   charity_model?: string | null;
+  charity_model_id?: string | null;
   role: 'steward';
   usage_total_mismatch: boolean;
   user_id: string | null;
@@ -160,10 +162,14 @@ export interface UserLogAttempt extends LogAttemptCommon {
 }
 
 export interface AdminLogAttempt extends LogAttemptCommon {
+  donation_id?: string | null;
+  donation_key_id?: string | null;
   role: 'admin';
   usage_total_mismatch: boolean;
 }
 export interface StewardLogAttempt extends LogAttemptCommon {
+  donation_id?: string | null;
+  donation_key_id?: string | null;
   role: 'steward';
   usage_total_mismatch: boolean;
 }
@@ -439,6 +445,7 @@ export function normalizeAdminLogRow(value: unknown): AdminLogRow {
       'caller_identity',
       'attempt_count',
       'charity_model',
+      'charity_model_id',
       'rejection_detail',
       'usage_total_mismatch',
     ],
@@ -459,6 +466,7 @@ export function normalizeAdminLogRow(value: unknown): AdminLogRow {
     user_id: nullableDecimalID(root.user_id, 'log user id'),
     caller_identity: callerIdentity,
     charity_model: managementCharityModel(root, common.route_kind),
+    charity_model_id: managementCharityModelID(root, common.route_kind),
     attempt_count: decimal(root.attempt_count, 'attempt count'),
   };
 }
@@ -476,6 +484,19 @@ function managementCharityModel(root: WireRecord, route: LogRouteKind): string |
   const model = nullableString(root.charity_model ?? null, 'requested charity model', { min: 1 });
   if (!isCharityRoute(route) && model !== null) invalidResponse('non-charity model projection');
   return model;
+}
+
+function managementCharityModelID(root: WireRecord, route: LogRouteKind): string | null {
+  const id = nullableDecimalID(root.charity_model_id ?? null, 'charity model id');
+  if (!isCharityRoute(route) && id !== null) invalidResponse('non-charity model identity');
+  return id;
+}
+
+function managementAttemptTarget(root: WireRecord) {
+  const donation_id = nullableDecimalID(root.donation_id ?? null, 'donation id');
+  const donation_key_id = nullableDecimalID(root.donation_key_id ?? null, 'donation key id');
+  if (Boolean(donation_id) !== Boolean(donation_key_id)) invalidResponse('donation key identity');
+  return { donation_id, donation_key_id };
 }
 
 function normalizeCallerIdentity(value: unknown): CallerIdentity | null {
@@ -497,6 +518,7 @@ export function normalizeStewardLogRow(value: unknown): StewardLogRow {
       'caller_identity',
       'attempt_count',
       'charity_model',
+      'charity_model_id',
       'rejection_detail',
       'usage_total_mismatch',
     ],
@@ -517,6 +539,7 @@ export function normalizeStewardLogRow(value: unknown): StewardLogRow {
     user_id: nullableDecimalID(root.user_id, 'log user id'),
     caller_identity: callerIdentity,
     charity_model: managementCharityModel(root, common.route_kind),
+    charity_model_id: managementCharityModelID(root, common.route_kind),
     attempt_count: decimal(root.attempt_count, 'attempt count'),
   };
 }
@@ -589,20 +612,28 @@ export function normalizeUserLogAttempt(value: unknown): UserLogAttempt {
 export function normalizeAdminLogAttempt(value: unknown): AdminLogAttempt {
   const root = record(
     value,
-    [...ATTEMPT_FIELDS, 'usage_total_mismatch'],
+    [...ATTEMPT_FIELDS, 'usage_total_mismatch', 'donation_id', 'donation_key_id'],
     'administrator log attempt',
+    [...ATTEMPT_FIELDS, 'usage_total_mismatch'],
   );
   return {
     ...commonAttempt(root),
+    ...managementAttemptTarget(root),
     role: 'admin',
     usage_total_mismatch: boolean(root.usage_total_mismatch, 'usage total mismatch marker'),
   };
 }
 
 export function normalizeStewardLogAttempt(value: unknown): StewardLogAttempt {
-  const root = record(value, [...ATTEMPT_FIELDS, 'usage_total_mismatch'], 'steward log attempt');
+  const root = record(
+    value,
+    [...ATTEMPT_FIELDS, 'usage_total_mismatch', 'donation_id', 'donation_key_id'],
+    'steward log attempt',
+    [...ATTEMPT_FIELDS, 'usage_total_mismatch'],
+  );
   return {
     ...commonAttempt(root),
+    ...managementAttemptTarget(root),
     role: 'steward',
     usage_total_mismatch: boolean(root.usage_total_mismatch, 'usage total mismatch marker'),
   };
