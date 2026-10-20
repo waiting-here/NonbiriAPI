@@ -182,9 +182,13 @@ func (s *Service) AutomationModels(ctx context.Context, actorID int64, query str
 	if err != nil {
 		return empty, err
 	}
+	now, err := s.nowUnix()
+	if err != nil {
+		return empty, err
+	}
 	result := AutomationPage[StewardCharityModel]{Data: make([]StewardCharityModel, 0, len(ids)), Pagination: &metadata}
 	for _, id := range ids {
-		item, err := getAdminModelTx(ctx, tx, id)
+		item, err := getAdminModelTx(ctx, tx, id, now)
 		if err != nil {
 			return empty, err
 		}

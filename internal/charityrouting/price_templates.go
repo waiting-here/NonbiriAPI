@@ -13,6 +13,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/waiting-here/NonbiriAPI/internal/charitydiscount"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -27,18 +28,20 @@ const (
 )
 
 type PriceTemplate struct {
-	ID                  string        `json:"id"`
-	Name                string        `json:"name"`
-	Description         string        `json:"description"`
-	Enabled             bool          `json:"enabled"`
-	Revision            string        `json:"revision"`
-	Pricing             AdminPricing  `json:"pricing"`
-	TokenReserveCredits *string       `json:"token_reserve_credits"`
-	Discount            AdminDiscount `json:"discount"`
-	CreatedAt           int64         `json:"created_at"`
-	UpdatedAt           int64         `json:"updated_at"`
+	RecurringDiscount   charitydiscount.Config `json:"recurring_discount"`
+	ID                  string                 `json:"id"`
+	Name                string                 `json:"name"`
+	Description         string                 `json:"description"`
+	Enabled             bool                   `json:"enabled"`
+	Revision            string                 `json:"revision"`
+	Pricing             AdminPricing           `json:"pricing"`
+	TokenReserveCredits *string                `json:"token_reserve_credits"`
+	Discount            AdminDiscount          `json:"discount"`
+	CreatedAt           int64                  `json:"created_at"`
+	UpdatedAt           int64                  `json:"updated_at"`
 }
 type PriceTemplateInput struct {
+	RecurringDiscount   *charitydiscount.Config
 	Name                string
 	Description         string
 	Enabled             bool
@@ -49,6 +52,11 @@ type PriceTemplateInput struct {
 
 func normalizePriceTemplate(input PriceTemplateInput) (PriceTemplate, error) {
 	var out PriceTemplate
+	var err error
+	out.RecurringDiscount, _, err = normalizeRecurring(input.RecurringDiscount)
+	if err != nil {
+		return out, err
+	}
 	input.Description = strings.ReplaceAll(input.Description, "\r\n", "\n")
 	if !utf8.ValidString(input.Name) || utf8.RuneCountInString(input.Name) < 1 || utf8.RuneCountInString(input.Name) > 80 ||
 		strings.TrimSpace(input.Name) != input.Name || !utf8.ValidString(input.Description) || utf8.RuneCountInString(input.Description) > 500 ||
@@ -154,7 +162,7 @@ func (s *Service) priceTemplate(ctx context.Context, role roleKind, actorID, id 
 	return out, tx.Commit()
 }
 
-const priceTemplateColumns = "id,name,description,enabled,revision,pricing,token_reserve_credits,discount,created_at,updated_at"
+const priceTemplateColumns = "id,name,description,enabled,revision,pricing,token_reserve_credits,discount,created_at,updated_at,recurring_discount"
 
 func readPriceTemplate(ctx context.Context, tx *sql.Tx, id int64) (PriceTemplate, error) {
 	return scanPriceTemplate(tx.QueryRowContext(ctx, "SELECT "+priceTemplateColumns+" FROM charity_price_templates WHERE id=?", id).Scan)
@@ -163,8 +171,8 @@ func readPriceTemplate(ctx context.Context, tx *sql.Tx, id int64) (PriceTemplate
 func scanPriceTemplate(scan func(...any) error) (PriceTemplate, error) {
 	var out PriceTemplate
 	var id, revision int64
-	var pricing, discount string
-	err := scan(&id, &out.Name, &out.Description, &out.Enabled, &revision, &pricing, &out.TokenReserveCredits, &discount, &out.CreatedAt, &out.UpdatedAt)
+	var pricing, discount, recurring string
+	err := scan(&id, &out.Name, &out.Description, &out.Enabled, &revision, &pricing, &out.TokenReserveCredits, &discount, &out.CreatedAt, &out.UpdatedAt, &recurring)
 	if errors.Is(err, sql.ErrNoRows) {
 		return out, ErrNotFound
 	}
@@ -172,6 +180,10 @@ func scanPriceTemplate(scan func(...any) error) (PriceTemplate, error) {
 		return out, err
 	}
 	if json.Unmarshal([]byte(pricing), &out.Pricing) != nil || json.Unmarshal([]byte(discount), &out.Discount) != nil {
+		return out, ErrInvariant
+	}
+	out.RecurringDiscount, err = charitydiscount.Decode(recurring)
+	if err != nil {
 		return out, ErrInvariant
 	}
 	out.ID, out.Revision = strconv.FormatInt(id, 10), strconv.FormatInt(revision, 10)
@@ -222,7 +234,18 @@ func (s *Service) mutatePriceTemplate(ctx context.Context, id int64, expected st
 		return empty, err
 	}
 	if decision.Kind == idempotency.Replay {
-		return replay[PriceTemplate](decision)
+		result, err := replay[PriceTemplate](decision)
+		if err != nil || result.Status == http.StatusNoContent {
+			return result, err
+		}
+		if result.Value.RecurringDiscount.TimeZone == "" {
+			result.Value.RecurringDiscount = charitydiscount.Default()
+			result.Body, err = json.Marshal(result.Value)
+			if err != nil {
+				return empty, ErrInvariant
+			}
+		}
+		return result, nil
 	}
 	action, status := "create", http.StatusCreated
 	if id == 0 {
@@ -251,8 +274,9 @@ func (s *Service) mutatePriceTemplate(ctx context.Context, id int64, expected st
 	} else {
 		pricing, _ := json.Marshal(value.Pricing)
 		discount, _ := json.Marshal(value.Discount)
+		recurring, _ := charitydiscount.Encode(value.RecurringDiscount)
 		if id == 0 {
-			result, err := tx.ExecContext(ctx, `INSERT INTO charity_price_templates(name,description,enabled,revision,pricing,token_reserve_credits,discount,created_at,updated_at) VALUES(?,?,?,1,?,?,?,?,?)`, value.Name, value.Description, value.Enabled, string(pricing), value.TokenReserveCredits, string(discount), now, now)
+			result, err := tx.ExecContext(ctx, `INSERT INTO charity_price_templates(name,description,enabled,revision,pricing,token_reserve_credits,discount,created_at,updated_at,recurring_discount) VALUES(?,?,?,1,?,?,?,?,?,?)`, value.Name, value.Description, value.Enabled, string(pricing), value.TokenReserveCredits, string(discount), now, now, recurring)
 			if err != nil {
 				return empty, err
 			}
@@ -261,7 +285,7 @@ func (s *Service) mutatePriceTemplate(ctx context.Context, id int64, expected st
 				return empty, err
 			}
 		} else {
-			result, err := tx.ExecContext(ctx, `UPDATE charity_price_templates SET name=?,description=?,enabled=?,revision=revision+1,pricing=?,token_reserve_credits=?,discount=?,updated_at=? WHERE id=? AND revision=?`, value.Name, value.Description, value.Enabled, string(pricing), value.TokenReserveCredits, string(discount), now, id, revision)
+			result, err := tx.ExecContext(ctx, `UPDATE charity_price_templates SET name=?,description=?,enabled=?,revision=revision+1,pricing=?,token_reserve_credits=?,discount=?,updated_at=?,recurring_discount=? WHERE id=? AND revision=?`, value.Name, value.Description, value.Enabled, string(pricing), value.TokenReserveCredits, string(discount), now, recurring, id, revision)
 			if err != nil {
 				return empty, err
 			}

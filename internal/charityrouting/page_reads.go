@@ -73,9 +73,13 @@ func (s *Service) modelsPage(ctx context.Context, role roleKind, actorID int64, 
 	if err != nil {
 		return empty, err
 	}
+	now, err := s.nowUnix()
+	if err != nil {
+		return empty, err
+	}
 	result := Page[AdminCharityModel]{Data: make([]AdminCharityModel, 0, len(ids)), Pagination: &metadata}
 	for _, id := range ids {
-		item, err := getAdminModelTx(ctx, tx, id)
+		item, err := getAdminModelTx(ctx, tx, id, now)
 		if err != nil {
 			return empty, err
 		}
