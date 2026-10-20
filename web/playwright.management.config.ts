@@ -16,6 +16,7 @@ export default defineConfig({
     'discovery-errors.spec.ts',
     'workflow.spec.ts',
     'smart-backoff.spec.ts',
+    'charity-binding-batch.spec.ts',
   ],
   outputDir: 'test-results/management/browser',
 });

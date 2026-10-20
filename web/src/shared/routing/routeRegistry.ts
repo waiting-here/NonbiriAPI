@@ -105,6 +105,13 @@ export const USER_ROUTE_DESCRIPTORS = [
     labelKey: 'user.charity.nav',
   }),
   user({
+    id: 'channel-binding-presets',
+    path: '/charity/channel-presets',
+    access: 'user',
+    layout: 'wide',
+    registered: true,
+  }),
+  user({
     id: 'donation-detail',
     path: '/charity/donations/:donationId',
     access: 'user',
@@ -472,6 +479,13 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
     navGroup: 'content',
     icon: 'charity',
     labelKey: 'admin.charity.nav',
+  }),
+  admin({
+    id: 'admin-channel-binding-presets',
+    path: '/charity/channel-presets',
+    access: 'admin',
+    layout: 'wide',
+    registered: true,
   }),
   admin({
     id: 'admin-activities',

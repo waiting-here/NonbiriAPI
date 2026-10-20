@@ -143,6 +143,9 @@ function candidate({
     },
     upstream_model_id: modelID,
     source_types: sourceTypes,
+    current_binding_id: null,
+    other_binding_count: '0',
+    other_bindings: [],
   };
 }
 
@@ -163,6 +166,7 @@ function PickerHarness({
   locked = false,
   modelId = '31',
   renderKeyManager,
+  onInspectBindings,
   fixedKey,
   capacity,
 }: {
@@ -170,6 +174,7 @@ function PickerHarness({
   locked?: boolean;
   modelId?: string;
   renderKeyManager?: (props: CharityPickerKeyManagerProps) => ReactNode;
+  onInspectBindings?: () => void;
   fixedKey?: ManagedDonationKeySummary;
   capacity?: number;
 } = {}) {
@@ -185,6 +190,7 @@ function PickerHarness({
       locked={locked}
       onReadStateChange={onReadStateChange}
       renderKeyManager={renderKeyManager}
+      onInspectBindings={onInspectBindings}
     />
   );
 }
@@ -205,6 +211,41 @@ afterEach(async () => {
 });
 
 describe('CharityBindingPicker numbered source flow', () => {
+  it('shows exact current and other bindings and never bulk-selects an existing tuple', async () => {
+    const inspect = vi.fn();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse(
+          sourcePage([
+            {
+              ...candidate(),
+              current_binding_id: '9',
+              other_binding_count: '4',
+              other_bindings: [
+                { charity_model_id: '32', full_name: 'Other charity model', binding_id: '10' },
+              ],
+            },
+            candidate({ modelID: 'model-b' }),
+          ]),
+        ),
+      ),
+    );
+    const view = await renderWithProviders(
+      <PickerHarness fixedKey={normalizeKeySummary(key(), 0)} onInspectBindings={inspect} />,
+      { station: 'admin' },
+    );
+    authorize(view.queryClient);
+    expect(await screen.findByRole('checkbox', { name: /model-a/ })).toBeDisabled();
+    expect(screen.getByText('Already bound to this model')).toBeVisible();
+    expect(screen.getByText('Also bound to: Other charity model')).toBeVisible();
+    expect(screen.getByText(/3 more/)).toBeVisible();
+    await view.user.click(screen.getByRole('button', { name: 'Related charity models' }));
+    expect(inspect).toHaveBeenCalledOnce();
+    await view.user.click(screen.getByRole('button', { name: 'Select this page (1)' }));
+    expect(modelCheckbox('model-b')).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: /model-a/ })).not.toBeChecked();
+  });
   it('keeps 144 fixed-key selections across candidate pages and searches and renders only each page', async () => {
     const catalog = Array.from({ length: 144 }, (_, index) =>
       candidate({ modelID: `provider/model-${String(index).padStart(3, '0')}-2026-10` }),
@@ -325,7 +366,7 @@ describe('CharityBindingPicker numbered source flow', () => {
       `/admin/api/donation-sources/${encodeURIComponent(SOURCE_KEY)}/keys?scope=active&key_state=available&page=1&page_size=20`,
     );
     expect(requests).toContain(
-      '/admin/api/charity-models/31/binding-candidates?donation_id=7&donation_key_id=21&key_state=available&page=1&page_size=20',
+      '/admin/api/charity-models/31/binding-candidates?donation_id=7&donation_key_id=21&key_state=available&include_bound=true&page=1&page_size=20',
     );
     expect(screen.getByRole('heading', { name: '1 service connection(s) selected' })).toBeVisible();
   });
@@ -492,7 +533,7 @@ describe('CharityBindingPicker numbered source flow', () => {
     await view.user.click(screen.getByRole('button', { name: /Choose source/ }));
     expect(await screen.findByRole('button', { name: /source-21/ })).toBeVisible();
     expect(requests).toContain(
-      '/admin/api/charity-models/31/binding-candidates?donation_id=22&donation_key_id=22&key_state=available&page=2&page_size=20',
+      '/admin/api/charity-models/31/binding-candidates?donation_id=22&donation_key_id=22&key_state=available&include_bound=true&page=2&page_size=20',
     );
   });
 

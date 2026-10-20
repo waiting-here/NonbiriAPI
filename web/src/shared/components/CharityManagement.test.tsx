@@ -42,6 +42,7 @@ function expectNumberedPageQuery(url: URL, filters: Record<string, string> = {})
   const expected = new URLSearchParams(filters);
   if (url.pathname.includes('/donation-sources') || url.pathname.endsWith('/binding-candidates'))
     expected.set('key_state', 'available');
+  if (url.pathname.endsWith('/binding-candidates')) expected.set('include_bound', 'true');
   expected.set('page', page!);
   expected.set('page_size', pageSize!);
   expect(url.search).toBe(`?${expected.toString()}`);
@@ -233,6 +234,9 @@ function bindingCandidate(
       display_tail: key.display_tail,
     },
     source_types: ['automatic'],
+    current_binding_id: null,
+    other_binding_count: '0',
+    other_bindings: [],
   };
 }
 
