@@ -44,7 +44,8 @@ func TestAdditiveConversionLeavesUnrelatedHistoryForExplicitAudit(t *testing.T) 
 			}
 			want := map[string]bool{"donation_key_cooldowns": true, "dispatch_retry_after_observations": true,
 				"request_header_facts": true, "charity_price_template_audits": true, "donation_owner_preferences": true,
-				"donation_key_backoffs": true, "dispatch_smart_backoff_facts": true}
+				"donation_key_backoffs": true, "dispatch_smart_backoff_facts": true,
+				"channel_charity_binding_presets": true, "channel_charity_binding_mappings": true}
 			if !reflect.DeepEqual(checkedTables, want) {
 				t.Fatal("unexpected relationship scope", checkedTables)
 			}
@@ -113,7 +114,7 @@ func TestRebuiltSourceRetainsCredentialAndAffectedRelationChecks(t *testing.T) {
 			}
 			defer database.Close()
 			plan, err := storageSchema.plan(t.Context(), database)
-			if err != nil || len(plan.steps) != 8 {
+			if err != nil || len(plan.steps) != 9 {
 				t.Fatal("failure did not preserve source", err)
 			}
 			if fault != "credential" {
@@ -150,7 +151,7 @@ func TestOfflineCancellationAtConversionBoundariesRestoresExactSource(t *testing
 				t.Fatal(err)
 			}
 			plan, err := storageSchema.plan(t.Context(), database)
-			if err := errors.Join(err, database.Close()); err != nil || len(plan.steps) != 5 {
+			if err := errors.Join(err, database.Close()); err != nil || len(plan.steps) != 6 {
 				t.Fatal("exact source not restored", err)
 			}
 			if _, err := Run(t.Context(), path, vault, Options{Apply: true}); err != nil {

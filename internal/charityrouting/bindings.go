@@ -88,6 +88,12 @@ func (s *Service) bindingCandidates(ctx context.Context, role roleKind, actorUse
 	if err := rows.Err(); err != nil {
 		return nil, 0, "", fmt.Errorf("charity routing: iterate binding candidates: %w", err)
 	}
+	if err := rows.Close(); err != nil {
+		return nil, 0, "", err
+	}
+	if err := annotateBindingCandidates(ctx, tx, items, modelID, scope.Trainee); err != nil {
+		return nil, 0, "", err
+	}
 	nextKey, nextModel := int64(0), ""
 	if len(items) > query.Limit {
 		nextKey = keyIDs[query.Limit-1]
@@ -651,7 +657,8 @@ func sourceTypes(automatic, manual int64) []string {
 
 func stewardCandidate(value AdminBindingCandidate) StewardBindingCandidate {
 	return StewardBindingCandidate{
-		DonationKeyID: value.DonationKeyID, DonationID: value.DonationID,
+		BindingMarkers: value.BindingMarkers,
+		DonationKeyID:  value.DonationKeyID, DonationID: value.DonationID,
 		Source: StewardCandidateSource{
 			ConnectorType: value.Source.ConnectorType, CanonicalBaseURL: value.Source.CanonicalBaseURL,
 			DisplayHead: value.Source.DisplayHead, DisplayTail: value.Source.DisplayTail,
