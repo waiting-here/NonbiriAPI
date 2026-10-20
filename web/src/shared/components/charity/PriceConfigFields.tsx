@@ -1,3 +1,4 @@
+import { RecurringDiscountFields } from './RecurringDiscountFields';
 import { useRef, useState, type ReactNode, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { CharityRole, TokenPrices } from '@shared/operations/charity';
@@ -17,6 +18,7 @@ export function PriceConfigFields({
   modeRef,
   actions,
   discountError = false,
+  recurringError = false,
 }: {
   value: PriceDraft;
   role: CharityRole;
@@ -24,11 +26,13 @@ export function PriceConfigFields({
   modeRef?: Ref<HTMLSelectElement>;
   actions?: ReactNode;
   discountError?: boolean;
+  recurringError?: boolean;
 }) {
   const { t, i18n } = useTranslation();
   const copy = charityControlCopy(i18n.language);
   const inputs = useRef<Record<string, HTMLInputElement | null>>({});
   const [halfError, setHalfError] = useState(false);
+  const [recurringOpen, setRecurringOpen] = useState(value.recurringDiscount.enabled);
   const [discountOpen, setDiscountOpen] = useState(value.discountEnabled);
   const set = (fields: Partial<PriceDraft>) => {
     setHalfError(false);
@@ -165,7 +169,7 @@ export function PriceConfigFields({
       </fieldset>
       <ContextPricingFields value={value} role={role} onChange={set} />
       <Fold
-        title={copy.discountSettings}
+        title={t('common.recurringDiscount.fixedTitle')}
         summary={
           value.discountEnabled
             ? t('common.operations.charity.discountSummary', { percent: value.discountPercent })
@@ -208,6 +212,28 @@ export function PriceConfigFields({
             onChange={(update) => set({ discountEnd: update(value.discountEnd) })}
           />
         </div>
+      </Fold>
+      <Fold
+        title={t('common.recurringDiscount.title')}
+        summary={
+          value.recurringDiscount.enabled
+            ? t('common.recurringDiscount.summary', {
+                zone: value.recurringDiscount.time_zone,
+                percent: value.recurringDiscount.default_percent,
+                count: value.recurringDiscount.periods.length,
+              })
+            : t('common.disabled')
+        }
+        open={recurringOpen || recurringError}
+        onOpenChange={setRecurringOpen}
+        lazy
+      >
+        <RecurringDiscountFields
+          value={value.recurringDiscount}
+          role={role}
+          fixedEnabled={value.discountEnabled}
+          onChange={(recurringDiscount) => set({ recurringDiscount })}
+        />
       </Fold>
     </div>
   );

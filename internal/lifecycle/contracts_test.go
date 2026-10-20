@@ -8,7 +8,7 @@ import (
 )
 
 func TestFrozenBoundsAndHeldObjectKinds(t *testing.T) {
-	if SchemaVersion != 23 || CollectionLimit != 10_000 || MaxExportBytes != 16<<20 || WorkerBatchLimit != 100 {
+	if SchemaVersion != 24 || CollectionLimit != 10_000 || MaxExportBytes != 16<<20 || WorkerBatchLimit != 100 {
 		t.Fatalf("frozen bounds changed: schema=%d collection=%d bytes=%d batch=%d",
 			SchemaVersion, CollectionLimit, MaxExportBytes, WorkerBatchLimit)
 	}
@@ -87,7 +87,7 @@ func TestExportEndpointAndDonationSchemasAreClosed(t *testing.T) {
 	assertClosedJSONKeys(t, DonationExport{}, "owner_hidden_at",
 		"id", "status", "description", "review_result", "keys", "created_at", "updated_at")
 	assertClosedJSONKeys(t, DonationKeyExport{},
-		"smart_backoff_profile", "smart_backoff_rules", "smart_backoff",
+		"smart_backoff",
 		"id", "endpoint_key_id", "display_head", "display_tail", "safe_source",
 		"physical_enabled", "charity_state", "rate_limited_until", "limits", "usage", "token_reserve",
 		"authorized_expires_at", "expires_at", "streak", "ended_reason", "recurring_limits", "review", "manual_models")

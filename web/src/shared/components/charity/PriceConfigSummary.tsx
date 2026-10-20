@@ -1,3 +1,4 @@
+import { weekdayKeys } from '@shared/operations/recurringDiscount';
 import { useTranslation } from 'react-i18next';
 import type { CharityPriceConfig, CharityRole, TokenPrices } from '@shared/operations/charity';
 import { Amount } from '@shared/components/Amount';
@@ -140,7 +141,7 @@ export function PriceConfigSummary({
         </dd>
       </div>
       <div>
-        <dt>{t('common.workflow.discount')}</dt>
+        <dt>{t('common.recurringDiscount.fixedTitle')}</dt>
         <dd>
           {t(config.discount.enabled ? 'common.enabled' : 'common.disabled')} ·{' '}
           <span className="nb-num">{config.discount.percent}%</span>
@@ -153,6 +154,35 @@ export function PriceConfigSummary({
       <div>
         <dt>{t('common.workflow.discountEnd')}</dt>
         <dd>{config.discount.end_at === null ? '—' : time(config.discount.end_at)}</dd>
+      </div>
+      <div>
+        <dt>{t('common.recurringDiscount.title')}</dt>
+        <dd>
+          {t(config.recurring_discount.enabled ? 'common.enabled' : 'common.disabled')}
+          <p>
+            {t('common.recurringDiscount.zoneSummary', {
+              zone: config.recurring_discount.time_zone,
+            })}
+          </p>
+          <p>
+            {t('common.recurringDiscount.defaultSummary', {
+              percent: config.recurring_discount.default_percent,
+            })}
+          </p>
+          {config.discount.enabled && config.recurring_discount.enabled ? (
+            <p>{t('common.recurringDiscount.paused')}</p>
+          ) : null}
+          {config.recurring_discount.periods.map((period, index) => (
+            <p key={index}>
+              {t('common.recurringDiscount.periodSummary', {
+                days: period.weekdays.map((day) => t(weekdayKeys[day - 1]!)).join(', '),
+                start: period.start_time,
+                end: period.end_time,
+                percent: period.percent,
+              })}
+            </p>
+          ))}
+        </dd>
       </div>
     </dl>
   );

@@ -4,15 +4,16 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
+	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 )
 
 type backoffEnv struct {
@@ -35,17 +36,7 @@ func newBackoffEnv(t *testing.T) *backoffEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e.configure(t, "five_hour_week_month", nil)
 	return e
-}
-func (e *backoffEnv) configure(t *testing.T, profile string, rules []smartbackoff.Rule) {
-	t.Helper()
-	tx := beginTestTx(t, e.store.DB())
-	defer tx.Rollback()
-	if err := smartbackoff.Set(t.Context(), tx, e.donationKey, smartbackoff.Patch{Profile: &profile, Rules: &rules}, e.clock.Load()); err != nil {
-		t.Fatal(err)
-	}
-	commitTestTx(t, tx)
 }
 func (e *backoffEnv) request(t *testing.T, model int64) claim.Request {
 	t.Helper()
@@ -278,7 +269,7 @@ func TestSmartBackoffAcceptedHeadersRecoverBeforeCompletionWithoutEarlyNonstream
 		})
 	}
 }
-func TestSmartBackoffLateResultsCannotChangeNewConfigurationOrEpisode(t *testing.T) {
+func TestSmartBackoffLateResultsCannotChangeNewEpisode(t *testing.T) {
 	e := newBackoffEnv(t)
 	old, _ := e.dispatch(t)
 	first, _ := e.dispatch(t)
@@ -290,25 +281,21 @@ func TestSmartBackoffLateResultsCannotChangeNewConfigurationOrEpisode(t *testing
 	}
 	e.ready(t)
 	oldTrial, _ := e.dispatch(t)
-	e.configure(t, "day", []smartbackoff.Rule{{Kind: "code", Value: "custom", Period: "auto"}})
-	if e.status(t) != nil {
-		t.Fatal("changed config retained episode")
+	if err := e.rail.ObserveResponseHeaders(t.Context(), oldTrial, contract.ResponseObservation{Status: 200, ObservedAt: e.clock.Load()}); err != nil {
+		t.Fatal(err)
 	}
 	newer, _ := e.dispatch(t)
 	e.complete(t, newer, quotaOutcome("day"))
 	before = *e.status(t)
 	e.complete(t, oldTrial, quotaOutcome("month"))
 	if got := e.status(t); got == nil || *got != before {
-		t.Fatal("old generation changed config episode", got)
+		t.Fatal("accepted old trial changed newer episode", got)
 	}
 	var disposition string
-	if err := e.store.DB().QueryRow("SELECT streak_disposition FROM donation_usage_reservations WHERE claim_id=?", oldTrial.ClaimID()).Scan(&disposition); err != nil || disposition != "neutral" {
-		t.Fatal("dispatch snapshot lost neutral", disposition, err)
+	if err := e.store.DB().QueryRow("SELECT streak_disposition FROM donation_usage_reservations WHERE claim_id=?", oldTrial.ClaimID()).Scan(&disposition); err != nil || disposition != "success" {
+		t.Fatal("initial acceptance lost success", disposition, err)
 	}
-	e.configure(t, "day", []smartbackoff.Rule{{Kind: "code", Value: "custom", Period: "auto"}})
-	if got := e.status(t); got == nil || *got != before {
-		t.Fatal("same config reset episode", got)
-	}
+
 }
 func TestSmartBackoffExplicitResetAndEndedKeyCannotRevive(t *testing.T) {
 	e := newBackoffEnv(t)
@@ -326,5 +313,29 @@ func TestSmartBackoffExplicitResetAndEndedKeyCannotRevive(t *testing.T) {
 	e.complete(t, trial, quotaOutcome("month"))
 	if got := e.status(t); got == nil || *got != before {
 		t.Fatal("ended key mutated", got)
+	}
+}
+
+func TestAutomaticBackoffExpiredHeadersSuppressFirstEpisode(t *testing.T) {
+	for _, offset := range []int64{0, -60} {
+		t.Run(fmt.Sprint(offset), func(t *testing.T) {
+			e := newBackoffEnv(t)
+			if _, err := e.store.DB().Exec("UPDATE donation_keys SET failure_streak=? WHERE id=?", u128Blob(t, 2), e.donationKey); err != nil {
+				t.Fatal(err)
+			}
+			h, _ := e.dispatch(t)
+			if err := e.rail.ObserveResponseHeaders(t.Context(), h, contract.ResponseObservation{HasRetryAfter: true, Status: 429, ObservedAt: e.clock.Load(), RateLimitedUntil: e.clock.Load() + offset}); err != nil {
+				t.Fatal(err)
+			}
+			e.complete(t, h, quotaOutcome("month"))
+			if e.status(t) != nil {
+				t.Fatal("valid expired header fell back to body")
+			}
+			var streak []byte
+			if err := e.store.DB().QueryRow("SELECT failure_streak FROM donation_keys WHERE id=?", e.donationKey).Scan(&streak); err != nil {
+				t.Fatal(err)
+			}
+			assertU128(t, streak, 2, "expired header keeps streak")
+		})
 	}
 }

@@ -34,6 +34,8 @@ type StewardContextPenalty struct {
 	Fine           string `json:"fine"`
 }
 type CapabilityLongContext struct {
+	CurrentUserPriceMilli     *string                `json:"current_user_price_milli"`
+	CurrentUserPricesMilli    *CapabilityTokenPrices `json:"current_user_prices_milli"`
 	InputThreshold            string                 `json:"input_threshold"`
 	UserPriceMilli            *string                `json:"user_price_milli"`
 	DiscountedUserPriceMilli  *string                `json:"discounted_user_price_milli"`
@@ -179,17 +181,18 @@ func stewardContextPricing(p AdminPricing, out *StewardPricing) {
 		out.ContextPenalty = &StewardContextPenalty{InputThreshold: p.ContextPenalty.InputThreshold, Fine: p.ContextPenalty.Fine}
 	}
 }
-func capabilityContextPricing(out *CapabilityPricing, encoded string, discount int) error {
+func capabilityContextPricing(out *CapabilityPricing, encoded string, discount, current int) error {
 	p, err := credits.DecodeContextPricing(encoded)
 	if err != nil {
 		return ErrInvariant
 	}
 	if l := p.LongContext; l != nil {
-		v, err := capabilityPricing(out.Mode, l.RequestPrice, l.UserPrices, discount)
+		v, err := capabilityPricing(out.Mode, l.RequestPrice, l.UserPrices, discount, current)
 		if err != nil {
 			return err
 		}
 		out.LongContext = &CapabilityLongContext{
+			CurrentUserPriceMilli: v.CurrentUserPriceMilli, CurrentUserPricesMilli: v.CurrentUserPricesMilli,
 			InputThreshold: strconv.FormatInt(l.InputThreshold, 10), UserPriceMilli: v.UserPriceMilli,
 			DiscountedUserPriceMilli: v.DiscountedUserPriceMilli, UserPricesMilli: v.UserPricesMilli,
 			DiscountedUserPricesMilli: v.DiscountedUserPricesMilli,

@@ -209,3 +209,46 @@
     max-inline-size: 100%;
   }
 }
+
+.nb-recurring-discount .nb-recurring-discount__period {
+  display: grid;
+  gap: var(--nb-space-3);
+  min-width: 0;
+  margin: 0;
+  padding: var(--nb-space-3);
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-md);
+}
+.nb-recurring-discount__period > legend {
+  font-weight: var(--nb-font-weight-semibold);
+}
+.nb-recurring-discount .nb-recurring-discount__weekdays {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--nb-space-2) var(--nb-space-3);
+  padding: 0;
+  margin: 0;
+  border: 0;
+  min-width: 0;
+}
+.nb-recurring-discount__weekdays > legend {
+  margin-block-end: var(--nb-space-2);
+}
+.nb-recurring-discount__weekdays label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--nb-space-1);
+}
+.nb-recurring-discount__weekdays label,
+.nb-recurring-discount label.nb-inline {
+  min-block-size: var(--nb-space-10);
+  min-inline-size: var(--nb-space-10);
+  cursor: pointer;
+}
+.nb-recurring-discount .nb-field {
+  align-content: start;
+}
+.nb-recurring-discount input {
+  min-width: 0;
+  max-width: 100%;
+}

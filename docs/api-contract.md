@@ -136,9 +136,9 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 25. Normal startup accepts fresh storage and schema 25 only; exact schema 16–24 structures require the separate offline converter. Unknown or partial structures are rejected before writes. Startup validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for explicit source/target versions and rollback requirements.
+The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 26. Normal startup accepts fresh storage and schema 26 only; exact schema 16–25 structures require the separate offline converter. Unknown or partial structures are rejected before writes. Startup validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for explicit source/target versions and rollback requirements.
 
-Current account export `schema_version=23` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v23.json`. See §9 for its safe projections.
+Current account export `schema_version=24` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v24.json`. See §9 for its safe projections.
 
 ### 1.5 Display time context
 
@@ -576,12 +576,12 @@ Administrator and current level-6 steward donation projections contain the same 
 
 Every owner-visible key carries `safe_source`: a custom Connector/base URL or a mainstream channel/name/Connector/base URL. Internal source IDs, channel category/revision, report fingerprints, secrets, and management notes are excluded. A donation containing only keys from one immutable mainstream channel is approved atomically at creation. A fully custom donation remains pending. Mixed custom/mainstream or multiple-channel submissions are `invalid_request`.
 
-`CharityCapability.state` is `feature_disabled|no_models|no_candidates|available`; `donation_intake` is `open|closed`. Only models allowed for the caller's current level and with a usable candidate are listed. Charity candidates exclude the caller's own donated keys unless the caller is currently level 6; personal calls are unchanged. Level-6 self-donation calls receive normal rewards and cumulative donation credit. Each model contains `id,provider,model,full_name,pricing,discount,recent_success`. Pricing is a tagged union:
+`CharityCapability.state` is `feature_disabled|no_models|no_candidates|available`; `donation_intake` is `open|closed`. Only models allowed for the caller's current level and with a usable candidate are listed. Charity candidates exclude the caller's own donated keys unless the caller is currently level 6; personal calls are unchanged. Level-6 self-donation calls receive normal rewards and cumulative donation credit. Each model contains `id,provider,model,full_name,model_types,pricing,discount,recurring_discount,effective_discount,recent_success`. Pricing is a tagged union:
 
-- `per_request`: canonical base and current discounted user price;
-- `per_token`: canonical base and current price for uncached input, cache-write input, cache-read input, and output.
+- `per_request`: canonical base `user_price_milli`, configured fixed-percentage `discounted_user_price_milli`, and current payable `current_user_price_milli`;
+- `per_token`: corresponding `user_prices_milli`, `discounted_user_prices_milli` and `current_user_prices_milli` objects for uncached input, cache-write input, cache-read input, and output. The irrelevant mode fields are null.
 
-`discount` contains `enabled,percent,start_at,end_at`; the interval is `[start_at,end_at)`, nullable at either end. Effective prices use the same integer ceiling rule as billing. `server_now` is the single decision time used for availability and promotion status. No donated-resource identity is exposed.
+`discount` contains `enabled,percent,start_at,end_at`; the interval is `[start_at,end_at)`, nullable at either end. Enabling it pauses the recurring schedule even outside the fixed window, where full price applies. `recurring_discount` supplies a time zone, default payable percentage and at most 16 weekly periods. `effective_discount` contains `source,percent,next_change_at`; the latter is the next actual percentage change as a Unix second or null. Effective prices use the same integer ceiling rule as billing. `server_now` is the single decision time used for availability and pricing. Existing `discounted_*` fields use the configured fixed percentage regardless of the active window; consumers should use `current_user_*` for current prices. No donated-resource identity is exposed. See [weekly configuration, precedence, DST and frozen settlement](charity-discounts.md).
 
 The complete capability response shares one read-only snapshot, including current
 level, switches, models, availability and batched recent-success statistics.
@@ -591,7 +591,7 @@ directory responses remain `no-store` and have no complete-list cache or TTL.
 
 The web directory uses `GET /api/charity/models?view=catalog`. Optional single-value parameters are `q` (at most 128 Unicode code points and 512 UTF-8 bytes, no NUL), `allowed_for_me=true|false`, `allowed_level=1|2|3|4|5|6`, `currently_available=true|false`, `model_type=chat_completions|embeddings|images_generations`, `page`, and `page_size`. Omit a filter to apply no restriction; the filters are combined as an intersection. The web UI initially sends `allowed_for_me=true` and `currently_available=true`, while omitting `allowed_level` and `model_type`. Model-type filtering matches any model that includes the selected operation and applies before counting and pagination. It rejects cursor/limit and unknown or repeated parameters. Page numbers are canonical decimal strings from 1 to 2147483647; sizes are 10, 20, 50, or 100, with defaults 1 and 20. The response is `{models,pagination,donation_intake,server_now}`. Pagination contains decimal-string `page,total_items,total_pages` and integer `page_size`; empty results use page 1 of 1, and an excessive requested page is clamped to the last page.
 
-Catalog entries contain the six capability fields plus `public_description,enabled,allowed_levels,level_allowed,currently_available,availability`. They include unavailable models so users can understand the reason. Availability is `feature_disabled|model_disabled|level_denied|no_usable_key|available`, in that precedence. `currently_available` reports the current charity resource state independently of the caller's level; `availability` remains the caller-facing explanation. Ordinary active donor bans exclude that donor's bindings from resource availability; a permanent protective-inactivity ban remains exempt. Unbanning or expiry restores eligible supply without rebuilding bindings, and other eligible donors can keep the model available. The same donor rule applies to runtime candidates and management key-model availability. Search, count, ordered page, pricing and availability share one read-only snapshot and a five-second query budget. No donor rewards, bindings, physical resources or private notes appear in the directory.
+Catalog entries contain the capability model fields plus `public_description,enabled,allowed_levels,level_allowed,currently_available,availability`. They include unavailable models so users can understand the reason. Availability is `feature_disabled|model_disabled|level_denied|no_usable_key|available`, in that precedence. `currently_available` reports the current charity resource state independently of the caller's level; `availability` remains the caller-facing explanation. Ordinary active donor bans exclude the donor's bindings from resource availability; a permanent protective-inactivity ban remains exempt. Unbanning or expiry restores eligible supply without rebuilding bindings, and other eligible donors can keep the model available. The same donor rule applies to runtime candidates and management key-model availability. Search, count, ordered page, pricing and availability share one read-only snapshot and a five-second query budget. No donor rewards, bindings, physical resources or private notes appear in the directory.
 
 Administrator and steward model create/patch bodies accept `allowed_levels` and `public_description` within a 16 KiB request limit. Levels are unique integers 1–6, returned sorted. Omitted creation fields mean all six levels and an empty description; omitted patch fields remain unchanged. An explicit empty array blocks every ordinary caller, including L6. Null and duplicate/out-of-range levels are invalid. Descriptions are plain text, at most 1,024 code points and 4,096 UTF-8 bytes after CRLF-to-LF normalization; controls other than LF and TAB, including lone CR, are rejected. These fields use the existing model revision and idempotency rules.
 
@@ -600,6 +600,13 @@ Management model detail, create, and patch DTOs also carry the top-level `token_
 Pricing optionally includes independent `long_context` and `context_penalty` configurations. Their thresholds use reported input across ordinary, cache-write and cache-read buckets. Full alternate prices receive existing discounts; the one-time penalty does not. Request acceptance freezes both options. See [context pricing fields, replacement semantics and billing rules](charity-context-pricing.md).
 
 Model configuration also accepts optional `session_headers` for generated upstream session values. See the [field defaults, authority, lifetime and header-precedence contract](charity-session-headers.md). Public catalogue and capability DTOs do not expose this management configuration.
+
+Administrator and level-6 model writes accept top-level `recurring_discount`.
+Creation defaults to disabled; PATCH omission preserves it and an explicit object
+replaces it completely. Level 5 cannot write it, including within a model scope.
+Management model projections return the configuration, `effective_discount` and
+`server_now`; list entries share one decision time. The existing revision,
+idempotency and 16 KiB body limits apply.
 
 Level permission is rechecked at admission, claim and immediately before the dispatch marker. A denied level returns `403 forbidden`; an unavailable model returns `404 not_found`. A blocked unsent attempt releases its reservations. Already dispatched attempts finish under their accepted accounting, while later sends and retries must pass current access rules. Debug dry and live calls follow the same caller-level restriction.
 
@@ -665,7 +672,7 @@ approval, expiry, donor restrictions and quota rules still apply.
 
 ### 4.1.3 Smart donated-key backoff
 
-Smart backoff is optional per donated key and applies to charity calls. It keeps
+Smart backoff automatically applies to charity calls without per-key setup. It keeps
 the normal consecutive-failure policy: only a recognized quota error leaves the
 current streak unchanged. Initial HTTP 200 still resets it, including later
 read or protocol failure. A valid retry header, including zero or a past deadline,
@@ -675,57 +682,50 @@ Authorized key projections and failure-policy responses include:
 
 | Field | Shape |
 | --- | --- |
-| `smart_backoff_profile` | `none` (default), `five_hour_week`, `five_hour_week_month`, `day`, or `day_month`. |
-| `smart_backoff_rules` | Ordered array of at most eight supplemental rules; default `[]`. |
 | `smart_backoff` | Null, or `{state,reason,source,retry_at}`; `retry_at` is Unix seconds. |
 
-A rule is `{kind,value,period}`. `kind:"code"` matches `error.code` or
-`error.type` exactly and case-sensitively; its trimmed value contains 1–64
-ASCII letters, digits, dots, underscores, colons or hyphens.
-`kind:"message"` matches a fixed, case-sensitive substring of `error.message`;
-its trimmed value contains 1–160 Unicode characters without control characters.
-No regular expressions are supported. `period` is
-`auto|five_hour|day|week|month`, defaults to `auto` on input, and is always
-present in responses. An explicit period must belong to the profile; a disabled
-profile may retain rules without running them. The first matching rule wins.
-`auto` uses an explicit period when available, otherwise the short schedule.
+The former `smart_backoff_profile` and `smart_backoff_rules` fields are removed
+from creation, policy updates, responses and account exports. Requests containing
+them fail strict validation. Remove the fields from clients; no replacement
+setting is needed. Personal calls and model discovery do not enable this feature.
 
 Classification uses bounded, complete structured error JSON from a non-200
 response without a valid retry header. Built-ins require evidence of recoverable
 periodic quota exhaustion: recognized business codes with matching quota context
 or explicit quota/reset wording. HTTP status alone, generic quota words, billing
 failures, expired plans, permission failures, context limits, ordinary RPM/TPM
-limits and overload are insufficient. An applicable built-in result takes
-precedence; otherwise supplemental rules can identify an upstream-specific error.
+limits and overload are insufficient.
 Unknown, malformed or truncated responses keep the existing failure policy.
 Successful content is never searched.
 
 Without a reliable reset time, a short or unknown quota period waits 15 minutes,
 then 30, then 60 after successive quota failures from actual trial requests,
 capped at 60 minutes. Explicit weekly and monthly exhaustion waits six and twelve
-hours respectively. A reliable reset time with an explicit time zone is preferred.
-Profiles limit applicable periods; elapsed waiting never implies a longer quota.
+hours respectively. A reliable future reset time with an explicit time zone is preferred.
+All supported periods are recognized; elapsed waiting never implies a longer quota.
 
 State is `waiting|ready|probing`; reason is
 `five_hour_quota|day_quota|week_quota|month_quota|quota`, and source is
-`builtin|custom_rule`. These fields contain no raw error or internal claim ID.
+`builtin|custom_rule`. New recognition uses `builtin`; `custom_rule` remains
+readable for episodes retained during an upgrade. These fields contain no raw
+error or internal claim ID.
 At the deadline, the next eligible real charity request atomically claims one
 trial across all models using the key. No traffic means no probe. The trial's
 initial HTTP 200 clears the smart episode before a stream completes.
 Ordinary trial failures count normally and reuse the current interval;
 cancellation or unknown recovery does not count or advance the interval.
-Old in-flight results cannot clear or advance a newer episode or policy.
+Old in-flight results cannot clear or advance a newer episode.
 
-Changing the profile or rules clears the previous smart episode. Saving the same
-configuration, changing only the threshold, or resetting the failure streak does
-not. These actions never clear header cooldown. `rate_limited_until` remains
+The upgrade preserves active smart episodes and in-flight trial facts while
+discarding obsolete configuration. Changing the failure threshold or resetting
+the failure streak preserves smart state and header cooldown. `rate_limited_until` remains
 header-only; smart `waiting` and `probing` also project
 `charity_state:"rate_limited"`. Ready state still requires every ordinary
 ownership, approval, enablement, expiry, quota and admission check.
 
 ### 4.2 Donation failure-streak reset
 
-Each key's `failure_disable_threshold` is a canonical decimal U128 string, default `"10"` on creation and migration. Owners, administrators and current stewards can independently `PATCH {prefix}/donations/{id}/keys/{keyId}/failure-policy`, using `/api`, `/admin/api` or `/api/steward` respectively. The body requires `{expected_revision,failure_disable_threshold}` with `Idempotency-Key` and accepts optional `smart_backoff_profile` and `smart_backoff_rules` (§4.1.3). Omission preserves configuration, null is rejected, and `[]` clears rules. Idempotency distinguishes omission from an explicit value. The safe response includes `donation_id,donation_key_id,failure_disable_threshold,failure_streak,failure_disabled,revision` and the three smart-backoff fields. New donations accept the same optional configuration per key, defaulting to `none/[]`.
+Each key's `failure_disable_threshold` is a canonical decimal U128 string, default `"10"` on creation and migration. Owners, administrators and current stewards can independently `PATCH {prefix}/donations/{id}/keys/{keyId}/failure-policy`, using `/api`, `/admin/api` or `/api/steward` respectively. The strict body requires `{expected_revision,failure_disable_threshold}` with `Idempotency-Key`. The safe response includes `donation_id,donation_key_id,failure_disable_threshold,failure_streak,failure_disabled,revision` and nullable `smart_backoff` (§4.1.3). New donations need no smart-backoff configuration.
 
 Saving retains the current count and generation and atomically recalculates error-disablement: `0` clears it; a positive threshold disables when the count reaches that threshold. Zero still records failures. Upstream HTTP 200 or a protocol-complete success clears the count, regardless of later errors. Without either, a non-200 response with a valid retry hint or an error recognized by its smart-backoff policy is neutral; other upstream response/protocol/DNS/connect/timeout failures increase it; caller cancellation, downstream failure, Debug stop, platform rejection and internal failure leave it unchanged. A confirmed upstream failure still counts after a later cancellation. Recovery uses a persisted HTTP 200 acceptance checkpoint when available; an unknown outcome is neutral. Fees and quotas follow the billing rules above. Ordered in-flight results use the latest saved threshold; old-generation completions cannot change current state. Manual disablement, expiry, withdrawal, bans, quotas and ownership checks continue to apply. Pages warn when zero is entered or saved, without extra confirmation. Each real save has a no-secret review audit; replay repeats no write or alarm. Only a transition into error-disablement alerts; clearing and later disabling can alert again.
 
@@ -1102,9 +1102,9 @@ pricing or template access and does not depend on a mainstream-source flag.
 
 ### 6.3 Steward CallerKey automation
 
-`GET|PATCH /api/steward/automation/donation-key-failure-policy` uses the same current L6, CallerKey, lifecycle, maintenance and four-global/one-per-user concurrency gates. GET accepts only `donation_id` and `donation_key_id` query parameters and no body. PATCH requires those IDs, `expected_revision` and `failure_disable_threshold`, accepts optional `smart_backoff_profile` and `smart_backoff_rules`, requires `Idempotency-Key`, and returns the safe policy receipt described in §4.2. Its 30-second bound and shared mutation limits apply. Policy management follows ordinary retained donation-management visibility; it cannot access or modify another user's private credentials. Unknown fields, noncanonical values and forbidden methods fail; stale revision gives 409, missing/unavailable objects 404 and revoked authority 401/403. Current authority and object visibility are checked before replay.
+`GET|PATCH /api/steward/automation/donation-key-failure-policy` uses the same current L6, CallerKey, lifecycle, maintenance and four-global/one-per-user concurrency gates. GET accepts only `donation_id` and `donation_key_id` query parameters and no body. PATCH requires those IDs, `expected_revision` and `failure_disable_threshold`, requires `Idempotency-Key`, and returns the safe policy receipt described in §4.2. Its 30-second bound and shared mutation limits apply. Policy management follows ordinary retained donation-management visibility; it cannot access or modify another user's private credentials. Unknown fields, noncanonical values and forbidden methods fail; stale revision gives 409, missing/unavailable objects 404 and revoked authority 401/403. Current authority and object visibility are checked before replay.
 
-`POST /api/steward/automation/donations` atomically creates one custom endpoint and 1–100 owned keys, submits them in one donation and approves it as the calling steward. It requires `Idempotency-Key` and returns 201 `{endpoint_id,donation_id,keys:[{endpoint_key_id,donation_key_id}]}`. Explicit `connector_type` and URL are required; OpenAI-compatible, Anthropic-compatible and AI SDK Gateway v3 custom sources are supported. Optional per-key settings include recurring limits and `failure_disable_threshold` (canonical U128 string, default `"10"`). Per-key `smart_backoff_profile` and `smart_backoff_rules` are optional and default to `none/[]` (§4.1.3). Channel IDs and ownership-confirmation fields are not accepted by this dedicated operation.
+`POST /api/steward/automation/donations` atomically creates one custom endpoint and 1–100 owned keys, submits them in one donation and approves it as the calling steward. It requires `Idempotency-Key` and returns 201 `{endpoint_id,donation_id,keys:[{endpoint_key_id,donation_key_id}]}`. Explicit `connector_type` and URL are required; OpenAI-compatible, Anthropic-compatible and AI SDK Gateway v3 custom sources are supported. Optional per-key settings include recurring limits and `failure_disable_threshold` (canonical U128 string, default `"10"`). Smart backoff is automatic and accepts no per-key configuration (§4.1.3). Channel IDs and ownership-confirmation fields are not accepted by this dedicated operation.
 
 `POST /api/steward/automation/model-bindings` accepts `{charity_model_id,donation_key_ids,upstream_model_id,manual?}` and processes only the caller's own donation keys. Automatic mode requires this request's successful fresh discovery; manual mode ensures an exact entry with empty new metadata, preserving existing metadata. Repeated identical bindings succeed without reordering. The response is `{charity_model_id,results:[{donation_key_id,status,code?,message?}]}`, with `success|failed|incomplete` in input order. At least one success gives 200; zero successes gives 504 for any incomplete item, otherwise 422. This endpoint has no whole-batch replay receipt.
 
@@ -1286,7 +1286,7 @@ disablement or deletion never change models that previously copied it.
 | `GET /api/steward/charity-price-templates` and `GET .../{id}` | Current L6 session only; list state must be `enabled`; disabled detail returns 404. |
 
 Lists return `{data,pagination}`. A template has `id,name,description,enabled,
-revision,pricing,token_reserve_credits,discount,created_at,updated_at`. IDs and
+revision,pricing,token_reserve_credits,discount,recurring_discount,created_at,updated_at`. IDs and
 revisions are decimal strings; timestamps are Unix seconds. Names are trimmed,
 1–80 Unicode code points without controls; descriptions are LF-normalized text
 of at most 500 code points. There are at most 256 templates, including disabled
@@ -1297,7 +1297,9 @@ POST/PUT require `name,description,enabled,pricing,token_reserve_credits,discoun
 `token_reserve_credits` must be present even when null. POST rejects
 `expected_revision`; PUT and DELETE require it. Mutations use the ordinary
 `Idempotency-Key`, strict JSON, current-authorization and replay contract. GETs
-have no body; mutations have no query parameters.
+have no body; mutations have no query parameters. Optional `recurring_discount`
+defaults to the disabled object on both POST and PUT. PUT is a complete
+replacement, so omission clears any previously configured schedule.
 
 | Copied field | Meaning and replacement behavior |
 | --- | --- |
@@ -1308,6 +1310,7 @@ have no body; mutations have no query parameters.
 | `pricing.context_penalty` | Null/absent disables it and clears its values; otherwise copy `input_threshold,fine`. |
 | `token_reserve_credits` | Null clears the form override to inherited global reserve; otherwise copy the canonical credit string. It remains stored but inactive in request mode. |
 | `discount` | Replace all of `enabled,percent,start_at,end_at`, including false, zero and null; do not merge with stale form values. Percent is an integer 0–100; nullable times use Unix seconds and a configured start must precede the end. |
+| `recurring_discount` | Replace `enabled,time_zone,default_percent,periods` completely, including false, zero and an empty array. Applying a template copies both discount configurations; it never merges them with previous form values. |
 
 Prices, rewards, thresholds, reserve bounds and context behavior use the model's
 existing validators and [context pricing contract](charity-context-pricing.md).
@@ -1323,6 +1326,11 @@ actor link for 90 days; deleted actor identity becomes null. They do not store
 price-field differences. Shared templates and audits are excluded from personal exports.
 
 ### 7.4.2 Binding selection and compact receipts
+
+The [binding workflow contract](charity-bindings.md) defines existing-binding
+markers, manual single-key batches spanning several charity models, and shared
+channel presets. Those new batch routes return per-item skip results. The
+per-model routes below retain their original behavior.
 
 Both management prefixes expose `GET {prefix}/charity-models/{id}/binding-donations`
 and `GET .../binding-donations/{donationId}/keys`, alongside binding candidates.
@@ -1432,7 +1440,7 @@ Lineage items are exactly `{donation_id,donation_key_id,donation_status,key_stat
 
 ## 9. Export, privacy, and account deletion
 
-`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v23.json`, with `schema_version:23` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema.
+`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v24.json`, with `schema_version:24` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema.
 
 The top-level fields include `limited_activities`, `image_tasks` and `inactivity`. Limited activities contain the safe general/paper/brush wallet projection and own exchange receipts; the existing game wallet remains separate. Image tasks contain only local ID, state, requested/actual image counts, times, billing state and two-currency charge/refund facts. Inactivity contains safe own activity timestamps and retained execution outcomes. No prompts, complete execution parameters, images, source facts, raw errors, risk rules, private adapter/configuration or upstream task identifiers are included.
 

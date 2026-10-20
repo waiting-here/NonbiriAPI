@@ -114,8 +114,18 @@ func sourceFixtureFromDDL(t *testing.T, sourceDDL string, version int, manifest 
 			columns[i] = quote(columns[i])
 		}
 		projection := strings.Join(columns, ",")
+		sourceColumns := append([]string(nil), columns...)
+		for i, column := range columns {
+			if table == "donation_key_backoffs" && column == quote("profile") {
+				sourceColumns[i] = "'none'"
+			} else if table == "dispatch_smart_backoff_facts" && column == quote("profile") {
+				sourceColumns[i] = "'day'"
+			} else if table == "donation_key_backoffs" && column == quote("rules_json") {
+				sourceColumns[i] = "'[]'"
+			}
+		}
 		mustExec(t, tx, "DELETE FROM main."+quote(table))
-		mustExec(t, tx, "INSERT INTO main."+quote(table)+" ("+projection+") SELECT "+projection+" FROM seed."+quote(table))
+		mustExec(t, tx, "INSERT INTO main."+quote(table)+" ("+projection+") SELECT "+strings.Join(sourceColumns, ",")+" FROM seed."+quote(table))
 	}
 	mustExec(t, tx, "DELETE FROM main.sqlite_sequence;INSERT INTO main.sqlite_sequence SELECT * FROM seed.sqlite_sequence WHERE name IN (SELECT name FROM main.sqlite_schema WHERE type='table')")
 	mustExec(t, tx, "UPDATE schema_state SET version=?", version)

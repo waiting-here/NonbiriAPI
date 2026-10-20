@@ -1,3 +1,4 @@
+import type { RecurringDiscount } from '@shared/operations/recurringDiscount';
 import { SessionHeaderFields } from './SessionHeaderFields';
 import { PriceTools } from './PriceTools';
 import {
@@ -114,6 +115,7 @@ interface ModelDraft {
   requestDonor: string;
   userPrices: TokenPrices;
   donorRewards: TokenPrices;
+  recurringDiscount: RecurringDiscount;
   discountEnabled: boolean;
   discountPercent: number;
   discountStart: TimeDraft;
@@ -185,6 +187,7 @@ function modelBody(
           }
         : {}),
     },
+    recurring_discount: structuredClone(draft.recurringDiscount),
     discount: {
       enabled: draft.discountEnabled,
       percent: draft.discountPercent,
@@ -213,7 +216,8 @@ type ModelValidation =
   | 'tokenReserveCredits'
   | 'affinityTTLSeconds'
   | 'discountPercent'
-  | 'discountDates';
+  | 'discountDates'
+  | 'recurringDiscount';
 
 function modelDraftError(draft: ModelDraft): ModelValidation | null {
   if (
@@ -582,6 +586,7 @@ function ModelForm({
               onChange={(fields) => setDraft((current) => ({ ...current, ...fields }))}
               modeRef={pricingModeInput}
               discountError={discountError}
+              recurringError={validationError === 'recurringDiscount'}
               actions={
                 <>
                   <Button
@@ -680,7 +685,9 @@ function ModelForm({
                 ? t('common.operations.charity.validation.publicDescription')
                 : validationError === 'affinityTTLSeconds'
                   ? t('common.operations.charity.validation.affinityTTLSeconds')
-                  : t(`common.operations.charity.validation.${validationError}`)}
+                  : validationError === 'recurringDiscount'
+                    ? t('common.operations.charity.validation.recurringDiscount')
+                    : t(`common.operations.charity.validation.${validationError}`)}
         </p>
       ) : null}
       <div className="ops-actions">
@@ -1274,9 +1281,9 @@ export function ModelsPanel({
   );
   const resourceDenied = Boolean(
     logReturnTo &&
-      isForbidden(detail.error) &&
-      !isUnauthorized(models.error) &&
-      !isForbidden(models.error),
+    isForbidden(detail.error) &&
+    !isUnauthorized(models.error) &&
+    !isForbidden(models.error),
   );
   useEffect(() => {
     if (capabilityLost && !resourceDenied) onCapabilityLoss?.();

@@ -19,6 +19,7 @@ import {
 import { managementResourceID, validManagementSearch } from './charityModelPages';
 
 export interface CharityBindingCandidatePageFilters {
+  include_bound?: boolean;
   key_state?: KeyStateFilter;
   donation_id?: string;
   donation_key_id?: string;
@@ -87,7 +88,7 @@ function inputOneOf<const T extends string>(
 function inputCandidateFilters(value: unknown): Required<CharityBindingCandidatePageFilters> {
   const root = inputRecord(
     value,
-    ['donation_id', 'donation_key_id', 'source', 'q', 'key_state'],
+    ['donation_id', 'donation_key_id', 'source', 'q', 'key_state', 'include_bound'],
     'binding candidate page filters',
   );
   const donationID =
@@ -110,7 +111,14 @@ function inputCandidateFilters(value: unknown): Required<CharityBindingCandidate
     root.key_state === undefined
       ? 'all'
       : inputOneOf(root.key_state, KEY_STATES, 'key state filter');
-  return { donation_id: donationID, donation_key_id: donationKeyID, source, q, key_state };
+  return {
+    donation_id: donationID,
+    donation_key_id: donationKeyID,
+    source,
+    q,
+    key_state,
+    include_bound: root.include_bound === true,
+  };
 }
 
 function candidateFilters(
@@ -118,7 +126,7 @@ function candidateFilters(
 ): Required<CharityBindingCandidatePageFilters> {
   const root = exactRecord(
     value,
-    ['donation_id', 'donation_key_id', 'source', 'q', 'key_state'],
+    ['donation_id', 'donation_key_id', 'source', 'q', 'key_state', 'include_bound'],
     'binding candidate page filters',
     [],
   );
@@ -135,7 +143,14 @@ function candidateFilters(
   const q = root.q === undefined ? '' : queryText(root.q, 'candidate search');
   const key_state =
     root.key_state === undefined ? 'all' : oneOf(root.key_state, KEY_STATES, 'key state filter');
-  return { donation_id: donationID, donation_key_id: donationKeyID, source, q, key_state };
+  return {
+    donation_id: donationID,
+    donation_key_id: donationKeyID,
+    source,
+    q,
+    key_state,
+    include_bound: root.include_bound === true,
+  };
 }
 
 function normalizeCandidatePage(
@@ -156,7 +171,11 @@ function normalizeCandidatePage(
   if (root.next_cursor !== null) invalidResponse(`${role} binding candidate cursor`);
   const metadata = normalizePageMetadata(root.pagination);
   const data = array(root.data, `${role} binding candidate data`, 100).map((entry, index) =>
-    normalizeCharityBindingCandidate(entry, `${role} binding candidate ${index + 1}`),
+    normalizeCharityBindingCandidate(
+      entry,
+      `${role} binding candidate ${index + 1}`,
+      normalizedFilters.include_bound,
+    ),
   );
   validatePageResponse(metadata, page, pageSize);
   if (
@@ -217,6 +236,7 @@ export function getManagedBindingCandidatesPage(
       source: normalizedFilters.source || undefined,
       q: normalizedFilters.q || undefined,
       key_state: filters.key_state === undefined ? undefined : normalizedFilters.key_state,
+      include_bound: normalizedFilters.include_bound || undefined,
       page,
       page_size: pageSize,
     }),

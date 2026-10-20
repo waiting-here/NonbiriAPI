@@ -142,8 +142,6 @@ function endpointKey(
           : 1_800_003_600
         : options.expiresAt,
     failure_disable_threshold: '10',
-    smart_backoff_profile: 'none' as const,
-    smart_backoff_rules: [],
     smart_backoff: null,
     streak: { generation: '1', count: '0', failure_disabled: false },
     ended_reason:
@@ -550,12 +548,23 @@ test.describe('donation expiry in UTC', () => {
         state: 'available',
         models: [
           {
+            recurring_discount: {
+              enabled: false,
+              time_zone: 'UTC',
+              default_percent: 100,
+              periods: [],
+            },
+            effective_discount: { source: 'fixed', percent: 80, next_change_at: null },
+
             model_types: ['chat_completions', 'embeddings'],
             id: '7',
             provider: 'provider',
             model: 'charity',
             full_name: '[公益]provider/charity',
             pricing: {
+              current_user_price_milli: '2400',
+              current_user_prices_milli: null,
+
               mode: 'per_request',
               user_price_milli: '3000',
               discounted_user_price_milli: '2400',
@@ -581,12 +590,23 @@ test.describe('donation expiry in UTC', () => {
       body: catalogPage(
         [
           {
+            recurring_discount: {
+              enabled: false,
+              time_zone: 'UTC',
+              default_percent: 100,
+              periods: [],
+            },
+            effective_discount: { source: 'fixed', percent: 80, next_change_at: null },
+
             model_types: ['chat_completions', 'embeddings'],
             id: '7',
             provider: 'provider',
             model: 'charity',
             full_name: '[公益]provider/charity',
             pricing: {
+              current_user_price_milli: '2400',
+              current_user_prices_milli: null,
+
               mode: 'per_request',
               user_price_milli: '3000',
               discounted_user_price_milli: '2400',
@@ -698,7 +718,7 @@ test.describe('donation expiry in UTC', () => {
     const priceTable = page.getByRole('table', { name: 'Charity model prices' });
     await expect(priceTable).toBeVisible();
     await expect(priceTable.getByLabel('Original price: 3')).toBeVisible();
-    await expect(priceTable.getByLabel('Offer price: 2.4')).toBeVisible();
+    await expect(priceTable.getByLabel('Current price: 2.4')).toBeVisible();
     await expect(
       page.locator('.charity-model-detail .charity-discount').getByText('20% off', { exact: true }),
     ).toBeVisible();
@@ -811,12 +831,28 @@ for (const locale of ['en', 'zh'] as const) {
         state: 'available',
         models: [
           {
+            recurring_discount: {
+              enabled: false,
+              time_zone: 'UTC',
+              default_percent: 100,
+              periods: [],
+            },
+            effective_discount: { source: 'fixed', percent: 80, next_change_at: null },
+
             model_types: ['chat_completions', 'embeddings'],
             id: '7',
             provider: 'provider',
             model: 'charity',
             full_name: '[公益]provider/charity',
             pricing: {
+              current_user_price_milli: null,
+              current_user_prices_milli: {
+                uncached_input: '8000000',
+                cache_write_input: '8000000',
+                cache_read_input: '1280000',
+                output: '24000000',
+              },
+
               mode: 'per_token',
               user_price_milli: null,
               discounted_user_price_milli: null,
@@ -852,12 +888,28 @@ for (const locale of ['en', 'zh'] as const) {
       body: catalogPage(
         [
           {
+            recurring_discount: {
+              enabled: false,
+              time_zone: 'UTC',
+              default_percent: 100,
+              periods: [],
+            },
+            effective_discount: { source: 'fixed', percent: 80, next_change_at: null },
+
             model_types: ['chat_completions', 'embeddings'],
             id: '7',
             provider: 'provider',
             model: 'charity',
             full_name: '[公益]provider/charity',
             pricing: {
+              current_user_price_milli: null,
+              current_user_prices_milli: {
+                uncached_input: '8000000',
+                cache_write_input: '8000000',
+                cache_read_input: '1280000',
+                output: '24000000',
+              },
+
               mode: 'per_token',
               user_price_milli: null,
               discounted_user_price_milli: null,
@@ -1011,8 +1063,6 @@ test('administrator charity provenance grouping and report lineage expose safe d
     authorized_expires_at: 1_800_003_600,
     expires_at: 1_800_003_600,
     failure_disable_threshold: '10',
-    smart_backoff_profile: 'none' as const,
-    smart_backoff_rules: [],
     smart_backoff: null,
     streak: { generation: '1', count: '0', failure_disabled: false },
     ended_reason: null,

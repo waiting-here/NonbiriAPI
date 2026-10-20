@@ -237,12 +237,6 @@ type Dispatch struct {
 }
 
 func (d *Dispatch) IsBackoffTrial() bool { return d != nil && d.backoff.Trial }
-func (d *Dispatch) BackoffConfig() smartbackoff.Config {
-	if d == nil {
-		return smartbackoff.Default()
-	}
-	return d.backoff.Config
-}
 
 func (d *Dispatch) Handle() Handle {
 	if d == nil {

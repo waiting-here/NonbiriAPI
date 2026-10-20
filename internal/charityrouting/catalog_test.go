@@ -125,11 +125,19 @@ func TestCatalogExplainsAllStatesWithoutPrivateFieldsOrWrites(t *testing.T) {
 		if err := json.Unmarshal(encoded, &fields); err != nil {
 			t.Fatal(err)
 		}
-		if len(fields) != 14 {
+		if len(fields) != 16 || fields["recurring_discount"] == nil || fields["effective_discount"] == nil {
 			t.Fatalf("catalog model fields: %s", encoded)
 		}
+		var effective map[string]json.RawMessage
+		if err := json.Unmarshal(fields["effective_discount"], &effective); err != nil || len(effective) != 3 ||
+			effective["source"] == nil || effective["percent"] == nil || effective["next_change_at"] == nil {
+			t.Fatalf("public effective discount fields: %s", fields["effective_discount"])
+		}
+		// The public discount source is separate from private candidate sources.
+		delete(fields, "effective_discount")
+		privacyBody, _ := json.Marshal(fields)
 		for _, forbidden := range []string{"source", "bindings", "donor_reward", "limits", "donation_key_id", "owner", "route_strategy"} {
-			if strings.Contains(string(encoded), `"`+forbidden+`"`) {
+			if strings.Contains(string(privacyBody), `"`+forbidden+`"`) {
 				t.Fatalf("private field %s: %s", forbidden, encoded)
 			}
 		}

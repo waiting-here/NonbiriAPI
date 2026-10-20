@@ -183,12 +183,17 @@ const CHARITY_OPEN: CharityCapability = {
   state: 'available',
   models: [
     {
+      recurringDiscount: { enabled: false, time_zone: 'UTC', default_percent: 100, periods: [] },
+      effectiveDiscount: { source: 'fixed', percent: 80, next_change_at: null },
+
       modelTypes: ['chat_completions', 'embeddings'],
       id: '7',
       provider: 'provider',
       model: 'charity-model',
       fullName: '[公益]provider/charity-model',
       pricing: {
+        currentUserPriceMilli: '2400',
+
         mode: 'per_request',
         userPriceMilli: '3000',
         discountedUserPriceMilli: '2400',
@@ -311,7 +316,19 @@ describe('public charity pricing', () => {
       models: [
         {
           ...CHARITY_OPEN.models[0],
+          effectiveDiscount: {
+            source: 'fixed',
+            percent: 100,
+            next_change_at: CHARITY_OPEN.serverNow + 600,
+          },
           pricing: {
+            currentUserPricesMilli: {
+              uncachedInput: '1000',
+              cacheWriteInput: '2000',
+              cacheReadInput: '500',
+              output: '3000',
+            },
+
             mode: 'per_token',
             userPricesMilli: {
               uncachedInput: '1000',
@@ -339,8 +356,8 @@ describe('public charity pricing', () => {
       station: 'user',
       role: 'user',
     });
-    expect(screen.getByText(charityCopy.discountUpcoming)).toBeVisible();
-    expect(screen.getByLabelText(`${charityCopy.userPrice}: 0.5`)).toBeVisible();
+    expect(screen.getByText(charityCopy.discountUpcoming, { exact: false })).toBeVisible();
+    expect(screen.getByLabelText(`${charityCopy.currentPrice}: 0.5`)).toBeVisible();
     expect(screen.queryByLabelText(`${charityCopy.currentPrice}: 0.25`)).toBeNull();
   });
 });
@@ -861,8 +878,6 @@ describe('donation composer recovery', () => {
       tokenReserve: 8,
       expiresAt: 1_900_000_000,
       failureDisableThreshold: '10',
-      smartBackoffProfile: 'none' as const,
-      smartBackoffRules: [],
       smartBackoff: null,
       streak: { generation: '2', count: '3', failureDisabled: false },
       endedReason: null,
@@ -925,7 +940,7 @@ describe('donation composer recovery', () => {
       },
       physicalEnabled: false,
       charityState: 'disabled',
-      rateLimitedUntil: null,
+      rateLimitedUntil: 1_900_000_000,
       limits: { price: null, calls: null, tokens: null },
       usage: {
         priceUsed: '0',
@@ -938,8 +953,6 @@ describe('donation composer recovery', () => {
       tokenReserve: 0,
       expiresAt: null,
       failureDisableThreshold: '10',
-      smartBackoffProfile: 'none' as const,
-      smartBackoffRules: [],
       smartBackoff: null,
       streak: { generation: '1', count: '10', failureDisabled: true },
       endedReason: null,
@@ -950,6 +963,7 @@ describe('donation composer recovery', () => {
     });
     expect(screen.getByText(charityCopy.keyState.physical_disabled)).toBeInTheDocument();
     expect(screen.getByText(charityCopy.keyState.failure_disabled)).toBeInTheDocument();
+    expect(screen.getByText('Upstream wait')).toBeInTheDocument();
     rendered.rerender(
       <DonationKeyPanel
         donationKey={{
@@ -958,8 +972,6 @@ describe('donation composer recovery', () => {
           charityState: 'exhausted',
           limits: { price: '0', calls: '0', tokens: '0' },
           failureDisableThreshold: '10',
-          smartBackoffProfile: 'none' as const,
-          smartBackoffRules: [],
           smartBackoff: null,
           streak: { generation: '1', count: '0', failureDisabled: false },
         }}
@@ -968,6 +980,7 @@ describe('donation composer recovery', () => {
     expect(screen.getByText(charityCopy.keyState.price_exhausted)).toBeInTheDocument();
     expect(screen.getByText(charityCopy.keyState.calls_exhausted)).toBeInTheDocument();
     expect(screen.getByText(charityCopy.keyState.tokens_exhausted)).toBeInTheDocument();
+    expect(screen.getByText('Upstream wait')).toBeInTheDocument();
     rendered.rerender(
       <DonationKeyPanel
         donationKey={{
@@ -983,6 +996,9 @@ describe('donation composer recovery', () => {
     expect(screen.getByText(/Expected recovery:/)).toBeInTheDocument();
     expect(screen.queryByText(charityCopy.keyState.physical_disabled)).not.toBeInTheDocument();
     expect(screen.queryByText(charityCopy.keyState.disabled)).not.toBeInTheDocument();
+    rendered.rerender(<DonationKeyPanel donationKey={{ ...key, rateLimitedUntil: 1 }} />);
+    expect(screen.queryByRole('region', { name: 'Recovery status' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Recovery status')).not.toBeInTheDocument();
   });
 
   it.each([

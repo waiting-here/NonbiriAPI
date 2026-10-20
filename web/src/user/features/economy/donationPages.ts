@@ -92,8 +92,6 @@ const OWNER_KEY_FIELDS = [
   'usage',
   'token_reserve',
   'failure_disable_threshold',
-  'smart_backoff_profile',
-  'smart_backoff_rules',
   'smart_backoff',
   'expires_at',
   'streak',
@@ -417,8 +415,6 @@ function normalizeOwnerKey(
       ? { breakdown_started_at: root.breakdown_started_at }
       : {}),
     failure_disable_threshold: root.failure_disable_threshold,
-    smart_backoff_profile: root.smart_backoff_profile,
-    smart_backoff_rules: root.smart_backoff_rules,
     smart_backoff: root.smart_backoff,
     expires_at: root.expires_at,
     streak: root.streak,

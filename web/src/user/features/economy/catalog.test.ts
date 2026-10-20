@@ -18,12 +18,18 @@ const SERVER_NOW = 1_800_000_000;
 
 function catalogModel(overrides: Record<string, unknown> = {}) {
   return {
+    recurring_discount: { enabled: false, time_zone: 'UTC', default_percent: 100, periods: [] },
+    effective_discount: { source: 'fixed', percent: 80, next_change_at: null },
+
     model_types: ['chat_completions', 'embeddings'],
     id: '1',
     provider: 'provider',
     model: 'model',
     full_name: '[公益]provider/model',
     pricing: {
+      current_user_price_milli: '2400',
+      current_user_prices_milli: null,
+
       mode: 'per_request',
       user_price_milli: '3000',
       discounted_user_price_milli: '2400',
@@ -81,7 +87,11 @@ describe('charity catalog normalizer', () => {
       levelAllowed: true,
       currentlyAvailable: true,
       availability: 'available',
-      pricing: { userPriceMilli: '3000', discountedUserPriceMilli: '2400' },
+      pricing: {
+        currentUserPriceMilli: '2400',
+        userPriceMilli: '3000',
+        discountedUserPriceMilli: '2400',
+      },
     });
   });
 

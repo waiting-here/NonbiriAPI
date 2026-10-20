@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/waiting-here/NonbiriAPI/internal/charityaccess"
+	"github.com/waiting-here/NonbiriAPI/internal/charitydiscount"
 	"github.com/waiting-here/NonbiriAPI/internal/modeltype"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
 	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
@@ -33,6 +34,12 @@ func RegisterAdminRoutes(registrar AdminRouteRegistrar, service *Service) error 
 		method, pattern string
 		handler         http.HandlerFunc
 	}{
+		{http.MethodGet, routeAdminKeyBindingOptions, api.adminKeyBindingOptions},
+		{http.MethodPost, routeAdminKeyBindingBatch, api.adminKeyBindingBatch},
+		{http.MethodPost, routeAdminApplyBindingPreset, api.adminApplyBindingPreset},
+		{http.MethodGet, routeAdminBindingPresets, api.adminBindingPresets},
+		{http.MethodGet, routeAdminBindingPreset, api.adminBindingPreset},
+		{http.MethodPut, routeAdminBindingPreset, api.adminSaveBindingPreset},
 		{http.MethodGet, routeAdminPriceTemplates, api.listAdminPriceTemplates},
 		{http.MethodGet, routeAdminPriceTemplate, api.getAdminPriceTemplate},
 		{http.MethodPost, routeAdminPriceTemplates, api.mutateAdminPriceTemplate},
@@ -77,6 +84,12 @@ func RegisterStewardRoutes(registrar UserRouteRegistrar, service *Service) error
 		method, pattern string
 		handler         AuthorizedUserHandler
 	}{
+		{http.MethodGet, routeStewardKeyBindingOptions, api.stewardKeyBindingOptions},
+		{http.MethodPost, routeStewardKeyBindingBatch, api.stewardKeyBindingBatch},
+		{http.MethodPost, routeStewardApplyBindingPreset, api.stewardApplyBindingPreset},
+		{http.MethodGet, routeStewardBindingPresets, api.stewardBindingPresets},
+		{http.MethodGet, routeStewardBindingPreset, api.stewardBindingPreset},
+		{http.MethodPut, routeStewardBindingPreset, api.stewardSaveBindingPreset},
 		{http.MethodGet, routeStewardPriceTemplates, api.listStewardPriceTemplates},
 		{http.MethodGet, routeStewardPriceTemplate, api.getStewardPriceTemplate},
 		{http.MethodGet, routeStewardModels, api.listStewardModels},
@@ -346,6 +359,7 @@ func parseDiscount(wire discountWire) (DiscountInput, map[string]any, error) {
 }
 
 type modelCreateWire struct {
+	RecurringDiscount     requiredField[charitydiscount.Config] `json:"recurring_discount"`
 	SessionHeaders        requiredField[[]sessionheader.Config] `json:"session_headers"`
 	ModelTypes            requiredField[modeltype.Set]          `json:"model_types"`
 	TransportRule         requiredField[transportpolicy.Rule]   `json:"transport_rule"`
@@ -381,6 +395,11 @@ func parseModelCreate(wire modelCreateWire) (ModelCreate, map[string]any, error)
 		Pricing: pricing, Discount: discount, FlattenToolCalls: wire.FlattenToolCalls.Value}
 	canonical := map[string]any{"provider": input.Provider, "model": input.Model, "enabled": input.Enabled,
 		"pricing": pricingJSON, "discount": discountJSON, "flatten_tool_calls": input.FlattenToolCalls}
+	if wire.RecurringDiscount.Set {
+		value := wire.RecurringDiscount.Value
+		input.RecurringDiscount = &value
+		canonical["recurring_discount"] = value
+	}
 	if wire.SessionHeaders.Set {
 		values, err := sessionheader.Normalize(wire.SessionHeaders.Value)
 		if err != nil {
@@ -531,6 +550,7 @@ func parseDiscountPatch(wire discountPatchWire) (*DiscountPatchInput, map[string
 }
 
 type modelPatchWire struct {
+	RecurringDiscount     requiredField[charitydiscount.Config] `json:"recurring_discount"`
 	SessionHeaders        requiredField[[]sessionheader.Config] `json:"session_headers"`
 	ModelTypes            requiredField[modeltype.Set]          `json:"model_types"`
 	TransportRule         requiredField[transportpolicy.Rule]   `json:"transport_rule"`
@@ -560,6 +580,11 @@ func parseModelPatch(wire modelPatchWire) (ModelPatch, map[string]any, error) {
 	}
 	input := ModelPatch{ExpectedRevision: wire.ExpectedRevision.Value}
 	canonical := map[string]any{"expected_revision": wire.ExpectedRevision.Value}
+	if wire.RecurringDiscount.Set {
+		value := wire.RecurringDiscount.Value
+		input.RecurringDiscount = &value
+		canonical["recurring_discount"] = value
+	}
 	if wire.SessionHeaders.Set {
 		values, err := sessionheader.Normalize(wire.SessionHeaders.Value)
 		if err != nil {

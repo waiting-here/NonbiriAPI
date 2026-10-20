@@ -99,6 +99,9 @@ function publicModel(index: number) {
   const provider = 'Provider-' + 'p'.repeat(index === 2 ? 50 : 4);
   const model = `model-${index}-` + 'm'.repeat(index === 2 ? 50 : 4);
   return {
+    recurring_discount: { enabled: false, time_zone: 'UTC', default_percent: 100, periods: [] },
+    effective_discount: { source: 'fixed', percent: 80, next_change_at: null },
+
     model_types: ['chat_completions', 'embeddings'],
     id: String(index),
     provider,
@@ -106,6 +109,14 @@ function publicModel(index: number) {
     full_name: `[公益]${provider}/${model}`,
     pricing: token
       ? {
+          current_user_price_milli: null,
+          current_user_prices_milli: {
+            uncached_input: '8000000',
+            cache_write_input: '8000000',
+            cache_read_input: '1280000',
+            output: '24000000',
+          },
+
           mode: 'per_token',
           user_price_milli: null,
           discounted_user_price_milli: null,
@@ -123,6 +134,9 @@ function publicModel(index: number) {
           },
         }
       : {
+          current_user_price_milli: '98765431210',
+          current_user_prices_milli: null,
+
           mode: 'per_request',
           user_price_milli: '123456789012',
           discounted_user_price_milli: '98765431210',
@@ -299,26 +313,49 @@ for (const [timezoneId, expectedTime] of [
           models: [model],
         },
       });
-      await mockJson(page, {
-        origin: USER_ORIGIN,
-        method: 'GET',
-        path: '/api/charity/models?view=catalog&page=1&page_size=20&allowed_for_me=true&currently_available=true',
-        body: catalogPage([model], 'closed', endAt - 120),
-      });
+      const projectPrice = async (serverNow: number, percent: number, nextChange: number | null) =>
+        mockJson(page, {
+          origin: USER_ORIGIN,
+          method: 'GET',
+          path: '/api/charity/models?view=catalog&page=1&page_size=20&allowed_for_me=true&currently_available=true',
+          body: catalogPage(
+            [
+              {
+                ...model,
+                effective_discount: {
+                  source: 'fixed',
+                  percent,
+                  next_change_at: nextChange,
+                },
+                pricing: {
+                  ...model.pricing,
+                  current_user_price_milli: percent === 100 ? '123456789012' : '98765431210',
+                },
+              },
+            ],
+            'closed',
+            serverNow,
+          ),
+        });
+      await projectPrice(endAt - 120, 100, endAt - 60);
       await page.goto(`${USER_ORIGIN}/charity`);
       await page.locator('.charity-model-name').click();
       const detail = page.locator('.charity-model-detail');
       const deadline = detail.locator(`time[datetime="2026-09-07T12:30:00.000Z"]`);
-      await expect(deadline).toHaveText(`Ends 09/07/2026, ${expectedTime} (your local time)`);
-      await expect(page.getByText('Upcoming offer', { exact: true })).toBeVisible();
+      await expect(detail.locator('time')).toHaveAttribute('datetime', '2026-09-07T12:29:00.000Z');
+      await expect(detail).toContainText('Upcoming offer');
       await expect(detail.locator('.charity-original')).toHaveCount(0);
+      await projectPrice(endAt - 60, 80, endAt);
       await page.clock.fastForward(60_000);
       await expect(detail.locator('.charity-original')).toHaveCount(1);
-      await expect(deadline).toBeVisible();
+      await expect(deadline).toHaveText(`Next price change: 09/07/2026, ${expectedTime}`);
+      await projectPrice(endAt, 100, null);
       await page.clock.fastForward(60_000);
       await expect(detail.locator('.charity-original')).toHaveCount(0);
-      await expect(detail.locator('.charity-discount')).toHaveCount(0);
-      await expect(page.getByLabel('Price: 123,456,789.012', { exact: true })).toBeVisible();
+      await expect(detail.locator('time')).toHaveCount(0);
+      await expect(
+        detail.getByLabel('Current price: 123,456,789.012', { exact: true }),
+      ).toBeVisible();
       guard.assertNone();
     });
   });
@@ -565,6 +602,11 @@ for (const locale of ['en', 'zh'] as const) {
         'line-through',
       );
       await expect(detail.locator('.charity-current')).toHaveCSS('font-weight', '750');
+      if (width < 640) {
+        const labelBounds = (await firstRow.locator('th').boundingBox())!;
+        const amountBounds = (await firstRow.locator('td').boundingBox())!;
+        expect(amountBounds.y).toBeGreaterThanOrEqual(labelBounds.y + labelBounds.height);
+      }
       const clipped = await page.locator('.charity-price-table').evaluateAll((tables) =>
         tables.some((table) => {
           const wrapper = table.parentElement!;
@@ -609,7 +651,13 @@ for (const locale of ['en', 'zh'] as const) {
       );
       if (compactOverflow.length) await screenshot(page, `prices-${locale}-overflow-${width}`);
       expect(compactOverflow, `compact prices at ${width}px`).toEqual([]);
-      if (width === 390) await screenshot(page, `prices-${locale}-mobile`);
+      if (width === 390) {
+        await screenshot(page, `prices-${locale}-mobile`);
+        if (process.env.NONBIRI_VISUAL_DIR)
+          await detail.screenshot({
+            path: resolve(process.env.NONBIRI_VISUAL_DIR, `prices-${locale}-mobile-detail.png`),
+          });
+      }
     }
     const search = page.getByRole('searchbox', {
       name: locale === 'zh' ? '搜索模型名称或公开说明' : 'Search model name or public description',
@@ -859,6 +907,10 @@ test('many personal endpoints, keys and models preserve cross-page selections wi
 });
 
 const managedModel = {
+  recurring_discount: { enabled: false, time_zone: 'UTC', default_percent: 100, periods: [] },
+  effective_discount: { source: 'none', percent: 100, next_change_at: null },
+  server_now: 1800000000,
+
   model_types: ['chat_completions', 'embeddings'],
   id: '7',
   route_strategy: 'expiry_weighted',
@@ -944,8 +996,6 @@ function sourceManagedKey(
     authorized_expires_at: null,
     expires_at: null,
     failure_disable_threshold: '10',
-    smart_backoff_profile: 'none' as const,
-    smart_backoff_rules: [],
     smart_backoff: null,
     streak: { generation: '1', count: '0', failure_disabled: false },
     ended_reason: null,
@@ -1004,8 +1054,6 @@ function managedDonation(id: number) {
         authorized_expires_at: null,
         expires_at: null,
         failure_disable_threshold: '10',
-        smart_backoff_profile: 'none' as const,
-        smart_backoff_rules: [],
         smart_backoff: null,
         streak: { generation: '1', count: '0', failure_disabled: false },
         ended_reason: null,
@@ -1085,6 +1133,9 @@ for (const role of ['admin', 'steward'] as const)
               upstream_model_id: `shared-model-${i + 1}-${'m'.repeat(i === 0 ? 440 : 20)}`,
               source: sharedSource(Number(donationId)),
               source_types: ['automatic'],
+              current_binding_id: null,
+              other_binding_count: '0',
+              other_bindings: [],
             })),
             url,
           ),

@@ -63,7 +63,7 @@ function priceRows(model: CatalogModel, translate: (key: string) => string): Cha
         label: translate('user.charity.requestPrice'),
         compactLabel: translate('user.charity.presentation.perCall'),
         userMilli: model.pricing.userPriceMilli,
-        discountedUserMilli: model.pricing.discountedUserPriceMilli,
+        currentUserMilli: model.pricing.currentUserPriceMilli,
       },
     ];
   }
@@ -72,25 +72,25 @@ function priceRows(model: CatalogModel, translate: (key: string) => string): Cha
       label: translate('user.charity.uncachedInputPrice'),
       compactLabel: translate('user.charity.presentation.input'),
       userMilli: model.pricing.userPricesMilli.uncachedInput,
-      discountedUserMilli: model.pricing.discountedUserPricesMilli.uncachedInput,
+      currentUserMilli: model.pricing.currentUserPricesMilli.uncachedInput,
     },
     {
       label: translate('user.charity.cacheWriteInputPrice'),
       compactLabel: translate('user.charity.presentation.cacheWrite'),
       userMilli: model.pricing.userPricesMilli.cacheWriteInput,
-      discountedUserMilli: model.pricing.discountedUserPricesMilli.cacheWriteInput,
+      currentUserMilli: model.pricing.currentUserPricesMilli.cacheWriteInput,
     },
     {
       label: translate('user.charity.cacheReadInputPrice'),
       compactLabel: translate('user.charity.presentation.cacheRead'),
       userMilli: model.pricing.userPricesMilli.cacheReadInput,
-      discountedUserMilli: model.pricing.discountedUserPricesMilli.cacheReadInput,
+      currentUserMilli: model.pricing.currentUserPricesMilli.cacheReadInput,
     },
     {
       label: translate('user.charity.outputPrice'),
       compactLabel: translate('user.charity.presentation.output'),
       userMilli: model.pricing.userPricesMilli.output,
-      discountedUserMilli: model.pricing.discountedUserPricesMilli.output,
+      currentUserMilli: model.pricing.currentUserPricesMilli.output,
     },
   ];
 }
@@ -449,6 +449,8 @@ export function CharityCatalogPanel({
                       mode={model.pricing.mode}
                       rows={priceRows(model, t)}
                       serverNow={pageData.serverNow}
+                      effectiveDiscount={model.effectiveDiscount}
+                      recurringDiscount={model.recurringDiscount}
                       discount={discountProps(model)}
                     />
                   ),
@@ -493,6 +495,8 @@ export function CharityCatalogPanel({
                       mode={model.pricing.mode}
                       rows={priceRows(model, t)}
                       serverNow={pageData.serverNow}
+                      effectiveDiscount={model.effectiveDiscount}
+                      recurringDiscount={model.recurringDiscount}
                       discount={discountProps(model)}
                     />
                     <RecentCharitySuccess value={model.recentSuccess} />

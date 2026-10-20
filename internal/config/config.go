@@ -75,6 +75,7 @@ type Config struct {
 	// "admin." + UserHost). It must differ from UserHost.
 	AdminHost         string
 	TrustedProxyCIDRs []netip.Prefix
+	CloudflareRoutes  []CloudflareRoute
 }
 
 // Load reads environment variables and returns a fully validated Config, or a
@@ -163,6 +164,13 @@ func Load() (*Config, error) {
 		errs = append(errs, "NONBIRI_TRUSTED_PROXY_CIDRS: "+err.Error())
 	} else {
 		c.TrustedProxyCIDRs = proxies
+	}
+
+	routes, routeErr := ParseCloudflareRoutes(os.Getenv("NONBIRI_CLOUDFLARE_ROUTES"), os.LookupEnv)
+	if routeErr != nil {
+		errs = append(errs, "NONBIRI_CLOUDFLARE_ROUTES: "+routeErr.Error())
+	} else {
+		c.CloudflareRoutes = routes
 	}
 
 	if len(errs) > 0 {

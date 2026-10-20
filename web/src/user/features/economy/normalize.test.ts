@@ -82,8 +82,6 @@ const DONATION_FIXTURE = {
       token_reserve: 4096,
       expires_at: null,
       failure_disable_threshold: '10',
-      smart_backoff_profile: 'none' as const,
-      smart_backoff_rules: [],
       smart_backoff: null,
       streak: { generation: '2', count: '0', failure_disabled: false },
       ended_reason: null,
@@ -97,12 +95,18 @@ const CAPABILITY_SERVER_NOW = 1_788_100_000;
 
 function capabilityModel(provider = 'provider', model = 'model') {
   return {
+    recurring_discount: { enabled: false, time_zone: 'UTC', default_percent: 100, periods: [] },
+    effective_discount: { source: 'fixed', percent: 80, next_change_at: null },
+
     model_types: ['chat_completions', 'embeddings'],
     id: '1',
     provider,
     model,
     full_name: `[公益]${provider}/${model}`,
     pricing: {
+      current_user_price_milli: '2400',
+      current_user_prices_milli: null,
+
       mode: 'per_request',
       user_price_milli: '3000',
       discounted_user_price_milli: '2400',
@@ -119,6 +123,49 @@ function capabilityModel(provider = 'provider', model = 'model') {
 }
 
 describe('economy closed-wire normalizers', () => {
+  it('keeps server current prices separate from the configured fixed-discount prices and requires the new projection', () => {
+    const model = {
+      ...capabilityModel(),
+      recurring_discount: { enabled: true, time_zone: 'UTC', default_percent: 50, periods: [] },
+      effective_discount: {
+        source: 'recurring',
+        percent: 50,
+        next_change_at: CAPABILITY_SERVER_NOW + 60,
+      },
+      pricing: { ...capabilityModel().pricing, current_user_price_milli: '1500' },
+    };
+    const payload = {
+      state: 'available',
+      models: [model],
+      donation_intake: 'open',
+      server_now: CAPABILITY_SERVER_NOW,
+    };
+    expect(normalizeCharityCapability(payload).models[0]).toMatchObject({
+      pricing: {
+        userPriceMilli: '3000',
+        discountedUserPriceMilli: '2400',
+        currentUserPriceMilli: '1500',
+      },
+      effectiveDiscount: model.effective_discount,
+    });
+    for (const key of ['recurring_discount', 'effective_discount']) {
+      const missing: Record<string, unknown> = { ...model };
+      delete missing[key];
+      expect(() => normalizeCharityCapability({ ...payload, models: [missing] })).toThrow();
+    }
+    const pricing: Record<string, unknown> = { ...model.pricing };
+    delete pricing.current_user_price_milli;
+    expect(() =>
+      normalizeCharityCapability({ ...payload, models: [{ ...model, pricing }] }),
+    ).toThrow();
+    expect(() =>
+      normalizeCharityCapability({
+        ...payload,
+        models: [{ ...model, pricing: { ...model.pricing, current_user_prices_milli: {} } }],
+      }),
+    ).toThrow();
+  });
+
   it('accepts the canonical disabled D2 snapshot including its zero server clock', () => {
     expect(
       normalizeActivitiesSnapshot({
@@ -173,9 +220,14 @@ describe('economy closed-wire normalizers', () => {
       models: [capabilityModel()],
     });
     expect(available.models[0]).toMatchObject({
+      recurringDiscount: { enabled: false, time_zone: 'UTC', default_percent: 100, periods: [] },
+      effectiveDiscount: { source: 'fixed', percent: 80, next_change_at: null },
+
       modelTypes: ['chat_completions', 'embeddings'],
       fullName: '[公益]provider/model',
       pricing: {
+        currentUserPriceMilli: '2400',
+
         mode: 'per_request',
         userPriceMilli: '3000',
         discountedUserPriceMilli: '2400',
@@ -221,6 +273,14 @@ describe('economy closed-wire normalizers', () => {
     const model = {
       ...capabilityModel(),
       pricing: {
+        current_user_price_milli: null,
+        current_user_prices_milli: {
+          uncached_input: '1',
+          cache_write_input: '660',
+          cache_read_input: '991',
+          output: '0',
+        },
+
         mode: 'per_token',
         user_price_milli: null,
         discounted_user_price_milli: null,
@@ -251,6 +311,13 @@ describe('economy closed-wire normalizers', () => {
       models: [model],
     } as const;
     expect(normalizeCharityCapability(payload).models[0].pricing).toEqual({
+      currentUserPricesMilli: {
+        uncachedInput: '1',
+        cacheWriteInput: '660',
+        cacheReadInput: '991',
+        output: '0',
+      },
+
       mode: 'per_token',
       userPricesMilli: {
         uncachedInput: '1',
@@ -495,8 +562,6 @@ describe('economy closed-wire normalizers', () => {
             },
             token_reserve: 0,
             failure_disable_threshold: '10',
-            smart_backoff_profile: 'none' as const,
-            smart_backoff_rules: [],
             smart_backoff: null,
             streak: { generation: '1', count: '0', failure_disabled: false },
           },
@@ -901,6 +966,9 @@ it('retains independent context thresholds and exact alternate prices', () => {
         pricing: {
           ...model.pricing,
           long_context: {
+            current_user_price_milli: '7200',
+            current_user_prices_milli: null,
+
             input_threshold: '100000',
             user_price_milli: '9000',
             discounted_user_price_milli: '7200',
@@ -915,6 +983,8 @@ it('retains independent context thresholds and exact alternate prices', () => {
     server_now: CAPABILITY_SERVER_NOW,
   });
   expect(capability.models[0].pricing.longContext).toEqual({
+    currentUserPriceMilli: '7200',
+
     mode: 'per_request',
     inputThreshold: '100000',
     userPriceMilli: '9000',

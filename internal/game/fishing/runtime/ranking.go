@@ -257,11 +257,16 @@ func (service *Service) FishingLeaderboard(ctx context.Context, userID int64, bo
 			return FishingLeaderboard{}, err
 		}
 	}
-	tx, err := service.database.BeginTx(ctx, nil)
+	tx, err := service.readDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return FishingLeaderboard{}, classifyDB(err)
 	}
 	defer tx.Rollback()
+	if service.beforeLeaderboardQuery != nil {
+		if err := service.beforeLeaderboardQuery(ctx, tx); err != nil {
+			return FishingLeaderboard{}, classifyDB(err)
+		}
+	}
 	if board == "single" {
 		return querySingleLeaderboard(ctx, tx, userID, queryNow)
 	}

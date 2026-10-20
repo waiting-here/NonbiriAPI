@@ -124,10 +124,10 @@ func retainedFacts(t *testing.T, database *sql.DB) map[string][32]byte {
 	ignored := map[string]bool{"schema_state": true, "user_continuity_identities": true, "gateway_model_capabilities_state": true, "site_usage_totals": true}
 	result := map[string][32]byte{}
 	for _, table := range tables {
-		if table == "donation_key_backoffs" || table == "dispatch_smart_backoff_facts" || table == "donation_key_cooldowns" || table == "dispatch_retry_after_observations" || table == "request_header_facts" || table == "charity_price_templates" || table == "charity_price_template_audits" || table == "donation_owner_preferences" {
+		if table == "donation_key_backoffs" || table == "dispatch_smart_backoff_facts" || table == "donation_key_cooldowns" || table == "dispatch_retry_after_observations" || table == "request_header_facts" || table == "charity_price_templates" || table == "charity_price_template_audits" || table == "donation_owner_preferences" || table == "channel_charity_binding_presets" || table == "channel_charity_binding_mappings" {
 			var count int
 			if err := database.QueryRow("SELECT count(*) FROM " + table).Scan(&count); err != nil || count != 0 {
-				t.Fatalf("new diagnostic table %s is not empty: %d %v", table, count, err)
+				t.Fatalf("new additive table %s is not empty: %d %v", table, count, err)
 			}
 			continue
 		}
@@ -161,6 +161,12 @@ func retainedFacts(t *testing.T, database *sql.DB) map[string][32]byte {
 				if table == "observability_state" && column == "header_bytes" {
 					if values[i] != int64(0) {
 						t.Fatal("upgrade header counter is not empty")
+					}
+					continue
+				}
+				if table == "charity_models" && column == "recurring_discount" {
+					if values[i] != `{"enabled":false,"time_zone":"UTC","default_percent":100,"periods":[]}` {
+						t.Fatal("upgrade recurring discount is not the disabled default")
 					}
 					continue
 				}

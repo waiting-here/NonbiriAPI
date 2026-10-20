@@ -34,12 +34,18 @@ const model = {
   updated_at: 1700000001,
 };
 const charityModel = {
+  recurring_discount: { enabled: false, time_zone: 'UTC', default_percent: 100, periods: [] },
+  effective_discount: { source: 'none', percent: 100, next_change_at: null },
+
   model_types: ['chat_completions', 'embeddings'],
   id: '1',
   provider: 'provider',
   model: 'model',
   full_name: '[公益]provider/model',
   pricing: {
+    current_user_price_milli: '1000',
+    current_user_prices_milli: null,
+
     mode: 'per_request',
     user_price_milli: '1000',
     discounted_user_price_milli: '1000',

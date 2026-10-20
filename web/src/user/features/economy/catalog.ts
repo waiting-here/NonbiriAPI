@@ -1,3 +1,4 @@
+import { usePriceRefresh } from '@shared/operations/usePriceRefresh';
 import { clearStationSession } from '@shared/charityManagement';
 import {
   isPageNumber,
@@ -385,6 +386,8 @@ export function normalizeCatalogModel(value: unknown): CatalogModel {
     'full_name',
     'pricing',
     'discount',
+    'recurring_discount',
+    'effective_discount',
     'public_description',
     'enabled',
     'allowed_levels',
@@ -401,6 +404,8 @@ export function normalizeCatalogModel(value: unknown): CatalogModel {
     model_types: root.model_types,
     pricing: root.pricing,
     discount: root.discount,
+    recurring_discount: root.recurring_discount,
+    effective_discount: root.effective_discount,
     ...(root.recent_success !== undefined ? { recent_success: root.recent_success } : {}),
   });
   const enabled = boolean(root.enabled, 'charity catalog enabled');
@@ -524,6 +529,13 @@ export function useCharityCatalog(
     retry: false,
     staleTime: 15_000,
   });
+  usePriceRefresh(
+    query.data?.serverNow,
+    query.data?.models.map((model) => model.effectiveDiscount.next_change_at) ?? [],
+    query.dataUpdatedAt,
+    () => query.refetch({ throwOnError: true }),
+    enabled && Boolean(accountID) && !query.isPlaceholderData,
+  );
   useEffect(() => {
     if (accountID === undefined) {
       handledError.current = null;

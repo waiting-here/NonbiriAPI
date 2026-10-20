@@ -364,7 +364,7 @@ CREATE TABLE charity_models (
  uncached_donor_reward INTEGER NOT NULL DEFAULT 0 CHECK(uncached_donor_reward BETWEEN 0 AND 9000000000000000), cache_write_donor_reward INTEGER NOT NULL DEFAULT 0 CHECK(cache_write_donor_reward BETWEEN 0 AND 9000000000000000), cache_read_donor_reward INTEGER NOT NULL DEFAULT 0 CHECK(cache_read_donor_reward BETWEEN 0 AND 9000000000000000), output_donor_reward INTEGER NOT NULL DEFAULT 0 CHECK(output_donor_reward BETWEEN 0 AND 9000000000000000),
  discount_percent INTEGER NOT NULL DEFAULT 100 CHECK(discount_percent BETWEEN 0 AND 100), discount_start_at INTEGER, discount_end_at INTEGER, discount_enabled INTEGER NOT NULL DEFAULT 0 CHECK(discount_enabled IN (0,1)), flatten_tool_calls INTEGER NOT NULL DEFAULT 0 CHECK(flatten_tool_calls IN (0,1)), created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
  revision INTEGER NOT NULL DEFAULT 1 CHECK(revision BETWEEN 1 AND 9223372036854775807), binding_revision INTEGER NOT NULL DEFAULT 0 CHECK(binding_revision BETWEEN 0 AND 9223372036854775807), created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, is_mainstream INTEGER NOT NULL DEFAULT 0 CHECK(is_mainstream IN (0,1)), excluded_request_fields TEXT NOT NULL DEFAULT '[]'
- CHECK(json_valid(excluded_request_fields) AND json_type(excluded_request_fields)='array' AND length(excluded_request_fields)<=2200), role_policy TEXT NOT NULL DEFAULT '{"default_action":"native","rules":{}}' CHECK(typeof(role_policy)='text' AND length(CAST(role_policy AS BLOB))<=8192 AND json_valid(role_policy) AND json_type(role_policy)='object' AND COALESCE(json_type(role_policy,'$.default_action'),'')='text' AND json_extract(role_policy,'$.default_action') IN ('native','passthrough','system','user','assistant','reject') AND COALESCE(json_type(role_policy,'$.rules'),'')='object'), transport_rule TEXT NOT NULL DEFAULT 'passthrough' CHECK(transport_rule IN ('passthrough','force_non_stream','force_stream')), model_types INTEGER NOT NULL DEFAULT 1 CHECK(typeof(model_types)='integer' AND model_types BETWEEN 1 AND 15), context_pricing TEXT NOT NULL DEFAULT '{}' CHECK(length(context_pricing)<=2048 AND json_valid(context_pricing) AND json_type(context_pricing)='object'), session_headers TEXT NOT NULL DEFAULT '[]' CHECK(length(session_headers)<=4096 AND json_valid(session_headers) AND json_type(session_headers)='array'),
+ CHECK(json_valid(excluded_request_fields) AND json_type(excluded_request_fields)='array' AND length(excluded_request_fields)<=2200), role_policy TEXT NOT NULL DEFAULT '{"default_action":"native","rules":{}}' CHECK(typeof(role_policy)='text' AND length(CAST(role_policy AS BLOB))<=8192 AND json_valid(role_policy) AND json_type(role_policy)='object' AND COALESCE(json_type(role_policy,'$.default_action'),'')='text' AND json_extract(role_policy,'$.default_action') IN ('native','passthrough','system','user','assistant','reject') AND COALESCE(json_type(role_policy,'$.rules'),'')='object'), transport_rule TEXT NOT NULL DEFAULT 'passthrough' CHECK(transport_rule IN ('passthrough','force_non_stream','force_stream')), model_types INTEGER NOT NULL DEFAULT 1 CHECK(typeof(model_types)='integer' AND model_types BETWEEN 1 AND 15), context_pricing TEXT NOT NULL DEFAULT '{}' CHECK(length(context_pricing)<=2048 AND json_valid(context_pricing) AND json_type(context_pricing)='object'), session_headers TEXT NOT NULL DEFAULT '[]' CHECK(length(session_headers)<=4096 AND json_valid(session_headers) AND json_type(session_headers)='array'), recurring_discount TEXT NOT NULL DEFAULT '{"enabled":false,"time_zone":"UTC","default_percent":100,"periods":[]}' CHECK(json_valid(recurring_discount) AND json_type(recurring_discount)='object' AND length(CAST(recurring_discount AS BLOB))<=4096),
  CHECK(full_name='[公益]'||provider||'/'||model), CHECK(discount_end_at IS NULL OR discount_start_at IS NULL OR discount_end_at>=discount_start_at)
 );
 CREATE TABLE donation_keys (
@@ -6541,7 +6541,7 @@ CREATE TABLE schema_state (
 ) STRICT;
 INSERT INTO credit_compaction(id,through_seq,details_before,sweep_at,sweep_after_seq) VALUES(1,0,0,0,0);
 INSERT INTO game_blackjack_clock(id,observed_at) VALUES(1,0);
-INSERT INTO schema_state(id,version) VALUES(1,25);
+INSERT INTO schema_state(id,version) VALUES(1,26);
 
 CREATE TABLE game_ai_settings (
  game_key TEXT PRIMARY KEY NOT NULL,
@@ -6992,7 +6992,7 @@ CREATE TABLE charity_price_templates (
  discount TEXT NOT NULL CHECK(json_valid(discount) AND json_type(discount)='object' AND length(CAST(discount AS BLOB))<=512),
  created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799),
  updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN created_at AND 253402300799)
-) STRICT;
+, recurring_discount TEXT NOT NULL DEFAULT '{"enabled":false,"time_zone":"UTC","default_percent":100,"periods":[]}' CHECK(json_valid(recurring_discount) AND json_type(recurring_discount)='object' AND length(CAST(recurring_discount AS BLOB))<=4096)) STRICT;
 CREATE TRIGGER charity_price_template_capacity BEFORE INSERT ON charity_price_templates
 WHEN (SELECT COUNT(*) FROM charity_price_templates)>=256
 BEGIN SELECT RAISE(ABORT,'price template capacity reached'); END;
@@ -7022,8 +7022,6 @@ CREATE TABLE donation_owner_preferences (
 CREATE INDEX idx_donation_owner_preferences_user ON donation_owner_preferences(user_id,donation_id);
 CREATE TABLE donation_key_backoffs (
  donation_key_id INTEGER PRIMARY KEY REFERENCES donation_keys(id) ON DELETE CASCADE,
- profile TEXT NOT NULL CHECK(profile IN ('none','five_hour_week','five_hour_week_month','day','day_month')),
- rules_json TEXT NOT NULL CHECK(json_valid(rules_json) AND json_type(rules_json)='array' AND json_array_length(rules_json)<=8 AND length(CAST(rules_json AS BLOB))<=16384),
  generation INTEGER NOT NULL CHECK(generation>=1),
  episode INTEGER NOT NULL CHECK(episode>=0),
  period TEXT CHECK(period IN ('unknown','five_hour','day','week','month')),
@@ -7039,7 +7037,6 @@ CREATE TABLE dispatch_smart_backoff_facts (
  donation_key_id INTEGER REFERENCES donation_keys(id) ON DELETE SET NULL,
  generation INTEGER NOT NULL CHECK(generation>=1),
  episode INTEGER NOT NULL CHECK(episode>=0),
- profile TEXT NOT NULL CHECK(profile IN ('five_hour_week','five_hour_week_month','day','day_month')),
  is_trial INTEGER NOT NULL CHECK(is_trial IN (0,1)),
  accepted_at INTEGER CHECK(accepted_at BETWEEN 0 AND 253402300799),
  period TEXT CHECK(period IN ('unknown','five_hour','day','week','month')),
@@ -7049,3 +7046,16 @@ CREATE TABLE dispatch_smart_backoff_facts (
 ) STRICT;
 CREATE UNIQUE INDEX idx_donation_backoffs_trial ON donation_key_backoffs(trial_claim_id) WHERE trial_claim_id IS NOT NULL;
 CREATE INDEX idx_dispatch_backoff_key ON dispatch_smart_backoff_facts(donation_key_id);
+
+CREATE TABLE channel_charity_binding_presets (
+ channel_id TEXT PRIMARY KEY REFERENCES mainstream_channels(id) ON DELETE CASCADE,
+ revision INTEGER NOT NULL CHECK(revision>=1)
+) STRICT;
+CREATE TABLE channel_charity_binding_mappings (
+ channel_id TEXT NOT NULL REFERENCES channel_charity_binding_presets(channel_id) ON DELETE CASCADE,
+ ord INTEGER NOT NULL CHECK(ord BETWEEN 0 AND 15),
+ upstream_model_id TEXT NOT NULL CHECK(length(upstream_model_id) BETWEEN 1 AND 512 AND instr(upstream_model_id,char(0))=0),
+ charity_model_id INTEGER NOT NULL CHECK(charity_model_id>0),
+ PRIMARY KEY(channel_id,ord),
+ UNIQUE(channel_id,upstream_model_id,charity_model_id)
+) STRICT;

@@ -42,6 +42,7 @@ function expectNumberedPageQuery(url: URL, filters: Record<string, string> = {})
   const expected = new URLSearchParams(filters);
   if (url.pathname.includes('/donation-sources') || url.pathname.endsWith('/binding-candidates'))
     expected.set('key_state', 'available');
+  if (url.pathname.endsWith('/binding-candidates')) expected.set('include_bound', 'true');
   expected.set('page', page!);
   expected.set('page_size', pageSize!);
   expect(url.search).toBe(`?${expected.toString()}`);
@@ -139,8 +140,6 @@ const managedKey = (overrides: Partial<ManagedDonationKey> = {}): ManagedDonatio
   authorized_expires_at: null,
   expires_at: null,
   failure_disable_threshold: '10',
-  smart_backoff_profile: 'none' as const,
-  smart_backoff_rules: [],
   smart_backoff: null,
   streak: { generation: '1', count: '0', failure_disabled: false },
   ended_reason: null,
@@ -233,6 +232,9 @@ function bindingCandidate(
       display_tail: key.display_tail,
     },
     source_types: ['automatic'],
+    current_binding_id: null,
+    other_binding_count: '0',
+    other_bindings: [],
   };
 }
 
@@ -333,6 +335,10 @@ function deferred<T>() {
 }
 
 const charityModel = (start: number, end: number): CharityModel => ({
+  recurring_discount: { enabled: false, time_zone: 'UTC', default_percent: 100, periods: [] },
+  effective_discount: { source: 'fixed', percent: 10, next_change_at: null },
+  server_now: 1800000000,
+
   model_types: ['chat_completions', 'embeddings'],
   route_strategy: 'expiry_weighted',
   affinity_ttl_seconds: 300,
@@ -361,6 +367,12 @@ const siteDateTime = (epoch: number) => `${new Date(epoch * 1_000).toISOString()
 describe('CharityManagement corrective controls', () => {
   it('fills and undoes complete prices inside the fixed editor and saves explicit request reserve clearing', async () => {
     const token = {
+      recurring_discount: {
+        enabled: true,
+        time_zone: 'Asia/Tokyo',
+        default_percent: 50,
+        periods: [{ weekdays: [1], start_time: '22:00', end_time: '02:00', percent: 0 }],
+      },
       pricing: {
         mode: 'per_token' as const,
         user_prices: {
@@ -390,6 +402,7 @@ describe('CharityManagement corrective controls', () => {
       discount: { enabled: true, percent: 80, start_at: null, end_at: null },
     };
     const request = {
+      recurring_discount: { enabled: false, time_zone: 'UTC', default_percent: 0, periods: [] },
       pricing: { mode: 'per_request' as const, user_price: '3.5', donor_reward: '1.75' },
       token_reserve_credits: null,
       discount: { enabled: false, percent: 0, start_at: null, end_at: null },
@@ -875,8 +888,6 @@ describe('CharityManagement corrective controls', () => {
       managedKey({
         charity_state: 'disabled',
         failure_disable_threshold: '10',
-        smart_backoff_profile: 'none' as const,
-        smart_backoff_rules: [],
         smart_backoff: null,
         streak: { generation: '2', count: '10', failure_disabled: true },
       }),
@@ -1206,6 +1217,7 @@ describe('CharityManagement corrective controls', () => {
         context_penalty: { input_threshold: '200000', fine: '50' },
       },
       discount: { enabled: true, percent: 10, start_at: start, end_at: end },
+      recurring_discount: { enabled: false, time_zone: 'UTC', default_percent: 100, periods: [] },
       transport_rule: 'passthrough',
       flatten_tool_calls: false,
     });

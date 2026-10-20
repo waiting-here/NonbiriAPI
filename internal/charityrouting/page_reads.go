@@ -73,9 +73,13 @@ func (s *Service) modelsPage(ctx context.Context, role roleKind, actorID int64, 
 	if err != nil {
 		return empty, err
 	}
+	now, err := s.nowUnix()
+	if err != nil {
+		return empty, err
+	}
 	result := Page[AdminCharityModel]{Data: make([]AdminCharityModel, 0, len(ids)), Pagination: &metadata}
 	for _, id := range ids {
-		item, err := getAdminModelTx(ctx, tx, id)
+		item, err := getAdminModelTx(ctx, tx, id, now)
 		if err != nil {
 			return empty, err
 		}
@@ -96,12 +100,17 @@ LEFT JOIN endpoint_key_limits kl ON kl.endpoint_key_id=k.id
 CROSS JOIN model_pair_catalog pc ON pc.endpoint_key_id=k.id
 WHERE cm.id=? AND d.status='approved' AND d.user_id IS NOT NULL
 AND dk.ended_at IS NULL AND (dk.expires_at IS NULL OR dk.expires_at>?)
-AND NOT EXISTS(SELECT 1 FROM charity_model_bindings b WHERE b.charity_model_id=cm.id
+` + candidateUnboundPredicate
+
+const candidateUnboundPredicate = `AND NOT EXISTS(SELECT 1 FROM charity_model_bindings b WHERE b.charity_model_id=cm.id
  AND b.donation_key_id=dk.id AND b.upstream_model_id=pc.normalized_model_id)`
 
 func candidatePageSelection(modelID, now int64, query CandidateQuery) (string, []any) {
 	statement := `SELECT dk.id,d.id,dk.connector_type,dk.canonical_base_url,dk.display_head,dk.display_tail,
 pc.normalized_model_id,pc.automatic_supports,pc.manual_supports,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0)` + candidatePageFrom
+	if query.IncludeBound {
+		statement = strings.Replace(statement, candidateUnboundPredicate, "", 1)
+	}
 	args := []any{modelID, now}
 	if donationstate.Filtered(query.KeyState) {
 		// Evaluate key state before expanding its model pairs.
@@ -195,13 +204,18 @@ func (s *Service) candidatesPage(ctx context.Context, role roleKind, actorID, mo
 		return empty, err
 	}
 	rows.Close()
+	if !query.omitBindingMarkers {
+		if err := annotateBindingCandidates(ctx, tx, result.Data, modelID, scope.Trainee); err != nil {
+			return empty, err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return empty, err
 	}
 	return result, nil
 }
 
-func (s *Service) bindingSourcesPage(ctx context.Context, role roleKind, actorID, modelID, donationID int64, keyState string, page pagination.Request) (Page[BindingDonation], Page[BindingSourceKey], error) {
+func (s *Service) bindingSourcesPage(ctx context.Context, role roleKind, actorID, modelID, donationID int64, keyState string, page pagination.Request, includeBound ...bool) (Page[BindingDonation], Page[BindingSourceKey], error) {
 	var donations Page[BindingDonation]
 	var keys Page[BindingSourceKey]
 	if ctx == nil || modelID <= 0 || donationID < 0 || !page.Valid() || !donationstate.Valid(keyState) {
@@ -222,7 +236,7 @@ func (s *Service) bindingSourcesPage(ctx context.Context, role roleKind, actorID
 	if err != nil {
 		return donations, keys, err
 	}
-	from, args := bindingSourceSelection(modelID, now, keyState)
+	from, args := bindingSourceSelection(modelID, now, keyState, includeBound...)
 	if scope.Trainee {
 		from += ` AND dk.mainstream_channel_id IS NOT NULL`
 	}

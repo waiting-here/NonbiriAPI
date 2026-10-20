@@ -31,7 +31,9 @@ for (const [width, theme] of [
 ] as const) {
   test.describe(width + 'px ' + theme, () => {
     for (const role of ['owner', 'admin', 'steward'] as const) {
-      test(`${role} saves backoff and zero and retains them after reload`, async ({ page }) => {
+      test(`${role} saves zero and retains automatic recovery state after reload`, async ({
+        page,
+      }) => {
         const station = role === 'admin' ? 'admin' : 'user';
         const origin = role === 'admin' ? ADMIN_ORIGIN : USER_ORIGIN;
         const prefix =
@@ -50,9 +52,6 @@ for (const [width, theme] of [
         );
         let threshold = '10';
         let revision = '1';
-        let profile = 'none';
-        let rules: { kind: string; value: string; period: string }[] = [];
-        const ruleValue = 'Monthly allowance exhausted. '.repeat(5).trim();
         const writes: unknown[] = [];
         const dialogs: string[] = [];
         page.on('dialog', async (dialog) => {
@@ -79,17 +78,12 @@ for (const [width, theme] of [
           token_reserve: 0,
           expires_at: null,
           failure_disable_threshold: threshold,
-          smart_backoff_profile: profile,
-          smart_backoff_rules: rules,
-          smart_backoff:
-            profile === 'none'
-              ? null
-              : {
-                  state: role === 'owner' ? 'waiting' : role === 'admin' ? 'ready' : 'probing',
-                  reason: 'month_quota',
-                  source: 'custom_rule',
-                  retry_at: 1_900_000_000,
-                },
+          smart_backoff: {
+            state: role === 'owner' ? 'waiting' : role === 'admin' ? 'ready' : 'probing',
+            reason: 'month_quota',
+            source: 'custom_rule',
+            retry_at: 1_900_000_000,
+          },
           streak: { generation: '4', count: '12', failure_disabled: threshold !== '0' },
           ended_reason: null,
           ...(role === 'owner'
@@ -163,17 +157,11 @@ for (const [width, theme] of [
             const body = request.postDataJSON() as {
               expected_revision: string;
               failure_disable_threshold: string;
-              smart_backoff_profile: string;
-              smart_backoff_rules: typeof rules;
             };
             expect(body).toEqual({
               expected_revision: revision,
               failure_disable_threshold: '0',
-              smart_backoff_profile: 'day_month',
-              smart_backoff_rules: [{ kind: 'message', value: ruleValue, period: 'month' }],
             });
-            profile = body.smart_backoff_profile;
-            rules = body.smart_backoff_rules;
             writes.push(body);
             threshold = '0';
             revision = '2';
@@ -182,9 +170,7 @@ for (const [width, theme] of [
                 donation_id: '7',
                 donation_key_id: '11',
                 failure_disable_threshold: threshold,
-                smart_backoff_profile: profile,
-                smart_backoff_rules: rules,
-                smart_backoff: null,
+                smart_backoff: key().smart_backoff,
                 failure_streak: '12',
                 failure_disabled: false,
                 revision,
@@ -242,12 +228,10 @@ for (const [width, theme] of [
         const control = page.locator('.failure-policy-control').first();
         await expect(control).toBeVisible();
         await control.getByLabel(copy.label).fill('0');
-        await control.getByLabel('Smart quota backoff').selectOption('day_month');
-        await control.getByText('Additional error recognition (optional)', { exact: true }).click();
-        await control.getByRole('button', { name: 'Add rule', exact: true }).click();
-        await control.getByLabel('Rule 1 type').selectOption('message');
-        await control.getByLabel('Rule 1 value').fill(ruleValue);
-        await control.getByLabel('Rule 1 allowance cycle').selectOption('month');
+        await expect(control.getByRole('combobox')).toHaveCount(0);
+        await expect(
+          control.getByText(commonEn.common.smartBackoff.automaticHelp, { exact: true }),
+        ).toBeVisible();
         await expect(control.locator('.failure-policy-warning')).toBeVisible();
         await control.getByRole('button', { name: copy.save, exact: true }).click();
         await expect.poll(() => writes.length).toBe(1);
@@ -266,24 +250,27 @@ for (const [width, theme] of [
         if (role !== 'owner') await page.getByText('Failure strategy', { exact: true }).click();
         await expect(control).toBeVisible();
         await expect(control.getByLabel(copy.label)).toHaveValue('0');
-        await expect(control.getByLabel('Smart quota backoff')).toHaveValue('day_month');
-        await control.getByText('Additional error recognition (optional)', { exact: true }).click();
-        await expect(control.getByLabel('Rule 1 value')).toHaveValue(ruleValue);
-        await expect(control.getByLabel('Rule 1 allowance cycle')).toHaveValue('month');
         await expect(
           page
             .getByText(
               role === 'owner'
-                ? 'Smart backoff: waiting'
+                ? commonEn.common.smartBackoff.states.waiting
                 : role === 'admin'
-                  ? 'Smart backoff: ready for a trial request'
-                  : 'Smart backoff: trial request in progress',
+                  ? commonEn.common.smartBackoff.states.ready
+                  : commonEn.common.smartBackoff.states.probing,
               { exact: true },
             )
             .first(),
         ).toBeVisible();
         await expect(
-          page.getByText('Monthly allowance exhausted · Additional rule', { exact: true }).first(),
+          page
+            .getByText(
+              commonEn.common.smartBackoff.reasonSource
+                .replace('{{reason}}', commonEn.common.smartBackoff.reasons.month_quota)
+                .replace('{{source}}', commonEn.common.smartBackoff.sources.custom_rule),
+              { exact: true },
+            )
+            .first(),
         ).toBeVisible();
         await expect(control.locator('.failure-policy-warning').first()).toBeVisible();
         const policyLayout = await control.evaluate((element) => {
@@ -317,9 +304,9 @@ for (const [width, theme] of [
         );
         if (process.env.NONBIRI_VISUAL_DIR) {
           await mkdir(process.env.NONBIRI_VISUAL_DIR, { recursive: true });
-          await control.getByLabel('Rule 1 value').focus();
+          await control.getByLabel(copy.label).focus();
           if (width === 390) {
-            const inputBox = await control.getByLabel('Rule 1 value').boundingBox();
+            const inputBox = await control.getByLabel(copy.label).boundingBox();
             expect(inputBox?.width).toBeGreaterThanOrEqual(280);
           }
           await page.screenshot({

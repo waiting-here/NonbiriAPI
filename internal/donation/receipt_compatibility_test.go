@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
@@ -95,5 +98,153 @@ func TestManagementReceiptAddsSafeFieldsWithoutChangingStoredResult(t *testing.T
 				t.Fatal("replay wrote to database")
 			}
 		})
+	}
+}
+
+func TestAutomaticBackoffLegacyReceiptsKeepOutcomeWithoutRetiredFields(t *testing.T) {
+	e := newDonationTestEnv(t)
+	owner := e.seedUser(t, "automatic-receipt", nil, false)
+	_, physical := e.seedEndpointKey(t, owner, 'c')
+	api := &httpAPI{service: e.service}
+	createBody := fmt.Sprintf(`{"description":"stored result","keys":[{"endpoint_key_id":"%d","expires_at":null}],"ownership_authorized":true,"discord_public_thanks":false}`, physical)
+	create := func() *httptest.ResponseRecorder {
+		r := httptest.NewRequest(http.MethodPost, routeDonations, strings.NewReader(createBody))
+		r.Header.Set("Idempotency-Key", strings.Repeat("N", 22))
+		w := httptest.NewRecorder()
+		api.createOwner(w, r, UserPrincipal{UserID: owner})
+		return w
+	}
+	first := create()
+	var d Donation
+	if first.Code != 201 || json.Unmarshal(first.Body.Bytes(), &d) != nil {
+		t.Fatal(first.Code, first.Body)
+	}
+	inject := func(body []byte, seed string, keyShape bool) ([]byte, [32]byte) {
+		t.Helper()
+		var fields map[string]any
+		if err := json.Unmarshal(body, &fields); err != nil {
+			t.Fatal(err)
+		}
+		target := fields
+		if keyShape {
+			target = fields["keys"].([]any)[0].(map[string]any)
+		}
+		target["smart_backoff_profile"] = "day"
+		target["smart_backoff_rules"] = []map[string]any{{"kind": "code", "value": "retained-only-until-receipt-expiry", "period": "auto"}}
+		raw, err := json.Marshal(fields)
+		if err != nil {
+			t.Fatal(err)
+		}
+		hash, err := idempotency.KeyHash(strings.Repeat(seed, 22))
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Recreate only this synthetic historical receipt; terminal rows stay immutable.
+		result, err := e.store.DB().Exec("INSERT OR REPLACE INTO idempotency_records(scope,actor_scope_hash,key_hash,request_hash,state,http_status,response_body,created_at,expires_at) SELECT scope,actor_scope_hash,key_hash,request_hash,state,http_status,?,created_at,expires_at FROM idempotency_records WHERE scope=? AND key_hash=?", raw, string(idempotency.ScopeDonation), hash[:])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n, err := result.RowsAffected(); err != nil || n != 1 {
+			t.Fatal(n, err)
+		}
+		return raw, hash
+	}
+	check := func(w *httptest.ResponseRecorder, stored []byte, hash [32]byte, wantStatus int, wantRevision string, wantAudits int) {
+		t.Helper()
+		if w.Code != wantStatus || strings.Contains(w.Body.String(), "smart_backoff_profile") || strings.Contains(w.Body.String(), "smart_backoff_rules") || strings.Contains(w.Body.String(), "retained-only-until-receipt-expiry") {
+			t.Fatal(w.Code, w.Body)
+		}
+		var raw []byte
+		if err := e.store.DB().QueryRow("SELECT response_body FROM idempotency_records WHERE scope=? AND key_hash=?", string(idempotency.ScopeDonation), hash[:]).Scan(&raw); err != nil || !bytes.Equal(raw, stored) {
+			t.Fatal("stored receipt rewritten", err)
+		}
+		var revision string
+		var audits, count int
+		if err := e.store.DB().QueryRow("SELECT CAST(revision AS TEXT),(SELECT count(*) FROM donation_reviews),(SELECT count(*) FROM donations) FROM donations WHERE id=?", d.ID).Scan(&revision, &audits, &count); err != nil || revision != wantRevision || audits != wantAudits || count != 1 {
+			t.Fatal("replay mutated resources", revision, audits, count, err)
+		}
+	}
+	var audits int
+	if err := e.store.DB().QueryRow("SELECT count(*) FROM donation_reviews").Scan(&audits); err != nil {
+		t.Fatal(err)
+	}
+	stored, hash := inject(first.Body.Bytes(), "N", true)
+	replayed := create()
+	check(replayed, stored, hash, 201, d.Revision, audits)
+	var replayDonation Donation
+	decoder := json.NewDecoder(bytes.NewReader(replayed.Body.Bytes()))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&replayDonation); err != nil || replayDonation.ID != d.ID || replayDonation.Revision != d.Revision {
+		t.Fatal(replayDonation, err)
+	}
+	policy := policyHTTP(t, api, "", owner, d, d.Revision, "11", "O")
+	if policy.Code != 200 {
+		t.Fatal(policy.Code, policy.Body)
+	}
+	var p FailurePolicy
+	if err := json.Unmarshal(policy.Body.Bytes(), &p); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.store.DB().QueryRow("SELECT count(*) FROM donation_reviews").Scan(&audits); err != nil {
+		t.Fatal(err)
+	}
+	stored, hash = inject(policy.Body.Bytes(), "O", false)
+	replayed = policyHTTP(t, api, "", owner, d, d.Revision, "11", "O")
+	check(replayed, stored, hash, 200, p.Revision, audits)
+	decoder = json.NewDecoder(bytes.NewReader(replayed.Body.Bytes()))
+	decoder.DisallowUnknownFields()
+	var replayPolicy FailurePolicy
+	if err := decoder.Decode(&replayPolicy); err != nil || replayPolicy.Revision != p.Revision || replayPolicy.FailureDisableThreshold != "11" {
+		t.Fatal(replayPolicy, err)
+	}
+}
+
+func TestAutomaticBackoffFullManagementReceiptsOmitRetiredSettings(t *testing.T) {
+	e := newDonationTestEnv(t)
+	owner := e.seedUser(t, "full-receipt", nil, false)
+	e.seedUser(t, "", nil, true)
+	level := int64(6)
+	steward := e.seedUser(t, "full-viewer", &level, false)
+	_, key := e.seedEndpointKey(t, owner, 'm')
+	d := e.createDonation(t, owner, key)
+	id := parseTestID(t, d.ID)
+	current, err := e.service.GetAdmin(t.Context(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(encoded, &fields); err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range fields["keys"].([]any) {
+		key := item.(map[string]any)
+		key["smart_backoff_profile"] = "day"
+		key["smart_backoff_rules"] = []any{}
+	}
+	historical, err := json.Marshal(fields)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, role := range []reviewerRole{reviewerAdmin, reviewerSteward} {
+		tx, err := e.store.DB().Begin()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var before, after int64
+		if err := tx.QueryRow("SELECT total_changes()").Scan(&before); err != nil {
+			t.Fatal(err)
+		}
+		result, err := replayRoleDonation(t.Context(), tx, idempotency.Decision{Kind: idempotency.Replay, HTTPStatus: 200, ResponseBody: historical}, role, steward, id)
+		if err != nil || !result.replayed || bytes.Contains(result.body, []byte("smart_backoff_profile")) || bytes.Contains(result.body, []byte("smart_backoff_rules")) {
+			t.Fatal(result, err)
+		}
+		if err := tx.QueryRow("SELECT total_changes()").Scan(&after); err != nil || before != after {
+			t.Fatal("replay wrote", before, after, err)
+		}
+		tx.Rollback()
 	}
 }

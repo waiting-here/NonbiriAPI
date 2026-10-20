@@ -15,6 +15,7 @@ import (
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/tooltext"
+	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/gatewaypolicy"
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
@@ -173,13 +174,14 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, w http.ResponseWriter, 
 		}()
 	}
 	clear(label)
-	errorContext := upstreamerror.Context{Backoff: smartbackoff.FromContext(ctx), BaseURL: target.BaseURL(), PrivateModel: target.UpstreamModel(), ContainsSecret: errorGuard.ContainsBytes}
+	errorContext := upstreamerror.Context{CharityCall: smartbackoff.IsCharityCall(ctx), BaseURL: target.BaseURL(), PrivateModel: target.UpstreamModel(), ContainsSecret: errorGuard.ContainsBytes}
 	if policy.HasAdaptation || len(policy.ManagedHeaders) > 0 {
 		errorContext.ContainsSecret = func(value []byte) bool { return len(value) != 0 }
 	}
 	clear(plain)
 	clear(cipher)
 	sent = attribution != ""
+	request = egress.WithResponseLimits(request, egress.ResponseLimits{JSONBytes: maxJSONBytes, StreamBytes: maxStreamBytes, LineBytes: maxLineBytes, EventBytes: maxEventBytes})
 	response, err := client.Do(request)
 	if response != nil {
 		defer func() { result.UpstreamStatus = response.StatusCode }()

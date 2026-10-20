@@ -9,6 +9,10 @@ const dtos = JSON.parse(
   readFileSync(resolve(process.cwd(), '../internal/logapi/testdata/role_dtos.golden'), 'utf8'),
 );
 const model = {
+  recurring_discount: { enabled: false, time_zone: 'UTC', default_percent: 100, periods: [] },
+  effective_discount: { source: 'none', percent: 100, next_change_at: null },
+  server_now: 1800000000,
+
   model_types: ['chat_completions'],
   route_strategy: 'expiry_weighted',
   id: '31',

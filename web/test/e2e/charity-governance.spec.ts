@@ -136,8 +136,6 @@ function managedKey(id: string, state: 'pending' | 'available' = 'pending'): JSO
     authorized_expires_at: null,
     expires_at: null,
     failure_disable_threshold: '10',
-    smart_backoff_profile: 'none' as const,
-    smart_backoff_rules: [],
     smart_backoff: null,
     streak: { generation: '1', count: '0', failure_disabled: false },
     ended_reason: null,
@@ -254,12 +252,18 @@ function donationPageItem(donation: JSONRecord): JSONRecord {
 
 function capabilityModel(model: string): JSONRecord {
   return {
+    recurring_discount: { enabled: false, time_zone: 'UTC', default_percent: 100, periods: [] },
+    effective_discount: { source: 'fixed', percent: 80, next_change_at: null },
+
     model_types: ['chat_completions', 'embeddings'],
     id: '1',
     provider: 'provider',
     model,
     full_name: `[公益]provider/${model}`,
     pricing: {
+      current_user_price_milli: '2400',
+      current_user_prices_milli: null,
+
       mode: 'per_request',
       user_price_milli: '3000',
       discounted_user_price_milli: '2400',
@@ -596,7 +600,7 @@ test('user catalog searches, filters levels, paginates, and expands plain descri
   const priceTable = detail.getByRole('table', { name: '公益模型价格', exact: true });
   await expect(priceTable).toBeVisible();
   await expect(priceTable.locator('[aria-label="原价: 3"]')).toBeVisible();
-  await expect(priceTable.locator('[aria-label="优惠价: 2.4"]')).toBeVisible();
+  await expect(priceTable.locator('[aria-label="当前价格: 2.4"]')).toBeVisible();
   await expect(firstCard.getByRole('button', { name: '复制模型名称', exact: true })).toBeVisible();
   await saveScreenshot(page, 'catalog-expanded-320-dark-zh');
 

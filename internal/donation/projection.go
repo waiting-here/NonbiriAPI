@@ -499,7 +499,7 @@ EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=dk.endpo
 EXISTS(SELECT 1 FROM donation_key_memberships m WHERE m.donation_key_id=dk.id),
 CASE WHEN k.id IS NOT NULL THEN COALESCE(kl.max_concurrency,0) END,
 CASE WHEN k.id IS NOT NULL THEN COALESCE(kl.max_rpm,0) END,
-k.revision,cooldown.rate_limited_until,COALESCE(sb.profile,'none'),COALESCE(sb.rules_json,'[]'),COALESCE(sb.period,''),COALESCE(sb.source,''),sb.retry_at,sb.trial_claim_id IS NOT NULL,
+k.revision,cooldown.rate_limited_until,COALESCE(sb.period,''),COALESCE(sb.source,''),sb.retry_at,sb.trial_claim_id IS NOT NULL,
 (SELECT COUNT(*) FROM charity_model_bindings b WHERE b.donation_key_id=dk.id),
 dk.key_body_review_hmac IS NOT NULL,COALESCE(rr.required,0),rr.revision
 FROM donation_keys dk
@@ -517,7 +517,7 @@ WHERE `+where+` ORDER BY dk.id`, args...)
 	items := make([]AdminDonationKey, 0)
 	for rows.Next() {
 		var item AdminDonationKey
-		var bp, br, bperiod, bsource string
+		var bperiod, bsource string
 		var until *int64
 		var probing bool
 		var id int64
@@ -537,13 +537,10 @@ WHERE `+where+` ORDER BY dk.id`, args...)
 			&channelName, &channelCategory, &endpointEnabled, &keyPhysicalEnabled,
 			&priceLimit, &callLimit, &tokenLimit, &priceUsed, &priceReserved, &callsUsed, &callsReserved,
 			&tokensUsed, &tokensReserved, &item.TokenReserve, &enabled, &failureDisabled, &streak,
-			&generation, &item.FailureDisableThreshold, &item.SafeNote, &authorizedExpires, &expires, &ended, &suspended, &member, &item.MaxConcurrency, &item.MaxRPM, &item.KeyLimitsRevision, &item.RateLimitedUntil, &bp, &br, &bperiod, &bsource, &until, &probing, &bindingCount, &item.Review.MaterialAvailable, &item.Review.Required, &reviewRevision); err != nil {
+			&generation, &item.FailureDisableThreshold, &item.SafeNote, &authorizedExpires, &expires, &ended, &suspended, &member, &item.MaxConcurrency, &item.MaxRPM, &item.KeyLimitsRevision, &item.RateLimitedUntil, &bperiod, &bsource, &until, &probing, &bindingCount, &item.Review.MaterialAvailable, &item.Review.Required, &reviewRevision); err != nil {
 			return nil, fmt.Errorf("donation: scan key projection: %w", err)
 		}
-		item.Projection, err = smartbackoff.DecodeProjection(bp, br, bperiod, bsource, until, probing, now)
-		if err != nil {
-			return nil, err
-		}
+		item.Projection = smartbackoff.DecodeProjection(bperiod, bsource, until, probing, now)
 		item.ID = strconv.FormatInt(id, 10)
 		item.BindingCount = strconv.FormatInt(bindingCount, 10)
 		if reviewRevision.Valid {

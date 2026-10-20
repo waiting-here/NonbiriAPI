@@ -270,7 +270,7 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWri
 	errorGuard := newSensitiveGuard(append([][]byte{target.credential.bearer, target.credential.ciphertext, safetyMaterial}, sentSecrets...)...)
 	clear(safetyMaterial)
 	defer errorGuard.Clear()
-	errorContext := upstreamerror.Context{Backoff: smartbackoff.FromContext(ctx),
+	errorContext := upstreamerror.Context{CharityCall: smartbackoff.IsCharityCall(ctx),
 		BaseURL: target.baseURL, PrivateModel: target.upstreamModel,
 		ContainsSecret: func(value []byte) bool {
 			scanner := errorGuard.clone()
@@ -294,6 +294,7 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWri
 	// before DNS/dial/response latency can extend their lifetime.
 	target.credential.clear()
 
+	httpRequest = egress.WithResponseLimits(httpRequest, egress.ResponseLimits{JSONBytes: a.maxJSONResponseBytes, StreamBytes: a.maxStreamBytes, LineBytes: a.maxSSELineBytes, EventBytes: a.maxSSEEventBytes})
 	response, err := client.Do(httpRequest)
 	if response != nil {
 		defer func() { result.UpstreamStatus = response.StatusCode }()

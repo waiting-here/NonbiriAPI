@@ -1,3 +1,8 @@
+import {
+  defaultRecurringDiscount,
+  validRecurringDiscount,
+  type RecurringDiscount,
+} from '@shared/operations/recurringDiscount';
 import type { CharityPriceConfig, TokenPrices } from '@shared/operations/charity';
 import { createTimeDraft, timeDraftValue, type TimeDraft } from '@shared/time';
 import { MAX_UNIX_SECOND, validAmount, validTokenReserveCredits } from './managementFields';
@@ -16,6 +21,7 @@ export interface PriceDraft {
   penaltyEnabled: boolean;
   penaltyThreshold: string;
   penaltyFine: string;
+  recurringDiscount: RecurringDiscount;
   discountEnabled: boolean;
   discountPercent: number;
   discountStart: TimeDraft;
@@ -48,6 +54,7 @@ export function priceDraft(config?: CharityPriceConfig): PriceDraft {
     penaltyEnabled: Boolean(pricing?.context_penalty),
     penaltyThreshold: pricing?.context_penalty?.input_threshold ?? '',
     penaltyFine: pricing?.context_penalty?.fine ?? '0',
+    recurringDiscount: structuredClone(config?.recurring_discount ?? defaultRecurringDiscount()),
     discountEnabled: config?.discount.enabled ?? false,
     discountPercent: config?.discount.percent ?? 0,
     discountStart: createTimeDraft(config?.discount.start_at ?? null, 'second'),
@@ -87,6 +94,7 @@ export function draftPriceConfig(draft: PriceDraft): CharityPriceConfig | null {
         : {}),
     },
     token_reserve_credits: draft.tokenReserveCredits,
+    recurring_discount: structuredClone(draft.recurringDiscount),
     discount: {
       enabled: draft.discountEnabled,
       percent: draft.discountPercent,
@@ -146,6 +154,7 @@ export function priceDraftError(
   | 'tokenReserveCredits'
   | 'discountPercent'
   | 'discountDates'
+  | 'recurringDiscount'
   | null {
   const prices =
     draft.mode === 'per_request'
@@ -179,5 +188,6 @@ export function priceDraftError(
     (start !== null && end !== null && end < start)
   )
     return 'discountDates';
+  if (!validRecurringDiscount(draft.recurringDiscount)) return 'recurringDiscount';
   return null;
 }

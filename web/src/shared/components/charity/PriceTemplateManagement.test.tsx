@@ -5,6 +5,8 @@ import { PriceTemplateManagement } from './PriceTemplateManagement';
 import type { CharityPriceTemplate } from '@shared/operations/charityPriceTemplates';
 vi.mock('../AsyncLeaveDialog', () => ({ AsyncLeaveDialog: () => null }));
 const template: CharityPriceTemplate = {
+  recurring_discount: { enabled: false, time_zone: 'UTC', default_percent: 100, periods: [] },
+
   id: '3',
   name: 'Full token prices',
   description: 'All price fields',
@@ -108,6 +110,7 @@ describe('independent price-template management', () => {
       pricing: template.pricing,
       token_reserve_credits: null,
       discount: template.discount,
+      recurring_discount: template.recurring_discount,
       expected_revision: '4',
     });
     await screen.findByText('Editing “Changed template” · revision 5');

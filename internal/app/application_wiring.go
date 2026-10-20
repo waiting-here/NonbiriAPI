@@ -177,7 +177,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 
 	outbound := options.Egress
 	if outbound == nil {
-		outbound, err = egress.NewStack(egress.StackOptions{})
+		outbound, err = egress.NewStack(egress.StackOptions{CloudflareRoutes: cfg.CloudflareRoutes})
 		if err != nil {
 			_ = elevationManager.Close()
 			return nil, fmt.Errorf("create egress stack: %w", err)

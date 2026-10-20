@@ -4,6 +4,50 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## 1.0.6 — 2026-10-20
+
+### Added
+
+- Operator-configured Cloudflare AI Gateway forwarding for exact endpoint bases,
+  with optional provider-header to query-credential adaptation, separate gateway
+  authentication and secret protection before diagnostic capture.
+- Existing-binding markers and a single donated-key operation spanning multiple
+  charity models.
+- Channel binding presets managed by administrators and level-6 stewards, with
+  one operation applying a preset to all keys in an approved donation. Missing
+  models, unavailable resources and existing bindings produce per-item results.
+- Recurring weekly charity discounts with configurable time zones, weekdays,
+  time windows and percentages, including cross-midnight periods. Complete price
+  templates copy the schedule. An enabled fixed-window discount pauses it.
+
+### Changed
+
+- Charity smart backoff automatically recognizes supported recoverable quota
+  errors. Per-key profiles and supplemental rules are removed; existing waiting
+  deadlines, trial ownership and safe status remain available.
+- Key details give upstream waits and smart-backoff state a dedicated visible
+  area with separate deadlines, including when another restriction disables a key.
+- Public pricing adds current payable prices and the next percentage change.
+  Accepted requests retain their price across schedule changes and retries.
+- Fishing leaderboard snapshots use the existing read pool so ranking queries
+  no longer occupy the write connection. Ordering, privacy and expiry stay the same.
+
+### Compatibility
+
+- Storage schema 26 adds shared channel binding presets and removes obsolete
+  smart-backoff configuration while preserving recovery state. It also adds
+  disabled-by-default recurring discount settings. Account export 24
+  omits the old profile and rule fields. Requests containing those fields are
+  rejected; remove them from donation creation and failure-policy requests.
+  Existing bindings, key enablement and level-5 model scope are preserved.
+- Fixed-window discount fields retain their behavior and take priority whenever
+  enabled, including outside their configured window. Existing `discounted_*`
+  projections remain fixed-percentage calculations; use `current_user_*` for
+  current payable prices. Template PUT without `recurring_discount` resets it
+  to the disabled default.
+- Cloudflare forwarding is disabled by default. It retains shared outbound
+  protections and does not add gateway billing fallback or extra retries.
+
 ## 1.0.5 — 2026-10-20
 
 ### Added

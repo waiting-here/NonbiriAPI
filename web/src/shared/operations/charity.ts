@@ -1,4 +1,10 @@
 import {
+  normalizeRecurringDiscount,
+  normalizeEffectiveDiscount,
+  type RecurringDiscount,
+  type EffectiveDiscount,
+} from './recurringDiscount';
+import {
   normalizeSmartBackoffFields,
   type SmartBackoffFields,
 } from '@shared/operations/smartBackoff';
@@ -256,8 +262,6 @@ export function normalizeManagedKey(
 ): ManagedDonationKey {
   const required = [
     'failure_disable_threshold',
-    'smart_backoff_profile',
-    'smart_backoff_rules',
     'smart_backoff',
     'binding_count',
     'idle',
@@ -735,6 +739,9 @@ export interface CharityModel {
     context_penalty?: { input_threshold: string; fine: string };
   };
   discount: { enabled: boolean; percent: number; start_at: number | null; end_at: number | null };
+  recurring_discount: RecurringDiscount;
+  effective_discount: EffectiveDiscount;
+  server_now: number;
   flatten_tool_calls: boolean;
   revision: string;
   binding_revision: string;
@@ -767,7 +774,11 @@ export interface CharityBinding {
   upstream_model_id: string;
   source_types: ('automatic' | 'manual')[];
 }
-export type CharityBindingCandidate = Omit<CharityBinding, 'id' | 'ord'>;
+export type CharityBindingCandidate = Omit<CharityBinding, 'id' | 'ord'> & {
+  current_binding_id?: string | null;
+  other_binding_count?: string;
+  other_bindings?: { charity_model_id: string; full_name: string; binding_id: string }[];
+};
 export interface BindingDonation {
   id: string;
   description: string;
@@ -787,7 +798,7 @@ export interface CharityBindings {
 
 export type CharityPriceConfig = Pick<
   CharityModel,
-  'pricing' | 'token_reserve_credits' | 'discount'
+  'pricing' | 'token_reserve_credits' | 'discount' | 'recurring_discount'
 >;
 
 export function normalizeCharityPriceConfig(
@@ -877,6 +888,7 @@ export function normalizeCharityPriceConfig(
     invalidResponse(`${label} discount window`);
   return {
     pricing,
+    recurring_discount: normalizeRecurringDiscount(root.recurring_discount),
     token_reserve_credits: normalizeTokenReserveCredits(
       root.token_reserve_credits,
       label + ' token reserve credits',
@@ -902,6 +914,9 @@ function normalizeModel(value: unknown, label: string): CharityModel {
     'public_description',
     'pricing',
     'discount',
+    'recurring_discount',
+    'effective_discount',
+    'server_now',
     'flatten_tool_calls',
     'transport_rule',
     'revision',
@@ -987,6 +1002,8 @@ function normalizeModel(value: unknown, label: string): CharityModel {
     allowed_levels: allowedLevels,
     public_description: publicDescription,
     ...priceConfig,
+    effective_discount: normalizeEffectiveDiscount(root.effective_discount),
+    server_now: unixSecond(root.server_now, `${label} server time`),
     transport_rule: normalizeTransportRule(root.transport_rule),
     flatten_tool_calls: boolean(root.flatten_tool_calls, `${label} flatten tool calls`),
     role_policy: normalizeRolePolicy(root.role_policy, `${label} role policy`),
@@ -1156,13 +1173,49 @@ function normalizeBinding(value: unknown, label: string): CharityBinding {
 export function normalizeCharityBindingCandidate(
   value: unknown,
   label: string,
+  requireBindingMarkers = false,
 ): CharityBindingCandidate {
   const root = record(
     value,
-    ['donation_key_id', 'donation_id', 'source', 'upstream_model_id', 'source_types'],
+    [
+      'donation_key_id',
+      'donation_id',
+      'source',
+      'upstream_model_id',
+      'source_types',
+      'current_binding_id',
+      'other_binding_count',
+      'other_bindings',
+    ],
     label,
+    ['donation_key_id', 'donation_id', 'source', 'upstream_model_id', 'source_types'],
   );
+  const hasMarkers = root.current_binding_id !== undefined || requireBindingMarkers;
+  const markers = hasMarkers
+    ? {
+        current_binding_id: nullableDecimalID(root.current_binding_id, `${label} current binding`),
+        other_binding_count: decimal(root.other_binding_count, `${label} other binding count`),
+        other_bindings: array(root.other_bindings, `${label} other bindings`, 3).map((entry) => {
+          const binding = record(
+            entry,
+            ['charity_model_id', 'full_name', 'binding_id'],
+            `${label} other binding`,
+          );
+          return {
+            charity_model_id: decimalID(binding.charity_model_id, `${label} other target`),
+            full_name: string(binding.full_name, `${label} other target name`, { min: 1 }),
+            binding_id: decimalID(binding.binding_id, `${label} other binding id`),
+          };
+        }),
+      }
+    : {};
+  if (
+    markers.other_bindings &&
+    BigInt(markers.other_binding_count!) < BigInt(markers.other_bindings.length)
+  )
+    invalidResponse(`${label} other binding count`);
   return {
+    ...markers,
     donation_key_id: decimalID(root.donation_key_id, `${label} donation key id`),
     donation_id: decimalID(root.donation_id, `${label} donation id`),
     source: normalizeSource(root.source, `${label} source`),

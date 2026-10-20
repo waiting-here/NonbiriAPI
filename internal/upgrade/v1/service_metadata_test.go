@@ -40,7 +40,7 @@ func TestServiceMetadataConversionPreservesPopulatedSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	result, err := Run(t.Context(), path, vault, Options{Apply: true})
-	if err != nil || result.SourceSchemaVersion != 20 || result.TargetSchemaVersion != 25 {
+	if err != nil || result.SourceSchemaVersion != 20 || result.TargetSchemaVersion != 26 {
 		t.Fatal(result, err)
 	}
 	store, err := db.Open(path, vault)

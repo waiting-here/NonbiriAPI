@@ -20,12 +20,12 @@ has passed.
 
 ## Stable candidate
 
-- Validate fresh schema 25, exact supported schema 16–24 conversions, target equality,
+- Validate fresh schema 26, exact supported schema 16–25 conversions, target equality,
   rollback/cancellation, re-entry and zero-write unsupported-source rejection.
   Preserve credentials, operator settings, legal overrides, balances, game saves,
   activities and receipts. Exercise successive stable migrations; see
   [database upgrades](database-upgrades.md).
-- Prove catalog/template/period additions need no DDL and preserve administrator
+- Keep content-only catalog/template/period edits free of DDL and preserve administrator
   edits, historical eligibility, pity and claims. Recheck exports and deletion
   for every new user-associated record.
 - Cover ownership, secrets, SSRF, original-input abuse priority, ledger atomicity,

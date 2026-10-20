@@ -184,7 +184,9 @@ func TestLegacyModelReceiptRetainsOriginalFieldsAndKnownAccessDefaults(t *testin
 	}
 	current := []byte("{\"id\":\"7\",\"allowed_levels\":[],\"public_description\":\"current\",\"revision\":\"4\"}")
 	result, err = replayModel(idempotency.Decision{Kind: idempotency.Replay, HTTPStatus: 200, ResponseBody: current})
-	if err != nil || !bytes.Equal(result.Body, current) || result.Value.AllowedLevels == nil || len(result.Value.AllowedLevels) != 0 {
+	if err != nil || result.Value.AllowedLevels == nil || len(result.Value.AllowedLevels) != 0 ||
+		result.Value.PublicDescription != "current" || result.Value.Revision != "4" ||
+		result.Value.RecurringDiscount.Enabled || result.Value.RecurringDiscount.TimeZone != "UTC" {
 		t.Fatalf("empty set replay %+v %v", result, err)
 	}
 }

@@ -16,7 +16,7 @@ All three connectors use the shared outbound boundary, cancellation, timeouts, c
 
 Gemini rejects tool-call flattening during candidate preflight because the text tool format cannot retain Google thought signatures. Both JSON and SSE calls require this option to be disabled.
 
-Configure the complete API mount, for example `https://generativelanguage.googleapis.com/v1beta`. Authentication uses `x-goog-api-key`, never a URL query key. Model IDs are one path segment, optionally prefixed once with `models/`.
+Configure the complete API mount, for example `https://generativelanguage.googleapis.com/v1beta`. The connector authenticates with `x-goog-api-key`. An explicit operator-configured [Cloudflare route](cloudflare-egress.md) can move this credential into a private outbound query parameter when required by the gateway. Direct requests retain header authentication. Model IDs are one path segment, optionally prefixed once with `models/`.
 
 Supported Chat input includes leading system/developer text, user/assistant text, function definitions and matched tool results, temperature, top-p, stop sequences, one candidate, output-token limits, and streaming. Images must be bounded PNG, JPEG, GIF or WebP base64 data URLs. Arbitrary remote image URLs, audio, files, server-executed tools, `store`, `reasoning_effort`, multiple candidates, strict function schemas and `parallel_tool_calls:false` with tools are incompatible. `response_format` supports `text` and `json_object`; JSON-schema formats are incompatible.
 

@@ -142,6 +142,10 @@ describe.each([normalizeAdminDonation, normalizeStewardDonation])(
 );
 
 const model = {
+  recurring_discount: { enabled: false, time_zone: 'UTC', default_percent: 100, periods: [] },
+  effective_discount: { source: 'fixed', percent: 10, next_change_at: null },
+  server_now: 1800000000,
+
   model_types: ['chat_completions', 'embeddings'],
   id: '1',
   provider: 'provider',
@@ -201,8 +205,6 @@ const managedKey = {
   authorized_expires_at: null,
   expires_at: 100,
   failure_disable_threshold: '10',
-  smart_backoff_profile: 'none' as const,
-  smart_backoff_rules: [],
   smart_backoff: null,
   streak: { generation: '1', count: '0', failure_disabled: false },
   ended_reason: null,

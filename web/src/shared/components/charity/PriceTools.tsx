@@ -33,6 +33,7 @@ const priceSnapshot = (source: CharityPriceConfig): CharityPriceConfig => ({
   pricing: structuredClone(source.pricing),
   token_reserve_credits: source.token_reserve_credits,
   discount: { ...source.discount },
+  recurring_discount: structuredClone(source.recurring_discount),
 });
 
 export function PriceTools(props: PriceToolsProps) {

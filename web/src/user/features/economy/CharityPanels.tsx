@@ -1,10 +1,3 @@
-import { SmartBackoffInput } from '@shared/components/SmartBackoffInput';
-import {
-  DEFAULT_SMART_BACKOFF,
-  smartBackoffInput,
-  validSmartBackoff,
-  type SmartBackoffConfiguration,
-} from '@shared/operations/smartBackoff';
 import { contextPriceProps } from './contextPrices';
 import { ModelTypesSummary } from '@shared/components/ModelTypesField';
 import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react';
@@ -52,6 +45,16 @@ import type {
 } from './types';
 
 const DRAFT_STORAGE_PREFIX = 'nonbiri:charity-donation-draft:v1';
+const keyStateLabels: Record<DonationKey['charityState'], string> = {
+  pending: 'user.charity.keyState.pending',
+  disabled: 'user.charity.keyState.disabled',
+  suspended: 'user.charity.keyState.suspended',
+  exhausted: 'user.charity.keyState.exhausted',
+  expired: 'user.charity.keyState.expired',
+  ended: 'user.charity.keyState.ended',
+  available: 'user.charity.keyState.available',
+  rate_limited: 'user.charity.keyState.rate_limited',
+};
 
 export type DonationOverviewFilter = 'all' | 'available' | 'blocked' | 'ended';
 
@@ -175,29 +178,29 @@ export function CharityCapabilityPanel({ capability }: { capability: CharityCapa
                     {
                       label: t('user.charity.requestPrice'),
                       userMilli: model.pricing.userPriceMilli,
-                      discountedUserMilli: model.pricing.discountedUserPriceMilli,
+                      currentUserMilli: model.pricing.currentUserPriceMilli,
                     },
                   ]
                 : [
                     {
                       label: t('user.charity.uncachedInputPrice'),
                       userMilli: model.pricing.userPricesMilli.uncachedInput,
-                      discountedUserMilli: model.pricing.discountedUserPricesMilli.uncachedInput,
+                      currentUserMilli: model.pricing.currentUserPricesMilli.uncachedInput,
                     },
                     {
                       label: t('user.charity.cacheWriteInputPrice'),
                       userMilli: model.pricing.userPricesMilli.cacheWriteInput,
-                      discountedUserMilli: model.pricing.discountedUserPricesMilli.cacheWriteInput,
+                      currentUserMilli: model.pricing.currentUserPricesMilli.cacheWriteInput,
                     },
                     {
                       label: t('user.charity.cacheReadInputPrice'),
                       userMilli: model.pricing.userPricesMilli.cacheReadInput,
-                      discountedUserMilli: model.pricing.discountedUserPricesMilli.cacheReadInput,
+                      currentUserMilli: model.pricing.currentUserPricesMilli.cacheReadInput,
                     },
                     {
                       label: t('user.charity.outputPrice'),
                       userMilli: model.pricing.userPricesMilli.output,
-                      discountedUserMilli: model.pricing.discountedUserPricesMilli.output,
+                      currentUserMilli: model.pricing.currentUserPricesMilli.output,
                     },
                   ];
             return (
@@ -211,6 +214,8 @@ export function CharityCapabilityPanel({ capability }: { capability: CharityCapa
                   mode={model.pricing.mode}
                   rows={rows}
                   serverNow={capability.serverNow}
+                  effectiveDiscount={model.effectiveDiscount}
+                  recurringDiscount={model.recurringDiscount}
                   discount={{
                     enabled: model.discount.enabled,
                     percent: model.discount.percent,
@@ -285,7 +290,6 @@ export function DonationComposer({
   const [selectedChoices, setSelectedChoices] = useState<readonly EndpointKeyChoice[]>([]);
   const [expiryByKey, setExpiryByKey] = useState<Record<string, TimeDraft>>({});
   const [thresholdByKey, setThresholdByKey] = useState<Record<string, string>>({});
-  const [backoffByKey, setBackoffByKey] = useState<Record<string, SmartBackoffConfiguration>>({});
   const [readBlocked, setReadBlocked] = useState(true);
   const [authorized, setAuthorized] = useState(false);
   const [validation, setValidation] = useState('');
@@ -347,18 +351,7 @@ export function DonationComposer({
       setValidation(t('common.failurePolicy.invalid'));
       return;
     }
-    if (
-      selectedChoices.some(
-        (choice) => !validSmartBackoff(backoffByKey[choice.key.id] ?? DEFAULT_SMART_BACKOFF),
-      )
-    ) {
-      setValidation(t('common.smartBackoff.invalid'));
-      return;
-    }
     const keys = selectedChoices.map((choice) => {
-      const backoff = backoffByKey[choice.key.id]
-        ? smartBackoffInput(backoffByKey[choice.key.id])
-        : null;
       const failureDisableThreshold = thresholdByKey[choice.key.id] ?? '10';
       if (!validFailureThreshold(failureDisableThreshold)) return undefined;
       const expiresAt = expiryByKey[choice.key.id]
@@ -370,12 +363,6 @@ export function DonationComposer({
             endpointKeyId: choice.key.id,
             expiresAt,
             failureDisableThreshold,
-            ...(backoff
-              ? {
-                  smartBackoffProfile: backoff.smart_backoff_profile,
-                  smartBackoffRules: backoff.smart_backoff_rules,
-                }
-              : {}),
           };
     });
     if (keys.some((key) => key === undefined)) {
@@ -486,6 +473,7 @@ export function DonationComposer({
             </button>
           }
         >
+          <p className="muted">{t('common.smartBackoff.automaticHelp')}</p>
           <DonationResourcePicker
             accountId={draftNamespace}
             selected={selectedChoices}
@@ -517,13 +505,6 @@ export function DonationComposer({
                   disabled={locked}
                   onChange={(value) =>
                     setThresholdByKey((current) => ({ ...current, [choice.key.id]: value }))
-                  }
-                />
-                <SmartBackoffInput
-                  value={backoffByKey[choice.key.id] ?? DEFAULT_SMART_BACKOFF}
-                  disabled={locked}
-                  onChange={(value) =>
-                    setBackoffByKey((current) => ({ ...current, [choice.key.id]: value }))
                   }
                 />
               </div>
@@ -779,7 +760,7 @@ export function DonationKeyPanel({
           <StatusBadge
             active={donationKey.charityState === 'available'}
             danger={donationKey.charityState === 'ended' || donationKey.charityState === 'expired'}
-            label={t(`user.charity.keyState.${donationKey.charityState}`)}
+            label={t(keyStateLabels[donationKey.charityState])}
           />
           {states
             .filter((state) => state !== donationKey.charityState)
@@ -795,24 +776,11 @@ export function DonationKeyPanel({
             ))}
         </div>
       </div>
+      <KeyRateLimitTime
+        until={donationKey.rateLimitedUntil}
+        smartBackoff={donationKey.smartBackoff}
+      />
       <dl className="detail-grid economy-key-status-details">
-        {donationKey.charityState === 'rate_limited' || donationKey.smartBackoff ? (
-          <div className="detail-row">
-            <dt>
-              {t(
-                donationKey.smartBackoff
-                  ? 'common.smartBackoff.profile'
-                  : 'user.charity.keyState.rate_limited',
-              )}
-            </dt>
-            <dd>
-              <KeyRateLimitTime
-                until={donationKey.rateLimitedUntil}
-                smartBackoff={donationKey.smartBackoff}
-              />
-            </dd>
-          </div>
-        ) : null}
         {blockingReasons.length > 0 ? (
           <div className="detail-row">
             <dt>{t('user.charity.blockingReasons')}</dt>
@@ -954,8 +922,6 @@ export function DonationKeyPanel({
           keyID={donationKey.id}
           revision={donationRevision}
           threshold={donationKey.failureDisableThreshold}
-          profile={donationKey.smartBackoffProfile}
-          rules={donationKey.smartBackoffRules}
         />
       ) : null}
       {accountID && donationId && donationRevision ? (

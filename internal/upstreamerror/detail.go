@@ -39,7 +39,7 @@ func (d Detail) Backoff() smartbackoff.Classification { return d.backoff }
 // the connector's fingerprints, never by retained plaintext credentials.
 // ContainsSecret must start with fresh rolling state on every call.
 type Context struct {
-	Backoff        smartbackoff.Config
+	CharityCall    bool
 	BaseURL        string
 	PrivateModel   string
 	ContainsSecret func([]byte) bool
@@ -116,8 +116,8 @@ func (c Context) Parse(body []byte) Detail {
 		}
 		if raw, ok := root["error"]; ok {
 			var errorFields map[string]json.RawMessage
-			if json.Unmarshal(raw, &errorFields) == nil && errorFields != nil {
-				classified = smartbackoff.Classify(c.Backoff, errorFields)
+			if c.CharityCall && json.Unmarshal(raw, &errorFields) == nil && errorFields != nil {
+				classified = smartbackoff.Classify(errorFields)
 			}
 		}
 	} else {

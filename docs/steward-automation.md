@@ -76,8 +76,6 @@ The endpoint optionally accepts `note` and `enabled`. Each key accepts:
 | `token_reserve` | `0`; unknown-usage Token reserve, as a whole number through 2147483647. |
 | `charity_enabled` | `true`; the donation-key switch, separate from physical-key `enabled`. |
 | `failure_disable_threshold` | `"10"`; canonical unsigned 128-bit decimal string. `"0"` never disables this key for errors; failures are still counted. The maximum is `"340282366920938463463374607431768211455"`. |
-| `smart_backoff_profile` | `"none"`; or `"five_hour_week"`, `"five_hour_week_month"`, `"day"`, `"day_month"`. Selects applicable periodic quotas for optional charity-call backoff. |
-| `smart_backoff_rules` | `[]`; at most eight supplemental code/message rules. See [smart backoff](api-contract.md#413-smart-donated-key-backoff) for matching, period values and validation. |
 | `safe_note` | Empty management note, at most 256 Unicode code points. It is separate from the private owner note. |
 | `recurring_limits` | `[]`; zero to sixteen rules with the existing [recurring-limit semantics](api-contract.md#75-recurring-donation-key-limits). New rule `id` is omitted or `null`. Nullable alignment and week-start fields may be omitted when their mode does not need them. |
 
@@ -155,8 +153,6 @@ GET and a successful PATCH return HTTP 200 with the same safe shape:
   "failure_disable_threshold": "10",
   "failure_streak": "12",
   "failure_disabled": true,
-  "smart_backoff_profile": "none",
-  "smart_backoff_rules": [],
   "smart_backoff": null,
   "revision": "3"
 }
@@ -180,32 +176,19 @@ Idempotency-Key: REPLACE_WITH_A_UNIQUE_RANDOM_KEY
 
 All four body fields are required strings. The threshold has the same U128 range as creation; no signs, leading zeros, fractions, exponents or `null`. IDs and revisions fit positive signed 64-bit integers. Never convert these strings through JavaScript `Number`.
 
-PATCH also accepts `smart_backoff_profile` and `smart_backoff_rules` with the
-same shapes and limits as creation. Omission preserves each setting, `null`
-is rejected, and an empty rules array clears supplemental recognition.
-For example, add these fields to the request above:
-
-```json
-{
-  "smart_backoff_profile": "day_month",
-  "smart_backoff_rules": [
-    {"kind": "code", "value": "DAILY_QUOTA_EXHAUSTED", "period": "day"}
-  ]
-}
-```
-
-Use an actual error code documented by that upstream. A rule also supports
-`kind:"message"` for a fixed error-message substring; matches are case-sensitive
-and are never regular expressions. An omitted rule period defaults to `auto`.
-The response always returns the normalized configuration and nullable
-`smart_backoff:{state,reason,source,retry_at}`. Recognized quota errors leave the
+Smart backoff automatically recognizes supported recoverable quota errors for
+charity calls. Creation and PATCH reject the removed `smart_backoff_profile` and
+`smart_backoff_rules` fields. Remove them from requests; no replacement is needed.
+The response retains nullable `smart_backoff:{state,reason,source,retry_at}`.
+New classifications use `builtin`; an existing episode can retain its historical
+`custom_rule` source. Recognized quota errors leave the
 current failure streak unchanged; valid retry headers take precedence.
 The next eligible real charity request performs a single trial when the wait
 ends. A trial's initial HTTP 200 clears smart backoff immediately.
 
-Changing the profile or rules clears the old smart episode. Threshold-only
-edits, identical settings and failure-streak resets preserve it. Header cooldown
-is preserved in every case. Unknown errors still follow the failure threshold.
+Threshold edits and failure-streak resets preserve the smart episode and header
+cooldown. Upgrading also preserves existing recovery facts while discarding
+obsolete configuration. Unknown errors still follow the failure threshold.
 See the [API contract](api-contract.md#413-smart-donated-key-backoff) for the
 15/30/60-minute, weekly and monthly recovery schedules.
 
@@ -213,7 +196,7 @@ Saving keeps the count and generation, immediately sets error-disablement when a
 
 PATCH uses the same 24-hour idempotency rules as creation, with a 30-second operation limit. Repeating the original key and body returns the original policy snapshot without another revision, audit or alert. Current permission and visibility are checked before replay. A stale revision or a reused key with a different request returns 409; re-read after a definite revision conflict and use a new key for the newly intended edit. An unknown result must first be resolved by retrying the original request. Invalid input returns 400, missing or no-longer-visible records 404, oversized input 413, and authentication or authority failures 401/403. Capacity and maintenance failures follow the shared controls.
 
-Creation, discovery and policy edits use existing account, donation, catalog, quota, review and replay records. Safe exports include the threshold, smart-backoff configuration and current safe state. Policy audits contain no key secrets; alerts occur once per transition into error-disablement. Existing account export, deletion and anonymization rules apply. Discovery failures may also enter the restricted original-error store, which can contain content echoed by an upstream and is not part of an automation response or personal export.
+Creation, discovery and policy edits use existing account, donation, catalog, quota, review and replay records. Safe exports include the threshold and current safe backoff state; retired configuration is omitted. Policy audits contain no key secrets; alerts occur once per transition into error-disablement. Existing account export, deletion and anonymization rules apply. Discovery failures may also enter the restricted original-error store, which can contain content echoed by an upstream and is not part of an automation response or personal export.
 
 Discovery failures distinguish authentication, quota, timeout, protocol, transport,
 interruption, unsupported server region and temporary upstream unavailability.
@@ -236,6 +219,14 @@ Donation projections use `first_approval_origin: "none"` for pending requests
 and requests directly rejected before approval. `unknown` remains reserved
 for historical approvals whose origin cannot be established. This display
 field does not grant review or forced-rejection permission.
+
+## Model price reads
+
+Existing authorized model reads include `recurring_discount`, `effective_discount`
+and `server_now`. List entries share one decision time. These fields add no
+CallerKey price-write or template permissions. Use the current-price fields in
+capability and catalog responses for the payable price; the older `discounted_*`
+fields retain their fixed-percentage meaning. See [charity discounts](charity-discounts.md).
 
 ## Temporary upstream cooldowns
 

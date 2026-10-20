@@ -98,8 +98,6 @@ const pendingKey = {
   authorized_expires_at: null,
   expires_at: null,
   failure_disable_threshold: '10',
-  smart_backoff_profile: 'none' as const,
-  smart_backoff_rules: [],
   smart_backoff: null,
   streak: { generation: '1', count: '0', failure_disabled: false },
   ended_reason: null,
@@ -133,6 +131,10 @@ const pendingStewardDonation = {
 };
 
 const currentCharityModel = {
+  recurring_discount: { enabled: false, time_zone: 'UTC', default_percent: 100, periods: [] },
+  effective_discount: { source: 'none', percent: 100, next_change_at: null },
+  server_now: 1800000000,
+
   model_types: ['chat_completions', 'embeddings'],
   route_strategy: 'expiry_weighted',
   id: '7',
@@ -853,6 +855,9 @@ test('reachable admin charity edits flatten policy with keyboard input at 390px'
               upstream_model_id: 'upstream-model',
               source: sharedSource,
               source_types: ['automatic'],
+              current_binding_id: null,
+              other_binding_count: '0',
+              other_bindings: [],
             },
           ],
           next_cursor: null,

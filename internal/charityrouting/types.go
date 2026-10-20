@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/charitydiscount"
 	"log/slog"
 	"net/http"
 
@@ -79,6 +80,8 @@ type CapabilityTokenPrices struct {
 }
 
 type CapabilityPricing struct {
+	CurrentUserPriceMilli     *string                   `json:"current_user_price_milli"`
+	CurrentUserPricesMilli    *CapabilityTokenPrices    `json:"current_user_prices_milli"`
 	LongContext               *CapabilityLongContext    `json:"long_context,omitempty"`
 	ContextPenalty            *CapabilityContextPenalty `json:"context_penalty,omitempty"`
 	Mode                      string                    `json:"mode"`
@@ -96,14 +99,16 @@ type CapabilityDiscount struct {
 }
 
 type CapabilityModel struct {
-	ModelTypes    modeltype.Set             `json:"model_types"`
-	RecentSuccess observability.SuccessRate `json:"recent_success"`
-	ID            string                    `json:"id"`
-	Provider      string                    `json:"provider"`
-	Model         string                    `json:"model"`
-	FullName      string                    `json:"full_name"`
-	Pricing       CapabilityPricing         `json:"pricing"`
-	Discount      CapabilityDiscount        `json:"discount"`
+	RecurringDiscount charitydiscount.Config    `json:"recurring_discount"`
+	EffectiveDiscount charitydiscount.Effective `json:"effective_discount"`
+	ModelTypes        modeltype.Set             `json:"model_types"`
+	RecentSuccess     observability.SuccessRate `json:"recent_success"`
+	ID                string                    `json:"id"`
+	Provider          string                    `json:"provider"`
+	Model             string                    `json:"model"`
+	FullName          string                    `json:"full_name"`
+	Pricing           CapabilityPricing         `json:"pricing"`
+	Discount          CapabilityDiscount        `json:"discount"`
 }
 
 type Capability struct {
@@ -144,31 +149,34 @@ type AdminRollingSuccess struct {
 }
 
 type AdminCharityModel struct {
-	SessionHeaders        []sessionheader.Config `json:"session_headers"`
-	ModelTypes            modeltype.Set          `json:"model_types"`
-	TransportRule         transportpolicy.Rule   `json:"transport_rule"`
-	RolePolicy            rolepolicy.Policy      `json:"role_policy"`
-	IsMainstream          bool                   `json:"is_mainstream"`
-	ExcludedRequestFields []string               `json:"excluded_request_fields"`
-	TokenReserveCredits   *string                `json:"token_reserve_credits"`
-	AllowedLevels         []int                  `json:"allowed_levels"`
-	PublicDescription     string                 `json:"public_description"`
-	RouteStrategy         string                 `json:"route_strategy"`
-	AffinityTTLSeconds    int                    `json:"affinity_ttl_seconds"`
-	ID                    string                 `json:"id"`
-	Provider              string                 `json:"provider"`
-	Model                 string                 `json:"model"`
-	FullName              string                 `json:"full_name"`
-	Enabled               bool                   `json:"enabled"`
-	Pricing               AdminPricing           `json:"pricing"`
-	Discount              AdminDiscount          `json:"discount"`
-	FlattenToolCalls      bool                   `json:"flatten_tool_calls"`
-	Revision              string                 `json:"revision"`
-	BindingRevision       string                 `json:"binding_revision"`
-	BindingCount          string                 `json:"binding_count"`
-	RollingSuccess        AdminRollingSuccess    `json:"rolling_success"`
-	CreatedAt             int64                  `json:"created_at"`
-	UpdatedAt             int64                  `json:"updated_at"`
+	RecurringDiscount     charitydiscount.Config    `json:"recurring_discount"`
+	EffectiveDiscount     charitydiscount.Effective `json:"effective_discount"`
+	ServerNow             int64                     `json:"server_now"`
+	SessionHeaders        []sessionheader.Config    `json:"session_headers"`
+	ModelTypes            modeltype.Set             `json:"model_types"`
+	TransportRule         transportpolicy.Rule      `json:"transport_rule"`
+	RolePolicy            rolepolicy.Policy         `json:"role_policy"`
+	IsMainstream          bool                      `json:"is_mainstream"`
+	ExcludedRequestFields []string                  `json:"excluded_request_fields"`
+	TokenReserveCredits   *string                   `json:"token_reserve_credits"`
+	AllowedLevels         []int                     `json:"allowed_levels"`
+	PublicDescription     string                    `json:"public_description"`
+	RouteStrategy         string                    `json:"route_strategy"`
+	AffinityTTLSeconds    int                       `json:"affinity_ttl_seconds"`
+	ID                    string                    `json:"id"`
+	Provider              string                    `json:"provider"`
+	Model                 string                    `json:"model"`
+	FullName              string                    `json:"full_name"`
+	Enabled               bool                      `json:"enabled"`
+	Pricing               AdminPricing              `json:"pricing"`
+	Discount              AdminDiscount             `json:"discount"`
+	FlattenToolCalls      bool                      `json:"flatten_tool_calls"`
+	Revision              string                    `json:"revision"`
+	BindingRevision       string                    `json:"binding_revision"`
+	BindingCount          string                    `json:"binding_count"`
+	RollingSuccess        AdminRollingSuccess       `json:"rolling_success"`
+	CreatedAt             int64                     `json:"created_at"`
+	UpdatedAt             int64                     `json:"updated_at"`
 }
 
 // Steward DTOs are deliberately independently compiled, including nested
@@ -204,31 +212,34 @@ type StewardRollingSuccess struct {
 }
 
 type StewardCharityModel struct {
-	SessionHeaders        []sessionheader.Config `json:"session_headers"`
-	ModelTypes            modeltype.Set          `json:"model_types"`
-	TransportRule         transportpolicy.Rule   `json:"transport_rule"`
-	RolePolicy            rolepolicy.Policy      `json:"role_policy"`
-	IsMainstream          bool                   `json:"is_mainstream"`
-	ExcludedRequestFields []string               `json:"excluded_request_fields"`
-	TokenReserveCredits   *string                `json:"token_reserve_credits"`
-	AllowedLevels         []int                  `json:"allowed_levels"`
-	PublicDescription     string                 `json:"public_description"`
-	RouteStrategy         string                 `json:"route_strategy"`
-	AffinityTTLSeconds    int                    `json:"affinity_ttl_seconds"`
-	ID                    string                 `json:"id"`
-	Provider              string                 `json:"provider"`
-	Model                 string                 `json:"model"`
-	FullName              string                 `json:"full_name"`
-	Enabled               bool                   `json:"enabled"`
-	Pricing               StewardPricing         `json:"pricing"`
-	Discount              StewardDiscount        `json:"discount"`
-	FlattenToolCalls      bool                   `json:"flatten_tool_calls"`
-	Revision              string                 `json:"revision"`
-	BindingRevision       string                 `json:"binding_revision"`
-	BindingCount          string                 `json:"binding_count"`
-	RollingSuccess        StewardRollingSuccess  `json:"rolling_success"`
-	CreatedAt             int64                  `json:"created_at"`
-	UpdatedAt             int64                  `json:"updated_at"`
+	RecurringDiscount     charitydiscount.Config    `json:"recurring_discount"`
+	EffectiveDiscount     charitydiscount.Effective `json:"effective_discount"`
+	ServerNow             int64                     `json:"server_now"`
+	SessionHeaders        []sessionheader.Config    `json:"session_headers"`
+	ModelTypes            modeltype.Set             `json:"model_types"`
+	TransportRule         transportpolicy.Rule      `json:"transport_rule"`
+	RolePolicy            rolepolicy.Policy         `json:"role_policy"`
+	IsMainstream          bool                      `json:"is_mainstream"`
+	ExcludedRequestFields []string                  `json:"excluded_request_fields"`
+	TokenReserveCredits   *string                   `json:"token_reserve_credits"`
+	AllowedLevels         []int                     `json:"allowed_levels"`
+	PublicDescription     string                    `json:"public_description"`
+	RouteStrategy         string                    `json:"route_strategy"`
+	AffinityTTLSeconds    int                       `json:"affinity_ttl_seconds"`
+	ID                    string                    `json:"id"`
+	Provider              string                    `json:"provider"`
+	Model                 string                    `json:"model"`
+	FullName              string                    `json:"full_name"`
+	Enabled               bool                      `json:"enabled"`
+	Pricing               StewardPricing            `json:"pricing"`
+	Discount              StewardDiscount           `json:"discount"`
+	FlattenToolCalls      bool                      `json:"flatten_tool_calls"`
+	Revision              string                    `json:"revision"`
+	BindingRevision       string                    `json:"binding_revision"`
+	BindingCount          string                    `json:"binding_count"`
+	RollingSuccess        StewardRollingSuccess     `json:"rolling_success"`
+	CreatedAt             int64                     `json:"created_at"`
+	UpdatedAt             int64                     `json:"updated_at"`
 }
 
 type CandidateSource struct {
@@ -241,6 +252,7 @@ type CandidateSource struct {
 }
 
 type AdminBindingCandidate struct {
+	BindingMarkers
 	DonationKeyID   string          `json:"donation_key_id"`
 	DonationID      string          `json:"donation_id"`
 	Source          CandidateSource `json:"source"`
@@ -258,6 +270,7 @@ type StewardCandidateSource struct {
 }
 
 type StewardBindingCandidate struct {
+	BindingMarkers
 	DonationKeyID   string                 `json:"donation_key_id"`
 	DonationID      string                 `json:"donation_id"`
 	Source          StewardCandidateSource `json:"source"`
@@ -329,26 +342,28 @@ type DiscountPatchInput struct {
 }
 
 type ModelCreate struct {
-	SessionHeaders        []sessionheader.Config `json:"session_headers,omitempty"`
-	ModelTypes            modeltype.Set          `json:"model_types,omitempty"`
-	TransportRule         transportpolicy.Rule   `json:"transport_rule,omitempty"`
-	RolePolicy            *rolepolicy.Policy     `json:"role_policy,omitempty"`
-	IsMainstream          bool                   `json:"is_mainstream"`
-	ExcludedRequestFields []string               `json:"excluded_request_fields,omitempty"`
-	TokenReserveCredits   *string                `json:"token_reserve_credits,omitempty"`
-	AllowedLevels         []int                  `json:"allowed_levels,omitempty"`
-	PublicDescription     string                 `json:"public_description,omitempty"`
-	RouteStrategy         string                 `json:"route_strategy,omitempty"`
-	AffinityTTLSeconds    *int                   `json:"affinity_ttl_seconds,omitempty"`
-	Provider              string                 `json:"provider"`
-	Model                 string                 `json:"model"`
-	Enabled               bool                   `json:"enabled"`
-	Pricing               PricingInput           `json:"pricing"`
-	Discount              DiscountInput          `json:"discount"`
-	FlattenToolCalls      bool                   `json:"flatten_tool_calls"`
+	RecurringDiscount     *charitydiscount.Config `json:"recurring_discount,omitempty"`
+	SessionHeaders        []sessionheader.Config  `json:"session_headers,omitempty"`
+	ModelTypes            modeltype.Set           `json:"model_types,omitempty"`
+	TransportRule         transportpolicy.Rule    `json:"transport_rule,omitempty"`
+	RolePolicy            *rolepolicy.Policy      `json:"role_policy,omitempty"`
+	IsMainstream          bool                    `json:"is_mainstream"`
+	ExcludedRequestFields []string                `json:"excluded_request_fields,omitempty"`
+	TokenReserveCredits   *string                 `json:"token_reserve_credits,omitempty"`
+	AllowedLevels         []int                   `json:"allowed_levels,omitempty"`
+	PublicDescription     string                  `json:"public_description,omitempty"`
+	RouteStrategy         string                  `json:"route_strategy,omitempty"`
+	AffinityTTLSeconds    *int                    `json:"affinity_ttl_seconds,omitempty"`
+	Provider              string                  `json:"provider"`
+	Model                 string                  `json:"model"`
+	Enabled               bool                    `json:"enabled"`
+	Pricing               PricingInput            `json:"pricing"`
+	Discount              DiscountInput           `json:"discount"`
+	FlattenToolCalls      bool                    `json:"flatten_tool_calls"`
 }
 
 type ModelPatch struct {
+	RecurringDiscount     *charitydiscount.Config `json:"recurring_discount,omitempty"`
 	SessionHeaders        *[]sessionheader.Config `json:"session_headers,omitempty"`
 	ModelTypes            *modeltype.Set          `json:"model_types,omitempty"`
 	TransportRule         *transportpolicy.Rule   `json:"transport_rule,omitempty"`
@@ -401,15 +416,17 @@ type BindingDelete struct {
 }
 
 type CandidateQuery struct {
-	KeyState      string
-	traineeOnly   bool
-	DonationID    int64
-	DonationKeyID int64
-	Source        string
-	Query         string
-	AfterKeyID    int64
-	AfterModelID  string
-	Limit         int
+	omitBindingMarkers bool
+	IncludeBound       bool
+	KeyState           string
+	traineeOnly        bool
+	DonationID         int64
+	DonationKeyID      int64
+	Source             string
+	Query              string
+	AfterKeyID         int64
+	AfterModelID       string
+	Limit              int
 }
 
 // RuntimeCandidate is a frozen, credential-free candidate. String/log

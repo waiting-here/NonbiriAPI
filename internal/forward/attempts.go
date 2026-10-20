@@ -184,12 +184,11 @@ func (service *Service) runAttempts(
 			run.completeUndeliveredSynthetic(parent, service, handle, "request snapshot unavailable")
 			break
 		}
-		backoffConfig, backoffTrial := smartbackoff.Default(), false
+		backoffTrial := false
 		if info, ok := dispatch.(interface {
-			BackoffConfig() smartbackoff.Config
 			IsBackoffTrial() bool
 		}); ok {
-			backoffConfig, backoffTrial = info.BackoffConfig(), info.IsBackoffTrial()
+			backoffTrial = info.IsBackoffTrial()
 		}
 		policy := dispatch.Policy()
 		policy.GatewayModel = candidate.Policy.GatewayModel
@@ -259,7 +258,7 @@ func (service *Service) runAttempts(
 			run.completeUndeliveredSynthetic(parent, service, handle, "connector unavailable")
 			break
 		}
-		attemptContext := smartbackoff.WithConfig(executionContext, backoffConfig)
+		attemptContext := smartbackoff.WithCharityCall(executionContext, plan.charity)
 		if service.errorScope != nil {
 			attemptContext = service.errorScope(attemptContext, accepted.ID, index+1)
 		}

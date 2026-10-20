@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
 	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
@@ -53,7 +54,7 @@ func (a *Adapter) AttemptDecision(ctx context.Context, writer http.ResponseWrite
 	errorGuard := newSensitiveGuard(materials...)
 	defer errorGuard.Clear()
 	clear(identifier)
-	errorContext := upstreamerror.Context{Backoff: smartbackoff.FromContext(ctx), BaseURL: target.baseURL, PrivateModel: target.upstreamModel, ContainsSecret: func(value []byte) bool {
+	errorContext := upstreamerror.Context{CharityCall: smartbackoff.IsCharityCall(ctx), BaseURL: target.baseURL, PrivateModel: target.upstreamModel, ContainsSecret: func(value []byte) bool {
 		scanner := errorGuard.clone()
 		defer scanner.Clear()
 		return scanner.Contains(value)
@@ -63,6 +64,7 @@ func (a *Adapter) AttemptDecision(ctx context.Context, writer http.ResponseWrite
 	}
 	httpRequest.Header.Set("Authorization", "Bearer "+string(target.credential.bearer))
 	target.credential.clear()
+	httpRequest = egress.WithResponseLimits(httpRequest, egress.ResponseLimits{JSONBytes: a.maxJSONResponseBytes})
 	response, err := client.Do(httpRequest)
 	httpRequest.Header.Del("Authorization")
 	clear(body)

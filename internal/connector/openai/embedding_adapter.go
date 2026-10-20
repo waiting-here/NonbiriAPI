@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
 	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
@@ -55,7 +56,7 @@ func (a *Adapter) AttemptEmbedding(ctx context.Context, writer http.ResponseWrit
 	errorGuard := newSensitiveGuard(append([][]byte{target.credential.bearer, target.credential.ciphertext, identifier}, sentSecrets...)...)
 	clear(identifier)
 	defer errorGuard.Clear()
-	errorContext := upstreamerror.Context{Backoff: smartbackoff.FromContext(ctx),
+	errorContext := upstreamerror.Context{CharityCall: smartbackoff.IsCharityCall(ctx),
 		BaseURL: target.baseURL, PrivateModel: target.upstreamModel,
 		ContainsSecret: func(value []byte) bool {
 			scanner := errorGuard.clone()
@@ -68,6 +69,7 @@ func (a *Adapter) AttemptEmbedding(ctx context.Context, writer http.ResponseWrit
 	}
 	httpRequest.Header.Set("Authorization", "Bearer "+string(target.credential.bearer))
 	target.credential.clear()
+	httpRequest = egress.WithResponseLimits(httpRequest, egress.ResponseLimits{JSONBytes: a.maxEmbeddingResponseBytes})
 	response, err := client.Do(httpRequest)
 	if response != nil {
 		defer func() { result.UpstreamStatus = response.StatusCode }()

@@ -271,8 +271,6 @@ type DonationManualModelExport struct {
 }
 
 type DonationKeyExport struct {
-	SmartBackoffProfile string                      `json:"smart_backoff_profile"`
-	SmartBackoffRules   []smartbackoff.Rule         `json:"smart_backoff_rules"`
 	SmartBackoff        *smartbackoff.Status        `json:"smart_backoff"`
 	Review              DonationKeyReviewExport     `json:"review"`
 	ManualModels        []DonationManualModelExport `json:"manual_models"`

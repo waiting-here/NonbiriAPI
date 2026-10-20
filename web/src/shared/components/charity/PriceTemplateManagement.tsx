@@ -473,12 +473,17 @@ function PriceTemplateEditor({
                 setDraft((current) => ({ ...current, ...fields }));
               }}
               discountError={validation === 'discountDates' || validation === 'discountPercent'}
+              recurringError={validation === 'recurringDiscount'}
             />
           </fieldset>
         </PanelBody>
       </Panel>
       {validation ? (
-        <Note tone="bad">{t(`common.operations.charity.validation.${validation}`)}</Note>
+        <Note tone="bad">
+          {validation === 'recurringDiscount'
+            ? t('common.operations.charity.validation.recurringDiscount')
+            : t(`common.operations.charity.validation.${validation}`)}
+        </Note>
       ) : null}
       {save.error && save.outcome !== 'conflict' && save.outcome !== 'unknown' ? (
         <ErrorState error={save.error} />

@@ -265,6 +265,10 @@ const managedModel = {
 };
 
 const managedModelFixture = {
+  recurring_discount: { enabled: false, time_zone: 'UTC', default_percent: 100, periods: [] },
+  effective_discount: { source: 'none', percent: 100, next_change_at: null },
+  server_now: 1800000000,
+
   model_types: ['chat_completions', 'embeddings'],
   id: '7',
   provider: 'provider',
@@ -312,8 +316,6 @@ const managedKeyFixture = {
   authorized_expires_at: null,
   expires_at: null,
   failure_disable_threshold: '10',
-  smart_backoff_profile: 'none' as const,
-  smart_backoff_rules: [],
   smart_backoff: null,
   streak: { generation: '1', count: '0', failure_disabled: false },
   ended_reason: null,
@@ -1440,12 +1442,23 @@ describe('experimental policy and charity controls', () => {
       server_now: 1_788_100_000,
       models: [
         {
+          recurring_discount: {
+            enabled: false,
+            time_zone: 'UTC',
+            default_percent: 100,
+            periods: [],
+          },
+          effective_discount: { source: 'fixed', percent: 80, next_change_at: null },
+
           model_types: ['chat_completions', 'embeddings'],
           id: '7',
           provider: 'provider',
           model: 'charity-model',
           full_name: '[公益]provider/charity-model',
           pricing: {
+            current_user_price_milli: '2400',
+            current_user_prices_milli: null,
+
             mode: 'per_request',
             user_price_milli: '3000',
             discounted_user_price_milli: '2400',
@@ -1492,8 +1505,6 @@ describe('experimental policy and charity controls', () => {
           token_reserve: 0,
           expires_at: null,
           failure_disable_threshold: '10',
-          smart_backoff_profile: 'none' as const,
-          smart_backoff_rules: [],
           smart_backoff: null,
           streak: { generation: '1', count: '0', failure_disabled: false },
           ended_reason: null,
