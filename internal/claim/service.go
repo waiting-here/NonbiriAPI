@@ -503,7 +503,7 @@ WHERE c.id=?`, handle.claimID).Scan(&stateText, &requestID, &attemptSeq, &purpos
 		return nil, ErrInvariant
 	}
 	var managedHeaders http.Header
-	backoff := smartbackoff.Dispatch{Config: smartbackoff.Default()}
+	backoff := smartbackoff.Dispatch{}
 	if RouteKind(requestRoute).IsCharity() {
 		if !callerID.Valid {
 			clear(contextID)

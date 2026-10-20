@@ -3,7 +3,6 @@ package smartbackoff
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"math"
 )
@@ -12,7 +11,6 @@ type Querier interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }
 type stored struct {
-	Config
 	Generation, Episode int64
 	Period, Source      string
 	Stage               int
@@ -21,20 +19,15 @@ type stored struct {
 }
 
 func read(ctx context.Context, q Querier, keyID int64) (stored, error) {
-	s := stored{Config: Default()}
-	var raw string
+	s := stored{}
 	var period, source sql.NullString
-	err := q.QueryRowContext(ctx, `SELECT profile,rules_json,generation,episode,period,source,stage,retry_at,trial_claim_id FROM donation_key_backoffs WHERE donation_key_id=?`, keyID).Scan(&s.Profile, &raw, &s.Generation, &s.Episode, &period, &source, &s.Stage, &s.RetryAt, &s.Trial)
+	err := q.QueryRowContext(ctx, `SELECT generation,episode,period,source,stage,retry_at,trial_claim_id FROM donation_key_backoffs WHERE donation_key_id=?`, keyID).Scan(&s.Generation, &s.Episode, &period, &source, &s.Stage, &s.RetryAt, &s.Trial)
 	if errors.Is(err, sql.ErrNoRows) {
 		return s, nil
 	}
 	if err != nil {
 		return s, err
 	}
-	if err = json.Unmarshal([]byte(raw), &s.Rules); err != nil {
-		return s, err
-	}
-	s.Config, err = Normalize(s.Config)
 	s.Period, s.Source = period.String, source.String
 	return s, err
 }
@@ -43,8 +36,8 @@ func Read(ctx context.Context, q Querier, keyID, now int64) (Projection, error) 
 	return project(s, now), err
 }
 func project(s stored, now int64) Projection {
-	p := Projection{Config: s.Config}
-	if s.Profile != "none" && s.RetryAt.Valid {
+	p := Projection{}
+	if s.RetryAt.Valid {
 		state := "ready"
 		if s.RetryAt.Int64 > now {
 			state = "waiting"
@@ -56,62 +49,35 @@ func project(s stored, now int64) Projection {
 	}
 	return p
 }
-func DecodeProjection(profile, rules, period, source string, retryAt *int64, probing bool, now int64) (Projection, error) {
-	s := stored{Config: Config{Profile: profile}, Period: period, Source: source}
-	if err := json.Unmarshal([]byte(rules), &s.Rules); err != nil {
-		return Projection{}, err
-	}
-	var err error
-	s.Config, err = Normalize(s.Config)
-	if err != nil {
-		return Projection{}, err
-	}
+func DecodeProjection(period, source string, retryAt *int64, probing bool, now int64) Projection {
+	s := stored{Period: period, Source: source}
 	if retryAt != nil {
 		s.RetryAt = sql.NullInt64{Int64: *retryAt, Valid: true}
 	}
 	s.Trial.Valid = probing
-	return project(s, now), nil
-}
-func Set(ctx context.Context, tx *sql.Tx, keyID int64, patch Patch, now int64) error {
-	prior, err := read(ctx, tx, keyID)
-	if err != nil {
-		return err
-	}
-	next, err := Merge(prior.Config, patch)
-	if err != nil {
-		return err
-	}
-	if prior.Profile == next.Profile && RulesJSON(prior.Rules) == RulesJSON(next.Rules) {
-		return nil
-	}
-	if prior.Generation == math.MaxInt64 || prior.Episode == math.MaxInt64 {
-		return ErrInvalid
-	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO donation_key_backoffs(donation_key_id,profile,rules_json,generation,episode,stage,updated_at)
- VALUES(?,?,?,1,0,0,?) ON CONFLICT(donation_key_id) DO UPDATE SET profile=excluded.profile,rules_json=excluded.rules_json,
- generation=donation_key_backoffs.generation+1,episode=donation_key_backoffs.episode+1,stage=0,
- period=NULL,source=NULL,retry_at=NULL,trial_claim_id=NULL,updated_at=excluded.updated_at`, keyID, next.Profile, RulesJSON(next.Rules), now)
-	return err
+	return project(s, now)
 }
 
 type Dispatch struct {
-	Config Config
-	Trial  bool
+	Trial bool
 }
 
 func Prepare(ctx context.Context, tx *sql.Tx, keyID int64, claimID string, now int64) (Dispatch, error) {
+	// A key without previous configuration still needs a stable generation for
+	// every dispatch fact and its eventual completion.
+	if _, err := tx.ExecContext(ctx, `INSERT INTO donation_key_backoffs(donation_key_id,generation,episode,stage,updated_at)
+ VALUES(?,1,0,0,?) ON CONFLICT(donation_key_id) DO NOTHING`, keyID, now); err != nil {
+		return Dispatch{}, err
+	}
 	s, err := read(ctx, tx, keyID)
 	if err != nil {
 		return Dispatch{}, err
-	}
-	if s.Profile == "none" {
-		return Dispatch{Config: s.Config}, nil
 	}
 	if s.RetryAt.Valid && (s.RetryAt.Int64 > now || s.Trial.Valid) {
 		return Dispatch{}, ErrUnavailable
 	}
 	trial := s.RetryAt.Valid
-	_, err = tx.ExecContext(ctx, `INSERT INTO dispatch_smart_backoff_facts(claim_id,donation_key_id,generation,episode,profile,is_trial) VALUES(?,?,?,?,?,?)`, claimID, keyID, s.Generation, s.Episode, s.Profile, trial)
+	_, err = tx.ExecContext(ctx, `INSERT INTO dispatch_smart_backoff_facts(claim_id,donation_key_id,generation,episode,is_trial) VALUES(?,?,?,?,?)`, claimID, keyID, s.Generation, s.Episode, trial)
 	if err != nil {
 		return Dispatch{}, err
 	}
@@ -128,7 +94,7 @@ func Prepare(ctx context.Context, tx *sql.Tx, keyID int64, claimID string, now i
 			return Dispatch{}, ErrUnavailable
 		}
 	}
-	return Dispatch{Config: s.Config, Trial: trial}, nil
+	return Dispatch{Trial: trial}, nil
 }
 
 // Accepted records HTTP acceptance independently of accounting and completion.
@@ -149,21 +115,10 @@ func IsTrial(ctx context.Context, tx *sql.Tx, claimID string) (bool, error) {
 	return trial, err
 }
 
-// RecordClassification stores the normalized fact produced with the immutable
-// in-memory dispatch configuration, never a diagnostic or rule copy.
+// RecordClassification stores only built-in classifications from a charity
+// dispatch. Historical custom_rule facts remain readable during recovery.
 func RecordClassification(ctx context.Context, tx *sql.Tx, claimID string, c Classification) (bool, error) {
-	if !c.Valid() {
-		return false, nil
-	}
-	var profile string
-	err := tx.QueryRowContext(ctx, `SELECT profile FROM dispatch_smart_backoff_facts WHERE claim_id=?`, claimID).Scan(&profile)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	if !Supports(profile, c.Period) {
+	if !c.Valid() || c.Source != "builtin" {
 		return false, nil
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE dispatch_smart_backoff_facts SET period=?,source=?,reset_at=? WHERE claim_id=? AND accepted_at IS NULL AND (period IS NULL OR (period=? AND source=? AND reset_at=?))`, c.Period, c.Source, c.ResetAt, claimID, c.Period, c.Source, c.ResetAt)
@@ -218,7 +173,7 @@ func Complete(ctx context.Context, tx *sql.Tx, claimID string, status int, now i
 	if err != nil {
 		return err
 	}
-	if s.Generation != generation || s.Episode != episode || s.Profile == "none" {
+	if s.Generation != generation || s.Episode != episode {
 		return nil
 	}
 	if trial && (!s.Trial.Valid || s.Trial.String != claimID) {
@@ -271,5 +226,5 @@ func Complete(ctx context.Context, tx *sql.Tx, claimID string, status int, now i
 }
 func EffectiveUntilSQL(key string) string {
 	return `max(COALESCE((SELECT rate_limited_until FROM donation_key_cooldowns WHERE donation_key_id=` + key + `),0),
- COALESCE((SELECT CASE WHEN trial_claim_id IS NOT NULL THEN 253402300799 ELSE retry_at END FROM donation_key_backoffs WHERE donation_key_id=` + key + ` AND profile<>'none'),0))`
+ COALESCE((SELECT CASE WHEN trial_claim_id IS NOT NULL THEN 253402300799 ELSE retry_at END FROM donation_key_backoffs WHERE donation_key_id=` + key + `),0))`
 }

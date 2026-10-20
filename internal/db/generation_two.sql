@@ -7022,8 +7022,6 @@ CREATE TABLE donation_owner_preferences (
 CREATE INDEX idx_donation_owner_preferences_user ON donation_owner_preferences(user_id,donation_id);
 CREATE TABLE donation_key_backoffs (
  donation_key_id INTEGER PRIMARY KEY REFERENCES donation_keys(id) ON DELETE CASCADE,
- profile TEXT NOT NULL CHECK(profile IN ('none','five_hour_week','five_hour_week_month','day','day_month')),
- rules_json TEXT NOT NULL CHECK(json_valid(rules_json) AND json_type(rules_json)='array' AND json_array_length(rules_json)<=8 AND length(CAST(rules_json AS BLOB))<=16384),
  generation INTEGER NOT NULL CHECK(generation>=1),
  episode INTEGER NOT NULL CHECK(episode>=0),
  period TEXT CHECK(period IN ('unknown','five_hour','day','week','month')),
@@ -7039,7 +7037,6 @@ CREATE TABLE dispatch_smart_backoff_facts (
  donation_key_id INTEGER REFERENCES donation_keys(id) ON DELETE SET NULL,
  generation INTEGER NOT NULL CHECK(generation>=1),
  episode INTEGER NOT NULL CHECK(episode>=0),
- profile TEXT NOT NULL CHECK(profile IN ('five_hour_week','five_hour_week_month','day','day_month')),
  is_trial INTEGER NOT NULL CHECK(is_trial IN (0,1)),
  accepted_at INTEGER CHECK(accepted_at BETWEEN 0 AND 253402300799),
  period TEXT CHECK(period IN ('unknown','five_hour','day','week','month')),

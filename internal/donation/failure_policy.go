@@ -63,7 +63,7 @@ FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id WHERE dk.id=? AND 
 	return out, err
 }
 
-func updateFailurePolicyTx(ctx context.Context, tx *sql.Tx, actorID int64, role string, donationID, keyID, expected int64, threshold string, now int64, patches ...smartbackoff.Patch) (FailurePolicy, error) {
+func updateFailurePolicyTx(ctx context.Context, tx *sql.Tx, actorID int64, role string, donationID, keyID, expected int64, threshold string, now int64) (FailurePolicy, error) {
 	wide, err := db.ParseU128Decimal(threshold)
 	if err != nil || expected <= 0 || expected == math.MaxInt64 {
 		return FailurePolicy{}, ErrInvalidRequest
@@ -78,16 +78,6 @@ func updateFailurePolicyTx(ctx context.Context, tx *sql.Tx, actorID int64, role 
 	count, err := db.ParseU128Decimal(before.FailureStreak)
 	if err != nil {
 		return FailurePolicy{}, ErrInvariant
-	}
-	patch := smartbackoff.Patch{}
-	if len(patches) > 0 {
-		patch = patches[0]
-	}
-	if err := smartbackoff.Set(ctx, tx, keyID, patch, now); err != nil {
-		if errors.Is(err, smartbackoff.ErrInvalid) {
-			return FailurePolicy{}, ErrInvalidRequest
-		}
-		return FailurePolicy{}, err
 	}
 	disabled := wide != (db.U128{}) && count.Big().Cmp(wide.Big()) >= 0
 	result, err := tx.ExecContext(ctx, `UPDATE donation_keys SET failure_disable_threshold=?,failure_disabled=?,updated_at=? WHERE id=? AND donation_id=?`, threshold, boolInt(disabled), now, keyID, donationID)
@@ -150,7 +140,7 @@ VALUES(?,?,?,?,'failure_policy_update',?,?)`, donationID, expected+1, actorID, r
 	return readFailurePolicyTx(ctx, tx, donationID, keyID, now)
 }
 
-func (s *Service) failurePolicy(ctx context.Context, actorID int64, role reviewerRole, donationID, keyID, expected int64, threshold string, mutation resources.ControlMutation, patches ...smartbackoff.Patch) (resources.MutationResult[FailurePolicy], error) {
+func (s *Service) failurePolicy(ctx context.Context, actorID int64, role reviewerRole, donationID, keyID, expected int64, threshold string, mutation resources.ControlMutation) (resources.MutationResult[FailurePolicy], error) {
 	var empty resources.MutationResult[FailurePolicy]
 	route, actorKind := routeOwnerFailurePolicy, "user"
 	if role == reviewerAdmin {
@@ -212,7 +202,7 @@ func (s *Service) failurePolicy(ctx context.Context, actorID int64, role reviewe
 	if decision.Kind == idempotency.Replay {
 		return replay[FailurePolicy](decision)
 	}
-	value, err := updateFailurePolicyTx(ctx, tx, actorID, auditRole, donationID, keyID, expected, threshold, now, patches...)
+	value, err := updateFailurePolicyTx(ctx, tx, actorID, auditRole, donationID, keyID, expected, threshold, now)
 	if err != nil {
 		return empty, err
 	}
@@ -245,7 +235,7 @@ func (s *Service) ReadFailurePolicyStewardInTransaction(ctx context.Context, tx 
 	return readFailurePolicyTx(ctx, tx, donationID, keyID, now)
 }
 
-func (s *Service) SetFailurePolicyStewardInTransaction(ctx context.Context, tx *sql.Tx, actorID, donationID, keyID, expected int64, threshold string, patches ...smartbackoff.Patch) (FailurePolicy, error) {
+func (s *Service) SetFailurePolicyStewardInTransaction(ctx context.Context, tx *sql.Tx, actorID, donationID, keyID, expected int64, threshold string) (FailurePolicy, error) {
 	if _, err := s.ReadFailurePolicyStewardInTransaction(ctx, tx, actorID, donationID, keyID); err != nil {
 		return FailurePolicy{}, err
 	}
@@ -253,5 +243,5 @@ func (s *Service) SetFailurePolicyStewardInTransaction(ctx context.Context, tx *
 	if err != nil {
 		return FailurePolicy{}, err
 	}
-	return updateFailurePolicyTx(ctx, tx, actorID, string(reviewerSteward), donationID, keyID, expected, threshold, now, patches...)
+	return updateFailurePolicyTx(ctx, tx, actorID, string(reviewerSteward), donationID, keyID, expected, threshold, now)
 }
