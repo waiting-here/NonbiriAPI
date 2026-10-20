@@ -119,3 +119,20 @@ export function snapshotPriceDraft(draft: PriceDraft): PriceDraft {
     Object.fromEntries(keys.map((key) => [key, draft[key]])) as unknown as PriceDraft,
   );
 }
+
+function timeDraftSignature(draft: TimeDraft) {
+  if (!draft.invalidInput && draft.text === draft.originalText) return draft.originalEpoch;
+  const value = timeDraftValue(draft);
+  return value === undefined
+    ? { text: draft.text, zone: draft.zone, invalidInput: draft.invalidInput }
+    : value;
+}
+
+/** Compare editable values without treating automatic time-zone hydration as an edit. */
+export function priceDraftSignature<T extends PriceDraft>(draft: T): string {
+  return JSON.stringify({
+    ...draft,
+    discountStart: timeDraftSignature(draft.discountStart),
+    discountEnd: timeDraftSignature(draft.discountEnd),
+  });
+}

@@ -3,6 +3,7 @@ import { PriceTools } from './PriceTools';
 import {
   draftPriceConfig,
   priceDraft,
+  priceDraftSignature,
   snapshotPriceDraft,
   switchPriceMode,
   type PriceDraft,
@@ -60,7 +61,7 @@ import '@shared/styles/charity-management.css';
 import { timeDraftValue, type TimeDraft } from '@shared/time';
 import type { TransportRule } from '@shared/transportRule';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router';
 import { useRetainedOperation } from '../../../admin/features/operations/useRetainedOperation';
@@ -315,7 +316,7 @@ function ModelForm({
   const { t, i18n } = useTranslation();
   const [draft, updateDraft] = useState(() => modelDraft(model));
   const [baseRevision, setBaseRevision] = useState(model?.revision);
-  const [savedDraft, setSavedDraft] = useState(() => JSON.stringify(modelDraft(model)));
+  const [savedDraft, setSavedDraft] = useState(() => priceDraftSignature(modelDraft(model)));
   const [undoPrice, setUndoPrice] = useState<PriceDraft | null>(null);
   const [priceSource, setPriceSource] = useState('');
   const [createdModel, setCreatedModel] = useState<CharityModel | null>(null);
@@ -938,7 +939,7 @@ function ModelForm({
                 },
                 {
                   onSuccess: (result) => {
-                    setSavedDraft(JSON.stringify(draft));
+                    setSavedDraft(priceDraftSignature(draft));
                     if (!model) setCreatedModel(result);
                   },
                 },
@@ -957,7 +958,7 @@ function ModelForm({
             onClick={() =>
               save.mutate(save.variables!, {
                 onSuccess: (result) => {
-                  setSavedDraft(JSON.stringify(draft));
+                  setSavedDraft(priceDraftSignature(draft));
                   if (!model) setCreatedModel(result);
                 },
               })
@@ -978,7 +979,7 @@ function ModelForm({
             }
             onClick={() => {
               setDraft(modelDraft(model));
-              setSavedDraft(JSON.stringify(modelDraft(model)));
+              setSavedDraft(priceDraftSignature(modelDraft(model)));
               setBaseRevision(model.revision);
               save.reset();
             }}
@@ -1021,7 +1022,7 @@ function ModelForm({
   );
   return (
     <Card className="charity-model-editor">
-      <AsyncLeaveDialog dirty={JSON.stringify(draft) !== savedDraft} />
+      <AsyncLeaveDialog dirty={priceDraftSignature(draft) !== savedDraft} />
       {content}
       {save.refreshError ? (
         <ErrorState error={save.refreshError} onRetry={() => void save.refresh()} />
@@ -1360,6 +1361,7 @@ export function ModelsPanel({
 }) {
   const { t } = useTranslation();
   const location = useLocation();
+  const manageTriggerId = useId();
   const client = useQueryClient();
   const [params, setParams] = useSearchState();
   const rawQuery = oneParam(params, 'model_q');
@@ -1671,6 +1673,7 @@ export function ModelsPanel({
                     cell: 'action',
                     render: (model) => (
                       <Button
+                        id={manageTriggerId + '-' + model.id}
                         type="button"
                         disabled={models.isFetching}
                         onClick={() => setSelected(model.id)}

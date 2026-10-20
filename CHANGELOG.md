@@ -48,6 +48,9 @@ does not upgrade an instance.
 
 ### Fixed
 
+- Avoid unsaved-change prompts when model editors load their site time zone;
+  actual model, price and date edits still require confirmation before leaving.
+  Return keyboard focus to the original model row after closing its editor.
 - Accept current account-export downloads through format 22 while retaining
   account-identity, attachment-version and size checks.
 

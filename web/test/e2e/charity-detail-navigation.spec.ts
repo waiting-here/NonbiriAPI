@@ -487,7 +487,7 @@ function donationListRow(page: Page, id = DETAIL_DONATION_ID): Locator {
 }
 
 function modelListRow(page: Page, id = DETAIL_MODEL_ID): Locator {
-  return page.locator('.ops-table tbody tr').filter({
+  return page.getByRole('row').filter({
     has: page.getByText('[公益]DetailProvider/detail-model-' + id, { exact: true }),
   });
 }
@@ -838,7 +838,9 @@ async function exerciseSourceNavigation(
     page: '2',
     pageSize: String(PAGE_SIZE),
   });
-  expect(state.sourceReads).toContain('?q=detail&scope=active&page=2&page_size=10');
+  expect(state.sourceReads).toContain(
+    '?q=detail&scope=active&key_state=available&page=2&page_size=10',
+  );
   expect(state.sourceKeyReads.length).toBeGreaterThanOrEqual(1);
   await saveScreenshot(page, setup.station + '-source-detail-1280-light-en');
 

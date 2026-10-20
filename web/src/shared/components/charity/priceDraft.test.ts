@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import type { CharityPriceConfig } from '@shared/operations/charity';
-import { draftPriceConfig, priceDraft, snapshotPriceDraft, switchPriceMode } from './priceDraft';
+import {
+  draftPriceConfig,
+  priceDraft,
+  priceDraftSignature,
+  snapshotPriceDraft,
+  switchPriceMode,
+} from './priceDraft';
+import {
+  editTimeDraft,
+  rezoneSiteTimeDraft,
+  resolveFixedLocalTime,
+  timeDraftKey,
+} from '@shared/time';
 
 const token: CharityPriceConfig = {
   pricing: {
@@ -88,5 +100,60 @@ describe('complete charity price snapshots', () => {
     expect(back.longThreshold).toBe('');
     expect(back.penaltyFine).toBe('0');
     expect(back.tokenReserveCredits).toBe('25.125');
+  });
+});
+
+describe('charity draft leave protection', () => {
+  it.each([null, 480, -240])('ignores automatic site-time hydration at offset %s', (offset) => {
+    for (const draft of [priceDraft(), priceDraft(token)]) {
+      expect(
+        priceDraftSignature({
+          ...draft,
+          discountStart: rezoneSiteTimeDraft(draft.discountStart, offset),
+          discountEnd: rezoneSiteTimeDraft(draft.discountEnd, offset),
+        }),
+      ).toBe(priceDraftSignature(draft));
+    }
+  });
+
+  it('keeps unresolved, invalid and cleared date changes dirty', () => {
+    const draft = priceDraft(token);
+    const saved = priceDraftSignature(draft);
+    const start = rezoneSiteTimeDraft(draft.discountStart, 480);
+    for (const discountStart of [
+      editTimeDraft(start, '2026-10-20T09:00:00'),
+      editTimeDraft(start, '', true),
+      editTimeDraft(start, ''),
+    ]) {
+      expect(priceDraftSignature({ ...draft, discountStart })).not.toBe(saved);
+    }
+  });
+
+  it('compares resolved dates by instant while retaining price and model edits', () => {
+    const draft = { ...priceDraft(token), provider: 'Example' };
+    const edited = editTimeDraft(
+      rezoneSiteTimeDraft(draft.discountStart, 480),
+      '2026-10-20T09:00:00',
+    );
+    const resolved = {
+      ...edited,
+      resolved: { key: timeDraftKey(edited), value: resolveFixedLocalTime(edited.text, 480) },
+    };
+    const changed = { ...draft, discountStart: resolved };
+    expect(priceDraftSignature(changed)).not.toBe(priceDraftSignature(draft));
+    const saved = {
+      ...priceDraft({
+        ...token,
+        discount: { ...token.discount, start_at: resolved.resolved.value.instant },
+      }),
+      provider: 'Example',
+    };
+    expect(priceDraftSignature(changed)).toBe(priceDraftSignature(saved));
+    expect(priceDraftSignature({ ...saved, provider: 'Changed' })).not.toBe(
+      priceDraftSignature(saved),
+    );
+    expect(priceDraftSignature({ ...saved, tokenReserveCredits: '30' })).not.toBe(
+      priceDraftSignature(saved),
+    );
   });
 });
