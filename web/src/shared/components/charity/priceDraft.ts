@@ -1,5 +1,6 @@
 import type { CharityPriceConfig, TokenPrices } from '@shared/operations/charity';
 import { createTimeDraft, timeDraftValue, type TimeDraft } from '@shared/time';
+import { MAX_UNIX_SECOND, validAmount, validTokenReserveCredits } from './managementFields';
 
 export interface PriceDraft {
   mode: 'per_request' | 'per_token';
@@ -135,4 +136,48 @@ export function priceDraftSignature<T extends PriceDraft>(draft: T): string {
     discountStart: timeDraftSignature(draft.discountStart),
     discountEnd: timeDraftSignature(draft.discountEnd),
   });
+}
+
+export function priceDraftError(
+  draft: PriceDraft,
+):
+  | 'contextThreshold'
+  | 'modelPrices'
+  | 'tokenReserveCredits'
+  | 'discountPercent'
+  | 'discountDates'
+  | null {
+  const prices =
+    draft.mode === 'per_request'
+      ? [draft.requestUser, draft.requestDonor]
+      : [...Object.values(draft.userPrices), ...Object.values(draft.donorRewards)];
+  if (draft.longEnabled)
+    prices.push(
+      ...(draft.mode === 'per_request' ? [draft.longRequest] : Object.values(draft.longPrices)),
+    );
+  if (draft.penaltyEnabled) prices.push(draft.penaltyFine);
+  if (
+    (draft.longEnabled && !/^[1-9][0-9]*$/.test(draft.longThreshold)) ||
+    (draft.penaltyEnabled && !/^[1-9][0-9]*$/.test(draft.penaltyThreshold))
+  )
+    return 'contextThreshold';
+  if (prices.some((value) => !validAmount(value))) return 'modelPrices';
+  if (!validTokenReserveCredits(draft.tokenReserveCredits)) return 'tokenReserveCredits';
+  if (
+    !Number.isInteger(draft.discountPercent) ||
+    draft.discountPercent < 0 ||
+    draft.discountPercent > 100
+  )
+    return 'discountPercent';
+  const start = timeDraftValue(draft.discountStart);
+  const end = timeDraftValue(draft.discountEnd);
+  if (
+    start === undefined ||
+    end === undefined ||
+    (start !== null && (!Number.isSafeInteger(start) || start < 0 || start > MAX_UNIX_SECOND)) ||
+    (end !== null && (!Number.isSafeInteger(end) || end < 0 || end > MAX_UNIX_SECOND)) ||
+    (start !== null && end !== null && end < start)
+  )
+    return 'discountDates';
+  return null;
 }

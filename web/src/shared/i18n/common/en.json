@@ -939,7 +939,7 @@
       "summary": "Default: {{action}}; {{count}} role rules"
     },
     "donationReview": {
-      "forceTitle": "Reject an automatically approved donation",
+      "forceTitle": "Force reject donation",
       "forceHelp": "New community calls will stop for this donation. Dispatched calls settle normally. Each key will need manual review when donated again. Existing rewards are kept.",
       "required": "Enable this key and approve the donation to restore automatic approval. Disabled keys still require review.",
       "materialUnavailable": "Review material is unavailable. Keep this key disabled, or restore the material before reviewing it again.",
@@ -952,8 +952,8 @@
         "unknown": "First approval origin is unknown"
       },
       "unavailable": {
-        "manual": "Only donations first approved automatically can be forcibly rejected.",
-        "unknown": "The first approval origin cannot be confirmed, so forced rejection is unavailable.",
+        "manual": "Forced rejection is unavailable for this donation.",
+        "unknown": "Forced rejection is unavailable for this donation.",
         "notApproved": "This donation is not currently approved."
       },
       "title": "Donation review",
@@ -1708,8 +1708,6 @@
       "maintainTemplates": "Maintain price templates",
       "fillTemplate": "Fill all prices",
       "createTemplate": "Create price template",
-      "saveTemplateMetadata": "Save template details",
-      "overwriteTemplate": "Replace stored prices",
       "deleteTemplate": "Delete price template",
       "deleteTemplateHelp": "This removes the template from future choices. Prices already filled or saved in models stay unchanged.",
       "priceApplied": "Filled prices from {{source}}. Save the current model to apply them.",
@@ -1770,6 +1768,31 @@
       "inputPrice": "Uncached input",
       "outputPrice": "Output",
       "longPriceField": "Long context: {{field}}"
+    },
+    "templateManagement": {
+      "help": "Create and maintain complete price presets. Template changes do not change prices saved in models.",
+      "back": "Return to price templates",
+      "backModel": "Return to model draft",
+      "updated": "Updated",
+      "empty": "Create a template, or try another search or state filter.",
+      "edit": "Edit price template",
+      "target": "Editing “{{name}}” · revision {{revision}}",
+      "newHelp": "Set a name and all prices for this new template.",
+      "save": "Save template “{{name}}”",
+      "discard": "Discard changes",
+      "unsaved": "Unsaved template changes",
+      "delete": "Delete template “{{name}}”?",
+      "conflict": "This template changed. Your draft is kept. Load the latest revision before saving again.",
+      "loadLatest": "Load latest revision and keep draft",
+      "latestLoaded": "Loaded “{{name}}”, revision {{revision}}. Your draft is unchanged."
+    },
+    "pendingReviews": {
+      "title": "Pending donation reviews",
+      "help": "Review all pending donations. Set each key’s limits and enabled state before approval.",
+      "saved": "Review saved: {{status}}.",
+      "empty": "No pending donations",
+      "emptyHelp": "New donations will appear here. Try clearing the search if needed.",
+      "noLongerPending": "This donation has already been reviewed. Return to the pending queue."
     }
   },
   "logs": {

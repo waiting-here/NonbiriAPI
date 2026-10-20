@@ -720,7 +720,8 @@ describe('CharityManagement corrective controls', () => {
     });
     expect(await screen.findByText('[公益]provider/model')).toBeVisible();
     expect(screen.queryByRole('heading', { name: 'Add charity model' })).not.toBeInTheDocument();
-    expect(screen.getAllByRole('tab')).toHaveLength(2);
+    expect(screen.getAllByRole('tab')).toHaveLength(3);
+    expect(screen.getByRole('tab', { name: 'Pending donation reviews' })).toBeVisible();
     expect(screen.getByRole('tab', { name: 'Approved donation handling' })).toBeVisible();
     expect(
       fetchMock.mock.calls.every(
@@ -954,7 +955,7 @@ describe('CharityManagement corrective controls', () => {
     });
     await view.user.click(await screen.findByRole('button', { name: 'Review' }));
     const action = await screen.findByRole('button', {
-      name: 'Reject an automatically approved donation',
+      name: 'Force reject donation',
     });
     expect(action).toBeDisabled();
     await view.user.type(
@@ -966,9 +967,7 @@ describe('CharityManagement corrective controls', () => {
     const dialog = await screen.findByRole('alertdialog');
     expect(within(dialog).getByText(/Dispatched calls settle normally/)).toBeVisible();
     expect(within(dialog).queryByRole('checkbox')).not.toBeInTheDocument();
-    await view.user.click(
-      within(dialog).getByRole('button', { name: 'Reject an automatically approved donation' }),
-    );
+    await view.user.click(within(dialog).getByRole('button', { name: 'Force reject donation' }));
     await waitFor(() => expect(requests.reviewBodies).toHaveLength(1));
     expect(requests.reviewBodies[0]).toEqual({
       decision: 'force_reject',
@@ -1855,4 +1854,116 @@ describe('CharityManagement candidate key shortcuts', () => {
       }
     },
   );
+});
+
+describe('level-5 pending review queue', () => {
+  it.each(['approve', 'reject'] as const)(
+    'completes %s and refreshes only the pending queue',
+    async (decision) => {
+      let current: AdminDonation = {
+        ...pendingDonation(),
+        owner: null,
+        reviewer: null,
+        can_force_reject: false,
+      };
+      let completed = false;
+      let completedReads = 0;
+      let submitted: Record<string, unknown> | undefined;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn<typeof fetch>(async (input, init) => {
+          const url = new URL(String(input), 'https://example.test');
+          if (url.pathname.endsWith('/time-context')) return jsonResponse(siteTimeContext);
+          if (url.pathname === '/api/steward/donations') {
+            expect(url.searchParams.get('status')).toBe('pending');
+            return jsonResponse(numberedPage(completed ? [] : [donationSummary(current)], url));
+          }
+          if (url.pathname === '/api/steward/donations/1' && (init?.method ?? 'GET') === 'GET') {
+            if (completed) completedReads++;
+            return jsonResponse(current);
+          }
+          if (url.pathname === '/api/steward/donations/1/review') {
+            submitted = JSON.parse(String(init?.body));
+            completed = true;
+            current = {
+              ...current,
+              status: decision === 'approve' ? 'approved' : 'rejected',
+              revision: '2',
+              review_result: { decision, reason: 'Reviewed pending source', reviewed_at: 2 },
+            };
+            return jsonResponse(current);
+          }
+          throw new Error(`Unexpected pending review request: ${url.pathname}`);
+        }),
+      );
+      const view = await renderWithProviders(
+        <CharityManagement frame="steward" accountId="1" trainee />,
+        {
+          station: 'user',
+          route: '/steward?charity_section=donations',
+          role: 'level5',
+        },
+      );
+      view.queryClient.setQueryData(['user', 'session'], {
+        ...stewardSession,
+        user: { ...stewardSession.user, effective_level: 5 },
+      });
+      await view.user.click(await screen.findByRole('button', { name: 'Review' }));
+      await screen.findByRole('heading', { name: 'Review pending submission' });
+      expect(
+        screen.queryByRole('button', { name: 'Force reject donation' }),
+      ).not.toBeInTheDocument();
+      if (decision === 'reject')
+        await view.user.selectOptions(screen.getByLabelText('Decision'), 'reject');
+      await view.user.type(screen.getByLabelText('Reason'), 'Reviewed pending source');
+      await view.user.click(
+        screen.getByRole('checkbox', {
+          name: 'I confirm this review result and its per-key consequences.',
+        }),
+      );
+      await view.user.click(
+        screen.getByRole('button', {
+          name: decision === 'approve' ? 'Approve donation' : 'Reject donation',
+        }),
+      );
+      await screen.findByText(/Review saved:/);
+      await screen.findByRole('heading', { name: 'No pending donations' });
+      expect(submitted).toMatchObject({
+        decision,
+        expected_revision: '1',
+        reason: 'Reviewed pending source',
+      });
+      expect(completedReads).toBe(0);
+    },
+  );
+});
+
+it('keeps level-5 access when a pending target was concurrently reviewed', async () => {
+  const capabilityLost = vi.fn();
+  let listReads = 0;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn<typeof fetch>(async (input) => {
+      const url = new URL(String(input), 'https://example.test');
+      if (url.pathname === '/api/steward/donations') {
+        listReads++;
+        return jsonResponse(numberedPage([], url));
+      }
+      if (url.pathname === '/api/steward/donations/1')
+        return new Response(
+          JSON.stringify({ error: { code: 'forbidden', message: 'No longer pending' } }),
+          { status: 403, headers: { 'content-type': 'application/json' } },
+        );
+      throw new Error(`Unexpected pending review request: ${url.pathname}`);
+    }),
+  );
+  const view = await renderWithProviders(
+    <CharityManagement frame="steward" accountId="1" trainee onCapabilityLoss={capabilityLost} />,
+    { station: 'user', route: '/steward?charity_section=donations&donation_id=1' },
+  );
+  await screen.findByText('This donation has already been reviewed. Return to the pending queue.');
+  expect(listReads).toBeGreaterThanOrEqual(2);
+  expect(capabilityLost).not.toHaveBeenCalled();
+  await view.user.click(screen.getByRole('button', { name: 'Return to list' }));
+  await screen.findByRole('heading', { name: 'No pending donations' });
 });
