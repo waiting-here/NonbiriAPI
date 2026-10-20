@@ -81,6 +81,12 @@ func TestTraineePendingReviewWithRealSession(t *testing.T) {
 		}
 		require(call(http.MethodGet, path, "", ""), http.StatusForbidden)
 		require(call(http.MethodGet, "/api/steward/donations?status=approved", "", ""), http.StatusForbidden)
+		exec(`UPDATE users SET level=6 WHERE id=?`, f.userID)
+		full := call(http.MethodGet, path, "", "")
+		require(full, http.StatusOK)
+		if err := json.Unmarshal(full.Body.Bytes(), &value); err != nil || value.Reviewer == nil || value.Reviewer.Role != "steward" {
+			t.Fatalf("public reviewer role: %s %v", full.Body, err)
+		}
 		exec(`UPDATE users SET level=4 WHERE id=?`, f.userID)
 		require(call(http.MethodPost, path+"/review", body, key), http.StatusForbidden)
 	}

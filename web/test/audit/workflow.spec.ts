@@ -947,7 +947,7 @@ test('level 5 reviews independent pending sources, retains receipts after refres
       await expect(
         page.getByRole('button', { name: common.common.donationReview.forceTitle, exact: true }),
       ).toHaveCount(0);
-      await page.getByLabel(operations.decisionLabel, { exact: true }).selectOption(decision);
+      await page.getByLabel(operations.decisionLabel).selectOption(decision);
       await page
         .getByLabel(operations.reason, { exact: true })
         .fill('Synthetic independent pending review');

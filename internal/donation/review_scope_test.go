@@ -73,6 +73,10 @@ func TestTraineeReviewsAllPendingSourcesWithPrivateReceipts(t *testing.T) {
 	if n := mutationRecordCount(t, e.store.DB(), idempotency.ScopeControlMutation, "trainee5", actor, mutation.IdempotencyKey); n != 1 {
 		t.Fatal("missing trainee mutation namespace", n)
 	}
+	full, err := e.service.GetAdmin(ctx, id)
+	if err != nil || full.Reviewer == nil || full.Reviewer.Role != "steward" || full.Reviewer.UserID == nil || *full.Reviewer.UserID != fmt.Sprint(actor) {
+		t.Fatalf("public reviewer projection: %+v %v", full.Reviewer, err)
+	}
 	replayed, err := e.service.ReviewSteward(ctx, actor, id, mutation, input)
 	if err != nil || !replayed.Replayed || string(replayed.Body) != string(result.Body) {
 		t.Fatal("completed approval could not replay", err)
