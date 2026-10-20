@@ -415,7 +415,7 @@ function DonationKeyEditor(
         })}
       </h4>
       <p>{safeSourceLabel(props.item.safe_source, t)}</p>
-      {props.item.charity_state === 'rate_limited' || props.item.smart_backoff ? (
+      {props.item.rate_limited_until !== null || props.item.smart_backoff ? (
         <KeyRateLimitTime
           until={props.item.rate_limited_until}
           smartBackoff={props.item.smart_backoff}
@@ -431,8 +431,6 @@ function DonationKeyEditor(
           keyID={props.item.id}
           revision={props.donation.revision}
           threshold={props.item.failure_disable_threshold}
-          profile={props.item.smart_backoff_profile}
-          rules={props.item.smart_backoff_rules}
           refresh={props.refresh}
         />
       </Fold>

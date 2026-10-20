@@ -401,7 +401,7 @@ function KeySummary({
         donor={keyValue.donation_note}
         approval={keyValue.approval_note}
       />
-      {keyValue.charity_state === 'rate_limited' || keyValue.smart_backoff ? (
+      {keyValue.rate_limited_until !== null || keyValue.smart_backoff ? (
         <KeyRateLimitTime
           until={keyValue.rate_limited_until}
           smartBackoff={keyValue.smart_backoff}

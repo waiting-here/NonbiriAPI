@@ -170,57 +170,10 @@
       "invalid": "Enter a valid consecutive failure threshold."
     },
     "smartBackoff": {
-      "details": "How backoff works",
-      "ruleHeading": "Rule {{index}}",
-      "kindLabel": "Type",
-      "valueLabel": "Value",
-      "periodLabel": "Allowance cycle",
-      "recognitionHelp": "Built-in recognition runs first. Additional rules match error responses only and are case-sensitive.",
-      "successHelp": "An upstream HTTP 200 resets consecutive failures and stops retries; later errors are still reported.",
-      "profile": "Smart quota backoff",
-      "help": "Matched quota errors pause this key without adding failures. Other errors still count toward the disable threshold.",
-      "profiles": {
-        "none": "Off",
-        "five_hour_week": "5 hours + week",
-        "five_hour_week_month": "5 hours + week + month",
-        "day": "Day",
-        "day_month": "Day + month"
-      },
-      "advanced": "Additional error recognition (optional)",
-      "ruleCount_zero": "Built-in recognition only",
-      "ruleCount_one": "{{count}} additional rule",
-      "ruleCount_other": "{{count}} additional rules",
-      "rulesHelp": "Up to 8 rules; the first exact match applies.",
-      "rulesInactive": "These rules are saved while backoff is off and will apply when you turn it on.",
-      "ruleKind": "Rule {{index}} type",
-      "ruleValue": "Rule {{index}} value",
-      "rulePeriod": "Rule {{index}} allowance cycle",
-      "kinds": {
-        "code": "Business error code",
-        "message": "Fixed message fragment"
-      },
-      "valueHelp": {
-        "code": "1–64 letters, digits, dots, underscores, colons or hyphens. Matches the error code or type exactly.",
-        "message": "1–160 characters copied from the error message. Use a short fixed fragment without personal details."
-      },
-      "placeholder": {
-        "code": "For example: 1308",
-        "message": "For example: weekly usage exhausted"
-      },
-      "periods": {
-        "auto": "Detect automatically",
-        "five_hour": "5 hours",
-        "day": "Day",
-        "week": "Week",
-        "month": "Month"
-      },
-      "removeRule": "Remove rule {{index}}",
-      "addRule": "Add rule",
-      "invalid": "Check the rule values and choose an allowance cycle supported by this profile.",
       "states": {
-        "waiting": "Smart backoff: waiting",
-        "ready": "Smart backoff: ready for a trial request",
-        "probing": "Smart backoff: trial request in progress"
+        "waiting": "Waiting for recovery",
+        "ready": "Ready for a trial request",
+        "probing": "Trial request in progress"
       },
       "reasons": {
         "five_hour_quota": "5-hour allowance exhausted",
@@ -231,12 +184,15 @@
       },
       "sources": {
         "builtin": "Built-in recognition",
-        "custom_rule": "Additional rule"
+        "custom_rule": "Historical rule"
       },
       "reasonSource": "{{reason}} · {{source}}",
       "retryAt": "Trial available from: {{time}}",
-      "timingHelp": "Without a recovery time, retries wait 15, 30, then 60 minutes; weekly and monthly limits wait 6 and 12 hours. The next charity request makes one trial.",
-      "editingHelp": "Changing the profile or rules restarts smart backoff. Upstream-provided cooldowns remain in effect."
+      "statusTitle": "Recovery status",
+      "automaticHelp": "Recoverable quota limits pause charity calls automatically. The next charity request tries again when the wait ends.",
+      "headerTitle": "Upstream wait",
+      "automaticTitle": "Smart backoff",
+      "independentHelp": "Both waits apply independently. Other key limits still apply."
     },
     "refresh": "Refresh",
     "donationHandling": {

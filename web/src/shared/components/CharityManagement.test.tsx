@@ -140,8 +140,6 @@ const managedKey = (overrides: Partial<ManagedDonationKey> = {}): ManagedDonatio
   authorized_expires_at: null,
   expires_at: null,
   failure_disable_threshold: '10',
-  smart_backoff_profile: 'none' as const,
-  smart_backoff_rules: [],
   smart_backoff: null,
   streak: { generation: '1', count: '0', failure_disabled: false },
   ended_reason: null,
@@ -879,8 +877,6 @@ describe('CharityManagement corrective controls', () => {
       managedKey({
         charity_state: 'disabled',
         failure_disable_threshold: '10',
-        smart_backoff_profile: 'none' as const,
-        smart_backoff_rules: [],
         smart_backoff: null,
         streak: { generation: '2', count: '10', failure_disabled: true },
       }),

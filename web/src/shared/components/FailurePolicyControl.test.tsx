@@ -27,8 +27,6 @@ describe('key failure policy', () => {
               donation_id: '1',
               donation_key_id: '2',
               failure_disable_threshold: '0',
-              smart_backoff_profile: 'none' as const,
-              smart_backoff_rules: [],
               smart_backoff: null,
               failure_streak: '12',
               failure_disabled: false,
@@ -44,8 +42,6 @@ describe('key failure policy', () => {
         keyID: '2',
         revision: '7',
         threshold: '10',
-        profile: 'none' as const,
-        rules: [],
       };
       const view = await renderWithProviders(<FailurePolicyControl {...props} />, {
         station: role === 'admin' ? 'admin' : 'user',
@@ -80,7 +76,7 @@ describe('key failure policy', () => {
       expect(screen.getByText(/Never disable automatically for errors/)).toBeInTheDocument();
     });
   }
-  it('retains rules through profile changes and retries unknown saves with the same request', async () => {
+  it('retries an unknown threshold save with the same request and idempotency key', async () => {
     const requests: { body: unknown; key: string | null }[] = [];
     vi.stubGlobal(
       'fetch',
@@ -92,9 +88,7 @@ describe('key failure policy', () => {
           JSON.stringify({
             donation_id: '1',
             donation_key_id: '2',
-            failure_disable_threshold: '10',
-            smart_backoff_profile: body.smart_backoff_profile,
-            smart_backoff_rules: body.smart_backoff_rules,
+            failure_disable_threshold: '11',
             smart_backoff: null,
             failure_streak: '3',
             failure_disabled: false,
@@ -111,8 +105,6 @@ describe('key failure policy', () => {
         keyID="2"
         revision="7"
         threshold="10"
-        profile="none"
-        rules={[]}
         refresh={async () => undefined}
       />,
       { station: 'user', locale: 'en' },
@@ -120,30 +112,18 @@ describe('key failure policy', () => {
     view.queryClient.setQueryData(['user', 'session'], {
       user: { id: '3', username: 'fixture', effective_level: 1 },
     });
-    const profile = screen.getByLabelText('Smart quota backoff');
-    await view.user.selectOptions(profile, 'day_month');
-    await view.user.click(screen.getByText('Additional error recognition (optional)'));
-    await view.user.click(screen.getByRole('button', { name: 'Add rule' }));
-    await view.user.selectOptions(screen.getByLabelText('Rule 1 type'), 'message');
-    await view.user.type(screen.getByLabelText('Rule 1 value'), '  monthly allowance exhausted  ');
-    await view.user.selectOptions(screen.getByLabelText('Rule 1 allowance cycle'), 'month');
-    await view.user.selectOptions(profile, 'day');
-    expect(screen.getByRole('button', { name: 'Save failure policy' })).toBeDisabled();
-    expect(screen.getByLabelText('Rule 1 value')).toHaveValue('  monthly allowance exhausted  ');
-    await view.user.selectOptions(profile, 'day_month');
+    const threshold = screen.getByLabelText('Consecutive failure disable threshold');
+    await view.user.clear(threshold);
+    await view.user.type(threshold, '11');
     await view.user.click(screen.getByRole('button', { name: 'Save failure policy' }));
-    await waitFor(() => expect(profile).toBeDisabled());
+    await waitFor(() => expect(threshold).toBeDisabled());
     await view.user.click(await screen.findByRole('button', { name: 'Continue' }));
     await screen.findByText('Failure policy saved and recalculated.');
     expect(requests).toHaveLength(2);
     expect(requests[1]).toEqual(requests[0]);
     expect(requests[0].body).toEqual({
       expected_revision: '7',
-      failure_disable_threshold: '10',
-      smart_backoff_profile: 'day_month',
-      smart_backoff_rules: [
-        { kind: 'message', value: 'monthly allowance exhausted', period: 'month' },
-      ],
+      failure_disable_threshold: '11',
     });
     expect(requests[0].key).toMatch(/^[A-Za-z0-9_-]{22,128}$/);
   });
@@ -159,9 +139,7 @@ describe('key failure policy', () => {
           JSON.stringify({
             donation_id: '1',
             donation_key_id: '2',
-            failure_disable_threshold: '10',
-            smart_backoff_profile: 'day',
-            smart_backoff_rules: [],
+            failure_disable_threshold: '11',
             smart_backoff: null,
             failure_streak: '3',
             failure_disabled: false,
@@ -178,20 +156,20 @@ describe('key failure policy', () => {
         keyID="2"
         revision="7"
         threshold="10"
-        profile="none"
-        rules={[]}
         refresh={refresh}
       />,
       { station: 'admin', locale: 'en' },
     );
     view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'fixture' } });
-    await view.user.selectOptions(screen.getByLabelText('Smart quota backoff'), 'day');
+    const threshold = screen.getByLabelText('Consecutive failure disable threshold');
+    await view.user.clear(threshold);
+    await view.user.type(threshold, '11');
     await view.user.click(screen.getByRole('button', { name: 'Save failure policy' }));
     await screen.findByText('Saved, but the latest version could not be loaded.');
     await view.user.click(screen.getAllByRole('button', { name: 'Check again' })[0]);
     await screen.findByText('Failure policy saved and recalculated.');
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(refresh).toHaveBeenCalledTimes(2);
-    expect(screen.getByLabelText('Smart quota backoff')).toHaveValue('day');
+    expect(threshold).toHaveValue('11');
   });
 });

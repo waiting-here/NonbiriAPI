@@ -256,8 +256,6 @@ export function normalizeManagedKey(
 ): ManagedDonationKey {
   const required = [
     'failure_disable_threshold',
-    'smart_backoff_profile',
-    'smart_backoff_rules',
     'smart_backoff',
     'binding_count',
     'idle',
