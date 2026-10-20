@@ -3,10 +3,11 @@ package app
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/waiting-here/NonbiriAPI/internal/stewardautomation"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/waiting-here/NonbiriAPI/internal/stewardautomation"
 )
 
 func TestPricingAndHistoryRegisteredSessionRoutes(t *testing.T) {
@@ -81,12 +82,12 @@ func TestPricingAndHistoryRegisteredSessionRoutes(t *testing.T) {
 	}
 	hidden := call("GET", "/api/donations?view=hidden&page=1&page_size=20", "", "", false)
 	require(hidden, 200)
-	if !strings.Contains(hidden.Body.String(), `"owner_hidden_at":`+fmt.Sprint(f.now)) {
+	if !strings.Contains(hidden.Body.String(), `"owner_hidden_at":`+fmt.Sprint(*receipt.At)) {
 		t.Fatal(hidden.Body)
 	}
 	detail := call("GET", fmt.Sprintf("/api/donations/%d", id), "", "", false)
 	require(detail, 200)
-	if !strings.Contains(detail.Body.String(), `"owner_hidden_at":`+fmt.Sprint(f.now)) {
+	if !strings.Contains(detail.Body.String(), `"owner_hidden_at":`+fmt.Sprint(*receipt.At)) {
 		t.Fatal(detail.Body)
 	}
 	current := call("GET", "/api/donations?view=current&page=1&page_size=20", "", "", false)
