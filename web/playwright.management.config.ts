@@ -3,6 +3,7 @@ import { defineConfig } from '@playwright/test';
 import audit from './playwright.audit.config';
 
 process.env.NONBIRI_MANAGEMENT_BROWSER = '1';
+process.env.NONBIRI_ENDPOINT_POLICIES_BROWSER = '1';
 process.env.NONBIRI_AUDIT_BROWSER_STATE = resolve('test-results/management/state.json');
 
 export default defineConfig({
@@ -17,6 +18,7 @@ export default defineConfig({
     'smart-backoff.spec.ts',
     'recurring-discounts.spec.ts',
     'charity-binding-batch.spec.ts',
+    'endpoint-policies.spec.ts',
   ],
   outputDir: 'test-results/management/browser',
 });
