@@ -1,6 +1,6 @@
 # Data Lifecycle Checklist (Generation 2 export / delete / retention / privacy)
 
-> Status: **v1.0.5 contract** — this checklist describes the
+> Status: **v1.0.6 contract** — this checklist describes the
 > release's export, deletion, retention, and privacy boundary. Source publication does
 > not itself upgrade an instance; deployment status is specific to each operator.
 >
@@ -12,7 +12,24 @@ family. The registered routes, export builder, deletion coordinator, retention w
 and bilingual privacy text are covered by their implementation and contract tests.
 Schema presence alone never creates a route or expands a response.
 
-Current account export format 23 includes safe `gacha` balances, owned cards, guarantees, claims, activity journals, draw details within 180 days and the saved appearance artwork key. Its filename is `nonbiriapi-account-export-v23.json`; SQLite `user_version` remains 2 and the current storage schema is 25. All rows below describe current retained fields. This does not assert that a particular instance has been upgraded.
+Current account export format 23 includes safe `gacha` balances, owned cards, guarantees, claims, activity journals, draw details within 180 days and the saved appearance artwork key. Its filename is `nonbiriapi-account-export-v23.json`; SQLite `user_version` remains 2 and the current storage schema is 26. All rows below describe current retained fields. This does not assert that a particular instance has been upgraded.
+
+`channel_charity_binding_presets` and `channel_charity_binding_mappings` contain
+shared channel configuration without donor or operator identity. They are excluded
+from personal exports and retained with the channel. Removing a charity target
+leaves its preset reference visible to authorized managers for repair; applying
+the preset skips that missing target. Mutations and batch results use existing
+role-scoped control receipts and retention. No additional personal audit history
+is created.
+
+Optional deployment routes send selected upstream requests, provider credentials
+and responses through Cloudflare AI Gateway. The gateway token is deployment
+configuration, excluded from database records, exports and diagnostics. Routed
+responses are checked for known credential reflections before header and error
+capture; direct responses retain the existing diagnostic contract. Gateway logging,
+cache, extra retries and billing fallback are disabled for these routes. Operators
+must disclose the intermediary and maintain its settings; these controls do not
+guarantee end-to-end zero retention.
 
 `account_mfa_credentials` holds purpose-encrypted authenticator seeds and the
 last consumed time step. `account_mfa_pending` holds a ten-minute enrollment
@@ -230,7 +247,7 @@ manifest, and checksums. Snapshot retention/deletion is operator-controlled and 
 be disclosed by the instance policy; the service does not promise per-user erasure inside
 historical snapshots.
 
-Normal v1.0.5 startup accepts fresh storage or current schema 25; exact schema 16–24 structures use the independent converter. Unknown or partial sources are rejected before writes. Fresh creation requires the main database and sidecars to be absent. Conversion preserves accounts, economic facts, credentials, saved games, configuration and instance legal text. Full historical audits use offline `maintenance verify`. The [database upgrade guide](database-upgrades.md) identifies the exact source and restore requirements.
+Normal v1.0.6 startup accepts fresh storage or current schema 26; exact schema 16–25 structures use the independent converter. Unknown or partial sources are rejected before writes. Fresh creation requires the main database and sidecars to be absent. Conversion preserves accounts, economic facts, credentials, saved games, configuration and instance legal text. Full historical audits use offline `maintenance verify`. The [database upgrade guide](database-upgrades.md) identifies the exact source and restore requirements.
 
 Starting fresh from an unsupported version uses a separate empty path and resets active application state. A complete old recovery set remains sensitive until its retention purpose ends. Never combine an old binary with a newer database or restore a stale snapshot over newly accepted data automatically.
 

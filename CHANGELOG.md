@@ -4,6 +4,26 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## Unreleased
+
+### Added
+
+- Operator-configured Cloudflare AI Gateway forwarding for exact endpoint bases,
+  with optional provider-header to query-credential adaptation, separate gateway
+  authentication and secret protection before diagnostic capture.
+- Existing-binding markers and a single donated-key operation spanning multiple
+  charity models.
+- Channel binding presets managed by administrators and level-6 stewards, with
+  one operation applying a preset to all keys in an approved donation. Missing
+  models, unavailable resources and existing bindings produce per-item results.
+
+### Compatibility
+
+- Storage schema 26 adds shared channel binding presets. Account export remains
+  23. Existing bindings, key enablement and level-5 model scope are preserved.
+- Cloudflare forwarding is disabled by default. It retains shared outbound
+  protections and does not add gateway billing fallback or extra retries.
+
 ## 1.0.5 — 2026-10-20
 
 ### Added
