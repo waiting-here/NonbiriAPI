@@ -46,6 +46,11 @@ does not upgrade an instance.
   direct execution and statement preparation, separately from connection waits.
   Fixed categories exclude SQL, parameters, resource identities and content.
 
+### Fixed
+
+- Accept current account-export downloads through format 22 while retaining
+  account-identity, attachment-version and size checks.
+
 ## 1.0.3 — 2026-10-19
 
 Database schema 21 and account export 20 are unchanged. This source-only release
