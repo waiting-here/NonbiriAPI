@@ -132,3 +132,26 @@ func TestResetTimeMustBelongToTheResetHint(t *testing.T) {
 		t.Fatal("ambiguous reset was guessed", got)
 	}
 }
+
+func TestRuleJSONPeriodOmissionAndClosedFields(t *testing.T) {
+	for _, tc := range []struct {
+		body  string
+		valid bool
+	}{
+		{`{"kind":"code","value":"quota"}`, true},
+		{`{"kind":"code","value":"quota","period":"auto"}`, true},
+		{`{"kind":"code","value":"quota","period":null}`, false},
+		{`{"kind":"code","value":"quota","period":""}`, false},
+		{`{"kind":"code","value":"quota","period":1}`, false},
+		{`{"kind":"code","value":"quota","unexpected":true}`, false},
+	} {
+		var rule Rule
+		err := json.Unmarshal([]byte(tc.body), &rule)
+		if (err == nil) != tc.valid {
+			t.Fatalf("%s got=%+v err=%v", tc.body, rule, err)
+		}
+		if err == nil && rule.Period != "auto" {
+			t.Fatal("missing explicit default", rule)
+		}
+	}
+}
