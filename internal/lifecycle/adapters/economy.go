@@ -259,8 +259,8 @@ func mapDonationKeys(values []donation.ExportDonationKey) []lifecycle.DonationKe
 			manual[i] = lifecycle.DonationManualModelExport{UpstreamModelID: item.UpstreamModelID, DisplayName: item.DisplayName}
 		}
 		out[index] = lifecycle.DonationKeyExport{
-			SmartBackoffProfile: value.Profile, SmartBackoffRules: value.Rules, SmartBackoff: value.Backoff,
-			Review: lifecycle.DonationKeyReviewExport{Required: value.Review.Required, Revision: cloneString(value.Review.Revision), MaterialAvailable: value.Review.MaterialAvailable}, ManualModels: manual,
+			SmartBackoff: value.Backoff,
+			Review:       lifecycle.DonationKeyReviewExport{Required: value.Review.Required, Revision: cloneString(value.Review.Revision), MaterialAvailable: value.Review.MaterialAvailable}, ManualModels: manual,
 			RecurringLimits: mapRecurringLimits(value.RecurringLimits),
 			ID:              value.ID, EndpointKeyID: cloneString(value.EndpointKeyID),
 			DisplayHead: value.DisplayHead, DisplayTail: value.DisplayTail,

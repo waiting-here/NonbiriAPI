@@ -58,7 +58,7 @@ func (a *Adapter) AttemptImage(ctx context.Context, writer http.ResponseWriter, 
 	errorGuard := newSensitiveGuard(append([][]byte{target.credential.bearer, target.credential.ciphertext, identifier}, sentSecrets...)...)
 	clear(identifier)
 	defer errorGuard.Clear()
-	errorContext := upstreamerror.Context{Backoff: smartbackoff.FromContext(ctx),
+	errorContext := upstreamerror.Context{CharityCall: smartbackoff.IsCharityCall(ctx),
 		BaseURL: target.baseURL, PrivateModel: target.upstreamModel,
 		ContainsSecret: func(value []byte) bool {
 			scanner := errorGuard.clone()

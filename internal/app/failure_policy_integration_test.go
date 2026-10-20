@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -8,15 +9,22 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/donation"
+	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/stewardautomation"
 )
 
 func TestStewardAutomationFailurePolicyAuthorityAndReplay(t *testing.T) {
 	f := newAutomationFixture(t)
+	for _, field := range []string{"smart_backoff_profile", "smart_backoff_rules"} {
+		old := f.input(1)
+		old["keys"].([]map[string]any)[0][field] = nil
+		rejected := f.call(t, stewardautomation.DonationsPath, strings.Repeat("R", 22), old)
+		if rejected.Code != 400 {
+			t.Fatal("retired create field accepted", field, rejected.Code, rejected.Body)
+		}
+	}
 	input := f.input(1)
 	input["keys"].([]map[string]any)[0]["failure_disable_threshold"] = "0"
-	input["keys"].([]map[string]any)[0]["smart_backoff_profile"] = "day_month"
-	input["keys"].([]map[string]any)[0]["smart_backoff_rules"] = []map[string]any{{"kind": "code", "value": "create_quota", "period": "auto"}}
 	created := f.create(t, strings.Repeat("P", 22), input)
 	key := created.Keys[0].DonationKeyID
 	f.exec(t, "UPDATE donation_keys SET failure_streak=?,enabled=0 WHERE id=?", db.EncodeU128(db.U128{15: 12}), key)
@@ -24,18 +32,64 @@ func TestStewardAutomationFailurePolicyAuthorityAndReplay(t *testing.T) {
 	headers := map[string]string{"Authorization": "Bearer " + f.caller, "Content-Type": "application/json"}
 	read := testApplicationRequest(t, f.handler, "GET", auditUserHost, readPath, "", nil, headers)
 	var policy donation.FailurePolicy
-	if read.Code != 200 || json.Unmarshal(read.Body.Bytes(), &policy) != nil || policy.FailureDisableThreshold != "0" || policy.FailureStreak != "12" || policy.Profile != "day_month" || len(policy.Rules) != 1 {
+	if read.Code != 200 || json.Unmarshal(read.Body.Bytes(), &policy) != nil || policy.FailureDisableThreshold != "0" || policy.FailureStreak != "12" {
 		t.Fatal(read.Code, read.Body)
 	}
-	body := `{"donation_id":"` + created.DonationID + `","donation_key_id":"` + key + `","expected_revision":"` + policy.Revision + `","failure_disable_threshold":"10","smart_backoff_profile":"day","smart_backoff_rules":[{"kind":"code","value":"daily_limit"}]}`
+	body := `{"donation_id":"` + created.DonationID + `","donation_key_id":"` + key + `","expected_revision":"` + policy.Revision + `","failure_disable_threshold":"10"}`
 	headers["Idempotency-Key"] = strings.Repeat("Q", 22)
+	for _, extra := range []string{`,"smart_backoff_profile":"none"}`, `,"smart_backoff_rules":[]}`} {
+		rejected := testApplicationRequest(t, f.handler, "PATCH", auditUserHost, stewardautomation.FailurePolicyPath, strings.TrimSuffix(body, "}")+extra, nil, headers)
+		if rejected.Code != 400 {
+			t.Fatal("retired policy field accepted", rejected.Code, rejected.Body)
+		}
+	}
 	patch := testApplicationRequest(t, f.handler, "PATCH", auditUserHost, stewardautomation.FailurePolicyPath, body, nil, headers)
-	if patch.Code != 200 || json.Unmarshal(patch.Body.Bytes(), &policy) != nil || !policy.FailureDisabled || policy.Profile != "day" || len(policy.Rules) != 1 || policy.Rules[0].Period != "auto" {
+	if patch.Code != 200 || json.Unmarshal(patch.Body.Bytes(), &policy) != nil || !policy.FailureDisabled {
 		t.Fatal(patch.Code, patch.Body)
 	}
+	var legacy map[string]any
+	if err := json.Unmarshal(patch.Body.Bytes(), &legacy); err != nil {
+		t.Fatal(err)
+	}
+	legacy["smart_backoff_profile"] = "day"
+	legacy["smart_backoff_rules"] = []map[string]any{{"kind": "code", "value": "old.private-rule", "period": "auto"}}
+	historical, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receiptHash, err := idempotency.KeyHash(headers["Idempotency-Key"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Recreate only this synthetic historical receipt; terminal rows stay immutable.
+	f.exec(t, "INSERT OR REPLACE INTO idempotency_records(scope,actor_scope_hash,key_hash,request_hash,state,http_status,response_body,created_at,expires_at) SELECT scope,actor_scope_hash,key_hash,request_hash,state,http_status,?,created_at,expires_at FROM idempotency_records WHERE scope=? AND key_hash=?", historical, string(idempotency.ScopeControlMutation), receiptHash[:])
+	var beforeAudits int
+	if err := f.store.DB().QueryRow("SELECT count(*) FROM donation_reviews").Scan(&beforeAudits); err != nil {
+		t.Fatal(err)
+	}
 	replay := testApplicationRequest(t, f.handler, "PATCH", auditUserHost, stewardautomation.FailurePolicyPath, body, nil, headers)
-	if replay.Code != 200 || replay.Body.String() != patch.Body.String() {
+	if replay.Code != 200 || strings.Contains(replay.Body.String(), "smart_backoff_profile") || strings.Contains(replay.Body.String(), "smart_backoff_rules") {
 		t.Fatal(replay.Code, replay.Body)
+	}
+	for _, field := range []string{"smart_backoff_profile", "smart_backoff_rules"} {
+		if strings.Contains(read.Body.String(), field) || strings.Contains(patch.Body.String(), field) {
+			t.Fatal("retired field returned", field)
+		}
+	}
+	var replayPolicy donation.FailurePolicy
+	strict := json.NewDecoder(bytes.NewReader(replay.Body.Bytes()))
+	strict.DisallowUnknownFields()
+	if err := strict.Decode(&replayPolicy); err != nil || replayPolicy.Revision != policy.Revision || replayPolicy.FailureDisableThreshold != policy.FailureDisableThreshold {
+		t.Fatal(replayPolicy, err)
+	}
+	var afterAudits int
+	var stored []byte
+	var revision string
+	if err := f.store.DB().QueryRow("SELECT response_body FROM idempotency_records WHERE scope=? AND key_hash=?", string(idempotency.ScopeControlMutation), receiptHash[:]).Scan(&stored); err != nil || !bytes.Equal(stored, historical) {
+		t.Fatal("receipt rewritten", err)
+	}
+	if err := f.store.DB().QueryRow("SELECT CAST(revision AS TEXT),(SELECT count(*) FROM donation_reviews) FROM donations WHERE id=?", created.DonationID).Scan(&revision, &afterAudits); err != nil || revision != policy.Revision || beforeAudits != afterAudits {
+		t.Fatal("replay applied a second mutation", revision, afterAudits, err)
 	}
 	if strings.Contains(patch.Body.String(), "base_url") || strings.Contains(patch.Body.String(), "secret") || strings.Contains(patch.Body.String(), "user_id") {
 		t.Fatal("unsafe policy projection")

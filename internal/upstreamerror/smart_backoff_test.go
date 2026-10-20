@@ -3,17 +3,20 @@ package upstreamerror
 import (
 	"strings"
 	"testing"
-
-	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 )
 
 func TestSmartBackoffOnlyClassifiesCompleteErrorObjects(t *testing.T) {
 	ctx := testContext("opaque-secret")
-	ctx.Backoff = smartbackoff.Config{Profile: "day", Rules: []smartbackoff.Rule{{Kind: "code", Value: "private.example.invalid", Period: "auto"}}}
-	got := ctx.Parse([]byte(`{"error":{"code":"private.example.invalid","message":"opaque-secret"}}`))
-	if got.Backoff().Source != "custom_rule" || got.Code() != "" {
+	ctx.CharityCall = true
+	got := ctx.Parse([]byte(`{"error":{"code":"private.example.invalid","message":"Daily quota exhausted; reset later. opaque-secret"}}`))
+	if got.Backoff().Source != "builtin" || got.Code() != "" {
 		t.Fatalf("classification must precede public scrub: %+v", got)
 	}
+	ctx.CharityCall = false
+	if ctx.Parse([]byte(`{"error":{"code":"quota","message":"Daily quota exhausted; reset later."}}`)).Backoff().Valid() {
+		t.Fatal("personal error classified")
+	}
+	ctx.CharityCall = true
 	for _, body := range []string{
 		`{"message":"Daily quota exhausted; reset later."}`,
 		`{"choices":[{"message":{"content":"Daily quota exhausted; reset later."}}]}`,

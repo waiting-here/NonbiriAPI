@@ -23,7 +23,7 @@ func smartPolicyHTTP(t *testing.T, api *httpAPI, owner int64, d Donation, body, 
 	api.failurePolicyEdit(w, r, UserPrincipal{UserID: owner}, "")
 	return w
 }
-func TestSmartBackoffPolicyPreservesOmittedConfigAndResetCooldowns(t *testing.T) {
+func TestSmartBackoffThresholdEditsAndResetPreserveCooldowns(t *testing.T) {
 	e := newDonationTestEnv(t)
 	owner := e.seedUser(t, "smart-owner", nil, false)
 	e.seedUser(t, "", nil, true)
@@ -31,69 +31,51 @@ func TestSmartBackoffPolicyPreservesOmittedConfigAndResetCooldowns(t *testing.T)
 	d := approvedResetDonation(t, e, owner, physical)
 	key := parseTestID(t, d.Keys[0].ID)
 	api := &httpAPI{service: e.service}
-	save := func(rev int, extra, seed string) FailurePolicy {
-		t.Helper()
-		body := fmt.Sprintf(`{"expected_revision":"%d","failure_disable_threshold":"10"%s}`, rev, extra)
-		w := smartPolicyHTTP(t, api, owner, d, body, seed)
-		if w.Code != 200 {
-			t.Fatal(w.Code, w.Body)
-		}
-		replay := smartPolicyHTTP(t, api, owner, d, body, seed)
-		if replay.Code != 200 || replay.Body.String() != w.Body.String() {
-			t.Fatal("replay", replay.Code, replay.Body)
-		}
-		var p FailurePolicy
-		if err := json.Unmarshal(w.Body.Bytes(), &p); err != nil {
-			t.Fatal(err)
-		}
-		return p
-	}
-	config := `,"smart_backoff_profile":"day_month","smart_backoff_rules":[{"kind":"message","value":"  ` + strings.Repeat("额", 160) + `  "}]`
-	p := save(2, config, "a")
-	if p.Profile != "day_month" || len(p.Rules) != 1 || p.Rules[0].Period != "auto" || len([]rune(p.Rules[0].Value)) != 160 {
-		t.Fatal(p)
-	}
 	until := e.clock.Load() + 900
-	if _, err := e.store.DB().Exec("UPDATE donation_key_backoffs SET episode=1,period=?,source=?,retry_at=? WHERE donation_key_id=?", "day", "builtin", until, key); err != nil {
+	if _, err := e.store.DB().Exec(`INSERT INTO donation_key_backoffs(donation_key_id,generation,episode,period,source,stage,retry_at,updated_at) VALUES(?,7,3,'day','custom_rule',1,?,?)`, key, until, e.clock.Load()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.store.DB().Exec("INSERT INTO donation_key_cooldowns VALUES(?,?,?)", key, until+60, e.clock.Load()); err != nil {
 		t.Fatal(err)
 	}
-	p = save(3, "", "b")
-	if p.Backoff == nil || p.Backoff.RetryAt != until || len(p.Rules) != 1 {
-		t.Fatal("omission reset", p)
+	body := `{"expected_revision":"2","failure_disable_threshold":"10"}`
+	w := smartPolicyHTTP(t, api, owner, d, body, "a")
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body)
 	}
-	p = save(4, config, "c")
-	if p.Backoff == nil || p.Backoff.RetryAt != until {
-		t.Fatal("same config reset", p)
+	replay := smartPolicyHTTP(t, api, owner, d, body, "a")
+	if replay.Code != 200 || replay.Body.String() != w.Body.String() {
+		t.Fatal("replay", replay.Code, replay.Body)
 	}
-	reset := resetHTTP(t, api, recurringOwner, owner, "/reset", `{"expected_revision":"5"}`, "d", d.ID, d.Keys[0].ID)
+	var policy FailurePolicy
+	if err := json.Unmarshal(w.Body.Bytes(), &policy); err != nil || policy.Backoff == nil || policy.Backoff.RetryAt != until || policy.Backoff.Source != "custom_rule" {
+		t.Fatal(policy, err)
+	}
+	if strings.Contains(w.Body.String(), "smart_backoff_profile") || strings.Contains(w.Body.String(), "smart_backoff_rules") {
+		t.Fatal("retired fields returned")
+	}
+	reset := resetHTTP(t, api, recurringOwner, owner, "/reset", `{"expected_revision":"3"}`, "b", d.ID, d.Keys[0].ID)
 	if reset.Code != 200 {
 		t.Fatal(reset.Code, reset.Body)
 	}
 	current, err := smartbackoff.Read(t.Context(), e.store.DB(), key, e.clock.Load())
-	if err != nil || current.Backoff == nil || current.Backoff.RetryAt != until {
-		t.Fatal("failure reset cleared backoff", current, err)
+	if err != nil || current.Backoff == nil || *current.Backoff != *policy.Backoff {
+		t.Fatal("failure reset changed backoff", current, err)
 	}
-	p = save(6, `,"smart_backoff_rules":[]`, "e")
-	if p.Backoff != nil || len(p.Rules) != 0 {
-		t.Fatal("rule edit did not clear episode", p)
-	}
-	var headerUntil int64
+	var headerUntil, generation, episode int64
 	if err := e.store.DB().QueryRow("SELECT rate_limited_until FROM donation_key_cooldowns WHERE donation_key_id=?", key).Scan(&headerUntil); err != nil || headerUntil != until+60 {
-		t.Fatal("header was cleared", headerUntil, err)
+		t.Fatal("header cleared", headerUntil, err)
 	}
-	for _, extra := range []string{
-		`,"smart_backoff_rules":[{"kind":"code","value":"quota","period":null}]`,
-		`,"smart_backoff_rules":[{"kind":"code","value":"quota","period":""}]`, `,"smart_backoff_profile":null`, `,"smart_backoff_rules":null`, `,"smart_backoff_rules":[{"kind":"code","value":"x","period":"week"}]`, `,"smart_backoff_rules":[{"kind":"message","value":"a","unexpected":true}]`} {
-		w := smartPolicyHTTP(t, api, owner, d, `{"expected_revision":"7","failure_disable_threshold":"10"`+extra+`}`, "f")
-		if w.Code != 400 {
-			t.Fatal("bad config", w.Code, w.Body)
+	if err := e.store.DB().QueryRow("SELECT generation,episode FROM donation_key_backoffs WHERE donation_key_id=?", key).Scan(&generation, &episode); err != nil || generation != 7 || episode != 3 {
+		t.Fatal("episode changed", generation, episode, err)
+	}
+	for _, extra := range []string{`,"smart_backoff_profile":"none"`, `,"smart_backoff_profile":"day"`, `,"smart_backoff_rules":[]`, `,"smart_backoff_rules":null`} {
+		rejected := smartPolicyHTTP(t, api, owner, d, `{"expected_revision":"4","failure_disable_threshold":"10"`+extra+`}`, "c")
+		if rejected.Code != 400 {
+			t.Fatal("retired field accepted", rejected.Code, rejected.Body)
 		}
 	}
-	// Omission and explicit empty are different idempotency requests.
-	collision := smartPolicyHTTP(t, api, owner, d, `{"expected_revision":"6","failure_disable_threshold":"10"}`, "e")
+	collision := smartPolicyHTTP(t, api, owner, d, `{"expected_revision":"2","failure_disable_threshold":"11"}`, "a")
 	if collision.Code != 409 {
 		t.Fatal(collision.Code, collision.Body)
 	}
@@ -102,15 +84,17 @@ func TestSmartBackoffCreationExportAndAccountDeletion(t *testing.T) {
 	e := newDonationTestEnv(t)
 	owner := e.seedUser(t, "smart-export", nil, false)
 	_, physical := e.seedEndpointKey(t, owner, 'y')
-	profile := "day"
-	rules := []smartbackoff.Rule{{Kind: "message", Value: "personal fixed phrase"}}
-	created, err := e.service.Create(t.Context(), owner, donationCreateMutation(t, 'W', map[string]any{"smart": true}), CreateInput{Description: "smart", OwnershipAuthorized: true, Keys: []CreateKeyInput{{EndpointKeyID: physical, SmartBackoffProfile: &profile, SmartBackoffRules: &rules}}})
+	created, err := e.service.Create(t.Context(), owner, donationCreateMutation(t, 'W', map[string]any{"smart": true}), CreateInput{Description: "smart", OwnershipAuthorized: true, Keys: []CreateKeyInput{{EndpointKeyID: physical}}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	key := parseTestID(t, created.Value.Keys[0].ID)
-	if created.Value.Keys[0].Profile != "day" {
-		t.Fatal("creation lost config")
+	if created.Value.Keys[0].Backoff != nil {
+		t.Fatal("new key has episode")
+	}
+	until := e.clock.Load() + 900
+	if _, err := e.store.DB().Exec(`INSERT INTO donation_key_backoffs(donation_key_id,generation,episode,period,source,stage,retry_at,updated_at) VALUES(?,1,1,'week','builtin',0,?,?)`, key, until, e.clock.Load()); err != nil {
+		t.Fatal(err)
 	}
 	tx, err := e.store.DB().Begin()
 	if err != nil {
@@ -118,12 +102,14 @@ func TestSmartBackoffCreationExportAndAccountDeletion(t *testing.T) {
 	}
 	exported, err := e.service.ExportUserTx(t.Context(), tx, owner, e.clock.Load(), 100)
 	tx.Rollback()
-	if err != nil || len(exported) != 1 || exported[0].Keys[0].Rules[0].Value != rules[0].Value {
+	if err != nil || len(exported) != 1 || exported[0].Keys[0].Backoff == nil || exported[0].Keys[0].Backoff.RetryAt != until {
 		t.Fatal(exported, err)
 	}
 	body, _ := json.Marshal(exported)
-	if strings.Contains(string(body), "smart_backoff_generation") || strings.Contains(string(body), "trial_claim_id") {
-		t.Fatal("internal facts exported")
+	for _, name := range []string{"smart_backoff_profile", "smart_backoff_rules", "smart_backoff_generation", "trial_claim_id"} {
+		if strings.Contains(string(body), name) {
+			t.Fatal("internal or retired field exported", name)
+		}
 	}
 	tx, err = e.store.DB().Begin()
 	if err != nil {
@@ -138,7 +124,7 @@ func TestSmartBackoffCreationExportAndAccountDeletion(t *testing.T) {
 	}
 	var count int
 	if err := e.store.DB().QueryRow("SELECT count(*) FROM donation_key_backoffs WHERE donation_key_id=?", key).Scan(&count); err != nil || count != 0 {
-		t.Fatal("personal rules survived account deletion", count, err)
+		t.Fatal("state survived account deletion", count, err)
 	}
 }
 func TestSmartBackoffTraineeScopeRecheckedBeforeReplay(t *testing.T) {
@@ -152,11 +138,10 @@ func TestSmartBackoffTraineeScopeRecheckedBeforeReplay(t *testing.T) {
 	id, key := parseTestID(t, d.ID), parseTestID(t, d.Keys[0].ID)
 	model := controlModel(t, e, "smart-maintenance", true)
 	ctx := charityscope.WithModel(context.Background(), model)
-	profile := "day"
-	mutation := donationMutation(t, 'u', http.MethodPatch, routeStewardFailurePolicy, []int64{id, key}, map[string]any{"expected_revision": "2", "failure_disable_threshold": "10", "smart_backoff_profile": profile})
+	mutation := donationMutation(t, 'u', http.MethodPatch, routeStewardFailurePolicy, []int64{id, key}, map[string]any{"expected_revision": "2", "failure_disable_threshold": "10"})
 	mutation.Query = charityscope.Query(ctx)
 	save := func() error {
-		_, err := e.service.failurePolicy(ctx, trainee, reviewerSteward, id, key, 2, "10", mutation, smartbackoff.Patch{Profile: &profile})
+		_, err := e.service.failurePolicy(ctx, trainee, reviewerSteward, id, key, 2, "10", mutation)
 		return err
 	}
 	if err := save(); !errors.Is(err, ErrNotFound) {
@@ -179,5 +164,25 @@ func TestSmartBackoffTraineeScopeRecheckedBeforeReplay(t *testing.T) {
 	}
 	if err := save(); !errors.Is(err, ErrNotFound) {
 		t.Fatal("revoked binding replay", err)
+	}
+}
+
+func TestAutomaticBackoffCreateRejectsRetiredSettings(t *testing.T) {
+	e := newDonationTestEnv(t)
+	owner := e.seedUser(t, "automatic-owner", nil, false)
+	_, key := e.seedEndpointKey(t, owner, 'a')
+	api := &httpAPI{service: e.service}
+	for _, field := range []string{"smart_backoff_profile", "smart_backoff_rules"} {
+		raw, err := json.Marshal(map[string]any{"description": "automatic", "discord_public_thanks": false, "ownership_authorized": true, "keys": []map[string]any{{"endpoint_key_id": fmt.Sprint(key), "expires_at": nil, field: nil}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		request := httptest.NewRequest(http.MethodPost, "/api/donations", strings.NewReader(string(raw)))
+		request.Header.Set("Idempotency-Key", strings.Repeat("S", 22))
+		response := httptest.NewRecorder()
+		api.createOwner(response, request, UserPrincipal{UserID: owner})
+		if response.Code != 400 {
+			t.Fatal("retired create field accepted", field, response.Code, response.Body)
+		}
 	}
 }

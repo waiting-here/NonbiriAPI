@@ -198,9 +198,6 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		if err != nil || donationKeyID <= 0 {
 			return Donation{}, ErrInvariant
 		}
-		if err := smartbackoff.Set(ctx, tx, donationKeyID, smartbackoff.Patch{Profile: &key.backoff.Profile, Rules: &key.backoff.Rules}, now); err != nil {
-			return Donation{}, err
-		}
 		required, err := s.reviewMaterial.CaptureDonationKey(ctx, tx, donationKeyID, key.id, time.Unix(now, 0))
 		if err != nil {
 			return Donation{}, mapReviewError(err)
@@ -865,7 +862,11 @@ func (s *Service) manageKey(
 }
 
 func replayRoleDonation(ctx context.Context, tx *sql.Tx, decision idempotency.Decision, role reviewerRole, actorID, donationID int64) (roleDonationMutation, error) {
-	result := roleDonationMutation{status: decision.HTTPStatus, body: append([]byte(nil), decision.ResponseBody...), replayed: true}
+	body, err := smartbackoff.ProjectReceipt(decision.ResponseBody)
+	if err != nil {
+		return roleDonationMutation{}, ErrInvariant
+	}
+	result := roleDonationMutation{status: decision.HTTPStatus, body: body, replayed: true}
 	if role == reviewerSteward || role == reviewerTrainee {
 		if err := json.Unmarshal(decision.ResponseBody, &result.steward); err != nil {
 			return roleDonationMutation{}, ErrInvariant
@@ -1170,7 +1171,6 @@ func (s *Service) materializeRoleExpiryStandalone(
 }
 
 type submissionKey struct {
-	backoff                        smartbackoff.Config
 	failureDisableThreshold        db.U128
 	id                             int64
 	head, tail, baseURL, connector string
@@ -1207,13 +1207,7 @@ func validateSubmissionKeys(ctx context.Context, tx *sql.Tx, userID int64, input
 	ids := make([]int64, len(inputs))
 	expiries := make(map[int64]*int64, len(inputs))
 	thresholds := make(map[int64]db.U128, len(inputs))
-	backoffs := make(map[int64]smartbackoff.Config, len(inputs))
 	for index, input := range inputs {
-		config, err := smartbackoff.Merge(smartbackoff.Default(), smartbackoff.Patch{Profile: input.SmartBackoffProfile, Rules: input.SmartBackoffRules})
-		if err != nil {
-			return nil, ErrInvalidRequest
-		}
-		backoffs[input.EndpointKeyID] = config
 		value := "10"
 		if input.FailureDisableThreshold != nil {
 			value = *input.FailureDisableThreshold
@@ -1253,7 +1247,6 @@ ORDER BY k.id`, args...)
 		}
 		key.expiresAt = expiries[key.id]
 		key.failureDisableThreshold = thresholds[key.id]
-		key.backoff = backoffs[key.id]
 		key.reportFingerprint = append([]byte(nil), key.reportFingerprint...)
 		keys = append(keys, key)
 	}
@@ -1297,8 +1290,17 @@ func replay[T any](decision idempotency.Decision) (resources.MutationResult[T], 
 			return resources.MutationResult[T]{}, ErrInvariant
 		}
 	}
+	body := append([]byte(nil), decision.ResponseBody...)
+	switch any(value).(type) {
+	case Donation, FailurePolicy, ManagedKeyReceipt:
+		var err error
+		body, err = smartbackoff.ProjectReceipt(body)
+		if err != nil {
+			return resources.MutationResult[T]{}, ErrInvariant
+		}
+	}
 	return resources.MutationResult[T]{Value: value, Status: decision.HTTPStatus,
-		Body: append([]byte(nil), decision.ResponseBody...), Replayed: true}, nil
+		Body: body, Replayed: true}, nil
 }
 
 func finishJSON[T any](ctx context.Context, tx *sql.Tx, decision idempotency.Decision, status int, value T) (resources.MutationResult[T], error) {

@@ -252,8 +252,6 @@ type StewardDonation struct {
 }
 
 type CreateKeyInput struct {
-	SmartBackoffProfile     *string
-	SmartBackoffRules       *[]smartbackoff.Rule
 	FailureDisableThreshold *string
 	EndpointKeyID           int64
 	ExpiresAt               *int64

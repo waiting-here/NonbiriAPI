@@ -106,11 +106,11 @@ func resetAt(fields map[string]json.RawMessage, message string) int64 {
 
 // Classify consumes only an already validated, complete JSON error object.
 // The original machine fields are used before public diagnostic redaction.
-func Classify(config Config, fields map[string]json.RawMessage) Classification {
-	if !Supports(config.Profile, "unknown") || fields == nil {
+func Classify(fields map[string]json.RawMessage) Classification {
+	if fields == nil {
 		return Classification{}
 	}
-	code, kind, message := scalar(fields, "code"), scalar(fields, "type"), scalar(fields, "message")
+	code, message := scalar(fields, "code"), scalar(fields, "message")
 	period := messagePeriod(message)
 	m := strings.ToLower(message)
 	quota := containsAny(m, "quota", "usage limit", "usage quota", "额度", "用量", "使用限额", "调用量", "限额", "使用量", "使用上限")
@@ -145,22 +145,8 @@ func Classify(config Config, fields map[string]json.RawMessage) Classification {
 	resetEvidence := reset > 0 || containsAny(m, "reset", "重置")
 	shortRate := containsAny(m, "per minute", "per second", "tokens/min", "requests/min", "tpm", "rpm", "tps", "qps", "每分钟", "每秒", "overload", "过载", "concurrent", "并发")
 	built := !permanentCode && !hardFailure && !shortRate && quota && exhausted && (!billing || specificWindow) && ((knownCode && documentedWindow) || (!knownCode && (resetEvidence || (period != "unknown" && recoverable))))
-	if built && Supports(config.Profile, builtinPeriod) {
+	if built {
 		return Classification{Period: builtinPeriod, Source: "builtin", ResetAt: reset}
-	}
-	for _, rule := range config.Rules {
-		match := rule.Kind == "code" && (code == rule.Value || kind == rule.Value) || rule.Kind == "message" && strings.Contains(message, rule.Value)
-		if !match {
-			continue
-		}
-		selected := rule.Period
-		if selected == "" || selected == "auto" {
-			selected = period
-		}
-		if !Supports(config.Profile, selected) {
-			return Classification{}
-		}
-		return Classification{Period: selected, Source: "custom_rule", ResetAt: reset}
 	}
 	return Classification{}
 }
