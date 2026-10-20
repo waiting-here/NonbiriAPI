@@ -14,7 +14,6 @@ export default defineConfig({
     'directory-controls.spec.ts',
     'operation-controls.spec.ts',
     'discovery-errors.spec.ts',
-    'workflow.spec.ts',
     'smart-backoff.spec.ts',
     'recurring-discounts.spec.ts',
     'charity-binding-batch.spec.ts',

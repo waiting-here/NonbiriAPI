@@ -47,7 +47,7 @@ func TestBrowserUnknownSharedAndDeletedInputsKeepFullCoverage(t *testing.T) {
 		if err := selectBrowserPlan(&plan); err != nil {
 			t.Fatal(err)
 		}
-		if len(plan.Browser.Specs) != 5 || len(plan.Browser.Suites) != 5 || len(plan.Browser.matrix()) != 4 || !plan.Browser.Engine {
+		if len(plan.Browser.Specs) != 5 || len(plan.Browser.Suites) != 6 || len(plan.Browser.matrix()) != 4 || !plan.Browser.Engine {
 			t.Fatalf("incomplete fallback for %s: %+v", path, plan)
 		}
 	}
@@ -186,6 +186,26 @@ func TestBrowserFeatureDirectoriesSelectTheirContracts(t *testing.T) {
 		}
 		if !slices.Equal(plan.Browser.Specs, want) || !slices.Equal(plan.Browser.Suites, []string{test.suite}) || plan.Browser.Engine != test.engine {
 			t.Fatalf("feature scope %s: %+v", test.path, plan.Browser)
+		}
+	}
+}
+
+func TestBrowserWorkflowFixtureAlwaysSelectsItsRunnableSuite(t *testing.T) {
+	browserCatalogFixture(t)
+	for _, path := range []string{"web/test/audit/workflow.spec.ts", "internal/app/workflow_browser_integration_test.go", "web/playwright.workflow.config.ts"} {
+		plan := verificationPlan{Mode: "routine", Changed: []string{path}}
+		if err := selectBrowserPlan(&plan); err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Contains(plan.Browser.Suites, "workflow") {
+			t.Fatalf("workflow suite omitted for %s: %+v", path, plan.Browser)
+		}
+		found := false
+		for _, job := range plan.Browser.matrix() {
+			found = found || job.Name == "management"
+		}
+		if !found {
+			t.Fatalf("workflow suite has no runner for %s", path)
 		}
 	}
 }
