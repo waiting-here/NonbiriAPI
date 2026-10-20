@@ -22,6 +22,7 @@ interface Fixture {
     charity_model_id: string;
     automatic_donation_id: string;
     pending_donation_id: string;
+    binding_donation_id: string;
     denials: Record<'client_rules' | 'charity' | 'manual', { cookie: Cookie }>;
   };
 }
@@ -161,7 +162,13 @@ test('owner reads donation keys and details from current API responses', async (
       state.user_url,
       '/api/donations?view=current&page=1&page_size=20',
     );
-    expect(donations.data).toHaveLength(2);
+    expect(donations.data.map((item: { id: string }) => item.id).sort()).toEqual(
+      [
+        state.management.automatic_donation_id,
+        state.management.pending_donation_id,
+        state.management.binding_donation_id,
+      ].sort(),
+    );
     expect(
       donations.data.every((item: { status: string }) =>
         ['pending', 'approved'].includes(item.status),
