@@ -3,6 +3,7 @@ package charityrouting
 import (
 	"net/http"
 
+	"github.com/waiting-here/NonbiriAPI/internal/charitydiscount"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
@@ -62,13 +63,14 @@ func (api *httpAPI) getPriceTemplate(w http.ResponseWriter, r *http.Request, rol
 }
 
 type priceTemplateWire struct {
-	Name                requiredField[string]       `json:"name"`
-	Description         requiredField[string]       `json:"description"`
-	Enabled             requiredField[bool]         `json:"enabled"`
-	Pricing             requiredField[pricingWire]  `json:"pricing"`
-	TokenReserveCredits nullableField[string]       `json:"token_reserve_credits"`
-	Discount            requiredField[discountWire] `json:"discount"`
-	ExpectedRevision    requiredField[string]       `json:"expected_revision"`
+	RecurringDiscount   requiredField[charitydiscount.Config] `json:"recurring_discount"`
+	Name                requiredField[string]                 `json:"name"`
+	Description         requiredField[string]                 `json:"description"`
+	Enabled             requiredField[bool]                   `json:"enabled"`
+	Pricing             requiredField[pricingWire]            `json:"pricing"`
+	TokenReserveCredits nullableField[string]                 `json:"token_reserve_credits"`
+	Discount            requiredField[discountWire]           `json:"discount"`
+	ExpectedRevision    requiredField[string]                 `json:"expected_revision"`
 }
 
 func (api *httpAPI) mutateAdminPriceTemplate(w http.ResponseWriter, r *http.Request) {
@@ -125,6 +127,11 @@ func (api *httpAPI) mutateAdminPriceTemplate(w http.ResponseWriter, r *http.Requ
 		}
 		input = &PriceTemplateInput{Name: wire.Name.Value, Description: wire.Description.Value, Enabled: wire.Enabled.Value, Pricing: pricing, TokenReserveCredits: wire.TokenReserveCredits.Value, Discount: discount}
 		canonical = map[string]any{"name": input.Name, "description": input.Description, "enabled": input.Enabled, "pricing": pj, "token_reserve_credits": input.TokenReserveCredits, "discount": dj}
+		if wire.RecurringDiscount.Set {
+			value := wire.RecurringDiscount.Value
+			input.RecurringDiscount = &value
+			canonical["recurring_discount"] = value
+		}
 		if id != 0 {
 			expected = wire.ExpectedRevision.Value
 			canonical["expected_revision"] = expected

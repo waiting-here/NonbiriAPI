@@ -10,6 +10,14 @@ import (
 )
 
 func TestContextPricingSettlement(t *testing.T) {
+	testContextPricingSettlement(t, false)
+}
+
+func TestRecurringDiscountContextPricingSettlement(t *testing.T) {
+	testContextPricingSettlement(t, true)
+}
+
+func testContextPricingSettlement(t *testing.T, recurring bool) {
 	known := connectorcontract.Usage{Present: true, UncachedInputTokens: 5, CacheWriteInputTokens: 2, CacheReadInputTokens: 3, OutputTokens: 4}
 	below := known
 	below.CacheReadInputTokens = 2
@@ -47,7 +55,13 @@ func TestContextPricingSettlement(t *testing.T) {
 			if _, err := e.store.DB().Exec("UPDATE charity_models SET context_pricing=?,discount_percent=? WHERE id=?", policy.Encode(), tc.discount, model); err != nil {
 				t.Fatal(err)
 			}
+			if recurring {
+				setRecurringDiscount(t, e, model, tc.discount)
+			}
 			request := e.billingRequest(t, rail, model, reserve, 1)
+			if recurring {
+				setRecurringDiscount(t, e, model, 100)
+			}
 			// Editing live prices after acceptance must not rewrite the receipt.
 			if _, err := e.store.DB().Exec("UPDATE charity_models SET context_pricing='{}',discount_percent=100 WHERE id=?", model); err != nil {
 				t.Fatal(err)

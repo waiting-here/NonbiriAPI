@@ -16,6 +16,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/charityaccess"
+	"github.com/waiting-here/NonbiriAPI/internal/charitydiscount"
 	"github.com/waiting-here/NonbiriAPI/internal/charityreserve"
 	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
@@ -160,14 +161,15 @@ func readAcceptancePricing(ctx context.Context, tx *sql.Tx, modelID, at int64) (
 	}
 	var enabled, discountEnabled int
 	var start, end sql.NullInt64
+	var recurringEncoded string
 	err := tx.QueryRowContext(ctx, `SELECT pricing_mode,enabled,discount_percent,discount_enabled,
 discount_start_at,discount_end_at,request_user_price,request_donor_reward,
 uncached_user_price,cache_write_user_price,cache_read_user_price,output_user_price,
-uncached_donor_reward,cache_write_donor_reward,cache_read_donor_reward,output_donor_reward,context_pricing
+uncached_donor_reward,cache_write_donor_reward,cache_read_donor_reward,output_donor_reward,context_pricing,recurring_discount
 FROM charity_models WHERE id=?`, modelID).Scan(
 		&p.mode, &enabled, &p.discount, &discountEnabled, &start, &end,
 		&p.requestUser, &p.requestReward, &p.uncachedUser, &p.writeUser, &p.readUser, &p.outputUser,
-		&p.uncachedReward, &p.writeReward, &p.readReward, &p.outputReward, &p.contextPricing)
+		&p.uncachedReward, &p.writeReward, &p.readReward, &p.outputReward, &p.contextPricing, &recurringEncoded)
 	if errors.Is(err, sql.ErrNoRows) {
 		return frozenPricing{}, claim.ErrNotFound
 	}
@@ -180,8 +182,20 @@ FROM charity_models WHERE id=?`, modelID).Scan(
 	if _, err := credits.DecodeContextPricing(p.contextPricing); err != nil {
 		return frozenPricing{}, claim.ErrInvariant
 	}
-	if discountEnabled != 1 || start.Valid && at < start.Int64 || end.Valid && at >= end.Int64 {
-		p.discount = 100
+	recurring, err := charitydiscount.Decode(recurringEncoded)
+	if err != nil {
+		return frozenPricing{}, claim.ErrInvariant
+	}
+	fixed := charitydiscount.Fixed{Enabled: discountEnabled == 1, Percent: p.discount}
+	if start.Valid {
+		fixed.StartAt = &start.Int64
+	}
+	if end.Valid {
+		fixed.EndAt = &end.Int64
+	}
+	p.discount, err = charitydiscount.PercentAt(fixed, recurring, at)
+	if err != nil {
+		return frozenPricing{}, claim.ErrInvariant
 	}
 	if p.mode == "per_request" {
 		p.uncachedUser, p.writeUser, p.readUser, p.outputUser = 0, 0, 0, 0

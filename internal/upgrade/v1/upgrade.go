@@ -51,8 +51,9 @@ var storageSchema = schemaRegistry{baseline: 17, target: db.CurrentSchemaVersion
 	{from: 24, version: 25, manifest: stableSchema25Manifest, sql: smartBackoffSchema, impact: &migrationImpact{
 		addedTables:      []string{"donation_key_backoffs", "dispatch_smart_backoff_facts"},
 		constraintTables: []string{"donation_usage_reservations", "dispatch_claims"}, credentials: credentialsUnchanged}},
-	{from: 25, version: 26, manifest: db.PinnedGenerationTwoManifestHash, sql: channelBindingPresetsSchema + automaticBackoffSchema, impact: &migrationImpact{
+	{from: 25, version: 26, manifest: db.PinnedGenerationTwoManifestHash, sql: channelBindingPresetsSchema + automaticBackoffSchema + recurringDiscountSchema, impact: &migrationImpact{
 		addedTables:   []string{"channel_charity_binding_presets", "channel_charity_binding_mappings"},
+		controlTables: []string{"charity_models", "charity_price_templates"},
 		rebuiltTables: []string{"donation_key_backoffs", "dispatch_smart_backoff_facts"}, credentials: credentialsUnchanged}},
 }}
 

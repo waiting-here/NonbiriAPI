@@ -117,14 +117,14 @@ WHERE u.id=?`, userID).Scan(&admin, &banned, &bannedUntil, &suspendedUntil, &gat
 	var preflight RuntimePreflight
 	var encodedPolicy string
 	var enabled, discount, discountEnabled int
-	var pricingMode string
+	var pricingMode, recurring string
 	var requestPrice int64
 	var discountStart, discountEnd sql.NullInt64
 	err = tx.QueryRowContext(ctx, `SELECT id,provider,model,full_name,enabled,flatten_tool_calls,
-pricing_mode,request_user_price,discount_percent,discount_enabled,discount_start_at,discount_end_at,role_policy,revision,transport_rule,model_types
+pricing_mode,request_user_price,discount_percent,discount_enabled,discount_start_at,discount_end_at,role_policy,revision,transport_rule,model_types,recurring_discount
 FROM charity_models WHERE full_name=?`, fullName).Scan(&preflight.ModelID, &preflight.Provider, &preflight.Model,
 		&preflight.FullName, &enabled, &preflight.FlattenToolCalls, &pricingMode, &requestPrice,
-		&discount, &discountEnabled, &discountStart, &discountEnd, &encodedPolicy, &preflight.Revision, &preflight.TransportRule, &preflight.ModelTypes)
+		&discount, &discountEnabled, &discountStart, &discountEnd, &encodedPolicy, &preflight.Revision, &preflight.TransportRule, &preflight.ModelTypes, &recurring)
 	if errors.Is(err, sql.ErrNoRows) {
 		return RuntimePreflight{}, ErrNotFound
 	}
@@ -150,7 +150,10 @@ FROM charity_models WHERE full_name=?`, fullName).Scan(&preflight.ModelID, &pref
 		}
 		return RuntimePreflight{}, err
 	}
-	activeDiscount := discountPercentAt(discount, discountEnabled, discountStart, discountEnd, decisionNow)
+	activeDiscount, err := activeDiscountAt(discount, discountEnabled, discountStart, discountEnd, recurring, decisionNow)
+	if err != nil {
+		return RuntimePreflight{}, err
+	}
 	if pricingMode == "per_request" {
 		preflight.ReservedMilli, err = credits.ApplyDiscountPercent(requestPrice, activeDiscount)
 		if err != nil {
@@ -336,7 +339,7 @@ func (s *Service) readSnapshotTx(ctx context.Context, tx *sql.Tx, modelID, decis
 	var snapshot RuntimeSnapshot
 	var encodedPolicy string
 	var enabled int
-	var pricingMode string
+	var pricingMode, recurring string
 	var requestPrice int64
 	var discount, discountEnabled int
 	var discountStart, discountEnd sql.NullInt64
@@ -351,10 +354,10 @@ func (s *Service) readSnapshotTx(ctx context.Context, tx *sql.Tx, modelID, decis
 		return RuntimeSnapshot{}, ErrNotFound
 	}
 	err := tx.QueryRowContext(ctx, `SELECT id,provider,model,full_name,enabled,flatten_tool_calls,
-pricing_mode,request_user_price,discount_percent,discount_enabled,discount_start_at,discount_end_at,role_policy,revision,transport_rule,model_types
+pricing_mode,request_user_price,discount_percent,discount_enabled,discount_start_at,discount_end_at,role_policy,revision,transport_rule,model_types,recurring_discount
 FROM charity_models WHERE id=?`, modelID).Scan(&snapshot.ModelID, &snapshot.Provider, &snapshot.Model,
 		&snapshot.FullName, &enabled, &snapshot.FlattenToolCalls, &pricingMode, &requestPrice,
-		&discount, &discountEnabled, &discountStart, &discountEnd, &encodedPolicy, &snapshot.Revision, &snapshot.TransportRule, &snapshot.ModelTypes)
+		&discount, &discountEnabled, &discountStart, &discountEnd, &encodedPolicy, &snapshot.Revision, &snapshot.TransportRule, &snapshot.ModelTypes, &recurring)
 	if errors.Is(err, sql.ErrNoRows) {
 		return RuntimeSnapshot{}, ErrNotFound
 	}
@@ -371,7 +374,10 @@ FROM charity_models WHERE id=?`, modelID).Scan(&snapshot.ModelID, &snapshot.Prov
 	if enabled != 1 {
 		return RuntimeSnapshot{}, ErrNotFound
 	}
-	activeDiscount := discountPercentAt(discount, discountEnabled, discountStart, discountEnd, decisionNow)
+	activeDiscount, err := activeDiscountAt(discount, discountEnabled, discountStart, discountEnd, recurring, decisionNow)
+	if err != nil {
+		return RuntimeSnapshot{}, err
+	}
 	if pricingMode == "per_request" {
 		snapshot.ReservedMilli, err = credits.ApplyDiscountPercent(requestPrice, activeDiscount)
 		if err != nil {
@@ -591,7 +597,7 @@ func (s *Service) Capability(ctx context.Context, userID, decisionNow int64) (re
 	rows, err := tx.QueryContext(ctx, `SELECT id,provider,model,full_name,pricing_mode,
 request_user_price,uncached_user_price,cache_write_user_price,cache_read_user_price,output_user_price,
 discount_enabled,discount_percent,discount_start_at,discount_end_at,
-(SELECT allowed_level_mask FROM charity_model_access WHERE model_id=charity_models.id),model_types,context_pricing FROM charity_models
+(SELECT allowed_level_mask FROM charity_model_access WHERE model_id=charity_models.id),model_types,context_pricing,recurring_discount FROM charity_models
 WHERE enabled=1 ORDER BY id`)
 	if err != nil {
 		return Capability{}, fmt.Errorf("charity routing: read capability models: %w", err)
@@ -602,7 +608,7 @@ WHERE enabled=1 ORDER BY id`)
 	for rows.Next() {
 		var model CapabilityModel
 		var id int64
-		var mode, contextPricing string
+		var mode, contextPricing, recurring string
 		var requestPrice int64
 		var tokenPrices [4]int64
 		var discountEnabled int
@@ -610,7 +616,7 @@ WHERE enabled=1 ORDER BY id`)
 		var discountStart, discountEnd sql.NullInt64
 		if err := rows.Scan(&id, &model.Provider, &model.Model, &model.FullName, &mode,
 			&requestPrice, &tokenPrices[0], &tokenPrices[1], &tokenPrices[2], &tokenPrices[3],
-			&discountEnabled, &model.Discount.Percent, &discountStart, &discountEnd, &mask, &model.ModelTypes, &contextPricing); err != nil {
+			&discountEnabled, &model.Discount.Percent, &discountStart, &discountEnd, &mask, &model.ModelTypes, &contextPricing, &recurring); err != nil {
 			_ = rows.Close()
 			return Capability{}, fmt.Errorf("charity routing: scan capability model: %w", err)
 		}
@@ -624,12 +630,16 @@ WHERE enabled=1 ORDER BY id`)
 			value := discountEnd.Int64
 			model.Discount.EndAt = &value
 		}
-		model.Pricing, err = capabilityPricing(mode, requestPrice, tokenPrices, model.Discount.Percent)
+		if err := projectCapabilityDiscount(&model, recurring, decisionNow); err != nil {
+			_ = rows.Close()
+			return Capability{}, err
+		}
+		model.Pricing, err = capabilityPricing(mode, requestPrice, tokenPrices, model.Discount.Percent, model.EffectiveDiscount.Percent)
 		if err != nil {
 			_ = rows.Close()
 			return Capability{}, err
 		}
-		if err := capabilityContextPricing(&model.Pricing, contextPricing, model.Discount.Percent); err != nil {
+		if err := capabilityContextPricing(&model.Pricing, contextPricing, model.Discount.Percent, model.EffectiveDiscount.Percent); err != nil {
 			_ = rows.Close()
 			return Capability{}, err
 		}
@@ -688,14 +698,7 @@ WHERE enabled=1 ORDER BY id`)
 	return Capability{State: "available", Models: available, DonationIntake: donationIntake, ServerNow: decisionNow}, nil
 }
 
-func discountPercentAt(percent, enabled int, start, end sql.NullInt64, decisionNow int64) int {
-	if enabled != 1 || start.Valid && decisionNow < start.Int64 || end.Valid && decisionNow >= end.Int64 {
-		return 100
-	}
-	return percent
-}
-
-func capabilityPricing(mode string, requestPrice int64, tokenPrices [4]int64, discountPercent int) (CapabilityPricing, error) {
+func capabilityPricing(mode string, requestPrice int64, tokenPrices [4]int64, discountPercent, currentPercent int) (CapabilityPricing, error) {
 	pricing := CapabilityPricing{Mode: mode}
 	if mode == "per_request" {
 		discounted, err := credits.ApplyDiscountPercent(requestPrice, discountPercent)
@@ -705,21 +708,32 @@ func capabilityPricing(mode string, requestPrice int64, tokenPrices [4]int64, di
 		baseText, discountedText := strconv.FormatInt(requestPrice, 10), strconv.FormatInt(discounted, 10)
 		pricing.UserPriceMilli = &baseText
 		pricing.DiscountedUserPriceMilli = &discountedText
+		current, err := credits.ApplyDiscountPercent(requestPrice, currentPercent)
+		if err != nil {
+			return CapabilityPricing{}, ErrInvariant
+		}
+		pricing.CurrentUserPriceMilli = new(strconv.FormatInt(current, 10))
 		return pricing, nil
 	}
 	if mode != "per_token" {
 		return CapabilityPricing{}, ErrInvariant
 	}
 	discounted := [4]int64{}
+	current := [4]int64{}
 	for index, value := range tokenPrices {
 		projected, err := credits.ApplyDiscountPercent(value, discountPercent)
 		if err != nil {
 			return CapabilityPricing{}, ErrInvariant
 		}
 		discounted[index] = projected
+		current[index], err = credits.ApplyDiscountPercent(value, currentPercent)
+		if err != nil {
+			return CapabilityPricing{}, ErrInvariant
+		}
 	}
 	pricing.UserPricesMilli = capabilityTokenPrices(tokenPrices)
 	pricing.DiscountedUserPricesMilli = capabilityTokenPrices(discounted)
+	pricing.CurrentUserPricesMilli = capabilityTokenPrices(current)
 	return pricing, nil
 }
 
