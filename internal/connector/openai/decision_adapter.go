@@ -9,6 +9,7 @@ import (
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
+	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
 
@@ -52,7 +53,7 @@ func (a *Adapter) AttemptDecision(ctx context.Context, writer http.ResponseWrite
 	errorGuard := newSensitiveGuard(materials...)
 	defer errorGuard.Clear()
 	clear(identifier)
-	errorContext := upstreamerror.Context{BaseURL: target.baseURL, PrivateModel: target.upstreamModel, ContainsSecret: func(value []byte) bool {
+	errorContext := upstreamerror.Context{Backoff: smartbackoff.FromContext(ctx), BaseURL: target.baseURL, PrivateModel: target.upstreamModel, ContainsSecret: func(value []byte) bool {
 		scanner := errorGuard.clone()
 		defer scanner.Clear()
 		return scanner.Contains(value)

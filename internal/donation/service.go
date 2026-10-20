@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 	"math/big"
 	"net/http"
 	"reflect"
@@ -196,6 +197,9 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		donationKeyID, err := result.LastInsertId()
 		if err != nil || donationKeyID <= 0 {
 			return Donation{}, ErrInvariant
+		}
+		if err := smartbackoff.Set(ctx, tx, donationKeyID, smartbackoff.Patch{Profile: &key.backoff.Profile, Rules: &key.backoff.Rules}, now); err != nil {
+			return Donation{}, err
 		}
 		required, err := s.reviewMaterial.CaptureDonationKey(ctx, tx, donationKeyID, key.id, time.Unix(now, 0))
 		if err != nil {
@@ -1143,6 +1147,7 @@ func (s *Service) materializeRoleExpiryStandalone(
 }
 
 type submissionKey struct {
+	backoff                        smartbackoff.Config
 	failureDisableThreshold        db.U128
 	id                             int64
 	head, tail, baseURL, connector string
@@ -1179,7 +1184,13 @@ func validateSubmissionKeys(ctx context.Context, tx *sql.Tx, userID int64, input
 	ids := make([]int64, len(inputs))
 	expiries := make(map[int64]*int64, len(inputs))
 	thresholds := make(map[int64]db.U128, len(inputs))
+	backoffs := make(map[int64]smartbackoff.Config, len(inputs))
 	for index, input := range inputs {
+		config, err := smartbackoff.Merge(smartbackoff.Default(), smartbackoff.Patch{Profile: input.SmartBackoffProfile, Rules: input.SmartBackoffRules})
+		if err != nil {
+			return nil, ErrInvalidRequest
+		}
+		backoffs[input.EndpointKeyID] = config
 		value := "10"
 		if input.FailureDisableThreshold != nil {
 			value = *input.FailureDisableThreshold
@@ -1219,6 +1230,7 @@ ORDER BY k.id`, args...)
 		}
 		key.expiresAt = expiries[key.id]
 		key.failureDisableThreshold = thresholds[key.id]
+		key.backoff = backoffs[key.id]
 		key.reportFingerprint = append([]byte(nil), key.reportFingerprint...)
 		keys = append(keys, key)
 	}

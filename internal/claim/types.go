@@ -16,6 +16,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
+	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 )
 
 const (
@@ -224,6 +225,7 @@ func (Handle) LogValue() slog.Value {
 // state commits. TakeCredential transfers that handle exactly once to one
 // connector; Clear is the required backstop for every pre-connector path.
 type Dispatch struct {
+	backoff        smartbackoff.Dispatch
 	managedHeaders http.Header
 	onRequestSent  func()
 	handle         Handle
@@ -232,6 +234,14 @@ type Dispatch struct {
 	mu         sync.Mutex
 	credential *connectorcontract.ShortLivedSecret
 	taken      bool
+}
+
+func (d *Dispatch) IsBackoffTrial() bool { return d != nil && d.backoff.Trial }
+func (d *Dispatch) BackoffConfig() smartbackoff.Config {
+	if d == nil {
+		return smartbackoff.Default()
+	}
+	return d.backoff.Config
 }
 
 func (d *Dispatch) Handle() Handle {
@@ -301,6 +311,7 @@ func (*Dispatch) LogValue() slog.Value {
 }
 
 type AttemptOutcome struct {
+	Backoff           smartbackoff.Classification
 	StreakDisposition connectorcontract.StreakDisposition
 	FailureOrigin     connectorcontract.FailureOrigin
 	Kind              ResultKind
@@ -513,6 +524,8 @@ type CharityDispatch struct {
 }
 
 type CharityAttemptInput struct {
+	BackoffActive     bool
+	UpstreamStatus    int
 	StreakDisposition connectorcontract.StreakDisposition
 	FailureOrigin     connectorcontract.FailureOrigin
 	RequestID         string

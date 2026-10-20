@@ -15,6 +15,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
 )
 
@@ -27,15 +28,18 @@ const redacted = "[redacted]"
 type Detail struct {
 	message string
 	code    string
+	backoff smartbackoff.Classification
 }
 
-func (d Detail) Message() string { return d.message }
-func (d Detail) Code() string    { return d.code }
+func (d Detail) Message() string                      { return d.message }
+func (d Detail) Code() string                         { return d.code }
+func (d Detail) Backoff() smartbackoff.Classification { return d.backoff }
 
 // Context holds source identifiers and an exact secret detector backed by
 // the connector's fingerprints, never by retained plaintext credentials.
 // ContainsSecret must start with fresh rolling state on every call.
 type Context struct {
+	Backoff        smartbackoff.Config
 	BaseURL        string
 	PrivateModel   string
 	ContainsSecret func([]byte) bool
@@ -82,6 +86,7 @@ func (c Context) Parse(body []byte) Detail {
 		return Detail{}
 	}
 	var message, code string
+	var classified smartbackoff.Classification
 	if body[0] == '{' {
 		if strictjson.ValidateObject(body) != nil {
 			return Detail{}
@@ -109,6 +114,12 @@ func (c Context) Parse(body []byte) Detail {
 		if code == "" {
 			code = machineCode(fields)
 		}
+		if raw, ok := root["error"]; ok {
+			var errorFields map[string]json.RawMessage
+			if json.Unmarshal(raw, &errorFields) == nil && errorFields != nil {
+				classified = smartbackoff.Classify(c.Backoff, errorFields)
+			}
+		}
 	} else {
 		// A plain-text error is useful, but an HTML proxy page, JSON scalar or
 		// array is not a safe substitute for the documented error fields.
@@ -122,7 +133,7 @@ func (c Context) Parse(body []byte) Detail {
 	if cleanCode != code || !codePattern.MatchString(cleanCode) {
 		cleanCode = ""
 	}
-	return Detail{message: boundUTF8(message, 1024), code: cleanCode}
+	return Detail{message: boundUTF8(message, 1024), code: cleanCode, backoff: classified}
 }
 
 // IsEvent reports an explicit error envelope without interpreting an ordinary

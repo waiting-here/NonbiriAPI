@@ -1,6 +1,10 @@
 package donation
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
+)
 
 func (api *httpAPI) failurePolicyOwner(w http.ResponseWriter, r *http.Request, p UserPrincipal) {
 	api.failurePolicyEdit(w, r, p, "")
@@ -21,8 +25,10 @@ func (api *httpAPI) failurePolicyEdit(w http.ResponseWriter, r *http.Request, p 
 		return
 	}
 	var wire struct {
-		ExpectedRevision requiredField[string] `json:"expected_revision"`
-		Threshold        requiredField[string] `json:"failure_disable_threshold"`
+		Profile          requiredField[string]              `json:"smart_backoff_profile"`
+		Rules            requiredField[[]smartbackoff.Rule] `json:"smart_backoff_rules"`
+		ExpectedRevision requiredField[string]              `json:"expected_revision"`
+		Threshold        requiredField[string]              `json:"failure_disable_threshold"`
 	}
 	if !decodeStrictObject(w, r, &wire) {
 		return
@@ -39,11 +45,21 @@ func (api *httpAPI) failurePolicyEdit(w http.ResponseWriter, r *http.Request, p 
 	if role == reviewerSteward {
 		route = routeStewardFailurePolicy
 	}
-	mutation, ok := mutationFor(w, r, route, []int64{donationID, keyID}, map[string]any{"expected_revision": wire.ExpectedRevision.Value, "failure_disable_threshold": wire.Threshold.Value})
+	canonical := map[string]any{"expected_revision": wire.ExpectedRevision.Value, "failure_disable_threshold": wire.Threshold.Value}
+	patch := smartbackoff.Patch{}
+	if wire.Profile.Set {
+		patch.Profile = &wire.Profile.Value
+		canonical["smart_backoff_profile"] = wire.Profile.Value
+	}
+	if wire.Rules.Set {
+		patch.Rules = &wire.Rules.Value
+		canonical["smart_backoff_rules"] = wire.Rules.Value
+	}
+	mutation, ok := mutationFor(w, r, route, []int64{donationID, keyID}, canonical)
 	if !ok {
 		return
 	}
-	out, err := api.service.failurePolicy(r.Context(), p.UserID, role, donationID, keyID, expected, wire.Threshold.Value, mutation)
+	out, err := api.service.failurePolicy(r.Context(), p.UserID, role, donationID, keyID, expected, wire.Threshold.Value, mutation, patch)
 	if err != nil {
 		writeDonationError(w, err)
 		return

@@ -1,6 +1,8 @@
 // Package donationstate shares the management projection of a donated key.
 package donationstate
 
+import "github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
+
 func Valid(value string) bool {
 	switch value {
 	case "", "all", "available", "disabled", "suspended", "exhausted", "rate_limited", "pending", "expired", "ended":
@@ -29,6 +31,6 @@ func SQL() string {
  OR nbi_u128_remaining(dk.token_limit_mag,dk.tokens_used,dk.tokens_reserved,nbi_u128(0))=nbi_u128(0)
  OR nbi_u128_remaining(dk.input_token_limit_mag,dk.input_tokens_used,dk.input_tokens_reserved,nbi_u128(0))=nbi_u128(0)
  OR nbi_u128_remaining(dk.output_token_limit_mag,dk.output_tokens_used,dk.output_tokens_reserved,nbi_u128(0))=nbi_u128(0) THEN 'exhausted'
- WHEN EXISTS(SELECT 1 FROM donation_key_cooldowns cooldown WHERE cooldown.donation_key_id=dk.id AND cooldown.rate_limited_until>?) THEN 'rate_limited'
+ WHEN ` + smartbackoff.EffectiveUntilSQL("dk.id") + `>? THEN 'rate_limited'
  ELSE 'available' END`
 }

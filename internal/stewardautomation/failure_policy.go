@@ -11,16 +11,20 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
+	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
 )
 
 type failurePolicyInput struct {
-	DonationID       string `json:"donation_id"`
-	DonationKeyID    string `json:"donation_key_id"`
-	ExpectedRevision string `json:"expected_revision"`
-	Threshold        string `json:"failure_disable_threshold"`
+	Profile          httpapi.RequestField[string]              `json:"smart_backoff_profile"`
+	Rules            httpapi.RequestField[[]smartbackoff.Rule] `json:"smart_backoff_rules"`
+	DonationID       string                                    `json:"donation_id"`
+	DonationKeyID    string                                    `json:"donation_key_id"`
+	ExpectedRevision string                                    `json:"expected_revision"`
+	Threshold        string                                    `json:"failure_disable_threshold"`
 }
 
 func (s *Service) failurePolicyHTTP(w http.ResponseWriter, r *http.Request, userID int64) {
@@ -150,7 +154,14 @@ func (s *Service) setFailurePolicy(ctx context.Context, userID int64, key string
 	if decision.Kind == idempotency.Replay {
 		return decision.ResponseBody, nil
 	}
-	value, err := s.donations.SetFailurePolicyStewardInTransaction(ctx, tx, userID, donationID, keyID, expected, input.Threshold)
+	patch := smartbackoff.Patch{}
+	if input.Profile.Set {
+		patch.Profile = &input.Profile.Value
+	}
+	if input.Rules.Set {
+		patch.Rules = &input.Rules.Value
+	}
+	value, err := s.donations.SetFailurePolicyStewardInTransaction(ctx, tx, userID, donationID, keyID, expected, input.Threshold, patch)
 	if err != nil {
 		return nil, err
 	}

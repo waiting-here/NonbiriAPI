@@ -5,6 +5,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
+	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 )
 
 // Catalog availability describes the model's current resources independently
@@ -52,7 +53,7 @@ func availableCandidateCountSQL(bindingID string, callerScoped bool) string {
  WHERE b.charity_model_id=cm.id AND d.status='approved' AND d.user_id IS NOT NULL
  AND ` + donorAvailableSQL("cx.decision_now") + `
  AND dk.ended_at IS NULL AND dk.enabled=1 AND dk.failure_disabled=0
- AND NOT EXISTS(SELECT 1 FROM donation_key_cooldowns c WHERE c.donation_key_id=dk.id AND c.rate_limited_until>cx.decision_now)
+ AND ` + smartbackoff.EffectiveUntilSQL("dk.id") + `<=cx.decision_now
  AND k.enabled=1 AND e.enabled=1 AND ` + charityscope.SupportSQL("dk.id", "b.endpoint_key_id", "b.upstream_model_id") + `
  AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions x WHERE x.endpoint_key_id=k.id)
  AND (dk.expires_at IS NULL OR dk.expires_at>cx.decision_now)

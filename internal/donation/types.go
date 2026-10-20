@@ -9,6 +9,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
+	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 )
 
 var (
@@ -107,6 +108,7 @@ type ReviewState struct {
 }
 
 type DonationKey struct {
+	smartbackoff.Projection
 	Review ReviewState `json:"review"`
 	TokenBreakdown
 	FailureDisableThreshold string         `json:"failure_disable_threshold"`
@@ -130,6 +132,7 @@ type DonationKey struct {
 }
 
 type AdminDonationKey struct {
+	smartbackoff.Projection
 	Review ReviewState `json:"review"`
 	TokenBreakdown
 	FailureDisableThreshold string          `json:"failure_disable_threshold"`
@@ -249,6 +252,8 @@ type StewardDonation struct {
 }
 
 type CreateKeyInput struct {
+	SmartBackoffProfile     *string
+	SmartBackoffRules       *[]smartbackoff.Rule
 	FailureDisableThreshold *string
 	EndpointKeyID           int64
 	ExpiresAt               *int64
@@ -335,6 +340,7 @@ type ManualModelExport struct {
 }
 
 type ExportDonationKey struct {
+	smartbackoff.Projection
 	Review       ReviewState         `json:"review"`
 	ManualModels []ManualModelExport `json:"manual_models"`
 	TokenBreakdown
