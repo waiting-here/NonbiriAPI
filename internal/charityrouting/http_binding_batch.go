@@ -1,12 +1,17 @@
 package charityrouting
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
+	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
 )
 
 func (api *httpAPI) adminKeyBindingOptions(w http.ResponseWriter, r *http.Request) {
@@ -68,7 +73,7 @@ func (api *httpAPI) keyBindingBatch(w http.ResponseWriter, r *http.Request, role
 		return
 	}
 	var input KeyBindingBatch
-	if !decodeStrictObjectLimit(w, r, &input, 256<<10) {
+	if !decodeKeyBindingBatch(w, r, &input) {
 		return
 	}
 	route := routeAdminKeyBindingBatch
@@ -85,6 +90,22 @@ func (api *httpAPI) keyBindingBatch(w http.ResponseWriter, r *http.Request, role
 		return
 	}
 	writeMutation(w, out)
+}
+func decodeKeyBindingBatch(w http.ResponseWriter, r *http.Request, input *KeyBindingBatch) bool {
+	body, err := httpapi.ReadJSON(w, r, input, httpapi.BodyOptions{MaxBytes: idempotency.MaxControlBodyBytes,
+		Validate: func(body []byte) error {
+			return strictjson.ValidateObjectWithFieldLimit(body, 2+3*maxKeyBindingTargets)
+		}})
+	if err != nil {
+		if errors.Is(err, httpapi.ErrTooLarge) {
+			httperr.WriteError(w, httperr.New(httperr.CodePayloadTooLarge, "request body is too large"))
+		} else {
+			writeRoutingError(w, ErrInvalidRequest)
+		}
+		return false
+	}
+	clear(body)
+	return true
 }
 func (api *httpAPI) adminApplyBindingPreset(w http.ResponseWriter, r *http.Request) {
 	api.applyBindingPreset(w, r, roleAdmin, 0)
