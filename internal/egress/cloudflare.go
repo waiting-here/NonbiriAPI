@@ -14,6 +14,7 @@ import (
 type cloudflareRoute struct {
 	source, gateway                          *url.URL
 	token, credentialHeader, credentialQuery string
+	gatewayBaseURL                           string
 }
 
 func (*cloudflareRoute) String() string     { return "[private Cloudflare route]" }
@@ -53,7 +54,7 @@ func buildCloudflareRoutes(policy *EgressPolicy, entries []config.CloudflareRout
 		if _, exists := routes[key]; exists {
 			return nil, fmt.Errorf("duplicate Cloudflare route source at entry %d", i+1)
 		}
-		routes[key] = &cloudflareRoute{source: source, gateway: gateway, token: entry.GatewayToken(), credentialHeader: entry.CredentialHeader, credentialQuery: entry.CredentialQueryParameter}
+		routes[key] = &cloudflareRoute{source: source, gateway: gateway, token: entry.GatewayToken(), credentialHeader: entry.CredentialHeader, credentialQuery: entry.CredentialQueryParameter, gatewayBaseURL: entry.GatewayBaseURL}
 	}
 	return routes, nil
 }
@@ -88,7 +89,15 @@ func (r *cloudflareRoute) prepare(outbound *http.Request) (*routeSecrets, error)
 		return nil, errors.New("routed request requires one provider credential")
 	}
 	credential := values[0]
-	secrets := newRouteSecrets(r.token, credential, r.gateway.String(), r.gateway.Host, r.gateway.EscapedPath())
+	secrets := newRouteSecrets(r.token, credential, r.gateway.String(), r.gatewayBaseURL)
+	if r.gateway.Port() == "443" {
+		withoutDefaultPort := *r.gateway
+		withoutDefaultPort.Host = withoutDefaultPort.Hostname()
+		if strings.Contains(withoutDefaultPort.Host, ":") {
+			withoutDefaultPort.Host = "[" + withoutDefaultPort.Host + "]"
+		}
+		secrets.add(withoutDefaultPort.String())
+	}
 	if scheme, value, ok := strings.Cut(credential, " "); ok && strings.EqualFold(scheme, "Bearer") {
 		if strings.TrimSpace(value) == "" {
 			return nil, errors.New("routed request requires a provider credential")
