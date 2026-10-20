@@ -70,7 +70,7 @@ func TestAuditBrowserFixture(t *testing.T) {
 	f.cfg.ListenAddr, f.cfg.SiteBaseURL = f.cfg.UserHost, "http://"+f.cfg.UserHost
 	f.cfg.DBPath = f.path
 	if os.Getenv("NONBIRI_ENDPOINT_POLICIES_BROWSER") == "1" {
-		configureEndpointPoliciesBrowser(t, &f.cfg)
+		configureEndpointPoliciesBrowser(t, f.cfg)
 	}
 	if err := f.open(); err != nil {
 		t.Fatal(err)
