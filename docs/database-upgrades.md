@@ -27,8 +27,8 @@ descriptors instead of parsing Go source or deriving versions from array lengths
 ## Schema changes
 
 Schema 25 adds per-donated-key smart-backoff configuration, a current waiting or
-trial episode and claim-bound recovery facts. Existing keys default to disabled
-with no supplemental rules or active episode. Account export 23 adds the safe
+trial episode and claim-bound recovery facts. Smart backoff defaults to off for
+existing keys, with no supplemental rules or active episode. Account export 23 adds the safe
 configuration and current state. Existing retry-header cooldowns, failure counts,
 credentials and accounting retain their meanings.
 
