@@ -551,3 +551,44 @@ func TestCloudflareSSEHarmlessPrefixSuffixDoesNotAccumulate(t *testing.T) {
 		t.Fatal("split percent escape lost semantic prefix")
 	}
 }
+
+func TestCloudflarePublicGatewayComponentsRemainValidContent(t *testing.T) {
+	stack := newLoopbackStack(t, nil, func(options *StackOptions) {
+		options.CloudflareRoutes = configuredRoutes(t, routeSource, "https://proxy.example/v1", "X-Api-Key", "key")
+	})
+	client, err := stack.NewClient(routeSource)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name, value string
+		rejected    bool
+	}{
+		{"public components", "Models are under /v1/models; the public proxy hostname is proxy.example.", false},
+		{"configured URL", "https://proxy.example/v1", true},
+		{"canonical URL", "https://proxy.example:443/v1/models", true},
+		{"encoded URL", url.QueryEscape("https://proxy.example/v1"), true},
+		{"gateway token", routeToken, true},
+		{"provider key", routeKey, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			payload, _ := json.Marshal(map[string]string{"message": tc.value})
+			client.httpClient.Transport = routeRoundTripper(func(*http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}, "X-Metadata": {tc.value}}, Body: io.NopCloser(strings.NewReader(string(payload)))}, nil
+			})
+			response, err := client.Do(routedRequest(context.Background(), "/models"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			body, readErr := io.ReadAll(response.Body)
+			response.Body.Close()
+			if tc.rejected {
+				if !errors.Is(readErr, errRouteReflection) || len(body) != 0 || response.Header.Get("X-Metadata") != "[redacted]" {
+					t.Fatal("private material escaped", readErr)
+				}
+			} else if readErr != nil || string(body) != string(payload) || response.Header.Get("X-Metadata") != tc.value {
+				t.Fatal("public gateway component rejected", readErr)
+			}
+		})
+	}
+}
