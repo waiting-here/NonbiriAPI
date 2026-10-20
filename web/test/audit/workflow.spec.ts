@@ -36,6 +36,7 @@ interface Fixture {
   };
 }
 const workflow = common.common.workflow;
+const batch = common.common.bindingBatch;
 const operations = common.common.operations.charity;
 const pages = common.common.pageControls;
 const history = en.user.charity.ownerHistory;
@@ -254,7 +255,7 @@ test('approve a fixed key, page 240 targets and bind 144 cross-page selections w
     await page
       .getByRole('row')
       .filter({ hasText: '[公益]workflow/model-001' })
-      .getByRole('button', { name: workflow.chooseTarget, exact: true })
+      .getByRole('button', { name: batch.chooseUpstream, exact: true })
       .click();
     const choices = page.getByRole('region', { name: operations.chooseModels, exact: true });
     await expect(choices.getByRole('checkbox')).toHaveCount(20);
@@ -274,24 +275,34 @@ test('approve a fixed key, page 240 targets and bind 144 cross-page selections w
       page.getByRole('button', { name: 'Add 144 connections', exact: true }),
     ).toBeEnabled();
     await expect(
-      page.getByText('Existing: 0 of 256. Available slots: 256. Selected: 144.', { exact: true }),
+      page.getByText(
+        batch.selectionCapacity.replace('{{selected}}', '144').replace('{{capacity}}', '256'),
+        { exact: true },
+      ),
     ).toBeVisible();
     const idSearch = page.getByPlaceholder(workflow.upstreamSearch).first();
     await idSearch.fill('model-144');
     await idSearch.press('Enter');
     await expect(choices.getByRole('checkbox')).toHaveCount(1);
     await expect(choices.getByRole('checkbox')).toBeChecked();
-    await page.getByLabel(workflow.searchSelected, { exact: true }).fill('model-144');
+    await page.getByLabel(batch.searchSelected, { exact: true }).fill('model-144');
     await page
-      .getByRole('button', { name: 'Remove selected provider/model-144-2026-10', exact: true })
+      .getByRole('button', {
+        name: workflow.removeSelection.replace(
+          '{{id}}',
+          '[公益]workflow/model-001: provider/model-144-2026-10',
+        ),
+        exact: true,
+      })
       .click();
     await expect(
       page.getByRole('button', { name: 'Add 143 connections', exact: true }),
     ).toBeEnabled();
+    await expect(page.getByLabel(batch.searchSelected, { exact: true })).toBeFocused();
     await choices.getByRole('checkbox').check();
     await idSearch.fill('');
     await idSearch.press('Enter');
-    await page.getByLabel(workflow.searchSelected, { exact: true }).fill('');
+    await page.getByLabel(batch.searchSelected, { exact: true }).fill('');
     await expect(choices.getByRole('checkbox')).toHaveCount(100);
     await expect(
       page.getByRole('button', { name: 'Add 144 connections', exact: true }),
@@ -302,18 +313,25 @@ test('approve a fixed key, page 240 targets and bind 144 cross-page selections w
     const receipt = page.waitForResponse(
       (response) =>
         response.request().method() === 'POST' &&
-        response.url().endsWith('/bindings/batch-receipt'),
+        new URL(response.url()).pathname ===
+          `/admin/api/donations/${data.pending_donation_id}/keys/${data.pending_key_id}/bindings/batch`,
     );
     await page.getByRole('button', { name: 'Add 144 connections', exact: true }).click();
     const response = await receipt;
-    expect(response.status()).toBe(201);
+    expect(response.status()).toBe(200);
     expect(await response.json()).toEqual({
-      model_id: data.models[0],
-      binding_revision: '1',
+      items: [
+        {
+          donation_key_id: data.pending_key_id,
+          results: Array.from({ length: 144 }, () => 'added'),
+        },
+      ],
+      models: [{ charity_model_id: data.models[0], binding_revision: '1' }],
       added_count: '144',
-      binding_count: '144',
     });
-    await expect(page.getByText(workflow.bindingsSaved, { exact: true })).toBeVisible();
+    await expect(page.getByRole('region', { name: batch.results })).toContainText(
+      batch.resultSummary.replace('{{count}}', '144'),
+    );
     const saved = await read(
       context,
       state.admin_url,
@@ -324,7 +342,9 @@ test('approve a fixed key, page 240 targets and bind 144 cross-page selections w
       new Set(saved.bindings.map((entry: { upstream_model_id: string }) => entry.upstream_model_id))
         .size,
     ).toBe(144);
-    await expect(choices.getByRole('checkbox')).toHaveCount(0);
+    await expect(choices.getByRole('checkbox')).toHaveCount(100);
+    await expect(choices.locator('input[type=checkbox]:enabled')).toHaveCount(0);
+    await expect(choices.getByText(batch.boundHere, { exact: true })).toHaveCount(100);
     await page.getByRole('button', { name: workflow.returnDonation, exact: true }).click();
     await page.getByRole('button', { name: operations.returnToList, exact: true }).first().click();
     await expect(page).toHaveURL(/donations_page=2/);
@@ -361,7 +381,7 @@ test('create with a carried key returns to its fixed binding target and preserve
     expect(result.status()).toBe(201);
     const model = await result.json();
     await expect(
-      page.getByRole('heading', { name: 'Target: [公益]workflow/carried-key-model', exact: true }),
+      page.getByRole('heading', { name: '[公益]workflow/carried-key-model', exact: true }),
     ).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`binding_key=${data.pending_key_id}`));
     await page
@@ -808,7 +828,10 @@ test('level 5 handles all four custom-source keys and edits shared limits only i
     await expect(page.getByText(operations.sourceBrowser.noSources, { exact: true })).toBeVisible();
     await expect(page.locator('.charity-source-browser__source-button')).toHaveCount(0);
     await sourceState.selectOption('available');
-    await page.locator('.charity-source-browser__source-button').first().click();
+    await page
+      .locator('.charity-source-browser__source-button')
+      .filter({ has: page.getByText('Mainstream channel: Browser service', { exact: true }) })
+      .click();
     await page
       .locator('.charity-source-browser')
       .getByRole('button', { name: `Manage key #${data.pending_key_id}`, exact: true })

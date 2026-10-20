@@ -133,6 +133,7 @@ function candidatePageFilters(
   key_state: KeyState,
 ): CharityBindingCandidatePageFilters {
   return {
+    include_bound: true,
     donation_id: key.donation_id,
     donation_key_id: key.key_id,
     q: query || undefined,
@@ -172,6 +173,7 @@ export interface CharityPickerKeyManagerProps {
 }
 
 interface CharityBindingPickerProps {
+  showSelectionSummary?: boolean;
   fixedKey?: ManagedDonationKeySummary;
   capacity?: number;
   role: CharityRole;
@@ -181,6 +183,7 @@ interface CharityBindingPickerProps {
   locked: boolean;
   onCapabilityLoss?: () => void;
   onReadStateChange?: (blocked: boolean) => void;
+  onInspectBindings?: () => void;
   renderKeyManager?: (props: CharityPickerKeyManagerProps) => ReactNode;
 }
 
@@ -227,6 +230,7 @@ export function CharityBindingPicker(props: CharityBindingPickerProps) {
 }
 
 function CharityBindingPickerBody({
+  showSelectionSummary = true,
   role,
   modelId,
   selected,
@@ -234,6 +238,7 @@ function CharityBindingPickerBody({
   locked,
   onCapabilityLoss,
   onReadStateChange,
+  onInspectBindings,
   renderKeyManager,
   account,
   management,
@@ -973,12 +978,14 @@ function CharityBindingPickerBody({
                                   type="checkbox"
                                   disabled={
                                     interactionBlocked ||
+                                    Boolean(entry.current_binding_id) ||
                                     (!selected[key] && Object.keys(selected).length >= capacity)
                                   }
                                   checked={Boolean(selected[key])}
                                   onChange={(event) => {
                                     if (
                                       interactionBlocked ||
+                                      Boolean(entry.current_binding_id) ||
                                       (event.target.checked &&
                                         !selected[key] &&
                                         Object.keys(selected).length >= capacity)
@@ -995,6 +1002,32 @@ function CharityBindingPickerBody({
                                 />
                                 <span>
                                   {entry.upstream_model_id}
+                                  {entry.current_binding_id ? (
+                                    <small className="ops-picker-source-types">
+                                      {t('common.bindingBatch.boundHere')}
+                                    </small>
+                                  ) : null}
+                                  {entry.other_bindings?.length ? (
+                                    <small className="ops-picker-source-types">
+                                      {t('common.bindingBatch.boundElsewhere', {
+                                        names: entry.other_bindings
+                                          .map((binding) => binding.full_name)
+                                          .join(' / '),
+                                      })}
+                                    </small>
+                                  ) : null}
+                                  {entry.other_binding_count &&
+                                  BigInt(entry.other_binding_count) >
+                                    BigInt(entry.other_bindings?.length ?? 0) ? (
+                                    <small className="ops-picker-source-types">
+                                      {t('common.bindingBatch.moreBindings', {
+                                        count: Number(
+                                          BigInt(entry.other_binding_count) -
+                                            BigInt(entry.other_bindings?.length ?? 0),
+                                        ),
+                                      })}
+                                    </small>
+                                  ) : null}
                                   <small className="ops-picker-source-types">
                                     {entry.source_types
                                       .map((source) => t(sourceTypeKey(source)))
@@ -1002,6 +1035,24 @@ function CharityBindingPickerBody({
                                   </small>
                                 </span>
                               </label>
+                              {entry.other_binding_count &&
+                              BigInt(entry.other_binding_count) >
+                                BigInt(entry.other_bindings?.length ?? 0) &&
+                              (onInspectBindings || renderKeyManager) ? (
+                                <Button
+                                  type="button"
+                                  disabled={interactionBlocked}
+                                  onClick={() => {
+                                    if (onInspectBindings) onInspectBindings();
+                                    else {
+                                      remember();
+                                      setManagingKey(true);
+                                    }
+                                  }}
+                                >
+                                  {t('common.keyModels.title')}
+                                </Button>
+                              ) : null}
                             </li>
                           );
                         })}
@@ -1020,13 +1071,18 @@ function CharityBindingPickerBody({
                       type="button"
                       disabled={
                         candidateBusy ||
-                        candidatePage.data.filter((entry) => !selected[charitySelectionKey(entry)])
-                          .length >
+                        candidatePage.data.every((entry) => Boolean(entry.current_binding_id)) ||
+                        candidatePage.data.filter(
+                          (entry) =>
+                            !entry.current_binding_id && !selected[charitySelectionKey(entry)],
+                        ).length >
                           capacity - allSelectedEntries.length
                       }
                       onClick={() => {
                         const next = { ...selected };
-                        for (const entry of candidatePage.data)
+                        for (const entry of candidatePage.data.filter(
+                          (entry) => !entry.current_binding_id,
+                        ))
                           next[charitySelectionKey(entry)] ??= {
                             ...entry,
                             note: selectedKey.safe_note,
@@ -1034,7 +1090,10 @@ function CharityBindingPickerBody({
                         onChange(next);
                       }}
                     >
-                      {t('common.workflow.selectPage', { count: candidatePage.data.length })}
+                      {t('common.workflow.selectPage', {
+                        count: candidatePage.data.filter((entry) => !entry.current_binding_id)
+                          .length,
+                      })}
                     </Button>
                     <Button
                       type="button"
@@ -1058,83 +1117,85 @@ function CharityBindingPickerBody({
         </>
       )}
 
-      <section
-        className="ops-picker-selection"
-        aria-label={t('common.operations.charity.selectedModels')}
-      >
-        <h4>
-          {t('common.operations.charity.selectedCount', { count: Object.keys(selected).length })}
-        </h4>
-        <p>{t('common.operations.charity.crossSelectionHelp')}</p>
-        <p role="status" aria-live="polite">
-          {t('common.workflow.selectionCapacity', {
-            selected: allSelectedEntries.length,
-            capacity,
-            outside: allSelectedEntries.filter(
-              ([key]) => !candidatePage?.data.some((entry) => charitySelectionKey(entry) === key),
-            ).length,
-          })}
-        </p>
-        <Field label={t('common.workflow.searchSelected')}>
-          {(props) => (
-            <input
-              {...props}
-              type="search"
-              placeholder={t('common.workflow.upstreamSearch')}
-              value={selectedSearch}
-              ref={selectedSearchInput}
-              onChange={(event) => setSelectedSearch(event.target.value)}
-            />
-          )}
-        </Field>
-        <Button
-          type="button"
-          disabled={locked || allSelectedEntries.length === 0}
-          onClick={() => {
-            onChange({});
-            selectedSearchInput.current?.focus();
-          }}
+      {showSelectionSummary ? (
+        <section
+          className="ops-picker-selection"
+          aria-label={t('common.operations.charity.selectedModels')}
         >
-          {t('common.workflow.clearSelected')}
-        </Button>
-        <ul>
-          {selectedPageEntries.map(([key, entry]) => (
-            <li key={key}>
-              <div>
-                <strong>
-                  {allSelectedEntries.findIndex(([id]) => id === key) + 1}.{' '}
-                  {entry.upstream_model_id}
-                </strong>
-                <span>
-                  {t('common.operations.charity.donationNumber', { id: entry.donation_id })} ·{' '}
-                  {entry.note} · {entry.source.display_head}…{entry.source.display_tail}
-                </span>
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                aria-label={t('common.workflow.removeSelection', { id: entry.upstream_model_id })}
-                disabled={interactionBlocked}
-                onClick={() => {
-                  const next = { ...selected };
-                  delete next[key];
-                  onChange(next);
-                  selectedSearchInput.current?.focus();
-                }}
-              >
-                {t('common.operations.charity.remove')}
-              </Button>
-            </li>
-          ))}
-        </ul>
-        <PagePagination
-          metadata={selectedPageMetadata}
-          requestedPage={selectedPager.page}
-          busy={interactionBlocked}
-          onPageChange={selectedPager.setPage}
-          onPageSizeChange={selectedPager.setPageSize}
-        />
-      </section>
+          <h4>
+            {t('common.operations.charity.selectedCount', { count: Object.keys(selected).length })}
+          </h4>
+          <p>{t('common.operations.charity.crossSelectionHelp')}</p>
+          <p role="status" aria-live="polite">
+            {t('common.workflow.selectionCapacity', {
+              selected: allSelectedEntries.length,
+              capacity,
+              outside: allSelectedEntries.filter(
+                ([key]) => !candidatePage?.data.some((entry) => charitySelectionKey(entry) === key),
+              ).length,
+            })}
+          </p>
+          <Field label={t('common.workflow.searchSelected')}>
+            {(props) => (
+              <input
+                {...props}
+                type="search"
+                placeholder={t('common.workflow.upstreamSearch')}
+                value={selectedSearch}
+                ref={selectedSearchInput}
+                onChange={(event) => setSelectedSearch(event.target.value)}
+              />
+            )}
+          </Field>
+          <Button
+            type="button"
+            disabled={locked || allSelectedEntries.length === 0}
+            onClick={() => {
+              onChange({});
+              selectedSearchInput.current?.focus();
+            }}
+          >
+            {t('common.workflow.clearSelected')}
+          </Button>
+          <ul>
+            {selectedPageEntries.map(([key, entry]) => (
+              <li key={key}>
+                <div>
+                  <strong>
+                    {allSelectedEntries.findIndex(([id]) => id === key) + 1}.{' '}
+                    {entry.upstream_model_id}
+                  </strong>
+                  <span>
+                    {t('common.operations.charity.donationNumber', { id: entry.donation_id })} ·{' '}
+                    {entry.note} · {entry.source.display_head}…{entry.source.display_tail}
+                  </span>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  aria-label={t('common.workflow.removeSelection', { id: entry.upstream_model_id })}
+                  disabled={interactionBlocked}
+                  onClick={() => {
+                    const next = { ...selected };
+                    delete next[key];
+                    onChange(next);
+                    selectedSearchInput.current?.focus();
+                  }}
+                >
+                  {t('common.operations.charity.remove')}
+                </Button>
+              </li>
+            ))}
+          </ul>
+          <PagePagination
+            metadata={selectedPageMetadata}
+            requestedPage={selectedPager.page}
+            busy={interactionBlocked}
+            onPageChange={selectedPager.setPage}
+            onPageSizeChange={selectedPager.setPageSize}
+          />
+        </section>
+      ) : null}
     </div>
   );
   return (

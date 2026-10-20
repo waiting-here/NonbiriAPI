@@ -1109,6 +1109,22 @@ button.nb-row:hover {
   color: var(--nb-color-success);
 }
 
+@media (width < 40rem) {
+  .nb-note {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .nb-note > :last-child:empty {
+    display: none;
+  }
+  .nb-note > :last-child:not(:empty) {
+    grid-column: 2;
+    justify-self: start;
+    min-width: 0;
+    max-width: 100%;
+    white-space: normal;
+  }
+}
+
 .nb-steps {
   display: flex;
   gap: var(--nb-space-2);

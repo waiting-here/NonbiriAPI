@@ -767,7 +767,11 @@ export interface CharityBinding {
   upstream_model_id: string;
   source_types: ('automatic' | 'manual')[];
 }
-export type CharityBindingCandidate = Omit<CharityBinding, 'id' | 'ord'>;
+export type CharityBindingCandidate = Omit<CharityBinding, 'id' | 'ord'> & {
+  current_binding_id?: string | null;
+  other_binding_count?: string;
+  other_bindings?: { charity_model_id: string; full_name: string; binding_id: string }[];
+};
 export interface BindingDonation {
   id: string;
   description: string;
@@ -1156,13 +1160,49 @@ function normalizeBinding(value: unknown, label: string): CharityBinding {
 export function normalizeCharityBindingCandidate(
   value: unknown,
   label: string,
+  requireBindingMarkers = false,
 ): CharityBindingCandidate {
   const root = record(
     value,
-    ['donation_key_id', 'donation_id', 'source', 'upstream_model_id', 'source_types'],
+    [
+      'donation_key_id',
+      'donation_id',
+      'source',
+      'upstream_model_id',
+      'source_types',
+      'current_binding_id',
+      'other_binding_count',
+      'other_bindings',
+    ],
     label,
+    ['donation_key_id', 'donation_id', 'source', 'upstream_model_id', 'source_types'],
   );
+  const hasMarkers = root.current_binding_id !== undefined || requireBindingMarkers;
+  const markers = hasMarkers
+    ? {
+        current_binding_id: nullableDecimalID(root.current_binding_id, `${label} current binding`),
+        other_binding_count: decimal(root.other_binding_count, `${label} other binding count`),
+        other_bindings: array(root.other_bindings, `${label} other bindings`, 3).map((entry) => {
+          const binding = record(
+            entry,
+            ['charity_model_id', 'full_name', 'binding_id'],
+            `${label} other binding`,
+          );
+          return {
+            charity_model_id: decimalID(binding.charity_model_id, `${label} other target`),
+            full_name: string(binding.full_name, `${label} other target name`, { min: 1 }),
+            binding_id: decimalID(binding.binding_id, `${label} other binding id`),
+          };
+        }),
+      }
+    : {};
+  if (
+    markers.other_bindings &&
+    BigInt(markers.other_binding_count!) < BigInt(markers.other_bindings.length)
+  )
+    invalidResponse(`${label} other binding count`);
   return {
+    ...markers,
     donation_key_id: decimalID(root.donation_key_id, `${label} donation key id`),
     donation_id: decimalID(root.donation_id, `${label} donation id`),
     source: normalizeSource(root.source, `${label} source`),

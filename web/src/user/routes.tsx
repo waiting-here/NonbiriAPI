@@ -16,7 +16,9 @@ export const router = createBrowserRouter([
     element: (
       <>
         <NavigationProgress />
-        <MfaRecovery><UserLayout /></MfaRecovery>
+        <MfaRecovery>
+          <UserLayout />
+        </MfaRecovery>
       </>
     ),
     hydrateFallbackElement: <LoadingState />,
@@ -87,6 +89,12 @@ export const router = createBrowserRouter([
       {
         path: pathFor('charity'),
         lazy: async () => ({ Component: (await import('./pages/CharityPage')).CharityPage }),
+      },
+      {
+        path: pathFor('channel-binding-presets'),
+        lazy: async () => ({
+          Component: (await import('./pages/ChannelBindingPresetsPage')).ChannelBindingPresetsPage,
+        }),
       },
       {
         path: pathFor('donation-detail'),

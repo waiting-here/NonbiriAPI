@@ -84,6 +84,7 @@ import { DonationDiscoveryControl } from './DonationDiscoveryControl';
 import { DonationHandlingControl, DonationHandlingStatus } from './DonationHandling';
 import { DonationHandlingPanel } from './charity/DonationHandlingPanel';
 import { DonationBindingWorkflow } from './charity/DonationBindingWorkflow';
+import { DonationPresetApply } from './charity/DonationPresetApply';
 import './charity/workflow.css';
 import { donationHandlingStateKey } from './donationHandlingCopy';
 import { DonationKeyModels } from './DonationKeyModels';
@@ -1439,6 +1440,7 @@ function DonationsPanel({
     ? rawStatus
     : '';
   const selected = selectedID(searchParams, 'donation_id');
+  const binding = Boolean(selected && selectedID(searchParams, 'binding_key'));
   const [draft, setDraft] = useState({ query, text: query });
   const queryDraft = draft.query === query ? draft.text : query;
   const setQueryDraft = (text: string) => setDraft({ query, text });
@@ -1552,8 +1554,12 @@ function DonationsPanel({
     );
   }
   return (
-    <div className={`charity-donations${selected ? ' nb-md' : ''}`} ref={listRef} tabIndex={-1}>
-      <div className="charity-donations__list">
+    <div
+      className={`charity-donations${selected && !binding ? ' nb-md' : ''}`}
+      ref={listRef}
+      tabIndex={-1}
+    >
+      <div className="charity-donations__list" hidden={binding}>
         <Card>
           <div className="charity-donation-toolbar">
             <FilterBar
@@ -1866,6 +1872,13 @@ function DonationsPanel({
             <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
           ) : (
             <>
+              <DonationPresetApply
+                role={role}
+                accountId={accountId}
+                item={detail.data}
+                busy={detail.isFetching || list.isFetching}
+                onCapabilityLoss={onCapabilityLoss}
+              />
               <DonationDetail
                 key={detail.data.id}
                 item={detail.data}
@@ -1990,6 +2003,7 @@ function CharityManagementAccount({
   trainee?: boolean;
 }) {
   const { t } = useTranslation();
+  const location = useLocation();
   const [params, setParams] = useSearchState();
   const rawSection = oneParam(params, 'charity_section');
   const section = trainee
@@ -2042,6 +2056,17 @@ function CharityManagementAccount({
   return (
     <DraftLeaveScope onStay={() => requestAnimationFrame(revealSelectedTab)}>
       <div className="ops-stack charity-management" ref={workspace}>
+        {!trainee ? (
+          <div className="nb-actions">
+            <Link
+              className="nb-btn nb-btn--secondary"
+              to="/charity/channel-presets"
+              state={{ returnTo: location.pathname + location.search }}
+            >
+              {t('common.bindingPresets.title')}
+            </Link>
+          </div>
+        ) : null}
         <Tabs
           label={t('common.operations.charity.sectionsLabel')}
           value={section}
