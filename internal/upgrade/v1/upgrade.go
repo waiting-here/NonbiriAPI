@@ -29,6 +29,8 @@ const stableSchema24Manifest = "ee3bcf270ed884f80a1ddf2c0cc75a509c20aa3d06c0e46f
 
 const stableSchema25Manifest = "ef68dc29f32b24ac5b06caa8bb6563be24dfae13a1e752385331c9828317cdd9"
 
+const stableSchema26Manifest = "6bcc4ea8fa31bee46e25b5e33b96a3caca18c5c5ff1f257d26b2e2d7acc64b9e"
+
 var storageSchema = schemaRegistry{baseline: 17, target: db.CurrentSchemaVersion, versions: []schemaMigration{
 	{version: 17, manifest: stableSchema17Manifest},
 	{from: 17, version: 18, manifest: stableSchema18Manifest, apply: extendContentAndProtocols, impact: &migrationImpact{
@@ -51,10 +53,12 @@ var storageSchema = schemaRegistry{baseline: 17, target: db.CurrentSchemaVersion
 	{from: 24, version: 25, manifest: stableSchema25Manifest, sql: smartBackoffSchema, impact: &migrationImpact{
 		addedTables:      []string{"donation_key_backoffs", "dispatch_smart_backoff_facts"},
 		constraintTables: []string{"donation_usage_reservations", "dispatch_claims"}, credentials: credentialsUnchanged}},
-	{from: 25, version: 26, manifest: db.PinnedGenerationTwoManifestHash, sql: channelBindingPresetsSchema + automaticBackoffSchema + recurringDiscountSchema, impact: &migrationImpact{
+	{from: 25, version: 26, manifest: stableSchema26Manifest, sql: channelBindingPresetsSchema + automaticBackoffSchema + recurringDiscountSchema, impact: &migrationImpact{
 		addedTables:   []string{"channel_charity_binding_presets", "channel_charity_binding_mappings"},
 		controlTables: []string{"charity_models", "charity_price_templates"},
 		rebuiltTables: []string{"donation_key_backoffs", "dispatch_smart_backoff_facts"}, credentials: credentialsUnchanged}},
+	{from: 26, version: 27, manifest: db.PinnedGenerationTwoManifestHash, sql: endpointBackoffSchema, impact: &migrationImpact{
+		addedTables: []string{"endpoint_backoff_policies"}, controlTables: []string{"dispatch_smart_backoff_facts"}, credentials: credentialsUnchanged}},
 }}
 
 type Options struct {
@@ -85,6 +89,7 @@ func SchemaDescriptor() db.StorageSchemaDescriptor {
 		{23, stableSchema23Manifest, "75044b0e685e0f2c3a0d41b19be6e54fd54d7b5b"},
 		{24, stableSchema24Manifest, "6f4ee67206eb6fb3a3f345ba06b2d85aba5abc83"},
 		{25, stableSchema25Manifest, "2b4f4f62ed5b01c247fcc3f79005358ef0237933"},
+		{26, stableSchema26Manifest, "361cb204e888de51901eecc993d3d52b1d156d3a"},
 	} {
 		descriptor.OfflineConversions = append(descriptor.OfflineConversions, db.OfflineConversionDescriptor{
 			Tool: "nonbiri-upgrade-v1", SourceCommit: source.commit, SourceSchemaVersion: source.version,
@@ -109,7 +114,7 @@ func run(ctx context.Context, path string, vault *secret.Vault, options Options,
 	defer stopProgress()
 	sources := []OfflineSchema{{Version: 16, ManifestHash: SourceManifestHash}}
 	if !rc7Only {
-		sources = append(sources, OfflineSchema{Version: 17, ManifestHash: stableSchema17Manifest}, OfflineSchema{Version: 18, ManifestHash: stableSchema18Manifest}, OfflineSchema{Version: 19, ManifestHash: stableSchema19Manifest}, OfflineSchema{Version: 20, ManifestHash: stableSchema20Manifest}, OfflineSchema{Version: 21, ManifestHash: stableSchema21Manifest}, OfflineSchema{Version: 22, ManifestHash: stableSchema22Manifest}, OfflineSchema{Version: 23, ManifestHash: stableSchema23Manifest}, OfflineSchema{Version: 24, ManifestHash: stableSchema24Manifest}, OfflineSchema{Version: 25, ManifestHash: stableSchema25Manifest})
+		sources = append(sources, OfflineSchema{Version: 17, ManifestHash: stableSchema17Manifest}, OfflineSchema{Version: 18, ManifestHash: stableSchema18Manifest}, OfflineSchema{Version: 19, ManifestHash: stableSchema19Manifest}, OfflineSchema{Version: 20, ManifestHash: stableSchema20Manifest}, OfflineSchema{Version: 21, ManifestHash: stableSchema21Manifest}, OfflineSchema{Version: 22, ManifestHash: stableSchema22Manifest}, OfflineSchema{Version: 23, ManifestHash: stableSchema23Manifest}, OfflineSchema{Version: 24, ManifestHash: stableSchema24Manifest}, OfflineSchema{Version: 25, ManifestHash: stableSchema25Manifest}, OfflineSchema{Version: 26, ManifestHash: stableSchema26Manifest})
 	}
 	sourceVersion := db.CurrentSchemaVersion
 	invalidLegacyConfiguration := false

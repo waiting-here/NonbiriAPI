@@ -259,6 +259,11 @@ func (service *Service) runAttempts(
 			break
 		}
 		attemptContext := smartbackoff.WithCharityCall(executionContext, plan.charity)
+		var backoffRules []smartbackoff.Rule
+		if info, ok := dispatch.(interface{ BackoffRules() []smartbackoff.Rule }); ok {
+			backoffRules = info.BackoffRules()
+		}
+		attemptContext = smartbackoff.WithRules(attemptContext, backoffRules)
 		if service.errorScope != nil {
 			attemptContext = service.errorScope(attemptContext, accepted.ID, index+1)
 		}

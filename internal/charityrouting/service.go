@@ -19,6 +19,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/charityaccess"
 	"github.com/waiting-here/NonbiriAPI/internal/charitydiscount"
+	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
@@ -69,6 +70,8 @@ const (
 )
 
 type Config struct {
+	Connectors    *connector.Registry
+	BaseURLs      resources.BaseURLValidator
 	Store         *db.Store
 	Adaptations   *requestadaptation.Store
 	RoleAuth      RoleFinalTxAuthorizer
@@ -79,6 +82,8 @@ type Config struct {
 }
 
 type Service struct {
+	connectors    *connector.Registry
+	baseURLs      resources.BaseURLValidator
 	db            *sql.DB
 	readDB        *sql.DB
 	adaptations   *requestadaptation.Store
@@ -99,7 +104,7 @@ func New(config Config) (*Service, error) {
 	if nilDependency(config.Entropy) {
 		config.Entropy = cryptorand.Reader
 	}
-	return &Service{db: config.Store.DB(), readDB: config.Store.ReadDB(), adaptations: config.Adaptations, roleAuth: config.RoleAuth, donationState: config.DonationState,
+	return &Service{connectors: config.Connectors, baseURLs: config.BaseURLs, db: config.Store.DB(), readDB: config.Store.ReadDB(), adaptations: config.Adaptations, roleAuth: config.RoleAuth, donationState: config.DonationState,
 		cursorKeys: config.CursorKeys, entropy: config.Entropy, now: config.Now}, nil
 }
 
@@ -1088,31 +1093,36 @@ func (s *Service) beginRoleTx(ctx context.Context, role roleKind, actorUserID in
 	if err != nil {
 		return nil, 0, fmt.Errorf("charity routing: begin role transaction: %w", err)
 	}
-	fail := func(err error) (*sql.Tx, int64, error) {
+	actorUserID, err = s.authorizeRoleTx(ctx, tx, role, actorUserID)
+	if err != nil {
 		_ = tx.Rollback()
 		return nil, 0, err
 	}
+	return tx, actorUserID, nil
+}
+
+func (s *Service) authorizeRoleTx(ctx context.Context, tx *sql.Tx, role roleKind, actorUserID int64) (int64, error) {
 	switch role {
 	case roleAdmin:
 		if err := tx.QueryRowContext(ctx, `SELECT id FROM users WHERE is_admin=1`).Scan(&actorUserID); errors.Is(err, sql.ErrNoRows) {
-			return fail(ErrForbidden)
+			return 0, ErrForbidden
 		} else if err != nil {
-			return fail(fmt.Errorf("charity routing: read singleton admin: %w", err))
+			return 0, fmt.Errorf("charity routing: read singleton admin: %w", err)
 		}
 		if err := s.roleAuth.AuthorizeAdminMutation(ctx, tx, actorUserID); err != nil {
-			return fail(mapAuthorization(err))
+			return 0, mapAuthorization(err)
 		}
 	case roleSteward:
 		if actorUserID <= 0 {
-			return fail(ErrInvalidRequest)
+			return 0, ErrInvalidRequest
 		}
 		if err := s.roleAuth.AuthorizeStewardMutation(ctx, tx, actorUserID); err != nil {
-			return fail(mapAuthorization(err))
+			return 0, mapAuthorization(err)
 		}
 	default:
-		return fail(ErrInvalidRequest)
+		return 0, ErrInvalidRequest
 	}
-	return tx, actorUserID, nil
+	return actorUserID, nil
 }
 
 func (s *Service) nowUnix() (int64, error) {

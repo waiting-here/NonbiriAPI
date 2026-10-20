@@ -28,8 +28,12 @@ import (
 // Copy a small, real dispatch fixture into the exact released schema. Only
 // retired settings are supplied; all other values come from live domain calls.
 func (e *backoffEnv) upgradeFromConfiguredSchema(t *testing.T, profile string) {
+	e.upgradeBackoffSchema(t, 25, profile)
+}
+
+func (e *backoffEnv) upgradeBackoffSchema(t *testing.T, version int, profile string) {
 	t.Helper()
-	compressed, err := os.ReadFile("../upgrade/v1/testdata/schema25.sql.gz")
+	compressed, err := os.ReadFile(fmt.Sprintf("../upgrade/v1/testdata/schema%d.sql.gz", version))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +48,8 @@ func (e *backoffEnv) upgradeFromConfiguredSchema(t *testing.T, profile string) {
 	if err := reader.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if fmt.Sprintf("%x", sha256.Sum256(ddl)) != "f2fcd20ed52e4e434228d0ef017f4e2cb76b1ab00d090011297e018a841cca65" {
+	expectedSQL := map[int]string{25: "f2fcd20ed52e4e434228d0ef017f4e2cb76b1ab00d090011297e018a841cca65", 26: "8994b94aea5b5c1152e7c30a3d9c9074d3a649c14c9f0c59bb6b9b395afa6dea"}
+	if fmt.Sprintf("%x", sha256.Sum256(ddl)) != expectedSQL[version] {
 		t.Fatal("released schema changed")
 	}
 	var seq int
@@ -127,7 +132,7 @@ func (e *backoffEnv) upgradeFromConfiguredSchema(t *testing.T, profile string) {
 		exec("INSERT INTO " + quote(table) + "(" + strings.Join(columns, ",") + ") SELECT " + strings.Join(projection, ",") + " FROM seed." + quote(table))
 	}
 	exec("DELETE FROM main.sqlite_sequence;INSERT INTO main.sqlite_sequence SELECT * FROM seed.sqlite_sequence WHERE name IN (SELECT name FROM main.sqlite_schema WHERE type='table')")
-	exec("UPDATE schema_state SET version=25")
+	exec("UPDATE schema_state SET version=?", version)
 	for _, ddl := range triggers {
 		exec(ddl)
 	}
@@ -135,7 +140,7 @@ func (e *backoffEnv) upgradeFromConfiguredSchema(t *testing.T, profile string) {
 	snapshot := backoffUpgradeFacts(t, e.store.DB(), tables)
 	expected := ""
 	for _, source := range v1.SchemaDescriptor().OfflineConversions {
-		if source.SourceSchemaVersion == 25 {
+		if source.SourceSchemaVersion == version {
 			expected = source.SourceManifestHash
 		}
 	}
@@ -155,7 +160,7 @@ func (e *backoffEnv) upgradeFromConfiguredSchema(t *testing.T, profile string) {
 	}
 	t.Cleanup(func() { _ = vault.Close() })
 	result, err := v1.Run(t.Context(), path, vault, v1.Options{Apply: true})
-	if err != nil || result.SourceSchemaVersion != 25 || result.TargetSchemaVersion != 26 || result.Status != "converted" {
+	if err != nil || result.SourceSchemaVersion != version || result.TargetSchemaVersion != db.CurrentSchemaVersion || result.Status != "converted" {
 		t.Fatal(result, err)
 	}
 	store, err := db.Open(path, vault)

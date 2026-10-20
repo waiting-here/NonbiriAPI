@@ -3,6 +3,7 @@ package smartbackoff
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"math"
 )
@@ -60,9 +61,27 @@ func DecodeProjection(period, source string, retryAt *int64, probing bool, now i
 
 type Dispatch struct {
 	Trial bool
+	Rules []Rule
 }
 
 func Prepare(ctx context.Context, tx *sql.Tx, keyID int64, claimID string, now int64) (Dispatch, error) {
+	var rulesJSON string
+	var revision int64
+	err := tx.QueryRowContext(ctx, `SELECT COALESCE(p.rules_json,'[]'),COALESCE(p.revision,0)
+ FROM dispatch_claims c JOIN endpoint_key_secrets s ON s.id=c.secret_ref_id
+ LEFT JOIN endpoint_backoff_policies p ON p.connector_type=s.connector_type AND p.base_url=s.canonical_base_url
+ WHERE c.id=? AND c.donation_key_id=? AND c.purpose='charity'`, claimID, keyID).Scan(&rulesJSON, &revision)
+	if err != nil {
+		return Dispatch{}, err
+	}
+	var rules []Rule
+	if json.Unmarshal([]byte(rulesJSON), &rules) != nil {
+		return Dispatch{}, ErrInvalid
+	}
+	rules, err = NormalizeRules(rules)
+	if err != nil {
+		return Dispatch{}, err
+	}
 	// A key without previous configuration still needs a stable generation for
 	// every dispatch fact and its eventual completion.
 	if _, err := tx.ExecContext(ctx, `INSERT INTO donation_key_backoffs(donation_key_id,generation,episode,stage,updated_at)
@@ -77,7 +96,7 @@ func Prepare(ctx context.Context, tx *sql.Tx, keyID int64, claimID string, now i
 		return Dispatch{}, ErrUnavailable
 	}
 	trial := s.RetryAt.Valid
-	_, err = tx.ExecContext(ctx, `INSERT INTO dispatch_smart_backoff_facts(claim_id,donation_key_id,generation,episode,is_trial) VALUES(?,?,?,?,?)`, claimID, keyID, s.Generation, s.Episode, trial)
+	_, err = tx.ExecContext(ctx, `INSERT INTO dispatch_smart_backoff_facts(claim_id,donation_key_id,generation,episode,is_trial,policy_revision,rules_json) VALUES(?,?,?,?,?,?,?)`, claimID, keyID, s.Generation, s.Episode, trial, revision, rulesJSON)
 	if err != nil {
 		return Dispatch{}, err
 	}
@@ -94,7 +113,7 @@ func Prepare(ctx context.Context, tx *sql.Tx, keyID int64, claimID string, now i
 			return Dispatch{}, ErrUnavailable
 		}
 	}
-	return Dispatch{Trial: trial}, nil
+	return Dispatch{Trial: trial, Rules: rules}, nil
 }
 
 // Accepted records HTTP acceptance independently of accounting and completion.
@@ -115,13 +134,35 @@ func IsTrial(ctx context.Context, tx *sql.Tx, claimID string) (bool, error) {
 	return trial, err
 }
 
-// RecordClassification stores only built-in classifications from a charity
-// dispatch. Historical custom_rule facts remain readable during recovery.
+// RecordClassification binds a recognized error to this dispatch's frozen rules.
 func RecordClassification(ctx context.Context, tx *sql.Tx, claimID string, c Classification) (bool, error) {
-	if !c.Valid() || c.Source != "builtin" {
+	if !c.Valid() {
 		return false, nil
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE dispatch_smart_backoff_facts SET period=?,source=?,reset_at=? WHERE claim_id=? AND accepted_at IS NULL AND (period IS NULL OR (period=? AND source=? AND reset_at=?))`, c.Period, c.Source, c.ResetAt, claimID, c.Period, c.Source, c.ResetAt)
+	if c.Source == "custom_rule" {
+		var encoded string
+		err := tx.QueryRowContext(ctx, `SELECT rules_json FROM dispatch_smart_backoff_facts WHERE claim_id=?`, claimID).Scan(&encoded)
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		var rules []Rule
+		if json.Unmarshal([]byte(encoded), &rules) != nil {
+			return false, ErrInvalid
+		}
+		if c.RuleIndex < 1 || c.RuleIndex > len(rules) {
+			return false, nil
+		}
+		rule := rules[c.RuleIndex-1]
+		if rule.Period != "auto" && rule.Period != c.Period {
+			return false, nil
+		}
+	} else if c.RuleIndex != 0 {
+		return false, nil
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE dispatch_smart_backoff_facts SET period=?,source=?,reset_at=?,rule_index=? WHERE claim_id=? AND accepted_at IS NULL AND (period IS NULL OR (period=? AND source=? AND reset_at=? AND rule_index=?))`, c.Period, c.Source, c.ResetAt, c.RuleIndex, claimID, c.Period, c.Source, c.ResetAt, c.RuleIndex)
 	if err != nil {
 		return false, err
 	}
