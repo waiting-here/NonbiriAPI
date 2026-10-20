@@ -40,6 +40,7 @@ func (d Detail) Backoff() smartbackoff.Classification { return d.backoff }
 // ContainsSecret must start with fresh rolling state on every call.
 type Context struct {
 	CharityCall    bool
+	Rules          []smartbackoff.Rule
 	BaseURL        string
 	PrivateModel   string
 	ContainsSecret func([]byte) bool
@@ -117,7 +118,7 @@ func (c Context) Parse(body []byte) Detail {
 		if raw, ok := root["error"]; ok {
 			var errorFields map[string]json.RawMessage
 			if c.CharityCall && json.Unmarshal(raw, &errorFields) == nil && errorFields != nil {
-				classified = smartbackoff.Classify(errorFields)
+				classified = smartbackoff.Classify(errorFields, c.Rules...)
 			}
 		}
 	} else {

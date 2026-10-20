@@ -54,7 +54,7 @@ func (a *Adapter) AttemptDecision(ctx context.Context, writer http.ResponseWrite
 	errorGuard := newSensitiveGuard(materials...)
 	defer errorGuard.Clear()
 	clear(identifier)
-	errorContext := upstreamerror.Context{CharityCall: smartbackoff.IsCharityCall(ctx), BaseURL: target.baseURL, PrivateModel: target.upstreamModel, ContainsSecret: func(value []byte) bool {
+	errorContext := upstreamerror.Context{CharityCall: smartbackoff.IsCharityCall(ctx), Rules: smartbackoff.RulesFromContext(ctx), BaseURL: target.baseURL, PrivateModel: target.upstreamModel, ContainsSecret: func(value []byte) bool {
 		scanner := errorGuard.clone()
 		defer scanner.Clear()
 		return scanner.Contains(value)

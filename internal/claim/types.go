@@ -238,6 +238,13 @@ type Dispatch struct {
 
 func (d *Dispatch) IsBackoffTrial() bool { return d != nil && d.backoff.Trial }
 
+func (d *Dispatch) BackoffRules() []smartbackoff.Rule {
+	if d == nil {
+		return nil
+	}
+	return append([]smartbackoff.Rule(nil), d.backoff.Rules...)
+}
+
 func (d *Dispatch) Handle() Handle {
 	if d == nil {
 		return Handle{}

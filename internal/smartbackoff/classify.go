@@ -9,9 +9,10 @@ import (
 )
 
 type Classification struct {
-	Period  string
-	Source  string
-	ResetAt int64
+	Period    string
+	Source    string
+	ResetAt   int64
+	RuleIndex int
 }
 
 func (c Classification) Valid() bool {
@@ -106,7 +107,7 @@ func resetAt(fields map[string]json.RawMessage, message string) int64 {
 
 // Classify consumes only an already validated, complete JSON error object.
 // The original machine fields are used before public diagnostic redaction.
-func Classify(fields map[string]json.RawMessage) Classification {
+func Classify(fields map[string]json.RawMessage, rules ...Rule) Classification {
 	if fields == nil {
 		return Classification{}
 	}
@@ -147,6 +148,16 @@ func Classify(fields map[string]json.RawMessage) Classification {
 	built := !permanentCode && !hardFailure && !shortRate && quota && exhausted && (!billing || specificWindow) && ((knownCode && documentedWindow) || (!knownCode && (resetEvidence || (period != "unknown" && recoverable))))
 	if built {
 		return Classification{Period: builtinPeriod, Source: "builtin", ResetAt: reset}
+	}
+	for i, rule := range rules {
+		matched := rule.Kind == "code" && (rule.Value == code || rule.Value == scalar(fields, "type")) || rule.Kind == "message" && strings.Contains(message, rule.Value)
+		if matched {
+			selected := rule.Period
+			if selected == "auto" {
+				selected = period
+			}
+			return Classification{Period: selected, Source: "custom_rule", ResetAt: reset, RuleIndex: i + 1}
+		}
 	}
 	return Classification{}
 }

@@ -407,6 +407,8 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	charityRoutingService, err := charityrouting.New(charityrouting.Config{
 		Adaptations:   adaptations,
 		Store:         store,
+		Connectors:    connectorRegistry,
+		BaseURLs:      outbound,
 		RoleAuth:      roleAuthorizer,
 		DonationState: donationService,
 		CursorKeys:    vault,
