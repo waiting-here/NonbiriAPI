@@ -1,3 +1,4 @@
+import { smartBackoffDeadline } from '@shared/operations/smartBackoff';
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { Link, useLocation } from 'react-router';
@@ -510,7 +511,7 @@ export function OwnerDonationKeys({
     enabled
       ? (query.data?.data
           .filter((key) => key.charityState === 'rate_limited')
-          .map((key) => key.rateLimitedUntil) ?? [])
+          .flatMap((key) => [key.rateLimitedUntil, smartBackoffDeadline(key.smartBackoff)]) ?? [])
       : [],
     () => query.refetch({ throwOnError: true }),
   );

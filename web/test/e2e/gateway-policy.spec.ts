@@ -23,223 +23,339 @@ const handling = {
   closed_reason: null,
 };
 
-for (const role of ['owner', 'admin', 'steward'] as const) {
-  test(`${role} saves zero independently and retains the warning after reload`, async ({
-    page,
-  }) => {
-    const station = role === 'admin' ? 'admin' : 'user';
-    const origin = role === 'admin' ? ADMIN_ORIGIN : USER_ORIGIN;
-    const prefix = role === 'admin' ? '/admin/api' : role === 'steward' ? '/api/steward' : '/api';
-    const violations = collectConsoleViolations(page);
-    await page.setViewportSize({ width: role === 'steward' ? 390 : 1280, height: 900 });
-    await page.addInitScript(() => {
-      localStorage.setItem('nb.lang', 'en');
-      localStorage.setItem('nb.theme', 'dark');
-    });
-    await mockPublicConfig(page, station);
-    await mockRoleSession(
-      page,
-      station,
-      role === 'steward' ? 'level6' : role === 'owner' ? 'user' : 'admin',
-    );
-    let threshold = '10';
-    let revision = '1';
-    const writes: unknown[] = [];
-    const dialogs: string[] = [];
-    page.on('dialog', async (dialog) => {
-      dialogs.push(dialog.type());
-      await dialog.dismiss();
-    });
-    const key = () => ({
-      id: '11',
-      endpoint_key_id: '21',
-      display_head: 'fixture',
-      display_tail: 'key',
-      safe_source: source,
-      physical_enabled: false,
-      charity_state: 'disabled',
-      limits: { price: null, calls: null, tokens: null },
-      usage: {
-        price_used: '0',
-        price_inflight: '0',
-        calls_used: '0',
-        calls_inflight: '0',
-        tokens_used: '0',
-        tokens_inflight: '0',
-      },
-      token_reserve: 0,
-      expires_at: null,
-      failure_disable_threshold: threshold,
-      streak: { generation: '4', count: '12', failure_disabled: threshold !== '0' },
-      ended_reason: null,
-      ...(role === 'owner'
-        ? {}
-        : {
-            binding_count: '0',
-            idle: true,
-            authorized_expires_at: null,
-            safe_note: '',
-            max_concurrency: 0,
-            max_rpm: 0,
-          }),
-    });
-    const donation = () => ({
-      id: '7',
-      status: 'approved',
-      revision,
-      description: 'Gateway policy fixture',
-      review_result: { decision: 'approve', reason: '', reviewed_at: NOW },
-      keys: [key()],
-      created_at: NOW,
-      updated_at: NOW,
-      ...(role === 'owner'
-        ? {}
-        : {
-            handling,
-            owner: { user_id: '42', discord_id: null, display_name: 'Synthetic donor' },
-            reviewer: null,
-          }),
-    });
-    const summary = () => {
-      const { keys: _keys, ...rest } = donation();
-      void _keys;
-      return {
-        ...rest,
-        key_count: '1',
-        source_count: '1',
-        sources: [source],
-        state_counts: {
-          available: '0',
-          rate_limited: '0',
-          pending: '0',
-          disabled: '1',
-          suspended: '0',
-          exhausted: '0',
-          expired: '0',
-          ended: '0',
-        },
-      };
-    };
-    await page.route('**/*', async (route) => {
-      const request = route.request();
-      const url = new URL(request.url());
-      if (url.origin !== origin) return route.fallback();
-      if (url.pathname === '/api/charity/models')
-        return route.fulfill({
-          json: {
-            state: 'no_models',
-            models: [],
-            donation_intake: 'closed',
-            server_now: NOW,
-            ...(url.searchParams.has('page')
-              ? { pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' } }
-              : {}),
-          },
+for (const [width, theme] of [
+  [1440, 'light'],
+  [1440, 'dark'],
+  [390, 'light'],
+  [390, 'dark'],
+] as const) {
+  test.describe(width + 'px ' + theme, () => {
+    for (const role of ['owner', 'admin', 'steward'] as const) {
+      test(`${role} saves backoff and zero and retains them after reload`, async ({ page }) => {
+        const station = role === 'admin' ? 'admin' : 'user';
+        const origin = role === 'admin' ? ADMIN_ORIGIN : USER_ORIGIN;
+        const prefix =
+          role === 'admin' ? '/admin/api' : role === 'steward' ? '/api/steward' : '/api';
+        const violations = collectConsoleViolations(page);
+        await page.setViewportSize({ width, height: 900 });
+        await page.addInitScript((theme) => {
+          localStorage.setItem('nb.lang', 'en');
+          localStorage.setItem('nb.theme', theme);
+        }, theme);
+        await mockPublicConfig(page, station);
+        await mockRoleSession(
+          page,
+          station,
+          role === 'steward' ? 'level6' : role === 'owner' ? 'user' : 'admin',
+        );
+        let threshold = '10';
+        let revision = '1';
+        let profile = 'none';
+        let rules: { kind: string; value: string; period: string }[] = [];
+        const ruleValue = 'Monthly allowance exhausted. '.repeat(5).trim();
+        const writes: unknown[] = [];
+        const dialogs: string[] = [];
+        page.on('dialog', async (dialog) => {
+          dialogs.push(dialog.type());
+          await dialog.dismiss();
         });
-      if (!url.pathname.startsWith(prefix + '/donations')) return route.fallback();
-      if (request.method() === 'PATCH') {
-        expect(url.pathname).toBe(prefix + '/donations/7/keys/11/failure-policy');
-        expect(request.headers()['idempotency-key']).toMatch(/^[A-Za-z0-9_-]{22,128}$/);
-        const body = request.postDataJSON() as {
-          expected_revision: string;
-          failure_disable_threshold: string;
+        const key = () => ({
+          id: '11',
+          endpoint_key_id: '21',
+          display_head: 'fixture',
+          display_tail: 'key',
+          safe_source: source,
+          physical_enabled: false,
+          charity_state: 'disabled',
+          limits: { price: null, calls: null, tokens: null },
+          usage: {
+            price_used: '0',
+            price_inflight: '0',
+            calls_used: '0',
+            calls_inflight: '0',
+            tokens_used: '0',
+            tokens_inflight: '0',
+          },
+          token_reserve: 0,
+          expires_at: null,
+          failure_disable_threshold: threshold,
+          smart_backoff_profile: profile,
+          smart_backoff_rules: rules,
+          smart_backoff:
+            profile === 'none'
+              ? null
+              : {
+                  state: role === 'owner' ? 'waiting' : role === 'admin' ? 'ready' : 'probing',
+                  reason: 'month_quota',
+                  source: 'custom_rule',
+                  retry_at: 1_900_000_000,
+                },
+          streak: { generation: '4', count: '12', failure_disabled: threshold !== '0' },
+          ended_reason: null,
+          ...(role === 'owner'
+            ? {}
+            : {
+                binding_count: '0',
+                idle: true,
+                authorized_expires_at: null,
+                safe_note: '',
+                max_concurrency: 0,
+                max_rpm: 0,
+              }),
+        });
+        const donation = () => ({
+          id: '7',
+          status: 'approved',
+          revision,
+          description: 'Gateway policy fixture',
+          review_result: { decision: 'approve', reason: '', reviewed_at: NOW },
+          keys: [key()],
+          created_at: NOW,
+          updated_at: NOW,
+          ...(role === 'owner'
+            ? {}
+            : {
+                handling,
+                owner: { user_id: '42', discord_id: null, display_name: 'Synthetic donor' },
+                reviewer: null,
+              }),
+        });
+        const summary = () => {
+          const { keys: _keys, ...rest } = donation();
+          void _keys;
+          return {
+            ...rest,
+            key_count: '1',
+            source_count: '1',
+            sources: [source],
+            state_counts: {
+              available: '0',
+              rate_limited: '0',
+              pending: '0',
+              disabled: '1',
+              suspended: '0',
+              exhausted: '0',
+              expired: '0',
+              ended: '0',
+            },
+          };
         };
-        expect(body).toEqual({ expected_revision: revision, failure_disable_threshold: '0' });
-        writes.push(body);
-        threshold = '0';
-        revision = '2';
-        return route.fulfill({
-          json: {
-            donation_id: '7',
-            donation_key_id: '11',
-            failure_disable_threshold: threshold,
-            failure_streak: '12',
-            failure_disabled: false,
-            revision,
-          },
-        });
-      }
-      expect(request.method()).toBe('GET');
-      if (url.pathname.endsWith('/badge'))
-        return route.fulfill({ json: { pending_count: '1', server_now: NOW } });
-      if (url.pathname.endsWith('/7')) return route.fulfill({ json: donation() });
-      if (url.pathname.endsWith('/7/keys'))
-        return route.fulfill({
-          json: numberedResponse(
-            [
-              {
-                ...key(),
-                donation_id: '7',
-                key_id: '11',
-                donation_revision: revision,
-                rule_count: '0',
-                rules: [],
-                ...(role === 'owner' ? {} : { handling }),
+        await page.route('**/*', async (route) => {
+          const request = route.request();
+          const url = new URL(request.url());
+          if (url.origin !== origin) return route.fallback();
+          if (url.pathname === '/api/charity/models')
+            return route.fulfill({
+              json: {
+                state: 'no_models',
+                models: [],
+                donation_intake: 'closed',
+                server_now: NOW,
+                ...(url.searchParams.has('page')
+                  ? { pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' } }
+                  : {}),
               },
-            ],
-            '1',
-            20,
-          ),
+            });
+          if (!url.pathname.startsWith(prefix + '/donations')) return route.fallback();
+          if (request.method() === 'PATCH') {
+            expect(url.pathname).toBe(prefix + '/donations/7/keys/11/failure-policy');
+            expect(request.headers()['idempotency-key']).toMatch(/^[A-Za-z0-9_-]{22,128}$/);
+            const body = request.postDataJSON() as {
+              expected_revision: string;
+              failure_disable_threshold: string;
+              smart_backoff_profile: string;
+              smart_backoff_rules: typeof rules;
+            };
+            expect(body).toEqual({
+              expected_revision: revision,
+              failure_disable_threshold: '0',
+              smart_backoff_profile: 'day_month',
+              smart_backoff_rules: [{ kind: 'message', value: ruleValue, period: 'month' }],
+            });
+            profile = body.smart_backoff_profile;
+            rules = body.smart_backoff_rules;
+            writes.push(body);
+            threshold = '0';
+            revision = '2';
+            return route.fulfill({
+              json: {
+                donation_id: '7',
+                donation_key_id: '11',
+                failure_disable_threshold: threshold,
+                smart_backoff_profile: profile,
+                smart_backoff_rules: rules,
+                smart_backoff: null,
+                failure_streak: '12',
+                failure_disabled: false,
+                revision,
+              },
+            });
+          }
+          expect(request.method()).toBe('GET');
+          if (url.pathname.endsWith('/badge'))
+            return route.fulfill({ json: { pending_count: '1', server_now: NOW } });
+          if (url.pathname.endsWith('/7')) return route.fulfill({ json: donation() });
+          if (url.pathname.endsWith('/7/keys'))
+            return route.fulfill({
+              json: numberedResponse(
+                [
+                  {
+                    ...key(),
+                    donation_id: '7',
+                    key_id: '11',
+                    donation_revision: revision,
+                    rule_count: '0',
+                    rules: [],
+                    ...(role === 'owner' ? {} : { handling }),
+                  },
+                ],
+                '1',
+                20,
+              ),
+            });
+          return route.fulfill({ json: numberedResponse([summary()], '1', 20) });
         });
-      return route.fulfill({ json: numberedResponse([summary()], '1', 20) });
-    });
-    await page.goto(
-      origin +
-        (role === 'owner'
-          ? '/charity?tab=donations'
-          : role === 'admin'
-            ? '/charity'
-            : '/steward?tab=charity'),
-    );
-    const donationList = role === 'owner' ? page : page.locator('.nb-table tbody');
-    await expect(donationList.getByText('Gateway policy fixture', { exact: true })).toBeVisible();
-    if (role === 'owner') {
-      await page
-        .getByRole('button', {
-          name: userEn.user.charity.presentation.donationActions,
-          exact: true,
-        })
-        .click();
-      await page
-        .getByRole('menuitem', { name: userEn.user.charity.ownerPages.keys, exact: true })
-        .click();
-    } else await page.getByRole('button', { name: 'Review', exact: true }).click();
-    if (role !== 'owner') await page.getByText('Failure strategy', { exact: true }).click();
-    const control = page.locator('.failure-policy-control').first();
-    await expect(control).toBeVisible();
-    await control.getByLabel(copy.label).fill('0');
-    await expect(control.locator('.failure-policy-warning')).toBeVisible();
-    await control.getByRole('button', { name: copy.save, exact: true }).click();
-    await expect.poll(() => writes.length).toBe(1);
-    if (role !== 'owner') {
-      const disclosure = page.getByText('Failure strategy', { exact: true });
-      await expect(
-        control.getByText(copy.saved.replace('{{value}}', '0'), { exact: true }),
-      ).toBeAttached();
-      if (!(await control.isVisible())) await disclosure.click();
-    }
-    await expect(
-      control.getByText(copy.saved.replace('{{value}}', '0'), { exact: true }),
-    ).toBeVisible();
-    expect(dialogs).toEqual([]);
-    await page.reload();
-    if (role !== 'owner') await page.getByText('Failure strategy', { exact: true }).click();
-    await expect(control).toBeVisible();
-    await expect(control.getByLabel(copy.label)).toHaveValue('0');
-    await expect(control.locator('.failure-policy-warning').first()).toBeVisible();
-    expect(await control.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
-      true,
-    );
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
-      true,
-    );
-    if (process.env.NONBIRI_VISUAL_DIR) {
-      await mkdir(process.env.NONBIRI_VISUAL_DIR, { recursive: true });
-      await control.screenshot({
-        path: resolve(process.env.NONBIRI_VISUAL_DIR, `failure-policy-${role}.png`),
+        await page.goto(
+          origin +
+            (role === 'owner'
+              ? '/charity?tab=donations'
+              : role === 'admin'
+                ? '/charity'
+                : '/steward?tab=charity'),
+        );
+        const donationList = role === 'owner' ? page : page.locator('.nb-table tbody');
+        await expect(
+          donationList.getByText('Gateway policy fixture', { exact: true }),
+        ).toBeVisible();
+        if (role === 'owner') {
+          await page
+            .getByRole('button', {
+              name: userEn.user.charity.presentation.donationActions,
+              exact: true,
+            })
+            .click();
+          await page
+            .getByRole('menuitem', { name: userEn.user.charity.ownerPages.keys, exact: true })
+            .click();
+        } else await page.getByRole('button', { name: 'Review', exact: true }).click();
+        if (role !== 'owner') await page.getByText('Failure strategy', { exact: true }).click();
+        const control = page.locator('.failure-policy-control').first();
+        await expect(control).toBeVisible();
+        await control.getByLabel(copy.label).fill('0');
+        await control.getByLabel('Smart quota backoff').selectOption('day_month');
+        await control.getByText('Additional error recognition (optional)', { exact: true }).click();
+        await control.getByRole('button', { name: 'Add rule', exact: true }).click();
+        await control.getByLabel('Rule 1 type').selectOption('message');
+        await control.getByLabel('Rule 1 value').fill(ruleValue);
+        await control.getByLabel('Rule 1 allowance cycle').selectOption('month');
+        await expect(control.locator('.failure-policy-warning')).toBeVisible();
+        await control.getByRole('button', { name: copy.save, exact: true }).click();
+        await expect.poll(() => writes.length).toBe(1);
+        if (role !== 'owner') {
+          const disclosure = page.getByText('Failure strategy', { exact: true });
+          await expect(
+            control.getByText(copy.saved.replace('{{value}}', '0'), { exact: true }),
+          ).toBeAttached();
+          if (!(await control.isVisible())) await disclosure.click();
+        }
+        await expect(
+          control.getByText(copy.saved.replace('{{value}}', '0'), { exact: true }),
+        ).toBeVisible();
+        expect(dialogs).toEqual([]);
+        await page.reload();
+        if (role !== 'owner') await page.getByText('Failure strategy', { exact: true }).click();
+        await expect(control).toBeVisible();
+        await expect(control.getByLabel(copy.label)).toHaveValue('0');
+        await expect(control.getByLabel('Smart quota backoff')).toHaveValue('day_month');
+        await control.getByText('Additional error recognition (optional)', { exact: true }).click();
+        await expect(control.getByLabel('Rule 1 value')).toHaveValue(ruleValue);
+        await expect(control.getByLabel('Rule 1 allowance cycle')).toHaveValue('month');
+        await expect(
+          page
+            .getByText(
+              role === 'owner'
+                ? 'Smart backoff: waiting'
+                : role === 'admin'
+                  ? 'Smart backoff: ready for a trial request'
+                  : 'Smart backoff: trial request in progress',
+              { exact: true },
+            )
+            .first(),
+        ).toBeVisible();
+        await expect(
+          page.getByText('Monthly allowance exhausted · Additional rule', { exact: true }).first(),
+        ).toBeVisible();
+        await expect(control.locator('.failure-policy-warning').first()).toBeVisible();
+        const policyLayout = await control.evaluate((element) => {
+          const box = element.getBoundingClientRect();
+          return {
+            scroll: element.scrollWidth,
+            width: element.clientWidth,
+            box: box.width,
+            overflow: Array.from(element.querySelectorAll('*'))
+              .filter((item) => {
+                const child = item.getBoundingClientRect();
+                return (
+                  child.width > 0 && (child.right > box.right + 0.5 || child.left < box.left - 0.5)
+                );
+              })
+              .map((item) => ({
+                tag: item.tagName,
+                className: item.className,
+                width: item.getBoundingClientRect().width,
+                right: item.getBoundingClientRect().right,
+                text: item.textContent?.slice(0, 70),
+              }))
+              .slice(0, 12),
+          };
+        });
+        expect(policyLayout.scroll, JSON.stringify(policyLayout)).toBeLessThanOrEqual(
+          policyLayout.width,
+        );
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+          true,
+        );
+        if (process.env.NONBIRI_VISUAL_DIR) {
+          await mkdir(process.env.NONBIRI_VISUAL_DIR, { recursive: true });
+          await control.getByLabel('Rule 1 value').focus();
+          if (width === 390) {
+            const inputBox = await control.getByLabel('Rule 1 value').boundingBox();
+            expect(inputBox?.width).toBeGreaterThanOrEqual(280);
+          }
+          await page.screenshot({
+            path: resolve(
+              process.env.NONBIRI_VISUAL_DIR,
+              'backoff-edit-viewport-' + role + '-' + width + '-' + theme + '.png',
+            ),
+          });
+          await control
+            .getByRole('button', { name: copy.save, exact: true })
+            .scrollIntoViewIfNeeded();
+          await page.screenshot({
+            path: resolve(
+              process.env.NONBIRI_VISUAL_DIR,
+              'backoff-save-viewport-' + role + '-' + width + '-' + theme + '.png',
+            ),
+          });
+          await control.screenshot({
+            path: resolve(
+              process.env.NONBIRI_VISUAL_DIR,
+              'failure-policy-' + role + '-' + width + '-' + theme + '.png',
+            ),
+          });
+          await page
+            .locator('.smart-backoff-status')
+            .first()
+            .screenshot({
+              path: resolve(
+                process.env.NONBIRI_VISUAL_DIR,
+                'backoff-status-' + role + '-' + width + '-' + theme + '.png',
+              ),
+            });
+        }
+        violations.assertNone();
       });
     }
-    violations.assertNone();
   });
 }
 

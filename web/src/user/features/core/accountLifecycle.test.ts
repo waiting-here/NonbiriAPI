@@ -265,7 +265,7 @@ describe('production account lifecycle adapter', () => {
     fetchMock
       .mockResolvedValueOnce(exportResponse({ ...exportDocument(), schema_version: '11' }))
       .mockResolvedValueOnce(exportResponse({ ...exportDocument(), schema_version: 4 }))
-      .mockResolvedValueOnce(exportResponse({ ...exportDocument(), schema_version: 23 }))
+      .mockResolvedValueOnce(exportResponse({ ...exportDocument(), schema_version: 24 }))
       .mockResolvedValueOnce(
         exportResponse(exportDocument(), { 'Content-Length': String(16 * 1024 * 1024 + 1) }),
       );
@@ -282,12 +282,36 @@ describe('production account lifecycle adapter', () => {
     expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
-  it.each([12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22])(
+  it.each([12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23])(
     'downloads a v%s attachment and rejects a version mismatch in its filename',
     async (version) => {
       const document = {
         ...exportDocument(),
         schema_version: version,
+        ...(version === 23
+          ? {
+              donations: [
+                {
+                  id: '41',
+                  keys: [
+                    {
+                      id: '51',
+                      smart_backoff_profile: 'day_month',
+                      smart_backoff_rules: [
+                        { kind: 'message', value: 'Monthly allowance exhausted', period: 'month' },
+                      ],
+                      smart_backoff: {
+                        state: 'waiting',
+                        reason: 'month_quota',
+                        source: 'custom_rule',
+                        retry_at: 1_900_000_000,
+                      },
+                    },
+                  ],
+                },
+              ],
+            }
+          : {}),
         ...(version === 16
           ? { appearance: { selected: 'default', unlocked: ['default'], updated_at: null } }
           : {}),

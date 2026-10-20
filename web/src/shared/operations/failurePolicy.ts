@@ -1,3 +1,8 @@
+import {
+  normalizeSmartBackoffFields,
+  type SmartBackoffConfiguration,
+  type SmartBackoffFields,
+} from './smartBackoff';
 import { ApiError } from '@shared/query/http';
 import { decoded, idempotentOptions } from './api';
 import { charityScopePath } from './charityScope';
@@ -6,7 +11,7 @@ import { boolean, decimal, decimalID, invalidResponse, record } from './wire';
 export function validFailureThreshold(value: string): boolean {
   return /^(0|[1-9][0-9]{0,38})$/.test(value) && BigInt(value) <= (1n << 128n) - 1n;
 }
-export interface FailurePolicy {
+export interface FailurePolicy extends SmartBackoffFields {
   donation_id: string;
   donation_key_id: string;
   failure_disable_threshold: string;
@@ -14,11 +19,15 @@ export interface FailurePolicy {
   failure_disabled: boolean;
   revision: string;
 }
+export interface FailurePolicyInput extends Partial<SmartBackoffConfiguration> {
+  expected_revision: string;
+  failure_disable_threshold: string;
+}
 export function saveFailurePolicy(
   role: 'owner' | 'admin' | 'steward',
   donationID: string,
   keyID: string,
-  input: { expected_revision: string; failure_disable_threshold: string },
+  input: FailurePolicyInput,
   idempotencyKey: string,
   modelID?: string,
 ): Promise<FailurePolicy> {
@@ -37,6 +46,9 @@ export function saveFailurePolicy(
           'donation_id',
           'donation_key_id',
           'failure_disable_threshold',
+          'smart_backoff_profile',
+          'smart_backoff_rules',
+          'smart_backoff',
           'failure_streak',
           'failure_disabled',
           'revision',
@@ -46,6 +58,7 @@ export function saveFailurePolicy(
       if (fields.donation_id !== donationID || fields.donation_key_id !== keyID)
         invalidResponse('failure policy identity');
       return {
+        ...normalizeSmartBackoffFields(fields),
         donation_id: donationID,
         donation_key_id: keyID,
         failure_disable_threshold: decimal(fields.failure_disable_threshold, 'failure threshold'),

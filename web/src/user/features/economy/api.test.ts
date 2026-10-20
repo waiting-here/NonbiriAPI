@@ -1,12 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@shared/query/http';
 import { normalizeDonationKey } from './normalize';
-import {
-  createDonation,
-  contributeThursday,
-  getDonation,
-  isResponseUnknown,
-} from './api';
+import { createDonation, contributeThursday, getDonation, isResponseUnknown } from './api';
 
 const DONATION_RESPONSE = {
   id: '41',
@@ -39,6 +34,9 @@ const DONATION_RESPONSE = {
       token_reserve: 0,
       expires_at: null,
       failure_disable_threshold: '10',
+      smart_backoff_profile: 'none' as const,
+      smart_backoff_rules: [],
+      smart_backoff: null,
       streak: { generation: '1', count: '0', failure_disabled: false },
       ended_reason: null,
     },
@@ -98,7 +96,12 @@ describe('economy mutation boundary', () => {
       description: 'Existing resources only',
       keys: [
         { endpointKeyId: '61', expiresAt: null },
-        { endpointKeyId: '62', expiresAt: 1_900_000_000 },
+        {
+          endpointKeyId: '62',
+          expiresAt: 1_900_000_000,
+          smartBackoffProfile: 'day_month',
+          smartBackoffRules: [{ kind: 'code', value: '1308', period: 'day' }],
+        },
       ],
       ownershipAuthorized: true,
       discordPublicThanks: false,
@@ -111,7 +114,12 @@ describe('economy mutation boundary', () => {
       description: 'Existing resources only',
       keys: [
         { endpoint_key_id: '61', expires_at: null },
-        { endpoint_key_id: '62', expires_at: 1_900_000_000 },
+        {
+          endpoint_key_id: '62',
+          expires_at: 1_900_000_000,
+          smart_backoff_profile: 'day_month',
+          smart_backoff_rules: [{ kind: 'code', value: '1308', period: 'day' }],
+        },
       ],
       ownership_authorized: true,
       discord_public_thanks: false,

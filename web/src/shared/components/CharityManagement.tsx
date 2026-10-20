@@ -1,3 +1,4 @@
+import { smartBackoffDeadline } from '@shared/operations/smartBackoff';
 import { NullableValue } from './charity/NullableValue';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import {
@@ -401,10 +402,27 @@ function DonationKeyEditor(
         })}
       </h4>
       <p>{safeSourceLabel(props.item.safe_source, t)}</p>
-      {props.item.charity_state === 'rate_limited' ? (
-        <KeyRateLimitTime until={props.item.rate_limited_until} />
+      {props.item.charity_state === 'rate_limited' || props.item.smart_backoff ? (
+        <KeyRateLimitTime
+          until={props.item.rate_limited_until}
+          smartBackoff={props.item.smart_backoff}
+        />
       ) : null}
       <ManagedKeyLimitsControl {...props} refresh={props.refreshLimits} />
+      <Fold
+        title={t('common.operations.charity.failureStrategy', { defaultValue: 'Failure strategy' })}
+      >
+        <FailurePolicyControl
+          role={props.role}
+          donationID={props.donation.id}
+          keyID={props.item.id}
+          revision={props.donation.revision}
+          threshold={props.item.failure_disable_threshold}
+          profile={props.item.smart_backoff_profile}
+          rules={props.item.smart_backoff_rules}
+          refresh={props.refresh}
+        />
+      </Fold>
       <DonationKeySettings key={props.donation.revision} {...props} />
     </section>
   );
@@ -497,18 +515,6 @@ function DonationKeySettings({
       <p className="muted">
         {item.safe_source.connector_type} · {item.safe_source.base_url}
       </p>
-      <Fold
-        title={t('common.operations.charity.failureStrategy', { defaultValue: 'Failure strategy' })}
-      >
-        <FailurePolicyControl
-          role={role}
-          donationID={donation.id}
-          keyID={item.id}
-          revision={donation.revision}
-          threshold={item.failure_disable_threshold}
-          refresh={refresh}
-        />
-      </Fold>
       <h5>{copy.keyUsage}</h5>
       <div className="ops-toolbar">
         <StatusBadge
@@ -1191,7 +1197,7 @@ function DonationKeyPages({
   useRateLimitRefresh(
     keys.data?.data
       .filter((key) => key.charity_state === 'rate_limited')
-      .map((key) => key.rate_limited_until) ?? [],
+      .flatMap((key) => [key.rate_limited_until, smartBackoffDeadline(key.smart_backoff)]) ?? [],
     () => keys.refetch({ throwOnError: true }),
   );
   useEffect(() => {
@@ -2092,7 +2098,9 @@ function ScopedKeyBrowser({
   const refresh = () =>
     client.invalidateQueries({ queryKey: charityKeys.root('steward') }, { throwOnError: true });
   useRateLimitRefresh(
-    detail.data?.charity_state === 'rate_limited' ? [detail.data.rate_limited_until] : [],
+    detail.data?.charity_state === 'rate_limited'
+      ? [detail.data.rate_limited_until, smartBackoffDeadline(detail.data.smart_backoff)]
+      : [],
     () => detail.refetch({ throwOnError: true }),
   );
   const lost = isUnauthorized(detail.error) || isForbidden(detail.error);
@@ -2247,7 +2255,9 @@ function PickerKeyManager({
   const refresh = () =>
     client.invalidateQueries({ queryKey: charityKeys.root(role) }, { throwOnError: true });
   useRateLimitRefresh(
-    detail.data?.key.charity_state === 'rate_limited' ? [detail.data.key.rate_limited_until] : [],
+    detail.data?.key.charity_state === 'rate_limited'
+      ? [detail.data.key.rate_limited_until, smartBackoffDeadline(detail.data.key.smart_backoff)]
+      : [],
     () => detail.refetch({ throwOnError: true }),
   );
   return (

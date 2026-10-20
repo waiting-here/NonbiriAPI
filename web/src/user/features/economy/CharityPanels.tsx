@@ -1,3 +1,10 @@
+import { SmartBackoffInput } from '@shared/components/SmartBackoffInput';
+import {
+  DEFAULT_SMART_BACKOFF,
+  smartBackoffInput,
+  validSmartBackoff,
+  type SmartBackoffConfiguration,
+} from '@shared/operations/smartBackoff';
 import { contextPriceProps } from './contextPrices';
 import { ModelTypesSummary } from '@shared/components/ModelTypesField';
 import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react';
@@ -278,6 +285,7 @@ export function DonationComposer({
   const [selectedChoices, setSelectedChoices] = useState<readonly EndpointKeyChoice[]>([]);
   const [expiryByKey, setExpiryByKey] = useState<Record<string, TimeDraft>>({});
   const [thresholdByKey, setThresholdByKey] = useState<Record<string, string>>({});
+  const [backoffByKey, setBackoffByKey] = useState<Record<string, SmartBackoffConfiguration>>({});
   const [readBlocked, setReadBlocked] = useState(true);
   const [authorized, setAuthorized] = useState(false);
   const [validation, setValidation] = useState('');
@@ -339,7 +347,18 @@ export function DonationComposer({
       setValidation(t('common.failurePolicy.invalid'));
       return;
     }
+    if (
+      selectedChoices.some(
+        (choice) => !validSmartBackoff(backoffByKey[choice.key.id] ?? DEFAULT_SMART_BACKOFF),
+      )
+    ) {
+      setValidation(t('common.smartBackoff.invalid'));
+      return;
+    }
     const keys = selectedChoices.map((choice) => {
+      const backoff = backoffByKey[choice.key.id]
+        ? smartBackoffInput(backoffByKey[choice.key.id])
+        : null;
       const failureDisableThreshold = thresholdByKey[choice.key.id] ?? '10';
       if (!validFailureThreshold(failureDisableThreshold)) return undefined;
       const expiresAt = expiryByKey[choice.key.id]
@@ -347,7 +366,17 @@ export function DonationComposer({
         : null;
       return expiresAt === undefined
         ? undefined
-        : { endpointKeyId: choice.key.id, expiresAt, failureDisableThreshold };
+        : {
+            endpointKeyId: choice.key.id,
+            expiresAt,
+            failureDisableThreshold,
+            ...(backoff
+              ? {
+                  smartBackoffProfile: backoff.smart_backoff_profile,
+                  smartBackoffRules: backoff.smart_backoff_rules,
+                }
+              : {}),
+          };
     });
     if (keys.some((key) => key === undefined)) {
       setValidation(t('user.charity.expiryInvalid'));
@@ -488,6 +517,13 @@ export function DonationComposer({
                   disabled={locked}
                   onChange={(value) =>
                     setThresholdByKey((current) => ({ ...current, [choice.key.id]: value }))
+                  }
+                />
+                <SmartBackoffInput
+                  value={backoffByKey[choice.key.id] ?? DEFAULT_SMART_BACKOFF}
+                  disabled={locked}
+                  onChange={(value) =>
+                    setBackoffByKey((current) => ({ ...current, [choice.key.id]: value }))
                   }
                 />
               </div>
@@ -760,11 +796,20 @@ export function DonationKeyPanel({
         </div>
       </div>
       <dl className="detail-grid economy-key-status-details">
-        {donationKey.charityState === 'rate_limited' ? (
+        {donationKey.charityState === 'rate_limited' || donationKey.smartBackoff ? (
           <div className="detail-row">
-            <dt>{t('user.charity.keyState.rate_limited')}</dt>
+            <dt>
+              {t(
+                donationKey.smartBackoff
+                  ? 'common.smartBackoff.profile'
+                  : 'user.charity.keyState.rate_limited',
+              )}
+            </dt>
             <dd>
-              <KeyRateLimitTime until={donationKey.rateLimitedUntil} />
+              <KeyRateLimitTime
+                until={donationKey.rateLimitedUntil}
+                smartBackoff={donationKey.smartBackoff}
+              />
             </dd>
           </div>
         ) : null}
@@ -909,6 +954,8 @@ export function DonationKeyPanel({
           keyID={donationKey.id}
           revision={donationRevision}
           threshold={donationKey.failureDisableThreshold}
+          profile={donationKey.smartBackoffProfile}
+          rules={donationKey.smartBackoffRules}
         />
       ) : null}
       {accountID && donationId && donationRevision ? (
