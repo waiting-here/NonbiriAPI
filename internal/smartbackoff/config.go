@@ -2,6 +2,7 @@
 package smartbackoff
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -19,6 +20,33 @@ type Rule struct {
 	Value  string `json:"value"`
 	Period string `json:"period"`
 }
+
+// UnmarshalJSON preserves omission without accepting null or an empty enum.
+// Keep the decoder closed even when this rule is nested in a request field.
+func (rule *Rule) UnmarshalJSON(data []byte) error {
+	var wire struct {
+		Kind   string          `json:"kind"`
+		Value  string          `json:"value"`
+		Period json.RawMessage `json:"period"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&wire); err != nil {
+		return err
+	}
+	period := "auto"
+	if len(wire.Period) > 0 {
+		if err := json.Unmarshal(wire.Period, &period); err != nil {
+			return err
+		}
+		if bytes.Equal(bytes.TrimSpace(wire.Period), []byte("null")) || period == "" {
+			return ErrInvalid
+		}
+	}
+	*rule = Rule{Kind: wire.Kind, Value: wire.Value, Period: period}
+	return nil
+}
+
 type Config struct {
 	Profile string `json:"smart_backoff_profile"`
 	Rules   []Rule `json:"smart_backoff_rules"`

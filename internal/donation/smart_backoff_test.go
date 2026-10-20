@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
+	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -84,7 +84,9 @@ func TestSmartBackoffPolicyPreservesOmittedConfigAndResetCooldowns(t *testing.T)
 	if err := e.store.DB().QueryRow("SELECT rate_limited_until FROM donation_key_cooldowns WHERE donation_key_id=?", key).Scan(&headerUntil); err != nil || headerUntil != until+60 {
 		t.Fatal("header was cleared", headerUntil, err)
 	}
-	for _, extra := range []string{`,"smart_backoff_profile":null`, `,"smart_backoff_rules":null`, `,"smart_backoff_rules":[{"kind":"code","value":"x","period":"week"}]`, `,"smart_backoff_rules":[{"kind":"message","value":"a","unexpected":true}]`} {
+	for _, extra := range []string{
+		`,"smart_backoff_rules":[{"kind":"code","value":"quota","period":null}]`,
+		`,"smart_backoff_rules":[{"kind":"code","value":"quota","period":""}]`, `,"smart_backoff_profile":null`, `,"smart_backoff_rules":null`, `,"smart_backoff_rules":[{"kind":"code","value":"x","period":"week"}]`, `,"smart_backoff_rules":[{"kind":"message","value":"a","unexpected":true}]`} {
 		w := smartPolicyHTTP(t, api, owner, d, `{"expected_revision":"7","failure_disable_threshold":"10"`+extra+`}`, "f")
 		if w.Code != 400 {
 			t.Fatal("bad config", w.Code, w.Body)
