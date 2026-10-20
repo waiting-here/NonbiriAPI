@@ -104,13 +104,15 @@ func (s *Service) GetSteward(ctx context.Context, userID, donationID int64) (Ste
 	if err != nil {
 		return StewardDonation{}, err
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, role, _, err := s.beginReviewTx(ctx, reviewerSteward, userID, false)
 	if err != nil {
-		return StewardDonation{}, fmt.Errorf("donation: begin steward read: %w", err)
+		return StewardDonation{}, err
 	}
 	defer tx.Rollback()
-	if err := s.roleAuth.AuthorizeStewardMutation(ctx, tx, userID); err != nil {
-		return StewardDonation{}, mapAuthorization(err)
+	if role == reviewerTrainee {
+		if err := requirePendingReviewTx(ctx, tx, donationID, now); err != nil {
+			return StewardDonation{}, err
+		}
 	}
 	if _, err := materializeDonationExpiryTx(ctx, tx, donationID, now); err != nil {
 		return StewardDonation{}, err
@@ -138,6 +140,9 @@ func (s *Service) GetSteward(ctx context.Context, userID, donationID int64) (Ste
 	}
 	if err := tx.Commit(); err != nil {
 		return StewardDonation{}, fmt.Errorf("donation: commit steward read: %w", err)
+	}
+	if role == reviewerTrainee {
+		value = traineeReviewProjection(value)
 	}
 	return stewardFromAdmin(value, userID), nil
 }
@@ -225,11 +230,17 @@ func (s *Service) listRole(ctx context.Context, userID int64, filter ManagementF
 	if err != nil {
 		return nil, 0, err
 	}
-	tx, _, err := s.beginRoleTx(ctx, role, userID)
+	tx, reviewRole, _, err := s.beginReviewTx(ctx, role, userID, false)
 	if err != nil {
 		return nil, 0, fmt.Errorf("donation: begin role list: %w", err)
 	}
 	defer tx.Rollback()
+	if reviewRole == reviewerTrainee {
+		filter, err = pendingReviewFilter(filter)
+		if err != nil {
+			return nil, 0, err
+		}
+	}
 	query := `SELECT d.id FROM donations d JOIN donation_handling h ON h.donation_id=d.id WHERE d.id>?
  AND (d.status IN ('pending','approved') OR d.terminal_at>?)`
 	args := []any{afterID, now - terminalRetention}
@@ -257,6 +268,9 @@ func (s *Service) listRole(ctx context.Context, userID int64, filter ManagementF
 		item, err := getAdminDonationTx(ctx, tx, id, now)
 		if err != nil {
 			return nil, 0, err
+		}
+		if reviewRole == reviewerTrainee {
+			item = traineeReviewProjection(item)
 		}
 		items = append(items, item)
 	}
@@ -390,12 +404,9 @@ FROM donations d LEFT JOIN users u ON u.id=d.user_id WHERE d.id=?`, donationID).
 	if out.Status == "pending" || lastAction == "reject" {
 		out.FirstApprovalOrigin = "none"
 	}
-	out.CanForceReject = out.Status == "approved" && out.FirstApprovalOrigin == "auto" && !unknown
+	out.CanForceReject = out.Status == "approved" && !unknown
 	if !out.CanForceReject {
-		reason := "not_automatically_approved"
-		if out.FirstApprovalOrigin == "unknown" {
-			reason = "approval_origin_unknown"
-		}
+		reason := "not_approved"
 		if unknown {
 			reason = "review_material_unavailable"
 		}
