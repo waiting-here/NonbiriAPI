@@ -27,7 +27,7 @@ channel IDs. Pagination uses the existing numbered-page envelope.
 | Method and suffix | Request or response |
 | --- | --- |
 | `GET /donations/{id}/keys/{keyId}/binding-options` | `q,page,page_size`; `{data:[{charity_model_id,full_name,enabled,binding_revision}],pagination,next_cursor:null}` |
-| `POST /donations/{id}/keys/{keyId}/bindings/batch` | `{expected_donation_revision,targets:[{charity_model_id,expected_binding_revision,upstream_model_id}]}`; at most 64 distinct pairs |
+| `POST /donations/{id}/keys/{keyId}/bindings/batch` | `{expected_donation_revision,targets:[{charity_model_id,expected_binding_revision,upstream_model_id}]}`; at most 256 distinct pairs within a 256 KiB request |
 | `GET /charity-binding-presets` | `q,page,page_size,state=active\|retired\|all`; channel page with `channel_id,name,connector_type,base_url,enabled,state,channel_revision,preset_revision,mapping_count` |
 | `GET /charity-binding-presets/{channelId}` | `{channel_id,channel_revision,preset_revision,mappings:[{upstream_model_id,charity_model_id,full_name,binding_revision}]}` |
 | `PUT /charity-binding-presets/{channelId}` | `{expected_channel_revision,expected_preset_revision,mappings:[{upstream_model_id,charity_model_id}]}`; at most 16 distinct pairs |
