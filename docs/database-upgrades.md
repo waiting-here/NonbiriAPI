@@ -10,7 +10,7 @@ a complete upgrade path from every earlier stable v1.x database. An older binary
 is not required to read a newer database.
 
 SQLite identity remains `application_id=0x4E425249`, `user_version=2`. Account
-exports use format **23**, independently of the storage schema. An unknown
+exports use format **24**, independently of the storage schema. An unknown
 identity, version or structural manifest is rejected before writes.
 
 ```sh
@@ -29,11 +29,22 @@ descriptors instead of parsing Go source or deriving versions from array lengths
 Schema 26 adds shared channel binding presets and their ordered upstream-model
 mappings. Existing channels start without a preset. Saving or applying a preset
 does not rewrite existing bindings, enable keys or alter donation approval.
-The structures contain no account identity, and account export remains 23.
+The preset structures contain no account identity.
+
+The same upgrade removes per-key smart-backoff profiles and supplemental rules,
+including the profile copied into dispatch facts. All charity keys use built-in
+recognition, including keys previously disabled or restricted to other periods.
+Existing recovery deadlines, reasons, sources, generation/episode identities,
+trial ownership and HTTP acceptance facts are preserved. Header cooldowns are
+unchanged. Startup uses the existing claim recovery path to finish interrupted
+trials; removing settings does not make a waiting key immediately available.
+Account export 24 omits the two configuration fields and retains safe current
+state. New classifications use built-in recognition; an existing episode may
+still report its historical supplemental-rule source.
 
 Schema 25 adds per-donated-key smart-backoff configuration, a current waiting or
 trial episode and claim-bound recovery facts. Smart backoff defaults to off for
-existing keys, with no supplemental rules or active episode. Account export 23 adds the safe
+existing keys at that version, with no supplemental rules or active episode. Account export 23 added the safe
 configuration and current state. Existing retry-header cooldowns, failure counts,
 credentials and accounting retain their meanings.
 

@@ -80,10 +80,9 @@ donated-key settings from a log, then return to the same filters and page.
 After choosing a key for a charity service connection, fetch its model list again
 or open its key settings directly, then return to the same selection.
 
-Donated keys can optionally wait after recognized periodic-quota errors and
-recover through one real charity request. Donors and authorized managers can add
-exact business codes or fixed message fragments. Retry headers take precedence;
-other errors retain the consecutive-failure policy. See the
+Charity calls automatically wait after recognized recoverable quota errors and
+recover through one real charity request. No per-key setup is required.
+Retry headers take precedence; other errors retain the consecutive-failure policy. See the
 [smart-backoff contract](docs/api-contract.md#413-smart-donated-key-backoff).
 
 ## Build and develop
@@ -102,7 +101,7 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [First-run setup](docs/first-run-setup.md) covers private paths, the encryption key, Discord OAuth and public origins. Copy [admin.env.example](admin.env.example) outside the checkout, replace placeholders and load it before starting. Preserve the database with its matching key.
 
-Fresh databases start in maintenance with public features closed. The v1.0.6 source accepts schema 26 or fresh storage and produces account export 23. Existing schema 16–25 databases use the separate offline converter; historical conversion code is excluded from the service. Later v1.x releases retain an upgrade path from every earlier stable v1.x schema. Older binaries need not read newer databases.
+Fresh databases start in maintenance with public features closed. The v1.0.6 source accepts schema 26 or fresh storage and produces account export 24. Existing schema 16–25 databases use the separate offline converter; historical conversion code is excluded from the service. Later v1.x releases retain an upgrade path from every earlier stable v1.x schema. Older binaries need not read newer databases.
 
 [Deployment](docs/deployment.md) covers systemd, proxies, immutable artifacts, upgrades and complete-snapshot recovery. Startup variables and online settings have one reference in [configuration](docs/configuration.md).
 

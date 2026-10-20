@@ -17,10 +17,19 @@ Each version entry describes its source and compatibility boundary; a release ta
   one operation applying a preset to all keys in an approved donation. Missing
   models, unavailable resources and existing bindings produce per-item results.
 
+### Changed
+
+- Charity smart backoff automatically recognizes supported recoverable quota
+  errors. Per-key profiles and supplemental rules are removed; existing waiting
+  deadlines, trial ownership and safe status remain available.
+
 ### Compatibility
 
-- Storage schema 26 adds shared channel binding presets. Account export remains
-  23. Existing bindings, key enablement and level-5 model scope are preserved.
+- Storage schema 26 adds shared channel binding presets and removes obsolete
+  smart-backoff configuration while preserving recovery state. Account export 24
+  omits the old profile and rule fields. Requests containing those fields are
+  rejected; remove them from donation creation and failure-policy requests.
+  Existing bindings, key enablement and level-5 model scope are preserved.
 - Cloudflare forwarding is disabled by default. It retains shared outbound
   protections and does not add gateway billing fallback or extra retries.
 
