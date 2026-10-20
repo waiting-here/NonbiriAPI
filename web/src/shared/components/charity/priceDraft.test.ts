@@ -42,6 +42,12 @@ const token: CharityPriceConfig = {
   },
   token_reserve_credits: '25.125',
   discount: { enabled: true, percent: 80, start_at: 100, end_at: 200 },
+  recurring_discount: {
+    enabled: true,
+    time_zone: 'America/New_York',
+    default_percent: 50,
+    periods: [{ weekdays: [1, 7], start_time: '22:00', end_time: '02:00', percent: 0 }],
+  },
 };
 
 describe('complete charity price snapshots', () => {
@@ -50,6 +56,12 @@ describe('complete charity price snapshots', () => {
     const draft = priceDraft(token);
     draft.userPrices.output = '99';
     draft.longPrices.output = '199';
+    draft.recurringDiscount.periods[0]!.weekdays.push(2);
+    expect(token.recurring_discount.periods[0]!.weekdays).toEqual([1, 7]);
+    const restored = snapshotPriceDraft(priceDraft(token));
+    const body = draftPriceConfig(restored)!;
+    body.recurring_discount.periods[0]!.percent = 99;
+    expect(restored.recurringDiscount.periods[0]!.percent).toBe(0);
     expect(token.pricing.mode === 'per_token' && token.pricing.user_prices.output).toBe('60');
     expect(token.pricing.long_context?.user_prices?.output).toBe('120');
   });
@@ -59,6 +71,7 @@ describe('complete charity price snapshots', () => {
       pricing: { mode: 'per_request', user_price: '3.5', donor_reward: '1.75' },
       token_reserve_credits: null,
       discount: { enabled: false, percent: 0, start_at: null, end_at: null },
+      recurring_discount: { enabled: false, time_zone: 'UTC', default_percent: 0, periods: [] },
     };
     const filled = { ...priceDraft(token), ...priceDraft(request) };
     expect(draftPriceConfig(filled)).toEqual(request);

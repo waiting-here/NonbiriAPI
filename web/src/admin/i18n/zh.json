@@ -1201,7 +1201,6 @@
       "currentPrice": "当前用户价",
       "discountFree": "限时免费",
       "discountPercent": "限时 {{percent}}% 折",
-      "discountRemaining": "剩余 {{time}}",
       "requestUnit": "每次请求；实际结算由服务端完成。",
       "tokenUnit": "每百万 token；四档由服务端结算。"
     }

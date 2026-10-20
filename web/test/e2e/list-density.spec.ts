@@ -99,6 +99,9 @@ function publicModel(index: number) {
   const provider = 'Provider-' + 'p'.repeat(index === 2 ? 50 : 4);
   const model = `model-${index}-` + 'm'.repeat(index === 2 ? 50 : 4);
   return {
+    recurring_discount: { enabled: false, time_zone: 'UTC', default_percent: 100, periods: [] },
+    effective_discount: { source: 'fixed', percent: 80, next_change_at: null },
+
     model_types: ['chat_completions', 'embeddings'],
     id: String(index),
     provider,
@@ -106,6 +109,14 @@ function publicModel(index: number) {
     full_name: `[公益]${provider}/${model}`,
     pricing: token
       ? {
+          current_user_price_milli: null,
+          current_user_prices_milli: {
+            uncached_input: '8000000',
+            cache_write_input: '8000000',
+            cache_read_input: '1280000',
+            output: '24000000',
+          },
+
           mode: 'per_token',
           user_price_milli: null,
           discounted_user_price_milli: null,
@@ -123,6 +134,9 @@ function publicModel(index: number) {
           },
         }
       : {
+          current_user_price_milli: '98765431210',
+          current_user_prices_milli: null,
+
           mode: 'per_request',
           user_price_milli: '123456789012',
           discounted_user_price_milli: '98765431210',
@@ -859,6 +873,10 @@ test('many personal endpoints, keys and models preserve cross-page selections wi
 });
 
 const managedModel = {
+  recurring_discount: { enabled: false, time_zone: 'UTC', default_percent: 100, periods: [] },
+  effective_discount: { source: 'none', percent: 100, next_change_at: null },
+  server_now: 1800000000,
+
   model_types: ['chat_completions', 'embeddings'],
   id: '7',
   route_strategy: 'expiry_weighted',

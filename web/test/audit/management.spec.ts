@@ -23,6 +23,8 @@ interface Fixture {
     automatic_donation_id: string;
     pending_donation_id: string;
     binding_donation_id: string;
+    automatic_backoff_donation_id: string;
+    recurring_discount: { donation_id: string };
     denials: Record<'client_rules' | 'charity' | 'manual', { cookie: Cookie }>;
   };
 }
@@ -167,6 +169,8 @@ test('owner reads donation keys and details from current API responses', async (
         state.management.automatic_donation_id,
         state.management.pending_donation_id,
         state.management.binding_donation_id,
+        state.management.automatic_backoff_donation_id,
+        state.management.recurring_discount.donation_id,
       ].sort(),
     );
     expect(

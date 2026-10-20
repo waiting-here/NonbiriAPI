@@ -1,4 +1,10 @@
 import {
+  normalizeRecurringDiscount,
+  normalizeEffectiveDiscount,
+  type RecurringDiscount,
+  type EffectiveDiscount,
+} from './recurringDiscount';
+import {
   normalizeSmartBackoffFields,
   type SmartBackoffFields,
 } from '@shared/operations/smartBackoff';
@@ -733,6 +739,9 @@ export interface CharityModel {
     context_penalty?: { input_threshold: string; fine: string };
   };
   discount: { enabled: boolean; percent: number; start_at: number | null; end_at: number | null };
+  recurring_discount: RecurringDiscount;
+  effective_discount: EffectiveDiscount;
+  server_now: number;
   flatten_tool_calls: boolean;
   revision: string;
   binding_revision: string;
@@ -789,7 +798,7 @@ export interface CharityBindings {
 
 export type CharityPriceConfig = Pick<
   CharityModel,
-  'pricing' | 'token_reserve_credits' | 'discount'
+  'pricing' | 'token_reserve_credits' | 'discount' | 'recurring_discount'
 >;
 
 export function normalizeCharityPriceConfig(
@@ -879,6 +888,7 @@ export function normalizeCharityPriceConfig(
     invalidResponse(`${label} discount window`);
   return {
     pricing,
+    recurring_discount: normalizeRecurringDiscount(root.recurring_discount),
     token_reserve_credits: normalizeTokenReserveCredits(
       root.token_reserve_credits,
       label + ' token reserve credits',
@@ -904,6 +914,9 @@ function normalizeModel(value: unknown, label: string): CharityModel {
     'public_description',
     'pricing',
     'discount',
+    'recurring_discount',
+    'effective_discount',
+    'server_now',
     'flatten_tool_calls',
     'transport_rule',
     'revision',
@@ -989,6 +1002,8 @@ function normalizeModel(value: unknown, label: string): CharityModel {
     allowed_levels: allowedLevels,
     public_description: publicDescription,
     ...priceConfig,
+    effective_discount: normalizeEffectiveDiscount(root.effective_discount),
+    server_now: unixSecond(root.server_now, `${label} server time`),
     transport_rule: normalizeTransportRule(root.transport_rule),
     flatten_tool_calls: boolean(root.flatten_tool_calls, `${label} flatten tool calls`),
     role_policy: normalizeRolePolicy(root.role_policy, `${label} role policy`),

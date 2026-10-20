@@ -178,29 +178,29 @@ export function CharityCapabilityPanel({ capability }: { capability: CharityCapa
                     {
                       label: t('user.charity.requestPrice'),
                       userMilli: model.pricing.userPriceMilli,
-                      discountedUserMilli: model.pricing.discountedUserPriceMilli,
+                      currentUserMilli: model.pricing.currentUserPriceMilli,
                     },
                   ]
                 : [
                     {
                       label: t('user.charity.uncachedInputPrice'),
                       userMilli: model.pricing.userPricesMilli.uncachedInput,
-                      discountedUserMilli: model.pricing.discountedUserPricesMilli.uncachedInput,
+                      currentUserMilli: model.pricing.currentUserPricesMilli.uncachedInput,
                     },
                     {
                       label: t('user.charity.cacheWriteInputPrice'),
                       userMilli: model.pricing.userPricesMilli.cacheWriteInput,
-                      discountedUserMilli: model.pricing.discountedUserPricesMilli.cacheWriteInput,
+                      currentUserMilli: model.pricing.currentUserPricesMilli.cacheWriteInput,
                     },
                     {
                       label: t('user.charity.cacheReadInputPrice'),
                       userMilli: model.pricing.userPricesMilli.cacheReadInput,
-                      discountedUserMilli: model.pricing.discountedUserPricesMilli.cacheReadInput,
+                      currentUserMilli: model.pricing.currentUserPricesMilli.cacheReadInput,
                     },
                     {
                       label: t('user.charity.outputPrice'),
                       userMilli: model.pricing.userPricesMilli.output,
-                      discountedUserMilli: model.pricing.discountedUserPricesMilli.output,
+                      currentUserMilli: model.pricing.currentUserPricesMilli.output,
                     },
                   ];
             return (
@@ -214,6 +214,8 @@ export function CharityCapabilityPanel({ capability }: { capability: CharityCapa
                   mode={model.pricing.mode}
                   rows={rows}
                   serverNow={capability.serverNow}
+                  effectiveDiscount={model.effectiveDiscount}
+                  recurringDiscount={model.recurringDiscount}
                   discount={{
                     enabled: model.discount.enabled,
                     percent: model.discount.percent,

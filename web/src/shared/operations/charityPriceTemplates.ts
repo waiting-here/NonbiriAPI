@@ -41,6 +41,7 @@ export function normalizePriceTemplate(value: unknown): CharityPriceTemplate {
       'pricing',
       'token_reserve_credits',
       'discount',
+      'recurring_discount',
       'created_at',
       'updated_at',
     ],

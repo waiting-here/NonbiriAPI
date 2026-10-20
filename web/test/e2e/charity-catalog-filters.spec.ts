@@ -72,12 +72,18 @@ const MODEL_DEFINITIONS: ReadonlyArray<
 function capabilityModel(id: string, model: string): JSONRecord {
   const modelTypes = modelTypesForID(id);
   return {
+    recurring_discount: { enabled: false, time_zone: 'UTC', default_percent: 100, periods: [] },
+    effective_discount: { source: 'fixed', percent: 80, next_change_at: null },
+
     model_types: modelTypes,
     id,
     provider: 'provider',
     model,
     full_name: `[公益]provider/${model}`,
     pricing: {
+      current_user_price_milli: '2400',
+      current_user_prices_milli: null,
+
       mode: 'per_request',
       user_price_milli: '3000',
       discounted_user_price_milli: '2400',
@@ -135,7 +141,17 @@ function catalogCapability(fixture: CatalogFixture): JSONRecord {
   return {
     state: 'available',
     models: fixture.models.map(
-      ({ id, provider, model, full_name, pricing, discount, model_types }) => ({
+      ({
+        id,
+        provider,
+        model,
+        full_name,
+        pricing,
+        discount,
+        model_types,
+        recurring_discount,
+        effective_discount,
+      }) => ({
         model_types,
         id,
         provider,
@@ -143,6 +159,8 @@ function catalogCapability(fixture: CatalogFixture): JSONRecord {
         full_name,
         pricing,
         discount,
+        recurring_discount,
+        effective_discount,
       }),
     ),
     donation_intake: 'open',
@@ -622,6 +640,14 @@ for (const [width, locale, theme] of [
   }) => {
     const tokenModel = catalogModel('2', [1, 3], true, false, 'token');
     tokenModel.pricing = {
+      current_user_price_milli: null,
+      current_user_prices_milli: {
+        uncached_input: '617',
+        cache_write_input: '1234',
+        cache_read_input: '1851',
+        output: '2468',
+      },
+
       mode: 'per_token',
       user_price_milli: null,
       discounted_user_price_milli: null,

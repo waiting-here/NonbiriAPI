@@ -142,6 +142,10 @@ describe.each([normalizeAdminDonation, normalizeStewardDonation])(
 );
 
 const model = {
+  recurring_discount: { enabled: false, time_zone: 'UTC', default_percent: 100, periods: [] },
+  effective_discount: { source: 'fixed', percent: 10, next_change_at: null },
+  server_now: 1800000000,
+
   model_types: ['chat_completions', 'embeddings'],
   id: '1',
   provider: 'provider',

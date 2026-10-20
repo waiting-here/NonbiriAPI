@@ -131,6 +131,10 @@ const pendingStewardDonation = {
 };
 
 const currentCharityModel = {
+  recurring_discount: { enabled: false, time_zone: 'UTC', default_percent: 100, periods: [] },
+  effective_discount: { source: 'none', percent: 100, next_change_at: null },
+  server_now: 1800000000,
+
   model_types: ['chat_completions', 'embeddings'],
   route_strategy: 'expiry_weighted',
   id: '7',

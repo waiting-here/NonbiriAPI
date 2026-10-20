@@ -1,3 +1,7 @@
+import {
+  normalizeRecurringDiscount,
+  normalizeEffectiveDiscount,
+} from '@shared/operations/recurringDiscount';
 import { normalizeSmartBackoffFields } from '@shared/operations/smartBackoff';
 import { responseFields } from '@shared/query/responseFields';
 import { normalizeModelTypes } from '@shared/modelTypes';
@@ -347,7 +351,17 @@ export function normalizeCharityCapabilityModel(value: unknown): CharityCapabili
   const item = record(
     value,
     'charity model',
-    ['id', 'provider', 'model', 'full_name', 'model_types', 'pricing', 'discount'],
+    [
+      'id',
+      'provider',
+      'model',
+      'full_name',
+      'model_types',
+      'pricing',
+      'discount',
+      'recurring_discount',
+      'effective_discount',
+    ],
     ['recent_success'],
   );
   const provider = charityModelName(item.provider, 'charity model provider');
@@ -378,6 +392,8 @@ export function normalizeCharityCapabilityModel(value: unknown): CharityCapabili
       'discounted_user_price_milli',
       'user_prices_milli',
       'discounted_user_prices_milli',
+      'current_user_price_milli',
+      'current_user_prices_milli',
     ],
     ['long_context', 'context_penalty'],
   );
@@ -392,6 +408,8 @@ export function normalizeCharityCapabilityModel(value: unknown): CharityCapabili
       'discounted_user_price_milli',
       'user_prices_milli',
       'discounted_user_prices_milli',
+      'current_user_price_milli',
+      'current_user_prices_milli',
     ]);
     normalizedPricing.longContext = {
       ...normalizeBasePricing({ ...long, mode: pricing.mode }, discountPercent),
@@ -419,6 +437,8 @@ export function normalizeCharityCapabilityModel(value: unknown): CharityCapabili
       ? {}
       : { recentSuccess: normalizeCharitySuccess(item.recent_success) }),
     pricing: normalizedPricing,
+    recurringDiscount: normalizeRecurringDiscount(item.recurring_discount),
+    effectiveDiscount: normalizeEffectiveDiscount(item.effective_discount),
     discount: {
       enabled: discountEnabled,
       percent: discountPercent,
@@ -1179,7 +1199,11 @@ function normalizeBasePricing(
 ): import('./types').CharityBasePricing {
   let normalizedPricing: import('./types').CharityBasePricing;
   if (pricing.mode === 'per_request') {
-    if (pricing.user_prices_milli !== null || pricing.discounted_user_prices_milli !== null) {
+    if (
+      pricing.user_prices_milli !== null ||
+      pricing.discounted_user_prices_milli !== null ||
+      pricing.current_user_prices_milli !== null
+    ) {
       invalid('charity model request pricing');
     }
     const userPriceMilli = capabilityMilli(pricing.user_price_milli, 'charity model request price');
@@ -1193,9 +1217,21 @@ function normalizeBasePricing(
       discountPercent,
       'charity model discounted request price',
     );
-    normalizedPricing = { mode: 'per_request', userPriceMilli, discountedUserPriceMilli };
+    normalizedPricing = {
+      mode: 'per_request',
+      userPriceMilli,
+      discountedUserPriceMilli,
+      currentUserPriceMilli: capabilityMilli(
+        pricing.current_user_price_milli,
+        'current request price',
+      ),
+    };
   } else if (pricing.mode === 'per_token') {
-    if (pricing.user_price_milli !== null || pricing.discounted_user_price_milli !== null) {
+    if (
+      pricing.user_price_milli !== null ||
+      pricing.discounted_user_price_milli !== null ||
+      pricing.current_user_price_milli !== null
+    ) {
       invalid('charity model token pricing');
     }
     const userPricesMilli = normalizeCapabilityTokenPrices(
@@ -1214,7 +1250,15 @@ function normalizeBasePricing(
         `charity model discounted ${key} price`,
       );
     }
-    normalizedPricing = { mode: 'per_token', userPricesMilli, discountedUserPricesMilli };
+    normalizedPricing = {
+      mode: 'per_token',
+      userPricesMilli,
+      discountedUserPricesMilli,
+      currentUserPricesMilli: normalizeCapabilityTokenPrices(
+        pricing.current_user_prices_milli,
+        'current token prices',
+      ),
+    };
   } else {
     invalid('charity model pricing mode');
   }

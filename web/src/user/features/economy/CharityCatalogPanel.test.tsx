@@ -17,12 +17,18 @@ function catalogModel(
   overrides: Record<string, unknown> = {},
 ) {
   return {
+    recurring_discount: { enabled: false, time_zone: 'UTC', default_percent: 100, periods: [] },
+    effective_discount: { source: 'fixed', percent: 80, next_change_at: null },
+
     model_types: ['chat_completions', 'embeddings'],
     id,
     provider: 'provider',
     model: modelName,
     full_name: `[公益]provider/${modelName}`,
     pricing: {
+      current_user_price_milli: '2400',
+      current_user_prices_milli: null,
+
       mode: 'per_request',
       user_price_milli: '3000',
       discounted_user_price_milli: '2400',
@@ -180,7 +186,7 @@ describe('charity catalog panel', () => {
     expect(detail.querySelector('b')).toBeNull();
     const table = within(detail).getByRole('table', { name: 'Charity model prices' });
     expect(within(table).getByLabelText('Original price: 3')).toBeVisible();
-    expect(within(table).getByLabelText('Offer price: 2.4')).toBeVisible();
+    expect(within(table).getByLabelText('Current price: 2.4')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Copy Model name' })).toBeVisible();
   });
 

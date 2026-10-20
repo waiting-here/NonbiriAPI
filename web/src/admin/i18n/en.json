@@ -1201,7 +1201,6 @@
       "currentPrice": "Current user price",
       "discountFree": "Limited-time free",
       "discountPercent": "Limited-time {{percent}}% off",
-      "discountRemaining": "{{time}} remaining",
       "requestUnit": "Per request; final settlement is server-side.",
       "tokenUnit": "Per million tokens; four buckets are settled server-side."
     }

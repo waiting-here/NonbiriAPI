@@ -1,3 +1,4 @@
+import { usePriceRefresh } from '@shared/operations/usePriceRefresh';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   useMutation,
@@ -67,12 +68,20 @@ export async function economySessionRequest<T>(
 
 export function useCharityCapability(enabled = true) {
   const queryClient = useQueryClient();
-  return useQuery({
+  const query = useQuery({
     queryKey: economyKeys.charityCapability,
     queryFn: ({ signal }) => economySessionRequest(queryClient, () => getCharityCapability(signal)),
     enabled,
     staleTime: 15_000,
   });
+  usePriceRefresh(
+    query.data?.serverNow,
+    query.data?.models.map((model) => model.effectiveDiscount.next_change_at) ?? [],
+    query.dataUpdatedAt,
+    () => query.refetch({ throwOnError: true }),
+    enabled,
+  );
+  return query;
 }
 
 export function useDonation(id: string | undefined, enabled = true) {

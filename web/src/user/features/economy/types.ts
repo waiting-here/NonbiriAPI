@@ -1,3 +1,4 @@
+import type { RecurringDiscount, EffectiveDiscount } from '@shared/operations/recurringDiscount';
 import type { SmartBackoff } from '@shared/operations/smartBackoff';
 export type CharityCapabilityState =
   'feature_disabled' | 'no_models' | 'no_candidates' | 'available';
@@ -14,11 +15,13 @@ export type CharityBasePricing =
       mode: 'per_request';
       userPriceMilli: string;
       discountedUserPriceMilli: string;
+      currentUserPriceMilli: string;
     }
   | {
       mode: 'per_token';
       userPricesMilli: CharityCapabilityTokenPrices;
       discountedUserPricesMilli: CharityCapabilityTokenPrices;
+      currentUserPricesMilli: CharityCapabilityTokenPrices;
     };
 
 export type CharityCapabilityPricing = CharityBasePricing & {
@@ -42,6 +45,8 @@ export interface CharityCapabilityModel {
   fullName: string;
   pricing: CharityCapabilityPricing;
   discount: CharityCapabilityDiscount;
+  recurringDiscount: RecurringDiscount;
+  effectiveDiscount: EffectiveDiscount;
 }
 
 export interface CharityCapability {

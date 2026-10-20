@@ -16,7 +16,7 @@ function contextRows(pricing: CharityBasePricing, t: (key: string) => string): C
       {
         label: t('user.charity.requestPrice'),
         userMilli: pricing.userPriceMilli,
-        discountedUserMilli: pricing.discountedUserPriceMilli,
+        currentUserMilli: pricing.currentUserPriceMilli,
       },
     ];
   return (
@@ -29,6 +29,6 @@ function contextRows(pricing: CharityBasePricing, t: (key: string) => string): C
   ).map(([key, label]) => ({
     label: t(label),
     userMilli: pricing.userPricesMilli[key],
-    discountedUserMilli: pricing.discountedUserPricesMilli[key],
+    currentUserMilli: pricing.currentUserPricesMilli[key],
   }));
 }
