@@ -1,0 +1,30 @@
+.endpoint-policies .endpoint-policy-url {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.endpoint-policy-rule {
+  min-width: 0;
+  margin: 0;
+  padding: var(--nb-space-4);
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-md);
+}
+.endpoint-policy-rule legend {
+  padding-inline: var(--nb-space-2);
+  font-weight: var(--nb-font-weight-semibold);
+}
+.endpoint-policy-rule__fields {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) minmax(0, 2fr) minmax(10rem, 1fr);
+  gap: var(--nb-space-4);
+}
+.endpoint-policy-rule__actions {
+  margin-top: var(--nb-space-4);
+}
+@media (width < 48rem) {
+  .endpoint-policy-rule__fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
