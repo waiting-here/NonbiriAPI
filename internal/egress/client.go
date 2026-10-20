@@ -15,6 +15,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 	"github.com/waiting-here/NonbiriAPI/internal/headerfacts"
+	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
 
 const (
@@ -39,7 +40,8 @@ var (
 // finite defaults. Resolver and Dialer are dependency-injection points for
 // deterministic tests; production uses net.DefaultResolver and net.Dialer.
 type StackOptions struct {
-	AllowedOrigins []string
+	AllowedOrigins   []string
+	CloudflareRoutes []config.CloudflareRoute
 
 	RequestTimeout         time.Duration
 	DialTimeout            time.Duration
@@ -59,6 +61,7 @@ type StackOptions struct {
 type Stack struct {
 	policy *EgressPolicy
 	gate   *Gate
+	routes map[string]*cloudflareRoute
 
 	requestTimeout         time.Duration
 	responseHeaderTimeout  time.Duration
@@ -119,12 +122,18 @@ func NewStack(options StackOptions) (*Stack, error) {
 		}
 	}
 
+	routes, err := buildCloudflareRoutes(policy, options.CloudflareRoutes)
+	if err != nil {
+		return nil, err
+	}
+
 	gate, err := NewGate(options.Concurrency)
 	if err != nil {
 		return nil, err
 	}
 	return &Stack{
 		policy:                 policy,
+		routes:                 routes,
 		gate:                   gate,
 		requestTimeout:         options.RequestTimeout,
 		responseHeaderTimeout:  options.ResponseHeaderTimeout,
@@ -180,19 +189,27 @@ func (s *Stack) NewClient(baseURL string) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	_, origin, parsed, _, err := canonicalizeBaseURL(canonical, false)
+	key, origin, parsed, _, err := canonicalizeBaseURL(canonical, false)
 	if err != nil {
 		return nil, err
 	}
 
+	route := s.routes[key]
+	transportTarget := parsed
+	transportOrigin := origin
+	if route != nil {
+		transportTarget = route.gateway
+		transportOrigin, _ = canonicalRequestOrigin(route.gateway)
+	}
+
 	s.clientsMu.Lock()
-	httpClient := s.clients[origin]
+	httpClient := s.clients[transportOrigin]
 	if httpClient == nil {
 		transport := http.DefaultTransport.(*http.Transport).Clone()
 		// A process environment proxy would perform its own DNS lookup and
 		// bypass IP pinning, so protected egress is always direct.
 		transport.Proxy = nil
-		transport.DialContext = s.policy.dialContext(parsed.Scheme, parsed.Hostname(), parsed.Port())
+		transport.DialContext = s.policy.dialContext(transportTarget.Scheme, transportTarget.Hostname(), transportTarget.Port())
 		transport.DialTLSContext = nil
 		transport.ResponseHeaderTimeout = s.responseHeaderTimeout
 		transport.TLSHandshakeTimeout = s.tlsHandshakeTimeout
@@ -203,12 +220,14 @@ func (s *Stack) NewClient(baseURL string) (*Client, error) {
 				return ErrRedirectBlocked
 			},
 		}
-		s.clients[origin] = httpClient
+		s.clients[transportOrigin] = httpClient
 	}
 	s.clientsMu.Unlock()
 
 	return &Client{
 		baseURL:          canonical,
+		route:            route,
+		policy:           s.policy,
 		origin:           origin,
 		originScheme:     parsed.Scheme,
 		originHost:       parsed.Host,
@@ -232,6 +251,8 @@ func (s *Stack) CloseIdleConnections() {
 // Client performs requests through the shared policy and gate. Its underlying
 // http.Client and Transport are intentionally not exposed.
 type Client struct {
+	route            *cloudflareRoute
+	policy           *EgressPolicy
 	baseURL          string
 	origin           string
 	originScheme     string
@@ -251,7 +272,10 @@ func (c *Client) BaseURL() string { return c.baseURL }
 // whose decompressed body is bounded. The slots are released on request error,
 // body EOF, body Close, cancellation, or timeout. A response received before
 // an error retains its status and headers with its body already closed.
-func (c *Client) Do(req *http.Request) (*http.Response, error) {
+func (c *Client) Do(req *http.Request) (response *http.Response, resultErr error) {
+	if c.route != nil {
+		defer func() { resultErr = safeRouteError(resultErr) }()
+	}
 	if req == nil {
 		return nil, errors.New("egress request is nil")
 	}
@@ -311,6 +335,18 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	outbound.URL.Scheme = c.originScheme
 	outbound.URL.Host = c.originHost
 	outbound.Host = c.originHost
+	var secrets *routeSecrets
+	if c.route != nil {
+		secrets, err = c.route.prepare(outbound)
+		if err == nil {
+			_, err = c.policy.validateTarget(ctx, "tcp", c.route.source.Scheme, c.route.source.Hostname(), c.route.source.Port())
+		}
+		if err != nil {
+			permit.Release()
+			cancel()
+			return closeBodyOnError(err)
+		}
+	}
 	// Match Transport's automatic gzip negotiation while retaining the original
 	// response headers for diagnostics before its transparent decoding.
 	automaticGzip := preserveGzipHeaders(outbound, c.httpClient)
@@ -318,6 +354,12 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	// canonical origin and installed a DNS-pinning dialer; the checks above bind
 	// both URL and Host to that exact origin before the request is dispatched.
 	resp, err := c.httpClient.Do(outbound)
+	if secrets != nil && resp != nil {
+		resp.Request = safeRouteRequest(req, c.route.credentialHeader)
+		secrets.cleanHeaders(resp.Header)
+		secrets.cleanHeaders(resp.Trailer)
+		resp.Status = fmt.Sprintf("%d %s", resp.StatusCode, http.StatusText(resp.StatusCode))
+	}
 	headerfacts.CaptureResponse(ctx, resp)
 	if err != nil {
 		ctxErr := ctx.Err()
@@ -343,8 +385,23 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	if automaticGzip {
 		restoreAutomaticGzip(resp)
 	}
-	managed := newManagedResponseBody(resp.Body, c.maxResponseBytes, ctx, cancel, permit.Release)
+	limit := c.maxResponseBytes
+	limits := routeResponseLimits(req, limit)
+	if secrets != nil {
+		if routeResponseIsSSE(resp) {
+			limit = limits.StreamBytes
+		} else {
+			limit = limits.JSONBytes
+		}
+		if resp.StatusCode >= 300 {
+			limit = min(limit, upstreamerror.MaxRawBodyBytes)
+		}
+	}
+	managed := newManagedResponseBody(resp.Body, limit, ctx, cancel, permit.Release)
 	resp.Body = managed
+	if secrets != nil {
+		resp.Body = newRouteResponseBody(managed, resp, secrets, limits)
+	}
 	return resp, nil
 }
 

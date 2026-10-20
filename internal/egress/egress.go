@@ -616,53 +616,9 @@ func (p *EgressPolicy) dialContext(scheme, expectedHost, expectedPort string) fu
 			return nil, errors.New("unexpected outbound dial target")
 		}
 
-		var addresses []netip.Addr
-		if literal, parseErr := netip.ParseAddr(expectedHost); parseErr == nil {
-			addresses = []netip.Addr{literal.Unmap()}
-		} else {
-			addresses, err = p.resolver.LookupNetIP(ctx, "ip", expectedHost)
-			if err != nil {
-				if ctxErr := ctx.Err(); ctxErr != nil {
-					return nil, networkFailure(ctxErr)
-				}
-				return nil, networkFailure(newBoundedError("resolve outbound hostname", err))
-			}
-		}
-		addresses = normalizeAddresses(addresses)
-		if len(addresses) == 0 {
-			return nil, networkFailure(errors.New("outbound hostname resolved to no addresses"))
-		}
-
-		originAllowed := false
-		if _, ok := p.allowedOrigins[originKey(scheme, expectedHost, expectedPort)]; ok {
-			originAllowed = true
-		}
-		for _, addr := range addresses {
-			if p.blocked(addr) && !originAllowed {
-				return nil, errors.New("outbound hostname resolved to a blocked address")
-			}
-		}
-
-		portNumber64, parseErr := strconv.ParseUint(port, 10, 16)
-		if parseErr != nil || portNumber64 == 0 {
-			return nil, errors.New("invalid outbound dial port")
-		}
-		portNumber := uint16(portNumber64)
-		selfTarget := p.isSelfOrigin(scheme, expectedHost, expectedPort)
-		if !selfTarget {
-			for _, addr := range addresses {
-				if p.isSelfTarget(addr, portNumber) {
-					selfTarget = true
-					break
-				}
-			}
-		}
-		if selfTarget {
-			if err := p.refusalDelay(ctx); err != nil {
-				return nil, err
-			}
-			first := firstAddressForNetwork(addresses, network)
-			return nil, fakeConnectionRefused(network, first, int(portNumber))
+		addresses, err := p.validateTarget(ctx, network, scheme, expectedHost, expectedPort)
+		if err != nil {
+			return nil, err
 		}
 
 		var lastErr error
@@ -687,6 +643,62 @@ func (p *EgressPolicy) dialContext(scheme, expectedHost, expectedPort string) fu
 		}
 		return nil, networkFailure(newBoundedError("dial outbound hostname", lastErr))
 	}
+}
+
+// validateTarget also checks logical sources of deployment-routed requests,
+// without opening an unused connection to the original provider.
+func (p *EgressPolicy) validateTarget(ctx context.Context, network, scheme, expectedHost, expectedPort string) (addresses []netip.Addr, resultErr error) {
+	defer func() { resultErr = executionFailure(FailurePlatform, resultErr) }()
+	if literal, parseErr := netip.ParseAddr(expectedHost); parseErr == nil {
+		addresses = []netip.Addr{literal.Unmap()}
+	} else {
+		var err error
+		addresses, err = p.resolver.LookupNetIP(ctx, "ip", expectedHost)
+		if err != nil {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return nil, networkFailure(ctxErr)
+			}
+			return nil, networkFailure(newBoundedError("resolve outbound hostname", err))
+		}
+	}
+	addresses = normalizeAddresses(addresses)
+	if len(addresses) == 0 {
+		return nil, networkFailure(errors.New("outbound hostname resolved to no addresses"))
+	}
+
+	originAllowed := false
+	if _, ok := p.allowedOrigins[originKey(scheme, expectedHost, expectedPort)]; ok {
+		originAllowed = true
+	}
+	for _, addr := range addresses {
+		if p.blocked(addr) && !originAllowed {
+			return nil, errors.New("outbound hostname resolved to a blocked address")
+		}
+	}
+
+	portNumber64, parseErr := strconv.ParseUint(expectedPort, 10, 16)
+	if parseErr != nil || portNumber64 == 0 {
+		return nil, errors.New("invalid outbound dial port")
+	}
+	portNumber := uint16(portNumber64)
+	selfTarget := p.isSelfOrigin(scheme, expectedHost, expectedPort)
+	if !selfTarget {
+		for _, addr := range addresses {
+			if p.isSelfTarget(addr, portNumber) {
+				selfTarget = true
+				break
+			}
+		}
+	}
+	if selfTarget {
+		if err := p.refusalDelay(ctx); err != nil {
+			return nil, err
+		}
+		first := firstAddressForNetwork(addresses, network)
+		return nil, fakeConnectionRefused(network, first, int(portNumber))
+	}
+
+	return addresses, nil
 }
 
 func normalizeAddresses(addresses []netip.Addr) []netip.Addr {

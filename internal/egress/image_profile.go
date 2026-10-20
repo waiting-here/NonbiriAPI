@@ -41,17 +41,24 @@ func (s *Stack) NewImageClient(baseURL string, profile ImageProfile) (*Client, e
 	if err != nil {
 		return nil, err
 	}
-	_, origin, parsed, _, err := canonicalizeBaseURL(canonical, false)
+	key, origin, parsed, _, err := canonicalizeBaseURL(canonical, false)
 	if err != nil {
 		return nil, err
 	}
-	cacheKey := "image:" + strconv.Itoa(int(profile)) + ":" + origin
+	route := s.routes[key]
+	transportTarget := parsed
+	transportOrigin := origin
+	if route != nil {
+		transportTarget = route.gateway
+		transportOrigin, _ = canonicalRequestOrigin(route.gateway)
+	}
+	cacheKey := "image:" + strconv.Itoa(int(profile)) + ":" + transportOrigin
 	s.clientsMu.Lock()
 	httpClient := s.clients[cacheKey]
 	if httpClient == nil {
 		transport := http.DefaultTransport.(*http.Transport).Clone()
 		transport.Proxy = nil
-		transport.DialContext = s.policy.dialContext(parsed.Scheme, parsed.Hostname(), parsed.Port())
+		transport.DialContext = s.policy.dialContext(transportTarget.Scheme, transportTarget.Hostname(), transportTarget.Port())
 		transport.DialTLSContext = nil
 		transport.ResponseHeaderTimeout = timeout
 		transport.TLSHandshakeTimeout = s.tlsHandshakeTimeout
@@ -73,6 +80,6 @@ func (s *Stack) NewImageClient(baseURL string, profile ImageProfile) (*Client, e
 		s.clients[cacheKey] = httpClient
 	}
 	s.clientsMu.Unlock()
-	return &Client{baseURL: canonical, origin: origin, originScheme: parsed.Scheme, originHost: parsed.Host,
+	return &Client{route: route, policy: s.policy, baseURL: canonical, origin: origin, originScheme: parsed.Scheme, originHost: parsed.Host,
 		httpClient: httpClient, gate: s.gate, timeout: timeout, maxResponseBytes: maxBytes, disableReplay: true}, nil
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
+	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
 
@@ -99,6 +100,7 @@ func (d ModelDiscoverer) Discover(ctx context.Context, input connectorcontract.D
 	request.Header.Set("Authorization", "Bearer "+string(plaintext))
 	request.Header.Set("Accept", "application/json")
 	clear(plaintext)
+	request = egress.WithResponseLimits(request, egress.ResponseLimits{JSONBytes: MaxModelsBodyBytes})
 	response, err := client.Do(request)
 	request.Header.Del("Authorization")
 	if response != nil && response.Request != nil {

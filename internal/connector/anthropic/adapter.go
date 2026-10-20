@@ -285,6 +285,7 @@ func (a *Adapter) attempt(ctx context.Context, writer http.ResponseWriter, targe
 	httpRequest.Header.Set("X-Api-Key", string(target.credential.apiKey))
 	target.credential.clear()
 
+	httpRequest = egress.WithResponseLimits(httpRequest, egress.ResponseLimits{JSONBytes: a.maxJSONResponseBytes, StreamBytes: a.maxStreamBytes, LineBytes: a.maxSSELineBytes, EventBytes: a.maxSSEEventBytes})
 	response, err := client.Do(httpRequest)
 	if response != nil {
 		defer func() { result.UpstreamStatus = response.StatusCode }()
