@@ -66,7 +66,7 @@ func TestFishingRankingPrivacyAndStableOrder(t *testing.T) {
 	if _, err := fixture.database.Exec(`UPDATE users SET game_profile_public=1,guild_nick='Public Angler',guild_avatar_url='' WHERE id=?`, ids[1]); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fixture.database.Exec(`UPDATE users SET is_banned=1,banned_reason='test' WHERE id=?`, ids[2]); err != nil {
+	if _, err := fixture.database.Exec(`UPDATE users SET game_profile_public=1,is_banned=1,banned_reason='test' WHERE id=?`, ids[2]); err != nil {
 		t.Fatal(err)
 	}
 	board, err := fixture.service.FishingLeaderboard(context.Background(), ids[1], "single")
@@ -86,6 +86,57 @@ func TestFishingRankingPrivacyAndStableOrder(t *testing.T) {
 	wire, err := json.Marshal(public)
 	if err != nil || !bytes.Contains(wire, []byte(`"avatar_url":null`)) {
 		t.Fatalf("public null-avatar wire = %s, %v", wire, err)
+	}
+	seedAdminRanking(t, fixture)
+	for _, name := range []string{"single", "recent_single", "total"} {
+		board, err := fixture.service.FishingLeaderboard(context.Background(), ids[1], name)
+		if err != nil || len(board.Entries) != 3 || board.Me != nil {
+			t.Fatalf("%s administrator exclusion = (%#v,%v)", name, board, err)
+		}
+		me := ownLeaderboardRow(board)
+		if me == nil || me.Identity.Kind != "public" || me.Identity.DisplayName != "Public Angler" {
+			t.Fatalf("%s public identity = %#v", name, me)
+		}
+		for _, row := range board.Entries {
+			if !row.IsMe && (row.Identity.Kind != "anonymous" || row.Identity.AvatarURL != nil) {
+				t.Fatalf("%s banned identity leaked: %#v", name, row)
+			}
+		}
+	}
+}
+
+func seedAdminRanking(t *testing.T, fixture *gameFixture) {
+	t.Helper()
+	ctx := t.Context()
+	tx, err := fixture.database.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	record := batchRecord{ID: fixture.mustID("fb_"), UserID: fixture.adminID, Count: 1, CreatedAt: fixtureNow}
+	// Seed a historical zero-value batch without changing the immutable admin
+	// identity or authorizing an administrator to start a game.
+	if _, err := tx.ExecContext(ctx, `INSERT INTO game_fishing_batches(id,user_id,bait,count,unit_price_milli,entry_total_milli,payout_total_milli,operation_id,request_hash,state,ledger_rows_remaining,next_attempt_at,created_at)
+VALUES(?,?,'worm',1,0,0,0,?,zeroblob(32),'reserved',x'00000000000000000000000000000001',?,?)`, record.ID, record.UserID, fixture.mustID("op_"), fixtureNow, fixtureNow); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO game_fishing_outcomes(batch_id,ordinal,species_key,tier,size_cm,payout_milli) VALUES(?,0,'boot','junk',0,0)`, record.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := fixture.service.applyBest(ctx, tx, record, fixtureNow); err != nil {
+		t.Fatal(err)
+	}
+	if err := fixture.service.applyRankFact(ctx, tx, record, fixtureNow); err != nil {
+		t.Fatal(err)
+	}
+	if err := applyLengthFact(ctx, tx, record); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE game_fishing_batches SET state='committed',settled_at=?,next_attempt_at=NULL,ledger_rows_remaining=zeroblob(16) WHERE id=?`, fixtureNow, record.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
 	}
 }
 
