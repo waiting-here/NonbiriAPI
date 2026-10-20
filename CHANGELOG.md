@@ -39,7 +39,8 @@ does not upgrade an instance.
 - Reuse Lake Notes configuration and decoded state within a transaction and
   reuse canonical checkpoint bytes without changing save formats or economics.
   Restrict capacity checks to active casts so the existing partial index can
-  exclude terminal history.
+  exclude terminal history. Evaluate donated-key availability before expanding
+  its model IDs to avoid repeating key checks for every candidate.
   Compress header facts before persistence and decode them after the authorized
   read transaction.
 - Add anonymous connection-occupancy measurements for transactions, queries,
