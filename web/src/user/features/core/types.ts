@@ -511,9 +511,11 @@ export interface HomeAdapters {
 
 export type LifecycleIntent = 'export' | 'delete';
 
+export const ACCOUNT_EXPORT_VERSIONS = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22] as const;
+
 export interface AccountExportAttachment {
   blob: Blob;
-  schemaVersion: 11 | 12 | 13 | 14 | 15 | 16;
+  schemaVersion: (typeof ACCOUNT_EXPORT_VERSIONS)[number];
 }
 
 export type AccountAuthority = 'active' | 'deleted';

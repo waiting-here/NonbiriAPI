@@ -14,7 +14,7 @@ const cases = [
 ] as const;
 
 for (const scenario of cases) {
-  test(`new charity model disclosure retains inputs on ${scenario.station} at ${scenario.width}px ${scenario.theme}`, async ({
+  test(`new charity model workspace retains inputs on ${scenario.station} at ${scenario.width}px ${scenario.theme}`, async ({
     page,
   }) => {
     const consoleGuard = collectConsoleViolations(page);
@@ -42,7 +42,7 @@ for (const scenario of cases) {
       }
       if (
         request.method() === 'GET' &&
-        ['/donations', '/charity-models', '/donation-sources'].some(
+        ['/donations', '/charity-models', '/donation-sources', '/charity-price-templates'].some(
           (suffix) => url.pathname === root + suffix,
         )
       ) {
@@ -53,19 +53,22 @@ for (const scenario of cases) {
     });
     await page.goto(origin + (scenario.station === 'admin' ? '/charity' : '/steward?tab=charity'));
     await page.getByRole('tab', { name: /Charity models and/ }).click();
-    const summary = page.locator('.charity-model-editor > .nb-fold > summary');
-    const disclosure = page.locator('.charity-model-editor > .nb-fold');
+    await expect(page.getByLabel('Provider', { exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Create charity model', exact: true }).click();
+    await expect(
+      page.getByRole('heading', { name: 'Create charity model', exact: true }),
+    ).toBeVisible();
     const provider = page.getByLabel('Provider', { exact: true });
     const model = page.getByLabel('Model', { exact: true });
     const strategy = page.getByRole('combobox', { name: /Routing strategy/ });
-    await expect(disclosure).toHaveAttribute('open');
     await expect(strategy).toHaveValue('cache_balanced');
     await provider.fill('draft-prefix');
     await model.fill('draft-model');
     await strategy.selectOption('ordered');
-    await summary.click();
-    await expect(disclosure).not.toHaveAttribute('open');
-    await expect(provider).toBeHidden();
+    const reference = page.getByRole('button', { name: 'Choose a template or reference' });
+    await reference.focus();
+    await reference.press('Enter');
+    await expect(page.getByRole('heading', { name: 'Price reference', exact: true })).toBeVisible();
     expect(submissions).toBe(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
@@ -74,17 +77,12 @@ for (const scenario of cases) {
     const filename = `${scenario.station}-new-charity-model-${scenario.width}-${scenario.theme}`;
     if (evidence) {
       await mkdir(evidence, { recursive: true });
-      await page.screenshot({ path: resolve(evidence, filename + '-collapsed.png') });
+      await page.screenshot({ path: resolve(evidence, filename + '-reference.png') });
     }
-    await summary.focus();
-    await summary.press('Enter');
-    await expect(disclosure).toHaveAttribute('open');
-    await expect(provider).toHaveValue('draft-prefix');
-    await expect(model).toHaveValue('draft-model');
-    await expect(strategy).toHaveValue('ordered');
-    await summary.press('Space');
-    await expect(disclosure).not.toHaveAttribute('open');
-    await summary.press('Enter');
+    const returnToDraft = page.getByRole('button', { name: 'Return to current price draft' });
+    await returnToDraft.focus();
+    await returnToDraft.press('Enter');
+    await expect(page.getByRole('heading', { name: 'Price reference', exact: true })).toBeHidden();
     await expect(provider).toHaveValue('draft-prefix');
     await expect(model).toHaveValue('draft-model');
     await expect(strategy).toHaveValue('ordered');
@@ -95,10 +93,18 @@ for (const scenario of cases) {
     );
     if (evidence) {
       await page.screenshot({
-        path: resolve(evidence, filename + '-expanded.png'),
+        path: resolve(evidence, filename + '-draft.png'),
         fullPage: true,
       });
     }
+    await page.getByRole('button', { name: 'Return to list', exact: true }).click();
+    const leave = page.getByRole('alertdialog', { name: 'Leave this page?' });
+    await expect(leave).toBeVisible();
+    await leave.getByRole('button', { name: 'Stay here' }).click();
+    await expect(provider).toHaveValue('draft-prefix');
+    await page.getByRole('button', { name: 'Return to list', exact: true }).click();
+    await leave.getByRole('button', { name: 'Leave page' }).click();
+    await expect(provider).toHaveCount(0);
     consoleGuard.assertNone();
   });
 }

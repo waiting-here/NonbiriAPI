@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { useDetailNavigation } from './useDetailNavigation';
 
@@ -11,11 +11,13 @@ function NavigationProbe({
   ready: boolean;
   showTrigger?: boolean;
 }) {
-  const { listRef, detailRef } = useDetailNavigation(selection, ready);
+  const { listRef, detailRef, remember } = useDetailNavigation(selection, ready);
   return (
     <div ref={listRef} tabIndex={-1} data-testid="list">
       {showTrigger ? (
-        <button type="button">Open</button>
+        <button id="navigation-trigger" type="button" onClick={remember}>
+          Open
+        </button>
       ) : null}
       <input aria-label="Other focus target" data-testid="other" />
       {selection ? (
@@ -28,6 +30,21 @@ function NavigationProbe({
 }
 
 describe('useDetailNavigation', () => {
+  it('restores the same row trigger after a separate editor unmounts and remounts the list', async () => {
+    const view = render(<NavigationProbe selection="" ready />);
+    const original = screen.getByRole('button', { name: 'Open' });
+    original.focus();
+    fireEvent.click(original);
+    view.rerender(<NavigationProbe selection="selected" ready showTrigger={false} />);
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('detail')));
+    expect(original.isConnected).toBe(false);
+
+    view.rerender(<NavigationProbe selection="" ready />);
+    const returned = screen.getByRole('button', { name: 'Open' });
+    expect(returned).not.toBe(original);
+    await waitFor(() => expect(document.activeElement).toBe(returned));
+  });
+
   it('waits for a stable layout and does not recapture later renders', async () => {
     const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
     const scrollIntoView = vi.fn();
@@ -108,15 +125,11 @@ describe('useDetailNavigation', () => {
       const view = render(<NavigationProbe selection="" ready />);
       screen.getByRole('button', { name: 'Open' }).focus();
       view.rerender(<NavigationProbe selection="selected" ready={false} />);
-      view.rerender(
-        <NavigationProbe selection="selected" ready={false} showTrigger={false} />,
-      );
+      view.rerender(<NavigationProbe selection="selected" ready={false} showTrigger={false} />);
       document.body.focus();
       expect(document.activeElement).toBe(document.body);
 
-      view.rerender(
-        <NavigationProbe selection="selected" ready showTrigger={false} />,
-      );
+      view.rerender(<NavigationProbe selection="selected" ready showTrigger={false} />);
       const detail = await screen.findByTestId('detail');
       await waitFor(() => expect(document.activeElement).toBe(detail));
       expect(scrollIntoView).toHaveBeenCalledTimes(1);

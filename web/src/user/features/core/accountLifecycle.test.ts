@@ -265,12 +265,13 @@ describe('production account lifecycle adapter', () => {
     fetchMock
       .mockResolvedValueOnce(exportResponse({ ...exportDocument(), schema_version: '11' }))
       .mockResolvedValueOnce(exportResponse({ ...exportDocument(), schema_version: 4 }))
+      .mockResolvedValueOnce(exportResponse({ ...exportDocument(), schema_version: 23 }))
       .mockResolvedValueOnce(
         exportResponse(exportDocument(), { 'Content-Length': String(16 * 1024 * 1024 + 1) }),
       );
     vi.stubGlobal('fetch', fetchMock);
 
-    for (let index = 0; index < 3; index += 1) {
+    for (let index = 0; index < 4; index += 1) {
       await expect(
         productionAccountLifecycleAdapter.exportAccount({
           accountId: '1',
@@ -278,10 +279,10 @@ describe('production account lifecycle adapter', () => {
         }),
       ).rejects.toMatchObject({ code: 'invalid_response' });
     }
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
-  it.each([12, 13, 14, 15, 16])(
+  it.each([12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22])(
     'downloads a v%s attachment and rejects a version mismatch in its filename',
     async (version) => {
       const document = {
