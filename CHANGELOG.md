@@ -29,6 +29,8 @@ Each version entry describes its source and compatibility boundary; a release ta
   area with separate deadlines, including when another restriction disables a key.
 - Public pricing adds current payable prices and the next percentage change.
   Accepted requests retain their price across schedule changes and retries.
+- Fishing leaderboard snapshots use the existing read pool so ranking queries
+  no longer occupy the write connection. Ordering, privacy and expiry stay the same.
 
 ### Compatibility
 
