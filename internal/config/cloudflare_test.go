@@ -17,7 +17,7 @@ func TestCloudflareRouteConfiguration(t *testing.T) {
 		}
 	}
 	routes, err := ParseCloudflareRoutes(valid, lookup)
-	if err != nil || len(routes) != 1 || routes[0].CredentialHeader != "X-Api-Key" || routes[0].GatewayToken() != "private-gateway-token" {
+	if err != nil || len(routes) != 1 || routes[0].CredentialHeader != "X-Api-Key" || routes[0].GatewayToken() != "private-gateway-token" || routes[0].RetainCredentialHeader {
 		t.Fatal(routes, err)
 	}
 	data, _ := json.Marshal(routes)
@@ -48,6 +48,38 @@ func TestCloudflareRouteConfiguration(t *testing.T) {
 		if _, err := ParseCloudflareRoutes(valid, func(string) (string, bool) { return token, true }); err == nil {
 			t.Fatal("invalid token accepted")
 		}
+	}
+}
+
+func TestCloudflareRetainCredentialHeaderConfiguration(t *testing.T) {
+	const base = `[{"source_base_url":"https://provider.example/v1","gateway_base_url":"https://gateway.example/provider/v1","token_env":"GATEWAY_TOKEN","credential_header":"x-api-key"%s}]`
+	const query = `,"credential_query_parameter":"key"`
+	for _, tc := range []struct {
+		name, fields   string
+		retain, reject bool
+	}{
+		{"default without query", "", false, false},
+		{"explicit false", query + `,"retain_credential_header":false`, false, false},
+		{"retain", query + `,"retain_credential_header":true`, true, false},
+		{"false without query", `,"retain_credential_header":false`, false, false},
+		{"true without query", `,"retain_credential_header":true`, false, true},
+		{"true with empty query", `,"credential_query_parameter":"","retain_credential_header":true`, false, true},
+		{"string", query + `,"retain_credential_header":"true"`, false, true},
+		{"number", query + `,"retain_credential_header":1`, false, true},
+		{"null", query + `,"retain_credential_header":null`, false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			routes, err := ParseCloudflareRoutes(fmt.Sprintf(base, tc.fields), func(string) (string, bool) { return "private-gateway-token", true })
+			if tc.reject {
+				if err == nil {
+					t.Fatal("invalid retention setting accepted")
+				}
+				return
+			}
+			if err != nil || len(routes) != 1 || routes[0].RetainCredentialHeader != tc.retain {
+				t.Fatal("retention setting not loaded", err)
+			}
+		})
 	}
 }
 

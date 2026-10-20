@@ -15,6 +15,7 @@ type cloudflareRoute struct {
 	source, gateway                          *url.URL
 	token, credentialHeader, credentialQuery string
 	gatewayBaseURL                           string
+	retainCredentialHeader                   bool
 }
 
 func (*cloudflareRoute) String() string     { return "[private Cloudflare route]" }
@@ -54,7 +55,7 @@ func buildCloudflareRoutes(policy *EgressPolicy, entries []config.CloudflareRout
 		if _, exists := routes[key]; exists {
 			return nil, fmt.Errorf("duplicate Cloudflare route source at entry %d", i+1)
 		}
-		routes[key] = &cloudflareRoute{source: source, gateway: gateway, token: entry.GatewayToken(), credentialHeader: entry.CredentialHeader, credentialQuery: entry.CredentialQueryParameter, gatewayBaseURL: entry.GatewayBaseURL}
+		routes[key] = &cloudflareRoute{source: source, gateway: gateway, token: entry.GatewayToken(), credentialHeader: entry.CredentialHeader, credentialQuery: entry.CredentialQueryParameter, gatewayBaseURL: entry.GatewayBaseURL, retainCredentialHeader: entry.RetainCredentialHeader}
 	}
 	return routes, nil
 }
@@ -124,9 +125,11 @@ func (r *cloudflareRoute) prepare(outbound *http.Request) (*routeSecrets, error)
 			gateway.RawQuery += "&"
 		}
 		gateway.RawQuery += url.QueryEscape(r.credentialQuery) + "=" + url.QueryEscape(credential)
-		for name := range outbound.Header {
-			if strings.EqualFold(name, r.credentialHeader) {
-				delete(outbound.Header, name)
+		if !r.retainCredentialHeader {
+			for name := range outbound.Header {
+				if strings.EqualFold(name, r.credentialHeader) {
+					delete(outbound.Header, name)
+				}
 			}
 		}
 	}

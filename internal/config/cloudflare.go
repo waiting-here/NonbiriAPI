@@ -23,6 +23,7 @@ type CloudflareRoute struct {
 	TokenEnv                 string `json:"token_env"`
 	CredentialHeader         string `json:"credential_header"`
 	CredentialQueryParameter string `json:"credential_query_parameter,omitempty"`
+	RetainCredentialHeader   bool   `json:"retain_credential_header,omitempty"`
 	token                    string
 }
 
@@ -49,15 +50,29 @@ func ParseCloudflareRoutes(raw string, lookup func(string) (string, bool)) ([]Cl
 	if strictjson.ValidateObject(wrapped) != nil {
 		return nil, errors.New("routes must be an unambiguous JSON array")
 	}
-	var routes []CloudflareRoute
+	var entries []struct {
+		CloudflareRoute
+		RetainCredentialHeader json.RawMessage `json:"retain_credential_header"`
+	}
 	decoder := json.NewDecoder(strings.NewReader(raw))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&routes) != nil || routes == nil || len(routes) > MaxCloudflareRoutes {
+	if decoder.Decode(&entries) != nil || entries == nil || len(entries) > MaxCloudflareRoutes {
 		return nil, errors.New("routes must be an array of at most 32 route objects with known fields")
 	}
-	for i := range routes {
+	routes := make([]CloudflareRoute, len(entries))
+	for i, entry := range entries {
+		routes[i] = entry.CloudflareRoute
 		route := &routes[i]
 		fail := func(reason string) ([]CloudflareRoute, error) { return nil, fmt.Errorf("route %d: %s", i+1, reason) }
+		if len(entry.RetainCredentialHeader) != 0 {
+			switch string(entry.RetainCredentialHeader) {
+			case "true":
+				route.RetainCredentialHeader = true
+			case "false":
+			default:
+				return fail("retain_credential_header must be a boolean")
+			}
+		}
 		for _, field := range []struct {
 			value   string
 			gateway bool
@@ -82,6 +97,9 @@ func ParseCloudflareRoutes(raw string, lookup func(string) (string, bool)) ([]Cl
 		route.CredentialHeader = http.CanonicalHeaderKey(route.CredentialHeader)
 		if route.CredentialQueryParameter != "" && (!validHTTPToken(route.CredentialQueryParameter) || len(route.CredentialQueryParameter) > 128) {
 			return fail("credential_query_parameter is invalid")
+		}
+		if route.RetainCredentialHeader && route.CredentialQueryParameter == "" {
+			return fail("retain_credential_header requires credential_query_parameter")
 		}
 		route.token = token
 	}

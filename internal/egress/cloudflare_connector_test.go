@@ -24,14 +24,26 @@ import (
 )
 
 func TestCloudflareGeminiDiscoveryGenerationAndSSE(t *testing.T) {
+	for _, retain := range []bool{false, true} {
+		t.Run(fmt.Sprintf("retain=%t", retain), func(t *testing.T) {
+			testCloudflareGeminiDiscoveryGenerationAndSSE(t, retain)
+		})
+	}
+}
+
+func testCloudflareGeminiDiscoveryGenerationAndSSE(t *testing.T, retain bool) {
 	const key = "connector-provider-key-private"
 	const token = "connector-gateway-token-private"
 	const source = "https://native-provider.example/v1beta"
 	var calls atomic.Int32
 	var mode string
+	wantHeader := ""
+	if retain {
+		wantHeader = key
+	}
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
-		if r.URL.Query().Get("key") != key || r.Header.Get("X-Goog-Api-Key") != "" || r.Header.Get("Cf-Aig-Authorization") != "Bearer "+token || r.Header.Get("Cf-Aig-No-Wholesale") != "true" {
+		if r.URL.Query().Get("key") != key || r.Header.Get("X-Goog-Api-Key") != wantHeader || r.Header.Get("Cf-Aig-Authorization") != "Bearer "+token || r.Header.Get("Cf-Aig-No-Wholesale") != "true" {
 			t.Error("connector authentication not adapted")
 		}
 		if !strings.HasPrefix(r.URL.Path, "/gateway/v1beta/models") {
@@ -75,7 +87,11 @@ func TestCloudflareGeminiDiscoveryGenerationAndSSE(t *testing.T) {
 	fixture.TLSClientConfig = server.Client().Transport.(*http.Transport).TLSClientConfig.Clone()
 	http.DefaultTransport = fixture
 	defer func() { http.DefaultTransport = previous; fixture.CloseIdleConnections() }()
-	raw, _ := json.Marshal([]map[string]string{{"source_base_url": source, "gateway_base_url": server.URL + "/gateway/v1beta", "token_env": "TOKEN", "credential_header": "X-Goog-Api-Key", "credential_query_parameter": "key"}})
+	entry := map[string]any{"source_base_url": source, "gateway_base_url": server.URL + "/gateway/v1beta", "token_env": "TOKEN", "credential_header": "X-Goog-Api-Key", "credential_query_parameter": "key"}
+	if retain {
+		entry["retain_credential_header"] = true
+	}
+	raw, _ := json.Marshal([]map[string]any{entry})
 	routes, err := config.ParseCloudflareRoutes(string(raw), func(string) (string, bool) { return token, true })
 	if err != nil {
 		t.Fatal(err)
