@@ -1,6 +1,6 @@
 # Data Lifecycle Checklist (Generation 2 export / delete / retention / privacy)
 
-> Status: **v1.0.5 development contract** — this checklist describes the
+> Status: **v1.0.5 contract** — this checklist describes the
 > release's export, deletion, retention, and privacy boundary. Source publication does
 > not itself upgrade an instance; deployment status is specific to each operator.
 >

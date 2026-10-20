@@ -2,7 +2,7 @@
 
 ## Supported databases
 
-The v1.0.5 development application accepts a new database or the current schema **25**.
+The v1.0.5 application accepts a new database or the current schema **25**.
 Existing exact schema 16–24 databases require the separate one-time converter.
 The normal service contains only current DDL and validation; it does not import
 or embed historical schemas or conversion code. Later v1.x releases must provide

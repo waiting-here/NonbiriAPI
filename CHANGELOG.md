@@ -4,7 +4,7 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
-## Unreleased
+## 1.0.5 — 2026-10-20
 
 ### Added
 
@@ -18,6 +18,10 @@ Each version entry describes its source and compatibility boundary; a release ta
 - A dedicated administrator price-template workspace with full pricing fields,
   search, state filters, numbered pagination, creation, editing and deletion.
   Model forms retain template selection and independent editable snapshots.
+- Direct links from management request logs to the corresponding charity model
+  and each attempt's donated-key settings, preserving the return filters and page.
+  Missing historical resource relations remain unavailable instead of being
+  inferred from names or endpoint snapshots.
 
 ### Changed
 
