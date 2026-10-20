@@ -9,7 +9,17 @@ import {
   PageHeader,
   StatusBadge,
 } from '@shared/components/States';
-import { DataTable, FilterBar, Fold, MoreMenu, Tabs } from '@shared/components/ui';
+import {
+  DataTable,
+  FilterBar,
+  Fold,
+  MoreMenu,
+  Tabs,
+  Note,
+  Button,
+  OutcomeNote,
+  Field,
+} from '@shared/components/ui';
 import {
   charityKeys,
   getManagedDonation,
@@ -47,6 +57,8 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { useRetainedOperation } from '../../admin/features/operations/useRetainedOperation';
 import { ModelsPanel } from './charity/CharityModels';
+import { PriceTemplateManagement } from './charity/PriceTemplateManagement';
+import { DraftLeaveScope } from './charity/DraftLeaveScope';
 import {
   charityCopyKey,
   charityStateKey,
@@ -74,7 +86,6 @@ import { DonationBindingWorkflow } from './charity/DonationBindingWorkflow';
 import './charity/workflow.css';
 import { donationHandlingStateKey } from './donationHandlingCopy';
 import { DonationKeyModels } from './DonationKeyModels';
-import { Button } from './ui/Button';
 import { stationSessionWrite } from '@shared/charityManagement';
 import type { CharityPickerKeyManagerProps } from './CharityBindingPicker';
 import { FailurePolicyControl } from './FailurePolicyControl';
@@ -691,6 +702,7 @@ interface DonationDetailProps {
   busy: boolean;
   refresh: () => Promise<unknown>;
   onCapabilityLoss?: () => void;
+  onReviewed?: (result: ManagedDonation) => void;
 }
 
 function DonationDetail(props: DonationDetailProps) {
@@ -720,6 +732,7 @@ function DonationReview({
   refresh,
   onCapabilityLoss,
   onPendingChange,
+  onReviewed,
 }: DonationDetailProps & {
   onPendingChange: (pending: boolean) => void;
 }) {
@@ -768,6 +781,9 @@ function DonationReview({
     onPendingChange(review.isPending);
     return () => onPendingChange(false);
   }, [onPendingChange, review.isPending]);
+  useEffect(() => {
+    if (onReviewed && review.outcome === 'confirmed' && review.data) onReviewed(review.data);
+  }, [onReviewed, review.outcome, review.data]);
   const owner = item.owner;
   let validationError:
     KeySettingsValidation | 'reviewReason' | 'completeSettings' | 'reviewMaterial' | null = null;
@@ -805,17 +821,34 @@ function DonationReview({
       </Card>
     );
   }
+  if (onReviewed && review.isSuccess)
+    return (
+      <Card>
+        <Note tone="ok">
+          {t('common.pendingReviews.saved', {
+            status: t(charityStatusKey(role, review.data?.status ?? 'pending')),
+          })}
+        </Note>
+        {review.refreshError ? (
+          <OutcomeNote
+            outcome={{ kind: 'savedRefreshFailed', recheck: () => void review.refresh() }}
+          />
+        ) : null}
+      </Card>
+    );
   return (
     <fieldset className="ops-stack ops-unframed" disabled={busy || review.isPending}>
       <Card>
         <h3>{t('common.donationReview.title')}</h3>
-        <DonationHandlingControl
-          donationID={item.id}
-          role={role}
-          handling={item.handling}
-          refresh={refresh}
-          onCapabilityLoss={onCapabilityLoss}
-        />
+        {!onReviewed ? (
+          <DonationHandlingControl
+            donationID={item.id}
+            role={role}
+            handling={item.handling}
+            refresh={refresh}
+            onCapabilityLoss={onCapabilityLoss}
+          />
+        ) : null}
         <div className="ops-toolbar">
           <StatusBadge
             active={item.status === 'approved'}
@@ -1852,6 +1885,14 @@ function DonationsPanel({
 const workflowNavigationSubjects = new WeakMap<ReturnType<typeof useQueryClient>, string>();
 const workflowSearchParameters = [
   'charity_section',
+  'price_template',
+  'pending_review_q',
+  'pending_reviews_page',
+  'pending_reviews_page_size',
+  'template_q',
+  'template_state',
+  'templates_page',
+  'templates_page_size',
   'donation_id',
   'donation_key',
   'donation_from',
@@ -1949,18 +1990,39 @@ function CharityManagementAccount({
   const [params, setParams] = useSearchState();
   const rawSection = oneParam(params, 'charity_section');
   const section = trainee
-    ? rawSection === 'handling'
-      ? 'handling'
+    ? rawSection === 'handling' || rawSection === 'donations'
+      ? rawSection
       : 'models'
-    : rawSection === 'models' || rawSection === 'sources'
+    : rawSection === 'models' ||
+        rawSection === 'sources' ||
+        (frame === 'admin' && rawSection === 'templates')
       ? rawSection
       : 'donations';
-  const setSection = (nextSection: 'donations' | 'models' | 'sources' | 'handling') =>
+  const setSection = (nextSection: 'donations' | 'models' | 'sources' | 'handling' | 'templates') =>
     setParams((current) => {
       const next = new URLSearchParams(current);
       next.set('charity_section', nextSection);
       return next;
     });
+  const [modelsVisited, setModelsVisited] = useState(section === 'models');
+  if (section === 'models' && !modelsVisited) setModelsVisited(true);
+  const keepModelDraft = frame === 'admin' && section === 'templates' && modelsVisited;
+  const workspace = useRef<HTMLDivElement>(null);
+  const revealSelectedTab = useCallback(() => {
+    const tab = workspace.current?.querySelector<HTMLElement>(`#charity-tab-${section}`);
+    const row = tab?.parentElement;
+    if (!tab || !row) return;
+    const selected = tab.getBoundingClientRect();
+    const viewport = row.getBoundingClientRect();
+    const offset =
+      selected.left < viewport.left
+        ? selected.left - viewport.left
+        : selected.right > viewport.right
+          ? selected.right - viewport.right
+          : 0;
+    if (offset) row.scrollBy({ left: offset, behavior: 'instant' });
+  }, [section]);
+  useEffect(revealSelectedTab, [revealSelectedTab]);
   const [capabilityLost, setCapabilityLost] = useState(false);
   const clearCapability = useCallback(() => {
     setCapabilityLost(true);
@@ -1975,94 +2037,123 @@ function CharityManagementAccount({
       </Card>
     );
   return (
-    <div className="ops-stack charity-management">
-      <Tabs
-        label={t('common.operations.charity.sectionsLabel')}
-        value={section}
-        onChange={setSection}
-        tabs={(
-          [
-            {
-              value: 'handling',
-              label: t('common.workflow.approvedDonations'),
-              id: 'charity-tab-handling',
-              panelId: 'charity-panel',
-            },
-            {
-              value: 'donations',
-              label: t(
-                frame === 'admin' ? 'admin.charity.donationsTitle' : 'user.steward.donationsTitle',
-              ),
-              id: 'charity-tab-donations',
-              panelId: 'charity-panel',
-            },
-            {
-              value: 'models',
-              label: t(
-                frame === 'admin' ? 'admin.charity.modelsTitle' : 'user.steward.modelsTitle',
-              ),
-              id: 'charity-tab-models',
-              panelId: 'charity-panel',
-            },
-            {
-              value: 'sources',
-              label: t('common.operations.charity.sourceGroups'),
-              id: 'charity-tab-sources',
-              panelId: 'charity-panel',
-            },
-          ] as const
-        ).filter((tab) =>
-          trainee ? tab.value === 'models' || tab.value === 'handling' : tab.value !== 'handling',
-        )}
-      />
-      <div id="charity-panel" role="tabpanel" aria-labelledby={`charity-tab-${section}`}>
-        {section === 'handling' ? (
-          <DonationHandlingPanel accountId={accountId} onCapabilityLoss={clearCapability} />
-        ) : section === 'donations' ? (
-          <DonationsPanel role={frame} accountId={accountId} onCapabilityLoss={clearCapability} />
-        ) : section === 'models' ? (
-          <ModelsPanel
-            renderKeyManager={(props) => (
-              <PickerKeyManager
-                key={`${props.modelID}:${props.donationID}:${props.keyID}`}
-                {...props}
+    <DraftLeaveScope onStay={() => requestAnimationFrame(revealSelectedTab)}>
+      <div className="ops-stack charity-management" ref={workspace}>
+        <Tabs
+          label={t('common.operations.charity.sectionsLabel')}
+          value={section}
+          onChange={setSection}
+          tabs={(
+            [
+              {
+                value: 'handling',
+                label: t('common.workflow.approvedDonations'),
+                id: 'charity-tab-handling',
+                panelId: 'charity-panel',
+              },
+              {
+                value: 'donations',
+                label: t(
+                  trainee
+                    ? 'common.pendingReviews.title'
+                    : frame === 'admin'
+                      ? 'admin.charity.donationsTitle'
+                      : 'user.steward.donationsTitle',
+                ),
+                id: 'charity-tab-donations',
+                panelId: 'charity-panel',
+              },
+              {
+                value: 'models',
+                label: t(
+                  frame === 'admin' ? 'admin.charity.modelsTitle' : 'user.steward.modelsTitle',
+                ),
+                id: 'charity-tab-models',
+                panelId: 'charity-panel',
+              },
+              {
+                value: 'sources',
+                label: t('common.operations.charity.sourceGroups'),
+                id: 'charity-tab-sources',
+                panelId: 'charity-panel',
+              },
+              {
+                value: 'templates',
+                label: t('common.workflow.templates'),
+                id: 'charity-tab-templates',
+                panelId: 'charity-panel',
+              },
+            ] as const
+          ).filter((tab) =>
+            trainee
+              ? tab.value === 'models' || tab.value === 'handling' || tab.value === 'donations'
+              : tab.value !== 'handling' && (frame === 'admin' || tab.value !== 'templates'),
+          )}
+        />
+        <div id="charity-panel" role="tabpanel" aria-labelledby={`charity-tab-${section}`}>
+          {section === 'handling' ? (
+            <DonationHandlingPanel accountId={accountId} onCapabilityLoss={clearCapability} />
+          ) : section === 'donations' ? (
+            trainee ? (
+              <PendingDonationReviews accountId={accountId} onCapabilityLoss={clearCapability} />
+            ) : (
+              <DonationsPanel
                 role={frame}
                 accountId={accountId}
                 onCapabilityLoss={clearCapability}
               />
-            )}
-            renderScopedKeys={(props) => <ScopedKeyBrowser key={props.modelID} {...props} />}
-            role={frame}
-            accountId={accountId}
-            onCapabilityLoss={clearCapability}
-            trainee={trainee}
-          />
-        ) : (
-          <CharitySourceBrowser
-            role={frame}
-            accountId={accountId}
-            enabled
-            onCapabilityLoss={clearCapability}
-            onOpenDonation={(donationId, keyId) =>
-              setParams((current) => {
-                const next = new URLSearchParams(current);
-                next.set('charity_section', 'donations');
-                next.set('donation_id', donationId);
-                next.set('donation_from', 'sources');
-                for (const name of [
-                  'donation_key',
-                  'donation_keys_page',
-                  'donation_keys_page_size',
-                ])
-                  next.delete(name);
-                if (keyId) next.set('donation_key', keyId);
-                return next;
-              })
-            }
-          />
-        )}
+            )
+          ) : null}
+          <div hidden={section !== 'models'}>
+            {section === 'models' || keepModelDraft ? (
+              <ModelsPanel
+                renderKeyManager={(props) => (
+                  <PickerKeyManager
+                    key={`${props.modelID}:${props.donationID}:${props.keyID}`}
+                    {...props}
+                    role={frame}
+                    accountId={accountId}
+                    onCapabilityLoss={clearCapability}
+                  />
+                )}
+                renderScopedKeys={(props) => <ScopedKeyBrowser key={props.modelID} {...props} />}
+                role={frame}
+                accountId={accountId}
+                onCapabilityLoss={clearCapability}
+                trainee={trainee}
+              />
+            ) : null}
+          </div>
+          {section === 'templates' && frame === 'admin' ? (
+            <PriceTemplateManagement accountId={accountId} onCapabilityLoss={clearCapability} />
+          ) : null}
+          {section === 'sources' ? (
+            <CharitySourceBrowser
+              role={frame}
+              accountId={accountId}
+              enabled
+              onCapabilityLoss={clearCapability}
+              onOpenDonation={(donationId, keyId) =>
+                setParams((current) => {
+                  const next = new URLSearchParams(current);
+                  next.set('charity_section', 'donations');
+                  next.set('donation_id', donationId);
+                  next.set('donation_from', 'sources');
+                  for (const name of [
+                    'donation_key',
+                    'donation_keys_page',
+                    'donation_keys_page_size',
+                  ])
+                    next.delete(name);
+                  if (keyId) next.set('donation_key', keyId);
+                  return next;
+                })
+              }
+            />
+          ) : null}
+        </div>
       </div>
-    </div>
+    </DraftLeaveScope>
   );
 }
 
@@ -2320,6 +2411,225 @@ function PickerKeyManager({
             onCapabilityLoss={onCapabilityLoss}
           />
         </Card>
+      )}
+    </div>
+  );
+}
+
+function PendingDonationReviews({
+  accountId,
+  onCapabilityLoss,
+}: {
+  accountId: string;
+  onCapabilityLoss?: () => void;
+}) {
+  const { t } = useTranslation();
+  const client = useQueryClient();
+  const [params, setParams] = useSearchState();
+  const selected = selectedID(params, 'donation_id');
+  const rawQuery = oneParam(params, 'pending_review_q');
+  const q = validManagementSearch(rawQuery) ? rawQuery : '';
+  const [search, setSearch] = useState({ q, text: q });
+  const searchText = search.q === q ? search.text : q;
+  const [receipt, setReceipt] = useState<ManagedDonation | null>(null);
+  const [reviewPending, setReviewPending] = useState(false);
+  const pager = useUrlPagePager({
+    station: 'user',
+    listType: 'pending-donation-reviews',
+    scopeKey: accountId,
+    pageParam: 'pending_reviews_page',
+    pageSizeParam: 'pending_reviews_page_size',
+  });
+  const listRoot = [...charityKeys.root('steward'), 'pending-reviews', accountId] as const;
+  const list = useQuery({
+    queryKey: [...listRoot, q, pager.page, pager.pageSize],
+    queryFn: ({ signal }) =>
+      getManagedDonationsPage(
+        'steward',
+        { status: 'pending', q },
+        pager.page,
+        pager.pageSize,
+        signal,
+      ),
+    retry: false,
+  });
+  const detail = useQuery({
+    queryKey: [...charityKeys.root('steward'), 'pending-review', accountId, selected],
+    queryFn: ({ signal }) => getManagedDonation('steward', selected, signal),
+    enabled: Boolean(selected),
+    retry: false,
+  });
+  const deniedTarget = isForbidden(detail.error);
+  const refetchPendingList = list.refetch;
+  const targetAccess = useQuery({
+    queryKey: [...listRoot, 'target-access', selected, detail.errorUpdatedAt],
+    queryFn: async () => {
+      const result = await refetchPendingList({ throwOnError: true });
+      return result.data ?? null;
+    },
+    enabled: Boolean(selected) && deniedTarget,
+    retry: false,
+  });
+  const lost =
+    [list.error, targetAccess.error].some((error) => isForbidden(error) || isUnauthorized(error)) ||
+    isUnauthorized(detail.error);
+  useEffect(() => {
+    if (lost) onCapabilityLoss?.();
+  }, [lost, onCapabilityLoss]);
+  const setSelected = (id: string) =>
+    setParams((next) => {
+      if (id) next.set('donation_id', id);
+      else next.delete('donation_id');
+      return next;
+    });
+  const refresh = () => client.invalidateQueries({ queryKey: listRoot }, { throwOnError: true });
+  const completed = (value: ManagedDonation) => {
+    setReceipt(value);
+    setSelected('');
+  };
+  if (lost) return <Note tone="bad">{t('common.operations.charity.accessLost')}</Note>;
+  return (
+    <div className="nb-form">
+      <PageHeader
+        title={t('common.pendingReviews.title')}
+        description={t('common.pendingReviews.help')}
+      />
+      {receipt ? (
+        <Note tone="ok">
+          {t('common.pendingReviews.saved', {
+            status: t(charityStatusKey('steward', receipt.status)),
+          })}
+        </Note>
+      ) : null}
+      {selected ? (
+        <>
+          <Button variant="ghost" disabled={reviewPending} onClick={() => setSelected('')}>
+            {t('common.operations.charity.returnToList')}
+          </Button>
+          {detail.isPending ? (
+            <LoadingState />
+          ) : deniedTarget ? (
+            targetAccess.isPending ? (
+              <LoadingState />
+            ) : targetAccess.error ? (
+              <ErrorState error={targetAccess.error} onRetry={() => void targetAccess.refetch()} />
+            ) : (
+              <Note>{t('common.pendingReviews.noLongerPending')}</Note>
+            )
+          ) : detail.error ? (
+            <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
+          ) : detail.data.status === 'pending' ? (
+            <DonationReview
+              key={detail.data.id}
+              item={detail.data}
+              role="steward"
+              accountId={accountId}
+              busy={list.isFetching}
+              refresh={refresh}
+              onPendingChange={setReviewPending}
+              onCapabilityLoss={onCapabilityLoss}
+              onReviewed={completed}
+            />
+          ) : (
+            <Note>{t('common.pendingReviews.noLongerPending')}</Note>
+          )}
+        </>
+      ) : (
+        <>
+          <FilterBar
+            activeCount={q ? 1 : 0}
+            secondaryLabel={t('common.filter')}
+            search={
+              <>
+                <Field label={t('common.search')}>
+                  {(props) => (
+                    <input
+                      {...props}
+                      type="search"
+                      placeholder={t('common.donationHandling.searchPlaceholder')}
+                      value={searchText}
+                      onChange={(e) => setSearch({ q, text: e.target.value })}
+                    />
+                  )}
+                </Field>
+                <Button type="submit" disabled={!validManagementSearch(searchText)}>
+                  {t('common.search')}
+                </Button>
+              </>
+            }
+            onSubmit={() => {
+              if (validManagementSearch(searchText))
+                setParams((next) => {
+                  next.set('pending_review_q', searchText.trim());
+                  next.set('pending_reviews_page', '1');
+                  return next;
+                });
+            }}
+          />
+          {list.isPending ? (
+            <LoadingState />
+          ) : list.error ? (
+            <ErrorState error={list.error} onRetry={() => void list.refetch()} />
+          ) : (
+            <>
+              {list.data.data.length ? (
+                <DataTable
+                  caption={t('common.pendingReviews.title')}
+                  rows={list.data.data}
+                  rowKey={(item) => item.id}
+                  columns={[
+                    {
+                      key: 'description',
+                      header: t('common.operations.charity.description'),
+                      cell: 'title',
+                      render: (item) =>
+                        item.description || t('common.operations.charity.noDescription'),
+                    },
+                    {
+                      key: 'source',
+                      header: t('common.operations.charity.sourceGroups'),
+                      cell: 'meta',
+                      render: (item) => (
+                        <span className="nb-workflow-id">
+                          {item.sources.map((source) => safeSourceLabel(source, t)).join(' · ')}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: 'keys',
+                      header: t('common.operations.charity.keys'),
+                      cell: 'meta',
+                      render: (item) => item.key_count,
+                    },
+                    {
+                      key: 'actions',
+                      header: t('common.workflow.actions'),
+                      cell: 'action',
+                      render: (item) => (
+                        <Button onClick={() => setSelected(item.id)}>
+                          {t('common.operations.charity.openReview')}
+                        </Button>
+                      ),
+                    },
+                  ]}
+                />
+              ) : (
+                <EmptyState
+                  title={t('common.pendingReviews.empty')}
+                  body={t('common.pendingReviews.emptyHelp')}
+                />
+              )}
+              <PagePagination
+                alwaysShowJump
+                metadata={list.data.pagination}
+                requestedPage={pager.page}
+                onPageChange={pager.setPage}
+                onPageSizeChange={pager.setPageSize}
+                busy={list.isFetching}
+              />
+            </>
+          )}
+        </>
       )}
     </div>
   );

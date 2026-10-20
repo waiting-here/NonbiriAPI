@@ -294,7 +294,7 @@ test('level 6 forcibly rejects an automatic donation through one consequence con
       state.user_url + '/steward?tab=charity&donation_id=' + state.management.automatic_donation_id,
     );
     const action = page.getByRole('button', {
-      name: 'Reject an automatically approved donation',
+      name: 'Force reject donation',
       exact: true,
     });
     await expect(action).toBeDisabled();
@@ -310,9 +310,7 @@ test('level 6 forcibly rejects an automatic donation through one consequence con
           '/donations/' + state.management.automatic_donation_id + '/review',
         ),
     );
-    await dialog
-      .getByRole('button', { name: 'Reject an automatically approved donation', exact: true })
-      .click();
+    await dialog.getByRole('button', { name: 'Force reject donation', exact: true }).click();
     const completed = await response;
     expect(completed.ok()).toBe(true);
     expect(completed.request().postDataJSON().decision).toBe('force_reject');

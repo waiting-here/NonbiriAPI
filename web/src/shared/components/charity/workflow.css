@@ -144,3 +144,68 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.nb-price-fields-section,
+.charity-management .nb-price-fields-section {
+  display: grid;
+  gap: var(--nb-space-3);
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.nb-price-fields-section > legend {
+  font-weight: var(--nb-font-weight-semibold);
+  margin-block-end: var(--nb-space-3);
+}
+
+.nb-template-editor .nb-page-header :is(h1, p),
+.nb-template-editor .nb-savebar__state {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.nb-template-editor,
+.nb-template-list {
+  scroll-margin-block-start: calc(var(--nb-space-16) + var(--nb-space-6));
+}
+
+.nb-template-list td[data-cell='title'] {
+  min-width: 0;
+}
+
+.nb-template-name {
+  display: block;
+  max-inline-size: 24rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nb-template-list .nb-template-description {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.nb-template-editor .nb-savebar__actions {
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+
+.nb-template-editor .nb-savebar__actions .nb-btn {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (width < 48rem) {
+  .nb-template-name {
+    max-inline-size: 100%;
+  }
+}

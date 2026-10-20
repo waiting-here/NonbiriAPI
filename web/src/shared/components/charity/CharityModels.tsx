@@ -1,17 +1,16 @@
 import { SessionHeaderFields } from './SessionHeaderFields';
 import { PriceTools } from './PriceTools';
 import {
-  draftPriceConfig,
+  priceDraftError,
   priceDraft,
   priceDraftSignature,
   snapshotPriceDraft,
-  switchPriceMode,
   type PriceDraft,
 } from './priceDraft';
-import { AsyncLeaveDialog } from '../AsyncLeaveDialog';
+import { DraftLeaveGuard } from './DraftLeaveScope';
 import { PageHeader } from '../States';
 import type { SessionHeader } from '@shared/operations/charity';
-import { ContextPricingFields } from './ContextPricingFields';
+import { PriceConfigFields } from './PriceConfigFields';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { ModelTypesField, ModelTypesSummary } from '@shared/components/ModelTypesField';
 import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
@@ -48,7 +47,7 @@ import {
   getManagedCharityModelsPage,
   validManagementSearch,
 } from '@shared/operations/charityModelPages';
-import { excludedFields, halfPrice } from '@shared/operations/charityScope';
+import { excludedFields } from '@shared/operations/charityScope';
 import '@shared/operations/operations.css';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useDetailNavigation } from '@shared/operations/useDetailNavigation';
@@ -74,23 +73,17 @@ import { KeyLimitSummary } from '../KeyRoutingLimits';
 import { useRequestAdaptationCopy } from '../requestAdaptationCopy';
 import { RequestAdaptationEditor } from '../RequestAdaptationEditor';
 import { RolePolicyEditor } from '../RolePolicyEditor';
-import { TimeContextNotice } from '../TimeContext';
-import { TimeInput } from '../TimeInput';
 
 import {
   charityCopyKey,
-  MAX_UNIX_SECOND,
   MODEL_LEVELS,
   normalizePublicDescriptionInput,
   oneParam,
   samePageFamily,
   selectedID,
   snapshotPage,
-  tokenPriceCopyKey,
-  validAmount,
   validPublicDescription,
   validText,
-  validTokenReserveCredits,
 } from './managementFields';
 
 interface ModelDraft {
@@ -259,43 +252,7 @@ function modelDraftError(draft: ModelDraft): ModelValidation | null {
     return 'modelLevels';
   }
   if (!validPublicDescription(draft.publicDescription)) return 'publicDescription';
-  const prices =
-    draft.mode === 'per_request'
-      ? [draft.requestUser, draft.requestDonor]
-      : [...Object.values(draft.userPrices), ...Object.values(draft.donorRewards)];
-  if (draft.longEnabled)
-    prices.push(
-      ...(draft.mode === 'per_request' ? [draft.longRequest] : Object.values(draft.longPrices)),
-    );
-  if (draft.penaltyEnabled) prices.push(draft.penaltyFine);
-  if (
-    (draft.longEnabled && !/^[1-9][0-9]*$/.test(draft.longThreshold)) ||
-    (draft.penaltyEnabled && !/^[1-9][0-9]*$/.test(draft.penaltyThreshold))
-  )
-    return 'contextThreshold';
-  if (prices.some((value) => !validAmount(value))) {
-    return 'modelPrices';
-  }
-  if (!validTokenReserveCredits(draft.tokenReserveCredits)) return 'tokenReserveCredits';
-  if (
-    !Number.isInteger(draft.discountPercent) ||
-    draft.discountPercent < 0 ||
-    draft.discountPercent > 100
-  ) {
-    return 'discountPercent';
-  }
-  const start = timeDraftValue(draft.discountStart);
-  const end = timeDraftValue(draft.discountEnd);
-  if (
-    start === undefined ||
-    end === undefined ||
-    (start !== null && (!Number.isSafeInteger(start) || start < 0 || start > MAX_UNIX_SECOND)) ||
-    (end !== null && (!Number.isSafeInteger(end) || end < 0 || end > MAX_UNIX_SECOND)) ||
-    (start !== null && end !== null && end < start)
-  ) {
-    return 'discountDates';
-  }
-  return null;
+  return priceDraftError(draft);
 }
 
 function ModelForm({
@@ -324,8 +281,6 @@ function ModelForm({
     if (createdModel) onCreated?.(createdModel);
   }, [createdModel, onCreated]);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [halfError, setHalfError] = useState(false);
-  const priceInputs = useRef<Record<string, HTMLInputElement | null>>({});
   const pricingModeInput = useRef<HTMLSelectElement>(null);
   const [referenceOpen, setReferenceOpen] = useState(false);
   const referenceTrigger = useRef<HTMLButtonElement>(null);
@@ -338,7 +293,6 @@ function ModelForm({
     target?.focus({ preventScroll: true });
     target?.scrollIntoView?.({ block: 'nearest', behavior: 'instant' });
   }, [referenceOpen]);
-  const discountDisclosure = useRef<HTMLDetailsElement>(null);
   const save = useRetainedOperation<
     { body: ReturnType<typeof modelBody>; revision?: string },
     CharityModel
@@ -365,15 +319,11 @@ function ModelForm({
   );
   const setDraft: typeof updateDraft = (next) => {
     if (save.isSuccess) save.reset();
-    setHalfError(false);
     updateDraft(next);
   };
   const validationError = modelDraftError(draft);
   const discountError =
     validationError === 'discountDates' || validationError === 'discountPercent';
-  useEffect(() => {
-    if (discountError && discountDisclosure.current) discountDisclosure.current.open = true;
-  }, [discountError]);
   const unknownSave = save.error && responseOutcomeUnknown(save.error);
   const capabilityLost =
     isUnauthorized(save.error) ||
@@ -392,8 +342,6 @@ function ModelForm({
       </Card>
     );
   }
-  const setPrice = (side: 'userPrices' | 'donorRewards', field: keyof TokenPrices, value: string) =>
-    setDraft({ ...draft, [side]: { ...draft[side], [field]: value } });
   const copy = charityControlCopy(i18n.language);
   const content = (
     <>
@@ -627,223 +575,43 @@ function ModelForm({
         ) : null}
         <div className={`nb-workflow-price-workspace${referenceOpen ? ' is-reference-open' : ''}`}>
           <div className="nb-workflow-price-editor">
-            <fieldset className="ops-form-section">
-              <legend>{copy.pricingRewards}</legend>
-              <Button
-                type="button"
-                ref={referenceTrigger}
-                aria-expanded={referenceOpen}
-                onClick={() => setReferenceOpen(true)}
-              >
-                {t('common.workflow.openPriceReference')}
-              </Button>
-              {priceSource ? (
-                <p role="status">{t('common.workflow.priceApplied', { source: priceSource })}</p>
-              ) : null}
-              {undoPrice ? (
-                <button
-                  type="button"
-                  className="nb-btn nb-btn--secondary"
-                  onClick={() => {
-                    setDraft((current) => ({ ...current, ...structuredClone(undoPrice) }));
-                    setUndoPrice(null);
-                    setPriceSource('');
-                    pricingModeInput.current?.focus();
-                  }}
-                >
-                  {t('common.workflow.undoPrice')}
-                </button>
-              ) : null}
-              <div className="ops-field-grid">
-                <label>
-                  <span>{t(charityCopyKey(role, 'pricingMode'))}</span>
-                  <select
-                    ref={pricingModeInput}
-                    value={draft.mode}
-                    onChange={(event) =>
-                      setDraft(switchPriceMode(draft, event.target.value as ModelDraft['mode']))
-                    }
-                  >
-                    <option value="per_request">{t(charityCopyKey(role, 'perRequest'))}</option>
-                    <option value="per_token">{t(charityCopyKey(role, 'perToken'))}</option>
-                  </select>
-                </label>
-              </div>
-              <div className="ops-actions">
-                <button
-                  className="nb-btn nb-btn--secondary"
-                  type="button"
-                  onClick={() => {
-                    const prices =
-                      draft.mode === 'per_request'
-                        ? [['request', draft.requestUser]]
-                        : Object.entries(draft.userPrices);
-                    const invalid = prices.find(([, value]) => halfPrice(value) === null);
-                    if (invalid) {
-                      setHalfError(true);
-                      priceInputs.current[invalid[0]]?.focus();
-                      return;
-                    }
-                    setHalfError(false);
-                    if (draft.mode === 'per_request') {
-                      const reward = halfPrice(draft.requestUser);
-                      if (reward !== null) setDraft({ ...draft, requestDonor: reward });
-                    } else {
-                      const entries = Object.entries(draft.userPrices).map(([key, value]) => [
-                        key,
-                        halfPrice(value),
-                      ]);
-                      if (entries.every(([, value]) => value !== null))
-                        setDraft({
-                          ...draft,
-                          donorRewards: Object.fromEntries(entries) as TokenPrices,
-                        });
-                    }
-                  }}
-                >
-                  {copy.halfPrice}
-                </button>
-                {halfError ? (
-                  <p className="field-error" role="alert">
-                    {copy.halfInvalid}
-                  </p>
-                ) : null}
-              </div>
-              <Fold title={t('common.operations.charity.quotaReserve')}>
-                <label>
-                  <span>{t('common.operations.charity.tokenReserveCredits')}</span>
-                  <input
-                    aria-label={t('common.operations.charity.tokenReserveCredits')}
-                    inputMode="decimal"
-                    value={draft.tokenReserveCredits ?? ''}
-                    onChange={(event) =>
-                      setDraft({ ...draft, tokenReserveCredits: event.target.value || null })
-                    }
-                  />
-                  <small>{t('common.operations.charity.tokenReserveCreditsHelp')}</small>
-                </label>
-                {draft.mode === 'per_request' ? <p>{t('common.workflow.reserveLater')}</p> : null}
-              </Fold>
-              {draft.mode === 'per_request' ? (
-                <div className="ops-field-grid">
-                  <label>
-                    <span>{t(charityCopyKey(role, 'request_user_price_milli'))}</span>
-                    <input
-                      value={draft.requestUser}
-                      ref={(element) => {
-                        priceInputs.current.request = element;
-                      }}
-                      onChange={(event) => setDraft({ ...draft, requestUser: event.target.value })}
-                    />
-                  </label>
-                  <label>
-                    <span>{t(charityCopyKey(role, 'request_donor_reward_milli'))}</span>
-                    <input
-                      value={draft.requestDonor}
-                      onChange={(event) => setDraft({ ...draft, requestDonor: event.target.value })}
-                    />
-                  </label>
-                </div>
-              ) : (
-                <>
-                  <div className="charity-price-grid">
-                    <div className="charity-price-headings" aria-hidden="true">
-                      {(['userPrices', 'donorRewards'] as const).map((side) => (
-                        <strong key={side}>
-                          {t(
-                            `common.operations.charity.${side === 'userPrices' ? 'userPrices' : 'donorRewards'}`,
-                          )}
-                        </strong>
-                      ))}
-                    </div>
-                    {(Object.keys(draft.userPrices) as (keyof TokenPrices)[]).map((field) => (
-                      <div className="charity-price-row" key={field}>
-                        {(['userPrices', 'donorRewards'] as const).map((side) => (
-                          <label key={side}>
-                            <span>{t(tokenPriceCopyKey(role, side, field))}</span>
-                            <input
-                              value={draft[side][field]}
-                              ref={(element) => {
-                                if (side === 'userPrices') priceInputs.current[field] = element;
-                              }}
-                              onChange={(event) => setPrice(side, field, event.target.value)}
-                            />
-                          </label>
-                        ))}
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-            </fieldset>
-            <ContextPricingFields
+            <PriceConfigFields
               value={draft}
               role={role}
               onChange={(fields) => setDraft((current) => ({ ...current, ...fields }))}
+              modeRef={pricingModeInput}
+              discountError={discountError}
+              actions={
+                <>
+                  <Button
+                    type="button"
+                    ref={referenceTrigger}
+                    aria-expanded={referenceOpen}
+                    onClick={() => setReferenceOpen(true)}
+                  >
+                    {t('common.workflow.openPriceReference')}
+                  </Button>
+                  {priceSource ? (
+                    <p role="status">
+                      {t('common.workflow.priceApplied', { source: priceSource })}
+                    </p>
+                  ) : null}
+                  {undoPrice ? (
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        setDraft((current) => ({ ...current, ...structuredClone(undoPrice) }));
+                        setUndoPrice(null);
+                        setPriceSource('');
+                        pricingModeInput.current?.focus();
+                      }}
+                    >
+                      {t('common.workflow.undoPrice')}
+                    </Button>
+                  ) : null}
+                </>
+              }
             />
-            <details className="ops-advanced" ref={discountDisclosure}>
-              <summary>
-                <strong>{copy.discountSettings}</strong>
-                {' · '}
-                {draft.discountEnabled
-                  ? t('common.operations.charity.discountSummary', {
-                      percent: draft.discountPercent,
-                    })
-                  : t('common.disabled')}
-              </summary>
-              <fieldset className="ops-form-section">
-                <legend>{copy.discountSettings}</legend>
-                <div className="ops-field-grid ops-paired-fields">
-                  <TimeContextNotice station={role === 'admin' ? 'admin' : 'steward'} />
-                  <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={draft.discountEnabled}
-                      onChange={(event) =>
-                        setDraft({ ...draft, discountEnabled: event.target.checked })
-                      }
-                    />
-                    <span>{t(charityCopyKey(role, 'discountEnabled'))}</span>
-                  </label>
-                  <label>
-                    <span>{t(charityCopyKey(role, 'discountPercent'))}</span>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={draft.discountPercent}
-                      onChange={(event) =>
-                        setDraft({ ...draft, discountPercent: Number(event.target.value) })
-                      }
-                    />
-                  </label>
-                  <TimeInput
-                    label={t(charityCopyKey(role, 'discountStart'))}
-                    station={role === 'admin' ? 'admin' : 'steward'}
-                    draft={draft.discountStart}
-                    showZoneHint={false}
-                    onChange={(update) =>
-                      setDraft((current) => ({
-                        ...current,
-                        discountStart: update(current.discountStart),
-                      }))
-                    }
-                  />
-                  <TimeInput
-                    label={t(charityCopyKey(role, 'discountEnd'))}
-                    station={role === 'admin' ? 'admin' : 'steward'}
-                    draft={draft.discountEnd}
-                    showZoneHint={false}
-                    onChange={(update) =>
-                      setDraft((current) => ({
-                        ...current,
-                        discountEnd: update(current.discountEnd),
-                      }))
-                    }
-                  />
-                </div>
-              </fieldset>
-            </details>
           </div>
           <div
             className="nb-workflow-price-reference"
@@ -868,7 +636,6 @@ function ModelForm({
                 <div className="nb-workflow-price-reference-body">
                   <PriceTools
                     role={role}
-                    current={draftPriceConfig(draft)}
                     onCapabilityLoss={onCapabilityLoss}
                     onApply={(config, name, revision) => {
                       setUndoPrice(snapshotPriceDraft(draft));
@@ -1022,7 +789,19 @@ function ModelForm({
   );
   return (
     <Card className="charity-model-editor">
-      <AsyncLeaveDialog dirty={priceDraftSignature(draft) !== savedDraft} />
+      <DraftLeaveGuard
+        dirty={priceDraftSignature(draft) !== savedDraft}
+        allowNavigation={({ currentLocation, nextLocation }) => {
+          const next = new URLSearchParams(nextLocation.search);
+          const current = new URLSearchParams(currentLocation.search);
+          return (
+            role === 'admin' &&
+            nextLocation.pathname === currentLocation.pathname &&
+            ['models', 'templates'].includes(next.get('charity_section') ?? '') &&
+            ['charity_model', 'model_workspace'].every((key) => next.get(key) === current.get(key))
+          );
+        }}
+      />
       {content}
       {save.refreshError ? (
         <ErrorState error={save.refreshError} onRetry={() => void save.refresh()} />

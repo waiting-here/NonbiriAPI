@@ -5,6 +5,7 @@ import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import en from '@shared/i18n/common/en.json';
 import { AsyncLeaveDialog } from './AsyncLeaveDialog';
+import { useSearchState } from '@shared/operations/useSearchState';
 
 beforeAll(async () => {
   await i18n.use(initReactI18next).init({ resources: { en: { translation: en } }, lng: 'en' });
@@ -46,4 +47,38 @@ describe('asynchronous route leave', () => {
     expect(event.defaultPrevented).toBe(true);
     router.dispose();
   });
+});
+
+it('can request the same query destination again after staying on a dirty draft', async () => {
+  function QueryLeave() {
+    const [, setParams] = useSearchState();
+    return (
+      <>
+        <button
+          onClick={() =>
+            setParams((next) => {
+              next.set('view', 'other');
+              return next;
+            })
+          }
+        >
+          Other view
+        </button>
+        <AsyncLeaveDialog dirty />
+      </>
+    );
+  }
+  const router = createMemoryRouter([{ path: '/', element: <QueryLeave /> }], {
+    initialEntries: ['/?view=draft'],
+  });
+  render(<RouterProvider router={router} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Other view' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Stay here' }));
+  expect(router.state.location.search).toBe('?view=draft');
+  fireEvent.click(screen.getByRole('button', { name: 'Other view' }));
+  await act(async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Leave page' }));
+  });
+  expect(router.state.location.search).toBe('?view=other');
+  router.dispose();
 });
