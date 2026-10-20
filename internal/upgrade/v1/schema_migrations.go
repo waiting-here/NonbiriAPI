@@ -7,6 +7,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"time"
+
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
 
@@ -17,6 +19,7 @@ type schemaMigration struct {
 	manifest string
 	sql      string
 	apply    func(context.Context, *sql.Tx) error
+	impact   *migrationImpact
 }
 
 type schemaRegistry struct {
@@ -38,6 +41,11 @@ func (registry schemaRegistry) validate() error {
 			i == 0 && (step.from != 0 || step.sql != "" || step.apply != nil) ||
 			i > 0 && (step.from != registry.versions[i-1].version || step.version <= step.from || step.sql == "" && step.apply == nil) {
 			return errors.New("schema migration chain is incomplete")
+		}
+		if i > 0 {
+			if err := step.impact.validate(); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -104,23 +112,39 @@ func (plan schemaPlan) apply(ctx context.Context, tx *sql.Tx) error {
 // check with current seed, configuration and key validation before commit.
 func (plan schemaPlan) applySteps(ctx context.Context, tx *sql.Tx) error {
 	for _, step := range plan.steps {
-		if step.sql != "" {
-			if _, err := tx.ExecContext(ctx, step.sql); err != nil {
-				return fmt.Errorf("migrate storage to %d: %w", step.version, err)
-			}
-		}
-		if step.apply != nil {
-			if err := step.apply(ctx, tx); err != nil {
-				return fmt.Errorf("migrate data to %d: %w", step.version, err)
-			}
-		}
-		result, err := tx.ExecContext(ctx, "UPDATE schema_state SET version=? WHERE id=1 AND version=?", step.version, step.from)
-		if err != nil {
+		if err := progressStep(ctx, "migration", step.version, "", func() error {
+			return step.applyStep(ctx, tx)
+		}); err != nil {
 			return err
 		}
-		if changed, err := result.RowsAffected(); err != nil || changed != 1 {
-			return errors.New("schema version changed during migration")
+	}
+	return nil
+}
+
+func (step schemaMigration) applyStep(ctx context.Context, tx *sql.Tx) error {
+	if err := step.impact.validate(); err != nil {
+		return err
+	}
+	ctx = context.WithValue(ctx, migrationImpactKey{}, step.impact)
+	if step.sql != "" {
+		if _, err := tx.ExecContext(ctx, step.sql); err != nil {
+			return fmt.Errorf("migrate storage to %d: %w", step.version, err)
 		}
+	}
+	if step.apply != nil {
+		if err := step.apply(ctx, tx); err != nil {
+			return fmt.Errorf("migrate data to %d: %w", step.version, err)
+		}
+	}
+	if err := validateNewTables(ctx, tx, step.impact.addedTables); err != nil {
+		return err
+	}
+	result, err := tx.ExecContext(ctx, "UPDATE schema_state SET version=? WHERE id=1 AND version=?", step.version, step.from)
+	if err != nil {
+		return err
+	}
+	if changed, err := result.RowsAffected(); err != nil || changed != 1 {
+		return errors.New("schema version changed during migration")
 	}
 	return nil
 }
@@ -137,8 +161,17 @@ func (registry schemaRegistry) planFromValidatedVersion(version int) (schemaPlan
 	return schemaPlan{}, errors.New("unsupported conversion source version")
 }
 
-// Startup finishes rollback before returning, including after cancellation.
+// The unclassified callback entry point retains a complete relationship check.
+// Registered offline conversions use runConversionTransaction with their plan.
 func runGenerationTwoExtension(ctx context.Context, database *sql.DB, extend func(context.Context, *sql.Tx) error) (result error) {
+	return runConversionTransaction(ctx, database, true, extend, func(ctx context.Context, tx *sql.Tx) error {
+		return checkForeignKeys(ctx, tx, "PRAGMA foreign_key_check")
+	})
+}
+
+// Rollback and connection cleanup finish before ownership is returned, including
+// after cancellation. Foreign keys are disabled only for a rebuilding chain.
+func runConversionTransaction(ctx context.Context, database *sql.DB, rebuild bool, extend, validate func(context.Context, *sql.Tx) error) (result error) {
 	conn, err := database.Conn(ctx)
 	if err != nil {
 		return err
@@ -147,18 +180,22 @@ func runGenerationTwoExtension(ctx context.Context, database *sql.DB, extend fun
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	// Rebuilding a referenced table must not run ON DELETE actions. This
-	// startup-owned connection restores its setting after commit or rollback;
-	// the complete target's references are checked before committing.
 	var foreignKeys int
 	if err := conn.QueryRowContext(ctx, "PRAGMA foreign_keys").Scan(&foreignKeys); err != nil {
 		return err
 	}
-	if _, err := conn.ExecContext(ctx, "PRAGMA foreign_keys=OFF"); err != nil {
+	if rebuild {
+		// Rebuilding a referenced table must not run ON DELETE actions.
+		if _, err := conn.ExecContext(ctx, "PRAGMA foreign_keys=OFF"); err != nil {
+			return err
+		}
+	} else if _, err := conn.ExecContext(ctx, "PRAGMA foreign_keys=ON"); err != nil {
 		return err
 	}
 	defer func() {
-		if _, err := conn.ExecContext(context.Background(), fmt.Sprintf("PRAGMA foreign_keys=%d", foreignKeys)); err != nil {
+		cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if _, err := conn.ExecContext(cleanup, fmt.Sprintf("PRAGMA foreign_keys=%d", foreignKeys)); err != nil {
 			_ = conn.Raw(func(any) error { return driver.ErrBadConn })
 			result = errors.Join(result, err)
 		}
@@ -169,31 +206,32 @@ func runGenerationTwoExtension(ctx context.Context, database *sql.DB, extend fun
 	if err != nil {
 		return err
 	}
+	committed := false
 	defer func() {
-		if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
+		if !committed {
+			finish := beginProgress(ctx, "rollback", 0, "")
+			err := tx.Rollback()
+			if errors.Is(err, sql.ErrTxDone) {
+				err = nil
+			}
+			finish(err)
 			result = errors.Join(result, err)
 		}
 	}()
 	if err := extend(ctx, tx); err != nil {
 		return err
 	}
-	rows, err := tx.QueryContext(ctx, "PRAGMA foreign_key_check")
-	if err != nil {
+	if validate != nil {
+		if err := validate(ctx, tx); err != nil {
+			return err
+		}
+	}
+	return progressStep(ctx, "commit", 0, "", func() error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		err := tx.Commit()
+		committed = err == nil
 		return err
-	}
-	invalid := rows.Next()
-	err = rows.Err()
-	if closeErr := rows.Close(); err == nil {
-		err = closeErr
-	}
-	if err != nil {
-		return err
-	}
-	if invalid {
-		return errors.New("schema migration left invalid references")
-	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	return tx.Commit()
+	})
 }

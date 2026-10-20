@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"io"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,6 +13,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
+	"github.com/waiting-here/NonbiriAPI/internal/upgrade/v1"
 )
 
 func TestArgumentErrorsDoNotReadOrExposeEnvironment(t *testing.T) {
@@ -64,7 +67,8 @@ func TestCurrentDatabaseCommandNeedsOnlyEncryptionEnvironment(t *testing.T) {
 	t.Setenv("NONBIRI_DISCORD_CLIENT_ID", "")
 	for _, mode := range []string{"--check", "--apply"} {
 		var output bytes.Buffer
-		if err := run(t.Context(), []string{mode}, &output); err != nil {
+		var progress bytes.Buffer
+		if err := runWithProgress(t.Context(), []string{mode}, &output, &progress); err != nil {
 			t.Fatal(err)
 		}
 		var result struct {
@@ -72,6 +76,23 @@ func TestCurrentDatabaseCommandNeedsOnlyEncryptionEnvironment(t *testing.T) {
 		}
 		if err := json.Unmarshal(output.Bytes(), &result); err != nil || result.Status != "current" {
 			t.Fatal(output.String(), err)
+		}
+		decoder := json.NewDecoder(&progress)
+		var audit, target bool
+		for {
+			var event v1.Progress
+			err := decoder.Decode(&event)
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			if err != nil || event.Type != "upgrade_progress" {
+				t.Fatal(event, err)
+			}
+			audit = audit || event.Phase == "audit"
+			target = target || event.Phase == "target" && event.State == "completed"
+		}
+		if !target || audit != (mode == "--check") {
+			t.Fatal("progress did not describe explicit audit scope", mode, audit, target)
 		}
 	}
 }

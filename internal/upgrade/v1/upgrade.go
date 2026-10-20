@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/gatewaypolicy"
@@ -28,19 +29,32 @@ const stableSchema24Manifest = "ee3bcf270ed884f80a1ddf2c0cc75a509c20aa3d06c0e46f
 
 var storageSchema = schemaRegistry{baseline: 17, target: db.CurrentSchemaVersion, versions: []schemaMigration{
 	{version: 17, manifest: stableSchema17Manifest},
-	{from: 17, version: 18, manifest: stableSchema18Manifest, apply: extendContentAndProtocols},
-	{from: 18, version: 19, manifest: stableSchema19Manifest, sql: accountMFASchema},
-	{from: 19, version: 20, manifest: stableSchema20Manifest, sql: logQueryIndexes},
-	{from: 20, version: 21, manifest: stableSchema21Manifest, apply: extendServiceMetadata},
-	{from: 21, version: 22, manifest: stableSchema22Manifest, sql: keyCooldownSchema},
-	{from: 22, version: 23, manifest: stableSchema23Manifest, sql: headerDiagnosticsSchema},
-	{from: 23, version: 24, manifest: stableSchema24Manifest, sql: pricingHistorySchema},
-	{from: 24, version: 25, manifest: db.PinnedGenerationTwoManifestHash, sql: smartBackoffSchema},
+	{from: 17, version: 18, manifest: stableSchema18Manifest, apply: extendContentAndProtocols, impact: &migrationImpact{
+		rebuiltTables: []string{"mainstream_channels", "endpoints", "endpoint_key_secrets", "donation_keys", "request_attempts", "report_cases", "report_targets", "models", "charity_models", "logical_requests", "request_logs", "game_fishing_batches", "game_fishing_outcome_lengths", "game_fishing_best_lengths", "game_fishing_length_facts"},
+		controlTables: []string{"site_config"}, credentials: credentialsRebuilt}},
+	{from: 18, version: 19, manifest: stableSchema19Manifest, sql: accountMFASchema, impact: &migrationImpact{
+		addedTables:   []string{"account_mfa_credentials", "account_mfa_pending", "account_mfa_attempts", "account_mfa_proofs"},
+		controlTables: []string{"site_config"}, constraintTables: []string{"users"}, credentials: credentialsUnchanged}},
+	{from: 19, version: 20, manifest: stableSchema20Manifest, sql: logQueryIndexes, impact: &migrationImpact{
+		indexedTables: []string{"request_attempts", "request_logs"}, credentials: credentialsUnchanged}},
+	{from: 20, version: 21, manifest: stableSchema21Manifest, apply: extendServiceMetadata, impact: &migrationImpact{
+		rebuiltTables: []string{"admin_endpoint_tags", "model_discovery_evidence"}, credentials: credentialsUnchanged}},
+	{from: 21, version: 22, manifest: stableSchema22Manifest, sql: keyCooldownSchema, impact: &migrationImpact{
+		addedTables:      []string{"donation_key_cooldowns", "dispatch_retry_after_observations"},
+		constraintTables: []string{"donation_usage_reservations", "dispatch_claims"}, credentials: credentialsUnchanged}},
+	{from: 22, version: 23, manifest: stableSchema23Manifest, sql: headerDiagnosticsSchema, impact: &migrationImpact{
+		addedTables: []string{"request_header_facts"}, controlTables: []string{"observability_state", "site_config"}, credentials: credentialsUnchanged}},
+	{from: 23, version: 24, manifest: stableSchema24Manifest, sql: pricingHistorySchema, impact: &migrationImpact{
+		addedTables: []string{"charity_price_templates", "charity_price_template_audits", "donation_owner_preferences"}, credentials: credentialsUnchanged}},
+	{from: 24, version: 25, manifest: db.PinnedGenerationTwoManifestHash, sql: smartBackoffSchema, impact: &migrationImpact{
+		addedTables:      []string{"donation_key_backoffs", "dispatch_smart_backoff_facts"},
+		constraintTables: []string{"donation_usage_reservations", "dispatch_claims"}, credentials: credentialsUnchanged}},
 }}
 
 type Options struct {
 	Apply               bool
 	LegacyGatewayModels string
+	Progress            func(Progress)
 }
 
 type Result struct {
@@ -81,13 +95,18 @@ func RunRC7(ctx context.Context, path string, vault *secret.Vault, options Optio
 }
 
 func run(ctx context.Context, path string, vault *secret.Vault, options Options, rc7Only bool) (Result, error) {
+	if ctx == nil {
+		return Result{}, errors.New("offline conversion context is required")
+	}
+	ctx, stopProgress := withProgress(ctx, db.CurrentSchemaVersion, options.Progress, 5*time.Second)
+	defer stopProgress()
 	sources := []OfflineSchema{{Version: 16, ManifestHash: SourceManifestHash}}
 	if !rc7Only {
 		sources = append(sources, OfflineSchema{Version: 17, ManifestHash: stableSchema17Manifest}, OfflineSchema{Version: 18, ManifestHash: stableSchema18Manifest}, OfflineSchema{Version: 19, ManifestHash: stableSchema19Manifest}, OfflineSchema{Version: 20, ManifestHash: stableSchema20Manifest}, OfflineSchema{Version: 21, ManifestHash: stableSchema21Manifest}, OfflineSchema{Version: 22, ManifestHash: stableSchema22Manifest}, OfflineSchema{Version: 23, ManifestHash: stableSchema23Manifest}, OfflineSchema{Version: 24, ManifestHash: stableSchema24Manifest})
 	}
 	sourceVersion := db.CurrentSchemaVersion
 	invalidLegacyConfiguration := false
-	needed, err := convertOffline(ctx, path, vault, sources, options.Apply, func(ctx context.Context, database *sql.DB) error {
+	needed, err := convertOffline(ctx, path, vault, sources, options.Apply, true, func(ctx context.Context, database *sql.DB) error {
 		if err := database.QueryRowContext(ctx, "SELECT version FROM schema_state WHERE id=1").Scan(&sourceVersion); err != nil {
 			return err
 		}

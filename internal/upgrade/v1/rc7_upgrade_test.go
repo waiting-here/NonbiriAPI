@@ -168,13 +168,25 @@ func TestConversionChecksThenUpgradesExactSourceAndReenters(t *testing.T) {
 		t.Fatal("rejected startup changed source", err)
 	}
 	for i := 0; i < 2; i++ {
-		result, err := Run(t.Context(), path, vault, Options{Apply: true, LegacyGatewayModels: "malformed stale value"})
+		var events []Progress
+		result, err := Run(t.Context(), path, vault, Options{Apply: true, LegacyGatewayModels: "malformed stale value", Progress: func(event Progress) { events = append(events, event) }})
 		want := "converted"
 		if i == 1 {
 			want = "current"
 		}
 		if err != nil || result.Status != want {
 			t.Fatal(result, err)
+		}
+		if i == 0 {
+			var audit, legacyMigration, fullRelationships bool
+			for _, event := range events {
+				audit = audit || event.Phase == "audit" && event.Table == "" && event.State == "completed"
+				legacyMigration = legacyMigration || event.Phase == "migration" && event.MigrationVersion == 17 && event.State == "completed"
+				fullRelationships = fullRelationships || event.Phase == "relationships" && event.Table == "" && event.State == "completed"
+			}
+			if !audit || !legacyMigration || !fullRelationships {
+				t.Fatal("legacy conversion lost its full checks or progress", audit, legacyMigration, fullRelationships)
+			}
 		}
 	}
 	store, err := db.Open(path, vault)
