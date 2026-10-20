@@ -1,3 +1,4 @@
+import { smartBackoffDeadline } from '@shared/operations/smartBackoff';
 import { Button } from '@shared/components/ui/Button';
 import { Field } from './ui/Field';
 import { KeyStateFilter } from './charity/KeyStateFilter';
@@ -408,7 +409,8 @@ function CharityBindingPickerBody({
     readEnabled
       ? (sourceKeys.data?.data
           .filter((key) => key.charity_state === 'rate_limited')
-          .map((key) => key.rate_limited_until) ?? [])
+          .flatMap((key) => [key.rate_limited_until, smartBackoffDeadline(key.smart_backoff)]) ??
+          [])
       : [],
     () => sourceKeys.refetch({ throwOnError: true }),
   );
@@ -815,8 +817,11 @@ function CharityBindingPickerBody({
                                   rpm={entry.max_rpm}
                                   readOnly
                                 />
-                                {entry.charity_state === 'rate_limited' ? (
-                                  <KeyRateLimitTime until={entry.rate_limited_until} />
+                                {entry.charity_state === 'rate_limited' || entry.smart_backoff ? (
+                                  <KeyRateLimitTime
+                                    until={entry.rate_limited_until}
+                                    smartBackoff={entry.smart_backoff}
+                                  />
                                 ) : null}
                                 <small>
                                   {entry.idle

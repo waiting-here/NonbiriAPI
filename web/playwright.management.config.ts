@@ -15,6 +15,7 @@ export default defineConfig({
     'operation-controls.spec.ts',
     'discovery-errors.spec.ts',
     'workflow.spec.ts',
+    'smart-backoff.spec.ts',
   ],
   outputDir: 'test-results/management/browser',
 });

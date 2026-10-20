@@ -861,6 +861,9 @@ describe('donation composer recovery', () => {
       tokenReserve: 8,
       expiresAt: 1_900_000_000,
       failureDisableThreshold: '10',
+      smartBackoffProfile: 'none' as const,
+      smartBackoffRules: [],
+      smartBackoff: null,
       streak: { generation: '2', count: '3', failureDisabled: false },
       endedReason: null,
     } satisfies DonationKey;
@@ -935,6 +938,9 @@ describe('donation composer recovery', () => {
       tokenReserve: 0,
       expiresAt: null,
       failureDisableThreshold: '10',
+      smartBackoffProfile: 'none' as const,
+      smartBackoffRules: [],
+      smartBackoff: null,
       streak: { generation: '1', count: '10', failureDisabled: true },
       endedReason: null,
     };
@@ -952,6 +958,9 @@ describe('donation composer recovery', () => {
           charityState: 'exhausted',
           limits: { price: '0', calls: '0', tokens: '0' },
           failureDisableThreshold: '10',
+          smartBackoffProfile: 'none' as const,
+          smartBackoffRules: [],
+          smartBackoff: null,
           streak: { generation: '1', count: '0', failureDisabled: false },
         }}
       />,

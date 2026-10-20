@@ -142,6 +142,9 @@ function endpointKey(
           : 1_800_003_600
         : options.expiresAt,
     failure_disable_threshold: '10',
+    smart_backoff_profile: 'none' as const,
+    smart_backoff_rules: [],
+    smart_backoff: null,
     streak: { generation: '1', count: '0', failure_disabled: false },
     ended_reason:
       options.endedReason === undefined ? (terminal ? 'expired' : null) : options.endedReason,
@@ -1008,6 +1011,9 @@ test('administrator charity provenance grouping and report lineage expose safe d
     authorized_expires_at: 1_800_003_600,
     expires_at: 1_800_003_600,
     failure_disable_threshold: '10',
+    smart_backoff_profile: 'none' as const,
+    smart_backoff_rules: [],
+    smart_backoff: null,
     streak: { generation: '1', count: '0', failure_disabled: false },
     ended_reason: null,
     safe_note: 'Safe administrative note',

@@ -170,7 +170,12 @@ test.describe('donation resource submission', () => {
         if (url.pathname === '/api/donations') {
           expect(request.method()).toBe('POST');
           const body = request.postDataJSON() as {
-            keys: { endpoint_key_id: string; expires_at: number | null }[];
+            keys: {
+              endpoint_key_id: string;
+              expires_at: number | null;
+              smart_backoff_profile?: string;
+              smart_backoff_rules?: { kind: string; value: string; period: string }[];
+            }[];
             description: string;
           };
           posts.push(body);
@@ -208,6 +213,9 @@ test.describe('donation resource submission', () => {
                 token_reserve: 0,
                 expires_at: key.expires_at,
                 failure_disable_threshold: '10',
+                smart_backoff_profile: key.smart_backoff_profile ?? 'none',
+                smart_backoff_rules: key.smart_backoff_rules ?? [],
+                smart_backoff: null,
                 streak: { generation: '1', count: '0', failure_disabled: false },
                 ended_reason: null,
               })),
@@ -225,8 +233,25 @@ test.describe('donation resource submission', () => {
       await keys.getByRole('checkbox', { name: /^Key 101 / }).check();
       const expiry = picker.locator('input[type="datetime-local"]');
       await expiry.fill('2030-01-01T00:00');
+      await picker
+        .getByLabel(common.smartBackoff.profile, { exact: true })
+        .first()
+        .selectOption('five_hour_week');
+      await picker.getByText(common.smartBackoff.advanced, { exact: true }).first().click();
+      await picker
+        .getByRole('button', { name: common.smartBackoff.addRule, exact: true })
+        .first()
+        .click();
+      await picker
+        .getByLabel(common.smartBackoff.ruleValue.replace('{{index}}', '1'), { exact: true })
+        .first()
+        .fill('1308');
       await keys.getByRole('button', { name: common.next, exact: true }).click();
       await keys.getByRole('checkbox', { name: /^Key 121 / }).check();
+      await picker
+        .getByLabel(common.smartBackoff.profile, { exact: true })
+        .nth(1)
+        .selectOption('day');
       await sources.getByRole('button', { name: common.next, exact: true }).click();
       await sources.getByRole('button', { name: /^Source 21 / }).click();
       await keys.getByRole('checkbox', { name: /^Key 201 / }).check();
@@ -244,6 +269,17 @@ test.describe('donation resource submission', () => {
         '2030-01-01T00:00',
       );
       await expect(page).toHaveURL(/endpoint_page=2/);
+      await expect(
+        picker.getByLabel(common.smartBackoff.profile, { exact: true }).first(),
+      ).toHaveValue('five_hour_week');
+      await expect(
+        picker.getByLabel(common.smartBackoff.profile, { exact: true }).nth(1),
+      ).toHaveValue('day');
+      await expect(
+        picker
+          .getByLabel(common.smartBackoff.ruleValue.replace('{{index}}', '1'), { exact: true })
+          .first(),
+      ).toHaveValue('1308');
       await expect(sources.getByRole('button', { name: /^Source 1 / })).toHaveCount(0);
       await expect(picker.getByText('head101…tail', { exact: true })).toBeVisible();
       await expect(picker.getByText('head121…tail', { exact: true })).toBeVisible();
@@ -290,8 +326,20 @@ test.describe('donation resource submission', () => {
           ownership_authorized: true,
           discord_public_thanks: false,
           keys: [
-            { endpoint_key_id: '101', expires_at: EXPIRY, failure_disable_threshold: '10' },
-            { endpoint_key_id: '121', expires_at: null, failure_disable_threshold: '10' },
+            {
+              endpoint_key_id: '101',
+              expires_at: EXPIRY,
+              failure_disable_threshold: '10',
+              smart_backoff_profile: 'five_hour_week',
+              smart_backoff_rules: [{ kind: 'code', value: '1308', period: 'auto' }],
+            },
+            {
+              endpoint_key_id: '121',
+              expires_at: null,
+              failure_disable_threshold: '10',
+              smart_backoff_profile: 'day',
+              smart_backoff_rules: [],
+            },
             { endpoint_key_id: '201', expires_at: null, failure_disable_threshold: '10' },
           ],
         },

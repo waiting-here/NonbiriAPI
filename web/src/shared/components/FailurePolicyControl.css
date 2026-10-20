@@ -1,35 +1,64 @@
 .failure-policy-control {
-  margin-block: 1rem;
-  padding: 1rem;
-  border: 1px solid var(--nb-color-border);
-  border-radius: 0.65rem;
-}
-.failure-policy-input {
   display: grid;
-  gap: 0.45rem;
+  gap: var(--nb-space-4);
+  min-width: 0;
+  margin-block: var(--nb-space-4);
+}
+.failure-policy-input,
+.smart-backoff-input,
+.smart-backoff-rules {
+  display: grid;
+  gap: var(--nb-space-3);
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.failure-policy-input input {
+.failure-policy-input input,
+.smart-backoff-input input,
+.smart-backoff-input select {
   width: 100%;
-  max-width: 30rem;
-  font-variant-numeric: tabular-nums;
   min-width: 0;
+  max-width: 100%;
   box-sizing: border-box;
 }
+.failure-policy-input input {
+  max-width: 30rem;
+  font-variant-numeric: tabular-nums;
+}
 .failure-policy-warning {
-  display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
-  padding: 0.8rem;
-  border: 2px solid var(--nb-color-warning);
-  border-radius: 0.4rem;
-  background: var(--nb-color-warning-soft);
-  color: var(--nb-color-text);
-  font-weight: 700;
+  margin: 0;
+}
+.smart-backoff-rule {
+  display: grid;
+  gap: var(--nb-space-3);
+  border-block-start: 1px solid var(--nb-color-border);
+  padding-block: var(--nb-space-3);
+  min-width: 0;
+}
+.smart-backoff-status {
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.failure-policy-warning > span {
-  font-size: 1.4em;
+.smart-backoff-status p {
+  margin-block: var(--nb-space-1);
+}
+
+.smart-backoff-time {
+  display: block;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.smart-backoff-rule-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--nb-space-2);
+}
+.smart-backoff-rule-heading h4 {
+  margin: 0;
+  font-size: var(--nb-font-size-md);
+}
+
+.smart-backoff-input > .nb-fold--plain > summary {
+  padding-inline-end: var(--nb-space-2);
 }

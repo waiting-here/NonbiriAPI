@@ -1,3 +1,4 @@
+import { smartBackoffDeadline } from '@shared/operations/smartBackoff';
 import { Button } from '@shared/components/ui/Button';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDetailNavigation } from '@shared/operations/useDetailNavigation';
@@ -400,8 +401,11 @@ function KeySummary({
         donor={keyValue.donation_note}
         approval={keyValue.approval_note}
       />
-      {keyValue.charity_state === 'rate_limited' ? (
-        <KeyRateLimitTime until={keyValue.rate_limited_until} />
+      {keyValue.charity_state === 'rate_limited' || keyValue.smart_backoff ? (
+        <KeyRateLimitTime
+          until={keyValue.rate_limited_until}
+          smartBackoff={keyValue.smart_backoff}
+        />
       ) : null}
       <dl className="ops-kv">
         <dt>{t('common.operations.charity.sourceBrowser.donation')}</dt>
@@ -633,7 +637,7 @@ export function CharitySourceBrowser({
   useRateLimitRefresh(
     sourceKeys.data?.data
       .filter((key) => key.charity_state === 'rate_limited')
-      .map((key) => key.rate_limited_until) ?? [],
+      .flatMap((key) => [key.rate_limited_until, smartBackoffDeadline(key.smart_backoff)]) ?? [],
     () => sourceKeys.refetch({ throwOnError: true }),
   );
   const authorityError = [sources.error, sourceKeys.error].find(
