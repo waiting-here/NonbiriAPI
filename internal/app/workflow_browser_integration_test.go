@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/headerfacts"
 )
 
@@ -117,9 +118,121 @@ func seedWorkflowBrowser(t *testing.T, f *imageBrowserFixture, management map[st
 			f.call("POST", path+"/withdraw", map[string]any{"expected_revision": current["revision"]}, owner.Cookie, false)
 		}
 	}
+	shortcutDonation := donate(endpoint, "Workflow log shortcut keys", "synthetic-workflow-shortcut", 2)
+	shortcutRequest, shortcutTargets := seedWorkflowLogShortcut(t, f, management["charity_model_id"].(string), shortcutDonation["id"].(string))
 	requestID := seedWorkflowHeaderRequest(t, f, management, userURL)
 	return map[string]any{"owner": owner, "models": models, "templates": templates, "pending_donation_id": pendingID, "pending_key_id": keyID,
-		"processing_donation_id": processingID, "ended_donation_id": ended["id"], "header_request_id": requestID}
+		"processing_donation_id": processingID, "ended_donation_id": ended["id"], "header_request_id": requestID,
+		"shortcut_request_id": shortcutRequest, "shortcut_model_id": management["charity_model_id"], "shortcut_attempt_targets": shortcutTargets}
+}
+
+func seedWorkflowLogShortcut(t *testing.T, f *imageBrowserFixture, modelID, donationID string) (string, []map[string]string) {
+	t.Helper()
+	donation := f.call("GET", "/admin/api/donations/"+donationID, nil, f.adminCookie, true)
+	keys := donation["keys"].([]any)
+	if donation["status"] != "approved" || len(keys) != 2 {
+		t.Fatal("shortcut donation must contain two approved mainstream keys")
+	}
+	at := f.now().Unix() - 3
+	requestID, err := db.GenerateOpaqueID("req_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx, err := f.store.DB().Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	exec := func(query string, args ...any) {
+		t.Helper()
+		if _, err := tx.Exec(query, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var model string
+	if err := tx.QueryRow(`SELECT full_name FROM charity_models WHERE id=? AND is_mainstream=1`, modelID).Scan(&model); err != nil {
+		t.Fatal(err)
+	}
+	exec(`INSERT INTO logical_requests(id,user_id,route_kind,model_snapshot,state,attempt_limit,caller_result_class,caller_status,caller_error_code,accounting_state,settlement_destination,ledger_rows_remaining,created_at,terminal_at)
+VALUES(?,?,'charity_chat_completions',?,'terminal',2,'failed',503,'upstream','released','user',zeroblob(16),?,?)`, requestID, f.users[1].ID, model, at, at+1)
+	result, err := tx.Exec(`INSERT INTO request_logs(logical_request_id,user_id,route_kind,model,started_at,completed_at,caller_result_class,caller_status,caller_error_code,status_code,attempt_count,error_source,error_code,error_diag,duration_ms)
+VALUES(?,?,'charity_chat_completions',?, ?,?,'failed',503,'upstream',503,2,'upstream','upstream','Synthetic safe failure summary',1000)`, requestID, f.users[1].ID, model, at, at+1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logID, err := result.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	targets := make([]map[string]string, 0, 2)
+	for i, value := range keys {
+		keyID := value.(map[string]any)["id"].(string)
+		claimID, err := db.GenerateOpaqueID("clm_")
+		if err != nil {
+			t.Fatal(err)
+		}
+		exec(`INSERT INTO request_attempts(claim_id,request_log_id,attempt_seq,connector_type,canonical_base_url,upstream_model_id,result_kind,upstream_status,diag,started_at,completed_at)
+VALUES(?,?,?,'openai-compatible','https://synthetic.invalid/v1','synthetic/audit-model','response',503,'Synthetic upstream failure',?,?)`, claimID, logID, i+1, at, at+1)
+		exec(`INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,donation_key_id,claim_now,state,dispatched_at,terminal_at,donor_reward_actual_milli,donor_reward_state,streak_disposition,failure_origin)
+VALUES(?,?,?,'charity',?,?,'committed',?,?,0,'zero','upstream_failure','upstream_response')`, claimID, requestID, i+1, keyID, at, at, at+1)
+		targets = append(targets, map[string]string{"donation_id": donationID, "donation_key_id": keyID})
+	}
+	exec(`INSERT INTO charity_reservations(logical_request_id,user_id,charity_model_id,model_snapshot,state,pricing_mode,discount_percent,
+request_user_price_milli,request_donor_reward_milli,uncached_user_price_milli,cache_write_user_price_milli,cache_read_user_price_milli,output_user_price_milli,
+uncached_donor_reward_milli,cache_write_donor_reward_milli,cache_read_donor_reward_milli,output_donor_reward_milli,
+token_reserve_milli,user_reserved_milli,original_charge_milli,user_charge_milli,donor_reward_total_mag,created_at,finalized_at,updated_at)
+VALUES(?,?,?,?,'released','per_request',100,0,0,0,0,0,0,0,0,0,0,0,0,0,0,zeroblob(16),?,?,?)`, requestID, f.users[1].ID, modelID, model, at, at+1, at+1)
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	return requestID, targets
+}
+
+func TestWorkflowLogShortcutSeedRespectsSchemaAndTraineeScope(t *testing.T) {
+	f := newActivityWireFixture(t)
+	now := f.now().Unix()
+	if _, err := f.store.DB().Exec(`UPDATE site_config SET value='1' WHERE key IN ('donation_accept_enabled','charity_enabled')`); err != nil {
+		t.Fatal(err)
+	}
+	channel, err := db.GenerateOpaqueID("mch_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.DB().Exec(`INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at) VALUES(?,'Shortcut service','subscription','openai-compatible',?,1,'active',1,?,?)`, channel, f.upstream.URL+"/v1", now, now); err != nil {
+		t.Fatal(err)
+	}
+	owner := f.users[1].Cookie
+	endpoint := f.call("POST", "/api/endpoints", map[string]any{"source": "mainstream", "channel_id": channel, "note": "Shortcut service", "enabled": true}, owner, false)["id"].(string)
+	keys := make([]map[string]any, 0, 2)
+	for i := range 2 {
+		key := f.call("POST", "/api/endpoints/"+endpoint+"/keys", map[string]any{"secret": fmt.Sprintf("synthetic-shortcut-%d", i), "note": "Shortcut credential", "enabled": true, "force_store_false": false, "ownership_confirmed": true}, owner, false)["id"].(string)
+		keys = append(keys, map[string]any{"endpoint_key_id": key, "expires_at": nil})
+	}
+	donation := f.call("POST", "/api/donations", map[string]any{"description": "Shortcut donation", "discord_public_thanks": false, "ownership_authorized": true, "keys": keys}, owner, false)["id"].(string)
+	model := f.call("POST", "/admin/api/charity-models", map[string]any{
+		"provider": "browser", "model": "shortcut", "enabled": true, "is_mainstream": true, "flatten_tool_calls": false,
+		"pricing": map[string]any{"mode": "per_request", "user_price": "0", "donor_reward": "0"}, "discount": map[string]any{"enabled": false, "percent": 100, "start_at": nil, "end_at": nil},
+	}, f.adminCookie, true)["id"].(string)
+	requestID, targets := seedWorkflowLogShortcut(t, f, model, donation)
+	detail := f.call("GET", "/admin/api/logs/"+requestID, nil, f.adminCookie, true)
+	if detail["request"].(map[string]any)["charity_model_id"] != model {
+		t.Fatalf("model target = %v", detail["request"])
+	}
+	attempts := detail["attempts"].(map[string]any)["data"].([]any)
+	if len(attempts) != 2 || targets[0]["donation_key_id"] == targets[1]["donation_key_id"] {
+		t.Fatalf("attempt targets = %v, %v", attempts, targets)
+	}
+	for i, target := range targets {
+		attempt := attempts[i].(map[string]any)
+		if attempt["donation_id"] != target["donation_id"] || attempt["donation_key_id"] != target["donation_key_id"] {
+			t.Fatalf("attempt %d target = %v, want %v", i, attempt, target)
+		}
+		path := "/api/steward/donations/" + target["donation_id"] + "/keys/" + target["donation_key_id"] + "?charity_model_id=" + model
+		managed := f.call("GET", path, nil, f.users[2].Cookie, false)
+		if managed["id"] != target["donation_key_id"] {
+			t.Fatalf("trainee key target = %v", managed)
+		}
+	}
 }
 
 func seedWorkflowHeaderRequest(t *testing.T, f *imageBrowserFixture, management map[string]any, userURL string) string {

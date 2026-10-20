@@ -151,7 +151,8 @@ func (UserCharityLogDetail) userLogDetail() {}
 type AdminLogRow struct {
 	RejectionDetail *requestattempt.RejectionDetail `json:"rejection_detail,omitempty"`
 	OriginIdentity
-	CharityModel *string `json:"charity_model,omitempty"`
+	CharityModel   *string `json:"charity_model,omitempty"`
+	CharityModelID *string `json:"charity_model_id,omitempty"`
 	RejectionFields
 	ID                 string          `json:"id"`
 	RouteKind          RouteKind       `json:"route_kind"`
@@ -168,6 +169,8 @@ type AdminLogRow struct {
 }
 
 type AdminLogAttempt struct {
+	DonationID         *string    `json:"donation_id,omitempty"`
+	DonationKeyID      *string    `json:"donation_key_id,omitempty"`
 	AttemptSeq         string     `json:"attempt_seq"`
 	ResultKind         ResultKind `json:"result_kind"`
 	EndpointKeyID      *string    `json:"endpoint_key_id"`
@@ -194,7 +197,8 @@ type AdminLogDetail struct {
 type StewardLogRow struct {
 	RejectionDetail *requestattempt.RejectionDetail `json:"rejection_detail,omitempty"`
 	OriginIdentity
-	CharityModel *string `json:"charity_model,omitempty"`
+	CharityModel   *string `json:"charity_model,omitempty"`
+	CharityModelID *string `json:"charity_model_id,omitempty"`
 	RejectionFields
 	ID                 string          `json:"id"`
 	RouteKind          RouteKind       `json:"route_kind"`
@@ -216,6 +220,8 @@ type CallerIdentity struct {
 }
 
 type StewardLogAttempt struct {
+	DonationID         *string    `json:"donation_id,omitempty"`
+	DonationKeyID      *string    `json:"donation_key_id,omitempty"`
 	AttemptSeq         string     `json:"attempt_seq"`
 	ResultKind         ResultKind `json:"result_kind"`
 	EndpointKeyID      *string    `json:"endpoint_key_id"`

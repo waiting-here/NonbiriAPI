@@ -92,6 +92,11 @@ func newLogFixture(t *testing.T) *logFixture {
 	statements := []string{
 		`CREATE TABLE users(id INTEGER PRIMARY KEY,discord_id TEXT,username TEXT NOT NULL DEFAULT '',guild_nick TEXT NOT NULL DEFAULT '',is_admin INTEGER NOT NULL DEFAULT 0)`,
 		`CREATE TABLE admin_account_deletions(alert_id INTEGER PRIMARY KEY,former_user_id INTEGER UNIQUE)`,
+		`CREATE TABLE charity_models(id INTEGER PRIMARY KEY,full_name TEXT NOT NULL UNIQUE)`,
+		`CREATE TABLE charity_reservations(logical_request_id TEXT NOT NULL UNIQUE,charity_model_id INTEGER)`,
+		`CREATE TABLE donations(id INTEGER PRIMARY KEY)`,
+		`CREATE TABLE donation_keys(id INTEGER PRIMARY KEY,donation_id INTEGER NOT NULL,endpoint_key_id INTEGER)`,
+		`CREATE TABLE dispatch_claims(id TEXT PRIMARY KEY,logical_request_id TEXT NOT NULL,attempt_seq INTEGER NOT NULL,purpose TEXT NOT NULL,donation_key_id INTEGER,UNIQUE(logical_request_id,attempt_seq))`,
 		`CREATE TABLE request_logs(
  id INTEGER PRIMARY KEY, logical_request_id TEXT NOT NULL, user_id INTEGER, model TEXT NOT NULL,
  route_kind TEXT NOT NULL, caller_result_class TEXT, caller_status INTEGER, caller_error_code TEXT,
