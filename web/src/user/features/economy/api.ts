@@ -1,3 +1,8 @@
+import {
+  validSmartBackoff,
+  type SmartBackoffProfile,
+  type SmartBackoffRule,
+} from '@shared/operations/smartBackoff';
 import { ApiError, apiFetch, isApiError } from '@shared/query/http';
 import { validFailureThreshold } from '@shared/operations/failurePolicy';
 import {
@@ -88,7 +93,13 @@ export async function getDonation(id: string, signal?: AbortSignal): Promise<Don
 export interface CreateDonationInput {
   discordPublicThanks: boolean;
   description: string;
-  keys: { endpointKeyId: string; expiresAt: number | null; failureDisableThreshold?: string }[];
+  keys: {
+    endpointKeyId: string;
+    expiresAt: number | null;
+    failureDisableThreshold?: string;
+    smartBackoffProfile?: SmartBackoffProfile;
+    smartBackoffRules?: SmartBackoffRule[];
+  }[];
   ownershipAuthorized: true;
 }
 
@@ -109,6 +120,13 @@ export async function createDonation(input: CreateDonationInput): Promise<Donati
     requireDecimalID(key.endpointKeyId, 'endpoint key id');
     requireDonationExpiry(key.expiresAt);
     if (
+      !validSmartBackoff({
+        smart_backoff_profile: key.smartBackoffProfile ?? 'none',
+        smart_backoff_rules: key.smartBackoffRules ?? [],
+      })
+    )
+      invalidRequest('Invalid smart backoff configuration.');
+    if (
       key.failureDisableThreshold !== undefined &&
       !validFailureThreshold(key.failureDisableThreshold)
     )
@@ -122,6 +140,12 @@ export async function createDonation(input: CreateDonationInput): Promise<Donati
         description: input.description,
         keys: input.keys.map((key) => ({
           endpoint_key_id: key.endpointKeyId,
+          ...(key.smartBackoffProfile === undefined
+            ? {}
+            : { smart_backoff_profile: key.smartBackoffProfile }),
+          ...(key.smartBackoffRules === undefined
+            ? {}
+            : { smart_backoff_rules: key.smartBackoffRules }),
           expires_at: key.expiresAt,
           ...(key.failureDisableThreshold === undefined
             ? {}

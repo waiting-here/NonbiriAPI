@@ -161,13 +161,82 @@
     },
     "failurePolicy": {
       "label": "连续失败下架阈值",
-      "help": "默认 10，设为 0 可关闭报错自动下架。公益调用收到上游 HTTP 200 即清零并停止重试，后续错误仍会显示。",
+      "help": "默认 10；设为 0 可关闭报错自动下架。",
       "zeroWarning": "永不因报错自动下架：这把密钥发生连续错误时仍可能被调用。手动禁用、到期、封禁及配额限制仍然有效。",
       "saved": "当前下架阈值：{{value}}",
-      "recalculate": "保存后保留已有失败次数并立即重算报错下架状态。此操作不会启用密钥或重置失败次数。",
+      "recalculate": "保存后保留失败次数，并重新计算报错下架状态。",
       "save": "保存失败策略",
       "done": "失败策略已保存并重新计算。",
       "invalid": "请填写有效的连续失败阈值。"
+    },
+    "smartBackoff": {
+      "details": "退避说明",
+      "ruleHeading": "规则 {{index}}",
+      "kindLabel": "类型",
+      "valueLabel": "内容",
+      "periodLabel": "额度周期",
+      "recognitionHelp": "先使用内置识别。补充规则仅匹配错误响应，区分大小写。",
+      "successHelp": "上游返回 HTTP 200 即清零连续失败次数并停止重试，后续错误仍会显示。",
+      "profile": "智能额度退避",
+      "help": "额度错误暂避且不增加失败次数，其他错误仍计入下架阈值。",
+      "profiles": {
+        "none": "关闭",
+        "five_hour_week": "5 小时＋周",
+        "five_hour_week_month": "5 小时＋周＋月",
+        "day": "日",
+        "day_month": "日＋月"
+      },
+      "advanced": "补充错误识别（可选）",
+      "ruleCount_zero": "仅使用内置识别",
+      "ruleCount_one": "{{count}} 条补充规则",
+      "ruleCount_other": "{{count}} 条补充规则",
+      "rulesHelp": "最多 8 条规则，按顺序使用首条匹配项。",
+      "rulesInactive": "关闭时仍会保存这些规则，重新开启后生效。",
+      "ruleKind": "规则 {{index}} 类型",
+      "ruleValue": "规则 {{index}} 内容",
+      "rulePeriod": "规则 {{index}} 额度周期",
+      "kinds": {
+        "code": "业务错误码",
+        "message": "固定错误文字"
+      },
+      "valueHelp": {
+        "code": "1–64 个字母、数字、点、下划线、冒号或连字符，与错误码或错误类型完整匹配。",
+        "message": "从错误信息中选取 1–160 个字符的固定片段，请勿填写个人信息。"
+      },
+      "placeholder": {
+        "code": "例如：1308",
+        "message": "例如：本周用量已耗尽"
+      },
+      "periods": {
+        "auto": "自动识别",
+        "five_hour": "5 小时",
+        "day": "日",
+        "week": "周",
+        "month": "月"
+      },
+      "removeRule": "删除规则 {{index}}",
+      "addRule": "添加规则",
+      "invalid": "请检查规则内容，并选择当前情景包含的额度周期。",
+      "states": {
+        "waiting": "智能退避：等待中",
+        "ready": "智能退避：可试用",
+        "probing": "智能退避：试用中"
+      },
+      "reasons": {
+        "five_hour_quota": "5 小时额度耗尽",
+        "day_quota": "当日额度耗尽",
+        "week_quota": "本周额度耗尽",
+        "month_quota": "本月额度耗尽",
+        "quota": "可恢复额度耗尽"
+      },
+      "sources": {
+        "builtin": "内置识别",
+        "custom_rule": "补充规则"
+      },
+      "reasonSource": "{{reason}} · {{source}}",
+      "retryAt": "可试时间：{{time}}",
+      "timingHelp": "没有可靠恢复时间时，依次等待 15、30、60 分钟；明确周额度等待 6 小时，月额度等待 12 小时。到时由下一次公益请求试用。",
+      "editingHelp": "修改情景或补充规则会重新开始智能退避。上游指定的冷却时间继续有效。"
     },
     "refresh": "刷新",
     "donationHandling": {
@@ -395,6 +464,11 @@
         "discordFilterHint": "输入完整的 Discord ID",
         "keyFilterNotice": "当前显示已记录的尝试中使用过物理密钥 #{{id}} 的全部自用与公益请求，包括重试。",
         "viewKeyLogs": "查看该密钥请求日志",
+        "manageCharityModel": "管理公益模型",
+        "manageCharityKey": "管理公益密钥",
+        "charityModelUnavailable": "此记录已无对应的公益模型。",
+        "charityKeyUnavailable": "此记录已无对应的公益密钥。",
+        "returnToLogs": "返回请求日志",
         "keyLogsUnavailable": "此记录已无可用的物理密钥 ID，无法关联请求日志。",
         "attemptNumber": "第 {{number}} 次调用",
         "platformRecord": "平台生成的记录",
@@ -870,7 +944,7 @@
       "summary": "默认：{{action}}；{{count}} 条角色规则"
     },
     "donationReview": {
-      "forceTitle": "强制驳回自动批准的捐赠",
+      "forceTitle": "强制驳回捐赠",
       "forceHelp": "将停止此捐赠的新公益调用，已发出的调用正常结算。各密钥再次捐赠时需要人工复审，已有奖励保留。",
       "required": "启用此密钥并批准捐赠后，可恢复自动审核。未启用的密钥仍需复审。",
       "materialUnavailable": "审核材料不可用。请保持此密钥禁用，或恢复材料后重新审核。",
@@ -883,8 +957,8 @@
         "unknown": "首次批准来源无法确认"
       },
       "unavailable": {
-        "manual": "只有首次自动批准的捐赠可强制驳回。",
-        "unknown": "无法确认首次批准来源，当前不能强制驳回。",
+        "manual": "此捐赠当前无法强制驳回。",
+        "unknown": "此捐赠当前无法强制驳回。",
         "notApproved": "此捐赠当前未处于已批准状态。"
       },
       "title": "捐赠审核",
@@ -1639,8 +1713,6 @@
       "maintainTemplates": "管理员维护价格模板",
       "fillTemplate": "一键填写价格",
       "createTemplate": "用当前价格创建模板",
-      "saveTemplateMetadata": "保存名称、说明与启停",
-      "overwriteTemplate": "用当前价格覆盖此模板",
       "deleteTemplate": "删除价格模板",
       "deleteTemplateHelp": "删除后无法再选择此模板，已经填写或保存的模型价格保持原值。",
       "priceApplied": "已从 {{source}} 填写价格，保存当前模型后生效。",
@@ -1701,6 +1773,31 @@
       "inputPrice": "未缓存输入",
       "outputPrice": "输出",
       "longPriceField": "长上下文：{{field}}"
+    },
+    "templateManagement": {
+      "help": "新建和维护完整价格预设。模板变更不会改变模型中已保存的价格。",
+      "back": "返回价格模板",
+      "backModel": "返回模型草稿",
+      "updated": "更新时间",
+      "empty": "新建一个模板，或更换搜索词和启停筛选。",
+      "edit": "编辑价格模板",
+      "target": "正在编辑「{{name}}」· 第 {{revision}} 版",
+      "newHelp": "为新模板填写名称和全部价格。",
+      "save": "保存模板「{{name}}」",
+      "discard": "放弃修改",
+      "unsaved": "模板有未保存的修改",
+      "delete": "删除模板「{{name}}」？",
+      "conflict": "模板已被修改，当前草稿已保留。请载入最新版本后再保存。",
+      "loadLatest": "载入最新版本并保留草稿",
+      "latestLoaded": "已载入「{{name}}」第 {{revision}} 版，当前草稿保持不变。"
+    },
+    "pendingReviews": {
+      "title": "待处理捐赠审核",
+      "help": "审核所有待处理捐赠。通过前可设置各密钥的限额和启用状态。",
+      "saved": "已完成审核：{{status}}。",
+      "empty": "暂无待处理捐赠",
+      "emptyHelp": "新捐赠会出现在这里，也可以清空搜索条件重试。",
+      "noLongerPending": "此捐赠已完成审核，请返回待处理队列。"
     }
   },
   "logs": {

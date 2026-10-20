@@ -1,3 +1,8 @@
+import type {
+  SmartBackoff,
+  SmartBackoffProfile,
+  SmartBackoffRule,
+} from '@shared/operations/smartBackoff';
 export type CharityCapabilityState =
   'feature_disabled' | 'no_models' | 'no_candidates' | 'available';
 
@@ -128,6 +133,9 @@ export interface DonationKey {
   outputTokenReserve?: string | null;
   breakdownStartedAt?: number;
   failureDisableThreshold: string;
+  smartBackoffProfile: SmartBackoffProfile;
+  smartBackoffRules: SmartBackoffRule[];
+  smartBackoff: SmartBackoff | null;
   id: string;
   endpointKeyId: string | null;
   displayHead: string;

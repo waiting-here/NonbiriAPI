@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../../test/unit/support';
 import type { CharityModel, CharityPriceConfig } from '@shared/operations/charity';
@@ -73,7 +73,7 @@ const page = (data: unknown[], pageNumber = 1, total = data.length, size = 20) =
 afterEach(() => vi.unstubAllGlobals());
 
 describe('prices inside a model workspace', () => {
-  it('applies only the complete price snapshot, and admin metadata and overwrite use separate explicit writes', async () => {
+  it('applies only the complete price snapshot and exposes a separate administration entry', async () => {
     let template = {
       ...token,
       id: '3',
@@ -97,10 +97,9 @@ describe('prices inside a model workspace', () => {
       }),
     );
     const apply = vi.fn();
-    const view = await renderWithProviders(
-      <PriceTools role="admin" current={request} onApply={apply} />,
-      { station: 'admin' },
-    );
+    const view = await renderWithProviders(<PriceTools role="admin" onApply={apply} />, {
+      station: 'admin',
+    });
     view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'fixture-admin' } });
     await view.user.click(screen.getByText('Price templates', { selector: 'strong' }));
     await view.user.click(await screen.findByRole('button', { name: 'View full prices' }));
@@ -113,34 +112,10 @@ describe('prices inside a model workspace', () => {
       'token_reserve_credits',
     ]);
     expect(writes).toHaveLength(0);
-    await view.user.click(screen.getByText('Maintain price templates', { selector: 'strong' }));
-    fireEvent.change(screen.getByLabelText('Template name'), {
-      target: { value: 'Renamed prices' },
-    });
-    await view.user.click(screen.getByRole('button', { name: 'Save template details' }));
-    await waitFor(() => expect(writes).toHaveLength(1));
-    expect(writes[0]).toEqual({
-      method: 'PUT',
-      body: {
-        ...token,
-        name: 'Renamed prices',
-        description: 'Full prices',
-        enabled: true,
-        expected_revision: '4',
-      },
-    });
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Replace stored prices' })).toBeEnabled(),
-    );
-    await view.user.click(screen.getByRole('button', { name: 'Replace stored prices' }));
-    await waitFor(() => expect(writes).toHaveLength(2));
-    expect(writes[1]?.body).toEqual({
-      ...request,
-      name: 'Renamed prices',
-      description: 'Full prices',
-      enabled: true,
-      expected_revision: '5',
-    });
+    expect(screen.getByRole('button', { name: 'Maintain price templates' })).toBeVisible();
+    expect(screen.queryByLabelText('Template name')).not.toBeInTheDocument();
+    await view.user.click(screen.getByRole('button', { name: 'Maintain price templates' }));
+    expect(screen.queryByRole('button', { name: 'Fill all prices' })).not.toBeInTheDocument();
   });
 
   it('gives level 6 only enabled template reads and local filling', async () => {
@@ -167,10 +142,9 @@ describe('prices inside a model workspace', () => {
       }),
     );
     const apply = vi.fn();
-    const view = await renderWithProviders(
-      <PriceTools role="steward" current={request} onApply={apply} />,
-      { station: 'user' },
-    );
+    const view = await renderWithProviders(<PriceTools role="steward" onApply={apply} />, {
+      station: 'user',
+    });
     await view.user.click(screen.getByText('Price templates', { selector: 'strong' }));
     await view.user.click(await screen.findByRole('button', { name: 'View full prices' }));
     await view.user.click(screen.getByRole('button', { name: 'Fill all prices' }));
@@ -196,10 +170,9 @@ describe('prices inside a model workspace', () => {
       }),
     );
     const apply = vi.fn();
-    const view = await renderWithProviders(
-      <PriceTools role="admin" current={token} onApply={apply} />,
-      { station: 'admin' },
-    );
+    const view = await renderWithProviders(<PriceTools role="admin" onApply={apply} />, {
+      station: 'admin',
+    });
     await view.user.click(
       screen.getByText("Reference an existing model's prices", { selector: 'strong' }),
     );

@@ -19,6 +19,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
+	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 )
 
 const maxUnixSecond = int64(253402300799)
@@ -502,6 +503,7 @@ WHERE c.id=?`, handle.claimID).Scan(&stateText, &requestID, &attemptSeq, &purpos
 		return nil, ErrInvariant
 	}
 	var managedHeaders http.Header
+	backoff := smartbackoff.Dispatch{Config: smartbackoff.Default()}
 	if RouteKind(requestRoute).IsCharity() {
 		if !callerID.Valid {
 			clear(contextID)
@@ -524,6 +526,16 @@ WHERE c.id=?`, handle.claimID).Scan(&stateText, &requestID, &attemptSeq, &purpos
 			clear(contextID)
 			clear(encrypted)
 			return nil, s.quotaCapacityFailure(ctx, tx, at, err, nil)
+		}
+		var backoffErr error
+		backoff, backoffErr = smartbackoff.Prepare(ctx, tx, handle.donationKeyID, handle.claimID, at)
+		if backoffErr != nil {
+			clear(contextID)
+			clear(encrypted)
+			if errors.Is(backoffErr, smartbackoff.ErrUnavailable) {
+				return nil, ErrKeyRateLimited
+			}
+			return nil, backoffErr
 		}
 		if provider, ok := s.charity.(CharitySessionHeaders); ok {
 			managedHeaders, err = provider.SessionHeaders(ctx, tx, CharityDispatch{RequestID: requestID, ClaimID: handle.claimID, ActorUserID: callerID.Int64, DispatchedAt: at})
@@ -596,7 +608,7 @@ SET state='dispatched',dispatched_at=? WHERE id=? AND state='claimed'`, at, hand
 		}
 	}
 	return &Dispatch{
-		managedHeaders: managedHeaders, onRequestSent: sent,
+		managedHeaders: managedHeaders, onRequestSent: sent, backoff: backoff,
 		handle:       handle,
 		dispatchedAt: at,
 		credential:   credential,

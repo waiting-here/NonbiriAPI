@@ -109,6 +109,42 @@ const attempt = {
 };
 
 describe('role log wire', () => {
+  it('keeps stable management targets separate from historical names and physical key IDs', () => {
+    for (const normalize of [normalizeAdminLogRow, normalizeStewardLogRow]) {
+      expect(
+        normalize({
+          ...charityStewardRow,
+          charity_model: 'Historical name',
+          charity_model_id: '31',
+        }),
+      ).toMatchObject({ charity_model: 'Historical name', charity_model_id: '31' });
+      expect(normalize(charityStewardRow).charity_model_id).toBeNull();
+      expect(() => normalize({ ...row, charity_model_id: '31' })).toThrow();
+      expect(() => normalize({ ...charityStewardRow, charity_model_id: '03' })).toThrow();
+    }
+    for (const normalize of [normalizeAdminLogAttempt, normalizeStewardLogAttempt]) {
+      expect(normalize({ ...attempt, donation_id: '7', donation_key_id: '11' })).toMatchObject({
+        endpoint_key_id: '2',
+        donation_id: '7',
+        donation_key_id: '11',
+      });
+      expect(normalize(attempt)).toMatchObject({ donation_id: null, donation_key_id: null });
+      expect(() => normalize({ ...attempt, donation_id: '7' })).toThrow();
+      expect(() => normalize({ ...attempt, donation_id: '7', donation_key_id: '01' })).toThrow();
+    }
+    expect(normalizeUserLogRow({ ...userRow, charity_model_id: '31' })).not.toHaveProperty(
+      'charity_model_id',
+    );
+    expect(
+      normalizeUserLogAttempt({
+        ...attempt,
+        endpoint_note: '',
+        key_note: '',
+        donation_id: '7',
+        donation_key_id: '11',
+      }),
+    ).not.toHaveProperty('donation_key_id');
+  });
   it('rejects inconsistent pre-handler accounting and validates every role', () => {
     const refusal = {
       ...commonRow,

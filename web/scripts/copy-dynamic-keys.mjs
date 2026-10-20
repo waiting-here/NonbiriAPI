@@ -15,6 +15,7 @@ const entry = (catalog, key, source, anchor, reason) => ({
 
 const charityManagement = 'src/shared/components/CharityManagement.tsx';
 const charityModels = 'src/shared/components/charity/CharityModels.tsx';
+const charityPriceFields = 'src/shared/components/charity/PriceConfigFields.tsx';
 
 function charityRoleSource(key) {
   const donationFields = [
@@ -24,7 +25,23 @@ function charityRoleSource(key) {
     'saveKeyLimits',
     'statusFilter',
   ];
-  return donationFields.includes(key.split('.').at(-1)) ? charityManagement : charityModels;
+  const field = key.split('.').at(-1);
+  const priceFields = [
+    'discountEnabled',
+    'discountEnd',
+    'discountPercent',
+    'discountStart',
+    'perRequest',
+    'perToken',
+    'pricingMode',
+    'request_donor_reward_milli',
+    'request_user_price_milli',
+  ];
+  return donationFields.includes(field)
+    ? charityManagement
+    : priceFields.includes(field)
+      ? charityPriceFields
+      : charityModels;
 }
 const charityPanels = 'src/user/features/economy/CharityPanels.tsx';
 const activitiesPanels = 'src/user/features/economy/ActivitiesPanels.tsx';
@@ -168,7 +185,7 @@ const dynamicCopyKeys = [
     entry(
       'common',
       key,
-      charityModels,
+      charityPriceFields,
       "`common.operations.charity.${side === 'userPrices' ? 'userPrices' : 'donorRewards'}`",
       'The side expression has exactly the userPrices/donorRewards alternatives.',
     ),
@@ -329,7 +346,7 @@ const dynamicCopyKeys = [
     entry(
       'admin',
       key,
-      charityModels,
+      charityPriceFields,
       't(tokenPriceCopyKey(role, side, field))',
       'tokenPriceCopyKey combines four token fields with the two explicit pricing sides.',
     ),
@@ -347,7 +364,7 @@ const dynamicCopyKeys = [
     entry(
       'user',
       key,
-      charityModels,
+      charityPriceFields,
       't(tokenPriceCopyKey(role, side, field))',
       'tokenPriceCopyKey combines four token fields with the two explicit pricing sides.',
     ),

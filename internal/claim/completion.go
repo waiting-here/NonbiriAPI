@@ -172,6 +172,8 @@ func (s *Service) checkRequestCompletionTx(ctx context.Context, tx *sql.Tx, inpu
 }
 
 type claimRecord struct {
+	backoffActive                    bool
+	backoffAccepted                  sql.NullInt64
 	streakDisposition, failureOrigin sql.NullString
 	claimID                          string
 	requestID                        string
@@ -209,17 +211,18 @@ func loadClaimTx(ctx context.Context, tx *sql.Tx, claimID string) (claimRecord, 
 	err := tx.QueryRowContext(ctx, `SELECT
 c.id,c.logical_request_id,c.attempt_seq,c.purpose,c.state,c.endpoint_key_id,c.secret_ref_id,
 c.donation_key_id,c.receiver_user_id,c.dispatched_at,c.terminal_at,c.donor_reward_actual_milli,
-c.donor_reward_state,l.id,s.connector_type,s.canonical_base_url,l.upstream_model_id,e.id,c.streak_disposition,c.failure_origin
+c.donor_reward_state,l.id,s.connector_type,s.canonical_base_url,l.upstream_model_id,e.id,c.streak_disposition,c.failure_origin,sb.claim_id IS NOT NULL,sb.accepted_at
 FROM dispatch_claims c
 JOIN request_logs l ON l.logical_request_id=c.logical_request_id
 LEFT JOIN endpoint_key_secrets s ON s.id=c.secret_ref_id
 LEFT JOIN endpoint_keys k ON k.id=c.endpoint_key_id
 LEFT JOIN endpoints e ON e.id=k.endpoint_id
+LEFT JOIN dispatch_smart_backoff_facts sb ON c.purpose='charity' AND sb.claim_id=c.id
 WHERE c.id=?`, claimID).Scan(
 		&record.claimID, &record.requestID, &record.attemptSeq, &purposeText, &stateText,
 		&record.endpointKeyID, &record.secretRefID, &record.donationKeyID, &record.receiverUserID,
 		&record.dispatchedAt, &record.terminalAt, &record.rewardActual, &rewardText,
-		&record.requestLogID, &connectorText, &baseURL, &upstreamModel, &record.currentEndpoint, &record.streakDisposition, &record.failureOrigin)
+		&record.requestLogID, &connectorText, &baseURL, &upstreamModel, &record.currentEndpoint, &record.streakDisposition, &record.failureOrigin, &record.backoffActive, &record.backoffAccepted)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return claimRecord{}, ErrNotFound
@@ -395,6 +398,8 @@ func (s *Service) completeAttemptTx(
 		}
 		suppressReward := !outcome.Usage.Present || isAdmin
 		charityInput = CharityAttemptInput{
+			BackoffActive:     record.backoffActive,
+			UpstreamStatus:    outcome.UpstreamStatus,
 			RequestID:         record.requestID,
 			ClaimID:           record.claimID,
 			DonationKeyID:     nullableInt64(record.donationKeyID),

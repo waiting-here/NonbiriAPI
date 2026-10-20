@@ -32,8 +32,13 @@ work overlaps. Success still requires a durable commit, and anonymous queue
 metrics distinguish application waiting from database pool waiting.
 
 Level-5 stewards can inspect user accounts and ban level 1–4 users. They cannot
-change account settings or credits, lift a ban, or replace an active ban. Full
-steward and administrator permissions retain their existing boundaries.
+change account settings or credits, lift a ban, or replace an active ban. They
+can approve or reject every pending donation. Administrators and level-6
+stewards can force-reject any approved donation, including manual approvals.
+
+Administrators manage complete price templates in a dedicated charity workspace,
+with search, pagination, creation, editing and deletion. Administrators and
+level-6 stewards can copy a template into a model form and adjust it before saving.
 
 | Area | Source and contract |
 | --- | --- |
@@ -60,8 +65,16 @@ The mystery shop offers daily bundles of ten standard or limited tickets for
 10,000 credits each, using game credits first. Each bundle has its own daily limit.
 Management request logs support an exact Discord ID filter alongside the called
 charity model; additional filters include the upstream model used.
+Authorized managers can open the corresponding charity model or each attempt's
+donated-key settings from a log, then return to the same filters and page.
 After choosing a key for a charity service connection, fetch its model list again
 or open its key settings directly, then return to the same selection.
+
+Donated keys can optionally wait after recognized periodic-quota errors and
+recover through one real charity request. Donors and authorized managers can add
+exact business codes or fixed message fragments. Retry headers take precedence;
+other errors retain the consecutive-failure policy. See the
+[smart-backoff contract](docs/api-contract.md#413-smart-donated-key-backoff).
 
 ## Build and develop
 
@@ -79,7 +92,7 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [First-run setup](docs/first-run-setup.md) covers private paths, the encryption key, Discord OAuth and public origins. Copy [admin.env.example](admin.env.example) outside the checkout, replace placeholders and load it before starting. Preserve the database with its matching key.
 
-Fresh databases start in maintenance with public features closed. The v1.0.4 source accepts schema 24 or fresh storage and produces account export 22. Existing schema 16–23 databases use the separate offline converter; historical conversion code is excluded from the service. Later v1.x releases retain an upgrade path from every earlier stable v1.x schema. Older binaries need not read newer databases.
+Fresh databases start in maintenance with public features closed. The v1.0.5 source accepts schema 25 or fresh storage and produces account export 23. Existing schema 16–24 databases use the separate offline converter; historical conversion code is excluded from the service. Later v1.x releases retain an upgrade path from every earlier stable v1.x schema. Older binaries need not read newer databases.
 
 [Deployment](docs/deployment.md) covers systemd, proxies, immutable artifacts, upgrades and complete-snapshot recovery. Startup variables and online settings have one reference in [configuration](docs/configuration.md).
 

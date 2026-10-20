@@ -15,6 +15,8 @@ func TestStewardAutomationFailurePolicyAuthorityAndReplay(t *testing.T) {
 	f := newAutomationFixture(t)
 	input := f.input(1)
 	input["keys"].([]map[string]any)[0]["failure_disable_threshold"] = "0"
+	input["keys"].([]map[string]any)[0]["smart_backoff_profile"] = "day_month"
+	input["keys"].([]map[string]any)[0]["smart_backoff_rules"] = []map[string]any{{"kind": "code", "value": "create_quota", "period": "auto"}}
 	created := f.create(t, strings.Repeat("P", 22), input)
 	key := created.Keys[0].DonationKeyID
 	f.exec(t, "UPDATE donation_keys SET failure_streak=?,enabled=0 WHERE id=?", db.EncodeU128(db.U128{15: 12}), key)
@@ -22,13 +24,13 @@ func TestStewardAutomationFailurePolicyAuthorityAndReplay(t *testing.T) {
 	headers := map[string]string{"Authorization": "Bearer " + f.caller, "Content-Type": "application/json"}
 	read := testApplicationRequest(t, f.handler, "GET", auditUserHost, readPath, "", nil, headers)
 	var policy donation.FailurePolicy
-	if read.Code != 200 || json.Unmarshal(read.Body.Bytes(), &policy) != nil || policy.FailureDisableThreshold != "0" || policy.FailureStreak != "12" {
+	if read.Code != 200 || json.Unmarshal(read.Body.Bytes(), &policy) != nil || policy.FailureDisableThreshold != "0" || policy.FailureStreak != "12" || policy.Profile != "day_month" || len(policy.Rules) != 1 {
 		t.Fatal(read.Code, read.Body)
 	}
-	body := `{"donation_id":"` + created.DonationID + `","donation_key_id":"` + key + `","expected_revision":"` + policy.Revision + `","failure_disable_threshold":"10"}`
+	body := `{"donation_id":"` + created.DonationID + `","donation_key_id":"` + key + `","expected_revision":"` + policy.Revision + `","failure_disable_threshold":"10","smart_backoff_profile":"day","smart_backoff_rules":[{"kind":"code","value":"daily_limit"}]}`
 	headers["Idempotency-Key"] = strings.Repeat("Q", 22)
 	patch := testApplicationRequest(t, f.handler, "PATCH", auditUserHost, stewardautomation.FailurePolicyPath, body, nil, headers)
-	if patch.Code != 200 || json.Unmarshal(patch.Body.Bytes(), &policy) != nil || !policy.FailureDisabled {
+	if patch.Code != 200 || json.Unmarshal(patch.Body.Bytes(), &policy) != nil || !policy.FailureDisabled || policy.Profile != "day" || len(policy.Rules) != 1 || policy.Rules[0].Period != "auto" {
 		t.Fatal(patch.Code, patch.Body)
 	}
 	replay := testApplicationRequest(t, f.handler, "PATCH", auditUserHost, stewardautomation.FailurePolicyPath, body, nil, headers)
@@ -54,6 +56,7 @@ func TestStewardAutomationFailurePolicyAuthorityAndReplay(t *testing.T) {
 		query string
 		args  []any
 	}{
+		{"UPDATE users SET level=5 WHERE id=?", []any{f.userID}},
 		{"UPDATE users SET level=4 WHERE id=?", []any{f.userID}},
 		{"UPDATE users SET level=6,is_banned=1 WHERE id=?", []any{f.userID}},
 		{"UPDATE users SET is_banned=0 WHERE id=?", []any{f.userID}},

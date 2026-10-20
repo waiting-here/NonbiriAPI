@@ -26,6 +26,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
+	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 )
 
 const (
@@ -397,7 +398,7 @@ cr.uncached_user_price_milli,cr.cache_write_user_price_milli,cr.cache_read_user_
 cr.uncached_donor_reward_milli,cr.cache_write_donor_reward_milli,cr.cache_read_donor_reward_milli,cr.output_donor_reward_milli,
 cr.token_reserve_milli,
 EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=k.id),
-(SELECT rate_limited_until FROM donation_key_cooldowns WHERE donation_key_id=dk.id)
+`+smartbackoff.EffectiveUntilSQL("dk.id")+`
 FROM charity_reservations cr
 JOIN logical_requests lr ON lr.id=cr.logical_request_id
 JOIN donation_keys dk ON dk.id=?
@@ -792,6 +793,11 @@ state='committed',finalized_at=?,streak_disposition=?,failure_origin=? WHERE cla
 	}
 	if err := updateRequestAttemptAggregate(ctx, tx, input, completion.Actual, completion.RewardState, input.CompletedAt); err != nil {
 		return err
+	}
+	if input.BackoffActive {
+		if err := smartbackoff.Complete(ctx, tx, input.ClaimID, input.UpstreamStatus, input.CompletedAt); err != nil {
+			return err
+		}
 	}
 	return foldStreak(ctx, tx, *row.keyID, row.generation, input.CompletedAt)
 }

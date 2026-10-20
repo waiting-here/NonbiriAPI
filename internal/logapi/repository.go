@@ -417,6 +417,7 @@ type commonLogRecord struct {
 	rejectionDetail                                             *requestattempt.RejectionDetail
 	origin                                                      OriginIdentity
 	charityModel                                                *string
+	charityModelID                                              *string
 	rejectionStage, rejectionReason, requestMethod, requestPath sql.NullString
 	rowID                                                       int64
 	id                                                          string

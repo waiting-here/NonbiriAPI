@@ -4,6 +4,44 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## 1.0.5 — 2026-10-20
+
+### Added
+
+- Optional donated-key smart backoff for five-hour/weekly, five-hour/weekly/monthly,
+  daily and daily/monthly quotas. Built-in recognition and optional exact business
+  codes or fixed message fragments leave recognized quota failures out of the
+  consecutive-failure count. Waiting keys resume through one real charity trial;
+  an initial HTTP 200 restores them without waiting for stream completion.
+- Donor and authorized management controls for profiles, supplemental recognition
+  and visible retry state. Existing level-5 key scope remains unchanged.
+- A dedicated administrator price-template workspace with full pricing fields,
+  search, state filters, numbered pagination, creation, editing and deletion.
+  Model forms retain template selection and independent editable snapshots.
+- Direct links from management request logs to the corresponding charity model
+  and each attempt's donated-key settings, preserving the return filters and page.
+  Missing historical resource relations remain unavailable instead of being
+  inferred from names or endpoint snapshots.
+
+### Changed
+
+- Allow level-5 browser sessions to approve or reject all active pending
+  donations, with a pending-only queue and redacted review receipts.
+- Allow administrators and level-6 stewards to force-reject any approved
+  donation, regardless of its original manual or automatic approval source.
+  Existing review-material, revision and transaction safeguards still apply.
+- Validate ordinary offline upgrades against the registered migration's affected
+  relationships instead of scanning unrelated history. Explicit `--check`
+  retains credential, integrity and full foreign-key checks. Conversion progress
+  and elapsed-time heartbeats use stderr; the final result remains JSON on stdout.
+
+### Compatibility
+
+- Storage schema 25 and account export 23 include smart-backoff settings and safe
+  current state. The separate converter supports exact registered schema 16–24.
+  Existing keys default to smart backoff disabled. Retry headers retain priority,
+  ordinary failure thresholds remain effective, and billing rules are unchanged.
+
 ## 1.0.4 — 2026-10-20
 
 Storage schema 24 requires the matching offline converter for exact registered

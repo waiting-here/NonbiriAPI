@@ -21,10 +21,11 @@ type OfflineSchema struct {
 // ConvertOffline checks or converts one exact source in an exclusive transaction.
 // The caller owns the stopped service and its recovery snapshot.
 func ConvertOffline(ctx context.Context, path string, codec secret.GenerationTwoContextCodec, source OfflineSchema, apply bool, check func(context.Context, *sql.DB) error, convert func(context.Context, *sql.DB, *sql.Tx) error) (bool, error) {
-	return convertOffline(ctx, path, codec, []OfflineSchema{source}, apply, check, convert)
+	// Arbitrary caller transforms have no compiled impact classification.
+	return convertOffline(ctx, path, codec, []OfflineSchema{source}, apply, false, check, convert)
 }
 
-func convertOffline(ctx context.Context, path string, codec secret.GenerationTwoContextCodec, sources []OfflineSchema, apply bool, check func(context.Context, *sql.DB) error, convert func(context.Context, *sql.DB, *sql.Tx) error) (changed bool, result error) {
+func convertOffline(ctx context.Context, path string, codec secret.GenerationTwoContextCodec, sources []OfflineSchema, apply, classified bool, check func(context.Context, *sql.DB) error, convert func(context.Context, *sql.DB, *sql.Tx) error) (changed bool, result error) {
 	if ctx == nil || codec == nil || len(sources) == 0 || convert == nil {
 		return false, errors.New("offline conversion dependencies are required")
 	}
@@ -52,29 +53,60 @@ func convertOffline(ctx context.Context, path string, codec secret.GenerationTwo
 		}
 		return false, errors.New("unsupported schema version or manifest")
 	}
+	finishIdentity := beginProgress(ctx, "identity", 0, "")
+	identityFinished := false
+	defer func() {
+		if !identityFinished {
+			finishIdentity(result)
+		}
+	}()
 	err := db.InspectContext(ctx, path, codec, func(ctx context.Context, read *sql.DB) error {
 		needed, err := inspect(read)
 		if err != nil {
 			return err
 		}
 		changed = needed
-		if !needed {
-			return db.ValidateCurrentStorage(ctx, read, codec)
-		}
-		if err := db.ValidateStoredEndpointCredentials(ctx, read, codec); err != nil {
+		sourceVersion, err := readSchemaVersion(ctx, read)
+		if err != nil {
 			return err
 		}
-		if err := checkIntegrity(ctx, read); err != nil {
+		setProgressSource(ctx, sourceVersion)
+		planVersion := sourceVersion
+		if sourceVersion == 16 {
+			planVersion = 17
+		}
+		plan, err := storageSchema.planFromValidatedVersion(planVersion)
+		if err != nil {
 			return err
 		}
-		if check != nil {
+		if needed && check != nil {
 			if err := check(ctx, read); err != nil {
 				return err
 			}
 		}
+		finishIdentity(nil)
+		identityFinished = true
+		fullAudit := !apply || sourceVersion == 16 || !classified
+		if fullAudit || plan.auditsCredentials() {
+			if err := progressStep(ctx, "audit", 0, "endpoint_key_secrets", func() error {
+				return db.ValidateStoredEndpointCredentials(ctx, read, codec)
+			}); err != nil {
+				return err
+			}
+		}
+		if fullAudit {
+			if err := progressStep(ctx, "audit", 0, "", func() error { return checkIntegrity(ctx, read) }); err != nil {
+				return err
+			}
+		}
+		if !needed {
+			return progressStep(ctx, "target", 0, "", func() error { return db.ValidateCurrentStorage(ctx, read, codec) })
+		}
 		if !apply {
 			return nil
 		}
+		finishIdentity = beginProgress(ctx, "identity", 0, "")
+		identityFinished = false
 		// A WAL reader retains shared-memory locks even after its queries finish.
 		// Keep the process ownership lease, but close this SQLite connection
 		// before acquiring exclusive access on the conversion connection.
@@ -97,7 +129,8 @@ func convertOffline(ctx context.Context, path string, codec secret.GenerationTwo
 		}
 		database.SetMaxOpenConns(1)
 		defer database.Close()
-		return runGenerationTwoExtension(ctx, database, func(ctx context.Context, tx *sql.Tx) error {
+		var sourceRelationships map[string]bool
+		return runConversionTransaction(ctx, database, fullAudit || plan.rebuildsTables(), func(ctx context.Context, tx *sql.Tx) error {
 			if err := db.ValidateDatabaseIdentity(ctx, tx); err != nil {
 				return err
 			}
@@ -105,17 +138,32 @@ func convertOffline(ctx context.Context, path string, codec secret.GenerationTwo
 			if err != nil {
 				return err
 			}
-			if !needed {
-				changed = false
-				return nil
+			version, err := readSchemaVersion(ctx, tx)
+			if err != nil {
+				return err
+			}
+			if !needed || version != sourceVersion {
+				return errors.New("conversion source changed before exclusive access")
 			}
 			if err := validateMaterial(ctx, tx, codec); err != nil {
 				return err
 			}
-			if err := convert(ctx, database, tx); err != nil {
+			finishIdentity(nil)
+			identityFinished = true
+			if !fullAudit {
+				sourceRelationships, err = plan.relationshipTables(ctx, tx)
+				if err != nil {
+					return err
+				}
+			}
+			if sourceVersion == 16 {
+				if err := progressStep(ctx, "migration", 17, "", func() error { return convert(ctx, database, tx) }); err != nil {
+					return err
+				}
+			} else if err := convert(ctx, database, tx); err != nil {
 				return err
 			}
-			version, err := readSchemaVersion(ctx, tx)
+			version, err = readSchemaVersion(ctx, tx)
 			if err != nil {
 				return err
 			}
@@ -129,7 +177,24 @@ func convertOffline(ctx context.Context, path string, codec secret.GenerationTwo
 			if err := plan.applySteps(ctx, tx); err != nil {
 				return err
 			}
-			return db.ValidateCurrentStorage(ctx, tx, codec)
+			return nil
+		}, func(ctx context.Context, tx *sql.Tx) error {
+			if fullAudit {
+				if err := progressStep(ctx, "relationships", 0, "", func() error {
+					return checkForeignKeys(ctx, tx, "PRAGMA foreign_key_check")
+				}); err != nil {
+					return err
+				}
+			} else {
+				targetRelationships, err := plan.relationshipTables(ctx, tx)
+				if err != nil {
+					return err
+				}
+				if err := checkRelationships(ctx, tx, sourceRelationships, targetRelationships); err != nil {
+					return err
+				}
+			}
+			return progressStep(ctx, "target", 0, "", func() error { return db.ValidateCurrentStorage(ctx, tx, codec) })
 		})
 	})
 	if err != nil {
@@ -180,19 +245,7 @@ func checkIntegrity(ctx context.Context, q queryer) error {
 	if count != 1 {
 		return errors.New("source integrity result is missing")
 	}
-	rows, err = q.QueryContext(ctx, "PRAGMA foreign_key_check")
-	if err != nil {
-		return err
-	}
-	invalid := rows.Next()
-	err = errors.Join(rows.Err(), rows.Close())
-	if err != nil {
-		return err
-	}
-	if invalid {
-		return errors.New("source reference check failed")
-	}
-	return nil
+	return checkForeignKeys(ctx, q, "PRAGMA foreign_key_check")
 }
 
 type queryer interface {

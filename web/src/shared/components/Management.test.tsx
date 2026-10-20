@@ -1,3 +1,4 @@
+vi.mock('@shared/components/AsyncLeaveDialog', () => ({ AsyncLeaveDialog: () => null }));
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 	"math/big"
 	"net/http"
 	"reflect"
@@ -196,6 +197,9 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		donationKeyID, err := result.LastInsertId()
 		if err != nil || donationKeyID <= 0 {
 			return Donation{}, ErrInvariant
+		}
+		if err := smartbackoff.Set(ctx, tx, donationKeyID, smartbackoff.Patch{Profile: &key.backoff.Profile, Rules: &key.backoff.Rules}, now); err != nil {
+			return Donation{}, err
 		}
 		required, err := s.reviewMaterial.CaptureDonationKey(ctx, tx, donationKeyID, key.id, time.Unix(now, 0))
 		if err != nil {
@@ -463,12 +467,16 @@ func (s *Service) review(
 	if s == nil || ctx == nil || donationID <= 0 || !validReviewInput(input) {
 		return roleDonationMutation{}, ErrInvalidRequest
 	}
-	tx, actorID, err := s.beginRoleTx(ctx, role, actorUserID)
+	tx, reviewRole, actorID, err := s.beginReviewTx(ctx, role, actorUserID, false)
 	if err != nil {
 		return roleDonationMutation{}, err
 	}
+	role = reviewRole
 	committed := false
 	defer finishTx(tx, &committed)
+	if role == reviewerTrainee && input.Decision == "force_reject" {
+		return roleDonationMutation{}, ErrForbidden
+	}
 	now, err := s.nowUnix()
 	if err != nil {
 		return roleDonationMutation{}, err
@@ -482,6 +490,11 @@ func (s *Service) review(
 	}
 	if decision.Kind == idempotency.Replay {
 		return replayRoleDonation(ctx, tx, decision, role, actorID, donationID)
+	}
+	if role == reviewerTrainee {
+		if err := requirePendingReviewTx(ctx, tx, donationID, now); err != nil {
+			return roleDonationMutation{}, err
+		}
 	}
 	expiry, err := materializeDonationExpiryStateTx(ctx, tx, donationID, now)
 	if err != nil {
@@ -515,9 +528,9 @@ func (s *Service) review(
 }
 
 func (s *Service) reviewDonationTx(ctx context.Context, tx *sql.Tx, donationID, actorID int64, role string, input ReviewInput, now int64) error {
-	var status, origin string
+	var status string
 	var revision int64
-	if err := tx.QueryRowContext(ctx, `SELECT status,revision,first_approval_origin FROM donations WHERE id=?`, donationID).Scan(&status, &revision, &origin); errors.Is(err, sql.ErrNoRows) {
+	if err := tx.QueryRowContext(ctx, `SELECT status,revision FROM donations WHERE id=?`, donationID).Scan(&status, &revision); errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	} else if err != nil {
 		return fmt.Errorf("donation: read review state: %w", err)
@@ -527,7 +540,7 @@ func (s *Service) reviewDonationTx(ctx context.Context, tx *sql.Tx, donationID, 
 	}
 	if input.Decision == "reject" || input.Decision == "force_reject" {
 		if input.Decision == "force_reject" {
-			if status != "approved" || origin != "auto" {
+			if status != "approved" {
 				return ErrConflict
 			}
 			if err := s.reviewMaterial.RequireDonation(ctx, tx, donationID, time.Unix(now, 0)); err != nil {
@@ -853,7 +866,7 @@ func (s *Service) manageKey(
 
 func replayRoleDonation(ctx context.Context, tx *sql.Tx, decision idempotency.Decision, role reviewerRole, actorID, donationID int64) (roleDonationMutation, error) {
 	result := roleDonationMutation{status: decision.HTTPStatus, body: append([]byte(nil), decision.ResponseBody...), replayed: true}
-	if role == reviewerSteward {
+	if role == reviewerSteward || role == reviewerTrainee {
 		if err := json.Unmarshal(decision.ResponseBody, &result.steward); err != nil {
 			return roleDonationMutation{}, ErrInvariant
 		}
@@ -942,7 +955,10 @@ JOIN donation_keys dk ON dk.id=b.donation_key_id WHERE dk.donation_id=? AND dk.i
 }
 
 func finishRoleDonation(ctx context.Context, tx *sql.Tx, decision idempotency.Decision, role reviewerRole, actorID int64, value AdminDonation) (roleDonationMutation, error) {
-	if role == reviewerSteward {
+	if role == reviewerSteward || role == reviewerTrainee {
+		if role == reviewerTrainee {
+			value = traineeReviewProjection(value)
+		}
 		steward := stewardFromAdmin(value, actorID)
 		out, err := finishJSON(ctx, tx, decision, http.StatusOK, steward)
 		if err != nil {
@@ -1127,12 +1143,23 @@ func (s *Service) materializeRoleExpiryStandalone(
 	role reviewerRole,
 	actorUserID, donationID, now int64,
 ) error {
-	tx, _, err := s.beginRoleTx(ctx, role, actorUserID)
+	var tx *sql.Tx
+	var err error
+	if role == reviewerTrainee {
+		tx, _, _, err = s.beginReviewTx(ctx, reviewerSteward, actorUserID, false)
+	} else {
+		tx, _, err = s.beginRoleTx(ctx, role, actorUserID)
+	}
 	if err != nil {
 		return err
 	}
 	committed := false
 	defer finishTx(tx, &committed)
+	if role == reviewerTrainee {
+		if err := requirePendingReviewTx(ctx, tx, donationID, now); err != nil {
+			return err
+		}
+	}
 	if err := requireManagedDonationTx(ctx, tx, role, donationID, now); err != nil {
 		return err
 	}
@@ -1143,6 +1170,7 @@ func (s *Service) materializeRoleExpiryStandalone(
 }
 
 type submissionKey struct {
+	backoff                        smartbackoff.Config
 	failureDisableThreshold        db.U128
 	id                             int64
 	head, tail, baseURL, connector string
@@ -1179,7 +1207,13 @@ func validateSubmissionKeys(ctx context.Context, tx *sql.Tx, userID int64, input
 	ids := make([]int64, len(inputs))
 	expiries := make(map[int64]*int64, len(inputs))
 	thresholds := make(map[int64]db.U128, len(inputs))
+	backoffs := make(map[int64]smartbackoff.Config, len(inputs))
 	for index, input := range inputs {
+		config, err := smartbackoff.Merge(smartbackoff.Default(), smartbackoff.Patch{Profile: input.SmartBackoffProfile, Rules: input.SmartBackoffRules})
+		if err != nil {
+			return nil, ErrInvalidRequest
+		}
+		backoffs[input.EndpointKeyID] = config
 		value := "10"
 		if input.FailureDisableThreshold != nil {
 			value = *input.FailureDisableThreshold
@@ -1219,6 +1253,7 @@ ORDER BY k.id`, args...)
 		}
 		key.expiresAt = expiries[key.id]
 		key.failureDisableThreshold = thresholds[key.id]
+		key.backoff = backoffs[key.id]
 		key.reportFingerprint = append([]byte(nil), key.reportFingerprint...)
 		keys = append(keys, key)
 	}

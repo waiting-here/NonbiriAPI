@@ -1,4 +1,8 @@
 import {
+  normalizeSmartBackoffFields,
+  type SmartBackoffFields,
+} from '@shared/operations/smartBackoff';
+import {
   normalizeGatewayCapabilityPolicy,
   type GatewayCapabilityPolicy,
 } from '@shared/gateway/capabilities';
@@ -86,7 +90,7 @@ export type ManagedSafeSource =
       category?: 'subscription' | 'api_platform';
     };
 
-export interface ManagedDonationKey {
+export interface ManagedDonationKey extends SmartBackoffFields {
   review?: { required: boolean; revision: string | null; material_available: boolean };
   failure_disable_threshold: string;
   binding_count: string;
@@ -252,6 +256,9 @@ export function normalizeManagedKey(
 ): ManagedDonationKey {
   const required = [
     'failure_disable_threshold',
+    'smart_backoff_profile',
+    'smart_backoff_rules',
+    'smart_backoff',
     'binding_count',
     'idle',
     'id',
@@ -380,6 +387,7 @@ export function normalizeManagedKey(
           })(),
         }),
     binding_count: bindingCount,
+    ...normalizeSmartBackoffFields(root),
     failure_disable_threshold: decimal(root.failure_disable_threshold, 'failure threshold'),
     idle,
     id: decimalID(root.id, `${label} id`),

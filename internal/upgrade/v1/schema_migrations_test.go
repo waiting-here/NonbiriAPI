@@ -40,10 +40,11 @@ func migrationFixture(t *testing.T, source int) (*sql.DB, schemaRegistry) {
 		"UPDATE saves SET title=inventory || ':converted'; INSERT INTO settings VALUES('activity_enabled','0');",
 	} {
 		hostileMustExec(t, database, query)
-		registry.versions = append(registry.versions, schemaMigration{from: i + 17, version: i + 18, manifest: hash(), sql: query})
+		registry.versions = append(registry.versions, schemaMigration{from: i + 17, version: i + 18, manifest: hash(), sql: query,
+			impact: &migrationImpact{controlTables: []string{"saves", "settings"}, credentials: credentialsUnchanged}})
 	}
 	// The final revision is a Go-owned data transform with no DDL change.
-	registry.versions = append(registry.versions, schemaMigration{from: 19, version: 20, manifest: hash(), apply: func(ctx context.Context, tx *sql.Tx) error {
+	registry.versions = append(registry.versions, schemaMigration{from: 19, version: 20, manifest: hash(), impact: &migrationImpact{controlTables: []string{"saves"}, credentials: credentialsUnchanged}, apply: func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, "UPDATE saves SET title=title || ':final'")
 		return err
 	}})

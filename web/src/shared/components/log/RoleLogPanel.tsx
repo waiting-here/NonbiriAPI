@@ -1,4 +1,6 @@
 import { Button } from '@shared/components/ui/Button';
+import { Link, useLocation } from 'react-router';
+import { charityManagementPath } from './managementNavigation';
 import { clearStationSession } from '@shared/charityManagement';
 import { Card, EmptyState, ErrorState, LoadingState } from '@shared/components/States';
 import { formatCredits } from '../../../user/games/common/strict';
@@ -158,7 +160,9 @@ function AttemptTable({
   busy,
   onPageChange,
   onPageSizeChange,
+  logReturnTo,
 }: {
+  logReturnTo: string;
   detail: NumberedRoleLogDetail;
   role: LogRole;
   accountID: string;
@@ -261,6 +265,28 @@ function AttemptTable({
                   <dd className="mono log-attempt-diagnostic">{attempt.diag ?? '—'}</dd>
                 </div>
               </dl>
+              {attempt.role !== 'user' &&
+              detail.request.role !== 'user' &&
+              detail.request.route_kind.startsWith('charity_') ? (
+                detail.request.charity_model_id &&
+                attempt.donation_id &&
+                attempt.donation_key_id ? (
+                  <div className="ops-actions">
+                    <Link
+                      className="nb-btn nb-btn--secondary"
+                      to={charityManagementPath(attempt.role, detail.request.charity_model_id, {
+                        donationID: attempt.donation_id,
+                        keyID: attempt.donation_key_id,
+                      })}
+                      state={{ logReturnTo }}
+                    >
+                      {t('common.operations.logs.manageCharityKey')}
+                    </Link>
+                  </div>
+                ) : (
+                  <p className="nb-sub">{t('common.operations.logs.charityKeyUnavailable')}</p>
+                )
+              ) : null}
               {role !== 'user' ? (
                 <HeaderFacts
                   role={role}
@@ -339,6 +365,8 @@ function ScopedRoleLogPanel({
 }) {
   const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
+  const location = useLocation();
+  const logReturnTo = location.pathname + location.search;
   const rejectionDescription = (reason: string) => {
     const counts = /^content has (\d+) characters; minimum is (\d+)$/.exec(reason);
     return counts
@@ -767,6 +795,21 @@ function ScopedRoleLogPanel({
     },
   ];
 
+  const modelManagement = (row: RoleLogRow) =>
+    row.role !== 'user' && row.route_kind.startsWith('charity_') ? (
+      row.charity_model_id ? (
+        <Link
+          className="nb-btn nb-btn--secondary"
+          to={charityManagementPath(row.role, row.charity_model_id)}
+          state={{ logReturnTo }}
+        >
+          {t('common.operations.logs.manageCharityModel')}
+        </Link>
+      ) : (
+        <span className="nb-sub">{t('common.operations.logs.charityModelUnavailable')}</span>
+      )
+    ) : null;
+
   const resultHint = (row: RoleLogRow) => {
     const result = logResult(row);
     const hintKeys = {
@@ -936,6 +979,7 @@ function ScopedRoleLogPanel({
                     >
                       <AttemptTable
                         detail={detailData}
+                        logReturnTo={logReturnTo}
                         role={role}
                         accountID={accountID}
                         endpointKeyID={role === 'user' ? undefined : filter.endpoint_key_id}
@@ -1052,13 +1096,12 @@ function ScopedRoleLogPanel({
               rows={pageData.data}
               rowKey={(row) => row.id}
               actions={(row) => (
-                <Button
-                  type="button"
-
-                  onClick={() => openDetail(row.id)}
-                >
-                  {t('logs.details')}
-                </Button>
+                <div className="ops-actions">
+                  <Button type="button" onClick={() => openDetail(row.id)}>
+                    {t('logs.details')}
+                  </Button>
+                  {modelManagement(row)}
+                </div>
               )}
             />
           )}
@@ -1102,14 +1145,17 @@ function ScopedRoleLogPanel({
         }
         result={
           detailRequest ? (
-            <Note
-              tone={logResult(detailRequest).tone}
-              title={t(logResultCopyKey(role, logResult(detailRequest).key), {
-                status: detailRequest.caller_status ?? '—',
-              })}
-            >
-              {resultHint(detailRequest)}
-            </Note>
+            <>
+              {modelManagement(detailRequest)}
+              <Note
+                tone={logResult(detailRequest).tone}
+                title={t(logResultCopyKey(role, logResult(detailRequest).key), {
+                  status: detailRequest.caller_status ?? '—',
+                })}
+              >
+                {resultHint(detailRequest)}
+              </Note>
+            </>
           ) : null
         }
       />

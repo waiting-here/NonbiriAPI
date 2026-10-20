@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import {
   expect,
@@ -9,6 +10,7 @@ import {
   type TestInfo,
 } from '@playwright/test';
 import common from '../../src/shared/i18n/common/en.json' with { type: 'json' };
+import adminEn from '../../src/admin/i18n/en.json' with { type: 'json' };
 import en from '../../src/user/i18n/en.json' with { type: 'json' };
 
 type Cookie = { Name: string; Value: string };
@@ -27,6 +29,9 @@ interface Fixture {
       processing_donation_id: string;
       ended_donation_id: string;
       header_request_id: string;
+      shortcut_request_id: string;
+      shortcut_model_id: string;
+      shortcut_attempt_targets: { donation_id: string; donation_key_id: string }[];
     };
   };
 }
@@ -94,6 +99,116 @@ async function visuals(page: Page, info: TestInfo, name: string, focus: () => Pr
     }
   }
 }
+
+test('charity request and attempt shortcuts preserve the log window for administrators and level 5', async ({
+  browser,
+}, info) => {
+  const state = fixture(),
+    data = state.management.workflow;
+  for (const role of ['admin', 5] as const) {
+    const context = await session(browser, role);
+    try {
+      const origin = role === 'admin' ? state.admin_url : state.user_url;
+      const prefix = role === 'admin' ? '/admin/api' : '/api/steward';
+      const page = await context.newPage();
+      const model = await read(
+        context,
+        origin,
+        `${prefix}/charity-models/${data.shortcut_model_id}`,
+      );
+      const detail = await read(
+        context,
+        origin,
+        `${prefix}/logs/${data.shortcut_request_id}?attempt_page=1&attempt_page_size=20`,
+      );
+      expect(detail.request.charity_model_id).toBe(data.shortcut_model_id);
+      expect(
+        detail.attempts.data.map((attempt: { donation_id: string; donation_key_id: string }) => ({
+          donation_id: attempt.donation_id,
+          donation_key_id: attempt.donation_key_id,
+        })),
+      ).toEqual(data.shortcut_attempt_targets);
+      const search = new URLSearchParams({
+        ...(role === 'admin' ? {} : { tab: 'logs' }),
+        charity_model: model.full_name,
+        page: '1',
+        page_size: '10',
+        from: '',
+        to: '',
+        request_id: data.shortcut_request_id,
+        attempt_page: '1',
+        attempt_page_size: '20',
+      });
+      await page.goto(origin + (role === 'admin' ? '/logs?' : '/steward?') + search);
+      const panel = page.locator('.nb-expandable-panel:not([hidden])');
+      await expect(
+        panel.getByRole('link', { name: common.common.operations.logs.manageCharityModel }),
+      ).toBeVisible();
+      const original = page.url();
+      await panel
+        .getByRole('link', { name: common.common.operations.logs.manageCharityModel })
+        .click();
+      await expect(page).toHaveURL(new RegExp(`charity_model=${data.shortcut_model_id}`));
+      await expect(
+        page.getByRole('heading', { name: workflow.editModel, exact: true }),
+      ).toBeVisible();
+      await page
+        .getByRole('link', { name: common.common.operations.logs.returnToLogs, exact: true })
+        .click();
+      await expect(page).toHaveURL(original);
+      for (let index = 0; index < data.shortcut_attempt_targets.length; index++) {
+        const toggle = panel
+          .locator('summary')
+          .filter({ hasText: common.common.operations.logs.attempts });
+        if ((await toggle.locator('..').getAttribute('open')) === null) await toggle.click();
+        const link = panel
+          .getByRole('link', { name: common.common.operations.logs.manageCharityKey })
+          .nth(index);
+        const target = data.shortcut_attempt_targets[index];
+        await expect(link).toHaveAttribute(
+          'href',
+          new RegExp(
+            `managed_donation=${target.donation_id}&managed_key=${target.donation_key_id}$`,
+          ),
+        );
+        const scopeRead =
+          role === 5
+            ? page.waitForResponse(
+                (response) =>
+                  new URL(response.url()).pathname ===
+                  `/api/steward/donations/${target.donation_id}/keys/${target.donation_key_id}`,
+              )
+            : undefined;
+        await link.click();
+        await expect(
+          page.getByRole('heading', { name: `Manage key #${target.donation_key_id}`, exact: true }),
+        ).toBeVisible();
+        await expect(
+          page.getByLabel(common.common.keyLimits.concurrency, { exact: true }),
+        ).toBeVisible();
+        if (scopeRead)
+          expect(new URL((await scopeRead).url()).searchParams.get('charity_model_id')).toBe(
+            data.shortcut_model_id,
+          );
+        if (role === 'admin' && index === 0)
+          await visuals(page, info, 'workflow-log-key-shortcut', () =>
+            page
+              .getByRole('button', {
+                name: common.common.operations.logs.returnToLogs,
+                exact: true,
+              })
+              .scrollIntoViewIfNeeded(),
+          );
+        await page
+          .getByRole('button', { name: common.common.operations.logs.returnToLogs, exact: true })
+          .click();
+        await expect(page).toHaveURL(original);
+      }
+    } finally {
+      await context.close();
+    }
+  }
+});
 
 test('approve a fixed key, page 240 targets and bind 144 cross-page selections with a compact receipt', async ({
   browser,
@@ -385,41 +500,126 @@ test('edit keeps its identity through complete template and model-reference fill
     expect(request.pricing.long_context).toBeUndefined();
     expect(request.pricing.context_penalty).toBeUndefined();
     await page.getByRole('button', { name: workflow.openPriceReference, exact: true }).click();
-    await page
-      .locator('summary')
-      .filter({ has: page.getByText(workflow.maintainTemplates, { exact: true }) })
-      .click();
-    await page
+    await page.getByRole('button', { name: workflow.maintainTemplates, exact: true }).click();
+    await page.getByRole('button', { name: workflow.createTemplate, exact: true }).click();
+    const templateEditor = page.locator('.nb-template-editor');
+    await templateEditor
       .getByLabel(workflow.templateName, { exact: true })
       .fill('Workflow disposable template');
-    await page
+    await templateEditor
       .getByLabel(workflow.templateDescription, { exact: true })
       .fill('Browser complete price snapshot');
-    await page.getByRole('switch', { name: workflow.templateEnabled, exact: true }).uncheck();
+    await templateEditor
+      .getByRole('switch', { name: workflow.templateEnabled, exact: true })
+      .uncheck();
+    await templateEditor
+      .getByLabel('Request user price', { exact: true })
+      .fill(request.pricing.user_price);
+    await templateEditor
+      .getByLabel('Request donor reward', { exact: true })
+      .fill(request.pricing.donor_reward);
     const made = page.waitForResponse(
       (response) =>
         response.request().method() === 'POST' &&
         new URL(response.url()).pathname === '/admin/api/charity-price-templates',
     );
-    await page.getByRole('button', { name: workflow.createTemplate, exact: true }).click();
+    await templateEditor
+      .getByRole('button', { name: workflow.createTemplate, exact: true })
+      .click();
     const madeResponse = await made;
     expect(madeResponse.status()).toBe(201);
     const template = await madeResponse.json();
     expect(template.enabled).toBe(false);
     expect(template.pricing).toEqual(request.pricing);
-    await page.getByRole('switch', { name: workflow.templateEnabled, exact: true }).check();
+    await templateEditor
+      .getByRole('switch', { name: workflow.templateEnabled, exact: true })
+      .check();
+    const priceLabels = adminEn.admin.charity;
+    await templateEditor
+      .getByLabel(priceLabels.pricingMode, { exact: true })
+      .selectOption('per_token');
+    for (const [field, userLabel, rewardLabel] of [
+      [
+        'uncached_input',
+        priceLabels.uncached_user_price_milli,
+        priceLabels.uncached_donor_reward_milli,
+      ],
+      [
+        'cache_write_input',
+        priceLabels.cache_write_user_price_milli,
+        priceLabels.cache_write_donor_reward_milli,
+      ],
+      [
+        'cache_read_input',
+        priceLabels.cache_read_user_price_milli,
+        priceLabels.cache_read_donor_reward_milli,
+      ],
+      ['output', priceLabels.output_user_price_milli, priceLabels.output_donor_reward_milli],
+    ]) {
+      await templateEditor
+        .getByLabel(userLabel, { exact: true })
+        .fill(referenceModel.pricing.user_prices[field]);
+      await templateEditor
+        .getByLabel(rewardLabel, { exact: true })
+        .fill(referenceModel.pricing.donor_rewards[field]);
+    }
+    await templateEditor.locator('summary').filter({ hasText: operations.quotaReserve }).click();
+    await templateEditor
+      .getByLabel(operations.tokenReserveCredits, { exact: true })
+      .fill(referenceModel.token_reserve_credits);
+    await templateEditor
+      .locator('summary')
+      .filter({ hasText: operations.context.settings })
+      .click();
+    await templateEditor
+      .getByRole('switch', { name: operations.context.long, exact: true })
+      .check();
+    await templateEditor
+      .getByLabel(operations.context.longThreshold, { exact: true })
+      .fill(referenceModel.pricing.long_context.input_threshold);
+    for (const [field, label] of [
+      ['uncached_input', priceLabels.uncached_user_price_milli],
+      ['cache_write_input', priceLabels.cache_write_user_price_milli],
+      ['cache_read_input', priceLabels.cache_read_user_price_milli],
+      ['output', priceLabels.output_user_price_milli],
+    ])
+      await templateEditor
+        .getByLabel(workflow.longPriceField.replace('{{field}}', label), { exact: true })
+        .fill(referenceModel.pricing.long_context.user_prices[field]);
+    await templateEditor
+      .getByRole('switch', { name: operations.context.penalty, exact: true })
+      .check();
+    await templateEditor
+      .getByLabel(operations.context.penaltyThreshold, { exact: true })
+      .fill(referenceModel.pricing.context_penalty.input_threshold);
+    await templateEditor
+      .getByLabel(operations.context.fine, { exact: true })
+      .fill(referenceModel.pricing.context_penalty.fine);
+    await templateEditor
+      .locator('summary')
+      .filter({ has: page.getByText('Discount', { exact: true }) })
+      .click();
+    await templateEditor
+      .getByRole('switch', { name: priceLabels.discountEnabled, exact: true })
+      .check();
+    await templateEditor.getByLabel(priceLabels.discountPercent, { exact: true }).fill('80');
+
     const changed = page.waitForResponse(
       (response) =>
         response.request().method() === 'PUT' &&
         new URL(response.url()).pathname.endsWith('/charity-price-templates/' + template.id),
     );
-    await page.getByRole('button', { name: workflow.saveTemplateMetadata, exact: true }).click();
+    await page
+      .getByRole('button', { name: 'Save template “Workflow disposable template”', exact: true })
+      .click();
     expect((await changed).ok()).toBe(true);
     const currentTemplate = await read(
       context,
       state.admin_url,
       '/admin/api/charity-price-templates/' + template.id,
     );
+    for (const field of ['pricing', 'token_reserve_credits', 'discount'])
+      expect(currentTemplate[field]).toEqual(referenceModel[field]);
     expect(currentTemplate).toMatchObject({
       enabled: true,
       revision: '2',
@@ -440,6 +640,7 @@ test('edit keeps its identity through complete template and model-reference fill
       )
       .toBe(404);
     expect(await read(context, state.admin_url, root)).toEqual(request);
+    await page.getByRole('button', { name: 'Return to model draft', exact: true }).click();
     await page.getByRole('button', { name: workflow.returnPriceDraft, exact: true }).click();
     await page.getByRole('button', { name: operations.returnToList, exact: true }).first().click();
     await page.getByRole('button', { name: workflow.newModel, exact: true }).click();
@@ -497,7 +698,7 @@ test('owner current and ended defaults, mobile numbered controls, single and bat
     await expect(panel.locator('.economy-donation-summary')).toHaveCount(0);
     await panel.getByRole('tab', { name: history.history, exact: true }).click();
     await panel.getByRole('button', { name: history.hideAll, exact: true }).click();
-    await expect(panel.getByText(/Hide.*167 changed.*169 checked.*Complete/)).toBeVisible();
+    await expect(panel.getByText(/Hide.*167 changed.*170 checked.*Complete/)).toBeVisible();
     const hidden = await read(
       context,
       state.user_url,
@@ -507,7 +708,7 @@ test('owner current and ended defaults, mobile numbered controls, single and bat
     expect(
       (await read(context, state.user_url, '/api/donations?view=current&page=1&page_size=20'))
         .pagination.total_items,
-    ).toBe('2');
+    ).toBe('3');
     await panel.getByRole('tab', { name: history.hidden, exact: true }).click();
     await panel.getByRole('button', { name: history.restoreAll, exact: true }).click();
     await expect
@@ -758,5 +959,187 @@ test('complete headers stay lazy, preserve duplicates and physical responses, an
     } finally {
       await context.close();
     }
+  }
+});
+
+test('level 5 reviews independent pending sources, retains receipts after refresh failure and retries an unknown result', async ({
+  browser,
+}, info) => {
+  const state = fixture();
+  const owner = await session(browser, 'owner');
+  const steward = await session(browser, 5);
+  const admin = await session(browser, 'admin');
+  const write = async (context: BrowserContext, origin: string, path: string, data: unknown) => {
+    const response = await context.request.post(origin + path, {
+      headers: { Origin: origin, 'Idempotency-Key': randomUUID() },
+      data,
+    });
+    expect(response.ok(), path + ': ' + response.status()).toBe(true);
+    return response.json();
+  };
+  try {
+    for (const decision of ['approve', 'reject'] as const) {
+      const endpoint = await write(owner, state.user_url, '/api/endpoints', {
+        source: 'custom',
+        connector_type: 'openai-compatible',
+        base_url: `https://pending-${decision}.example.test/v1`,
+        note: 'Synthetic pending review',
+        enabled: true,
+      });
+      const key = await write(owner, state.user_url, `/api/endpoints/${endpoint.id}/keys`, {
+        secret: `synthetic-pending-browser-${decision}`,
+        note: 'Synthetic review key',
+        enabled: true,
+        force_store_false: false,
+        ownership_confirmed: true,
+      });
+      const donation = await write(owner, state.user_url, '/api/donations', {
+        description: `Independent pending ${decision}`,
+        ownership_authorized: true,
+        discord_public_thanks: false,
+        keys: [{ endpoint_key_id: key.id, expires_at: null }],
+      });
+      expect(donation.status).toBe('pending');
+      const page = await steward.newPage();
+      let committed = false,
+        failList = false,
+        interrupted = false,
+        writes = 0,
+        completedReads = 0;
+      const identities: string[] = [];
+      page.on('request', (request) => {
+        if (
+          committed &&
+          request.method() === 'GET' &&
+          new URL(request.url()).pathname === `/api/steward/donations/${donation.id}`
+        )
+          completedReads++;
+      });
+      await page.route(state.user_url + '/api/steward/donations**', async (route) => {
+        const request = route.request(),
+          url = new URL(request.url());
+        if (
+          request.method() === 'POST' &&
+          url.pathname === `/api/steward/donations/${donation.id}/review`
+        ) {
+          writes++;
+          identities.push(request.headers()['idempotency-key']);
+          const response = await route.fetch();
+          expect(response.ok()).toBe(true);
+          const receipt = await response.json();
+          expect(receipt.owner).toBeNull();
+          expect(receipt.reviewer).toBeNull();
+          committed = true;
+          if (decision === 'reject' && !interrupted) {
+            interrupted = true;
+            await route.abort('connectionfailed');
+            return;
+          }
+          failList = decision === 'approve';
+          await route.fulfill({ response });
+          return;
+        }
+        if (request.method() === 'GET' && url.pathname === '/api/steward/donations' && failList) {
+          failList = false;
+          await route.fulfill({
+            status: 503,
+            json: { error: { code: 'temporary_failure', message: 'Synthetic refresh failure' } },
+          });
+          return;
+        }
+        await route.continue();
+      });
+      await page.goto(
+        state.user_url +
+          `/steward?tab=charity&charity_section=donations&donation_id=${donation.id}`,
+      );
+      await expect(
+        page.getByRole('tab', { name: common.common.pendingReviews.title, exact: true }),
+      ).toBeVisible();
+      await expect(page.getByRole('tab', { name: workflow.templates, exact: true })).toHaveCount(0);
+      await expect(
+        page.getByRole('button', { name: common.common.donationReview.forceTitle, exact: true }),
+      ).toHaveCount(0);
+      await page.getByLabel(operations.decisionLabel).selectOption(decision);
+      await page
+        .getByLabel(operations.reason, { exact: true })
+        .fill('Synthetic independent pending review');
+      await page.getByLabel(operations.confirmReview, { exact: true }).check();
+      if (decision === 'approve') {
+        await page.getByLabel(operations.enableForCharity, { exact: true }).check();
+        await visuals(page, info, 'pending-review', () =>
+          page.getByLabel(operations.reason, { exact: true }).scrollIntoViewIfNeeded(),
+        );
+        await page.setViewportSize({ width: 1440, height: 900 });
+      }
+      await page
+        .getByRole('button', {
+          name: decision === 'approve' ? 'Approve donation' : 'Reject donation',
+          exact: true,
+        })
+        .click();
+      if (decision === 'reject') {
+        await page
+          .getByRole('button', { name: common.common.donationReview.retrySame, exact: true })
+          .click();
+        expect(identities).toHaveLength(2);
+        expect(identities[0]).toBe(identities[1]);
+      } else {
+        await expect(page.getByText(/Review saved:/)).toBeVisible();
+        await page
+          .getByRole('button', { name: common.common.outcome.recheck, exact: true })
+          .click();
+      }
+      await expect(
+        page.getByRole('button', {
+          name: decision === 'approve' ? 'Approve donation' : 'Reject donation',
+          exact: true,
+        }),
+      ).toHaveCount(0);
+      expect(completedReads).toBe(0);
+      expect(writes).toBe(decision === 'approve' ? 1 : 2);
+      const denied = await steward.request.get(
+        state.user_url + `/api/steward/donations/${donation.id}`,
+      );
+      expect(denied.status()).toBe(403);
+      const approved = await read(admin, state.admin_url, `/admin/api/donations/${donation.id}`);
+      expect(approved.status).toBe(decision === 'approve' ? 'approved' : 'rejected');
+      if (decision === 'approve') {
+        expect(approved.first_approval_origin).toBe('manual');
+        const senior = await session(browser, 6);
+        try {
+          const correction = await senior.newPage();
+          await correction.goto(state.user_url + `/steward?tab=charity&donation_id=${donation.id}`);
+          await correction
+            .getByLabel(operations.reason, { exact: true })
+            .fill('Synthetic manual-approval correction');
+          await correction
+            .getByRole('button', { name: common.common.donationReview.forceTitle, exact: true })
+            .click();
+          await correction
+            .getByRole('alertdialog')
+            .getByRole('button', { name: common.common.donationReview.forceTitle, exact: true })
+            .click();
+          await expect
+            .poll(
+              async () =>
+                (await read(admin, state.admin_url, `/admin/api/donations/${donation.id}`)).status,
+            )
+            .toBe('rejected');
+          expect(
+            (await read(admin, state.admin_url, `/admin/api/donations/${donation.id}`))
+              .first_approval_origin,
+          ).toBe('manual');
+        } finally {
+          await senior.close();
+        }
+      }
+
+      await page.close();
+    }
+  } finally {
+    await owner.close();
+    await steward.close();
+    await admin.close();
   }
 });

@@ -15,6 +15,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/donationstate"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
+	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 )
 
 const sourceIdentitySQL = `nbi_donation_source(dk.mainstream_channel_id,dk.connector_type,dk.canonical_base_url)`
@@ -122,7 +123,7 @@ JOIN charity_model_access a ON a.model_id=cm.id
 SELECT CASE WHEN dk.donation_status='approved' AND dk.user_id IS NOT NULL AND dk.ended_at IS NULL
  AND dk.enabled=1 AND dk.failure_disabled=0 AND dk.member=1 AND dk.suspended=0
  AND dk.endpoint_enabled=1 AND dk.physical_enabled=1 AND (dk.expires_at IS NULL OR dk.expires_at>?)
- AND NOT EXISTS(SELECT 1 FROM donation_key_cooldowns cooldown WHERE cooldown.donation_key_id=dk.id AND cooldown.rate_limited_until>?)
+ AND ` + smartbackoff.EffectiveUntilSQL("dk.id") + `<=?
  AND dk.price_reserve IS NOT NULL AND (SELECT value FROM site_config WHERE key='charity_enabled')='1'
  THEN CASE WHEN
  nbi_u128_remaining(dk.price_limit_mag,dk.price_used_mag,dk.price_reserved_mag,nbi_u128(0))>nbi_u128(0)

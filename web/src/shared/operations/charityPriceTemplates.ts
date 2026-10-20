@@ -82,6 +82,12 @@ export function getPriceTemplates(
   );
 }
 
+export function getPriceTemplate(role: CharityRole, id: string, signal?: AbortSignal) {
+  return decoded(`${base(role)}/${decimalID(id, 'template id')}`, normalizePriceTemplate, {
+    signal,
+  });
+}
+
 export function savePriceTemplate(
   role: CharityRole,
   input: PriceTemplateInput & { id?: string; expected_revision?: string },

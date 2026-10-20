@@ -33,7 +33,7 @@ func allIndexSourceFacts(t *testing.T, database *sql.DB) map[string][]string {
 	}
 	out := make(map[string][]string, len(tables))
 	for _, table := range tables {
-		if table == "donation_key_cooldowns" || table == "dispatch_retry_after_observations" || table == "request_header_facts" || table == "charity_price_templates" || table == "charity_price_template_audits" || table == "donation_owner_preferences" {
+		if table == "donation_key_cooldowns" || table == "dispatch_retry_after_observations" || table == "request_header_facts" || table == "charity_price_templates" || table == "charity_price_template_audits" || table == "donation_owner_preferences" || table == "donation_key_backoffs" || table == "dispatch_smart_backoff_facts" {
 			var count int
 			if err := database.QueryRow("SELECT count(*) FROM " + table).Scan(&count); err != nil || count != 0 {
 				t.Fatalf("new diagnostic table %s is not empty: %d %v", table, count, err)
@@ -107,7 +107,7 @@ func TestLogIndexConversionPreservesEverySourceTable(t *testing.T) {
 		t.Fatal(err)
 	}
 	result, err := Run(t.Context(), path, vault, Options{Apply: true})
-	if err != nil || result.SourceSchemaVersion != 19 || result.TargetSchemaVersion != 24 {
+	if err != nil || result.SourceSchemaVersion != 19 || result.TargetSchemaVersion != 25 {
 		t.Fatal(result, err)
 	}
 	store, err := db.Open(path, vault)

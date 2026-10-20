@@ -42,6 +42,14 @@ Management responses return configured credit strings. Public pricing responses 
 
 ## Price-template copying
 
+The administrator charity workspace has a separate Price templates tab alongside
+the review queue, charity models and source views. Create, edit, enable, disable
+or delete templates there without opening a model. Search and state filters keep
+the list manageable, with page-size and direct-page controls. The editor exposes
+the complete pricing fields. A model draft remains available while visiting the
+template manager and returning to that model. Model forms select an existing
+template and keep their own draft values until explicitly saved.
+
 Administrator-maintained price templates can fill the pricing section of a new
 or existing model for administrators and current level-6 stewards. They copy the
 billing mode, all active user prices and donor rewards, Token reserve override,

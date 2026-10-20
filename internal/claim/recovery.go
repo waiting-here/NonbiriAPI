@@ -118,7 +118,7 @@ WHERE state IN ('claimed','dispatched') ORDER BY claim_now,id LIMIT 1`).Scan(&cl
 			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM dispatch_response_starts WHERE claim_id=?1 AND http_status=200), EXISTS(SELECT 1 FROM dispatch_retry_after_observations WHERE claim_id=?1 AND http_status=200)`, record.claimID).Scan(&acceptedStream, &acceptedHint); err != nil {
 				return "", err
 			}
-			if acceptedStream || acceptedHint {
+			if acceptedStream || acceptedHint || record.backoffAccepted.Valid {
 				outcome.Kind, outcome.UpstreamStatus = ResultResponse, 200
 				outcome.StreakDisposition = connectorcontract.StreakSuccess
 				outcome.Diagnostic = "upstream response outcome unavailable after restart"

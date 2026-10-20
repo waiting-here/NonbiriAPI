@@ -13,6 +13,10 @@ interface PendingSearchUpdate {
 
 const pending = new WeakMap<ReturnType<typeof useLocation>, PendingSearchUpdate>();
 
+export function discardPendingSearchState(location: ReturnType<typeof useLocation>): void {
+  pending.delete(location);
+}
+
 /** Compose successive control edits before a router transition has rendered. */
 export function useSearchState(): readonly [URLSearchParams, SetURLSearchParams] {
   const location = useLocation();

@@ -547,6 +547,9 @@ WHERE id=? AND user_id=?`, decisionNow, value.id, userID)
 		if _, err := tx.ExecContext(ctx, `UPDATE donation_keys SET safe_note='',updated_at=? WHERE donation_id=?`, decisionNow, value.id); err != nil {
 			return fmt.Errorf("donation: scrub donation key note: %w", err)
 		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM donation_key_backoffs WHERE donation_key_id IN (SELECT id FROM donation_keys WHERE donation_id=?)`, value.id); err != nil {
+			return fmt.Errorf("donation: scrub smart backoff rules: %w", err)
+		}
 		// donation_reviews are schema-enforced append-only decision facts. Their
 		// actor FK is deidentified by account deletion; the mutable projection
 		// above is the only review text cleared in this transaction.
@@ -662,6 +665,7 @@ func exportDonationKeys(values []AdminDonationKey) []ExportDonationKey {
 	for index, value := range values {
 		owner := ownerKey(value)
 		out[index] = ExportDonationKey{
+			Projection:              owner.Projection,
 			TokenBreakdown:          value.TokenBreakdown,
 			Review:                  owner.Review,
 			FailureDisableThreshold: owner.FailureDisableThreshold,

@@ -1,3 +1,7 @@
+import {
+  normalizeSmartBackoffFields,
+  type SmartBackoffFields,
+} from '@shared/operations/smartBackoff';
 import { decoded, queryPath } from '@shared/operations/api';
 import { normalizeDonationHandling } from '@shared/operations/charity';
 import {
@@ -133,7 +137,7 @@ export interface AdminCharityMainstreamSource {
 
 export type AdminCharitySource = AdminCharityCustomSource | AdminCharityMainstreamSource;
 
-export interface AdminCharityKey {
+export interface AdminCharityKey extends SmartBackoffFields {
   failure_disable_threshold: string;
   id: string;
   display_head: string;
@@ -229,6 +233,9 @@ function normalizeAdminCharityKey(value: unknown): AdminCharityKey {
   // identity fields are intentionally not read into the returned object.
   const required = [
     'failure_disable_threshold',
+    'smart_backoff_profile',
+    'smart_backoff_rules',
+    'smart_backoff',
     'id',
     'binding_count',
     'idle',
@@ -314,6 +321,7 @@ function normalizeAdminCharityKey(value: unknown): AdminCharityKey {
   return {
     id,
     display_head: displayHead,
+    ...normalizeSmartBackoffFields(root),
     failure_disable_threshold: decimal(root.failure_disable_threshold, 'failure threshold'),
     display_tail: displayTail,
     safe_source: normalizeAdminCharitySource(root.safe_source),

@@ -8,6 +8,7 @@ import (
 
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
+	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 )
 
 // ObserveResponseHeaders persists a retry hint before reading the response body.
@@ -33,6 +34,24 @@ func (s *Service) ObserveResponseHeaders(ctx context.Context, handle Handle, obs
 	if record.state != StateDispatched {
 		return ErrNotDispatched
 	}
+	if !observation.HasRetryAfter {
+		trial, err := smartbackoff.IsTrial(ctx, tx, record.claimID)
+		if err != nil {
+			return err
+		}
+		if !trial || observation.Status != 200 {
+			return ErrInvalidInput
+		}
+		if err := smartbackoff.Accepted(ctx, tx, record.claimID, max(observation.ObservedAt, record.dispatchedAt.Int64)); err != nil {
+			return err
+		}
+		if observation.Stream {
+			if err := recordResponseStartTx(ctx, tx, record.claimID, max(observation.ObservedAt, record.dispatchedAt.Int64), 200); err != nil {
+				return err
+			}
+		}
+		return tx.Commit()
+	}
 	result, err := tx.ExecContext(ctx, `INSERT INTO dispatch_retry_after_observations(claim_id,http_status,observed_at,rate_limited_until)
 VALUES(?,?,?,?) ON CONFLICT(claim_id) DO NOTHING`, record.claimID, observation.Status, observation.ObservedAt, observation.RateLimitedUntil)
 	if err != nil {
@@ -53,6 +72,11 @@ updated_at=max(donation_key_cooldowns.updated_at,excluded.updated_at)`,
 			return err
 		}
 	}
+	if changed == 1 && observation.Status == 200 && record.backoffActive {
+		if err := smartbackoff.Accepted(ctx, tx, record.claimID, max(observation.ObservedAt, record.dispatchedAt.Int64)); err != nil {
+			return err
+		}
+	}
 	if changed == 1 && observation.Stream && observation.Status == 200 {
 		at := max(observation.ObservedAt, record.dispatchedAt.Int64)
 		if err := recordResponseStartTx(ctx, tx, record.claimID, at, 200); err != nil {
@@ -69,9 +93,23 @@ func retryAfterOutcomeTx(ctx context.Context, tx *sql.Tx, record claimRecord, ou
 		}
 		return outcome, nil
 	}
+	if record.backoffAccepted.Valid {
+		outcome.StreakDisposition = connectorcontract.StreakSuccess
+		return outcome, nil
+	}
 	var status int
 	err := tx.QueryRowContext(ctx, `SELECT http_status FROM dispatch_retry_after_observations WHERE claim_id=?`, record.claimID).Scan(&status)
 	if errors.Is(err, sql.ErrNoRows) {
+		if record.backoffActive && outcome.UpstreamStatus != 200 && outcome.FailureOrigin == connectorcontract.OriginUpstreamResponse {
+			neutral, err := smartbackoff.RecordClassification(ctx, tx, record.claimID, outcome.Backoff)
+			if err != nil {
+				return outcome, err
+			}
+			if neutral {
+				outcome.StreakDisposition = connectorcontract.StreakNeutral
+				return outcome, nil
+			}
+		}
 		if outcome.StreakDisposition == connectorcontract.StreakNeutral && retryOrigin(outcome.FailureOrigin) {
 			return outcome, ErrInvalidInput
 		}

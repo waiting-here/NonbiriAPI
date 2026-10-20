@@ -493,8 +493,8 @@ func attemptOutcome(result connectorcontract.AttemptResult) claim.AttemptOutcome
 	return claim.AttemptOutcome{
 		StreakDisposition: result.StreakDisposition, FailureOrigin: result.FailureOrigin,
 		Kind: kind, UpstreamStatus: result.UpstreamStatus, Diagnostic: result.Diagnostic,
-		UpstreamCode: result.ErrorDetail.Code(),
-		Usage:        result.Usage, ProtocolSuccess: result.StreakDisposition == connectorcontract.StreakSuccess && result.FailureOrigin == connectorcontract.OriginNone, ResponseStarted: result.Committed,
+		UpstreamCode: result.ErrorDetail.Code(), Backoff: result.ErrorDetail.Backoff(),
+		Usage: result.Usage, ProtocolSuccess: result.StreakDisposition == connectorcontract.StreakSuccess && result.FailureOrigin == connectorcontract.OriginNone, ResponseStarted: result.Committed,
 	}
 }
 

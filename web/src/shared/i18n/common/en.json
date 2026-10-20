@@ -161,13 +161,82 @@
     },
     "failurePolicy": {
       "label": "Consecutive failure disable threshold",
-      "help": "Default: 10. Set to 0 to disable automatic removal. An upstream HTTP 200 resets the charity key's failure count and stops retries; later errors are still reported.",
+      "help": "Default: 10. Set to 0 to keep this key listed after repeated errors.",
       "zeroWarning": "Never disable automatically for errors: this key may still be called after repeated failures. Manual disabling, expiry, bans and quota limits still apply.",
       "saved": "Current disable threshold: {{value}}",
-      "recalculate": "Saving preserves the failure count and immediately recalculates the error-disabled state. It does not enable the key or reset its failure count.",
+      "recalculate": "Saving keeps the failure count and recalculates automatic disabling.",
       "save": "Save failure policy",
       "done": "Failure policy saved and recalculated.",
       "invalid": "Enter a valid consecutive failure threshold."
+    },
+    "smartBackoff": {
+      "details": "How backoff works",
+      "ruleHeading": "Rule {{index}}",
+      "kindLabel": "Type",
+      "valueLabel": "Value",
+      "periodLabel": "Allowance cycle",
+      "recognitionHelp": "Built-in recognition runs first. Additional rules match error responses only and are case-sensitive.",
+      "successHelp": "An upstream HTTP 200 resets consecutive failures and stops retries; later errors are still reported.",
+      "profile": "Smart quota backoff",
+      "help": "Matched quota errors pause this key without adding failures. Other errors still count toward the disable threshold.",
+      "profiles": {
+        "none": "Off",
+        "five_hour_week": "5 hours + week",
+        "five_hour_week_month": "5 hours + week + month",
+        "day": "Day",
+        "day_month": "Day + month"
+      },
+      "advanced": "Additional error recognition (optional)",
+      "ruleCount_zero": "Built-in recognition only",
+      "ruleCount_one": "{{count}} additional rule",
+      "ruleCount_other": "{{count}} additional rules",
+      "rulesHelp": "Up to 8 rules; the first exact match applies.",
+      "rulesInactive": "These rules are saved while backoff is off and will apply when you turn it on.",
+      "ruleKind": "Rule {{index}} type",
+      "ruleValue": "Rule {{index}} value",
+      "rulePeriod": "Rule {{index}} allowance cycle",
+      "kinds": {
+        "code": "Business error code",
+        "message": "Fixed message fragment"
+      },
+      "valueHelp": {
+        "code": "1–64 letters, digits, dots, underscores, colons or hyphens. Matches the error code or type exactly.",
+        "message": "1–160 characters copied from the error message. Use a short fixed fragment without personal details."
+      },
+      "placeholder": {
+        "code": "For example: 1308",
+        "message": "For example: weekly usage exhausted"
+      },
+      "periods": {
+        "auto": "Detect automatically",
+        "five_hour": "5 hours",
+        "day": "Day",
+        "week": "Week",
+        "month": "Month"
+      },
+      "removeRule": "Remove rule {{index}}",
+      "addRule": "Add rule",
+      "invalid": "Check the rule values and choose an allowance cycle supported by this profile.",
+      "states": {
+        "waiting": "Smart backoff: waiting",
+        "ready": "Smart backoff: ready for a trial request",
+        "probing": "Smart backoff: trial request in progress"
+      },
+      "reasons": {
+        "five_hour_quota": "5-hour allowance exhausted",
+        "day_quota": "Daily allowance exhausted",
+        "week_quota": "Weekly allowance exhausted",
+        "month_quota": "Monthly allowance exhausted",
+        "quota": "Recoverable allowance exhausted"
+      },
+      "sources": {
+        "builtin": "Built-in recognition",
+        "custom_rule": "Additional rule"
+      },
+      "reasonSource": "{{reason}} · {{source}}",
+      "retryAt": "Trial available from: {{time}}",
+      "timingHelp": "Without a recovery time, retries wait 15, 30, then 60 minutes; weekly and monthly limits wait 6 and 12 hours. The next charity request makes one trial.",
+      "editingHelp": "Changing the profile or rules restarts smart backoff. Upstream-provided cooldowns remain in effect."
     },
     "refresh": "Refresh",
     "donationHandling": {
@@ -395,6 +464,11 @@
         "discordFilterHint": "Exact Discord ID",
         "keyFilterNotice": "Showing personal and charity requests with a recorded attempt using physical key #{{id}}, including retries.",
         "viewKeyLogs": "View this key's request logs",
+        "manageCharityModel": "Manage charity model",
+        "manageCharityKey": "Manage charity key",
+        "charityModelUnavailable": "The linked charity model is no longer available.",
+        "charityKeyUnavailable": "The linked charity key is no longer available.",
+        "returnToLogs": "Return to request logs",
         "keyLogsUnavailable": "The physical key ID is no longer available, so its request logs cannot be linked.",
         "attemptNumber": "Attempt {{number}}",
         "platformRecord": "Platform record",
@@ -870,7 +944,7 @@
       "summary": "Default: {{action}}; {{count}} role rules"
     },
     "donationReview": {
-      "forceTitle": "Reject an automatically approved donation",
+      "forceTitle": "Force reject donation",
       "forceHelp": "New community calls will stop for this donation. Dispatched calls settle normally. Each key will need manual review when donated again. Existing rewards are kept.",
       "required": "Enable this key and approve the donation to restore automatic approval. Disabled keys still require review.",
       "materialUnavailable": "Review material is unavailable. Keep this key disabled, or restore the material before reviewing it again.",
@@ -883,8 +957,8 @@
         "unknown": "First approval origin is unknown"
       },
       "unavailable": {
-        "manual": "Only donations first approved automatically can be forcibly rejected.",
-        "unknown": "The first approval origin cannot be confirmed, so forced rejection is unavailable.",
+        "manual": "Forced rejection is unavailable for this donation.",
+        "unknown": "Forced rejection is unavailable for this donation.",
         "notApproved": "This donation is not currently approved."
       },
       "title": "Donation review",
@@ -1639,8 +1713,6 @@
       "maintainTemplates": "Maintain price templates",
       "fillTemplate": "Fill all prices",
       "createTemplate": "Create price template",
-      "saveTemplateMetadata": "Save template details",
-      "overwriteTemplate": "Replace stored prices",
       "deleteTemplate": "Delete price template",
       "deleteTemplateHelp": "This removes the template from future choices. Prices already filled or saved in models stay unchanged.",
       "priceApplied": "Filled prices from {{source}}. Save the current model to apply them.",
@@ -1701,6 +1773,31 @@
       "inputPrice": "Uncached input",
       "outputPrice": "Output",
       "longPriceField": "Long context: {{field}}"
+    },
+    "templateManagement": {
+      "help": "Create and maintain complete price presets. Template changes do not change prices saved in models.",
+      "back": "Return to price templates",
+      "backModel": "Return to model draft",
+      "updated": "Updated",
+      "empty": "Create a template, or try another search or state filter.",
+      "edit": "Edit price template",
+      "target": "Editing “{{name}}” · revision {{revision}}",
+      "newHelp": "Set a name and all prices for this new template.",
+      "save": "Save template “{{name}}”",
+      "discard": "Discard changes",
+      "unsaved": "Unsaved template changes",
+      "delete": "Delete template “{{name}}”?",
+      "conflict": "This template changed. Your draft is kept. Load the latest revision before saving again.",
+      "loadLatest": "Load latest revision and keep draft",
+      "latestLoaded": "Loaded “{{name}}”, revision {{revision}}. Your draft is unchanged."
+    },
+    "pendingReviews": {
+      "title": "Pending donation reviews",
+      "help": "Review all pending donations. Set each key’s limits and enabled state before approval.",
+      "saved": "Review saved: {{status}}.",
+      "empty": "No pending donations",
+      "emptyHelp": "New donations will appear here. Try clearing the search if needed.",
+      "noLongerPending": "This donation has already been reviewed. Return to the pending queue."
     }
   },
   "logs": {
