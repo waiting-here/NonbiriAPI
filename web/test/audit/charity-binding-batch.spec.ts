@@ -71,6 +71,39 @@ async function visuals(page: Page, info: TestInfo, name: string, focus: () => Pr
       }, theme);
       await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
       await focus();
+      if (name.startsWith('binding-')) {
+        const layout = page.locator('.charity-donations');
+        await expect(layout.locator(':scope > .charity-donations__list')).toBeHidden();
+        const container = (await layout.boundingBox())!;
+        const detail = (await layout.locator(':scope > .ops-detail-target').boundingBox())!;
+        expect(Math.abs(detail.x - container.x)).toBeLessThanOrEqual(1);
+        expect(detail.width).toBeGreaterThanOrEqual(container.width - 2);
+      }
+      if (name === 'binding-current-marker') {
+        await expect(page.getByText(batch.boundHere, { exact: true })).toBeInViewport();
+        const lines = await page.locator('.ops-picker-context > *').evaluateAll((nodes) =>
+          nodes.map((node) => {
+            const { top, bottom } = node.getBoundingClientRect();
+            return { top, bottom };
+          }),
+        );
+        expect(lines[1]!.top).toBeGreaterThanOrEqual(lines[0]!.bottom);
+        expect(lines[2]!.top).toBeGreaterThanOrEqual(lines[1]!.bottom);
+      }
+      if (name === 'binding-revision-conflict') {
+        await expect(
+          page.getByRole('heading', { name: common.common.error, exact: true }),
+        ).toHaveCount(0);
+        if (width === 390) {
+          const note = page
+            .locator('.nb-note')
+            .filter({ hasText: common.common.workflow.bindingConflict });
+          const copy = (await note.locator(':scope > div').boundingBox())!;
+          const action = (await note.getByRole('button').boundingBox())!;
+          expect(copy.width).toBeGreaterThan(250);
+          expect(action.y).toBeGreaterThanOrEqual(copy.y + copy.height);
+        }
+      }
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,
       );
@@ -152,9 +185,7 @@ test('key binding collects multiple targets, shows exact existing bindings, and 
     await expect(page.getByRole('checkbox', { name: /binding-up-0/ })).toBeDisabled();
     await expect(page.getByText(batch.boundHere, { exact: true })).toBeVisible();
     await visuals(page, info, 'binding-current-marker', () =>
-      page
-        .getByRole('heading', { name: '[公益]binding-browser/target-0', exact: true })
-        .scrollIntoViewIfNeeded(),
+      page.getByText(batch.boundHere, { exact: true }).scrollIntoViewIfNeeded(),
     );
     await page.getByRole('checkbox', { name: /binding-up-1/ }).check();
     await page.getByRole('button', { name: batch.backTargets }).click();

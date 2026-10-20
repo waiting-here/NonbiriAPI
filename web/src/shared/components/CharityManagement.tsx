@@ -1440,6 +1440,7 @@ function DonationsPanel({
     ? rawStatus
     : '';
   const selected = selectedID(searchParams, 'donation_id');
+  const binding = Boolean(selected && selectedID(searchParams, 'binding_key'));
   const [draft, setDraft] = useState({ query, text: query });
   const queryDraft = draft.query === query ? draft.text : query;
   const setQueryDraft = (text: string) => setDraft({ query, text });
@@ -1553,8 +1554,12 @@ function DonationsPanel({
     );
   }
   return (
-    <div className={`charity-donations${selected ? ' nb-md' : ''}`} ref={listRef} tabIndex={-1}>
-      <div className="charity-donations__list">
+    <div
+      className={`charity-donations${selected && !binding ? ' nb-md' : ''}`}
+      ref={listRef}
+      tabIndex={-1}
+    >
+      <div className="charity-donations__list" hidden={binding}>
         <Card>
           <div className="charity-donation-toolbar">
             <FilterBar

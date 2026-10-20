@@ -575,7 +575,7 @@ export function MultiTargetBindingWorkflow({
         </Note>
       ) : null}
       {readError ? <ErrorState error={readError} onRetry={() => void reread()} /> : null}
-      {add.error ? <ErrorState error={add.error} /> : null}
+      {add.error && add.outcome !== 'conflict' ? <ErrorState error={add.error} /> : null}
       <OutcomeNote
         outcome={
           add.outcome === 'refresh-failed'
