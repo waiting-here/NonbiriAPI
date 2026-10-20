@@ -1,6 +1,6 @@
 # Data Lifecycle Checklist (Generation 2 export / delete / retention / privacy)
 
-> Status: **v1.0.6 contract** — this checklist describes the
+> Status: **v1.0.7 contract** — this checklist describes the
 > release's export, deletion, retention, and privacy boundary. Source publication does
 > not itself upgrade an instance; deployment status is specific to each operator.
 >
@@ -12,7 +12,7 @@ family. The registered routes, export builder, deletion coordinator, retention w
 and bilingual privacy text are covered by their implementation and contract tests.
 Schema presence alone never creates a route or expands a response.
 
-Current account export format 24 includes safe `gacha` balances, owned cards, guarantees, claims, activity journals, draw details within 180 days and the saved appearance artwork key. Its filename is `nonbiriapi-account-export-v24.json`; SQLite `user_version` remains 2 and the current storage schema is 26. All rows below describe current retained fields. This does not assert that a particular instance has been upgraded.
+Current account export format 24 includes safe `gacha` balances, owned cards, guarantees, claims, activity journals, draw details within 180 days and the saved appearance artwork key. Its filename is `nonbiriapi-account-export-v24.json`; SQLite `user_version` remains 2 and the current storage schema is 27. All rows below describe current retained fields. This does not assert that a particular instance has been upgraded.
 
 `channel_charity_binding_presets` and `channel_charity_binding_mappings` contain
 shared channel configuration without donor or operator identity. They are excluded
@@ -247,7 +247,7 @@ manifest, and checksums. Snapshot retention/deletion is operator-controlled and 
 be disclosed by the instance policy; the service does not promise per-user erasure inside
 historical snapshots.
 
-Normal v1.0.6 startup accepts fresh storage or current schema 26; exact schema 16–25 structures use the independent converter. Unknown or partial sources are rejected before writes. Fresh creation requires the main database and sidecars to be absent. Conversion preserves accounts, economic facts, credentials, saved games, configuration and instance legal text. Full historical audits use offline `maintenance verify`. The [database upgrade guide](database-upgrades.md) identifies the exact source and restore requirements.
+Normal v1.0.7 startup accepts fresh storage or current schema 27; exact schema 16–26 structures use the independent converter. Unknown or partial sources are rejected before writes. Fresh creation requires the main database and sidecars to be absent. Conversion preserves accounts, economic facts, credentials, saved games, configuration and instance legal text. Full historical audits use offline `maintenance verify`. The [database upgrade guide](database-upgrades.md) identifies the exact source and restore requirements.
 
 Starting fresh from an unsupported version uses a separate empty path and resets active application state. A complete old recovery set remains sensitive until its retention purpose ends. Never combine an old binary with a newer database or restore a stale snapshot over newly accepted data automatically.
 
@@ -322,7 +322,8 @@ and rule fields are removed from replay responses without repeating the mutation
 | Family | Access and export | Deletion, retention and late work |
 | --- | --- | --- |
 | `donation_key_backoffs` | Owner and authorized management may read safe current state, also included in account export 24. Internal generation, episode and trial identifiers are excluded. There is no per-key recognition configuration. | Current state cascades with the key. Schema 26 discards old profiles and supplemental-rule text while preserving active recovery facts. Account deletion removes the state. |
-| `dispatch_smart_backoff_facts` | Internal per-claim recovery identity, trial ownership, HTTP acceptance and finite quota classification; no raw error or copied rule text and no personal export. | Claim deletion cascades; key deletion clears its key reference. Existing request retention and holds apply. Generation and episode checks prevent late results from changing a newer episode. Historical supplemental-rule classifications remain valid recovery facts after configuration removal. |
+| `endpoint_backoff_policies` | Platform configuration readable and writable by administrators and current level-6 stewards; exact connector/base identity, revision and at most eight rules. No personal export or account identifier. | Retained with platform configuration and complete deployment backups. Clearing rules keeps the revision; account deletion does not delete shared endpoint policy. |
+| `dispatch_smart_backoff_facts` | Internal per-claim recovery identity, trial ownership, HTTP acceptance, finite quota classification and bounded endpoint rule snapshot/revision/matched index; no raw error and no personal export. | Claim deletion cascades; key deletion clears its key reference. Existing request retention and holds apply. Generation and episode checks prevent late results from changing a newer episode. Historical supplemental-rule classifications remain valid recovery facts after configuration removal. |
 | `charity_price_templates` and `charity_price_template_audits` | Shared price/reward/reserve/context/fixed and recurring discount settings; administrator maintenance and enabled-only L6 session reads. No L5/CallerKey access or personal export. Applying copies values, never links a model to future changes. | Templates persist until deleted; safe audits expire after 90 days and actor deletion sets identity null. No credentials or caller content. |
 | `donation_owner_preferences` | Owner-only nullable `owner_hidden_at` is included for every owned donation in account exports, including hidden history. Management does not receive it. | Cascades with user/donation deletion. Hide/restore does not delete records, change the donation revision or reset its 400-day terminal clock. Resumable batches use fixed time and ID boundaries and expire after one hour. |
 | `donation_key_cooldowns` and `dispatch_retry_after_observations` | Safe owner/authorized key projections expose `rate_limited_until`; raw observations are internal. No header body or secret is exported. | Cooldown follows the donation key; observations follow the claim. Atomic writes preserve the latest valid deadline. Neither can recreate a retired key, claim or account. Elapsed deadlines stop limiting immediately. |

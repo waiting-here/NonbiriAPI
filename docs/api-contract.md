@@ -136,7 +136,7 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 26. Normal startup accepts fresh storage and schema 26 only; exact schema 16–25 structures require the separate offline converter. Unknown or partial structures are rejected before writes. Startup validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for explicit source/target versions and rollback requirements.
+The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 27. Normal startup accepts fresh storage and schema 27 only; exact schema 16–26 structures require the separate offline converter. Unknown or partial structures are rejected before writes. Startup validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for explicit source/target versions and rollback requirements.
 
 Current account export `schema_version=24` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v24.json`. See §9 for its safe projections.
 
@@ -686,8 +686,9 @@ Authorized key projections and failure-policy responses include:
 
 The former `smart_backoff_profile` and `smart_backoff_rules` fields are removed
 from creation, policy updates, responses and account exports. Requests containing
-them fail strict validation. Remove the fields from clients; no replacement
-setting is needed. Personal calls and model discovery do not enable this feature.
+them fail strict validation. Remove the fields from clients. Additional recognition
+is configured per endpoint through the management API below. Personal calls and
+model discovery do not enable this feature.
 
 Classification uses bounded, complete structured error JSON from a non-200
 response without a valid retry header. Built-ins require evidence of recoverable
@@ -706,8 +707,8 @@ All supported periods are recognized; elapsed waiting never implies a longer quo
 
 State is `waiting|ready|probing`; reason is
 `five_hour_quota|day_quota|week_quota|month_quota|quota`, and source is
-`builtin|custom_rule`. New recognition uses `builtin`; `custom_rule` remains
-readable for episodes retained during an upgrade. These fields contain no raw
+`builtin|custom_rule`. Additional endpoint rules use `custom_rule`; existing
+historical episodes retain their recorded source. These fields contain no raw
 error or internal claim ID.
 At the deadline, the next eligible real charity request atomically claims one
 trial across all models using the key. No traffic means no probe. The trial's
@@ -716,12 +717,57 @@ Ordinary trial failures count normally and reuse the current interval;
 cancellation or unknown recovery does not count or advance the interval.
 Old in-flight results cannot clear or advance a newer episode.
 
-The upgrade preserves active smart episodes and in-flight trial facts while
-discarding obsolete configuration. Changing the failure threshold or resetting
+The upgrade preserves active smart episodes and in-flight trial facts. New
+endpoint policies start empty; retired per-key settings are not restored. Changing the failure threshold or resetting
 the failure streak preserves smart state and header cooldown. `rate_limited_until` remains
 header-only; smart `waiting` and `probing` also project
 `charity_state:"rate_limited"`. Ready state still requires every ordinary
 ownership, approval, enablement, expiry, quota and admission check.
+
+#### Endpoint recognition rules
+
+Administrators and current level-6 stewards configure an exact `connector_type`
+plus normalized complete `base_url`. All charity keys at that endpoint share
+rules, including later donations. Different protocols and paths remain separate.
+Valid retry headers and recognized built-in errors take priority; otherwise the
+first matching additional rule applies.
+
+Each endpoint accepts at most eight ordered `{kind,value,period}` entries.
+`kind:"code"` exactly matches `error.code` or `error.type`; value contains
+1–64 ASCII letters, digits or `_.:-`. `kind:"message"` matches a case-sensitive
+literal substring of `error.message`; value is trimmed and accepts 1–160 Unicode
+characters without control or format characters. No regular expressions are supported. Period is
+`auto` (default), `five_hour`, `day`, `week` or `month`. Auto uses explicit
+period evidence or the ordinary unknown-period schedule.
+
+For HTTP 402 with `{"error":{"code":"insufficient_credits","message":"Insufficient credits"}}`,
+an operator can configure `{"kind":"code","value":"insufficient_credits","period":"auto"}`.
+HTTP 402 alone does not trigger backoff.
+
+Use the corresponding web session and prefix `/admin/api` or `/api/steward`:
+
+- `GET {prefix}/endpoint-backoff-options`: no query/body; returns
+  `{connector_types:[]}` from the connector registry.
+- `GET {prefix}/endpoint-backoff-policies?q=&page=1&page_size=20`: standard
+  `{data,next_cursor:null,pagination}` numbered page. Rows contain
+  `connector_type,base_url,revision,rule_count,key_count`; counts and revisions
+  are decimal strings. Search accepts up to 128 Unicode characters. Includes
+  donated and explicitly configured endpoints.
+- `GET {prefix}/endpoint-backoff-policy?connector_type=...&base_url=...`:
+  returns `{connector_type,base_url,revision,rules}`; an unconfigured endpoint
+  has revision `"0"` and empty rules.
+- `PUT {prefix}/endpoint-backoff-policy`: strict JSON
+  `{connector_type,base_url,expected_revision,rules}`, a 36 KiB body limit, CSRF and
+  `Idempotency-Key` required. Returns saved detail. Revision conflicts return
+  409; preserve drafts and reread before resubmitting. Unknown outcomes retry
+  with the same key and body. Replay rechecks current permission.
+
+Only supported connectors and valid bases can be configured; no upstream request
+is made. Saving empty rules clears recognition while retaining the revision.
+Changes affect future dispatches only, preserving current waits, trials and
+failure streaks. In-flight requests finish using their dispatch snapshot.
+A matched custom rule leaves the existing failure count unchanged. Ordinary
+users, level-5 stewards and CallerKey cannot manage these policies.
 
 ### 4.2 Donation failure-streak reset
 

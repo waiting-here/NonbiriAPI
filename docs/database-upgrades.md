@@ -2,8 +2,8 @@
 
 ## Supported databases
 
-The v1.0.6 application accepts a new database or the current schema **26**.
-Existing exact schema 16–25 databases require the separate one-time converter.
+The v1.0.7 application accepts a new database or the current schema **27**.
+Existing exact schema 16–26 databases require the separate one-time converter.
 The normal service contains only current DDL and validation; it does not import
 or embed historical schemas or conversion code. Later v1.x releases must provide
 a complete upgrade path from every earlier stable v1.x database. An older binary
@@ -20,11 +20,16 @@ identity, version or structural manifest is rejected before writes.
 
 These commands load no application configuration or database. Each machine-readable descriptor
 contains the current identity and accepted versions. The application descriptor
-accepts only schema 26 and has empty migration and conversion lists. The converter
+accepts only schema 27 and has empty migration and conversion lists. The converter
 descriptor lists its exact offline sources and target. Deployment tools use both
 descriptors instead of parsing Go source or deriving versions from array lengths.
 
 ## Schema changes
+
+Schema 27 adds platform-wide endpoint backoff policies and bounded rule snapshots
+on dispatch facts. Policies start empty; existing waiting, trial, HTTP acceptance
+and failure facts are preserved. Rules affect future charity dispatches only.
+Account export remains format 24; per-key configuration is not restored.
 
 Schema 26 adds shared channel binding presets and their ordered upstream-model
 mappings. Existing channels start without a preset. Saving or applying a preset
@@ -122,7 +127,7 @@ donation terminal clocks, expiry, balances or historical settlements.
 ## One-time conversion
 
 Build `./cmd/nonbiri-upgrade-v1` from the same commit as the target application.
-The converter accepts exact registered schema 16–25 structures. For rc.7,
+The converter accepts exact registered schema 16–26 structures. For rc.7,
 the reference source is `82f1711b674425745a768f781e0e0c34dcb37ac3`. The database
 manifest determines eligibility, not a guess based on a release label.
 
@@ -131,7 +136,7 @@ needed. Ordinary `--apply` validates the exact source, encryption-root identity,
 required configuration and migration-affected relationships, without scanning
 unrelated historical tables. Run it with the service stopped and its existing
 master key available. The converter acquires exclusive
-database access and converts the source to schema 26 in one transaction. A matching
+database access and converts the source to schema 27 in one transaction. A matching
 current schema is a no-op; structural drift, an unknown source or a wrong key is
 rejected. Failure or cancellation rolls back.
 

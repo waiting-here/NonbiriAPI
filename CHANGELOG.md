@@ -4,6 +4,32 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## Unreleased
+
+### Added
+
+- Endpoint-level supplemental backoff rules shared by all charity keys at the
+  same connector and complete base URL. Administrators and level-6 stewards can
+  configure ordered exact error codes or literal message fragments, including
+  provider-specific credit exhaustion responses.
+- Read-only management visibility into the egress routes actually loaded by the
+  process, without gateway secrets or private gateway paths.
+- Documented Google AI Studio and Vertex AI OpenAI-compatible routing, with
+  isolated regional/global path, authentication and streaming coverage.
+
+### Changed
+
+- Backoff policy edits affect future dispatches while in-flight requests retain
+  their rule snapshot. Existing waits, trial ownership and failure streaks are
+  preserved.
+- Storage schema 27 adds endpoint policies and dispatch rule snapshots. Existing
+  schema 16–26 sources use the offline converter; account export remains 24.
+
+### Fixed
+
+- Workflow browser coverage now has an explicit isolated suite selected by the
+  shared local and CI verification plan.
+
 ## 1.0.6 — 2026-10-20
 
 ### Added

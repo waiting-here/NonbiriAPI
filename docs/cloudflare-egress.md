@@ -91,3 +91,71 @@ with the intended connector and provider key. Check an invalid-key control, long
 responses and client cancellation. HTTP 200 alone is insufficient: the connector
 must still validate the protocol's terminal event and usage. Keep gateway-side
 timeouts compatible with the application's request budget.
+
+## Google official channels
+
+AI Studio's official OpenAI-compatible base is
+`https://generativelanguage.googleapis.com/v1beta/openai`. Use
+`openai-compatible` with a bare API key and a Cloudflare Custom Provider
+pointing to the official origin, preserving the complete API mount.
+See [Google's compatibility guide](https://ai.google.dev/gemini-api/docs/openai/).
+
+Vertex AI's official OpenAI-compatible Chat Completions endpoint also uses
+`openai-compatible`. Regional and global bases are separate exact routes:
+
+```json
+[
+  {
+    "source_base_url": "https://us-central1-aiplatform.googleapis.com/v1/projects/PROJECT/locations/us-central1/endpoints/openapi",
+    "gateway_base_url": "https://gateway.ai.cloudflare.com/v1/ACCOUNT/GATEWAY/custom-vertex-regional/v1/projects/PROJECT/locations/us-central1/endpoints/openapi",
+    "token_env": "NONBIRI_CF_GATEWAY_TOKEN",
+    "credential_header": "Authorization"
+  },
+  {
+    "source_base_url": "https://aiplatform.googleapis.com/v1/projects/PROJECT/locations/global/endpoints/openapi",
+    "gateway_base_url": "https://gateway.ai.cloudflare.com/v1/ACCOUNT/GATEWAY/custom-vertex-global/v1/projects/PROJECT/locations/global/endpoints/openapi",
+    "token_env": "NONBIRI_CF_GATEWAY_TOKEN",
+    "credential_header": "Authorization"
+  }
+]
+```
+
+Configure the corresponding Cloudflare Custom Provider bases as
+`https://us-central1-aiplatform.googleapis.com` and
+`https://aiplatform.googleapis.com`. Append the project path once; the
+application does not create these providers. Use model ID `google/{model}`
+and store the bare OAuth access token. The connector adds `Bearer `.
+Do not copy the complete Authorization header into a query parameter.
+
+Access tokens normally expire after one hour. Refresh and update them externally;
+the platform does not store service-account JSON, obtain ADC credentials or
+refresh tokens. Expired tokens follow existing authentication-failure behavior.
+Model availability depends on project and location. Register models manually:
+automatic `/models` discovery is not established by the verified Vertex contract.
+
+These examples cover existing OpenAI-compatible Chat operations. Native Vertex
+OAuth, native model discovery and complete Express-mode support are outside this
+compatibility claim. Controlled regional/global tests verify paths, Bearer,
+JSON, SSE and errors; they do not establish live provider availability.
+
+References: [Vertex compatibility](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/start/openai),
+[authentication](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/migrate/openai/auth-and-credentials),
+[locations](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/locations)
+and [Custom Providers](https://developers.cloudflare.com/ai-gateway/configuration/custom-providers/).
+
+## View loaded routes
+
+Administrators and current level-6 stewards can view loaded routes on the endpoint
+policies page. Refresh reads the current process without probing the upstream.
+Configuration changes require a restart.
+
+Session-authenticated `GET /admin/api/egress/cloudflare-routes` and
+`GET /api/steward/egress/cloudflare-routes` accept no query or body and return
+`{enabled,routes}`. Each route has `source_base_url`, `gateway_origin`,
+`credential_header`, `credential_query_parameter` (empty if absent) and
+`retain_credential_header`. Tokens, environment-variable names and full gateway
+paths are omitted. CallerKey, level-5 and ordinary user access are rejected.
+Responses use `Cache-Control: no-store`.
+
+`enabled:false,routes:[]` means no routes are loaded. Enabled means configuration
+is active; it does not establish credential validity or network health.

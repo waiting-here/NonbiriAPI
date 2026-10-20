@@ -32,6 +32,17 @@ Usage maps `promptTokenCount - cachedContentTokenCount` to uncached input, cache
 
 Discovery uses bounded `GET /models` pagination: at most 20 pages, 1 MiB in total and 1,000 original entries. Only models advertising `generateContent` are retained. Page cycles, malformed entries and credential reflection reject the complete discovery result.
 
+## Multimodal usage and prices
+
+Provider pricing can distinguish input modalities. Platform token billing has
+four buckets: uncached input, cache-write input, cache-read input and output.
+Separate text, image, audio or video prices are not available. Gemini modality
+breakdowns and OpenAI audio-token details are not split into new billing buckets;
+valid aggregate usage is settled at the configured bucket prices. Image responses
+may retain supported text/image usage details in the public response while
+settlement uses aggregate buckets. Per-request prices remain fixed. These totals
+do not reproduce a provider's modality-specific invoice.
+
 ## Responses Chat
 
 Configure the complete API mount, for example `https://api.openai.com/v1`. Authentication uses Bearer credentials. Every request sends `store:false` and requests `reasoning.encrypted_content`. Caller `store:true`, previous-response IDs, conversation references, background execution, remote file IDs and built-in tools are incompatible.
