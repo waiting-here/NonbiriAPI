@@ -828,7 +828,10 @@ test('level 5 handles all four custom-source keys and edits shared limits only i
     await expect(page.getByText(operations.sourceBrowser.noSources, { exact: true })).toBeVisible();
     await expect(page.locator('.charity-source-browser__source-button')).toHaveCount(0);
     await sourceState.selectOption('available');
-    await page.locator('.charity-source-browser__source-button').first().click();
+    await page
+      .locator('.charity-source-browser__source-button')
+      .filter({ has: page.getByText('Mainstream channel: Browser service', { exact: true }) })
+      .click();
     await page
       .locator('.charity-source-browser')
       .getByRole('button', { name: `Manage key #${data.pending_key_id}`, exact: true })
