@@ -272,7 +272,7 @@ func (repository *Repository) ListAdmin(ctx context.Context, filter ListFilter) 
 				CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
 				StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
 				UsageTotalMismatch: record.usageTotalMismatch == 1,
-				UserID:             nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity, CharityModel: record.charityModel,
+				UserID:             nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity, CharityModel: record.charityModel, CharityModelID: record.charityModelID,
 			})
 		}
 		positions = append(positions, listCursor{startedAt: record.startedAt, rowID: record.rowID})
@@ -421,7 +421,7 @@ func (repository *Repository) ListSteward(
 				CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
 				StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
 				UsageTotalMismatch: record.usageTotalMismatch == 1,
-				UserID:             nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity, CharityModel: record.charityModel,
+				UserID:             nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity, CharityModel: record.charityModel, CharityModelID: record.charityModelID,
 			})
 		}
 		positions = append(positions, listCursor{startedAt: record.startedAt, rowID: record.rowID})

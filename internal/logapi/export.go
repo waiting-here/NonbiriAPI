@@ -166,7 +166,7 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 			CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
 			StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
 			UsageTotalMismatch: record.usageTotalMismatch == 1,
-			UserID:             nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity, CharityModel: record.charityModel,
+			UserID:             nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity, CharityModel: record.charityModel, CharityModelID: record.charityModelID,
 		})
 	}
 	if err := rows.Err(); err != nil {
@@ -206,6 +206,7 @@ func MarshalAdminCSV(rows []AdminLogRow) ([]byte, error) {
 		"caller_discord_nickname", "caller_discord_id",
 		"phase", "rejection_stage", "rejection_reason", "request_method", "request_path", "charity_model",
 		"origin_user_id", "origin_discord_id", "origin_deleted", "origin_unknown", "history_record_id", "rejection_field", "rejection_detail", "requested_streaming", "automatic_actions",
+		"charity_model_id",
 	}
 	if err := writer.Write(header); err != nil {
 		return nil, ErrUnavailable
@@ -229,6 +230,7 @@ func MarshalAdminCSV(rows []AdminLogRow) ([]byte, error) {
 			csvString(nickname), csvString(discordID),
 			csvSafe(row.Phase), csvString(row.RejectionStage), csvString(row.RejectionReason), csvString(row.RequestMethod), csvString(row.RequestPath), csvString(row.CharityModel),
 			csvString(row.OriginIdentity.UserID), csvString(row.OriginIdentity.DiscordID), strconv.FormatBool(row.Deleted), strconv.FormatBool(row.Unknown), csvString(row.HistoryRecordID), csvSafe(rejectionField), csvSafe(rejectionReason), csvBool(row.RequestedStreaming), csvActions(row.AutomaticActions),
+			csvString(row.CharityModelID),
 		}
 		if err := writer.Write(record); err != nil {
 			return nil, ErrUnavailable

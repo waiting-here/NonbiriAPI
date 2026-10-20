@@ -143,7 +143,7 @@ func (repository *Repository) GetAdmin(ctx context.Context, requestID string, fi
 		CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
 		StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
 		UsageTotalMismatch: record.usageTotalMismatch == 1,
-		UserID:             nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity, CharityModel: record.charityModel,
+		UserID:             nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity, CharityModel: record.charityModel, CharityModelID: record.charityModelID,
 	}
 	attempts, err := repository.listAdminAttemptsTx(ctx, tx, record.rowID, requestID, filter)
 	if err != nil {
@@ -218,7 +218,7 @@ func (repository *Repository) GetSteward(
 		CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
 		StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
 		UsageTotalMismatch: record.usageTotalMismatch == 1,
-		UserID:             nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity, CharityModel: record.charityModel,
+		UserID:             nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity, CharityModel: record.charityModel, CharityModelID: record.charityModelID,
 	}
 	attempts, err := repository.listStewardAttempts(ctx, tx, stewardUserID, record.rowID, requestID, filter)
 	if err != nil {
@@ -262,6 +262,14 @@ const attemptColumns = `a.attempt_seq,a.result_kind,a.endpoint_key_id_snapshot,a
 a.connector_type,a.upstream_model_id,a.upstream_status,a.upstream_code,a.diag,
 a.input_tokens,a.cache_write_input_tokens,a.cache_read_input_tokens,a.output_tokens,
 a.usage_unknown,a.usage_total_mismatch,a.started_at,a.completed_at`
+
+// Claim identity is the only link to the donation used by this attempt. Deleted
+// claims or resources leave both navigation IDs absent; snapshots cannot restore them.
+const managementAttemptTargetColumns = `d.id,CASE WHEN d.id IS NOT NULL THEN dk.id END`
+const managementAttemptTargetJoin = ` JOIN request_logs l ON l.id=a.request_log_id
+LEFT JOIN dispatch_claims dc ON dc.id=a.claim_id AND dc.logical_request_id=l.logical_request_id AND dc.attempt_seq=a.attempt_seq AND dc.purpose='charity' AND l.route_kind IN ('charity_chat_completions','charity_embeddings','charity_images_generations','charity_decisions')
+LEFT JOIN donation_keys dk ON dk.id=dc.donation_key_id
+LEFT JOIN donations d ON d.id=dk.donation_id `
 
 func scanAttempt(scanner rowScanner, extra ...any) (attemptRecord, error) {
 	var record attemptRecord
@@ -401,7 +409,7 @@ func (repository *Repository) listAdminAttemptsTx(
 	if err != nil {
 		return Page[AdminLogAttempt]{}, err
 	}
-	query := `SELECT ` + attemptColumns + ` FROM request_attempts a
+	query := `SELECT ` + attemptColumns + `,` + managementAttemptTargetColumns + ` FROM request_attempts a` + managementAttemptTargetJoin + `
 WHERE a.request_log_id=? AND a.attempt_seq>?`
 	query, args, metadata, err := logPageQuery(ctx, queryer, query, `SELECT COUNT(*) FROM (`+query+`)`, ` ORDER BY a.attempt_seq ASC`, []any{requestLogID, cursor}, filter.Page, filter.Limit)
 	if err != nil {
@@ -420,7 +428,8 @@ WHERE a.request_log_id=? AND a.attempt_seq>?`
 	var last int64
 	more := false
 	for rows.Next() {
-		record, scanErr := scanAttempt(rows)
+		var donationID, donationKeyID sql.NullInt64
+		record, scanErr := scanAttempt(rows, &donationID, &donationKeyID)
 		if scanErr != nil {
 			return Page[AdminLogAttempt]{}, translateReadError(ctx, scanErr)
 		}
@@ -433,6 +442,7 @@ WHERE a.request_log_id=? AND a.attempt_seq>?`
 			return Page[AdminLogAttempt]{}, usageErr
 		}
 		page.Data = append(page.Data, AdminLogAttempt{
+			DonationID: nullableDecimal(donationID), DonationKeyID: nullableDecimal(donationKeyID),
 			AttemptSeq: strconv.FormatInt(record.sequence, 10), ResultKind: ResultKind(record.resultKind),
 			EndpointKeyID: attemptKeyID(record.endpointKeyID), EndpointBaseURL: record.baseURL,
 			ConnectorType: record.connectorType, UpstreamModelID: record.upstreamModel,
@@ -481,7 +491,7 @@ func (repository *Repository) listStewardAttempts(
 		return Page[StewardLogAttempt]{}, err
 	}
 	// Independent query and projection: no Admin/user/note/logical model column.
-	query := `SELECT ` + attemptColumns + ` FROM request_attempts a
+	query := `SELECT ` + attemptColumns + `,` + managementAttemptTargetColumns + ` FROM request_attempts a` + managementAttemptTargetJoin + `
 WHERE a.request_log_id=? AND a.attempt_seq>?`
 	query, args, metadata, err := logPageQuery(ctx, tx, query, `SELECT COUNT(*) FROM (`+query+`)`, ` ORDER BY a.attempt_seq ASC`, []any{requestLogID, cursor}, filter.Page, filter.Limit)
 	if err != nil {
@@ -500,7 +510,8 @@ WHERE a.request_log_id=? AND a.attempt_seq>?`
 	var last int64
 	more := false
 	for rows.Next() {
-		record, scanErr := scanAttempt(rows)
+		var donationID, donationKeyID sql.NullInt64
+		record, scanErr := scanAttempt(rows, &donationID, &donationKeyID)
 		if scanErr != nil {
 			return Page[StewardLogAttempt]{}, translateReadError(ctx, scanErr)
 		}
@@ -513,6 +524,7 @@ WHERE a.request_log_id=? AND a.attempt_seq>?`
 			return Page[StewardLogAttempt]{}, usageErr
 		}
 		page.Data = append(page.Data, StewardLogAttempt{
+			DonationID: nullableDecimal(donationID), DonationKeyID: nullableDecimal(donationKeyID),
 			AttemptSeq: strconv.FormatInt(record.sequence, 10), ResultKind: ResultKind(record.resultKind),
 			EndpointKeyID: attemptKeyID(record.endpointKeyID), EndpointBaseURL: record.baseURL,
 			ConnectorType: record.connectorType, UpstreamModelID: record.upstreamModel,
