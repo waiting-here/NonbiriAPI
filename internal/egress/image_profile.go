@@ -22,6 +22,10 @@ const (
 // activity. Callers must additionally set the original task deadline on each
 // request context; a retry never extends that deadline.
 func (s *Stack) NewImageClient(baseURL string, profile ImageProfile) (*Client, error) {
+	return s.newImageClient(baseURL, profile, true)
+}
+
+func (s *Stack) newImageClient(baseURL string, profile ImageProfile, allowCloudflare bool) (*Client, error) {
 	var timeout time.Duration
 	var maxBytes int64
 	switch profile {
@@ -45,12 +49,23 @@ func (s *Stack) NewImageClient(baseURL string, profile ImageProfile) (*Client, e
 	if err != nil {
 		return nil, err
 	}
-	route := s.routes[key]
+	var route *cloudflareRoute
+	var worker *cloudflareWorker
+	if allowCloudflare {
+		worker = s.worker
+		if worker == nil {
+			route = s.routes[key]
+		}
+	}
 	transportTarget := parsed
 	transportOrigin := origin
 	if route != nil {
 		transportTarget = route.gateway
 		transportOrigin, _ = canonicalRequestOrigin(route.gateway)
+	}
+	if worker != nil {
+		transportTarget = worker.target
+		transportOrigin, _ = canonicalRequestOrigin(worker.target)
 	}
 	cacheKey := "image:" + strconv.Itoa(int(profile)) + ":" + transportOrigin
 	s.clientsMu.Lock()
@@ -80,6 +95,6 @@ func (s *Stack) NewImageClient(baseURL string, profile ImageProfile) (*Client, e
 		s.clients[cacheKey] = httpClient
 	}
 	s.clientsMu.Unlock()
-	return &Client{route: route, policy: s.policy, baseURL: canonical, origin: origin, originScheme: parsed.Scheme, originHost: parsed.Host,
+	return &Client{stack: s, imageProfile: profile, worker: worker, route: route, policy: s.policy, baseURL: canonical, origin: origin, originScheme: parsed.Scheme, originHost: parsed.Host,
 		httpClient: httpClient, gate: s.gate, timeout: timeout, maxResponseBytes: maxBytes, disableReplay: true}, nil
 }

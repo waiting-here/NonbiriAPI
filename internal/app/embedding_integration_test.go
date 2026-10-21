@@ -57,6 +57,10 @@ func newEmbeddingHTTPFixtureWithConfig(t *testing.T, configure func(*db.Store, s
 }
 
 func newModelHTTPFixture(t *testing.T, configure func(*db.Store, string), connectorType string, custom ...http.HandlerFunc) *embeddingHTTPFixture {
+	return newModelHTTPFixtureWithEgress(t, configure, connectorType, nil, custom...)
+}
+
+func newModelHTTPFixtureWithEgress(t *testing.T, configure func(*db.Store, string), connectorType string, configureEgress func(*egress.StackOptions, string) string, custom ...http.HandlerFunc) *embeddingHTTPFixture {
 	t.Helper()
 	f := &embeddingHTTPFixture{}
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -133,8 +137,13 @@ func newModelHTTPFixture(t *testing.T, configure func(*db.Store, string), connec
 	}
 	t.Cleanup(func() { _ = f.store.Close() })
 	cfg := auditConfig()
+	base := upstream.URL + "/v1"
+	egressOptions := egress.StackOptions{AllowedOrigins: []string{upstream.URL}, RequestTimeout: 5 * time.Second}
+	if configureEgress != nil {
+		base = configureEgress(&egressOptions, base)
+	}
 	if configure != nil {
-		configure(f.store, upstream.URL+"/v1")
+		configure(f.store, base)
 	}
 	f.app, err = buildApplication(context.Background(), cfg, f.store, vault)
 	if err != nil {
@@ -154,8 +163,8 @@ func newModelHTTPFixture(t *testing.T, configure func(*db.Store, string), connec
 	if err := f.store.DB().QueryRow(`SELECT user_id FROM caller_keys WHERE generation=1`).Scan(&f.userID); err != nil {
 		t.Fatal(err)
 	}
-	f.seedModels(t, vault, upstream.URL+"/v1", connectorType)
-	stack, err := egress.NewStack(egress.StackOptions{AllowedOrigins: []string{upstream.URL}, RequestTimeout: 5 * time.Second})
+	f.seedModels(t, vault, base, connectorType)
+	stack, err := egress.NewStack(egressOptions)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -469,12 +469,12 @@ func validAdmission(value logicalAdmission) bool {
 func samePersonalSnapshot(preflight logicalAdmission, snapshot PersonalSnapshot, userID int64) bool {
 	return !preflight.charity && snapshot.ModelID == preflight.modelID && snapshot.OwnerUserID == userID &&
 		snapshot.FullName == preflight.fullName && snapshot.RouteStrategy == preflight.strategy &&
-		snapshot.SilentRetry == preflight.silentRetry && snapshot.FlattenToolCalls == preflight.flatten
+		snapshot.SilentRetry == preflight.silentRetry && snapshot.CloudflareProxyEnabled == preflight.cloudflareProxyEnabled && snapshot.FlattenToolCalls == preflight.flatten
 }
 
 func sameCharitySnapshot(preflight logicalAdmission, snapshot CharitySnapshot) bool {
 	return preflight.charity && snapshot.ModelID == preflight.modelID && snapshot.FullName == preflight.fullName &&
-		snapshot.FlattenToolCalls == preflight.flatten && snapshot.ReservedMilli == preflight.reservedMilli
+		snapshot.CloudflareProxyEnabled == preflight.cloudflareProxyEnabled && snapshot.FlattenToolCalls == preflight.flatten && snapshot.ReservedMilli == preflight.reservedMilli
 }
 
 func charityModelID(plan executionPlan) int64 {

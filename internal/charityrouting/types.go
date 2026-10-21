@@ -149,34 +149,36 @@ type AdminRollingSuccess struct {
 }
 
 type AdminCharityModel struct {
-	RecurringDiscount     charitydiscount.Config    `json:"recurring_discount"`
-	EffectiveDiscount     charitydiscount.Effective `json:"effective_discount"`
-	ServerNow             int64                     `json:"server_now"`
-	SessionHeaders        []sessionheader.Config    `json:"session_headers"`
-	ModelTypes            modeltype.Set             `json:"model_types"`
-	TransportRule         transportpolicy.Rule      `json:"transport_rule"`
-	RolePolicy            rolepolicy.Policy         `json:"role_policy"`
-	IsMainstream          bool                      `json:"is_mainstream"`
-	ExcludedRequestFields []string                  `json:"excluded_request_fields"`
-	TokenReserveCredits   *string                   `json:"token_reserve_credits"`
-	AllowedLevels         []int                     `json:"allowed_levels"`
-	PublicDescription     string                    `json:"public_description"`
-	RouteStrategy         string                    `json:"route_strategy"`
-	AffinityTTLSeconds    int                       `json:"affinity_ttl_seconds"`
-	ID                    string                    `json:"id"`
-	Provider              string                    `json:"provider"`
-	Model                 string                    `json:"model"`
-	FullName              string                    `json:"full_name"`
-	Enabled               bool                      `json:"enabled"`
-	Pricing               AdminPricing              `json:"pricing"`
-	Discount              AdminDiscount             `json:"discount"`
-	FlattenToolCalls      bool                      `json:"flatten_tool_calls"`
-	Revision              string                    `json:"revision"`
-	BindingRevision       string                    `json:"binding_revision"`
-	BindingCount          string                    `json:"binding_count"`
-	RollingSuccess        AdminRollingSuccess       `json:"rolling_success"`
-	CreatedAt             int64                     `json:"created_at"`
-	UpdatedAt             int64                     `json:"updated_at"`
+	CloudflareProxyEnabled bool                      `json:"cloudflare_proxy_enabled"`
+	CloudflareProxyMode    string                    `json:"cloudflare_proxy_mode"`
+	RecurringDiscount      charitydiscount.Config    `json:"recurring_discount"`
+	EffectiveDiscount      charitydiscount.Effective `json:"effective_discount"`
+	ServerNow              int64                     `json:"server_now"`
+	SessionHeaders         []sessionheader.Config    `json:"session_headers"`
+	ModelTypes             modeltype.Set             `json:"model_types"`
+	TransportRule          transportpolicy.Rule      `json:"transport_rule"`
+	RolePolicy             rolepolicy.Policy         `json:"role_policy"`
+	IsMainstream           bool                      `json:"is_mainstream"`
+	ExcludedRequestFields  []string                  `json:"excluded_request_fields"`
+	TokenReserveCredits    *string                   `json:"token_reserve_credits"`
+	AllowedLevels          []int                     `json:"allowed_levels"`
+	PublicDescription      string                    `json:"public_description"`
+	RouteStrategy          string                    `json:"route_strategy"`
+	AffinityTTLSeconds     int                       `json:"affinity_ttl_seconds"`
+	ID                     string                    `json:"id"`
+	Provider               string                    `json:"provider"`
+	Model                  string                    `json:"model"`
+	FullName               string                    `json:"full_name"`
+	Enabled                bool                      `json:"enabled"`
+	Pricing                AdminPricing              `json:"pricing"`
+	Discount               AdminDiscount             `json:"discount"`
+	FlattenToolCalls       bool                      `json:"flatten_tool_calls"`
+	Revision               string                    `json:"revision"`
+	BindingRevision        string                    `json:"binding_revision"`
+	BindingCount           string                    `json:"binding_count"`
+	RollingSuccess         AdminRollingSuccess       `json:"rolling_success"`
+	CreatedAt              int64                     `json:"created_at"`
+	UpdatedAt              int64                     `json:"updated_at"`
 }
 
 // Steward DTOs are deliberately independently compiled, including nested
@@ -212,34 +214,36 @@ type StewardRollingSuccess struct {
 }
 
 type StewardCharityModel struct {
-	RecurringDiscount     charitydiscount.Config    `json:"recurring_discount"`
-	EffectiveDiscount     charitydiscount.Effective `json:"effective_discount"`
-	ServerNow             int64                     `json:"server_now"`
-	SessionHeaders        []sessionheader.Config    `json:"session_headers"`
-	ModelTypes            modeltype.Set             `json:"model_types"`
-	TransportRule         transportpolicy.Rule      `json:"transport_rule"`
-	RolePolicy            rolepolicy.Policy         `json:"role_policy"`
-	IsMainstream          bool                      `json:"is_mainstream"`
-	ExcludedRequestFields []string                  `json:"excluded_request_fields"`
-	TokenReserveCredits   *string                   `json:"token_reserve_credits"`
-	AllowedLevels         []int                     `json:"allowed_levels"`
-	PublicDescription     string                    `json:"public_description"`
-	RouteStrategy         string                    `json:"route_strategy"`
-	AffinityTTLSeconds    int                       `json:"affinity_ttl_seconds"`
-	ID                    string                    `json:"id"`
-	Provider              string                    `json:"provider"`
-	Model                 string                    `json:"model"`
-	FullName              string                    `json:"full_name"`
-	Enabled               bool                      `json:"enabled"`
-	Pricing               StewardPricing            `json:"pricing"`
-	Discount              StewardDiscount           `json:"discount"`
-	FlattenToolCalls      bool                      `json:"flatten_tool_calls"`
-	Revision              string                    `json:"revision"`
-	BindingRevision       string                    `json:"binding_revision"`
-	BindingCount          string                    `json:"binding_count"`
-	RollingSuccess        StewardRollingSuccess     `json:"rolling_success"`
-	CreatedAt             int64                     `json:"created_at"`
-	UpdatedAt             int64                     `json:"updated_at"`
+	CloudflareProxyEnabled bool                      `json:"cloudflare_proxy_enabled"`
+	CloudflareProxyMode    string                    `json:"cloudflare_proxy_mode"`
+	RecurringDiscount      charitydiscount.Config    `json:"recurring_discount"`
+	EffectiveDiscount      charitydiscount.Effective `json:"effective_discount"`
+	ServerNow              int64                     `json:"server_now"`
+	SessionHeaders         []sessionheader.Config    `json:"session_headers"`
+	ModelTypes             modeltype.Set             `json:"model_types"`
+	TransportRule          transportpolicy.Rule      `json:"transport_rule"`
+	RolePolicy             rolepolicy.Policy         `json:"role_policy"`
+	IsMainstream           bool                      `json:"is_mainstream"`
+	ExcludedRequestFields  []string                  `json:"excluded_request_fields"`
+	TokenReserveCredits    *string                   `json:"token_reserve_credits"`
+	AllowedLevels          []int                     `json:"allowed_levels"`
+	PublicDescription      string                    `json:"public_description"`
+	RouteStrategy          string                    `json:"route_strategy"`
+	AffinityTTLSeconds     int                       `json:"affinity_ttl_seconds"`
+	ID                     string                    `json:"id"`
+	Provider               string                    `json:"provider"`
+	Model                  string                    `json:"model"`
+	FullName               string                    `json:"full_name"`
+	Enabled                bool                      `json:"enabled"`
+	Pricing                StewardPricing            `json:"pricing"`
+	Discount               StewardDiscount           `json:"discount"`
+	FlattenToolCalls       bool                      `json:"flatten_tool_calls"`
+	Revision               string                    `json:"revision"`
+	BindingRevision        string                    `json:"binding_revision"`
+	BindingCount           string                    `json:"binding_count"`
+	RollingSuccess         StewardRollingSuccess     `json:"rolling_success"`
+	CreatedAt              int64                     `json:"created_at"`
+	UpdatedAt              int64                     `json:"updated_at"`
 }
 
 type CandidateSource struct {
@@ -342,46 +346,48 @@ type DiscountPatchInput struct {
 }
 
 type ModelCreate struct {
-	RecurringDiscount     *charitydiscount.Config `json:"recurring_discount,omitempty"`
-	SessionHeaders        []sessionheader.Config  `json:"session_headers,omitempty"`
-	ModelTypes            modeltype.Set           `json:"model_types,omitempty"`
-	TransportRule         transportpolicy.Rule    `json:"transport_rule,omitempty"`
-	RolePolicy            *rolepolicy.Policy      `json:"role_policy,omitempty"`
-	IsMainstream          bool                    `json:"is_mainstream"`
-	ExcludedRequestFields []string                `json:"excluded_request_fields,omitempty"`
-	TokenReserveCredits   *string                 `json:"token_reserve_credits,omitempty"`
-	AllowedLevels         []int                   `json:"allowed_levels,omitempty"`
-	PublicDescription     string                  `json:"public_description,omitempty"`
-	RouteStrategy         string                  `json:"route_strategy,omitempty"`
-	AffinityTTLSeconds    *int                    `json:"affinity_ttl_seconds,omitempty"`
-	Provider              string                  `json:"provider"`
-	Model                 string                  `json:"model"`
-	Enabled               bool                    `json:"enabled"`
-	Pricing               PricingInput            `json:"pricing"`
-	Discount              DiscountInput           `json:"discount"`
-	FlattenToolCalls      bool                    `json:"flatten_tool_calls"`
+	CloudflareProxyEnabled bool                    `json:"cloudflare_proxy_enabled"`
+	RecurringDiscount      *charitydiscount.Config `json:"recurring_discount,omitempty"`
+	SessionHeaders         []sessionheader.Config  `json:"session_headers,omitempty"`
+	ModelTypes             modeltype.Set           `json:"model_types,omitempty"`
+	TransportRule          transportpolicy.Rule    `json:"transport_rule,omitempty"`
+	RolePolicy             *rolepolicy.Policy      `json:"role_policy,omitempty"`
+	IsMainstream           bool                    `json:"is_mainstream"`
+	ExcludedRequestFields  []string                `json:"excluded_request_fields,omitempty"`
+	TokenReserveCredits    *string                 `json:"token_reserve_credits,omitempty"`
+	AllowedLevels          []int                   `json:"allowed_levels,omitempty"`
+	PublicDescription      string                  `json:"public_description,omitempty"`
+	RouteStrategy          string                  `json:"route_strategy,omitempty"`
+	AffinityTTLSeconds     *int                    `json:"affinity_ttl_seconds,omitempty"`
+	Provider               string                  `json:"provider"`
+	Model                  string                  `json:"model"`
+	Enabled                bool                    `json:"enabled"`
+	Pricing                PricingInput            `json:"pricing"`
+	Discount               DiscountInput           `json:"discount"`
+	FlattenToolCalls       bool                    `json:"flatten_tool_calls"`
 }
 
 type ModelPatch struct {
-	RecurringDiscount     *charitydiscount.Config `json:"recurring_discount,omitempty"`
-	SessionHeaders        *[]sessionheader.Config `json:"session_headers,omitempty"`
-	ModelTypes            *modeltype.Set          `json:"model_types,omitempty"`
-	TransportRule         *transportpolicy.Rule   `json:"transport_rule,omitempty"`
-	RolePolicy            *rolepolicy.Policy      `json:"role_policy,omitempty"`
-	IsMainstream          *bool                   `json:"is_mainstream,omitempty"`
-	ExcludedRequestFields *[]string               `json:"excluded_request_fields,omitempty"`
-	TokenReserveCredits   **string                `json:"token_reserve_credits,omitempty"`
-	AllowedLevels         *[]int                  `json:"allowed_levels,omitempty"`
-	PublicDescription     *string                 `json:"public_description,omitempty"`
-	RouteStrategy         *string                 `json:"route_strategy,omitempty"`
-	AffinityTTLSeconds    *int                    `json:"affinity_ttl_seconds,omitempty"`
-	ExpectedRevision      string                  `json:"expected_revision"`
-	Provider              *string                 `json:"provider,omitempty"`
-	Model                 *string                 `json:"model,omitempty"`
-	Enabled               *bool                   `json:"enabled,omitempty"`
-	Pricing               *PricingInput           `json:"pricing,omitempty"`
-	Discount              *DiscountPatchInput
-	FlattenToolCalls      *bool `json:"flatten_tool_calls,omitempty"`
+	CloudflareProxyEnabled *bool                   `json:"cloudflare_proxy_enabled,omitempty"`
+	RecurringDiscount      *charitydiscount.Config `json:"recurring_discount,omitempty"`
+	SessionHeaders         *[]sessionheader.Config `json:"session_headers,omitempty"`
+	ModelTypes             *modeltype.Set          `json:"model_types,omitempty"`
+	TransportRule          *transportpolicy.Rule   `json:"transport_rule,omitempty"`
+	RolePolicy             *rolepolicy.Policy      `json:"role_policy,omitempty"`
+	IsMainstream           *bool                   `json:"is_mainstream,omitempty"`
+	ExcludedRequestFields  *[]string               `json:"excluded_request_fields,omitempty"`
+	TokenReserveCredits    **string                `json:"token_reserve_credits,omitempty"`
+	AllowedLevels          *[]int                  `json:"allowed_levels,omitempty"`
+	PublicDescription      *string                 `json:"public_description,omitempty"`
+	RouteStrategy          *string                 `json:"route_strategy,omitempty"`
+	AffinityTTLSeconds     *int                    `json:"affinity_ttl_seconds,omitempty"`
+	ExpectedRevision       string                  `json:"expected_revision"`
+	Provider               *string                 `json:"provider,omitempty"`
+	Model                  *string                 `json:"model,omitempty"`
+	Enabled                *bool                   `json:"enabled,omitempty"`
+	Pricing                *PricingInput           `json:"pricing,omitempty"`
+	Discount               *DiscountPatchInput
+	FlattenToolCalls       *bool `json:"flatten_tool_calls,omitempty"`
 }
 
 type ModelDelete struct {
@@ -458,34 +464,36 @@ func (candidate RuntimeCandidate) ClaimCandidate() claim.Candidate {
 }
 
 type RuntimeSnapshot struct {
-	ModelTypes       modeltype.Set
-	TransportRule    transportpolicy.Rule
-	RolePolicy       rolepolicy.Policy
-	Revision         int64
-	ModelID          int64
-	RouteStrategy    string
-	Provider         string
-	Model            string
-	FullName         string
-	FlattenToolCalls bool
-	ReservedMilli    int64
-	candidates       []RuntimeCandidate
+	CloudflareProxyEnabled bool
+	ModelTypes             modeltype.Set
+	TransportRule          transportpolicy.Rule
+	RolePolicy             rolepolicy.Policy
+	Revision               int64
+	ModelID                int64
+	RouteStrategy          string
+	Provider               string
+	Model                  string
+	FullName               string
+	FlattenToolCalls       bool
+	ReservedMilli          int64
+	candidates             []RuntimeCandidate
 }
 
 // RuntimePreflight carries only candidate-free logical, policy, and caller
 // eligibility facts. It intentionally has no endpoint, key, donation, health,
 // quota, or binding field.
 type RuntimePreflight struct {
-	ModelTypes       modeltype.Set
-	TransportRule    transportpolicy.Rule
-	RolePolicy       rolepolicy.Policy
-	Revision         int64
-	ModelID          int64
-	Provider         string
-	Model            string
-	FullName         string
-	FlattenToolCalls bool
-	ReservedMilli    int64
+	CloudflareProxyEnabled bool
+	ModelTypes             modeltype.Set
+	TransportRule          transportpolicy.Rule
+	RolePolicy             rolepolicy.Policy
+	Revision               int64
+	ModelID                int64
+	Provider               string
+	Model                  string
+	FullName               string
+	FlattenToolCalls       bool
+	ReservedMilli          int64
 }
 
 type AvailableModel struct {

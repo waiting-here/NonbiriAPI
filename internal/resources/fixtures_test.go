@@ -57,6 +57,7 @@ func TestCanonicalResourceDTOFixtures(t *testing.T) {
 			}},
 			AffectedModels: []AffectedModel{{
 				Model: Model{
+					CloudflareProxyEnabled: true, CloudflareProxyMode: "direct",
 					ModelTypes: modeltype.Default(), TransportRule: "passthrough", RolePolicy: rolepolicy.Default(),
 					ID: "41", Provider: "logical", Model: "primary", FullName: "logical/primary", RouteStrategy: "ordered",
 					SilentRetry: true, FlattenToolCalls: false, Revision: "2", BindingRevision: "6", BindingCount: "1",

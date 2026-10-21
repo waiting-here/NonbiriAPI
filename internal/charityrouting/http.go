@@ -367,24 +367,25 @@ func parseDiscount(wire discountWire) (DiscountInput, map[string]any, error) {
 }
 
 type modelCreateWire struct {
-	RecurringDiscount     requiredField[charitydiscount.Config] `json:"recurring_discount"`
-	SessionHeaders        requiredField[[]sessionheader.Config] `json:"session_headers"`
-	ModelTypes            requiredField[modeltype.Set]          `json:"model_types"`
-	TransportRule         requiredField[transportpolicy.Rule]   `json:"transport_rule"`
-	RolePolicy            requiredField[rolepolicy.Policy]      `json:"role_policy"`
-	IsMainstream          requiredField[bool]                   `json:"is_mainstream"`
-	ExcludedRequestFields requiredField[[]string]               `json:"excluded_request_fields"`
-	TokenReserveCredits   nullableField[string]                 `json:"token_reserve_credits"`
-	AllowedLevels         requiredField[[]int]                  `json:"allowed_levels"`
-	PublicDescription     requiredField[string]                 `json:"public_description"`
-	RouteStrategy         requiredField[string]                 `json:"route_strategy"`
-	AffinityTTLSeconds    requiredField[int]                    `json:"affinity_ttl_seconds"`
-	Provider              requiredField[string]                 `json:"provider"`
-	Model                 requiredField[string]                 `json:"model"`
-	Enabled               requiredField[bool]                   `json:"enabled"`
-	Pricing               requiredField[pricingWire]            `json:"pricing"`
-	Discount              requiredField[discountWire]           `json:"discount"`
-	FlattenToolCalls      requiredField[bool]                   `json:"flatten_tool_calls"`
+	CloudflareProxyEnabled requiredField[bool]                   `json:"cloudflare_proxy_enabled"`
+	RecurringDiscount      requiredField[charitydiscount.Config] `json:"recurring_discount"`
+	SessionHeaders         requiredField[[]sessionheader.Config] `json:"session_headers"`
+	ModelTypes             requiredField[modeltype.Set]          `json:"model_types"`
+	TransportRule          requiredField[transportpolicy.Rule]   `json:"transport_rule"`
+	RolePolicy             requiredField[rolepolicy.Policy]      `json:"role_policy"`
+	IsMainstream           requiredField[bool]                   `json:"is_mainstream"`
+	ExcludedRequestFields  requiredField[[]string]               `json:"excluded_request_fields"`
+	TokenReserveCredits    nullableField[string]                 `json:"token_reserve_credits"`
+	AllowedLevels          requiredField[[]int]                  `json:"allowed_levels"`
+	PublicDescription      requiredField[string]                 `json:"public_description"`
+	RouteStrategy          requiredField[string]                 `json:"route_strategy"`
+	AffinityTTLSeconds     requiredField[int]                    `json:"affinity_ttl_seconds"`
+	Provider               requiredField[string]                 `json:"provider"`
+	Model                  requiredField[string]                 `json:"model"`
+	Enabled                requiredField[bool]                   `json:"enabled"`
+	Pricing                requiredField[pricingWire]            `json:"pricing"`
+	Discount               requiredField[discountWire]           `json:"discount"`
+	FlattenToolCalls       requiredField[bool]                   `json:"flatten_tool_calls"`
 }
 
 func parseModelCreate(wire modelCreateWire) (ModelCreate, map[string]any, error) {
@@ -399,10 +400,13 @@ func parseModelCreate(wire modelCreateWire) (ModelCreate, map[string]any, error)
 	if err != nil {
 		return ModelCreate{}, nil, err
 	}
-	input := ModelCreate{Provider: wire.Provider.Value, Model: wire.Model.Value, Enabled: wire.Enabled.Value,
+	input := ModelCreate{CloudflareProxyEnabled: wire.CloudflareProxyEnabled.Value, Provider: wire.Provider.Value, Model: wire.Model.Value, Enabled: wire.Enabled.Value,
 		Pricing: pricing, Discount: discount, FlattenToolCalls: wire.FlattenToolCalls.Value}
 	canonical := map[string]any{"provider": input.Provider, "model": input.Model, "enabled": input.Enabled,
 		"pricing": pricingJSON, "discount": discountJSON, "flatten_tool_calls": input.FlattenToolCalls}
+	if wire.CloudflareProxyEnabled.Set {
+		canonical["cloudflare_proxy_enabled"] = input.CloudflareProxyEnabled
+	}
 	if wire.RecurringDiscount.Set {
 		value := wire.RecurringDiscount.Value
 		input.RecurringDiscount = &value
@@ -558,25 +562,26 @@ func parseDiscountPatch(wire discountPatchWire) (*DiscountPatchInput, map[string
 }
 
 type modelPatchWire struct {
-	RecurringDiscount     requiredField[charitydiscount.Config] `json:"recurring_discount"`
-	SessionHeaders        requiredField[[]sessionheader.Config] `json:"session_headers"`
-	ModelTypes            requiredField[modeltype.Set]          `json:"model_types"`
-	TransportRule         requiredField[transportpolicy.Rule]   `json:"transport_rule"`
-	RolePolicy            requiredField[rolepolicy.Policy]      `json:"role_policy"`
-	IsMainstream          requiredField[bool]                   `json:"is_mainstream"`
-	ExcludedRequestFields requiredField[[]string]               `json:"excluded_request_fields"`
-	TokenReserveCredits   nullableField[string]                 `json:"token_reserve_credits"`
-	AllowedLevels         requiredField[[]int]                  `json:"allowed_levels"`
-	PublicDescription     requiredField[string]                 `json:"public_description"`
-	RouteStrategy         requiredField[string]                 `json:"route_strategy"`
-	AffinityTTLSeconds    requiredField[int]                    `json:"affinity_ttl_seconds"`
-	ExpectedRevision      requiredField[string]                 `json:"expected_revision"`
-	Provider              requiredField[string]                 `json:"provider"`
-	Model                 requiredField[string]                 `json:"model"`
-	Enabled               requiredField[bool]                   `json:"enabled"`
-	Pricing               requiredField[pricingWire]            `json:"pricing"`
-	Discount              requiredField[discountPatchWire]      `json:"discount"`
-	FlattenToolCalls      requiredField[bool]                   `json:"flatten_tool_calls"`
+	CloudflareProxyEnabled requiredField[bool]                   `json:"cloudflare_proxy_enabled"`
+	RecurringDiscount      requiredField[charitydiscount.Config] `json:"recurring_discount"`
+	SessionHeaders         requiredField[[]sessionheader.Config] `json:"session_headers"`
+	ModelTypes             requiredField[modeltype.Set]          `json:"model_types"`
+	TransportRule          requiredField[transportpolicy.Rule]   `json:"transport_rule"`
+	RolePolicy             requiredField[rolepolicy.Policy]      `json:"role_policy"`
+	IsMainstream           requiredField[bool]                   `json:"is_mainstream"`
+	ExcludedRequestFields  requiredField[[]string]               `json:"excluded_request_fields"`
+	TokenReserveCredits    nullableField[string]                 `json:"token_reserve_credits"`
+	AllowedLevels          requiredField[[]int]                  `json:"allowed_levels"`
+	PublicDescription      requiredField[string]                 `json:"public_description"`
+	RouteStrategy          requiredField[string]                 `json:"route_strategy"`
+	AffinityTTLSeconds     requiredField[int]                    `json:"affinity_ttl_seconds"`
+	ExpectedRevision       requiredField[string]                 `json:"expected_revision"`
+	Provider               requiredField[string]                 `json:"provider"`
+	Model                  requiredField[string]                 `json:"model"`
+	Enabled                requiredField[bool]                   `json:"enabled"`
+	Pricing                requiredField[pricingWire]            `json:"pricing"`
+	Discount               requiredField[discountPatchWire]      `json:"discount"`
+	FlattenToolCalls       requiredField[bool]                   `json:"flatten_tool_calls"`
 }
 
 func parseModelPatch(wire modelPatchWire) (ModelPatch, map[string]any, error) {
@@ -690,6 +695,10 @@ func parseModelPatch(wire modelPatchWire) (ModelPatch, map[string]any, error) {
 		}
 		input.TransportRule = &wire.TransportRule.Value
 		canonical["transport_rule"] = wire.TransportRule.Value
+	}
+	if wire.CloudflareProxyEnabled.Set {
+		input.CloudflareProxyEnabled = &wire.CloudflareProxyEnabled.Value
+		canonical["cloudflare_proxy_enabled"] = wire.CloudflareProxyEnabled.Value
 	}
 	if wire.FlattenToolCalls.Set {
 		input.FlattenToolCalls = &wire.FlattenToolCalls.Value

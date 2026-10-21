@@ -121,10 +121,10 @@ WHERE u.id=?`, userID).Scan(&admin, &banned, &bannedUntil, &suspendedUntil, &gat
 	var requestPrice int64
 	var discountStart, discountEnd sql.NullInt64
 	err = tx.QueryRowContext(ctx, `SELECT id,provider,model,full_name,enabled,flatten_tool_calls,
-pricing_mode,request_user_price,discount_percent,discount_enabled,discount_start_at,discount_end_at,role_policy,revision,transport_rule,model_types,recurring_discount
+pricing_mode,request_user_price,discount_percent,discount_enabled,discount_start_at,discount_end_at,role_policy,revision,transport_rule,model_types,recurring_discount,cloudflare_proxy_enabled
 FROM charity_models WHERE full_name=?`, fullName).Scan(&preflight.ModelID, &preflight.Provider, &preflight.Model,
 		&preflight.FullName, &enabled, &preflight.FlattenToolCalls, &pricingMode, &requestPrice,
-		&discount, &discountEnabled, &discountStart, &discountEnd, &encodedPolicy, &preflight.Revision, &preflight.TransportRule, &preflight.ModelTypes, &recurring)
+		&discount, &discountEnabled, &discountStart, &discountEnd, &encodedPolicy, &preflight.Revision, &preflight.TransportRule, &preflight.ModelTypes, &recurring, &preflight.CloudflareProxyEnabled)
 	if errors.Is(err, sql.ErrNoRows) {
 		return RuntimePreflight{}, ErrNotFound
 	}
@@ -354,10 +354,10 @@ func (s *Service) readSnapshotTx(ctx context.Context, tx *sql.Tx, modelID, decis
 		return RuntimeSnapshot{}, ErrNotFound
 	}
 	err := tx.QueryRowContext(ctx, `SELECT id,provider,model,full_name,enabled,flatten_tool_calls,
-pricing_mode,request_user_price,discount_percent,discount_enabled,discount_start_at,discount_end_at,role_policy,revision,transport_rule,model_types,recurring_discount
+pricing_mode,request_user_price,discount_percent,discount_enabled,discount_start_at,discount_end_at,role_policy,revision,transport_rule,model_types,recurring_discount,cloudflare_proxy_enabled
 FROM charity_models WHERE id=?`, modelID).Scan(&snapshot.ModelID, &snapshot.Provider, &snapshot.Model,
 		&snapshot.FullName, &enabled, &snapshot.FlattenToolCalls, &pricingMode, &requestPrice,
-		&discount, &discountEnabled, &discountStart, &discountEnd, &encodedPolicy, &snapshot.Revision, &snapshot.TransportRule, &snapshot.ModelTypes, &recurring)
+		&discount, &discountEnabled, &discountStart, &discountEnd, &encodedPolicy, &snapshot.Revision, &snapshot.TransportRule, &snapshot.ModelTypes, &recurring, &snapshot.CloudflareProxyEnabled)
 	if errors.Is(err, sql.ErrNoRows) {
 		return RuntimeSnapshot{}, ErrNotFound
 	}

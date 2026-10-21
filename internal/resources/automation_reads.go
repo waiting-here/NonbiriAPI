@@ -47,7 +47,7 @@ func (r *Repository) AutomationModels(ctx context.Context, userID int64, q strin
 	return automationPage(result), err
 }
 func (r *Repository) AutomationModel(ctx context.Context, userID, id int64) (Model, error) {
-	return userPageRead(ctx, r, userID, pagination.Default(), func(ctx context.Context, tx *sql.Tx) (Model, error) { return getModelTx(ctx, tx, userID, id) })
+	return userPageRead(ctx, r, userID, pagination.Default(), func(ctx context.Context, tx *sql.Tx) (Model, error) { return r.getModelTx(ctx, tx, userID, id) })
 }
 
 type AutomationBinding struct {
@@ -70,7 +70,7 @@ type AutomationBinding struct {
 
 func (r *Repository) AutomationBindings(ctx context.Context, userID, modelID int64, q string, page pagination.Request) (AutomationPage[AutomationBinding], error) {
 	result, err := userPageRead(ctx, r, userID, page, func(ctx context.Context, tx *sql.Tx) (Page[AutomationBinding], error) {
-		if _, err := getModelTx(ctx, tx, userID, modelID); err != nil {
+		if _, err := r.getModelTx(ctx, tx, userID, modelID); err != nil {
 			return Page[AutomationBinding]{}, err
 		}
 		query := `SELECT b.id,k.id,e.id,e.base_url,e.connector_type,e.note,k.note,k.display_head,k.display_tail,b.upstream_model_id,b.ord,e.enabled,k.enabled,

@@ -15,8 +15,10 @@ type CloudflareRouteStatus struct {
 }
 
 type CloudflareStatus struct {
-	Enabled bool                    `json:"enabled"`
-	Routes  []CloudflareRouteStatus `json:"routes"`
+	Enabled      bool                    `json:"enabled"`
+	Mode         string                  `json:"mode"`
+	WorkerOrigin string                  `json:"worker_origin"`
+	Routes       []CloudflareRouteStatus `json:"routes"`
 }
 
 // CloudflareStatus snapshots the immutable routes used by this Stack. It does
@@ -34,7 +36,11 @@ func (s *Stack) CloudflareStatus() CloudflareStatus {
 		})
 	}
 	sort.Slice(routes, func(i, j int) bool { return routes[i].SourceBaseURL < routes[j].SourceBaseURL })
-	return CloudflareStatus{Enabled: len(routes) > 0, Routes: routes}
+	workerOrigin := ""
+	if s.worker != nil {
+		workerOrigin = routeStatusURL(&url.URL{Scheme: s.worker.target.Scheme, Host: s.worker.target.Host})
+	}
+	return CloudflareStatus{Enabled: s.CloudflareProxyMode() != "direct", Mode: s.CloudflareProxyMode(), WorkerOrigin: workerOrigin, Routes: routes}
 }
 
 func routeStatusURL(value *url.URL) string {

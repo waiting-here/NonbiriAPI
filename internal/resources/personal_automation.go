@@ -18,7 +18,7 @@ type AutomationMutation struct {
 // not create or enable resources. The automation owner authorizes the transaction.
 func (r *Repository) AutomationTargetInTransaction(ctx context.Context, tx *sql.Tx, userID, targetID int64, model bool) error {
 	if model {
-		_, err := getModelTx(ctx, tx, userID, targetID)
+		_, err := r.getModelTx(ctx, tx, userID, targetID)
 		return err
 	}
 	_, err := getEndpointTx(ctx, tx, userID, targetID)
@@ -79,7 +79,7 @@ func (r *Repository) ImportEndpointKeyInTransaction(ctx context.Context, tx *sql
 // ExistingAutomationBindingInTransaction checks live ownership before confirming
 // an existing tuple, including disabled or no-longer-callable connections.
 func (r *Repository) ExistingAutomationBindingInTransaction(ctx context.Context, tx *sql.Tx, userID, modelID, keyID int64, upstream string) (AutomationMutation, int64, error) {
-	if _, err := getModelTx(ctx, tx, userID, modelID); err != nil {
+	if _, err := r.getModelTx(ctx, tx, userID, modelID); err != nil {
 		return AutomationMutation{}, 0, err
 	}
 	var endpointID int64

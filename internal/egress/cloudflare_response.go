@@ -86,6 +86,7 @@ func (s *routeSecrets) contains(value string) bool {
 	return false
 }
 func (s *routeSecrets) cleanHeaders(headers http.Header) {
+	removeWorkerHeaders(headers)
 	for name, values := range headers {
 		if s.contains(name) {
 			delete(headers, name)

@@ -77,19 +77,20 @@ type LifecycleCatalogPair struct {
 }
 
 type LifecycleModel struct {
-	ModelTypes       modeltype.Set
-	TransportRule    transportpolicy.Rule
-	RolePolicy       rolepolicy.Policy
-	ID               string
-	Provider         string
-	Model            string
-	FullName         string
-	RouteStrategy    string
-	SilentRetry      bool
-	FlattenToolCalls bool
-	CreatedAt        int64
-	UpdatedAt        int64
-	Bindings         []LifecycleBinding
+	CloudflareProxyEnabled bool
+	ModelTypes             modeltype.Set
+	TransportRule          transportpolicy.Rule
+	RolePolicy             rolepolicy.Policy
+	ID                     string
+	Provider               string
+	Model                  string
+	FullName               string
+	RouteStrategy          string
+	SilentRetry            bool
+	FlattenToolCalls       bool
+	CreatedAt              int64
+	UpdatedAt              int64
+	Bindings               []LifecycleBinding
 }
 
 type LifecycleBinding struct {
@@ -222,7 +223,7 @@ LIMIT ?`, userID, limit+1)
 			ModelTypes: model.ModelTypes.Clone(), TransportRule: model.TransportRule, RolePolicy: model.RolePolicy.Clone(),
 			ID: model.ID, Provider: model.Provider, Model: model.Model, FullName: model.FullName,
 			RouteStrategy: model.RouteStrategy, SilentRetry: model.SilentRetry,
-			FlattenToolCalls: model.FlattenToolCalls, CreatedAt: model.CreatedAt, UpdatedAt: model.UpdatedAt,
+			CloudflareProxyEnabled: model.CloudflareProxyEnabled, FlattenToolCalls: model.FlattenToolCalls, CreatedAt: model.CreatedAt, UpdatedAt: model.UpdatedAt,
 			Bindings: make([]LifecycleBinding, 0, len(bindings)),
 		}
 		for _, binding := range bindings {
