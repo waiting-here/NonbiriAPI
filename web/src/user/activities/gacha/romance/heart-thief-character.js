@@ -1,5 +1,6 @@
 import { makeArmLayers } from './heart-thief-arm.js';
 import { restPose, inspectRestWeight } from './heart-thief-rest.js';
+import { backgroundRenderSize } from './background-size';
 export { restPose, inspectRestWeight } from './heart-thief-rest.js';
 export const ART_WIDTH = 1086,
   ART_HEIGHT = 1448;
@@ -551,8 +552,8 @@ export function makeCharacterRenderer(image, repairImage) {
 }
 export function makeBackgroundRenderer(image) {
   const surface = document.createElement('canvas');
-  surface.width = 1536;
-  surface.height = 1024;
+  surface.width = image.naturalWidth;
+  surface.height = image.naturalHeight;
   const gl = surface.getContext('webgl', {
     alpha: false,
     antialias: false,
@@ -607,13 +608,20 @@ export function makeBackgroundRenderer(image) {
   gl.uniform1i(gl.getUniformLocation(pr, 'windMap'), 1);
   const phase = gl.getUniformLocation(pr, 'phase');
   return {
+    setProjectionScale(scale) {
+      const [width, height] = backgroundRenderSize(image.naturalWidth, image.naturalHeight, scale);
+      if (surface.width !== width || surface.height !== height) {
+        surface.width = width;
+        surface.height = height;
+      }
+    },
     dispose() {
       gl.getExtension('WEBGL_lose_context')?.loseContext();
     },
     draw(t) {
       gl.useProgram(pr);
       gl.uniform1f(phase, t);
-      gl.viewport(0, 0, 1536, 1024);
+      gl.viewport(0, 0, surface.width, surface.height);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       return surface;
     },

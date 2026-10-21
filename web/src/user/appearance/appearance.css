@@ -249,12 +249,26 @@ html[data-appearance='default'] body::after {
 .nb-appearance-still[data-scene='amber'] {
   object-position: 82% top;
 }
-.nb-amber-still-character {
+.nb-amber-still-character,
+.nb-romance-still-character,
+.nb-mirror-still-character,
+.nb-mirror-still-light,
+.nb-mirror-still-reflection {
   position: fixed;
   z-index: -1;
   pointer-events: none;
   max-width: none;
   object-fit: fill;
+}
+.nb-mirror-still-reflection {
+  inset: 0;
+}
+.nb-mirror-still-reflection img {
+  position: absolute;
+  max-width: none;
+}
+.nb-mirror-still-light {
+  mix-blend-mode: plus-lighter;
 }
 @media (prefers-reduced-motion: reduce) {
   .nb-appearance-backdrop {

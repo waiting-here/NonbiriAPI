@@ -13,6 +13,7 @@ export async function renderRomance(
     dark?: boolean;
     highResolution?: boolean;
     characterOnly?: boolean;
+    characterPlate?: boolean;
     backgroundOnly?: boolean;
     frozenTime?: number;
     paused?: () => boolean;
@@ -20,12 +21,13 @@ export async function renderRomance(
     ambient?: boolean;
   } = {},
 ) {
-  const scene = await createScene(id, options.polished);
+  const scene = await createScene(id, options.polished, options);
   if (options.signal?.aborted) {
     scene.dispose();
     throw new DOMException('Cancelled', 'AbortError');
   }
   const landscape = options.landscape;
+  const independentAppearance = options.polished && options.variant === 'appearance';
   const buffer = document.createElement('canvas');
   const cadence = new PaintCadence(undefined, options.ambient);
   let request = 0,
@@ -45,21 +47,30 @@ export async function renderRomance(
     canvas.height = landscape
       ? Math.round((canvas.width * (canvas.getBoundingClientRect().height || innerHeight)) / width)
       : Math.round(canvas.width * 1.5);
-    buffer.width = landscape
-      ? Math.min(1920, Math.max(canvas.width, (canvas.height * 16) / 9))
-      : canvas.width;
-    buffer.height = landscape ? Math.round((buffer.width * 9) / 16) : canvas.height;
+    buffer.width = independentAppearance
+      ? canvas.width
+      : landscape
+        ? Math.min(1920, Math.max(canvas.width, (canvas.height * 16) / 9))
+        : canvas.width;
+    buffer.height = independentAppearance
+      ? canvas.height
+      : landscape
+        ? Math.round((buffer.width * 9) / 16)
+        : canvas.height;
   };
   const paint = () => {
-    scene.paint(
-      buffer,
-      elapsed,
-      options.variant ?? (landscape ? 'appearance' : 'card'),
-      options.dark,
-      options.characterOnly ? 'hero' : options.backgroundOnly ? 'background' : 'complete',
-      true,
-      options.blink,
-    );
+    if (options.characterPlate) scene.paintCharacter(buffer, options.dark, elapsed, options.blink);
+    else
+      scene.paint(
+        buffer,
+        elapsed,
+        options.variant ?? (landscape ? 'appearance' : 'card'),
+        options.dark,
+        options.characterOnly ? 'hero' : options.backgroundOnly ? 'background' : 'complete',
+        true,
+        options.blink,
+        options.exportSize ? undefined : canvas.getBoundingClientRect().width || innerWidth,
+      );
     const context = canvas.getContext('2d')!;
     context.imageSmoothingQuality = 'high';
     const scale = Math.max(canvas.width / buffer.width, canvas.height / buffer.height);

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { SpecialTheme } from '../activities/gacha/special-scenes';
-import { artSourceSet } from '../activities/gacha/art-resolution';
 import { AmberStill } from './AmberStill';
+import { RomanceStill } from './RomanceStill';
+import { MirrorSeaStill } from './MirrorSeaStill';
 
 const settings = () => ({
   dark: document.documentElement.dataset.theme === 'dark',
@@ -47,7 +48,7 @@ export function SpecialBackdrop({ theme }: { theme: SpecialTheme }) {
         .then(({ renderSpecial }) =>
           renderSpecial(surface, theme, {
             landscape: true,
-            variant: theme === 'amber' ? 'appearance' : undefined,
+            variant: 'appearance',
             dark: quality.dark,
             highResolution: quality.high,
             signal: next.signal,
@@ -70,22 +71,14 @@ export function SpecialBackdrop({ theme }: { theme: SpecialTheme }) {
       release?.();
     };
   }, [theme, quality]);
-  const src =
-    '/assets/gacha/appearances/' + theme + '-' + (quality.dark ? 'dark' : 'light') + '.webp';
   return (
     <>
       {theme === 'amber' ? (
         <AmberStill dark={quality.dark} />
+      ) : theme === 'elopement' || theme === 'heart-thief' ? (
+        <RomanceStill theme={theme} dark={quality.dark} />
       ) : (
-        <img
-          className="nb-appearance-still"
-          data-scene={theme}
-          src={src}
-          srcSet={artSourceSet(src)}
-          sizes="(max-aspect-ratio: 16/9) 177.78vh, 100vw"
-          alt=""
-          aria-hidden="true"
-        />
+        <MirrorSeaStill dark={quality.dark} />
       )}
       <canvas
         ref={canvas}

@@ -9,6 +9,7 @@ export async function renderSpecial(
     dark?: boolean;
     highResolution?: boolean;
     characterOnly?: boolean;
+    characterPlate?: boolean;
     backgroundOnly?: boolean;
     frozenTime?: number;
     paused?: () => boolean;
