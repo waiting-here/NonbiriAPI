@@ -10,6 +10,7 @@ export default defineConfig({
   testMatch: [
     'account-mfa.spec.ts',
     'management.spec.ts',
+    'inference-configuration.spec.ts',
     'moderation.spec.ts',
     'directory-controls.spec.ts',
     'operation-controls.spec.ts',

@@ -85,7 +85,7 @@ async function write(context: BrowserContext, origin: string, path: string, data
   return response.json();
 }
 
-test('level 5 reads accounts and only bans a lower-level user', async ({ browser }) => {
+test('level 5 reads accounts and retains the lower-user ban boundary', async ({ browser }) => {
   const state = fixture();
   const context = await session(browser, 5);
   const id = state.management.trainee_target_id;
@@ -98,7 +98,9 @@ test('level 5 reads accounts and only bans a lower-level user', async ({ browser
     const before = await read(context, state.user_url, root);
     await page.goto(state.user_url + '/steward?tab=users&user=' + id);
     await expect(page.getByRole('tab', { name: copy.tabEconomy, exact: true })).toHaveCount(0);
-    await expect(page.getByText(copy.traineeReadOnly, { exact: true }).first()).toBeVisible();
+    await page.getByRole('tab', { name: copy.tabLimits, exact: true }).click();
+    await expect(page.getByLabel(copy.lightRPMLimit, { exact: true })).toBeEnabled();
+    await expect(page.getByLabel(copy.endpointLimit, { exact: true })).toHaveCount(0);
     await page.getByRole('tab', { name: copy.tabPenalties, exact: true }).click();
     await page.getByLabel(copy.banReason, { exact: true }).fill('Synthetic account restriction');
     await page.getByLabel(copy.banDurationDays, { exact: true }).fill('1');
@@ -136,7 +138,9 @@ test('level 5 reads accounts and only bans a lower-level user', async ({ browser
     expect(after.is_banned).toBe(true);
     expect(after.level.effective).toBe(4);
     await page.reload();
-    await expect(page.getByText(copy.traineeReadOnly, { exact: true }).first()).toBeVisible();
+    await page.getByRole('tab', { name: copy.tabLimits, exact: true }).click();
+    await expect(page.getByLabel(copy.lightRPMLimit, { exact: true })).toBeEnabled();
+    await expect(page.getByLabel(copy.endpointLimit, { exact: true })).toHaveCount(0);
     await page.getByRole('tab', { name: copy.tabPenalties, exact: true }).click();
     await expect(page.getByRole('button', { name: copy.unban, exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: copy.ban, exact: true })).toHaveCount(0);
