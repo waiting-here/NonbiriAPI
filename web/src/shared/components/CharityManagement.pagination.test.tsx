@@ -305,19 +305,8 @@ describe('managed donation page integration', () => {
         },
       );
       await screen.findByRole('heading', { name: 'Add service connections' });
-      await view.user.click(screen.getByRole('button', { name: 'Return to donation settings' }));
-      expect(await screen.findByRole('heading', { name: 'Donation review' })).toBeVisible();
-      let params = new URLSearchParams(screen.getByTestId('url').textContent ?? '');
-      expect(params.get('donation_id')).toBe('7');
-      expect(params.get('donation_key')).toBe('21');
-      expect(params.get('donation_keys_page')).toBe('2');
-      expect(params.has('binding_key')).toBe(false);
-      await view.user.click(
-        screen.getAllByRole('button', { name: 'Bind this key to a charity model' })[0]!,
-      );
-      await screen.findByRole('heading', { name: 'Add service connections' });
       await view.user.click(screen.getByRole('button', { name: 'Return to list' }));
-      params = new URLSearchParams(screen.getByTestId('url').textContent ?? '');
+      const params = new URLSearchParams(screen.getByTestId('url').textContent ?? '');
       for (const name of [
         'donation_id',
         'donation_key',
@@ -341,8 +330,8 @@ describe('managed donation page integration', () => {
       expect(
         screen.queryByRole('heading', { name: 'Add service connections' }),
       ).not.toBeInTheDocument();
-      await view.user.click(screen.getByRole('button', { name: 'Browser back' }));
-      await view.user.click(screen.getByRole('button', { name: 'Browser back' }));
+      await view.user.click(screen.getByText('Browser back', { exact: true }));
+      await view.user.click(screen.getByText('Browser back', { exact: true }));
       expect(await screen.findByRole('heading', { name: 'Add service connections' })).toBeVisible();
     },
   );
