@@ -29,3 +29,20 @@ func TestUsageRemainsComparable(t *testing.T) {
 		t.Fatal("copy changed usage")
 	}
 }
+
+func TestNormalizeUsageDetailsBoundsPersistedMetadata(t *testing.T) {
+	u := Usage{Present: true, UncachedInputTokens: 3, OutputTokens: 2, SearchUnitsMicros: -1, SearchUnitsPresent: true, Modalities: ModalityUsage{InputPresent: true, Input: [3][4]int64{{1, 1}}, OutputReason: "raw untrusted text", Output: [4]int64{1, 2}}}
+	n := NormalizeUsageDetails(u)
+	if !n.Present || n.UncachedInputTokens != 3 || n.SearchUnitsPresent || n.SearchUnitsMicros != 0 || n.Modalities.InputPresent || n.Modalities.InputReason != ModalityMismatch || n.Modalities.OutputReason != ModalityInvalid || n.Modalities.Input != [3][4]int64{} || n.Modalities.Output != [4]int64{} {
+		t.Fatal(n)
+	}
+	u.Modalities = ModalityUsage{InputPresent: true, Input: [3][4]int64{{3}}, InputReason: "raw", OutputPresent: true, Output: [4]int64{2}, OutputReason: "raw"}
+	n = NormalizeUsageDetails(u)
+	if !n.Modalities.InputPresent || !n.Modalities.OutputPresent || n.Modalities.InputReason != "" || n.Modalities.OutputReason != "" {
+		t.Fatal(n)
+	}
+	u.Present = false
+	if n := NormalizeUsageDetails(u); n.Modalities != (ModalityUsage{}) {
+		t.Fatal(n)
+	}
+}
