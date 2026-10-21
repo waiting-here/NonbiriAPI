@@ -24,8 +24,89 @@ type Model = {
   revision: string;
   cloudflare_proxy_enabled: boolean;
   cloudflare_proxy_mode: 'worker' | 'legacy' | 'direct';
+  session_headers: { name: string; idle_seconds: number; format: string }[];
 };
 const copy = common.common.cloudflareProxy;
+const headerCopy = common.common.operations.charity.sessionHeaders;
+const managedHeaders = [
+  { name: 'x-browser-id', idle_seconds: 0, format: 'opencode_part' },
+  { name: 'x-browser-session', idle_seconds: 300, format: 'opencode_session' },
+];
+type Adaptation = {
+  forward_headers: { mode: string; values: string[] };
+};
+async function managedHeaderFields(page: Page) {
+  const summary = page
+    .locator('summary')
+    .filter({ has: page.getByText(headerCopy.title, { exact: true }) });
+  const fold = summary.locator('..');
+  if ((await fold.getAttribute('open')) === null) await summary.click();
+  return fold;
+}
+async function configureManagedHeaders(page: Page) {
+  const fields = await managedHeaderFields(page);
+  for (const [index, row] of [managedHeaders[1], managedHeaders[0]].entries()) {
+    await fields.getByRole('button', { name: headerCopy.add, exact: true }).click();
+    await fields
+      .getByLabel(headerCopy.name.replace('{{n}}', String(index + 1)), { exact: true })
+      .fill(row.name.toUpperCase());
+    await fields
+      .getByLabel(headerCopy.idle, { exact: true })
+      .nth(index)
+      .fill(row.idle_seconds === 0 ? '0' : '');
+    await fields.getByLabel(headerCopy.format, { exact: true }).nth(index).selectOption(row.format);
+  }
+}
+async function expectManagedHeaders(page: Page) {
+  const fields = await managedHeaderFields(page);
+  for (const [index, row] of managedHeaders.entries()) {
+    await expect(
+      fields.getByLabel(headerCopy.name.replace('{{n}}', String(index + 1)), { exact: true }),
+    ).toHaveValue(row.name);
+    await expect(fields.getByLabel(headerCopy.idle, { exact: true }).nth(index)).toHaveValue(
+      String(row.idle_seconds),
+    );
+    await expect(fields.getByLabel(headerCopy.format, { exact: true }).nth(index)).toHaveValue(
+      row.format,
+    );
+  }
+}
+async function saveSeparateAdaptation(
+  page: Page,
+  context: BrowserContext,
+  origin: string,
+  modelPath: string,
+) {
+  const before = await read(context, origin, modelPath);
+  const summary = page
+    .locator('summary')
+    .filter({ has: page.getByText(common.requestAdaptation.model.title, { exact: true }) });
+  await summary.click();
+  const fold = summary.locator('..');
+  const forwarded = fold.getByRole('group', {
+    name: common.requestAdaptation.model.forwardHeaders,
+    exact: true,
+  });
+  await expect(forwarded).toBeVisible();
+  const mode = forwarded.getByRole('combobox', { name: 'Configuration source', exact: true });
+  if (await mode.count()) await mode.selectOption('replace');
+  await forwarded.getByRole('textbox').fill('x-browser-forward');
+  const path = modelPath + '/request-adaptation';
+  const saved = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === path && response.request().method() === 'PUT',
+  );
+  await fold
+    .getByRole('button', { name: common.requestAdaptation.model.save, exact: true })
+    .click();
+  const response = await saved;
+  expect(response.ok()).toBe(true);
+  expect(response.request().postDataJSON()).not.toHaveProperty('session_headers');
+  expect((await read<Adaptation>(context, origin, path)).forward_headers.values).toEqual([
+    'x-browser-forward',
+  ]);
+  expect((await read(context, origin, modelPath)).session_headers).toEqual(before.session_headers);
+}
 function fixture(): Fixture {
   return JSON.parse(readFileSync(process.env.NONBIRI_AUDIT_BROWSER_STATE!, 'utf8')) as Fixture;
 }
@@ -66,7 +147,7 @@ function managementPath(role: 'admin' | 5 | 6, selection: Record<string, string>
   });
   return (role === 'admin' ? '/charity' : '/steward') + '?' + query;
 }
-async function read(context: BrowserContext, origin: string, path: string): Promise<Model> {
+async function read<T = Model>(context: BrowserContext, origin: string, path: string): Promise<T> {
   const response = await context.request.get(origin + path, { headers: { Origin: origin } });
   expect(response.ok(), path + ': ' + response.status()).toBe(true);
   return response.json();
@@ -127,6 +208,7 @@ test('personal models default on and retain a changed setting after a real revis
     const editor = page.locator('form.model-editor');
     await editor.getByRole('textbox', { name: 'Prefix', exact: true }).fill('browser');
     await editor.getByRole('textbox', { name: 'Model name', exact: true }).fill(name);
+    await configureManagedHeaders(page);
     await toggle.uncheck();
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Edit model', exact: true })).toBeVisible();
@@ -136,8 +218,11 @@ test('personal models default on and retain a changed setting after a real revis
     let current = await read(context, origin, path);
     expect(current.cloudflare_proxy_enabled).toBe(false);
     expect(current.cloudflare_proxy_mode).toBe('worker');
+    expect(current.session_headers).toEqual(managedHeaders);
+    await saveSeparateAdaptation(page, context, origin, path);
     await page.getByRole('button', { name: 'Edit model', exact: true }).click();
     await expect(toggle).not.toBeChecked();
+    await expectManagedHeaders(page);
     await toggle.check();
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(toggle).toHaveCount(0);
@@ -165,6 +250,13 @@ test('personal models default on and retain a changed setting after a real revis
     expect((await read(context, origin, path)).cloudflare_proxy_enabled).toBe(false);
     await page.reload();
     await expect(page.getByText(copy.off, { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Edit model', exact: true }).click();
+    await expectManagedHeaders(page);
+    expect((await read(context, origin, path)).session_headers).toEqual(managedHeaders);
+    expect(
+      (await read<Adaptation>(context, origin, path + '/request-adaptation')).forward_headers
+        .values,
+    ).toEqual(['x-browser-forward']);
   } finally {
     await context.close();
   }
@@ -185,6 +277,7 @@ for (const role of ['admin', 6] as const) {
       await page
         .getByRole('textbox', { name: 'Model', exact: true })
         .fill('proxy-' + randomUUID().slice(0, 8));
+      await configureManagedHeaders(page);
       await toggle.check();
       await page.getByRole('button', { name: 'Add charity model', exact: true }).click();
       await expect(page).toHaveURL(/charity_model=[1-9]\d*/);
@@ -193,6 +286,9 @@ for (const role of ['admin', 6] as const) {
       let current = await read(context, origin, path);
       expect(current.cloudflare_proxy_enabled).toBe(true);
       expect(current.cloudflare_proxy_mode).toBe('worker');
+      expect(current.session_headers).toEqual(managedHeaders);
+      await expectManagedHeaders(page);
+      if (role === 'admin') await saveSeparateAdaptation(page, context, origin, path);
       await expect(toggle).toBeChecked();
       await toggle.uncheck();
       const save = page.getByRole('button', {
@@ -235,6 +331,13 @@ for (const role of ['admin', 6] as const) {
         .toBe(true);
       await page.reload();
       await expect(toggle).toBeChecked();
+      await expectManagedHeaders(page);
+      expect((await read(context, origin, path)).session_headers).toEqual(managedHeaders);
+      if (role === 'admin')
+        expect(
+          (await read<Adaptation>(context, origin, path + '/request-adaptation')).forward_headers
+            .values,
+        ).toEqual(['x-browser-forward']);
     } finally {
       await context.close();
     }
