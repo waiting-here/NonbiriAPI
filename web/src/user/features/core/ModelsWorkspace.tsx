@@ -20,6 +20,7 @@ import { isNotFoundError } from '@shared/query/http';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
+import { useTranslation } from 'react-i18next';
 import { deleteModel, getModel } from './api';
 import { CoreEmpty, CoreErrorPanel, CoreLoading, SafeCopyValue } from './components';
 import { useCoreCopy } from './copy';
@@ -70,6 +71,7 @@ function ModelDetail({
   onDeleted: () => void;
 }) {
   const { t } = useCoreCopy();
+  const { t: sharedText } = useTranslation();
   const textModel = useModelText();
   const [sourceFocusPending, setSourceFocusPending] = useState(focusSources);
   const [requestedStrategy, setRequestedStrategy] = useState<RouteStrategy>();
@@ -283,6 +285,12 @@ function ModelDetail({
               model.data.model_types.includes('responses') ? (
                 <ModelRoleSummary policy={model.data.role_policy} />
               ) : null}
+            </Fold>
+            <Fold
+              lazy
+              title={sharedText('requestAdaptation.model.title')}
+              summary={sharedText('requestAdaptation.model.saveHelp')}
+            >
               <RequestAdaptationEditor
                 key={`${accountId}:${model.data.id}`}
                 url={'/api/models/' + model.data.id + '/request-adaptation'}

@@ -11,7 +11,12 @@ import {
 } from './priceDraft';
 import { DraftLeaveGuard } from './DraftLeaveScope';
 import { PageHeader } from '../States';
-import type { SessionHeader } from '@shared/operations/charity';
+import {
+  buildSessionHeaders,
+  sessionHeaderDraft,
+  validSessionHeaderDraft,
+  type SessionHeaderDraft,
+} from '@shared/sessionHeaders';
 import { PriceConfigFields } from './PriceConfigFields';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { ModelTypesField, ModelTypesSummary } from '@shared/components/ModelTypesField';
@@ -90,7 +95,7 @@ import {
 
 interface ModelDraft extends PriceDraft {
   cloudflareProxy: boolean;
-  sessionHeaders: SessionHeader[];
+  sessionHeaders: SessionHeaderDraft[];
   modelTypes: ModelType[];
   transportRule: TransportRule;
   rolePolicy: RolePolicyDraft;
@@ -109,7 +114,7 @@ function modelDraft(model?: CharityModel): ModelDraft {
   return {
     ...priceDraft(model),
     cloudflareProxy: model?.cloudflare_proxy_enabled ?? false,
-    sessionHeaders: model?.session_headers?.map((value) => ({ ...value })) ?? [],
+    sessionHeaders: sessionHeaderDraft(model?.session_headers),
     modelTypes: model ? [...model.model_types] : ['chat_completions'],
     transportRule: model?.transport_rule ?? 'passthrough',
     rolePolicy: draftFromRolePolicy(model?.role_policy),
@@ -137,7 +142,7 @@ function modelBody(
   if (rolePolicy.error) throw new Error('Role fields are not ready');
   const body = {
     cloudflare_proxy_enabled: draft.cloudflareProxy,
-    session_headers: draft.sessionHeaders.map((v) => ({ ...v, name: v.name.trim() })),
+    session_headers: buildSessionHeaders(draft.sessionHeaders),
     model_types: draft.modelTypes,
     transport_rule: draft.transportRule,
     role_policy: rolePolicy.policy,
@@ -189,16 +194,7 @@ function modelDraftError(draft: ModelDraft): ModelValidation | null {
     (draft.modelTypes.length !== 1 || draft.modelTypes[0] !== 'rerank')
   )
     return 'searchUnitOperations';
-  if (
-    draft.sessionHeaders.some(
-      (v) =>
-        !v.name.trim() ||
-        !Number.isInteger(v.idle_seconds) ||
-        v.idle_seconds < 1 ||
-        v.idle_seconds > 86400,
-    )
-  )
-    return 'sessionHeaders';
+  if (!validSessionHeaderDraft(draft.sessionHeaders)) return 'sessionHeaders';
   if (!draft.modelTypes.length) return 'modelTypes';
   if (buildRolePolicy(draft.rolePolicy).error) return 'rolePolicy';
   if (
@@ -387,6 +383,10 @@ function ModelForm({
           mode={model?.cloudflare_proxy_mode}
           disabled={save.isPending || remove.isPending || Boolean(unknownSave)}
           onChange={(cloudflareProxy) => setDraft({ ...draft, cloudflareProxy })}
+        />
+        <SessionHeaderFields
+          value={draft.sessionHeaders}
+          onChange={(sessionHeaders) => setDraft((value) => ({ ...value, sessionHeaders }))}
         />
         <p className="nb-sub">{t('common.operations.charity.operationHelp')}</p>
         {draft.modelTypes.includes('embeddings') ? (
@@ -639,10 +639,6 @@ function ModelForm({
             </Panel>
           </div>
         </div>
-        <SessionHeaderFields
-          value={draft.sessionHeaders}
-          onChange={(sessionHeaders) => setDraft((value) => ({ ...value, sessionHeaders }))}
-        />
       </fieldset>
       {save.error ? (
         <ErrorState error={save.error} />
@@ -890,9 +886,8 @@ function BindingsPanel({
       {showAdaptation ? (
         <Fold
           lazy
-          title={t('common.operations.charity.adaptationSettings', {
-            defaultValue: 'Request adaptation',
-          })}
+          title={t('requestAdaptation.model.title')}
+          summary={t('requestAdaptation.model.saveHelp')}
         >
           <RequestAdaptationEditor
             key={`${accountId}:${role}:${model.id}`}

@@ -86,9 +86,9 @@ describe('personal model request adaptation', () => {
         expect(reads.filter((path) => path.endsWith('/bindings'))).toHaveLength(1),
       );
       expect(reads.some((path) => path.endsWith('/request-adaptation'))).toBe(false);
-      const advanced = screen.getByText('Advanced behavior', { selector: 'strong' });
+      const advanced = screen.getByText('Request adaptation', { selector: 'strong' });
       await view.user.click(advanced);
-      await screen.findByRole('button', { name: 'Save request rewriting' });
+      await screen.findByRole('button', { name: 'Save request adaptation' });
       if (mixed) {
         expect(screen.queryByLabelText('Automatic cache default')).not.toBeInTheDocument();
       } else {
@@ -97,7 +97,7 @@ describe('personal model request adaptation', () => {
         await view.user.click(advanced);
         await view.user.click(advanced);
         expect(cache).toHaveValue('1h');
-        await view.user.click(screen.getByRole('button', { name: 'Save request rewriting' }));
+        await view.user.click(screen.getByRole('button', { name: 'Save request adaptation' }));
         await waitFor(() => expect(writes).toHaveLength(1));
         expect(writes[0].body_defaults).toEqual({
           mode: 'replace',
