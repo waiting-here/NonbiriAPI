@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
@@ -21,11 +22,13 @@ type preparedIngress struct {
 	envelope  *openai.RequestEnvelope
 	mediaType string
 	failure   *wireFailure
+	multipart *openai.InferenceMultipart
 }
 
 func (p *preparedIngress) clear() {
 	clear(p.body)
 	p.envelope.Clear()
+	p.multipart.Clear()
 }
 
 // RPMClassifier reads the same envelope that ingress will use. Concurrency
@@ -86,6 +89,14 @@ func prepareIngress(r *http.Request) *preparedIngress {
 	p.body, err = readBoundedBody(r.Body, limit)
 	if err != nil && !errors.Is(err, openai.ErrPayloadTooLarge) {
 		return failDetail(httperr.CodeInvalidRequest, "invalid request", "body", "request body could not be read")
+	}
+	if err == nil && strings.HasPrefix(p.mediaType, "multipart/form-data") {
+		p.multipart, err = openai.DecodeInferenceMultipart(p.body, p.mediaType, requestkind.OperationForPath(r.URL.Path), limit)
+		if err == nil {
+			clear(p.body)
+			p.body = p.multipart.LogicalBody()
+			p.mediaType = "application/json"
+		}
 	}
 	if err == nil {
 		p.envelope, err = openai.DecodeRequestEnvelope(bytes.NewReader(p.body), limit, requestkind.OperationForPath(r.URL.Path))

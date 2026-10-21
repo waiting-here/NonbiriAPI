@@ -6,11 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
+	"github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
+	"github.com/waiting-here/NonbiriAPI/internal/usageinfo"
 )
 
 const maxConsumerExportRows = 10_000
@@ -21,16 +24,18 @@ var ErrResourceLimit = errors.New("charity: resource limit exceeded")
 // charity consumption. It contains no model, donation, endpoint, key, claim,
 // worker, or ledger identity.
 type ConsumerExport struct {
-	RequestCount      string
-	OriginalCharge    string
-	Charged           string
-	Saved             string
-	DonorReward       string
-	UncachedInput     string
-	CacheWriteInput   string
-	CacheReadInput    string
-	Output            string
-	UsageUnknownCount string
+	UsageDetails        contract.Usage
+	UsageDetailsPresent bool
+	RequestCount        string
+	OriginalCharge      string
+	Charged             string
+	Saved               string
+	DonorReward         string
+	UncachedInput       string
+	CacheWriteInput     string
+	CacheReadInput      string
+	Output              string
+	UsageUnknownCount   string
 }
 
 // ExportConsumerTx computes the consumer aggregate from the caller-owned
@@ -49,7 +54,7 @@ func (s *Service) ExportConsumerTx(
 	cutoff := decisionNow - terminalRetention
 	rows, err := tx.QueryContext(ctx, `SELECT original_charge_milli,user_charge_milli,
 donor_reward_total_mag,usage_uncached_input_tokens,cache_write_input_tokens,
-cache_read_input_tokens,usage_output_tokens,usage_unknown
+cache_read_input_tokens,usage_output_tokens,usage_unknown,usage_details
 FROM charity_reservations
 WHERE user_id=? AND (
  state IN ('reserved','dispatched') OR
@@ -66,6 +71,8 @@ ORDER BY created_at,id LIMIT ?`, userID, cutoff, limit+1)
 	uncachedInput, cacheWriteInput := new(big.Int), new(big.Int)
 	cacheReadInput, output := new(big.Int), new(big.Int)
 	usageUnknownCount := new(big.Int)
+	usage := usageinfo.Zero()
+	detailsPresent := false
 	for rows.Next() {
 		requestCount++
 		if requestCount > limit {
@@ -73,15 +80,25 @@ ORDER BY created_at,id LIMIT ?`, userID, cutoff, limit+1)
 		}
 		var original, userCharge, uncached, cacheWrite, cacheRead, outputTokens int64
 		var usageUnknown int
+		var details string
 		var rewardBlob []byte
 		if err := rows.Scan(&original, &userCharge, &rewardBlob, &uncached, &cacheWrite,
-			&cacheRead, &outputTokens, &usageUnknown); err != nil {
+			&cacheRead, &outputTokens, &usageUnknown, &details); err != nil {
 			return ConsumerExport{}, fmt.Errorf("charity: scan consumer export: %w", err)
 		}
 		if original < 0 || userCharge < 0 || userCharge > original || uncached < 0 || cacheWrite < 0 ||
 			cacheRead < 0 || outputTokens < 0 || usageUnknown != 0 && usageUnknown != 1 {
 			return ConsumerExport{}, claim.ErrInvariant
 		}
+		rowUsage, err := usageinfo.Apply(contract.Usage{Present: usageUnknown == 0, UncachedInputTokens: uncached, CacheWriteInputTokens: cacheWrite, CacheReadInputTokens: cacheRead, OutputTokens: outputTokens}, details)
+		if err != nil {
+			return ConsumerExport{}, claim.ErrInvariant
+		}
+		usage, err = usageinfo.AddUsage(usage, rowUsage)
+		if err != nil && !errors.Is(err, usageinfo.ErrOverflow) {
+			return ConsumerExport{}, claim.ErrInvariant
+		}
+		detailsPresent = detailsPresent || (details != "" && strings.TrimSpace(details) != "{}")
 		reward, err := db.DecodeU128(rewardBlob)
 		if err != nil {
 			return ConsumerExport{}, claim.ErrInvariant
@@ -112,7 +129,11 @@ ORDER BY created_at,id LIMIT ?`, userID, cutoff, limit+1)
 	if saved.Sign() < 0 {
 		return ConsumerExport{}, claim.ErrInvariant
 	}
+	if !detailsPresent {
+		usage = contract.Usage{}
+	}
 	return ConsumerExport{
+		UsageDetails: usage, UsageDetailsPresent: detailsPresent,
 		RequestCount:      new(big.Int).SetInt64(int64(requestCount)).String(),
 		OriginalCharge:    formatConsumerMilli(originalCharge),
 		Charged:           formatConsumerMilli(charged),

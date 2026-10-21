@@ -342,16 +342,42 @@ type DonationUsageExport struct {
 }
 
 type CharityExport struct {
-	RequestCount      string `json:"request_count"`
-	OriginalCharge    string `json:"original_charge"`
-	Charged           string `json:"charged"`
-	Saved             string `json:"saved"`
-	DonorReward       string `json:"donor_reward"`
-	UncachedInput     string `json:"uncached_input_tokens"`
-	CacheWriteInput   string `json:"cache_write_input_tokens"`
-	CacheReadInput    string `json:"cache_read_input_tokens"`
-	Output            string `json:"output_tokens"`
-	UsageUnknownCount string `json:"usage_unknown_count"`
+	UsageDetails      *UsageDetailsExport `json:"usage_details,omitempty"`
+	RequestCount      string              `json:"request_count"`
+	OriginalCharge    string              `json:"original_charge"`
+	Charged           string              `json:"charged"`
+	Saved             string              `json:"saved"`
+	DonorReward       string              `json:"donor_reward"`
+	UncachedInput     string              `json:"uncached_input_tokens"`
+	CacheWriteInput   string              `json:"cache_write_input_tokens"`
+	CacheReadInput    string              `json:"cache_read_input_tokens"`
+	Output            string              `json:"output_tokens"`
+	UsageUnknownCount string              `json:"usage_unknown_count"`
+}
+
+type UsageDetailsExport struct {
+	SearchUnits *string              `json:"search_units,omitempty"`
+	Modalities  *ModalityUsageExport `json:"modalities,omitempty"`
+}
+
+type ModalityTokensExport struct {
+	Text  string `json:"text"`
+	Image string `json:"image"`
+	Audio string `json:"audio"`
+	Video string `json:"video"`
+}
+
+type ModalityInputExport struct {
+	UncachedInput   ModalityTokensExport `json:"uncached_input"`
+	CacheWriteInput ModalityTokensExport `json:"cache_write_input"`
+	CacheReadInput  ModalityTokensExport `json:"cache_read_input"`
+}
+
+type ModalityUsageExport struct {
+	Input          *ModalityInputExport  `json:"input,omitempty"`
+	Output         *ModalityTokensExport `json:"output,omitempty"`
+	InputFallback  string                `json:"input_fallback,omitempty"`
+	OutputFallback string                `json:"output_fallback,omitempty"`
 }
 
 type FishingExport struct {

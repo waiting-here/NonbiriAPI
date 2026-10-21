@@ -51,7 +51,13 @@ func (service *Service) preflight(ctx context.Context, userID int64, request *va
 			return logicalAdmission{charity: true}, request, nil, err
 		}
 		var value CharityPreflight
-		if request.operation == connectorcontract.OperationEmbeddings {
+		if request.inference != nil {
+			if router, ok := service.charity.(InferenceCharityRouter); ok {
+				value, err = router.PreflightInference(ctx, userID, request.Model, request.inference, now)
+			} else {
+				err = unsupportedModelType()
+			}
+		} else if request.operation == connectorcontract.OperationEmbeddings {
 			value, err = service.charity.PreflightEmbedding(ctx, userID, request.Model, request.embedding, now)
 		} else if request.image != nil {
 			value, err = service.charity.PreflightImage(ctx, userID, request.Model, request.image, now)

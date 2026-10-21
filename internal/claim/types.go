@@ -542,8 +542,9 @@ type CharityAttemptInput struct {
 }
 
 type CharityActual struct {
-	PriceMilli  int64
-	RewardMilli int64
+	PriceMilli     int64
+	RewardMilli    int64
+	PricingDetails string
 }
 
 type CharityAttemptCompletion struct {

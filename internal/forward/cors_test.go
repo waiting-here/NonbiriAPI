@@ -36,7 +36,7 @@ func TestBrowserCORSPreflightBoundary(t *testing.T) {
 		{"long method", func(r *http.Request) { r.Header.Set("Access-Control-Request-Method", strings.Repeat("x", 129)) }, 400, false, true},
 		{"query", func(r *http.Request) { r.URL.RawQuery = "x=1" }, 400, false, true},
 		{"empty query", func(r *http.Request) { r.URL.ForceQuery = true }, 400, false, true},
-		{"unknown path", func(r *http.Request) { r.URL.Path = "/v1/responses" }, 404, true, false},
+		{"unknown path", func(r *http.Request) { r.URL.Path = "/v1/files" }, 404, true, false},
 		{"trailing slash", func(r *http.Request) { r.URL.Path += "/" }, 404, true, false},
 		{"escaped path", func(r *http.Request) { r.URL.RawPath = "/v1/%65mbeddings" }, 404, true, false},
 		{"user session", func(r *http.Request) { r.URL.Path = "/api/caller-key/regenerate" }, 404, true, false},

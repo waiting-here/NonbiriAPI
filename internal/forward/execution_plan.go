@@ -163,7 +163,7 @@ func (service *Service) supportedCharityConnectorTypes(request *validatedRequest
 		}
 		if service.adaptations != nil {
 			descriptor, ok := service.registry.Descriptor(connectorType)
-			if ok && (request.chat == nil || descriptor.Capabilities.Has(connectorcontract.CapabilityText)) && (request.embedding == nil || descriptor.Capabilities.Has(connectorcontract.CapabilityEmbeddings)) && (request.image == nil || descriptor.Capabilities.Has(connectorcontract.CapabilityImagesGenerations)) && (request.decision == nil || descriptor.Capabilities.Has(connectorcontract.CapabilityDecisions)) {
+			if ok && (request.chat == nil || descriptor.Capabilities.Has(connectorcontract.CapabilityText)) && (request.embedding == nil || descriptor.Capabilities.Has(connectorcontract.CapabilityEmbeddings)) && (request.image == nil || descriptor.Capabilities.Has(connectorcontract.CapabilityImagesGenerations)) && (request.decision == nil || descriptor.Capabilities.Has(connectorcontract.CapabilityDecisions)) && (request.inference == nil || descriptor.Capabilities.Has(connectorcontract.OperationCapability(request.operation))) {
 				connectorTypes = append(connectorTypes, connectorType)
 			}
 		} else if request.supports(service.registry, connectorType) {
