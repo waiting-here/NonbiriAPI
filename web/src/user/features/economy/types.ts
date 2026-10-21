@@ -10,9 +10,17 @@ export interface CharityCapabilityTokenPrices {
   output: string;
 }
 
-export type CharityBasePricing =
+export interface CharityModalityPricing {
+  inputEnabled: boolean;
+  outputEnabled: boolean;
+  text?: CharityCapabilityTokenPrices;
+  image?: CharityCapabilityTokenPrices;
+  audio?: CharityCapabilityTokenPrices;
+  video?: CharityCapabilityTokenPrices;
+}
+export type CharityBasePricing = (
   | {
-      mode: 'per_request';
+      mode: 'per_request' | 'per_search_unit';
       userPriceMilli: string;
       discountedUserPriceMilli: string;
       currentUserPriceMilli: string;
@@ -22,7 +30,12 @@ export type CharityBasePricing =
       userPricesMilli: CharityCapabilityTokenPrices;
       discountedUserPricesMilli: CharityCapabilityTokenPrices;
       currentUserPricesMilli: CharityCapabilityTokenPrices;
-    };
+    }
+) & {
+  userModalitiesMilli?: CharityModalityPricing;
+  discountedUserModalitiesMilli?: CharityModalityPricing;
+  currentUserModalitiesMilli?: CharityModalityPricing;
+};
 
 export type CharityCapabilityPricing = CharityBasePricing & {
   longContext?: CharityBasePricing & { inputThreshold: string };

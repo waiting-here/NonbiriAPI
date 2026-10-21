@@ -5,16 +5,10 @@ import { Fold } from '@shared/components/ui/Fold';
 import type { CharityRole, TokenPrices } from '@shared/operations/charity';
 import { tokenPriceCopyKey } from './managementFields';
 
-interface ContextDraft {
-  mode: 'per_request' | 'per_token';
-  longEnabled: boolean;
-  longThreshold: string;
-  longRequest: string;
-  longPrices: TokenPrices;
-  penaltyEnabled: boolean;
-  penaltyThreshold: string;
-  penaltyFine: string;
-}
+import type { PriceDraft } from './priceDraft';
+import { emptyModalities } from './priceDraft';
+import { ModalityPricingFields } from './ModalityPricingFields';
+type ContextDraft = PriceDraft;
 
 export function ContextPricingFields({
   value,
@@ -33,29 +27,31 @@ export function ContextPricingFields({
     >
       <div className="nb-form">
         <p className="nb-sub">{t('common.operations.charity.context.help')}</p>
-        <Toggle
-          label={t('common.operations.charity.context.long')}
-          description={t('common.operations.charity.context.longHelp')}
-          checked={value.longEnabled}
-          onChange={(longEnabled) =>
-            onChange(
-              longEnabled
-                ? { longEnabled }
-                : {
-                    longEnabled,
-                    longThreshold: '',
-                    longRequest: '0',
-                    longPrices: {
-                      uncached_input: '0',
-                      cache_write_input: '0',
-                      cache_read_input: '0',
-                      output: '0',
+        {value.mode !== 'per_search_unit' && (
+          <Toggle
+            label={t('common.operations.charity.context.long')}
+            description={t('common.operations.charity.context.longHelp')}
+            checked={value.longEnabled}
+            onChange={(longEnabled) =>
+              onChange(
+                longEnabled
+                  ? { longEnabled }
+                  : {
+                      longEnabled,
+                      longThreshold: '',
+                      longRequest: '0',
+                      longPrices: {
+                        uncached_input: '0',
+                        cache_write_input: '0',
+                        cache_read_input: '0',
+                        output: '0',
+                      },
                     },
-                  },
-            )
-          }
-        />
-        {value.longEnabled && (
+              )
+            }
+          />
+        )}
+        {value.longEnabled && value.mode !== 'per_search_unit' && (
           <div className="nb-grid nb-grid--2">
             <Field label={t('common.operations.charity.context.longThreshold')}>
               {(props) => (
@@ -100,6 +96,75 @@ export function ContextPricingFields({
               ))
             )}
           </div>
+        )}
+        {value.longEnabled && value.mode !== 'per_search_unit' && (
+          <>
+            <Toggle
+              label={t('common.modalityPricing.longReward')}
+              description={t('common.modalityPricing.longRewardHelp')}
+              checked={value.longDonorOverride}
+              onChange={(longDonorOverride) => onChange({ longDonorOverride })}
+            />
+            {value.longDonorOverride &&
+              (value.mode === 'per_request' ? (
+                <Field label={t('common.modalityPricing.longRequestReward')}>
+                  {(props) => (
+                    <input
+                      {...props}
+                      inputMode="decimal"
+                      value={value.longDonorRequest}
+                      onChange={(e) => onChange({ longDonorRequest: e.target.value })}
+                    />
+                  )}
+                </Field>
+              ) : (
+                <div className="nb-grid nb-grid--2">
+                  {(Object.keys(value.longDonorRewards) as (keyof TokenPrices)[]).map((field) => (
+                    <Field key={field} label={t(tokenPriceCopyKey(role, 'donorRewards', field))}>
+                      {(props) => (
+                        <input
+                          {...props}
+                          inputMode="decimal"
+                          value={value.longDonorRewards[field]}
+                          onChange={(e) =>
+                            onChange({
+                              longDonorRewards: {
+                                ...value.longDonorRewards,
+                                [field]: e.target.value,
+                              },
+                            })
+                          }
+                        />
+                      )}
+                    </Field>
+                  ))}
+                </div>
+              ))}
+            {value.mode === 'per_token' && (
+              <>
+                <ModalityPricingFields
+                  title={t('common.modalityPricing.longUser')}
+                  value={value.longUserModalities}
+                  onChange={(longUserModalities) => onChange({ longUserModalities })}
+                />
+                <Toggle
+                  label={t('common.modalityPricing.longDonorOverride')}
+                  description={t('common.modalityPricing.longDonorHelp')}
+                  checked={value.longDonorModalities !== null}
+                  onChange={(enabled) =>
+                    onChange({ longDonorModalities: enabled ? emptyModalities() : null })
+                  }
+                />
+                {value.longDonorModalities && (
+                  <ModalityPricingFields
+                    title={t('common.modalityPricing.longDonor')}
+                    value={value.longDonorModalities}
+                    onChange={(longDonorModalities) => onChange({ longDonorModalities })}
+                  />
+                )}
+              </>
+            )}
+          </>
         )}
         <Toggle
           label={t('common.operations.charity.context.penalty')}

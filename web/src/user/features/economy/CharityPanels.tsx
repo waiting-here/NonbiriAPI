@@ -1,4 +1,4 @@
-import { contextPriceProps } from './contextPrices';
+import { contextPriceProps, contextRows } from './contextPrices';
 import { ModelTypesSummary } from '@shared/components/ModelTypesField';
 import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react';
 import { Link } from 'react-router';
@@ -161,6 +161,7 @@ export function CharityCapabilityPanel({ capability }: { capability: CharityCapa
               <option value="">{t('user.charity.allPricing')}</option>
               <option value="per_request">{t('user.charity.requestPrice')}</option>
               <option value="per_token">{t('user.charity.tokenPricing')}</option>
+              <option value="per_search_unit">{t('common.modalityPricing.perSearchUnit')}</option>
             </select>
           </label>
           <span className="muted">
@@ -172,37 +173,7 @@ export function CharityCapabilityPanel({ capability }: { capability: CharityCapa
       {available ? (
         <ul className="economy-model-list" aria-label={t('user.charity.availableModels')}>
           {models.map((model) => {
-            const rows: CharityPriceRow[] =
-              model.pricing.mode === 'per_request'
-                ? [
-                    {
-                      label: t('user.charity.requestPrice'),
-                      userMilli: model.pricing.userPriceMilli,
-                      currentUserMilli: model.pricing.currentUserPriceMilli,
-                    },
-                  ]
-                : [
-                    {
-                      label: t('user.charity.uncachedInputPrice'),
-                      userMilli: model.pricing.userPricesMilli.uncachedInput,
-                      currentUserMilli: model.pricing.currentUserPricesMilli.uncachedInput,
-                    },
-                    {
-                      label: t('user.charity.cacheWriteInputPrice'),
-                      userMilli: model.pricing.userPricesMilli.cacheWriteInput,
-                      currentUserMilli: model.pricing.currentUserPricesMilli.cacheWriteInput,
-                    },
-                    {
-                      label: t('user.charity.cacheReadInputPrice'),
-                      userMilli: model.pricing.userPricesMilli.cacheReadInput,
-                      currentUserMilli: model.pricing.currentUserPricesMilli.cacheReadInput,
-                    },
-                    {
-                      label: t('user.charity.outputPrice'),
-                      userMilli: model.pricing.userPricesMilli.output,
-                      currentUserMilli: model.pricing.currentUserPricesMilli.output,
-                    },
-                  ];
+            const rows: CharityPriceRow[] = contextRows(model.pricing, t);
             return (
               <li key={model.id}>
                 <div className="economy-model-heading">

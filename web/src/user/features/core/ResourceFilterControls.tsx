@@ -109,6 +109,12 @@ function ResourceFilterForm({ control }: { control: ResourceFilterControl }) {
       'google-gemini': t('connector.gemini'),
       'openai-responses': t('connector.responses'),
       'openai-decisions': t('connector.decisions'),
+      'cohere-rerank': t('connector.cohere'),
+      'jina-rerank': t('connector.jina'),
+      'siliconflow-rerank': t('connector.siliconflow'),
+      'voyage-rerank': t('connector.voyage'),
+      'typesafe-systemone': t('connector.systemone'),
+      'openai-chat-completions': t('connector.chatCompletions'),
     };
     const chips = Object.entries(control.filters)
       .filter(([, value]) => Boolean(value))

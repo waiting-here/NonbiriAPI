@@ -293,13 +293,15 @@ type tokenPricesWire struct {
 }
 
 type pricingWire struct {
-	LongContext    nullableField[longContextWire]    `json:"long_context"`
-	ContextPenalty nullableField[contextPenaltyWire] `json:"context_penalty"`
-	Mode           requiredField[string]             `json:"mode"`
-	UserPrice      requiredField[string]             `json:"user_price"`
-	DonorReward    requiredField[string]             `json:"donor_reward"`
-	UserPrices     requiredField[tokenPricesWire]    `json:"user_prices"`
-	DonorRewards   requiredField[tokenPricesWire]    `json:"donor_rewards"`
+	UserModalities  nullableField[modalityPricingWire] `json:"user_modalities"`
+	DonorModalities nullableField[modalityPricingWire] `json:"donor_modalities"`
+	LongContext     nullableField[longContextWire]     `json:"long_context"`
+	ContextPenalty  nullableField[contextPenaltyWire]  `json:"context_penalty"`
+	Mode            requiredField[string]              `json:"mode"`
+	UserPrice       requiredField[string]              `json:"user_price"`
+	DonorReward     requiredField[string]              `json:"donor_reward"`
+	UserPrices      requiredField[tokenPricesWire]     `json:"user_prices"`
+	DonorRewards    requiredField[tokenPricesWire]     `json:"donor_rewards"`
 }
 
 func parseTokenPrices(wire tokenPricesWire) (*TokenPricesInput, map[string]any, error) {
@@ -320,7 +322,7 @@ func parsePricing(wire pricingWire) (PricingInput, map[string]any, error) {
 	input := PricingInput{Mode: wire.Mode.Value}
 	canonical := map[string]any{"mode": wire.Mode.Value}
 	switch wire.Mode.Value {
-	case "per_request":
+	case "per_request", "per_search_unit":
 		if !wire.UserPrice.Set || !wire.DonorReward.Set || wire.UserPrices.Set || wire.DonorRewards.Set {
 			return PricingInput{}, nil, ErrInvalidRequest
 		}

@@ -5,6 +5,18 @@ export const MODEL_TYPES = [
   'embeddings',
   'images_generations',
   'decisions',
+  'responses',
+  'responses_compact',
+  'responses_input_tokens',
+  'completions',
+  'images_edits',
+  'images_variations',
+  'audio_speech',
+  'audio_transcriptions',
+  'audio_translations',
+  'moderations',
+  'rerank',
+  'systemone',
 ] as const;
 export type ModelType = (typeof MODEL_TYPES)[number];
 
@@ -13,6 +25,18 @@ export const MODEL_TYPE_PATHS: Record<ModelType, string> = {
   embeddings: '/v1/embeddings',
   images_generations: '/v1/images/generations',
   decisions: '/v1/decisions',
+  responses: '/v1/responses',
+  responses_compact: '/v1/responses/compact',
+  responses_input_tokens: '/v1/responses/input_tokens',
+  completions: '/v1/completions',
+  images_edits: '/v1/images/edits',
+  images_variations: '/v1/images/variations',
+  audio_speech: '/v1/audio/speech',
+  audio_transcriptions: '/v1/audio/transcriptions',
+  audio_translations: '/v1/audio/translations',
+  moderations: '/v1/moderations',
+  rerank: '/v1/rerank',
+  systemone: '/v1/systemone',
 };
 
 export function normalizeModelTypes(value: unknown): ModelType[] {
@@ -24,5 +48,53 @@ export function normalizeModelTypes(value: unknown): ModelType[] {
 }
 
 export function sameModelTypes(left: readonly ModelType[], right: readonly ModelType[]): boolean {
-  return left.length === right.length && left.every((type) => right.includes(type));
+  const a = new Set(left.map(modelTypeGroup));
+  const b = new Set(right.map(modelTypeGroup));
+  return a.size === b.size && [...a].every((type) => b.has(type));
+}
+
+export const MODEL_TYPE_LABEL_KEYS: Record<ModelType, string> = {
+  chat_completions: 'common.modelTypes.chat_completions',
+  embeddings: 'common.modelTypes.embeddings',
+  images_generations: 'common.modelTypes.images_generations',
+  decisions: 'common.modelTypes.decisions',
+  responses: 'common.modelTypes.responses',
+  responses_compact: 'common.modelTypes.responses_compact',
+  responses_input_tokens: 'common.modelTypes.responses_input_tokens',
+  completions: 'common.modelTypes.completions',
+  images_edits: 'common.modelTypes.images_edits',
+  images_variations: 'common.modelTypes.images_variations',
+  audio_speech: 'common.modelTypes.audio_speech',
+  audio_transcriptions: 'common.modelTypes.audio_transcriptions',
+  audio_translations: 'common.modelTypes.audio_translations',
+  moderations: 'common.modelTypes.moderations',
+  rerank: 'common.modelTypes.rerank',
+  systemone: 'common.modelTypes.systemone',
+};
+
+export const MODEL_TYPE_CHOICES = MODEL_TYPES.filter((type) => type !== 'responses');
+export function modelTypeGroup(type: ModelType): ModelType {
+  return type === 'responses' ? 'chat_completions' : type;
+}
+export const MODEL_TYPE_GROUP_LABEL_KEYS = {
+  ...MODEL_TYPE_LABEL_KEYS,
+  chat_completions: 'common.modelTypes.chat_responses',
+} as const;
+export function groupedModelTypes(value: readonly ModelType[]): ModelType[] {
+  return MODEL_TYPE_CHOICES.filter((type) => value.some((item) => modelTypeGroup(item) === type));
+}
+export function setModelTypeGroup(
+  value: readonly ModelType[],
+  type: ModelType,
+  enabled: boolean,
+): ModelType[] {
+  const groups = new Set(value.map(modelTypeGroup));
+  if (enabled) groups.add(modelTypeGroup(type));
+  else groups.delete(modelTypeGroup(type));
+  return MODEL_TYPES.filter((item) => groups.has(modelTypeGroup(item)));
+}
+export function modelTypeGroupPath(type: ModelType): string {
+  return modelTypeGroup(type) === 'chat_completions'
+    ? MODEL_TYPE_PATHS.chat_completions + ' · ' + MODEL_TYPE_PATHS.responses
+    : MODEL_TYPE_PATHS[type];
 }

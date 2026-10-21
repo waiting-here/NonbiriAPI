@@ -79,7 +79,13 @@ type CharityConnectorType =
   | 'ai-sdk-gateway-v3'
   | 'google-gemini'
   | 'openai-responses'
-  | 'openai-decisions';
+  | 'openai-decisions'
+  | 'cohere-rerank'
+  | 'jina-rerank'
+  | 'siliconflow-rerank'
+  | 'voyage-rerank'
+  | 'typesafe-systemone'
+  | 'openai-chat-completions';
 
 export type ManagedSafeSource =
   | {
@@ -207,6 +213,12 @@ export function normalizeManagedSource(
       'google-gemini',
       'openai-responses',
       'openai-decisions',
+      'cohere-rerank',
+      'jina-rerank',
+      'siliconflow-rerank',
+      'voyage-rerank',
+      'typesafe-systemone',
+      'openai-chat-completions',
     ] as const,
     `${label} connector`,
   );
@@ -735,10 +747,20 @@ export interface CharityModel {
   public_description: string;
   token_reserve_credits: string | null;
   pricing: (
-    | { mode: 'per_request'; user_price: string; donor_reward: string }
+    | { mode: 'per_request' | 'per_search_unit'; user_price: string; donor_reward: string }
     | { mode: 'per_token'; user_prices: TokenPrices; donor_rewards: TokenPrices }
   ) & {
-    long_context?: { input_threshold: string; user_price?: string; user_prices?: TokenPrices };
+    user_modalities?: ModalityPricing;
+    donor_modalities?: ModalityPricing;
+    long_context?: {
+      input_threshold: string;
+      user_price?: string;
+      user_prices?: TokenPrices;
+      donor_reward?: string;
+      donor_rewards?: TokenPrices;
+      user_modalities?: ModalityPricing;
+      donor_modalities?: ModalityPricing;
+    };
     context_penalty?: { input_threshold: string; fine: string };
   };
   discount: { enabled: boolean; percent: number; start_at: number | null; end_at: number | null };
@@ -753,6 +775,32 @@ export interface CharityModel {
   created_at: number;
   updated_at: number;
 }
+export interface ModalityPricing {
+  input_enabled: boolean;
+  output_enabled: boolean;
+  text?: TokenPrices;
+  image?: TokenPrices;
+  audio?: TokenPrices;
+  video?: TokenPrices;
+}
+export const MODALITIES = ['text', 'image', 'audio', 'video'] as const;
+
+export function normalizeModalityPricing(value: unknown, label: string): ModalityPricing {
+  const root = record(value, ['input_enabled', 'output_enabled', ...MODALITIES], label, [
+    'input_enabled',
+    'output_enabled',
+  ]);
+  const result: ModalityPricing = {
+    input_enabled: boolean(root.input_enabled, label),
+    output_enabled: boolean(root.output_enabled, label),
+  };
+  for (const modality of MODALITIES) {
+    if (root[modality] != null)
+      result[modality] = normalizeTokenPrices(root[modality], label + ' ' + modality);
+  }
+  return result;
+}
+
 export interface TokenPrices {
   uncached_input: string;
   cache_write_input: string;
@@ -818,17 +866,19 @@ export function normalizeCharityPriceConfig(
       'donor_rewards',
       'long_context',
       'context_penalty',
+      'user_modalities',
+      'donor_modalities',
     ],
     `${label} pricing`,
     ['mode'],
   );
   const mode = oneOf(
     pricingRoot.mode,
-    ['per_request', 'per_token'] as const,
+    ['per_request', 'per_token', 'per_search_unit'] as const,
     `${label} pricing mode`,
   );
   let pricing: CharityModel['pricing'];
-  if (mode === 'per_request') {
+  if (mode !== 'per_token') {
     if (
       !Object.hasOwn(pricingRoot, 'user_price') ||
       !Object.hasOwn(pricingRoot, 'donor_reward') ||
@@ -855,10 +905,22 @@ export function normalizeCharityPriceConfig(
       donor_rewards: normalizeTokenPrices(pricingRoot.donor_rewards, `${label} donor rewards`),
     };
   }
+  for (const side of ['user_modalities', 'donor_modalities'] as const) {
+    if (pricingRoot[side] != null)
+      pricing[side] = normalizeModalityPricing(pricingRoot[side], label + ' ' + side);
+  }
   if (pricingRoot.long_context != null) {
     const long = record(
       pricingRoot.long_context,
-      ['input_threshold', 'user_price', 'user_prices'],
+      [
+        'input_threshold',
+        'user_price',
+        'user_prices',
+        'donor_reward',
+        'donor_rewards',
+        'user_modalities',
+        'donor_modalities',
+      ],
       'long context',
       ['input_threshold'],
     );
@@ -868,6 +930,21 @@ export function normalizeCharityPriceConfig(
         ? { user_price: amount(long.user_price, 'long context price', false) }
         : { user_prices: normalizeTokenPrices(long.user_prices, 'long context prices') }),
     };
+  }
+  for (const side of ['user_modalities', 'donor_modalities'] as const) {
+    const long = pricingRoot.long_context as Record<string, unknown> | undefined;
+    if (long?.[side] != null && pricing.long_context)
+      pricing.long_context[side] = normalizeModalityPricing(long[side], label + ' long ' + side);
+  }
+  if (pricing.long_context) {
+    const long = pricingRoot.long_context as Record<string, unknown>;
+    if (long.donor_reward != null)
+      pricing.long_context.donor_reward = amount(long.donor_reward, 'long context reward', false);
+    if (long.donor_rewards != null)
+      pricing.long_context.donor_rewards = normalizeTokenPrices(
+        long.donor_rewards,
+        'long context rewards',
+      );
   }
   if (pricingRoot.context_penalty != null) {
     const penalty = record(
@@ -1119,6 +1196,12 @@ function normalizeSource(value: unknown, label: string): CharityBinding['source'
         'google-gemini',
         'openai-responses',
         'openai-decisions',
+        'cohere-rerank',
+        'jina-rerank',
+        'siliconflow-rerank',
+        'voyage-rerank',
+        'typesafe-systemone',
+        'openai-chat-completions',
       ] as const,
       `${label} connector`,
     ),

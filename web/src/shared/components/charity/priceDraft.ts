@@ -3,12 +3,19 @@ import {
   validRecurringDiscount,
   type RecurringDiscount,
 } from '@shared/operations/recurringDiscount';
-import type { CharityPriceConfig, TokenPrices } from '@shared/operations/charity';
+import type { CharityPriceConfig, ModalityPricing, TokenPrices } from '@shared/operations/charity';
 import { createTimeDraft, timeDraftValue, type TimeDraft } from '@shared/time';
 import { MAX_UNIX_SECOND, validAmount, validTokenReserveCredits } from './managementFields';
 
 export interface PriceDraft {
-  mode: 'per_request' | 'per_token';
+  mode: 'per_request' | 'per_token' | 'per_search_unit';
+  userModalities: ModalityPricing;
+  donorModalities: ModalityPricing;
+  longDonorOverride: boolean;
+  longDonorRequest: string;
+  longDonorRewards: TokenPrices;
+  longUserModalities: ModalityPricing;
+  longDonorModalities: ModalityPricing | null;
   requestUser: string;
   requestDonor: string;
   userPrices: TokenPrices;
@@ -35,12 +42,29 @@ export const emptyPrices = (): TokenPrices => ({
   output: '0',
 });
 
+export const emptyModalities = (): ModalityPricing => ({
+  input_enabled: false,
+  output_enabled: false,
+});
 export function priceDraft(config?: CharityPriceConfig): PriceDraft {
   const pricing = config?.pricing;
   return {
     mode: pricing?.mode ?? 'per_request',
-    requestUser: pricing?.mode === 'per_request' ? pricing.user_price : '0',
-    requestDonor: pricing?.mode === 'per_request' ? pricing.donor_reward : '0',
+    userModalities: structuredClone(pricing?.user_modalities ?? emptyModalities()),
+    donorModalities: structuredClone(pricing?.donor_modalities ?? emptyModalities()),
+    longUserModalities: structuredClone(
+      pricing?.long_context?.user_modalities ?? emptyModalities(),
+    ),
+    longDonorModalities: pricing?.long_context?.donor_modalities
+      ? structuredClone(pricing.long_context.donor_modalities)
+      : null,
+    longDonorOverride:
+      pricing?.long_context?.donor_reward !== undefined ||
+      pricing?.long_context?.donor_rewards !== undefined,
+    longDonorRequest: pricing?.long_context?.donor_reward ?? '0',
+    longDonorRewards: structuredClone(pricing?.long_context?.donor_rewards ?? emptyPrices()),
+    requestUser: pricing && pricing.mode !== 'per_token' ? pricing.user_price : '0',
+    requestDonor: pricing && pricing.mode !== 'per_token' ? pricing.donor_reward : '0',
     userPrices: pricing?.mode === 'per_token' ? { ...pricing.user_prices } : emptyPrices(),
     donorRewards: pricing?.mode === 'per_token' ? { ...pricing.donor_rewards } : emptyPrices(),
     tokenReserveCredits: config?.token_reserve_credits ?? null,
@@ -62,15 +86,22 @@ export function priceDraft(config?: CharityPriceConfig): PriceDraft {
   };
 }
 
+function hasModalities(value: ModalityPricing) {
+  return (
+    value.input_enabled ||
+    value.output_enabled ||
+    ['text', 'image', 'audio', 'video'].some((key) => Object.hasOwn(value, key))
+  );
+}
 export function draftPriceConfig(draft: PriceDraft): CharityPriceConfig | null {
   const start = timeDraftValue(draft.discountStart);
   const end = timeDraftValue(draft.discountEnd);
   if (start === undefined || end === undefined) return null;
   return {
     pricing: {
-      ...(draft.mode === 'per_request'
+      ...(draft.mode !== 'per_token'
         ? {
-            mode: 'per_request' as const,
+            mode: draft.mode,
             user_price: draft.requestUser,
             donor_reward: draft.requestDonor,
           }
@@ -79,11 +110,36 @@ export function draftPriceConfig(draft: PriceDraft): CharityPriceConfig | null {
             user_prices: { ...draft.userPrices },
             donor_rewards: { ...draft.donorRewards },
           }),
-      ...(draft.longEnabled
+      ...(draft.mode === 'per_token'
+        ? {
+            ...(hasModalities(draft.userModalities)
+              ? { user_modalities: structuredClone(draft.userModalities) }
+              : {}),
+            ...(hasModalities(draft.donorModalities)
+              ? { donor_modalities: structuredClone(draft.donorModalities) }
+              : {}),
+          }
+        : {}),
+      ...(draft.longEnabled && draft.mode !== 'per_search_unit'
         ? {
             long_context: {
               input_threshold: draft.longThreshold,
-              ...(draft.mode === 'per_request'
+              ...(draft.mode === 'per_token'
+                ? {
+                    ...(hasModalities(draft.longUserModalities)
+                      ? { user_modalities: structuredClone(draft.longUserModalities) }
+                      : {}),
+                    ...(draft.longDonorModalities
+                      ? { donor_modalities: structuredClone(draft.longDonorModalities) }
+                      : {}),
+                  }
+                : {}),
+              ...(draft.longDonorOverride
+                ? draft.mode === 'per_request'
+                  ? { donor_reward: draft.longDonorRequest }
+                  : { donor_rewards: structuredClone(draft.longDonorRewards) }
+                : {}),
+              ...(draft.mode !== 'per_token'
                 ? { user_price: draft.longRequest }
                 : { user_prices: { ...draft.longPrices } }),
             },
@@ -108,6 +164,13 @@ export function switchPriceMode<T extends PriceDraft>(draft: T, mode: PriceDraft
   return {
     ...draft,
     mode,
+    userModalities: emptyModalities(),
+    donorModalities: emptyModalities(),
+    longUserModalities: emptyModalities(),
+    longDonorModalities: null,
+    longDonorOverride: false,
+    longDonorRequest: '0',
+    longDonorRewards: emptyPrices(),
     requestUser: '0',
     requestDonor: '0',
     userPrices: emptyPrices(),
@@ -157,13 +220,28 @@ export function priceDraftError(
   | 'recurringDiscount'
   | null {
   const prices =
-    draft.mode === 'per_request'
+    draft.mode !== 'per_token'
       ? [draft.requestUser, draft.requestDonor]
       : [...Object.values(draft.userPrices), ...Object.values(draft.donorRewards)];
   if (draft.longEnabled)
     prices.push(
-      ...(draft.mode === 'per_request' ? [draft.longRequest] : Object.values(draft.longPrices)),
+      ...(draft.mode !== 'per_token' ? [draft.longRequest] : Object.values(draft.longPrices)),
     );
+  if (draft.longEnabled && draft.longDonorOverride)
+    prices.push(
+      ...(draft.mode === 'per_request'
+        ? [draft.longDonorRequest]
+        : Object.values(draft.longDonorRewards)),
+    );
+  if (draft.mode === 'per_token')
+    for (const p of [
+      draft.userModalities,
+      draft.donorModalities,
+      ...(draft.longEnabled ? [draft.longUserModalities, draft.longDonorModalities] : []),
+    ]) {
+      for (const key of ['text', 'image', 'audio', 'video'] as const)
+        if (p?.[key]) prices.push(...Object.values(p[key]));
+    }
   if (draft.penaltyEnabled) prices.push(draft.penaltyFine);
   if (
     (draft.longEnabled && !/^[1-9][0-9]*$/.test(draft.longThreshold)) ||

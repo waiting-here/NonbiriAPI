@@ -10,6 +10,12 @@ export const CONNECTOR_TYPES = [
   'google-gemini',
   'openai-responses',
   'openai-decisions',
+  'cohere-rerank',
+  'jina-rerank',
+  'siliconflow-rerank',
+  'voyage-rerank',
+  'typesafe-systemone',
+  'openai-chat-completions',
 ] as const;
 
 export type ConnectorType = (typeof CONNECTOR_TYPES)[number];

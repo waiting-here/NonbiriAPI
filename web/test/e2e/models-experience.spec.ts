@@ -347,7 +347,7 @@ for (const scenario of cases) {
     await page.getByRole('button', { name: core('models.editModel'), exact: true }).click();
     const editor = page.locator('.model-editor');
     const types = editor.getByRole('group', { name: /Model types|模型类型/ });
-    const chat = types.getByRole('checkbox', { name: /Chat completions|聊天补全/ });
+    const chat = types.getByRole('checkbox', { name: 'Chat Completions / Responses' });
     const embeddings = types.getByRole('checkbox', { name: /Embeddings|向量化/ });
     const images = types.getByRole('checkbox', { name: /Image generation|图像生成/ });
     await expect(chat).toBeChecked();

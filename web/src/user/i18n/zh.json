@@ -1629,7 +1629,7 @@
     "debug": {
       "nav": "调试",
       "descriptionShort": "查看请求从发出到完成的情况。",
-      "description": "捕获外部客户端发起的聊天补全和向量嵌入请求，仅展示你本人的请求与安全的调用结果。",
+      "description": "捕获外部客户端发起的推理请求，仅展示你本人的请求与安全的调用结果。",
       "actions": {
         "start": "开始调试"
       },
@@ -2739,7 +2739,7 @@
       "keys.charityModels": "公益模型",
       "keys.ownModels": "我的模型",
       "keys.copyModel": "打开模型页复制调用名。",
-      "keys.supportedPaths": "支持聊天与向量，可用模型列表见",
+      "keys.supportedPaths": "请使用模型支持的接口，可用模型列表见",
       "keys.curlTitle": "命令行测试",
       "keys.curlHelp": "用 curl 检查密钥和模型。",
       "keys.curlPlaceholder": "把模型名替换为你要用的调用名。NONBIRI_KEY 填你保存的密钥。",
@@ -2755,8 +2755,14 @@
       "keys.charityModelExample": "[公益]服务商/模型名",
       "keys.ownModelExample": "my/模型名",
       "connector.gemini": "Google Gemini (Chat)",
-      "connector.responses": "OpenAI Responses (Chat)",
-      "connector.decisions": "OpenAI Decisions"
+      "connector.responses": "OpenAI Responses",
+      "connector.decisions": "OpenAI Decisions",
+      "connector.cohere": "Cohere Rerank",
+      "connector.jina": "Jina Rerank",
+      "connector.siliconflow": "SiliconFlow Rerank",
+      "connector.voyage": "Voyage AI Rerank",
+      "connector.systemone": "Typesafe System One",
+      "connector.chatCompletions": "OpenAI Chat Completions"
     },
     "lakeNotes": {
       "exchangeAvailable": "垂钓免费入场。金币兑换已开放，可查看下方兑换。",

@@ -488,7 +488,7 @@ describe('CharityManagement corrective controls', () => {
     expect(editor.getByRole('combobox', { name: 'Pricing mode' })).toHaveValue('per_token');
     expect(editor.getByLabelText('Output user price')).toHaveValue('60');
     expect(editor.getByLabelText('Output donor reward')).toHaveValue('30');
-    expect(editor.getByLabelText('Call reservation (credits)')).toHaveValue('25.125');
+    expect(editor.getByLabelText('Usage reserve (credits)')).toHaveValue('25.125');
     expect(editor.getByLabelText('Provider')).toHaveValue('provider');
     expect(editor.getByRole('checkbox', { name: 'Enable charity model' })).not.toBeChecked();
     expect(writes).toHaveLength(0);
@@ -500,7 +500,7 @@ describe('CharityManagement corrective controls', () => {
     await view.user.click(editor.getByRole('button', { name: 'Undo the last price fill' }));
     expect(editor.getByRole('combobox', { name: 'Pricing mode' })).toHaveFocus();
     expect(editor.getByLabelText('Request user price')).toHaveValue('1');
-    expect(editor.getByLabelText('Call reservation (credits)')).toHaveValue('7');
+    expect(editor.getByLabelText('Usage reserve (credits)')).toHaveValue('7');
     await view.user.click(editor.getByRole('button', { name: 'Fill all prices' }));
     await view.user.click(
       within(editor.getByRole('row', { name: /Request template/ })).getByRole('button', {
@@ -1239,8 +1239,8 @@ describe('CharityManagement corrective controls', () => {
       sessionPath: '/admin/api/session',
       session: adminSession,
       modelsTab: 'Charity models and bindings',
-      reserveLabel: 'Call reservation (credits)',
-      reserveHelp: 'Leave blank to inherit the global configuration.',
+      reserveLabel: 'Usage reserve (credits)',
+      reserveHelp: 'Used before usage-based requests. Leave blank to use the caller key or site reserve.',
       pricingLabel: 'Pricing mode',
       perRequest: 'Per request',
       perToken: 'Per token',
@@ -1255,8 +1255,8 @@ describe('CharityManagement corrective controls', () => {
       sessionPath: '/api/session',
       session: stewardSession,
       modelsTab: '公益模型与来源',
-      reserveLabel: '调用前预留积分',
-      reserveHelp: '留空继承全局配置。',
+      reserveLabel: '用量预留（积分）',
+      reserveHelp: '用于按用量计费请求的预留。留空沿用调用密钥或站点设置。',
       pricingLabel: '计价模式',
       perRequest: '按次',
       perToken: '按 token',
@@ -1442,7 +1442,7 @@ describe('CharityManagement corrective controls', () => {
 
     await view.user.click(await screen.findByRole('tab', { name: 'Charity models and bindings' }));
     await view.user.click(screen.getByRole('button', { name: 'Create charity model' }));
-    expect(screen.getByRole('checkbox', { name: 'Chat completions' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Chat Completions / Responses' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Embeddings' })).not.toBeChecked();
     await view.user.click(screen.getByRole('checkbox', { name: 'Image generation' }));
     expect(screen.getByRole('checkbox', { name: 'L1' })).toBeChecked();
@@ -1475,18 +1475,18 @@ describe('CharityManagement corrective controls', () => {
 
     const pricing = screen.getByRole('combobox', { name: 'Pricing mode' });
     await view.user.selectOptions(pricing, 'per_token');
-    const hiddenReserve = screen.getByLabelText('Call reservation (credits)');
+    const hiddenReserve = screen.getByLabelText('Usage reserve (credits)');
     fireEvent.change(hiddenReserve, { target: { value: '0' } });
     expect(screen.getByRole('button', { name: 'Add charity model' })).toBeDisabled();
     await view.user.selectOptions(pricing, 'per_request');
-    expect(screen.getByLabelText('Call reservation (credits)')).toHaveValue('0');
+    expect(screen.getByLabelText('Usage reserve (credits)')).toHaveValue('0');
     expect(screen.getByRole('button', { name: 'Add charity model' })).toBeDisabled();
     fireEvent.change(hiddenReserve, { target: { value: '' } });
     expect(screen.getByRole('button', { name: 'Add charity model' })).toBeEnabled();
     await view.user.click(screen.getByRole('button', { name: 'Add charity model' }));
     await waitFor(() => expect(createBodies).toHaveLength(1));
     expect(createBodies[0]).toMatchObject({
-      model_types: ['chat_completions', 'images_generations'],
+      model_types: ['chat_completions', 'images_generations', 'responses'],
       allowed_levels: [2, 5],
       public_description: 'First line\n<b>literal</b>\t😀',
     });

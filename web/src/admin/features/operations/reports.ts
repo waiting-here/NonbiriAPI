@@ -65,7 +65,13 @@ export interface ReportCaseSummary {
     | 'ai-sdk-gateway-v3'
     | 'google-gemini'
     | 'openai-responses'
-    | 'openai-decisions';
+    | 'openai-decisions'
+    | 'cohere-rerank'
+    | 'jina-rerank'
+    | 'siliconflow-rerank'
+    | 'voyage-rerank'
+    | 'typesafe-systemone'
+    | 'openai-chat-completions';
   canonical_base_url: string;
   material_version: string;
   target_version: string;
@@ -174,6 +180,12 @@ export function normalizeReportSummary(value: unknown): ReportCaseSummary {
         'google-gemini',
         'openai-responses',
         'openai-decisions',
+        'cohere-rerank',
+        'jina-rerank',
+        'siliconflow-rerank',
+        'voyage-rerank',
+        'typesafe-systemone',
+        'openai-chat-completions',
       ] as const,
       'reported connector',
     ),
@@ -297,7 +309,13 @@ export interface ReportTarget {
       | 'ai-sdk-gateway-v3'
       | 'google-gemini'
       | 'openai-responses'
-      | 'openai-decisions';
+      | 'openai-decisions'
+      | 'cohere-rerank'
+      | 'jina-rerank'
+      | 'siliconflow-rerank'
+      | 'voyage-rerank'
+      | 'typesafe-systemone'
+      | 'openai-chat-completions';
     canonical_base_url: string;
     display_head: string;
     display_tail: string;
@@ -384,6 +402,12 @@ export function normalizeReportTarget(value: unknown): ReportTarget {
           'google-gemini',
           'openai-responses',
           'openai-decisions',
+          'cohere-rerank',
+          'jina-rerank',
+          'siliconflow-rerank',
+          'voyage-rerank',
+          'typesafe-systemone',
+          'openai-chat-completions',
         ] as const,
         'target connector',
       ),

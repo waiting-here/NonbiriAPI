@@ -1,4 +1,4 @@
-import { contextPriceProps } from './contextPrices';
+import { contextPriceProps, contextRows } from './contextPrices';
 import { ModelTypesSummary } from '@shared/components/ModelTypesField';
 import { formatLevelRanges } from '@shared/utils/levels';
 import { useEffect, useState } from 'react';
@@ -12,7 +12,11 @@ import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { type PageSize } from '@shared/operations/pageNumbers';
-import { MODEL_TYPES } from '@shared/modelTypes';
+import {
+  MODEL_TYPE_CHOICES,
+  MODEL_TYPE_GROUP_LABEL_KEYS,
+  modelTypeGroup,
+} from '@shared/modelTypes';
 import {
   canonicalCharityCatalogSearch,
   charityCatalogFilterKey,
@@ -57,42 +61,7 @@ function boundQueryDraft(value: string): string {
 }
 
 function priceRows(model: CatalogModel, translate: (key: string) => string): CharityPriceRow[] {
-  if (model.pricing.mode === 'per_request') {
-    return [
-      {
-        label: translate('user.charity.requestPrice'),
-        compactLabel: translate('user.charity.presentation.perCall'),
-        userMilli: model.pricing.userPriceMilli,
-        currentUserMilli: model.pricing.currentUserPriceMilli,
-      },
-    ];
-  }
-  return [
-    {
-      label: translate('user.charity.uncachedInputPrice'),
-      compactLabel: translate('user.charity.presentation.input'),
-      userMilli: model.pricing.userPricesMilli.uncachedInput,
-      currentUserMilli: model.pricing.currentUserPricesMilli.uncachedInput,
-    },
-    {
-      label: translate('user.charity.cacheWriteInputPrice'),
-      compactLabel: translate('user.charity.presentation.cacheWrite'),
-      userMilli: model.pricing.userPricesMilli.cacheWriteInput,
-      currentUserMilli: model.pricing.currentUserPricesMilli.cacheWriteInput,
-    },
-    {
-      label: translate('user.charity.cacheReadInputPrice'),
-      compactLabel: translate('user.charity.presentation.cacheRead'),
-      userMilli: model.pricing.userPricesMilli.cacheReadInput,
-      currentUserMilli: model.pricing.currentUserPricesMilli.cacheReadInput,
-    },
-    {
-      label: translate('user.charity.outputPrice'),
-      compactLabel: translate('user.charity.presentation.output'),
-      userMilli: model.pricing.userPricesMilli.output,
-      currentUserMilli: model.pricing.currentUserPricesMilli.output,
-    },
-  ];
+  return contextRows(model.pricing, translate);
 }
 
 function discountProps(model: CatalogModel) {
@@ -129,7 +98,7 @@ function CatalogFilters({
       : [
           {
             key: 'model-type',
-            label: t(`common.modelTypes.${filter.modelType}`),
+            label: t(MODEL_TYPE_GROUP_LABEL_KEYS[modelTypeGroup(filter.modelType)]),
             removeLabel: t('user.charity.presentation.removeModelType'),
             onRemove: () => onModelTypeChange('all'),
           },
@@ -205,15 +174,15 @@ function CatalogFilters({
             <label>
               <span>{t('user.charity.catalog.typeFilter')}</span>
               <select
-                value={filter.modelType}
+                value={filter.modelType === 'all' ? 'all' : modelTypeGroup(filter.modelType)}
                 onChange={(event) =>
                   onModelTypeChange(event.target.value as CatalogModelTypeFilter)
                 }
               >
                 <option value="all">{t('user.charity.catalog.typeAll')}</option>
-                {MODEL_TYPES.map((modelType) => (
+                {MODEL_TYPE_CHOICES.map((modelType) => (
                   <option key={modelType} value={modelType}>
-                    {t(`common.modelTypes.${modelType}`)}
+                    {t(MODEL_TYPE_GROUP_LABEL_KEYS[modelType])}
                   </option>
                 ))}
               </select>

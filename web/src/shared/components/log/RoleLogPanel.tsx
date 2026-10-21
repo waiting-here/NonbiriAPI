@@ -1,3 +1,4 @@
+import { MODEL_TYPE_LABEL_KEYS, type ModelType } from '@shared/modelTypes';
 import { Button } from '@shared/components/ui/Button';
 import { Link, useLocation } from 'react-router';
 import { charityManagementPath } from './managementNavigation';
@@ -60,6 +61,31 @@ const ROUTE_LABEL_KEYS: Record<LogRouteKind, string> = {
   charity_images_generations: 'common.operations.logs.route.charityImagesGenerations',
   openai_decisions: 'common.operations.logs.route.openaiDecisions',
   charity_decisions: 'common.operations.logs.route.charityDecisions',
+  openai_responses: 'common.operations.logs.route.openai_responses',
+  charity_responses: 'common.operations.logs.route.charity_responses',
+  openai_responses_compact: 'common.operations.logs.route.openai_responses_compact',
+  charity_responses_compact: 'common.operations.logs.route.charity_responses_compact',
+  openai_responses_input_tokens: 'common.operations.logs.route.openai_responses_input_tokens',
+  charity_responses_input_tokens: 'common.operations.logs.route.charity_responses_input_tokens',
+  openai_completions: 'common.operations.logs.route.openai_completions',
+  charity_completions: 'common.operations.logs.route.charity_completions',
+  openai_images_edits: 'common.operations.logs.route.openai_images_edits',
+  charity_images_edits: 'common.operations.logs.route.charity_images_edits',
+  openai_images_variations: 'common.operations.logs.route.openai_images_variations',
+  charity_images_variations: 'common.operations.logs.route.charity_images_variations',
+  openai_audio_speech: 'common.operations.logs.route.openai_audio_speech',
+  charity_audio_speech: 'common.operations.logs.route.charity_audio_speech',
+  openai_audio_transcriptions: 'common.operations.logs.route.openai_audio_transcriptions',
+  charity_audio_transcriptions: 'common.operations.logs.route.charity_audio_transcriptions',
+  openai_audio_translations: 'common.operations.logs.route.openai_audio_translations',
+  charity_audio_translations: 'common.operations.logs.route.charity_audio_translations',
+  openai_moderations: 'common.operations.logs.route.openai_moderations',
+  charity_moderations: 'common.operations.logs.route.charity_moderations',
+  openai_rerank: 'common.operations.logs.route.openai_rerank',
+  charity_rerank: 'common.operations.logs.route.charity_rerank',
+  openai_systemone: 'common.operations.logs.route.openai_systemone',
+  charity_systemone: 'common.operations.logs.route.charity_systemone',
+
   model_discovery: 'common.operations.logs.route.modelDiscovery',
 };
 
@@ -643,15 +669,15 @@ function ScopedRoleLogPanel({
   };
 
   const routeSummary = (route: LogRouteKind) =>
-    t(
-      route === 'model_discovery'
-        ? 'common.operations.logs.presentation.models'
+    route === 'model_discovery'
+      ? t('common.operations.logs.presentation.models')
+      : route.endsWith('chat_completions')
+        ? t('common.operations.logs.presentation.chat')
         : route.endsWith('embeddings')
-          ? 'common.operations.logs.presentation.embeddings'
+          ? t('common.operations.logs.presentation.embeddings')
           : route.endsWith('images_generations')
-            ? 'common.operations.logs.presentation.images'
-            : 'common.operations.logs.presentation.chat',
-    );
+            ? t('common.operations.logs.presentation.images')
+            : t(MODEL_TYPE_LABEL_KEYS[route.replace(/^(openai|charity)_/, '') as ModelType]);
   const modelCell = (row: RoleLogRow) => {
     const model = 'model' in row ? row.model : row.charity_model;
     const kind =

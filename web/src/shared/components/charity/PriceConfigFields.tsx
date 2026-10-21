@@ -1,3 +1,4 @@
+import { ModalityPricingFields } from './ModalityPricingFields';
 import { RecurringDiscountFields } from './RecurringDiscountFields';
 import { useRef, useState, type ReactNode, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -19,6 +20,7 @@ export function PriceConfigFields({
   actions,
   discountError = false,
   recurringError = false,
+  allowSearchUnits = true,
 }: {
   value: PriceDraft;
   role: CharityRole;
@@ -27,6 +29,7 @@ export function PriceConfigFields({
   actions?: ReactNode;
   discountError?: boolean;
   recurringError?: boolean;
+  allowSearchUnits?: boolean;
 }) {
   const { t, i18n } = useTranslation();
   const copy = charityControlCopy(i18n.language);
@@ -55,30 +58,49 @@ export function PriceConfigFields({
             >
               <option value="per_request">{t(charityCopyKey(role, 'perRequest'))}</option>
               <option value="per_token">{t(charityCopyKey(role, 'perToken'))}</option>
+              {(allowSearchUnits || value.mode === 'per_search_unit') && (
+                <option value="per_search_unit">{t('common.modalityPricing.perSearchUnit')}</option>
+              )}
             </select>
           )}
         </Field>
+        {value.mode === 'per_token' &&
+          (value.userModalities.input_enabled ||
+            value.userModalities.output_enabled ||
+            value.donorModalities.input_enabled ||
+            value.donorModalities.output_enabled) && (
+            <p className="nb-sub">{t('common.modalityPricing.fallbackHelp')}</p>
+          )}
         <div className="nb-inline">
           <Button
             type="button"
             onClick={() => {
               const prices =
-                value.mode === 'per_request'
+                value.mode !== 'per_token'
                   ? [['request', value.requestUser]]
-                  : Object.entries(value.userPrices);
+                  : [
+                      ...Object.entries(value.userPrices),
+                      ...(['text', 'image', 'audio', 'video'] as const).flatMap((m) =>
+                        value.userModalities[m] ? Object.entries(value.userModalities[m]) : [],
+                      ),
+                    ];
               const invalid = prices.find(([, amount]) => halfPrice(amount) === null);
               if (invalid) {
                 setHalfError(true);
                 inputs.current[invalid[0]]?.focus();
                 return;
               }
-              if (value.mode === 'per_request')
-                set({ requestDonor: halfPrice(value.requestUser)! });
+              if (value.mode !== 'per_token') set({ requestDonor: halfPrice(value.requestUser)! });
               else {
                 const donorRewards = { ...value.userPrices };
                 for (const key of Object.keys(donorRewards) as (keyof TokenPrices)[])
                   donorRewards[key] = halfPrice(value.userPrices[key])!;
-                set({ donorRewards });
+                const donorModalities = structuredClone(value.userModalities);
+                for (const m of ['text', 'image', 'audio', 'video'] as const)
+                  if (donorModalities[m])
+                    for (const k of Object.keys(donorModalities[m]) as (keyof TokenPrices)[])
+                      donorModalities[m][k] = halfPrice(donorModalities[m][k])!;
+                set({ donorRewards, donorModalities });
               }
             }}
           >
@@ -106,9 +128,15 @@ export function PriceConfigFields({
           </Field>
           {value.mode === 'per_request' ? <p>{t('common.workflow.reserveLater')}</p> : null}
         </Fold>
-        {value.mode === 'per_request' ? (
+        {value.mode !== 'per_token' ? (
           <div className="nb-grid nb-grid--2">
-            <Field label={t(charityCopyKey(role, 'request_user_price_milli'))}>
+            <Field
+              label={t(
+                value.mode === 'per_search_unit'
+                  ? 'common.modalityPricing.searchCharge'
+                  : charityCopyKey(role, 'request_user_price_milli'),
+              )}
+            >
               {(props) => (
                 <input
                   {...props}
@@ -121,7 +149,13 @@ export function PriceConfigFields({
                 />
               )}
             </Field>
-            <Field label={t(charityCopyKey(role, 'request_donor_reward_milli'))}>
+            <Field
+              label={t(
+                value.mode === 'per_search_unit'
+                  ? 'common.modalityPricing.searchReward'
+                  : charityCopyKey(role, 'request_donor_reward_milli'),
+              )}
+            >
               {(props) => (
                 <input
                   {...props}
@@ -167,6 +201,20 @@ export function PriceConfigFields({
           </div>
         )}
       </fieldset>
+      {value.mode === 'per_token' && (
+        <>
+          <ModalityPricingFields
+            title={t('common.modalityPricing.user')}
+            value={value.userModalities}
+            onChange={(userModalities) => set({ userModalities })}
+          />
+          <ModalityPricingFields
+            title={t('common.modalityPricing.donor')}
+            value={value.donorModalities}
+            onChange={(donorModalities) => set({ donorModalities })}
+          />
+        </>
+      )}
       <ContextPricingFields value={value} role={role} onChange={set} />
       <Fold
         title={t('common.recurringDiscount.fixedTitle')}

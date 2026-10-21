@@ -69,7 +69,13 @@ export type DonationPageSafeSource =
         | 'ai-sdk-gateway-v3'
         | 'google-gemini'
         | 'openai-responses'
-        | 'openai-decisions';
+        | 'openai-decisions'
+        | 'cohere-rerank'
+        | 'jina-rerank'
+        | 'siliconflow-rerank'
+        | 'voyage-rerank'
+        | 'typesafe-systemone'
+        | 'openai-chat-completions';
       base_url: string;
     }
   | {
@@ -80,7 +86,13 @@ export type DonationPageSafeSource =
         | 'ai-sdk-gateway-v3'
         | 'google-gemini'
         | 'openai-responses'
-        | 'openai-decisions';
+        | 'openai-decisions'
+        | 'cohere-rerank'
+        | 'jina-rerank'
+        | 'siliconflow-rerank'
+        | 'voyage-rerank'
+        | 'typesafe-systemone'
+        | 'openai-chat-completions';
       base_url: string;
       channel_id: string;
       name: string;
