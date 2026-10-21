@@ -164,6 +164,16 @@ func retainedFacts(t *testing.T, database *sql.DB) map[string][32]byte {
 					}
 					continue
 				}
+				if (table == "models" || table == "charity_models") && column == "cloudflare_proxy_enabled" {
+					want := int64(0)
+					if table == "models" {
+						want = 1
+					}
+					if values[i] != want {
+						t.Fatalf("upgrade %s proxy default is %v, want %d", table, values[i], want)
+					}
+					continue
+				}
 				if table == "charity_models" && column == "recurring_discount" {
 					if values[i] != `{"enabled":false,"time_zone":"UTC","default_percent":100,"periods":[]}` {
 						t.Fatal("upgrade recurring discount is not the disabled default")
