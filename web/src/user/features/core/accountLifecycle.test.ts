@@ -265,13 +265,21 @@ describe('production account lifecycle adapter', () => {
     fetchMock
       .mockResolvedValueOnce(exportResponse({ ...exportDocument(), schema_version: '11' }))
       .mockResolvedValueOnce(exportResponse({ ...exportDocument(), schema_version: 4 }))
-      .mockResolvedValueOnce(exportResponse({ ...exportDocument(), schema_version: 25 }))
+      .mockResolvedValueOnce(exportResponse({ ...exportDocument(), schema_version: 28 }))
+      .mockResolvedValueOnce(
+        exportResponse(
+          { ...exportDocument(), schema_version: 28 },
+          {
+            'Content-Disposition': 'attachment; filename="nonbiriapi-account-export-v28.json"',
+          },
+        ),
+      )
       .mockResolvedValueOnce(
         exportResponse(exportDocument(), { 'Content-Length': String(16 * 1024 * 1024 + 1) }),
       );
     vi.stubGlobal('fetch', fetchMock);
 
-    for (let index = 0; index < 4; index += 1) {
+    for (let index = 0; index < 5; index += 1) {
       await expect(
         productionAccountLifecycleAdapter.exportAccount({
           accountId: '1',
@@ -279,15 +287,25 @@ describe('production account lifecycle adapter', () => {
         }),
       ).rejects.toMatchObject({ code: 'invalid_response' });
     }
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
   });
 
-  it.each([12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24])(
+  it.each([12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27])(
     'downloads a v%s attachment and rejects a version mismatch in its filename',
     async (version) => {
       const document = {
         ...exportDocument(),
         schema_version: version,
+        ...(version === 27
+          ? {
+              models: [
+                {
+                  id: '31',
+                  session_headers: [{ name: 'x-session', idle_seconds: 300, format: 'uuid_v4' }],
+                },
+              ],
+            }
+          : {}),
         ...(version === 24
           ? {
               donations: [
