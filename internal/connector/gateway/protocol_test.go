@@ -369,7 +369,7 @@ func TestDiscoverySkipsOtherKindsAndPreservesIDs(t *testing.T) {
 		return response(`{"models":[{"id":"provider/chat","modelType":"language"},{"id":"provider/embed","modelType":"embedding"},{"id":"provider/image","modelType":"image"},{"id":"provider/video","modelType":"video"},{"modelType":"future-kind","pricing":{"output":"0"}}]}`, "application/json"), nil
 	}}
 	res := (ModelDiscoverer{}).Discover(context.Background(), contract.DiscoveryInput{Backend: b, Target: target(), Credential: secret()})
-	if res.Failure != contract.DiscoveryFailureNone || len(res.Models) != 2 || res.Models[0].ID != "provider/chat" || res.Models[1].ID != "provider/embed" {
+	if res.Failure != contract.DiscoveryFailureNone || len(res.Models) != 3 || res.Models[0].ID != "provider/chat" || res.Models[1].ID != "provider/embed" || res.Models[2].ID != "provider/image" {
 		t.Fatalf("%+v", res)
 	}
 	for _, body := range []string{`{"models":[{"id":"sk-test-credential-long","modelType":"language"}]}`, `{"models":[{"id":"x","modelType":"language"},{"id":"x","modelType":"language"}]}`, `{"models":[{"id":"x","modelType":true}]}`} {
