@@ -140,9 +140,9 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 28. Normal startup accepts fresh storage and schema 28 only; exact schema 16–27 structures require the separate offline converter. Unknown or partial structures are rejected before writes. Startup validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for explicit source/target versions and rollback requirements.
+The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 31. Normal startup accepts fresh storage and schema 31 only; exact schema 16–30 structures require the separate offline converter. Unknown or partial structures are rejected before writes. Startup validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for explicit source/target versions and rollback requirements.
 
-Current account export `schema_version=26` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v26.json`. See §9 for its safe projections. This contract describes v1.1.0 source, not an instance's release or deployment status.
+Current account export `schema_version=27` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v27.json`. See §9 for its safe projections. This contract describes v1.1.0 source, not an instance's release or deployment status.
 
 ### 1.5 Display time context
 
@@ -411,7 +411,7 @@ Authorized donation-key projections include numeric `max_concurrency,max_rpm` an
 | Method and path | Request / response |
 | --- | --- |
 | `GET /api/models` | Legacy `cursor,limit` or numbered `page,page_size`; numbered mode accepts `q,provider,route_strategy,connection_state`; response includes `pagination` and the owner models. |
-| `POST /api/models` | Provider/model, strategy, retry, flatten, role and `transport_rule` policy; returns 201 model. |
+| `POST /api/models` | Provider/model, strategy, retry, flatten, role, `transport_rule` and optional `session_headers`; returns 201 model. |
 | `GET /api/models/{id}` | One owner model. |
 | `GET/PUT /api/models/{id}/request-adaptation` | Owner-only encrypted request settings, with independent revision and idempotency. |
 | `PATCH /api/models/{id}` | Partial business fields plus `expected_revision`. |
@@ -421,6 +421,8 @@ Authorized donation-key projections include numeric `max_concurrency,max_rpm` an
 | `POST /api/models/{id}/bindings/batch` | Expected binding revision and selections; all-or-nothing 201. |
 | `PUT /api/models/{id}/bindings/order` | Exact current ID permutation and expected binding revision. |
 | `DELETE /api/models/{id}/bindings/{bId}` | Expected binding revision; returns the complete new binding set. |
+
+Personal-model create/PATCH/detail DTOs include `session_headers`, using the same fields and defaults as charity models. Owners configure only their own models; charity writes require administrator or level-6 authority. Header configuration is saved with model settings; request adaptation has its own save and revision. PATCH omission preserves the array, `[]` clears it and null rejects. Generated values never appear in these DTOs. See [managed headers](charity-session-headers.md) for zero idle lifetime, all five formats and export boundaries.
 
 Personal and management charity model DTOs include `cloudflare_proxy_enabled`
 and the read-only `cloudflare_proxy_mode` (`worker|legacy|direct`). The boolean
@@ -730,8 +732,9 @@ approval, expiry, donor restrictions and quota rules still apply.
 ### 4.1.3 Smart donated-key backoff
 
 Smart backoff automatically applies to charity calls without per-key setup. It keeps
-the normal consecutive-failure policy: only a recognized quota error leaves the
-current streak unchanged. Initial HTTP 200 still resets it, including later
+the normal consecutive-failure policy: a recognized quota error leaves the
+current streak unchanged. Verified caller-parameter errors have the separate
+neutral treatment below. Initial HTTP 200 still resets it, including later
 read or protocol failure. A valid retry header, including zero or a past deadline,
 takes precedence over error classification.
 
@@ -826,11 +829,23 @@ failure streaks. In-flight requests finish using their dispatch snapshot.
 A matched custom rule leaves the existing failure count unchanged. Ordinary
 users, level-5 stewards and CallerKey cannot manage these policies.
 
+### 4.1.4 Verified caller-parameter errors
+
+A narrowly verified caller-parameter error leaves the donated key's consecutive-failure count unchanged: it neither increments nor clears it. The request still fails and retains its normal sanitized error, diagnostics, retry and accounting behavior. HTTP 400/422 alone, generic `invalid_request_error` or message wording cannot establish this result. Existing retry-header and quota-backoff rules retain priority.
+
+Recognition requires a complete, bounded `application/json` response with no duplicate keys, an `error` object, `type:"invalid_request_error"`, a nonempty string message, and exact string `code` and `param`. The message is not used for classification. Accepted codes are `invalid_value`, `invalid_type`, `unsupported_parameter` and `unsupported_value`.
+
+The exact top-level parameter allowlist is `temperature`, `top_p`, `top_k`, `frequency_penalty`, `presence_penalty`, `seed`, `stop`, `n`, `logprobs`, `top_logprobs`, `logit_bias`, `max_tokens`, `max_completion_tokens`, `max_output_tokens`, `reasoning_effort`, `reasoning`, `verbosity`, `response_format`, `dimensions`, `encoding_format`, `size`, `quality`, `style`, `output_format`, `output_compression`, `partial_images`, `speed` and `language`.
+
+Only supported native OpenAI JSON paths can supply the proof. The named parameter must come from the original caller and have the same raw JSON value in the final upstream body. Request adaptation, additional or managed headers, native extensions and protocol conversion exclude recognition. Changing the reported parameter's raw JSON value, even by equivalent normalization, also excludes it. Nested/unknown parameters, model/resource/identity/store/service-tier errors, other protocols, rerank and multipart are outside this classification. Authorization, billing, platform, network and ambiguous failures retain their existing handling. Personal calls are unchanged.
+
+The same completion transaction saves a minimal claim-bound receipt before accepting the neutral outcome. The receipt contains only its claim reference, HTTP status and recognized code, with no parameter name/value, body or upstream message. It follows the claim lifecycle and is excluded from account export.
+
 ### 4.2 Donation failure-streak reset
 
 Each key's `failure_disable_threshold` is a canonical decimal U128 string, default `"10"` on creation and migration. Owners, administrators and current stewards can independently `PATCH {prefix}/donations/{id}/keys/{keyId}/failure-policy`, using `/api`, `/admin/api` or `/api/steward` respectively. The strict body requires `{expected_revision,failure_disable_threshold}` with `Idempotency-Key`. The safe response includes `donation_id,donation_key_id,failure_disable_threshold,failure_streak,failure_disabled,revision` and nullable `smart_backoff` (§4.1.3). New donations need no smart-backoff configuration.
 
-Saving retains the current count and generation and atomically recalculates error-disablement: `0` clears it; a positive threshold disables when the count reaches that threshold. Zero still records failures. Upstream HTTP 200 or a protocol-complete success clears the count, regardless of later errors. Without either, a non-200 response with a valid retry hint or an error recognized by its smart-backoff policy is neutral; other upstream response/protocol/DNS/connect/timeout failures increase it; caller cancellation, downstream failure, Debug stop, platform rejection and internal failure leave it unchanged. A confirmed upstream failure still counts after a later cancellation. Recovery uses a persisted HTTP 200 acceptance checkpoint when available; an unknown outcome is neutral. Fees and quotas follow the billing rules above. Ordered in-flight results use the latest saved threshold; old-generation completions cannot change current state. Manual disablement, expiry, withdrawal, bans, quotas and ownership checks continue to apply. Pages warn when zero is entered or saved, without extra confirmation. Each real save has a no-secret review audit; replay repeats no write or alarm. Only a transition into error-disablement alerts; clearing and later disabling can alert again.
+Saving retains the current count and generation and atomically recalculates error-disablement: `0` clears it; a positive threshold disables when the count reaches that threshold. Zero still records failures. Upstream HTTP 200 or a protocol-complete success clears the count, regardless of later errors. Without either, a non-200 response with a valid retry hint, an error recognized by its smart-backoff policy, or a narrowly verified caller-parameter error leaves the count unchanged without clearing it; other upstream response/protocol/DNS/connect/timeout failures increase it; caller cancellation, downstream failure, Debug stop, platform rejection and internal failure leave it unchanged. A confirmed upstream failure still counts after a later cancellation. Recovery uses a persisted HTTP 200 acceptance checkpoint when available; an unknown outcome is neutral. Fees and quotas follow the billing rules above. Ordered in-flight results use the latest saved threshold; old-generation completions cannot change current state. Manual disablement, expiry, withdrawal, bans, quotas and ownership checks continue to apply. Pages warn when zero is entered or saved, without extra confirmation. Each real save has a no-secret review audit; replay repeats no write or alarm. Only a transition into error-disablement alerts; clearing and later disabling can alert again.
 
 Owners can `POST /api/donations/{id}/keys/{keyId}/failure-streak-reset` with `{expected_revision}` and `Idempotency-Key`. Only their own approved, unexpired, active donated key is eligible. The response is `{donation_id,key_id,revision,failure_streak:"0"}`. Missing ownership returns 404; stale or ineligible state returns 409.
 
@@ -1544,7 +1559,7 @@ Lineage items are exactly `{donation_id,donation_key_id,donation_status,key_stat
 
 ## 9. Export, privacy, and account deletion
 
-`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v26.json`, with `schema_version:26` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema.
+`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v27.json`, with `schema_version:27` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema.
 
 `user` includes the five nullable inference limits and their effective values
 from §7.1. The safe `charity` aggregate may include `usage_details` with optional
@@ -1570,7 +1585,7 @@ The following fields are top-level (an excerpt, not a complete export):
 
 ```json
 {
-  "schema_version": 26,
+  "schema_version": 27,
   "request_adaptations": [],
   "continuity": [],
   "fat_fish": {"summaries": [], "progress": []}
@@ -1591,11 +1606,15 @@ Deletion keeps a separate minimum security projection for administrator and curr
 
 `appearance` contains `selected,unlocked,moment,updated_at`; eligibility derives from collection ownership and pool history, while the derived `moments` catalogue is omitted. `rewards` contains personal successful receipts. `gacha` contains ticket/shard balances, collection, pity, claims, retained transactions and draw records, without retry-key digests. Model request adaptations include excluded parameter names and partition modes without saved values. `user` contains `discord_gate_policy`; personal models include `model_types` and accept `cache_balanced` as a `route_strategy`. Current personal models also include `role_policy`, `transport_rule` and the saved `cloudflare_proxy_enabled` preference; deployment mode and proxy secrets are excluded; saved Likes preset names are currently omitted from the account export. `lake_notes` contains `rules_id,profile_revision,profile,casts,entries,exchanges`, excluding private encounter/reward randomness and internal checkpoints. Safe cast entries include identity, nullable source period, rules/generation/revision, acknowledged tick, phase/pause and public motion state. Entry/exchange receipts retain exact amounts and financial references.
 
+Export 27 also includes personal models' saved `session_headers` entries (`name,idle_seconds,format`). Generated header values and shared charity-model header configuration are excluded.
+
 `steadycatch` contains the owner's first-clear status, retained sessions and accepted replay inputs. `gwent` uses the duel export with owner-only competitive results and the current Elo aggregate. Neither adds access to another player's private state. See [Steady Catch](steady-catch.md), [AI Gwent](ai-gwent.md) and the [lifecycle checklist](data-lifecycle-checklist.md) for routes and retention.
 
 `personal_automation` is a top-level array (empty when there are no retained records). Each batch has `id,kind,target_id,item_count,created_at,expires_at,results`; results contain `index,status` and applicable safe `outcome,endpoint_key_id,binding_id,code,message`. Batches and their results share one combined 10,000-entry limit. It exports only retained safe batch identity/type/target/times and item outcomes; no input secrets/notes, request digests, original idempotency keys or private discovery snapshots are included. All existing 10,000-row collection and 16 MiB whole-file limits remain; over-limit export fails without truncation. Account deletion removes personal batches, their exact receipt associations, profile/current cast and resource policy, and cannot be undone by late work.
 
 Self, administrator and inactivity deletion preserve request logs and necessary source facts until their original completion-plus-30-day deadline or applicable hold. After account deletion only authorized administrator/L5/L6 management can read unexpired logs; expired held logs retain their separate administrator/L6 authorization; a new account with the same Discord ID cannot read or export the former account's logs. Immutable origin identity is not reconstructed from a later account. This is separate from the long-lived minimal deleted-account record.
+
+Account deletion validates settled request/claim history together and detaches its account links in one batch. A naturally expired request log no longer prevents deletion. Active work still uses the existing settlement handoff; reservations, balances, retained log snapshots and rollback remain in the same deletion transaction.
 
 ## 10. Maintenance, recovery, and retention
 
@@ -1644,6 +1663,7 @@ Log and diagnostic browser-session reads require a current administrator on the 
 | `GET {prefix}/logs/{id}/attempts/{seq}/errors` | Failure events, including failed attempts before eventual success. |
 | `GET {prefix}/logs/{id}/attempts/{seq}/errors/{event}` | Bounded original event body and capture state. |
 | `GET {prefix}/diagnostics`, `GET {prefix}/diagnostics/{id}` | Model-discovery and image submit/query/discovery failure diagnostics. |
+| `GET {prefix}/logs/pressure` | Anonymous global concurrency/RPM observations; administrator or level-5/6 browser session. |
 | `GET {prefix}/logs/diagnostic-capacity` | Raw-body capacity and omissions; administrator or level-5/6 steward. |
 | `GET {prefix}/abuse-audit/users`, `GET {prefix}/abuse-audit/users/{id}` | Risk candidates and bounded supporting observations. |
 | `GET {prefix}/abuse-audit/shared-ips` | Qualified shared-address observations. |
@@ -1705,6 +1725,26 @@ Source facts contain normalized full IP and provenance (`direct_peer`, `trusted_
 The management rule editor provides populated, suspected-client presets: Tavo (`user_agent` prefix `Tavo/`), New API (`openrouter_title` equals `New API`) and One API (`legacy_title` equals `One API`). Title matching defaults to case-insensitive. New API and One API presets do not require a particular HTTP-Referer origin. These headers occur only on some forwarding paths; forks retaining them may match, while renamed or hidden markers require separate evidence-based custom rules. Presets are drafts until explicitly saved and enabled; they neither rewrite existing rules nor establish abuse. A preset alone does not enable the separate administrator-controlled automatic-ban binding below.
 
 Client rules combine up to eight conditions with AND; enabled rules are alternatives. Existing `equals`, `contains` and `prefix` conditions use `value` and `case_sensitive`. An observed-IP condition can instead use `{"field":"effective_ip","operator":"ip_in","values":["192.0.2.1","2001:db8::1"]}` to match any listed address. For `ip_in`, `value` must be empty or omitted and `case_sensitive` false or omitted; other operators do not accept a nonempty `values` array. The server accepts 1–64 IPv4/IPv6 addresses per list, trims surrounding whitespace, normalizes IPv6 and IPv4-mapped addresses, and removes duplicates while retaining first-seen order. Domain names, CIDRs, ports and zone IDs are rejected. A match requires a complete, valid `direct_peer` or `trusted_forwarded` source IP; the rule's remaining conditions must also match. The editor accepts newlines, commas or spaces between addresses. Rule bodies remain limited to 32 KiB and stored conditions to 16 KiB. Existing single-value rules and frozen scan snapshots retain their meaning; list conditions use the same matching logic in audits, scans and explicitly enabled automatic-ban bindings.
+
+### Global pressure
+
+`GET /admin/api/logs/pressure` requires a current administrator session on the administrator host. `GET /api/steward/logs/pressure` requires a current level-5/6 session on the user host. Current session, account, role and MFA rules are rechecked in a read transaction. Ordinary users and CallerKeys cannot use either route. Requests accept no query or body; responses are `Cache-Control: no-store`.
+
+```json
+{
+  "rpm": {"current":12,"limit":600,"peak_24h":80,"peak_all":120},
+  "concurrency": {"current":2,"limit":50,"peak_24h":8,"peak_all":15},
+  "observed_at":1792540800,
+  "started_at":1792454400,
+  "sample_seconds":5
+}
+```
+
+All values are JSON integers; times are UTC Unix seconds. `rpm` counts the site-wide inference admission window; `concurrency` measures occupancy of the shared outbound gate. These metrics exclude ordinary page HTTP visits and do not count inbound connections. Each metric reports the current observation, current configured global limit, approximate last-24-hour peak and maximum observed since `started_at`. The server samples every five seconds and retains bounded minute maxima. The edge minute can extend the 24-hour window by less than one minute. Peaks are observations, not an exact request history; no history is reconstructed from old logs. Admission counters record interval peaks in memory, without additional per-request writes or request-log scans.
+
+Minute samples and all-time maxima persist about every 30 seconds and are restored after restart. Abrupt shutdown can lose unflushed observations, normally the last approximately 30 seconds and longer if persistence fails. Downtime adds no observations. The observation start and saved maxima do not reset at process restart.
+
+The management log page refreshes every 15 seconds while in the foreground. Current/24-hour/all-time values use dark/medium/light fills, numeric labels and a legend, with the configured limit as the scale. Historical values above a reduced limit remain visible numerically while bars stop at full width. A transient refresh failure retains the last values with a stale warning; an initial failure displays unavailable. HTTP 401/403 hides the panel and stops its interval polling.
 
 ### Redemption-code bans
 

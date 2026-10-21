@@ -283,9 +283,17 @@ Failed discovery displays a dedicated explanation and, while its diagnostic reco
 
 The Gacha Simulator entry is hidden by default and can be shown in its administrator settings. The display switch does not disable the activity URL. Eligible signed-in users can use the activity when the site is operational and its timezone is configured. Its dedicated administrator page uses `GET/POST /admin/api/gacha` for rules, prices, quotas, pools and saved presets. The generic activity master switch does not close this permanent collection activity. Only published limited pools use schedules; installation does not publish a limited pool automatically. See [the activity guide](gacha.md).
 
-## Managed charity session headers
+## Managed session headers
 
-Model settings may define random session headers, shared by the same user and model until idle expiry. UUID v4 and lowercase hexadecimal formats are available. See [configuration, reuse and lifecycle](charity-session-headers.md).
+Personal and charity model settings use the same managed-header fields and save them with the model. Request adaptation saves separately, with request-header and request-body groups. Owners edit their personal models; administrator/level-6 authority edits charity settings, and level-6 charity request adaptation remains read-only.
+
+Each header selects `uuid_v4`, `hex_32`, `opencode_session`, `opencode_message` or `opencode_part`. Idle lifetime accepts 0–86,400 seconds; omission or a blank browser field uses 300. Zero generates a new value for each logical request, reused by its internal retries, without an absolute uniqueness guarantee. Positive lifetimes reuse a value for the same user/model/header until idle expiry. See [field defaults, precedence, export and lifecycle](charity-session-headers.md).
+
+## Global pressure and appearance
+
+Administrator and level-5/6 steward management logs display sampled global concurrency and RPM, their approximate 24-hour peaks and persistent all-time observed maxima. There is no new site setting or CallerKey permission. Sampling is every five seconds; visible pages refresh every 15 seconds. Refresh failures mark retained values stale, while revoked session access hides the panel. See [pressure routes and observation limits](api-contract.md#global-pressure).
+
+Appearance controls offer light, dark or system theme and three intensity levels (`vivid`, `balanced`, `focus`). A manual theme/intensity choice takes priority over the corresponding system preference. Without a saved intensity, reduced transparency selects focus. Preferences apply immediately and are stored in the browser when available; they are separate from server-authorized cosmetic unlocks.
 
 ## Charity context prices
 

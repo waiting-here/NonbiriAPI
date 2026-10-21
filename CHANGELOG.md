@@ -35,6 +35,17 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Documented Google AI Studio and Vertex AI OpenAI-compatible routing, with
   isolated regional/global path, authentication and streaming coverage.
 
+- Managed session headers for personal models, with the same settings fields as
+  charity models. Both support UUID v4, hex and OpenCode session/message/part
+  formats. Zero idle lifetime generates a value per logical request and keeps
+  it for internal retries, without guaranteeing uniqueness.
+- Anonymous global concurrency/RPM observations for administrator and level-5/6
+  log pages, sampled every five seconds and refreshed every 15 foreground seconds.
+  Minute samples approximate 24-hour peaks; observation start and all-time maxima
+  survive restart. No request-log scan or extra per-request write is added.
+- Three appearance intensities with immediate browser preferences, system-following
+  theme/reduced-transparency defaults and manual-choice precedence.
+
 ### Changed
 
 - Reduce CI transfer and setup work with compact station artifacts, shared browser
@@ -52,16 +63,32 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Chat and Responses share a model service selection, with explicit upstream
   protocol choice and bounded conversion in both directions. Other model
   services retain independent multi-selection.
-- Storage schema 28 includes endpoint policies, dispatch rule snapshots, model
-  forwarding preferences, expanded connector/operation/pricing values, usage
-  and pricing metadata, and light/global admission overrides. Exact schema
-  16–27 sources use the offline converter. Account export 26 includes safe
-  aggregate modality/search usage and configured/effective user limits.
+- Storage schema 31 includes the earlier direct-inference/admission changes,
+  personal managed-header configuration, anonymous pressure samples and minimal
+  claim-bound caller-parameter-error receipts. Exact schema 16–30 sources use
+  the offline converter. Account export 27 includes safe aggregate modality/search
+  usage, configured/effective user limits and personal-model header configuration;
+  generated header values and shared charity configuration remain excluded.
+- Model settings and request adaptation have consistent entry points and header/body
+  groups across personal and charity editors, with separate saves and existing
+  permissions.
+- Strictly verified original caller-parameter errors leave a donated key's failure
+  streak unchanged, without clearing it. HTTP 400/422, generic error types and
+  message wording alone never establish this result; errors, diagnostics and
+  accounting retain their existing behavior.
+- Batch settled request/claim validation and account-link detachment during
+  account deletion while preserving active settlement and transaction rollback.
 - Token output reservations account for enabled user modality and long-context
   output rates. Request charges aggregate precise usage before rounding;
   frozen discounts, replay and conservative unknown-usage behavior remain.
 
 ### Fixed
+
+- Account deletion succeeds after related terminal request logs have naturally expired.
+- Improve glass-surface readability, management back controls and centered
+  workbench widths on desktop and mobile. Focus-mode background viewing restores
+  the selected reading surface on return; manual intensity choices remain effective
+  when browser preference storage is unavailable.
 
 - Keep sequential setup actions disabled until the preceding save and refresh settle.
 - Keep donation review navigation fresh after returning from key binding to the list.
