@@ -27,6 +27,9 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Fixed
 
+- Non-mainstream endpoint DNS identifiers are redacted in ordinary user request
+  logs and in level-5 upstream error details, with current mainstream-address
+  exemptions and complete administrator/level-6 diagnostics.
 - Workflow browser coverage now has an explicit isolated suite selected by the
   shared local and CI verification plan.
 

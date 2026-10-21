@@ -323,6 +323,36 @@ describe('role log wire', () => {
     );
   });
 
+  it('accepts redacted personal display fields without changing management validation', () => {
+    for (const endpointBaseURL of ['https://[redacted]/v1', '[redacted]']) {
+      expect(
+        normalizeUserLogAttempt({
+          ...attempt,
+          endpoint_base_url: endpointBaseURL,
+          endpoint_note: '[redacted] endpoint',
+          key_note: '[redacted] key',
+          upstream_model_id: '[redacted]-model',
+          upstream_code: '[redacted]_error',
+        }),
+      ).toMatchObject({ endpoint_base_url: endpointBaseURL, upstream_code: '[redacted]_error' });
+      for (const normalize of [normalizeAdminLogAttempt, normalizeStewardLogAttempt])
+        expect(() => normalize({ ...attempt, endpoint_base_url: endpointBaseURL })).toThrow(
+          /base URL/i,
+        );
+    }
+    const failed = {
+      caller_result_class: 'failed',
+      caller_status: 502,
+      caller_error_code: '[redacted]_error',
+    };
+    expect(normalizeUserLogRow({ ...userRow, ...failed })).toMatchObject(failed);
+    for (const normalize of [normalizeAdminLogRow, normalizeStewardLogRow])
+      expect(() => normalize({ ...row, ...failed })).toThrow(/caller error code/i);
+    expect(() =>
+      normalizeUserLogRow({ ...userRow, ...failed, caller_error_code: '[unexpected]_error' }),
+    ).toThrow(/caller error code/i);
+  });
+
   it('normalizes the steward caller identity on rows and details', () => {
     const complete = normalizeStewardLogRow({
       ...charityStewardRow,

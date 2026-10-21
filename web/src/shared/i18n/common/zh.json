@@ -1316,6 +1316,7 @@
       "copyText": "复制文本",
       "downloadDiagnosticSummary": "下载诊断摘要",
       "downloadOriginal": "下载错误正文",
+      "logPrivacyRedacted": "5级协管查看时，此条错误中的 IPv4 地址和非主流渠道域名标识已隐藏；复制和下载与当前展示一致。",
       "ipv4Redacted": "5级协管看到的此条错误已删减IPv4地址；复制和下载的内容与当前展示一致。",
       "bodyPreview": "正文预览",
       "rawBodyReadFailed": "读取上游原文失败。",

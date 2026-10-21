@@ -349,7 +349,7 @@ function rejection(root: WireRecord) {
   };
 }
 
-function commonRow(root: WireRecord): LogRowCommon {
+function commonRow(root: WireRecord, redactedDisplay = false): LogRowCommon {
   const resultClass =
     root.caller_result_class === null
       ? null
@@ -359,7 +359,10 @@ function commonRow(root: WireRecord): LogRowCommon {
     min: 1,
     ascii: true,
   });
-  if (callerErrorCode !== null && !/^[a-z0-9_]+$/.test(callerErrorCode))
+  const codeForValidation = redactedDisplay
+    ? callerErrorCode?.replaceAll('[redacted]', 'redacted')
+    : callerErrorCode;
+  if (codeForValidation != null && !/^[a-z0-9_]+$/.test(codeForValidation))
     invalidResponse('caller error code');
   const startedAt = unixSecond(root.started_at, 'log start time');
   const completedAt = nullableUnixSecond(root.completed_at, 'log completion time');
@@ -410,7 +413,7 @@ export function normalizeUserLogRow(value: unknown): UserLogRow {
     ...REQUIRED_ROW_FIELDS,
     'model',
   ]);
-  const common = commonRow(probe);
+  const common = commonRow(probe, true);
   const model = string(probe.model, 'logical model');
   if (isCharityRoute(common.route_kind)) {
     if (Object.prototype.hasOwnProperty.call(probe, 'attempt_count'))
@@ -544,23 +547,26 @@ export function normalizeStewardLogRow(value: unknown): StewardLogRow {
   };
 }
 
-function commonAttempt(root: WireRecord): LogAttemptCommon {
+function commonAttempt(root: WireRecord, redactedDisplay = false): LogAttemptCommon {
   const endpointBaseURL = string(root.endpoint_base_url, 'endpoint base URL', { min: 1 });
-  let parsed: URL;
-  try {
-    parsed = new URL(endpointBaseURL);
-  } catch {
-    return invalidResponse('endpoint base URL');
-  }
-  if (
-    !['http:', 'https:'].includes(parsed.protocol) ||
-    !parsed.hostname ||
-    parsed.username ||
-    parsed.password ||
-    parsed.search ||
-    parsed.hash
-  ) {
-    invalidResponse('endpoint base URL');
+  // Personal log addresses are display text and can contain privacy placeholders.
+  if (!redactedDisplay) {
+    let parsed: URL;
+    try {
+      parsed = new URL(endpointBaseURL);
+    } catch {
+      return invalidResponse('endpoint base URL');
+    }
+    if (
+      !['http:', 'https:'].includes(parsed.protocol) ||
+      !parsed.hostname ||
+      parsed.username ||
+      parsed.password ||
+      parsed.search ||
+      parsed.hash
+    ) {
+      invalidResponse('endpoint base URL');
+    }
   }
   const resultKind = oneOf(
     root.result_kind,
@@ -602,7 +608,7 @@ function commonAttempt(root: WireRecord): LogAttemptCommon {
 export function normalizeUserLogAttempt(value: unknown): UserLogAttempt {
   const root = record(value, [...ATTEMPT_FIELDS, 'endpoint_note', 'key_note'], 'user log attempt');
   return {
-    ...commonAttempt(root),
+    ...commonAttempt(root, true),
     role: 'user',
     endpoint_note: string(root.endpoint_note, 'endpoint note', { multiline: true }),
     key_note: string(root.key_note, 'key note', { multiline: true }),

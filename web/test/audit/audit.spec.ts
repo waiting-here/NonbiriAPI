@@ -202,7 +202,9 @@ test('custom presets persist across reloads without matchmaking, payment or cros
 async function requestDiagnostics(page: Page, admin: boolean, keyboard = false, redacted = false) {
   const f = fixture();
   const expectedBody = redacted
-    ? f.json_body.replaceAll('203.0.113.19', '[redacted]')
+    ? f.json_body
+        .replaceAll('203.0.113.19', '[redacted]')
+        .replaceAll('synthetic_busy', '[redacted]_busy')
     : f.json_body;
   const path = admin ? '/logs?' : '/steward?tab=logs&';
   await page.goto((admin ? f.admin_url : f.user_url) + path + 'request_id=' + f.request_ids[0]);
@@ -234,7 +236,7 @@ async function requestDiagnostics(page: Page, admin: boolean, keyboard = false, 
   await expect(event.locator('pre')).toHaveText(expectedBody);
   if (redacted) {
     await expect(event.getByRole('status')).toContainText(
-      'IPv4 addresses in this error are hidden',
+      'IPv4 addresses and non-mainstream channel domain identifiers are hidden',
     );
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
     await event.getByRole('button', { name: 'Copy text', exact: true }).click();
@@ -676,6 +678,15 @@ for (const level of [5, 1] as const) {
           if (allowed && path.endsWith('/errors/1')) {
             expect(JSON.parse(body).ipv4_redacted).toBe(true);
             expect(body).not.toContain('203.0.113.19');
+            expect(body).not.toContain('synthetic_busy');
+            const detail = await api(context, '/api/steward/logs/' + f.request_ids[0]);
+            expect(detail.status()).toBe(200);
+            const projected = await detail.json();
+            expect(projected.attempts.data[0]).toMatchObject({
+              endpoint_base_url: 'https://synthetic.invalid/v1',
+              upstream_model_id: 'synthetic/audit-model',
+              diag: '[redacted] safe failure summary',
+            });
             expect(body).toContain('[redacted]');
           }
         }
@@ -683,6 +694,8 @@ for (const level of [5, 1] as const) {
         const own = await api(context, '/api/logs/' + f.request_ids[index]);
         expect(own.status()).toBe(200);
         const wire = await own.text();
+        expect(JSON.parse(wire).request.model).toBe('[redacted]/audit-model');
+        expect(wire).not.toContain('synthetic.invalid');
         for (const marker of f.private_markers) expect(wire).not.toContain(marker);
         for (const key of ['effective_ip', 'user_agent', 'bytes_saved', 'source_json'])
           expect(wire).not.toContain('"' + key + '"');
