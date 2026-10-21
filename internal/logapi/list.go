@@ -98,6 +98,7 @@ func (repository *Repository) ListUser(ctx context.Context, userID int64, filter
 		return Page[UserLogRow]{}, ErrInvalid
 	}
 	page := Page[UserLogRow]{Data: make([]UserLogRow, 0, capacity), Pagination: metadata}
+	privacyIDs := make([]int64, 0, capacity)
 	positions := make([]listCursor, 0, capacity+1)
 	for rows.Next() {
 		var model string
@@ -110,6 +111,7 @@ func (repository *Repository) ListUser(ctx context.Context, userID int64, filter
 			return Page[UserLogRow]{}, ErrInvariant
 		}
 		if len(page.Data) < filter.Limit {
+			privacyIDs = append(privacyIDs, record.rowID)
 			switch RouteKind(record.routeKind) {
 			case RouteOpenAIChat, RouteOpenAIEmbeddings, RouteOpenAIImages, RouteOpenAIDecisions, RouteDiscovery:
 				page.Data = append(page.Data, UserSelfLogRow{
@@ -137,6 +139,12 @@ func (repository *Repository) ListUser(ctx context.Context, userID int64, filter
 	if err := rows.Err(); err != nil {
 		return Page[UserLogRow]{}, translateReadError(ctx, err)
 	}
+	if err := rows.Close(); err != nil {
+		return Page[UserLogRow]{}, translateReadError(ctx, err)
+	}
+	if err := redactUserLogRows(ctx, reader, privacyIDs, page.Data); err != nil {
+		return Page[UserLogRow]{}, err
+	}
 	if len(positions) > filter.Limit {
 		next, err := repository.encodeListCursor("logapi-user-list-v1", owner, positions[filter.Limit-1])
 		if err != nil {
@@ -145,9 +153,6 @@ func (repository *Repository) ListUser(ctx context.Context, userID int64, filter
 		page.NextCursor = &next
 	}
 	if tx != nil {
-		if err := rows.Close(); err != nil {
-			return Page[UserLogRow]{}, translateReadError(ctx, err)
-		}
 		if err := tx.Commit(); err != nil {
 			return Page[UserLogRow]{}, translateReadError(ctx, err)
 		}

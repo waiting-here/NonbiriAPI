@@ -114,6 +114,13 @@ func (api *diagnosticAPI) diagnostic(w http.ResponseWriter, r *http.Request, act
 		body, err = observability.ErrorBodyTx(ctx, tx, rootID, query.attempt, query.event)
 		if err == nil && redact {
 			body, err = observability.RedactErrorIPv4(body)
+			if err == nil {
+				var sources map[int64][]attemptPrivacySource
+				sources, err = readLogPrivacySources(ctx, tx, []int64{rootID}, query.attempt)
+				if err == nil {
+					body, err = redactErrorDNS(body, sources[rootID])
+				}
+			}
 		}
 		value = body
 	} else {
