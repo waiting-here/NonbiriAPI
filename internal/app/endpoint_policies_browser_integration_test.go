@@ -33,6 +33,10 @@ func configureEndpointPoliciesBrowser(t *testing.T, cfg *config.Config) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	cfg.CloudflareWorker, err = config.ParseCloudflareWorker("https://worker.example.net/private-entry", "synthetic-private-worker-token-12345")
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 func seedEndpointPoliciesBrowser(t *testing.T, f *imageBrowserFixture) map[string]string {

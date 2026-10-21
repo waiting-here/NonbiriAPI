@@ -7070,3 +7070,5 @@ CREATE TABLE endpoint_backoff_policies (
 ALTER TABLE dispatch_smart_backoff_facts ADD COLUMN policy_revision INTEGER NOT NULL DEFAULT 0 CHECK(policy_revision>=0);
 ALTER TABLE dispatch_smart_backoff_facts ADD COLUMN rules_json TEXT NOT NULL DEFAULT '[]' CHECK(length(CAST(rules_json AS BLOB))<=8192 AND json_valid(rules_json) AND json_type(rules_json)='array' AND json_array_length(rules_json)<=8);
 ALTER TABLE dispatch_smart_backoff_facts ADD COLUMN rule_index INTEGER NOT NULL DEFAULT 0 CHECK(rule_index BETWEEN 0 AND 8);
+ALTER TABLE models ADD COLUMN cloudflare_proxy_enabled INTEGER NOT NULL DEFAULT 1 CHECK(cloudflare_proxy_enabled IN (0,1));
+ALTER TABLE charity_models ADD COLUMN cloudflare_proxy_enabled INTEGER NOT NULL DEFAULT 0 CHECK(cloudflare_proxy_enabled IN (0,1));

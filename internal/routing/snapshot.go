@@ -55,20 +55,23 @@ type Identity struct {
 // fields are safe logical-model facts only; no binding, endpoint, key, catalog
 // row, or secret reference can be represented by this type.
 type LogicalPreflight struct {
-	modelTypes       modeltype.Set
-	transportRule    transportpolicy.Rule
-	rolePolicy       rolepolicy.Policy
-	modelID          int64
-	ownerUserID      int64
-	provider         string
-	model            string
-	fullName         string
-	routeStrategy    string
-	silentRetry      bool
-	flattenToolCalls bool
-	revision         int64
-	bindingRevision  int64
+	cloudflareProxyEnabled bool
+	modelTypes             modeltype.Set
+	transportRule          transportpolicy.Rule
+	rolePolicy             rolepolicy.Policy
+	modelID                int64
+	ownerUserID            int64
+	provider               string
+	model                  string
+	fullName               string
+	routeStrategy          string
+	silentRetry            bool
+	flattenToolCalls       bool
+	revision               int64
+	bindingRevision        int64
 }
+
+func (p LogicalPreflight) CloudflareProxyEnabled() bool { return p.cloudflareProxyEnabled }
 
 func (p LogicalPreflight) ModelTypes() modeltype.Set { return p.modelTypes.Clone() }
 
@@ -125,21 +128,24 @@ func (Candidate) GoString() string             { return "[redacted routing candi
 func (Candidate) LogValue() slog.Value         { return slog.StringValue("[redacted routing candidate]") }
 
 type Snapshot struct {
-	modelTypes       modeltype.Set
-	transportRule    transportpolicy.Rule
-	rolePolicy       rolepolicy.Policy
-	modelID          int64
-	ownerUserID      int64
-	provider         string
-	model            string
-	fullName         string
-	routeStrategy    string
-	silentRetry      bool
-	flattenToolCalls bool
-	revision         int64
-	bindingRevision  int64
-	candidates       []Candidate
+	cloudflareProxyEnabled bool
+	modelTypes             modeltype.Set
+	transportRule          transportpolicy.Rule
+	rolePolicy             rolepolicy.Policy
+	modelID                int64
+	ownerUserID            int64
+	provider               string
+	model                  string
+	fullName               string
+	routeStrategy          string
+	silentRetry            bool
+	flattenToolCalls       bool
+	revision               int64
+	bindingRevision        int64
+	candidates             []Candidate
 }
+
+func (s Snapshot) CloudflareProxyEnabled() bool { return s.cloudflareProxyEnabled }
 
 func (s Snapshot) ModelTypes() modeltype.Set { return s.modelTypes.Clone() }
 
@@ -164,6 +170,7 @@ func (Snapshot) GoString() string          { return "[redacted routing snapshot]
 func (Snapshot) LogValue() slog.Value      { return slog.StringValue("[redacted routing snapshot]") }
 
 type modelFacts struct {
+	cloudflareProxyEnabled                bool
 	modelTypes                            modeltype.Set
 	transportRule                         transportpolicy.Rule
 	rolePolicy                            rolepolicy.Policy
@@ -288,7 +295,7 @@ func (s *Store) Snapshot(ctx context.Context, ownerUserID int64, identity Identi
 	return Snapshot{
 		modelTypes: facts.modelTypes.Clone(), transportRule: facts.transportRule, rolePolicy: facts.rolePolicy.Clone(), modelID: facts.id, ownerUserID: facts.userID, provider: facts.provider,
 		model: facts.model, fullName: facts.fullName, routeStrategy: facts.strategy,
-		silentRetry: facts.silentRetry == 1, flattenToolCalls: facts.flattenToolCalls == 1,
+		silentRetry: facts.silentRetry == 1, flattenToolCalls: facts.flattenToolCalls == 1, cloudflareProxyEnabled: facts.cloudflareProxyEnabled,
 		revision: facts.revision, bindingRevision: facts.bindingRevision,
 		candidates: append([]Candidate(nil), candidates...),
 	}, nil
@@ -331,7 +338,7 @@ func logicalPreflight(facts modelFacts) LogicalPreflight {
 	return LogicalPreflight{
 		modelTypes: facts.modelTypes.Clone(), transportRule: facts.transportRule, rolePolicy: facts.rolePolicy.Clone(), modelID: facts.id, ownerUserID: facts.userID, provider: facts.provider, model: facts.model,
 		fullName: facts.fullName, routeStrategy: facts.strategy, silentRetry: facts.silentRetry == 1,
-		flattenToolCalls: facts.flattenToolCalls == 1, revision: facts.revision,
+		flattenToolCalls: facts.flattenToolCalls == 1, cloudflareProxyEnabled: facts.cloudflareProxyEnabled, revision: facts.revision,
 		bindingRevision: facts.bindingRevision,
 	}
 }
@@ -378,13 +385,13 @@ func parseModelID(value string) (int64, bool, error) {
 
 func readModelByID(ctx context.Context, tx *sql.Tx, ownerUserID, modelID int64) (modelFacts, error) {
 	return scanModelFacts(tx.QueryRowContext(ctx, `
-SELECT id,user_id,provider,model,full_name,route_strategy,silent_retry,flatten_tool_calls,revision,binding_revision,role_policy,transport_rule,model_types
+SELECT id,user_id,provider,model,full_name,route_strategy,silent_retry,flatten_tool_calls,revision,binding_revision,role_policy,transport_rule,model_types,cloudflare_proxy_enabled
 FROM models WHERE id=? AND user_id=?`, modelID, ownerUserID))
 }
 
 func readModelByName(ctx context.Context, tx *sql.Tx, ownerUserID int64, fullName string) (modelFacts, error) {
 	return scanModelFacts(tx.QueryRowContext(ctx, `
-SELECT id,user_id,provider,model,full_name,route_strategy,silent_retry,flatten_tool_calls,revision,binding_revision,role_policy,transport_rule,model_types
+SELECT id,user_id,provider,model,full_name,route_strategy,silent_retry,flatten_tool_calls,revision,binding_revision,role_policy,transport_rule,model_types,cloudflare_proxy_enabled
 FROM models WHERE full_name=? AND user_id=?`, fullName, ownerUserID))
 }
 
@@ -392,7 +399,7 @@ func scanModelFacts(row *sql.Row) (modelFacts, error) {
 	var facts modelFacts
 	var encodedPolicy string
 	err := row.Scan(&facts.id, &facts.userID, &facts.provider, &facts.model, &facts.fullName,
-		&facts.strategy, &facts.silentRetry, &facts.flattenToolCalls, &facts.revision, &facts.bindingRevision, &encodedPolicy, &facts.transportRule, &facts.modelTypes)
+		&facts.strategy, &facts.silentRetry, &facts.flattenToolCalls, &facts.revision, &facts.bindingRevision, &encodedPolicy, &facts.transportRule, &facts.modelTypes, &facts.cloudflareProxyEnabled)
 	if errors.Is(err, sql.ErrNoRows) {
 		return modelFacts{}, ErrNotFound
 	}

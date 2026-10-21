@@ -48,33 +48,35 @@ type CallerKeyResolver interface {
 
 // PersonalPreflight contains candidate-free owner-scoped logical facts.
 type PersonalPreflight struct {
-	ModelTypes       modeltype.Set
-	TransportRule    transportpolicy.Rule
-	RolePolicy       rolepolicy.Policy
-	ModelID          int64
-	OwnerUserID      int64
-	Provider         string
-	Model            string
-	FullName         string
-	RouteStrategy    string
-	SilentRetry      bool
-	FlattenToolCalls bool
-	Revision         int64
-	BindingRevision  int64
+	CloudflareProxyEnabled bool
+	ModelTypes             modeltype.Set
+	TransportRule          transportpolicy.Rule
+	RolePolicy             rolepolicy.Policy
+	ModelID                int64
+	OwnerUserID            int64
+	Provider               string
+	Model                  string
+	FullName               string
+	RouteStrategy          string
+	SilentRetry            bool
+	FlattenToolCalls       bool
+	Revision               int64
+	BindingRevision        int64
 }
 
 // CharityPreflight contains candidate-free charity policy and price facts.
 type CharityPreflight struct {
-	ModelTypes       modeltype.Set
-	TransportRule    transportpolicy.Rule
-	RolePolicy       rolepolicy.Policy
-	Revision         int64
-	ModelID          int64
-	Provider         string
-	Model            string
-	FullName         string
-	FlattenToolCalls bool
-	ReservedMilli    int64
+	CloudflareProxyEnabled bool
+	ModelTypes             modeltype.Set
+	TransportRule          transportpolicy.Rule
+	RolePolicy             rolepolicy.Policy
+	Revision               int64
+	ModelID                int64
+	Provider               string
+	Model                  string
+	FullName               string
+	FlattenToolCalls       bool
+	ReservedMilli          int64
 }
 
 // CharityRequestPolicy contains no physical candidates or credentials.

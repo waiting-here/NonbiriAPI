@@ -12,6 +12,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/debug"
 	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
+	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 )
@@ -258,7 +259,8 @@ func (service *Service) runAttempts(
 			run.completeUndeliveredSynthetic(parent, service, handle, "connector unavailable")
 			break
 		}
-		attemptContext := smartbackoff.WithCharityCall(executionContext, plan.charity)
+		attemptContext := egress.WithCloudflareProxy(executionContext, plan.cloudflareProxyEnabled)
+		attemptContext = smartbackoff.WithCharityCall(attemptContext, plan.charity)
 		var backoffRules []smartbackoff.Rule
 		if info, ok := dispatch.(interface{ BackoffRules() []smartbackoff.Rule }); ok {
 			backoffRules = info.BackoffRules()

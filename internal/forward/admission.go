@@ -15,17 +15,18 @@ import (
 )
 
 type logicalAdmission struct {
-	transportRule transportpolicy.Rule
-	rolePolicy    rolepolicy.Policy
-	modelRevision int64
-	charity       bool
-	modelID       int64
-	fullName      string
-	strategy      string
-	silentRetry   bool
-	flatten       bool
-	reservedMilli int64
-	decisionNow   int64
+	cloudflareProxyEnabled bool
+	transportRule          transportpolicy.Rule
+	rolePolicy             rolepolicy.Policy
+	modelRevision          int64
+	charity                bool
+	modelID                int64
+	fullName               string
+	strategy               string
+	silentRetry            bool
+	flatten                bool
+	reservedMilli          int64
+	decisionNow            int64
 }
 
 func (service *Service) preflight(ctx context.Context, userID int64, request *validatedRequest) (logicalAdmission, *validatedRequest, func(), error) {
@@ -69,7 +70,8 @@ func (service *Service) preflight(ctx context.Context, userID int64, request *va
 			return logicalAdmission{charity: true}, request, nil, charityrouting.ErrNotFound
 		}
 		admission := logicalAdmission{
-			transportRule: value.TransportRule, rolePolicy: value.RolePolicy.Clone(), modelRevision: value.Revision, charity: true, modelID: value.ModelID, fullName: value.FullName, strategy: "ordered",
+			cloudflareProxyEnabled: value.CloudflareProxyEnabled,
+			transportRule:          value.TransportRule, rolePolicy: value.RolePolicy.Clone(), modelRevision: value.Revision, charity: true, modelID: value.ModelID, fullName: value.FullName, strategy: "ordered",
 			silentRetry: true, flatten: value.FlattenToolCalls, reservedMilli: value.ReservedMilli,
 			decisionNow: now,
 		}
@@ -106,7 +108,8 @@ func (service *Service) preflight(ctx context.Context, userID int64, request *va
 		return logicalAdmission{}, request, nil, unsupportedModelType()
 	}
 	admission := logicalAdmission{
-		transportRule: value.TransportRule, rolePolicy: value.RolePolicy.Clone(), modelRevision: value.Revision, modelID: value.ModelID, fullName: value.FullName, strategy: value.RouteStrategy,
+		cloudflareProxyEnabled: value.CloudflareProxyEnabled,
+		transportRule:          value.TransportRule, rolePolicy: value.RolePolicy.Clone(), modelRevision: value.Revision, modelID: value.ModelID, fullName: value.FullName, strategy: value.RouteStrategy,
 		silentRetry: value.SilentRetry, flatten: value.FlattenToolCalls,
 	}
 	if request.roleSnapshot != nil {

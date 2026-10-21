@@ -187,11 +187,16 @@ func (s *Service) AutomationModels(ctx context.Context, actorID int64, query str
 		return empty, err
 	}
 	result := AutomationPage[StewardCharityModel]{Data: make([]StewardCharityModel, 0, len(ids)), Pagination: &metadata}
+	models := make([]AdminCharityModel, 0, len(ids))
 	for _, id := range ids {
 		item, err := getAdminModelTx(ctx, tx, id, now)
 		if err != nil {
 			return empty, err
 		}
+		models = append(models, item)
+	}
+	s.attachModelCloudflareMode(models)
+	for _, item := range models {
 		result.Data = append(result.Data, stewardModel(item))
 	}
 	if err := tx.Commit(); err != nil {

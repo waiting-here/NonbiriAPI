@@ -42,6 +42,7 @@ var (
 type StackOptions struct {
 	AllowedOrigins   []string
 	CloudflareRoutes []config.CloudflareRoute
+	CloudflareWorker config.CloudflareWorker
 
 	RequestTimeout         time.Duration
 	DialTimeout            time.Duration
@@ -62,6 +63,7 @@ type Stack struct {
 	policy *EgressPolicy
 	gate   *Gate
 	routes map[string]*cloudflareRoute
+	worker *cloudflareWorker
 
 	requestTimeout         time.Duration
 	responseHeaderTimeout  time.Duration
@@ -127,6 +129,11 @@ func NewStack(options StackOptions) (*Stack, error) {
 		return nil, err
 	}
 
+	worker, err := buildCloudflareWorker(policy, options.CloudflareWorker)
+	if err != nil {
+		return nil, err
+	}
+
 	gate, err := NewGate(options.Concurrency)
 	if err != nil {
 		return nil, err
@@ -134,6 +141,7 @@ func NewStack(options StackOptions) (*Stack, error) {
 	return &Stack{
 		policy:                 policy,
 		routes:                 routes,
+		worker:                 worker,
 		gate:                   gate,
 		requestTimeout:         options.RequestTimeout,
 		responseHeaderTimeout:  options.ResponseHeaderTimeout,
@@ -182,6 +190,10 @@ func (s *Stack) MaxResponseBytes() int64 { return s.maxResponseBytes }
 // shared by origin, while concurrency remains keyed by the complete canonical
 // base URL so path and trailing-slash differences stay distinct.
 func (s *Stack) NewClient(baseURL string) (*Client, error) {
+	return s.newClient(baseURL, true)
+}
+
+func (s *Stack) newClient(baseURL string, allowCloudflare bool) (*Client, error) {
 	if !s.policy.originsReady() {
 		return nil, ErrSelfOriginsNotConfigured
 	}
@@ -194,12 +206,24 @@ func (s *Stack) NewClient(baseURL string) (*Client, error) {
 		return nil, err
 	}
 
-	route := s.routes[key]
+	var route *cloudflareRoute
+	var worker *cloudflareWorker
+	if allowCloudflare {
+		worker = s.worker
+		if worker == nil {
+			route = s.routes[key]
+		}
+	}
 	transportTarget := parsed
 	transportOrigin := origin
 	if route != nil {
 		transportTarget = route.gateway
 		transportOrigin, _ = canonicalRequestOrigin(route.gateway)
+	}
+
+	if worker != nil {
+		transportTarget = worker.target
+		transportOrigin, _ = canonicalRequestOrigin(worker.target)
 	}
 
 	s.clientsMu.Lock()
@@ -225,8 +249,10 @@ func (s *Stack) NewClient(baseURL string) (*Client, error) {
 	s.clientsMu.Unlock()
 
 	return &Client{
+		stack:            s,
 		baseURL:          canonical,
 		route:            route,
+		worker:           worker,
 		policy:           s.policy,
 		origin:           origin,
 		originScheme:     parsed.Scheme,
@@ -251,7 +277,9 @@ func (s *Stack) CloseIdleConnections() {
 // Client performs requests through the shared policy and gate. Its underlying
 // http.Client and Transport are intentionally not exposed.
 type Client struct {
+	stack            *Stack
 	route            *cloudflareRoute
+	worker           *cloudflareWorker
 	policy           *EgressPolicy
 	baseURL          string
 	origin           string
@@ -262,6 +290,7 @@ type Client struct {
 	timeout          time.Duration
 	maxResponseBytes int64
 	disableReplay    bool
+	imageProfile     ImageProfile
 }
 
 // BaseURL returns the canonical endpoint base URL used as the concurrency key.
@@ -273,7 +302,24 @@ func (c *Client) BaseURL() string { return c.baseURL }
 // body EOF, body Close, cancellation, or timeout. A response received before
 // an error retains its status and headers with its body already closed.
 func (c *Client) Do(req *http.Request) (response *http.Response, resultErr error) {
-	if c.route != nil {
+	if req != nil && (c.route != nil || c.worker != nil) && !cloudflareProxyEnabled(req.Context()) {
+		var direct *Client
+		var err error
+		if c.imageProfile != 0 {
+			direct, err = c.stack.newImageClient(c.baseURL, c.imageProfile, false)
+		} else {
+			direct, err = c.stack.newClient(c.baseURL, false)
+		}
+		if err != nil {
+			if req.Body != nil {
+				_ = req.Body.Close()
+			}
+			return nil, executionFailure(FailurePlatform, err)
+		}
+		direct.disableReplay = c.disableReplay
+		return direct.Do(req)
+	}
+	if c.route != nil || c.worker != nil {
 		defer func() { resultErr = safeRouteError(resultErr) }()
 	}
 	if req == nil {
@@ -284,6 +330,9 @@ func (c *Client) Do(req *http.Request) (response *http.Response, resultErr error
 	}
 	closeBodyOnError := func(err error) (*http.Response, error) {
 		_ = req.Body.Close()
+		if c.worker != nil && errors.Is(err, context.Canceled) {
+			return nil, workerTransportFailure(err)
+		}
 		return nil, executionFailure(FailurePlatform, err)
 	}
 	if req.URL == nil || req.URL.Opaque != "" || req.URL.Scheme == "" || req.URL.Host == "" {
@@ -314,6 +363,7 @@ func (c *Client) Do(req *http.Request) (response *http.Response, resultErr error
 	}
 
 	outbound := req.Clone(ctx)
+	removeWorkerHeaders(outbound.Header)
 	if outbound.Method != http.MethodGet && outbound.Method != http.MethodHead && outbound.Method != http.MethodOptions && outbound.Method != http.MethodTrace {
 		// A second billable attempt must pass through the claim rail. Retain
 		// provider idempotency headers, but do not let Transport replay a body.
@@ -336,10 +386,14 @@ func (c *Client) Do(req *http.Request) (response *http.Response, resultErr error
 	outbound.URL.Host = c.originHost
 	outbound.Host = c.originHost
 	var secrets *routeSecrets
-	if c.route != nil {
-		secrets, err = c.route.prepare(outbound)
+	if c.route != nil || c.worker != nil {
+		_, err = c.policy.validateTarget(ctx, "tcp", outbound.URL.Scheme, outbound.URL.Hostname(), outbound.URL.Port())
 		if err == nil {
-			_, err = c.policy.validateTarget(ctx, "tcp", c.route.source.Scheme, c.route.source.Hostname(), c.route.source.Port())
+			if c.worker != nil {
+				secrets, err = c.worker.prepare(outbound)
+			} else {
+				secrets, err = c.route.prepare(outbound)
+			}
 		}
 		if err != nil {
 			permit.Release()
@@ -349,16 +403,37 @@ func (c *Client) Do(req *http.Request) (response *http.Response, resultErr error
 	}
 	// Match Transport's automatic gzip negotiation while retaining the original
 	// response headers for diagnostics before its transparent decoding.
-	automaticGzip := preserveGzipHeaders(outbound, c.httpClient)
+	automaticGzip := preserveGzipHeaders(outbound, c.httpClient, c.worker != nil)
 	// #nosec G704 -- this is the unified SSRF boundary: NewClient validated the
 	// canonical origin and installed a DNS-pinning dialer; the checks above bind
 	// both URL and Host to that exact origin before the request is dispatched.
 	resp, err := c.httpClient.Do(outbound)
+	proxyFailed := c.worker != nil && resp != nil && (workerFailure(resp.Header) || !workerConfirmedResponse(resp.Header))
 	if secrets != nil && resp != nil {
-		resp.Request = safeRouteRequest(req, c.route.credentialHeader)
+		credentialHeader := ""
+		if c.route != nil {
+			credentialHeader = c.route.credentialHeader
+		}
+		resp.Request = safeRouteRequest(req, credentialHeader)
 		secrets.cleanHeaders(resp.Header)
 		secrets.cleanHeaders(resp.Trailer)
 		resp.Status = fmt.Sprintf("%d %s", resp.StatusCode, http.StatusText(resp.StatusCode))
+	}
+	if resp != nil {
+		removeWorkerHeaders(resp.Header)
+		removeWorkerHeaders(resp.Trailer)
+	}
+	if proxyFailed {
+		ctxErr := ctx.Err()
+		if resp.Body != nil {
+			_ = resp.Body.Close()
+		}
+		permit.Release()
+		cancel()
+		if ctxErr != nil {
+			return nil, workerTransportFailure(ctxErr)
+		}
+		return nil, executionFailure(FailurePlatform, errors.New("Cloudflare Worker request failed"))
 	}
 	headerfacts.CaptureResponse(ctx, resp)
 	if err != nil {
@@ -369,6 +444,12 @@ func (c *Client) Do(req *http.Request) (response *http.Response, resultErr error
 		// received status and headers remain available to response observers.
 		if resp != nil && resp.Body != nil {
 			_ = resp.Body.Close()
+		}
+		if c.worker != nil {
+			if ctxErr != nil {
+				err = ctxErr
+			}
+			return resp, workerTransportFailure(err)
 		}
 		if errors.Is(err, ErrRedirectBlocked) {
 			return resp, executionFailure(FailurePlatform, ErrRedirectBlocked)
@@ -382,6 +463,11 @@ func (c *Client) Do(req *http.Request) (response *http.Response, resultErr error
 		return resp, networkFailure(newBoundedError("egress request failed", unwrapURLError(err)))
 	}
 
+	if c.worker != nil {
+		// Classify the raw HTTP transport before decoding content. A complete
+		// upstream gzip/JSON/SSE error remains the connector's protocol error.
+		resp.Body = workerResponseBody{ReadCloser: resp.Body}
+	}
 	if automaticGzip {
 		restoreAutomaticGzip(resp)
 	}
@@ -398,6 +484,7 @@ func (c *Client) Do(req *http.Request) (response *http.Response, resultErr error
 		}
 	}
 	managed := newManagedResponseBody(resp.Body, limit, ctx, cancel, permit.Release)
+	managed.worker = c.worker != nil
 	resp.Body = managed
 	if secrets != nil {
 		resp.Body = newRouteResponseBody(managed, resp, secrets, limits)
@@ -457,6 +544,7 @@ type managedResponseBody struct {
 	finishOnce sync.Once
 	done       chan struct{}
 	closeErr   error
+	worker     bool
 }
 
 func newManagedResponseBody(body io.ReadCloser, limit int64, ctx context.Context, cancel context.CancelFunc, release func()) *managedResponseBody {
@@ -490,7 +578,7 @@ func (b *managedResponseBody) Read(dst []byte) (int, error) {
 		var probe [1]byte
 		n, err := b.body.Read(probe[:])
 		if cause := b.ctx.Err(); cause != nil {
-			err = networkFailure(cause)
+			err = b.contextFailure(cause)
 		} else {
 			var network net.Error
 			if errors.As(err, &network) {
@@ -514,7 +602,7 @@ func (b *managedResponseBody) Read(dst []byte) (int, error) {
 	}
 	n, err := b.body.Read(dst[:int(readSize)])
 	if cause := b.ctx.Err(); cause != nil {
-		err = networkFailure(cause)
+		err = b.contextFailure(cause)
 	} else {
 		var network net.Error
 		if errors.As(err, &network) {
@@ -533,6 +621,13 @@ func (b *managedResponseBody) Read(dst []byte) (int, error) {
 		b.finish()
 	}
 	return n, err
+}
+
+func (b *managedResponseBody) contextFailure(err error) error {
+	if b.worker {
+		return workerTransportFailure(err)
+	}
+	return networkFailure(err)
 }
 
 func (b *managedResponseBody) Close() error {

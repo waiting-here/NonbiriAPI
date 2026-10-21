@@ -76,7 +76,7 @@ func (adapter *PersonalRoutingAdapter) Preflight(ctx context.Context, userID int
 	return PersonalPreflight{
 		ModelTypes: value.ModelTypes(), TransportRule: value.TransportRule(), RolePolicy: value.RolePolicy(), ModelID: value.ModelID(), OwnerUserID: value.OwnerUserID(), Provider: value.Provider(),
 		Model: value.Model(), FullName: value.FullName(), RouteStrategy: value.RouteStrategy(),
-		SilentRetry: value.SilentRetry(), FlattenToolCalls: value.FlattenToolCalls(),
+		SilentRetry: value.SilentRetry(), FlattenToolCalls: value.FlattenToolCalls(), CloudflareProxyEnabled: value.CloudflareProxyEnabled(),
 		Revision: value.Revision(), BindingRevision: value.BindingRevision(),
 	}, nil
 }
@@ -96,7 +96,7 @@ func (adapter *PersonalRoutingAdapter) Snapshot(ctx context.Context, userID int6
 	out := PersonalSnapshot{PersonalPreflight: PersonalPreflight{
 		ModelTypes: value.ModelTypes(), TransportRule: value.TransportRule(), RolePolicy: value.RolePolicy(), ModelID: value.ModelID(), OwnerUserID: value.OwnerUserID(), Provider: value.Provider(),
 		Model: value.Model(), FullName: value.FullName(), RouteStrategy: value.RouteStrategy(),
-		SilentRetry: value.SilentRetry(), FlattenToolCalls: value.FlattenToolCalls(),
+		SilentRetry: value.SilentRetry(), FlattenToolCalls: value.FlattenToolCalls(), CloudflareProxyEnabled: value.CloudflareProxyEnabled(),
 		Revision: value.Revision(), BindingRevision: value.BindingRevision(),
 	}}
 	for _, candidate := range value.Candidates() {
@@ -147,7 +147,7 @@ func (adapter *CharityRoutingAdapter) Preflight(ctx context.Context, userID int6
 	}
 	return CharityPreflight{
 		ModelTypes: value.ModelTypes.Clone(), TransportRule: value.TransportRule, RolePolicy: value.RolePolicy.Clone(), Revision: value.Revision, ModelID: value.ModelID, Provider: value.Provider, Model: value.Model, FullName: value.FullName,
-		FlattenToolCalls: value.FlattenToolCalls, ReservedMilli: value.ReservedMilli,
+		CloudflareProxyEnabled: value.CloudflareProxyEnabled, FlattenToolCalls: value.FlattenToolCalls, ReservedMilli: value.ReservedMilli,
 	}, nil
 }
 
@@ -161,7 +161,7 @@ func (adapter *CharityRoutingAdapter) PreflightEmbedding(ctx context.Context, us
 	}
 	return CharityPreflight{
 		ModelTypes: value.ModelTypes.Clone(), TransportRule: value.TransportRule, RolePolicy: value.RolePolicy.Clone(), Revision: value.Revision, ModelID: value.ModelID, Provider: value.Provider, Model: value.Model, FullName: value.FullName,
-		FlattenToolCalls: value.FlattenToolCalls, ReservedMilli: value.ReservedMilli,
+		CloudflareProxyEnabled: value.CloudflareProxyEnabled, FlattenToolCalls: value.FlattenToolCalls, ReservedMilli: value.ReservedMilli,
 	}, nil
 }
 
@@ -175,7 +175,7 @@ func (adapter *CharityRoutingAdapter) PreflightImage(ctx context.Context, userID
 	}
 	return CharityPreflight{
 		ModelTypes: value.ModelTypes.Clone(), TransportRule: value.TransportRule, RolePolicy: value.RolePolicy.Clone(), Revision: value.Revision, ModelID: value.ModelID, Provider: value.Provider, Model: value.Model, FullName: value.FullName,
-		FlattenToolCalls: value.FlattenToolCalls, ReservedMilli: value.ReservedMilli,
+		CloudflareProxyEnabled: value.CloudflareProxyEnabled, FlattenToolCalls: value.FlattenToolCalls, ReservedMilli: value.ReservedMilli,
 	}, nil
 }
 
@@ -187,7 +187,7 @@ func (adapter *CharityRoutingAdapter) PreflightDecision(ctx context.Context, use
 	if err != nil {
 		return CharityPreflight{}, err
 	}
-	return CharityPreflight{ModelTypes: value.ModelTypes.Clone(), TransportRule: value.TransportRule, RolePolicy: value.RolePolicy.Clone(), Revision: value.Revision, ModelID: value.ModelID, Provider: value.Provider, Model: value.Model, FullName: value.FullName, ReservedMilli: value.ReservedMilli}, nil
+	return CharityPreflight{CloudflareProxyEnabled: value.CloudflareProxyEnabled, ModelTypes: value.ModelTypes.Clone(), TransportRule: value.TransportRule, RolePolicy: value.RolePolicy.Clone(), Revision: value.Revision, ModelID: value.ModelID, Provider: value.Provider, Model: value.Model, FullName: value.FullName, ReservedMilli: value.ReservedMilli}, nil
 }
 
 func (adapter *CharityRoutingAdapter) RequestPolicy(ctx context.Context, userID int64, fullName string, now int64) (CharityRequestPolicy, error) {
@@ -211,7 +211,7 @@ func (adapter *CharityRoutingAdapter) Snapshot(ctx context.Context, userID, mode
 	}
 	out := CharitySnapshot{CharityPreflight: CharityPreflight{
 		ModelTypes: value.ModelTypes.Clone(), TransportRule: value.TransportRule, RolePolicy: value.RolePolicy.Clone(), Revision: value.Revision, ModelID: value.ModelID, Provider: value.Provider, Model: value.Model, FullName: value.FullName,
-		FlattenToolCalls: value.FlattenToolCalls, ReservedMilli: value.ReservedMilli,
+		CloudflareProxyEnabled: value.CloudflareProxyEnabled, FlattenToolCalls: value.FlattenToolCalls, ReservedMilli: value.ReservedMilli,
 	}, RouteStrategy: value.RouteStrategy}
 	for index, candidate := range value.Candidates() {
 		out.Candidates = append(out.Candidates, RouteCandidate{

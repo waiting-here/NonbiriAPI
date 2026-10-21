@@ -85,6 +85,7 @@ func (s *Service) modelsPage(ctx context.Context, role roleKind, actorID int64, 
 		}
 		result.Data = append(result.Data, item)
 	}
+	s.attachModelCloudflareMode(result.Data)
 	if err := tx.Commit(); err != nil {
 		return empty, err
 	}

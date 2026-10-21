@@ -31,7 +31,7 @@ func TestCloudflareStatusRoutesRequireCurrentWebSessionRole(t *testing.T) {
 		if response.Code != want {
 			t.Fatalf("%s %s %s = %d; want %d: %s", method, host, path, response.Code, want, response.Body.String())
 		}
-		if want == http.StatusOK && (response.Header().Get("Cache-Control") != "no-store" || strings.TrimSpace(response.Body.String()) != `{"enabled":false,"routes":[]}`) {
+		if want == http.StatusOK && (response.Header().Get("Cache-Control") != "no-store" || strings.TrimSpace(response.Body.String()) != `{"enabled":false,"mode":"direct","worker_origin":"","routes":[]}`) {
 			t.Fatalf("unexpected status projection: %s", response.Body.String())
 		}
 	}
@@ -91,7 +91,11 @@ func TestCloudflareStatusUsesInjectedStackInsteadOfConfig(t *testing.T) {
 	}
 	cfg := auditConfig()
 	cfg.CloudflareRoutes = route("https://unused-config.example/v1")
-	stack, err := egress.NewStack(egress.StackOptions{CloudflareRoutes: route("https://loaded.example/v1")})
+	worker, err := config.ParseCloudflareWorker("https://worker.example/private-loaded-path", "private-loaded-worker-token-0123456789")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stack, err := egress.NewStack(egress.StackOptions{CloudflareRoutes: route("https://loaded.example/v1"), CloudflareWorker: worker})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +108,7 @@ func TestCloudflareStatusUsesInjectedStackInsteadOfConfig(t *testing.T) {
 	login := testApplicationRequest(t, application.handler, "POST", auditAdminHost, "/admin/api/login", `{"username":"operator","password":"correct horse battery staple"}`, nil, map[string]string{"Content-Type": "application/json"})
 	cookie := responseCookieNamed(t, login, auth.AdminSessionCookieName)
 	response := testApplicationRequest(t, application.handler, "GET", auditAdminHost, adminCloudflareRoutes, "", []*http.Cookie{cookie}, nil)
-	want := `{"enabled":true,"routes":[{"source_base_url":"https://loaded.example/v1","gateway_origin":"https://gateway.example","credential_header":"Authorization","credential_query_parameter":"","retain_credential_header":false}]}`
+	want := `{"enabled":true,"mode":"worker","worker_origin":"https://worker.example","routes":[{"source_base_url":"https://loaded.example/v1","gateway_origin":"https://gateway.example","credential_header":"Authorization","credential_query_parameter":"","retain_credential_header":false}]}`
 	if response.Code != http.StatusOK || strings.TrimSpace(response.Body.String()) != want {
 		t.Fatalf("status used an unloaded route or exposed private config: %d %s", response.Code, response.Body.String())
 	}

@@ -12,8 +12,8 @@ import (
 // An explicit Accept-Encoding prevents Transport from deleting original
 // Content-Encoding/Content-Length. Only the negotiation it would have added
 // itself is reproduced; callers explicitly requesting an encoding keep control.
-func preserveGzipHeaders(request *http.Request, client *http.Client) bool {
-	if !headerfacts.CapturingResponse(request.Context()) {
+func preserveGzipHeaders(request *http.Request, client *http.Client, inspectTransport bool) bool {
+	if !inspectTransport && !headerfacts.CapturingResponse(request.Context()) {
 		return false
 	}
 	transport, ok := client.Transport.(*http.Transport)

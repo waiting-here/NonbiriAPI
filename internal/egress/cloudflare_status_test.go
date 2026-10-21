@@ -16,7 +16,7 @@ func TestCloudflareStatusProjectsLoadedRoutes(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(stack.CloseIdleConnections)
-	want := CloudflareStatus{Enabled: true, Routes: []CloudflareRouteStatus{
+	want := CloudflareStatus{Enabled: true, Mode: "legacy", Routes: []CloudflareRouteStatus{
 		{SourceBaseURL: "https://a.example/v1", GatewayOrigin: "https://gateway.example:8443", CredentialHeader: "Authorization"},
 		{SourceBaseURL: "https://z.example/v1/", GatewayOrigin: "https://gateway.example", CredentialHeader: "X-Goog-Api-Key", CredentialQueryParameter: "key", RetainCredentialHeader: true},
 	}}
@@ -47,7 +47,7 @@ func TestCloudflareStatusEmptyRoutes(t *testing.T) {
 	}
 	t.Cleanup(stack.CloseIdleConnections)
 	raw, err := json.Marshal(stack.CloudflareStatus())
-	if err != nil || string(raw) != `{"enabled":false,"routes":[]}` {
+	if err != nil || string(raw) != `{"enabled":false,"mode":"direct","worker_origin":"","routes":[]}` {
 		t.Fatalf("empty status = %s, %v", raw, err)
 	}
 }

@@ -85,7 +85,7 @@ func (f *imageBrowserFixture) open() error {
 	if err != nil {
 		return err
 	}
-	stack, err := egress.NewStack(egress.StackOptions{AllowedOrigins: []string{f.upstream.URL}})
+	stack, err := egress.NewStack(egress.StackOptions{AllowedOrigins: []string{f.upstream.URL}, CloudflareRoutes: f.cfg.CloudflareRoutes, CloudflareWorker: f.cfg.CloudflareWorker})
 	if err != nil {
 		_ = store.Close()
 		return err

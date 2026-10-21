@@ -247,7 +247,7 @@ func (r *Repository) UpdateManualEntry(ctx context.Context, userID, endpointID, 
 		return MutationResult[ManualUpdateResponse]{}, err
 	}
 	if decision.Kind == idempotency.Replay {
-		return replayMutation[ManualUpdateResponse](decision)
+		return r.replayManualModelUpdate(decision)
 	}
 	current, err := manualEntryOwnerTx(ctx, tx, userID, endpointID, keyID, entryID)
 	if err != nil {
@@ -349,7 +349,7 @@ WHERE id=? AND endpoint_key_id=? AND source_type='manual'`, input.UpstreamModelI
 	if err != nil {
 		return MutationResult[ManualUpdateResponse]{}, err
 	}
-	affected, err := affectedModelsTx(ctx, tx, userID, affectedIDs)
+	affected, err := r.affectedModelsTx(ctx, tx, userID, affectedIDs)
 	if err != nil {
 		return MutationResult[ManualUpdateResponse]{}, err
 	}
@@ -578,10 +578,10 @@ WHERE id=? AND user_id=? AND binding_revision<9223372036854775807`, now, modelID
 	return modelIDs, nil
 }
 
-func affectedModelsTx(ctx context.Context, tx *sql.Tx, userID int64, modelIDs []int64) ([]AffectedModel, error) {
+func (r *Repository) affectedModelsTx(ctx context.Context, tx *sql.Tx, userID int64, modelIDs []int64) ([]AffectedModel, error) {
 	items := make([]AffectedModel, 0, len(modelIDs))
 	for _, modelID := range modelIDs {
-		model, err := getModelTx(ctx, tx, userID, modelID)
+		model, err := r.getModelTx(ctx, tx, userID, modelID)
 		if err != nil {
 			return nil, err
 		}

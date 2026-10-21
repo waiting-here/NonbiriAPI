@@ -161,8 +161,9 @@ func safeRouteRequest(request *http.Request, credentialHeader string) *http.Requ
 	safe := request.Clone(request.Context())
 	safe.Body, safe.GetBody = nil, nil
 	removeCloudflareControls(safe.Header)
+	removeWorkerHeaders(safe.Header)
 	for name := range safe.Header {
-		if strings.EqualFold(name, credentialHeader) || strings.EqualFold(name, "Authorization") || strings.EqualFold(name, "Proxy-Authorization") {
+		if strings.EqualFold(name, credentialHeader) || workerCredentialHeader(name) {
 			delete(safe.Header, name)
 		}
 	}

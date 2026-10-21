@@ -31,6 +31,7 @@ const (
 )
 
 type modelRow struct {
+	cloudflareProxyEnabled                                            bool
 	modelTypes                                                        modeltype.Set
 	transportRule                                                     transportpolicy.Rule
 	rolePolicy                                                        string
@@ -51,6 +52,7 @@ func (row modelRow) dto() (Model, error) {
 		return Model{}, ErrUnavailable
 	}
 	return Model{
+		CloudflareProxyEnabled: row.cloudflareProxyEnabled, CloudflareProxyMode: "direct",
 		ModelTypes: row.modelTypes.Clone(), TransportRule: row.transportRule, RolePolicy: policy, ID: id, Provider: row.provider, Model: row.model, FullName: row.fullName,
 		RouteStrategy: row.routeStrategy, SilentRetry: row.silentRetry == 1,
 		FlattenToolCalls: row.flattenToolCalls == 1, Revision: strconv.FormatInt(row.revision, 10),
@@ -63,7 +65,7 @@ func scanModel(scanner interface{ Scan(...any) error }) (Model, error) {
 	var row modelRow
 	if err := scanner.Scan(&row.id, &row.provider, &row.model, &row.fullName, &row.routeStrategy,
 		&row.silentRetry, &row.flattenToolCalls, &row.revision, &row.bindingRevision, &row.bindingCount,
-		&row.createdAt, &row.updatedAt, &row.rolePolicy, &row.transportRule, &row.modelTypes); err != nil {
+		&row.createdAt, &row.updatedAt, &row.rolePolicy, &row.transportRule, &row.modelTypes, &row.cloudflareProxyEnabled); err != nil {
 		return Model{}, err
 	}
 	return row.dto()
@@ -72,7 +74,7 @@ func scanModel(scanner interface{ Scan(...any) error }) (Model, error) {
 const modelSelect = `
 SELECT m.id,m.provider,m.model,m.full_name,m.route_strategy,m.silent_retry,m.flatten_tool_calls,
        m.revision,m.binding_revision,(SELECT count(*) FROM model_bindings b WHERE b.model_id=m.id),
-       m.created_at,m.updated_at,m.role_policy,m.transport_rule,m.model_types
+       m.created_at,m.updated_at,m.role_policy,m.transport_rule,m.model_types,m.cloudflare_proxy_enabled
 FROM models m`
 
 func (r *Repository) ListModels(ctx context.Context, userID int64, limit int, cursor string) (Page[Model], error) {
@@ -113,6 +115,9 @@ ORDER BY m.updated_at DESC,m.id DESC LIMIT ?`, userID, afterID, afterUpdated, af
 	if err := rows.Err(); err != nil {
 		return Page[Model]{}, fmt.Errorf("resources: list models: %w", err)
 	}
+	if err := rows.Close(); err != nil {
+		return Page[Model]{}, err
+	}
 	page := Page[Model]{Data: items}
 	if len(items) > limit {
 		last := items[limit-1]
@@ -126,6 +131,7 @@ ORDER BY m.updated_at DESC,m.id DESC LIMIT ?`, userID, afterID, afterUpdated, af
 		page.Data = items[:limit]
 		page.NextCursor = &next
 	}
+	r.attachModelCloudflareMode(page.Data)
 	return page, nil
 }
 
@@ -140,7 +146,7 @@ func (r *Repository) GetModel(ctx context.Context, userID, modelID int64) (Model
 	if err != nil {
 		return Model{}, fmt.Errorf("resources: get model: %w", err)
 	}
-	return model, nil
+	return r.modelWithCloudflareMode(model), nil
 }
 
 func getModelTx(ctx context.Context, tx *sql.Tx, userID, modelID int64) (Model, error) {
@@ -206,7 +212,7 @@ func (r *Repository) CreateModel(ctx context.Context, userID int64, mutation Con
 		return MutationResult[Model]{}, err
 	}
 	if decision.Kind == idempotency.Replay {
-		return replayMutation[Model](decision)
+		return r.replayModelMutation(decision)
 	}
 	modelLimit, err := readSiteLimitTx(ctx, tx, "default_model_limit", 1, 10000)
 	if err != nil {
@@ -219,11 +225,12 @@ func (r *Repository) CreateModel(ctx context.Context, userID int64, mutation Con
 	if modelCount >= modelLimit {
 		return MutationResult[Model]{}, ErrResourceLimit
 	}
+	cloudflareProxyEnabled := input.CloudflareProxyEnabled == nil || *input.CloudflareProxyEnabled
 	result, err := tx.ExecContext(ctx, `
-INSERT INTO models(user_id,provider,model,full_name,route_strategy,silent_retry,flatten_tool_calls,role_policy,transport_rule,model_types,revision,binding_revision,created_at,updated_at)
-SELECT ?,?,?,?,?,?,?,?,?,?,1,0,?,? WHERE EXISTS(SELECT 1 FROM users WHERE id=? AND is_admin=0)`,
+INSERT INTO models(user_id,provider,model,full_name,route_strategy,silent_retry,flatten_tool_calls,role_policy,transport_rule,model_types,cloudflare_proxy_enabled,revision,binding_revision,created_at,updated_at)
+SELECT ?,?,?,?,?,?,?,?,?,?,?,1,0,?,? WHERE EXISTS(SELECT 1 FROM users WHERE id=? AND is_admin=0)`,
 		userID, input.Provider, input.Model, input.Provider+"/"+input.Model, input.RouteStrategy,
-		boolInt(input.SilentRetry), boolInt(input.FlattenToolCalls), encodedPolicy, input.TransportRule, input.ModelTypes, now, now, userID)
+		boolInt(input.SilentRetry), boolInt(input.FlattenToolCalls), encodedPolicy, input.TransportRule, input.ModelTypes, cloudflareProxyEnabled, now, now, userID)
 	if err != nil {
 		return MutationResult[Model]{}, conflictOrError("create model", err)
 	}
@@ -246,7 +253,7 @@ SELECT ?,?,?,?,?,?,?,?,?,?,1,0,?,? WHERE EXISTS(SELECT 1 FROM users WHERE id=? A
 			return MutationResult[Model]{}, err
 		}
 	}
-	model, err := getModelTx(ctx, tx, userID, modelID)
+	model, err := r.getModelTx(ctx, tx, userID, modelID)
 	if err != nil {
 		return MutationResult[Model]{}, err
 	}
@@ -268,7 +275,7 @@ SELECT ?,?,?,?,?,?,?,?,?,?,1,0,?,? WHERE EXISTS(SELECT 1 FROM users WHERE id=? A
 
 func (r *Repository) PatchModel(ctx context.Context, userID, modelID int64, mutation ControlMutation, input PatchModelInput) (MutationResult[Model], error) {
 	if r == nil || userID <= 0 || modelID <= 0 || mutation.Route != routeModel || mutation.Method != http.MethodPatch || !mutationPathIDs(mutation, modelID) || mutation.Query != "" || input.ExpectedRevision < 1 ||
-		(input.Provider == nil && input.Model == nil && input.RouteStrategy == nil && input.SilentRetry == nil && input.FlattenToolCalls == nil && input.RolePolicy == nil && input.TransportRule == nil && input.ModelTypes == nil) ||
+		(input.Provider == nil && input.Model == nil && input.RouteStrategy == nil && input.SilentRetry == nil && input.FlattenToolCalls == nil && input.RolePolicy == nil && input.TransportRule == nil && input.ModelTypes == nil && input.CloudflareProxyEnabled == nil) ||
 		(input.Provider != nil && !validPersonalModelProvider(*input.Provider)) ||
 		(input.Model != nil && !validateExactText(*input.Model, 1, maxModelNameRunes)) ||
 		(input.TransportRule != nil && !input.TransportRule.Valid()) ||
@@ -291,9 +298,9 @@ func (r *Repository) PatchModel(ctx context.Context, userID, modelID int64, muta
 		return MutationResult[Model]{}, err
 	}
 	if decision.Kind == idempotency.Replay {
-		return replayMutation[Model](decision)
+		return r.replayModelMutation(decision)
 	}
-	current, err := getModelTx(ctx, tx, userID, modelID)
+	current, err := r.getModelTx(ctx, tx, userID, modelID)
 	if err != nil {
 		return MutationResult[Model]{}, err
 	}
@@ -311,6 +318,10 @@ func (r *Repository) PatchModel(ctx context.Context, userID, modelID int64, muta
 	}
 	provider, modelName, strategy := current.Provider, current.Model, current.RouteStrategy
 	silentRetry, flatten := current.SilentRetry, current.FlattenToolCalls
+	cloudflareProxyEnabled := current.CloudflareProxyEnabled
+	if input.CloudflareProxyEnabled != nil {
+		cloudflareProxyEnabled = *input.CloudflareProxyEnabled
+	}
 	types := current.ModelTypes.Clone()
 	if input.ModelTypes != nil {
 		types = input.ModelTypes.Clone()
@@ -335,9 +346,9 @@ func (r *Repository) PatchModel(ctx context.Context, userID, modelID int64, muta
 		flatten = *input.FlattenToolCalls
 	}
 	result, err := tx.ExecContext(ctx, `
-UPDATE models SET provider=?,model=?,full_name=?,route_strategy=?,silent_retry=?,flatten_tool_calls=?,role_policy=?,transport_rule=?,model_types=?,revision=revision+1,updated_at=?
+UPDATE models SET provider=?,model=?,full_name=?,route_strategy=?,silent_retry=?,flatten_tool_calls=?,role_policy=?,transport_rule=?,model_types=?,cloudflare_proxy_enabled=?,revision=revision+1,updated_at=?
 WHERE id=? AND user_id=? AND revision=?`, provider, modelName, provider+"/"+modelName, strategy,
-		boolInt(silentRetry), boolInt(flatten), encodedPolicy, transportRule, types, now, modelID, userID, input.ExpectedRevision)
+		boolInt(silentRetry), boolInt(flatten), encodedPolicy, transportRule, types, cloudflareProxyEnabled, now, modelID, userID, input.ExpectedRevision)
 	if err != nil {
 		return MutationResult[Model]{}, conflictOrError("patch model", err)
 	}
@@ -356,7 +367,7 @@ WHERE id=? AND user_id=? AND revision=?`, provider, modelName, provider+"/"+mode
 			return MutationResult[Model]{}, err
 		}
 	}
-	model, err := getModelTx(ctx, tx, userID, modelID)
+	model, err := r.getModelTx(ctx, tx, userID, modelID)
 	if err != nil {
 		return MutationResult[Model]{}, err
 	}
@@ -391,7 +402,7 @@ func (r *Repository) DeleteModel(ctx context.Context, userID, modelID int64, mut
 	if decision.Kind == idempotency.Replay {
 		return replayMutation[struct{}](decision)
 	}
-	if _, err := getModelTx(ctx, tx, userID, modelID); err != nil {
+	if _, err := r.getModelTx(ctx, tx, userID, modelID); err != nil {
 		return MutationResult[struct{}]{}, err
 	}
 	if err := r.projection.PrepareModelDeletion(ctx, tx, userID, modelID, now); err != nil {
@@ -427,7 +438,7 @@ func (r *Repository) ListBindings(ctx context.Context, userID, modelID int64) (B
 		return BindingsResponse{}, err
 	}
 	defer tx.Rollback()
-	model, err := getModelTx(ctx, tx, userID, modelID)
+	model, err := r.getModelTx(ctx, tx, userID, modelID)
 	if err != nil {
 		return BindingsResponse{}, err
 	}
@@ -498,7 +509,7 @@ func (r *Repository) AddBindings(ctx context.Context, userID, modelID int64, mut
 	if decision.Kind == idempotency.Replay {
 		return replayMutation[BindingsResponse](decision)
 	}
-	model, err := getModelTx(ctx, tx, userID, modelID)
+	model, err := r.getModelTx(ctx, tx, userID, modelID)
 	if err != nil {
 		return MutationResult[BindingsResponse]{}, err
 	}
@@ -679,7 +690,7 @@ func (r *Repository) OrderBindings(ctx context.Context, userID, modelID int64, m
 	if decision.Kind == idempotency.Replay {
 		return replayMutation[BindingsResponse](decision)
 	}
-	model, err := getModelTx(ctx, tx, userID, modelID)
+	model, err := r.getModelTx(ctx, tx, userID, modelID)
 	if err != nil {
 		return MutationResult[BindingsResponse]{}, err
 	}
@@ -733,7 +744,7 @@ func (r *Repository) DeleteBinding(ctx context.Context, userID, modelID, binding
 	if decision.Kind == idempotency.Replay {
 		return replayMutation[BindingsResponse](decision)
 	}
-	model, err := getModelTx(ctx, tx, userID, modelID)
+	model, err := r.getModelTx(ctx, tx, userID, modelID)
 	if err != nil {
 		return MutationResult[BindingsResponse]{}, err
 	}

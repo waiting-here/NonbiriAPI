@@ -154,6 +154,7 @@ func (r *Repository) FilterModelsPage(ctx context.Context, userID int64, filters
 		if err != nil {
 			return result, err
 		}
+		r.attachModelCloudflareMode(result.Data)
 		if err = attachModelBrowseTx(ctx, tx, userID, result.Data); err != nil {
 			return Page[Model]{}, err
 		}
@@ -179,7 +180,7 @@ func (r *Repository) BindingCandidatesPage(ctx context.Context, userID, modelID 
 		return Page[BindingCandidate]{}, ErrInvalidRequest
 	}
 	return userPageRead(ctx, r, userID, page, func(ctx context.Context, tx *sql.Tx) (Page[BindingCandidate], error) {
-		if _, err := getModelTx(ctx, tx, userID, modelID); err != nil {
+		if _, err := r.getModelTx(ctx, tx, userID, modelID); err != nil {
 			return Page[BindingCandidate]{}, err
 		}
 		if query.EndpointID != 0 || query.KeyID != 0 {

@@ -57,8 +57,8 @@ var storageSchema = schemaRegistry{baseline: 17, target: db.CurrentSchemaVersion
 		addedTables:   []string{"channel_charity_binding_presets", "channel_charity_binding_mappings"},
 		controlTables: []string{"charity_models", "charity_price_templates"},
 		rebuiltTables: []string{"donation_key_backoffs", "dispatch_smart_backoff_facts"}, credentials: credentialsUnchanged}},
-	{from: 26, version: 27, manifest: db.PinnedGenerationTwoManifestHash, sql: endpointBackoffSchema, impact: &migrationImpact{
-		addedTables: []string{"endpoint_backoff_policies"}, controlTables: []string{"dispatch_smart_backoff_facts"}, credentials: credentialsUnchanged}},
+	{from: 26, version: 27, manifest: db.PinnedGenerationTwoManifestHash, sql: endpointBackoffSchema + modelCloudflareSchema, impact: &migrationImpact{
+		addedTables: []string{"endpoint_backoff_policies"}, controlTables: []string{"dispatch_smart_backoff_facts", "models", "charity_models"}, credentials: credentialsUnchanged}},
 }}
 
 type Options struct {

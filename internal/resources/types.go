@@ -161,22 +161,24 @@ type Binding struct {
 }
 
 type Model struct {
-	ModelTypes       modeltype.Set        `json:"model_types"`
-	TransportRule    transportpolicy.Rule `json:"transport_rule"`
-	RolePolicy       rolepolicy.Policy    `json:"role_policy"`
-	ID               string               `json:"id"`
-	Provider         string               `json:"provider"`
-	Model            string               `json:"model"`
-	FullName         string               `json:"full_name"`
-	RouteStrategy    string               `json:"route_strategy"`
-	SilentRetry      bool                 `json:"silent_retry"`
-	FlattenToolCalls bool                 `json:"flatten_tool_calls"`
-	Revision         string               `json:"revision"`
-	BindingRevision  string               `json:"binding_revision"`
-	BindingCount     string               `json:"binding_count"`
-	Browse           *ModelBrowse         `json:"browse,omitempty"`
-	CreatedAt        int64                `json:"created_at"`
-	UpdatedAt        int64                `json:"updated_at"`
+	CloudflareProxyEnabled bool                 `json:"cloudflare_proxy_enabled"`
+	CloudflareProxyMode    string               `json:"cloudflare_proxy_mode"`
+	ModelTypes             modeltype.Set        `json:"model_types"`
+	TransportRule          transportpolicy.Rule `json:"transport_rule"`
+	RolePolicy             rolepolicy.Policy    `json:"role_policy"`
+	ID                     string               `json:"id"`
+	Provider               string               `json:"provider"`
+	Model                  string               `json:"model"`
+	FullName               string               `json:"full_name"`
+	RouteStrategy          string               `json:"route_strategy"`
+	SilentRetry            bool                 `json:"silent_retry"`
+	FlattenToolCalls       bool                 `json:"flatten_tool_calls"`
+	Revision               string               `json:"revision"`
+	BindingRevision        string               `json:"binding_revision"`
+	BindingCount           string               `json:"binding_count"`
+	Browse                 *ModelBrowse         `json:"browse,omitempty"`
+	CreatedAt              int64                `json:"created_at"`
+	UpdatedAt              int64                `json:"updated_at"`
 }
 
 type ManualEntriesResponse struct {
@@ -277,26 +279,28 @@ type DeleteManualInput struct {
 }
 
 type CreateModelInput struct {
-	ModelTypes       modeltype.Set
-	TransportRule    transportpolicy.Rule
-	RolePolicy       *rolepolicy.Policy
-	Provider         string
-	Model            string
-	RouteStrategy    string
-	SilentRetry      bool
-	FlattenToolCalls bool
+	CloudflareProxyEnabled *bool
+	ModelTypes             modeltype.Set
+	TransportRule          transportpolicy.Rule
+	RolePolicy             *rolepolicy.Policy
+	Provider               string
+	Model                  string
+	RouteStrategy          string
+	SilentRetry            bool
+	FlattenToolCalls       bool
 }
 
 type PatchModelInput struct {
-	ModelTypes       *modeltype.Set
-	TransportRule    *transportpolicy.Rule
-	RolePolicy       *rolepolicy.Policy
-	Provider         *string
-	Model            *string
-	RouteStrategy    *string
-	SilentRetry      *bool
-	FlattenToolCalls *bool
-	ExpectedRevision int64
+	CloudflareProxyEnabled *bool
+	ModelTypes             *modeltype.Set
+	TransportRule          *transportpolicy.Rule
+	RolePolicy             *rolepolicy.Policy
+	Provider               *string
+	Model                  *string
+	RouteStrategy          *string
+	SilentRetry            *bool
+	FlattenToolCalls       *bool
+	ExpectedRevision       int64
 }
 
 type BindingSelection struct {

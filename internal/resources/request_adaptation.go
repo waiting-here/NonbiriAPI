@@ -149,7 +149,7 @@ func (r *Repository) GetModelAdaptation(ctx context.Context, userID, modelID int
 		return requestadaptation.Projection{}, err
 	}
 	defer tx.Rollback()
-	if _, err := getModelTx(ctx, tx, userID, modelID); err != nil {
+	if _, err := r.getModelTx(ctx, tx, userID, modelID); err != nil {
 		return requestadaptation.Projection{}, err
 	}
 	snapshot, err := r.adaptations.LoadTx(ctx, tx, requestadaptation.Ref{Scope: requestadaptation.ScopePersonalModel, ID: modelID})
@@ -185,7 +185,7 @@ func (r *Repository) PutModelAdaptation(ctx context.Context, userID, modelID int
 	if decision.Kind == idempotency.Replay {
 		return replayMutation[requestadaptation.Projection](decision)
 	}
-	if _, err := getModelTx(ctx, tx, userID, modelID); err != nil {
+	if _, err := r.getModelTx(ctx, tx, userID, modelID); err != nil {
 		return MutationResult[requestadaptation.Projection]{}, err
 	}
 	ref := requestadaptation.Ref{Scope: requestadaptation.ScopePersonalModel, ID: modelID}
