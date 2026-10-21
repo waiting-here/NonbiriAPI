@@ -341,5 +341,7 @@ func parseUsage(raw []byte) (contract.Usage, bool) {
 	if read > prompt || counts["toolUsePromptTokenCount"] != 0 {
 		return contract.Usage{TotalMismatch: mismatch}, false
 	}
-	return contract.Usage{Present: true, UncachedInputTokens: prompt - read, CacheReadInputTokens: read, OutputTokens: output, TotalMismatch: mismatch}, true
+	usage := contract.Usage{Present: true, UncachedInputTokens: prompt - read, CacheReadInputTokens: read, OutputTokens: output, TotalMismatch: mismatch}
+	normalizeModalities(&usage, root, prompt, counts["candidatesTokenCount"], thought)
+	return usage, true
 }

@@ -325,14 +325,16 @@ func parseUsage(raw json.RawMessage) (Usage, error) {
 	if !ok || cacheSummed > prompt {
 		return Usage{TotalMismatch: mismatch}, errUsageMalformed
 	}
-	return Usage{
+	usage := Usage{
 		UncachedInputTokens:   prompt - cacheSummed,
 		CacheWriteInputTokens: cacheWrite,
 		CacheReadInputTokens:  cacheRead,
 		OutputTokens:          completion,
 		Present:               true,
 		TotalMismatch:         mismatch,
-	}, nil
+	}
+	normalizeChatModalities(&usage, values)
+	return usage, nil
 }
 
 // addChecked adds two non-negative-oriented int64 values and reports whether
@@ -350,7 +352,7 @@ func addChecked(a, b int64) (int64, bool) {
 // refuses them for an int64 target, so string and float token counts can never
 // enter the buckets.
 func decodeNonNegativeInt(raw json.RawMessage, dst *int64) bool {
-	if len(raw) == 0 || dst == nil {
+	if len(raw) == 0 || dst == nil || isJSONNull(raw) {
 		return false
 	}
 	return json.Unmarshal(raw, dst) == nil && *dst >= 0
