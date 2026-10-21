@@ -60,6 +60,23 @@ closes. A timed-out shutdown can be awaited again. The queue holds no durable
 acknowledgements or deferred accounting; crash recovery uses the existing stored
 claim and ledger state.
 
+## Inference preflight and snapshots
+
+Personal and charity route preflight, candidate snapshots and request-policy
+reads use the existing read-only pool. Final authorization, quota reservation
+and dispatch still run through the business transaction and recheck current
+state. This does not enlarge either pool or relax the dispatch checks.
+
+Request-adaptation reads copy the bounded encrypted values, close the read
+cursor and transaction, then decrypt and decode them. Batch reads retain one
+database snapshot; decoding errors and cancellation still fail the batch.
+
+A charity candidate snapshot reuses validated token budgets and recurring-quota
+availability for the same physical key within that transaction. Model reserve
+amounts and decision time remain fixed during the snapshot. Each candidate still
+checks its own ownership, expiry, backoff, capacity and ordering. Results never
+outlive the transaction or replace dispatch-time reservation checks.
+
 ## Model directories
 
 `GET /v1/models` combines an owner-scoped personal-model read with a charity
