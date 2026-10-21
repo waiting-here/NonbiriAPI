@@ -24,7 +24,12 @@ export function RecordsHeader({
   const { pathname } = useLocation();
   return (
     <div className="records-header">
-      <PageHeader title={t('user.records.title')} description={description} actions={actions} />
+      <PageHeader
+        icon="diagnostics"
+        title={t('user.records.title')}
+        description={description}
+        actions={actions}
+      />
       <nav className="nb-tabs records-tabs" aria-label={t('user.records.title')}>
         {routes.map(([to, key]) => (
           <Link key={to} to={to} aria-current={pathname === to ? 'page' : undefined}>

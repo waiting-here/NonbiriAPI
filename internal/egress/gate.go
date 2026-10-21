@@ -54,6 +54,7 @@ type Gate struct {
 
 	limits       ConcurrencyLimits
 	globalActive int
+	globalPeak   int
 	perActive    map[string]int
 	notify       chan struct{}
 }
@@ -90,6 +91,16 @@ func (g *Gate) Limits() ConcurrencyLimits {
 	return g.limits
 }
 
+// SampleGlobal reports occupied slots, the interval peak, and the current cap.
+// The single sampling consumer resets the peak after reading it.
+func (g *Gate) SampleGlobal() (current, peak, limit int) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	current, peak = g.globalActive, max(g.globalPeak, g.globalActive)
+	g.globalPeak = current
+	return current, peak, g.limits.Global
+}
+
 // Acquire waits for both a global and canonical-base-URL slot. The input is
 // canonicalized again at the gate boundary so equivalent default ports, host
 // case, and trailing-dot forms cannot create independent counters.
@@ -114,6 +125,7 @@ func (g *Gate) Acquire(ctx context.Context, baseURL string) (*Permit, error) {
 		}
 		if g.globalActive < g.limits.Global && g.perActive[canonical] < g.limits.PerEndpoint {
 			g.globalActive++
+			g.globalPeak = max(g.globalPeak, g.globalActive)
 			g.perActive[canonical]++
 			g.mu.Unlock()
 			return &Permit{gate: g, key: canonical}, nil

@@ -26,10 +26,13 @@ func sessionDB(t *testing.T) *sql.DB {
 	mustExec(t, database, `PRAGMA foreign_keys=ON;
  CREATE TABLE users(id INTEGER PRIMARY KEY);
  CREATE TABLE charity_models(id INTEGER PRIMARY KEY,session_headers TEXT NOT NULL DEFAULT '[]');
+ CREATE TABLE models(id INTEGER PRIMARY KEY,user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,session_headers TEXT NOT NULL DEFAULT '[]');
  CREATE TABLE logical_requests(id TEXT PRIMARY KEY);
  CREATE TABLE charity_header_sessions(user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,model_id INTEGER REFERENCES charity_models(id) ON DELETE CASCADE,name TEXT,value TEXT,format TEXT,idle_seconds INTEGER,expires_at INTEGER,PRIMARY KEY(user_id,model_id,name));
- CREATE TABLE charity_header_uses(logical_request_id TEXT REFERENCES logical_requests(id) ON DELETE CASCADE,user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,model_id INTEGER REFERENCES charity_models(id) ON DELETE CASCADE,name TEXT,value TEXT,idle_seconds INTEGER,sent INTEGER,PRIMARY KEY(logical_request_id,name));
+ CREATE TABLE charity_header_uses(logical_request_id TEXT REFERENCES logical_requests(id) ON DELETE CASCADE,user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,model_id INTEGER REFERENCES charity_models(id) ON DELETE CASCADE,name TEXT,value TEXT,idle_seconds INTEGER,sent INTEGER,PRIMARY KEY(logical_request_id,name)); CREATE TABLE personal_header_sessions(user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,model_id INTEGER REFERENCES models(id) ON DELETE CASCADE,name TEXT,value TEXT,format TEXT,idle_seconds INTEGER,expires_at INTEGER,PRIMARY KEY(user_id,model_id,name));
+ CREATE TABLE personal_header_uses(logical_request_id TEXT REFERENCES logical_requests(id) ON DELETE CASCADE,user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,model_id INTEGER REFERENCES models(id) ON DELETE CASCADE,name TEXT,value TEXT,idle_seconds INTEGER,sent INTEGER,PRIMARY KEY(logical_request_id,name));
  INSERT INTO users VALUES(1),(2);
+ INSERT INTO models VALUES(1,1,'[{"name":"X-Session-ID"}]'),(2,1,'[{"name":"X-Session-ID"}]'),(3,2,'[{"name":"X-Session-ID"}]');
  INSERT INTO charity_models VALUES(1,'[{"name":"X-Session-ID"},{"name":"X-Cache-ID","format":"hex_32"}]'),(2,'[{"name":"X-Session-ID"}]');
  `)
 	return database
@@ -175,7 +178,7 @@ func TestParallelRequestsReuseAndCleanup(t *testing.T) {
 	tx.Commit()
 }
 func TestConfigAndActualTransmission(t *testing.T) {
-	for _, input := range []string{`[{"name":"Authorization"}]`, `[{"name":"Host"}]`, `[{"name":"Cookie"}]`, `[{"name":"X-Session","idle_seconds":0}]`, `[{"name":"X-Session","format":"x"}]`, `[{"name":"X-Session","oops":1}]`, `[{"name":"X-Session","format":null}]`, `[{"name":"x-a"},{"name":"X-A"}]`} {
+	for _, input := range []string{`[{"name":"Authorization"}]`, `[{"name":"Host"}]`, `[{"name":"Cookie"}]`, `[{"name":"X-Session","idle_seconds":-1}]`, `[{"name":"X-Session","format":"x"}]`, `[{"name":"X-Session","oops":1}]`, `[{"name":"X-Session","format":null}]`, `[{"name":"x-a"},{"name":"X-A"}]`} {
 		var c []Config
 		err := json.Unmarshal([]byte(input), &c)
 		if err == nil {
@@ -220,25 +223,34 @@ func TestConfigAndActualTransmission(t *testing.T) {
 }
 
 func TestSessionSurvivesReopenWithinIdleWindow(t *testing.T) {
-	d := sessionDB(t)
-	h := acquire(t, d, "a", 1, 1, 100)
-	finish(t, d, "a", 120, true)
-	var sequence int
-	var name, path string
-	if err := d.QueryRow("PRAGMA database_list").Scan(&sequence, &name, &path); err != nil {
-		t.Fatal(err)
-	}
-	if err := d.Close(); err != nil {
-		t.Fatal(err)
-	}
-	restored, err := sql.Open("sqlite", path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer restored.Close()
-	restored.SetMaxOpenConns(1)
-	after := acquire(t, restored, "b", 1, 1, 419)
-	if after.Get("X-Session-ID") != h.Get("X-Session-ID") {
-		t.Fatal("valid session lost on restart")
+	for _, personal := range []bool{false, true} {
+		name := "charity"
+		get := acquire
+		if personal {
+			name, get = "personal", acquirePersonal
+		}
+		t.Run(name, func(t *testing.T) {
+			d := sessionDB(t)
+			h := get(t, d, "a", 1, 1, 100)
+			finish(t, d, "a", 120, true)
+			var sequence int
+			var name, path string
+			if err := d.QueryRow("PRAGMA database_list").Scan(&sequence, &name, &path); err != nil {
+				t.Fatal(err)
+			}
+			if err := d.Close(); err != nil {
+				t.Fatal(err)
+			}
+			restored, err := sql.Open("sqlite", path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer restored.Close()
+			restored.SetMaxOpenConns(1)
+			after := get(t, restored, "b", 1, 1, 419)
+			if after.Get("X-Session-ID") != h.Get("X-Session-ID") {
+				t.Fatal("valid session lost on restart")
+			}
+		})
 	}
 }

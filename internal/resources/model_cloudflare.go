@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
+	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
 )
 
 func (r *Repository) getModelTx(ctx context.Context, tx *sql.Tx, userID, modelID int64) (Model, error) {
@@ -65,6 +66,9 @@ func (r *Repository) attachModelCloudflareMode(models []Model) {
 	}
 	for i := range models {
 		models[i].CloudflareProxyMode = mode
+		if models[i].SessionHeaders == nil {
+			models[i].SessionHeaders = []sessionheader.Config{}
+		}
 	}
 }
 func (r *Repository) modelWithCloudflareMode(model Model) Model {

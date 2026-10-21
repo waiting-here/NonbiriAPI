@@ -688,9 +688,13 @@
   flex: 1 1 16rem;
   display: flex;
   gap: var(--nb-space-2);
+  /* Keep buttons at control height when the search input has a visible label. */
+  align-items: flex-end;
 }
-.nb-filter__search .nb-input {
+.nb-filter__search .nb-input,
+.nb-filter__search > .nb-field {
   flex: 1;
+  min-width: 0;
 }
 .nb-filter__more {
   display: contents;
@@ -1201,6 +1205,17 @@ button.nb-row:hover {
 .nb-tabs [role='tab']:focus-visible {
   box-shadow: var(--nb-focus-ring);
   border-radius: var(--nb-radius-sm);
+}
+/* Narrow screens: wrap instead of hiding tabs behind an invisible horizontal scroll. */
+@media (width < 40rem) {
+  .nb-tabs {
+    flex-wrap: wrap;
+    overflow-x: visible;
+    row-gap: 0;
+  }
+  .nb-tabs [role='tab'] {
+    padding: 0.55rem 0.7rem;
+  }
 }
 .nb-tabs .nb-count {
   margin-left: 0.35rem;

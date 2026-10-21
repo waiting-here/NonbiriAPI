@@ -304,7 +304,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 22.22.3
+          node-version: 22.23.4
           cache: npm
           cache-dependency-path: web/package-lock.json
       - name: Pin npm
@@ -340,7 +340,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 22.22.3
+          node-version: 22.23.4
           cache: npm
           cache-dependency-path: web/package-lock.json
       - name: Pin npm
@@ -384,7 +384,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 22.22.3
+          node-version: 22.23.4
       - name: Require verified station artifact
         env:
           ARTIFACT_ID: ${{ needs.web_build.outputs.artifact_id }}
@@ -430,7 +430,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 22.22.3
+          node-version: 22.23.4
           cache: npm
           cache-dependency-path: web/package-lock.json
       - name: Pin npm
@@ -498,7 +498,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 22.22.3
+          node-version: 22.23.4
           cache: npm
           cache-dependency-path: web/package-lock.json
       - name: Pin npm
@@ -596,7 +596,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 22.22.3
+          node-version: 22.23.4
       - name: Summarize execution and queue time
         env:
           GITHUB_TOKEN: ${{ github.token }}

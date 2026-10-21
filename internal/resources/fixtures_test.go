@@ -9,6 +9,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/modeltype"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
+	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
 )
 
 func TestCanonicalResourceDTOFixtures(t *testing.T) {
@@ -57,7 +58,7 @@ func TestCanonicalResourceDTOFixtures(t *testing.T) {
 			}},
 			AffectedModels: []AffectedModel{{
 				Model: Model{
-					CloudflareProxyEnabled: true, CloudflareProxyMode: "direct",
+					SessionHeaders: []sessionheader.Config{}, CloudflareProxyEnabled: true, CloudflareProxyMode: "direct",
 					ModelTypes: modeltype.Default(), TransportRule: "passthrough", RolePolicy: rolepolicy.Default(),
 					ID: "41", Provider: "logical", Model: "primary", FullName: "logical/primary", RouteStrategy: "ordered",
 					SilentRetry: true, FlattenToolCalls: false, Revision: "2", BindingRevision: "6", BindingCount: "1",

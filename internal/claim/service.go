@@ -556,6 +556,12 @@ WHERE c.id=?`, handle.claimID).Scan(&stateText, &requestID, &attemptSeq, &purpos
 			clear(encrypted)
 			return nil, err
 		}
+		managedHeaders, err = personalSessionHeadersTx(ctx, tx, handle.claimID, requestID, callerID.Int64, at)
+		if err != nil {
+			clear(contextID)
+			clear(encrypted)
+			return nil, err
+		}
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE dispatch_claims
 SET state='dispatched',dispatched_at=? WHERE id=? AND state='claimed'`, at, handle.claimID)

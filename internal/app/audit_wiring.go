@@ -32,6 +32,7 @@ import (
 type auditRuntime struct {
 	observations   *observability.Repository
 	diagnostics    *observability.DiagnosticReader
+	pressure       *observability.PressureMonitor
 	risk           *riskaudit.Repository
 	collector      *riskaudit.Collector
 	economy        *economyaudit.Service
@@ -77,6 +78,15 @@ func newAuditRuntime(ctx context.Context, store *db.Store, vault *secret.Vault, 
 		return nil, err
 	}
 	a.economy, err = economyaudit.New(economyaudit.Config{Database: store.DB(), ReadDatabase: store.ReadDB(), FinalAuth: authorizer, CursorKeys: vault})
+	if err != nil {
+		return nil, err
+	}
+	a.pressure, err = observability.NewPressureMonitor(ctx, store.DB(), func() observability.PressureReading {
+		rpm, rpmPeak, rpmLimit := a.flow.SampleGlobalRPM()
+		concurrency, concurrencyPeak, concurrencyLimit := a.outbound.SampleGlobalConcurrency()
+		return observability.PressureReading{RPM: rpm, RPMIntervalPeak: rpmPeak, RPMLimit: rpmLimit,
+			Concurrency: concurrency, ConcurrencyIntervalPeak: concurrencyPeak, ConcurrencyLimit: concurrencyLimit}
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -135,6 +145,10 @@ func (a *auditRuntime) Start(parent context.Context) {
 	go func() { defer a.workers.Done(); a.collector.Run(ctx) }()
 	go func() { defer a.workers.Done(); a.economy.Run(ctx) }()
 	go func() { defer a.workers.Done(); a.risk.RunScans(ctx) }()
+	if a.pressure != nil {
+		a.workers.Add(1)
+		go func() { defer a.workers.Done(); a.pressure.Run(ctx) }()
+	}
 }
 
 func (a *auditRuntime) Close() error {
@@ -154,6 +168,14 @@ func (a *auditRuntime) Close() error {
 }
 
 func (a *auditRuntime) registerRoutes(runtime *auth.Runtime, logs *logapi.Repository, authorizer *roleFinalTxAuthorizer) error {
+	if a.pressure != nil {
+		if err := logapi.RegisterAdminPressureRoute(runtime, logs, authorizer, a.pressure); err != nil {
+			return err
+		}
+		if err := logapi.RegisterStewardPressureRoute(runtime, logs, authorizer, a.pressure); err != nil {
+			return err
+		}
+	}
 	for _, register := range []func() error{
 		func() error { return logapi.RegisterAdminDiagnosticRoutes(runtime, logs, authorizer) },
 		func() error { return logapi.RegisterStewardDiagnosticRoutes(runtime, logs, authorizer) },

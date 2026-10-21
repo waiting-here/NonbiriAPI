@@ -8,6 +8,7 @@ import {
   type InferenceLimitDraft,
 } from '@shared/operations/userInferenceLimits';
 import { Button } from '@shared/components/ui/Button';
+import { Icon } from '@shared/components/Icon';
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { routePath } from '@shared/routing/routeRegistry';
@@ -36,6 +37,7 @@ import {
   ErrorState,
   LoadingState,
   PageHeader,
+  SectionHead,
   StatusBadge,
 } from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
@@ -357,11 +359,12 @@ function UserAuthority({
     <div className="ops-stack user-authority">
       {trainee ? <Note>{t('management.users.traineeReadOnly')}</Note> : null}
       <Card>
-        <div className="ops-actions">
-          <h2>{user.username}</h2>
-          <Button variant="ghost" type="button" onClick={onClose}>
+        <div className="user-authority__head">
+          <Button variant="ghost" type="button" className="user-authority__back" onClick={onClose}>
+            <Icon name="arrow-left" />
             {t('management.users.backToList')}
           </Button>
+          <h2>{user.username}</h2>
         </div>
         <dl className="nb-facts nb-facts--inline user-identity">
           <dt>{t('management.users.userId')}</dt>
@@ -888,6 +891,8 @@ interface UserManagementProps {
   onAuthorityLoss?: () => void;
   renderDeletion?: (user: AdminUser, refresh: () => Promise<unknown>) => ReactNode;
   renderSecurity?: (user: AdminUser) => ReactNode;
+  /** Rendered inside a page that already owns the h1. */
+  embedded?: boolean;
 }
 
 export function UserManagement({
@@ -899,6 +904,7 @@ export function UserManagement({
   renderDeletion,
   renderSecurity,
   trainee = false,
+  embedded = false,
 }: UserManagementProps) {
   const { t } = useTranslation();
   const accountLabels = accountCopy(t);
@@ -1153,12 +1159,21 @@ export function UserManagement({
   if (authorityError) return <ErrorState error={authorityError} />;
   return (
     <div className="page ops-page user-management">
-      <PageHeader
-        title={role === 'admin' ? t('admin.navigation.users') : t('management.users.title')}
-        description={t(
-          trainee ? 'management.users.traineeDescription' : 'management.users.description',
-        )}
-      />
+      {embedded ? (
+        <SectionHead
+          title={t('management.users.title')}
+          description={t(
+            trainee ? 'management.users.traineeDescription' : 'management.users.description',
+          )}
+        />
+      ) : (
+        <PageHeader
+          title={role === 'admin' ? t('admin.navigation.users') : t('management.users.title')}
+          description={t(
+            trainee ? 'management.users.traineeDescription' : 'management.users.description',
+          )}
+        />
+      )}
       <div className={`nb-md${selection ? ' has-selection' : ''}`}>
         <div className="nb-md__list ops-stack" ref={listRef} tabIndex={-1}>
           <Card>

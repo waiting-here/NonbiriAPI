@@ -18,6 +18,8 @@ type Options = {
   frozenTime?: number;
   paused?: () => boolean;
   signal?: AbortSignal;
+  /** Page background: paint less often while the user types or scrolls. */
+  ambient?: boolean;
 };
 
 function image(src: string, signal?: AbortSignal) {
@@ -80,7 +82,7 @@ export async function renderMirrorSea(canvas: HTMLCanvasElement, options: Option
     last = performance.now(),
     painted = false;
   const observer = new ResizeObserver(() => resize());
-  const cadence = new PaintCadence();
+  const cadence = new PaintCadence(undefined, options.ambient);
   const dispose = () => {
     if (stopped) return;
     stopped = true;

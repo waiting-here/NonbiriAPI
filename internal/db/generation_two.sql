@@ -6589,7 +6589,7 @@ CREATE TABLE schema_state (
 ) STRICT;
 INSERT INTO credit_compaction(id,through_seq,details_before,sweep_at,sweep_after_seq) VALUES(1,0,0,0,0);
 INSERT INTO game_blackjack_clock(id,observed_at) VALUES(1,0);
-INSERT INTO schema_state(id,version) VALUES(1,28);
+INSERT INTO schema_state(id,version) VALUES(1,30);
 
 CREATE TABLE game_ai_settings (
  game_key TEXT PRIMARY KEY NOT NULL,
@@ -6900,8 +6900,8 @@ CREATE TABLE charity_header_sessions (
  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
  model_id INTEGER NOT NULL REFERENCES charity_models(id) ON DELETE CASCADE,
  name TEXT NOT NULL CHECK(length(name) BETWEEN 1 AND 128),
- value TEXT NOT NULL CHECK(length(value) IN (32,36)),
- format TEXT NOT NULL CHECK(format IN ('uuid_v4','hex_32')),
+ value TEXT NOT NULL CHECK(length(value) IN (30,32,36)),
+ format TEXT NOT NULL CHECK(format IN ('uuid_v4','hex_32','opencode_session','opencode_message','opencode_part')),
  idle_seconds INTEGER NOT NULL CHECK(idle_seconds BETWEEN 1 AND 86400),
  expires_at INTEGER NOT NULL CHECK(expires_at BETWEEN 0 AND 253402387199),
  PRIMARY KEY(user_id,model_id,name)
@@ -6912,8 +6912,8 @@ CREATE TABLE charity_header_uses (
  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
  model_id INTEGER NOT NULL REFERENCES charity_models(id) ON DELETE CASCADE,
  name TEXT NOT NULL CHECK(length(name) BETWEEN 1 AND 128),
- value TEXT NOT NULL CHECK(length(value) IN (32,36)),
- idle_seconds INTEGER NOT NULL CHECK(idle_seconds BETWEEN 1 AND 86400),
+ value TEXT NOT NULL CHECK(length(value) IN (30,32,36)),
+ idle_seconds INTEGER NOT NULL CHECK(idle_seconds BETWEEN 0 AND 86400),
  sent INTEGER NOT NULL DEFAULT 0 CHECK(sent IN (0,1)),
  PRIMARY KEY(logical_request_id,name)
 ) STRICT;
@@ -7129,3 +7129,39 @@ ALTER TABLE users ADD COLUMN light_rpm_limit INTEGER CHECK(light_rpm_limit IS NU
 ALTER TABLE users ADD COLUMN light_concurrency_limit INTEGER CHECK(light_concurrency_limit IS NULL OR (typeof(light_concurrency_limit)='integer' AND light_concurrency_limit BETWEEN 1 AND 100000));
 ALTER TABLE users ADD COLUMN global_rpm_limit INTEGER CHECK(global_rpm_limit IS NULL OR (typeof(global_rpm_limit)='integer' AND global_rpm_limit BETWEEN 1 AND 4096));
 ALTER TABLE risk_audit_minutes ADD COLUMN saturation_micros_millis INTEGER CHECK(saturation_micros_millis IS NULL OR (typeof(saturation_micros_millis)='integer' AND saturation_micros_millis BETWEEN 0 AND 60000000000));
+
+ALTER TABLE models ADD COLUMN session_headers TEXT NOT NULL DEFAULT '[]' CHECK(length(session_headers)<=4096 AND json_valid(session_headers) AND json_type(session_headers)='array');
+CREATE TABLE personal_header_sessions (
+ user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ model_id INTEGER NOT NULL REFERENCES models(id) ON DELETE CASCADE,
+ name TEXT NOT NULL CHECK(length(name) BETWEEN 1 AND 128),
+ value TEXT NOT NULL CHECK(length(value) IN (30,32,36)),
+ format TEXT NOT NULL CHECK(format IN ('uuid_v4','hex_32','opencode_session','opencode_message','opencode_part')),
+ idle_seconds INTEGER NOT NULL CHECK(idle_seconds BETWEEN 1 AND 86400),
+ expires_at INTEGER NOT NULL CHECK(expires_at BETWEEN 0 AND 253402387199),
+ PRIMARY KEY(user_id,model_id,name)
+) STRICT;
+CREATE INDEX idx_personal_header_expiry ON personal_header_sessions(expires_at);
+CREATE TABLE personal_header_uses (
+ logical_request_id TEXT NOT NULL REFERENCES logical_requests(id) ON DELETE CASCADE,
+ user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ model_id INTEGER NOT NULL REFERENCES models(id) ON DELETE CASCADE,
+ name TEXT NOT NULL CHECK(length(name) BETWEEN 1 AND 128),
+ value TEXT NOT NULL CHECK(length(value) IN (30,32,36)),
+ idle_seconds INTEGER NOT NULL CHECK(idle_seconds BETWEEN 0 AND 86400),
+ sent INTEGER NOT NULL DEFAULT 0 CHECK(sent IN (0,1)),
+ PRIMARY KEY(logical_request_id,name)
+) STRICT;
+CREATE INDEX idx_personal_header_active ON personal_header_uses(user_id,model_id,name,value);
+
+CREATE TABLE global_pressure_state (
+ id INTEGER PRIMARY KEY CHECK(id=1),
+ started_at INTEGER NOT NULL CHECK(started_at>0),
+ rpm_peak INTEGER NOT NULL CHECK(rpm_peak>=0),
+ concurrency_peak INTEGER NOT NULL CHECK(concurrency_peak>=0)
+) STRICT;
+CREATE TABLE global_pressure_samples (
+ observed_at INTEGER PRIMARY KEY CHECK(observed_at>0),
+ rpm INTEGER NOT NULL CHECK(rpm>=0),
+ concurrency INTEGER NOT NULL CHECK(concurrency>=0)
+) STRICT;

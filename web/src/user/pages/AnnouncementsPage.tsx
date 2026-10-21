@@ -75,7 +75,7 @@ export function AnnouncementsPage() {
   return (
     <div className="page ops-stack">
       <PageHeader
-        eyebrow={t('user.announcements.eyebrow')}
+        icon="announcements"
         title={t('user.announcements.title')}
         description={t('user.announcements.description')}
       />

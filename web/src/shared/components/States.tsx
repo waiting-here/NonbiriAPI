@@ -18,19 +18,59 @@ interface PageHeaderProps {
   className?: string;
 }
 
-export function PageHeader({ eyebrow, title, description, actions, icon, back, className = '' }: PageHeaderProps) {
+export function PageHeader({
+  eyebrow,
+  title,
+  description,
+  actions,
+  icon,
+  back,
+  className = '',
+}: PageHeaderProps) {
   return (
-    <div className={`page-header nb-page-header${className ? ` ${className}` : ''}`} data-component="page-header">
+    <div
+      className={`page-header nb-page-header${className ? ` ${className}` : ''}`}
+      data-component="page-header"
+    >
       <div className="nb-page-header__lead">
-        {icon ? <span className="nb-page-header__icon"><Icon name={icon} /></span> : null}
+        {icon ? (
+          <span className="nb-page-header__icon">
+            <Icon name={icon} />
+          </span>
+        ) : null}
         <div className="nb-page-header__copy">
           {back ? <div className="nb-page-header__back">{back}</div> : null}
           {eyebrow ? <p className="eyebrow nb-page-header__eyebrow">{eyebrow}</p> : null}
-        <h1>{title}</h1>
-          {description ? <p className="page-description nb-page-header__description">{description}</p> : null}
+          <h1>{title}</h1>
+          {description ? (
+            <p className="page-description nb-page-header__description">{description}</p>
+          ) : null}
         </div>
       </div>
-      {actions ? <div className="page-header-actions nb-page-header__actions">{actions}</div> : null}
+      {actions ? (
+        <div className="page-header-actions nb-page-header__actions">{actions}</div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Heading for a section embedded in another page, which already owns the h1. */
+export function SectionHead({
+  title,
+  description,
+  actions,
+}: {
+  title: string;
+  description?: string;
+  actions?: ReactNode;
+}) {
+  return (
+    <div className="nb-section-head">
+      <div className="nb-section-head__copy">
+        <h2>{title}</h2>
+        {description ? <p className="nb-small nb-muted">{description}</p> : null}
+      </div>
+      {actions ? <div className="nb-section-head__actions">{actions}</div> : null}
     </div>
   );
 }
@@ -39,8 +79,13 @@ export function LoadingState({ label }: { label?: string }) {
   const { t } = useTranslation();
   return (
     <div className="state-panel nb-state" role="status" aria-live="polite">
-      <span className="nb-state__icon"><Icon name="spark" /></span>
-      <span className="nb-state__body"><span className="loading-dot" aria-hidden="true" /><span>{label ?? t('common.loading')}</span></span>
+      <span className="nb-state__icon">
+        <Icon name="spark" />
+      </span>
+      <span className="nb-state__body">
+        <span className="loading-dot" aria-hidden="true" />
+        <span>{label ?? t('common.loading')}</span>
+      </span>
     </div>
   );
 }
@@ -54,7 +99,9 @@ interface EmptyStateProps {
 export function EmptyState({ title, body, action }: EmptyStateProps) {
   return (
     <div className="state-panel empty-state nb-state">
-      <span className="state-icon nb-state__icon" aria-hidden="true"><img className="nb-state__illustration" src={emptyStateURL} alt="" /></span>
+      <span className="state-icon nb-state__icon" aria-hidden="true">
+        <img className="nb-state__illustration" src={emptyStateURL} alt="" />
+      </span>
       <div>
         <h2>{title}</h2>
         <p>{body}</p>
@@ -66,7 +113,8 @@ export function EmptyState({ title, body, action }: EmptyStateProps) {
 
 function errorMessage(error: unknown, translate: (key: string) => string): string {
   if (isUnauthorized(error)) return translate('common.authRequired');
-  if (isApiError(error) && error.code === 'elevated_required') return translate('common.elevationRequired');
+  if (isApiError(error) && error.code === 'elevated_required')
+    return translate('common.elevationRequired');
   if (isForbidden(error)) return translate('common.forbidden');
   if (isApiError(error)) {
     switch (error.code) {
@@ -109,7 +157,9 @@ export function ErrorState({
   const unauthorized = isUnauthorized(error);
   return (
     <div className="state-panel error-state nb-state nb-state--error" role="alert">
-      <span className="state-icon nb-state__icon" aria-hidden="true"><Icon name="error" /></span>
+      <span className="state-icon nb-state__icon" aria-hidden="true">
+        <Icon name="error" />
+      </span>
       <div>
         <h2>{unauthorized ? t('common.authRequiredTitle') : t('common.error')}</h2>
         <p>{errorMessage(error, t)}</p>
@@ -120,7 +170,7 @@ export function ErrorState({
           </details>
         ) : null}
         {onRetry ? (
-          <Button type="button"  onClick={onRetry}>
+          <Button type="button" onClick={onRetry}>
             {t('common.retry')}
           </Button>
         ) : null}
@@ -136,11 +186,15 @@ export function AuthRequired({ station }: { station: 'user' | 'admin' }) {
   const registrationClosed = station === 'user' && config.data?.registrationOpen === false;
   return (
     <div className="auth-panel nb-state" role="status">
-      <span className="auth-mark nb-state__icon" aria-hidden="true"><Icon name="account" /></span>
+      <span className="auth-mark nb-state__icon" aria-hidden="true">
+        <Icon name="account" />
+      </span>
       <div>
         <h2>{t('common.authRequiredTitle')}</h2>
         <p>{station === 'user' ? t('common.userSignInBody') : t('common.adminSignInBody')}</p>
-        {registrationClosed ? <p className="inline-notice">{t('common.registrationClosed')}</p> : null}
+        {registrationClosed ? (
+          <p className="inline-notice">{t('common.registrationClosed')}</p>
+        ) : null}
         {href ? (
           <a className="nb-btn nb-btn--primary" href={href}>
             {t('common.signIn')}
@@ -200,7 +254,11 @@ export function NoticePage({
   return (
     <div className="state-panel notice-page nb-state nb-state--warning" role="status">
       <span className="state-icon nb-state__icon" aria-hidden="true">
-        {icon === 'maintenance' ? <img className="nb-state__illustration" src={maintenanceStateURL} alt="" /> : <Icon name={icon} />}
+        {icon === 'maintenance' ? (
+          <img className="nb-state__illustration" src={maintenanceStateURL} alt="" />
+        ) : (
+          <Icon name={icon} />
+        )}
       </span>
       <div>
         <h1>{t(titleKey)}</h1>
@@ -211,7 +269,14 @@ export function NoticePage({
 }
 
 export function MutationState({ label }: { label: string }) {
-  return <div className="nb-state" role="status" aria-live="polite"><span className="nb-state__icon"><Icon name="spark" /></span><p>{label}</p></div>;
+  return (
+    <div className="nb-state" role="status" aria-live="polite">
+      <span className="nb-state__icon">
+        <Icon name="spark" />
+      </span>
+      <p>{label}</p>
+    </div>
+  );
 }
 
 export function PageFooter({
@@ -232,10 +297,22 @@ export function PageFooter({
 }
 
 export function SectionNav({ children, label }: { children: ReactNode; label?: string }) {
-  return <nav className="nb-section-nav" aria-label={label}>{children}</nav>;
+  return (
+    <nav className="nb-section-nav" aria-label={label}>
+      {children}
+    </nav>
+  );
 }
 
-export function MetricCard({ label, value, hint }: { label: string; value: ReactNode; hint?: ReactNode }) {
+export function MetricCard({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: ReactNode;
+  hint?: ReactNode;
+}) {
   return (
     <section className="nb-metric-card">
       <span className="nb-metric-card__label">{label}</span>
@@ -245,6 +322,18 @@ export function MetricCard({ label, value, hint }: { label: string; value: React
   );
 }
 
-export function Skeleton({ className = '', style }: { className?: string; style?: React.CSSProperties }) {
-  return <span className={`nb-skeleton${className ? ` ${className}` : ''}`} aria-hidden="true" style={style} />;
+export function Skeleton({
+  className = '',
+  style,
+}: {
+  className?: string;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <span
+      className={`nb-skeleton${className ? ` ${className}` : ''}`}
+      aria-hidden="true"
+      style={style}
+    />
+  );
 }

@@ -136,8 +136,12 @@
   text-decoration: none;
   min-height: 32px;
 }
-.nb-page-header__back a:not(.game-back-link)::before { content: '←' / ''; }
-.nb-page-header__back a:not(.game-back-link):hover { color: var(--nb-color-accent); }
+.nb-page-header__back a:not(.game-back-link)::before {
+  content: '←' / '';
+}
+.nb-page-header__back a:not(.game-back-link):hover {
+  color: var(--nb-color-accent);
+}
 
 .page-description {
   margin-bottom: 0;
@@ -357,6 +361,7 @@
   overflow: hidden;
   border: 1px solid var(--nb-color-border);
   border-radius: var(--nb-radius-sm);
+  background: var(--nb-color-surface-raised);
 }
 
 .lang-switcher button {
@@ -736,6 +741,14 @@ tr:first-child td {
   background: var(--nb-color-surface-raised);
   border: 1px solid var(--nb-color-border);
   border-radius: var(--nb-radius-sm);
+}
+
+/* Inside an existing surface the filter shares that frame instead of drawing a second one. */
+:is(.card, .nb-panel, .nb-card, .ops-subcard, [role='tabpanel']) .filter-bar {
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 0;
 }
 
 .filter-bar label {

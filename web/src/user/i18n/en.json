@@ -3677,7 +3677,12 @@
       "apply": "Apply appearance",
       "available": "Unlocked",
       "chosen": "Selected",
-      "locked": "Collect the matching SP card to unlock"
+      "locked": "Collect the matching SP card to unlock",
+      "intensity": "Appearance strength",
+      "intensityHint": "How much artwork shows behind content. Saved on this device only.",
+      "intensityVivid": "Vivid",
+      "intensityBalanced": "Balanced",
+      "intensityFocus": "Focused reading"
     }
   },
   "games": {

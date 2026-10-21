@@ -9,57 +9,62 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/modeltype"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
+	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
 	"github.com/waiting-here/NonbiriAPI/internal/transportpolicy"
 )
 
 type createModelRequest struct {
-	CloudflareProxyEnabled requestField[bool]                 `json:"cloudflare_proxy_enabled"`
-	ModelTypes             requestField[modeltype.Set]        `json:"model_types"`
-	TransportRule          requestField[transportpolicy.Rule] `json:"transport_rule"`
-	RolePolicy             requestField[rolepolicy.Policy]    `json:"role_policy"`
-	Provider               requestField[string]               `json:"provider"`
-	Model                  requestField[string]               `json:"model"`
-	RouteStrategy          requestField[string]               `json:"route_strategy"`
-	SilentRetry            requestField[bool]                 `json:"silent_retry"`
-	FlattenToolCalls       requestField[bool]                 `json:"flatten_tool_calls"`
+	SessionHeaders         requestField[[]sessionheader.Config] `json:"session_headers"`
+	CloudflareProxyEnabled requestField[bool]                   `json:"cloudflare_proxy_enabled"`
+	ModelTypes             requestField[modeltype.Set]          `json:"model_types"`
+	TransportRule          requestField[transportpolicy.Rule]   `json:"transport_rule"`
+	RolePolicy             requestField[rolepolicy.Policy]      `json:"role_policy"`
+	Provider               requestField[string]                 `json:"provider"`
+	Model                  requestField[string]                 `json:"model"`
+	RouteStrategy          requestField[string]                 `json:"route_strategy"`
+	SilentRetry            requestField[bool]                   `json:"silent_retry"`
+	FlattenToolCalls       requestField[bool]                   `json:"flatten_tool_calls"`
 }
 
 type createModelCanonical struct {
-	CloudflareProxyEnabled *bool                 `json:"cloudflare_proxy_enabled,omitempty"`
-	ModelTypes             *modeltype.Set        `json:"model_types,omitempty"`
-	TransportRule          *transportpolicy.Rule `json:"transport_rule,omitempty"`
-	RolePolicy             *rolepolicy.Policy    `json:"role_policy,omitempty"`
-	Provider               string                `json:"provider"`
-	Model                  string                `json:"model"`
-	RouteStrategy          *string               `json:"route_strategy,omitempty"`
-	SilentRetry            *bool                 `json:"silent_retry,omitempty"`
-	FlattenToolCalls       *bool                 `json:"flatten_tool_calls,omitempty"`
+	SessionHeaders         *[]sessionheader.Config `json:"session_headers,omitempty"`
+	CloudflareProxyEnabled *bool                   `json:"cloudflare_proxy_enabled,omitempty"`
+	ModelTypes             *modeltype.Set          `json:"model_types,omitempty"`
+	TransportRule          *transportpolicy.Rule   `json:"transport_rule,omitempty"`
+	RolePolicy             *rolepolicy.Policy      `json:"role_policy,omitempty"`
+	Provider               string                  `json:"provider"`
+	Model                  string                  `json:"model"`
+	RouteStrategy          *string                 `json:"route_strategy,omitempty"`
+	SilentRetry            *bool                   `json:"silent_retry,omitempty"`
+	FlattenToolCalls       *bool                   `json:"flatten_tool_calls,omitempty"`
 }
 
 type patchModelRequest struct {
-	CloudflareProxyEnabled requestField[bool]                 `json:"cloudflare_proxy_enabled"`
-	ModelTypes             requestField[modeltype.Set]        `json:"model_types"`
-	TransportRule          requestField[transportpolicy.Rule] `json:"transport_rule"`
-	RolePolicy             requestField[rolepolicy.Policy]    `json:"role_policy"`
-	Provider               requestField[string]               `json:"provider"`
-	Model                  requestField[string]               `json:"model"`
-	RouteStrategy          requestField[string]               `json:"route_strategy"`
-	SilentRetry            requestField[bool]                 `json:"silent_retry"`
-	FlattenToolCalls       requestField[bool]                 `json:"flatten_tool_calls"`
-	ExpectedRevision       requestField[string]               `json:"expected_revision"`
+	SessionHeaders         requestField[[]sessionheader.Config] `json:"session_headers"`
+	CloudflareProxyEnabled requestField[bool]                   `json:"cloudflare_proxy_enabled"`
+	ModelTypes             requestField[modeltype.Set]          `json:"model_types"`
+	TransportRule          requestField[transportpolicy.Rule]   `json:"transport_rule"`
+	RolePolicy             requestField[rolepolicy.Policy]      `json:"role_policy"`
+	Provider               requestField[string]                 `json:"provider"`
+	Model                  requestField[string]                 `json:"model"`
+	RouteStrategy          requestField[string]                 `json:"route_strategy"`
+	SilentRetry            requestField[bool]                   `json:"silent_retry"`
+	FlattenToolCalls       requestField[bool]                   `json:"flatten_tool_calls"`
+	ExpectedRevision       requestField[string]                 `json:"expected_revision"`
 }
 
 type patchModelCanonical struct {
-	CloudflareProxyEnabled *bool                 `json:"cloudflare_proxy_enabled,omitempty"`
-	ModelTypes             *modeltype.Set        `json:"model_types,omitempty"`
-	TransportRule          *transportpolicy.Rule `json:"transport_rule,omitempty"`
-	RolePolicy             *rolepolicy.Policy    `json:"role_policy,omitempty"`
-	Provider               *string               `json:"provider,omitempty"`
-	Model                  *string               `json:"model,omitempty"`
-	RouteStrategy          *string               `json:"route_strategy,omitempty"`
-	SilentRetry            *bool                 `json:"silent_retry,omitempty"`
-	FlattenToolCalls       *bool                 `json:"flatten_tool_calls,omitempty"`
-	ExpectedRevision       string                `json:"expected_revision"`
+	SessionHeaders         *[]sessionheader.Config `json:"session_headers,omitempty"`
+	CloudflareProxyEnabled *bool                   `json:"cloudflare_proxy_enabled,omitempty"`
+	ModelTypes             *modeltype.Set          `json:"model_types,omitempty"`
+	TransportRule          *transportpolicy.Rule   `json:"transport_rule,omitempty"`
+	RolePolicy             *rolepolicy.Policy      `json:"role_policy,omitempty"`
+	Provider               *string                 `json:"provider,omitempty"`
+	Model                  *string                 `json:"model,omitempty"`
+	RouteStrategy          *string                 `json:"route_strategy,omitempty"`
+	SilentRetry            *bool                   `json:"silent_retry,omitempty"`
+	FlattenToolCalls       *bool                   `json:"flatten_tool_calls,omitempty"`
+	ExpectedRevision       string                  `json:"expected_revision"`
 }
 
 type bindingSelectionRequest struct {
@@ -138,9 +143,17 @@ func (api *httpAPI) createModel(writer http.ResponseWriter, request *http.Reques
 		writeResourceError(writer, ErrInvalidRequest)
 		return
 	}
+	if body.SessionHeaders.Set {
+		values, err := sessionheader.Normalize(body.SessionHeaders.Value)
+		if err != nil {
+			writeResourceError(writer, ErrInvalidRequest)
+			return
+		}
+		body.SessionHeaders.Value = values
+	}
 	canonical := createModelCanonical{
-		CloudflareProxyEnabled: optionalPointer(body.CloudflareProxyEnabled),
-		ModelTypes:             optionalPointer(body.ModelTypes), RolePolicy: optionalPointer(body.RolePolicy), TransportRule: optionalPointer(body.TransportRule),
+		SessionHeaders: optionalPointer(body.SessionHeaders), CloudflareProxyEnabled: optionalPointer(body.CloudflareProxyEnabled),
+		ModelTypes: optionalPointer(body.ModelTypes), RolePolicy: optionalPointer(body.RolePolicy), TransportRule: optionalPointer(body.TransportRule),
 		Provider: body.Provider.Value, Model: body.Model.Value,
 		RouteStrategy: optionalPointer(body.RouteStrategy), SilentRetry: optionalPointer(body.SilentRetry),
 		FlattenToolCalls: optionalPointer(body.FlattenToolCalls),
@@ -150,6 +163,9 @@ func (api *httpAPI) createModel(writer http.ResponseWriter, request *http.Reques
 		return
 	}
 	input := CreateModelInput{CloudflareProxyEnabled: canonical.CloudflareProxyEnabled, Provider: canonical.Provider, Model: canonical.Model, RolePolicy: canonical.RolePolicy}
+	if canonical.SessionHeaders != nil {
+		input.SessionHeaders = *canonical.SessionHeaders
+	}
 	if canonical.ModelTypes != nil {
 		input.ModelTypes = canonical.ModelTypes.Clone()
 	}
@@ -200,13 +216,21 @@ func (api *httpAPI) patchModel(writer http.ResponseWriter, request *http.Request
 		return
 	}
 	revision, revisionOK := canonicalExpectedRevision(body.ExpectedRevision)
-	if !revisionOK || (!body.Provider.Set && !body.Model.Set && !body.RouteStrategy.Set && !body.SilentRetry.Set && !body.FlattenToolCalls.Set && !body.RolePolicy.Set && !body.TransportRule.Set && !body.ModelTypes.Set && !body.CloudflareProxyEnabled.Set) {
+	if !revisionOK || (!body.Provider.Set && !body.Model.Set && !body.RouteStrategy.Set && !body.SilentRetry.Set && !body.FlattenToolCalls.Set && !body.RolePolicy.Set && !body.TransportRule.Set && !body.ModelTypes.Set && !body.CloudflareProxyEnabled.Set && !body.SessionHeaders.Set) {
 		writeResourceError(writer, ErrInvalidRequest)
 		return
 	}
+	if body.SessionHeaders.Set {
+		values, err := sessionheader.Normalize(body.SessionHeaders.Value)
+		if err != nil {
+			writeResourceError(writer, ErrInvalidRequest)
+			return
+		}
+		body.SessionHeaders.Value = values
+	}
 	canonical := patchModelCanonical{
-		CloudflareProxyEnabled: optionalPointer(body.CloudflareProxyEnabled),
-		ModelTypes:             optionalPointer(body.ModelTypes), RolePolicy: optionalPointer(body.RolePolicy), TransportRule: optionalPointer(body.TransportRule),
+		SessionHeaders: optionalPointer(body.SessionHeaders), CloudflareProxyEnabled: optionalPointer(body.CloudflareProxyEnabled),
+		ModelTypes: optionalPointer(body.ModelTypes), RolePolicy: optionalPointer(body.RolePolicy), TransportRule: optionalPointer(body.TransportRule),
 		Provider: optionalPointer(body.Provider), Model: optionalPointer(body.Model),
 		RouteStrategy: optionalPointer(body.RouteStrategy), SilentRetry: optionalPointer(body.SilentRetry),
 		FlattenToolCalls: optionalPointer(body.FlattenToolCalls), ExpectedRevision: body.ExpectedRevision.Value,
@@ -216,8 +240,8 @@ func (api *httpAPI) patchModel(writer http.ResponseWriter, request *http.Request
 		return
 	}
 	result, err := api.repository.PatchModel(request.Context(), principal.UserID, modelID, mutation, PatchModelInput{
-		CloudflareProxyEnabled: canonical.CloudflareProxyEnabled,
-		ModelTypes:             canonical.ModelTypes, TransportRule: canonical.TransportRule, RolePolicy: canonical.RolePolicy, Provider: canonical.Provider, Model: canonical.Model, RouteStrategy: canonical.RouteStrategy,
+		SessionHeaders: canonical.SessionHeaders, CloudflareProxyEnabled: canonical.CloudflareProxyEnabled,
+		ModelTypes: canonical.ModelTypes, TransportRule: canonical.TransportRule, RolePolicy: canonical.RolePolicy, Provider: canonical.Provider, Model: canonical.Model, RouteStrategy: canonical.RouteStrategy,
 		SilentRetry: canonical.SilentRetry, FlattenToolCalls: canonical.FlattenToolCalls, ExpectedRevision: revision,
 	})
 	if err != nil {
