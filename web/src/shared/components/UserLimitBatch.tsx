@@ -214,7 +214,9 @@ export function UserLimitBatch({
             </>
           )}
         </div>
-        {operation.isPending && <p role="status">{t('management.users.batchLimitPending')}</p>}
+        {operation.outcome === 'pending' && (
+          <p role="status">{t('management.users.batchLimitPending')}</p>
+        )}
         {results.length > 0 && (
           <>
             <p>{t('management.users.batchLimitRecovery')}</p>

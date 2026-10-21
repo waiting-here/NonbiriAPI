@@ -211,9 +211,16 @@ describe('shared account management', () => {
   it('batches only selected users and retries failures with the original request identity', async () => {
     const targets = [userFixture('7'), userFixture('8'), userFixture('10', 6)];
     let failed = true;
-    const calls = install((call) => {
+    let finishRefresh!: () => void;
+    const refresh = new Promise<void>((resolve) => {
+      finishRefresh = resolve;
+    });
+    const calls = install(async (call) => {
       if (call.path === '/admin/api/session') return { admin: { username: 'fixture-admin' } };
-      if (call.path.startsWith('/admin/api/users?')) return page(targets);
+      if (call.path.startsWith('/admin/api/users?')) {
+        if (!failed) await refresh;
+        return page(targets);
+      }
       if (call.path === '/admin/api/users/7' && call.method === 'PATCH')
         return { ...targets[0], revision: '2' };
       if (call.path === '/admin/api/users/8' && call.method === 'PATCH') {
@@ -245,6 +252,12 @@ describe('shared account management', () => {
     await view.user.selectOptions(screen.getByLabelText('Global RPM per user action'), 'inherit');
     await view.user.click(screen.getByRole('button', { name: 'Apply to selected users' }));
     await screen.findByRole('button', { name: 'Retry failed users' });
+    await waitFor(() =>
+      expect(calls.filter((c) => c.path.startsWith('/admin/api/users?'))).toHaveLength(2),
+    );
+    expect(screen.queryByText('Saving selected users…')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry failed users' })).toBeDisabled();
+    await act(async () => finishRefresh());
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Retry failed users' })).toBeEnabled(),
     );

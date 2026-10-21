@@ -80,6 +80,36 @@ describe('account custom presets', () => {
     expect(fetchMock.mock.calls.filter(([, options]) => options.method === 'PUT')).toHaveLength(1);
   });
 
+  it('shows one saved receipt while refresh still locks the next action', async () => {
+    let saved = false;
+    let finishRefresh!: (value: Response) => void;
+    const refresh = new Promise<Response>((resolve) => {
+      finishRefresh = resolve;
+    });
+    const fetchMock = vi.fn(async (_path: string, options: RequestInit) => {
+      if (options.method === 'PUT') {
+        saved = true;
+        return response(stored(1));
+      }
+      return saved ? refresh : response({ capacity: 10, slots: [] });
+    });
+    mount(fetchMock);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Save to Preset1' })).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Save to Preset1' }));
+    await screen.findByText('Preset saved.');
+    expect(screen.getAllByRole('status').map((node) => node.textContent)).toEqual([
+      'Preset saved.',
+    ]);
+    expect(screen.getByRole('button', { name: 'Save to Preset2' })).toBeDisabled();
+    await act(async () => finishRefresh(response({ capacity: 10, slots: [stored(1)] })));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Save to Preset2' })).toBeEnabled(),
+    );
+    expect(screen.getByRole('status')).toHaveTextContent('Preset saved.');
+  });
+
   it('loads a saved mode and confirms overwriting its revision', async () => {
     let slots = [stored(3, '7', 'standard')];
     const fetchMock = vi.fn(async (_path: string, options: RequestInit) => {
