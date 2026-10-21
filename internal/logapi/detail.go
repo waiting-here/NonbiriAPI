@@ -47,6 +47,11 @@ func (repository *Repository) GetUser(ctx context.Context, userID int64, request
 	if err != nil || !utf8.ValidString(model) || len(model) > 512 {
 		return nil, ErrInvariant
 	}
+	sources, err := readLogPrivacySources(ctx, reader, []int64{record.rowID}, 0)
+	if err != nil {
+		return nil, err
+	}
+	redactor := requestDNSRedactor(sources[record.rowID])
 	switch RouteKind(record.routeKind) {
 	case RouteOpenAIChat, RouteOpenAIEmbeddings, RouteOpenAIImages, RouteOpenAIDecisions, RouteDiscovery:
 		row := UserSelfLogRow{
@@ -60,13 +65,14 @@ func (repository *Repository) GetUser(ctx context.Context, userID int64, request
 		if err != nil {
 			return nil, err
 		}
+		row = redactUserLogRow(row, redactor).(UserSelfLogRow)
+		redactUserLogAttempts(attempts.Data, sources[record.rowID])
 		metadata := attempts.Pagination
 		attempts.Pagination = nil
 		return UserSelfLogDetail{Request: row, Attempts: attempts, AttemptPagination: metadata}, nil
 	case RouteCharityChat, RouteCharityEmbeddings, RouteCharityImages, RouteCharityDecisions:
-		// Charity detail deliberately returns before constructing or querying an
-		// attempt projection. Its response shape and size are independent of the
-		// number of physical candidates/retries.
+		// Endpoint metadata is used only to redact existing display text. Charity
+		// detail never constructs an attempt DTO or exposes candidate counts.
 		if !record.callerResultClass.Valid {
 			return nil, ErrConflict
 		}
@@ -76,6 +82,7 @@ func (repository *Repository) GetUser(ctx context.Context, userID int64, request
 			CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
 			StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage, Model: model,
 		}
+		row = redactUserLogRow(row, redactor).(UserCharityLogRow)
 		return UserCharityLogDetail{
 			Request: row, CallerSafeResult: CallerSafeResult{Class: ResultClass(record.callerResultClass.String)},
 		}, nil
@@ -225,9 +232,15 @@ func (repository *Repository) GetSteward(
 		return StewardLogDetail{}, err
 	}
 	if redact {
+		sources, err := readLogPrivacySources(ctx, tx, []int64{record.rowID}, 0)
+		if err != nil {
+			return StewardLogDetail{}, err
+		}
 		for i := range attempts.Data {
 			attempts.Data[i].Diag = redactUpstreamText(attempts.Data[i].Diag)
 			attempts.Data[i].UpstreamCode = redactUpstreamText(attempts.Data[i].UpstreamCode)
+			redactor := attemptDNSRedactor(sources[record.rowID], attempts.Data[i].AttemptSeq, attempts.Data[i].EndpointBaseURL)
+			attempts.Data[i].Diag = redactDNSPointer(attempts.Data[i].Diag, redactor)
 		}
 	}
 	if err := tx.Commit(); err != nil {

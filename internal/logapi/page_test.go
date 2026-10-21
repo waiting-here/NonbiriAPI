@@ -143,9 +143,8 @@ func TestLogNumberedAttemptsRemainRoleSafeAndIndependentlyPaged(t *testing.T) {
 	if _, err := f.repo.GetUser(ctx, logUserTwo, requestID, filter); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("foreign detail = %v", err)
 	}
-	// The public charity detail must not even count attempts. Removing the
-	// private table makes an accidental COUNT or projection fail this request.
-	f.mustExec(`DROP TABLE request_attempts`)
+	// Privacy projection can read endpoint identity, but public charity detail
+	// must never expose attempts, their count, or pagination metadata.
 	charity, err := f.repo.GetUser(ctx, logUserOne, f.charityID, filter)
 	if err != nil {
 		t.Fatal(err)

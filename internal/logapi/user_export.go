@@ -60,6 +60,7 @@ func (r *Repository) ExportUser(ctx context.Context, user int64, filter ListFilt
 	}
 	defer rows.Close()
 	result := []UserLogRow{}
+	privacyIDs := []int64{}
 	for rows.Next() {
 		var model string
 		record, err := scanCommon(rows, &model)
@@ -73,6 +74,7 @@ func (r *Repository) ExportUser(ctx context.Context, user int64, filter ListFilt
 		if err != nil || !utf8Bound(model, 512) {
 			return nil, ErrInvariant
 		}
+		privacyIDs = append(privacyIDs, record.rowID)
 		switch RouteKind(record.routeKind) {
 		case RouteOpenAIChat, RouteOpenAIEmbeddings, RouteOpenAIImages, RouteOpenAIDecisions, RouteDiscovery:
 			result = append(result, UserSelfLogRow{RejectionFields: rejectionFields(record), ID: record.id, RouteKind: RouteKind(record.routeKind), CallerResultClass: resultClassPointer(record.callerResultClass), CallerStatus: intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode), StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage, Model: model, AttemptCount: strconv.FormatInt(record.attemptCount, 10)})
@@ -87,6 +89,9 @@ func (r *Repository) ExportUser(ctx context.Context, user int64, filter ListFilt
 	}
 	if err := rows.Close(); err != nil {
 		return nil, translateReadError(ctx, err)
+	}
+	if err := redactUserLogRows(ctx, tx, privacyIDs, result); err != nil {
+		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, translateReadError(ctx, err)
