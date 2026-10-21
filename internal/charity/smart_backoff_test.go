@@ -27,7 +27,7 @@ func newBackoffEnv(t *testing.T) *backoffEnv {
 	e := &backoffEnv{charityTestEnv: newCharityTestEnv(t)}
 	e.clock.Store(charityTestNow + 30)
 	e.billingRail(t)
-	vault, err := secret.New(bytes.Repeat([]byte{0x43}, secret.MasterKeyBytes))
+	vault, err := secret.New(bytes.Repeat([]byte{charityTestMasterKeyByte}, secret.MasterKeyBytes))
 	if err != nil {
 		t.Fatal(err)
 	}

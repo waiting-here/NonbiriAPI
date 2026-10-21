@@ -36,7 +36,7 @@ func (forceReviewAuthority) AuthorizeStewardMutation(context.Context, *sql.Tx, i
 func prepareForceReview(t *testing.T, e *charityTestEnv) func() error {
 	t.Helper()
 	ctx := context.Background()
-	vault, err := secret.New(bytes.Repeat([]byte{0x43}, 32))
+	vault, err := secret.New(bytes.Repeat([]byte{charityTestMasterKeyByte}, 32))
 	if err != nil {
 		t.Fatal(err)
 	}
