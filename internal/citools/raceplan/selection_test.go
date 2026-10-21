@@ -96,3 +96,38 @@ func TestMissingTimingMetadataUsesLiveCoverage(t *testing.T) {
 		t.Fatalf("live fallback: %+v %s", hints, warnings.String())
 	}
 }
+
+func TestImplicitSplitRetainsObservedWeightsThroughLiveCatalog(t *testing.T) {
+	const pkg = "github.com/waiting-here/NonbiriAPI/internal/adminusers"
+	content := `{"version":1,"shards":2,"default_package_seconds":3,"split_packages":[],"test_seconds":{"github.com/waiting-here/NonbiriAPI/internal/adminusers":{"TestHeavy":90,"TestFast":1},"example/deleted":{"TestOld":5}}}`
+	hints, err := loadTimingHints(writeTimingHints(t, content))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var warnings bytes.Buffer
+	hints = catalogHints([]listedPackage{{ImportPath: pkg}}, hints, &warnings, false)
+	if len(hints.SplitPackages) != 0 || len(hints.TestSeconds) != 1 {
+		t.Fatalf("weights changed split selection or retained an obsolete package: %#v", hints)
+	}
+	catalog := []catalogPackage{{ImportPath: pkg, Tests: []string{"TestHeavy", "TestFast", "TestAdminNumberedPagesFullCollectionsAndNestedScale"}}}
+	selected, hints, excluded, err := selectRiskTests(catalog, hints, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(excluded) != 1 || len(hints.SplitPackages) != 1 || hints.TestSeconds[pkg]["TestHeavy"] != 90 {
+		t.Fatalf("implicit split lost observed weights: %#v, exclusions=%v", hints, excluded)
+	}
+	plans, err := buildPlans(selected, hints, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var seconds float64
+	var tests int
+	for _, plan := range plans {
+		seconds += plan.EstimatedSeconds
+		tests += len(plan.SplitTests[pkg])
+	}
+	if seconds != 91 || tests != 2 {
+		t.Fatalf("implicit split ignored weights or changed coverage: seconds=%v tests=%d", seconds, tests)
+	}
+}

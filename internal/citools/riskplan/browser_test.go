@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -227,5 +229,67 @@ func TestBrowserProxyFixtureAlwaysSelectsItsRunnableSuite(t *testing.T) {
 		if !found {
 			t.Fatalf("proxy suite has no runner for %s", path)
 		}
+	}
+}
+
+func TestBrowserJobOutputPartitions(t *testing.T) {
+	cases := []struct {
+		name               string
+		plan               browserPlan
+		smoke, integration []string
+	}{
+		{"none", browserPlan{}, nil, nil},
+		{"engine", browserPlan{Engine: true}, []string{"smoke-1"}, nil},
+		{"one spec", browserPlan{Specs: []string{"test/e2e/one.spec.ts"}}, []string{"smoke-1"}, nil},
+		{"lake", browserPlan{Suites: []string{"lakenotes"}}, nil, []string{"content"}},
+		{"full", browserPlan{Specs: []string{"one", "two"}, Suites: browserSuites, Engine: true}, []string{"smoke-1", "smoke-2"}, []string{"content", "management"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "outputs")
+			if err := writeJobOutputs(path, verificationPlan{Mode: "routine", Browser: tc.plan}); err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			outputs := map[string]string{}
+			for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+				key, value, ok := strings.Cut(line, "=")
+				if !ok {
+					t.Fatalf("invalid output: %q", line)
+				}
+				if _, duplicate := outputs[key]; duplicate {
+					t.Fatalf("duplicate output: %s", key)
+				}
+				outputs[key] = value
+			}
+			for _, group := range []struct {
+				key      string
+				expected []string
+			}{
+				{"browser_smoke", tc.smoke}, {"browser_integration", tc.integration},
+			} {
+				wantFlag := "false"
+				if len(group.expected) > 0 {
+					wantFlag = "true"
+				}
+				if outputs[group.key] != wantFlag {
+					t.Fatalf("%s = %s, want %s", group.key, outputs[group.key], wantFlag)
+				}
+				var jobs []browserJob
+				if err := json.Unmarshal([]byte(outputs[group.key+"_matrix"]), &jobs); err != nil {
+					t.Fatal(err)
+				}
+				var names []string
+				for _, job := range jobs {
+					names = append(names, job.Name)
+				}
+				if !slices.Equal(names, group.expected) {
+					t.Fatalf("%s = %v, want %v", group.key, names, group.expected)
+				}
+			}
+		})
 	}
 }

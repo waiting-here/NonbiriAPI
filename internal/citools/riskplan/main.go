@@ -413,6 +413,21 @@ func writeJobOutputs(path string, plan verificationPlan) error {
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(file, "browser=%t\nbrowser_integration=%t\nbrowser_plan=%s\nbrowser_matrix=%s\n", len(plan.Browser.matrix()) > 0, len(plan.Browser.Suites) > 0, browser, matrix)
-	return err
+	if _, err := fmt.Fprintf(file, "browser=%t\nbrowser_plan=%s\nbrowser_matrix=%s\n", len(plan.Browser.matrix()) > 0, browser, matrix); err != nil {
+		return err
+	}
+	for _, group := range []struct{ key, kind string }{
+		{"browser_smoke", "smoke"},
+		{"browser_integration", "integration"},
+	} {
+		jobs := plan.Browser.matrixFor(group.kind)
+		encoded, err := json.Marshal(jobs)
+		if err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(file, "%s=%t\n%s_matrix=%s\n", group.key, len(jobs) > 0, group.key, encoded); err != nil {
+			return err
+		}
+	}
+	return nil
 }

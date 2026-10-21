@@ -55,14 +55,24 @@ func (p browserPlan) matrix() []browserJob {
 		name   string
 		suites []string
 	}{
-		{"content", []string{"picturebook", "fatfish"}},
-		{"management", []string{"audit", "management", "workflow", "proxy", "lakenotes"}},
+		{"content", []string{"picturebook", "fatfish", "lakenotes"}},
+		{"management", []string{"audit", "management", "workflow", "proxy"}},
 	} {
 		for _, suite := range group.suites {
 			if slices.Contains(p.Suites, suite) {
 				jobs = append(jobs, browserJob{Name: group.name, Kind: "integration"})
 				break
 			}
+		}
+	}
+	return jobs
+}
+
+func (p browserPlan) matrixFor(kind string) []browserJob {
+	jobs := []browserJob{}
+	for _, job := range p.matrix() {
+		if job.Kind == kind {
+			jobs = append(jobs, job)
 		}
 	}
 	return jobs

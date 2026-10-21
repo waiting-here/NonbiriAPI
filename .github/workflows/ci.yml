@@ -33,12 +33,19 @@ jobs:
       browser_integration: ${{ steps.scope.outputs.browser_integration }}
       browser_plan: ${{ steps.scope.outputs.browser_plan }}
       browser_matrix: ${{ steps.scope.outputs.browser_matrix }}
+      browser_smoke: ${{ steps.scope.outputs.browser_smoke }}
+      browser_smoke_matrix: ${{ steps.scope.outputs.browser_smoke_matrix }}
+      browser_integration_matrix: ${{ steps.scope.outputs.browser_integration_matrix }}
       template_artifact_id: ${{ steps.template_artifact.outputs.artifact-id }}
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 2
+          sparse-checkout: |
+            /*
+            !/web/public/
+          sparse-checkout-cone-mode: false
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -86,6 +93,11 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            /*
+            !/web/public/
+          sparse-checkout-cone-mode: false
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -105,25 +117,37 @@ jobs:
           CGO_ENABLED: "0"
         run: go run ./internal/citools/raceplan -export-template .ci-template >> "$GITHUB_ENV"
       - name: Verify required result semantics
-        run: bash scripts/check-ci-results.test.sh
+        run: |
+          bash scripts/check-ci-results.test.sh
+          bash scripts/check-go.test.sh
       - name: Build, vet, and test
         env:
           MODE: ${{ needs.plan.outputs.mode }}
           GO_PACKAGES: ${{ needs.plan.outputs.go_packages }}
         run: |
           set -euo pipefail
+          mkdir -p .cache/ci
           if [ "$MODE" = full ]; then
-            bash scripts/check-go.sh
+            bash scripts/check-go.sh | tee .cache/ci/go-checks.log
           else
             read -r -a packages <<< "$GO_PACKAGES"
             test "${#packages[@]}" -gt 0
             go build "${packages[@]}"
             go vet "${packages[@]}"
-            go test -timeout=30m "${packages[@]}"
+            go test -timeout=30m "${packages[@]}" | tee .cache/ci/go-checks.log
           fi
       - name: Upgrade populated released databases
         if: needs.plan.outputs.upgrade == 'true'
         run: bash scripts/check-upgrade.sh
+
+      - name: Save ordinary Go measurements
+        if: ${{ always() && !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: go-measurements-${{ github.sha }}-${{ github.run_attempt }}
+          path: .cache/ci/go-checks.log
+          if-no-files-found: warn
+          retention-days: 3
 
   race_prepare:
     needs: plan
@@ -138,11 +162,20 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            /*
+            !/web/public/
+          sparse-checkout-cone-mode: false
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: 1.26.9
           cache: true
+          cache-dependency-path: |
+            go.mod
+            go.sum
+            scripts/race-check.sh
       - name: Require this run's empty database artifact
         env:
           ARTIFACT_ID: ${{ needs.plan.outputs.template_artifact_id }}
@@ -186,11 +219,20 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            /*
+            !/web/public/
+          sparse-checkout-cone-mode: false
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: 1.26.9
           cache: true
+          cache-dependency-path: |
+            go.mod
+            go.sum
+            scripts/race-check.sh
       - name: Require prepared race artifact
         env:
           ARTIFACT_ID: ${{ needs.race_prepare.outputs.artifact_id }}
@@ -224,6 +266,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: scripts
       - name: Require all Go checks
         env:
           PLAN_RESULT: ${{ needs.plan.result }}
@@ -310,12 +354,15 @@ jobs:
       - name: Verify generated notices
         run: git diff --exit-code -- THIRD_PARTY_NOTICES.md
 
+      - name: Package generated station files
+        working-directory: .
+        run: node scripts/ci-station-build.mjs pack .cache/ci/station-build
       - name: Share verified station build
         id: station_build
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: station-build-${{ github.sha }}-${{ github.run_attempt }}
-          path: web/dist
+          path: .cache/ci/station-build
           if-no-files-found: error
           retention-days: 3
 
@@ -334,6 +381,10 @@ jobs:
         with:
           go-version: 1.26.9
           cache: true
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.22.3
       - name: Require verified station artifact
         env:
           ARTIFACT_ID: ${{ needs.web_build.outputs.artifact_id }}
@@ -342,7 +393,10 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           artifact-ids: ${{ needs.web_build.outputs.artifact_id }}
-          path: web/dist
+          path: .cache/ci/station-build
+      - name: Restore complete verified stations
+        working-directory: .
+        run: node scripts/ci-station-build.mjs restore .cache/ci/station-build
       - name: Compile isolated browser fixtures once
         env:
           CGO_ENABLED: "0"
@@ -358,15 +412,15 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
-  web_browser:
-    needs: [plan, web_build, web_fixture]
-    if: ${{ always() && !cancelled() && needs.plan.result == 'success' && needs.web_build.result == 'success' && needs.plan.outputs.browser == 'true' && (needs.web_fixture.result == 'success' || needs.web_fixture.result == 'skipped') }}
+  web_smoke:
+    needs: [plan, web_build]
+    if: needs.plan.outputs.browser_smoke == 'true'
     name: Web browser (${{ matrix.name }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.plan.outputs.browser_matrix || '[]') }}
+        include: ${{ fromJSON(needs.plan.outputs.browser_smoke_matrix || '[]') }}
     defaults:
       run:
         working-directory: web
@@ -393,22 +447,78 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           artifact-ids: ${{ needs.web_build.outputs.artifact_id }}
-          path: web/dist
+          path: .cache/ci/station-build
+      - name: Restore complete verified stations
+        working-directory: .
+        run: node scripts/ci-station-build.mjs restore .cache/ci/station-build
+      - name: Install Chromium
+        run: npm exec -- playwright install --with-deps chromium
+      - name: Selected browser contracts
+        env:
+          PLAYWRIGHT_HTML_OPEN: never
+          CGO_ENABLED: "0"
+          BROWSER_PLAN: ${{ needs.plan.outputs.browser_plan }}
+          GROUP: smoke
+          SHARD: ${{ matrix.shard || 'all' }}
+        run: bash ../scripts/check-web.sh browser "$GROUP" "$SHARD"
+      - name: Save browser measurements
+        if: ${{ always() && !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: browser-measurements-${{ matrix.name }}-${{ github.run_attempt }}
+          path: .cache/ci/browser-*.json
+          if-no-files-found: warn
+          retention-days: 3
+      - name: Save failed browser diagnostics
+        if: ${{ failure() && !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: browser-failures-${{ matrix.name }}-${{ github.run_attempt }}
+          path: |
+            web/test-results/**/*.png
+            web/test-results/**/error-context.md
+          if-no-files-found: ignore
+          retention-days: 3
+
+  web_browser:
+    needs: [plan, web_fixture]
+    if: needs.plan.outputs.browser_integration == 'true'
+    name: Web browser (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.browser_integration_matrix || '[]') }}
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.22.3
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Pin npm
+        run: |
+          npm install --global npm@12.0.1
+          test "$(npm --version)" = "12.0.1"
+      - name: Install dependencies
+        run: npm ci
       - name: Install Chromium
         run: npm exec -- playwright install --with-deps chromium
       - name: Require this run's fixture artifact
-        if: matrix.kind == 'integration'
         env:
           ARTIFACT_ID: ${{ needs.web_fixture.outputs.artifact_id }}
         run: test -n "$ARTIFACT_ID"
       - name: Download browser fixture
-        if: matrix.kind == 'integration'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           artifact-ids: ${{ needs.web_fixture.outputs.artifact_id }}
           path: .cache/ci
       - name: Prepare isolated fixture processes
-        if: matrix.kind == 'integration'
         run: |
           chmod +x ../.cache/ci/browser-fixture
           printf 'NONBIRI_BROWSER_FIXTURE_BINARY=%s/.cache/ci/browser-fixture\n' "$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
@@ -417,8 +527,8 @@ jobs:
           PLAYWRIGHT_HTML_OPEN: never
           CGO_ENABLED: "0"
           BROWSER_PLAN: ${{ needs.plan.outputs.browser_plan }}
-          GROUP: ${{ matrix.kind == 'smoke' && 'smoke' || matrix.name }}
-          SHARD: ${{ matrix.shard || 'all' }}
+          GROUP: ${{ matrix.name }}
+          SHARD: all
         run: bash ../scripts/check-web.sh browser "$GROUP" "$SHARD"
       - name: Save browser measurements
         if: ${{ always() && !cancelled() }}
@@ -442,23 +552,27 @@ jobs:
   web:
     name: Web checks
     if: ${{ always() }}
-    needs: [plan, web_unit, web_build, web_fixture, web_browser]
+    needs: [plan, web_unit, web_build, web_fixture, web_smoke, web_browser]
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: scripts
       - name: Require all Web checks
         env:
           PLAN_RESULT: ${{ needs.plan.result }}
           MODE: ${{ needs.plan.outputs.mode }}
           FIRST_APPLICABLE: ${{ needs.plan.outputs.web }}
-          SECOND_APPLICABLE: ${{ needs.plan.outputs.browser }}
+          SECOND_APPLICABLE: ${{ needs.plan.outputs.browser_integration }}
           FIRST_RESULT: ${{ needs.web_unit.result }}
           SECOND_RESULT: ${{ needs.web_browser.result }}
           THIRD_APPLICABLE: ${{ needs.plan.outputs.web }}
           THIRD_RESULT: ${{ needs.web_build.result }}
           FOURTH_APPLICABLE: ${{ needs.plan.outputs.browser_integration }}
           FOURTH_RESULT: ${{ needs.web_fixture.result }}
+          FIFTH_APPLICABLE: ${{ needs.plan.outputs.browser_smoke }}
+          FIFTH_RESULT: ${{ needs.web_smoke.result }}
         run: |
           set -euo pipefail
           bash scripts/check-ci-results.sh | tee -a "$GITHUB_STEP_SUMMARY"
@@ -477,6 +591,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: scripts
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:

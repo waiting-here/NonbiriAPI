@@ -294,9 +294,6 @@ func loadTimingHints(path string) (timingHints, error) {
 		if packagePath == "" {
 			return timingHints{}, errors.New("timing hints contain an empty test-weight package")
 		}
-		if _, split := seenSplit[packagePath]; !split {
-			return timingHints{}, fmt.Errorf("timing hints contain test weights for unsplit package %s", packagePath)
-		}
 		if len(tests) == 0 {
 			return timingHints{}, fmt.Errorf("timing hints contain no test weights for %s", packagePath)
 		}
@@ -843,7 +840,11 @@ func catalogHints(listed []listedPackage, hints timingHints, output io.Writer, r
 		if cap, exists := hints.SplitGroupCaps[name]; exists {
 			result.SplitGroupCaps[name] = cap
 		}
-		result.TestSeconds[name] = hints.TestSeconds[name]
+	}
+	for name, tests := range hints.TestSeconds {
+		if live[name] {
+			result.TestSeconds[name] = tests
+		}
 	}
 	if reportPackages {
 		warnings := []string{}

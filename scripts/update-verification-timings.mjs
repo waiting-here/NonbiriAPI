@@ -20,6 +20,18 @@ export function raceMeasurements(logs) {
   return { tests, packages };
 }
 
+export function goMeasurements(logs) {
+  const packages = {};
+  for (const log of logs) {
+    for (const raw of log.split('\n')) {
+      const line = raw.replace(/^\d{4}-\d\d-\d\dT\S+Z /, '');
+      const result = /^ok\s+(\S+)\s+(\d+(?:\.\d+)?)s(?:\s|$)/.exec(line);
+      if (result) packages[result[1]] = Math.max(packages[result[1]] || 0, +result[2]);
+    }
+  }
+  return packages;
+}
+
 export function browserMeasurements(reports) {
   const seconds = {};
   function visit(suite) {
@@ -42,7 +54,9 @@ export function browserMeasurements(reports) {
 export function applyRaceMeasurements(hints, race) {
   Object.assign(hints.package_seconds, race.packages);
   for (const [pkg, tests] of Object.entries(race.tests)) {
-    if (hints.split_packages.includes(pkg)) Object.assign(hints.test_seconds[pkg] ||= {}, tests);
+    // Exclusion groups can split a package without an explicit split hint.
+    // Retain its observed test weights so those live groups are balanced too.
+    Object.assign(hints.test_seconds[pkg] ||= {}, tests);
   }
 }
 
@@ -60,9 +74,17 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   }
   const root = resolve(import.meta.dirname, '..');
   const files = filesIn(directory);
+  const go = goMeasurements(files.filter((path) => /^go-checks(?:-.*)?\.log$/.test(basename(path))).map((path) => readFileSync(path, 'utf8')));
   const race = raceMeasurements(files.filter((path) => /^race-.*\.log$/.test(basename(path))).map((path) => readFileSync(path, 'utf8')));
   const browser = browserMeasurements(files.filter((path) => /^browser-smoke-.*\.json$/.test(basename(path))).map((path) => JSON.parse(readFileSync(path, 'utf8'))));
-  if (!Object.keys(race.packages).length && !Object.keys(browser).length) throw new Error('No usable test measurements found.');
+  if (!Object.keys(go).length && !Object.keys(race.packages).length && !Object.keys(browser).length) throw new Error('No usable test measurements found.');
+  if (Object.keys(go).length) {
+    const path = join(root, 'scripts/go-test-timings.json');
+    const hints = JSON.parse(readFileSync(path, 'utf8'));
+    Object.assign(hints.package_seconds, go);
+    hints.source = { run_url: runURL, commit, attempt: +attempt, measurement: 'Ordinary Go package durations; ordering hints only.' };
+    writeFileSync(path, JSON.stringify(hints, null, 2) + '\n');
+  }
   if (Object.keys(race.packages).length) {
     const path = join(root, 'scripts/race-timings.json');
     const hints = JSON.parse(readFileSync(path, 'utf8'));
@@ -82,5 +104,5 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     hints.source = { run_url: runURL, commit, attempt: +attempt, measurement: 'Playwright test durations; balancing hints only.' };
     writeFileSync(path, `${JSON.stringify(hints, null, 2)}\n`);
   }
-  console.log(`Updated hints from ${Object.keys(race.packages).length} packages and ${Object.keys(browser).length} browser specs.`);
+  console.log('Updated hints from', Object.keys(go).length, 'ordinary Go packages,', Object.keys(race.packages).length, 'race packages and', Object.keys(browser).length, 'browser specs.');
 }

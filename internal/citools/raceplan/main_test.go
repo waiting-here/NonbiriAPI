@@ -55,6 +55,17 @@ func TestParseShardSpec(t *testing.T) {
 	}
 }
 
+func TestLoadTimingHintsRetainsWeightsWithoutForcingSplit(t *testing.T) {
+	content := `{"version":1,"shards":2,"default_package_seconds":3,"split_packages":[],"test_seconds":{"example/whole":{"TestSlow":90}}}`
+	hints, err := loadTimingHints(writeTimingHints(t, content))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hints.SplitPackages) != 0 || hints.TestSeconds["example/whole"]["TestSlow"] != 90 {
+		t.Fatalf("test weights changed split selection or were discarded: %#v", hints)
+	}
+}
+
 func TestLoadTimingHintsRejectsMalformedOrInconsistentFiles(t *testing.T) {
 	t.Parallel()
 
@@ -90,7 +101,6 @@ func TestLoadTimingHintsRejectsMalformedOrInconsistentFiles(t *testing.T) {
 		{name: "fractional group cap", content: strings.Replace(valid, `{"example/slow": 4}`, `{"example/slow": 1.5}`, 1)},
 		{name: "invalid test name", content: strings.Replace(valid, `{"TestOne": 90}`, `{"helper": 90}`, 1)},
 		{name: "invalid test weight", content: strings.Replace(valid, `{"TestOne": 90}`, `{"TestOne": 0}`, 1)},
-		{name: "unsplit test weights", content: strings.Replace(valid, `{"example/slow": {"TestOne": 90}}`, `{"example/whole": {"TestOne": 90}}`, 1)},
 		{name: "empty test weights", content: strings.Replace(valid, `{"example/slow": {"TestOne": 90}}`, `{"example/slow": {}}`, 1)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

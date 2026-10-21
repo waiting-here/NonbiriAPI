@@ -2,8 +2,8 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 export const integrationGroups = {
-  content: ['picturebook', 'fatfish'],
-  management: ['audit', 'management', 'workflow', 'proxy', 'lakenotes'],
+  content: ['picturebook', 'fatfish', 'lakenotes'],
+  management: ['audit', 'management', 'workflow', 'proxy'],
 };
 
 export function selectSpecs(specs, shard, hints = {}) {

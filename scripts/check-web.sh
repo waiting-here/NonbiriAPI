@@ -26,7 +26,7 @@ select_values() {
 }
 case "$component" in unit|browser|all) ;; *) exit 2 ;; esac
 if [ "$component" = unit ] || [ "$component" = all ]; then
-  node --test "$root/scripts/browser-plan.test.mjs" "$root/scripts/check-risk.test.mjs" "$root/scripts/ci-metrics.test.mjs" "$root/scripts/update-verification-timings.test.mjs"
+  node --test "$root/scripts/browser-plan.test.mjs" "$root/scripts/check-risk.test.mjs" "$root/scripts/ci-metrics.test.mjs" "$root/scripts/update-verification-timings.test.mjs" "$root/scripts/ci-station-build.test.mjs"
   select_values related
   if [ "${#selected[@]}" -eq 0 ]; then
     "$npm_command" test
