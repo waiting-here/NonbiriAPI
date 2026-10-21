@@ -37,6 +37,9 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Changed
 
+- Reduce CI transfer and setup work with compact station artifacts, shared browser
+  fixtures and a dedicated race build cache. Schedule slower Go packages and
+  balance race tests using measured durations while preserving complete coverage.
 - Route preflight and snapshots use the existing read pool. Request-adaptation
   reads release database connections before decoding, and charity snapshots reuse
   each physical key's quota result within the same transaction. Configuration

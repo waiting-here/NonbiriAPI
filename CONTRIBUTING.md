@@ -60,8 +60,9 @@ populated conversion, and `race-check.sh` runs the concurrency-risk catalog.
 Ordinary tests start slower packages first using `scripts/go-test-timings.json`;
 the complete live package list, build/vet coverage and test flags are unchanged.
 CI retains the required `Go checks` and `Web checks` summaries. Browser smoke
-runs in two whole-spec shards with two workers each; real-backend suites keep
-one worker in each of two isolated groups. Smoke starts after the station build
+runs in two whole-spec shards with one browser worker per runner, preserving
+headroom for image decoding and animation. Real-backend suites also use one
+worker in each of two isolated groups. Smoke starts after the station build
 without waiting for the backend fixture. Every selected child must succeed,
 including fixture preparation and both browser groups.
 
