@@ -70,7 +70,7 @@ func TestAuditBrowserFixture(t *testing.T) {
 	f.cfg.ListenAddr, f.cfg.SiteBaseURL = f.cfg.UserHost, "http://"+f.cfg.UserHost
 	f.cfg.DBPath = f.path
 	if os.Getenv("NONBIRI_ENDPOINT_POLICIES_BROWSER") == "1" {
-		configureEndpointPoliciesBrowser(t, f.cfg)
+		configureEndpointPoliciesBrowser(t, f)
 	}
 	if err := f.open(); err != nil {
 		t.Fatal(err)
@@ -143,6 +143,7 @@ VALUES('issue_projection_incomplete','synthetic projection checkpoint',?,?,0)`, 
 		management = seedManagementBrowser(t, f, now)
 		if os.Getenv("NONBIRI_ENDPOINT_POLICIES_BROWSER") == "1" {
 			management["endpoint_policy"] = seedEndpointPoliciesBrowser(t, f)
+			management["worker_origin"] = f.worker.URL
 		}
 		if workflowBrowser {
 			management["workflow"] = seedWorkflowBrowser(t, f, management, users.URL)

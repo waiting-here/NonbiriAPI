@@ -71,6 +71,7 @@ type imageBrowserFixture struct {
 	sequence      atomic.Int64
 	mu            sync.Mutex
 	upstream      *httptest.Server
+	worker        *httptest.Server
 	upstreamState *imageFixtureUpstream
 	adminCookie   *http.Cookie
 	users         []imageBrowserUser
@@ -85,7 +86,13 @@ func (f *imageBrowserFixture) open() error {
 	if err != nil {
 		return err
 	}
-	stack, err := egress.NewStack(egress.StackOptions{AllowedOrigins: []string{f.upstream.URL}, CloudflareRoutes: f.cfg.CloudflareRoutes, CloudflareWorker: f.cfg.CloudflareWorker})
+	options := egress.StackOptions{AllowedOrigins: []string{f.upstream.URL}, CloudflareRoutes: f.cfg.CloudflareRoutes, CloudflareWorker: f.cfg.CloudflareWorker}
+	if f.worker != nil {
+		options.AllowedOrigins = append(options.AllowedOrigins, f.worker.URL)
+		options.Resolver = endpointPolicyBrowserResolver{}
+		options.Dialer = modelWorkerDialer{direct: f.upstream.Listener.Addr().String()}
+	}
+	stack, err := egress.NewStack(options)
 	if err != nil {
 		_ = store.Close()
 		return err

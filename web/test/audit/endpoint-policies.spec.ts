@@ -24,7 +24,7 @@ interface Fixture {
   user_url: string;
   admin_cookie: Cookie;
   users: { id: string; level: number; cookie: Cookie }[];
-  management: { endpoint_policy: Identity };
+  management: { endpoint_policy: Identity; worker_origin: string };
 }
 const copy = common.common.endpointPolicies;
 function fixture(): Fixture {
@@ -141,7 +141,7 @@ test('endpoint list keeps numbered pagination, draft and focus through route ins
       prefix + '/egress/cloudflare-routes',
     );
     expect(loaded.mode).toBe('worker');
-    expect(loaded.worker_origin).toBe('https://worker.example.net');
+    expect(loaded.worker_origin).toBe(fixture().management.worker_origin);
     expect(new URL(loaded.worker_origin).origin).toBe(loaded.worker_origin);
     await expect(page.getByText(loaded.worker_origin, { exact: true })).toBeVisible();
     await expect(page.getByText(copy.proxyMode.worker, { exact: true })).toBeVisible();
