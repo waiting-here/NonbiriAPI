@@ -255,7 +255,14 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, w http.ResponseWriter, 
 	defer func() { clear(translated) }()
 	if err != nil {
 		upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), raw)
-		return upstreamFailure("upstream response was invalid", response.StatusCode)
+		failed := upstreamFailure("upstream response was invalid", response.StatusCode)
+		failed.Usage = usage
+		if errors.Is(err, errUnsuccessfulFinish) {
+			failed.Diagnostic = unsuccessfulFinishDiagnostic
+			root, _ := parseObject(raw)
+			failed.ErrorDetail = unsuccessfulFinishDetail(root["finishReason"], errorContext)
+		}
+		return failed
 	}
 	if chat != nil && policy.FlattenToolCalls {
 		projected, projectionErr := tooltext.FlattenCompletion(translated)
