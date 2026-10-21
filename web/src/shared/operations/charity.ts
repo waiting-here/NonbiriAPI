@@ -1,3 +1,5 @@
+import { normalizeSessionHeaders, type SessionHeader } from '@shared/sessionHeaders';
+export type { SessionHeader } from '@shared/sessionHeaders';
 import { normalizeCloudflareProxyMode, type CloudflareProxyMode } from '@shared/cloudflareProxy';
 import {
   normalizeRecurringDiscount,
@@ -722,11 +724,6 @@ export function normalizeStewardDonation(value: unknown): StewardDonation {
   };
 }
 
-export interface SessionHeader {
-  name: string;
-  idle_seconds: number;
-  format: 'uuid_v4' | 'hex_32';
-}
 export interface CharityModel {
   cloudflare_proxy_enabled: boolean;
   cloudflare_proxy_mode: CloudflareProxyMode;
@@ -1047,17 +1044,7 @@ function normalizeModel(value: unknown, label: string): CharityModel {
     (percent !== null && !/^(0|[1-9][0-9]?|100)(\.[0-9]{1,2})?$/.test(percent))
   )
     invalidResponse(`${label} success percent`);
-  const sessionHeaders =
-    root.session_headers === undefined
-      ? []
-      : array(root.session_headers, label + ' session headers', 16).map((v) => {
-          const entry = record(v, ['name', 'idle_seconds', 'format'], label + ' session header');
-          return {
-            name: string(entry.name, label + ' header name', { min: 1 }),
-            idle_seconds: integer(entry.idle_seconds, label + ' header idle', 1, 86400),
-            format: oneOf(entry.format, ['uuid_v4', 'hex_32'] as const, label + ' header format'),
-          };
-        });
+  const sessionHeaders = normalizeSessionHeaders(root.session_headers);
   return {
     cloudflare_proxy_enabled: boolean(
       root.cloudflare_proxy_enabled,

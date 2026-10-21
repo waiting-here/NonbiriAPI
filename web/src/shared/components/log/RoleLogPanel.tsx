@@ -7,6 +7,7 @@ import { Card, EmptyState, ErrorState, LoadingState } from '@shared/components/S
 import { formatCredits } from '../../../user/games/common/strict';
 import { Fold, Note } from '@shared/components/ui';
 import { RawStorageSummary } from '@shared/observability/RawStorageSummary';
+import { GlobalPressure } from '@shared/observability/GlobalPressure';
 import { AttemptErrors, RequestSource } from '@shared/observability/RequestDiagnostics';
 import { type PageSize } from '@shared/operations/pageNumbers';
 import { PagePagination } from '@shared/operations/PagePagination';
@@ -1091,6 +1092,7 @@ function ScopedRoleLogPanel({
           </details>
         )}
       </div>
+      {role !== 'user' ? <GlobalPressure role={role} accountID={accountID} /> : null}
       <LogFilters station={station} fields={fields} state={urlState} onApply={applyFilters} />
       {invalidFilter ? (
         <p className="field-error" role="alert">

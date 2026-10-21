@@ -1,3 +1,4 @@
+import { normalizeSessionHeaders } from '@shared/sessionHeaders';
 import { queryPath } from '@shared/operations/api';
 import { ApiError, isApiError } from '@shared/query/http';
 import { normalizeRolePolicy, type RolePolicy } from '@shared/rolePolicy';
@@ -944,6 +945,7 @@ export async function createModel(
       'cloudflare_proxy_enabled',
       'role_policy',
       'transport_rule',
+      'session_headers',
     ],
     'logical model creation input',
   );
@@ -980,6 +982,9 @@ export async function createModel(
     ...(Object.hasOwn(record, 'transport_rule')
       ? { transport_rule: normalizeTransportRule(record.transport_rule) }
       : {}),
+    ...(Object.hasOwn(record, 'session_headers')
+      ? { session_headers: normalizeSessionHeaders(record.session_headers, 'input') }
+      : {}),
     ...(Object.hasOwn(record, 'role_policy')
       ? { role_policy: rolePolicyInput(record.role_policy) }
       : {}),
@@ -1013,6 +1018,7 @@ export async function patchModel(
       'cloudflare_proxy_enabled',
       'role_policy',
       'transport_rule',
+      'session_headers',
     ],
     'logical model update input',
   );
@@ -1027,6 +1033,7 @@ export async function patchModel(
       'cloudflare_proxy_enabled',
       'role_policy',
       'transport_rule',
+      'session_headers',
     ].some((key) => Object.hasOwn(record, key))
   ) {
     throw new ApiError('invalid_request', 'Invalid logical model update input.', 400);
@@ -1069,6 +1076,9 @@ export async function patchModel(
       : {}),
     ...(Object.hasOwn(record, 'transport_rule')
       ? { transport_rule: normalizeTransportRule(record.transport_rule) }
+      : {}),
+    ...(Object.hasOwn(record, 'session_headers')
+      ? { session_headers: normalizeSessionHeaders(record.session_headers, 'input') }
       : {}),
     ...(Object.hasOwn(record, 'role_policy')
       ? { role_policy: rolePolicyInput(record.role_policy) }

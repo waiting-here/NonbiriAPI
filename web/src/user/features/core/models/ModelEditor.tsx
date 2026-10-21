@@ -1,3 +1,12 @@
+import { useTranslation } from 'react-i18next';
+import { SessionHeaderFields } from '@shared/components/charity/SessionHeaderFields';
+import {
+  buildSessionHeaders,
+  sameSessionHeaders,
+  sessionHeaderDraft,
+  validSessionHeaderDraft,
+  type SessionHeaderInput,
+} from '@shared/sessionHeaders';
 import { CloudflareProxyField } from '@shared/components/CloudflareProxyField';
 import { Field } from '@shared/components/ui';
 import { sameRolePolicy } from './policy';
@@ -92,6 +101,7 @@ export function ModelEditor({
   onCapabilityLoss?: (error: unknown) => void;
 }) {
   const { t } = useCoreCopy();
+  const { t: sharedText } = useTranslation();
   const queryClient = useQueryClient();
   const [provider, setProvider] = useState(initial?.provider ?? '');
   const [modelName, setModelName] = useState(initial?.model ?? '');
@@ -103,6 +113,10 @@ export function ModelEditor({
   );
   const [showTypeError, setShowTypeError] = useState(false);
   const [cloudflareProxy, setCloudflareProxy] = useState(initial?.cloudflare_proxy_enabled ?? true);
+  const [sessionHeaders, setSessionHeaders] = useState(() =>
+    sessionHeaderDraft(initial?.session_headers),
+  );
+  const headersInvalid = !validSessionHeaderDraft(sessionHeaders);
   const [silentRetry, setSilentRetry] = useState(initial?.silent_retry ?? false);
   const [transportRule, setTransportRule] = useState<TransportRule>(
     initial?.transport_rule ?? 'passthrough',
@@ -167,11 +181,13 @@ export function ModelEditor({
           Object.entries(patch).every(
             ([field, value]) =>
               field === 'expected_revision' ||
-              (field === 'model_types'
-                ? sameModelTypes(current.model_types, value as ModelType[])
-                : field === 'role_policy'
-                  ? sameRolePolicy(current.role_policy, value as RolePolicy)
-                  : current[field as keyof Model] === value),
+              (field === 'session_headers'
+                ? sameSessionHeaders(current.session_headers, value as SessionHeaderInput[])
+                : field === 'model_types'
+                  ? sameModelTypes(current.model_types, value as ModelType[])
+                  : field === 'role_policy'
+                    ? sameRolePolicy(current.role_policy, value as RolePolicy)
+                    : current[field as keyof Model] === value),
           );
         if (confirmed)
           context.commit(() => {
@@ -226,7 +242,7 @@ export function ModelEditor({
         setShowTypeError(true);
         return;
       }
-      if (!roleResult.policy) return;
+      if (!roleResult.policy || headersInvalid) return;
       try {
         validatePersonalProviderName(provider);
         validateLogicalName(modelName);
@@ -239,6 +255,7 @@ export function ModelEditor({
         model: modelName,
         route_strategy: strategy,
         model_types: modelTypes,
+        session_headers: buildSessionHeaders(sessionHeaders),
         cloudflare_proxy_enabled: cloudflareProxy,
         silent_retry: silentRetry,
         transport_rule: transportRule,
@@ -264,6 +281,7 @@ export function ModelEditor({
         modelName !== initial.model,
         strategy !== initial.route_strategy,
         !sameModelTypes(modelTypes, initial.model_types),
+        !sameSessionHeaders(sessionHeaders, initial.session_headers),
         cloudflareProxy !== initial.cloudflare_proxy_enabled,
         silentRetry !== initial.silent_retry,
         transportRule !== initial.transport_rule,
@@ -285,6 +303,7 @@ export function ModelEditor({
     setModelTypes(initial.model_types);
     setShowTypeError(false);
     setCloudflareProxy(initial.cloudflare_proxy_enabled);
+    setSessionHeaders(sessionHeaderDraft(initial.session_headers));
     setSilentRetry(initial.silent_retry);
     setTransportRule(initial.transport_rule);
     setFlattenTools(initial.flatten_tool_calls);
@@ -347,6 +366,16 @@ export function ModelEditor({
             disabled={hasAttempt}
             onChange={setCloudflareProxy}
           />
+          <SessionHeaderFields
+            value={sessionHeaders}
+            onChange={setSessionHeaders}
+            disabled={hasAttempt}
+          />
+          {headersInvalid ? (
+            <p className="core-inline-error" role="alert">
+              {sharedText('common.operations.charity.validation.sessionHeaders')}
+            </p>
+          ) : null}
           <div className="core-model-preview">
             <span>{textModel('clientValue')}</span>
             <SafeCopyValue
@@ -407,7 +436,7 @@ export function ModelEditor({
         <SaveBar
           dirtyCount={dirtyCount}
           busy={busy}
-          saveDisabled={!!roleResult.error}
+          saveDisabled={!!roleResult.error || headersInvalid}
           onSave={() => formRef.current?.requestSubmit()}
           onDiscard={discard}
           saveLabel={t('common.save')}
@@ -419,7 +448,7 @@ export function ModelEditor({
           <button
             type="submit"
             className="nb-btn nb-btn--primary"
-            disabled={busy || (!hasAttempt && !!roleResult.error)}
+            disabled={busy || (!hasAttempt && (!!roleResult.error || headersInvalid))}
           >
             {busy ? t('common.working') : hasAttempt ? text('checkResult') : t('common.save')}
           </button>

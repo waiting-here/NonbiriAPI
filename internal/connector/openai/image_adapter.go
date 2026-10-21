@@ -73,6 +73,9 @@ func (a *Adapter) AttemptImage(ctx context.Context, writer http.ResponseWriter, 
 	target.credential.clear()
 	httpRequest = egress.WithResponseLimits(httpRequest, egress.ResponseLimits{JSONBytes: a.maxImageResponseBytes, StreamBytes: a.maxImageResponseBytes, LineBytes: int(a.maxImageResponseBytes), EventBytes: int(a.maxImageResponseBytes)})
 	response, err := client.Do(httpRequest)
+	if err == nil {
+		errorContext.UnchangedCallerParameter = unchangedCallerParameters(ctx, response, request.fields, body, policy)
+	}
 	if response != nil {
 		defer func() { result.UpstreamStatus = response.StatusCode }()
 	}
@@ -100,7 +103,7 @@ func (a *Adapter) AttemptImage(ctx context.Context, writer http.ResponseWriter, 
 	if response.StatusCode != http.StatusOK {
 		result = connectorcontract.UpstreamFailed(upstreamFailure(statusDiagnostic(response.StatusCode), response.StatusCode), connectorcontract.OriginUpstreamResponse)
 		result.ErrorDetail = errorContext.ReadResponse(ctx, response, a.maxImageResponseBytes)
-		return result
+		return callerParameterFailure(result)
 	}
 	if request.Stream {
 		if !validResponseMediaType(response, "text/event-stream") {

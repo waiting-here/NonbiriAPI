@@ -529,6 +529,20 @@
           "rpm_ban": "RPM 超限自动封禁",
           "client_rule_ban": "客户端命中自动封禁",
           "context_penalty": "超长上下文罚款"
+        },
+        "pressure": {
+          "title": "全站压力",
+          "rpm": "全站 RPM",
+          "concurrency": "全站出站并发",
+          "currentLimit": "{{current}} / {{limit}}",
+          "current": "当前 {{value}}",
+          "day": "24 小时峰值 {{value}}",
+          "all": "历史峰值 {{value}}",
+          "values": "当前 {{current}}，上限 {{limit}}，24 小时峰值 {{day}}，历史峰值 {{all}}",
+          "updated": "观测于 {{time}}",
+          "help": "RPM 为最近一分钟的限额占用，并发为正在进行的上游调用。每 {{seconds}} 秒观测，峰值按分钟汇总；历史自 {{time}} 起记录，页面每 15 秒刷新。",
+          "unavailable": "压力统计暂时不可用，请稍后再试。",
+          "stale": "暂时无法刷新，以上为最近一次观测值。"
         }
       },
       "charity": {
@@ -780,7 +794,7 @@
           "discountPercent": "折扣百分比必须是 0 至 100 的整数。",
           "discountDates": "折扣日期必须有效，且结束时间必须晚于开始时间。",
           "contextThreshold": "门槛请填写大于 0 的整数 token 数。",
-          "sessionHeaders": "请填写请求头名称，闲置时间为 1–86,400 秒。",
+          "sessionHeaders": "请填写请求头名称，闲置时间留空或填写 0–86,400 秒。",
           "recurringDiscount": "请填写有效的星期、时间、时区与应付比例。",
           "searchUnitOperations": "按 search unit 计费要求模型仅启用重排序。请修改接口类型或计价模式。"
         },
@@ -811,13 +825,18 @@
         },
         "sessionHeaders": {
           "title": "会话请求头代管",
-          "help": "为同一用户与模型复用随机会话值；全部请求结束后开始闲置计时，有助于上游缓存复用。代管值覆盖同名固定和透传头。",
+          "help": "自动生成请求头值。代管值会覆盖同名固定和转发头。",
           "name": "请求头 {{n}} 名称",
           "idle": "闲置过期时间（秒）",
           "format": "随机值格式",
           "hex": "32 位小写十六进制",
           "remove": "移除请求头 {{n}}",
-          "add": "添加代管请求头"
+          "add": "添加代管请求头",
+          "saveHelp": "随模型设置保存；转发与固定请求头单独保存。",
+          "idleHelp": "留空使用 300 秒。大于 0 时，为同一用户与模型复用会话值，闲置超时后重新生成。0 表示每条请求重新生成，内部重试复用同一值。",
+          "opencodeSession": "OpenCode 会话 ID（ses）",
+          "opencodeMessage": "OpenCode 消息 ID（msg）",
+          "opencodePart": "OpenCode 分段 ID（prt）"
         }
       },
       "management": {
@@ -2506,6 +2525,16 @@
       "excludedHelp": "每行一个顶层参数名，如 temperature 或 max_tokens，不加 /。这些参数会在可选参数解析前移除；请勿同时在缺省值、强制值或原生扩展中配置同一参数，也需检查继承的服务配置。模型、输入内容和响应协议等必要字段不可排除。",
       "headerListHelp": "每行一个请求头名称，如 X-Client-Version，不加 /、冒号或值。只透传列出的客户端请求头。",
       "nativeListHelp": "每行一个参数路径，如 /thinking。使用 Anthropic 或 Gateway 时，允许该额外 JSON 字段进入上游原生请求；字段和值仍需得到该上游支持。"
+    },
+    "model": {
+      "title": "请求适配",
+      "headers": "请求头",
+      "body": "请求内容",
+      "forwardHeaders": "转发客户端请求头",
+      "fixedHeaders": "固定请求头",
+      "save": "保存请求适配",
+      "saved": "请求适配已保存。",
+      "saveHelp": "这里的修改单独保存，不随模型设置保存。"
     }
   },
   "mfa": {

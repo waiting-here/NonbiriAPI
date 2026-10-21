@@ -17,6 +17,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
+	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
 
 const (
@@ -312,6 +313,7 @@ func (*Dispatch) LogValue() slog.Value {
 }
 
 type AttemptOutcome struct {
+	CallerFault       upstreamerror.CallerFault
 	Backoff           smartbackoff.Classification
 	StreakDisposition connectorcontract.StreakDisposition
 	FailureOrigin     connectorcontract.FailureOrigin

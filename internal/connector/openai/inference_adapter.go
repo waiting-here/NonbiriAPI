@@ -97,6 +97,10 @@ func (a *Adapter) AttemptInference(ctx context.Context, writer http.ResponseWrit
 	}
 	httpRequest = egress.WithResponseLimits(httpRequest, egress.ResponseLimits{JSONBytes: limit, StreamBytes: streamLimit, LineBytes: lineLimit, EventBytes: eventLimit})
 	response, err := client.Do(httpRequest)
+	if err == nil && (kind == contract.TypeOpenAICompatible || kind == contract.TypeOpenAIResponses) &&
+		request.operation != contract.OperationRerank && len(request.parts) == 0 {
+		errorContext.UnchangedCallerParameter = unchangedCallerParameters(ctx, response, request.fields, body, policy)
+	}
 	httpRequest.Header.Del("Authorization")
 	clear(body)
 	if response != nil {
@@ -130,7 +134,7 @@ func (a *Adapter) AttemptInference(ctx context.Context, writer http.ResponseWrit
 	if response.StatusCode != http.StatusOK {
 		result = contract.UpstreamFailed(upstreamFailure(statusDiagnostic(response.StatusCode), response.StatusCode), contract.OriginUpstreamResponse)
 		result.ErrorDetail = errorContext.ReadResponse(ctx, response, limit)
-		return result
+		return callerParameterFailure(result)
 	}
 	media, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
 	if err != nil || !request.responseMedia(media) {

@@ -529,6 +529,20 @@
           "rpm_ban": "RPM-limit ban",
           "client_rule_ban": "Client-rule ban",
           "context_penalty": "Extra-long context fine"
+        },
+        "pressure": {
+          "title": "Site load",
+          "rpm": "Site RPM",
+          "concurrency": "Outbound concurrency",
+          "currentLimit": "{{current}} / {{limit}}",
+          "current": "Current {{value}}",
+          "day": "24-hour peak {{value}}",
+          "all": "All-time peak {{value}}",
+          "values": "Current {{current}}, limit {{limit}}, 24-hour peak {{day}}, all-time peak {{all}}",
+          "updated": "Observed {{time}}",
+          "help": "RPM counts occupied quota in the last minute; concurrency counts active upstream calls. Sampled every {{seconds}} seconds with peaks grouped by minute, recorded since {{time}}, and refreshed here every 15 seconds.",
+          "unavailable": "Load statistics are temporarily unavailable. Please try again later.",
+          "stale": "Refresh is unavailable. The latest observed values are shown."
         }
       },
       "charity": {
@@ -780,7 +794,7 @@
           "discountPercent": "Discount percent must be an integer from 0 through 100.",
           "discountDates": "Discount dates must be valid and the end must be later than the start.",
           "contextThreshold": "Enter a positive whole number of input tokens.",
-          "sessionHeaders": "Enter a header name and an idle lifetime of 1–86,400 seconds.",
+          "sessionHeaders": "Enter a header name. Leave idle expiry blank or enter 0–86,400 seconds.",
           "recurringDiscount": "Choose valid weekdays, times, a time zone and payable percentages.",
           "searchUnitOperations": "Per search unit requires Rerank as the only model operation. Change the operation or pricing mode."
         },
@@ -811,13 +825,18 @@
         },
         "sessionHeaders": {
           "title": "Managed session headers",
-          "help": "Reuse a random value for the same user and model. Idle time begins when all requests finish, helping upstream cache reuse. Managed values override fixed and forwarded headers with the same name.",
+          "help": "Generate request header values automatically. Managed values override fixed and forwarded headers with the same name.",
           "name": "Header {{n}} name",
           "idle": "Idle expiry (seconds)",
           "format": "Random value format",
           "hex": "32 lowercase hexadecimal characters",
           "remove": "Remove header {{n}}",
-          "add": "Add managed header"
+          "add": "Add managed header",
+          "saveHelp": "Saved with model settings. Forwarded and fixed headers are saved separately.",
+          "idleHelp": "Leave blank for 300 seconds. A positive value reuses a session for the same user and model until idle expiry. Use 0 to generate a new value for each request; internal retries keep that value.",
+          "opencodeSession": "OpenCode session ID (ses)",
+          "opencodeMessage": "OpenCode message ID (msg)",
+          "opencodePart": "OpenCode part ID (prt)"
         }
       },
       "management": {
@@ -2506,6 +2525,16 @@
       "excludedHelp": "One top-level parameter name per line, such as temperature or max_tokens, without a slash. These fields are removed before optional parameter validation. Do not also set them in defaults, forced values or native extensions (including inherited service settings). Routing, input and response protocol fields cannot be excluded.",
       "headerListHelp": "One header name per line, for example X-Client-Version. No slash, colon or value. Only listed client headers are forwarded.",
       "nativeListHelp": "One parameter path per line, for example /thinking. For Anthropic or Gateway this permits that extra JSON field to enter the native upstream request. The field and value must be supported by that upstream."
+    },
+    "model": {
+      "title": "Request adaptation",
+      "headers": "Request headers",
+      "body": "Request body",
+      "forwardHeaders": "Client headers to forward",
+      "fixedHeaders": "Fixed outbound headers",
+      "save": "Save request adaptation",
+      "saved": "Request adaptation saved.",
+      "saveHelp": "Save these changes separately from model settings."
     }
   },
   "mfa": {

@@ -74,7 +74,7 @@ for (const width of [1440, 390]) {
       await expect(page.getByRole('button', { name: 'Edit model', exact: true })).toBeVisible();
       await expect.poll(() => bindingReads).toBe(1);
       expect(adaptationReads).toBe(0);
-      const advanced = page.locator('summary').filter({ hasText: 'Advanced behavior' });
+      const advanced = page.locator('summary').filter({ hasText: 'Request adaptation' });
       await advanced.focus();
       await page.keyboard.press('Enter');
       const cache = page.getByLabel('Automatic cache default');

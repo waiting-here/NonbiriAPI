@@ -34,19 +34,19 @@ it('preserves service inheritance while saving personal exclusions and a model h
   );
   await view.user.type(await screen.findByLabelText('Client parameters to exclude'), 'temperature');
   for (const name of [
-    'Allowed client headers',
+    'Client headers to forward',
     'Default parameters (when absent)',
     'Fixed parameters (always override)',
     'Extra parameters to keep',
   ]) {
     expect(screen.getByRole('group', { name })).toBeVisible();
   }
-  const headers = screen.getByRole('group', { name: 'Headers added to requests' });
+  const headers = screen.getByRole('group', { name: 'Fixed outbound headers' });
   await view.user.selectOptions(within(headers).getByLabelText('Configuration source'), 'replace');
   await view.user.click(within(headers).getByRole('button', { name: 'Try this example' }));
   expect(within(headers).getByText(/Enter a header name such as User-Agent/)).toBeVisible();
-  await view.user.click(screen.getByRole('button', { name: 'Save request rewriting' }));
-  await screen.findByText('Request rewriting saved.');
+  await view.user.click(screen.getByRole('button', { name: 'Save request adaptation' }));
+  await screen.findByText('Request adaptation saved.');
   expect(sent?.excluded_request_fields).toEqual(['temperature']);
   expect(sent?.fixed_headers).toEqual({
     mode: 'replace',
