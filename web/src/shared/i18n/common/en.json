@@ -529,6 +529,20 @@
           "rpm_ban": "RPM-limit ban",
           "client_rule_ban": "Client-rule ban",
           "context_penalty": "Extra-long context fine"
+        },
+        "pressure": {
+          "title": "Site load",
+          "rpm": "Site RPM",
+          "concurrency": "Outbound concurrency",
+          "currentLimit": "{{current}} / {{limit}}",
+          "current": "Current {{value}}",
+          "day": "24-hour peak {{value}}",
+          "all": "All-time peak {{value}}",
+          "values": "Current {{current}}, limit {{limit}}, 24-hour peak {{day}}, all-time peak {{all}}",
+          "updated": "Observed {{time}}",
+          "help": "RPM counts occupied quota in the last minute; concurrency counts active upstream calls. Sampled every {{seconds}} seconds with peaks grouped by minute, recorded since {{time}}, and refreshed here every 15 seconds.",
+          "unavailable": "Load statistics are temporarily unavailable. Please try again later.",
+          "stale": "Refresh is unavailable. The latest observed values are shown."
         }
       },
       "charity": {
