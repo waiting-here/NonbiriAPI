@@ -107,6 +107,20 @@ func parseUsage(raw []byte) (contract.Usage, error) {
 	if _, ok := usageTotal(out); !ok {
 		return contract.Usage{TotalMismatch: out.TotalMismatch}, errResponse
 	}
+	// The native report can explicitly classify all output as text. A
+	// reasoning-only count is still billed by the aggregate output bucket.
+	if value.Output.Text != nil && *value.Output.Text == outputTokens && (value.Output.Reasoning == nil || *value.Output.Reasoning == 0) {
+		var fields struct {
+			Output object `json:"outputTokens"`
+		}
+		_ = json.Unmarshal(raw, &fields)
+		if only(fields.Output, "total", "text", "reasoning") {
+			out.Modalities.OutputPresent = true
+			out.Modalities.Output[contract.ModalityText] = outputTokens
+		} else {
+			out.Modalities.OutputReason = contract.ModalityUnknown
+		}
+	}
 	return out, nil
 }
 
@@ -154,6 +168,11 @@ func finishReason(raw []byte) (string, error) {
 	if err != nil || !ok || !only(value, "unified", "raw") {
 		return "", errResponse
 	}
+	if raw, exists := value["raw"]; exists && !isNull(raw) {
+		if _, valid := text(raw); !valid {
+			return "", errResponse
+		}
+	}
 	switch reason {
 	case "stop", "length":
 		return reason, nil
@@ -161,6 +180,8 @@ func finishReason(raw []byte) (string, error) {
 		return "tool_calls", nil
 	case "content-filter":
 		return "content_filter", nil
+	case "other", "error":
+		return "", errUnsuccessfulFinish
 	default:
 		return "", errResponse
 	}
@@ -240,11 +261,11 @@ func translateChat(raw []byte, model string, created int64) ([]byte, contract.Us
 	if err != nil || !warningsOK(root["warnings"]) {
 		return nil, contract.Usage{}, errResponse
 	}
-	reason, err := finishReason(root["finishReason"])
-	if err != nil {
-		return nil, contract.Usage{}, err
-	}
 	usage, err := parseUsage(root["usage"])
+	if err != nil {
+		return nil, usage, err
+	}
+	reason, err := finishReason(root["finishReason"])
 	if err != nil {
 		return nil, usage, err
 	}
