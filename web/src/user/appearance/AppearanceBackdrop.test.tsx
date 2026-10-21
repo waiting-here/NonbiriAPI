@@ -117,3 +117,62 @@ it.each(['mirrorsea', 'amber', 'elopement', 'heart-thief'])(
     expect(view.container.querySelector('canvas')).toHaveAttribute('data-ready', 'false');
   },
 );
+
+it.each([
+  ['elopement', 'p-claude'],
+  ['heart-thief', 'q-glm'],
+] as const)(
+  'keeps the independently placed %s character when animation loading fails',
+  async (selected, id) => {
+    motionPreference();
+    vi.stubGlobal('innerWidth', 390);
+    vi.stubGlobal('innerHeight', 844);
+    document.documentElement.dataset.theme = 'dark';
+    vi.mocked(renderSpecial).mockRejectedValue(new Error('image-unavailable'));
+    const view = render(<AppearanceBackdrop selected={selected} />);
+    await waitFor(() => expect(renderSpecial).toHaveBeenCalledOnce());
+    expect(vi.mocked(renderSpecial).mock.calls[0][2]).toMatchObject({
+      variant: 'appearance',
+      dark: true,
+      ambient: true,
+    });
+    const character = view.container.querySelector(
+      '.nb-romance-still-character',
+    ) as HTMLImageElement;
+    expect(character).toHaveAttribute(
+      'src',
+      `/assets/gacha/motion/${id}/appearance-hero-dark.webp`,
+    );
+    expect(parseFloat(character.style.top)).toBeGreaterThan(136);
+    expect(view.container.querySelector('canvas')).toHaveAttribute('data-ready', 'false');
+    view.unmount();
+  },
+);
+
+it('keeps the mirror reflection, touch light and contact layer when animation loading fails', async () => {
+  motionPreference();
+  vi.stubGlobal('innerWidth', 390);
+  vi.stubGlobal('innerHeight', 844);
+  document.documentElement.dataset.theme = 'dark';
+  vi.mocked(renderSpecial).mockRejectedValue(new Error('image-unavailable'));
+  const view = render(<AppearanceBackdrop selected="mirrorsea" />);
+  await waitFor(() => expect(renderSpecial).toHaveBeenCalledOnce());
+  expect(vi.mocked(renderSpecial).mock.calls[0][2]).toMatchObject({
+    variant: 'appearance',
+    ambient: true,
+  });
+  expect(view.container.querySelector('.nb-mirror-still-character')).toHaveAttribute(
+    'src',
+    '/assets/gacha/motion/n-gemini/appearance-hero-dark.webp',
+  );
+  expect(view.container.querySelector('.nb-mirror-still-reflection img')).toHaveAttribute(
+    'src',
+    '/assets/gacha/motion/n-gemini/appearance-reflection.webp',
+  );
+  expect(view.container.querySelector('.nb-mirror-still-light')).toHaveAttribute(
+    'src',
+    '/assets/gacha/motion/n-gemini/appearance-light.webp',
+  );
+  expect(view.container.querySelector('canvas')).toHaveAttribute('data-ready', 'false');
+  view.unmount();
+});

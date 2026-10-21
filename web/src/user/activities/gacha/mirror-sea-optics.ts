@@ -58,22 +58,24 @@ vec3 mirrorEcho(vec3 color,vec2 p,vec4 box,float lag){
   vec3 spectral=mix(vec3(value),silhouette.rgb,.36)*.80+prism(.3-phase/TAU*.5)*.11;
   return mix(color,spectral,silhouette.a*mask*presence*(.62+.38*wave));
 }
-vec3 centralEcho(vec3 color,vec2 p){
-  float mask=glassMask(p,mainGlass);
-  if(mask<.001)return color;
-  vec2 q=(p-heroBox.xy)/heroBox.zw;
+vec4 centralEchoLayer(vec2 q){
   float phase=TAU*time/17.6;
   q.x=1.-q.x+.026*sin(q.y*7.-phase);
   q.y+=.004*sin(q.x*6.+phase);
-  if(q.x<0. || q.x>1. || q.y<0. || q.y>1.)return color;
+  if(q.x<0. || q.x>1. || q.y<0. || q.y>1.)return vec4(0.);
   vec4 echo=texture2D(art,q);
   float value=dot(echo.rgb,vec3(.2126,.7152,.0722));
   vec3 spectral=mix(vec3(value),echo.rgb,.25)*.8+prism(q.y*.2-phase/TAU*.5)*.08;
+  return vec4(spectral,echo.a*(.07+.065*pow(.5+.5*sin(phase-q.y*4.),2.)));
+}
+vec3 centralEcho(vec3 color,vec2 p){
+  float mask=glassMask(p,mainGlass);
+  if(mask<.001)return color;
+  vec4 echo=centralEchoLayer((p-heroBox.xy)/heroBox.zw);
   // The opaque foreground figure covers the reflected face and torso.
-  return mix(color,spectral,echo.a*mask*(.07+.065*pow(.5+.5*sin(phase-q.y*4.),2.)));
+  return mix(color,echo.rgb,echo.a*mask);
 }
 vec3 mirrorOptics(vec3 color,vec2 p){
-  color=centralEcho(color,p);
   color=mirrorEcho(color,p,gardenGlass,2.4);
   color=mirrorEcho(color,p,rainGlass,1.8);
   color=mirrorEcho(color,p,sunsetGlass,.9);

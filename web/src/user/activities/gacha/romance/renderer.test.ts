@@ -1,13 +1,15 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { renderRomance } from './renderer';
+import { createScene } from './compositor.js';
 
 const scene = vi.hoisted(() => ({ paint: vi.fn(), dispose: vi.fn() }));
-vi.mock('./compositor.js', () => ({ createScene: async () => scene }));
+vi.mock('./compositor.js', () => ({ createScene: vi.fn(async () => scene) }));
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   scene.paint.mockClear();
   scene.dispose.mockClear();
+  vi.mocked(createScene).mockClear();
 });
 
 it('caps high refresh paints, stops hidden frames and resumes without advancing hidden time', async () => {
@@ -81,3 +83,46 @@ it('renders a frozen export once without scheduling animation', async () => {
   expect(canvas.dataset.time).toBe('2.500');
   dispose();
 });
+
+it.each(['elopement', 'heart-thief'] as const)(
+  'uses the actual mobile viewport for %s appearance framing at high density',
+  async (theme) => {
+    vi.stubGlobal('devicePixelRatio', 3);
+    vi.stubGlobal('requestAnimationFrame', vi.fn());
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    );
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      clearRect: vi.fn(),
+      drawImage: vi.fn(),
+    } as unknown as CanvasRenderingContext2D);
+    const canvas = document.createElement('canvas');
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+      width: 390,
+      height: 844,
+    } as DOMRect);
+    const dispose = await renderRomance(canvas, theme, {
+      polished: true,
+      landscape: true,
+      variant: 'appearance',
+      highResolution: true,
+      dark: true,
+      frozenTime: 0,
+    });
+    expect(createScene).toHaveBeenCalledWith(
+      theme,
+      true,
+      expect.objectContaining({ highResolution: true, dark: true }),
+    );
+    const frame = scene.paint.mock.calls[0];
+    expect(frame[0].width).toBe(1170);
+    expect(frame[0].height).toBe(2532);
+    expect(frame[7]).toBe(390);
+    dispose();
+  },
+);
