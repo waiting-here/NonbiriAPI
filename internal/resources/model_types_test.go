@@ -13,7 +13,7 @@ func TestModelTypesDefaultPatchReplayAndExport(t *testing.T) {
 	e := newResourceTestEnvironment(t)
 	owner := e.seedUser(t, "model-types")
 	model := e.createModel(t, owner, resourceTestKey('a'), "provider", "model")
-	if len(model.ModelTypes) != 1 || !model.ModelTypes.Supports(contract.OperationChatCompletions) {
+	if len(model.ModelTypes) != 2 || !model.ModelTypes.Supports(contract.OperationChatCompletions) || !model.ModelTypes.Supports(contract.OperationResponses) {
 		t.Fatalf("default types=%v", model.ModelTypes)
 	}
 	id := resourceTestID(t, model.ID)

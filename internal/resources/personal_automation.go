@@ -206,7 +206,7 @@ func automationBindingSourceTx(ctx context.Context, tx *sql.Tx, userID, modelID,
 	if key.SuspensionState != "none" {
 		return Model{}, ErrResourceLocked
 	}
-	if model.FlattenToolCalls && endpoint.ConnectorType != string(connectorcontract.TypeOpenAICompatible) {
+	if model.FlattenToolCalls && !connectorcontract.Type(endpoint.ConnectorType).NativeChatCompletions() {
 		return Model{}, ErrInvalidRequest
 	}
 	return model, nil

@@ -15,7 +15,7 @@ func TestModelTypesDefaultPatchAndOmission(t *testing.T) {
 	e := newRoutingTestEnv(t)
 	e.seedUser(t, true, nil)
 	model := e.createModel(t, 'a')
-	if len(model.ModelTypes) != 1 || !model.ModelTypes.Supports(contract.OperationChatCompletions) {
+	if len(model.ModelTypes) != 2 || !model.ModelTypes.Supports(contract.OperationChatCompletions) || !model.ModelTypes.Supports(contract.OperationResponses) {
 		t.Fatalf("default=%v", model.ModelTypes)
 	}
 	id, _ := parsePositiveID(model.ID)

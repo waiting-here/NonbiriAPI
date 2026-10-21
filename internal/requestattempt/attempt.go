@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
 )
 
 type Fact struct {
@@ -48,7 +49,8 @@ func New(ctx context.Context, user int64, method, path string) (context.Context,
 	return context.WithValue(ctx, key{}, a), id, nil
 }
 func ValidRoute(method, path string) bool {
-	return method == "GET" && path == "/v1/models" || method == "POST" && (path == "/v1/chat/completions" || path == "/v1/embeddings" || path == "/v1/images/generations" || path == "/v1/decisions")
+	return method == http.MethodGet && path == "/v1/models" ||
+		method == http.MethodPost && requestkind.OperationForPath(path).Valid()
 }
 func get(ctx context.Context) *attempt {
 	if ctx == nil {

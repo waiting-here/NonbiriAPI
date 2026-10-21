@@ -186,7 +186,7 @@ func newPublicForwardRuntime(
 	forwardConfig := forward.Config{
 		Adaptations:   adaptations,
 		GatewayModels: gatewaypolicy.NewStore(store.DB()),
-		Personal:      personal, Charity: charityPolicyRouter{CharityRouter: charity, abuse: abuse}, Claims: claimRail, CharityCharges: charityService,
+		Personal:      personal, Charity: charityPolicyRouter{CharityRouter: charity, InferenceCharityRouter: charity, abuse: abuse}, Claims: claimRail, CharityCharges: charityService,
 		Debug: debugHub, Registry: registry, Connectors: connectors, Safety: safety,
 		ClientGuard: clientGuard,
 	}
@@ -226,6 +226,7 @@ func newPublicForwardRuntime(
 
 type charityPolicyRouter struct {
 	forward.CharityRouter
+	forward.InferenceCharityRouter
 	abuse *antiabuse.Service
 }
 
@@ -268,6 +269,7 @@ func (router charityPolicyRouter) Preflight(ctx context.Context, userID int64, m
 }
 
 var _ forward.CharityRouter = charityPolicyRouter{}
+var _ forward.InferenceCharityRouter = charityPolicyRouter{}
 
 func (runtime *publicForwardRuntime) BeginShutdown() {
 	if runtime != nil && runtime.lifecycle != nil {

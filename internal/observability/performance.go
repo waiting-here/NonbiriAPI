@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
 )
 
 // Performance keeps bounded, anonymous latency histograms in memory. It never
@@ -316,6 +318,12 @@ func performanceMethod(method string) string {
 }
 
 func performanceRoute(path string) string {
+	if requestkind.OperationForPath(path).Valid() {
+		return path
+	}
+	if strings.HasPrefix(path, "/v1/models/") {
+		return "/v1/models/{model}"
+	}
 	switch path {
 	case "/healthz", "/readyz":
 		return "health"
@@ -323,8 +331,7 @@ func performanceRoute(path string) string {
 		"/api/home/game-summary", "/api/games", "/api/checkin", "/api/checkin/game",
 		"/api/charity/models", "/api/models", "/api/caller-key", "/api/announcements":
 		return path
-	case "/v1/chat/completions", "/v1/responses", "/v1/messages", "/v1/embeddings",
-		"/v1/images/generations", "/v1/decisions", "/v1/models":
+	case "/v1/messages", "/v1/models":
 		return path
 	}
 	if strings.HasPrefix(path, "/api/games/") {

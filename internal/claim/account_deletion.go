@@ -142,12 +142,12 @@ func (s *Service) prepareRequestDeletionTx(
 		return err
 	}
 	var preserve uint64
-	switch request.Route {
-	case RouteOpenAIChat, RouteOpenAIEmbeddings, RouteOpenAIImages, RouteOpenAIDecisions:
+	switch {
+	case request.Route.IsSelf():
 		preserve = 1
-	case RouteCharityChat, RouteCharityEmbeddings, RouteCharityImages, RouteCharityDecisions:
+	case request.Route.IsCharity():
 		preserve = 1 + dispatchedClaims
-	case RouteDiscovery:
+	case request.Route == RouteDiscovery:
 		preserve = 0
 	default:
 		return ErrInvariant

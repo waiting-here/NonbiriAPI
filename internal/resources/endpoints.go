@@ -516,8 +516,8 @@ SELECT EXISTS(
  JOIN endpoint_keys k ON k.id=b.endpoint_key_id
  JOIN endpoints e ON e.id=k.endpoint_id
  WHERE e.id=? AND e.user_id=? AND m.user_id=?
-   AND e.connector_type<>? AND k.enabled=1 AND m.flatten_tool_calls=1
-)`, endpointID, userID, userID, string(connectorcontract.TypeOpenAICompatible)).Scan(&incompatible); err != nil {
+   AND e.connector_type NOT IN (?,?) AND k.enabled=1 AND m.flatten_tool_calls=1
+)`, endpointID, userID, userID, string(connectorcontract.TypeOpenAICompatible), string(connectorcontract.TypeOpenAIChatCompletions)).Scan(&incompatible); err != nil {
 		return false, fmt.Errorf("resources: validate endpoint flatten restoration: %w", err)
 	}
 	return incompatible == 1, nil
@@ -843,7 +843,7 @@ func (r *Repository) CreateEndpointKeyInTransaction(ctx context.Context, tx *sql
 	if err != nil {
 		return EndpointKey{}, err
 	}
-	if input.ForceStoreFalse && endpoint.ConnectorType != string(connectorcontract.TypeOpenAICompatible) {
+	if input.ForceStoreFalse && !connectorcontract.Type(endpoint.ConnectorType).NativeChatCompletions() {
 		return EndpointKey{}, ErrInvalidRequest
 	}
 	locked, err := endpointLockedTx(ctx, tx, endpointID)
@@ -942,7 +942,7 @@ func (r *Repository) PatchEndpointKey(ctx context.Context, userID, endpointID, k
 	if err != nil {
 		return MutationResult[EndpointKey]{}, err
 	}
-	if input.ForceStoreFalse != nil && *input.ForceStoreFalse && endpoint.ConnectorType != string(connectorcontract.TypeOpenAICompatible) {
+	if input.ForceStoreFalse != nil && *input.ForceStoreFalse && !connectorcontract.Type(endpoint.ConnectorType).NativeChatCompletions() {
 		return MutationResult[EndpointKey]{}, ErrInvalidRequest
 	}
 	currentRevision, _ := strconv.ParseInt(current.Revision, 10, 64)
@@ -1116,8 +1116,8 @@ SELECT EXISTS(
  JOIN endpoint_keys k ON k.id=b.endpoint_key_id
  JOIN endpoints e ON e.id=k.endpoint_id
  WHERE e.id=? AND e.user_id=? AND m.user_id=? AND k.id=?
-   AND e.connector_type<>? AND e.enabled=1 AND m.flatten_tool_calls=1
-)`, endpointID, userID, userID, keyID, string(connectorcontract.TypeOpenAICompatible)).Scan(&incompatible); err != nil {
+   AND e.connector_type NOT IN (?,?) AND e.enabled=1 AND m.flatten_tool_calls=1
+)`, endpointID, userID, userID, keyID, string(connectorcontract.TypeOpenAICompatible), string(connectorcontract.TypeOpenAIChatCompletions)).Scan(&incompatible); err != nil {
 		return false, fmt.Errorf("resources: validate endpoint key flatten restoration: %w", err)
 	}
 	return incompatible == 1, nil

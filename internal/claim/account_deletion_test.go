@@ -9,7 +9,7 @@ import (
 )
 
 func TestPrepareAccountDeletionConvergesWithUndispatchedReleaseAndRollsBack(t *testing.T) {
-	for _, route := range []RouteKind{RouteOpenAIChat, RouteOpenAIEmbeddings} {
+	for _, route := range []RouteKind{RouteOpenAIChat, RouteOpenAIEmbeddings, "openai_responses", "openai_rerank"} {
 		t.Run(string(route), func(t *testing.T) { testDeletionUndispatched(t, route) })
 	}
 }
@@ -78,7 +78,7 @@ func testDeletionUndispatched(t *testing.T, route RouteKind) {
 }
 
 func TestPrepareAccountDeletionConvergesWithDispatchAndCompletion(t *testing.T) {
-	for _, route := range []RouteKind{RouteOpenAIChat, RouteOpenAIEmbeddings} {
+	for _, route := range []RouteKind{RouteOpenAIChat, RouteOpenAIEmbeddings, "openai_responses", "openai_rerank"} {
 		t.Run(string(route), func(t *testing.T) { testDeletionDispatched(t, route) })
 	}
 }
@@ -155,7 +155,7 @@ func testDeletionDispatched(t *testing.T, route RouteKind) {
 }
 
 func TestPrepareAccountDeletionReleasesUnusedCharityCapacityAndKeepsLatePathExternal(t *testing.T) {
-	for _, route := range []RouteKind{RouteCharityChat, RouteCharityEmbeddings} {
+	for _, route := range []RouteKind{RouteCharityChat, RouteCharityEmbeddings, "charity_responses", "charity_systemone"} {
 		t.Run(string(route), func(t *testing.T) { testDeletionCharity(t, route) })
 	}
 }

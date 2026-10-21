@@ -450,7 +450,7 @@ ORDER BY b.ord,b.id LIMIT ?`, modelID, ownerUserID, ownerUserID, MaxSnapshotCand
 			candidate.order < 0 || candidate.order > 255 {
 			return nil, errors.New("routing: invalid persisted candidate")
 		}
-		if forceStore == 1 && candidate.connectorType != string(connectorcontract.TypeOpenAICompatible) {
+		if forceStore == 1 && !connectorcontract.Type(candidate.connectorType).NativeChatCompletions() {
 			return nil, errors.New("routing: incompatible persisted candidate policy")
 		}
 		identity := strconv.FormatInt(candidate.endpointKeyID, 10) + "\x00" + candidate.upstreamModelID

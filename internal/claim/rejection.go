@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -14,6 +13,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/modelname"
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
+	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
 )
 
 // RecordRejection commits a zero-cost authenticated attempt. Current account
@@ -69,19 +69,10 @@ func (s *Service) RecordRejectionTx(ctx context.Context, tx *sql.Tx, user int64,
 			break
 		}
 	}
-	route := "openai_chat_completions"
+	route := requestkind.ForOperation(requestkind.OperationForPath(fact.Path), modelname.IsCharity(model))
 	if fact.Path == "/v1/models" {
-		route = "model_discovery"
+		route = requestkind.Discovery
 		model = ""
-	} else if fact.Path == "/v1/images/generations" {
-		route = "openai_images_generations"
-	} else if fact.Path == "/v1/embeddings" {
-		route = "openai_embeddings"
-	} else if fact.Path == "/v1/decisions" {
-		route = "openai_decisions"
-	}
-	if modelname.IsCharity(model) {
-		route = strings.Replace(route, "openai_", "charity_", 1)
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO logical_requests
 (id,user_id,route_kind,model_snapshot,state,attempt_limit,caller_result_class,caller_status,caller_error_code,accounting_state,account_reserved_milli,settlement_destination,ledger_rows_remaining,created_at,terminal_at,rejection_stage,rejection_reason,request_method,request_path)

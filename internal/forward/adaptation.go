@@ -201,7 +201,7 @@ func prepareAdaptedAttempt(request *validatedRequest, connectorType connectorcon
 		prepared.clear()
 		return nil, err
 	}
-	nativeChat := connectorType == connectorcontract.TypeOpenAICompatible || connectorType == connectorcontract.TypeOpenAIChatCompletions && request.chat != nil
+	nativeChat := connectorType.NativeChatCompletions() && request.chat != nil
 	if len(doc.BodyDefaults.Values)+len(doc.BodyForced.Values) == 0 && (nativeChat || len(doc.NativeExtensionPaths.Values) == 0) {
 		return prepared, nil
 	}

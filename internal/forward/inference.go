@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/waiting-here/NonbiriAPI/internal/charityrouting"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 )
 
@@ -29,13 +28,7 @@ func (adapter *CharityRoutingAdapter) PreflightInference(ctx context.Context, us
 	if adapter == nil || adapter.service == nil {
 		return CharityPreflight{}, ErrInternal
 	}
-	service, ok := any(adapter.service).(interface {
-		PreflightInference(context.Context, int64, string, *openai.InferenceRequest, int64) (charityrouting.RuntimePreflight, error)
-	})
-	if !ok {
-		return CharityPreflight{}, unsupportedModelType()
-	}
-	value, err := service.PreflightInference(ctx, userID, fullName, request, now)
+	value, err := adapter.service.PreflightInference(ctx, userID, fullName, request, now)
 	if err != nil {
 		return CharityPreflight{}, err
 	}

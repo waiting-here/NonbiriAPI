@@ -701,10 +701,10 @@ func validAcceptInput(input AcceptInput) bool {
 		!validBoundedText(input.ModelSnapshot, MaxModelSnapshotBytes, true) {
 		return false
 	}
-	switch input.Route {
-	case RouteOpenAIChat, RouteOpenAIEmbeddings, RouteOpenAIImages, RouteOpenAIDecisions:
+	switch {
+	case input.Route.IsSelf():
 		return input.CharityModelID == 0 && input.CharityDecisionNow == nil && input.OutputTokenFloor == 0
-	case RouteCharityChat, RouteCharityEmbeddings, RouteCharityImages, RouteCharityDecisions:
+	case input.Route.IsCharity():
 		return input.CharityModelID > 0 && input.CharityDecisionNow != nil &&
 			*input.CharityDecisionNow >= 0 && *input.CharityDecisionNow <= maxUnixSecond
 	default:

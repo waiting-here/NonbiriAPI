@@ -61,7 +61,7 @@ func TestContentProtocolsMainstreamChannelCreationAndOptions(t *testing.T) {
 		}
 	}
 	options, err := e.repository.GetEndpointCreateOptions(context.Background(), user)
-	if err != nil || len(options.BaseConnectorTypes) != 6 || len(options.MainstreamChannels) != 3 {
+	if err != nil || len(options.BaseConnectorTypes) != 12 || len(options.MainstreamChannels) != 3 {
 		t.Fatalf("options=%+v err=%v", options, err)
 	}
 }

@@ -956,9 +956,9 @@ func validPersistedRequest(request Request) bool {
 		!validMoney(request.ReservedMilli) {
 		return false
 	}
-	switch request.Route {
-	case RouteOpenAIChat, RouteCharityChat, RouteOpenAIEmbeddings, RouteCharityEmbeddings, RouteOpenAIImages, RouteCharityImages, RouteOpenAIDecisions, RouteCharityDecisions:
-	case RouteDiscovery:
+	switch {
+	case request.Route.IsModelCall():
+	case request.Route == RouteDiscovery:
 		if request.AttemptLimit != 1 {
 			return false
 		}

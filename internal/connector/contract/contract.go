@@ -28,6 +28,12 @@ const (
 	TypeOpenAIDecisions     Type = "openai-decisions"
 )
 
+// NativeChatCompletions identifies protocols that forward Chat Completions
+// without converting its storage or tool fields to another wire format.
+func (t Type) NativeChatCompletions() bool {
+	return t == TypeOpenAICompatible || t == TypeOpenAIChatCompletions
+}
+
 // Valid identifies protocol types supported by persisted connector records.
 // Execution still requires a descriptor from the process registry.
 func (t Type) Valid() bool {
