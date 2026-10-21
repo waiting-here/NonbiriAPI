@@ -450,6 +450,11 @@ func (c *Controller) Limits() ratelimit.RPMLimits {
 	return c.limiter.Limits()
 }
 
+// SampleGlobalRPM reads the shared admission window without reserving capacity.
+func (c *Controller) SampleGlobalRPM() (current, peak, limit int) {
+	return c.limiter.SampleGlobal()
+}
+
 // Close releases all stored limiter state and rejects new admissions.
 // In-flight reservations are force-released; their Commit/Release calls
 // become no-ops. Close is idempotent and does not start a background

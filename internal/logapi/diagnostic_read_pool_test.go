@@ -14,6 +14,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/host"
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 )
 
 type diagnosticReadFixture struct {
@@ -22,6 +23,12 @@ type diagnosticReadFixture struct {
 	actor     context.Context
 	final     *diagnosticTestFinal
 	requestID string
+}
+
+type pressureReadFixture struct{}
+
+func (pressureReadFixture) Snapshot() observability.PressureSnapshot {
+	return observability.PressureSnapshot{ObservedAt: 1_800_000_000, RPM: observability.PressureMetric{Current: 3, Limit: 600}}
 }
 
 func newDiagnosticReadFixture(t *testing.T) diagnosticReadFixture {
@@ -88,6 +95,8 @@ func (f diagnosticReadFixture) call(api *diagnosticAPI, ctx context.Context, rou
 		actorID = 6
 	}
 	switch route {
+	case "pressure":
+		api.pressure(response, request, actorID, pressureReadFixture{})
 	case "capacity":
 		api.diagnosticCapacity(response, request, actorID)
 	case "access":
@@ -114,7 +123,7 @@ func TestDiagnosticPureReadsAvoidWriterAndHeldSourceKeepsWriter(t *testing.T) {
 	defer writer.Close()
 	apis := []*diagnosticAPI{{repository: f.repo, admin: f.final}, {repository: f.repo, steward: allowLogStewardRead{}}}
 	for _, api := range apis {
-		for _, route := range []string{"capacity", "access", "numbered_access", "summary"} {
+		for _, route := range []string{"pressure", "capacity", "access", "numbered_access", "summary"} {
 			response := f.call(api, ctx, route)
 			if response.Code != http.StatusOK {
 				t.Fatalf("pure %s read waited for writer: %d %s", route, response.Code, response.Body.String())
@@ -168,7 +177,7 @@ func (a diagnosticFailureAuthorizer) AuthorizeStewardRead(ctx context.Context, t
 func TestDiagnosticReadsPreserveMFAAndContextFailures(t *testing.T) {
 	f := newDiagnosticReadFixture(t)
 	for _, role := range []string{"admin", "steward"} {
-		for _, route := range []string{"capacity", "access", "summary", "source"} {
+		for _, route := range []string{"pressure", "capacity", "access", "summary", "source"} {
 			for _, failure := range []error{context.Canceled, context.DeadlineExceeded, authz.ErrMFARequired, authz.ErrForbidden} {
 				t.Run(role+"/"+route+"/"+failure.Error(), func(t *testing.T) {
 					authority := diagnosticFailureAuthorizer{failure: failure}

@@ -98,7 +98,7 @@ covers AI Studio and Vertex AI's OpenAI-compatible Chat endpoints.
 
 ## Build and develop
 
-Use **Go 1.26.9**, **Node.js ≥22.22.3**, **npm 12.0.1** and Bash; Windows uses Git Bash. The finished binary needs neither Node.js nor a C runtime.
+Use **Go 1.26.9**, **Node.js 22.23.4+ (22.x), 24.22.1+ (24.x), or 26.12.1+ (26.x)**, **npm 12.0.1** and Bash; Windows uses Git Bash. The finished binary needs neither Node.js nor a C runtime.
 
 ```sh
 npm --prefix web ci

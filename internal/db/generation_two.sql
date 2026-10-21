@@ -6589,7 +6589,7 @@ CREATE TABLE schema_state (
 ) STRICT;
 INSERT INTO credit_compaction(id,through_seq,details_before,sweep_at,sweep_after_seq) VALUES(1,0,0,0,0);
 INSERT INTO game_blackjack_clock(id,observed_at) VALUES(1,0);
-INSERT INTO schema_state(id,version) VALUES(1,29);
+INSERT INTO schema_state(id,version) VALUES(1,30);
 
 CREATE TABLE game_ai_settings (
  game_key TEXT PRIMARY KEY NOT NULL,
@@ -7153,3 +7153,15 @@ CREATE TABLE personal_header_uses (
  PRIMARY KEY(logical_request_id,name)
 ) STRICT;
 CREATE INDEX idx_personal_header_active ON personal_header_uses(user_id,model_id,name,value);
+
+CREATE TABLE global_pressure_state (
+ id INTEGER PRIMARY KEY CHECK(id=1),
+ started_at INTEGER NOT NULL CHECK(started_at>0),
+ rpm_peak INTEGER NOT NULL CHECK(rpm_peak>=0),
+ concurrency_peak INTEGER NOT NULL CHECK(concurrency_peak>=0)
+) STRICT;
+CREATE TABLE global_pressure_samples (
+ observed_at INTEGER PRIMARY KEY CHECK(observed_at>0),
+ rpm INTEGER NOT NULL CHECK(rpm>=0),
+ concurrency INTEGER NOT NULL CHECK(concurrency>=0)
+) STRICT;

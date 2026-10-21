@@ -33,7 +33,7 @@ func allIndexSourceFacts(t *testing.T, database *sql.DB) map[string][]string {
 	}
 	out := make(map[string][]string, len(tables))
 	for _, table := range tables {
-		if table == "personal_header_sessions" || table == "personal_header_uses" || table == "endpoint_backoff_policies" || table == "donation_key_cooldowns" || table == "dispatch_retry_after_observations" || table == "request_header_facts" || table == "charity_price_templates" || table == "charity_price_template_audits" || table == "donation_owner_preferences" || table == "donation_key_backoffs" || table == "dispatch_smart_backoff_facts" || table == "channel_charity_binding_presets" || table == "channel_charity_binding_mappings" {
+		if table == "global_pressure_state" || table == "global_pressure_samples" || table == "personal_header_sessions" || table == "personal_header_uses" || table == "endpoint_backoff_policies" || table == "donation_key_cooldowns" || table == "dispatch_retry_after_observations" || table == "request_header_facts" || table == "charity_price_templates" || table == "charity_price_template_audits" || table == "donation_owner_preferences" || table == "donation_key_backoffs" || table == "dispatch_smart_backoff_facts" || table == "channel_charity_binding_presets" || table == "channel_charity_binding_mappings" {
 			var count int
 			if err := database.QueryRow("SELECT count(*) FROM " + table).Scan(&count); err != nil || count != 0 {
 				t.Fatalf("new additive table %s is not empty: %d %v", table, count, err)

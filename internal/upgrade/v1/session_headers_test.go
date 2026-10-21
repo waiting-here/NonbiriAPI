@@ -21,7 +21,7 @@ func TestSessionHeadersUpgradePreservesExistingConfigurationAndCache(t *testing.
 		t.Fatal(err)
 	}
 	result, err := Run(t.Context(), path, vault, Options{Apply: true})
-	if err != nil || result.Status != "converted" || result.SourceSchemaVersion != 28 || result.TargetSchemaVersion != 29 {
+	if err != nil || result.Status != "converted" || result.SourceSchemaVersion != 28 || result.TargetSchemaVersion != db.CurrentSchemaVersion {
 		t.Fatal(result, err)
 	}
 	store, err := db.Open(path, vault)
