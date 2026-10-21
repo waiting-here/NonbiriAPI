@@ -21,7 +21,7 @@ const covers = [
   ['m', '逍遥游', 'Wandering Free'],
   ['n', '镜海相逢', 'Across the Mirror Sea'],
   ['o', '琥珀誓章', 'Amber Vow'],
-  ['p', '与你私奔', 'Run Away with You'],
+  ['p', '天光与共', 'Shared Daylight'],
   ['q', '偷心预告', 'A Notice to Steal Your Heart'],
 ];
 export const momentArtworks: MomentArtwork[] = [

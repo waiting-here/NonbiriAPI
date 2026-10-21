@@ -61,8 +61,8 @@
   },
   {
     "id": "elopement",
-    "name": "与你私奔",
-    "name_en": "Run Away with You",
+    "name": "天光与共",
+    "name_en": "Shared Daylight",
     "description": "明天，也想和你在一起。",
     "description_en": "I want to be with you tomorrow, too.",
     "unlock": "card:p-claude",
