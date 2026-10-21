@@ -20,7 +20,7 @@ func (a *Adapter) imageStream(ctx context.Context, writer http.ResponseWriter, r
 	defer func() { _ = controller.SetWriteDeadline(time.Time{}) }()
 	committed := false
 	usage := Usage{}
-	combinedUsage := Usage{Present: true}
+	combinedUsage := emptyImageUsage()
 	completedImages := 0
 	for {
 		event, ok, err := nextSSEEvent(streamCtx, events, errs)
@@ -91,5 +91,42 @@ func combineImageUsage(current, next Usage) Usage {
 	if !inputOK || !outputOK || !totalOK {
 		return Usage{TotalMismatch: true}
 	}
-	return Usage{Present: true, UncachedInputTokens: input, OutputTokens: output, TotalMismatch: current.TotalMismatch || next.TotalMismatch}
+	out := Usage{Present: true, UncachedInputTokens: input, OutputTokens: output, TotalMismatch: current.TotalMismatch || next.TotalMismatch}
+	current = contract.NormalizeUsageDetails(current)
+	next = contract.NormalizeUsageDetails(next)
+	if current.Modalities.InputPresent && next.Modalities.InputPresent {
+		out.Modalities.InputPresent = true
+		for bucket := range out.Modalities.Input {
+			for modality := range out.Modalities.Input[bucket] {
+				out.Modalities.Input[bucket][modality] = current.Modalities.Input[bucket][modality] + next.Modalities.Input[bucket][modality]
+			}
+		}
+	} else {
+		out.Modalities.InputReason = next.Modalities.InputReason
+		if !current.Modalities.InputPresent {
+			out.Modalities.InputReason = current.Modalities.InputReason
+		}
+		if out.Modalities.InputReason == "" {
+			out.Modalities.InputReason = contract.ModalityMissing
+		}
+	}
+	if current.Modalities.OutputPresent && next.Modalities.OutputPresent {
+		out.Modalities.OutputPresent = true
+		for modality := range out.Modalities.Output {
+			out.Modalities.Output[modality] = current.Modalities.Output[modality] + next.Modalities.Output[modality]
+		}
+	} else {
+		out.Modalities.OutputReason = next.Modalities.OutputReason
+		if !current.Modalities.OutputPresent {
+			out.Modalities.OutputReason = current.Modalities.OutputReason
+		}
+		if out.Modalities.OutputReason == "" {
+			out.Modalities.OutputReason = contract.ModalityMissing
+		}
+	}
+	return out
+}
+
+func emptyImageUsage() Usage {
+	return Usage{Present: true, Modalities: contract.ModalityUsage{InputPresent: true, OutputPresent: true}}
 }
