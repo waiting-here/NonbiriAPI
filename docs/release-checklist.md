@@ -20,7 +20,7 @@ has passed.
 
 ## Stable candidate
 
-- Validate fresh schema 28, exact supported schema 16–27 conversions, target equality,
+- Validate fresh schema 31, exact supported schema 16–30 conversions, target equality,
   rollback/cancellation, re-entry and zero-write unsupported-source rejection.
   Preserve credentials, operator settings, legal overrides, balances, game saves,
   activities and receipts. Exercise successive stable migrations; see
@@ -28,6 +28,18 @@ has passed.
 - Keep content-only catalog/template/period edits free of DDL and preserve administrator
   edits, historical eligibility, pity and claims. Recheck exports and deletion
   for every new user-associated record.
+- Check account export 27 includes personal-model header configuration but excludes
+  temporary generated values, shared charity settings, pressure samples and
+  caller-parameter receipts. Verify model/user deletion, late completions and
+  the zero/default/positive idle-lifetime cases across all five formats.
+- Validate pressure administrator/L5/L6 session access, CallerKey/ordinary-user
+  rejection, stale values and revoked access, foreground refresh, minute-window
+  boundaries and restart persistence without reading historical request logs.
+- Verify caller-parameter neutrality only with strict structured evidence and
+  unchanged original input; ambiguous errors must retain normal failure handling.
+  Exercise an existing streak, repeated completion and transaction rollback.
+- Check account deletion with expired terminal logs and mixed settled/in-flight
+  requests, preserving accounting, retained log snapshots and rollback.
 - Cover ownership, secrets, SSRF, original-input abuse priority, ledger atomicity,
   cancellation, bans and deletion races in the affected paths. Redemption tests
   distinguish invalid/already-claimed codes, first business refusals, later
@@ -37,7 +49,9 @@ has passed.
   Retain required Go/Web check names and failure/cancellation propagation.
   Complete dependency, license, vulnerability and CodeQL checks; an unavailable
   scan is not a pass.
-- Inspect desktop/mobile, light/dark and keyboard flows. Cover same-account
+- Inspect desktop/mobile, light/dark and keyboard flows, including the three
+  appearance intensities, system/manual preference priority, background-view
+  return and reachable management back controls. Cover same-account
   session refresh during gacha entry, account switching, short/long SSE outages,
   delayed LinkLink responses, hidden-content loading and stale deployment assets.
   Preserve approved game designs, animations and reduced-motion fallbacks.
