@@ -1321,34 +1321,45 @@ export function UserManagement({
                   columns={[
                     {
                       key: 'limit_selection',
-                      header: t('management.users.limitSelection'),
+                      header: (
+                        <span className="user-list-selection-heading">
+                          {t('management.users.limitSelection')}
+                        </span>
+                      ),
                       cell: 'meta',
-                      render: (entry) =>
-                        entry.account_state === 'active' &&
-                        canEditInferenceLimits(entry.user, role, account, trainee) ? (
-                          <label className="user-limit-select">
-                            <input
-                              type="checkbox"
-                              aria-label={t('management.users.selectLimitUser', {
-                                user: entry.user.username,
-                              })}
-                              checked={limitSelected.includes(entry.user.id)}
-                              disabled={batchBusy || users.isFetching}
-                              onChange={(event) =>
-                                setLimitSelected(
-                                  event.target.checked
-                                    ? [...limitSelected, entry.user.id]
-                                    : limitSelected.filter((id) => id !== entry.user.id),
-                                )
-                              }
-                            />
-                          </label>
-                        ) : null,
+                      render: (entry) => (
+                        <span className="user-list-selection">
+                          {entry.account_state === 'active' &&
+                          canEditInferenceLimits(entry.user, role, account, trainee) ? (
+                            <label className="user-limit-select">
+                              <input
+                                type="checkbox"
+                                aria-label={t('management.users.selectLimitUser', {
+                                  user: entry.user.username,
+                                })}
+                                checked={limitSelected.includes(entry.user.id)}
+                                disabled={batchBusy || users.isFetching}
+                                onChange={(event) =>
+                                  setLimitSelected(
+                                    event.target.checked
+                                      ? [...limitSelected, entry.user.id]
+                                      : limitSelected.filter((id) => id !== entry.user.id),
+                                  )
+                                }
+                              />
+                            </label>
+                          ) : null}
+                        </span>
+                      ),
                     },
 
                     {
                       key: 'user',
-                      header: t('management.users.username'),
+                      header: (
+                        <span className="user-list-identity-heading">
+                          {t('management.users.username')}
+                        </span>
+                      ),
                       cell: 'title',
                       render: (entry) => {
                         const deleted = entry.account_state === 'deleted';
@@ -1362,6 +1373,7 @@ export function UserManagement({
                           >
                             <button
                               className="user-list-name"
+                              title={deleted ? accountLabels.deleted : entry.user.username}
                               type="button"
                               disabled={!scopeReady || users.isFetching}
                               aria-label={deleted ? t('management.users.view') : undefined}
@@ -1373,7 +1385,14 @@ export function UserManagement({
                             >
                               {deleted ? accountLabels.deleted : entry.user.username}
                             </button>
-                            <span title={discord ?? undefined}>
+                            <span
+                              title={
+                                '#' +
+                                (id ?? accountLabels.unknown) +
+                                ' · ' +
+                                (discord ?? t('management.users.discordUnlinked'))
+                              }
+                            >
                               #{id ?? accountLabels.unknown} ·{' '}
                               {discord
                                 ? `${discord.slice(0, 4)}…${discord.slice(-4)}`
@@ -1385,21 +1404,34 @@ export function UserManagement({
                     },
                     {
                       key: 'level',
-                      header: t('management.users.level'),
+                      header: (
+                        <span className="user-list-level-heading">
+                          {t('management.users.level')}
+                        </span>
+                      ),
                       cell: 'meta',
-                      render: (entry) =>
-                        entry.account_state === 'deleted'
-                          ? entry.deleted.effective_level === null
-                            ? accountLabels.unknown
-                            : t('management.users.levelValue', {
-                                level: entry.deleted.effective_level,
-                              })
-                          : entry.user.level.display_name ||
-                            t('management.users.levelValue', { level: entry.user.level.effective }),
+                      render: (entry) => (
+                        <span className="user-list-level">
+                          {entry.account_state === 'deleted'
+                            ? entry.deleted.effective_level === null
+                              ? accountLabels.unknown
+                              : t('management.users.levelValue', {
+                                  level: entry.deleted.effective_level,
+                                })
+                            : entry.user.level.display_name ||
+                              t('management.users.levelValue', {
+                                level: entry.user.level.effective,
+                              })}
+                        </span>
+                      ),
                     },
                     {
                       key: 'status',
-                      header: t('management.users.status'),
+                      header: (
+                        <span className="user-list-status-heading">
+                          {t('management.users.status')}
+                        </span>
+                      ),
                       cell: 'status',
                       render: (entry) =>
                         entry.account_state === 'deleted' ? (
@@ -1418,7 +1450,11 @@ export function UserManagement({
                     },
                     {
                       key: 'balance',
-                      header: t('management.users.creditsBalance'),
+                      header: (
+                        <span className="user-list-balance-heading">
+                          {t('management.users.creditsBalance')}
+                        </span>
+                      ),
                       cell: 'meta',
                       align: 'num',
                       mobileLabel: t('management.users.creditsBalance'),
@@ -1427,10 +1463,14 @@ export function UserManagement({
                           entry.account_state === 'deleted'
                             ? entry.deleted.general_balance
                             : entry.user.balance;
-                        return balance === null ? (
-                          accountLabels.unknown
-                        ) : (
-                          <span className="nb-amount">{formatCredits(balance)}</span>
+                        return (
+                          <span className="user-list-balance">
+                            {balance === null ? (
+                              accountLabels.unknown
+                            ) : (
+                              <span className="nb-amount">{formatCredits(balance)}</span>
+                            )}
+                          </span>
                         );
                       },
                     },
