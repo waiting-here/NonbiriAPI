@@ -10,6 +10,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/modeltype"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
+	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
 	"github.com/waiting-here/NonbiriAPI/internal/transportpolicy"
 )
 
@@ -77,6 +78,7 @@ type LifecycleCatalogPair struct {
 }
 
 type LifecycleModel struct {
+	SessionHeaders         []sessionheader.Config
 	CloudflareProxyEnabled bool
 	ModelTypes             modeltype.Set
 	TransportRule          transportpolicy.Rule
@@ -220,7 +222,8 @@ LIMIT ?`, userID, limit+1)
 			return empty, err
 		}
 		item := LifecycleModel{
-			ModelTypes: model.ModelTypes.Clone(), TransportRule: model.TransportRule, RolePolicy: model.RolePolicy.Clone(),
+			SessionHeaders: append([]sessionheader.Config{}, model.SessionHeaders...),
+			ModelTypes:     model.ModelTypes.Clone(), TransportRule: model.TransportRule, RolePolicy: model.RolePolicy.Clone(),
 			ID: model.ID, Provider: model.Provider, Model: model.Model, FullName: model.FullName,
 			RouteStrategy: model.RouteStrategy, SilentRetry: model.SilentRetry,
 			CloudflareProxyEnabled: model.CloudflareProxyEnabled, FlattenToolCalls: model.FlattenToolCalls, CreatedAt: model.CreatedAt, UpdatedAt: model.UpdatedAt,

@@ -11,6 +11,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
 	"github.com/waiting-here/NonbiriAPI/internal/logapi"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
+	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
 
 	_ "modernc.org/sqlite"
 )
@@ -117,7 +118,7 @@ func (source adapterTestResources) ExportLifecycleResources(
 			Origin: resources.EndpointOrigin{Kind: "mainstream", ChannelID: "mch_safe", Name: "Safe channel"},
 			Keys:   []resources.LifecycleEndpointKey{},
 		}},
-		CatalogPairs: []resources.LifecycleCatalogPair{}, Models: []resources.LifecycleModel{},
+		CatalogPairs: []resources.LifecycleCatalogPair{}, Models: []resources.LifecycleModel{{ID: "3", SessionHeaders: []sessionheader.Config{{Name: "x-session", IdleSeconds: 0, Format: "opencode_session"}}}},
 	}, err
 }
 
@@ -218,7 +219,7 @@ func TestAccountResourcesUsesOneFrozenSnapshot(t *testing.T) {
 		_ = tx.Rollback()
 		t.Fatal(err)
 	}
-	endpoints, _, _, _, err := adapter.ExportResources(context.Background(), tx, request)
+	endpoints, _, models, _, err := adapter.ExportResources(context.Background(), tx, request)
 	if err != nil {
 		_ = tx.Rollback()
 		t.Fatal(err)
@@ -230,6 +231,9 @@ func TestAccountResourcesUsesOneFrozenSnapshot(t *testing.T) {
 	}
 	if err := tx.Rollback(); err != nil {
 		t.Fatal(err)
+	}
+	if len(models) != 1 || len(models[0].SessionHeaders) != 1 || models[0].SessionHeaders[0] != (lifecycle.SessionHeaderExport{Name: "x-session", IdleSeconds: 0, Format: "opencode_session"}) {
+		t.Fatal(models)
 	}
 	wantCalls := []string{"identity", "logs", "resources", "issues"}
 	if len(state.exportCalls) != len(wantCalls) {
