@@ -36,8 +36,18 @@ const original = {
 };
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
-function fixture(role: 'admin' | 'steward', conflict = false) {
-  let current = { ...original };
+function fixture(
+  role: 'admin' | 'steward',
+  conflict = false,
+  options: { headers?: boolean; unknown?: boolean } = {},
+) {
+  let current = {
+    ...original,
+    session_headers: options.headers
+      ? [{ name: 'x-session-id', idle_seconds: 300, format: 'hex_32' }]
+      : [],
+  };
+  const requests: RequestInit[] = [];
   const sent: Record<string, unknown>[] = [];
   const base = role === 'admin' ? '/admin/api' : '/api/steward';
   vi.stubGlobal(
@@ -55,6 +65,8 @@ function fixture(role: 'admin' | 'steward', conflict = false) {
       if (init?.method === 'PATCH' || init?.method === 'POST') {
         const body = JSON.parse(String(init.body));
         sent.push(body);
+        requests.push(init);
+        if (options.unknown && sent.length === 1) throw new TypeError('Failed to fetch');
         if (conflict && sent.length === 1) {
           current = { ...current, revision: '2', cloudflare_proxy_enabled: true };
           return json({ error: { code: 'conflict', message: 'Changed.' } }, 409);
@@ -72,7 +84,7 @@ function fixture(role: 'admin' | 'steward', conflict = false) {
       throw new Error('Unexpected request: ' + url.pathname);
     }),
   );
-  return { sent };
+  return { sent, requests };
 }
 async function editor(role: 'admin' | 'steward', create = false, trainee = false) {
   const view = await renderWithProviders(
@@ -147,6 +159,63 @@ describe('managed model Cloudflare setting', () => {
         expect(() => normalize({ ...original, cloudflare_proxy_enabled: value })).toThrow();
       for (const value of [undefined, null, 'unknown'])
         expect(() => normalize({ ...original, cloudflare_proxy_mode: value })).toThrow();
+    },
+  );
+});
+
+describe('managed model session header settings', () => {
+  it.each(['admin', 'steward'] as const)(
+    '%s saves zero and OpenCode formats, restores saved values after a conflict, and clears',
+    async (role) => {
+      const f = fixture(role, true, { headers: true });
+      const view = await editor(role);
+      const idle = await screen.findByLabelText('Idle expiry (seconds)');
+      expect(idle).toHaveValue(300);
+      expect(screen.getByLabelText('Random value format')).toHaveValue('hex_32');
+      await view.user.clear(idle);
+      await view.user.type(idle, '0');
+      await view.user.selectOptions(
+        screen.getByLabelText('Random value format'),
+        'opencode_message',
+      );
+      await view.user.click(screen.getByRole('button', { name: 'Save model #31' }));
+      await waitFor(() => expect(f.sent).toHaveLength(1));
+      expect(f.sent[0].session_headers).toEqual([
+        { name: 'x-session-id', idle_seconds: 0, format: 'opencode_message' },
+      ]);
+      expect(idle).toHaveValue(0);
+      await view.user.click(
+        screen.getByRole('button', { name: 'Discard edits and reload saved model' }),
+      );
+      expect(idle).toHaveValue(300);
+      expect(screen.getByLabelText('Random value format')).toHaveValue('hex_32');
+      await view.user.click(screen.getByRole('button', { name: 'Remove header 1' }));
+      await view.user.click(screen.getByRole('button', { name: 'Save model #31' }));
+      await waitFor(() => expect(f.sent).toHaveLength(2));
+      expect(f.sent[1]).toMatchObject({ expected_revision: '2', session_headers: [] });
+    },
+  );
+
+  it.each(['admin', 'steward'] as const)(
+    '%s keeps an unresolved header draft disabled and retries the exact saved request',
+    async (role) => {
+      const f = fixture(role, false, { headers: true, unknown: true });
+      const view = await editor(role);
+      const idle = await screen.findByLabelText('Idle expiry (seconds)');
+      await view.user.clear(idle);
+      await view.user.type(idle, '0');
+      await view.user.selectOptions(screen.getByLabelText('Random value format'), 'opencode_part');
+      await view.user.click(screen.getByRole('button', { name: 'Save model #31' }));
+      await waitFor(() => expect(idle).toBeDisabled());
+      expect(idle).toHaveValue(0);
+      expect(screen.getByLabelText('Random value format')).toHaveValue('opencode_part');
+      const retry = await screen.findByRole('button', { name: 'Retry the last save' });
+      await view.user.click(retry);
+      await waitFor(() => expect(f.sent).toHaveLength(2));
+      expect(f.sent[1]).toEqual(f.sent[0]);
+      expect(new Headers(f.requests[1].headers).get('Idempotency-Key')).toBe(
+        new Headers(f.requests[0].headers).get('Idempotency-Key'),
+      );
     },
   );
 });

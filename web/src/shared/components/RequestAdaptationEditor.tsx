@@ -499,6 +499,7 @@ export function RequestAdaptationEditor({
   onConfiguredCount?: (count: number) => void;
 }) {
   const { t } = useTranslation();
+  const modelScope = scope === 'personal-model' || scope === 'charity-model';
   const copy = useRequestAdaptationCopy(scope === 'endpoint' || scope === 'personal-model');
   const exclusionsID = useId();
   const [reload, setReload] = useState(0);
@@ -589,7 +590,7 @@ export function RequestAdaptationEditor({
       const next = parseView(response);
       setView(next);
       setDraft(newDraft(next));
-      setNotice(copy('saved'));
+      setNotice(modelScope ? t('requestAdaptation.model.saved') : copy('saved'));
     } catch (error) {
       if (isApiError(error) && error.status === 409) {
         setNotice(copy('conflict'));
@@ -608,6 +609,128 @@ export function RequestAdaptationEditor({
     } finally {
       setSaving(false);
     }
+  };
+
+  const renderSection = (kind: SectionKind) => {
+    if (!draft || !view) return null;
+    const section = draft[kind];
+    const inherited = scope === 'binding' || scope === 'personal-model';
+    const setMode = (next: Mode) => {
+      if (kind === 'forward_headers' || kind === 'native_extension_paths')
+        updateList(kind, {
+          mode: next,
+          text: next === 'inherit' ? '' : (section as ListDraft).text,
+        });
+      else
+        updateMap(kind, {
+          mode: next,
+          rows: next === 'inherit' ? [] : (section as MapDraft).rows,
+        });
+    };
+    return (
+      <fieldset key={kind} className="core-form">
+        <legend>
+          {modelScope && (kind === 'forward_headers' || kind === 'fixed_headers')
+            ? t(
+                kind === 'forward_headers'
+                  ? 'requestAdaptation.model.forwardHeaders'
+                  : 'requestAdaptation.model.fixedHeaders',
+              )
+            : copy(labels[kind])}
+        </legend>
+        {inherited ? (
+          <label>
+            <span>{copy('mode')}</span>
+            <select
+              value={section.mode}
+              disabled={!editable}
+              onChange={(event) => setMode(event.target.value as Mode)}
+            >
+              <option value="inherit">
+                {scope === 'personal-model'
+                  ? t('requestAdaptation.personal.inheritEndpoint')
+                  : copy('inherit')}
+              </option>
+              <option value="replace">{copy('replace')}</option>
+            </select>
+          </label>
+        ) : null}
+        {kind === 'forward_headers' || kind === 'native_extension_paths' ? (
+          section.mode === 'inherit' ? (
+            <p>
+              {scope === 'personal-model'
+                ? t('requestAdaptation.personal.inheritedEndpoint')
+                : copy('inherited')}
+            </p>
+          ) : (
+            <div>
+              <label>
+                <span>
+                  {t(
+                    kind === 'forward_headers'
+                      ? 'requestAdaptation.personal.headerListHelp'
+                      : 'requestAdaptation.personal.nativeListHelp',
+                  )}
+                </span>
+                <textarea
+                  value={(section as ListDraft).text}
+                  rows={3}
+                  maxLength={65536}
+                  disabled={!editable}
+                  onChange={(event) =>
+                    updateList(kind, { mode: section.mode, text: event.target.value })
+                  }
+                />
+              </label>
+              {editable ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() =>
+                    updateList(kind, {
+                      mode: section.mode,
+                      text: [
+                        (section as ListDraft).text,
+                        kind === 'forward_headers' ? 'x-client-version' : '/custom_parameter',
+                      ]
+                        .filter(Boolean)
+                        .join('\n'),
+                    })
+                  }
+                >
+                  {copy('example')}
+                </Button>
+              ) : null}
+            </div>
+          )
+        ) : (
+          <MapEditor
+            kind={kind}
+            endpointScope={scope === 'endpoint' || scope === 'personal-model'}
+            inheritedHelp={
+              scope === 'personal-model'
+                ? t('requestAdaptation.personal.inheritedEndpoint')
+                : undefined
+            }
+            section={section as MapDraft}
+            editable={editable}
+            gatewayCacheDefaults={
+              kind === 'body_defaults' &&
+              (connectorType === 'ai-sdk-gateway-v3' || gatewayCacheDefaults)
+            }
+            change={(next) => updateMap(kind, next)}
+          />
+        )}
+        {view.effective ? (
+          <p>
+            {copy('effective')}:{' '}
+            {view.effective[kind].source === 'binding'
+              ? copy('sourceBinding')
+              : copy('sourceModel')}
+          </p>
+        ) : null}
+      </fieldset>
+    );
   };
 
   const technicalDetails = (
@@ -641,7 +764,7 @@ export function RequestAdaptationEditor({
   return (
     <section className="core-card">
       <div className="core-card__header">
-        <h3>{copy('title')}</h3>
+        <h3>{modelScope ? t('requestAdaptation.model.title') : copy('title')}</h3>
         <Button
           type="button"
 
@@ -664,6 +787,7 @@ export function RequestAdaptationEditor({
           ? t('requestAdaptation.personal.personalDescription')
           : copy('description')}
       </p>
+      {modelScope ? <p className="nb-sub">{t('requestAdaptation.model.saveHelp')}</p> : null}
       {scope === 'endpoint' ? (
         <Fold title={t('common.operations.management.details')} plain>
           {technicalDetails}
@@ -677,148 +801,50 @@ export function RequestAdaptationEditor({
       {!editable && view ? <p>{copy('readOnly')}</p> : null}
       {view && draft && !loading && !contextChanged ? (
         <form className="core-form" onSubmit={(event) => void save(event)}>
-          {scope === 'personal-model' ? (
-            <label>
-              <span id={exclusionsID}>{t('requestAdaptation.personal.excluded')}</span>
-              <textarea
-                rows={3}
-                aria-labelledby={exclusionsID}
-                aria-describedby={exclusionsID + '-help'}
-                value={draft.excluded}
-                disabled={!editable}
-                placeholder={'temperature\nmax_tokens'}
-                onChange={(event) => setDraft({ ...draft, excluded: event.target.value })}
-              />
-              <small id={exclusionsID + '-help'}>
-                {t('requestAdaptation.personal.excludedHelp')}
-              </small>
-            </label>
-          ) : null}
-          {(
-            [
-              'forward_headers',
-              'fixed_headers',
-              'body_defaults',
-              'body_forced',
-              'native_extension_paths',
-            ] as const
-          ).map((kind) => {
-            const section = draft[kind];
-            const inherited = scope === 'binding' || scope === 'personal-model';
-            const setMode = (next: Mode) => {
-              if (kind === 'forward_headers' || kind === 'native_extension_paths')
-                updateList(kind, {
-                  mode: next,
-                  text: next === 'inherit' ? '' : (section as ListDraft).text,
-                });
-              else
-                updateMap(kind, {
-                  mode: next,
-                  rows: next === 'inherit' ? [] : (section as MapDraft).rows,
-                });
-            };
-            return (
-              <fieldset key={kind} className="core-form">
-                <legend>{copy(labels[kind])}</legend>
-                {inherited ? (
+          {modelScope ? (
+            <>
+              <fieldset className="core-form ops-unframed">
+                <legend>{t('requestAdaptation.model.headers')}</legend>
+                {(['forward_headers', 'fixed_headers'] as const).map(renderSection)}
+              </fieldset>
+              <fieldset className="core-form ops-unframed">
+                <legend>{t('requestAdaptation.model.body')}</legend>
+                {scope === 'personal-model' ? (
                   <label>
-                    <span>{copy('mode')}</span>
-                    <select
-                      value={section.mode}
+                    <span id={exclusionsID}>{t('requestAdaptation.personal.excluded')}</span>
+                    <textarea
+                      rows={3}
+                      aria-labelledby={exclusionsID}
+                      aria-describedby={exclusionsID + '-help'}
+                      value={draft.excluded}
                       disabled={!editable}
-                      onChange={(event) => setMode(event.target.value as Mode)}
-                    >
-                      <option value="inherit">
-                        {scope === 'personal-model'
-                          ? t('requestAdaptation.personal.inheritEndpoint')
-                          : copy('inherit')}
-                      </option>
-                      <option value="replace">{copy('replace')}</option>
-                    </select>
+                      placeholder={'temperature\nmax_tokens'}
+                      onChange={(event) => setDraft({ ...draft, excluded: event.target.value })}
+                    />
+                    <small id={exclusionsID + '-help'}>
+                      {t('requestAdaptation.personal.excludedHelp')}
+                    </small>
                   </label>
                 ) : null}
-                {kind === 'forward_headers' || kind === 'native_extension_paths' ? (
-                  section.mode === 'inherit' ? (
-                    <p>
-                      {scope === 'personal-model'
-                        ? t('requestAdaptation.personal.inheritedEndpoint')
-                        : copy('inherited')}
-                    </p>
-                  ) : (
-                    <div>
-                      <label>
-                        <span>
-                          {t(
-                            kind === 'forward_headers'
-                              ? 'requestAdaptation.personal.headerListHelp'
-                              : 'requestAdaptation.personal.nativeListHelp',
-                          )}
-                        </span>
-                        <textarea
-                          value={(section as ListDraft).text}
-                          rows={3}
-                          maxLength={65536}
-                          disabled={!editable}
-                          onChange={(event) =>
-                            updateList(kind, { mode: section.mode, text: event.target.value })
-                          }
-                        />
-                      </label>
-                      {editable ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          onClick={() =>
-                            updateList(kind, {
-                              mode: section.mode,
-                              text: [
-                                (section as ListDraft).text,
-                                kind === 'forward_headers'
-                                  ? 'x-client-version'
-                                  : '/custom_parameter',
-                              ]
-                                .filter(Boolean)
-                                .join('\n'),
-                            })
-                          }
-                        >
-                          {copy('example')}
-                        </Button>
-                      ) : null}
-                    </div>
-                  )
-                ) : (
-                  <MapEditor
-                    kind={kind}
-                    endpointScope={scope === 'endpoint' || scope === 'personal-model'}
-                    inheritedHelp={
-                      scope === 'personal-model'
-                        ? t('requestAdaptation.personal.inheritedEndpoint')
-                        : undefined
-                    }
-                    section={section as MapDraft}
-                    editable={editable}
-                    gatewayCacheDefaults={
-                      kind === 'body_defaults' &&
-                      (connectorType === 'ai-sdk-gateway-v3' || gatewayCacheDefaults)
-                    }
-                    change={(next) => updateMap(kind, next)}
-                  />
+                {(['body_defaults', 'body_forced', 'native_extension_paths'] as const).map(
+                  renderSection,
                 )}
-                {view.effective ? (
-                  <p>
-                    {copy('effective')}:{' '}
-                    {view.effective[kind].source === 'binding'
-                      ? copy('sourceBinding')
-                      : copy('sourceModel')}
-                  </p>
-                ) : null}
               </fieldset>
-            );
-          })}
+            </>
+          ) : (
+            (
+              [
+                'forward_headers',
+                'fixed_headers',
+                'body_defaults',
+                'body_forced',
+                'native_extension_paths',
+              ] as const
+            ).map(renderSection)
+          )}
           {editable ? (
             <Button variant="primary" type="submit" disabled={saving || saveBlocked}>
-              {copy('save')}
+              {modelScope ? t('requestAdaptation.model.save') : copy('save')}
             </Button>
           ) : null}
         </form>

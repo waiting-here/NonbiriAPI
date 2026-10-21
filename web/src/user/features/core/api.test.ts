@@ -419,8 +419,13 @@ describe('core API wire contract', () => {
       unknown
     >;
     const entries = canonical.entries as Array<Record<string, unknown>>;
+    const affected = canonical.affected_models as Array<{ model: Record<string, unknown> }>;
     const accepted = {
       ...canonical,
+      affected_models: affected.map((entry) => ({
+        ...entry,
+        model: { ...entry.model, session_headers: [] },
+      })),
       entries: [{ ...entries[0], pair_revision: '3' }],
     };
     const missingReplacement = { ...accepted, affected_models: [] };

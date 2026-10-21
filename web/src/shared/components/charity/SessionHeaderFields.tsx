@@ -1,26 +1,34 @@
+import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Field } from '@shared/components/ui/Field';
 import { Fold } from '@shared/components/ui/Fold';
 import { Button } from '@shared/components/ui/Button';
-import type { SessionHeader } from '@shared/operations/charity';
+import { DEFAULT_SESSION_HEADER_IDLE, type SessionHeaderDraft } from '@shared/sessionHeaders';
 
 export function SessionHeaderFields({
   value,
   onChange,
+  disabled = false,
 }: {
-  value: SessionHeader[];
-  onChange: (headers: SessionHeader[]) => void;
+  value: SessionHeaderDraft[];
+  onChange: (headers: SessionHeaderDraft[]) => void;
+  disabled?: boolean;
 }) {
   const { t } = useTranslation();
-  const update = (index: number, patch: Partial<SessionHeader>) =>
+  const idleHelpID = useId();
+  const update = (index: number, patch: Partial<SessionHeaderDraft>) =>
     onChange(value.map((row, i) => (i === index ? { ...row, ...patch } : row)));
   return (
     <Fold
       title={t('common.operations.charity.sessionHeaders.title')}
       defaultOpen={value.length > 0}
+      summary={t('common.operations.charity.sessionHeaders.saveHelp')}
     >
-      <div className="nb-form">
+      <fieldset className="nb-form ops-unframed" disabled={disabled}>
         <p className="nb-sub">{t('common.operations.charity.sessionHeaders.help')}</p>
+        <p className="nb-sub" id={idleHelpID}>
+          {t('common.operations.charity.sessionHeaders.idleHelp')}
+        </p>
         {value.map((row, i) => (
           <div className="nb-form" key={i}>
             <Field label={t('common.operations.charity.sessionHeaders.name', { n: i + 1 })}>
@@ -30,6 +38,7 @@ export function SessionHeaderFields({
                   value={row.name}
                   placeholder="X-Session-ID"
                   maxLength={128}
+                  required
                   onChange={(e) => update(i, { name: e.target.value })}
                 />
               )}
@@ -40,10 +49,17 @@ export function SessionHeaderFields({
                   <input
                     {...props}
                     type="number"
-                    min={1}
+                    aria-describedby={idleHelpID}
+                    min={0}
+                    step={1}
                     max={86400}
-                    value={row.idle_seconds || ''}
-                    onChange={(e) => update(i, { idle_seconds: Number(e.target.value) })}
+                    value={row.idle_seconds}
+                    placeholder={String(DEFAULT_SESSION_HEADER_IDLE)}
+                    onChange={(e) =>
+                      update(i, {
+                        idle_seconds: e.target.value === '' ? '' : Number(e.target.value),
+                      })
+                    }
                   />
                 )}
               </Field>
@@ -53,12 +69,21 @@ export function SessionHeaderFields({
                     {...props}
                     value={row.format}
                     onChange={(e) =>
-                      update(i, { format: e.target.value as SessionHeader['format'] })
+                      update(i, { format: e.target.value as SessionHeaderDraft['format'] })
                     }
                   >
                     <option value="uuid_v4">UUID v4</option>
                     <option value="hex_32">
                       {t('common.operations.charity.sessionHeaders.hex')}
+                    </option>
+                    <option value="opencode_session">
+                      {t('common.operations.charity.sessionHeaders.opencodeSession')}
+                    </option>
+                    <option value="opencode_message">
+                      {t('common.operations.charity.sessionHeaders.opencodeMessage')}
+                    </option>
+                    <option value="opencode_part">
+                      {t('common.operations.charity.sessionHeaders.opencodePart')}
                     </option>
                   </select>
                 )}
@@ -79,12 +104,17 @@ export function SessionHeaderFields({
           <Button
             type="button"
             disabled={value.length >= 16}
-            onClick={() => onChange([...value, { name: '', idle_seconds: 300, format: 'uuid_v4' }])}
+            onClick={() =>
+              onChange([
+                ...value,
+                { name: '', idle_seconds: DEFAULT_SESSION_HEADER_IDLE, format: 'uuid_v4' },
+              ])
+            }
           >
             {t('common.operations.charity.sessionHeaders.add')}
           </Button>
         </div>
-      </div>
+      </fieldset>
     </Fold>
   );
 }

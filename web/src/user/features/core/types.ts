@@ -233,6 +233,7 @@ export interface CatalogView {
 }
 
 export interface Model {
+  session_headers?: import('@shared/sessionHeaders').SessionHeader[];
   cloudflare_proxy_enabled: boolean;
   cloudflare_proxy_mode: import('@shared/cloudflareProxy').CloudflareProxyMode;
   model_types: import('@shared/modelTypes').ModelType[];
@@ -348,6 +349,7 @@ export interface EndpointKeyPatchInput {
 }
 
 export interface ModelCreateInput {
+  session_headers?: import('@shared/sessionHeaders').SessionHeaderInput[];
   cloudflare_proxy_enabled?: boolean;
   model_types?: import('@shared/modelTypes').ModelType[];
   transport_rule?: TransportRule;
@@ -360,6 +362,7 @@ export interface ModelCreateInput {
 }
 
 export interface ModelPatchInput {
+  session_headers?: import('@shared/sessionHeaders').SessionHeaderInput[];
   cloudflare_proxy_enabled?: boolean;
   model_types?: import('@shared/modelTypes').ModelType[];
   transport_rule?: TransportRule;

@@ -1,3 +1,4 @@
+import { normalizeSessionHeaders } from '@shared/sessionHeaders';
 import { normalizeCloudflareProxyMode } from '@shared/cloudflareProxy';
 import { responseFields } from '@shared/query/responseFields';
 import { normalizeModelTypes } from '@shared/modelTypes';
@@ -1356,7 +1357,7 @@ export function normalizeModel(value: unknown): Model {
       'created_at',
       'updated_at',
     ],
-    ['browse', 'role_policy'],
+    ['browse', 'role_policy', 'session_headers'],
     'logical model',
   );
   const provider = logicalName(record.provider, 'logical model provider');
@@ -1379,6 +1380,7 @@ export function normalizeModel(value: unknown): Model {
     ? normalizeModelBrowse(record.browse, modelID, bindingCount)
     : undefined;
   return {
+    session_headers: normalizeSessionHeaders(record.session_headers),
     cloudflare_proxy_enabled: exactBoolean(
       record.cloudflare_proxy_enabled,
       'Cloudflare proxy setting',
