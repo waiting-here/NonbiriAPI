@@ -71,6 +71,8 @@ export function useRetainedOperation<TVariables, TResult>(
     input: PreparedOperation<TVariables>;
     promise: Promise<TResult>;
   } | null>(null);
+  // A confirmed write may still be reconciling before the next action can start.
+  const [isRunning, setIsRunning] = useState(false);
   const [outcome, setOutcome] = useState<OperationOutcome>('idle');
   const [refreshError, setRefreshError] = useState<unknown>(null);
   const [authorityLossError, setAuthorityLossError] = useState<Error | null>(null);
@@ -155,6 +157,7 @@ export function useRetainedOperation<TVariables, TResult>(
       }
       if (changed) {
         inFlight.current = null;
+        setIsRunning(false);
         clearSecrets.current?.();
         setOutcome('idle');
         setRefreshError(null);
@@ -166,6 +169,7 @@ export function useRetainedOperation<TVariables, TResult>(
       for (const input of requests) input.controller.abort();
       requests.clear();
       inFlight.current?.input.controller.abort();
+      setIsRunning(false);
       confirmed.current = null;
       clearSecrets.current?.();
     };
@@ -296,9 +300,13 @@ export function useRetainedOperation<TVariables, TResult>(
     });
     latest.current = input;
     inFlight.current = { input, promise };
+    setIsRunning(true);
     void promise
       .finally(() => {
-        if (inFlight.current?.input === input) inFlight.current = null;
+        if (inFlight.current?.input === input) {
+          inFlight.current = null;
+          if (mounted.current) setIsRunning(false);
+        }
       })
       .catch(() => undefined);
     return promise;
@@ -314,7 +322,7 @@ export function useRetainedOperation<TVariables, TResult>(
     ...mutation,
     outcome,
     refreshError,
-    isPending: outcome === 'pending',
+    isPending: isRunning,
     isSuccess: outcome === 'confirmed' || outcome === 'refresh-failed',
     isError: outcome === 'failed' || outcome === 'unknown' || outcome === 'conflict',
     data: outcome === 'idle' ? undefined : mutation.data,
@@ -332,6 +340,7 @@ export function useRetainedOperation<TVariables, TResult>(
     cancel: () => {
       for (const input of active.current) input.controller.abort();
       inFlight.current?.input.controller.abort();
+      setIsRunning(false);
       confirmed.current = null;
       clearSecrets.current?.();
       // Abort does not prove that a dispatched server transaction rolled back.

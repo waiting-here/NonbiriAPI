@@ -60,6 +60,7 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Fixed
 
+- Keep sequential setup actions disabled until the preceding save and refresh settle.
 - Keep donation review navigation fresh after returning from key binding to the list.
 - Keep the charity page available when a usage-priced model has no configured credit reserve.
 - Update Vite to 8.3.3 to address development-server editor-launch vulnerabilities.
