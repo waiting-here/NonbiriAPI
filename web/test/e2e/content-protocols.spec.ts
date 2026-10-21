@@ -22,6 +22,7 @@ const allTypes = [
   'openai-compatible',
   'anthropic-compatible',
   'ai-sdk-gateway-v3',
+  'ai-sdk-gateway-v4',
   ...protocols.map(([kind]) => kind),
 ];
 const baseURL = 'https://shared.example.test/v1';

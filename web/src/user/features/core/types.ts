@@ -7,6 +7,7 @@ export const CONNECTOR_TYPES = [
   'openai-compatible',
   'anthropic-compatible',
   'ai-sdk-gateway-v3',
+  'ai-sdk-gateway-v4',
   'google-gemini',
   'openai-responses',
   'openai-decisions',
@@ -531,7 +532,7 @@ export interface HomeAdapters {
 export type LifecycleIntent = 'export' | 'delete';
 
 export const ACCOUNT_EXPORT_VERSIONS = [
-  11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27,
+  11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
 ] as const;
 
 export interface AccountExportAttachment {

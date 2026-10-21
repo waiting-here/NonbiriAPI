@@ -380,6 +380,7 @@ function connectorType(value: unknown): Endpoint['connector_type'] {
     value === 'openai-compatible' ||
     value === 'anthropic-compatible' ||
     value === 'ai-sdk-gateway-v3' ||
+    value === 'ai-sdk-gateway-v4' ||
     value === 'google-gemini' ||
     value === 'openai-responses' ||
     value === 'openai-decisions' ||

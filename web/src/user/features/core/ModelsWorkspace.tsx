@@ -1,3 +1,4 @@
+import { isAISDKGateway } from '@shared/operations/connectorPolicy';
 import { CloudflareProxySummary } from '@shared/components/CloudflareProxyField';
 import { RequestAdaptationEditor } from '@shared/components/RequestAdaptationEditor';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
@@ -85,6 +86,10 @@ function ModelDetail({
     bindings.data?.bindings.every((binding) => binding.connector_type === connectorType)
       ? connectorType
       : undefined;
+  const gatewayCacheDefaults = Boolean(
+    bindings.data?.bindings.length &&
+    bindings.data.bindings.every((binding) => isAISDKGateway(binding.connector_type)),
+  );
   const [editing, setEditing] = useState<Model | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const permissionScope = `${accountId}\u0000${modelId}`;
@@ -296,6 +301,7 @@ function ModelDetail({
                 url={'/api/models/' + model.data.id + '/request-adaptation'}
                 scope="personal-model"
                 connectorType={adaptationConnectorType}
+                gatewayCacheDefaults={gatewayCacheDefaults}
                 editable={!reconciliationRequired && !replayAttempt}
               />
             </Fold>

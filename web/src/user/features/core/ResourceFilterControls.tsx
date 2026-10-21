@@ -106,6 +106,7 @@ function ResourceFilterForm({ control }: { control: ResourceFilterControl }) {
       'openai-compatible': t('connector.openai'),
       'anthropic-compatible': t('connector.anthropic'),
       'ai-sdk-gateway-v3': t('connector.gateway'),
+      'ai-sdk-gateway-v4': t('connector.gatewayV4'),
       'google-gemini': t('connector.gemini'),
       'openai-responses': t('connector.responses'),
       'openai-decisions': t('connector.decisions'),

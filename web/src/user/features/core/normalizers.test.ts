@@ -31,6 +31,27 @@ function jsonFixture(path: string): unknown {
 }
 
 describe('core wire normalizers', () => {
+  it.each(['ai-sdk-gateway-v3', 'ai-sdk-gateway-v4'] as const)(
+    'preserves %s and the complete native base URL',
+    (connector_type) => {
+      const endpoint = jsonFixture('internal/resources/testdata/endpoint.json') as Record<
+        string,
+        unknown
+      >;
+      const base_url = 'https://gateway.example.test/custom/native';
+      expect(normalizeEndpoint({ ...endpoint, connector_type, base_url })).toMatchObject({
+        connector_type,
+        base_url,
+      });
+      expect(
+        normalizeEndpointCreateOptions({
+          base_connector_types: [connector_type],
+          mainstream_channels: [],
+        }).base_connector_types,
+      ).toEqual([connector_type]);
+    },
+  );
+
   it('preserves the optional server role policy in models and affected-model projections', () => {
     const raw = jsonFixture('internal/resources/testdata/manual_update.json') as {
       affected_models: { model: Record<string, unknown> }[];

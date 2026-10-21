@@ -1,3 +1,4 @@
+import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation } from 'react-router';
@@ -247,7 +248,9 @@ function EndpointPoliciesContent({ role, accountId, onCapabilityLoss }: Props) {
                         render: (row) => (
                           <>
                             <span className="mono endpoint-policy-url">{row.base_url}</span>
-                            <small>{row.connector_type}</small>
+                            <small>
+                              <GatewayConnectorLabel value={row.connector_type} />
+                            </small>
                           </>
                         ),
                       },
@@ -614,7 +617,9 @@ function PolicyEditor({
           />
           <h2>{t('common.endpointPolicies.editRules')}</h2>
           <p className="mono endpoint-policy-url">{baseline.base_url}</p>
-          <p>{baseline.connector_type}</p>
+          <p>
+            <GatewayConnectorLabel value={baseline.connector_type} />
+          </p>
           <Note>{t('common.endpointPolicies.sharedHelp')}</Note>
           <p className="muted">{t('common.endpointPolicies.matchHelp')}</p>
           {draft.length ? (

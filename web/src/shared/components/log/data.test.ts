@@ -110,6 +110,14 @@ const attempt = {
 };
 
 describe('role log wire', () => {
+  it.each(['ai-sdk-gateway-v3', 'ai-sdk-gateway-v4'] as const)(
+    'retains %s in administrator and steward attempts',
+    (connector_type) => {
+      for (const normalize of [normalizeAdminLogAttempt, normalizeStewardLogAttempt])
+        expect(normalize({ ...attempt, connector_type }).connector_type).toBe(connector_type);
+    },
+  );
+
   it('keeps stable management targets separate from historical names and physical key IDs', () => {
     for (const normalize of [normalizeAdminLogRow, normalizeStewardLogRow]) {
       expect(

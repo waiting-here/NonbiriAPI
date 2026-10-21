@@ -60,6 +60,7 @@ export const ADMIN_CHARITY_CONNECTOR_TYPES = [
   'openai-compatible',
   'anthropic-compatible',
   'ai-sdk-gateway-v3',
+  'ai-sdk-gateway-v4',
   'google-gemini',
   'openai-responses',
   'openai-decisions',

@@ -1,3 +1,4 @@
+import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
 import { smartBackoffDeadline } from '@shared/operations/smartBackoff';
 import { NullableValue } from './charity/NullableValue';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
@@ -524,7 +525,8 @@ function DonationKeySettings({
         )
       ) : null}
       <p className="muted">
-        {item.safe_source.connector_type} · {item.safe_source.base_url}
+        <GatewayConnectorLabel value={item.safe_source.connector_type} /> ·{' '}
+        {item.safe_source.base_url}
       </p>
       <h5>{copy.keyUsage}</h5>
       <div className="ops-toolbar">

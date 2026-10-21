@@ -65,6 +65,7 @@ const CONNECTOR_LABEL_KEYS: Record<MainstreamConnectorType, string> = {
   'openai-compatible': 'admin.mainstreamChannels.connector.openaiCompatible',
   'anthropic-compatible': 'admin.mainstreamChannels.connector.anthropicCompatible',
   'ai-sdk-gateway-v3': 'common.gatewayName',
+  'ai-sdk-gateway-v4': 'common.gatewayV4Name',
   'google-gemini': 'common.connectorGemini',
   'openai-responses': 'common.connectorResponses',
   'openai-decisions': 'common.connectorDecisions',

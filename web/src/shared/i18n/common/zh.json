@@ -162,6 +162,7 @@
       }
     },
     "gatewayName": "AI SDK Gateway v3",
+    "gatewayV4Name": "AI SDK Gateway v4",
     "gatewayAttribution": {
       "label": "Gateway 费用归因标签",
       "sent": "已发送",

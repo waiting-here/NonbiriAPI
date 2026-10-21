@@ -1,3 +1,4 @@
+import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
 import { MODEL_TYPE_LABEL_KEYS, type ModelType } from '@shared/modelTypes';
 import { Button } from '@shared/components/ui/Button';
 import { Link, useLocation } from 'react-router';
@@ -256,7 +257,7 @@ function AttemptTable({
                 <div>
                   <dt>{t('common.operations.logs.connectorModel')}</dt>
                   <dd>
-                    {attempt.connector_type}
+                    <GatewayConnectorLabel value={attempt.connector_type} />
                     <br />
                     <span className="mono">{attempt.upstream_model_id}</span>
                   </dd>

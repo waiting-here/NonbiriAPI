@@ -1,3 +1,5 @@
+import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
+import { isAISDKGateway } from '@shared/operations/connectorPolicy';
 import { CloudflareProxyField, CloudflareProxySummary } from '../CloudflareProxyField';
 import { SessionHeaderFields } from './SessionHeaderFields';
 import { PriceTools } from './PriceTools';
@@ -895,9 +897,7 @@ function BindingsPanel({
             scope="charity-model"
             gatewayCacheDefaults={Boolean(
               bindings.data?.bindings.length &&
-              bindings.data.bindings.every(
-                (entry) => entry.source.connector_type === 'ai-sdk-gateway-v3',
-              ),
+              bindings.data.bindings.every((entry) => isAISDKGateway(entry.source.connector_type)),
             )}
             editable={role === 'admin'}
           />
@@ -935,8 +935,9 @@ function BindingsPanel({
                         className="ops-cell-wide"
                         data-label={t('common.operations.charity.source')}
                       >
-                        {entry.source.connector_type} · {entry.source.canonical_base_url} ·{' '}
-                        {entry.source.display_head}…{entry.source.display_tail}
+                        <GatewayConnectorLabel value={entry.source.connector_type} /> ·{' '}
+                        {entry.source.canonical_base_url} · {entry.source.display_head}…
+                        {entry.source.display_tail}
                         {entry.source_types.length === 0 ? (
                           <>
                             <br />
@@ -957,7 +958,7 @@ function BindingsPanel({
                         data-label={t(charityCopyKey(role, 'upstreamModel'))}
                       >
                         {entry.upstream_model_id}
-                        {entry.source.connector_type === 'ai-sdk-gateway-v3' ? (
+                        {isAISDKGateway(entry.source.connector_type) ? (
                           <GatewayCapabilitySummary entry={entry.gateway_capabilities} />
                         ) : null}
                       </td>

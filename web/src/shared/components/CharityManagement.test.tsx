@@ -616,9 +616,14 @@ describe('CharityManagement corrective controls', () => {
     },
   );
 
-  it.each([false, true])(
-    'offers model cache defaults only for an entirely Gateway binding set (mixed=%s)',
-    async (mixed) => {
+  it.each([
+    [false, 'ai-sdk-gateway-v3', 'ai-sdk-gateway-v3'],
+    [false, 'ai-sdk-gateway-v4', 'ai-sdk-gateway-v4'],
+    [false, 'ai-sdk-gateway-v3', 'ai-sdk-gateway-v4'],
+    [true, 'ai-sdk-gateway-v4', 'openai-compatible'],
+  ] as const)(
+    'offers cache defaults only for an entirely Gateway family (mixed=%s, %s / %s)',
+    async (mixed, firstConnector, secondConnector) => {
       const model = { ...charityModel(10, 20), binding_count: '2' };
       const binding = (id: string, connector: string) => ({
         id,
@@ -647,10 +652,7 @@ describe('CharityManagement corrective controls', () => {
           if (url.pathname === '/admin/api/charity-models/1') return jsonResponse(model);
           if (url.pathname === '/admin/api/charity-models/1/bindings')
             return jsonResponse({
-              bindings: [
-                binding('1', 'ai-sdk-gateway-v3'),
-                binding('2', mixed ? 'openai-compatible' : 'ai-sdk-gateway-v3'),
-              ],
+              bindings: [binding('1', firstConnector), binding('2', secondConnector)],
               binding_revision: '0',
             });
           if (url.pathname.endsWith('/request-adaptation'))
@@ -1246,7 +1248,8 @@ describe('CharityManagement corrective controls', () => {
       session: adminSession,
       modelsTab: 'Charity models and bindings',
       reserveLabel: 'Usage reserve (credits)',
-      reserveHelp: 'Used before usage-based requests. Leave blank to use the caller key or site reserve.',
+      reserveHelp:
+        'Used before usage-based requests. Leave blank to use the caller key or site reserve.',
       pricingLabel: 'Pricing mode',
       perRequest: 'Per request',
       perToken: 'Per token',
