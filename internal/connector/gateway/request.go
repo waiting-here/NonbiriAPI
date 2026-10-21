@@ -1,4 +1,4 @@
-// Package gateway implements the native AI SDK Gateway language/embedding v3
+// Package gateway implements the native AI SDK Gateway v3/v4 inference
 // wire protocol. Its request compiler is also the pure routing fidelity check.
 package gateway
 
@@ -78,7 +78,11 @@ func number(raw []byte, minimum, maximum float64, integer bool) bool {
 func isNull(raw []byte) bool { return bytes.Equal(bytes.TrimSpace(raw), []byte("null")) }
 
 func SupportsRequest(request *openai.ChatRequest) bool {
-	body, err := compileChatWithModel(request, "", nil)
+	return SupportsRequestForType(contract.TypeAISDKGatewayV3, request)
+}
+
+func SupportsRequestForType(kind contract.Type, request *openai.ChatRequest) bool {
+	body, err := compileChatForType(kind, request, "", nil)
 	clear(body)
 	return err == nil
 }
@@ -89,7 +93,11 @@ func compileChat(request *openai.ChatRequest, attribution string) ([]byte, error
 }
 
 func compileChatWithModel(request *openai.ChatRequest, attribution string, model *gatewaypolicy.Model) ([]byte, error) {
-	if request == nil {
+	return compileChatForType(contract.TypeAISDKGatewayV3, request, attribution, model)
+}
+
+func compileChatForType(kind contract.Type, request *openai.ChatRequest, attribution string, model *gatewaypolicy.Model) ([]byte, error) {
+	if request == nil || !kind.AISDKGateway() {
 		return nil, errRequest
 	}
 	output := map[string]any{}
@@ -155,6 +163,13 @@ func compileChatWithModel(request *openai.ChatRequest, attribution string, model
 			effort, ok := text(raw)
 			if !ok || !gatewaypolicy.KnownEffort(effort) {
 				return nil, reject("native compile", "reasoning_effort", "unsupported effort value")
+			}
+			if kind == contract.TypeAISDKGatewayV4 {
+				if model != nil && model.Adapter != "" && !model.AllowsEffort(effort) {
+					return nil, reject("model preflight", "reasoning_effort", "effort is not enabled for this model")
+				}
+				output["reasoning"] = effort
+				continue
 			}
 			if model == nil {
 				continue
@@ -266,6 +281,9 @@ func compileChatWithModel(request *openai.ChatRequest, attribution string, model
 		return nil, err
 	}
 	output["prompt"] = prompt
+	if kind == contract.TypeAISDKGatewayV4 {
+		encodeV4PromptFiles(prompt)
+	}
 	names := map[string]bool{}
 	if raw, ok := fields["tools"]; ok {
 		var tools []json.RawMessage
@@ -513,11 +531,28 @@ func compileEmbedding(request *openai.EmbeddingRequest, attribution string) ([]b
 	if request == nil || request.EncodingFormat != "float" || request.Dimensions != 0 {
 		return nil, errRequest
 	}
+	return compileEmbeddingForType(contract.TypeAISDKGatewayV3, request, attribution)
+}
+
+func compileEmbeddingForType(kind contract.Type, request *openai.EmbeddingRequest, attribution string) ([]byte, error) {
+	if !kind.AISDKGateway() || request == nil {
+		return nil, reject("native compile", "request", "expected a Gateway embedding request")
+	}
+	if request.EncodingFormat != "float" && request.EncodingFormat != "base64" {
+		return nil, reject("native compile", "encoding_format", "expected float or base64")
+	}
+	if request.Dimensions != 0 && kind != contract.TypeAISDKGatewayV4 {
+		return nil, reject("native compile", "dimensions", "dimensions require Gateway v4")
+	}
 	for _, field := range request.TopLevelFields() {
 		switch field {
 		case "model", "input", "encoding_format", "stream":
+		case "dimensions":
+			if kind != contract.TypeAISDKGatewayV4 {
+				return nil, reject("native compile", field, "dimensions require Gateway v4")
+			}
 		default:
-			return nil, errRequest
+			return nil, reject("native compile", field, "unsupported embedding field")
 		}
 	}
 	raw, _ := request.RawField("input")
@@ -526,12 +561,15 @@ func compileEmbedding(request *openai.EmbeddingRequest, attribution string) ([]b
 	if value, ok := text(raw); ok {
 		values = []string{value}
 	} else if json.Unmarshal(raw, &values) != nil || len(values) == 0 {
-		return nil, errRequest
+		return nil, reject("native compile", "input", "only text embedding inputs are supported")
 	}
 	if len(values) != request.InputCount {
 		return nil, errRequest
 	}
 	out := map[string]any{"values": values}
+	if request.Dimensions > 0 {
+		out["dimensions"] = request.Dimensions
+	}
 	if attribution != "" {
 		out["providerOptions"] = map[string]any{"gateway": map[string]string{"user": attribution}}
 	}
@@ -574,11 +612,15 @@ func outputBudget(fields object) (int64, error) {
 // with the same exact-target policy used before request acceptance.
 func CompileTarget(request *openai.ChatRequest, attribution string, target contract.Target, models gatewaypolicy.Config, native map[string]json.RawMessage) ([]byte, error) {
 	model := models.Lookup(target.BaseURL(), target.UpstreamModel())
-	return CompileWithModel(request, attribution, model, native)
+	return CompileWithModelForType(target.Type(), request, attribution, model, native)
 }
 
 func CompileWithModel(request *openai.ChatRequest, attribution string, model gatewaypolicy.Model, native map[string]json.RawMessage) ([]byte, error) {
-	body, err := compileChatWithModel(request, attribution, &model)
+	return CompileWithModelForType(contract.TypeAISDKGatewayV3, request, attribution, model, native)
+}
+
+func CompileWithModelForType(kind contract.Type, request *openai.ChatRequest, attribution string, model gatewaypolicy.Model, native map[string]json.RawMessage) ([]byte, error) {
+	body, err := compileChatForType(kind, request, attribution, &model)
 	if err != nil {
 		return nil, err
 	}
@@ -622,7 +664,7 @@ func validateControlExtensions(request *openai.ChatRequest, native map[string]js
 		case "max_tokens", "max_completion_tokens":
 			protected = append(protected, "/maxOutputTokens", "/providerOptions/openai/maxCompletionTokens", "/providerOptions/openai/forceReasoning", "/providerOptions/openai/systemMessageMode", "/providerOptions/anthropic/thinking", "/providerOptions/bedrock/thinking")
 		case "reasoning_effort":
-			protected = append(protected, "/providerOptions/openai/reasoningEffort", "/providerOptions/openai/forceReasoning", "/providerOptions/openai/systemMessageMode", "/providerOptions/anthropic/effort", "/providerOptions/anthropic/thinking", "/providerOptions/bedrock/thinking", "/providerOptions/bedrock/effort")
+			protected = append(protected, "/reasoning", "/providerOptions/openai/reasoningEffort", "/providerOptions/openai/forceReasoning", "/providerOptions/openai/systemMessageMode", "/providerOptions/anthropic/effort", "/providerOptions/anthropic/thinking", "/providerOptions/bedrock/thinking", "/providerOptions/bedrock/effort")
 		case "store":
 			protected = append(protected, "/providerOptions/openai/store")
 		case "cache_control":

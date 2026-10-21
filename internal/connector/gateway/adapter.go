@@ -57,12 +57,30 @@ func (a *Adapter) Attempt(ctx context.Context, w http.ResponseWriter, target con
 }
 
 func (a *Adapter) AttemptWithPolicy(ctx context.Context, w http.ResponseWriter, target contract.Target, credential *contract.ShortLivedSecret, chat *openai.ChatRequest, embedding *openai.EmbeddingRequest, attribution string, policy contract.AttemptPolicy) (result contract.AttemptResult) {
+	return a.attempt(ctx, w, target, credential, chat, embedding, nil, nil, attribution, policy)
+}
+
+func (a *Adapter) AttemptImageWithPolicy(ctx context.Context, w http.ResponseWriter, target contract.Target, credential *contract.ShortLivedSecret, request *openai.ImageRequest, attribution string, policy contract.AttemptPolicy) contract.AttemptResult {
+	return a.attempt(ctx, w, target, credential, nil, nil, request, nil, attribution, policy)
+}
+
+func (a *Adapter) AttemptInferenceWithPolicy(ctx context.Context, w http.ResponseWriter, target contract.Target, credential *contract.ShortLivedSecret, request *openai.InferenceRequest, attribution string, policy contract.AttemptPolicy) contract.AttemptResult {
+	return a.attempt(ctx, w, target, credential, nil, nil, nil, request, attribution, policy)
+}
+
+func (a *Adapter) attempt(ctx context.Context, w http.ResponseWriter, target contract.Target, credential *contract.ShortLivedSecret, chat *openai.ChatRequest, embedding *openai.EmbeddingRequest, image *openai.ImageRequest, inference *openai.InferenceRequest, attribution string, policy contract.AttemptPolicy) (result contract.AttemptResult) {
 	defer func() { result = contract.NormalizeOutcome(result) }()
 	result = contract.AttemptResult{Failure: contract.FailureInternal, Diagnostic: "gateway attempt unavailable"}
 	defer credential.Clear()
 	sent := false
 	defer func() { result.GatewayUserAttributionSent = &sent }()
-	if a == nil || ctx == nil || w == nil || (chat == nil) == (embedding == nil) || target.Type() != contract.TypeAISDKGatewayV3 {
+	requests := 0
+	for _, present := range []bool{chat != nil, embedding != nil, image != nil, inference != nil} {
+		if present {
+			requests++
+		}
+	}
+	if a == nil || ctx == nil || w == nil || requests != 1 || !target.Type().AISDKGateway() {
 		return result
 	}
 	if ctx.Err() != nil {
@@ -76,16 +94,24 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, w http.ResponseWriter, 
 	}
 	var body []byte
 	var err error
-	path := "/language-model"
-	if embedding != nil {
-		path = "/embedding-model"
-		body, err = compileEmbedding(embedding, attribution)
-	} else {
+	service := "language"
+	responseLimit := maxJSONBytes
+	switch {
+	case embedding != nil:
+		service, responseLimit = "embedding", openai.DefaultMaxEmbeddingResponseBytes
+		body, err = compileEmbeddingPolicy(target.Type(), embedding, attribution, policy.NativeExtensions)
+	case image != nil:
+		service, responseLimit = "image", openai.DefaultMaxImageResponseBytes
+		body, err = compileImagePolicy(target.Type(), image, attribution, policy.NativeExtensions)
+	case inference != nil:
+		service = "reranking"
+		body, err = compileRerankPolicy(target.Type(), inference, attribution, policy.NativeExtensions)
+	default:
 		model := a.models.Lookup(target.BaseURL(), target.UpstreamModel())
 		if policy.GatewayModel != nil {
 			model = *policy.GatewayModel
 		}
-		body, err = CompileWithModel(chat, attribution, model, policy.NativeExtensions)
+		body, err = CompileWithModelForType(target.Type(), chat, attribution, model, policy.NativeExtensions)
 	}
 	if err != nil {
 		var rejected *contract.RequestRejection
@@ -95,19 +121,11 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, w http.ResponseWriter, 
 		return result
 	}
 	defer func() { clear(body) }()
-	if embedding != nil && len(policy.NativeExtensions) != 0 {
-		merged, mergeErr := requestadaptation.MergeNative(body, policy.NativeExtensions, maxJSONBytes)
-		if mergeErr != nil {
-			return result
-		}
-		clear(body)
-		body = merged
-	}
 	client, err := a.backend.Open(target.BaseURL())
 	if err != nil {
 		return contract.NormalizeOutcome(contract.AttemptResult{Failure: contract.FailureUpstream, Diagnostic: "upstream endpoint was refused"})
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimSuffix(client.BaseURL(), "/")+path, bytes.NewReader(body))
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimSuffix(client.BaseURL(), "/")+"/"+service+"-model", bytes.NewReader(body))
 	if err != nil {
 		return result
 	}
@@ -122,11 +140,10 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, w http.ResponseWriter, 
 	defer clear(cipher)
 	setRequestHeaders(request, plain)
 	request.Header.Set("Content-Type", "application/json")
-	if embedding != nil {
-		request.Header.Set("ai-embedding-model-specification-version", "3")
+	request.Header.Set("ai-"+service+"-model-specification-version", specificationVersion(target.Type()))
+	if chat == nil {
 		request.Header.Set("ai-model-id", target.UpstreamModel())
 	} else {
-		request.Header.Set("ai-language-model-specification-version", "3")
 		request.Header.Set("ai-language-model-id", target.UpstreamModel())
 		request.Header.Set("ai-language-model-streaming", strconv.FormatBool(stream))
 	}
@@ -181,7 +198,7 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, w http.ResponseWriter, 
 	clear(plain)
 	clear(cipher)
 	sent = attribution != ""
-	request = egress.WithResponseLimits(request, egress.ResponseLimits{JSONBytes: maxJSONBytes, StreamBytes: maxStreamBytes, LineBytes: maxLineBytes, EventBytes: maxEventBytes})
+	request = egress.WithResponseLimits(request, egress.ResponseLimits{JSONBytes: responseLimit, StreamBytes: maxStreamBytes, LineBytes: maxLineBytes, EventBytes: maxEventBytes})
 	response, err := client.Do(request)
 	if response != nil {
 		defer func() { result.UpstreamStatus = response.StatusCode }()
@@ -219,7 +236,7 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, w http.ResponseWriter, 
 	}
 	if stream {
 		// The native SDK parses SSE independently of its advertised MIME type.
-		// The bounded parser below still requires valid v3 events and a terminal.
+		// The bounded parser still requires supported events and a terminal.
 		if response.Header.Get("Content-Encoding") != "" {
 			return upstreamFailure("upstream stream encoding was invalid", response.StatusCode)
 		}
@@ -229,7 +246,7 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, w http.ResponseWriter, 
 		_ = errorContext.ReadResponse(ctx, response)
 		return upstreamFailure("upstream response content type was invalid", response.StatusCode)
 	}
-	raw, err := readBounded(response.Body, min(maxJSONBytes, a.backend.MaxResponseBytes()))
+	raw, err := readBounded(response.Body, min(responseLimit, a.backend.MaxResponseBytes()))
 	if err != nil {
 		clear(raw)
 		failed := upstreamFailure("upstream response exceeded its limit or was interrupted", response.StatusCode)
@@ -247,9 +264,14 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, w http.ResponseWriter, 
 	}
 	var translated []byte
 	var usage contract.Usage
-	if embedding != nil {
-		translated, usage, err = translateEmbedding(raw, embedding.Model, embedding.InputCount)
-	} else {
+	switch {
+	case embedding != nil:
+		translated, usage, err = translateEmbeddingRequest(raw, embedding)
+	case image != nil:
+		translated, usage, err = translateImage(raw, image, a.now().Unix())
+	case inference != nil:
+		translated, usage, err = translateRerank(raw, inference)
+	default:
 		translated, usage, err = translateChat(raw, chat.Model, a.now().Unix())
 	}
 	defer func() { clear(translated) }()

@@ -29,7 +29,7 @@ func (ModelDiscoverer) Discover(ctx context.Context, input contract.DiscoveryInp
 			}
 		}
 	}()
-	if ctx == nil || backend.IsNil(input.Backend) || input.Target.Type() != contract.TypeAISDKGatewayV3 {
+	if ctx == nil || backend.IsNil(input.Backend) || !input.Target.Type().AISDKGateway() {
 		return result
 	}
 	if ctx.Err() != nil {
@@ -126,10 +126,20 @@ func (ModelDiscoverer) Discover(ctx context.Context, input contract.DiscoveryInp
 			result.Models = nil
 			return result
 		}
-		// Catalogs may contain image, video, speech, transcription, reranking
-		// and future model types. They are not chat/embedding candidates.
-		if kind != "language" && kind != "embedding" {
+		// Unrelated and future catalog services are not inference candidates.
+		if kind != "language" && kind != "embedding" && kind != "image" && kind != "reranking" {
 			continue
+		}
+		if raw, present := entry["specification"]; present {
+			spec, err := parseObject(raw)
+			version, ok := text(spec["specificationVersion"])
+			if err != nil || !ok {
+				result.Models = nil
+				return result
+			}
+			if version != "v"+specificationVersion(input.Target.Type()) {
+				continue
+			}
 		}
 		id, ok := text(entry["id"])
 		if !ok || !opaque(id, 512) || seen[id] || len(result.Models) >= 1000 {
