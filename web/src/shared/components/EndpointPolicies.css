@@ -28,3 +28,19 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+@media (width < 40rem) {
+  .endpoint-policies .nb-pager .nb-pager__jump,
+  .endpoint-policies .nb-pager__size {
+    display: inline-flex;
+  }
+
+  .endpoint-policies .nb-pager__pages {
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
+
+  .endpoint-policies .nb-pager input,
+  .endpoint-policies .nb-pager select {
+    min-height: 2.5rem;
+  }
+}

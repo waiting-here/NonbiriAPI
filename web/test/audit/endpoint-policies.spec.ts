@@ -124,6 +124,7 @@ test('endpoint list keeps numbered pagination, draft and focus through route ins
     await expect(trigger).toBeVisible();
     await visuals(page, info, 'endpoint-policy-list', async () => {
       await rulesPanel.getByLabel(common.common.pageControls.jump).scrollIntoViewIfNeeded();
+      await expect(rulesPanel.getByLabel(common.common.pageControls.size)).toBeVisible();
     });
     await trigger.click();
     await expect(page.getByRole('heading', { name: copy.editRules, exact: true })).toBeVisible();
@@ -153,9 +154,7 @@ test('endpoint list keeps numbered pagination, draft and focus through route ins
     await routePanel.getByRole('button', { name: common.common.previous, exact: true }).click();
     await expect(routePanel.getByLabel(common.common.pageControls.jump)).toHaveValue('2');
     await visuals(page, info, 'endpoint-loaded-routes', async () => {
-      await page
-        .getByRole('table', { name: copy.loadedRoutes, exact: true })
-        .scrollIntoViewIfNeeded();
+      await routePanel.getByText(loaded.worker_origin, { exact: true }).scrollIntoViewIfNeeded();
     });
     await page.getByRole('tab', { name: copy.rulesTab, exact: true }).click();
     await expect(value).toHaveValue('retained_endpoint_draft');
