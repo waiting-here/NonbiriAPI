@@ -108,14 +108,20 @@ async function fold(scope: Page | Locator, title: string) {
   if ((await panel.getAttribute('open')) === null) await summary.click();
   return panel;
 }
-async function visuals(page: Page, info: TestInfo, name: string, focus: Locator) {
+async function visuals(
+  page: Page,
+  info: TestInfo,
+  name: string,
+  focus: Locator,
+  widths: readonly number[] = [1440, 390],
+) {
   const directory = process.env.NONBIRI_VISUAL_DIR;
   if (directory) mkdirSync(directory, { recursive: true });
   for (const theme of ['light', 'dark']) {
     await page.evaluate((value) => {
       document.documentElement.dataset.theme = value;
     }, theme);
-    for (const width of [1440, 390]) {
+    for (const width of widths) {
       await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
       await focus.scrollIntoViewIfNeeded();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
@@ -189,6 +195,21 @@ test('administrator saves inherited five-limit profiles and batches only the sel
     const [first, second, untouched] = list.data.filter((item) => !item.is_admin);
     const unchanged = await read<AdminUser>(context, origin, '/admin/api/users/' + untouched.id);
     await page.goto(origin + '/users' + listQuery);
+    const listName = page.getByRole('button', { name: first.username, exact: true });
+    const listRow = page.getByRole('row').filter({ has: listName });
+    await expect(listName).toHaveAttribute('title', first.username);
+    await page.setViewportSize({ width: 390, height: 844 });
+    const selectionTarget = listRow.getByRole('checkbox').locator('..');
+    await expect(selectionTarget).toBeVisible();
+    const selectionBox = await selectionTarget.boundingBox();
+    expect(selectionBox?.width).toBeGreaterThanOrEqual(40);
+    expect(selectionBox?.height).toBeGreaterThanOrEqual(40);
+    expect(
+      await page
+        .locator('.nb-table-wrap')
+        .evaluate((element) => element.scrollWidth <= element.clientWidth),
+    ).toBe(true);
+    await visuals(page, info, 'user-list-mobile', listRow, [390]);
     await page
       .getByRole('checkbox', {
         name: limits.selectLimitUser.replace('{{user}}', first.username),
@@ -236,7 +257,9 @@ test('administrator saves inherited five-limit profiles and batches only the sel
     });
     await batch.getByRole('button', { name: limits.batchLimitApply, exact: true }).click();
     await expect(
-      batch.getByRole('listitem').filter({ hasText: limits.batchLimitSaved }),
+      batch
+        .getByRole('listitem')
+        .filter({ hasText: new RegExp(' · ' + limits.batchLimitSaved + '$') }),
     ).toHaveCount(2);
     expect(writes.map((write) => write.path).sort()).toEqual(
       [first, second].map((user) => '/admin/api/users/' + user.id).sort(),
