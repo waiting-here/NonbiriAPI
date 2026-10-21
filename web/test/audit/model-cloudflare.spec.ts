@@ -115,7 +115,10 @@ test('personal models default on and retain a changed setting after a real revis
   try {
     const page = await context.newPage();
     await page.goto(origin + '/models');
-    await page.getByRole('button', { name: 'Create model', exact: true }).click();
+    await page
+      .locator('[data-component="page-header"]')
+      .getByRole('button', { name: 'Create model', exact: true })
+      .click();
     const toggle = page.getByRole('switch', { name: copy.label, exact: true });
     await expect(toggle).toBeChecked();
     await expect(toggle).toHaveAccessibleDescription(copy.new);

@@ -632,7 +632,10 @@ test('native Chat services retain storage policy and one Chat Responses group al
     expect(keys.data.find((item) => item.id === key.id)?.force_store_false).toBe(false);
 
     await page.goto(origin + '/models');
-    await page.getByRole('button', { name: 'Create model', exact: true }).click();
+    await page
+      .locator('[data-component="page-header"]')
+      .getByRole('button', { name: 'Create model', exact: true })
+      .click();
     const editor = page.locator('form.model-editor');
     await editor.getByLabel('Prefix', { exact: true }).fill('browser');
     await editor
