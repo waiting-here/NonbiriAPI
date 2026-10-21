@@ -69,10 +69,14 @@ func (auth *testAdminAuth) AuthorizeUserManagement(ctx context.Context, tx *sql.
 	return level == 5, nil
 }
 
-type testInvalidator struct{ users []int64 }
+type testInvalidator struct{ users, limitUsers []int64 }
 
 func (sink *testInvalidator) InvalidateUserAuthority(userID int64) {
 	sink.users = append(sink.users, userID)
+}
+
+func (sink *testInvalidator) UserLimitsChanged(userID int64) {
+	sink.limitUsers = append(sink.limitUsers, userID)
 }
 
 type registeredRoute struct {

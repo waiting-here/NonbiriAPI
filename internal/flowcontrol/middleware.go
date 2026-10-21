@@ -97,7 +97,7 @@ func (m *Middleware) serveHTTP(writer http.ResponseWriter, request *http.Request
 		request, charity, cleanup, err = classifier(request)
 		return charity, err
 	}
-	reservation, retryAfter, err := m.controller.admit(request.Context(), userID, classify)
+	reservation, retryAfter, err := m.controller.admitClassified(request.Context(), userID, requestkind.IsLightOperation(requestkind.OperationForPath(request.URL.Path)), classify)
 	if err != nil {
 		if request.Context().Err() != nil {
 			return

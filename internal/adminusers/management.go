@@ -103,7 +103,11 @@ func (s *Service) lockUserIdentity(ctx context.Context, actorID, userID int64, r
 // The target check precedes replay for stewards. A cached response cannot
 // authorize editing oneself or an account that has since become a steward.
 func (s *Service) beginUserMutation(ctx context.Context, actorID, userID int64, role managementRole, control ControlMutation, now int64, allowTraineeBan bool) (*sql.Tx, userRow, idempotency.Decision, error) {
-	tx, trainee, err := s.beginManagementAccess(ctx, actorID, role, false, allowTraineeBan)
+	return s.beginUserMutationAccess(ctx, actorID, userID, role, control, now, allowTraineeBan, false)
+}
+
+func (s *Service) beginUserMutationAccess(ctx context.Context, actorID, userID int64, role managementRole, control ControlMutation, now int64, allowTraineeBan, limitsOnly bool) (*sql.Tx, userRow, idempotency.Decision, error) {
+	tx, trainee, err := s.beginManagementAccess(ctx, actorID, role, false, allowTraineeBan || limitsOnly)
 	if err != nil {
 		return nil, userRow{}, idempotency.Decision{}, err
 	}
@@ -120,7 +124,7 @@ func (s *Service) beginUserMutation(ctx context.Context, actorID, userID int64, 
 	}
 	// Changing an existing ban could shorten it, effectively granting an unban.
 	// An identical replay remains valid after the target-level check above.
-	if err == nil && trainee && decision.Kind != idempotency.Replay && row.isBanned == 1 && (!row.bannedUntil.Valid || row.bannedUntil.Int64 > now) {
+	if err == nil && trainee && !limitsOnly && decision.Kind != idempotency.Replay && row.isBanned == 1 && (!row.bannedUntil.Valid || row.bannedUntil.Int64 > now) {
 		err = ErrForbidden
 	}
 	if err == nil && role == roleAdmin && decision.Kind != idempotency.Replay {

@@ -9,6 +9,7 @@ type WindowFact struct {
 	At      time.Time
 	Expires time.Time
 	Charity bool
+	Light   bool
 }
 
 func (r *RPM) SnapshotUser(userKey string) (time.Time, []WindowFact, error) {
@@ -30,7 +31,7 @@ func (r *RPM) SnapshotUser(userKey string) (time.Time, []WindowFact, error) {
 		if event.state.Load() != uint32(rpmEventCommitted) {
 			return time.Time{}, nil, ErrCapacity
 		}
-		facts = append(facts, WindowFact{ID: event.id, At: event.at, Expires: event.expires, Charity: event.charity})
+		facts = append(facts, WindowFact{ID: event.id, At: event.at, Expires: event.expires, Charity: event.charity, Light: event.light})
 	}
 	return now, facts, nil
 }
@@ -57,7 +58,7 @@ func (r *RPM) MergeUser(userKey string, facts []WindowFact) error {
 	r.pruneLocked(now)
 	seen := make(map[string]WindowFact, len(facts)+len(r.users[userKey]))
 	for _, event := range r.users[userKey] {
-		seen[event.id] = WindowFact{ID: event.id, At: event.at, Expires: event.expires, Charity: event.charity}
+		seen[event.id] = WindowFact{ID: event.id, At: event.at, Expires: event.expires, Charity: event.charity, Light: event.light}
 	}
 	added := []*rpmEvent{}
 	for _, fact := range facts {
@@ -69,13 +70,13 @@ func (r *RPM) MergeUser(userKey string, facts []WindowFact) error {
 		}
 		if prior, found := seen[fact.ID]; found {
 			// Persistence has millisecond resolution and rounds expiry up.
-			if prior.Charity != fact.Charity || prior.At.UnixMilli() != fact.At.UnixMilli() || prior.Expires.Add(time.Millisecond-1).UnixMilli() != fact.Expires.Add(time.Millisecond-1).UnixMilli() {
+			if prior.Charity != fact.Charity || prior.Light != fact.Light || prior.At.UnixMilli() != fact.At.UnixMilli() || prior.Expires.Add(time.Millisecond-1).UnixMilli() != fact.Expires.Add(time.Millisecond-1).UnixMilli() {
 				return ErrInvalidConfig
 			}
 			continue
 		}
 		seen[fact.ID] = fact
-		event := &rpmEvent{id: fact.ID, at: fact.At, expires: fact.Expires, user: userKey, charity: fact.Charity}
+		event := &rpmEvent{id: fact.ID, at: fact.At, expires: fact.Expires, user: userKey, charity: fact.Charity, light: fact.Light}
 		event.state.Store(uint32(rpmEventCommitted))
 		added = append(added, event)
 	}

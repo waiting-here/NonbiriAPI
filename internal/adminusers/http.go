@@ -479,7 +479,7 @@ func (api *httpAPI) getEndpointOverview(writer http.ResponseWriter, request *htt
 }
 
 func decodeProfileMutation(object map[string]json.RawMessage) (ProfileMutation, bool) {
-	if !allowedObject(object, []string{"mode", "expected_revision"}, []string{"endpoint_limit", "rpm_limit", "concurrency_limit", "lang", "level", "discord_gate_policy"}) {
+	if !allowedObject(object, []string{"mode", "expected_revision"}, []string{"endpoint_limit", "rpm_limit", "concurrency_limit", "light_rpm_limit", "light_concurrency_limit", "global_rpm_limit", "lang", "level", "discord_gate_policy"}) {
 		return ProfileMutation{}, false
 	}
 	revision, ok := requiredRevision(object, "expected_revision")
@@ -508,6 +508,27 @@ func decodeProfileMutation(object map[string]json.RawMessage) (ProfileMutation, 
 			return ProfileMutation{}, false
 		}
 	}
+	if raw, set := object["light_rpm_limit"]; set {
+		input.LightRPMLimitSet = true
+		input.LightRPMLimit, ok = nullableDecimalInteger(raw, 1, db.MaxUserRPMLimit)
+		if !ok {
+			return ProfileMutation{}, false
+		}
+	}
+	if raw, set := object["light_concurrency_limit"]; set {
+		input.LightConcurrencySet = true
+		input.LightConcurrency, ok = nullableDecimalInteger(raw, 1, db.MaxUserConcurrencyLimit)
+		if !ok {
+			return ProfileMutation{}, false
+		}
+	}
+	if raw, set := object["global_rpm_limit"]; set {
+		input.GlobalRPMLimitSet = true
+		input.GlobalRPMLimit, ok = nullableDecimalInteger(raw, 1, db.MaxUserRPMLimit)
+		if !ok {
+			return ProfileMutation{}, false
+		}
+	}
 	if raw, set := object["lang"]; set {
 		input.LangSet = true
 		if json.Unmarshal(raw, &input.Lang) != nil || input.Lang != "zh" && input.Lang != "en" {
@@ -531,7 +552,7 @@ func decodeProfileMutation(object map[string]json.RawMessage) (ProfileMutation, 
 			return ProfileMutation{}, false
 		}
 	}
-	if !input.EndpointLimitSet && !input.RPMLimitSet && !input.ConcurrencySet && !input.LangSet && !input.LevelSet && !input.DiscordGatePolicySet {
+	if !input.LightRPMLimitSet && !input.LightConcurrencySet && !input.GlobalRPMLimitSet && !input.EndpointLimitSet && !input.RPMLimitSet && !input.ConcurrencySet && !input.LangSet && !input.LevelSet && !input.DiscordGatePolicySet {
 		return ProfileMutation{}, false
 	}
 	return input, true
@@ -570,6 +591,15 @@ func decodeEconomyMutation(object map[string]json.RawMessage) (EconomyMutation, 
 
 func profileCanonical(input ProfileMutation) map[string]any {
 	canonical := map[string]any{"mode": "profile", "expected_revision": input.ExpectedRevision.Decimal()}
+	if input.LightRPMLimitSet {
+		canonical["light_rpm_limit"] = nullableDecimal(input.LightRPMLimit)
+	}
+	if input.LightConcurrencySet {
+		canonical["light_concurrency_limit"] = nullableDecimal(input.LightConcurrency)
+	}
+	if input.GlobalRPMLimitSet {
+		canonical["global_rpm_limit"] = nullableDecimal(input.GlobalRPMLimit)
+	}
 	if input.DiscordGatePolicySet {
 		canonical["discord_gate_policy"] = input.DiscordGatePolicy
 	}

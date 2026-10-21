@@ -30,12 +30,13 @@ type bucketKey struct {
 	kind         string
 }
 type userOccupancy struct {
-	id                                 int64
-	last, seen                         time.Time
-	firstMinute                        int64
-	active, rpmLimit, concurrencyLimit int
-	kinds                              map[string]int
-	uncertain                          bool
+	id                                               int64
+	last, seen                                       time.Time
+	firstMinute                                      int64
+	active, rpmLimit, concurrencyLimit               int
+	kinds                                            map[string]int
+	uncertain                                        bool
+	heavyActive, lightActive, heavyLimit, lightLimit int
 }
 type requestSample struct {
 	user     int64
@@ -243,6 +244,17 @@ func (c *Collector) advance(u *userOccupancy, at time.Time) {
 		minute := from / 60000 * 60
 		end := min(to, (minute+60)*1000)
 		if b := c.bucket(u, minute, "total"); b != nil {
+			if u.heavyLimit > 0 && u.lightLimit > 0 {
+				value := int64(0)
+				if b.SaturationMicrosMillis != nil {
+					value = *b.SaturationMicrosMillis
+				}
+				duration := end - from
+				heavy := int64(min(u.heavyActive, u.heavyLimit)) * 1000000 * duration / int64(u.heavyLimit)
+				light := int64(min(u.lightActive, u.lightLimit)) * 1000000 * duration / int64(u.lightLimit)
+				value += max(heavy, light)
+				b.SaturationMicrosMillis = &value
+			}
 			b.OccupancyMillis += int64(u.active) * (end - from)
 			b.Peak = max(b.Peak, u.active)
 		}
@@ -288,6 +300,7 @@ func (c *Collector) invalidate(at time.Time, userID int64, flag int, reason stri
 		} else {
 			u.rpmLimit = 0
 			u.concurrencyLimit = 0
+			u.heavyLimit, u.lightLimit = 0, 0
 		}
 	}
 }
@@ -371,6 +384,7 @@ func (c *Collector) handle(event auditEvent) {
 		}
 		r = &requestSample{user: v.UserID, kind: kind, start: v.At, active: true}
 		c.requests[v.RequestID] = r
+		c.observePools(u, v)
 		u.concurrencyLimit = v.ConcurrencyLimit
 		if u.active+1 != v.Active {
 			u.uncertain = true
@@ -385,6 +399,8 @@ func (c *Collector) handle(event auditEvent) {
 		}
 	case "concurrency_release":
 		c.advance(u, v.At)
+		c.observePools(u, v)
+		u.concurrencyLimit = v.ConcurrencyLimit
 		if r != nil && r.active {
 			u.kinds[kind] = max(0, u.kinds[kind]-1)
 			r.active = false
@@ -399,6 +415,7 @@ func (c *Collector) handle(event auditEvent) {
 		}
 	case "concurrency_denied":
 		c.advance(u, v.At)
+		c.observePools(u, v)
 		u.concurrencyLimit = v.ConcurrencyLimit
 		c.eachBucket(u, minuteAt(v.At), kind, func(b *Minute) { b.ConcurrencyDenied++ })
 	case "rpm_reserve":
@@ -629,4 +646,15 @@ func (c *Collector) Run(ctx context.Context) error {
 			}
 		}
 	}
+}
+
+func (c *Collector) observePools(u *userOccupancy, v flowcontrol.Observation) {
+	if u.heavyLimit > 0 && u.lightLimit > 0 && (u.heavyLimit != v.HeavyLimit || u.lightLimit != v.LightLimit) {
+		if b := c.bucket(u, minuteAt(v.At), "total"); b != nil {
+			b.Coverage |= CoverageLimitChanged
+		}
+	}
+
+	u.heavyActive, u.lightActive = v.HeavyActive, v.LightActive
+	u.heavyLimit, u.lightLimit = v.HeavyLimit, v.LightLimit
 }
