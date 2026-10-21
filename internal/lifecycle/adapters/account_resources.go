@@ -169,11 +169,15 @@ func (adapter *AccountResources) ExportResources(
 	models := make([]lifecycle.ModelExport, 0, len(slice.Models))
 	for _, model := range slice.Models {
 		item := lifecycle.ModelExport{
-			RolePolicy: model.RolePolicy.Clone(),
-			ID:         model.ID, Provider: model.Provider, Model: model.Model, FullName: model.FullName,
+			SessionHeaders: make([]lifecycle.SessionHeaderExport, 0, len(model.SessionHeaders)),
+			RolePolicy:     model.RolePolicy.Clone(),
+			ID:             model.ID, Provider: model.Provider, Model: model.Model, FullName: model.FullName,
 			RouteStrategy: model.RouteStrategy, SilentRetry: model.SilentRetry,
 			ModelTypes: model.ModelTypes.Clone(), TransportRule: model.TransportRule, CloudflareProxyEnabled: model.CloudflareProxyEnabled, FlattenToolCalls: model.FlattenToolCalls, CreatedAt: model.CreatedAt, UpdatedAt: model.UpdatedAt,
 			Bindings: make([]lifecycle.BindingExport, 0, len(model.Bindings)),
+		}
+		for _, header := range model.SessionHeaders {
+			item.SessionHeaders = append(item.SessionHeaders, lifecycle.SessionHeaderExport{Name: header.Name, IdleSeconds: header.IdleSeconds, Format: header.Format})
 		}
 		for _, binding := range model.Bindings {
 			item.Bindings = append(item.Bindings, lifecycle.BindingExport{

@@ -124,7 +124,7 @@ func retainedFacts(t *testing.T, database *sql.DB) map[string][32]byte {
 	ignored := map[string]bool{"schema_state": true, "user_continuity_identities": true, "gateway_model_capabilities_state": true, "site_usage_totals": true}
 	result := map[string][32]byte{}
 	for _, table := range tables {
-		if table == "endpoint_backoff_policies" || table == "donation_key_backoffs" || table == "dispatch_smart_backoff_facts" || table == "donation_key_cooldowns" || table == "dispatch_retry_after_observations" || table == "request_header_facts" || table == "charity_price_templates" || table == "charity_price_template_audits" || table == "donation_owner_preferences" || table == "channel_charity_binding_presets" || table == "channel_charity_binding_mappings" {
+		if table == "personal_header_sessions" || table == "personal_header_uses" || table == "endpoint_backoff_policies" || table == "donation_key_backoffs" || table == "dispatch_smart_backoff_facts" || table == "donation_key_cooldowns" || table == "dispatch_retry_after_observations" || table == "request_header_facts" || table == "charity_price_templates" || table == "charity_price_template_audits" || table == "donation_owner_preferences" || table == "channel_charity_binding_presets" || table == "channel_charity_binding_mappings" {
 			var count int
 			if err := database.QueryRow("SELECT count(*) FROM " + table).Scan(&count); err != nil || count != 0 {
 				t.Fatalf("new additive table %s is not empty: %d %v", table, count, err)
@@ -161,6 +161,12 @@ func retainedFacts(t *testing.T, database *sql.DB) map[string][32]byte {
 			}
 			var retained []any
 			for i, column := range columns {
+				if table == "models" && column == "session_headers" {
+					if values[i] != "[]" {
+						t.Fatal("upgrade personal session headers are not disabled by default")
+					}
+					continue
+				}
 				if inferenceDefaultColumn(t, table, column, values[i]) {
 					continue
 				}

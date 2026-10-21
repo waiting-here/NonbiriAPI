@@ -17,6 +17,7 @@ export async function renderRomance(
     frozenTime?: number;
     paused?: () => boolean;
     signal?: AbortSignal;
+    ambient?: boolean;
   } = {},
 ) {
   const scene = await createScene(id, options.polished);
@@ -26,7 +27,7 @@ export async function renderRomance(
   }
   const landscape = options.landscape;
   const buffer = document.createElement('canvas');
-  const cadence = new PaintCadence();
+  const cadence = new PaintCadence(undefined, options.ambient);
   let request = 0,
     elapsed = options.frozenTime ?? 0,
     previous = 0,

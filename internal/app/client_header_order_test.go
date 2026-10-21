@@ -13,9 +13,9 @@ import (
 )
 
 func TestClientGuardUsesOriginalHeadersBeforeOutboundOverrides(t *testing.T) {
-	for _, variant := range []string{"personal-fixed", "charity-fixed", "charity-managed"} {
-		managed := variant == "charity-managed"
-		personal := variant == "personal-fixed"
+	for _, variant := range []string{"personal-fixed", "personal-managed", "charity-fixed", "charity-managed"} {
+		managed := strings.HasSuffix(variant, "managed")
+		personal := strings.HasPrefix(variant, "personal")
 		for _, blocked := range []bool{false, true} {
 			name := variant
 			if blocked {
@@ -59,7 +59,7 @@ func TestClientGuardUsesOriginalHeadersBeforeOutboundOverrides(t *testing.T) {
 					t.Fatal(err)
 				}
 				if managed {
-					f.exec(t, `UPDATE charity_models SET session_headers='[{"name":"user-agent","idle_seconds":300,"format":"uuid_v4"}]' WHERE id=?`, model)
+					f.exec(t, `UPDATE `+table+` SET session_headers='[{"name":"user-agent","idle_seconds":300,"format":"uuid_v4"}]' WHERE id=?`, model)
 				}
 				status, body := f.post(t, "/v1/chat/completions", fmt.Sprintf(`{"model":%q,"messages":[{"role":"user","content":"Hello"}]}`, modelName))
 				var requestedStreaming bool
@@ -75,7 +75,7 @@ func TestClientGuardUsesOriginalHeadersBeforeOutboundOverrides(t *testing.T) {
 					t.Fatalf("request facts stream=%v actions=%d", requestedStreaming, actions)
 				}
 				var banned, receipts, sessions int
-				if err := f.store.DB().QueryRow(`SELECT is_banned,(SELECT count(*) FROM client_rule_ban_receipts),(SELECT count(*) FROM charity_header_sessions) FROM users WHERE id=?`, f.userID).Scan(&banned, &receipts, &sessions); err != nil {
+				if err := f.store.DB().QueryRow(`SELECT is_banned,(SELECT count(*) FROM client_rule_ban_receipts),(SELECT count(*) FROM charity_header_sessions)+(SELECT count(*) FROM personal_header_sessions) FROM users WHERE id=?`, f.userID).Scan(&banned, &receipts, &sessions); err != nil {
 					t.Fatal(err)
 				}
 				if blocked {

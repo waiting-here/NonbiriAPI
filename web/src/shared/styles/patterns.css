@@ -33,6 +33,39 @@
   margin-bottom: var(--nb-space-5);
 }
 
+/* Section heading inside a page that already has its own h1 (for example a steward tab). */
+.nb-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--nb-space-3);
+  min-width: 0;
+  margin-bottom: var(--nb-space-4);
+}
+.nb-section-head__copy {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+.nb-section-head h2 {
+  margin: 0;
+  font-size: var(--nb-font-size-lg);
+}
+.nb-section-head__copy p {
+  margin: var(--nb-space-1) 0 0;
+}
+.nb-section-head__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--nb-space-2);
+}
+@media (width < 40rem) {
+  .nb-section-head__actions,
+  .nb-section-head__actions > * {
+    width: 100%;
+  }
+}
+
 .nb-page-header__lead {
   display: flex;
   flex: 1 1 0;

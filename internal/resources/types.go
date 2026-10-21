@@ -9,6 +9,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/modeltype"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
+	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
 	"github.com/waiting-here/NonbiriAPI/internal/transportpolicy"
 )
 
@@ -161,24 +162,25 @@ type Binding struct {
 }
 
 type Model struct {
-	CloudflareProxyEnabled bool                 `json:"cloudflare_proxy_enabled"`
-	CloudflareProxyMode    string               `json:"cloudflare_proxy_mode"`
-	ModelTypes             modeltype.Set        `json:"model_types"`
-	TransportRule          transportpolicy.Rule `json:"transport_rule"`
-	RolePolicy             rolepolicy.Policy    `json:"role_policy"`
-	ID                     string               `json:"id"`
-	Provider               string               `json:"provider"`
-	Model                  string               `json:"model"`
-	FullName               string               `json:"full_name"`
-	RouteStrategy          string               `json:"route_strategy"`
-	SilentRetry            bool                 `json:"silent_retry"`
-	FlattenToolCalls       bool                 `json:"flatten_tool_calls"`
-	Revision               string               `json:"revision"`
-	BindingRevision        string               `json:"binding_revision"`
-	BindingCount           string               `json:"binding_count"`
-	Browse                 *ModelBrowse         `json:"browse,omitempty"`
-	CreatedAt              int64                `json:"created_at"`
-	UpdatedAt              int64                `json:"updated_at"`
+	SessionHeaders         []sessionheader.Config `json:"session_headers"`
+	CloudflareProxyEnabled bool                   `json:"cloudflare_proxy_enabled"`
+	CloudflareProxyMode    string                 `json:"cloudflare_proxy_mode"`
+	ModelTypes             modeltype.Set          `json:"model_types"`
+	TransportRule          transportpolicy.Rule   `json:"transport_rule"`
+	RolePolicy             rolepolicy.Policy      `json:"role_policy"`
+	ID                     string                 `json:"id"`
+	Provider               string                 `json:"provider"`
+	Model                  string                 `json:"model"`
+	FullName               string                 `json:"full_name"`
+	RouteStrategy          string                 `json:"route_strategy"`
+	SilentRetry            bool                   `json:"silent_retry"`
+	FlattenToolCalls       bool                   `json:"flatten_tool_calls"`
+	Revision               string                 `json:"revision"`
+	BindingRevision        string                 `json:"binding_revision"`
+	BindingCount           string                 `json:"binding_count"`
+	Browse                 *ModelBrowse           `json:"browse,omitempty"`
+	CreatedAt              int64                  `json:"created_at"`
+	UpdatedAt              int64                  `json:"updated_at"`
 }
 
 type ManualEntriesResponse struct {
@@ -279,6 +281,7 @@ type DeleteManualInput struct {
 }
 
 type CreateModelInput struct {
+	SessionHeaders         []sessionheader.Config
 	CloudflareProxyEnabled *bool
 	ModelTypes             modeltype.Set
 	TransportRule          transportpolicy.Rule
@@ -291,6 +294,7 @@ type CreateModelInput struct {
 }
 
 type PatchModelInput struct {
+	SessionHeaders         *[]sessionheader.Config
 	CloudflareProxyEnabled *bool
 	ModelTypes             *modeltype.Set
 	TransportRule          *transportpolicy.Rule

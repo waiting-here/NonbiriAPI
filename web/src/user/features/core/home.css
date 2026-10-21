@@ -195,7 +195,7 @@
   justify-self: center;
 }
 .api-access-page {
-  max-width: 58rem;
+  max-width: var(--nb-content-readable);
   margin-inline: auto;
 }
 .api-access-page .nb-panel > .nb-facts,

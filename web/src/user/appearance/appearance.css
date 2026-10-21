@@ -224,6 +224,25 @@ html:is(
 .nb-appearance-backdrop[data-ready='true'] {
   opacity: 1;
 }
+/*
+ * One veil above all artwork layers (still, canvas, character). Dimming each layer would let
+ * the still ghost through the canvas. It paints after the artwork at the same z-index.
+ */
+html[data-appearance] body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--nb-color-bg) var(--nb-appearance-veil), transparent);
+}
+html[data-appearance='default'] body::after {
+  content: none;
+}
+/* Viewing the background always shows the artwork at full strength. */
+:root[data-background-view='true'][data-appearance-intensity] {
+  --nb-appearance-veil: 0%;
+}
 .nb-appearance-still[data-scene] {
   object-position: 78% top;
 }
@@ -255,7 +274,7 @@ html:is(
   :is(
     .nb-panel,
     .nb-page-header,
-    .nb-fold:not(.nb-fold--plain),
+    .nb-fold:not(.nb-fold--plain, .activity-slot.is-available),
     .card,
     .core-card,
     .nb-list:not(:empty),
@@ -274,7 +293,7 @@ html:is(
   box-shadow:
     inset 0 1px 0 var(--nb-appearance-glass-line),
     0 8px 24px -12px var(--nb-appearance-glass-shadow);
-  backdrop-filter: blur(24px) saturate(0.85);
+  backdrop-filter: var(--nb-appearance-blur);
 }
 
 html:is(
@@ -317,7 +336,7 @@ html:is(
   padding: var(--nb-space-3) var(--nb-space-4);
   border-radius: var(--nb-radius-md);
   background: var(--nb-appearance-glass-core);
-  backdrop-filter: blur(24px);
+  backdrop-filter: var(--nb-appearance-blur);
 }
 
 /* Nested surfaces share their parent's frost instead of stacking blur and shadows. */
@@ -330,12 +349,18 @@ html:is(
     [data-appearance='elopement'],
     [data-appearance='heart-thief']
   )
-  :is(.nb-panel, .card, .core-card, .nb-fold:not(.nb-fold--plain), .nb-list)
   :is(
     .nb-panel,
     .card,
     .core-card,
-    .nb-fold:not(.nb-fold--plain),
+    .nb-fold:not(.nb-fold--plain, .activity-slot.is-available),
+    .nb-list
+  )
+  :is(
+    .nb-panel,
+    .card,
+    .core-card,
+    .nb-fold:not(.nb-fold--plain, .activity-slot.is-available),
     .nb-list,
     .nb-table-wrap,
     .table-wrap,
@@ -399,6 +424,31 @@ html:is(
     ) {
     background: var(--nb-color-surface);
   }
+}
+
+/* Section headings and notes outside cards sit on the artwork; give them a readable chip. */
+html:is(
+    [data-appearance='celestial'],
+    [data-appearance='wandering'],
+    [data-appearance='heart-moment'],
+    [data-appearance='mirrorsea'],
+    [data-appearance='amber'],
+    [data-appearance='elopement'],
+    [data-appearance='heart-thief']
+  )
+  :is(
+    :is(.page, .nb-page) > :is(h2, .field-help, .time-context-notice),
+    :is(.page, .nb-page) > section > h2,
+    :is(.page, .nb-page) > .nb-section-head
+  ) {
+  justify-self: start;
+  width: fit-content;
+  max-width: 100%;
+  margin-block: 0;
+  padding: var(--nb-space-1) var(--nb-space-3);
+  border-radius: var(--nb-radius-md);
+  background: var(--nb-appearance-glass-core);
+  backdrop-filter: blur(16px);
 }
 
 html[data-background-view='true'] .nb-user-shell,

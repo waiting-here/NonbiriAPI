@@ -244,7 +244,13 @@ for (const scenario of [
             page.getByRole('heading', { name: zh ? '任务详情' : 'Task details' }),
           ).toBeVisible();
         }
-        if (name === 'account') await expect(page.getByRole('radiogroup')).toHaveCount(5);
+        if (name === 'account') {
+          // Language, theme, density, font size, appearance strength and music quality.
+          await expect(page.getByRole('radiogroup')).toHaveCount(6);
+          await expect(
+            page.getByRole('radiogroup', { name: zh ? '装扮强度' : 'Appearance strength' }),
+          ).toBeVisible();
+        }
         if (name === 'home') {
           await expect(
             page.getByText(zh ? '今日已签' : 'Claimed today', { exact: true }),

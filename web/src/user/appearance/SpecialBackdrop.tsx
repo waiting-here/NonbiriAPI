@@ -51,6 +51,7 @@ export function SpecialBackdrop({ theme }: { theme: SpecialTheme }) {
             dark: quality.dark,
             highResolution: quality.high,
             signal: next.signal,
+            ambient: true,
           }),
         )
         .then((stop) => {

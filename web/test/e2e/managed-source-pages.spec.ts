@@ -500,19 +500,18 @@ async function assertNoHorizontalOverflow(page: Page): Promise<void> {
     const bounds = (await tabs.boundingBox())!;
     expect(bounds.x).toBeGreaterThanOrEqual(0);
     expect(bounds.x + bounds.width).toBeLessThanOrEqual(layout.width);
-    await expect(tabs).toHaveCSS('overflow-x', 'auto');
-    const initialScroll = await tabs.evaluate((element) => element.scrollLeft);
+    // Narrow screens wrap the tab row, so every tab is visible without a hidden scroll.
+    await expect(tabs).toHaveCSS('flex-wrap', 'wrap');
+    expect(await tabs.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(
+      true,
+    );
     for (const name of ['用户管理', '黑名单', '公告管理', '维护模式']) {
       const tab = tabs.getByRole('tab', { name, exact: true });
-      await tab.scrollIntoViewIfNeeded();
       await tab.click({ trial: true });
       const box = (await tab.boundingBox())!;
       expect(box.x).toBeGreaterThanOrEqual(bounds.x - 1);
       expect(box.x + box.width).toBeLessThanOrEqual(bounds.x + bounds.width + 1);
     }
-    await tabs.evaluate((element, scroll) => {
-      element.scrollLeft = scroll;
-    }, initialScroll);
   }
   const boundedSelectors = [
     '.charity-source-browser__source-address',
