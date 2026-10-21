@@ -1,0 +1,13 @@
+import { resolve } from 'node:path';
+import { defineConfig } from '@playwright/test';
+import audit from './playwright.audit.config';
+
+process.env.NONBIRI_MANAGEMENT_BROWSER = '1';
+process.env.NONBIRI_ENDPOINT_POLICIES_BROWSER = '1';
+process.env.NONBIRI_AUDIT_BROWSER_STATE = resolve('test-results/proxy/state.json');
+
+export default defineConfig({
+  ...audit,
+  testMatch: ['endpoint-policies.spec.ts', 'model-cloudflare.spec.ts'],
+  outputDir: 'test-results/proxy/browser',
+});

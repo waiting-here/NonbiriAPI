@@ -47,7 +47,7 @@ func TestBrowserUnknownSharedAndDeletedInputsKeepFullCoverage(t *testing.T) {
 		if err := selectBrowserPlan(&plan); err != nil {
 			t.Fatal(err)
 		}
-		if len(plan.Browser.Specs) != 5 || len(plan.Browser.Suites) != 6 || len(plan.Browser.matrix()) != 4 || !plan.Browser.Engine {
+		if len(plan.Browser.Specs) != 5 || !slices.Equal(plan.Browser.Suites, []string{"audit", "fatfish", "lakenotes", "management", "picturebook", "proxy", "workflow"}) || len(plan.Browser.matrix()) != 4 || !plan.Browser.Engine {
 			t.Fatalf("incomplete fallback for %s: %+v", path, plan)
 		}
 	}
@@ -206,6 +206,26 @@ func TestBrowserWorkflowFixtureAlwaysSelectsItsRunnableSuite(t *testing.T) {
 		}
 		if !found {
 			t.Fatalf("workflow suite has no runner for %s", path)
+		}
+	}
+}
+
+func TestBrowserProxyFixtureAlwaysSelectsItsRunnableSuite(t *testing.T) {
+	browserCatalogFixture(t)
+	for _, path := range []string{"web/test/audit/model-cloudflare.spec.ts", "web/test/audit/endpoint-policies.spec.ts", "internal/app/endpoint_policies_browser_integration_test.go", "web/playwright.proxy.config.ts"} {
+		plan := verificationPlan{Mode: "routine", Changed: []string{path}}
+		if err := selectBrowserPlan(&plan); err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Contains(plan.Browser.Suites, "proxy") {
+			t.Fatalf("proxy suite omitted for %s: %+v", path, plan.Browser)
+		}
+		found := false
+		for _, job := range plan.Browser.matrix() {
+			found = found || job.Name == "management"
+		}
+		if !found {
+			t.Fatalf("proxy suite has no runner for %s", path)
 		}
 	}
 }

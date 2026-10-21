@@ -273,6 +273,8 @@ jobs:
         env:
           BROWSER_PLAN: ${{ needs.plan.outputs.browser_plan }}
         run: bash ../scripts/check-web.sh unit
+      - name: Cloudflare Worker tests
+        run: node --test ../deploy/cloudflare-worker/worker.test.mjs
       - name: Typecheck
         run: npm run typecheck
       - name: Lint

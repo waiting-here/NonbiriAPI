@@ -23,7 +23,7 @@ test('one or no spec is assigned only to a necessary shard', () => {
 });
 
 test('integration groups cover each selected suite exactly once', () => {
-  const suites = ['picturebook', 'audit', 'management', 'workflow', 'fatfish', 'lakenotes'];
+  const suites = ['picturebook', 'audit', 'management', 'workflow', 'proxy', 'fatfish', 'lakenotes'];
   const groups = [...selectSuites(suites, 'content'), ...selectSuites(suites, 'management')];
   assert.deepEqual(groups.sort(), suites.sort());
   assert.deepEqual(selectSuites(['management'], 'content'), []);

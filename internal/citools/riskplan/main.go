@@ -259,7 +259,7 @@ func selectPlan(packages []packageInfo, changed []string, mode string, diffErr e
 		if file == "go.mod" || file == "go.sum" || (filepath.Dir(file) == "." && strings.HasSuffix(file, ".go") && !testSource) || file == "web/package-lock.json" || file == "web/package.json" || strings.HasPrefix(file, "scripts/") || strings.HasPrefix(file, ".github/") || (!testInput && (strings.HasPrefix(file, "internal/db/") || strings.HasPrefix(file, "internal/citools/") || strings.HasPrefix(file, "internal/lifecycle/") || strings.HasPrefix(file, "internal/app/"))) {
 			return full("shared schema, lifecycle, root, dependency or gate input changed")
 		}
-		if strings.HasPrefix(file, "web/") {
+		if strings.HasPrefix(file, "web/") || strings.HasPrefix(file, "deploy/cloudflare-worker/") {
 			plan.Web = true
 			continue
 		}
