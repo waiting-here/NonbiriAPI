@@ -88,6 +88,12 @@ export interface AdminUser {
   charity_suspended_until: number | null;
   endpoint_limit: string | null;
   effective_endpoint_limit: string;
+  global_rpm_limit: string | null;
+  effective_global_rpm_limit: string;
+  light_rpm_limit: string | null;
+  effective_light_rpm_limit: string;
+  light_concurrency_limit: string | null;
+  effective_light_concurrency_limit: string;
   rpm_limit: string | null;
   effective_rpm_limit: string;
   concurrency_limit: string | null;
@@ -250,6 +256,12 @@ export function normalizeAdminUser(value: unknown): AdminUser {
     'charity_suspended_until',
     'endpoint_limit',
     'effective_endpoint_limit',
+    'global_rpm_limit',
+    'effective_global_rpm_limit',
+    'light_rpm_limit',
+    'effective_light_rpm_limit',
+    'light_concurrency_limit',
+    'effective_light_concurrency_limit',
     'rpm_limit',
     'effective_rpm_limit',
     'concurrency_limit',
@@ -306,6 +318,21 @@ export function normalizeAdminUser(value: unknown): AdminUser {
     ),
     endpoint_limit: nullableDecimal(root.endpoint_limit, 'endpoint limit'),
     effective_endpoint_limit: decimal(root.effective_endpoint_limit, 'effective endpoint limit'),
+    global_rpm_limit: nullableDecimal(root.global_rpm_limit, 'global_rpm_limit'),
+    effective_global_rpm_limit: decimal(
+      root.effective_global_rpm_limit,
+      'effective global_rpm_limit',
+    ),
+    light_rpm_limit: nullableDecimal(root.light_rpm_limit, 'light_rpm_limit'),
+    effective_light_rpm_limit: decimal(root.effective_light_rpm_limit, 'effective light_rpm_limit'),
+    light_concurrency_limit: nullableDecimal(
+      root.light_concurrency_limit,
+      'light_concurrency_limit',
+    ),
+    effective_light_concurrency_limit: decimal(
+      root.effective_light_concurrency_limit,
+      'effective light_concurrency_limit',
+    ),
     rpm_limit: nullableDecimal(root.rpm_limit, 'RPM limit'),
     effective_rpm_limit: decimal(root.effective_rpm_limit, 'effective RPM limit'),
     concurrency_limit: nullableDecimal(root.concurrency_limit, 'concurrency limit'),

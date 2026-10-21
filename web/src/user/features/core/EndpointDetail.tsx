@@ -1,3 +1,4 @@
+import { supportsChatStoragePolicy } from '@shared/operations/connectorPolicy';
 import { EndpointTransportNotice } from '@shared/components/EndpointTransportNotice';
 import { Fold, MoreMenu, OutcomeNote } from '@shared/components/ui';
 import { ExpandablePanel } from '@shared/components/ui/ExpandablePanel';
@@ -224,7 +225,8 @@ function AddEndpointKeyForm({
         : {
             note,
             enabled: true,
-            force_store_false: endpoint.connector_type === 'openai-compatible' && forceStoreFalse,
+            force_store_false:
+              supportsChatStoragePolicy(endpoint.connector_type) && forceStoreFalse,
             ownership_confirmed: true as const,
             max_concurrency: Number(maxConcurrency),
             max_rpm: Number(maxRPM),
@@ -292,7 +294,7 @@ function AddEndpointKeyForm({
         />
         <span>{t('endpoints.ownership')}</span>
       </label>
-      {endpoint.connector_type === 'openai-compatible' ? (
+      {supportsChatStoragePolicy(endpoint.connector_type) ? (
         <label className="core-checkbox">
           <input
             type="checkbox"
@@ -1208,7 +1210,7 @@ function EndpointKeyCard({
                   disabled: actionBlocked,
                   onSelect: openModels,
                 },
-                ...(endpoint.connector_type === 'openai-compatible'
+                ...(supportsChatStoragePolicy(endpoint.connector_type)
                   ? [
                       {
                         label: (

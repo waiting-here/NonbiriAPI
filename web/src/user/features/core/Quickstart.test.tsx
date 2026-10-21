@@ -22,13 +22,14 @@ function json(body: unknown, status = 200) {
 const endpoint = fixture('internal/resources/testdata/endpoint.json');
 const endpointKey = fixture('internal/resources/testdata/endpoint_key.json');
 const session = fixture('internal/auth/testdata/user_envelope.json');
-async function setup() {
+async function setup(connector = 'openai-compatible') {
   const rendered = await renderWithProviders(<Quickstart accountId="1" onClose={vi.fn()} />, {
     station: 'user',
     role: 'user',
     locale: 'en',
   });
   rendered.queryClient.setQueryData(coreKeys.session, session);
+  await rendered.user.selectOptions(await screen.findByLabelText('API format'), connector);
   await rendered.user.type(await screen.findByLabelText('Service URL'), 'https://example.com/v1');
   await rendered.user.click(screen.getByRole('button', { name: 'Next' }));
   await screen.findByLabelText('Key');
@@ -36,6 +37,78 @@ async function setup() {
 }
 afterEach(() => vi.unstubAllGlobals());
 describe('Optional resource setup recovery', () => {
+  it.each(['openai-compatible', 'openai-chat-completions', 'openai-responses'])(
+    'keeps the storage-policy choice scoped to native Chat for %s',
+    async (connector) => {
+      const writes: Record<string, unknown>[] = [];
+      const empty = fixture('internal/resources/testdata/catalog_succeeded_empty.json');
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+          const path = String(input);
+          if (path === '/api/endpoint-create-options')
+            return json({
+              base_connector_types: [
+                'openai-compatible',
+                'openai-chat-completions',
+                'openai-responses',
+              ],
+              mainstream_channels: [],
+            });
+          if (path === '/api/endpoints' && init?.method === 'POST')
+            return json({ ...endpoint, connector_type: connector }, 201);
+          if (path === '/api/endpoints/11/keys' && init?.method === 'POST') {
+            writes.push(JSON.parse(String(init.body)) as Record<string, unknown>);
+            return json(endpointKey, 201);
+          }
+          if (path.endsWith('/models/refresh'))
+            return json(
+              {
+                operation_id: 'op_AAAAAAAAAAAAAAAAAAAAAA',
+                evidence: {
+                  ...(empty.evidence as Record<string, unknown>),
+                  state: 'checking',
+                  result: null,
+                  count: null,
+                },
+              },
+              202,
+            );
+          if (path.startsWith('/api/endpoints/11/keys/21/models?'))
+            return json({
+              ...empty,
+              ...(path.includes('page=')
+                ? {
+                    pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
+                  }
+                : {}),
+            });
+          throw new Error('Unexpected request: ' + path);
+        }),
+      );
+      const rendered = await setup(connector);
+      const nativeChat = connector !== 'openai-responses';
+      if (nativeChat) {
+        await rendered.user.click(
+          screen
+            .getByText(en.user.core['models.configurationTitle'], { selector: 'strong' })
+            .closest('summary')!,
+        );
+        await rendered.user.click(screen.getByLabelText(en.user.core['endpoints.storePolicy']));
+      } else {
+        expect(
+          screen.queryByLabelText(en.user.core['endpoints.storePolicy']),
+        ).not.toBeInTheDocument();
+      }
+      await rendered.user.type(screen.getByLabelText('Key'), 'synthetic-policy-key');
+      await rendered.user.click(screen.getByLabelText(en.user.quickstart.ownership));
+      await rendered.user.click(screen.getByRole('button', { name: en.user.quickstart.addKey }));
+      await screen.findByText('Found 0 models');
+      expect(writes).toHaveLength(1);
+      expect(writes[0].force_store_false).toBe(nativeChat);
+    },
+  );
+
   it.each(['region', 'unavailable'] as const)(
     'keeps the safe %s reason and retries without resaving a key',
     async (safeClass) => {

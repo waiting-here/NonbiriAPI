@@ -193,3 +193,18 @@
     min-height: 2.5rem;
   }
 }
+
+.user-limit-batch-fields {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.user-limit-select {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--nb-space-10);
+  min-height: var(--nb-space-10);
+}
