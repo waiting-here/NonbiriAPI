@@ -23,6 +23,7 @@ const (
 	TypeOpenAICompatible    Type = "openai-compatible"
 	TypeAnthropicCompatible Type = "anthropic-compatible"
 	TypeAISDKGatewayV3      Type = "ai-sdk-gateway-v3"
+	TypeAISDKGatewayV4      Type = "ai-sdk-gateway-v4"
 	TypeGoogleGemini        Type = "google-gemini"
 	TypeOpenAIResponses     Type = "openai-responses"
 	TypeOpenAIDecisions     Type = "openai-decisions"
@@ -34,11 +35,16 @@ func (t Type) NativeChatCompletions() bool {
 	return t == TypeOpenAICompatible || t == TypeOpenAIChatCompletions
 }
 
+// AISDKGateway identifies the explicitly versioned Gateway protocols.
+func (t Type) AISDKGateway() bool {
+	return t == TypeAISDKGatewayV3 || t == TypeAISDKGatewayV4
+}
+
 // Valid identifies protocol types supported by persisted connector records.
 // Execution still requires a descriptor from the process registry.
 func (t Type) Valid() bool {
 	switch t {
-	case TypeOpenAICompatible, TypeAnthropicCompatible, TypeAISDKGatewayV3,
+	case TypeOpenAICompatible, TypeAnthropicCompatible, TypeAISDKGatewayV3, TypeAISDKGatewayV4,
 		TypeGoogleGemini, TypeOpenAIResponses, TypeOpenAIDecisions,
 		TypeCohereRerank, TypeJinaRerank, TypeSiliconFlowRerank, TypeVoyageRerank, TypeOpenAIChatCompletions, TypeTypeSafeSystemOne:
 		return true

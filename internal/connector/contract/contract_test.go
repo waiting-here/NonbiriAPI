@@ -5,6 +5,26 @@ import (
 	"testing"
 )
 
+func TestGatewayTypesAreExplicitAndClosed(t *testing.T) {
+	for _, kind := range []Type{TypeAISDKGatewayV3, TypeAISDKGatewayV4} {
+		if !kind.Valid() || !kind.AISDKGateway() || kind.NativeChatCompletions() {
+			t.Fatal("invalid Gateway classification", kind)
+		}
+	}
+	for _, kind := range []Type{TypeOpenAICompatible, TypeAnthropicCompatible, TypeGoogleGemini,
+		TypeOpenAIResponses, TypeOpenAIDecisions, TypeCohereRerank, TypeJinaRerank,
+		TypeSiliconFlowRerank, TypeVoyageRerank, TypeOpenAIChatCompletions, TypeTypeSafeSystemOne} {
+		if !kind.Valid() || kind.AISDKGateway() {
+			t.Fatal("existing protocol classification changed", kind)
+		}
+	}
+	for _, kind := range []Type{"", "ai-sdk-gateway", "ai-sdk-gateway-v5", "AI-SDK-Gateway-v4"} {
+		if kind.Valid() || kind.AISDKGateway() {
+			t.Fatal("unknown Gateway protocol accepted", kind)
+		}
+	}
+}
+
 func TestShortLivedSecretTransfersExactlyOnceAndRedactsFormatting(t *testing.T) {
 	plaintext := []byte("plain-secret")
 	ciphertext := []byte("cipher-secret")
