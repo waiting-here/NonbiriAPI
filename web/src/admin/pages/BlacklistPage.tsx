@@ -2,7 +2,14 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
-import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import {
+  Card,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  PageHeader,
+  SectionHead,
+} from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { useSearchState } from '@shared/operations/useSearchState';
@@ -46,6 +53,8 @@ interface BlacklistManagementProps {
   sessionFetching: boolean;
   refreshSession: () => void;
   onAuthorityLoss?: () => void;
+  /** Rendered inside a page that already owns the h1. */
+  embedded?: boolean;
 }
 
 export function BlacklistManagement({
@@ -55,6 +64,7 @@ export function BlacklistManagement({
   sessionFetching,
   refreshSession,
   onAuthorityLoss,
+  embedded = false,
 }: BlacklistManagementProps) {
   const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
@@ -252,10 +262,8 @@ export function BlacklistManagement({
   if (authorityError) return <ErrorState error={authorityError} />;
   return (
     <div className="page ops-page blacklist-management">
-      <PageHeader
-        title={label.title}
-        description={label.description}
-        actions={
+      {(() => {
+        const add = (
           <button
             className="nb-btn nb-btn--primary"
             type="button"
@@ -264,8 +272,13 @@ export function BlacklistManagement({
           >
             {label.addTitle}
           </button>
-        }
-      />
+        );
+        return embedded ? (
+          <SectionHead title={label.title} description={label.description} actions={add} />
+        ) : (
+          <PageHeader title={label.title} description={label.description} actions={add} />
+        );
+      })()}
       <ExpandablePanel
         open={panelOpen}
         onClose={() => setPanelOpen(false)}

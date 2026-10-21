@@ -214,6 +214,11 @@
   width: 100%;
 }
 
+/* Admin headers are text-only so every page lines up; only a few pages passed an icon. */
+.nb-admin-content .nb-page-header__icon {
+  display: none;
+}
+
 @media (width <= 64rem) {
   .nb-admin-shell {
     display: block;

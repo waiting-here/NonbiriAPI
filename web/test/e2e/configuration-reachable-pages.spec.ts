@@ -3,6 +3,7 @@ import { numberedResponse } from './numbered-fixtures';
 import { ADMIN_ORIGIN, USER_ORIGIN } from './ports';
 import {
   assertNoSensitiveBrowserPersistence,
+  assertWorkbenchWidth,
   assertResponsiveOperationTables,
   collectConsoleViolations,
   useNarrowReducedMotion as configureNarrowReducedMotion,
@@ -375,19 +376,7 @@ test('reachable user home keeps level state but removes the implementation hint'
   await expect(page.getByText(/This page computes nothing/i)).toHaveCount(0);
   for (const width of [320, 390, 1440, 1935]) {
     await page.setViewportSize({ width, height: 1000 });
-    const layout = await page.locator('.core-page').evaluate((element) => {
-      const main = element.closest('main')!;
-      const outer = main.getBoundingClientRect();
-      const inner = element.getBoundingClientRect();
-      const style = getComputedStyle(main);
-      return {
-        width: inner.width,
-        available: outer.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
-        overflow: document.documentElement.scrollWidth > innerWidth,
-      };
-    });
-    expect(layout.overflow).toBe(false);
-    expect(layout.width).toBeGreaterThanOrEqual(layout.available - 2);
+    await assertWorkbenchWidth(page, '.core-page');
   }
   await page.setViewportSize({ width: 390, height: 844 });
   const endpointLink = page.getByRole('link', { name: 'Add my service', exact: true });

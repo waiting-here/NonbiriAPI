@@ -12,7 +12,13 @@ import commonEn from '../../src/shared/i18n/common/en.json';
 import commonZh from '../../src/shared/i18n/common/zh.json';
 import userEn from '../../src/user/i18n/en.json';
 import userZh from '../../src/user/i18n/zh.json';
-import { ThemeContext, type Density, type FontSize, type Theme } from '@shared/theme/context';
+import {
+  ThemeContext,
+  type AppearanceIntensity,
+  type Density,
+  type FontSize,
+  type Theme,
+} from '@shared/theme/context';
 
 export type TestStation = 'admin' | 'user';
 export type TestRole = 'anonymous' | 'user' | 'level4' | 'level5' | 'level6' | 'admin';
@@ -311,6 +317,7 @@ export async function renderWithProviders(
     const [currentTheme, setCurrentTheme] = useState<Theme>(theme);
     const [currentDensity, setCurrentDensity] = useState<Density>(density);
     const [currentFontSize, setCurrentFontSize] = useState<FontSize>(fontSize);
+    const [currentIntensity, setCurrentIntensity] = useState<AppearanceIntensity>('balanced');
 
     return (
       <ThemeContext.Provider
@@ -322,6 +329,8 @@ export async function renderWithProviders(
           setDensity: setCurrentDensity,
           fontSize: currentFontSize,
           setFontSize: setCurrentFontSize,
+          intensity: currentIntensity,
+          setIntensity: setCurrentIntensity,
         }}
       >
         <I18nextProvider i18n={testI18n}>

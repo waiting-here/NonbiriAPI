@@ -2,9 +2,12 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { Button } from '@shared/components/ui/Button';
+import { Segmented } from '@shared/components/ui/Segmented';
 import { Icon } from '@shared/components/Icon';
 import { ErrorState, LoadingState } from '@shared/components/States';
 import { ThemeToggle } from '@shared/theme/ThemeToggle';
+import { useTheme } from '@shared/theme/useTheme';
+import type { AppearanceIntensity } from '@shared/theme/context';
 import { defaultMoment, momentByKey } from './moments';
 import { appearances, useOptionalAppearance } from './context';
 
@@ -14,6 +17,7 @@ export function AppearanceButton() {
   const [open, setOpen] = useState(false);
   const [choice, setChoice] = useState('default');
   const [error, setError] = useState<unknown>(null);
+  const { intensity, setIntensity } = useTheme();
   if (!appearance) return null;
   const english = i18n.language.startsWith('en');
   const available = appearance.state.unlocked.includes(choice);
@@ -46,6 +50,22 @@ export function AppearanceButton() {
         }}
       >
         <ThemeToggle />
+        <div className="nb-appearance-intensity">
+          <span id="nb-appearance-intensity-hint" className="nb-small nb-muted">
+            {t('user.appearance.intensityHint')}
+          </span>
+          <Segmented<AppearanceIntensity>
+            label={t('user.appearance.intensity')}
+            describedBy="nb-appearance-intensity-hint"
+            value={intensity}
+            onChange={setIntensity}
+            options={[
+              { value: 'vivid', label: t('user.appearance.intensityVivid') },
+              { value: 'balanced', label: t('user.appearance.intensityBalanced') },
+              { value: 'focus', label: t('user.appearance.intensityFocus') },
+            ]}
+          />
+        </div>
         {appearance.pending ? <LoadingState /> : null}
         {appearance.error ? (
           <ErrorState error={appearance.error} onRetry={appearance.refresh} />

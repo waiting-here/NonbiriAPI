@@ -25,7 +25,7 @@
   --nb-color-surface-alt: #f8fafc;
 
   /* Brand and semantic accents */
-  --nb-color-accent: #2563eb;
+  --nb-color-accent: #215cdf;
   --nb-color-accent-hover: #1d4ed8;
   --nb-color-accent-soft: #e7efff;
   --nb-color-accent-quiet: #f1f5ff;
@@ -36,14 +36,15 @@
     var(--nb-color-brand-start),
     var(--nb-color-brand-end)
   );
-  --nb-color-success: #138a5b;
+  /* Semantic ink holds 4.5:1 on its soft fill, plain white and the weakest cosmetic glass. */
+  --nb-color-success: #0a6140;
   --nb-color-success-soft: #e5f7ee;
-  --nb-color-warning: #aa6800;
+  --nb-color-warning: #7d4b00;
   --nb-color-warning-soft: #fff2d9;
-  --nb-color-danger: #c33a4b;
-  --nb-color-danger-hover: #a82c3c;
+  --nb-color-danger: #a32a3b;
+  --nb-color-danger-hover: #8c2232;
   --nb-color-danger-soft: #ffeaee;
-  --nb-color-info: #1268a3;
+  --nb-color-info: #0e5a8f;
   --nb-color-info-soft: #e5f3fc;
   --nb-color-focus: #7c3aed;
 
@@ -167,7 +168,7 @@
   --nb-color-success-soft: #1c4637;
   --nb-color-warning: #ffca68;
   --nb-color-warning-soft: #4a371d;
-  --nb-color-danger: #ff8b9b;
+  --nb-color-danger: #ff9aa8;
   --nb-color-danger-hover: #ffb0bb;
   --nb-color-danger-soft: #4d2730;
   --nb-color-info: #79c4f2;
@@ -320,8 +321,16 @@
   [data-appearance='elopement'],
   [data-appearance='heart-thief']
 ) {
-  --nb-appearance-glass-edge: color-mix(in srgb, var(--nb-color-surface-raised) 82%, transparent);
-  --nb-appearance-glass-core: color-mix(in srgb, var(--nb-color-surface-raised) 88%, transparent);
+  --nb-appearance-glass-edge: color-mix(
+    in srgb,
+    var(--nb-color-surface-raised) max(82%, var(--nb-appearance-edge-floor)),
+    transparent
+  );
+  --nb-appearance-glass-core: color-mix(
+    in srgb,
+    var(--nb-color-surface-raised) max(88%, var(--nb-appearance-core-floor)),
+    transparent
+  );
   --nb-appearance-glass-line: color-mix(in srgb, var(--nb-color-border) 42%, transparent);
   --nb-appearance-glass-shadow: color-mix(in srgb, var(--nb-color-bg) 26%, transparent);
   --nb-appearance-glass-divider: color-mix(in srgb, var(--nb-color-border) 50%, transparent);
@@ -335,10 +344,45 @@
     [data-appearance='elopement'],
     [data-appearance='heart-thief']
   )[data-theme='dark'] {
-  --nb-appearance-glass-edge: color-mix(in srgb, var(--nb-color-surface) 94%, transparent);
-  --nb-appearance-glass-core: color-mix(in srgb, var(--nb-color-surface) 96%, transparent);
+  --nb-appearance-glass-edge: color-mix(
+    in srgb,
+    var(--nb-color-surface) max(94%, var(--nb-appearance-edge-floor)),
+    transparent
+  );
+  --nb-appearance-glass-core: color-mix(
+    in srgb,
+    var(--nb-color-surface) max(96%, var(--nb-appearance-core-floor)),
+    transparent
+  );
   --nb-appearance-glass-line: color-mix(in srgb, var(--nb-color-border) 50%, transparent);
   --nb-appearance-glass-shadow: color-mix(in srgb, var(--nb-color-bg) 62%, transparent);
+}
+
+/*
+ * Appearance intensity (per device). Glass opacity never drops below the balanced level, so
+ * every level keeps text at 4.5:1; vivid only lightens blur and keeps the artwork's color.
+ */
+:root {
+  --nb-appearance-blur: blur(24px) saturate(0.85);
+  --nb-appearance-veil: 0%;
+  --nb-appearance-edge-floor: 0%;
+  --nb-appearance-core-floor: 0%;
+}
+:root[data-appearance-intensity='vivid'] {
+  --nb-appearance-blur: blur(12px) saturate(1.05);
+}
+:root[data-appearance-intensity='focus'] {
+  --nb-appearance-edge-floor: 96%;
+  --nb-appearance-core-floor: 98%;
+  --nb-appearance-veil: 65%;
+}
+/* Phones: the artwork becomes an ambient backdrop and content stays nearly opaque. */
+@media (width < 48rem) {
+  :root[data-appearance-intensity='balanced'] {
+    --nb-appearance-edge-floor: 94%;
+    --nb-appearance-core-floor: 97%;
+    --nb-appearance-veil: 25%;
+  }
 }
 
 :root[data-appearance='mirrorsea'] {
@@ -378,4 +422,123 @@
   --nb-color-accent-quiet: #32253f;
   --nb-color-accent-contrast: #29163c;
   --nb-elevation-1: 0 3px 16px #08071840;
+}
+
+/*
+ * Amber, elopement and heart-thief art stays mid-to-dark even in light mode, so ink is
+ * darker than the default palette to hold 4.5:1 over the weakest glass stop.
+ */
+:root[data-appearance='amber'] {
+  --nb-color-bg: #f6efe6;
+  --nb-color-surface: #fffbf5ed;
+  --nb-color-surface-raised: #ffffff;
+  --nb-color-surface-muted: #f3eadf;
+  --nb-color-surface-emphasis: #ead9c6;
+  --nb-color-surface-alt: #faf4ec;
+  --nb-color-text: #3a2717;
+  --nb-color-text-muted: #5a4330;
+  --nb-color-text-subtle: #634b36;
+  --nb-color-border: #e0cdb6;
+  --nb-color-border-strong: #b8936c;
+  --nb-color-accent: #7d4210;
+  --nb-color-accent-hover: #69360b;
+  --nb-color-accent-soft: #f5e4d0;
+  --nb-color-accent-quiet: #fbf2e6;
+  --nb-color-accent-contrast: #ffffff;
+  --nb-elevation-1: 0 3px 16px #7a4a1a14;
+}
+:root[data-appearance='amber'][data-theme='dark'] {
+  --nb-color-bg: #1c130c;
+  --nb-color-surface: #2a1d13;
+  --nb-color-surface-raised: #33251a;
+  --nb-color-surface-muted: #302217;
+  --nb-color-surface-emphasis: #45311f;
+  --nb-color-surface-alt: #2d2015;
+  --nb-color-text: #f6e9da;
+  --nb-color-text-muted: #d4bea6;
+  --nb-color-text-subtle: #c4ad95;
+  --nb-color-border: #5a4430;
+  --nb-color-border-strong: #8a6c4f;
+  --nb-color-accent: #f0c08a;
+  --nb-color-accent-hover: #f8d8b0;
+  --nb-color-accent-soft: #4a3220;
+  --nb-color-accent-quiet: #35251a;
+  --nb-color-accent-contrast: #2c1a0a;
+  --nb-elevation-1: 0 3px 16px #0d070340;
+}
+:root[data-appearance='elopement'] {
+  --nb-color-bg: #f5ecef;
+  --nb-color-surface: #fffafced;
+  --nb-color-surface-raised: #ffffff;
+  --nb-color-surface-muted: #f2e6eb;
+  --nb-color-surface-emphasis: #ead6df;
+  --nb-color-surface-alt: #faf3f6;
+  --nb-color-text: #3b2230;
+  --nb-color-text-muted: #5b3a4a;
+  --nb-color-text-subtle: #634555;
+  --nb-color-border: #e2c9d4;
+  --nb-color-border-strong: #b88aa0;
+  --nb-color-accent: #8a2f55;
+  --nb-color-accent-hover: #73244a;
+  --nb-color-accent-soft: #f6e1ea;
+  --nb-color-accent-quiet: #fbf0f4;
+  --nb-color-accent-contrast: #ffffff;
+  --nb-elevation-1: 0 3px 16px #6a2a4814;
+}
+:root[data-appearance='elopement'][data-theme='dark'] {
+  --nb-color-bg: #1c1219;
+  --nb-color-surface: #2b1c27;
+  --nb-color-surface-raised: #352331;
+  --nb-color-surface-muted: #31202c;
+  --nb-color-surface-emphasis: #46293c;
+  --nb-color-surface-alt: #2e1e29;
+  --nb-color-text: #f7e6ef;
+  --nb-color-text-muted: #d8bccb;
+  --nb-color-text-subtle: #c8aabb;
+  --nb-color-border: #5b3f51;
+  --nb-color-border-strong: #8c6a7f;
+  --nb-color-accent: #f2b3cf;
+  --nb-color-accent-hover: #f9d2e3;
+  --nb-color-accent-soft: #4d2a3e;
+  --nb-color-accent-quiet: #36202d;
+  --nb-color-accent-contrast: #34142a;
+  --nb-elevation-1: 0 3px 16px #0e060b40;
+}
+:root[data-appearance='heart-thief'] {
+  --nb-color-bg: #eceef6;
+  --nb-color-surface: #fbfbffed;
+  --nb-color-surface-raised: #ffffff;
+  --nb-color-surface-muted: #e8e9f3;
+  --nb-color-surface-emphasis: #dadcee;
+  --nb-color-surface-alt: #f4f4fb;
+  --nb-color-text: #1f2238;
+  --nb-color-text-muted: #3e4260;
+  --nb-color-text-subtle: #474b69;
+  --nb-color-border: #cfd1e6;
+  --nb-color-border-strong: #9396bf;
+  --nb-color-accent: #3d3f8f;
+  --nb-color-accent-hover: #2f3175;
+  --nb-color-accent-soft: #e3e4f5;
+  --nb-color-accent-quiet: #f1f1fa;
+  --nb-color-accent-contrast: #ffffff;
+  --nb-elevation-1: 0 3px 16px #2a2c6014;
+}
+:root[data-appearance='heart-thief'][data-theme='dark'] {
+  --nb-color-bg: #10111d;
+  --nb-color-surface: #1b1d2e;
+  --nb-color-surface-raised: #232538;
+  --nb-color-surface-muted: #1f2133;
+  --nb-color-surface-emphasis: #2c2f48;
+  --nb-color-surface-alt: #1d1f30;
+  --nb-color-text: #e8e9f7;
+  --nb-color-text-muted: #bfc1dc;
+  --nb-color-text-subtle: #adb0cf;
+  --nb-color-border: #3e4160;
+  --nb-color-border-strong: #6a6d93;
+  --nb-color-accent: #b8bcff;
+  --nb-color-accent-hover: #d6d8ff;
+  --nb-color-accent-soft: #33365e;
+  --nb-color-accent-quiet: #24263f;
+  --nb-color-accent-contrast: #191b3d;
+  --nb-elevation-1: 0 3px 16px #05061040;
 }

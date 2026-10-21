@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { LANGUAGE_STORAGE_KEY } from '@shared/i18n';
 import { ApiError } from '@shared/query/http';
 import { useTheme } from '@shared/theme/useTheme';
-import type { Density, FontSize, Theme } from '@shared/theme/context';
+import type { AppearanceIntensity, Density, FontSize, Theme } from '@shared/theme/context';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { PageHeader } from '@shared/components/States';
 import { disabledAccountLifecycleAdapter } from './adapters';
@@ -190,7 +190,9 @@ export function AccountLanguageForm({ user }: { user: UserProfile }) {
 
 function LocalPreferences() {
   const { t } = useCoreCopy();
-  const { theme, setTheme, density, setDensity, fontSize, setFontSize } = useTheme();
+  const { t: appearanceText } = useTranslation();
+  const { theme, setTheme, density, setDensity, fontSize, setFontSize, intensity, setIntensity } =
+    useTheme();
   const themes: Array<{ value: Theme; label: string }> = [
     { value: 'light', label: t('account.themeLight') },
     { value: 'dark', label: t('account.themeDark') },
@@ -203,6 +205,11 @@ function LocalPreferences() {
   const fontSizes: Array<{ value: FontSize; label: string }> = [
     { value: 'default', label: t('account.fontDefault') },
     { value: 'large', label: t('account.fontLarge') },
+  ];
+  const intensities: Array<{ value: AppearanceIntensity; label: string }> = [
+    { value: 'vivid', label: appearanceText('user.appearance.intensityVivid') },
+    { value: 'balanced', label: appearanceText('user.appearance.intensityBalanced') },
+    { value: 'focus', label: appearanceText('user.appearance.intensityFocus') },
   ];
 
   return (
@@ -228,6 +235,13 @@ function LocalPreferences() {
           value: fontSize,
           options: fontSizes,
           change: (value: string) => setFontSize(value as FontSize),
+        },
+        {
+          label: appearanceText('user.appearance.intensity'),
+          hint: appearanceText('user.appearance.intensityHint'),
+          value: intensity,
+          options: intensities,
+          change: (value: string) => setIntensity(value as AppearanceIntensity),
         },
       ].map((preference) => (
         <div className="account-preference-row" key={preference.label}>

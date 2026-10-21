@@ -170,6 +170,7 @@ export function GameCenter() {
   return (
     <main className="game-page game-center">
       <PageHeader
+        icon="games"
         title={text('center.title')}
         description={text('presentation.description')}
         actions={

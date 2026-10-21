@@ -18,6 +18,8 @@ type Options = {
   frozenTime?: number;
   paused?: () => boolean;
   signal?: AbortSignal;
+  /** Page background: paint less often while the user types or scrolls. */
+  ambient?: boolean;
   variant?: 'card' | 'cover' | 'illustration' | 'appearance';
   characterPlate?: boolean;
 };
@@ -88,7 +90,7 @@ export async function renderAmber(canvas: HTMLCanvasElement, options: Options = 
     last = performance.now(),
     painted = false;
   const observer = new ResizeObserver(() => resize());
-  const cadence = new PaintCadence();
+  const cadence = new PaintCadence(undefined, options.ambient);
   const dispose = () => {
     if (stopped) return;
     stopped = true;
