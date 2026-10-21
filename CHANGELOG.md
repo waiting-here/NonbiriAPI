@@ -4,10 +4,7 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
-## Unreleased
-
-This section describes v1.1.0 development, including the changes previously
-planned for v1.0.7. It does not announce a release or deployment.
+## 1.1.0 — 2026-10-21
 
 ### Added
 
@@ -42,8 +39,10 @@ planned for v1.0.7. It does not announce a release or deployment.
 
 - Route preflight and snapshots use the existing read pool. Request-adaptation
   reads release database connections before decoding, and charity snapshots reuse
-  each physical key's quota result within the same transaction. Dispatch still
-  revalidates live limits before reserving resources.
+  each physical key's quota result within the same transaction. Configuration
+  depth validation avoids building a second generic JSON tree, and keys without
+  current recurring rules skip an empty epoch query. Dispatch still revalidates
+  live limits before reserving resources.
 - Backoff policy edits affect future dispatches while in-flight requests retain
   their rule snapshot. Existing waits, trial ownership and failure streaks are
   preserved.
