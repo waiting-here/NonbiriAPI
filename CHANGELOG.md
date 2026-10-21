@@ -8,6 +8,10 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Added
 
+- Per-model Cloudflare forwarding with a generic authenticated Worker, without
+  per-upstream mappings. Personal models default to enabled and charity models
+  to disabled, including existing models after upgrade. Legacy AI Gateway
+  configuration remains compatible when no Worker is configured.
 - Endpoint-level supplemental backoff rules shared by all charity keys at the
   same connector and complete base URL. Administrators and level-6 stewards can
   configure ordered exact error codes or literal message fragments, including
@@ -22,11 +26,14 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Backoff policy edits affect future dispatches while in-flight requests retain
   their rule snapshot. Existing waits, trial ownership and failure streaks are
   preserved.
-- Storage schema 27 adds endpoint policies and dispatch rule snapshots. Existing
-  schema 16–26 sources use the offline converter; account export remains 24.
+- Storage schema 27 adds endpoint policies, dispatch rule snapshots and model
+  forwarding settings. Existing schema 16–26 sources use the offline converter;
+  account export schema 25 includes personal-model forwarding preferences.
 
 ### Fixed
 
+- Worker failures, including connection errors and unconfirmed Cloudflare edge
+  responses, do not increase donated-key failure counts or trigger key backoff.
 - Non-mainstream endpoint DNS identifiers are redacted in ordinary user request
   logs and in level-5 upstream error details, with current mainstream-address
   exemptions and complete administrator/level-6 diagnostics.

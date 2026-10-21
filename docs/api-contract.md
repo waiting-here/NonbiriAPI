@@ -142,7 +142,7 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 27. Normal startup accepts fresh storage and schema 27 only; exact schema 16–26 structures require the separate offline converter. Unknown or partial structures are rejected before writes. Startup validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for explicit source/target versions and rollback requirements.
 
-Current account export `schema_version=24` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v24.json`. See §9 for its safe projections.
+Current account export `schema_version=25` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v25.json`. See §9 for its safe projections.
 
 ### 1.5 Display time context
 
@@ -399,6 +399,29 @@ Authorized donation-key projections include numeric `max_concurrency,max_rpm` an
 | `POST /api/models/{id}/bindings/batch` | Expected binding revision and selections; all-or-nothing 201. |
 | `PUT /api/models/{id}/bindings/order` | Exact current ID permutation and expected binding revision. |
 | `DELETE /api/models/{id}/bindings/{bId}` | Expected binding revision; returns the complete new binding set. |
+
+Personal and management charity model DTOs include `cloudflare_proxy_enabled`
+and the read-only `cloudflare_proxy_mode` (`worker|legacy|direct`). The boolean
+defaults to true for personal models and false for charity models, including
+existing records on upgrade. Create omission uses that default; patch omission
+preserves the saved setting. Explicit null or a non-boolean is invalid. Personal
+owners can edit their own setting through existing authorized model routes;
+charity writes require administrator or level-6 authority. Level-5 scoped reads
+may see the setting but cannot change it. Existing body budgets, CSRF, revisions
+and idempotency apply. Public charity capability/catalog DTOs omit both fields.
+Idempotent model responses retain the original operation's saved boolean and
+revision, while recomputing the deployment mode from the running process. Older
+receipts without the boolean use the same personal/charity defaults, including
+models nested in manual-catalog update responses; stored receipts are unchanged.
+
+The mode is the actual process configuration, independent of the model switch:
+an enabled model uses the generic Worker first, otherwise a matching legacy
+mapping, otherwise direct egress. A disabled model always uses direct egress.
+Requests capture the boolean at admission and do not change route mid-request.
+Proxy failures never retry directly or increase donated-key failure counts.
+Mode is a configuration fact, not a network
+health test. See [Cloudflare forwarding](cloudflare-egress.md) for the loaded
+configuration API, deployment and discovery behavior.
 
 Personal model DTOs include `transport_rule`. POST omission defaults to `passthrough`; PATCH omission preserves the saved rule. Explicit values are `passthrough|force_non_stream|force_stream`; null, empty and unknown values return 400. Existing revision/idempotency requirements apply. See §2.2 for behavior and timeout limits.
 
@@ -1490,7 +1513,7 @@ Lineage items are exactly `{donation_id,donation_key_id,donation_status,key_stat
 
 ## 9. Export, privacy, and account deletion
 
-`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v24.json`, with `schema_version:24` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema.
+`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v25.json`, with `schema_version:25` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema.
 
 The top-level fields include `limited_activities`, `image_tasks` and `inactivity`. Limited activities contain the safe general/paper/brush wallet projection and own exchange receipts; the existing game wallet remains separate. Image tasks contain only local ID, state, requested/actual image counts, times, billing state and two-currency charge/refund facts. Inactivity contains safe own activity timestamps and retained execution outcomes. No prompts, complete execution parameters, images, source facts, raw errors, risk rules, private adapter/configuration or upstream task identifiers are included.
 
@@ -1527,7 +1550,7 @@ Deletion keeps a separate minimum security projection for administrator and curr
 
 ### Collection, appearance and other games
 
-`appearance` contains `selected,unlocked,moment,updated_at`; eligibility derives from collection ownership and pool history, while the derived `moments` catalogue is omitted. `rewards` contains personal successful receipts. `gacha` contains ticket/shard balances, collection, pity, claims, retained transactions and draw records, without retry-key digests. Model request adaptations include excluded parameter names and partition modes without saved values. `user` contains `discord_gate_policy`; personal models include `model_types` and accept `cache_balanced` as a `route_strategy`. Current personal models also include `role_policy` and `transport_rule`; saved Likes preset names are currently omitted from the account export. `lake_notes` contains `rules_id,profile_revision,profile,casts,entries,exchanges`, excluding private encounter/reward randomness and internal checkpoints. Safe cast entries include identity, nullable source period, rules/generation/revision, acknowledged tick, phase/pause and public motion state. Entry/exchange receipts retain exact amounts and financial references.
+`appearance` contains `selected,unlocked,moment,updated_at`; eligibility derives from collection ownership and pool history, while the derived `moments` catalogue is omitted. `rewards` contains personal successful receipts. `gacha` contains ticket/shard balances, collection, pity, claims, retained transactions and draw records, without retry-key digests. Model request adaptations include excluded parameter names and partition modes without saved values. `user` contains `discord_gate_policy`; personal models include `model_types` and accept `cache_balanced` as a `route_strategy`. Current personal models also include `role_policy`, `transport_rule` and the saved `cloudflare_proxy_enabled` preference; deployment mode and proxy secrets are excluded; saved Likes preset names are currently omitted from the account export. `lake_notes` contains `rules_id,profile_revision,profile,casts,entries,exchanges`, excluding private encounter/reward randomness and internal checkpoints. Safe cast entries include identity, nullable source period, rules/generation/revision, acknowledged tick, phase/pause and public motion state. Entry/exchange receipts retain exact amounts and financial references.
 
 `steadycatch` contains the owner's first-clear status, retained sessions and accepted replay inputs. `gwent` uses the duel export with owner-only competitive results and the current Elo aggregate. Neither adds access to another player's private state. See [Steady Catch](steady-catch.md), [AI Gwent](ai-gwent.md) and the [lifecycle checklist](data-lifecycle-checklist.md) for routes and retention.
 

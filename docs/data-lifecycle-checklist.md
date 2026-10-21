@@ -12,7 +12,14 @@ family. The registered routes, export builder, deletion coordinator, retention w
 and bilingual privacy text are covered by their implementation and contract tests.
 Schema presence alone never creates a route or expands a response.
 
-Current account export format 24 includes safe `gacha` balances, owned cards, guarantees, claims, activity journals, draw details within 180 days and the saved appearance artwork key. Its filename is `nonbiriapi-account-export-v24.json`; SQLite `user_version` remains 2 and the current storage schema is 27. All rows below describe current retained fields. This does not assert that a particular instance has been upgraded.
+Personal-model `cloudflare_proxy_enabled` belongs to the owner's model, is
+included in account export 25, and is deleted with that model or account.
+Charity-model preferences are shared platform configuration and excluded from
+personal exports. The read-only deployment mode is not persisted per account.
+Worker and legacy gateway tokens remain private deployment configuration and
+never enter account exports. Routing preferences do not extend log retention.
+
+Current account export format 25 includes safe `gacha` balances, owned cards, guarantees, claims, activity journals, draw details within 180 days and the saved appearance artwork key. Its filename is `nonbiriapi-account-export-v25.json`; SQLite `user_version` remains 2 and the current storage schema is 27. All rows below describe current retained fields. This does not assert that a particular instance has been upgraded.
 
 `channel_charity_binding_presets` and `channel_charity_binding_mappings` contain
 shared channel configuration without donor or operator identity. They are excluded
@@ -23,11 +30,11 @@ role-scoped control receipts and retention. No additional personal audit history
 is created.
 
 Optional deployment routes send selected upstream requests, provider credentials
-and responses through Cloudflare AI Gateway. The gateway token is deployment
+and responses through a Cloudflare Worker or a legacy AI Gateway. Proxy tokens are deployment
 configuration, excluded from database records, exports and diagnostics. Routed
 responses are checked for known credential reflections before header and error
-capture; direct responses retain the existing diagnostic contract. Gateway logging,
-cache, extra retries and billing fallback are disabled for these routes. Operators
+capture; direct responses retain the existing diagnostic contract. Proxy logging,
+cache and extra retries are disabled; legacy gateway billing fallback is also disabled. Operators
 must disclose the intermediary and maintain its settings; these controls do not
 guarantee end-to-end zero retention.
 
@@ -309,7 +316,7 @@ Reward receipts are included in current account exports under `rewards`. They co
 ## Shared pricing, owner history and header facts
 
 Smart backoff runs automatically for charity calls. Current safe state is included
-in account export 24 and authorized key projections. Runtime state contains a
+in account export 25 and authorized key projections. Runtime state contains a
 limited reason, source and retry time; it does not copy raw upstream errors.
 The current episode follows the donated key; internal trial and classification
 facts follow the claim.
@@ -321,7 +328,7 @@ and rule fields are removed from replay responses without repeating the mutation
 
 | Family | Access and export | Deletion, retention and late work |
 | --- | --- | --- |
-| `donation_key_backoffs` | Owner and authorized management may read safe current state, also included in account export 24. Internal generation, episode and trial identifiers are excluded. There is no per-key recognition configuration. | Current state cascades with the key. Schema 26 discards old profiles and supplemental-rule text while preserving active recovery facts. Account deletion removes the state. |
+| `donation_key_backoffs` | Owner and authorized management may read safe current state, also included in account export 25. Internal generation, episode and trial identifiers are excluded. There is no per-key recognition configuration. | Current state cascades with the key. Schema 26 discards old profiles and supplemental-rule text while preserving active recovery facts. Account deletion removes the state. |
 | `endpoint_backoff_policies` | Platform configuration readable and writable by administrators and current level-6 stewards; exact connector/base identity, revision and at most eight rules. No personal export or account identifier. | Retained with platform configuration and complete deployment backups. Clearing rules keeps the revision; account deletion does not delete shared endpoint policy. |
 | `dispatch_smart_backoff_facts` | Internal per-claim recovery identity, trial ownership, HTTP acceptance, finite quota classification and bounded endpoint rule snapshot/revision/matched index; no raw error and no personal export. | Claim deletion cascades; key deletion clears its key reference. Existing request retention and holds apply. Generation and episode checks prevent late results from changing a newer episode. Historical supplemental-rule classifications remain valid recovery facts after configuration removal. |
 | `charity_price_templates` and `charity_price_template_audits` | Shared price/reward/reserve/context/fixed and recurring discount settings; administrator maintenance and enabled-only L6 session reads. No L5/CallerKey access or personal export. Applying copies values, never links a model to future changes. | Templates persist until deleted; safe audits expire after 90 days and actor deletion sets identity null. No credentials or caller content. |

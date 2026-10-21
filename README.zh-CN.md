@@ -49,7 +49,7 @@ NonbiriAPI 是可自行部署的 AI 端点管理平台，提供 OpenAI-compatibl
 
 绑定选择器显示已有连接，获授权管理人员可一次将一把捐赠密钥绑定到多个公益模型。管理员和 6 级协管可在独立界面维护主流渠道预置，并一次应用到已通过捐赠的全部密钥；缺少模型和已存在绑定会逐项提示。
 
-部署者可通过配置将指定端点经 [Cloudflare AI Gateway](docs/cloudflare-egress.md) 转发，并按需要设置凭据传递方式。端点匹配适用于不同提供商，继续使用统一出站限制。支持 Google AI Studio 和 Vertex AI 的官方 OpenAI 兼容入口；管理员和 6 级协管可查看已加载路由，配置状态不代表上游连通性。
+平台模型可选择经 [Cloudflare Worker](docs/cloudflare-egress.md) 转发，各类上游无需逐个配置映射。自用模型默认开启、公益模型默认关闭；管理员和 6 级协管可查看实际加载的配置。未配置 Worker 时兼容旧 AI Gateway 映射。支持 Google AI Studio 和 Vertex AI 的官方 OpenAI 兼容入口，配置状态不代表上游连通性。
 
 ## 构建与开发
 
@@ -67,7 +67,7 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [首次配置](docs/first-run-setup.md) 涵盖私有目录、加密密钥、Discord OAuth 和公共域名。将 [admin.env.example](admin.env.example) 复制到检出目录外，替换占位值并在启动前加载。数据库与对应密钥须配套保留。
 
-新库默认开启维护并关闭公共功能。v1.0.7 源码的正常程序仅接受 schema 27 或全新初始化，账户导出为 24；既有 schema 16–26 使用独立离线转换器，历史转换代码不进入正常服务。后续 v1.x 保持从任一更早 v1.x 正式库升级的路径，不承诺旧程序读取新版数据库。
+新库默认开启维护并关闭公共功能。v1.0.7 源码的正常程序仅接受 schema 27 或全新初始化，账户导出为 25；既有 schema 16–26 使用独立离线转换器，历史转换代码不进入正常服务。后续 v1.x 保持从任一更早 v1.x 正式库升级的路径，不承诺旧程序读取新版数据库。
 
 [部署指南](docs/deployment.md) 说明 systemd、代理、不可变产物、升级和完整快照恢复；启动变量及在线设置统一维护在 [配置参考](docs/configuration.md)。
 

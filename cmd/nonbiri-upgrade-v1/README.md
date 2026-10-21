@@ -86,7 +86,7 @@ Earlier sources receive default-off MFA policies without enrollments or proofs.
 Schema 20 adds four covering indexes for request-log filtering; it changes no
 business records. Schema 21 widens endpoint tags with `noncommercial_gateway`
 and model-discovery outcomes with `region` and `unavailable`, preserving
-existing rows. The current application produces account export format 24.
+existing rows. The current application produces account export format 25.
 
 Schema 17 additionally receives the protocol and fishing presentation changes
 already present in schema 18. Existing probabilities and outcomes remain:

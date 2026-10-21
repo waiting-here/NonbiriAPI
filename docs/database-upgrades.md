@@ -10,7 +10,7 @@ a complete upgrade path from every earlier stable v1.x database. An older binary
 is not required to read a newer database.
 
 SQLite identity remains `application_id=0x4E425249`, `user_version=2`. Account
-exports use format **24**, independently of the storage schema. An unknown
+exports use format **25**, independently of the storage schema. An unknown
 identity, version or structural manifest is rejected before writes.
 
 ```sh
@@ -29,7 +29,11 @@ descriptors instead of parsing Go source or deriving versions from array lengths
 Schema 27 adds platform-wide endpoint backoff policies and bounded rule snapshots
 on dispatch facts. Policies start empty; existing waiting, trial, HTTP acceptance
 and failure facts are preserved. Rules affect future charity dispatches only.
-Account export remains format 24; per-key configuration is not restored.
+Schema 27 also adds `cloudflare_proxy_enabled` to personal and charity models,
+defaulting to true and false respectively for existing and newly created models.
+Account export format 25 includes the personal-model setting. Deployment tokens
+and forwarding configuration are excluded; per-key backoff configuration is not
+restored.
 
 Schema 26 adds shared channel binding presets and their ordered upstream-model
 mappings. Existing channels start without a preset. Saving or applying a preset
