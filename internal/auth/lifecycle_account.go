@@ -18,33 +18,39 @@ var (
 // available to the account lifecycle coordinator. It intentionally does not
 // contain the Discord identity, ban reason, revisions, or session material.
 type LifecycleIdentity struct {
-	ID                        string
-	Username                  string
-	Avatar                    *string
-	AvatarURL                 *string
-	GuildNick                 *string
-	GuildAvatarURL            *string
-	Lang                      string
-	DiscordGatePolicy         string
-	IsBanned                  bool
-	BannedUntil               *int64
-	CharitySuspendedUntil     *int64
-	EndpointLimit             *string
-	EffectiveEndpointLimit    string
-	RPMLimit                  *string
-	EffectiveRPMLimit         string
-	ConcurrencyLimit          *string
-	EffectiveConcurrencyLimit string
-	GameBalance               string
-	Balance                   string
-	DonationCredit            string
-	DonationCreditAchievedAt  *int64
-	EffectiveLevel            int
-	LevelDisplayName          string
-	GameProfilePublic         bool
-	CharityProfilePublic      bool
-	CreatedAt                 int64
-	UpdatedAt                 int64
+	ID                             string
+	Username                       string
+	Avatar                         *string
+	AvatarURL                      *string
+	GuildNick                      *string
+	GuildAvatarURL                 *string
+	Lang                           string
+	DiscordGatePolicy              string
+	IsBanned                       bool
+	BannedUntil                    *int64
+	CharitySuspendedUntil          *int64
+	EndpointLimit                  *string
+	EffectiveEndpointLimit         string
+	RPMLimit                       *string
+	EffectiveRPMLimit              string
+	ConcurrencyLimit               *string
+	EffectiveConcurrencyLimit      string
+	LightRPMLimit                  *string
+	EffectiveLightRPMLimit         string
+	LightConcurrencyLimit          *string
+	EffectiveLightConcurrencyLimit string
+	GlobalRPMLimit                 *string
+	EffectiveGlobalRPMLimit        string
+	GameBalance                    string
+	Balance                        string
+	DonationCredit                 string
+	DonationCreditAchievedAt       *int64
+	EffectiveLevel                 int
+	LevelDisplayName               string
+	GameProfilePublic              bool
+	CharityProfilePublic           bool
+	CreatedAt                      int64
+	UpdatedAt                      int64
 }
 
 // LifecycleUsage is the closed usage projection exported with an account.
@@ -96,7 +102,10 @@ func (r *Runtime) ExportLifecycleIdentity(
 		RPMLimit: user.RPMLimit, EffectiveRPMLimit: user.EffectiveRPMLimit,
 		ConcurrencyLimit:          user.ConcurrencyLimit,
 		EffectiveConcurrencyLimit: user.EffectiveConcurrencyLimit,
-		GameBalance:               user.GameBalance, Balance: user.Balance, DonationCredit: user.DonationCredit,
+		LightRPMLimit:             user.LightRPMLimit, EffectiveLightRPMLimit: user.EffectiveLightRPMLimit,
+		LightConcurrencyLimit: user.LightConcurrencyLimit, EffectiveLightConcurrencyLimit: user.EffectiveLightConcurrencyLimit,
+		GlobalRPMLimit: user.GlobalRPMLimit, EffectiveGlobalRPMLimit: user.EffectiveGlobalRPMLimit,
+		GameBalance: user.GameBalance, Balance: user.Balance, DonationCredit: user.DonationCredit,
 		EffectiveLevel: user.EffectiveLevel, LevelDisplayName: user.LevelDisplayName,
 		GameProfilePublic: user.GameProfilePublic, CharityProfilePublic: user.CharityProfilePublic, CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt,
 	}

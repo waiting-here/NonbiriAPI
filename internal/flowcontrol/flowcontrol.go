@@ -27,10 +27,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/continuity"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
+	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
 )
 
 var (
@@ -67,14 +69,19 @@ const (
 	DefaultRetryAfter = time.Second
 )
 
-// UserLimits is one request-time, server-side snapshot. RPMLimit is the charity
-// cap; RPMLimitSet=false
-// selects the current administrator default. ConcurrencyLimit is always the
-// effective value (the DB resolver maps NULL to the built-in 5).
+// UserLimits is one live server-side snapshot. RPMLimit and LightRPMLimit are
+// independent charity caps; GlobalRPMLimit covers all inference calls. An unset
+// RPM override uses the current site default. Concurrency values are effective
+// limits, with database NULL mapped to 5 heavy and 15 light requests.
 type UserLimits struct {
-	RPMLimit         int
-	RPMLimitSet      bool
-	ConcurrencyLimit int
+	RPMLimit              int
+	RPMLimitSet           bool
+	ConcurrencyLimit      int
+	LightConcurrencyLimit int
+	LightRPMLimit         int
+	LightRPMLimitSet      bool
+	GlobalRPMLimit        int
+	GlobalRPMLimitSet     bool
 }
 
 type UserLimitResolver func(ctx context.Context, userID int64) (UserLimits, error)
@@ -98,7 +105,9 @@ func DBUserLimitResolver(store *db.Store) UserLimitResolver {
 		}
 		return UserLimits{
 			RPMLimit: limits.RPMLimit, RPMLimitSet: limits.RPMLimitSet,
-			ConcurrencyLimit: limits.ConcurrencyLimit,
+			ConcurrencyLimit: limits.ConcurrencyLimit, LightConcurrencyLimit: limits.LightConcurrencyLimit,
+			LightRPMLimit: limits.LightRPMLimit, LightRPMLimitSet: limits.LightRPMLimitSet,
+			GlobalRPMLimit: limits.GlobalRPMLimit, GlobalRPMLimitSet: limits.GlobalRPMLimitSet,
 		}, nil
 	}
 }
@@ -214,7 +223,19 @@ func (c *Controller) AdmitModel(ctx context.Context, userID int64, charity bool)
 	return c.admit(ctx, userID, func() (bool, error) { return charity, nil })
 }
 
+// AdmitOperation admits a known operation using its fixed service class.
+func (c *Controller) AdmitOperation(ctx context.Context, userID int64, operation contract.Operation, charity bool) (*Reservation, time.Duration, error) {
+	if !operation.Valid() {
+		return nil, 0, ErrInvalidUser
+	}
+	return c.admitClassified(ctx, userID, requestkind.IsLightOperation(operation), func() (bool, error) { return charity, nil })
+}
+
 func (c *Controller) admit(ctx context.Context, userID int64, classify func() (bool, error)) (*Reservation, time.Duration, error) {
+	return c.admitClassified(ctx, userID, false, classify)
+}
+
+func (c *Controller) admitClassified(ctx context.Context, userID int64, light bool, classify func() (bool, error)) (*Reservation, time.Duration, error) {
 	if c == nil || c.limiter == nil || c.userConcurrency == nil || c.userAdmissions == nil {
 		return nil, 0, ErrClosed
 	}
@@ -234,13 +255,19 @@ func (c *Controller) admit(ctx context.Context, userID int64, classify func() (b
 	guard := c.userAdmissions.beginRead(userID)
 	defer guard.release()
 
-	limits := UserLimits{ConcurrencyLimit: db.DefaultUserConcurrencyLimit}
+	limits := UserLimits{ConcurrencyLimit: db.DefaultUserConcurrencyLimit, LightConcurrencyLimit: db.DefaultUserLightConcurrencyLimit}
 	if c.userLimits != nil {
 		resolved, err := c.userLimits(ctx, userID)
 		if err != nil {
 			return nil, 0, err
 		}
 		limits = resolved
+	}
+	if limits.LightConcurrencyLimit == 0 {
+		limits.LightConcurrencyLimit = db.DefaultUserLightConcurrencyLimit
+	}
+	if limits.LightConcurrencyLimit < 1 || limits.LightConcurrencyLimit > maxUserConcurrencyLimit || (limits.LightRPMLimitSet && (limits.LightRPMLimit < 1 || limits.LightRPMLimit > db.MaxUserRPMLimit)) || (limits.GlobalRPMLimitSet && (limits.GlobalRPMLimit < 1 || limits.GlobalRPMLimit > db.MaxUserRPMLimit)) {
+		return nil, 0, ErrInvalidUser
 	}
 	if limits.ConcurrencyLimit < 1 || limits.ConcurrencyLimit > maxUserConcurrencyLimit {
 		return nil, 0, ErrInvalidUser
@@ -255,7 +282,11 @@ func (c *Controller) admit(ctx context.Context, userID int64, classify func() (b
 	if err != nil {
 		return nil, 0, err
 	}
-	permit, err := c.userConcurrency.tryAcquireObserved(userID, limits.ConcurrencyLimit, requestID)
+	concurrencyLimit := limits.ConcurrencyLimit
+	if light {
+		concurrencyLimit = limits.LightConcurrencyLimit
+	}
+	permit, err := c.userConcurrency.tryAcquireClassObserved(userID, concurrencyLimit, limits.ConcurrencyLimit+limits.LightConcurrencyLimit, light, requestID)
 	if err != nil {
 		if errors.Is(err, errConcurrencyClosed) {
 			return nil, 0, ErrClosed
@@ -282,7 +313,17 @@ func (c *Controller) admit(ctx context.Context, userID int64, classify func() (b
 	if limits.RPMLimitSet {
 		charityLimit = limits.RPMLimit
 	}
-	reservation, decision, err := c.limiter.ReserveModelObserved(ctx, rpmKey, charity, charityLimit, c.rpmObserver(userID, requestID))
+	if light {
+		charityLimit = 0
+		if limits.LightRPMLimitSet {
+			charityLimit = limits.LightRPMLimit
+		}
+	}
+	globalUserLimit := 0
+	if limits.GlobalRPMLimitSet {
+		globalUserLimit = limits.GlobalRPMLimit
+	}
+	reservation, decision, err := c.limiter.ReserveClassifiedObserved(ctx, rpmKey, globalUserLimit, charity, light, charityLimit, c.rpmObserver(userID, requestID))
 
 	if err != nil {
 		permit.Release()

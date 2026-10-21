@@ -53,6 +53,7 @@ const (
 	KeyDefaultModelLimit         = "default_model_limit"
 	KeyDefaultBindingLimit       = "default_binding_limit"
 	KeyDefaultRPMPerUser         = "default_rpm_per_user"
+	KeyDefaultLightRPMPerUser    = "default_light_rpm_per_user"
 	KeyGlobalRPMPerUser          = "global_rpm_per_user"
 	KeyGlobalRPM                 = "global_rpm"
 	KeyModelRequestBodyLimitMiB  = requestbody.ConfigKey
@@ -286,6 +287,7 @@ var knownSiteConfig = func() map[string]keySpec {
 		KeyDefaultModelLimit:         {kind: kindInt, min: 1, max: maxResourceLimitValue, def: db.DefaultModelLimit},
 		KeyDefaultBindingLimit:       {kind: kindInt, min: 1, max: maxResourceLimitValue, def: db.DefaultBindingLimit},
 		KeyDefaultRPMPerUser:         {kind: kindInt, min: 1, max: maxRPMValue, def: ratelimit.DefaultRPMPerUserLimit},
+		KeyDefaultLightRPMPerUser:    {kind: kindInt, min: 1, max: maxRPMValue, def: ratelimit.DefaultRPMLightPerUserLimit},
 		KeyGlobalRPMPerUser:          {kind: kindInt, min: 1, max: maxRPMValue, def: ratelimit.DefaultRPMPerUserLimit},
 		KeyGlobalRPM:                 {kind: kindInt, min: 1, max: maxRPMValue, def: ratelimit.DefaultRPMGlobalLimit},
 		KeyModelRequestBodyLimitMiB:  {kind: kindInt, min: 1, max: requestbody.MaximumMiB, def: requestbody.DefaultMiB},

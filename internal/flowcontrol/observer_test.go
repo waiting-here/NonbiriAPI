@@ -52,7 +52,7 @@ func TestObserverUsesAuthoritativeAdmissionAndExistingIdentity(t *testing.T) {
 			t.Fatal("request identity drift")
 		}
 	}
-	if observer.values[0].Active != 1 || observer.values[0].ConcurrencyLimit != 5 || observer.values[1].RPMLimit != 2 || observer.values[3].Active != 0 {
+	if observer.values[0].Active != 1 || observer.values[0].ConcurrencyLimit != 20 || observer.values[0].HeavyLimit != 5 || observer.values[0].LightLimit != 15 || observer.values[1].RPMLimit != 2 || observer.values[3].Active != 0 {
 		t.Fatalf("snapshots: %+v", observer.values)
 	}
 	if !observer.values[1].AdmittedAt.Equal(observer.values[2].AdmittedAt) {

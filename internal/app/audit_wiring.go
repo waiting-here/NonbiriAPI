@@ -106,7 +106,8 @@ func (a *auditRuntime) configurationChanged(change adminapi.SiteConfigCommit) {
 		global, _ := strconv.Atoi(change.Values[adminapi.KeyGlobalRPM])
 		user, _ := strconv.Atoi(change.Values[adminapi.KeyGlobalRPMPerUser])
 		charity, _ := strconv.Atoi(change.Values[adminapi.KeyDefaultRPMPerUser])
-		_ = a.flow.SetLimits(ratelimit.RPMLimits{GlobalLimit: global, PerUserLimit: user, CharityPerUserLimit: charity})
+		lightCharity, _ := strconv.Atoi(change.Values[adminapi.KeyDefaultLightRPMPerUser])
+		_ = a.flow.SetLimits(ratelimit.RPMLimits{GlobalLimit: global, PerUserLimit: user, CharityPerUserLimit: charity, LightCharityPerUserLimit: lightCharity})
 	}
 	if a.outbound != nil {
 		// Both values come from the snapshot validated before this commit.

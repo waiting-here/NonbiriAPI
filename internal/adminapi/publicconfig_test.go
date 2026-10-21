@@ -106,6 +106,8 @@ func TestReadPublicConfigProjectsOnlyAllowlist(t *testing.T) {
 	for _, kv := range []struct{ k, v string }{
 		{"legal_authoritative_locale", "zh"},
 		{"default_rpm_per_user", "999"},
+		{"default_light_rpm_per_user", "999"},
+		{"global_rpm_per_user", "999"},
 		{"global_rpm", "999"},
 		{"default_per_endpoint_concurrency", "999"},
 		{"egress_global_concurrency", "999"},
