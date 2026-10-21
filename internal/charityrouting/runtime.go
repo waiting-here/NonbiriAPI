@@ -71,10 +71,10 @@ func (s *Service) PreflightDecision(ctx context.Context, userID int64, fullName 
 }
 
 func (s *Service) preflight(ctx context.Context, userID int64, fullName string, textRunes *int, decisionNow int64) (RuntimePreflight, error) {
-	if s == nil || s.db == nil || ctx == nil || userID <= 0 || fullName == "" || decisionNow < 0 || decisionNow > maxUnixSecond {
+	if s == nil || s.readDB == nil || ctx == nil || userID <= 0 || fullName == "" || decisionNow < 0 || decisionNow > maxUnixSecond {
 		return RuntimePreflight{}, ErrInvalidRequest
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return RuntimePreflight{}, fmt.Errorf("charity routing: begin preflight: %w", err)
 	}
@@ -416,6 +416,15 @@ ORDER BY b.ord,b.id LIMIT ?`, modelID, callerID, callerID, callerID, decisionNow
 	}
 	defer rows.Close()
 	weighted := make([]weightedRuntimeCandidate, 0, MaxRuntimeCandidates)
+	type keyQuota struct {
+		reservation        donationquota.TokenVector
+		budgetAvailable    bool
+		recurringChecked   bool
+		recurringAvailable bool
+	}
+	// Price, decision time and quota amounts are fixed for each key in this
+	// snapshot. Reuse only after reaching the same eligibility stage.
+	quotas := make(map[int64]keyQuota)
 	sawRuntimeCandidate := false
 	sawSupportedCandidate := false
 	sawRecurringLimit := false
@@ -459,18 +468,23 @@ ORDER BY b.ord,b.id LIMIT ?`, modelID, callerID, callerID, callerID, decisionNow
 		if pricingMode == "per_request" {
 			priceReserve = requestPrice
 		}
-		budget, err := donationquota.ReadTokenBudget(ctx, tx, candidate.DonationKeyID)
-		if err != nil {
-			return RuntimeSnapshot{}, err
+		quota, seen := quotas[candidate.DonationKeyID]
+		if !seen {
+			budget, err := donationquota.ReadTokenBudget(ctx, tx, candidate.DonationKeyID)
+			if err != nil {
+				return RuntimeSnapshot{}, err
+			}
+			quota.budgetAvailable, err = budget.Available()
+			if err != nil {
+				return RuntimeSnapshot{}, err
+			}
+			quota.reservation = budget.Reservation
+			quotas[candidate.DonationKeyID] = quota
 		}
-		eligible, err = budget.Available()
-		if err != nil {
-			return RuntimeSnapshot{}, err
-		}
-		if !eligible {
+		if !quota.budgetAvailable {
 			continue
 		}
-		tokenReserve = budget.Reservation.Total
+		tokenReserve = quota.reservation.Total
 		eligible, err = capacityAllows(priceLimit, priceUsed, priceInflight, big.NewInt(priceReserve))
 		if err == nil && eligible {
 			eligible, err = capacityAllows(callLimit, callsUsed, callsInflight, big.NewInt(1))
@@ -490,13 +504,17 @@ ORDER BY b.ord,b.id LIMIT ?`, modelID, callerID, callerID, callerID, decisionNow
 			return RuntimeSnapshot{}, ErrInvariant
 		}
 		quotaCalls, _ := db.U128FromBig(big.NewInt(1))
-		amounts := budget.Reservation.Amounts()
-		amounts.Calls, amounts.Credits = quotaCalls, quotaPrice
-		eligible, err = donationquota.Available(ctx, tx, candidate.DonationKeyID, decisionNow, amounts)
-		if err != nil {
-			return RuntimeSnapshot{}, err
+		if !quota.recurringChecked {
+			amounts := quota.reservation.Amounts()
+			amounts.Calls, amounts.Credits = quotaCalls, quotaPrice
+			quota.recurringAvailable, err = donationquota.Available(ctx, tx, candidate.DonationKeyID, decisionNow, amounts)
+			if err != nil {
+				return RuntimeSnapshot{}, err
+			}
+			quota.recurringChecked = true
+			quotas[candidate.DonationKeyID] = quota
 		}
-		if !eligible {
+		if !quota.recurringAvailable {
 			sawRecurringLimit = true
 			continue
 		}

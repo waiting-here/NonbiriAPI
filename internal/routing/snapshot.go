@@ -184,7 +184,7 @@ type modelFacts struct {
 // be a full name; disagreement is rejected instead of selecting one by
 // precedence. This transaction never reads physical candidates.
 func (s *Store) Preflight(ctx context.Context, ownerUserID int64, identifier string) (LogicalPreflight, error) {
-	if s == nil || s.db == nil || ctx == nil || ownerUserID <= 0 || identifier == "" {
+	if s == nil || s.readDB == nil || ctx == nil || ownerUserID <= 0 || identifier == "" {
 		return LogicalPreflight{}, ErrInvalidIdentity
 	}
 	modelID, hasID, idErr := parseModelID(identifier)
@@ -195,7 +195,7 @@ func (s *Store) Preflight(ctx context.Context, ownerUserID int64, identifier str
 		}
 		return LogicalPreflight{}, ErrInvalidIdentity
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return LogicalPreflight{}, fmt.Errorf("routing: begin preflight: %w", err)
 	}
@@ -266,14 +266,14 @@ ORDER BY m.full_name,m.id LIMIT ?`, ownerUserID, limit+1)
 }
 
 func (s *Store) Snapshot(ctx context.Context, ownerUserID int64, identity Identity) (Snapshot, error) {
-	if s == nil || s.db == nil || ctx == nil || ownerUserID <= 0 {
+	if s == nil || s.readDB == nil || ctx == nil || ownerUserID <= 0 {
 		return Snapshot{}, ErrInvalidIdentity
 	}
 	modelID, hasID, err := parseModelID(identity.ModelID)
 	if err != nil || (identity.FullName != "" && !validFullName(identity.FullName)) || (!hasID && identity.FullName == "") {
 		return Snapshot{}, ErrInvalidIdentity
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return Snapshot{}, fmt.Errorf("routing: begin snapshot: %w", err)
 	}

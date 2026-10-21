@@ -39,10 +39,10 @@ func decodeExcludedFields(encoded string) ([]string, error) {
 
 func (s *Service) RequestPolicy(ctx context.Context, userID int64, fullName string, decisionNow int64) (RequestPolicy, error) {
 	var result RequestPolicy
-	if s == nil || s.db == nil || ctx == nil || userID <= 0 || fullName == "" || decisionNow < 0 || decisionNow > maxUnixSecond {
+	if s == nil || s.readDB == nil || ctx == nil || userID <= 0 || fullName == "" || decisionNow < 0 || decisionNow > maxUnixSecond {
 		return result, ErrInvalidRequest
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return result, err
 	}

@@ -185,7 +185,7 @@ func newPublicForwardRuntime(
 	}
 	forwardConfig := forward.Config{
 		Adaptations:   adaptations,
-		GatewayModels: gatewaypolicy.NewStore(store.DB()),
+		GatewayModels: gatewaypolicy.NewStore(store.ReadDB()),
 		Personal:      personal, Charity: charityPolicyRouter{CharityRouter: charity, InferenceCharityRouter: charity, abuse: abuse}, Claims: claimRail, CharityCharges: charityService,
 		Debug: debugHub, Registry: registry, Connectors: connectors, Safety: safety,
 		ClientGuard: clientGuard,
