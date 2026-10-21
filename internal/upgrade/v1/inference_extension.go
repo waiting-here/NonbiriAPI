@@ -19,9 +19,15 @@ var directInferenceOperations = []struct{ operation, path string }{
 	{"audio_translations", "/v1/audio/translations"},
 	{"moderations", "/v1/moderations"},
 	{"rerank", "/v1/rerank"},
+	{"systemone", "/v1/systemone"},
 }
 
-const inferenceUsageSchema = `ALTER TABLE request_attempts ADD COLUMN usage_details TEXT NOT NULL DEFAULT '{}' CHECK(typeof(usage_details)='text' AND length(CAST(usage_details AS BLOB))<=4096 AND json_valid(usage_details) AND json_type(usage_details)='object');
+const inferenceUsageSchema = `ALTER TABLE users ADD COLUMN light_rpm_limit INTEGER CHECK(light_rpm_limit IS NULL OR (typeof(light_rpm_limit)='integer' AND light_rpm_limit BETWEEN 1 AND 4096));
+ALTER TABLE users ADD COLUMN light_concurrency_limit INTEGER CHECK(light_concurrency_limit IS NULL OR (typeof(light_concurrency_limit)='integer' AND light_concurrency_limit BETWEEN 1 AND 100000));
+ALTER TABLE users ADD COLUMN global_rpm_limit INTEGER CHECK(global_rpm_limit IS NULL OR (typeof(global_rpm_limit)='integer' AND global_rpm_limit BETWEEN 1 AND 4096));
+ALTER TABLE risk_audit_minutes ADD COLUMN saturation_micros_millis INTEGER CHECK(saturation_micros_millis IS NULL OR (typeof(saturation_micros_millis)='integer' AND saturation_micros_millis BETWEEN 0 AND 60000000000));
+INSERT INTO site_config(key,value,updated_at) VALUES('default_light_rpm_per_user','30',0) ON CONFLICT(key) DO NOTHING;
+ALTER TABLE request_attempts ADD COLUMN usage_details TEXT NOT NULL DEFAULT '{}' CHECK(typeof(usage_details)='text' AND length(CAST(usage_details AS BLOB))<=4096 AND json_valid(usage_details) AND json_type(usage_details)='object');
 ALTER TABLE donation_usage_reservations ADD COLUMN pricing_details TEXT NOT NULL DEFAULT '{}' CHECK(typeof(pricing_details)='text' AND length(CAST(pricing_details AS BLOB))<=2048 AND json_valid(pricing_details) AND json_type(pricing_details)='object');
 ALTER TABLE request_logs ADD COLUMN usage_details TEXT NOT NULL DEFAULT '{}' CHECK(typeof(usage_details)='text' AND length(CAST(usage_details AS BLOB))<=4096 AND json_valid(usage_details) AND json_type(usage_details)='object');
 ALTER TABLE charity_reservations ADD COLUMN usage_details TEXT NOT NULL DEFAULT '{}' CHECK(typeof(usage_details)='text' AND length(CAST(usage_details AS BLOB))<=4096 AND json_valid(usage_details) AND json_type(usage_details)='object');
@@ -90,8 +96,8 @@ func extendDirectInference(ctx context.Context, tx *sql.Tx) error {
 }
 
 func expandDirectInferenceSQL(source string) string {
-	value := strings.ReplaceAll(source, expandedConnectorCheck, expandedConnectorCheck+",'cohere-rerank','jina-rerank','siliconflow-rerank','voyage-rerank'")
-	value = strings.ReplaceAll(value, "model_types BETWEEN 1 AND 15", "model_types BETWEEN 1 AND 32767")
+	value := strings.ReplaceAll(source, expandedConnectorCheck, expandedConnectorCheck+",'cohere-rerank','jina-rerank','siliconflow-rerank','voyage-rerank','openai-chat-completions','typesafe-systemone'")
+	value = strings.ReplaceAll(value, "model_types BETWEEN 1 AND 15", "model_types BETWEEN 1 AND 65535")
 	value = strings.ReplaceAll(value, "pricing_mode IN ('per_request','per_token')", "pricing_mode IN ('per_request','per_token','per_search_unit')")
 	value = strings.ReplaceAll(value, "length(context_pricing)<=2048", "length(context_pricing)<=8192")
 	const routes = "'openai_chat_completions','charity_chat_completions','model_discovery','openai_embeddings','charity_embeddings','openai_images_generations','charity_images_generations','openai_decisions','charity_decisions'"

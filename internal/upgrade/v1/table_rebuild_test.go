@@ -81,3 +81,31 @@ INSERT INTO child VALUES(1,100);`)
 	}
 	assertForeignKeyEnforcement(t, database)
 }
+
+func TestTableRebuildPreservesAbsentSequence(t *testing.T) {
+	database, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "empty.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	database.SetMaxOpenConns(1)
+	if _, err := database.Exec(`CREATE TABLE empty (id INTEGER PRIMARY KEY AUTOINCREMENT, value TEXT)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := runGenerationTwoExtension(context.Background(), database, func(ctx context.Context, tx *sql.Tx) error {
+		return rebuildTables(ctx, tx, []tableRebuild{{Name: "empty", SQL: `CREATE TABLE empty (id INTEGER PRIMARY KEY AUTOINCREMENT, value TEXT, added INTEGER)`}})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := database.QueryRow(`SELECT count(*) FROM sqlite_sequence WHERE name='empty'`).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("new sequence row: %d, %v", count, err)
+	}
+	result, err := database.Exec(`INSERT INTO empty(value) VALUES('first')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id, err := result.LastInsertId(); err != nil || id != 1 {
+		t.Fatalf("first identity: %d, %v", id, err)
+	}
+}

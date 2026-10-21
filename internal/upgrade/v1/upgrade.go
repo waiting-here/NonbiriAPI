@@ -63,7 +63,8 @@ var storageSchema = schemaRegistry{baseline: 17, target: db.CurrentSchemaVersion
 		addedTables: []string{"endpoint_backoff_policies"}, controlTables: []string{"dispatch_smart_backoff_facts", "models", "charity_models"}, credentials: credentialsUnchanged}},
 	{from: 27, version: 28, manifest: db.PinnedGenerationTwoManifestHash, apply: extendDirectInference, impact: &migrationImpact{
 		rebuiltTables:    []string{"mainstream_channels", "endpoints", "endpoint_key_secrets", "donation_keys", "request_attempts", "report_cases", "report_targets", "models", "charity_models", "logical_requests", "request_logs", "charity_reservations"},
-		constraintTables: []string{"donation_usage_reservations"}, credentials: credentialsRebuilt}},
+		controlTables:    []string{"site_config"},
+		constraintTables: []string{"donation_usage_reservations", "users", "risk_audit_minutes"}, credentials: credentialsRebuilt}},
 }}
 
 type Options struct {

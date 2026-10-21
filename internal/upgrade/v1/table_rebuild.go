@@ -137,6 +137,12 @@ func rebuildTables(ctx context.Context, tx *sql.Tx, changes []tableRebuild) erro
 				if _, err := tx.ExecContext(ctx, `UPDATE sqlite_sequence SET seq=max(seq,?) WHERE name=?`, sequence.Int64, change.Name); err != nil {
 					return err
 				}
+			} else if sequenceTable != 0 {
+				// Inserting an empty SELECT creates a zero sequence row. Preserve
+				// the absence of a sequence for tables that were never populated.
+				if _, err := tx.ExecContext(ctx, `DELETE FROM sqlite_sequence WHERE name=? AND seq=0`, change.Name); err != nil {
+					return err
+				}
 			}
 			return nil
 		}()

@@ -139,6 +139,7 @@ func buildGenerationTwoConfigCatalog() map[string]generationTwoConfigSpec {
 		"default_endpoint_key_limit":       uintSpec(formatGenerationTwoUint(uint64(DefaultEndpointKeyLimit)), 1, 10000),
 		"default_model_limit":              uintSpec(formatGenerationTwoUint(uint64(DefaultModelLimit)), 1, 10000),
 		"default_binding_limit":            uintSpec(formatGenerationTwoUint(uint64(DefaultBindingLimit)), 1, 10000),
+		"default_light_rpm_per_user":       uintSpec("30", 1, 4096),
 		"default_rpm_per_user":             uintSpec(formatGenerationTwoUint(uint64(ratelimit.DefaultRPMPerUserLimit)), 1, 4096),
 		"global_rpm_per_user":              uintSpec(formatGenerationTwoUint(uint64(ratelimit.DefaultRPMPerUserLimit)), 1, 4096),
 		"global_rpm":                       uintSpec(formatGenerationTwoUint(uint64(ratelimit.DefaultRPMGlobalLimit)), 1, 4096),
