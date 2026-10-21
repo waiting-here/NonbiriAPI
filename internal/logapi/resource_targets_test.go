@@ -22,6 +22,22 @@ VALUES(?,?,1,'charity',9007199254740993),(?,?,2,'charity',9007199254740994)`,
 		logOpaqueID("clm_", 21), f.charityID, logOpaqueID("clm_", 22), f.charityID)
 }
 
+func TestCharityInferenceRouteJoinsPreserveResourceOwnership(t *testing.T) {
+	f := newLogFixture(t)
+	seedLogResourceTargets(f)
+	f.mustExec(`INSERT INTO users(id,username) VALUES(?,'caller')`, logUserOne)
+	for _, operation := range []string{"chat_completions", "embeddings", "images_generations", "decisions", "responses", "responses_compact", "responses_input_tokens", "completions", "images_edits", "images_variations", "audio_speech", "audio_transcriptions", "audio_translations", "moderations", "rerank", "systemone"} {
+		f.mustExec(`UPDATE request_logs SET route_kind=? WHERE logical_request_id=?`, "charity_"+operation, f.charityID)
+		var caller, model, donation int64
+		if err := f.db.QueryRow(`SELECT u.id,cm.id FROM request_logs l`+callerIdentityJoin+`WHERE l.logical_request_id=?`, f.charityID).Scan(&caller, &model); err != nil || caller != logUserOne || model != 701 {
+			t.Fatalf("%s caller/model = %d/%d, %v", operation, caller, model, err)
+		}
+		if err := f.db.QueryRow(`SELECT d.id FROM request_attempts a`+managementAttemptTargetJoin+`WHERE l.logical_request_id=? AND a.attempt_seq=1`, f.charityID).Scan(&donation); err != nil || donation != 801 {
+			t.Fatalf("%s donation = %d, %v", operation, donation, err)
+		}
+	}
+}
+
 func requireLogResourceID(t *testing.T, value *string, want string) {
 	t.Helper()
 	if want == "" {
@@ -218,8 +234,13 @@ func TestManagementExportIncludesLiveModelTarget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	column := len(rows[0]) - 1
-	if rows[0][column] != "charity_model_id" || rows[2][column] != "701" || rows[1][column] != "" {
+	column := -1
+	for index, name := range rows[0] {
+		if name == "charity_model_id" {
+			column = index
+		}
+	}
+	if column < 0 || rows[0][column] != "charity_model_id" || rows[2][column] != "701" || rows[1][column] != "" {
 		t.Fatalf("CSV model targets = %v", rows)
 	}
 }

@@ -56,13 +56,16 @@ const (
 )
 
 type LogUsage struct {
-	UncachedInputTokens   string `json:"uncached_input_tokens"`
-	CacheWriteInputTokens string `json:"cache_write_input_tokens"`
-	CacheReadInputTokens  string `json:"cache_read_input_tokens"`
-	OutputTokens          string `json:"output_tokens"`
-	TotalTokens           string `json:"total_tokens"`
-	UsageUnknown          bool   `json:"usage_unknown"`
-	Charge                string `json:"charge"`
+	SearchUnits           *string        `json:"search_units,omitempty"`
+	Modalities            *LogModalities `json:"modalities,omitempty"`
+	Pricing               *LogPricing    `json:"pricing,omitempty"`
+	UncachedInputTokens   string         `json:"uncached_input_tokens"`
+	CacheWriteInputTokens string         `json:"cache_write_input_tokens"`
+	CacheReadInputTokens  string         `json:"cache_read_input_tokens"`
+	OutputTokens          string         `json:"output_tokens"`
+	TotalTokens           string         `json:"total_tokens"`
+	UsageUnknown          bool           `json:"usage_unknown"`
+	Charge                string         `json:"charge"`
 }
 
 type Page[T any] struct {
