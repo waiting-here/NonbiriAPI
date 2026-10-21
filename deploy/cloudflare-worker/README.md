@@ -63,6 +63,14 @@ bodies remain streams; no complete stream is buffered. Upstream private headers
 are removed so they cannot forge a relay failure. Responses carry no-store
 browser and CDN cache controls.
 
+After removing all upstream `X-Nonbiri-Proxy-*` headers, the Worker sets exactly
+one `X-Nonbiri-Proxy-Response: upstream` header on every relayed response,
+including non-200 errors and SSE. Worker-generated errors omit this confirmation.
+The application requires it to distinguish upstream responses from Worker or
+Cloudflare failures. Proxy failures do not count against donated keys; confirmed
+upstream errors still follow the normal failure rules. The application removes
+these internal headers before logging or returning responses to callers.
+
 Worker failures return the same short JSON body and a closed
 `X-Nonbiri-Proxy-Error` value, with no target, token, or exception text:
 

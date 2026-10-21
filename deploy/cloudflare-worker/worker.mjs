@@ -125,10 +125,12 @@ export function createProxy(fetchUpstream = globalThis.fetch) {
           cancelBody(upstream);
           return failure('redirect', 502);
         }
+        const responseHeaders = noStore(cleanHeaders(upstream.headers));
+        responseHeaders.set('x-nonbiri-proxy-response', 'upstream');
         return new Response(upstream.body, {
           status: upstream.status,
           statusText: upstream.statusText,
-          headers: noStore(cleanHeaders(upstream.headers)),
+          headers: responseHeaders,
         });
       } catch {
         cancelBody(upstream);
