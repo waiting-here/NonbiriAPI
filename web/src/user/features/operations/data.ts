@@ -388,7 +388,13 @@ export interface CredentialReportInput {
     | 'ai-sdk-gateway-v3'
     | 'google-gemini'
     | 'openai-responses'
-    | 'openai-decisions';
+    | 'openai-decisions'
+    | 'cohere-rerank'
+    | 'jina-rerank'
+    | 'siliconflow-rerank'
+    | 'voyage-rerank'
+    | 'typesafe-systemone'
+    | 'openai-chat-completions';
   base_url: string;
   secret: string;
   note: string;

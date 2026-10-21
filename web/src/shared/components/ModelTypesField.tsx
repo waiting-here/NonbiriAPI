@@ -1,14 +1,15 @@
-import { MODEL_TYPES, MODEL_TYPE_PATHS, type ModelType } from '@shared/modelTypes';
+import {
+  MODEL_TYPE_CHOICES,
+  MODEL_TYPE_GROUP_LABEL_KEYS,
+  modelTypeGroup,
+  modelTypeGroupPath,
+  groupedModelTypes,
+  setModelTypeGroup,
+  type ModelType,
+} from '@shared/modelTypes';
 import { useTranslation } from 'react-i18next';
 import './ModelTypesField.css';
 import { Field } from './ui';
-
-const labelKeys = {
-  chat_completions: 'common.modelTypes.chat_completions',
-  embeddings: 'common.modelTypes.embeddings',
-  images_generations: 'common.modelTypes.images_generations',
-  decisions: 'common.modelTypes.decisions',
-} as const;
 
 export function ModelTypesField({
   value,
@@ -27,20 +28,18 @@ export function ModelTypesField({
       <legend>{t('common.modelTypes.title')}</legend>
       <p className="nb-sub">{t('common.modelTypes.help')}</p>
       <div className="model-types-field__choices">
-        {MODEL_TYPES.map((type) => (
-          <Field key={type} label={t(labelKeys[type])} help={<code>{MODEL_TYPE_PATHS[type]}</code>}>
+        {MODEL_TYPE_CHOICES.map((type) => (
+          <Field
+            key={type}
+            label={t(MODEL_TYPE_GROUP_LABEL_KEYS[modelTypeGroup(type)])}
+            help={<code>{modelTypeGroupPath(type)}</code>}
+          >
             {(props) => (
               <input
                 {...props}
                 type="checkbox"
-                checked={value.includes(type)}
-                onChange={(event) =>
-                  onChange(
-                    MODEL_TYPES.filter((item) =>
-                      item === type ? event.target.checked : value.includes(item),
-                    ),
-                  )
-                }
+                checked={value.some((item) => modelTypeGroup(item) === type)}
+                onChange={(event) => onChange(setModelTypeGroup(value, type, event.target.checked))}
               />
             )}
           </Field>
@@ -59,9 +58,9 @@ export function ModelTypesSummary({ value }: { value: readonly ModelType[] }) {
   const { t } = useTranslation();
   return (
     <span className="model-types-summary">
-      {value.map((type) => (
-        <span key={type} title={MODEL_TYPE_PATHS[type]}>
-          {t(labelKeys[type])}
+      {groupedModelTypes(value).map((type) => (
+        <span key={type} title={modelTypeGroupPath(type)}>
+          {t(MODEL_TYPE_GROUP_LABEL_KEYS[modelTypeGroup(type)])}
         </span>
       ))}
     </span>

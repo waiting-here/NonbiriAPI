@@ -1629,7 +1629,7 @@
     "debug": {
       "nav": "Debug",
       "descriptionShort": "See what happened from request to result.",
-      "description": "Capture chat completions and embeddings sent by your external client. Only your requests and safe call results appear here.",
+      "description": "Capture inference requests sent by your external client. Only your requests and safe call results appear here.",
       "actions": {
         "start": "Start Debug"
       },
@@ -2739,7 +2739,7 @@
       "keys.charityModels": "Charity models",
       "keys.ownModels": "My models",
       "keys.copyModel": "Open the model page to copy its call name.",
-      "keys.supportedPaths": "Chat and embeddings are supported. Available models:",
+      "keys.supportedPaths": "Use the operations supported by each model. Available models:",
       "keys.curlTitle": "Command-line test",
       "keys.curlHelp": "Check the key and model with curl.",
       "keys.curlPlaceholder": "Replace the model name with the one you want to use. Set NONBIRI_KEY to your saved key.",
@@ -2755,8 +2755,14 @@
       "keys.charityModelExample": "[公益]provider/model-name",
       "keys.ownModelExample": "my/model-name",
       "connector.gemini": "Google Gemini (Chat)",
-      "connector.responses": "OpenAI Responses (Chat)",
-      "connector.decisions": "OpenAI Decisions"
+      "connector.responses": "OpenAI Responses",
+      "connector.decisions": "OpenAI Decisions",
+      "connector.cohere": "Cohere Rerank",
+      "connector.jina": "Jina Rerank",
+      "connector.siliconflow": "SiliconFlow Rerank",
+      "connector.voyage": "Voyage AI Rerank",
+      "connector.systemone": "Typesafe System One",
+      "connector.chatCompletions": "OpenAI Chat Completions"
     },
     "lakeNotes": {
       "exchangeAvailable": "Fishing is free. Coin exchange is available below.",

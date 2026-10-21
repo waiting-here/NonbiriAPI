@@ -68,6 +68,12 @@ const CONNECTOR_LABEL_KEYS: Record<MainstreamConnectorType, string> = {
   'google-gemini': 'common.connectorGemini',
   'openai-responses': 'common.connectorResponses',
   'openai-decisions': 'common.connectorDecisions',
+  'cohere-rerank': 'common.connectorRerank.cohere',
+  'jina-rerank': 'common.connectorRerank.jina',
+  'siliconflow-rerank': 'common.connectorRerank.siliconflow',
+  'voyage-rerank': 'common.connectorRerank.voyage',
+  'typesafe-systemone': 'common.connectorSystemOne',
+  'openai-chat-completions': 'common.connectorChatCompletions',
 };
 
 const STATE_LABEL_KEYS: Record<'active' | 'retired', string> = {

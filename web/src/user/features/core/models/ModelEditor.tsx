@@ -372,7 +372,7 @@ export function ModelEditor({
               disabled={hasAttempt}
               onChange={setSilentRetry}
             />
-            {modelTypes.includes('chat_completions') ? (
+            {modelTypes.includes('chat_completions') || modelTypes.includes('responses') ? (
               <>
                 <TransportRuleField
                   value={transportRule}

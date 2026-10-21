@@ -1,9 +1,9 @@
 import { CloudflareProxyField, CloudflareProxySummary } from '../CloudflareProxyField';
-import type { RecurringDiscount } from '@shared/operations/recurringDiscount';
 import { SessionHeaderFields } from './SessionHeaderFields';
 import { PriceTools } from './PriceTools';
 import {
   priceDraftError,
+  draftPriceConfig,
   priceDraft,
   priceDraftSignature,
   snapshotPriceDraft,
@@ -42,7 +42,6 @@ import {
   patchManagedCharityModel,
   type CharityModel,
   type CharityRole,
-  type TokenPrices,
 } from '@shared/operations/charity';
 import {
   getManagedCharityModel,
@@ -59,7 +58,7 @@ import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
 import { buildRolePolicy, draftFromRolePolicy, type RolePolicyDraft } from '@shared/rolePolicy';
 import '@shared/styles/charity-management.css';
-import { timeDraftValue, type TimeDraft } from '@shared/time';
+import { timeDraftValue } from '@shared/time';
 import type { TransportRule } from '@shared/transportRule';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
@@ -89,16 +88,9 @@ import {
   validText,
 } from './managementFields';
 
-interface ModelDraft {
+interface ModelDraft extends PriceDraft {
   cloudflareProxy: boolean;
   sessionHeaders: SessionHeader[];
-  longEnabled: boolean;
-  longThreshold: string;
-  longRequest: string;
-  longPrices: TokenPrices;
-  penaltyEnabled: boolean;
-  penaltyThreshold: string;
-  penaltyFine: string;
   modelTypes: ModelType[];
   transportRule: TransportRule;
   rolePolicy: RolePolicyDraft;
@@ -111,17 +103,6 @@ interface ModelDraft {
   enabled: boolean;
   allowedLevels: number[];
   publicDescription: string;
-  tokenReserveCredits: string | null;
-  mode: 'per_request' | 'per_token';
-  requestUser: string;
-  requestDonor: string;
-  userPrices: TokenPrices;
-  donorRewards: TokenPrices;
-  recurringDiscount: RecurringDiscount;
-  discountEnabled: boolean;
-  discountPercent: number;
-  discountStart: TimeDraft;
-  discountEnd: TimeDraft;
   flatten: boolean;
 }
 function modelDraft(model?: CharityModel): ModelDraft {
@@ -168,29 +149,7 @@ function modelBody(
     enabled: draft.enabled,
     allowed_levels: MODEL_LEVELS.filter((level) => draft.allowedLevels.includes(level)),
     public_description: normalizePublicDescriptionInput(draft.publicDescription),
-    pricing: {
-      ...(draft.mode === 'per_request'
-        ? { mode: 'per_request', user_price: draft.requestUser, donor_reward: draft.requestDonor }
-        : { mode: 'per_token', user_prices: draft.userPrices, donor_rewards: draft.donorRewards }),
-      ...(draft.longEnabled
-        ? {
-            long_context: {
-              input_threshold: draft.longThreshold,
-              ...(draft.mode === 'per_request'
-                ? { user_price: draft.longRequest }
-                : { user_prices: draft.longPrices }),
-            },
-          }
-        : {}),
-      ...(draft.penaltyEnabled
-        ? {
-            context_penalty: {
-              input_threshold: draft.penaltyThreshold,
-              fine: draft.penaltyFine,
-            },
-          }
-        : {}),
-    },
+    pricing: draftPriceConfig(draft)!.pricing,
     recurring_discount: structuredClone(draft.recurringDiscount),
     discount: {
       enabled: draft.discountEnabled,
@@ -208,6 +167,7 @@ function modelBody(
 }
 
 type ModelValidation =
+  | 'searchUnitOperations'
   | 'modelTypes'
   | 'rolePolicy'
   | 'excludedFields'
@@ -224,6 +184,11 @@ type ModelValidation =
   | 'recurringDiscount';
 
 function modelDraftError(draft: ModelDraft): ModelValidation | null {
+  if (
+    draft.mode === 'per_search_unit' &&
+    (draft.modelTypes.length !== 1 || draft.modelTypes[0] !== 'rerank')
+  )
+    return 'searchUnitOperations';
   if (
     draft.sessionHeaders.some(
       (v) =>
@@ -481,7 +446,8 @@ function ModelForm({
                 <small>{t('common.operations.charity.routeAffinityTTLHelp')}</small>
               </label>
             ) : null}
-            {draft.modelTypes.includes('chat_completions') ? (
+            {draft.modelTypes.includes('chat_completions') ||
+            draft.modelTypes.includes('responses') ? (
               <>
                 <TransportRuleField
                   value={draft.transportRule}
@@ -577,7 +543,7 @@ function ModelForm({
             </label>
           </div>
         </fieldset>
-        {draft.modelTypes.includes('chat_completions') ? (
+        {draft.modelTypes.includes('chat_completions') || draft.modelTypes.includes('responses') ? (
           <RolePolicyEditor
             value={draft.rolePolicy}
             onChange={(rolePolicy) => {
@@ -591,6 +557,7 @@ function ModelForm({
         <div className={`nb-workflow-price-workspace${referenceOpen ? ' is-reference-open' : ''}`}>
           <div className="nb-workflow-price-editor">
             <PriceConfigFields
+              allowSearchUnits={draft.modelTypes.length === 1 && draft.modelTypes[0] === 'rerank'}
               value={draft}
               role={role}
               onChange={(fields) => setDraft((current) => ({ ...current, ...fields }))}
@@ -687,17 +654,19 @@ function ModelForm({
       ) : null}
       {validationError && validationError !== 'rolePolicy' && validationError !== 'modelTypes' ? (
         <p className="field-error" role="alert">
-          {validationError === 'excludedFields'
-            ? copy.excludedInvalid
-            : validationError === 'modelLevels'
-              ? t('common.operations.charity.validation.modelLevels')
-              : validationError === 'publicDescription'
-                ? t('common.operations.charity.validation.publicDescription')
-                : validationError === 'affinityTTLSeconds'
-                  ? t('common.operations.charity.validation.affinityTTLSeconds')
-                  : validationError === 'recurringDiscount'
-                    ? t('common.operations.charity.validation.recurringDiscount')
-                    : t(`common.operations.charity.validation.${validationError}`)}
+          {validationError === 'searchUnitOperations'
+            ? t('common.operations.charity.validation.searchUnitOperations')
+            : validationError === 'excludedFields'
+              ? copy.excludedInvalid
+              : validationError === 'modelLevels'
+                ? t('common.operations.charity.validation.modelLevels')
+                : validationError === 'publicDescription'
+                  ? t('common.operations.charity.validation.publicDescription')
+                  : validationError === 'affinityTTLSeconds'
+                    ? t('common.operations.charity.validation.affinityTTLSeconds')
+                    : validationError === 'recurringDiscount'
+                      ? t('common.operations.charity.validation.recurringDiscount')
+                      : t(`common.operations.charity.validation.${validationError}`)}
         </p>
       ) : null}
       <div className="ops-actions">

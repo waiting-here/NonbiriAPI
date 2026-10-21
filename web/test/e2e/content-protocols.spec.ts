@@ -9,8 +9,14 @@ type Page = Parameters<typeof collectConsoleViolations>[0];
 
 const protocols = [
   ['google-gemini', 'Google Gemini (Chat)'],
-  ['openai-responses', 'OpenAI Responses (Chat)'],
+  ['openai-responses', 'OpenAI Responses'],
   ['openai-decisions', 'OpenAI Decisions'],
+  ['openai-chat-completions', 'OpenAI Chat Completions'],
+  ['typesafe-systemone', 'Typesafe System One'],
+  ['cohere-rerank', 'Cohere Rerank'],
+  ['jina-rerank', 'Jina Rerank'],
+  ['siliconflow-rerank', 'SiliconFlow Rerank'],
+  ['voyage-rerank', 'Voyage AI Rerank'],
 ] as const;
 const allTypes = [
   'openai-compatible',

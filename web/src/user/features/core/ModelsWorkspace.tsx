@@ -268,7 +268,8 @@ function ModelDetail({
                   <dt>{t('models.silentRetry')}</dt>
                   <dd>{model.data.silent_retry ? t('common.yes') : t('common.no')}</dd>
                 </div>
-                {model.data.model_types.includes('chat_completions') ? (
+                {model.data.model_types.includes('chat_completions') ||
+                model.data.model_types.includes('responses') ? (
                   <>
                     <TransportRuleSummary value={model.data.transport_rule} />
                     <div>
@@ -278,7 +279,8 @@ function ModelDetail({
                   </>
                 ) : null}
               </dl>
-              {model.data.model_types.includes('chat_completions') ? (
+              {model.data.model_types.includes('chat_completions') ||
+              model.data.model_types.includes('responses') ? (
                 <ModelRoleSummary policy={model.data.role_policy} />
               ) : null}
               <RequestAdaptationEditor

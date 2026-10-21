@@ -159,7 +159,7 @@ FROM charity_models WHERE full_name=?`, fullName).Scan(&preflight.ModelID, &pref
 		if err != nil {
 			return RuntimePreflight{}, ErrInvariant
 		}
-	} else if pricingMode == "per_token" {
+	} else if pricingMode == "per_token" || pricingMode == "per_search_unit" {
 		preflight.ReservedMilli, err = charityreserve.Resolve(ctx, tx, preflight.ModelID)
 		if errors.Is(err, charityreserve.ErrNotConfigured) {
 			return RuntimePreflight{}, ErrNotFound
@@ -383,7 +383,7 @@ FROM charity_models WHERE id=?`, modelID).Scan(&snapshot.ModelID, &snapshot.Prov
 		if err != nil {
 			return RuntimeSnapshot{}, ErrInvariant
 		}
-	} else if pricingMode == "per_token" {
+	} else if pricingMode == "per_token" || pricingMode == "per_search_unit" {
 		snapshot.ReservedMilli, err = charityreserve.Resolve(ctx, tx, modelID)
 		if err != nil {
 			return RuntimeSnapshot{}, ErrInvariant
@@ -700,7 +700,7 @@ WHERE enabled=1 ORDER BY id`)
 
 func capabilityPricing(mode string, requestPrice int64, tokenPrices [4]int64, discountPercent, currentPercent int) (CapabilityPricing, error) {
 	pricing := CapabilityPricing{Mode: mode}
-	if mode == "per_request" {
+	if mode == "per_request" || mode == "per_search_unit" {
 		discounted, err := credits.ApplyDiscountPercent(requestPrice, discountPercent)
 		if err != nil {
 			return CapabilityPricing{}, ErrInvariant

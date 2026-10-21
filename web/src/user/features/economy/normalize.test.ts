@@ -995,3 +995,61 @@ it('retains independent context thresholds and exact alternate prices', () => {
     fineMilli: '50000',
   });
 });
+
+it('projects independent modality prices and search-unit prices without exposing rewards', () => {
+  const rates = {
+    uncached_input: '1000',
+    cache_write_input: '1000',
+    cache_read_input: '1000',
+    output: '1000',
+  };
+  const discounted = {
+    uncached_input: '800',
+    cache_write_input: '800',
+    cache_read_input: '800',
+    output: '800',
+  };
+  const modality = { input_enabled: true, output_enabled: false, audio: rates };
+  const model = {
+    ...capabilityModel(),
+    pricing: {
+      mode: 'per_token',
+      user_price_milli: null,
+      discounted_user_price_milli: null,
+      current_user_price_milli: null,
+      user_prices_milli: rates,
+      discounted_user_prices_milli: discounted,
+      current_user_prices_milli: discounted,
+      user_modalities_milli: modality,
+      discounted_user_modalities_milli: { ...modality, audio: discounted },
+      current_user_modalities_milli: { ...modality, audio: discounted },
+      donor_modalities_milli: { input_enabled: true, output_enabled: true, text: rates },
+    },
+  };
+  const payload = {
+    state: 'available',
+    models: [model],
+    donation_intake: 'open',
+    server_now: CAPABILITY_SERVER_NOW,
+  };
+  const result = normalizeCharityCapability(payload).models[0].pricing;
+  expect(result.userModalitiesMilli).toEqual({
+    inputEnabled: true,
+    outputEnabled: false,
+    audio: {
+      uncachedInput: '1000',
+      cacheWriteInput: '1000',
+      cacheReadInput: '1000',
+      output: '1000',
+    },
+  });
+  expect(result).not.toHaveProperty('donorModalitiesMilli');
+  const search = {
+    ...capabilityModel(),
+    model_types: ['rerank'],
+    pricing: { ...capabilityModel().pricing, mode: 'per_search_unit' },
+  };
+  expect(
+    normalizeCharityCapability({ ...payload, models: [search] }).models[0].pricing,
+  ).toMatchObject({ mode: 'per_search_unit', userPriceMilli: '3000' });
+});

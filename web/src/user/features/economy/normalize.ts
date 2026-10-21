@@ -207,7 +207,13 @@ function connectorType(value: unknown, field: string): string {
     candidate !== 'ai-sdk-gateway-v3' &&
     candidate !== 'google-gemini' &&
     candidate !== 'openai-responses' &&
-    candidate !== 'openai-decisions'
+    candidate !== 'openai-decisions' &&
+    candidate !== 'cohere-rerank' &&
+    candidate !== 'jina-rerank' &&
+    candidate !== 'siliconflow-rerank' &&
+    candidate !== 'voyage-rerank' &&
+    candidate !== 'typesafe-systemone' &&
+    candidate !== 'openai-chat-completions'
   )
     invalid(field);
   return candidate;
@@ -395,22 +401,37 @@ export function normalizeCharityCapabilityModel(value: unknown): CharityCapabili
       'current_user_price_milli',
       'current_user_prices_milli',
     ],
-    ['long_context', 'context_penalty'],
+    [
+      'long_context',
+      'context_penalty',
+      'user_modalities_milli',
+      'discounted_user_modalities_milli',
+      'current_user_modalities_milli',
+    ],
   );
   const normalizedPricing: CharityCapabilityModel['pricing'] = normalizeBasePricing(
     pricing,
     discountPercent,
   );
   if (pricing.long_context != null) {
-    const long = record(pricing.long_context, 'long context pricing', [
-      'input_threshold',
-      'user_price_milli',
-      'discounted_user_price_milli',
-      'user_prices_milli',
-      'discounted_user_prices_milli',
-      'current_user_price_milli',
-      'current_user_prices_milli',
-    ]);
+    const long = record(
+      pricing.long_context,
+      'long context pricing',
+      [
+        'input_threshold',
+        'user_price_milli',
+        'discounted_user_price_milli',
+        'user_prices_milli',
+        'discounted_user_prices_milli',
+        'current_user_price_milli',
+        'current_user_prices_milli',
+      ],
+      [
+        'user_modalities_milli',
+        'discounted_user_modalities_milli',
+        'current_user_modalities_milli',
+      ],
+    );
     normalizedPricing.longContext = {
       ...normalizeBasePricing({ ...long, mode: pricing.mode }, discountPercent),
       inputThreshold: positiveContextThreshold(long.input_threshold),
@@ -1198,7 +1219,7 @@ function normalizeBasePricing(
   discountPercent: number,
 ): import('./types').CharityBasePricing {
   let normalizedPricing: import('./types').CharityBasePricing;
-  if (pricing.mode === 'per_request') {
+  if (pricing.mode === 'per_request' || pricing.mode === 'per_search_unit') {
     if (
       pricing.user_prices_milli !== null ||
       pricing.discounted_user_prices_milli !== null ||
@@ -1218,7 +1239,7 @@ function normalizeBasePricing(
       'charity model discounted request price',
     );
     normalizedPricing = {
-      mode: 'per_request',
+      mode: pricing.mode,
       userPriceMilli,
       discountedUserPriceMilli,
       currentUserPriceMilli: capabilityMilli(
@@ -1263,7 +1284,32 @@ function normalizeBasePricing(
     invalid('charity model pricing mode');
   }
 
+  for (const [wire, key] of [
+    ['user_modalities_milli', 'userModalitiesMilli'],
+    ['discounted_user_modalities_milli', 'discountedUserModalitiesMilli'],
+    ['current_user_modalities_milli', 'currentUserModalitiesMilli'],
+  ] as const)
+    if (pricing[wire] != null)
+      normalizedPricing[key] = normalizeCapabilityModalityPricing(pricing[wire]);
   return normalizedPricing;
+}
+
+function normalizeCapabilityModalityPricing(
+  value: unknown,
+): import('./types').CharityModalityPricing {
+  const root = record(
+    value,
+    'modality pricing',
+    ['input_enabled', 'output_enabled'],
+    ['text', 'image', 'audio', 'video'],
+  );
+  const out: import('./types').CharityModalityPricing = {
+    inputEnabled: bool(root.input_enabled, 'modality input'),
+    outputEnabled: bool(root.output_enabled, 'modality output'),
+  };
+  for (const m of ['text', 'image', 'audio', 'video'] as const)
+    if (root[m] != null) out[m] = normalizeCapabilityTokenPrices(root[m], 'modality ' + m);
+  return out;
 }
 
 function positiveContextThreshold(value: unknown): string {

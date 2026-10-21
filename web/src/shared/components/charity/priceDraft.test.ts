@@ -170,3 +170,40 @@ describe('charity draft leave protection', () => {
     );
   });
 });
+
+it('preserves modality absence, explicit free rates and optional long reward overrides', () => {
+  const config = structuredClone(token);
+  config.pricing.user_modalities = {
+    input_enabled: true,
+    output_enabled: false,
+    audio: { uncached_input: '0', cache_write_input: '0', cache_read_input: '0', output: '0' },
+  };
+  config.pricing.donor_modalities = {
+    input_enabled: false,
+    output_enabled: true,
+    text: { uncached_input: '1', cache_write_input: '1', cache_read_input: '1', output: '1' },
+  };
+  config.pricing.long_context!.donor_rewards = {
+    uncached_input: '1',
+    cache_write_input: '2',
+    cache_read_input: '3',
+    output: '4',
+  };
+  config.pricing.long_context!.donor_modalities = { input_enabled: false, output_enabled: false };
+  const draft = priceDraft(config);
+  expect(draftPriceConfig(draft)).toEqual(config);
+  expect(draftPriceConfig(snapshotPriceDraft(draft))).toEqual(config);
+  expect(switchPriceMode(draft, 'per_search_unit')).toMatchObject({
+    longEnabled: false,
+    longDonorOverride: false,
+    longDonorModalities: null,
+  });
+});
+
+it('round trips a search-unit template without token prices', () => {
+  const config: CharityPriceConfig = {
+    ...token,
+    pricing: { mode: 'per_search_unit', user_price: '0.125', donor_reward: '0.05' },
+  };
+  expect(draftPriceConfig(priceDraft(config))).toEqual(config);
+});

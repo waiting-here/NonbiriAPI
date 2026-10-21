@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  normalizeLogUsage,
   normalizeAdminLogAttempt,
   normalizeAdminLogRow,
   normalizeStewardLogAttempt,
@@ -488,4 +489,46 @@ it('keeps the exact unsigned Discord ID in management filters and rejects invali
   expect(validateLogFilter('user', { discord_id: id, model: 'personal' })).toEqual({
     model: 'personal',
   });
+});
+
+it('keeps precise search units and independent classification decisions', () => {
+  const counts = { text: '0', image: '0', audio: '0', video: '0' };
+  const value = {
+    ...usage,
+    usage_unknown: true,
+    search_units: '9007199254740.123456',
+    modalities: { input_fallback: 'cache_details_missing', output: counts },
+    pricing: {
+      mode: 'per_search_unit',
+      input_mode: 'aggregate',
+      output_mode: 'modality',
+      input_fallback: 'missing_price',
+    },
+  };
+  expect(normalizeLogUsage(value)).toEqual(value);
+  expect(() => normalizeLogUsage({ ...value, search_units: '1.1234567' })).toThrow();
+  expect(() =>
+    normalizeLogUsage({
+      ...value,
+      pricing: { mode: 'per_token', input_fallback: 'raw provider error' },
+    }),
+  ).toThrow();
+});
+
+it('accepts direct-inference routes and safe rejected request paths', () => {
+  const row = { ...userRow, route_kind: 'openai_audio_speech' };
+  expect(normalizeUserLogRow(row).route_kind).toBe('openai_audio_speech');
+  const rejected = {
+    ...row,
+    phase: 'pre_handler',
+    rejection_stage: 'authorization',
+    rejection_reason: 'unauthorized',
+    request_method: 'POST',
+    request_path: '/v1/audio/speech',
+    caller_status: 401,
+    caller_error_code: 'unauthorized',
+    caller_result_class: 'failed',
+    attempt_count: '0',
+  };
+  expect(normalizeUserLogRow(rejected).request_path).toBe('/v1/audio/speech');
 });

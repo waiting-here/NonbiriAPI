@@ -1,7 +1,4 @@
-import {
-  normalizeCloudflareProxyMode,
-  type CloudflareProxyMode,
-} from '@shared/cloudflareProxy';
+import { normalizeCloudflareProxyMode, type CloudflareProxyMode } from '@shared/cloudflareProxy';
 import { CancelledError } from '@tanstack/react-query';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, apiFetch, isMfaRequired, isNotFoundError } from '@shared/query/http';
@@ -381,7 +378,16 @@ function connectorType(value: unknown): Endpoint['connector_type'] {
   if (
     value === 'openai-compatible' ||
     value === 'anthropic-compatible' ||
-    value === 'ai-sdk-gateway-v3' || value === 'google-gemini' || value === 'openai-responses' || value === 'openai-decisions'
+    value === 'ai-sdk-gateway-v3' ||
+    value === 'google-gemini' ||
+    value === 'openai-responses' ||
+    value === 'openai-decisions' ||
+    value === 'cohere-rerank' ||
+    value === 'jina-rerank' ||
+    value === 'siliconflow-rerank' ||
+    value === 'voyage-rerank' ||
+    value === 'typesafe-systemone' ||
+    value === 'openai-chat-completions'
   )
     return value;
   throw new ApiError('invalid_response', 'The server returned an invalid connector type.', 200);
@@ -832,9 +838,12 @@ export function useUserSession<T = UserSessionResponse>(
       } catch (error) {
         // An MFA challenge pauses this account without replacing its mounted forms.
         if (
-          isMfaRequired(error) && previous && snapshot &&
+          isMfaRequired(error) &&
+          previous &&
+          snapshot &&
           stationSessionMatches(queryClient, 'steward', snapshot)
-        ) return previous;
+        )
+          return previous;
         failManagementSessionRequest(queryClient, 'steward', generation, error);
         throw error;
       }

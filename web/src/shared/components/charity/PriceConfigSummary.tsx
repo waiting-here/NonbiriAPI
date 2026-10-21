@@ -1,6 +1,12 @@
+import { modalityNameKeys } from '@shared/operations/modalityCopy';
 import { weekdayKeys } from '@shared/operations/recurringDiscount';
 import { useTranslation } from 'react-i18next';
-import type { CharityPriceConfig, CharityRole, TokenPrices } from '@shared/operations/charity';
+import type {
+  CharityPriceConfig,
+  CharityRole,
+  ModalityPricing,
+  TokenPrices,
+} from '@shared/operations/charity';
 import { Amount } from '@shared/components/Amount';
 import { creditsToMilli } from '../../../user/games/common/strict';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
@@ -24,9 +30,13 @@ export function PriceConfigBrief({
   return (
     <div className="nb-workflow-price-brief">
       <span>
-        {t(charityCopyKey(role, pricing.mode === 'per_request' ? 'perRequest' : 'perToken'))}
+        {t(
+          pricing.mode === 'per_search_unit'
+            ? 'common.modalityPricing.perSearchUnit'
+            : charityCopyKey(role, pricing.mode === 'per_request' ? 'perRequest' : 'perToken'),
+        )}
       </span>
-      {pricing.mode === 'per_request' ? (
+      {pricing.mode !== 'per_token' ? (
         <span>
           {value(pricing.user_price)} / {value(pricing.donor_reward)}
         </span>
@@ -58,39 +68,95 @@ export function PriceConfigSummary({
       <Amount value={creditsToMilli(value).toString()} />
     </span>
   );
-  const prices = (side: 'userPrices' | 'donorRewards', values: TokenPrices) =>
+  const prices = (
+    side: 'userPrices' | 'donorRewards',
+    values: TokenPrices,
+    modality?: ModalityPricing,
+    fallback = false,
+  ) =>
     (Object.keys(values) as (keyof TokenPrices)[]).map((field) => (
       <div key={`${side}:${field}`}>
-        <dt>{t(tokenPriceCopyKey(role, side, field))}</dt>
+        <dt>
+          {fallback && (field === 'output' ? modality?.output_enabled : modality?.input_enabled)
+            ? t('common.modalityPricing.fallback') + ' · '
+            : ''}
+          {t(tokenPriceCopyKey(role, side, field))}
+        </dt>
         <dd>{money(values[field])}</dd>
       </div>
     ));
+  const modalities = (
+    title: string,
+    p?: ModalityPricing,
+    side: 'userPrices' | 'donorRewards' = 'userPrices',
+  ) =>
+    p && (
+      <div>
+        <dt>{t(title)}</dt>
+        <dd>
+          <p>
+            {t('common.modalityPricing.enabledSides', {
+              input: t(p.input_enabled ? 'common.enabled' : 'common.disabled'),
+              output: t(p.output_enabled ? 'common.enabled' : 'common.disabled'),
+            })}
+          </p>
+          <dl>
+            {(['text', 'image', 'audio', 'video'] as const).map((m) => (
+              <div key={m}>
+                <dt>{t(modalityNameKeys[m])}</dt>
+                <dd>
+                  {p[m] ? <dl>{prices(side, p[m])}</dl> : t('common.modalityPricing.missingPrice')}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </dd>
+      </div>
+    );
   const pricing = config.pricing;
   return (
     <dl className="nb-kv nb-workflow-prices">
       <div>
         <dt>{t('common.operations.charity.pricing')}</dt>
         <dd>
-          {t(charityCopyKey(role, pricing.mode === 'per_request' ? 'perRequest' : 'perToken'))}
+          {t(
+            pricing.mode === 'per_search_unit'
+              ? 'common.modalityPricing.perSearchUnit'
+              : charityCopyKey(role, pricing.mode === 'per_request' ? 'perRequest' : 'perToken'),
+          )}
         </dd>
       </div>
-      {pricing.mode === 'per_request' ? (
+      {pricing.mode !== 'per_token' ? (
         <>
           <div>
-            <dt>{t(charityCopyKey(role, 'request_user_price_milli'))}</dt>
+            <dt>
+              {t(
+                pricing.mode === 'per_search_unit'
+                  ? 'common.modalityPricing.searchCharge'
+                  : charityCopyKey(role, 'request_user_price_milli'),
+              )}
+            </dt>
             <dd>{money(pricing.user_price)}</dd>
           </div>
           <div>
-            <dt>{t(charityCopyKey(role, 'request_donor_reward_milli'))}</dt>
+            <dt>
+              {t(
+                pricing.mode === 'per_search_unit'
+                  ? 'common.modalityPricing.searchReward'
+                  : charityCopyKey(role, 'request_donor_reward_milli'),
+              )}
+            </dt>
             <dd>{money(pricing.donor_reward)}</dd>
           </div>
         </>
       ) : (
         <>
-          {prices('userPrices', pricing.user_prices)}
-          {prices('donorRewards', pricing.donor_rewards)}
+          {prices('userPrices', pricing.user_prices, pricing.user_modalities, true)}
+          {prices('donorRewards', pricing.donor_rewards, pricing.donor_modalities, true)}
         </>
       )}
+      {modalities('common.modalityPricing.user', pricing.user_modalities)}
+      {modalities('common.modalityPricing.donor', pricing.donor_modalities, 'donorRewards')}
       <div>
         <dt>{t('common.operations.charity.tokenReserveCredits')}</dt>
         <dd>
@@ -121,10 +187,44 @@ export function PriceConfigSummary({
         <div>
           <dt>{t('common.operations.charity.context.long')}</dt>
           <dd>
-            <dl>{prices('userPrices', pricing.long_context.user_prices)}</dl>
+            <dl>
+              {prices(
+                'userPrices',
+                pricing.long_context.user_prices,
+                pricing.long_context.user_modalities,
+                true,
+              )}
+            </dl>
           </dd>
         </div>
       ) : null}
+      {pricing.long_context?.donor_reward !== undefined && (
+        <div>
+          <dt>{t('common.modalityPricing.longRequestReward')}</dt>
+          <dd>{money(pricing.long_context.donor_reward)}</dd>
+        </div>
+      )}
+      {pricing.long_context?.donor_rewards && (
+        <div>
+          <dt>{t('common.modalityPricing.longReward')}</dt>
+          <dd>
+            <dl>
+              {prices(
+                'donorRewards',
+                pricing.long_context.donor_rewards,
+                pricing.long_context.donor_modalities,
+                true,
+              )}
+            </dl>
+          </dd>
+        </div>
+      )}
+      {modalities('common.modalityPricing.longUser', pricing.long_context?.user_modalities)}
+      {modalities(
+        'common.modalityPricing.longDonor',
+        pricing.long_context?.donor_modalities,
+        'donorRewards',
+      )}
       <div>
         <dt>{t('common.operations.charity.context.penalty')}</dt>
         <dd>

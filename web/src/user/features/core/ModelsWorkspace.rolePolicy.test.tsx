@@ -279,7 +279,7 @@ describe('personal model API selection', () => {
   it('preserves migrated types, cancels changes, and saves image-only balanced routing', async () => {
     const f = fixture();
     const view = await renderEditor();
-    expect(screen.getByRole('checkbox', { name: 'Chat completions' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Chat Completions / Responses' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Embeddings' })).toBeChecked();
     await view.user.click(screen.getByRole('checkbox', { name: 'Image generation' }));
     await view.user.click(screen.getByRole('button', { name: 'Cancel' }));
@@ -287,7 +287,7 @@ describe('personal model API selection', () => {
     await view.user.click(screen.getByRole('button', { name: 'Edit model' }));
     expect(screen.getByRole('checkbox', { name: 'Image generation' })).not.toBeChecked();
     await view.user.click(screen.getByRole('checkbox', { name: 'Image generation' }));
-    await view.user.click(screen.getByRole('checkbox', { name: 'Chat completions' }));
+    await view.user.click(screen.getByRole('checkbox', { name: 'Chat Completions / Responses' }));
     await view.user.click(screen.getByRole('checkbox', { name: 'Embeddings' }));
     await view.user.click(screen.getByText('Advanced behavior', { selector: 'strong' }));
     await view.user.click(screen.getByRole('switch', { name: 'Try the next source on error' }));
@@ -307,7 +307,7 @@ describe('personal model API selection', () => {
   it('explains an empty model type selection without saving it', async () => {
     const f = fixture();
     const view = await renderEditor();
-    await view.user.click(screen.getByRole('checkbox', { name: 'Chat completions' }));
+    await view.user.click(screen.getByRole('checkbox', { name: 'Chat Completions / Responses' }));
     await view.user.click(screen.getByRole('checkbox', { name: 'Embeddings' }));
     await view.user.click(screen.getByRole('button', { name: 'Save' }));
     expect(screen.getByText('Select at least one model type.')).toBeVisible();

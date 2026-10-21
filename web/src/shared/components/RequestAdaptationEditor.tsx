@@ -615,15 +615,21 @@ export function RequestAdaptationEditor({
       <p>
         {connectorType === 'openai-compatible'
           ? copy('openaiSupport')
-          : connectorType === 'google-gemini'
-            ? copy('geminiSupport')
-            : connectorType === 'openai-responses'
-              ? copy('responsesSupport')
-              : connectorType === 'openai-decisions'
-                ? copy('decisionsSupport')
-                : connectorType
-                  ? copy('convertedSupport')
-                  : copy('allSupport')}
+          : connectorType === 'openai-chat-completions'
+            ? copy('chatCompletionsSupport')
+            : connectorType === 'typesafe-systemone'
+              ? copy('systemOneSupport')
+              : connectorType?.endsWith('-rerank')
+                ? copy('rerankSupport')
+                : connectorType === 'google-gemini'
+                  ? copy('geminiSupport')
+                  : connectorType === 'openai-responses'
+                    ? copy('responsesSupport')
+                    : connectorType === 'openai-decisions'
+                      ? copy('decisionsSupport')
+                      : connectorType
+                        ? copy('convertedSupport')
+                        : copy('allSupport')}
       </p>
       {view ? (
         <p>

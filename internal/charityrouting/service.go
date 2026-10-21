@@ -366,6 +366,9 @@ func (s *Service) patch(ctx context.Context, role roleKind, actorUserID, modelID
 		updated.user, updated.reward = prices.user, prices.reward
 		updated.contextPricing = prices.contextPricing
 	}
+	if !validPricingOperations(updated.mode, updated.modelTypes) {
+		return resources.MutationResult[AdminCharityModel]{}, ErrInvalidRequest
+	}
 	if input.Discount != nil {
 		if !validDiscountPatch(*input.Discount) {
 			return resources.MutationResult[AdminCharityModel]{}, ErrInvalidRequest
@@ -836,7 +839,7 @@ func scanAdminModel(row rowScanner, at int64) (AdminCharityModel, error) {
 		value.Discount.EndAt = &v
 	}
 	value.Pricing.Mode = mode
-	if mode == "per_request" {
+	if mode == "per_request" || mode == "per_search_unit" {
 		u, r := formatWireAmount(requestUser), formatWireAmount(requestReward)
 		value.Pricing.UserPrice, value.Pricing.DonorReward = &u, &r
 	} else if mode == "per_token" {
@@ -939,6 +942,9 @@ func validateModelCreate(input ModelCreate) (validatedPricing, error) {
 	if !validModelName(input.Provider) || !validModelName(input.Model) || !validDiscount(input.Discount) {
 		return validatedPricing{}, ErrInvalidRequest
 	}
+	if !validPricingOperations(input.Pricing.Mode, input.ModelTypes) {
+		return validatedPricing{}, ErrInvalidRequest
+	}
 	return validatePricing(input.Pricing)
 }
 
@@ -1026,8 +1032,11 @@ func validatePricing(input PricingInput) (validatedPricing, error) {
 		return out, err
 	}
 	out.contextPricing = context.Encode()
+	if len(out.contextPricing) > 8192 {
+		return out, ErrInvalidRequest
+	}
 	switch input.Mode {
-	case "per_request":
+	case "per_request", "per_search_unit":
 		if input.UserPrice == nil || input.DonorReward == nil || input.UserPrices != nil || input.DonorRewards != nil {
 			return out, ErrInvalidRequest
 		}
@@ -1431,4 +1440,11 @@ func boolInt(value bool) int {
 		return 1
 	}
 	return 0
+}
+
+func validPricingOperations(mode string, operations modeltype.Set) bool {
+	if mode != "per_search_unit" {
+		return true
+	}
+	return len(operations) == 1 && string(operations[0]) == "rerank"
 }
