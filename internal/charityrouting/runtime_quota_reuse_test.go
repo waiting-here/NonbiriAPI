@@ -114,8 +114,23 @@ func TestRuntimeQuotaReuseRemainsTransactionLocal(t *testing.T) {
 	check(map[int64]int{keys[1]: 1}, nil)
 	exec("UPDATE donation_keys SET call_limit_mag=NULL WHERE id=?", keys[0])
 	check(both, nil)
+	// A non-null current reference must keep the full epoch validation,
+	// including a corrupt reference to an already-retired epoch.
+	exec("UPDATE donation_quota_epochs SET retired_at=? WHERE (rule_id,epoch) IN (SELECT id,current_epoch FROM donation_quota_rules WHERE donation_key_id=?)", routingTestNow, keys[0])
+	check(nil, donationquota.ErrInvariant)
+	// Budget rejection still precedes the later epoch-validation stage.
+	exec("UPDATE donation_keys SET input_token_limit_mag=nbi_u128(0) WHERE id=?", keys[0])
+	check(map[int64]int{keys[1]: 1}, nil)
+	exec("UPDATE donation_keys SET input_token_limit_mag=nbi_u128(4) WHERE id=?", keys[0])
+	exec("UPDATE donation_quota_epochs SET retired_at=NULL WHERE (rule_id,epoch) IN (SELECT id,current_epoch FROM donation_quota_rules WHERE donation_key_id=?)", keys[0])
+	check(both, nil)
 	replace(keys[0], "")
 	replace(keys[1], "")
+	var historical, current int
+	if err := e.store.DB().QueryRow("SELECT COUNT(*),COUNT(current_epoch) FROM donation_quota_rules").Scan(&historical, &current); err != nil || historical == 0 || current != 0 {
+		t.Fatalf("retired rules: historical=%d current=%d err=%v", historical, current, err)
+	}
+	check(both, nil)
 	// No configured limit does not excuse an overflowing token budget.
 	exec("UPDATE donation_keys SET input_token_limit_mag=NULL,input_tokens_used=X'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF' WHERE id=?", keys[0])
 	check(nil, donationquota.ErrInvariant)
