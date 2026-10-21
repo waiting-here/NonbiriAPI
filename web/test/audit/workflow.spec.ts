@@ -415,7 +415,27 @@ test('edit keeps its identity through complete template and model-reference fill
   try {
     const page = await context.newPage();
     const root = `/admin/api/charity-models/${data.models[1]}`;
+    const original = await read(context, state.admin_url, root);
+    const managedHeaders = [
+      { name: 'x-workflow-session', idle_seconds: 0, format: 'opencode_message' },
+    ];
+    const configured = await context.request.patch(state.admin_url + root, {
+      headers: { Origin: state.admin_url, 'Idempotency-Key': randomUUID() },
+      data: { expected_revision: original.revision, session_headers: managedHeaders },
+    });
+    expect(configured.ok()).toBe(true);
     const before = await read(context, state.admin_url, root);
+    expect(before.session_headers).toEqual(managedHeaders);
+    const headerCopy = common.common.operations.charity.sessionHeaders;
+    const expectManagedHeader = async () => {
+      await expect(
+        page.getByLabel(headerCopy.name.replace('{{n}}', '1'), { exact: true }),
+      ).toHaveValue(managedHeaders[0].name);
+      await expect(page.getByLabel(headerCopy.idle, { exact: true })).toHaveValue('0');
+      await expect(page.getByLabel(headerCopy.format, { exact: true })).toHaveValue(
+        'opencode_message',
+      );
+    };
     await page.goto(
       state.admin_url + `/charity?charity_section=models&charity_model=${data.models[1]}`,
     );
@@ -423,6 +443,7 @@ test('edit keeps its identity through complete template and model-reference fill
     const model = page.getByLabel('Model', { exact: true });
     await expect(provider).toHaveValue('workflow');
     await expect(model).toHaveValue('model-002');
+    await expectManagedHeader();
     await page.getByRole('button', { name: workflow.openPriceReference, exact: true }).click();
     await page
       .locator('summary')
@@ -434,6 +455,7 @@ test('edit keeps its identity through complete template and model-reference fill
       .getByRole('button', { name: workflow.viewPrice, exact: true })
       .click();
     await page.getByRole('button', { name: workflow.fillTemplate, exact: true }).click();
+    await expectManagedHeader();
     await expect(page.getByRole('combobox', { name: 'Pricing mode', exact: true })).toHaveValue(
       'per_token',
     );
@@ -457,6 +479,7 @@ test('edit keeps its identity through complete template and model-reference fill
       '25.125',
     );
     await page.getByRole('button', { name: workflow.undoPrice, exact: true }).click();
+    await expectManagedHeader();
     await expect(page.getByRole('combobox', { name: 'Pricing mode', exact: true })).toHaveValue(
       'per_request',
     );
@@ -478,6 +501,7 @@ test('edit keeps its identity through complete template and model-reference fill
     ).toContainText('25.125');
     await visuals(page, info, 'workflow-price-reference', () => reference.scrollIntoViewIfNeeded());
     await reference.getByRole('button', { name: workflow.fillReference, exact: true }).click();
+    await expectManagedHeader();
     await expect(model).toHaveValue('model-002');
     const tokenSave = page.waitForResponse(
       (response) =>
@@ -486,6 +510,7 @@ test('edit keeps its identity through complete template and model-reference fill
     await page.getByRole('button', { name: `Save model #${data.models[1]}`, exact: true }).click();
     expect((await tokenSave).ok()).toBe(true);
     const token = await read(context, state.admin_url, root);
+    expect(token.session_headers).toEqual(managedHeaders);
     const referenceModel = await read(
       context,
       state.admin_url,
@@ -516,6 +541,8 @@ test('edit keeps its identity through complete template and model-reference fill
       .poll(async () => (await read(context, state.admin_url, root)).pricing.mode)
       .toBe('per_request');
     const request = await read(context, state.admin_url, root);
+    expect(request.session_headers).toEqual(managedHeaders);
+    await expectManagedHeader();
     expect(request.token_reserve_credits).toBeNull();
     expect(request.discount).toEqual({ enabled: false, percent: 0, start_at: null, end_at: null });
     expect(request.pricing.long_context).toBeUndefined();
@@ -669,6 +696,10 @@ test('edit keeps its identity through complete template and model-reference fill
     await page.getByRole('button', { name: workflow.newModel, exact: true }).click();
     await expect(provider).toHaveValue('');
     await expect(model).toHaveValue('');
+    await expect(
+      page.getByLabel(headerCopy.name.replace('{{n}}', '1'), { exact: true }),
+    ).toHaveCount(0);
+    expect((await read(context, state.admin_url, root)).session_headers).toEqual(managedHeaders);
     await model.fill('unsaved-workflow-draft');
     await page.getByRole('button', { name: operations.returnToList, exact: true }).first().click();
     const leave = page.getByRole('alertdialog');
