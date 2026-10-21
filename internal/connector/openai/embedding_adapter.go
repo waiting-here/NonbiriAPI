@@ -71,6 +71,9 @@ func (a *Adapter) AttemptEmbedding(ctx context.Context, writer http.ResponseWrit
 	target.credential.clear()
 	httpRequest = egress.WithResponseLimits(httpRequest, egress.ResponseLimits{JSONBytes: a.maxEmbeddingResponseBytes})
 	response, err := client.Do(httpRequest)
+	if err == nil {
+		errorContext.UnchangedCallerParameter = unchangedCallerParameters(ctx, response, request.fields, body, policy)
+	}
 	if response != nil {
 		defer func() { result.UpstreamStatus = response.StatusCode }()
 	}
@@ -98,7 +101,7 @@ func (a *Adapter) AttemptEmbedding(ctx context.Context, writer http.ResponseWrit
 	if response.StatusCode != http.StatusOK {
 		result = connectorcontract.UpstreamFailed(upstreamFailure(statusDiagnostic(response.StatusCode), response.StatusCode), connectorcontract.OriginUpstreamResponse)
 		result.ErrorDetail = errorContext.ReadResponse(ctx, response, a.maxEmbeddingResponseBytes)
-		return result
+		return callerParameterFailure(result)
 	}
 	if !validResponseMediaType(response, "application/json") {
 		_ = errorContext.ReadResponse(ctx, response)

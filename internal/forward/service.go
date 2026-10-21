@@ -491,6 +491,7 @@ func attemptOutcome(result connectorcontract.AttemptResult) claim.AttemptOutcome
 		kind = claim.ResultResponse
 	}
 	return claim.AttemptOutcome{
+		CallerFault:       result.ErrorDetail.CallerFault(),
 		StreakDisposition: result.StreakDisposition, FailureOrigin: result.FailureOrigin,
 		Kind: kind, UpstreamStatus: result.UpstreamStatus, Diagnostic: result.Diagnostic,
 		UpstreamCode: result.ErrorDetail.Code(), Backoff: result.ErrorDetail.Backoff(),

@@ -6435,28 +6435,28 @@ WHEN NOT COALESCE((NEW.state IN ('reserved') AND NEW.streak_disposition IS NULL 
  OR (NEW.state IN ('committed','released') AND (
   (NEW.state='committed' AND NEW.streak_disposition='success' AND ((NEW.failure_origin='none' AND NEW.protocol_success=1) OR (NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout','client_cancel','downstream','platform','recovery_unknown') AND NEW.protocol_success=0)))
   OR (NEW.streak_disposition='upstream_failure' AND NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout') AND COALESCE(NEW.protocol_success,0)=0)
-  OR (NEW.streak_disposition='neutral' AND (NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown') OR (NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout') AND (EXISTS(SELECT 1 FROM dispatch_retry_after_observations r WHERE r.claim_id=NEW.claim_id AND r.http_status<>200) OR EXISTS(SELECT 1 FROM dispatch_smart_backoff_facts sb WHERE sb.claim_id=NEW.claim_id AND sb.period IS NOT NULL AND sb.accepted_at IS NULL)))) AND COALESCE(NEW.protocol_success,0)=0))),0)
+  OR (NEW.streak_disposition='neutral' AND (NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown') OR (NEW.failure_origin='upstream_response' AND EXISTS(SELECT 1 FROM dispatch_caller_parameter_errors ce WHERE ce.claim_id=NEW.claim_id)) OR (NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout') AND (EXISTS(SELECT 1 FROM dispatch_retry_after_observations r WHERE r.claim_id=NEW.claim_id AND r.http_status<>200) OR EXISTS(SELECT 1 FROM dispatch_smart_backoff_facts sb WHERE sb.claim_id=NEW.claim_id AND sb.period IS NOT NULL AND sb.accepted_at IS NULL)))) AND COALESCE(NEW.protocol_success,0)=0))),0)
 BEGIN SELECT RAISE(ABORT,'invalid terminal outcome'); END;
 CREATE TRIGGER donation_usage_reservations_outcome_update_guard BEFORE UPDATE ON donation_usage_reservations
 WHEN NOT COALESCE((NEW.state IN ('reserved') AND NEW.streak_disposition IS NULL AND NEW.failure_origin IS NULL)
  OR (NEW.state IN ('committed','released') AND (
   (NEW.state='committed' AND NEW.streak_disposition='success' AND ((NEW.failure_origin='none' AND NEW.protocol_success=1) OR (NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout','client_cancel','downstream','platform','recovery_unknown') AND NEW.protocol_success=0)))
   OR (NEW.streak_disposition='upstream_failure' AND NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout') AND COALESCE(NEW.protocol_success,0)=0)
-  OR (NEW.streak_disposition='neutral' AND (NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown') OR (NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout') AND ((EXISTS(SELECT 1 FROM dispatch_retry_after_observations r WHERE r.claim_id=NEW.claim_id AND r.http_status<>200) OR EXISTS(SELECT 1 FROM dispatch_smart_backoff_facts sb WHERE sb.claim_id=NEW.claim_id AND sb.period IS NOT NULL AND sb.accepted_at IS NULL)) OR (OLD.streak_disposition='neutral' AND OLD.failure_origin=NEW.failure_origin)))) AND COALESCE(NEW.protocol_success,0)=0))),0)
+  OR (NEW.streak_disposition='neutral' AND (NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown') OR (NEW.failure_origin='upstream_response' AND EXISTS(SELECT 1 FROM dispatch_caller_parameter_errors ce WHERE ce.claim_id=NEW.claim_id)) OR (NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout') AND ((EXISTS(SELECT 1 FROM dispatch_retry_after_observations r WHERE r.claim_id=NEW.claim_id AND r.http_status<>200) OR EXISTS(SELECT 1 FROM dispatch_smart_backoff_facts sb WHERE sb.claim_id=NEW.claim_id AND sb.period IS NOT NULL AND sb.accepted_at IS NULL)) OR (OLD.streak_disposition='neutral' AND OLD.failure_origin=NEW.failure_origin)))) AND COALESCE(NEW.protocol_success,0)=0))),0)
 BEGIN SELECT RAISE(ABORT,'invalid terminal outcome'); END;
 CREATE TRIGGER dispatch_claims_outcome_insert_guard BEFORE INSERT ON dispatch_claims
 WHEN NOT COALESCE((NEW.state IN ('claimed','dispatched') AND NEW.streak_disposition IS NULL AND NEW.failure_origin IS NULL)
  OR (NEW.state IN ('committed','released') AND (
   (NEW.state='committed' AND NEW.streak_disposition='success' AND NEW.failure_origin IN ('none','upstream_response','upstream_protocol','network','timeout','client_cancel','downstream','platform','recovery_unknown'))
   OR (NEW.streak_disposition='upstream_failure' AND NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout'))
-  OR (NEW.streak_disposition='neutral' AND (NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown') OR (NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout') AND (EXISTS(SELECT 1 FROM dispatch_retry_after_observations r WHERE r.claim_id=NEW.id AND r.http_status<>200) OR EXISTS(SELECT 1 FROM dispatch_smart_backoff_facts sb WHERE sb.claim_id=NEW.id AND sb.period IS NOT NULL AND sb.accepted_at IS NULL))))))),0)
+  OR (NEW.streak_disposition='neutral' AND (NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown') OR (NEW.failure_origin='upstream_response' AND NEW.purpose='charity' AND EXISTS(SELECT 1 FROM dispatch_caller_parameter_errors ce JOIN request_attempts a ON a.claim_id=ce.claim_id WHERE ce.claim_id=NEW.id AND a.result_kind='response' AND a.upstream_status=ce.http_status AND a.upstream_code=ce.error_code)) OR (NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout') AND (EXISTS(SELECT 1 FROM dispatch_retry_after_observations r WHERE r.claim_id=NEW.id AND r.http_status<>200) OR EXISTS(SELECT 1 FROM dispatch_smart_backoff_facts sb WHERE sb.claim_id=NEW.id AND sb.period IS NOT NULL AND sb.accepted_at IS NULL))))))),0)
 BEGIN SELECT RAISE(ABORT,'invalid terminal outcome'); END;
 CREATE TRIGGER dispatch_claims_outcome_update_guard BEFORE UPDATE ON dispatch_claims
 WHEN NOT COALESCE((NEW.state IN ('claimed','dispatched') AND NEW.streak_disposition IS NULL AND NEW.failure_origin IS NULL)
  OR (NEW.state IN ('committed','released') AND (
   (NEW.state='committed' AND NEW.streak_disposition='success' AND NEW.failure_origin IN ('none','upstream_response','upstream_protocol','network','timeout','client_cancel','downstream','platform','recovery_unknown'))
   OR (NEW.streak_disposition='upstream_failure' AND NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout'))
-  OR (NEW.streak_disposition='neutral' AND (NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown') OR (NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout') AND ((EXISTS(SELECT 1 FROM dispatch_retry_after_observations r WHERE r.claim_id=NEW.id AND r.http_status<>200) OR EXISTS(SELECT 1 FROM dispatch_smart_backoff_facts sb WHERE sb.claim_id=NEW.id AND sb.period IS NOT NULL AND sb.accepted_at IS NULL)) OR (OLD.streak_disposition='neutral' AND OLD.failure_origin=NEW.failure_origin))))))),0)
+  OR (NEW.streak_disposition='neutral' AND (NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown') OR (NEW.failure_origin='upstream_response' AND NEW.purpose='charity' AND EXISTS(SELECT 1 FROM dispatch_caller_parameter_errors ce JOIN request_attempts a ON a.claim_id=ce.claim_id WHERE ce.claim_id=NEW.id AND a.result_kind='response' AND a.upstream_status=ce.http_status AND a.upstream_code=ce.error_code)) OR (NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout') AND ((EXISTS(SELECT 1 FROM dispatch_retry_after_observations r WHERE r.claim_id=NEW.id AND r.http_status<>200) OR EXISTS(SELECT 1 FROM dispatch_smart_backoff_facts sb WHERE sb.claim_id=NEW.id AND sb.period IS NOT NULL AND sb.accepted_at IS NULL)) OR (OLD.streak_disposition='neutral' AND OLD.failure_origin=NEW.failure_origin))))))),0)
 BEGIN SELECT RAISE(ABORT,'invalid terminal outcome'); END;
 CREATE TRIGGER request_log_origin_capture AFTER INSERT ON request_logs
 WHEN NEW.user_id IS NOT NULL AND NEW.origin_user_id IS NULL
@@ -6589,7 +6589,7 @@ CREATE TABLE schema_state (
 ) STRICT;
 INSERT INTO credit_compaction(id,through_seq,details_before,sweep_at,sweep_after_seq) VALUES(1,0,0,0,0);
 INSERT INTO game_blackjack_clock(id,observed_at) VALUES(1,0);
-INSERT INTO schema_state(id,version) VALUES(1,30);
+INSERT INTO schema_state(id,version) VALUES(1,31);
 
 CREATE TABLE game_ai_settings (
  game_key TEXT PRIMARY KEY NOT NULL,
@@ -7165,3 +7165,17 @@ CREATE TABLE global_pressure_samples (
  rpm INTEGER NOT NULL CHECK(rpm>=0),
  concurrency INTEGER NOT NULL CHECK(concurrency>=0)
 ) STRICT;
+
+CREATE TABLE dispatch_caller_parameter_errors (
+ claim_id TEXT PRIMARY KEY REFERENCES dispatch_claims(id) ON DELETE CASCADE,
+ http_status INTEGER NOT NULL CHECK(http_status IN (400,422)),
+ error_code TEXT NOT NULL CHECK(error_code IN ('invalid_value','invalid_type','unsupported_parameter','unsupported_value'))
+) STRICT;
+CREATE TRIGGER dispatch_caller_parameter_errors_insert_guard BEFORE INSERT ON dispatch_caller_parameter_errors
+WHEN NOT EXISTS(SELECT 1 FROM dispatch_claims c WHERE c.id=NEW.claim_id AND c.purpose='charity' AND c.state='dispatched')
+ OR EXISTS(SELECT 1 FROM dispatch_response_starts r WHERE r.claim_id=NEW.claim_id)
+ OR EXISTS(SELECT 1 FROM dispatch_retry_after_observations r WHERE r.claim_id=NEW.claim_id AND r.http_status=200)
+ OR EXISTS(SELECT 1 FROM dispatch_smart_backoff_facts sb WHERE sb.claim_id=NEW.claim_id AND sb.accepted_at IS NOT NULL)
+BEGIN SELECT RAISE(ABORT,'invalid caller parameter error'); END;
+CREATE TRIGGER dispatch_caller_parameter_errors_update_guard BEFORE UPDATE ON dispatch_caller_parameter_errors
+BEGIN SELECT RAISE(ABORT,'caller parameter error is immutable'); END;

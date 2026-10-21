@@ -29,11 +29,13 @@ type Detail struct {
 	message string
 	code    string
 	backoff smartbackoff.Classification
+	caller  CallerFault
 }
 
 func (d Detail) Message() string                      { return d.message }
 func (d Detail) Code() string                         { return d.code }
 func (d Detail) Backoff() smartbackoff.Classification { return d.backoff }
+func (d Detail) CallerFault() CallerFault             { return d.caller }
 
 // Context holds source identifiers and an exact secret detector backed by
 // the connector's fingerprints, never by retained plaintext credentials.
@@ -44,6 +46,10 @@ type Context struct {
 	BaseURL        string
 	PrivateModel   string
 	ContainsSecret func([]byte) bool
+	// UnchangedCallerParameter proves that a supported native parameter came
+	// from the caller and has the same raw JSON value in the final wire body.
+	UnchangedCallerParameter func(string) bool
+	responseStatus           int
 }
 
 func (Context) String() string         { return "[redacted error context]" }
@@ -88,6 +94,7 @@ func (c Context) Parse(body []byte) Detail {
 	}
 	var message, code string
 	var classified smartbackoff.Classification
+	var caller CallerFault
 	if body[0] == '{' {
 		if strictjson.ValidateObject(body) != nil {
 			return Detail{}
@@ -119,6 +126,7 @@ func (c Context) Parse(body []byte) Detail {
 			var errorFields map[string]json.RawMessage
 			if c.CharityCall && json.Unmarshal(raw, &errorFields) == nil && errorFields != nil {
 				classified = smartbackoff.Classify(errorFields, c.Rules...)
+				caller = c.callerFault(errorFields)
 			}
 		}
 	} else {
@@ -134,7 +142,10 @@ func (c Context) Parse(body []byte) Detail {
 	if cleanCode != code || !codePattern.MatchString(cleanCode) {
 		cleanCode = ""
 	}
-	return Detail{message: boundUTF8(message, 1024), code: cleanCode, backoff: classified}
+	if !caller.Matches(c.responseStatus, cleanCode) {
+		caller = CallerFault{}
+	}
+	return Detail{message: boundUTF8(message, 1024), code: cleanCode, backoff: classified, caller: caller}
 }
 
 // IsEvent reports an explicit error envelope without interpreting an ordinary

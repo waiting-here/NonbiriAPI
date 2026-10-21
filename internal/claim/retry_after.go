@@ -110,6 +110,15 @@ func retryAfterOutcomeTx(ctx context.Context, tx *sql.Tx, record claimRecord, ou
 				return outcome, nil
 			}
 		}
+		if outcome.Kind == ResultResponse && !outcome.ProtocolSuccess && !outcome.ResponseStarted &&
+			outcome.FailureOrigin == connectorcontract.OriginUpstreamResponse &&
+			outcome.CallerFault.Matches(outcome.UpstreamStatus, outcome.UpstreamCode) {
+			if err := recordCallerFaultTx(ctx, tx, record, outcome); err != nil {
+				return outcome, err
+			}
+			outcome.StreakDisposition = connectorcontract.StreakNeutral
+			return outcome, nil
+		}
 		if outcome.StreakDisposition == connectorcontract.StreakNeutral && retryOrigin(outcome.FailureOrigin) {
 			return outcome, ErrInvalidInput
 		}
