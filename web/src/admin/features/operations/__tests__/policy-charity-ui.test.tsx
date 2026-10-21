@@ -482,6 +482,8 @@ describe('Generation 2 charity management policy', () => {
           pricing: body.pricing as CharityModel['pricing'],
           discount: body.discount as CharityModel['discount'],
           transport_rule: 'passthrough',
+          cloudflare_proxy_enabled: false,
+          cloudflare_proxy_mode: 'direct',
           flatten_tool_calls: false,
           revision: '1',
           binding_revision: '0',

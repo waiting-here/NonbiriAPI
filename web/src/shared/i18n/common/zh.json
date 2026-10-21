@@ -14,6 +14,14 @@
     "accountMenu": "账号操作"
   },
   "common": {
+    "cloudflareProxy": {
+      "label": "Cloudflare 转发",
+      "off": "已关闭，请求直接连接上游。",
+      "new": "开启后使用站点配置的转发服务；未配置时直接连接上游。",
+      "worker": "已配置通用 Cloudflare Worker，开启转发后请求将经由它发送。",
+      "legacy": "当前仅有旧端点路由，开启转发后只代理匹配的上游。建议联系管理员配置通用 Worker。",
+      "direct": "未配置转发服务，当前请求直接连接上游。"
+    },
     "headers": {
       "request": "完整请求头",
       "response": "完整响应头",
@@ -1903,17 +1911,25 @@
         "week": "每周",
         "month": "每月"
       },
-      "routesHelp": "此处显示运行中服务已加载的规则，不代表已连通或健康。修改路由需更新部署配置并重启服务。",
-      "loadedCount": "已加载{{count}}条路由",
-      "loadedRoutes": "已加载的 Cloudflare 路由",
+      "routesHelp": "此处显示运行中服务已加载的配置，不代表已连通或健康。修改配置需更新部署设置并重启服务。",
+      "loadedCount": "{{count}} 条旧端点路由",
+      "loadedRoutes": "旧端点路由",
       "sourceURL": "来源 base URL",
       "gatewayOrigin": "网关来源地址",
       "credentialMode": "凭据传递方式",
       "headerOnly": "请求头：{{header}}",
       "queryOnly": "查询参数：{{query}}（来自 {{header}}）",
       "headerAndQuery": "请求头：{{header}}；查询参数：{{query}}",
-      "routesEmpty": "尚未配置出站路由",
-      "routesEmptyHelp": "如需通过 Cloudflare 转发，请更新部署配置并重启服务。"
+      "routesEmpty": "未配置旧端点路由",
+      "routesEmptyHelp": "实际使用的转发服务以上方状态为准。旧端点映射仅用于兼容。",
+      "proxyStatus": "转发服务",
+      "workerOrigin": "Worker 来源地址",
+      "legacyInactive": "通用 Worker 优先，以下旧端点路由当前不生效。",
+      "proxyMode": {
+        "worker": "已配置通用 Cloudflare Worker，已开启转发的模型将使用它。",
+        "legacy": "已配置旧端点路由，仅转发匹配的上游。建议配置通用 Worker，以覆盖新增上游。",
+        "direct": "未配置转发服务，当前请求直接连接上游。"
+      }
     }
   },
   "logs": {

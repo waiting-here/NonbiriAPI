@@ -34,6 +34,8 @@ const original: Model = {
   route_strategy: 'ordered',
   transport_rule: 'passthrough',
   silent_retry: false,
+  cloudflare_proxy_enabled: false,
+  cloudflare_proxy_mode: 'direct',
   flatten_tool_calls: false,
   revision: '1',
   binding_revision: '1',

@@ -764,6 +764,12 @@ function PolicyEditor({
   );
 }
 
+const proxyModeCopy = {
+  worker: 'common.endpointPolicies.proxyMode.worker',
+  legacy: 'common.endpointPolicies.proxyMode.legacy',
+  direct: 'common.endpointPolicies.proxyMode.direct',
+} as const;
+
 function LoadedRoutes({ role, accountId, active, onCapabilityLoss }: Props & { active: boolean }) {
   const { t } = useTranslation();
   const pager = usePagePager({
@@ -796,68 +802,89 @@ function LoadedRoutes({ role, accountId, active, onCapabilityLoss }: Props & { a
         <LoadingState />
       ) : routes.error ? (
         <ErrorState error={routes.error} onRetry={() => void routes.refetch()} />
-      ) : routes.data.routes.length ? (
-        <>
-          <p>{t('common.endpointPolicies.loadedCount', { count: routes.data.routes.length })}</p>
-          <DataTable
-            caption={t('common.endpointPolicies.loadedRoutes')}
-            rows={routes.data.routes.slice((page - 1) * pager.pageSize, page * pager.pageSize)}
-            rowKey={(row) => row.source_base_url}
-            columns={[
-              {
-                key: 'source',
-                header: t('common.endpointPolicies.sourceURL'),
-                mobileLabel: t('common.endpointPolicies.sourceURL'),
-                cell: 'title',
-                render: (row) => (
-                  <span className="mono endpoint-policy-url">{row.source_base_url}</span>
-                ),
-              },
-              {
-                key: 'gateway',
-                header: t('common.endpointPolicies.gatewayOrigin'),
-                mobileLabel: t('common.endpointPolicies.gatewayOrigin'),
-                cell: 'meta',
-                render: (row) => (
-                  <span className="mono endpoint-policy-url">{row.gateway_origin}</span>
-                ),
-              },
-              {
-                key: 'credentials',
-                header: t('common.endpointPolicies.credentialMode'),
-                mobileLabel: t('common.endpointPolicies.credentialMode'),
-                cell: 'meta',
-                render: (row) =>
-                  t(
-                    row.credential_query_parameter
-                      ? row.retain_credential_header
-                        ? 'common.endpointPolicies.headerAndQuery'
-                        : 'common.endpointPolicies.queryOnly'
-                      : 'common.endpointPolicies.headerOnly',
-                    { header: row.credential_header, query: row.credential_query_parameter },
-                  ),
-              },
-            ]}
-          />
-          <PagePagination
-            alwaysShowJump
-            metadata={{
-              page: String(page),
-              page_size: pager.pageSize,
-              total_items: String(count),
-              total_pages: String(pages),
-            }}
-            requestedPage={String(page)}
-            onPageChange={pager.setPage}
-            onPageSizeChange={pager.setPageSize}
-            busy={routes.isFetching}
-          />
-        </>
       ) : (
-        <EmptyState
-          title={t('common.endpointPolicies.routesEmpty')}
-          body={t('common.endpointPolicies.routesEmptyHelp')}
-        />
+        <>
+          <dl className="nb-facts">
+            <div>
+              <dt>{t('common.endpointPolicies.proxyStatus')}</dt>
+              <dd>{t(proxyModeCopy[routes.data.mode])}</dd>
+            </div>
+            {routes.data.worker_origin ? (
+              <div>
+                <dt>{t('common.endpointPolicies.workerOrigin')}</dt>
+                <dd className="mono endpoint-policy-url">{routes.data.worker_origin}</dd>
+              </div>
+            ) : null}
+          </dl>
+          {routes.data.mode === 'worker' && routes.data.routes.length > 0 ? (
+            <Note>{t('common.endpointPolicies.legacyInactive')}</Note>
+          ) : null}
+          {routes.data.routes.length ? (
+            <>
+              <p>
+                {t('common.endpointPolicies.loadedCount', { count: routes.data.routes.length })}
+              </p>
+              <DataTable
+                caption={t('common.endpointPolicies.loadedRoutes')}
+                rows={routes.data.routes.slice((page - 1) * pager.pageSize, page * pager.pageSize)}
+                rowKey={(row) => row.source_base_url}
+                columns={[
+                  {
+                    key: 'source',
+                    header: t('common.endpointPolicies.sourceURL'),
+                    mobileLabel: t('common.endpointPolicies.sourceURL'),
+                    cell: 'title',
+                    render: (row) => (
+                      <span className="mono endpoint-policy-url">{row.source_base_url}</span>
+                    ),
+                  },
+                  {
+                    key: 'gateway',
+                    header: t('common.endpointPolicies.gatewayOrigin'),
+                    mobileLabel: t('common.endpointPolicies.gatewayOrigin'),
+                    cell: 'meta',
+                    render: (row) => (
+                      <span className="mono endpoint-policy-url">{row.gateway_origin}</span>
+                    ),
+                  },
+                  {
+                    key: 'credentials',
+                    header: t('common.endpointPolicies.credentialMode'),
+                    mobileLabel: t('common.endpointPolicies.credentialMode'),
+                    cell: 'meta',
+                    render: (row) =>
+                      t(
+                        row.credential_query_parameter
+                          ? row.retain_credential_header
+                            ? 'common.endpointPolicies.headerAndQuery'
+                            : 'common.endpointPolicies.queryOnly'
+                          : 'common.endpointPolicies.headerOnly',
+                        { header: row.credential_header, query: row.credential_query_parameter },
+                      ),
+                  },
+                ]}
+              />
+              <PagePagination
+                alwaysShowJump
+                metadata={{
+                  page: String(page),
+                  page_size: pager.pageSize,
+                  total_items: String(count),
+                  total_pages: String(pages),
+                }}
+                requestedPage={String(page)}
+                onPageChange={pager.setPage}
+                onPageSizeChange={pager.setPageSize}
+                busy={routes.isFetching}
+              />
+            </>
+          ) : routes.data.mode !== 'worker' ? (
+            <EmptyState
+              title={t('common.endpointPolicies.routesEmpty')}
+              body={t('common.endpointPolicies.routesEmptyHelp')}
+            />
+          ) : null}
+        </>
       )}
     </div>
   );

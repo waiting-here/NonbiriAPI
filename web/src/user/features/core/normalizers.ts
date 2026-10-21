@@ -1,3 +1,4 @@
+import { normalizeCloudflareProxyMode } from '@shared/cloudflareProxy';
 import { responseFields } from '@shared/query/responseFields';
 import { normalizeModelTypes } from '@shared/modelTypes';
 import { automaticRestrictions } from '@shared/operations/restrictions';
@@ -1323,6 +1324,8 @@ export function normalizeModel(value: unknown): Model {
       'transport_rule',
       'silent_retry',
       'flatten_tool_calls',
+      'cloudflare_proxy_enabled',
+      'cloudflare_proxy_mode',
       'revision',
       'binding_revision',
       'binding_count',
@@ -1352,6 +1355,11 @@ export function normalizeModel(value: unknown): Model {
     ? normalizeModelBrowse(record.browse, modelID, bindingCount)
     : undefined;
   return {
+    cloudflare_proxy_enabled: exactBoolean(
+      record.cloudflare_proxy_enabled,
+      'Cloudflare proxy setting',
+    ),
+    cloudflare_proxy_mode: normalizeCloudflareProxyMode(record.cloudflare_proxy_mode),
     id: modelID,
     provider,
     model,

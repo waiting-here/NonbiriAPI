@@ -1,3 +1,4 @@
+import { normalizeCloudflareProxyMode, type CloudflareProxyMode } from '@shared/cloudflareProxy';
 import { normalizeTransportRule, type TransportRule } from '@shared/transportRule';
 import { clearResourceNavigation } from '@shared/operations/resourceNavigation';
 import { useEffect, useRef } from 'react';
@@ -38,6 +39,8 @@ export interface ManagementPriceSet {
 }
 
 export interface ManagementCharityModel {
+  cloudflare_proxy_enabled: boolean;
+  cloudflare_proxy_mode: CloudflareProxyMode;
   transport_rule: TransportRule;
   id: string;
   provider: string;
@@ -1012,6 +1015,13 @@ export function normalizeManagementCharityModel(value: unknown): ManagementChari
   );
   if (success > samples) return invalidResponse('charity model success count');
   return {
+    cloudflare_proxy_enabled: requiredPolicyBoolean(
+      recordValue(record, 'cloudflare_proxy_enabled'),
+      'Cloudflare proxy setting',
+    ),
+    cloudflare_proxy_mode: normalizeCloudflareProxyMode(
+      recordValue(record, 'cloudflare_proxy_mode'),
+    ),
     id: requiredID(recordValue(record, 'id'), 'charity model id'),
     provider: requiredText(recordValue(record, 'provider'), 128, 'charity model provider'),
     model: requiredText(recordValue(record, 'model'), 256, 'charity model name'),
@@ -1361,6 +1371,7 @@ export function useDeleteManagedDonation(frame: CharityManagementFrame) {
 }
 
 export interface CharityModelPayload {
+  cloudflare_proxy_enabled?: boolean;
   transport_rule?: TransportRule;
   provider: string;
   model: string;

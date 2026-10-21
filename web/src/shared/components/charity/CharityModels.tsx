@@ -1,3 +1,4 @@
+import { CloudflareProxyField, CloudflareProxySummary } from '../CloudflareProxyField';
 import type { RecurringDiscount } from '@shared/operations/recurringDiscount';
 import { SessionHeaderFields } from './SessionHeaderFields';
 import { PriceTools } from './PriceTools';
@@ -89,6 +90,7 @@ import {
 } from './managementFields';
 
 interface ModelDraft {
+  cloudflareProxy: boolean;
   sessionHeaders: SessionHeader[];
   longEnabled: boolean;
   longThreshold: string;
@@ -125,6 +127,7 @@ interface ModelDraft {
 function modelDraft(model?: CharityModel): ModelDraft {
   return {
     ...priceDraft(model),
+    cloudflareProxy: model?.cloudflare_proxy_enabled ?? false,
     sessionHeaders: model?.session_headers?.map((value) => ({ ...value })) ?? [],
     modelTypes: model ? [...model.model_types] : ['chat_completions'],
     transportRule: model?.transport_rule ?? 'passthrough',
@@ -152,6 +155,7 @@ function modelBody(
   const rolePolicy = buildRolePolicy(draft.rolePolicy);
   if (rolePolicy.error) throw new Error('Role fields are not ready');
   const body = {
+    cloudflare_proxy_enabled: draft.cloudflareProxy,
     session_headers: draft.sessionHeaders.map((v) => ({ ...v, name: v.name.trim() })),
     model_types: draft.modelTypes,
     transport_rule: draft.transportRule,
@@ -412,6 +416,12 @@ function ModelForm({
           onChange={(modelTypes) => setDraft({ ...draft, modelTypes })}
           disabled={save.isPending || remove.isPending || Boolean(unknownSave)}
           showError
+        />
+        <CloudflareProxyField
+          enabled={draft.cloudflareProxy}
+          mode={model?.cloudflare_proxy_mode}
+          disabled={save.isPending || remove.isPending || Boolean(unknownSave)}
+          onChange={(cloudflareProxy) => setDraft({ ...draft, cloudflareProxy })}
         />
         <p className="nb-sub">{t('common.operations.charity.operationHelp')}</p>
         {draft.modelTypes.includes('embeddings') ? (
@@ -1528,6 +1538,14 @@ export function ModelsPanel({
             </CharityModelScope>
           ) : selected ? (
             <fieldset className="ops-stack ops-unframed" disabled={detail.isFetching}>
+              {trainee ? (
+                <dl className="nb-kv">
+                  <CloudflareProxySummary
+                    enabled={selected.cloudflare_proxy_enabled}
+                    mode={selected.cloudflare_proxy_mode}
+                  />
+                </dl>
+              ) : null}
               {trainee ? (
                 <CharityRolePolicyForm
                   key={`roles:${selected.id}`}

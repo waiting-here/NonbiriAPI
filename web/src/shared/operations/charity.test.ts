@@ -158,6 +158,8 @@ const model = {
   pricing: { mode: 'per_request', user_price: '1', donor_reward: '0' },
   discount: { enabled: true, percent: 10, start_at: null, end_at: null },
   transport_rule: 'passthrough',
+  cloudflare_proxy_enabled: false,
+  cloudflare_proxy_mode: 'direct',
   flatten_tool_calls: false,
   revision: '1',
   binding_revision: '0',

@@ -135,6 +135,17 @@ test('endpoint list keeps numbered pagination, draft and focus through route ins
     await page.getByRole('tab', { name: copy.routesTab, exact: true }).click();
     await expect(page.getByRole('table', { name: copy.loadedRoutes, exact: true })).toBeVisible();
     await expect(page.getByText(copy.routesHelp, { exact: true })).toBeVisible();
+    const loaded = await read<{ mode: string; worker_origin: string }>(
+      context,
+      origin,
+      prefix + '/egress/cloudflare-routes',
+    );
+    expect(loaded.mode).toBe('worker');
+    expect(loaded.worker_origin).toBe('https://worker.example.net');
+    expect(new URL(loaded.worker_origin).origin).toBe(loaded.worker_origin);
+    await expect(page.getByText(loaded.worker_origin, { exact: true })).toBeVisible();
+    await expect(page.getByText(copy.proxyMode.worker, { exact: true })).toBeVisible();
+    await expect(page.getByText(copy.legacyInactive, { exact: true })).toBeVisible();
     await routePanel.getByLabel(common.common.pageControls.size).selectOption('10');
     await routePanel.getByLabel(common.common.pageControls.jump).fill('3');
     await routePanel.getByLabel(common.common.pageControls.jump).press('Enter');

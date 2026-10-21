@@ -1,3 +1,4 @@
+import { normalizeCloudflareProxyMode, type CloudflareProxyMode } from '@shared/cloudflareProxy';
 import { decoded, idempotentOptions, queryPath } from './api';
 import type { CharityRole } from './charity';
 import { normalizeNumberedPage, validateWindow } from './numberedPage';
@@ -35,6 +36,8 @@ export interface CloudflareRoute {
   retain_credential_header: boolean;
 }
 export interface CloudflareRoutes {
+  mode: CloudflareProxyMode;
+  worker_origin: string;
   enabled: boolean;
   routes: CloudflareRoute[];
 }
@@ -150,9 +153,26 @@ export function getEndpointPolicyOptions(role: CharityRole, signal?: AbortSignal
   );
 }
 export function normalizeCloudflareRoutes(value: unknown): CloudflareRoutes {
-  const root = record(value, ['enabled', 'routes'], 'loaded Cloudflare routes');
+  const root = record(
+    value,
+    ['enabled', 'mode', 'worker_origin', 'routes'],
+    'loaded Cloudflare routes',
+  );
+  const mode = normalizeCloudflareProxyMode(root.mode);
+  const workerOrigin = string(root.worker_origin, 'Worker origin');
+  if (mode === 'worker') {
+    try {
+      const url = new URL(workerOrigin);
+      if (url.origin !== workerOrigin || url.protocol !== 'https:')
+        invalidResponse('Worker origin');
+    } catch {
+      invalidResponse('Worker origin');
+    }
+  } else if (workerOrigin !== '') invalidResponse('Worker origin');
   return {
     enabled: boolean(root.enabled, 'routes enabled'),
+    mode,
+    worker_origin: workerOrigin,
     routes: array(root.routes, 'loaded routes', 32).map((value) => {
       const row = record(
         value,

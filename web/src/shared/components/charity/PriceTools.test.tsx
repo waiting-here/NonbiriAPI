@@ -59,6 +59,8 @@ const model = (index: number): CharityModel => ({
   allowed_levels: [1],
   public_description: '',
   transport_rule: 'passthrough',
+  cloudflare_proxy_enabled: false,
+  cloudflare_proxy_mode: 'direct',
   flatten_tool_calls: false,
   revision: '9',
   binding_revision: '0',

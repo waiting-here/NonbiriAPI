@@ -1,3 +1,4 @@
+import { normalizeCloudflareProxyMode, type CloudflareProxyMode } from '@shared/cloudflareProxy';
 import {
   normalizeRecurringDiscount,
   normalizeEffectiveDiscount,
@@ -715,6 +716,8 @@ export interface SessionHeader {
   format: 'uuid_v4' | 'hex_32';
 }
 export interface CharityModel {
+  cloudflare_proxy_enabled: boolean;
+  cloudflare_proxy_mode: CloudflareProxyMode;
   session_headers?: SessionHeader[];
   model_types: import('@shared/modelTypes').ModelType[];
   transport_rule: TransportRule;
@@ -918,6 +921,8 @@ function normalizeModel(value: unknown, label: string): CharityModel {
     'effective_discount',
     'server_now',
     'flatten_tool_calls',
+    'cloudflare_proxy_enabled',
+    'cloudflare_proxy_mode',
     'transport_rule',
     'revision',
     'binding_revision',
@@ -977,6 +982,11 @@ function normalizeModel(value: unknown, label: string): CharityModel {
           };
         });
   return {
+    cloudflare_proxy_enabled: boolean(
+      root.cloudflare_proxy_enabled,
+      `${label} Cloudflare proxy setting`,
+    ),
+    cloudflare_proxy_mode: normalizeCloudflareProxyMode(root.cloudflare_proxy_mode),
     session_headers: sessionHeaders,
     id: decimalID(root.id, `${label} id`),
     provider,

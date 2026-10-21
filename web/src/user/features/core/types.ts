@@ -221,6 +221,8 @@ export interface CatalogView {
 }
 
 export interface Model {
+  cloudflare_proxy_enabled: boolean;
+  cloudflare_proxy_mode: import('@shared/cloudflareProxy').CloudflareProxyMode;
   model_types: import('@shared/modelTypes').ModelType[];
   transport_rule: TransportRule;
   id: string;
@@ -334,6 +336,7 @@ export interface EndpointKeyPatchInput {
 }
 
 export interface ModelCreateInput {
+  cloudflare_proxy_enabled?: boolean;
   model_types?: import('@shared/modelTypes').ModelType[];
   transport_rule?: TransportRule;
   provider: string;
@@ -345,6 +348,7 @@ export interface ModelCreateInput {
 }
 
 export interface ModelPatchInput {
+  cloudflare_proxy_enabled?: boolean;
   model_types?: import('@shared/modelTypes').ModelType[];
   transport_rule?: TransportRule;
   provider?: string;

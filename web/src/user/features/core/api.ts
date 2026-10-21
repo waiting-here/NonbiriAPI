@@ -941,6 +941,7 @@ export async function createModel(
       'route_strategy',
       'silent_retry',
       'flatten_tool_calls',
+      'cloudflare_proxy_enabled',
       'role_policy',
       'transport_rule',
     ],
@@ -964,6 +965,14 @@ export async function createModel(
       : {}),
     ...(Object.hasOwn(record, 'silent_retry')
       ? { silent_retry: exactBooleanInput(record.silent_retry, 'silent retry setting') }
+      : {}),
+    ...(Object.hasOwn(record, 'cloudflare_proxy_enabled')
+      ? {
+          cloudflare_proxy_enabled: exactBooleanInput(
+            record.cloudflare_proxy_enabled,
+            'Cloudflare proxy setting',
+          ),
+        }
       : {}),
     ...(Object.hasOwn(record, 'flatten_tool_calls')
       ? { flatten_tool_calls: exactBooleanInput(record.flatten_tool_calls, 'tool call setting') }
@@ -1001,6 +1010,7 @@ export async function patchModel(
       'model_types',
       'silent_retry',
       'flatten_tool_calls',
+      'cloudflare_proxy_enabled',
       'role_policy',
       'transport_rule',
     ],
@@ -1014,6 +1024,7 @@ export async function patchModel(
       'model_types',
       'silent_retry',
       'flatten_tool_calls',
+      'cloudflare_proxy_enabled',
       'role_policy',
       'transport_rule',
     ].some((key) => Object.hasOwn(record, key))
@@ -1044,6 +1055,14 @@ export async function patchModel(
       : {}),
     ...(Object.hasOwn(record, 'silent_retry')
       ? { silent_retry: exactBooleanInput(record.silent_retry, 'silent retry setting') }
+      : {}),
+    ...(Object.hasOwn(record, 'cloudflare_proxy_enabled')
+      ? {
+          cloudflare_proxy_enabled: exactBooleanInput(
+            record.cloudflare_proxy_enabled,
+            'Cloudflare proxy setting',
+          ),
+        }
       : {}),
     ...(Object.hasOwn(record, 'flatten_tool_calls')
       ? { flatten_tool_calls: exactBooleanInput(record.flatten_tool_calls, 'tool call setting') }

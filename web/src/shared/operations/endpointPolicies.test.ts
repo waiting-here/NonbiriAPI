@@ -40,31 +40,69 @@ describe('endpoint policy wire contracts', () => {
       expect(() => normalizeEndpointPolicy(value)).toThrow();
   });
   it('projects only safe loaded route fields and rejects a full gateway path', () => {
-    expect(normalizeCloudflareRoutes({ enabled: false, routes: [] })).toEqual({
+    expect(
+      normalizeCloudflareRoutes({ enabled: false, mode: 'direct', worker_origin: '', routes: [] }),
+    ).toEqual({
       enabled: false,
+      mode: 'direct',
+      worker_origin: '',
       routes: [],
     });
     expect(
       normalizeCloudflareRoutes({
         enabled: true,
+        mode: 'legacy',
+        worker_origin: '',
         routes: [{ ...route, token: 'not-for-display', token_env: 'PRIVATE_TOKEN' }],
       }),
-    ).toEqual({ enabled: true, routes: [route] });
+    ).toEqual({ enabled: true, mode: 'legacy', worker_origin: '', routes: [route] });
     expect(() =>
       normalizeCloudflareRoutes({
         enabled: true,
+        mode: 'legacy',
+        worker_origin: '',
         routes: [{ ...route, gateway_origin: 'https://gateway.example/private/account/path' }],
       }),
     ).toThrow();
     expect(() =>
-      normalizeCloudflareRoutes({ enabled: true, routes: Array.from({ length: 33 }, () => route) }),
+      normalizeCloudflareRoutes({
+        enabled: true,
+        mode: 'legacy',
+        worker_origin: '',
+        routes: Array.from({ length: 33 }, () => route),
+      }),
     ).toThrow();
     expect(() =>
       normalizeCloudflareRoutes({
         enabled: true,
+        mode: 'legacy',
+        worker_origin: '',
         routes: [{ ...route, retain_credential_header: 'true' }],
       }),
     ).toThrow();
+  });
+  it('projects only a safe Worker origin and validates the actual global mode', () => {
+    const status = {
+      enabled: true,
+      mode: 'worker',
+      worker_origin: 'https://worker.example',
+      routes: [route],
+    };
+    expect(
+      normalizeCloudflareRoutes({
+        ...status,
+        worker_url: 'https://worker.example/private',
+        token: 'private-token',
+      }),
+    ).toEqual(status);
+    for (const patch of [
+      { mode: 'unknown' },
+      { worker_origin: 'https://worker.example/private' },
+      { worker_origin: 'https://user:pass@worker.example' },
+      { worker_origin: '' },
+      { mode: 'legacy' },
+    ])
+      expect(() => normalizeCloudflareRoutes({ ...status, ...patch })).toThrow();
   });
   it('uses role-specific endpoints, numbered windows and unchanged idempotent input', async () => {
     const requests: { path: string; method?: string; body: unknown; key: string | null }[] = [];
@@ -87,7 +125,7 @@ describe('endpoint policy wire contracts', () => {
         if (path.endsWith('/endpoint-backoff-options'))
           return json({ connector_types: ['openai-compatible', 'google-gemini'] });
         if (path.endsWith('/egress/cloudflare-routes'))
-          return json({ enabled: true, routes: [route] });
+          return json({ enabled: true, mode: 'legacy', worker_origin: '', routes: [route] });
         return json(policy);
       }),
     );

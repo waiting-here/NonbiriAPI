@@ -108,6 +108,8 @@ for (const existingModels of [false, true]) {
       route_strategy: 'ordered',
       silent_retry: false,
       transport_rule: 'passthrough',
+      cloudflare_proxy_enabled: false,
+      cloudflare_proxy_mode: 'direct',
       flatten_tool_calls: false,
       revision: '1',
       binding_revision: '1',

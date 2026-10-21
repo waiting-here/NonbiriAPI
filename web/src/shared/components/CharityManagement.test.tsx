@@ -353,6 +353,8 @@ const charityModel = (start: number, end: number): CharityModel => ({
   pricing: { mode: 'per_request', user_price: '1', donor_reward: '0' },
   discount: { enabled: true, percent: 10, start_at: start, end_at: end },
   transport_rule: 'passthrough',
+  cloudflare_proxy_enabled: false,
+  cloudflare_proxy_mode: 'direct',
   flatten_tool_calls: false,
   revision: '1',
   binding_revision: '0',
@@ -1196,6 +1198,7 @@ describe('CharityManagement corrective controls', () => {
 
     await waitFor(() => expect(patchBodies).toHaveLength(1));
     expect(patchBodies[0]).toEqual({
+      cloudflare_proxy_enabled: false,
       session_headers: [{ name: 'X-Session-ID', idle_seconds: 300, format: 'hex_32' }],
       model_types: ['chat_completions', 'embeddings'],
       role_policy: { default_action: 'native', rules: {} },

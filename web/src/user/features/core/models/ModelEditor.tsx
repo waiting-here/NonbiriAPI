@@ -1,3 +1,4 @@
+import { CloudflareProxyField } from '@shared/components/CloudflareProxyField';
 import { Field } from '@shared/components/ui';
 import { sameRolePolicy } from './policy';
 import { ModelTypesField } from '@shared/components/ModelTypesField';
@@ -101,6 +102,7 @@ export function ModelEditor({
     initial?.model_types ?? ['chat_completions'],
   );
   const [showTypeError, setShowTypeError] = useState(false);
+  const [cloudflareProxy, setCloudflareProxy] = useState(initial?.cloudflare_proxy_enabled ?? true);
   const [silentRetry, setSilentRetry] = useState(initial?.silent_retry ?? false);
   const [transportRule, setTransportRule] = useState<TransportRule>(
     initial?.transport_rule ?? 'passthrough',
@@ -237,6 +239,7 @@ export function ModelEditor({
         model: modelName,
         route_strategy: strategy,
         model_types: modelTypes,
+        cloudflare_proxy_enabled: cloudflareProxy,
         silent_retry: silentRetry,
         transport_rule: transportRule,
         flatten_tool_calls: flattenTools,
@@ -261,6 +264,7 @@ export function ModelEditor({
         modelName !== initial.model,
         strategy !== initial.route_strategy,
         !sameModelTypes(modelTypes, initial.model_types),
+        cloudflareProxy !== initial.cloudflare_proxy_enabled,
         silentRetry !== initial.silent_retry,
         transportRule !== initial.transport_rule,
         flattenTools !== initial.flatten_tool_calls,
@@ -280,6 +284,7 @@ export function ModelEditor({
     setStrategy(initial.route_strategy);
     setModelTypes(initial.model_types);
     setShowTypeError(false);
+    setCloudflareProxy(initial.cloudflare_proxy_enabled);
     setSilentRetry(initial.silent_retry);
     setTransportRule(initial.transport_rule);
     setFlattenTools(initial.flatten_tool_calls);
@@ -335,6 +340,12 @@ export function ModelEditor({
             onChange={setModelTypes}
             disabled={hasAttempt}
             showError={showTypeError}
+          />
+          <CloudflareProxyField
+            enabled={cloudflareProxy}
+            mode={initial?.cloudflare_proxy_mode}
+            disabled={hasAttempt}
+            onChange={setCloudflareProxy}
           />
           <div className="core-model-preview">
             <span>{textModel('clientValue')}</span>

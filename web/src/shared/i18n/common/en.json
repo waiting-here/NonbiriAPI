@@ -14,6 +14,14 @@
     "accountMenu": "Account actions"
   },
   "common": {
+    "cloudflareProxy": {
+      "label": "Cloudflare forwarding",
+      "off": "Off. Requests connect directly to upstreams.",
+      "new": "When on, requests use the site’s configured forwarding service. If none is configured, requests connect directly.",
+      "worker": "A universal Cloudflare Worker is configured. Requests use it when forwarding is on.",
+      "legacy": "Legacy endpoint routes only: forwarding applies to matching upstreams. Ask an administrator to configure a universal Worker.",
+      "direct": "No forwarding service is configured. Requests currently connect directly to upstreams."
+    },
     "headers": {
       "request": "Complete request headers",
       "response": "Complete response headers",
@@ -1903,17 +1911,25 @@
         "week": "Weekly",
         "month": "Monthly"
       },
-      "routesHelp": "These rules are loaded by the running service. Loaded configuration does not indicate connectivity or health. Change deployment configuration and restart the service to update routes.",
-      "loadedCount": "{{count}} loaded routes",
-      "loadedRoutes": "Loaded Cloudflare routes",
+      "routesHelp": "This page shows the running service’s configuration, not connectivity or health. Update deployment configuration and restart the service to change it.",
+      "loadedCount": "{{count}} legacy endpoint routes",
+      "loadedRoutes": "Legacy endpoint routes",
       "sourceURL": "Source base URL",
       "gatewayOrigin": "Gateway origin",
       "credentialMode": "Credential forwarding",
       "headerOnly": "Header: {{header}}",
       "queryOnly": "Query parameter: {{query}} (from {{header}})",
       "headerAndQuery": "Header: {{header}} and query parameter: {{query}}",
-      "routesEmpty": "No outbound routes configured",
-      "routesEmptyHelp": "To configure Cloudflare forwarding, update the deployment configuration and restart the service."
+      "routesEmpty": "No legacy endpoint routes configured",
+      "routesEmptyHelp": "The forwarding mode above determines which service is used. Legacy endpoint mappings are kept for compatibility.",
+      "proxyStatus": "Forwarding service",
+      "workerOrigin": "Worker origin",
+      "legacyInactive": "The universal Worker takes priority. These legacy endpoint routes are not used.",
+      "proxyMode": {
+        "worker": "Universal Cloudflare Worker configured. Models with forwarding on use it.",
+        "legacy": "Legacy endpoint routes configured. Only matching upstreams are forwarded; configure a universal Worker to cover new upstreams.",
+        "direct": "No forwarding service configured. Requests currently connect directly to upstreams."
+      }
     }
   },
   "logs": {
