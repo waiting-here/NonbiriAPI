@@ -933,9 +933,9 @@ func TestCharityPreflightAndSnapshotShareOneDecisionTime(t *testing.T) {
 		fixture.charity.preTimes[0] != fixture.charity.snapTimes[0] {
 		t.Fatalf("charity decision times preflight=%v snapshot=%v", fixture.charity.preTimes, fixture.charity.snapTimes)
 	}
-	if len(fixture.charity.snapTypes) != 1 || len(fixture.charity.snapTypes[0]) != 1 ||
-		fixture.charity.snapTypes[0][0] != connectorcontract.TypeOpenAICompatible {
-		t.Fatalf("charity snapshot connector capabilities=%v, want OpenAI only", fixture.charity.snapTypes)
+	if len(fixture.charity.snapTypes) != 1 || len(fixture.charity.snapTypes[0]) != 2 ||
+		fixture.charity.snapTypes[0][0] != connectorcontract.TypeOpenAIChatCompletions || fixture.charity.snapTypes[0][1] != connectorcontract.TypeOpenAICompatible {
+		t.Fatalf("charity snapshot connector capabilities=%v, want native Chat connectors", fixture.charity.snapTypes)
 	}
 	if len(fixture.claims.accepts) != 1 || fixture.claims.accepts[0].CharityDecisionNow == nil ||
 		*fixture.claims.accepts[0].CharityDecisionNow != fixture.charity.preTimes[0] {

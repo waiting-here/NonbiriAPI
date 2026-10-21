@@ -51,12 +51,15 @@ func (m *InferenceMultipart) Decode(body []byte, operation contract.Operation, l
 }
 
 func SupportsInferenceMultipart(operation contract.Operation) bool {
-	return operation == contract.OperationImagesEdits || operation == contract.OperationImagesVariations || operation == contract.OperationAudioTranscriptions || operation == contract.OperationAudioTranslations
+	return operation == contract.OperationImagesEdits || operation == contract.OperationImagesVariations || operation == contract.OperationAudioTranscriptions || operation == contract.OperationAudioTranslations || operation == contract.OperationSystemOne
 }
 
 func DecodeInferenceMultipart(body []byte, mediaType string, operation contract.Operation, limit int64) (*InferenceMultipart, error) {
 	if !SupportsInferenceMultipart(operation) {
 		return nil, ErrInvalidRequest
+	}
+	if operation == contract.OperationSystemOne {
+		return decodeSystemOneMultipart(body, mediaType, limit)
 	}
 	limit = requestbody.DecoderLimit(limit)
 	if int64(len(body)) > limit {
@@ -186,6 +189,9 @@ func cloneInferenceParts(parts []inferencePart) []inferencePart {
 	return copy
 }
 func (r *InferenceRequest) validateParts() error {
+	if r.operation == contract.OperationSystemOne {
+		return validateSystemOne(fieldsByName(r.fields), r.parts)
+	}
 	images, files, masks := 0, 0, 0
 	for _, part := range r.parts {
 		switch r.operation {
@@ -214,6 +220,9 @@ func (r *InferenceRequest) validateParts() error {
 }
 
 func (r *InferenceRequest) marshalMultipart(object map[string]json.RawMessage) ([]byte, string, error) {
+	if r.operation == contract.OperationSystemOne {
+		return r.marshalSystemOneMultipart(object)
+	}
 	var body bytes.Buffer
 	w := multipart.NewWriter(&body)
 	for name, raw := range object {

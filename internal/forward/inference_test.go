@@ -207,7 +207,7 @@ func TestInferenceSingleModelUsesAccessibleProjection(t *testing.T) {
 }
 
 func TestInferenceCORSUsesClosedPaths(t *testing.T) {
-	for _, path := range []string{"/v1/responses", "/v1/responses/compact", "/v1/responses/input_tokens", "/v1/completions", "/v1/images/edits", "/v1/images/variations", "/v1/audio/speech", "/v1/audio/transcriptions", "/v1/audio/translations", "/v1/moderations", "/v1/rerank"} {
+	for _, path := range []string{"/v1/responses", "/v1/responses/compact", "/v1/responses/input_tokens", "/v1/completions", "/v1/images/edits", "/v1/images/variations", "/v1/audio/speech", "/v1/audio/transcriptions", "/v1/audio/translations", "/v1/moderations", "/v1/rerank", "/v1/systemone"} {
 		r := httptest.NewRequest(http.MethodOptions, path, nil)
 		r.Header.Set("Origin", "https://client.example")
 		r.Header.Set("Access-Control-Request-Method", http.MethodPost)

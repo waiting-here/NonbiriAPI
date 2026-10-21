@@ -114,6 +114,9 @@ func (handler *Handler) chat(writer http.ResponseWriter, request *http.Request, 
 	defer decoded.Clear()
 	defer clear(filtered)
 	requestattempt.Model(request.Context(), decoded.Model)
+	if decoded.inference != nil {
+		decoded.inference.SetOptionHeaders(request.Header)
+	}
 	handler.service.execute(request.Context(), writer, userID, decoded, filtered, p.mediaType, request.Header.Get("Accept-Language"), request.Header)
 }
 

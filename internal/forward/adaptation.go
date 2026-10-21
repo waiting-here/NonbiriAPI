@@ -201,7 +201,8 @@ func prepareAdaptedAttempt(request *validatedRequest, connectorType connectorcon
 		prepared.clear()
 		return nil, err
 	}
-	if len(doc.BodyDefaults.Values)+len(doc.BodyForced.Values) == 0 && (connectorType == connectorcontract.TypeOpenAICompatible || len(doc.NativeExtensionPaths.Values) == 0) {
+	nativeChat := connectorType == connectorcontract.TypeOpenAICompatible || connectorType == connectorcontract.TypeOpenAIChatCompletions && request.chat != nil
+	if len(doc.BodyDefaults.Values)+len(doc.BodyForced.Values) == 0 && (nativeChat || len(doc.NativeExtensionPaths.Values) == 0) {
 		return prepared, nil
 	}
 	var logical []byte
@@ -228,7 +229,7 @@ func prepareAdaptedAttempt(request *validatedRequest, connectorType connectorcon
 	}
 	prepared.secrets = append(prepared.secrets, bodySecrets...)
 	defer func() { clear(adapted) }()
-	if connectorType != connectorcontract.TypeOpenAICompatible {
+	if !nativeChat {
 		var filtered []byte
 		filtered, prepared.native, err = requestadaptation.ExtractNative(adapted, doc.NativeExtensionPaths.Values, request.bodyLimit())
 		if err != nil {
