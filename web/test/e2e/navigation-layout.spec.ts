@@ -56,7 +56,9 @@ test('user management separates identifiers and copies Discord IDs exactly at de
   await page.goto(`${ADMIN_ORIGIN}/users`);
   const table = page.locator('.nb-md__list .nb-table');
   await expect(table.getByRole('columnheader', { name: 'Username', exact: true })).toBeVisible();
-  const identity = table.locator('tbody tr td').first();
+  const identity = table.getByRole('cell').filter({
+    has: page.getByRole('button', { name: 'fixture-user', exact: true }),
+  });
   await expect(identity).toContainText('fixture-user');
   await expect(identity).toContainText('#7');
   await expect(identity).toContainText('1234…6789');
