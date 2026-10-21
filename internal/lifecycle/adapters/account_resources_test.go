@@ -114,7 +114,7 @@ func (source adapterTestResources) ExportLifecycleResources(
 	}
 	return resources.LifecycleResourceExport{
 		Endpoints: []resources.LifecycleEndpoint{{
-			ID: "2", Note: value,
+			ID: "2", Note: value, ConnectorType: "ai-sdk-gateway-v4",
 			Origin: resources.EndpointOrigin{Kind: "mainstream", ChannelID: "mch_safe", Name: "Safe channel"},
 			Keys:   []resources.LifecycleEndpointKey{},
 		}},
@@ -245,7 +245,7 @@ func TestAccountResourcesUsesOneFrozenSnapshot(t *testing.T) {
 		}
 	}
 	if user.Username != "shared-snapshot" || usage.TotalRequests != "shared-snapshot" ||
-		logs.TotalLogs != "shared-snapshot" || len(endpoints) != 1 || endpoints[0].Note != "shared-snapshot" ||
+		logs.TotalLogs != "shared-snapshot" || len(endpoints) != 1 || endpoints[0].Note != "shared-snapshot" || endpoints[0].ConnectorType != "ai-sdk-gateway-v4" ||
 		endpoints[0].Origin != (lifecycle.EndpointOriginExport{
 			Kind: "mainstream", ChannelID: "mch_safe", Name: "Safe channel",
 		}) ||
