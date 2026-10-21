@@ -83,6 +83,7 @@ describe('central route and navigation wiring', () => {
       '/settings:admin-settings',
       '/mainstream-channels:admin-mainstream-channels',
       '/charity:admin-charity',
+      '/endpoint-policies:admin-endpoint-policies',
       '/activities:admin-activities',
       '/games:admin-games',
       '/reports:admin-reports',

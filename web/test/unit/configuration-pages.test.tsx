@@ -857,7 +857,7 @@ describe('authoritative site-config frontend', () => {
 });
 
 describe('admin per-user limit explanations', () => {
-  test('states the built-in concurrency default and independent gate composition', async () => {
+  test('states light and heavy concurrency defaults and independent gate composition', async () => {
     const adminUser = {
       id: '7',
       username: 'fixture-user',
@@ -928,19 +928,21 @@ describe('admin per-user limit explanations', () => {
     await screen.findByRole('columnheader', { name: 'Username' });
     const row = (await screen.findByRole('button', { name: 'fixture-user' })).closest('tr');
     expect(row).not.toBeNull();
-    const cells = within(row!).getAllByRole('cell');
-    expect(cells[0]).toHaveTextContent('fixture-user');
-    expect(cells[0]).toHaveTextContent('#7');
-    expect(cells[0]).toHaveTextContent('1234…6789');
+    const identity = within(row!).getByRole('button', { name: 'fixture-user' }).closest('td');
+    expect(identity).toHaveTextContent('fixture-user');
+    expect(identity).toHaveTextContent('#7');
+    expect(identity).toHaveTextContent('1234…6789');
     await rendered.user.click(within(row!).getByRole('button', { name: 'fixture-user' }));
     await rendered.user.click(await screen.findByRole('button', { name: 'Copy Discord ID' }));
     expect(await navigator.clipboard.readText()).toBe('1234567890123456789');
     await rendered.user.click(screen.getByRole('tab', { name: /Limits/ }));
-    const note = await screen.findByText(/default per-user concurrency is 5/i);
-    expect(note).toHaveTextContent(/site, endpoint and key limits also apply/i);
+    expect(screen.getByLabelText('Heavy concurrency')).toHaveAccessibleDescription(/currently 5/i);
+    expect(screen.getByLabelText('Light concurrency')).toHaveAccessibleDescription(/currently 15/i);
+    const note = await screen.findByText(/other inference is heavy/i);
+    expect(note).toHaveTextContent(/site, endpoint and key limits still apply/i);
     await rendered.i18n.changeLanguage('zh');
-    expect(await screen.findByText(/单用户并发默认为 5/)).toHaveTextContent(
-      /全站、端点和密钥的限制/,
+    expect(await screen.findByText(/两类公益请求分别计算 RPM/)).toHaveTextContent(
+      /全站、端点和密钥限制仍然适用/,
     );
   });
 });
