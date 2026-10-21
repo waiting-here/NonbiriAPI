@@ -53,3 +53,40 @@ func WithOutputFloor(configured, outputUnitPrice, outputTokens int64) (int64, er
 	}
 	return configured, nil
 }
+
+// OutputUnitPrice covers every output rate that a frozen request may select.
+// Fallback rates remain relevant when an upstream omits classified usage.
+func OutputUnitPrice(fallback int64, contextPricing string) (int64, error) {
+	if fallback < 0 || fallback > db.MaxMoneyMilli {
+		return 0, errors.New("charity reservation: invalid output price")
+	}
+	if contextPricing == "" {
+		contextPricing = "{}"
+	}
+	policy, err := credits.DecodeContextPricing(contextPricing)
+	if err != nil {
+		return 0, err
+	}
+	maximum := fallback
+	include := func(p *credits.ModalityPricing) {
+		if p == nil || !p.OutputEnabled {
+			return
+		}
+		for _, rate := range []*credits.TokenPrices{p.Text, p.Image, p.Audio, p.Video} {
+			if rate != nil && rate.Output > maximum {
+				maximum = rate.Output
+			}
+		}
+	}
+	include(policy.UserModalities)
+	if tier := policy.LongContext; tier != nil {
+		if tier.UserPrices[3] > maximum {
+			maximum = tier.UserPrices[3]
+		}
+		include(tier.UserModalities)
+	}
+	if maximum > db.MaxMoneyMilli {
+		return 0, errors.New("charity reservation: output price exceeds limit")
+	}
+	return maximum, nil
+}
