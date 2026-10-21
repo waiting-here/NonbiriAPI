@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { browserFixtureBinary } from '../browser-fixture.mjs';
-import { access, mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -9,8 +9,14 @@ export default async function setup() {
   const root = resolve('..');
   const statePath = process.env.NONBIRI_AUDIT_BROWSER_STATE;
   if (!statePath) throw new Error('The audit state path is missing.');
-  for (const station of ['user', 'admin']) {
-    await access(resolve('dist', station, 'index.html'));
+  if (process.env.NONBIRI_BROWSER_FIXTURE_BINARY) {
+    if (!(await stat(resolve(process.env.NONBIRI_BROWSER_FIXTURE_BINARY))).isFile()) {
+      throw new Error('The shared browser fixture must be a regular file.');
+    }
+  } else {
+    for (const station of ['user', 'admin']) {
+      await access(resolve('dist', station, 'index.html'));
+    }
   }
   await mkdir(dirname(statePath), { recursive: true });
   await unlink(statePath).catch((error) => {
