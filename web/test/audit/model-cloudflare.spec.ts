@@ -121,8 +121,9 @@ test('personal models default on and retain a changed setting after a real revis
     await expect(toggle).toHaveAccessibleDescription(copy.new);
     await visuals(page, info, 'personal-cloudflare-new');
     const name = 'proxy-' + randomUUID().slice(0, 8);
-    await page.getByRole('textbox', { name: 'Prefix', exact: true }).fill('browser');
-    await page.getByRole('textbox', { name: 'Model name', exact: true }).fill(name);
+    const editor = page.locator('form.model-editor');
+    await editor.getByRole('textbox', { name: 'Prefix', exact: true }).fill('browser');
+    await editor.getByRole('textbox', { name: 'Model name', exact: true }).fill(name);
     await toggle.uncheck();
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Edit model', exact: true })).toBeVisible();
