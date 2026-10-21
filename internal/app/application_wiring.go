@@ -381,7 +381,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err != nil {
 		return nil, fmt.Errorf("create report repository: %w", err)
 	}
-	adaptations, err := requestadaptation.New(requestadaptation.Config{DB: store.DB(), Codec: vault, KeyDeriver: vault})
+	adaptations, err := requestadaptation.New(requestadaptation.Config{DB: store.DB(), ReadDB: store.ReadDB(), Codec: vault, KeyDeriver: vault})
 	if err != nil {
 		return nil, fmt.Errorf("create request adaptation store: %w", err)
 	}

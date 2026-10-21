@@ -60,6 +60,7 @@ func TestLoadManyBatchesScopedIDsAtOneSnapshot(t *testing.T) {
 	driverName := fmt.Sprintf("adaptation-query-counter-%d", queryCounterNames.Add(1))
 	sql.Register(driverName, queryCounterDriver{&count})
 	store, database := testStoreDriver(t, driverName, filepath.Join(t.TempDir(), "adaptation.sqlite"))
+	database.SetMaxOpenConns(1)
 	if _, err := database.Exec("PRAGMA journal_mode=WAL"); err != nil {
 		t.Fatal(err)
 	}
@@ -80,9 +81,12 @@ func TestLoadManyBatchesScopedIDsAtOneSnapshot(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// A writer commits while the reader is decrypting its first row. Every
-	// subsequent row must still belong to the original SQL snapshot.
+	// A writer commits after the captured SQL snapshot is released and while
+	// its first row is decoded. Later rows retain that original snapshot.
 	store.codec = &openHookCodec{GenerationTwoContextCodec: store.codec, afterFirst: func() {
+		if database.Stats().InUse != 0 {
+			t.Fatal("decoding retained the SQL snapshot")
+		}
 		if _, err := database.Exec("UPDATE request_adaptations SET revision=2 WHERE scope='binding'"); err != nil {
 			t.Fatal(err)
 		}
