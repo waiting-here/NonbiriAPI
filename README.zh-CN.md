@@ -28,7 +28,9 @@ NonbiriAPI 是可自行部署的 AI 端点管理平台，提供 OpenAI-compatibl
 | 共享组件与双站页面 | `web/src/shared/`、`web/src/user/`、`web/src/admin/` |
 | 验证与部署示例 | `scripts/`、`.github/workflows/`、`deploy/` |
 
-连接器注册表支持 OpenAI-compatible、Anthropic-compatible、AI SDK Gateway v3、Google Gemini、OpenAI Responses 和 OpenAI Decisions 上游。公共入口包括 `/v1/models`、`/v1/chat/completions`、`/v1/embeddings`、`/v1/images/generations` 和 `/v1/decisions`。Gemini 与 Responses 转换 Chat 请求，Decisions 使用原生接口；各连接器支持的操作不同。后端执行所有权、凭据、SSRF、账务和取消约束；格式及限制见 [API 契约](docs/api-contract.md)。
+注册表包含 12 种连接器，覆盖 OpenAI-compatible、专用 Chat 与 Responses、Anthropic、Gateway v3、Gemini、Decisions、System One 及四种明确选择的 rerank 协议。直接 HTTP 接口支持文本、图像、音频、嵌入、内容审核和重排，部分操作支持 SSE。Chat 与 Responses 合为一个模型服务选项并提供有限双向转换，其余服务仍可独立多选。[直接推理](docs/direct-inference.md)列出接口、转换限制和排除的持久资源／实时能力；所有权、凭据、SSRF、账务和取消规则见 [API 契约](docs/api-contract.md)。
+
+公益价格支持按次、按 Token 和按 search unit 计费，可分别设置输入／输出模态价格、捐赠奖励和长上下文档位。标准分类不完整时，对应一侧使用聚合价格。[定价说明](docs/charity-context-pricing.md)解释精度、预留和失败生成的有效用量。轻重型请求各有一个自用与公益共用的并发池，公益 RPM 也分为两个窗口；所有请求继续共同受全局限额约束。
 
 匿名分钟指标分别记录游戏检查点、请求账务及后台维护的连接获取和事务执行；跨窗口尚未结束的工作也有累计占用时间。对照已完成请求延迟和当前占用时，请参阅运行指标说明。
 
@@ -42,7 +44,7 @@ NonbiriAPI 是可自行部署的 AI 端点管理平台，提供 OpenAI-compatibl
 
 公益调用会自动识别可恢复的额度错误，暂时等待后由下一次真实公益请求试用恢复，无需为每把密钥配置。管理员和 6 级协管可按完整端点添加错误码或消息片段规则，同端点的公益密钥共用。有效重试响应头优先，其他错误仍遵循连续失败策略。恢复节奏和状态见[API 契约](docs/api-contract.md#413-smart-donated-key-backoff)。
 
-5 级协管可查看用户资料并封禁 1–4 级用户，不能修改账号设置或积分、解封或改写已有有效封禁。5 级还可通过或驳回所有待处理捐赠；管理员和 6 级协管可强制驳回任何已通过的捐赠，包括人工通过的捐赠。
+5 级协管可查看用户资料、调整有效等级严格低于自己的用户的五类推理 RPM／并发限额，并封禁 1–4 级用户；不能修改其它账号设置或积分、解封或改写已有有效封禁。5 级还可通过或驳回所有待处理捐赠；管理员和 6 级协管可强制驳回任何已通过的捐赠，包括人工通过的捐赠。
 
 管理员可在公益管理的独立「价格模板」界面查找、新增、编辑和删除模板，直接填写全部价格字段。管理员和 6 级协管可将模板复制到模型表单，按需修改后保存。
 模型和模板支持按时区、星期和每日时段配置[周期折扣](docs/charity-discounts.md)。启用固定时段折扣后，周期折扣暂停；已受理请求保持受理时的价格。
@@ -67,7 +69,7 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [首次配置](docs/first-run-setup.md) 涵盖私有目录、加密密钥、Discord OAuth 和公共域名。将 [admin.env.example](admin.env.example) 复制到检出目录外，替换占位值并在启动前加载。数据库与对应密钥须配套保留。
 
-新库默认开启维护并关闭公共功能。v1.0.7 源码的正常程序仅接受 schema 27 或全新初始化，账户导出为 25；既有 schema 16–26 使用独立离线转换器，历史转换代码不进入正常服务。后续 v1.x 保持从任一更早 v1.x 正式库升级的路径，不承诺旧程序读取新版数据库。
+新库默认开启维护并关闭公共功能。v1.1.0 源码的正常程序仅接受 schema 28 或全新初始化，账户导出为 26；既有 schema 16–27 使用独立离线转换器，历史转换代码不进入正常服务。后续 v1.x 保持从任一更早 v1.x 正式库升级的路径，不承诺旧程序读取新版数据库。源码契约不表示实例已发布或升级。
 
 [部署指南](docs/deployment.md) 说明 systemd、代理、不可变产物、升级和完整快照恢复；启动变量及在线设置统一维护在 [配置参考](docs/configuration.md)。
 

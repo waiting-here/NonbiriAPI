@@ -1,7 +1,7 @@
 # Data Lifecycle Checklist (Generation 2 export / delete / retention / privacy)
 
-> Status: **v1.0.7 contract** — this checklist describes the
-> release's export, deletion, retention, and privacy boundary. Source publication does
+> Status: **v1.1.0 source contract** — this checklist describes the
+> version's export, deletion, retention, and privacy boundary. Source publication does
 > not itself upgrade an instance; deployment status is specific to each operator.
 >
 > Canonical DDL: `internal/db/generation_two.sql`, embedded by `internal/db/schema.go`, plus registered extension schemas; manifest: `internal/db/schema_manifest.go`;
@@ -13,13 +13,51 @@ and bilingual privacy text are covered by their implementation and contract test
 Schema presence alone never creates a route or expands a response.
 
 Personal-model `cloudflare_proxy_enabled` belongs to the owner's model, is
-included in account export 25, and is deleted with that model or account.
+included in account export 26, and is deleted with that model or account.
 Charity-model preferences are shared platform configuration and excluded from
 personal exports. The read-only deployment mode is not persisted per account.
 Worker and legacy gateway tokens remain private deployment configuration and
 never enter account exports. Routing preferences do not extend log retention.
 
-Current account export format 25 includes safe `gacha` balances, owned cards, guarantees, claims, activity journals, draw details within 180 days and the saved appearance artwork key. Its filename is `nonbiriapi-account-export-v25.json`; SQLite `user_version` remains 2 and the current storage schema is 27. All rows below describe current retained fields. This does not assert that a particular instance has been upgraded.
+Current account export format 26 includes safe `gacha` balances, owned cards, guarantees, claims, activity journals, draw details within 180 days and the saved appearance artwork key. Its filename is `nonbiriapi-account-export-v26.json`; SQLite `user_version` remains 2 and the current storage schema is 28. All rows below describe current retained fields. This does not assert that a particular instance has been upgraded.
+
+## Direct inference usage and admission
+
+Every registered model operation uses the existing request, claim, reservation,
+export and deletion lifecycle. Multipart files and binary/media responses are
+bounded request-time data, not persistent file or conversation resources.
+This version adds no WebSocket/Realtime store, background job or batch resource.
+
+`request_attempts`, `request_logs` and `charity_reservations` add bounded
+`usage_details` JSON (at most 4,096 bytes). It contains standard modality and
+search-unit facts plus, where settled, the caller pricing decision. Separate
+`donation_usage_reservations.pricing_details` JSON (at most 2,048 bytes) records
+the reward decision for replay. Empty historical metadata remains readable and
+does not imply a zero report. Counts, valid/unknown status and closed reasons
+are normalized before persistence; no request body or arbitrary provider field
+is retained. These columns follow their parent rows' existing cascade,
+deidentification, late-settlement and retention rules.
+
+Authorized request-log projections and JSON/CSV exports may show exact
+`search_units`, modality counts and caller pricing/fallback fields. They do not
+reveal donor reward decisions to ordinary users. Account export adds only a
+safe `charity.usage_details` aggregate with available search units and modality
+counts/reasons. Aggregation requires complete compatible reports on each side;
+missing classification or units cannot become known zero. Per-model pricing,
+donor decisions, request identities and physical source identifiers are absent.
+
+The account's five nullable inference overrides and effective values are part
+of its user export. New light/global overrides cascade with the user; they do
+not restore after deletion or re-registration. Shared site defaults remain
+operator configuration. Light/heavy pools retain the existing account-retirement
+and late-release boundary. Durable RPM windows preserve their expiry rather
+than resetting when a configuration value changes.
+
+Risk-minute records add nullable `saturation_micros_millis`, a bounded integral
+of the larger light/heavy pool utilization. Existing null records use the old
+occupancy/limit calculation; a new zero means observed idle. Actual occupancy
+and peak fields still count requests. This adds no risk category, export access
+or retention period; risk records retain their existing deletion/privacy rules.
 
 `channel_charity_binding_presets` and `channel_charity_binding_mappings` contain
 shared channel configuration without donor or operator identity. They are excluded
@@ -254,7 +292,7 @@ manifest, and checksums. Snapshot retention/deletion is operator-controlled and 
 be disclosed by the instance policy; the service does not promise per-user erasure inside
 historical snapshots.
 
-Normal v1.0.7 startup accepts fresh storage or current schema 27; exact schema 16–26 structures use the independent converter. Unknown or partial sources are rejected before writes. Fresh creation requires the main database and sidecars to be absent. Conversion preserves accounts, economic facts, credentials, saved games, configuration and instance legal text. Full historical audits use offline `maintenance verify`. The [database upgrade guide](database-upgrades.md) identifies the exact source and restore requirements.
+Normal v1.1.0 startup accepts fresh storage or current schema 28; exact schema 16–27 structures use the independent converter. Unknown or partial sources are rejected before writes. Fresh creation requires the main database and sidecars to be absent. Conversion preserves accounts, economic facts, credentials, saved games, configuration and instance legal text. Full historical audits use offline `maintenance verify`. The [database upgrade guide](database-upgrades.md) identifies the exact source and restore requirements.
 
 Starting fresh from an unsupported version uses a separate empty path and resets active application state. A complete old recovery set remains sensitive until its retention purpose ends. Never combine an old binary with a newer database or restore a stale snapshot over newly accepted data automatically.
 
@@ -316,7 +354,7 @@ Reward receipts are included in current account exports under `rewards`. They co
 ## Shared pricing, owner history and header facts
 
 Smart backoff runs automatically for charity calls. Current safe state is included
-in account export 25 and authorized key projections. Runtime state contains a
+in account export 26 and authorized key projections. Runtime state contains a
 limited reason, source and retry time; it does not copy raw upstream errors.
 The current episode follows the donated key; internal trial and classification
 facts follow the claim.
@@ -328,7 +366,7 @@ and rule fields are removed from replay responses without repeating the mutation
 
 | Family | Access and export | Deletion, retention and late work |
 | --- | --- | --- |
-| `donation_key_backoffs` | Owner and authorized management may read safe current state, also included in account export 25. Internal generation, episode and trial identifiers are excluded. There is no per-key recognition configuration. | Current state cascades with the key. Schema 26 discards old profiles and supplemental-rule text while preserving active recovery facts. Account deletion removes the state. |
+| `donation_key_backoffs` | Owner and authorized management may read safe current state, also included in account export 26. Internal generation, episode and trial identifiers are excluded. There is no per-key recognition configuration. | Current state cascades with the key. Schema 26 discards old profiles and supplemental-rule text while preserving active recovery facts. Account deletion removes the state. |
 | `endpoint_backoff_policies` | Platform configuration readable and writable by administrators and current level-6 stewards; exact connector/base identity, revision and at most eight rules. No personal export or account identifier. | Retained with platform configuration and complete deployment backups. Clearing rules keeps the revision; account deletion does not delete shared endpoint policy. |
 | `dispatch_smart_backoff_facts` | Internal per-claim recovery identity, trial ownership, HTTP acceptance, finite quota classification and bounded endpoint rule snapshot/revision/matched index; no raw error and no personal export. | Claim deletion cascades; key deletion clears its key reference. Existing request retention and holds apply. Generation and episode checks prevent late results from changing a newer episode. Historical supplemental-rule classifications remain valid recovery facts after configuration removal. |
 | `charity_price_templates` and `charity_price_template_audits` | Shared price/reward/reserve/context/fixed and recurring discount settings; administrator maintenance and enabled-only L6 session reads. No L5/CallerKey access or personal export. Applying copies values, never links a model to future changes. | Templates persist until deleted; safe audits expire after 90 days and actor deletion sets identity null. No credentials or caller content. |
