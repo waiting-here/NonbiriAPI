@@ -1,10 +1,12 @@
 package contract
 
 const (
-	TypeCohereRerank      Type = "cohere-rerank"
-	TypeJinaRerank        Type = "jina-rerank"
-	TypeSiliconFlowRerank Type = "siliconflow-rerank"
-	TypeVoyageRerank      Type = "voyage-rerank"
+	TypeOpenAIChatCompletions Type = "openai-chat-completions"
+	TypeTypeSafeSystemOne     Type = "typesafe-systemone"
+	TypeCohereRerank          Type = "cohere-rerank"
+	TypeJinaRerank            Type = "jina-rerank"
+	TypeSiliconFlowRerank     Type = "siliconflow-rerank"
+	TypeVoyageRerank          Type = "voyage-rerank"
 )
 
 const (
@@ -19,6 +21,7 @@ const (
 	OperationAudioTranslations    Operation = "audio_translations"
 	OperationModerations          Operation = "moderations"
 	OperationRerank               Operation = "rerank"
+	OperationSystemOne            Operation = "systemone"
 )
 
 // AllOperations preserves the persisted bit positions of logical model types.
@@ -26,7 +29,7 @@ func AllOperations() []Operation {
 	return []Operation{OperationChatCompletions, OperationEmbeddings, OperationImagesGenerations, OperationDecisions,
 		OperationResponses, OperationResponsesCompact, OperationResponsesInputTokens, OperationCompletions,
 		OperationImagesEdits, OperationImagesVariations, OperationAudioSpeech, OperationAudioTranscriptions,
-		OperationAudioTranslations, OperationModerations, OperationRerank}
+		OperationAudioTranslations, OperationModerations, OperationRerank, OperationSystemOne}
 }
 
 const (
@@ -41,11 +44,12 @@ const (
 	CapabilityAudioTranslations
 	CapabilityModerations
 	CapabilityRerank
+	CapabilitySystemOne
 )
 
 const inferenceCapabilities = CapabilityResponses | CapabilityResponsesCompact | CapabilityResponsesInputTokens | CapabilityCompletions |
 	CapabilityImagesEdits | CapabilityImagesVariations | CapabilityAudioSpeech | CapabilityAudioTranscriptions |
-	CapabilityAudioTranslations | CapabilityModerations | CapabilityRerank
+	CapabilityAudioTranslations | CapabilityModerations | CapabilityRerank | CapabilitySystemOne
 
 func OperationCapability(operation Operation) Capability {
 	switch operation {
@@ -67,7 +71,7 @@ func OperationCapability(operation Operation) Capability {
 }
 
 func IsHTTPInference(operation Operation) bool {
-	for _, current := range AllOperations()[4:15] {
+	for _, current := range AllOperations()[4:] {
 		if current == operation {
 			return true
 		}

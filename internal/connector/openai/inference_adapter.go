@@ -36,7 +36,11 @@ func (a *Adapter) AttemptInference(ctx context.Context, writer http.ResponseWrit
 	if err != nil {
 		return contract.NormalizeOutcome(AttemptResult{Failure: FailureUpstream, Diagnostic: "upstream endpoint was refused"})
 	}
-	url := strings.TrimSuffix(client.BaseURL(), "/") + inferencePath(request.operation)
+	path := inferencePath(request.operation)
+	if kind == contract.TypeOpenAIChatCompletions {
+		path = "/chat/completions"
+	}
+	url := strings.TrimSuffix(client.BaseURL(), "/") + path
 	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil || len(target.credential.bearer) == 0 {
 		return result
@@ -44,6 +48,7 @@ func (a *Adapter) AttemptInference(ctx context.Context, writer http.ResponseWrit
 	if requestadaptation.ApplyAddedHeaders(httpRequest.Header, policy.AdditionalHeaders) != nil || sessionheader.Apply(httpRequest, policy.ManagedHeaders, policy.OnRequestSent) != nil {
 		return result
 	}
+	request.applyOptionHeaders(httpRequest.Header)
 	httpRequest.Header.Set("Content-Type", contentType)
 	httpRequest.Header.Set("Accept", "application/json")
 	if request.Stream {
@@ -132,6 +137,9 @@ func (a *Adapter) AttemptInference(ctx context.Context, writer http.ResponseWrit
 		return upstreamFailure("upstream response content type was invalid", response.StatusCode)
 	}
 	if request.Stream {
+		if kind == contract.TypeOpenAIChatCompletions {
+			return a.responsesChatStream(ctx, writer, response, guard, errorContext, request, streamLimit, lineLimit, eventLimit)
+		}
 		return a.inferenceStream(ctx, writer, response, guard, errorContext, request, streamLimit, lineLimit, eventLimit)
 	}
 	if response.ContentLength > limit {
@@ -149,13 +157,19 @@ func (a *Adapter) AttemptInference(ctx context.Context, writer http.ResponseWrit
 	projected := raw
 	usage := Usage{}
 	if media == "application/json" {
-		switch request.operation {
-		case contract.OperationRerank:
-			projected, usage, err = projectRerankResponse(raw, request, kind)
-		case contract.OperationImagesEdits, contract.OperationImagesVariations:
-			projected, usage, _, err = projectImageResponse(raw, &ImageRequest{Model: request.Model, Count: request.count}, false)
-		default:
-			projected, usage, err = nativeResponseProjection(raw, request)
+		if kind == contract.TypeOpenAIChatCompletions {
+			projected, usage, err = projectChatAsResponse(raw, request)
+		} else {
+			switch request.operation {
+			case contract.OperationSystemOne:
+				projected, usage, err = projectSystemOneResponse(raw, request)
+			case contract.OperationRerank:
+				projected, usage, err = projectRerankResponse(raw, request, kind)
+			case contract.OperationImagesEdits, contract.OperationImagesVariations:
+				projected, usage, _, err = projectImageResponse(raw, &ImageRequest{Model: request.Model, Count: request.count}, false)
+			default:
+				projected, usage, err = nativeResponseProjection(raw, request)
+			}
 		}
 		if err != nil {
 			result = upstreamFailure("upstream response was invalid", response.StatusCode)

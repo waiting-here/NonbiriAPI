@@ -3,6 +3,7 @@ package requestkind
 import contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 
 var inferencePaths = map[string]contract.Operation{
+	"/v1/systemone":              contract.OperationSystemOne,
 	"/v1/responses":              contract.OperationResponses,
 	"/v1/responses/compact":      contract.OperationResponsesCompact,
 	"/v1/responses/input_tokens": contract.OperationResponsesInputTokens,

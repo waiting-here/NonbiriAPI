@@ -13,7 +13,13 @@ func InferenceSupported(kind contract.Type, operation contract.Operation) bool {
 		return false
 	}
 	if kind == contract.TypeOpenAICompatible {
-		return true
+		return operation != contract.OperationSystemOne
+	}
+	if kind == contract.TypeOpenAIChatCompletions {
+		return operation == contract.OperationResponses
+	}
+	if kind == contract.TypeTypeSafeSystemOne {
+		return operation == contract.OperationSystemOne
 	}
 	if kind == contract.TypeOpenAIResponses {
 		return operation == contract.OperationResponses || operation == contract.OperationResponsesCompact || operation == contract.OperationResponsesInputTokens
@@ -30,11 +36,21 @@ func (r *InferenceRequest) CheckTarget(kind contract.Type, policy contract.Attem
 		clear(body)
 		return err
 	}
+	if kind == contract.TypeOpenAIChatCompletions {
+		body, err := r.compileChatResponse("model", policy)
+		clear(body)
+		return err
+	}
+	if r.operation == contract.OperationSystemOne {
+		return r.checkSystemOneOptions()
+	}
 	return nil
 }
 
 func inferencePath(operation contract.Operation) string {
 	switch operation {
+	case contract.OperationSystemOne:
+		return "/systemone"
 	case contract.OperationResponses:
 		return "/responses"
 	case contract.OperationResponsesCompact:
@@ -66,6 +82,10 @@ func (r *InferenceRequest) marshalInference(model string, kind contract.Type, po
 		return nil, "", ErrInvalidRequest
 	}
 	object := fieldsByName(r.fields)
+	if kind == contract.TypeOpenAIChatCompletions {
+		body, err := r.compileChatResponse(model, policy)
+		return body, "application/json", err
+	}
 	object["model"], _ = json.Marshal(model)
 	if r.operation == contract.OperationResponses {
 		object["store"] = json.RawMessage("false")
@@ -228,6 +248,8 @@ func nativeResponseProjection(raw []byte, request *InferenceRequest) ([]byte, Us
 
 func nativeInferenceUsage(root map[string]json.RawMessage, operation contract.Operation) Usage {
 	switch operation {
+	case contract.OperationSystemOne:
+		return systemOneUsage(root["usage"])
 	case contract.OperationResponses, contract.OperationResponsesCompact:
 		return ParseResponseUsage(root["usage"])
 	case contract.OperationCompletions:

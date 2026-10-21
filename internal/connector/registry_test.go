@@ -170,7 +170,7 @@ func TestRegistryNormalizesTypedNilDiscovererToUnsupported(t *testing.T) {
 func TestDefaultRegistryDescriptorDrivesExecutionAndDiscovery(t *testing.T) {
 	registry := NewDefaultRegistry()
 	types := registry.Types()
-	wantTypes := []connectorcontract.Type{connectorcontract.TypeAISDKGatewayV3, connectorcontract.TypeAnthropicCompatible, connectorcontract.TypeCohereRerank, connectorcontract.TypeGoogleGemini, connectorcontract.TypeJinaRerank, connectorcontract.TypeOpenAICompatible, connectorcontract.TypeOpenAIDecisions, connectorcontract.TypeOpenAIResponses, connectorcontract.TypeSiliconFlowRerank, connectorcontract.TypeVoyageRerank}
+	wantTypes := []connectorcontract.Type{connectorcontract.TypeAISDKGatewayV3, connectorcontract.TypeAnthropicCompatible, connectorcontract.TypeCohereRerank, connectorcontract.TypeGoogleGemini, connectorcontract.TypeJinaRerank, connectorcontract.TypeOpenAIChatCompletions, connectorcontract.TypeOpenAICompatible, connectorcontract.TypeOpenAIDecisions, connectorcontract.TypeOpenAIResponses, connectorcontract.TypeSiliconFlowRerank, connectorcontract.TypeTypeSafeSystemOne, connectorcontract.TypeVoyageRerank}
 	if !slices.Equal(types, wantTypes) {
 		t.Fatalf("default registry types=%v", types)
 	}
@@ -182,7 +182,7 @@ func TestDefaultRegistryDescriptorDrivesExecutionAndDiscovery(t *testing.T) {
 			}
 			continue
 		}
-		if !ok || descriptor.New == nil || descriptor.Discoverer == nil || connectorType != connectorcontract.TypeOpenAIDecisions && descriptor.Supports == nil || !descriptor.Capabilities.Has(connectorcontract.CapabilityModelDiscovery) {
+		if !ok || descriptor.New == nil || descriptor.Discoverer == nil || connectorType != connectorcontract.TypeOpenAIDecisions && connectorType != connectorcontract.TypeTypeSafeSystemOne && descriptor.Supports == nil || !descriptor.Capabilities.Has(connectorcontract.CapabilityModelDiscovery) {
 			t.Fatalf("default descriptor %q incomplete: %+v ok=%v", connectorType, descriptor, ok)
 		}
 	}

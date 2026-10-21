@@ -154,7 +154,7 @@ func NewDefaultRegistry() *Registry {
 }
 
 func NewDefaultRegistryWithGatewayModels(models gatewaypolicy.Config) *Registry {
-	registry, err := NewRegistry(rerankDescriptor(connectorcontract.TypeCohereRerank), rerankDescriptor(connectorcontract.TypeJinaRerank), rerankDescriptor(connectorcontract.TypeSiliconFlowRerank), rerankDescriptor(connectorcontract.TypeVoyageRerank), openAIDescriptor(), anthropicDescriptor(), gatewayDescriptorWithModels(models), decisionsDescriptor(), translatingDescriptor(connectorcontract.TypeGoogleGemini), translatingDescriptor(connectorcontract.TypeOpenAIResponses))
+	registry, err := NewRegistry(systemOneDescriptor(), chatOnlyDescriptor(), rerankDescriptor(connectorcontract.TypeCohereRerank), rerankDescriptor(connectorcontract.TypeJinaRerank), rerankDescriptor(connectorcontract.TypeSiliconFlowRerank), rerankDescriptor(connectorcontract.TypeVoyageRerank), openAIDescriptor(), anthropicDescriptor(), gatewayDescriptorWithModels(models), decisionsDescriptor(), translatingDescriptor(connectorcontract.TypeGoogleGemini), translatingDescriptor(connectorcontract.TypeOpenAIResponses))
 	if err != nil {
 		panic(err)
 	}
@@ -279,6 +279,27 @@ func openAIDescriptor() Descriptor {
 	}
 }
 
+func chatOnlyDescriptor() Descriptor {
+	d := openAIDescriptor()
+	d.Type = connectorcontract.TypeOpenAIChatCompletions
+	d.Capabilities = chatOnlyCapabilities()
+	d.Discoverer = openai.ModelDiscoverer{ConnectorType: d.Type}
+	base := d.New
+	d.New = func(dependencies Dependencies) Connector {
+		instance, ok := base(dependencies).(*openAIConnector)
+		if !ok {
+			return nil
+		}
+		instance.kind = connectorcontract.TypeOpenAIChatCompletions
+		return instance
+	}
+	return d
+}
+
+func chatOnlyCapabilities() connectorcontract.CapabilitySet {
+	return openAICapabilities()&^(inferenceCapabilities(connectorcontract.TypeOpenAICompatible)|connectorcontract.CapabilitySet(connectorcontract.CapabilityEmbeddings|connectorcontract.CapabilityImagesGenerations)) | connectorcontract.CapabilitySet(connectorcontract.CapabilityResponses)
+}
+
 func anthropicDescriptor() Descriptor {
 	return Descriptor{
 		Type:         connectorcontract.TypeAnthropicCompatible,
@@ -304,13 +325,22 @@ func anthropicDescriptor() Descriptor {
 
 type openAIConnector struct {
 	driver OpenAIDriver
+	kind   connectorcontract.Type
 }
 
-func (*openAIConnector) Type() connectorcontract.Type {
+func (c *openAIConnector) Type() connectorcontract.Type {
+	if c.kind != "" {
+		return c.kind
+	}
 	return connectorcontract.TypeOpenAICompatible
 }
 
-func (*openAIConnector) Capabilities() connectorcontract.CapabilitySet { return openAICapabilities() }
+func (c *openAIConnector) Capabilities() connectorcontract.CapabilitySet {
+	if c.Type() == connectorcontract.TypeOpenAIChatCompletions {
+		return chatOnlyCapabilities()
+	}
+	return openAICapabilities()
+}
 
 func openAICapabilities() connectorcontract.CapabilitySet {
 	return inferenceCapabilities(connectorcontract.TypeOpenAICompatible) | connectorcontract.CapabilitySet(
@@ -342,6 +372,10 @@ func (c *openAIConnector) Attempt(ctx context.Context, input AttemptInput) conne
 	if input.Inference != nil {
 		driver, _ := c.driver.(inferenceDriver)
 		return attemptInference(ctx, input, c.Type(), driver)
+	}
+	if c.Type() == connectorcontract.TypeOpenAIChatCompletions && input.Operation != connectorcontract.OperationChatCompletions {
+		input.Credential.Clear()
+		return result
 	}
 	if input.Operation == connectorcontract.OperationEmbeddings {
 		return c.attemptEmbedding(ctx, input)
