@@ -1,3 +1,5 @@
+import { userBusy } from './activity';
+
 export type EyelidProfile = {
   bounds: [number, number, number, number];
   rows: [number[], number[]];
@@ -21,18 +23,24 @@ export function blinkAt(seconds: number): number {
   return 0;
 }
 
-/** Keep the fractional frame budget instead of rounding every frame up to a vsync. */
+/**
+ * Keep the fractional frame budget instead of rounding every frame up to a vsync.
+ * Ambient backgrounds paint at a quarter rate while the user is typing or scrolling.
+ */
 export class PaintCadence {
   private next = -Infinity;
-  constructor(private readonly interval = 1000 / 60) {}
+  constructor(
+    private readonly interval = 1000 / 60,
+    private readonly ambient = false,
+  ) {}
   reset() {
     this.next = -Infinity;
   }
   due(now: number): boolean {
     if (now + 0.5 < this.next) return false;
-    if (!Number.isFinite(this.next) || now - this.next > this.interval * 2)
-      this.next = now + this.interval;
-    else this.next += this.interval;
+    const step = this.ambient && userBusy(now) ? this.interval * 4 : this.interval;
+    if (!Number.isFinite(this.next) || now - this.next > step * 2) this.next = now + step;
+    else this.next += step;
     return true;
   }
 }

@@ -13,6 +13,7 @@ export async function renderSpecial(
     frozenTime?: number;
     paused?: () => boolean;
     signal?: AbortSignal;
+    ambient?: boolean;
     exportSize?: boolean;
     blink?: number;
     variant?: 'card' | 'cover' | 'illustration' | 'appearance';

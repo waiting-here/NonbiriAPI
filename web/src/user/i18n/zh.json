@@ -3677,7 +3677,12 @@
       "apply": "应用装扮",
       "available": "已解锁",
       "chosen": "已选择",
-      "locked": "获得对应 SP 卡牌后解锁"
+      "locked": "获得对应 SP 卡牌后解锁",
+      "intensity": "装扮强度",
+      "intensityHint": "调整插画透出的程度，只保存在这台设备上。",
+      "intensityVivid": "鲜明",
+      "intensityBalanced": "均衡",
+      "intensityFocus": "专注阅读"
     }
   },
   "games": {

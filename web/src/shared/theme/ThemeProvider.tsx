@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
+  APPEARANCE_INTENSITY_STORAGE_KEY,
   DENSITY_STORAGE_KEY,
   FONT_SIZE_STORAGE_KEY,
   THEME_STORAGE_KEY,
   ThemeContext,
+  type AppearanceIntensity,
   type Density,
   type FontSize,
   type Theme,
@@ -40,7 +42,8 @@ function getInitialTheme(): Theme {
 
 function readDensity(): Density {
   try {
-    const stored = typeof window !== 'undefined' ? window.localStorage.getItem(DENSITY_STORAGE_KEY) : null;
+    const stored =
+      typeof window !== 'undefined' ? window.localStorage.getItem(DENSITY_STORAGE_KEY) : null;
     return stored === 'compact' ? 'compact' : 'comfortable';
   } catch {
     return 'comfortable';
@@ -49,17 +52,65 @@ function readDensity(): Density {
 
 function readFontSize(): FontSize {
   try {
-    const stored = typeof window !== 'undefined' ? window.localStorage.getItem(FONT_SIZE_STORAGE_KEY) : null;
+    const stored =
+      typeof window !== 'undefined' ? window.localStorage.getItem(FONT_SIZE_STORAGE_KEY) : null;
     return stored === 'large' ? 'large' : 'default';
   } catch {
     return 'default';
   }
 }
 
+const REDUCED_TRANSPARENCY_QUERY = '(prefers-reduced-transparency: reduce)';
+
+function storedIntensity(): AppearanceIntensity | null {
+  try {
+    const stored =
+      typeof window !== 'undefined'
+        ? window.localStorage.getItem(APPEARANCE_INTENSITY_STORAGE_KEY)
+        : null;
+    return stored === 'vivid' || stored === 'balanced' || stored === 'focus' ? stored : null;
+  } catch {
+    return null;
+  }
+}
+
+// Without a saved choice, follow the system's reduced-transparency setting.
+function systemIntensity(): AppearanceIntensity {
+  return typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia(REDUCED_TRANSPARENCY_QUERY).matches
+    ? 'focus'
+    : 'balanced';
+}
+
+function getInitialIntensity(): AppearanceIntensity {
+  const intensity = storedIntensity() ?? systemIntensity();
+  if (typeof document !== 'undefined')
+    document.documentElement.dataset.appearanceIntensity = intensity;
+  return intensity;
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(getInitialTheme);
   const [density, setDensityState] = useState<Density>(readDensity);
   const [fontSize, setFontSizeState] = useState<FontSize>(readFontSize);
+  const [intensity, setIntensityState] = useState<AppearanceIntensity>(getInitialIntensity);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.documentElement.dataset.appearanceIntensity = intensity;
+  }, [intensity]);
+
+  // Track the system setting until the user picks a level on this device.
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const mql = window.matchMedia(REDUCED_TRANSPARENCY_QUERY);
+    const onChange = () => {
+      if (!storedIntensity()) setIntensityState(systemIntensity());
+    };
+    mql.addEventListener?.('change', onChange);
+    return () => mql.removeEventListener?.('change', onChange);
+  }, []);
 
   // Persist the user's exact choice (including 'system') and apply the
   // resolved theme to the document.
@@ -111,10 +162,38 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, []);
   const setDensity = useCallback((next: Density) => setDensityState(next), []);
   const setFontSize = useCallback((next: FontSize) => setFontSizeState(next), []);
+  const setIntensity = useCallback((next: AppearanceIntensity) => {
+    try {
+      window.localStorage.setItem(APPEARANCE_INTENSITY_STORAGE_KEY, next);
+    } catch {
+      // Preference persistence is best effort.
+    }
+    setIntensityState(next);
+  }, []);
 
   const value = useMemo(
-    () => ({ theme, setTheme, toggleTheme, density, setDensity, fontSize, setFontSize }),
-    [density, fontSize, setDensity, setFontSize, setTheme, theme, toggleTheme],
+    () => ({
+      theme,
+      setTheme,
+      toggleTheme,
+      density,
+      setDensity,
+      fontSize,
+      setFontSize,
+      intensity,
+      setIntensity,
+    }),
+    [
+      density,
+      fontSize,
+      intensity,
+      setDensity,
+      setFontSize,
+      setIntensity,
+      setTheme,
+      theme,
+      toggleTheme,
+    ],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

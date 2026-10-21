@@ -311,7 +311,10 @@ export async function mockRoleSession(
   });
   if (station === 'admin') {
     await page.route(/\/admin\/api\/users\/[^/]+\/mfa$/, async (route) => {
-      if (route.request().method() !== 'GET') { await route.fallback(); return; }
+      if (route.request().method() !== 'GET') {
+        await route.fallback();
+        return;
+      }
       await route.fulfill({ json: { enrolled: false } });
     });
     await mockEmptyDiagnosticHistory(page, station);
@@ -678,4 +681,29 @@ export async function assertNoSensitiveBrowserPersistence(
   expect(result.serviceWorkerCount, 'browser tests must not leave service workers').toBe(0);
   expect([...urlObservation.hitSurfaces], 'a synthetic marker entered URL history').toEqual([]);
   expect(result.hits, 'a synthetic ephemeral marker reached browser persistence').toEqual([]);
+}
+
+/**
+ * Workbench pages fill the main area up to the wide content tier (88rem), then stay centred.
+ * Asserts no horizontal overflow at the current viewport.
+ */
+export async function assertWorkbenchWidth(page: Page, selector: string): Promise<void> {
+  const layout = await page.locator(selector).evaluate((element) => {
+    const main = element.closest('main')!;
+    const outer = main.getBoundingClientRect();
+    const inner = element.getBoundingClientRect();
+    const style = getComputedStyle(main);
+    const left = outer.left + parseFloat(style.paddingLeft);
+    const right = outer.right - parseFloat(style.paddingRight);
+    const wide = 88 * parseFloat(getComputedStyle(document.documentElement).fontSize);
+    return {
+      width: inner.width,
+      expected: Math.min(right - left, wide),
+      offCentre: Math.abs(inner.left - left - (right - inner.right)),
+      overflow: document.documentElement.scrollWidth > innerWidth,
+    };
+  });
+  expect(layout.overflow).toBe(false);
+  expect(layout.width).toBeGreaterThanOrEqual(layout.expected - 2);
+  expect(layout.offCentre).toBeLessThanOrEqual(2);
 }

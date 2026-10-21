@@ -87,6 +87,24 @@
 .user-authority > [hidden] {
   display: none;
 }
+/* Detail header: a small leading back link, then the title. */
+.user-authority__head {
+  display: grid;
+  justify-items: start;
+  gap: var(--nb-space-1);
+  margin-bottom: var(--nb-space-3);
+}
+.user-authority__head h2 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.user-authority__back.nb-btn {
+  width: auto;
+  min-height: 0;
+  margin-inline-start: calc(-1 * var(--nb-space-2));
+  padding: var(--nb-space-1) var(--nb-space-2);
+  font-size: var(--nb-font-size-sm);
+}
 .user-authority .ops-field-grid {
   gap: var(--nb-space-4);
 }

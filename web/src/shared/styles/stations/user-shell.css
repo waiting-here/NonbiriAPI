@@ -15,6 +15,19 @@
   min-width: 0;
 }
 
+/*
+ * Page widths: workspaces default to the wide token; reading pages use the readable token.
+ * :where() keeps the default at zero specificity so a page's own narrower width still wins.
+ */
+:where(.nb-user-shell__main > .page, .nb-user-shell__main > .reward-stack) {
+  width: 100%;
+  max-width: var(--nb-content-wide);
+  margin-inline: auto;
+}
+.nb-user-shell__main > .legal-copy {
+  max-width: var(--nb-content-readable);
+}
+
 @media (width >= 64rem) {
   .nb-user-shell__main > .nb-page {
     width: 100%;

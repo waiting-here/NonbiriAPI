@@ -33,6 +33,25 @@ describe('wallpaper timing', () => {
     expect(clock.due(5001)).toBe(false);
   });
 
+  it('paints ambient backgrounds at a quarter rate while the user types', () => {
+    const ambient = new PaintCadence(undefined, true);
+    const plain = new PaintCadence();
+    ambient.due(performance.now() - 10_000);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }));
+    const base = performance.now();
+    let ambientPaints = 0;
+    let plainPaints = 0;
+    ambient.reset();
+    for (let i = 0; i < 30; i++) {
+      const at = base + (i * 1000) / 60;
+      if (ambient.due(at)) ambientPaints++;
+      if (plain.due(at)) plainPaints++;
+    }
+    expect(plainPaints).toBeGreaterThanOrEqual(29);
+    expect(ambientPaints).toBeLessThanOrEqual(9);
+    expect(ambientPaints).toBeGreaterThanOrEqual(7);
+  });
+
   it('closes continuously and reopens more slowly without a loop seam', () => {
     const samples = Array.from({ length: 29 }, (_, i) => blinkAt(2.2 + i / 60));
     expect(samples.filter((v) => v > 0 && v < 1).length).toBeGreaterThan(16);
