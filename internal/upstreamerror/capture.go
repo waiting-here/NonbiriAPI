@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
 	"strings"
 	"unicode"
@@ -97,6 +98,9 @@ func (c Context) readResponse(ctx context.Context, response *http.Response, insp
 	}
 	if len(summaryLimit) > 0 && int64(len(body)) > summaryLimit[0] {
 		return Detail{}
+	}
+	if media, _, err := mime.ParseMediaType(response.Header.Get("Content-Type")); err == nil && media == "application/json" {
+		c.responseStatus = response.StatusCode
 	}
 	return c.Parse(body)
 }
