@@ -127,7 +127,10 @@ type Usage struct {
 	// TotalMismatch records a comparable upstream total that disagreed with
 	// independently validated buckets. It remains meaningful when Present is
 	// false because another usage defect made the buckets unbillable.
-	TotalMismatch bool
+	TotalMismatch      bool
+	Modalities         ModalityUsage
+	SearchUnitsMicros  int64
+	SearchUnitsPresent bool
 }
 
 // AttemptResult contains only bounded metadata. Diagnostic is a locally
