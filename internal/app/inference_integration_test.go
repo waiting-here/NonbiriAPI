@@ -6,6 +6,9 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/waiting-here/NonbiriAPI/internal/credits"
+	"github.com/waiting-here/NonbiriAPI/internal/usageinfo"
 )
 
 // Exercise authenticated HTTP, production router composition, dispatch and
@@ -97,6 +100,73 @@ func TestDirectInferenceDedicatedProtocols(t *testing.T) {
 			var finished int
 			if err := f.store.DB().QueryRow(`SELECT COUNT(*) FROM logical_requests WHERE state='terminal' AND caller_result_class='success'`).Scan(&finished); err != nil || finished != 2 {
 				t.Fatalf("terminal requests=%d err=%v", finished, err)
+			}
+		})
+	}
+}
+
+func TestSearchUnitHTTPSettlement(t *testing.T) {
+	f := newModelHTTPFixture(t, nil, "cohere-rerank", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"results":[{"index":0,"relevance_score":0.9}],"meta":{"billed_units":{"search_units":1.25}}}`)
+	})
+	f.exec(t, `UPDATE endpoint_keys SET force_store_false=0`)
+	f.exec(t, `UPDATE charity_models SET model_types=65535,cloudflare_proxy_enabled=0,pricing_mode='per_search_unit',request_user_price=3,request_donor_reward=2 WHERE model='per_token'`)
+	status, body := f.post(t, "/v1/rerank", `{"model":"[公益]provider/per_token","query":"hi","documents":["a"]}`)
+	if status != 200 {
+		t.Fatalf("status=%d body=%s", status, body)
+	}
+	var original, charge, reward int64
+	var metadata string
+	if err := f.store.DB().QueryRow(`SELECT cr.original_charge_milli,cr.user_charge_milli,u.reward_actual_milli,l.usage_details
+ FROM charity_reservations cr JOIN dispatch_claims c ON c.logical_request_id=cr.logical_request_id
+ JOIN donation_usage_reservations u ON u.claim_id=c.id JOIN request_logs l ON l.logical_request_id=cr.logical_request_id`).Scan(&original, &charge, &reward, &metadata); err != nil {
+		t.Fatal(err)
+	}
+	pricing, err := usageinfo.PricingFromUsage(metadata)
+	if err != nil || original != 4 || charge != 4 || reward != 3 || pricing.Mode != "per_search_unit" || !strings.Contains(metadata, `"search_units_micros":1250000`) {
+		t.Fatalf("original=%d charge=%d reward=%d metadata=%s err=%v", original, charge, reward, metadata, err)
+	}
+}
+
+func TestModalityHTTPSettlementAndFallback(t *testing.T) {
+	for _, classified := range []bool{true, false} {
+		name := "fallback"
+		if classified {
+			name = "classified"
+		}
+		t.Run(name, func(t *testing.T) {
+			f := newModelHTTPFixture(t, nil, "openai-compatible", func(w http.ResponseWriter, r *http.Request) {
+				details := ""
+				if classified {
+					details = `,"prompt_tokens_details":{"text_tokens":4,"image_tokens":6,"cached_tokens":0},"completion_tokens_details":{"text_tokens":5,"audio_tokens":1}`
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(w, `{"id":"c1","object":"chat.completion","created":1,"model":"private-model","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":6,"total_tokens":16`+details+`}}`)
+			})
+			policy := credits.ContextPricing{
+				UserModalities:  &credits.ModalityPricing{InputEnabled: true, OutputEnabled: true, Text: &credits.TokenPrices{UncachedInput: 1000000, Output: 3000000}, Image: &credits.TokenPrices{UncachedInput: 2000000}, Audio: &credits.TokenPrices{Output: 4000000}},
+				DonorModalities: &credits.ModalityPricing{InputEnabled: true, OutputEnabled: true, Text: &credits.TokenPrices{UncachedInput: 1000000, Output: 1000000}, Image: &credits.TokenPrices{UncachedInput: 1000000}, Audio: &credits.TokenPrices{Output: 2000000}},
+			}
+			f.exec(t, `UPDATE charity_models SET cloudflare_proxy_enabled=0,output_user_price=2000000,output_donor_reward=1000000,context_pricing=? WHERE model='per_token'`, policy.Encode())
+			status, body := f.post(t, "/v1/chat/completions", `{"model":"[公益]provider/per_token","messages":[{"role":"user","content":"`+strings.Repeat("a", 1001)+`"}]}`)
+			if status != 200 {
+				t.Fatalf("status=%d body=%s", status, body)
+			}
+			var original, charge, reward int64
+			var metadata string
+			if err := f.store.DB().QueryRow(`SELECT cr.original_charge_milli,cr.user_charge_milli,u.reward_actual_milli,l.usage_details
+ FROM charity_reservations cr JOIN dispatch_claims c ON c.logical_request_id=cr.logical_request_id
+ JOIN donation_usage_reservations u ON u.claim_id=c.id JOIN request_logs l ON l.logical_request_id=cr.logical_request_id`).Scan(&original, &charge, &reward, &metadata); err != nil {
+				t.Fatal(err)
+			}
+			wantOriginal, wantCharge, wantReward, wantMode := int64(52), int64(42), int64(26), "aggregate"
+			if classified {
+				wantOriginal, wantCharge, wantReward, wantMode = 35, 28, 17, "modality"
+			}
+			pricing, err := usageinfo.PricingFromUsage(metadata)
+			if err != nil || original != wantOriginal || charge != wantCharge || reward != wantReward || pricing.InputMode != wantMode || pricing.OutputMode != wantMode {
+				t.Fatalf("original=%d charge=%d reward=%d metadata=%s err=%v", original, charge, reward, metadata, err)
 			}
 		})
 	}

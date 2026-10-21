@@ -180,7 +180,7 @@ func TestDonationSourcesAggregateAcrossDonorsAndFilteredCollections(t *testing.T
 }
 
 func TestSourceUsabilityUsesUndiscountedReserveAndCurrentRules(t *testing.T) {
-	for _, kind := range []string{"openai-compatible", "google-gemini", "openai-responses", "openai-decisions"} {
+	for _, kind := range []string{"openai-compatible", "google-gemini", "openai-responses", "openai-decisions", "openai-chat-completions", "typesafe-systemone", "cohere-rerank", "jina-rerank", "siliconflow-rerank", "voyage-rerank"} {
 		t.Run(kind, func(t *testing.T) { testSourceUsability(t, kind) })
 	}
 }
@@ -273,6 +273,7 @@ func testSourceUsability(t *testing.T, kind string) {
 		{`DELETE FROM charity_model_token_reserves WHERE model_id=?`, []any{modelID}, "1"},
 		{`DELETE FROM site_config WHERE key='charity_token_reserve_milli'`, nil, "0"},
 		{`INSERT INTO charity_model_token_reserves(model_id,amount_milli) VALUES(?,3000)`, []any{modelID}, "1"},
+		{`UPDATE charity_models SET pricing_mode='per_search_unit' WHERE id=?`, []any{modelID}, "1"},
 		{`UPDATE charity_models SET pricing_mode='per_request' WHERE id=?`, []any{modelID}, "1"},
 	} {
 		if _, err := e.store.DB().Exec(step.query, step.args...); err != nil {
