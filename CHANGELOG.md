@@ -45,6 +45,9 @@ Each version entry describes its source and compatibility boundary; a release ta
   survive restart. No request-log scan or extra per-request write is added.
 - Three appearance intensities with immediate browser preferences, system-following
   theme/reduced-transparency defaults and manual-choice precedence.
+- Refined Shared Daylight, A Notice to Steal Your Heart and Across the Mirror Sea
+  SP scenery, lighting and motion, with dedicated responsive wallpapers and matching
+  static fallbacks. Shared Daylight is the new title for Run Away with You.
 
 ### Changed
 
@@ -85,6 +88,8 @@ Each version entry describes its source and compatibility boundary; a release ta
 ### Fixed
 
 - Account deletion succeeds after related terminal request logs have naturally expired.
+- Account downloads accept export versions 25–27 and preserve saved personal
+  managed-header settings, while retaining identity and attachment-version checks.
 - Improve glass-surface readability, management back controls and centered
   workbench widths on desktop and mobile. Focus-mode background viewing restores
   the selected reading surface on return; manual intensity choices remain effective
