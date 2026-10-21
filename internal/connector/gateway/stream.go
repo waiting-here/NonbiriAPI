@@ -262,6 +262,11 @@ func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *h
 				tool.complete = true
 			}
 		case "finish":
+			// Usage describes consumed work even when the finish is unsuccessful.
+			usage, err = parseUsage(part["usage"])
+			if err != nil {
+				return failure("upstream usage was invalid", upstreamerror.Detail{})
+			}
 			for _, closed := range texts {
 				if !closed {
 					return failure("upstream text block was incomplete", upstreamerror.Detail{})
@@ -273,12 +278,11 @@ func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *h
 				}
 			}
 			finish, err = finishReason(part["finishReason"])
+			if errors.Is(err, errUnsuccessfulFinish) {
+				return failure(unsuccessfulFinishDiagnostic, unsuccessfulFinishDetail(part["finishReason"], errorContext))
+			}
 			if err != nil || (finish == "tool_calls") != (len(tools) > 0) || len(texts)+len(tools) == 0 && finish != "content_filter" {
 				return failure("upstream finish was invalid", upstreamerror.Detail{})
-			}
-			usage, err = parseUsage(part["usage"])
-			if err != nil {
-				return failure("upstream usage was invalid", upstreamerror.Detail{})
 			}
 			terminal = true
 		case "error":
