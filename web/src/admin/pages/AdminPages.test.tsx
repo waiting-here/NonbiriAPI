@@ -199,7 +199,7 @@ describe('administrator paged operation pages', () => {
     });
     expect(await screen.findByText('8,007,199,254,740.123')).toBeVisible();
     expect(screen.getByText('Trusted steward')).toBeVisible();
-    expect(screen.getByText(/1234…5678/)).toHaveAttribute('title', '123456789012345678');
+    expect(screen.getByText(/1234…5678/)).toHaveAttribute('title', '#7 · 123456789012345678');
     expect(screen.queryByText('8007199254740.123')).not.toBeInTheDocument();
   });
 
