@@ -1,3 +1,4 @@
+import { supportsChatStoragePolicy } from '@shared/operations/connectorPolicy';
 import { normalizeCloudflareProxyMode, type CloudflareProxyMode } from '@shared/cloudflareProxy';
 import { CancelledError } from '@tanstack/react-query';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -521,7 +522,7 @@ export function normalizeEndpointKey(value: unknown, connectorTypeValue: string)
   const hasStorePolicy = Object.prototype.hasOwnProperty.call(record, 'force_store_false');
   const rawStorePolicy = recordValue(record, 'force_store_false');
   let storePolicyValue: StorePolicy;
-  if (connector === 'openai-compatible') {
+  if (supportsChatStoragePolicy(connector)) {
     if (!hasStorePolicy || typeof rawStorePolicy !== 'boolean') {
       throw new ApiError('invalid_response', 'The server returned an invalid store policy.', 200);
     }
@@ -1414,7 +1415,7 @@ export function normalizeDonationKey(value: unknown, connectorTypeValue: string)
   const hasStorePolicy = Object.prototype.hasOwnProperty.call(record, 'force_store_false');
   const rawStorePolicy = recordValue(record, 'force_store_false');
   let storePolicyValue: StorePolicy;
-  if (connector === 'openai-compatible') {
+  if (supportsChatStoragePolicy(connector)) {
     if (!hasStorePolicy || typeof rawStorePolicy !== 'boolean') {
       throw new ApiError(
         'invalid_response',
@@ -1596,7 +1597,7 @@ export interface DonationPayload {
       note?: string;
       max_concurrency?: number;
       rpm_limit?: number;
-      /** OpenAI-compatible only; omitted for every other connector. */
+      /** Native Chat connectors only; omitted for other connector types. */
       force_store_false?: boolean;
     }>;
   };

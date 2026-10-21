@@ -1,3 +1,12 @@
+import { InferenceLimitFields, InferenceLimitSummary } from './userInferenceLimits';
+import { UserLimitBatch } from './UserLimitBatch';
+import {
+  INFERENCE_LIMITS,
+  canEditInferenceLimits,
+  inferenceLimitDraft,
+  parseInferenceLimit,
+  type InferenceLimitDraft,
+} from '@shared/operations/userInferenceLimits';
 import { Button } from '@shared/components/ui/Button';
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
@@ -59,8 +68,7 @@ import './userManagement.css';
 
 interface UserDraft {
   endpointLimit: string;
-  rpmLimit: string;
-  concurrencyLimit: string;
+  inferenceLimits: InferenceLimitDraft;
   level: string;
   lang: '' | 'zh' | 'en';
   discordGatePolicy: AdminUser['discord_gate_policy'];
@@ -90,8 +98,7 @@ const economyTargetLabels = {
 
 const draftFor = (user: AdminUser): UserDraft => ({
   endpointLimit: user.endpoint_limit ?? '',
-  rpmLimit: user.rpm_limit ?? '',
-  concurrencyLimit: user.concurrency_limit ?? '',
+  inferenceLimits: inferenceLimitDraft(user),
   level: user.level.manual === null ? '' : String(user.level.manual),
   lang: user.lang,
   discordGatePolicy: user.discord_gate_policy,
@@ -151,6 +158,7 @@ function UserAuthority({
   const [economyConfirm, setEconomyConfirm] = useState<EconomyIntent | null>(null);
   const editable =
     !trainee && (role === 'admin' || (user.id !== account && user.level.effective < 6));
+  const limitsEditable = canEditInferenceLimits(user, role, account, trainee);
   const canBan =
     editable || (trainee && user.id !== account && user.level.effective <= 4 && !user.is_banned);
   const root = managementRoot(role);
@@ -201,28 +209,37 @@ function UserAuthority({
     setEconomyConfirm(null);
   }, [user.revision]);
   const endpoint = nullableLimit(draft.endpointLimit, 0, 10_000);
-  const rpm = nullableLimit(draft.rpmLimit, 1, 4_096);
-  const concurrency = nullableLimit(draft.concurrencyLimit, 1, 100_000);
-  const invalidLimits = endpoint === undefined || rpm === undefined || concurrency === undefined;
+  const inferenceLimits = Object.fromEntries(
+    INFERENCE_LIMITS.map(({ key, max }) => [
+      key,
+      parseInferenceLimit(draft.inferenceLimits[key], max),
+    ]),
+  );
+  const invalidLimits =
+    (editable && endpoint === undefined) ||
+    (limitsEditable && Object.values(inferenceLimits).some((value) => value === undefined));
 
   const baseline =
     confirmedUser && BigInt(confirmedUser.revision) > BigInt(user.revision) ? confirmedUser : user;
   const profileChanged =
-    endpoint !== baseline.endpoint_limit ||
-    rpm !== baseline.rpm_limit ||
-    concurrency !== baseline.concurrency_limit ||
-    draft.lang !== baseline.lang ||
-    (role === 'admin' && draft.discordGatePolicy !== baseline.discord_gate_policy);
-  const levelChanged = (draft.level ? Number(draft.level) : null) !== baseline.level.manual;
+    (limitsEditable &&
+      INFERENCE_LIMITS.some(({ key }) => inferenceLimits[key] !== baseline[key])) ||
+    (editable &&
+      (endpoint !== baseline.endpoint_limit ||
+        draft.lang !== baseline.lang ||
+        (role === 'admin' && draft.discordGatePolicy !== baseline.discord_gate_policy)));
+  const levelChanged =
+    editable && (draft.level ? Number(draft.level) : null) !== baseline.level.manual;
+
   const profileBusy = coordinating || profile.isPending || manualLevel.isPending;
   const saveLimits = async () => {
-    if (!editable || invalidLimits || profileBusy) return;
+    if ((!editable && !limitsEditable) || invalidLimits || profileBusy) return;
     const profileBody = {
       mode: 'profile',
-      endpoint_limit: endpoint,
-      rpm_limit: rpm,
-      concurrency_limit: concurrency,
-      ...(draft.lang ? { lang: draft.lang } : {}),
+      ...(limitsEditable ? inferenceLimits : {}),
+      ...(editable
+        ? { endpoint_limit: endpoint, ...(draft.lang ? { lang: draft.lang } : {}) }
+        : {}),
       ...(role === 'admin' && draft.discordGatePolicy !== baseline.discord_gate_policy
         ? { discord_gate_policy: draft.discordGatePolicy }
         : {}),
@@ -457,7 +474,7 @@ function UserAuthority({
           </div>
         </Card>
       </section>
-      {editable ? (
+      {editable || limitsEditable ? (
         <>
           <section
             role="tabpanel"
@@ -467,92 +484,105 @@ function UserAuthority({
           >
             <Card>
               <h2>
-                {t('management.users.manageLimitsTitle')} /{' '}
-                {t('management.users.levelSectionTitle')}
+                {t('management.users.manageLimitsTitle')}
+                {editable ? ' / ' + t('management.users.levelSectionTitle') : ''}
               </h2>
               <p>{t('management.users.limitHint')}</p>
               <Fold title={t('common.operations.management.details')}>
                 <p>{t('management.users.revisionGuard', { revision: user.revision })}</p>
               </Fold>
-              <div className="ops-field-grid">
-                <label>
-                  <span>{t('management.users.endpointLimit')}</span>
-                  <input
-                    inputMode="numeric"
-                    value={draft.endpointLimit}
-                    onChange={(event) => setDraft({ ...draft, endpointLimit: event.target.value })}
-                  />
-                </label>
-                <label>
-                  <span>{t('management.users.rpmLimit')}</span>
-                  <input
-                    inputMode="numeric"
-                    value={draft.rpmLimit}
-                    onChange={(event) => setDraft({ ...draft, rpmLimit: event.target.value })}
-                  />
-                </label>
-                <label>
-                  <span>{t('management.users.concurrencyLimit')}</span>
-                  <input
-                    inputMode="numeric"
-                    value={draft.concurrencyLimit}
-                    onChange={(event) =>
-                      setDraft({ ...draft, concurrencyLimit: event.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  <span>{t('management.users.levelControl')}</span>
-                  <select
-                    value={draft.level}
-                    onChange={(event) => setDraft({ ...draft, level: event.target.value })}
-                  >
-                    <option value="">{t('management.users.levelManualNone')}</option>
-                    {(role === 'admin' ? [1, 2, 3, 4, 5, 6] : [1, 2, 3, 4, 5]).map((level) => (
-                      <option key={level} value={level}>
-                        {level}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              <label className="ops-form-field">
-                <span>{t('management.users.language')}</span>
-                <select
-                  value={draft.lang}
-                  onChange={(event) =>
-                    setDraft({ ...draft, lang: event.target.value as UserDraft['lang'] })
-                  }
-                >
-                  <option value="" disabled>
-                    {t('management.users.languageDefault')}
-                  </option>
-                  <option value="zh">中文</option>
-                  <option value="en">English</option>
-                </select>
-              </label>
-              {role === 'admin' ? (
-                <Field
-                  label={t('management.users.discordGatePolicy')}
-                  help={t('management.users.discordGateHelp')}
-                >
-                  {(field) => (
-                    <select
-                      {...field}
-                      value={draft.discordGatePolicy}
-                      onChange={(event) =>
-                        setDraft({
-                          ...draft,
-                          discordGatePolicy: event.target.value as UserDraft['discordGatePolicy'],
-                        })
-                      }
+              {limitsEditable ? (
+                <InferenceLimitFields
+                  user={baseline}
+                  value={draft.inferenceLimits}
+                  onChange={(inferenceLimits) => setDraft({ ...draft, inferenceLimits })}
+                />
+              ) : (
+                <InferenceLimitSummary user={user} />
+              )}
+              <Fold title={t('management.users.inferenceLimitRules')}>
+                <p>{t('management.users.inferenceLimitHelp')}</p>
+              </Fold>
+              {editable ? (
+                <>
+                  <div className="ops-field-grid">
+                    <Field label={t('management.users.endpointLimit')}>
+                      {(field) => (
+                        <input
+                          {...field}
+                          inputMode="numeric"
+                          value={draft.endpointLimit}
+                          onChange={(event) =>
+                            setDraft({ ...draft, endpointLimit: event.target.value })
+                          }
+                        />
+                      )}
+                    </Field>
+                    <Field label={t('management.users.levelControl')}>
+                      {(field) => (
+                        <select
+                          {...field}
+                          value={draft.level}
+                          onChange={(event) => setDraft({ ...draft, level: event.target.value })}
+                        >
+                          <option value="">{t('management.users.levelManualNone')}</option>
+                          {(role === 'admin' ? [1, 2, 3, 4, 5, 6] : [1, 2, 3, 4, 5]).map(
+                            (level) => (
+                              <option key={level} value={level}>
+                                {level}
+                              </option>
+                            ),
+                          )}
+                        </select>
+                      )}
+                    </Field>
+                  </div>
+                  <Field label={t('management.users.language')}>
+                    {(field) => (
+                      <select
+                        {...field}
+                        value={draft.lang}
+                        onChange={(event) =>
+                          setDraft({ ...draft, lang: event.target.value as UserDraft['lang'] })
+                        }
+                      >
+                        <option value="" disabled>
+                          {t('management.users.languageDefault')}
+                        </option>
+                        <option value="zh">中文</option>
+                        <option value="en">English</option>
+                      </select>
+                    )}
+                  </Field>
+                  {role === 'admin' ? (
+                    <Field
+                      label={t('management.users.discordGatePolicy')}
+                      help={t('management.users.discordGateHelp')}
                     >
-                      <option value="inherit">{t('management.users.discordGateInherit')}</option>
-                      <option value="require">{t('management.users.discordGateRequire')}</option>
-                      <option value="exempt">{t('management.users.discordGateExempt')}</option>
-                    </select>
-                  )}
-                </Field>
+                      {(field) => (
+                        <select
+                          {...field}
+                          value={draft.discordGatePolicy}
+                          onChange={(event) =>
+                            setDraft({
+                              ...draft,
+                              discordGatePolicy: event.target
+                                .value as UserDraft['discordGatePolicy'],
+                            })
+                          }
+                        >
+                          <option value="inherit">
+                            {t('management.users.discordGateInherit')}
+                          </option>
+                          <option value="require">
+                            {t('management.users.discordGateRequire')}
+                          </option>
+                          <option value="exempt">{t('management.users.discordGateExempt')}</option>
+                        </select>
+                      )}
+                    </Field>
+                  ) : null}
+                </>
               ) : null}
               {invalidLimits ? (
                 <p className="field-error" role="alert">
@@ -596,6 +626,30 @@ function UserAuthority({
               )}
             </Card>
           </section>
+        </>
+      ) : (
+        <>
+          <section
+            role="tabpanel"
+            id={`${tabID}-limits-panel`}
+            aria-labelledby={`${tabID}-limits`}
+            hidden={tab !== 'limits'}
+          >
+            <Card>
+              {!trainee ? <p>{t('management.users.readOnly')}</p> : null}
+              <dl className="ops-kv">
+                <dt>{t('management.users.endpointLimit')}</dt>
+                <dd>{user.effective_endpoint_limit}</dd>
+                <dt>{t('management.users.language')}</dt>
+                <dd>{user.lang || t('management.users.languageDefault')}</dd>
+              </dl>
+              <InferenceLimitSummary user={user} />
+            </Card>
+          </section>
+        </>
+      )}
+      {editable ? (
+        <>
           <section
             role="tabpanel"
             id={`${tabID}-economy-panel`}
@@ -727,26 +781,6 @@ function UserAuthority({
         </>
       ) : (
         <>
-          <section
-            role="tabpanel"
-            id={`${tabID}-limits-panel`}
-            aria-labelledby={`${tabID}-limits`}
-            hidden={tab !== 'limits'}
-          >
-            <Card>
-              {!trainee ? <p>{t('management.users.readOnly')}</p> : null}
-              <dl className="ops-kv">
-                <dt>{t('management.users.endpointLimit')}</dt>
-                <dd>{user.effective_endpoint_limit}</dd>
-                <dt>{t('management.users.rpmLimit')}</dt>
-                <dd>{user.effective_rpm_limit}</dd>
-                <dt>{t('management.users.concurrencyLimit')}</dt>
-                <dd>{user.effective_concurrency_limit}</dd>
-                <dt>{t('management.users.language')}</dt>
-                <dd>{user.lang || t('management.users.languageDefault')}</dd>
-              </dl>
-            </Card>
-          </section>
           <section
             role="tabpanel"
             id={`${tabID}-economy-panel`}
@@ -963,6 +997,39 @@ export function UserManagement({
       !invalidCommittedUserID &&
       !invalidCommittedDiscordID,
   });
+  const batchScope = JSON.stringify([
+    account,
+    role,
+    query,
+    banned,
+    level,
+    userID,
+    discordID,
+    accountState,
+    pager.page,
+    pager.pageSize,
+  ]);
+  const [limitSelection, setLimitSelection] = useState<{ scope: string; ids: string[] }>({
+    scope: '',
+    ids: [],
+  });
+  const [batchBusy, setBatchBusy] = useState(false);
+  useEffect(() => {
+    // Returning to a previous page starts a fresh explicit selection.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLimitSelection({ scope: batchScope, ids: [] });
+  }, [batchScope]);
+
+  const eligibleUsers = (users.data?.data ?? []).flatMap((entry) =>
+    entry.account_state === 'active' && canEditInferenceLimits(entry.user, role, account, trainee)
+      ? [entry.user]
+      : [],
+  );
+  const limitSelected =
+    limitSelection.scope === batchScope
+      ? limitSelection.ids.filter((id) => eligibleUsers.some((user) => user.id === id))
+      : [];
+  const setLimitSelected = (ids: string[]) => setLimitSelection({ scope: batchScope, ids });
   const detailUnavailable =
     isUnauthorized(users.error) ||
     isForbidden(users.error) ||
@@ -1010,6 +1077,7 @@ export function UserManagement({
     nextAccountState: AccountState = accountState,
     nextDiscordID = discordID,
   ) => {
+    if (batchBusy) return;
     if (
       (nextUserID !== '' && !isPageNumber(nextUserID, 9_223_372_036_854_775_807n)) ||
       (nextDiscordID !== '' && !isPageNumber(nextDiscordID, 18_446_744_073_709_551_615n))
@@ -1144,6 +1212,7 @@ export function UserManagement({
                   <label>
                     <span>{accountLabels.allAccounts}</span>
                     <select
+                      disabled={batchBusy}
                       value={accountState}
                       onChange={(event) =>
                         commitListState(
@@ -1163,6 +1232,7 @@ export function UserManagement({
                   <label>
                     <span>{t('management.users.filterStatus')}</span>
                     <select
+                      disabled={batchBusy}
                       value={banned}
                       onChange={(event) =>
                         commitListState(
@@ -1181,6 +1251,7 @@ export function UserManagement({
                   <label>
                     <span>{t('management.users.level')}</span>
                     <select
+                      disabled={batchBusy}
                       value={level}
                       onChange={(event) =>
                         commitListState(query, banned, event.target.value, userIDDraft)
@@ -1206,7 +1277,10 @@ export function UserManagement({
                   {accountLabels.discordInvalid}
                 </p>
               ) : null}
-              <Button type="submit" disabled={invalidUserIDDraft || invalidDiscordIDDraft}>
+              <Button
+                type="submit"
+                disabled={batchBusy || invalidUserIDDraft || invalidDiscordIDDraft}
+              >
                 {t('common.applyFilter')}
               </Button>
             </form>
@@ -1245,6 +1319,33 @@ export function UserManagement({
                   }
                   selectedKey={selection}
                   columns={[
+                    {
+                      key: 'limit_selection',
+                      header: t('management.users.limitSelection'),
+                      cell: 'meta',
+                      render: (entry) =>
+                        entry.account_state === 'active' &&
+                        canEditInferenceLimits(entry.user, role, account, trainee) ? (
+                          <label className="user-limit-select">
+                            <input
+                              type="checkbox"
+                              aria-label={t('management.users.selectLimitUser', {
+                                user: entry.user.username,
+                              })}
+                              checked={limitSelected.includes(entry.user.id)}
+                              disabled={batchBusy || users.isFetching}
+                              onChange={(event) =>
+                                setLimitSelected(
+                                  event.target.checked
+                                    ? [...limitSelected, entry.user.id]
+                                    : limitSelected.filter((id) => id !== entry.user.id),
+                                )
+                              }
+                            />
+                          </label>
+                        ) : null,
+                    },
+
                     {
                       key: 'user',
                       header: t('management.users.username'),
@@ -1337,11 +1438,34 @@ export function UserManagement({
                 />
               </div>
             )}
+            {scopeReady &&
+            !sessionError &&
+            !users.error &&
+            users.data &&
+            eligibleUsers.length > 0 ? (
+              <UserLimitBatch
+                key={batchScope}
+                role={role}
+                users={eligibleUsers}
+                selected={limitSelected}
+                onSelected={setLimitSelected}
+                onBusy={setBatchBusy}
+                loading={users.isFetching}
+                refresh={async () => {
+                  const result = await users.refetch();
+                  if (result.error) throw result.error;
+                  if (selected) {
+                    const current = await detail.refetch();
+                    if (current.error) throw current.error;
+                  }
+                }}
+              />
+            ) : null}
             {scopeReady && !sessionError && !users.error && users.data ? (
               <PagePagination
                 metadata={users.data.pagination}
                 requestedPage={pager.page}
-                busy={users.isFetching}
+                busy={users.isFetching || batchBusy}
                 onPageChange={pager.setPage}
                 onPageSizeChange={pager.setPageSize}
               />

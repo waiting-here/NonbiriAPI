@@ -168,6 +168,12 @@ const coreBaseUser = {
   effective_rpm_limit: '60',
   concurrency_limit: null,
   effective_concurrency_limit: '5',
+  global_rpm_limit: null,
+  effective_global_rpm_limit: '60',
+  light_rpm_limit: null,
+  effective_light_rpm_limit: '30',
+  light_concurrency_limit: null,
+  effective_light_concurrency_limit: '15',
   balance: '1',
   game_balance: '0',
   donation_credit: '2',
@@ -871,6 +877,12 @@ describe('admin per-user limit explanations', () => {
       effective_rpm_limit: '60',
       concurrency_limit: null,
       effective_concurrency_limit: '5',
+      global_rpm_limit: null,
+      effective_global_rpm_limit: '60',
+      light_rpm_limit: null,
+      effective_light_rpm_limit: '30',
+      light_concurrency_limit: null,
+      effective_light_concurrency_limit: '15',
       lang: 'en',
       balance: '0',
       game_balance: '0',
@@ -1522,6 +1534,12 @@ describe('B1 and U3-U5 additive wire normalizers', () => {
       effective_endpoint_limit: '4',
       effective_rpm_limit: '60',
       effective_concurrency_limit: '5',
+      global_rpm_limit: null,
+      effective_global_rpm_limit: '60',
+      light_rpm_limit: null,
+      effective_light_rpm_limit: '30',
+      light_concurrency_limit: null,
+      effective_light_concurrency_limit: '15',
     });
     const admin = normalizeAdminUser({
       id: 7,
@@ -1550,9 +1568,11 @@ describe('B1 and U3-U5 additive wire normalizers', () => {
   });
 
   test('projects policy ownership fields and preserves strict donation limits and amounts', () => {
-    expect(
-      normalizeEndpointKey(endpointKeyFixture(1, true), 'openai-compatible').force_store_false,
-    ).toBe(true);
+    for (const connector of ['openai-compatible', 'openai-chat-completions']) {
+      expect(normalizeEndpointKey(endpointKeyFixture(1, true), connector).force_store_false).toBe(
+        true,
+      );
+    }
     expect(
       normalizePlatformModel(platformModelFixture(2, { flatten_tool_calls: true }))
         .flatten_tool_calls,
@@ -1572,12 +1592,14 @@ describe('B1 and U3-U5 additive wire normalizers', () => {
       enabled: true,
       force_store_false: true,
     };
-    expect(normalizeDonationKey(keyFixture, 'openai-compatible')).toMatchObject({
-      max_concurrency: 100_000,
-      rpm_limit: 4_096,
-      credits_usage_cap_milli: '9007199254740993',
-      force_store_false: true,
-    });
+    for (const connector of ['openai-compatible', 'openai-chat-completions']) {
+      expect(normalizeDonationKey(keyFixture, connector)).toMatchObject({
+        max_concurrency: 100_000,
+        rpm_limit: 4_096,
+        credits_usage_cap_milli: '9007199254740993',
+        force_store_false: true,
+      });
+    }
     expect(normalizeManagementDonationKey(keyFixture).force_store_false).toBe(true);
     expect(() => normalizeEndpointKey(endpointKeyFixture(1, 1), 'openai-compatible')).toThrow(
       /store policy/i,

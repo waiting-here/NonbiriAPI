@@ -123,6 +123,14 @@ describe('core wire normalizers', () => {
     expect(endpoint.origin).toEqual({ kind: 'custom' });
     expect(key).toMatchObject({ id: '21', endpoint_id: '11', revision: '4' });
     expect(user.user.usage.total_requests).toBe('340282366920938463463374607431768211455');
+    expect(user.user).toMatchObject({
+      global_rpm_limit: null,
+      effective_global_rpm_limit: '60',
+      light_rpm_limit: null,
+      effective_light_rpm_limit: '30',
+      light_concurrency_limit: null,
+      effective_light_concurrency_limit: '15',
+    });
   });
 
   it('decodes home check-in fields without numeric conversion', () => {

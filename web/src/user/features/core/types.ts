@@ -55,6 +55,12 @@ export interface UserProfile {
   charity_suspended_until: number | null;
   endpoint_limit: string | null;
   effective_endpoint_limit: string;
+  global_rpm_limit: string | null;
+  effective_global_rpm_limit: string;
+  light_rpm_limit: string | null;
+  effective_light_rpm_limit: string;
+  light_concurrency_limit: string | null;
+  effective_light_concurrency_limit: string;
   rpm_limit: string | null;
   effective_rpm_limit: string;
   concurrency_limit: string | null;
