@@ -1471,7 +1471,14 @@ function DonationsPanel({
       const next = new URLSearchParams(current);
       if (id) next.set('donation_id', id);
       else next.delete('donation_id');
-      for (const name of ['donation_key', 'donation_keys_page', 'donation_keys_page_size'])
+      for (const name of [
+        'donation_key',
+        'donation_keys_page',
+        'donation_keys_page_size',
+        'binding_donation',
+        'binding_key',
+        'binding_target',
+      ])
         next.delete(name);
       const from = oneParam(current, 'donation_from');
       if (!id && (from === 'sources' || from === 'models')) next.set('charity_section', from);
