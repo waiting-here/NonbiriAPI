@@ -216,6 +216,7 @@ func (adapter *CharityAdapter) ExportCharity(
 		return lifecycle.CharityExport{}, err
 	}
 	return lifecycle.CharityExport{
+		UsageDetails: consumerUsageDetails(value),
 		RequestCount: value.RequestCount, OriginalCharge: value.OriginalCharge,
 		Charged: value.Charged, Saved: value.Saved, DonorReward: value.DonorReward,
 		UncachedInput: value.UncachedInput, CacheWriteInput: value.CacheWriteInput,
