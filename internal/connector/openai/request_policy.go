@@ -103,6 +103,13 @@ func DecodeRequestEnvelope(body io.Reader, limit int64, operation contract.Opera
 	if result.Model == "" {
 		return nil, invalidField("model", "required field is missing")
 	}
+	if operation == contract.OperationAudioSpeech {
+		for _, field := range fields {
+			if field.name == "stream_format" {
+				result.Stream = bytes.Equal(bytes.TrimSpace(field.value), []byte(`"sse"`))
+			}
+		}
+	}
 	valid = true
 	return result, nil
 }

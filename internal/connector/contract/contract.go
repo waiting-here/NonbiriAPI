@@ -33,7 +33,8 @@ const (
 func (t Type) Valid() bool {
 	switch t {
 	case TypeOpenAICompatible, TypeAnthropicCompatible, TypeAISDKGatewayV3,
-		TypeGoogleGemini, TypeOpenAIResponses, TypeOpenAIDecisions:
+		TypeGoogleGemini, TypeOpenAIResponses, TypeOpenAIDecisions,
+		TypeCohereRerank, TypeJinaRerank, TypeSiliconFlowRerank, TypeVoyageRerank:
 		return true
 	default:
 		return false
@@ -51,7 +52,12 @@ const (
 )
 
 func (o Operation) Valid() bool {
-	return o == OperationChatCompletions || o == OperationEmbeddings || o == OperationImagesGenerations || o == OperationDecisions
+	for _, operation := range AllOperations() {
+		if o == operation {
+			return true
+		}
+	}
+	return false
 }
 
 // Capability is one fidelity guarantee made by a connector descriptor.
@@ -91,7 +97,7 @@ const KnownCapabilities = CapabilityText |
 	CapabilityImagesGenerations |
 	CapabilityEmbeddings |
 	CapabilityReasoningEffort |
-	CapabilityStorage | CapabilityPromptCache | CapabilityDecisions
+	CapabilityStorage | CapabilityPromptCache | CapabilityDecisions | inferenceCapabilities
 
 // CapabilitySet is an immutable bit set in a registry descriptor.
 type CapabilitySet uint64

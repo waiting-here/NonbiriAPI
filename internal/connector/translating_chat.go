@@ -14,7 +14,7 @@ import (
 func translatingCapabilities(kind contract.Type) contract.CapabilitySet {
 	capabilities := contract.CapabilitySet(contract.CapabilityText | contract.CapabilitySystem | contract.CapabilityDeveloper | contract.CapabilityImages | contract.CapabilityTools | contract.CapabilityToolChoice | contract.CapabilityParallelTools | contract.CapabilityStream | contract.CapabilitySampling | contract.CapabilityModelDiscovery)
 	if kind == contract.TypeOpenAIResponses {
-		capabilities |= contract.CapabilitySet(contract.CapabilityReasoningEffort | contract.CapabilityStorage | contract.CapabilityPromptCache | contract.CapabilityUnknownOpenAIFields)
+		capabilities |= inferenceCapabilities(kind) | contract.CapabilitySet(contract.CapabilityReasoningEffort|contract.CapabilityStorage|contract.CapabilityPromptCache|contract.CapabilityUnknownOpenAIFields)
 	}
 	return capabilities
 }
@@ -38,7 +38,11 @@ func translatingDescriptor(kind contract.Type) Descriptor {
 			if err != nil {
 				return nil
 			}
-			return &translatingConnector{adapter: adapter, kind: kind}
+			native, err := openai.NewAdapter(openai.AdapterConfig{Backend: dependencies.Backend})
+			if err != nil {
+				return nil
+			}
+			return &translatingConnector{adapter: adapter, kind: kind, inference: native}
 		},
 		CheckTarget: func(target contract.Target, request *openai.ChatRequest, policy contract.AttemptPolicy) error {
 			if target.Type() != kind || kind == contract.TypeGoogleGemini && policy.ForceStoreFalse {
@@ -52,8 +56,9 @@ func translatingDescriptor(kind contract.Type) Descriptor {
 }
 
 type translatingConnector struct {
-	adapter *chatwire.Adapter
-	kind    contract.Type
+	adapter   *chatwire.Adapter
+	inference *openai.Adapter
+	kind      contract.Type
 }
 
 func (c *translatingConnector) Type() contract.Type { return c.kind }
@@ -62,6 +67,9 @@ func (c *translatingConnector) Capabilities() contract.CapabilitySet {
 }
 func (c *translatingConnector) Attempt(ctx context.Context, input AttemptInput) contract.AttemptResult {
 	defer input.Credential.Clear()
+	if c != nil && input.Inference != nil {
+		return attemptInference(ctx, input, c.kind, c.inference)
+	}
 	if c == nil || c.adapter == nil || ctx == nil || input.Sink == nil || input.Target.Type() != c.kind || input.Operation != contract.OperationChatCompletions || !input.validOperation() {
 		return contract.AttemptResult{Failure: contract.FailureInternal, Diagnostic: "forwarding attempt unavailable"}
 	}

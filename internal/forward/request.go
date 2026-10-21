@@ -20,6 +20,7 @@ type validatedRequest struct {
 	embedding          *openai.EmbeddingRequest
 	image              *openai.ImageRequest
 	decision           *openai.DecisionRequest
+	inference          *openai.InferenceRequest
 	Model              string
 	Stream             bool
 	roleSnapshot       *rolepolicy.Policy
@@ -58,11 +59,24 @@ func imageRequest(request *openai.ImageRequest) *validatedRequest {
 }
 
 func decisionRequest(request *openai.DecisionRequest) *validatedRequest {
-	if request == nil { return nil }
+	if request == nil {
+		return nil
+	}
 	return &validatedRequest{operation: contract.OperationDecisions, decision: request, Model: request.Model}
 }
 
+func inferenceRequest(request *openai.InferenceRequest) *validatedRequest {
+	if request == nil {
+		return nil
+	}
+	return &validatedRequest{operation: request.Operation(), inference: request, Model: request.Model, Stream: request.Stream}
+}
+
 func decodeRequest(body io.Reader, operation contract.Operation, limit int64) (*validatedRequest, error) {
+	if contract.IsHTTPInference(operation) {
+		request, err := openai.DecodeInferenceRequest(body, operation, limit)
+		return inferenceRequest(request), err
+	}
 	switch operation {
 	case contract.OperationChatCompletions:
 		request, err := openai.DecodeChatRequest(body, limit)
@@ -85,10 +99,15 @@ func (r *validatedRequest) valid() bool {
 	if r == nil {
 		return false
 	}
+	if r.inference != nil {
+		return r.chat == nil && r.embedding == nil && r.image == nil && r.decision == nil && r.operation == r.inference.Operation() && r.Model == r.inference.Model && r.Stream == r.inference.Stream
+	}
 	if r.operation == contract.OperationDecisions {
 		return r.decision != nil && r.chat == nil && r.embedding == nil && r.image == nil && r.Model == r.decision.Model && !r.Stream
 	}
-	if r.decision != nil { return false }
+	if r.decision != nil {
+		return false
+	}
 	switch r.operation {
 	case contract.OperationChatCompletions:
 		return r.chat != nil && r.embedding == nil && r.image == nil && r.Model == r.chat.Model && r.Stream == r.chat.Stream
@@ -110,6 +129,7 @@ func (r *validatedRequest) Clear() {
 	r.embedding.Clear()
 	r.image.Clear()
 	r.decision.Clear()
+	r.inference.Clear()
 	*r = validatedRequest{}
 }
 
@@ -118,7 +138,9 @@ func (r *validatedRequest) CloneForAttempt() *validatedRequest {
 		return nil
 	}
 	var result *validatedRequest
-	if r.chat != nil {
+	if r.inference != nil {
+		result = inferenceRequest(r.inference.CloneForAttempt())
+	} else if r.chat != nil {
 		result = chatRequest(r.chat.CloneForAttempt())
 	} else if r.image != nil {
 		result = imageRequest(r.image.CloneForAttempt())
@@ -152,7 +174,9 @@ func (r *validatedRequest) excludeFields(fields []string) error {
 		return openai.ErrInvalidRequest
 	}
 	var err error
-	if r.chat != nil {
+	if r.inference != nil {
+		err = r.inference.ExcludeFields(fields)
+	} else if r.chat != nil {
 		err = r.chat.ExcludeFields(fields)
 	} else if r.image != nil {
 		err = r.image.ExcludeFields(fields)
@@ -168,18 +192,28 @@ func (r *validatedRequest) excludeFields(fields []string) error {
 }
 
 func (r *validatedRequest) supports(registry *connector.Registry, kind contract.Type) bool {
-	if r.valid() && r.decision != nil { return registry.SupportsDecisionRequest(kind, r.decision) }
+	if r.valid() && r.inference != nil {
+		return registry.SupportsInferenceRequest(kind, r.inference)
+	}
+	if r.valid() && r.decision != nil {
+		return registry.SupportsDecisionRequest(kind, r.decision)
+	}
 	return r.valid() && (r.chat == nil || r.chat.SupportsRolePassthrough(string(kind))) && registry.SupportsOperationRequest(kind, r.operation, r.chat, r.embedding, r.image)
 }
 
 func (r *validatedRequest) bodyLimit() int64 {
+	if r.inference != nil {
+		return r.inference.RequestBodyLimit()
+	}
 	if r.chat != nil {
 		return r.chat.RequestBodyLimit()
 	}
 	if r.image != nil {
 		return r.image.RequestBodyLimit()
 	}
-	if r.decision != nil { return r.decision.RequestBodyLimit() }
+	if r.decision != nil {
+		return r.decision.RequestBodyLimit()
+	}
 	return r.embedding.RequestBodyLimit()
 }
 
@@ -187,7 +221,12 @@ func (r *validatedRequest) checkTarget(registry *connector.Registry, target cont
 	if !r.valid() {
 		return openai.ErrInvalidRequest
 	}
-	if r.decision != nil { return registry.CheckDecisionTarget(target, r.decision, policy) }
+	if r.inference != nil {
+		return registry.CheckInferenceTarget(target, r.inference, policy)
+	}
+	if r.decision != nil {
+		return registry.CheckDecisionTarget(target, r.decision, policy)
+	}
 	if r.chat != nil && !r.chat.SupportsRolePassthrough(string(target.Type())) {
 		return &contract.RequestRejection{Stage: "role preflight", Field: "messages", Reason: "role cannot be passed through to this connector"}
 	}
