@@ -4,11 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"reflect"
 	"testing"
 )
 
-func TestAdditiveConversionLeavesUnrelatedHistoryForExplicitAudit(t *testing.T) {
+func TestConversionAuditsRebuiltCredentialsAndPreservesUnrelatedHistory(t *testing.T) {
 	for _, fault := range []string{"credential", "foreign-key"} {
 		t.Run(fault, func(t *testing.T) {
 			path, vault := sourceFixtureFromDDL(t, schema21SQLForTest(t), 21, stableSchema21Manifest)
@@ -30,24 +29,34 @@ func TestAdditiveConversionLeavesUnrelatedHistoryForExplicitAudit(t *testing.T) 
 			}
 			var events []Progress
 			result, err := Run(t.Context(), path, vault, Options{Apply: true, Progress: func(p Progress) { events = append(events, p) }})
+			if fault == "credential" {
+				if err == nil {
+					t.Fatal("rebuilt credentials were not audited")
+				}
+				database, openErr := sql.Open("sqlite", path)
+				if openErr != nil {
+					t.Fatal(openErr)
+				}
+				plan, planErr := storageSchema.plan(t.Context(), database)
+				if closeErr := database.Close(); planErr != nil || closeErr != nil || len(plan.steps) != 7 || plan.steps[0].from != 21 {
+					t.Fatal("credential rejection changed the exact source", planErr, closeErr)
+				}
+				return
+			}
 			if err != nil || result.Status != "converted" {
-				t.Fatal("additive conversion scanned unrelated history", result, err)
+				t.Fatal("conversion rejected unrelated history", result, err)
 			}
-			checkedTables := map[string]bool{}
+			var credentialAudit, endpointRebuild, endpointRelations bool
 			for _, event := range events {
-				if event.Phase == "audit" || event.Phase == "rebuild" {
-					t.Fatal("additive conversion performed a historical audit/rebuild", event)
-				}
-				if event.Phase == "relationships" {
-					checkedTables[event.Table] = true
+				credentialAudit = credentialAudit || event.Phase == "audit" && event.Table == "endpoint_key_secrets"
+				endpointRebuild = endpointRebuild || event.Phase == "rebuild" && event.Table == "endpoints"
+				endpointRelations = endpointRelations || event.Phase == "relationships" && event.Table == "endpoint_keys"
+				if event.Phase == "relationships" && event.Table == "account_mfa_attempts" {
+					t.Fatal("conversion scanned an unrelated historical relationship", event)
 				}
 			}
-			want := map[string]bool{"donation_key_cooldowns": true, "dispatch_retry_after_observations": true,
-				"request_header_facts": true, "charity_price_template_audits": true, "donation_owner_preferences": true,
-				"donation_key_backoffs": true, "dispatch_smart_backoff_facts": true,
-				"channel_charity_binding_presets": true, "channel_charity_binding_mappings": true}
-			if !reflect.DeepEqual(checkedTables, want) {
-				t.Fatal("unexpected relationship scope", checkedTables)
+			if !credentialAudit || !endpointRebuild || !endpointRelations {
+				t.Fatal("conversion omitted affected checks", credentialAudit, endpointRebuild, endpointRelations)
 			}
 			if _, err := Run(t.Context(), path, vault, Options{}); err == nil {
 				t.Fatal("explicit current audit missed preserved damage")

@@ -58,19 +58,23 @@ func allIndexSourceFacts(t *testing.T, database *sql.DB) map[string][]string {
 			if err := rows.Scan(refs...); err != nil {
 				t.Fatal(err)
 			}
-			if table == "observability_state" {
-				retained := make([]any, 0, len(values))
-				for i, column := range columns {
-					if column == "header_bytes" {
-						if values[i] != int64(0) {
-							t.Fatal("upgrade header counter is not empty")
-						}
-						continue
-					}
-					retained = append(retained, values[i])
-				}
-				values = retained
+			if inferenceDefaultRow(t, table, values) {
+				continue
 			}
+			retained := make([]any, 0, len(values))
+			for i, column := range columns {
+				if inferenceDefaultColumn(t, table, column, values[i]) {
+					continue
+				}
+				if table == "observability_state" && column == "header_bytes" {
+					if values[i] != int64(0) {
+						t.Fatal("upgrade header counter is not empty")
+					}
+					continue
+				}
+				retained = append(retained, values[i])
+			}
+			values = retained
 			encoded, err := json.Marshal(values)
 			if err != nil {
 				t.Fatal(err)
@@ -116,7 +120,7 @@ func TestLogIndexConversionPreservesEverySourceTable(t *testing.T) {
 	}
 	defer store.Close()
 	if after := allIndexSourceFacts(t, store.DB()); !reflect.DeepEqual(before, after) {
-		t.Fatal("index-only conversion changed stored facts")
+		t.Fatal("conversion changed original stored facts")
 	}
 }
 
@@ -156,4 +160,34 @@ func TestLogIndexConversionRollsBackPartialDDL(t *testing.T) {
 			}
 		})
 	}
+}
+
+// New inference fields have no source value; assert their exact upgrade defaults
+// before omitting them from comparisons of historical facts.
+func inferenceDefaultColumn(t *testing.T, table, column string, value any) bool {
+	t.Helper()
+	if table == "users" && (column == "light_rpm_limit" || column == "light_concurrency_limit" || column == "global_rpm_limit") || table == "risk_audit_minutes" && column == "saturation_micros_millis" {
+		if value != nil {
+			t.Fatalf("upgrade unexpectedly populated %s.%s", table, column)
+		}
+		return true
+	}
+	if (table == "request_attempts" || table == "request_logs" || table == "charity_reservations") && column == "usage_details" || table == "donation_usage_reservations" && column == "pricing_details" {
+		if value != "{}" {
+			t.Fatalf("upgrade %s.%s is not empty: %v", table, column, value)
+		}
+		return true
+	}
+	return false
+}
+
+func inferenceDefaultRow(t *testing.T, table string, values []any) bool {
+	t.Helper()
+	if table != "site_config" || values[0] != "default_light_rpm_per_user" {
+		return false
+	}
+	if len(values) != 3 || values[1] != "30" || values[2] != int64(0) {
+		t.Fatalf("unexpected default light RPM setting: %v", values)
+	}
+	return true
 }

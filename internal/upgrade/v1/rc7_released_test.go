@@ -156,12 +156,12 @@ func retainedFacts(t *testing.T, database *sql.DB) map[string][32]byte {
 			if err := rows.Scan(refs...); err != nil {
 				t.Fatal(err)
 			}
+			if inferenceDefaultRow(t, table, values) {
+				continue
+			}
 			var retained []any
 			for i, column := range columns {
-				if table == "users" && (column == "light_rpm_limit" || column == "light_concurrency_limit" || column == "global_rpm_limit") || table == "risk_audit_minutes" && column == "saturation_micros_millis" {
-					if values[i] != nil {
-						t.Fatalf("upgrade unexpectedly populated %s.%s", table, column)
-					}
+				if inferenceDefaultColumn(t, table, column, values[i]) {
 					continue
 				}
 				if table == "observability_state" && column == "header_bytes" {
