@@ -5,12 +5,13 @@ The connector selected for an endpoint determines its upstream protocol. The sam
 | Connector | Platform operation | Upstream resource appended to the versioned base |
 | --- | --- | --- |
 | `google-gemini` | `/v1/chat/completions` | `/models/{model}:generateContent`, or `:streamGenerateContent?alt=sse` |
-| `openai-responses` | `/v1/chat/completions` | `/responses` |
+| `openai-responses` | `/v1/chat/completions` conversion and native `/v1/responses`, `/v1/responses/compact`, `/v1/responses/input_tokens` | `/responses` or its corresponding native suffix |
+| `openai-chat-completions` | Native `/v1/chat/completions` and bounded `/v1/responses` conversion | `/chat/completions` |
 | `openai-decisions` | `/v1/decisions` | `/decisions` |
 
-Gemini and Responses do not serve embeddings, image generation or Decisions. There is no platform `/v1/responses` endpoint or stored upstream conversation. The existing OpenAI-compatible connector does not acquire Decisions support. A platform model must enable the corresponding `model_types` value, and its binding must support that operation.
+Gemini and the dedicated Chat/Responses types do not serve embeddings, image generation or Decisions. Native Responses is stateless and does not create a stored platform conversation. The OpenAI-compatible connector sends Chat and Responses natively and does not acquire Decisions support. A platform model must enable the corresponding `model_types` value, and its binding must support that operation. See [direct inference](direct-inference.md) for the complete registry and the new Responses-to-Chat conversion; the existing Chat translation subsets below retain their limits.
 
-All three connectors use the shared outbound boundary, cancellation, timeouts, concurrency limits and credential protections. Responses are bounded to 8 MiB for JSON or 32 MiB cumulatively for SSE, with 256 KiB lines and 1 MiB events, or a smaller configured shared limit. Translated output also respects those bounds. Upstream IDs and model metadata are projected to local completion IDs and the requested platform model; explicit continuation fields below retain the opaque information needed by that protocol.
+These connectors use the shared outbound boundary, cancellation, timeouts, concurrency limits and credential protections. Responses are bounded to 8 MiB for JSON or 32 MiB cumulatively for SSE, with 256 KiB lines and 1 MiB events, or a smaller configured shared limit. Translated output also respects those bounds. Upstream IDs and model metadata are projected to local completion IDs and the requested platform model; explicit continuation fields below retain the opaque information needed by that protocol.
 
 ## Gemini Chat
 

@@ -1,7 +1,7 @@
 # NonbiriAPI HTTP API Contract
 
-- Status: **v1.0.0 source contract**. Check an instance's deployed build before using routes or configuration added by an update.
-- Scope: public ingress includes `GET /v1/models` and `POST /v1/chat/completions`, `/v1/embeddings`, `/v1/images/generations` and `/v1/decisions`. Chat supports OpenAI-compatible, Anthropic-compatible, AI SDK Gateway v3, Google Gemini and OpenAI Responses upstreams. Embeddings support OpenAI-compatible and the strict Gateway text subset; image generation supports OpenAI-compatible upstreams; Decisions uses OpenAI Decisions upstreams. There is no public Responses, Anthropic-native or rerank API. See the [protocol matrix](content-protocols.md) for conversion limits.
+- Status: **v1.1.0 source contract**. Check an instance's deployed build before using routes or configuration added by an update.
+- Scope: model discovery and direct HTTP/SSE text, image, audio, embedding, moderation, rerank, Decisions and System One inference. See the [operation and connector matrix](direct-inference.md) for exact paths, conversion limits and the excluded persistent/realtime APIs. There is no Anthropic-native public ingress.
 - Authority: this document reflects the current source route registry, strict request/response types, stable error catalog, and contract tests. A future wire change requires a changelog entry; undocumented database fields never enter an API response automatically. The session-authenticated picture-book activity has its own configuration and accounting, separate from the public image-generation model route.
 - Release boundary: new source behavior is listed in the [changelog](../CHANGELOG.md). This document does not assert that an instance has deployed it.
 
@@ -140,9 +140,9 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 27. Normal startup accepts fresh storage and schema 27 only; exact schema 16–26 structures require the separate offline converter. Unknown or partial structures are rejected before writes. Startup validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for explicit source/target versions and rollback requirements.
+The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 28. Normal startup accepts fresh storage and schema 28 only; exact schema 16–27 structures require the separate offline converter. Unknown or partial structures are rejected before writes. Startup validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for explicit source/target versions and rollback requirements.
 
-Current account export `schema_version=25` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v25.json`. See §9 for its safe projections.
+Current account export `schema_version=26` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v26.json`. See §9 for its safe projections. This contract describes v1.1.0 source, not an instance's release or deployment status.
 
 ### 1.5 Display time context
 
@@ -154,6 +154,11 @@ The existing `GET /api/time-zones` and `GET /admin/api/time-zones` return the em
 
 ## 2. OpenAI-compatible ingress
 
+The [direct inference contract](direct-inference.md) lists all 12 connector types,
+16 model operations, native HTTP/SSE formats, bounded Chat/Responses conversion,
+System One, rerank and excluded persistent/realtime resources. The operation
+registry is closed; this is not an arbitrary upstream path proxy.
+
 ### 2.1 `GET /v1/models`
 
 Returns the caller's currently routable personal models plus currently available charity models in the OpenAI list envelope:
@@ -163,6 +168,10 @@ Returns the caller's currently routable personal models plus currently available
 ```
 
 The list is sorted by external model ID. It never contains physical endpoint, key, binding, donation, price, or donor data. A charity model appears only while its feature gate is open, the caller's current effective level is allowed, and at least one real candidate is currently usable.
+
+`GET /v1/models/{model}` returns one exact currently routable platform model in
+the same object shape, or 404 when unavailable. It retains the list's ownership
+and visibility checks.
 
 The charity portion is evaluated in one read-only snapshot using a single
 decision time. Personal models remain owner-scoped. These are immediate reads
@@ -174,11 +183,11 @@ an empty list. See [database access](database-access.md).
 
 The request is the OpenAI Chat Completions shape. Its body limit defaults to 10 MiB and is configured by administrators with `model_request_body_limit_mib` (integer 1–64 MiB). One MiB is 1,048,576 bytes; exactly the configured size is accepted, and one extra byte returns 413 `payload_too_large`. Each request keeps one configuration snapshot across parsing and forwarding; saved changes apply to new requests. Proxy limits can impose an earlier rejection. `model` is a required opaque platform model name (at most 133 Unicode runes). `stream` selects OpenAI-compatible SSE. `max_tokens` and `max_completion_tokens` may be absent or null; if both are integers they must be equal and in `1..2147483647`. For OpenAI and Anthropic, a caller-supplied safety identifier is replaced by the existing server-generated user-and-origin pseudonym. Gateway does not send that safety field; its separate optional cost-attribution tag is controlled only by the administrator and defaults off.
 
-Admission order is fixed: CallerKey/account, one user-wide concurrency permit, global/user RPM, strict body/model policy, Debug interception, model/capability resolution, candidate selection, credential/egress checks, then dispatch. A refused concurrency permit creates no RPM hit, candidate access, reservation, or penalty. One logical request retains one permit and one 1200-second aggregate deadline across retries and streaming. Upstream response headers may take up to 900 seconds; receiving them does not end the remaining output budget.
+Admission order is fixed: CallerKey/account, one permit from the user's operation-class concurrency pool, global/user RPM, strict body/model policy, Debug interception, model/capability resolution, candidate selection, credential/egress checks, then dispatch. A refused concurrency permit creates no RPM hit, candidate access, reservation, or penalty. One logical request retains one permit and one 1200-second aggregate deadline across retries and streaming. Upstream response headers may take up to 900 seconds; receiving them does not end the remaining output budget. Embeddings, rerank, System One and Decisions use the light pool; all other model operations use the heavy pool. Each pool combines personal and charity calls. Charity RPM windows are also independent by class, while global RPM remains shared; see §7.1 for defaults and overrides.
 
 Short charity requests return `400 content_too_short` with the actual and minimum character counts. The server applies the current optional penalty, temporary ban, and charity suspension settings before any reservation or upstream attempt. Their rejection log and any credit penalty commit together; `X-Request-ID` identifies that log. Rejected requests count once with zero upstream tokens. The separate automatic RPM-ban window counts only charity requests denied by the site's per-user RPM limit. Personal resource calls, global RPM, concurrency limits, shared EndpointKey limits and upstream `429` responses do not contribute. Successfully intercepted Debug dry runs retain their zero-accounting and zero-log behavior.
 
-On a per-user RPM denial, the server can attribute a charity violation only after decoding the reserved `[公益]` model namespace from a valid bounded chat, embedding, image-generation or Decisions request. This read is limited to the configured model-request body maximum and two seconds, or the earlier request deadline; at most 16 such reads run at once, without queuing. An unreadable or malformed body, or exhausted classification capacity, keeps the rate-limit rejection without adding an automatic-ban event. This does not select a candidate, access a credential, reserve credit or send upstream; admitted requests retain the order above.
+On a per-user RPM denial, the server can attribute a charity violation only after decoding the reserved `[公益]` model namespace from a valid bounded request for a registered operation, including supported multipart requests. This read is limited to the configured model-request body maximum and two seconds, or the earlier request deadline; at most 16 such reads run at once, without queuing. An unreadable or malformed body, or exhausted classification capacity, keeps the rate-limit rejection without adding an automatic-ban event. This does not select a candidate, access a credential, reserve credit or send upstream; admitted requests retain the order above.
 
 Personal models use `ordered`, `random`, or `cache_balanced` routing; the default remains `ordered`. Cache balancing first tries a currently eligible physical key associated with the same owner and personal model during the preceding 300 seconds. Otherwise it selects from the lowest recent physical-key load, using a uniform random candidate order for ties. Selection and pending-load reservation share the final claim transaction. Personal models do not apply donation-expiry weights or expose a configurable affinity lifetime. Request capability filtering happens before a credential is decrypted. Silent retry follows the existing pre-output boundary; heartbeat comments alone do not count as output. A clean EOF alone is never success: non-streaming requires a complete valid response, chat streaming requires its valid protocol terminator and `[DONE]`, and image streaming requires the completed-image events described in §2.5. Client disconnect cancels upstream work.
 
@@ -289,7 +298,7 @@ Valid `usage.input_tokens` and `usage.output_tokens` map to uncached input and o
 
 ### 2.6 Translated Chat connectors and `POST /v1/decisions`
 
-`google-gemini` and `openai-responses` serve the existing `/v1/chat/completions` operation only. Gemini uses GenerateContent with API-key header authentication; Responses uses Bearer authentication and always sends `store:false`. No platform `/v1/responses` route or persistent upstream conversation is created. Their text, image, function-tool, reasoning continuation and streaming subsets are specified in [content protocols](content-protocols.md). Unsupported fields reject the candidate before dispatch. Signature/reasoning continuation fields restrict routing to their source protocol and survive both forced transport modes.
+`google-gemini` serves `/v1/chat/completions` through GenerateContent with API-key header authentication. `openai-responses` serves native Responses operations and the supported Chat conversion, using Bearer authentication and `store:false`. The new `openai-chat-completions` type serves native Chat and a bounded Responses conversion; `openai-compatible` sends both natively. Protocol choice happens before dispatch, without retrying another endpoint after failure. Their text, image, function-tool, reasoning continuation and streaming subsets are specified in [content protocols](content-protocols.md) and [direct inference](direct-inference.md#chat-and-responses-conversion). Unsupported fields reject the candidate before dispatch. Existing signature/reasoning continuation fields restrict Chat routing to their source protocol and survive both forced transport modes.
 
 `openai-decisions` serves `POST /v1/decisions` with an independent native JSON request and response. Required fields are `model,input,questions`; 1–200 predicate/choice/score questions are supported. Optional cache fields and safety identity follow the native contract. `stream:false` is accepted and stripped locally; true/null and unknown fields are rejected. The response validates every positional answer against its question and exposes the platform model. Refusals are valid answers. Enable model type `decisions` and bind a Decisions connector; Chat/Gemini/Responses connectors do not convert this operation.
 
@@ -299,7 +308,20 @@ Decisions uses the existing CallerKey, ownership, admission, original-input clie
 
 All routes in this section require a user session unless marked anonymous.
 
-Request-log and Debug `route_kind` values are `openai_chat_completions`, `charity_chat_completions`, `model_discovery`, `openai_embeddings`, `charity_embeddings`, `openai_images_generations`, and `charity_images_generations`; Debug accepts the six model-call kinds only. Log clients using a closed enum must accept these values. Existing model/status/time filters, pagination, role-specific projections and exports include all three model operations. Personal and charity records retain their corresponding privacy boundary; request logs do not store prompts, vectors or image contents.
+Request-log and Debug model-call `route_kind` values use `openai_` or `charity_` followed by one of the 16 operation names in §3.4, including `responses_compact`, `responses_input_tokens`, `rerank` and `systemone`. Discovery retains `model_discovery`. Debug accepts registered model-call kinds only. Log clients using a closed enum must handle the complete set. Existing model/status/time filters, pagination, role-specific projections and exports include every registered operation. Personal and charity records retain their corresponding privacy boundary; request logs do not store prompts, vectors, uploaded files or generated media.
+
+Request and attempt `usage` may add optional `search_units`, `modalities` and
+`pricing`. Search units are decimal strings with at most six fractional digits
+and remain available independently of `usage_unknown` for tokens. Modality
+counts are decimal strings: `input` has `uncached_input,cache_write_input,
+cache_read_input`, each with `text,image,audio,video`; `output` has those four
+modality fields. Invalid or missing sides are omitted with a bounded
+`input_fallback`/`output_fallback`. `pricing` has `mode` and, for token pricing,
+`input_mode,output_mode` (`aggregate|modality`) plus optional side fallbacks.
+The closed reasons and rounding rules are in [usage pricing](charity-context-pricing.md).
+CSV exports add spreadsheet-safe `search_units,modalities,pricing` columns.
+Older rows can omit these fields; absence is not a reported zero. Ordinary
+user logs show caller pricing only, never donor reward decisions.
 
 Request logs and JSON/CSV exports include nullable `requested_streaming` (the caller's validated original mode before upstream overrides) and nullable `automatic_actions`. Actions are `short_content_deduction`, `short_content_ban`, `short_content_suspension`, `rpm_ban`, `client_rule_ban` and `context_penalty`. The list records effects in the same transaction as their application; a matched rule or ordinary rejection alone is not a punishment. An empty array means no recorded automatic action; null means historical information is unavailable. Missing or invalid request bodies can leave the mode null. These safe facts share existing log access, export, deletion and retention rules and reveal no rule definitions or request body.
 
@@ -551,7 +573,7 @@ Import has a 30-second total budget, append 60 seconds and results at most 64 Ki
 
 ### Model operation types
 
-Personal and charity model create/PATCH/GET, authorized model lists, automation reads, the public charity catalog and personal resource exports include `model_types`: a nonempty array drawn from `chat_completions`, `embeddings`, `images_generations` and `decisions`. Duplicate or unknown values, empty arrays and explicit null are invalid. Creating a model without the field enables only chat; omitting it from PATCH preserves the current selection. Upgrades preserve chat and embeddings for existing models. The final candidate snapshot rechecks the requested operation before request acceptance, key claims or reservations; admitted requests and retries retain that snapshot. This does not alter the earlier freeze point for role and transport policies. Enabling a platform type does not add that capability to an unsupported connector or upstream model.
+Personal and charity model create/PATCH/GET, authorized lists, automation reads, the public charity catalog and personal resource exports include `model_types`: a nonempty array of registered operation names. Values are `chat_completions,responses,embeddings,images_generations,decisions,responses_compact,responses_input_tokens,completions,images_edits,images_variations,audio_speech,audio_transcriptions,audio_translations,moderations,rerank,systemone`. Chat and Responses are one service selection: either legacy name enables both, and canonical reads/writes contain both names. Creation without the field enables this pair; PATCH omission preserves the selection. Other services may be selected independently together. Duplicate or unknown values, empty arrays and explicit null are invalid. Existing service selections remain enabled, with legacy Chat/Responses aliases interpreted as the pair. The final candidate snapshot rechecks the requested operation before request acceptance, key claims or reservations; admitted requests and retries retain that snapshot. This does not alter the earlier freeze point for role and transport policies. Enabling a platform type does not add that capability to an unsupported connector or upstream model.
 
 Existing ownership, administrator/steward scope, revision and idempotency rules apply. CallerKey automation only reads this setting and does not gain model-setting write access; level-5 stewards retain their existing limited policy permissions.
 
@@ -606,7 +628,15 @@ Every owner-visible key carries `safe_source`: a custom Connector/base URL or a 
 `CharityCapability.state` is `feature_disabled|no_models|no_candidates|available`; `donation_intake` is `open|closed`. Only models allowed for the caller's current level and with a usable candidate are listed. Charity candidates exclude the caller's own donated keys unless the caller is currently level 6; personal calls are unchanged. Level-6 self-donation calls receive normal rewards and cumulative donation credit. Each model contains `id,provider,model,full_name,model_types,pricing,discount,recurring_discount,effective_discount,recent_success`. Pricing is a tagged union:
 
 - `per_request`: canonical base `user_price_milli`, configured fixed-percentage `discounted_user_price_milli`, and current payable `current_user_price_milli`;
+- `per_search_unit`: the same scalar fields, in milli-credits per reported search unit; quantities retain exact millionth-unit precision independently of token usage;
 - `per_token`: corresponding `user_prices_milli`, `discounted_user_prices_milli` and `current_user_prices_milli` objects for uncached input, cache-write input, cache-read input, and output. The irrelevant mode fields are null.
+
+Token pricing may additionally expose `user_modalities_milli`,
+`discounted_user_modalities_milli` and `current_user_modalities_milli`, including
+within an optional long-context tier. Each has `input_enabled,output_enabled`
+and configured `text,image,audio,video` four-price entries. Input/output
+classification and missing-price fallback are independent. Donor prices and
+decisions are excluded. See [usage and context pricing](charity-context-pricing.md).
 
 `discount` contains `enabled,percent,start_at,end_at`; the interval is `[start_at,end_at)`, nullable at either end. Enabling it pauses the recurring schedule even outside the fixed window, where full price applies. `recurring_discount` supplies a time zone, default payable percentage and at most 16 weekly periods. `effective_discount` contains `source,percent,next_change_at`; the latter is the next actual percentage change as a Unix second or null. Effective prices use the same integer ceiling rule as billing. `server_now` is the single decision time used for availability and pricing. Existing `discounted_*` fields use the configured fixed percentage regardless of the active window; consumers should use `current_user_*` for current prices. No donated-resource identity is exposed. See [weekly configuration, precedence, DST and frozen settlement](charity-discounts.md).
 
@@ -616,13 +646,13 @@ Browsing excludes expired keys by time without advancing their stored lifecycle
 state. Background maintenance and business paths continue that work. All model
 directory responses remain `no-store` and have no complete-list cache or TTL.
 
-The web directory uses `GET /api/charity/models?view=catalog`. Optional single-value parameters are `q` (at most 128 Unicode code points and 512 UTF-8 bytes, no NUL), `allowed_for_me=true|false`, `allowed_level=1|2|3|4|5|6`, `currently_available=true|false`, `model_type=chat_completions|embeddings|images_generations`, `page`, and `page_size`. Omit a filter to apply no restriction; the filters are combined as an intersection. The web UI initially sends `allowed_for_me=true` and `currently_available=true`, while omitting `allowed_level` and `model_type`. Model-type filtering matches any model that includes the selected operation and applies before counting and pagination. It rejects cursor/limit and unknown or repeated parameters. Page numbers are canonical decimal strings from 1 to 2147483647; sizes are 10, 20, 50, or 100, with defaults 1 and 20. The response is `{models,pagination,donation_intake,server_now}`. Pagination contains decimal-string `page,total_items,total_pages` and integer `page_size`; empty results use page 1 of 1, and an excessive requested page is clamped to the last page.
+The web directory uses `GET /api/charity/models?view=catalog`. Optional single-value parameters are `q` (at most 128 Unicode code points and 512 UTF-8 bytes, no NUL), `allowed_for_me=true|false`, `allowed_level=1|2|3|4|5|6`, `currently_available=true|false`, `model_type` (one registered operation name), `page`, and `page_size`. Omit a filter to apply no restriction; the filters are combined as an intersection. The web UI initially sends `allowed_for_me=true` and `currently_available=true`, while omitting `allowed_level` and `model_type`. Model-type filtering matches any model that includes the selected operation and applies before counting and pagination; Chat and Responses aliases select the shared service. It rejects cursor/limit and unknown or repeated parameters. Page numbers are canonical decimal strings from 1 to 2147483647; sizes are 10, 20, 50, or 100, with defaults 1 and 20. The response is `{models,pagination,donation_intake,server_now}`. Pagination contains decimal-string `page,total_items,total_pages` and integer `page_size`; empty results use page 1 of 1, and an excessive requested page is clamped to the last page.
 
 Catalog entries contain the capability model fields plus `public_description,enabled,allowed_levels,level_allowed,currently_available,availability`. They include unavailable models so users can understand the reason. Availability is `feature_disabled|model_disabled|level_denied|no_usable_key|available`, in that precedence. `currently_available` reports the current charity resource state independently of the caller's level; `availability` remains the caller-facing explanation. Ordinary active donor bans exclude the donor's bindings from resource availability; a permanent protective-inactivity ban remains exempt. Unbanning or expiry restores eligible supply without rebuilding bindings, and other eligible donors can keep the model available. The same donor rule applies to runtime candidates and management key-model availability. Search, count, ordered page, pricing and availability share one read-only snapshot and a five-second query budget. No donor rewards, bindings, physical resources or private notes appear in the directory.
 
 Administrator and steward model create/patch bodies accept `allowed_levels` and `public_description` within a 16 KiB request limit. Levels are unique integers 1–6, returned sorted. Omitted creation fields mean all six levels and an empty description; omitted patch fields remain unchanged. An explicit empty array blocks every ordinary caller, including L6. Null and duplicate/out-of-range levels are invalid. Descriptions are plain text, at most 1,024 code points and 4,096 UTF-8 bytes after CRLF-to-LF normalization; controls other than LF and TAB, including lone CR, are rejected. These fields use the existing model revision and idempotency rules.
 
-Management model detail, create, and patch DTOs also carry the top-level `token_reserve_credits` field as a decimal string or `null`. It accepts canonical credit values from `0.001` through `9000000000000` inclusive, with no more than three fractional digits; zero, negative, exponent-form, overprecise, out-of-range, and non-string values are invalid. On create, omission or `null` inherits the global Token reserve. On PATCH, omission preserves the existing override and `null` clears it back to inheritance. The field is effective only for `per_token` pricing: `per_request` keeps its per-request price reserve, and an override is retained when switching back to Token. Runtime preflight, candidate availability, and billing use the model value or the global `charity_token_reserve_milli`; the accepted value is frozen for an admitted request, so in-flight and recovery snapshots remain unchanged. This is a management-only field and is absent from ordinary catalog/API projections and owner exports.
+Management model detail, create, and patch DTOs also carry the top-level `token_reserve_credits` field as a decimal string or `null`. It accepts canonical credit values from `0.001` through `9000000000000` inclusive, with no more than three fractional digits; zero, negative, exponent-form, overprecise, out-of-range, and non-string values are invalid. On create, omission or `null` inherits the global Token reserve. On PATCH, omission preserves the existing override and `null` clears it back to inheritance. The field is effective for `per_token` and `per_search_unit`: `per_request` keeps its per-request price reserve, and the override remains stored when inactive. Runtime preflight, candidate availability, and billing use the model value or the global `charity_token_reserve_milli`; the accepted value is frozen for an admitted request, so in-flight and recovery snapshots remain unchanged. Token-mode output reservation also considers the highest enabled user output price across base and long-context aggregate/modality prices. This is a management-only field and is absent from ordinary catalog/API projections and owner exports.
 
 Pricing optionally includes independent `long_context` and `context_penalty` configurations. Their thresholds use reported input across ordinary, cache-write and cache-read buckets. Full alternate prices receive existing discounts; the one-time penalty does not. Request acceptance freezes both options. See [context pricing fields, replacement semantics and billing rules](charity-context-pricing.md).
 
@@ -1177,7 +1207,7 @@ pricing or template access and does not depend on a mainstream-source flag.
 
 `GET|PATCH /api/steward/automation/donation-key-failure-policy` uses the same current L6, CallerKey, lifecycle, maintenance and four-global/one-per-user concurrency gates. GET accepts only `donation_id` and `donation_key_id` query parameters and no body. PATCH requires those IDs, `expected_revision` and `failure_disable_threshold`, requires `Idempotency-Key`, and returns the safe policy receipt described in §4.2. Its 30-second bound and shared mutation limits apply. Policy management follows ordinary retained donation-management visibility; it cannot access or modify another user's private credentials. Unknown fields, noncanonical values and forbidden methods fail; stale revision gives 409, missing/unavailable objects 404 and revoked authority 401/403. Current authority and object visibility are checked before replay.
 
-`POST /api/steward/automation/donations` atomically creates one custom endpoint and 1–100 owned keys, submits them in one donation and approves it as the calling steward. It requires `Idempotency-Key` and returns 201 `{endpoint_id,donation_id,keys:[{endpoint_key_id,donation_key_id}]}`. Explicit `connector_type` and URL are required; OpenAI-compatible, Anthropic-compatible and AI SDK Gateway v3 custom sources are supported. Optional per-key settings include recurring limits and `failure_disable_threshold` (canonical U128 string, default `"10"`). Smart backoff is automatic and accepts no per-key configuration (§4.1.3). Channel IDs and ownership-confirmation fields are not accepted by this dedicated operation.
+`POST /api/steward/automation/donations` atomically creates one custom endpoint and 1–100 owned keys, submits them in one donation and approves it as the calling steward. It requires `Idempotency-Key` and returns 201 `{endpoint_id,donation_id,keys:[{endpoint_key_id,donation_key_id}]}`. Explicit `connector_type` and URL are required; custom sources use the closed connector registry in [direct inference](direct-inference.md). Optional per-key settings include recurring limits and `failure_disable_threshold` (canonical U128 string, default `"10"`). Smart backoff is automatic and accepts no per-key configuration (§4.1.3). Channel IDs and ownership-confirmation fields are not accepted by this dedicated operation.
 
 `POST /api/steward/automation/model-bindings` accepts `{charity_model_id,donation_key_ids,upstream_model_id,manual?}` and processes only the caller's own donation keys. Automatic mode requires this request's successful fresh discovery; manual mode ensures an exact entry with empty new metadata, preserving existing metadata. Repeated identical bindings succeed without reordering. The response is `{charity_model_id,results:[{donation_key_id,status,code?,message?}]}`, with `success|failed|incomplete` in input order. At least one success gives 200; zero successes gives 504 for any incomplete item, otherwise 422. This endpoint has no whole-batch replay receipt.
 
@@ -1245,7 +1275,7 @@ cursors and exports to the same selection. Omission imposes no Discord filter;
 empty, repeated, noncanonical or out-of-range values return 400. Personal log
 routes reject this parameter. Do not convert it to a JavaScript number.
 
-The `charity_model` filter on administrator and authorized level-5/6 steward log lists/exports matches a nonempty literal substring of at most 512 UTF-8 bytes against the platform model name saved at call time, ignoring ASCII case only. `%` and `_` are literal, and later model renames do not rewrite that name. Only charity chat/embedding calls match. The predicate is identical for rows, counts, cursor identity and CSV/JSON exports and combines with existing filters and role scope; ordinary-user routes reject it.
+The `charity_model` filter on administrator and authorized level-5/6 steward log lists/exports matches a nonempty literal substring of at most 512 UTF-8 bytes against the platform model name saved at call time, ignoring ASCII case only. `%` and `_` are literal, and later model renames do not rewrite that name. All registered charity model operations can match. The predicate is identical for rows, counts, cursor identity and CSV/JSON exports and combines with existing filters and role scope; ordinary-user routes reject it.
 
 Administrator and authorized level-5/6 steward request rows and attempt rows carry the top-level boolean `usage_total_mismatch`. The optional management filter accepts exactly `true` or `false`; omission includes both. It applies to lists, numbered counts, cursor identity and exports under the existing role scope. Ordinary-user routes reject this filter and do not expose the marker. Existing logs lack the original upstream total and migrate with no recorded mismatch; the new field does not retrospectively validate old totals. The displayed `usage.total_tokens` remains the exact sum of the normalized buckets, not the contradictory upstream total.
 
@@ -1310,7 +1340,7 @@ Thursday `literature` accepts empty text or up to 1,024 Unicode characters and 4
 | Donations | `GET /admin/api/donations`; `GET /admin/api/donations/{id}`; `GET /admin/api/donations/{id}/keys`; `GET /admin/api/donation-sources`; `GET /admin/api/donation-sources/{source_key}/keys`; `POST /admin/api/donations/{id}/review`; `PATCH /admin/api/donations/{id}/keys/{keyId}` |
 | Charity models | Exact route family in the table below |
 
-Review and key-management requests include expected revisions and the complete effective limits/expiry needed for that decision. Authorized donation-key projections add `donation_note` and nullable `approval_note` beside `safe_note`, without exposing a secret. Binding/candidate projections otherwise retain their safe resource boundary. Models support per-request or four-bucket per-token prices, rewards, promotions, visibility, flattening, ordered bindings and the existing 100-result management statistic; the public 24-hour `recent_success` is a separate calculation. Administrators and authorized stewards can open a binding's key while preserving the originating model and page.
+Review and key-management requests include expected revisions and the complete effective limits/expiry needed for that decision. Authorized donation-key projections add `donation_note` and nullable `approval_note` beside `safe_note`, without exposing a secret. Binding/candidate projections otherwise retain their safe resource boundary. Models support per-request, per-search-unit and four-bucket per-token prices, optional per-side modality prices/rewards, promotions, visibility, flattening, ordered bindings and the existing 100-result management statistic; the public 24-hour `recent_success` is a separate calculation. Administrators and authorized stewards can open a binding's key while preserving the originating model and page.
 
 Charity model DTOs and authorized model create/PATCH requests include `transport_rule`, with the same enum, POST default, PATCH preservation and invalid/null rejection as personal models in §3.2. Existing role, revision and idempotency rules remain. It changes Chat Completions only.
 
@@ -1376,10 +1406,11 @@ replacement, so omission clears any previously configured schedule.
 
 | Copied field | Meaning and replacement behavior |
 | --- | --- |
-| `pricing.mode` | `per_request` or `per_token`; replaces the form's billing mode. |
-| `pricing.user_price,donor_reward` | Per-request credit strings. Clear both when applying Token pricing. |
+| `pricing.mode` | `per_request`, `per_token` or `per_search_unit`; replaces the form's billing mode. |
+| `pricing.user_price,donor_reward` | Per-request or per-search-unit credit strings. Clear both when applying Token pricing. |
 | `pricing.user_prices,donor_rewards` | Per-token four-bucket objects: `uncached_input,cache_write_input,cache_read_input,output`, in credits per million tokens. Clear both when applying request pricing. |
-| `pricing.long_context` | Null/absent disables it and clears its threshold and alternate prices. Otherwise copy `input_threshold` and the active-mode `user_price` or four-bucket `user_prices`; clear the other mode's fields. Donor rewards keep the base settings. |
+| `pricing.user_modalities,donor_modalities` | Optional independent input/output modality configurations in Token mode. Copy both booleans and every configured modality's four prices, including zero; null/absence clears the option. |
+| `pricing.long_context` | Null/absent disables it and clears its threshold and alternate prices. Otherwise copy `input_threshold`, the active-mode user prices, optional donor reward override and modality configurations. Missing donor overrides preserve base reward behavior. Unavailable in search-unit mode. |
 | `pricing.context_penalty` | Null/absent disables it and clears its values; otherwise copy `input_threshold,fine`. |
 | `token_reserve_credits` | Null clears the form override to inherited global reserve; otherwise copy the canonical credit string. It remains stored but inactive in request mode. |
 | `discount` | Replace all of `enabled,percent,start_at,end_at`, including false, zero and null; do not merge with stale form values. Percent is an integer 0–100; nullable times use Unix seconds and a configured start must precede the end. |
@@ -1513,7 +1544,15 @@ Lineage items are exactly `{donation_id,donation_key_id,donation_status,key_stat
 
 ## 9. Export, privacy, and account deletion
 
-`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v25.json`, with `schema_version:25` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema.
+`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v26.json`, with `schema_version:26` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema.
+
+`user` includes the five nullable inference limits and their effective values
+from §7.1. The safe `charity` aggregate may include `usage_details` with optional
+decimal-string `search_units` and `modalities`. Modalities use the same count
+shape and closed classification reasons as request logs, aggregated strictly
+across retained reservations; a missing report cannot be filled from another
+request. This export contains no per-request price decisions, donor decisions,
+model/endpoint/key identity or request content.
 
 The top-level fields include `limited_activities`, `image_tasks` and `inactivity`. Limited activities contain the safe general/paper/brush wallet projection and own exchange receipts; the existing game wallet remains separate. Image tasks contain only local ID, state, requested/actual image counts, times, billing state and two-currency charge/refund facts. Inactivity contains safe own activity timestamps and retained execution outcomes. No prompts, complete execution parameters, images, source facts, raw errors, risk rules, private adapter/configuration or upstream task identifiers are included.
 
@@ -1531,7 +1570,7 @@ The following fields are top-level (an excerpt, not a complete export):
 
 ```json
 {
-  "schema_version": 22,
+  "schema_version": 26,
   "request_adaptations": [],
   "continuity": [],
   "fat_fish": {"summaries": [], "progress": []}

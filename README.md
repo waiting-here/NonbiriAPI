@@ -31,8 +31,9 @@ Attempt and request completion use small synchronous transaction batches when
 work overlaps. Success still requires a durable commit, and anonymous queue
 metrics distinguish application waiting from database pool waiting.
 
-Level-5 stewards can inspect user accounts and ban level 1–4 users. They cannot
-change account settings or credits, lift a ban, or replace an active ban. They
+Level-5 stewards can inspect user accounts, adjust the five inference RPM/concurrency
+overrides for strictly lower-level users, and ban level 1–4 users. They cannot
+change other account settings or credits, lift a ban, or replace an active ban. They
 can approve or reject every pending donation. Administrators and level-6
 stewards can force-reject any approved donation, including manual approvals.
 
@@ -64,7 +65,9 @@ AI Gateway mappings remain compatible when no Worker is configured.
 | Shared components and separate stations | `web/src/shared/`, `web/src/user/`, `web/src/admin/` |
 | Verification and deployment examples | `scripts/`, `.github/workflows/`, `deploy/` |
 
-The connector registry supports OpenAI-compatible, Anthropic-compatible, AI SDK Gateway v3, Google Gemini, OpenAI Responses and OpenAI Decisions upstreams. Public ingress includes `/v1/models`, `/v1/chat/completions`, `/v1/embeddings`, `/v1/images/generations` and `/v1/decisions`. Gemini and Responses translate Chat requests; Decisions uses its native endpoint. Operation support is connector-specific. The backend enforces ownership, credential protection, SSRF, accounting and cancellation. Wire formats and limits are in the [API contract](docs/api-contract.md).
+The registry has 12 connector types covering OpenAI-compatible, dedicated Chat and Responses, Anthropic, Gateway v3, Gemini, Decisions, System One and four explicit rerank protocols. Direct HTTP operations include text, images, audio, embeddings, moderation and rerank, with SSE where supported. Chat and Responses share one model service selection and have bounded conversion paths; other services remain independently selectable. See [direct inference](docs/direct-inference.md) for the operation matrix and excluded persistent/realtime resources, and the [API contract](docs/api-contract.md) for ownership, credentials, SSRF, accounting and cancellation rules.
+
+Charity pricing supports request, token and search-unit billing, with independent input/output modality prices, donor rewards and long-context tiers. Missing standard classifications fall back to aggregate prices per side. [Pricing rules](docs/charity-context-pricing.md) explain exact units, reservation and failed-generation usage. Light and heavy requests have separate concurrency pools shared by personal and charity calls, and separate charity RPM windows; all calls still share global limits.
 
 Anonymous minute metrics separate pool acquisition from transaction work for
 game checkpoints, request accounting and background maintenance. In-flight
@@ -109,7 +112,7 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [First-run setup](docs/first-run-setup.md) covers private paths, the encryption key, Discord OAuth and public origins. Copy [admin.env.example](admin.env.example) outside the checkout, replace placeholders and load it before starting. Preserve the database with its matching key.
 
-Fresh databases start in maintenance with public features closed. The v1.0.7 source accepts schema 27 or fresh storage and produces account export 25. Existing schema 16–26 databases use the separate offline converter; historical conversion code is excluded from the service. Later v1.x releases retain an upgrade path from every earlier stable v1.x schema. Older binaries need not read newer databases.
+Fresh databases start in maintenance with public features closed. The v1.1.0 source accepts schema 28 or fresh storage and produces account export 26. Existing schema 16–27 databases use the separate offline converter; historical conversion code is excluded from the service. Later v1.x releases retain an upgrade path from every earlier stable v1.x schema. Older binaries need not read newer databases. Source documentation does not imply that an instance has released or deployed the update.
 
 [Deployment](docs/deployment.md) covers systemd, proxies, immutable artifacts, upgrades and complete-snapshot recovery. Startup variables and online settings have one reference in [configuration](docs/configuration.md).
 

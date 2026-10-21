@@ -6,7 +6,24 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ## Unreleased
 
+This section describes v1.1.0 development, including the changes previously
+planned for v1.0.7. It does not announce a release or deployment.
+
 ### Added
+
+- Direct HTTP/SSE Responses, legacy completions, image editing/variation, audio,
+  moderation and rerank operations, plus exact model lookup. Persistent resource
+  APIs and all WebSocket/Realtime/WebRTC interfaces remain outside this version.
+- Dedicated Chat and System One connectors and explicit Cohere, Jina, SiliconFlow
+  and Voyage rerank adapters. System One remains separate from Decisions.
+- Search-unit pricing and independent input/output modality prices for caller
+  charges, donor rewards and long-context tiers, with standard-usage validation
+  and aggregate-price fallback per side.
+- Separate light/heavy charity RPM windows and user concurrency pools shared by
+  personal and charity calls. Light defaults are 30 RPM and 15 concurrent calls;
+  existing heavy defaults remain 60 RPM and 5 concurrent calls. Administrators
+  and strictly higher-level stewards may adjust all five nullable user inference
+  limits, including the global user RPM override.
 
 - Per-model Cloudflare forwarding with a generic authenticated Worker, without
   per-upstream mappings. Personal models default to enabled and charity models
@@ -23,14 +40,33 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Changed
 
+- Route preflight and snapshots use the existing read pool. Request-adaptation
+  reads release database connections before decoding, and charity snapshots reuse
+  each physical key's quota result within the same transaction. Dispatch still
+  revalidates live limits before reserving resources.
 - Backoff policy edits affect future dispatches while in-flight requests retain
   their rule snapshot. Existing waits, trial ownership and failure streaks are
   preserved.
-- Storage schema 27 adds endpoint policies, dispatch rule snapshots and model
-  forwarding settings. Existing schema 16–26 sources use the offline converter;
-  account export schema 25 includes personal-model forwarding preferences.
+- Chat and Responses share a model service selection, with explicit upstream
+  protocol choice and bounded conversion in both directions. Other model
+  services retain independent multi-selection.
+- Storage schema 28 includes endpoint policies, dispatch rule snapshots, model
+  forwarding preferences, expanded connector/operation/pricing values, usage
+  and pricing metadata, and light/global admission overrides. Exact schema
+  16–27 sources use the offline converter. Account export 26 includes safe
+  aggregate modality/search usage and configured/effective user limits.
+- Token output reservations account for enabled user modality and long-context
+  output rates. Request charges aggregate precise usage before rounding;
+  frozen discounts, replay and conservative unknown-usage behavior remain.
 
 ### Fixed
+
+- Credible standard usage survives unsuccessful Gateway finishes, including
+  reasoning-only output. Failed generations remain failed, with diagnostics
+  distinguishing unsuccessful termination from malformed protocol structure.
+- Request accounting, logs and lifecycle projections recognize the complete
+  registered inference route set. Split concurrency observations retain each
+  pool's saturation for existing risk thresholds.
 
 - Worker failures, including connection errors and unconfirmed Cloudflare edge
   responses, do not increase donated-key failure counts or trigger key backoff.
