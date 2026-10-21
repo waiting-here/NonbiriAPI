@@ -99,7 +99,9 @@ connection failures and proxy stream transport failures are platform failures.
 This also covers Cloudflare errors returned before the Worker runs. Caller
 cancellation retains its existing classification. Confirmed upstream HTTP errors
 and invalid protocol content retain normal handling; billing still follows
-recorded delivery and consumption facts.
+recorded delivery and consumption facts. Once an upstream HTTP 200 is confirmed,
+existing accepted-response counting and failure-streak reset still apply even
+if the response stream later fails.
 
 Before production use, verify normal generation, streaming, an invalid-key
 control and cancellation with the intended connector. HTTP 200 alone is
