@@ -21,6 +21,7 @@ function fixture(
   let policy = initial;
   let failList = false;
   let routeCount = 1;
+  let routeMode: 'worker' | 'legacy' | 'direct' = 'worker';
   vi.stubGlobal(
     'fetch',
     vi.fn<typeof fetch>(async (input, init) => {
@@ -37,6 +38,8 @@ function fixture(
       if (url.pathname.endsWith('/egress/cloudflare-routes'))
         return json({
           enabled: true,
+          mode: routeMode,
+          worker_origin: routeMode === 'worker' ? 'https://worker.example' : '',
           routes: Array.from({ length: routeCount }, (_, index) => ({
             source_base_url:
               index === 0 ? identity.base_url : `https://provider-${index}.example/v1`,
@@ -86,6 +89,9 @@ function fixture(
     failList: (value: boolean) => {
       failList = value;
     },
+    routeMode: (value: typeof routeMode) => {
+      routeMode = value;
+    },
     routeCount: (value: number) => {
       routeCount = value;
     },
@@ -120,7 +126,13 @@ describe('endpoint policy management', () => {
     await view.user.click(screen.getByRole('tab', { name: 'Outbound routes' }));
     await screen.findByText('https://gateway.example');
     expect(screen.getByText('Header: X-Api-Key and query parameter: key')).toBeVisible();
-    expect(screen.getByText(/does not indicate connectivity or health/)).toBeVisible();
+    expect(screen.getByText('https://worker.example')).toBeVisible();
+    expect(
+      screen.getByText(
+        'The universal Worker takes priority. These legacy endpoint routes are not used.',
+      ),
+    ).toBeVisible();
+    expect(screen.getByText(/not connectivity or health/)).toBeVisible();
     await view.user.click(screen.getByRole('tab', { name: 'Extra backoff rules' }));
     expect(screen.getByLabelText('Rule 1 value')).toHaveValue('draft-kept');
     await view.user.click(screen.getByRole('button', { name: 'Back to endpoints' }));
@@ -130,6 +142,28 @@ describe('endpoint policy management', () => {
     expect(screen.getByLabelText('Rule 1 value')).toHaveValue('draft-kept');
     expect(data.writes).toHaveLength(0);
   });
+  it.each(['worker', 'legacy', 'direct'] as const)(
+    'shows only useful legacy empty state for %s mode',
+    async (mode) => {
+      const data = fixture();
+      data.routeCount(0);
+      data.routeMode(mode);
+      await open('/endpoint-policies?view=routes');
+      const panel = screen.getByRole('tabpanel', { name: 'Outbound routes' });
+      await within(panel).findByText('Forwarding service');
+      if (mode === 'worker') {
+        expect(within(panel).getByText('https://worker.example')).toBeVisible();
+        expect(
+          within(panel).queryByRole('heading', { name: 'No legacy endpoint routes configured' }),
+        ).not.toBeInTheDocument();
+      } else {
+        expect(
+          within(panel).getByRole('heading', { name: 'No legacy endpoint routes configured' }),
+        ).toBeVisible();
+      }
+      expect(within(panel).queryByRole('table')).not.toBeInTheDocument();
+    },
+  );
   it('changes list size and jumps to a specified page', async () => {
     const data = fixture();
     const view = await open();

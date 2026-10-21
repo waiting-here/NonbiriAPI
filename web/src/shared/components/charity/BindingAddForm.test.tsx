@@ -61,6 +61,8 @@ const model: CharityModel = {
   allowed_levels: [1],
   public_description: '',
   transport_rule: 'passthrough',
+  cloudflare_proxy_enabled: false,
+  cloudflare_proxy_mode: 'direct',
   flatten_tool_calls: false,
   pricing: { mode: 'per_request', user_price: '1', donor_reward: '0' },
   token_reserve_credits: null,

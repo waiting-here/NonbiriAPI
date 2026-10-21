@@ -73,6 +73,8 @@ function model(id: string, name: string, bound = false) {
     route_strategy: 'ordered',
     silent_retry: false,
     transport_rule: 'passthrough',
+    cloudflare_proxy_enabled: false,
+    cloudflare_proxy_mode: 'direct',
     flatten_tool_calls: false,
     revision: '1',
     binding_revision: bound ? '2' : '1',

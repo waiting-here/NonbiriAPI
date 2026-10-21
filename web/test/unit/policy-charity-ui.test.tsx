@@ -97,6 +97,8 @@ const model = {
   route_strategy: 'ordered',
   silent_retry: false,
   transport_rule: 'passthrough',
+  cloudflare_proxy_enabled: false,
+  cloudflare_proxy_mode: 'direct',
   flatten_tool_calls: false,
   binding_count: 2,
   created_at: 1,
@@ -139,6 +141,8 @@ const coreModel = {
   route_strategy: 'ordered',
   silent_retry: false,
   transport_rule: 'passthrough',
+  cloudflare_proxy_enabled: false,
+  cloudflare_proxy_mode: 'direct',
   flatten_tool_calls: false,
   revision: '1',
   binding_revision: '2',
@@ -240,6 +244,8 @@ const managedModel = {
   full_name: 'provider/charity-model',
   enabled: true,
   transport_rule: 'passthrough',
+  cloudflare_proxy_enabled: false,
+  cloudflare_proxy_mode: 'direct',
   flatten_tool_calls: false,
   pricing_mode: 'per_request',
   prices: {
@@ -280,6 +286,8 @@ const managedModelFixture = {
   pricing: { mode: 'per_request', user_price: '0', donor_reward: '0' },
   discount: { enabled: false, percent: 0, start_at: null, end_at: null },
   transport_rule: 'passthrough',
+  cloudflare_proxy_enabled: false,
+  cloudflare_proxy_mode: 'direct',
   flatten_tool_calls: false,
   revision: '1',
   binding_revision: '1',
@@ -1357,6 +1365,7 @@ describe('experimental policy and charity controls', () => {
     await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() =>
       expect(lastBody(fetchMock, 'PATCH', '/api/models/3')).toEqual({
+        cloudflare_proxy_enabled: false,
         model_types: ['chat_completions', 'embeddings'],
         provider: 'provider',
         model: 'model',

@@ -1,3 +1,7 @@
+import {
+  normalizeCloudflareProxyMode,
+  type CloudflareProxyMode,
+} from '@shared/cloudflareProxy';
 import { CancelledError } from '@tanstack/react-query';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, apiFetch, isMfaRequired, isNotFoundError } from '@shared/query/http';
@@ -70,6 +74,8 @@ export interface UpstreamModel {
 }
 
 export interface PlatformModel {
+  cloudflare_proxy_enabled: boolean;
+  cloudflare_proxy_mode: CloudflareProxyMode;
   id: string;
   provider: string;
   model: string;
@@ -569,6 +575,13 @@ export function normalizeUpstreamModel(value: unknown): UpstreamModel {
 export function normalizePlatformModel(value: unknown): PlatformModel {
   const record = requiredRecord(value, 'model');
   return {
+    cloudflare_proxy_enabled: requiredBoolean(
+      recordValue(record, 'cloudflare_proxy_enabled'),
+      'Cloudflare proxy setting',
+    ),
+    cloudflare_proxy_mode: normalizeCloudflareProxyMode(
+      recordValue(record, 'cloudflare_proxy_mode'),
+    ),
     id: requiredID(recordValue(record, 'id'), 'model id'),
     provider: requiredText(recordValue(record, 'provider'), 64, 'model provider'),
     model: requiredText(recordValue(record, 'model'), 64, 'model name'),
@@ -949,6 +962,7 @@ export function useModelBindings(modelId: string | undefined, enabled = true) {
 }
 
 export interface UpdateModelInput {
+  cloudflare_proxy_enabled?: boolean;
   modelId: string;
   provider?: string;
   model?: string;

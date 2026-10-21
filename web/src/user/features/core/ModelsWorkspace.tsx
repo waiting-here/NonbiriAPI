@@ -1,3 +1,4 @@
+import { CloudflareProxySummary } from '@shared/components/CloudflareProxyField';
 import { RequestAdaptationEditor } from '@shared/components/RequestAdaptationEditor';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { ModelTypesSummary } from '@shared/components/ModelTypesField';
@@ -241,6 +242,12 @@ function ModelDetail({
               <PanelBody>
                 <SafeCopyValue value={model.data.full_name} label={textModel('callName')} />
                 <ModelTypesSummary value={model.data.model_types} />
+                <dl className="core-detail-list">
+                  <CloudflareProxySummary
+                    enabled={model.data.cloudflare_proxy_enabled}
+                    mode={model.data.cloudflare_proxy_mode}
+                  />
+                </dl>
               </PanelBody>
             </Panel>
             <ModelSources
