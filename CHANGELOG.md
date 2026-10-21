@@ -60,6 +60,7 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Fixed
 
+- Update Vite to 8.3.3 to address development-server editor-launch vulnerabilities.
 - Credible standard usage survives unsuccessful Gateway finishes, including
   reasoning-only output. Failed generations remain failed, with diagnostics
   distinguishing unsuccessful termination from malformed protocol structure.
