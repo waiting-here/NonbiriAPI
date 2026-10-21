@@ -33,6 +33,8 @@ const stableSchema26Manifest = "6bcc4ea8fa31bee46e25b5e33b96a3caca18c5c5ff1f257d
 
 const stableSchema27Manifest = "5fb9f478d3482547174e43db7f6169621f8bf3d19b706e27e65f03809b002b89"
 
+const stableSchema28Manifest = "021b30ef19b15d8db903906a312ec0647c81f36904655f6d70fd030bfc445e93"
+
 var storageSchema = schemaRegistry{baseline: 17, target: db.CurrentSchemaVersion, versions: []schemaMigration{
 	{version: 17, manifest: stableSchema17Manifest},
 	{from: 17, version: 18, manifest: stableSchema18Manifest, apply: extendContentAndProtocols, impact: &migrationImpact{
@@ -61,10 +63,12 @@ var storageSchema = schemaRegistry{baseline: 17, target: db.CurrentSchemaVersion
 		rebuiltTables: []string{"donation_key_backoffs", "dispatch_smart_backoff_facts"}, credentials: credentialsUnchanged}},
 	{from: 26, version: 27, manifest: stableSchema27Manifest, sql: endpointBackoffSchema + modelCloudflareSchema, impact: &migrationImpact{
 		addedTables: []string{"endpoint_backoff_policies"}, controlTables: []string{"dispatch_smart_backoff_facts", "models", "charity_models"}, credentials: credentialsUnchanged}},
-	{from: 27, version: 28, manifest: db.PinnedGenerationTwoManifestHash, apply: extendDirectInference, impact: &migrationImpact{
+	{from: 27, version: 28, manifest: stableSchema28Manifest, apply: extendDirectInference, impact: &migrationImpact{
 		rebuiltTables:    []string{"mainstream_channels", "endpoints", "endpoint_key_secrets", "donation_keys", "request_attempts", "report_cases", "report_targets", "models", "charity_models", "logical_requests", "request_logs", "charity_reservations"},
 		controlTables:    []string{"site_config"},
 		constraintTables: []string{"donation_usage_reservations", "users", "risk_audit_minutes"}, credentials: credentialsRebuilt}},
+	{from: 28, version: 29, manifest: db.PinnedGenerationTwoManifestHash, apply: extendSessionHeaders, impact: &migrationImpact{
+		rebuiltTables: []string{"charity_header_sessions", "charity_header_uses"}, addedTables: []string{"personal_header_sessions", "personal_header_uses"}, controlTables: []string{"models"}, credentials: credentialsUnchanged}},
 }}
 
 type Options struct {
@@ -97,6 +101,7 @@ func SchemaDescriptor() db.StorageSchemaDescriptor {
 		{25, stableSchema25Manifest, "2b4f4f62ed5b01c247fcc3f79005358ef0237933"},
 		{26, stableSchema26Manifest, "361cb204e888de51901eecc993d3d52b1d156d3a"},
 		{27, stableSchema27Manifest, "0fa834ba935649cdf7a141800b5f733d9aaaaf89"},
+		{28, stableSchema28Manifest, "904c2c677b748a9fa8c9a39edbd4e109ca3fcd56"},
 	} {
 		descriptor.OfflineConversions = append(descriptor.OfflineConversions, db.OfflineConversionDescriptor{
 			Tool: "nonbiri-upgrade-v1", SourceCommit: source.commit, SourceSchemaVersion: source.version,
@@ -121,7 +126,7 @@ func run(ctx context.Context, path string, vault *secret.Vault, options Options,
 	defer stopProgress()
 	sources := []OfflineSchema{{Version: 16, ManifestHash: SourceManifestHash}}
 	if !rc7Only {
-		sources = append(sources, OfflineSchema{Version: 17, ManifestHash: stableSchema17Manifest}, OfflineSchema{Version: 18, ManifestHash: stableSchema18Manifest}, OfflineSchema{Version: 19, ManifestHash: stableSchema19Manifest}, OfflineSchema{Version: 20, ManifestHash: stableSchema20Manifest}, OfflineSchema{Version: 21, ManifestHash: stableSchema21Manifest}, OfflineSchema{Version: 22, ManifestHash: stableSchema22Manifest}, OfflineSchema{Version: 23, ManifestHash: stableSchema23Manifest}, OfflineSchema{Version: 24, ManifestHash: stableSchema24Manifest}, OfflineSchema{Version: 25, ManifestHash: stableSchema25Manifest}, OfflineSchema{Version: 26, ManifestHash: stableSchema26Manifest}, OfflineSchema{Version: 27, ManifestHash: stableSchema27Manifest})
+		sources = append(sources, OfflineSchema{Version: 17, ManifestHash: stableSchema17Manifest}, OfflineSchema{Version: 18, ManifestHash: stableSchema18Manifest}, OfflineSchema{Version: 19, ManifestHash: stableSchema19Manifest}, OfflineSchema{Version: 20, ManifestHash: stableSchema20Manifest}, OfflineSchema{Version: 21, ManifestHash: stableSchema21Manifest}, OfflineSchema{Version: 22, ManifestHash: stableSchema22Manifest}, OfflineSchema{Version: 23, ManifestHash: stableSchema23Manifest}, OfflineSchema{Version: 24, ManifestHash: stableSchema24Manifest}, OfflineSchema{Version: 25, ManifestHash: stableSchema25Manifest}, OfflineSchema{Version: 26, ManifestHash: stableSchema26Manifest}, OfflineSchema{Version: 27, ManifestHash: stableSchema27Manifest}, OfflineSchema{Version: 28, ManifestHash: stableSchema28Manifest})
 	}
 	sourceVersion := db.CurrentSchemaVersion
 	invalidLegacyConfiguration := false

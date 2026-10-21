@@ -5,6 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/http"
+
+	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
 )
 
 const personalAffinityTTL = 300
@@ -123,4 +126,26 @@ AND NOT EXISTS(SELECT 1 FROM user_deletion_markers d WHERE d.user_id=m.user_id))
 		return false, fmt.Errorf("claim: revalidate personal association: %w", err)
 	}
 	return available == 1, nil
+}
+
+// personalSessionHeadersTx runs after routing authorization and capacity.
+func personalSessionHeadersTx(ctx context.Context, tx *sql.Tx, attemptID, requestID string, userID, at int64) (http.Header, error) {
+	var modelID int64
+	err := tx.QueryRowContext(ctx, `SELECT m.id FROM charity_dispatch_receipts d
+ JOIN models m ON m.id=d.personal_model_id AND m.user_id=d.user_id
+ JOIN logical_requests r ON r.id=? AND r.user_id=m.user_id
+ WHERE d.attempt_id=? AND d.user_id=? AND d.state='dispatched'
+ AND r.state IN ('accepted','running')
+ AND NOT EXISTS(SELECT 1 FROM user_deletion_markers deleted WHERE deleted.user_id=m.user_id)`,
+		requestID, attemptID, userID).Scan(&modelID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := requireActiveUser(ctx, tx, userID, at, false); err != nil {
+		return nil, err
+	}
+	return sessionheader.AcquirePersonal(ctx, tx, requestID, userID, modelID, at)
 }

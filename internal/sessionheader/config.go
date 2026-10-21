@@ -12,6 +12,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 )
@@ -44,7 +46,7 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 			return ErrInvalid
 		}
 	}
-	if value.Name == "" || value.IdleSeconds < 1 || value.IdleSeconds > 86400 || (value.Format != "uuid_v4" && value.Format != "hex_32") {
+	if value.Name == "" || value.IdleSeconds < 0 || value.IdleSeconds > 86400 || !validFormat(value.Format) {
 		return ErrInvalid
 	}
 	*c = Config(value)
@@ -61,13 +63,10 @@ func Normalize(config []Config) ([]Config, error) {
 		if !requestadaptation.ValidManagedHeaderName(v.Name) || seen[v.Name] {
 			return nil, ErrInvalid
 		}
-		if v.IdleSeconds == 0 {
-			v.IdleSeconds = 300
-		}
 		if v.Format == "" {
 			v.Format = "uuid_v4"
 		}
-		if v.IdleSeconds < 1 || v.IdleSeconds > 86400 || (v.Format != "uuid_v4" && v.Format != "hex_32") {
+		if v.IdleSeconds < 0 || v.IdleSeconds > 86400 || !validFormat(v.Format) {
 			return nil, ErrInvalid
 		}
 		seen[v.Name] = true
@@ -91,7 +90,61 @@ func Decode(encoded string) ([]Config, error) {
 	}
 	return Normalize(v)
 }
+func validFormat(format string) bool {
+	switch format {
+	case "uuid_v4", "hex_32", "opencode_session", "opencode_message", "opencode_part":
+		return true
+	default:
+		return false
+	}
+}
+
+// The timestamp and counter are shared across all three OpenCode ID kinds.
+var openCodeSequence struct {
+	sync.Mutex
+	timestamp int64
+	counter   uint64
+}
+
+func openCodeValue(format string, timestamp int64) (string, error) {
+	var entropy [14]byte
+	if _, err := rand.Read(entropy[:]); err != nil {
+		return "", err
+	}
+	openCodeSequence.Lock()
+	if timestamp != openCodeSequence.timestamp {
+		openCodeSequence.timestamp = timestamp
+		openCodeSequence.counter = 0
+	}
+	openCodeSequence.counter++
+	current := uint64(timestamp)*0x1000 + openCodeSequence.counter
+	openCodeSequence.Unlock()
+	prefix := "msg_"
+	if format == "opencode_session" {
+		prefix = "ses_"
+		current = ^current
+	} else if format == "opencode_part" {
+		prefix = "prt_"
+	}
+	var timeBytes [6]byte
+	for i := 5; i >= 0; i-- {
+		timeBytes[i] = byte(current)
+		current >>= 8
+	}
+	const alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+	for i, b := range entropy {
+		entropy[i] = alphabet[int(b)%len(alphabet)]
+	}
+	return prefix + hex.EncodeToString(timeBytes[:]) + string(entropy[:]), nil
+}
+
 func randomValue(format string) (string, error) {
+	if !validFormat(format) {
+		return "", ErrInvalid
+	}
+	if strings.HasPrefix(format, "opencode_") {
+		return openCodeValue(format, time.Now().UnixMilli())
+	}
 	var bytes [16]byte
 	if _, err := rand.Read(bytes[:]); err != nil {
 		return "", err
@@ -105,7 +158,7 @@ func randomValue(format string) (string, error) {
 	return h[:8] + "-" + h[8:12] + "-" + h[12:16] + "-" + h[16:20] + "-" + h[20:], nil
 }
 
-var valuePattern = regexp.MustCompile(`^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$`)
+var valuePattern = regexp.MustCompile(`^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|(?:ses_|msg_|prt_)[0-9a-f]{12}[0-9A-Za-z]{14})$`)
 
 // Apply runs after fixed/forwarded headers. The send callback observes written
 // headers, so local refusals and unsuccessful connection setup do not refresh a session.

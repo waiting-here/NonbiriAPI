@@ -12,6 +12,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/headerfacts"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
+	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
 	"github.com/waiting-here/NonbiriAPI/internal/usageinfo"
 	"github.com/waiting-here/NonbiriAPI/internal/useractivity"
 )
@@ -612,6 +613,11 @@ FROM dispatch_claims WHERE logical_request_id=?`, request.ID).Scan(&nonterminalC
 				}); err != nil {
 					return fmt.Errorf("claim: complete charity request: %w", err)
 				}
+			}
+		}
+		if !request.Route.IsCharity() {
+			if err := sessionheader.Finish(callbackCtx, callbackTx, request.ID, at); err != nil {
+				return err
 			}
 		}
 		result, err := callbackTx.ExecContext(callbackCtx, `UPDATE logical_requests SET

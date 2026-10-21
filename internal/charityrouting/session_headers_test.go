@@ -15,7 +15,7 @@ func TestSessionHeaderConfigurationPermissionsAndOmission(t *testing.T) {
 	e := newRoutingTestEnv(t)
 	e.seedUser(t, true, nil)
 	in := testModelCreate()
-	in.SessionHeaders = []sessionheader.Config{{Name: "X-Cache-Session"}}
+	in.SessionHeaders = []sessionheader.Config{{Name: "X-Cache-Session", IdleSeconds: 300}}
 	r, err := e.service.CreateAdmin(t.Context(), routingMutation(t, 'a', http.MethodPost, routeAdminModels, nil, in), in)
 	if err != nil {
 		t.Fatal(err)
@@ -70,7 +70,7 @@ func TestSessionHeaderWireDefaultsAndStrictFields(t *testing.T) {
 	if _, err = json.Marshal(canonical); err != nil {
 		t.Fatal(err)
 	}
-	for _, raw := range []string{`{"expected_revision":"1","session_headers":null}`, `{"expected_revision":"1","session_headers":[{"name":"x","idle_seconds":0}]}`, `{"expected_revision":"1","session_headers":[{"name":"x","extra":true}]}`} {
+	for _, raw := range []string{`{"expected_revision":"1","session_headers":null}`, `{"expected_revision":"1","session_headers":[{"name":"x","idle_seconds":-1}]}`, `{"expected_revision":"1","session_headers":[{"name":"x","extra":true}]}`} {
 		var w modelPatchWire
 		if err = httpapi.DecodeJSON([]byte(raw), &w); err == nil {
 			t.Fatal("accepted", raw)
