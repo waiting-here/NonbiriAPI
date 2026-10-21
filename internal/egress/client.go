@@ -182,6 +182,9 @@ func (s *Stack) SetConcurrencyLimits(limits ConcurrencyLimits) error {
 // ConcurrencyLimits returns a consistent settings snapshot.
 func (s *Stack) ConcurrencyLimits() ConcurrencyLimits { return s.gate.Limits() }
 
+// SampleGlobalConcurrency reads the gate shared by every outbound client.
+func (s *Stack) SampleGlobalConcurrency() (current, peak, limit int) { return s.gate.SampleGlobal() }
+
 // MaxResponseBytes is the cumulative response ceiling enforced by every
 // Client. Streaming parsers may use the same value for their own accounting.
 func (s *Stack) MaxResponseBytes() int64 { return s.maxResponseBytes }

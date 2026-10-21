@@ -154,6 +154,7 @@ type RPM struct {
 	maxKeyBytes int
 
 	global     []*rpmEvent
+	globalPeak int
 	users      map[string][]*rpmEvent
 	closed     bool
 	eventCount int
@@ -188,6 +189,23 @@ func (r *RPM) Limits() RPMLimits {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.limits
+}
+
+// SampleGlobal reads the same sliding window used for admission. It creates
+// no event. The peak includes short bursts between calls; this method has one
+// sampling consumer, which resets the interval peak to the current value.
+func (r *RPM) SampleGlobal() (current, peak, limit int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	now := r.clock.Now()
+	for _, event := range r.global {
+		if event != nil && event.expires.After(now) && event.state.Load() != uint32(rpmEventReleased) {
+			current++
+		}
+	}
+	peak = max(r.globalPeak, current)
+	r.globalPeak = current
+	return current, peak, r.limits.GlobalLimit
 }
 
 // SetLimits changes the caps without replacing shared counters. Existing
@@ -492,6 +510,7 @@ func (r *RPM) newEventLocked(userKey string, now time.Time, state rpmEventState)
 	event := &rpmEvent{id: rand.Text(), at: now, expires: now.Add(r.window), user: userKey}
 	event.state.Store(uint32(state))
 	r.global = append(r.global, event)
+	r.globalPeak = max(r.globalPeak, len(r.global))
 	r.users[userKey] = append(r.users[userKey], event)
 	r.eventCount++
 	return event

@@ -35,6 +35,8 @@ const stableSchema27Manifest = "5fb9f478d3482547174e43db7f6169621f8bf3d19b706e27
 
 const stableSchema28Manifest = "021b30ef19b15d8db903906a312ec0647c81f36904655f6d70fd030bfc445e93"
 
+const stableSchema29Manifest = "e18a8d66845f04036df16a22b34c0fb6ad7df0354241b2cc93372d8a3055d01b"
+
 var storageSchema = schemaRegistry{baseline: 17, target: db.CurrentSchemaVersion, versions: []schemaMigration{
 	{version: 17, manifest: stableSchema17Manifest},
 	{from: 17, version: 18, manifest: stableSchema18Manifest, apply: extendContentAndProtocols, impact: &migrationImpact{
@@ -67,8 +69,10 @@ var storageSchema = schemaRegistry{baseline: 17, target: db.CurrentSchemaVersion
 		rebuiltTables:    []string{"mainstream_channels", "endpoints", "endpoint_key_secrets", "donation_keys", "request_attempts", "report_cases", "report_targets", "models", "charity_models", "logical_requests", "request_logs", "charity_reservations"},
 		controlTables:    []string{"site_config"},
 		constraintTables: []string{"donation_usage_reservations", "users", "risk_audit_minutes"}, credentials: credentialsRebuilt}},
-	{from: 28, version: 29, manifest: db.PinnedGenerationTwoManifestHash, apply: extendSessionHeaders, impact: &migrationImpact{
+	{from: 28, version: 29, manifest: stableSchema29Manifest, apply: extendSessionHeaders, impact: &migrationImpact{
 		rebuiltTables: []string{"charity_header_sessions", "charity_header_uses"}, addedTables: []string{"personal_header_sessions", "personal_header_uses"}, controlTables: []string{"models"}, credentials: credentialsUnchanged}},
+	{from: 29, version: 30, manifest: db.PinnedGenerationTwoManifestHash, sql: db.GlobalPressureSchema, impact: &migrationImpact{
+		addedTables: []string{"global_pressure_state", "global_pressure_samples"}, credentials: credentialsUnchanged}},
 }}
 
 type Options struct {
@@ -102,6 +106,7 @@ func SchemaDescriptor() db.StorageSchemaDescriptor {
 		{26, stableSchema26Manifest, "361cb204e888de51901eecc993d3d52b1d156d3a"},
 		{27, stableSchema27Manifest, "0fa834ba935649cdf7a141800b5f733d9aaaaf89"},
 		{28, stableSchema28Manifest, "904c2c677b748a9fa8c9a39edbd4e109ca3fcd56"},
+		{29, stableSchema29Manifest, "b7699638c8e09709d2a319a754e9eb17a6aa2bf0"},
 	} {
 		descriptor.OfflineConversions = append(descriptor.OfflineConversions, db.OfflineConversionDescriptor{
 			Tool: "nonbiri-upgrade-v1", SourceCommit: source.commit, SourceSchemaVersion: source.version,
@@ -126,7 +131,11 @@ func run(ctx context.Context, path string, vault *secret.Vault, options Options,
 	defer stopProgress()
 	sources := []OfflineSchema{{Version: 16, ManifestHash: SourceManifestHash}}
 	if !rc7Only {
-		sources = append(sources, OfflineSchema{Version: 17, ManifestHash: stableSchema17Manifest}, OfflineSchema{Version: 18, ManifestHash: stableSchema18Manifest}, OfflineSchema{Version: 19, ManifestHash: stableSchema19Manifest}, OfflineSchema{Version: 20, ManifestHash: stableSchema20Manifest}, OfflineSchema{Version: 21, ManifestHash: stableSchema21Manifest}, OfflineSchema{Version: 22, ManifestHash: stableSchema22Manifest}, OfflineSchema{Version: 23, ManifestHash: stableSchema23Manifest}, OfflineSchema{Version: 24, ManifestHash: stableSchema24Manifest}, OfflineSchema{Version: 25, ManifestHash: stableSchema25Manifest}, OfflineSchema{Version: 26, ManifestHash: stableSchema26Manifest}, OfflineSchema{Version: 27, ManifestHash: stableSchema27Manifest}, OfflineSchema{Version: 28, ManifestHash: stableSchema28Manifest})
+		for _, schema := range storageSchema.versions {
+			if schema.version < storageSchema.target {
+				sources = append(sources, OfflineSchema{Version: schema.version, ManifestHash: schema.manifest})
+			}
+		}
 	}
 	sourceVersion := db.CurrentSchemaVersion
 	invalidLegacyConfiguration := false

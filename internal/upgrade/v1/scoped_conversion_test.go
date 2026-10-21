@@ -123,7 +123,7 @@ func TestRebuiltSourceRetainsCredentialAndAffectedRelationChecks(t *testing.T) {
 			}
 			defer database.Close()
 			plan, err := storageSchema.plan(t.Context(), database)
-			if err != nil || len(plan.steps) != 12 || plan.steps[0].from != 17 || plan.steps[11].version != 29 {
+			if err != nil || len(plan.steps) != 13 || plan.steps[0].from != 17 || plan.steps[12].version != 30 {
 				t.Fatal("failure did not preserve source", err)
 			}
 			if fault != "credential" {
@@ -160,7 +160,7 @@ func TestOfflineCancellationAtConversionBoundariesRestoresExactSource(t *testing
 				t.Fatal(err)
 			}
 			plan, err := storageSchema.plan(t.Context(), database)
-			if err := errors.Join(err, database.Close()); err != nil || len(plan.steps) != 9 || plan.steps[0].from != 20 || plan.steps[8].version != 29 {
+			if err := errors.Join(err, database.Close()); err != nil || len(plan.steps) != 10 || plan.steps[0].from != 20 || plan.steps[9].version != 30 {
 				t.Fatal("exact source not restored", err)
 			}
 			if _, err := Run(t.Context(), path, vault, Options{Apply: true}); err != nil {

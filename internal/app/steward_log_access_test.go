@@ -41,7 +41,7 @@ func TestStewardLogRoleMatrixUsesCurrentPermissionAndPayloadProjection(t *testin
 	root := "/api/steward/logs/" + requestID
 	for _, level := range []int{6, 5, 4, 3, 2, 1, 5} {
 		f.exec(t, "UPDATE users SET level=? WHERE id=?", level, f.donorID)
-		for _, path := range []string{"/api/steward/logs", root, "/api/steward/logs/export.json", "/api/steward/logs/export.csv", root + "/source", root + "/attempts/1/errors", root + "/attempts/1/errors/2", root + "/attempts/1/errors/3", "/api/steward/logs/diagnostic-capacity", "/api/steward/diagnostics"} {
+		for _, path := range []string{"/api/steward/logs", root, "/api/steward/logs/export.json", "/api/steward/logs/export.csv", root + "/source", root + "/attempts/1/errors", root + "/attempts/1/errors/2", root + "/attempts/1/errors/3", "/api/steward/logs/pressure", "/api/steward/logs/diagnostic-capacity", "/api/steward/diagnostics"} {
 			got := testApplicationRequest(t, f.app.handler, "GET", auditUserHost, path, "", cookies, nil)
 			want := http.StatusOK
 			if level < 5 {
