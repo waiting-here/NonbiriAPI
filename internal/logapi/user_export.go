@@ -75,10 +75,10 @@ func (r *Repository) ExportUser(ctx context.Context, user int64, filter ListFilt
 			return nil, ErrInvariant
 		}
 		privacyIDs = append(privacyIDs, record.rowID)
-		switch RouteKind(record.routeKind) {
-		case RouteOpenAIChat, RouteOpenAIEmbeddings, RouteOpenAIImages, RouteOpenAIDecisions, RouteDiscovery:
+		switch kind := RouteKind(record.routeKind); {
+		case kind.IsSelf() || kind == RouteDiscovery:
 			result = append(result, UserSelfLogRow{RejectionFields: rejectionFields(record), ID: record.id, RouteKind: RouteKind(record.routeKind), CallerResultClass: resultClassPointer(record.callerResultClass), CallerStatus: intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode), StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage, Model: model, AttemptCount: strconv.FormatInt(record.attemptCount, 10)})
-		case RouteCharityChat, RouteCharityEmbeddings, RouteCharityImages, RouteCharityDecisions:
+		case kind.IsCharity():
 			result = append(result, UserCharityLogRow{RejectionFields: rejectionFields(record), ID: record.id, RouteKind: RouteKind(record.routeKind), CallerResultClass: resultClassPointer(record.callerResultClass), CallerStatus: intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode), StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage, Model: model})
 		default:
 			return nil, ErrInvariant
@@ -120,7 +120,7 @@ func MarshalUserCSV(rows []UserLogRow) ([]byte, error) {
 	}
 	var b bytes.Buffer
 	w := csv.NewWriter(&b)
-	if err := w.Write([]string{"id", "route_kind", "model", "caller_result_class", "caller_status", "caller_error_code", "started_at", "completed_at", "attempt_count", "uncached_input_tokens", "cache_write_input_tokens", "cache_read_input_tokens", "output_tokens", "total_tokens", "usage_unknown", "charge", "phase", "rejection_stage", "rejection_reason", "request_method", "request_path", "requested_streaming", "automatic_actions"}); err != nil {
+	if err := w.Write([]string{"id", "route_kind", "model", "caller_result_class", "caller_status", "caller_error_code", "started_at", "completed_at", "attempt_count", "uncached_input_tokens", "cache_write_input_tokens", "cache_read_input_tokens", "output_tokens", "total_tokens", "usage_unknown", "charge", "phase", "rejection_stage", "rejection_reason", "request_method", "request_path", "requested_streaming", "automatic_actions", "search_units", "modalities", "pricing"}); err != nil {
 		return nil, ErrUnavailable
 	}
 	for _, row := range rows {
@@ -134,6 +134,7 @@ func MarshalUserCSV(rows []UserLogRow) ([]byte, error) {
 			return nil, ErrInvariant
 		}
 		record := []string{csvSafe(v.ID), csvSafe(string(v.RouteKind)), csvSafe(v.Model), csvResultClass(v.CallerResultClass), csvInt(v.CallerStatus), csvString(v.CallerErrorCode), strconv.FormatInt(v.StartedAt, 10), csvInt64(v.CompletedAt), v.AttemptCount, v.Usage.UncachedInputTokens, v.Usage.CacheWriteInputTokens, v.Usage.CacheReadInputTokens, v.Usage.OutputTokens, v.Usage.TotalTokens, strconv.FormatBool(v.Usage.UsageUnknown), v.Usage.Charge, csvSafe(v.Phase), csvString(v.RejectionStage), csvString(v.RejectionReason), csvString(v.RequestMethod), csvString(v.RequestPath), csvBool(v.RequestedStreaming), csvActions(v.AutomaticActions)}
+		record = append(record, usageCSV(v.Usage)...)
 		for index := range record {
 			record[index] = textprivacy.IPv4(record[index])
 		}

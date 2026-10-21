@@ -12,6 +12,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/headerfacts"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
+	"github.com/waiting-here/NonbiriAPI/internal/usageinfo"
 	"github.com/waiting-here/NonbiriAPI/internal/useractivity"
 )
 
@@ -396,7 +397,7 @@ func (s *Service) completeAttemptTx(
 				isAdmin = admin == 1
 			}
 		}
-		suppressReward := !outcome.Usage.Present || isAdmin
+		suppressReward := (!outcome.Usage.Present && !outcome.Usage.SearchUnitsPresent) || isAdmin
 		charityInput = CharityAttemptInput{
 			BackoffActive:     record.backoffActive,
 			UpstreamStatus:    outcome.UpstreamStatus,
@@ -418,6 +419,16 @@ func (s *Service) completeAttemptTx(
 		}
 		if !validMoney(actual.PriceMilli) || !validMoney(actual.RewardMilli) {
 			return Attempt{}, ErrInvariant
+		}
+		pricing, err := usageinfo.DecodePricing(actual.PricingDetails)
+		if err != nil {
+			return Attempt{}, ErrInvariant
+		}
+		if actual.PricingDetails != "" {
+			actual.PricingDetails, err = usageinfo.EncodePricing(pricing)
+			if err != nil {
+				return Attempt{}, ErrInvariant
+			}
 		}
 		if suppressReward && actual.RewardMilli != 0 {
 			return Attempt{}, ErrInvariant
@@ -461,14 +472,14 @@ func (s *Service) completeAttemptTx(
 claim_id,request_log_id,attempt_seq,endpoint_id_snapshot,endpoint_key_id_snapshot,
 connector_type,canonical_base_url,upstream_model_id,result_kind,upstream_status,upstream_code,diag,
 input_tokens,cache_write_input_tokens,cache_read_input_tokens,output_tokens,usage_unknown,
-usage_total_mismatch,started_at,completed_at)
-VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+usage_total_mismatch,usage_details,started_at,completed_at)
+VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			record.claimID, record.requestLogID, record.attemptSeq,
 			nullableSQLInt64(snapshot.endpointID), nullableSQLInt64(snapshot.endpointKeyID),
 			snapshot.connectorType, snapshot.baseURL, snapshot.upstreamModel, outcome.Kind,
 			status, code, diag, outcome.Usage.UncachedInputTokens, outcome.Usage.CacheWriteInputTokens,
 			outcome.Usage.CacheReadInputTokens, outcome.Usage.OutputTokens, usageUnknown,
-			boolInt(outcome.Usage.TotalMismatch),
+			boolInt(outcome.Usage.TotalMismatch), usageinfo.Encode(outcome.Usage),
 			record.dispatchedAt.Int64, at)
 		if err != nil {
 			return fmt.Errorf("claim: persist request attempt: %w", err)
@@ -724,20 +735,20 @@ FROM logical_requests WHERE id=?`, requestID).Scan(
 
 func readAttemptTx(ctx context.Context, tx *sql.Tx, claimID string) (Attempt, error) {
 	var attempt Attempt
-	var stateText, kindText, rewardText string
+	var stateText, kindText, rewardText, usageDetails string
 	var code, diag sql.NullString
 	var upstreamStatus sql.NullInt64
 	var usageUnknown, usageTotalMismatch int
 	var rewardActual sql.NullInt64
 	err := tx.QueryRowContext(ctx, `SELECT a.claim_id,c.logical_request_id,a.attempt_seq,c.state,a.result_kind,
 a.upstream_status,a.upstream_code,a.diag,a.input_tokens,a.cache_write_input_tokens,
-a.cache_read_input_tokens,a.output_tokens,a.usage_unknown,a.usage_total_mismatch,a.started_at,a.completed_at,
+a.cache_read_input_tokens,a.output_tokens,a.usage_unknown,a.usage_total_mismatch,a.usage_details,a.started_at,a.completed_at,
 c.donor_reward_actual_milli,c.donor_reward_state,c.streak_disposition,c.failure_origin
 FROM request_attempts a JOIN dispatch_claims c ON c.id=a.claim_id WHERE a.claim_id=?`, claimID).Scan(
 		&attempt.ClaimID, &attempt.RequestID, &attempt.AttemptSeq, &stateText, &kindText,
 		&upstreamStatus, &code, &diag, &attempt.Usage.UncachedInputTokens,
 		&attempt.Usage.CacheWriteInputTokens, &attempt.Usage.CacheReadInputTokens,
-		&attempt.Usage.OutputTokens, &usageUnknown, &usageTotalMismatch, &attempt.StartedAt, &attempt.CompletedAt,
+		&attempt.Usage.OutputTokens, &usageUnknown, &usageTotalMismatch, &usageDetails, &attempt.StartedAt, &attempt.CompletedAt,
 		&rewardActual, &rewardText, &attempt.StreakDisposition, &attempt.FailureOrigin)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -761,6 +772,10 @@ FROM request_attempts a JOIN dispatch_claims c ON c.id=a.claim_id WHERE a.claim_
 		return Attempt{}, ErrInvariant
 	}
 	attempt.Usage.TotalMismatch = usageTotalMismatch == 1
+	attempt.Usage, err = usageinfo.Apply(attempt.Usage, usageDetails)
+	if err != nil {
+		return Attempt{}, ErrInvariant
+	}
 	if rewardActual.Valid {
 		attempt.RewardActualMilli = rewardActual.Int64
 	}
@@ -862,10 +877,11 @@ func updateRequestLogAttemptAggregateTx(
 ) error {
 	var attempts, unknown, mismatch int
 	var uncached, cacheWrite, cacheRead, output int64
+	var details string
 	if err := tx.QueryRowContext(ctx, `SELECT attempt_count,uncached_input_tokens,
-cache_write_input_tokens,cache_read_input_tokens,output_tokens,usage_unknown,usage_total_mismatch
+cache_write_input_tokens,cache_read_input_tokens,output_tokens,usage_unknown,usage_total_mismatch,usage_details
 FROM request_logs WHERE id=?`, requestLogID).Scan(
-		&attempts, &uncached, &cacheWrite, &cacheRead, &output, &unknown, &mismatch); err != nil {
+		&attempts, &uncached, &cacheWrite, &cacheRead, &output, &unknown, &mismatch, &details); err != nil {
 		return fmt.Errorf("claim: read request attempt aggregate: %w", err)
 	}
 	if attempts >= MaxAttempts {
@@ -874,34 +890,30 @@ FROM request_logs WHERE id=?`, requestLogID).Scan(
 	if mismatch != 0 && mismatch != 1 {
 		return ErrInvariant
 	}
+	previous, err := usageinfo.Apply(connectorcontract.Usage{Present: unknown == 0, UncachedInputTokens: uncached, CacheWriteInputTokens: cacheWrite, CacheReadInputTokens: cacheRead, OutputTokens: output, TotalMismatch: mismatch != 0}, details)
+	if err != nil {
+		return ErrInvariant
+	}
+	if attempts == 0 && uncached == 0 && cacheWrite == 0 && cacheRead == 0 && output == 0 && mismatch == 0 && details == "{}" {
+		previous = usageinfo.Zero()
+	}
+	combined, err := usageinfo.AddUsage(previous, outcome.Usage)
+	if err != nil && !errors.Is(err, usageinfo.ErrOverflow) {
+		return ErrInvariant
+	}
 	errorSource := "upstream"
 	if outcome.ProtocolSuccess {
 		errorSource = "platform"
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE request_logs SET
 attempt_count=?,uncached_input_tokens=?,cache_write_input_tokens=?,
-cache_read_input_tokens=?,output_tokens=?,usage_unknown=?,usage_total_mismatch=?,error_source=?,error_diag=?
+cache_read_input_tokens=?,output_tokens=?,usage_unknown=?,usage_total_mismatch=?,usage_details=?,error_source=?,error_diag=?
 WHERE id=?`, attempts+1,
-		saturatingAddNonnegative(uncached, outcome.Usage.UncachedInputTokens),
-		saturatingAddNonnegative(cacheWrite, outcome.Usage.CacheWriteInputTokens),
-		saturatingAddNonnegative(cacheRead, outcome.Usage.CacheReadInputTokens),
-		saturatingAddNonnegative(output, outcome.Usage.OutputTokens),
-		boolInt(unknown != 0 || !outcome.Usage.Present),
-		boolInt(mismatch != 0 || outcome.Usage.TotalMismatch), errorSource, diag, requestLogID); err != nil {
+		combined.UncachedInputTokens, combined.CacheWriteInputTokens, combined.CacheReadInputTokens, combined.OutputTokens,
+		boolInt(!combined.Present), boolInt(combined.TotalMismatch), usageinfo.Encode(combined), errorSource, diag, requestLogID); err != nil {
 		return fmt.Errorf("claim: update request attempt aggregate: %w", err)
 	}
 	return nil
-}
-
-func saturatingAddNonnegative(left, right int64) int64 {
-	if left < 0 || right < 0 {
-		return 0
-	}
-	const maxInt64 = int64(^uint64(0) >> 1)
-	if right > maxInt64-left {
-		return maxInt64
-	}
-	return left + right
 }
 
 func candidateFromRecord(record claimRecord) Candidate {
@@ -989,6 +1001,7 @@ func validCallerResult(result CallerResult) bool {
 }
 
 func normalizeAttemptOutcome(outcome AttemptOutcome) AttemptOutcome {
+	outcome.Usage = usageinfo.Normalize(outcome.Usage)
 	if outcome.StreakDisposition == "" && outcome.FailureOrigin == "" {
 		outcome.StreakDisposition = connectorcontract.StreakNeutral
 		outcome.FailureOrigin = connectorcontract.OriginPlatform

@@ -435,6 +435,7 @@ type commonLogRecord struct {
 	usageTotalMismatch                                          int
 	attemptCount                                                int64
 	chargeMagnitude                                             []byte
+	usageDetails                                                string
 }
 
 type rowScanner interface{ Scan(...any) error }
@@ -447,7 +448,7 @@ func scanCommon(scanner rowScanner, extra ...any) (commonLogRecord, error) {
 		&record.uncached, &record.cacheWrite, &record.cacheRead, &record.output,
 		&record.usageUnknown, &record.usageTotalMismatch, &record.attemptCount, &record.chargeMagnitude,
 		&record.rejectionStage, &record.rejectionReason, &record.requestMethod, &record.requestPath,
-		&record.requestedStreaming, &record.automaticActions,
+		&record.requestedStreaming, &record.automaticActions, &record.usageDetails,
 	}
 	targets = append(targets, extra...)
 	if err := scanner.Scan(targets...); err != nil {
@@ -467,9 +468,7 @@ func validateCommonRecord(record commonLogRecord) error {
 		(record.usageTotalMismatch != 0 && record.usageTotalMismatch != 1) {
 		return ErrInvariant
 	}
-	switch RouteKind(record.routeKind) {
-	case RouteOpenAIChat, RouteCharityChat, RouteOpenAIEmbeddings, RouteCharityEmbeddings, RouteOpenAIImages, RouteCharityImages, RouteOpenAIDecisions, RouteCharityDecisions, RouteDiscovery:
-	default:
+	if !RouteKind(record.routeKind).Valid() {
 		return ErrInvariant
 	}
 	if record.completedAt.Valid && (record.completedAt.Int64 < record.startedAt || record.completedAt.Int64 > maxUnixSecond) {
@@ -517,8 +516,12 @@ func validateCommonRecord(record commonLogRecord) error {
 }
 
 func usageFromRecord(record commonLogRecord) (LogUsage, error) {
-	return makeUsage(record.uncached, record.cacheWrite, record.cacheRead, record.output,
+	usage, err := makeUsage(record.uncached, record.cacheWrite, record.cacheRead, record.output,
 		record.usageUnknown != 0, record.chargeMagnitude)
+	if err != nil {
+		return LogUsage{}, err
+	}
+	return addUsageDetails(usage, record.uncached, record.cacheWrite, record.cacheRead, record.output, record.usageDetails)
 }
 
 func makeUsage(uncached, cacheWrite, cacheRead, output int64, unknown bool, charge []byte) (LogUsage, error) {
@@ -542,8 +545,12 @@ func makeUsage(uncached, cacheWrite, cacheRead, output int64, unknown bool, char
 	}, nil
 }
 
-func zeroUsage(uncached, cacheWrite, cacheRead, output int64, unknown bool) (LogUsage, error) {
-	return makeUsage(uncached, cacheWrite, cacheRead, output, unknown, db.EncodeU128(db.U128{}))
+func zeroUsage(uncached, cacheWrite, cacheRead, output int64, unknown bool, details string) (LogUsage, error) {
+	usage, err := makeUsage(uncached, cacheWrite, cacheRead, output, unknown, db.EncodeU128(db.U128{}))
+	if err != nil {
+		return LogUsage{}, err
+	}
+	return addUsageDetails(usage, uncached, cacheWrite, cacheRead, output, details)
 }
 
 func formatMilli(value *big.Int) string {
