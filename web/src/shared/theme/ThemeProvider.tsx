@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   APPEARANCE_INTENSITY_STORAGE_KEY,
   DENSITY_STORAGE_KEY,
@@ -95,6 +95,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [density, setDensityState] = useState<Density>(readDensity);
   const [fontSize, setFontSizeState] = useState<FontSize>(readFontSize);
   const [intensity, setIntensityState] = useState<AppearanceIntensity>(getInitialIntensity);
+  const intensityChosen = useRef(false);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -106,7 +107,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     if (typeof window.matchMedia !== 'function') return;
     const mql = window.matchMedia(REDUCED_TRANSPARENCY_QUERY);
     const onChange = () => {
-      if (!storedIntensity()) setIntensityState(systemIntensity());
+      if (!intensityChosen.current && !storedIntensity()) setIntensityState(systemIntensity());
     };
     mql.addEventListener?.('change', onChange);
     return () => mql.removeEventListener?.('change', onChange);
@@ -163,6 +164,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const setDensity = useCallback((next: Density) => setDensityState(next), []);
   const setFontSize = useCallback((next: FontSize) => setFontSizeState(next), []);
   const setIntensity = useCallback((next: AppearanceIntensity) => {
+    intensityChosen.current = true;
     try {
       window.localStorage.setItem(APPEARANCE_INTENSITY_STORAGE_KEY, next);
     } catch {

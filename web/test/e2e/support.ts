@@ -705,5 +705,6 @@ export async function assertWorkbenchWidth(page: Page, selector: string): Promis
   });
   expect(layout.overflow).toBe(false);
   expect(layout.width).toBeGreaterThanOrEqual(layout.expected - 2);
+  expect(layout.width).toBeLessThanOrEqual(layout.expected + 2);
   expect(layout.offCentre).toBeLessThanOrEqual(2);
 }

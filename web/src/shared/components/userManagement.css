@@ -100,7 +100,8 @@
 }
 .user-authority__back.nb-btn {
   width: auto;
-  min-height: 0;
+  min-width: var(--nb-space-10);
+  min-height: var(--nb-space-10);
   margin-inline-start: calc(-1 * var(--nb-space-2));
   padding: var(--nb-space-1) var(--nb-space-2);
   font-size: var(--nb-font-size-sm);

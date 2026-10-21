@@ -52,6 +52,24 @@ describe('wallpaper timing', () => {
     expect(ambientPaints).toBeGreaterThanOrEqual(7);
   });
 
+  it.each(['keydown', 'scroll'])('restores ambient drawing after %s activity ends', (type) => {
+    const ambient = new PaintCadence(undefined, true);
+    ambient.due(performance.now() - 1000);
+    window.dispatchEvent(new Event(type));
+    const base = performance.now();
+    ambient.reset();
+    const paints: number[] = [];
+    for (let i = 0; i < 78; i++) {
+      const at = base + (i * 1000) / 60;
+      if (ambient.due(at)) paints.push(at - base);
+    }
+    expect(paints.filter((at) => at < 600).length).toBeLessThanOrEqual(10);
+    const resumed = paints.filter((at) => at >= 600);
+    expect(resumed[0]).toBeLessThanOrEqual(667);
+    expect(resumed.filter((at) => at >= 700).length).toBeGreaterThanOrEqual(35);
+    expect(Math.max(...resumed.slice(1).map((at, i) => at - resumed[i]))).toBeLessThan(18);
+  });
+
   it('closes continuously and reopens more slowly without a loop seam', () => {
     const samples = Array.from({ length: 29 }, (_, i) => blinkAt(2.2 + i / 60));
     expect(samples.filter((v) => v > 0 && v < 1).length).toBeGreaterThan(16);
