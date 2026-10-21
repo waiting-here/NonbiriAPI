@@ -205,11 +205,17 @@ func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *h
 			id, ok := text(part["id"])
 			id = strings.TrimSuffix(kind, "-end") + ":" + id
 			closed, exists := texts[id]
-			if !ok || !exists || closed {
+			if !ok || !exists || closed || !noCitations(part["citations"]) {
 				return failure("invalid upstream text end", upstreamerror.Detail{})
 			}
 			texts[id] = true
 		case "tool-input-start":
+			if raw, present := part["inputEncoding"]; present {
+				encoding, ok := text(raw)
+				if !ok || encoding != "json" {
+					return failure("upstream tool input encoding cannot be represented", upstreamerror.Detail{})
+				}
+			}
 			id, ok := text(part["id"])
 			name, nameOK := text(part["toolName"])
 			if !ok || !nameOK || !opaque(id, 512) || !opaque(name, 64) || tools[id] != nil || len(tools) >= 128 {
