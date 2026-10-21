@@ -27,6 +27,7 @@ function incoming(target = TARGET, options = {}) {
 async function expectFailure(response, kind, status) {
   assert.equal(response.status, status);
   assert.equal(response.headers.get('x-nonbiri-proxy-error'), kind);
+  assert.equal(response.headers.get('x-nonbiri-proxy-response'), null);
   assert.equal(response.headers.get('cache-control'), 'no-store');
   assert.equal(response.headers.get('cdn-cache-control'), 'no-store');
   assert.deepEqual(await response.json(), FAILURE);
@@ -139,6 +140,7 @@ test('two unrelated upstreams preserve paths, queries, authentication, JSON and 
     assert.equal(response.status, 429);
     assert.equal(response.headers.get('retry-after'), '17');
     assert.equal(response.headers.get('x-nonbiri-proxy-error'), null);
+    assert.equal(response.headers.get('x-nonbiri-proxy-response'), 'upstream');
     assert.deepEqual(await response.json(), { error: { type: 'rate_limit' } });
   }
 });
@@ -198,6 +200,33 @@ test('all redirects cancel their body and return a fixed error without another f
   }
 });
 
+test('upstream responses receive exactly one authoritative confirmation after private-header removal', async () => {
+  for (const status of [200, 429, 503]) {
+    const headers = new Headers([
+      ['X-Nonbiri-Proxy-Response', 'forged'],
+      ['x-nonbiri-proxy-response', 'upstream'],
+      ['x-nonbiri-proxy-error', 'configuration'],
+      ['x-nonbiri-proxy-token', 'reflected-private-value'],
+      ['x-nonbiri-proxy-other', 'private-value'],
+      ['connection', 'X-Nonbiri-Proxy-Response'],
+    ]);
+    let outbound;
+    const proxy = createProxy((url, init) => {
+      outbound = new Request(url, init);
+      return new Response('upstream body', { status, headers });
+    });
+    const response = await proxy.fetch(incoming(TARGET, {
+      headers: { 'X-Nonbiri-Proxy-Response': 'caller-forged' },
+    }), ENV);
+    assert.equal(outbound.headers.get('x-nonbiri-proxy-response'), null);
+    assert.equal(response.status, status);
+    assert.deepEqual([...response.headers].filter(([name]) => name.startsWith('x-nonbiri-proxy-')),
+      [['x-nonbiri-proxy-response', 'upstream']]);
+    assert.equal(await response.text(), 'upstream body');
+    assert.equal(headers.get('x-nonbiri-proxy-response'), 'forged, upstream');
+  }
+});
+
 test('network failures reveal no exception text and do not retry', async () => {
   let calls = 0;
   const proxy = createProxy(() => { calls++; throw new Error(TARGET + TOKEN + WORKER); });
@@ -214,6 +243,7 @@ test('SSE remains unbuffered with backpressure and downstream cancellation', { t
   }, { highWaterMark: 0 });
   const proxy = createProxy(() => new Response(stream, { headers: { 'content-type': 'text/event-stream' } }));
   const response = await proxy.fetch(incoming(), ENV);
+  assert.equal(response.headers.get('x-nonbiri-proxy-response'), 'upstream');
   assert.equal(response.body, stream);
   assert.equal(pulls, 0);
   const reader = response.body.getReader();
