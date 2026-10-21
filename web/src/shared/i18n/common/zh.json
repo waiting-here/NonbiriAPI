@@ -529,6 +529,20 @@
           "rpm_ban": "RPM 超限自动封禁",
           "client_rule_ban": "客户端命中自动封禁",
           "context_penalty": "超长上下文罚款"
+        },
+        "pressure": {
+          "title": "全站压力",
+          "rpm": "全站 RPM",
+          "concurrency": "全站出站并发",
+          "currentLimit": "{{current}} / {{limit}}",
+          "current": "当前 {{value}}",
+          "day": "24 小时峰值 {{value}}",
+          "all": "历史峰值 {{value}}",
+          "values": "当前 {{current}}，上限 {{limit}}，24 小时峰值 {{day}}，历史峰值 {{all}}",
+          "updated": "观测于 {{time}}",
+          "help": "RPM 为最近一分钟的限额占用，并发为正在进行的上游调用。每 {{seconds}} 秒观测，峰值按分钟汇总；历史自 {{time}} 起记录，页面每 15 秒刷新。",
+          "unavailable": "压力统计暂时不可用，请稍后再试。",
+          "stale": "暂时无法刷新，以上为最近一次观测值。"
         }
       },
       "charity": {
