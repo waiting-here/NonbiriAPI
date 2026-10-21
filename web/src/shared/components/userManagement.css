@@ -169,8 +169,20 @@
   }
 }
 
-.user-management .nb-table .status-badge,
 .user-list-level {
+  white-space: nowrap;
+}
+.user-management .nb-table .status-badge {
+  max-width: 100%;
+  padding-inline: var(--nb-space-1);
+  gap: var(--nb-space-1);
+  white-space: normal;
+  overflow-wrap: normal;
+}
+.user-list-balance-heading {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 @media (width <= 48rem) {

@@ -1451,7 +1451,10 @@ export function UserManagement({
                     {
                       key: 'balance',
                       header: (
-                        <span className="user-list-balance-heading">
+                        <span
+                          className="user-list-balance-heading"
+                          title={t('management.users.creditsBalance')}
+                        >
                           {t('management.users.creditsBalance')}
                         </span>
                       ),

@@ -103,7 +103,11 @@ async function save(page: Page, control: Locator, path: string, method = 'PATCH'
   return response;
 }
 async function fold(scope: Page | Locator, title: string) {
-  const summary = scope.locator('summary').filter({ has: scope.getByText(title, { exact: true }) });
+  const exactTitle = new RegExp('^' + title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$');
+  const summary = scope
+    .locator('summary > .nb-fold__title > strong')
+    .filter({ hasText: exactTitle })
+    .locator('../..');
   const panel = summary.locator('..');
   if ((await panel.getAttribute('open')) === null) await summary.click();
   return panel;
@@ -178,6 +182,23 @@ test('administrator saves inherited five-limit profiles and batches only the sel
     await expect(
       page.getByLabel(limits.globalRPMLimit, { exact: true }),
     ).toHaveAccessibleDescription(/Inherited; currently/);
+    await expect(page.locator('.user-list-balance-heading')).toHaveAttribute(
+      'title',
+      limits.creditsBalance,
+    );
+    const deletedRow = page
+      .getByRole('row')
+      .filter({ has: page.locator('.status-badge.is-inactive') })
+      .first();
+    const statusBounds = await deletedRow.evaluate((row) => {
+      const range = document.createRange();
+      range.selectNodeContents(row.querySelector('.status-badge')!);
+      return {
+        textRight: range.getBoundingClientRect().right,
+        balanceLeft: row.querySelector('.user-list-balance')!.getBoundingClientRect().left,
+      };
+    });
+    expect(statusBounds.textRight).toBeLessThanOrEqual(statusBounds.balanceLeft);
     await visuals(
       page,
       info,
@@ -279,6 +300,22 @@ test('administrator saves inherited five-limit profiles and batches only the sel
     expect(await read<AdminUser>(context, origin, '/admin/api/users/' + untouched.id)).toEqual(
       unchanged,
     );
+    const trainee = await session(browser, 5);
+    try {
+      const traineePage = await trainee.context.newPage();
+      await traineePage.goto(
+        trainee.origin + '/steward?tab=users&user=' + fixture().management.trainee_target_id,
+      );
+      await traineePage.getByRole('tab', { name: limits.tabLimits, exact: true }).click();
+      await visuals(
+        traineePage,
+        info,
+        'trainee-inference-limits',
+        traineePage.getByLabel(limits.lightConcurrencyLimit, { exact: true }),
+      );
+    } finally {
+      await trainee.context.close();
+    }
   } finally {
     await context.close();
   }
