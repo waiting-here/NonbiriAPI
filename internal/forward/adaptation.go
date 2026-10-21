@@ -205,7 +205,9 @@ func prepareAdaptedAttempt(request *validatedRequest, connectorType connectorcon
 		return prepared, nil
 	}
 	var logical []byte
-	if request.chat != nil {
+	if request.inference != nil {
+		logical, err = request.inference.LogicalBody()
+	} else if request.chat != nil {
 		logical, err = request.chat.LogicalBody()
 	} else if request.image != nil {
 		logical, err = request.image.LogicalBody()
@@ -236,7 +238,13 @@ func prepareAdaptedAttempt(request *validatedRequest, connectorType connectorcon
 		clear(adapted)
 		adapted = filtered
 	}
-	prepared.request, err = decodeRequest(bytes.NewReader(adapted), request.operation, request.bodyLimit())
+	if request.inference != nil {
+		var decoded *openai.InferenceRequest
+		decoded, err = request.inference.WithLogicalBody(adapted)
+		prepared.request = inferenceRequest(decoded)
+	} else {
+		prepared.request, err = decodeRequest(bytes.NewReader(adapted), request.operation, request.bodyLimit())
+	}
 	if err != nil {
 		prepared.clear()
 		return nil, err

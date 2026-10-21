@@ -32,6 +32,7 @@ type AttemptInput struct {
 	Embedding    *openai.EmbeddingRequest
 	Image        *openai.ImageRequest
 	Decision     *openai.DecisionRequest
+	Inference    *openai.InferenceRequest
 	Policy       connectorcontract.AttemptPolicy
 	Sink         ResponseSink
 	Observer     *SafeObserver
@@ -40,6 +41,9 @@ type AttemptInput struct {
 }
 
 func (input AttemptInput) validOperation() bool {
+	if input.Inference != nil {
+		return input.Operation == input.Inference.Operation() && input.Ingress == nil && input.Embedding == nil && input.Image == nil && input.Decision == nil
+	}
 	if input.Operation == connectorcontract.OperationDecisions {
 		return input.Decision != nil && input.Ingress == nil && input.Embedding == nil && input.Image == nil
 	}
@@ -150,7 +154,7 @@ func NewDefaultRegistry() *Registry {
 }
 
 func NewDefaultRegistryWithGatewayModels(models gatewaypolicy.Config) *Registry {
-	registry, err := NewRegistry(openAIDescriptor(), anthropicDescriptor(), gatewayDescriptorWithModels(models), decisionsDescriptor(), translatingDescriptor(connectorcontract.TypeGoogleGemini), translatingDescriptor(connectorcontract.TypeOpenAIResponses))
+	registry, err := NewRegistry(rerankDescriptor(connectorcontract.TypeCohereRerank), rerankDescriptor(connectorcontract.TypeJinaRerank), rerankDescriptor(connectorcontract.TypeSiliconFlowRerank), rerankDescriptor(connectorcontract.TypeVoyageRerank), openAIDescriptor(), anthropicDescriptor(), gatewayDescriptorWithModels(models), decisionsDescriptor(), translatingDescriptor(connectorcontract.TypeGoogleGemini), translatingDescriptor(connectorcontract.TypeOpenAIResponses))
 	if err != nil {
 		panic(err)
 	}
@@ -309,20 +313,20 @@ func (*openAIConnector) Type() connectorcontract.Type {
 func (*openAIConnector) Capabilities() connectorcontract.CapabilitySet { return openAICapabilities() }
 
 func openAICapabilities() connectorcontract.CapabilitySet {
-	return connectorcontract.CapabilitySet(
-		connectorcontract.CapabilityText |
-			connectorcontract.CapabilitySystem |
-			connectorcontract.CapabilityDeveloper |
-			connectorcontract.CapabilityImages |
-			connectorcontract.CapabilityTools |
-			connectorcontract.CapabilityToolChoice |
-			connectorcontract.CapabilityParallelTools |
-			connectorcontract.CapabilityStream |
-			connectorcontract.CapabilitySampling |
-			connectorcontract.CapabilityUnknownOpenAIFields |
-			connectorcontract.CapabilityReasoningEffort |
-			connectorcontract.CapabilityStorage | connectorcontract.CapabilityPromptCache |
-			connectorcontract.CapabilityEmbeddings | connectorcontract.CapabilityImagesGenerations |
+	return inferenceCapabilities(connectorcontract.TypeOpenAICompatible) | connectorcontract.CapabilitySet(
+		connectorcontract.CapabilityText|
+			connectorcontract.CapabilitySystem|
+			connectorcontract.CapabilityDeveloper|
+			connectorcontract.CapabilityImages|
+			connectorcontract.CapabilityTools|
+			connectorcontract.CapabilityToolChoice|
+			connectorcontract.CapabilityParallelTools|
+			connectorcontract.CapabilityStream|
+			connectorcontract.CapabilitySampling|
+			connectorcontract.CapabilityUnknownOpenAIFields|
+			connectorcontract.CapabilityReasoningEffort|
+			connectorcontract.CapabilityStorage|connectorcontract.CapabilityPromptCache|
+			connectorcontract.CapabilityEmbeddings|connectorcontract.CapabilityImagesGenerations|
 			connectorcontract.CapabilityModelDiscovery,
 	)
 }
@@ -334,6 +338,10 @@ func (c *openAIConnector) Attempt(ctx context.Context, input AttemptInput) conne
 			input.Credential.Clear()
 		}
 		return result
+	}
+	if input.Inference != nil {
+		driver, _ := c.driver.(inferenceDriver)
+		return attemptInference(ctx, input, c.Type(), driver)
 	}
 	if input.Operation == connectorcontract.OperationEmbeddings {
 		return c.attemptEmbedding(ctx, input)

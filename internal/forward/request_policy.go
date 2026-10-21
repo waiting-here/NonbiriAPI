@@ -9,6 +9,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/modelname"
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/requestbody"
 	"github.com/waiting-here/NonbiriAPI/internal/routing"
 )
@@ -46,10 +47,15 @@ func (s *Service) decodeIngress(ctx context.Context, user int64, body []byte, op
 	return s.decodeEnvelope(ctx, user, body, envelope, operation)
 }
 
-func (s *Service) decodeEnvelope(ctx context.Context, user int64, body []byte, envelope *openai.RequestEnvelope, operation contract.Operation) (*validatedRequest, []byte, bool, error) {
+func (s *Service) decodeEnvelope(ctx context.Context, user int64, body []byte, envelope *openai.RequestEnvelope, operation contract.Operation, multipart ...*openai.InferenceMultipart) (*validatedRequest, []byte, bool, error) {
 	limit, err := requestbody.Limit(ctx)
 	if err != nil {
 		return nil, nil, false, err
+	}
+	if contract.IsHTTPInference(operation) {
+		if err := openai.ValidateStatelessInference(body, operation); err != nil {
+			return s.rejectStatefulInference(ctx, user, envelope.Model, err)
+		}
 	}
 	charity := modelname.IsCharity(envelope.Model)
 	filtered := body
@@ -78,7 +84,14 @@ func (s *Service) decodeEnvelope(ctx context.Context, user int64, body []byte, e
 			return nil, nil, true, err
 		}
 	}
-	request, err := decodeRequest(bytes.NewReader(filtered), operation, limit)
+	var request *validatedRequest
+	if len(multipart) == 1 && multipart[0] != nil {
+		var decoded *openai.InferenceRequest
+		decoded, err = multipart[0].Decode(filtered, operation, limit)
+		request = inferenceRequest(decoded)
+	} else {
+		request, err = decodeRequest(bytes.NewReader(filtered), operation, limit)
+	}
 	if err == nil && charity {
 		err = request.excludeFields(policy.ExcludedRequestFields)
 		request.policyModelID, request.policyDecisionNow = policy.ModelID, now
@@ -104,6 +117,47 @@ func (s *Service) decodeEnvelope(ctx context.Context, user int64, body []byte, e
 		return nil, nil, charity, err
 	}
 	return request, filtered, charity, nil
+}
+
+// A resource-policy refusal still follows access checks and the original
+// client audit. Successful requests perform that audit in ordinary preflight.
+func (s *Service) rejectStatefulInference(ctx context.Context, user int64, model string, rejection error) (*validatedRequest, []byte, bool, error) {
+	charity := modelname.IsCharity(model)
+	var now int64
+	var err error
+	if charity {
+		_, now, err = s.ingressPolicy(ctx, user, model)
+	} else {
+		s.lifecycle.RLock()
+		if s.closed {
+			err = ErrClosed
+		} else {
+			var policy PersonalPreflight
+			policy, err = s.personal.Preflight(ctx, user, model)
+			if err == nil && (policy.ModelID <= 0 || policy.OwnerUserID != user || policy.FullName != model) {
+				err = routing.ErrNotFound
+			}
+			if err == nil {
+				now, err = s.nowUnix()
+			}
+		}
+		s.lifecycle.RUnlock()
+	}
+	if err == nil {
+		kind := "self"
+		if charity {
+			kind = "charity"
+		}
+		requestattempt.Classify(ctx, kind)
+		if s.classify != nil {
+			s.classify(ctx, user, kind)
+		}
+		err = s.checkClientRules(ctx, user, model, now)
+	}
+	if err == nil {
+		err = rejection
+	}
+	return nil, nil, charity, err
 }
 
 // Direct service callers already own a decoded request. They still obtain and

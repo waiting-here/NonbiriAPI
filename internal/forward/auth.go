@@ -10,6 +10,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/lifecyclegate"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
+	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
@@ -131,14 +132,18 @@ func (middleware *CallerKeyMiddleware) wrap(next http.Handler, checkRoute func(s
 		}
 
 		observability.MarkAccessIdentity(request.Context(), identity.UserID, identity.Generation)
-		if middleware.rejections != nil && requestattempt.ValidRoute(request.Method, request.URL.Path) {
-			ctx, id, err := requestattempt.New(request.Context(), identity.UserID, request.Method, request.URL.Path)
+		recordPath := request.URL.Path
+		if request.Method == http.MethodGet && strings.HasPrefix(recordPath, "/v1/models/") {
+			recordPath = "/v1/models"
+		}
+		if middleware.rejections != nil && requestattempt.ValidRoute(request.Method, recordPath) {
+			ctx, id, err := requestattempt.New(request.Context(), identity.UserID, request.Method, recordPath)
 			if err != nil {
 				writeFailure(writer, platformFailure(httperr.CodeServiceUnavailable, "service unavailable"))
 				return
 			}
 			request = request.WithContext(ctx)
-			if request.URL.Path == "/v1/models" {
+			if recordPath == "/v1/models" {
 				requestattempt.Classify(ctx, "discovery")
 			}
 			writer.Header().Set("X-Request-ID", id)
@@ -232,15 +237,19 @@ func exactIngressFailure(method, path, escapedPath string) *wireFailure {
 
 // Authentication and browser preflights share the same exact route table.
 func exactIngressMethod(path, escapedPath string) string {
+	if strings.HasPrefix(path, "/v1/models/") && strings.HasPrefix(escapedPath, "/v1/models/") && len(path) > len("/v1/models/") {
+		return http.MethodGet
+	}
 	if path == "" || escapedPath != path {
 		return ""
 	}
 	switch path {
 	case "/v1/models":
 		return http.MethodGet
-	case "/v1/chat/completions", "/v1/embeddings", "/v1/images/generations", "/v1/decisions":
-		return http.MethodPost
 	default:
+		if requestkind.OperationForPath(path) != "" {
+			return http.MethodPost
+		}
 		return ""
 	}
 }
