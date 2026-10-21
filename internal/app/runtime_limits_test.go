@@ -48,7 +48,7 @@ func TestCommittedRPMSnapshotChangesAllCapsWithoutResettingWindow(t *testing.T) 
 	runtime := &auditRuntime{flow: flow}
 	apply := func(revision int64, global, user, charity string, keys ...string) {
 		runtime.configurationChanged(adminapi.SiteConfigCommit{Revision: revision, Keys: keys, Values: map[string]string{
-			adminapi.KeyGlobalRPM: global, adminapi.KeyGlobalRPMPerUser: user, adminapi.KeyDefaultRPMPerUser: charity,
+			adminapi.KeyGlobalRPM: global, adminapi.KeyGlobalRPMPerUser: user, adminapi.KeyDefaultRPMPerUser: charity, adminapi.KeyDefaultLightRPMPerUser: "30",
 		}})
 	}
 	apply(3, "20", "2", "7", adminapi.KeyGlobalRPMPerUser)
@@ -60,13 +60,13 @@ func TestCommittedRPMSnapshotChangesAllCapsWithoutResettingWindow(t *testing.T) 
 		reservation.Commit()
 	}
 	apply(2, "100", "60", "60", adminapi.KeyDefaultRPMPerUser)
-	if got := flow.Limits(); got != (ratelimit.RPMLimits{GlobalLimit: 20, PerUserLimit: 2, CharityPerUserLimit: 7}) {
+	if got := flow.Limits(); got != (ratelimit.RPMLimits{GlobalLimit: 20, PerUserLimit: 2, CharityPerUserLimit: 7, LightCharityPerUserLimit: 30}) {
 		t.Fatalf("stale snapshot reverted RPM caps: %+v", got)
 	}
 	// A callback for an unrelated setting can overtake the limit edit.
 	apply(5, "30", "3", "4", adminapi.KeySiteName)
 	apply(4, "30", "3", "4", adminapi.KeyGlobalRPM)
-	if got := flow.Limits(); got != (ratelimit.RPMLimits{GlobalLimit: 30, PerUserLimit: 3, CharityPerUserLimit: 4}) {
+	if got := flow.Limits(); got != (ratelimit.RPMLimits{GlobalLimit: 30, PerUserLimit: 3, CharityPerUserLimit: 4, LightCharityPerUserLimit: 30}) {
 		t.Fatalf("new caps were not applied: %+v", got)
 	}
 	reservation, _, err := flow.Admit(context.Background(), 1)

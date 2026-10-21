@@ -78,7 +78,11 @@ func SummarizeMinutes(userID int64, values []Minute, gaps map[int64]bool, cfg Co
 		} else {
 			rpmRun = 0
 		}
-		if float64(m.OccupancyMillis)*100 >= 60000*float64(m.ConcurrencyLimit)*float64(cfg.ThresholdPercent) {
+		highConcurrency := float64(m.OccupancyMillis)*100 >= 60000*float64(m.ConcurrencyLimit)*float64(cfg.ThresholdPercent)
+		if m.SaturationMicrosMillis != nil {
+			highConcurrency = *m.SaturationMicrosMillis >= int64(cfg.ThresholdPercent)*600000000
+		}
+		if highConcurrency {
 			concurrencyRun++
 		} else {
 			concurrencyRun = 0
@@ -129,7 +133,7 @@ func readMinutes(ctx context.Context, tx *sql.Tx, users []int64, w Window) ([]Mi
 		kind = "total"
 	}
 	args = append(args, kind, maxReadMinutes+1)
-	rows, err := tx.QueryContext(ctx, `SELECT epoch,user_id,minute,call_kind,rpm_committed,rpm_released,rpm_pending,rpm_denied,concurrency_denied,occupancy_millis,peak,COALESCE(rpm_limit,0),COALESCE(concurrency_limit,0),coverage,config_revision,updated_at FROM risk_audit_minutes WHERE user_id IN (`+strings.Join(placeholders, ",")+`) AND minute>=? AND minute<? AND call_kind IN ('total',?) ORDER BY user_id,minute,epoch,call_kind LIMIT ?`, args...)
+	rows, err := tx.QueryContext(ctx, `SELECT epoch,user_id,minute,call_kind,rpm_committed,rpm_released,rpm_pending,rpm_denied,concurrency_denied,occupancy_millis,peak,COALESCE(rpm_limit,0),COALESCE(concurrency_limit,0),coverage,config_revision,updated_at,saturation_micros_millis FROM risk_audit_minutes WHERE user_id IN (`+strings.Join(placeholders, ",")+`) AND minute>=? AND minute<? AND call_kind IN ('total',?) ORDER BY user_id,minute,epoch,call_kind LIMIT ?`, args...)
 	if err != nil {
 		return nil, false, ErrUnavailable
 	}
@@ -137,7 +141,7 @@ func readMinutes(ctx context.Context, tx *sql.Tx, users []int64, w Window) ([]Mi
 	result := make([]Minute, 0)
 	for rows.Next() {
 		var m Minute
-		if rows.Scan(&m.Epoch, &m.UserID, &m.Minute, &m.Kind, &m.RPMCommitted, &m.RPMReleased, &m.RPMPending, &m.RPMDenied, &m.ConcurrencyDenied, &m.OccupancyMillis, &m.Peak, &m.RPMLimit, &m.ConcurrencyLimit, &m.Coverage, &m.ConfigRevision, &m.UpdatedAt) != nil {
+		if rows.Scan(&m.Epoch, &m.UserID, &m.Minute, &m.Kind, &m.RPMCommitted, &m.RPMReleased, &m.RPMPending, &m.RPMDenied, &m.ConcurrencyDenied, &m.OccupancyMillis, &m.Peak, &m.RPMLimit, &m.ConcurrencyLimit, &m.Coverage, &m.ConfigRevision, &m.UpdatedAt, &m.SaturationMicrosMillis) != nil {
 			return nil, false, ErrUnavailable
 		}
 		result = append(result, m)

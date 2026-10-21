@@ -115,7 +115,7 @@ func (r *ChatRequest) ApplyRolePolicy(policy rolepolicy.Policy) (*ChatRequest, e
 
 // SupportsRolePassthrough excludes protocols that translate or reject extra roles.
 func (r *ChatRequest) SupportsRolePassthrough(kind string) bool {
-	return r != nil && (!r.extraRolesPassthrough || kind == "openai-compatible")
+	return r != nil && (!r.extraRolesPassthrough || kind == "openai-compatible" || kind == "openai-chat-completions")
 }
 
 // InheritRoleRequirements preserves logical role fidelity across an independent

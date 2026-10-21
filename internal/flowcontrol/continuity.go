@@ -24,10 +24,12 @@ func (c *Controller) loadRPMWindow(ctx context.Context, userID int64) (string, e
 	}
 	facts := make([]ratelimit.WindowFact, 0, len(events))
 	for _, event := range events {
-		if event.Count != 1 || (event.Value != nil && *event.Value != 1) {
+		// Keep legacy nil/1 facts heavy; 2 and 3 add light charity/personal
+		// classification without replacing the shared identity window.
+		if event.Count != 1 || (event.Value != nil && (*event.Value < 1 || *event.Value > 3)) {
 			return "", continuity.ErrInvariant
 		}
-		facts = append(facts, ratelimit.WindowFact{ID: event.ID, At: time.UnixMilli(event.AtMillis), Expires: time.UnixMilli(event.ExpiresMillis), Charity: event.Value != nil})
+		facts = append(facts, ratelimit.WindowFact{ID: event.ID, At: time.UnixMilli(event.AtMillis), Expires: time.UnixMilli(event.ExpiresMillis), Charity: event.Value != nil && *event.Value != 3, Light: event.Value != nil && *event.Value >= 2})
 	}
 	rpmKey := hex.EncodeToString(key[:])
 	if err := c.limiter.MergeUser(rpmKey, facts); err != nil {
@@ -53,8 +55,14 @@ func (c *Controller) PreserveWindowTx(ctx context.Context, tx *sql.Tx, userID, _
 	events := make([]continuity.WindowEvent, 0, len(facts))
 	for _, fact := range facts {
 		event := continuity.WindowEvent{ID: fact.ID, AtMillis: fact.At.UnixMilli(), ExpiresMillis: fact.Expires.Add(time.Millisecond - 1).UnixMilli(), Count: 1}
-		if fact.Charity {
+		if fact.Charity || fact.Light {
 			value := int64(1)
+			if fact.Light {
+				value = 3
+				if fact.Charity {
+					value = 2
+				}
+			}
 			event.Value = &value
 		}
 		events = append(events, event)

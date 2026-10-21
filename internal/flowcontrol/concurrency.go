@@ -80,8 +80,10 @@ func (g *userAdmissionWriteGuard) release() {
 }
 
 type userConcurrencyState struct {
-	active   int
-	retiring bool
+	active                 int
+	lightActive            int
+	heavyLimit, lightLimit int
+	retiring               bool
 }
 
 type userConcurrencyPermit struct {
@@ -89,7 +91,7 @@ type userConcurrencyPermit struct {
 	userID    int64
 	state     *userConcurrencyState
 	requestID string
-	limit     int
+	light     bool
 	released  atomic.Bool
 }
 
@@ -112,6 +114,10 @@ func (l *userConcurrencyLimiter) tryAcquire(userID int64, limit int) (*userConcu
 }
 
 func (l *userConcurrencyLimiter) tryAcquireObserved(userID int64, limit int, requestID string) (*userConcurrencyPermit, error) {
+	return l.tryAcquireClassObserved(userID, limit, limit, false, requestID)
+}
+
+func (l *userConcurrencyLimiter) tryAcquireClassObserved(userID int64, limit, totalLimit int, light bool, requestID string) (*userConcurrencyPermit, error) {
 	if l == nil {
 		return nil, errConcurrencyClosed
 	}
@@ -126,22 +132,34 @@ func (l *userConcurrencyLimiter) tryAcquireObserved(userID int64, limit int, req
 	state := l.users[userID]
 	if state == nil {
 		if len(l.users) >= l.maxTracked {
-			l.observeLocked("concurrency_denied", userID, requestID, limit, 0)
+			l.observeLocked("concurrency_denied", userID, requestID, totalLimit, 0)
 			return nil, ErrConcurrencyLimited
 		}
 		state = &userConcurrencyState{}
 		l.users[userID] = state
 	}
-	if state.retiring || state.active >= limit {
-		l.observeLocked("concurrency_denied", userID, requestID, limit, state.active)
+	if light {
+		state.lightLimit, state.heavyLimit = limit, totalLimit-limit
+	} else {
+		state.heavyLimit, state.lightLimit = limit, totalLimit-limit
+	}
+	active := state.active - state.lightActive
+	if light {
+		active = state.lightActive
+	}
+	if state.retiring || active >= limit {
+		l.observeLocked("concurrency_denied", userID, requestID, totalLimit, state.active)
 		if state.active == 0 {
 			delete(l.users, userID)
 		}
 		return nil, ErrConcurrencyLimited
 	}
 	state.active++
-	l.observeLocked("concurrency_acquire", userID, requestID, limit, state.active)
-	return &userConcurrencyPermit{limiter: l, userID: userID, state: state, requestID: requestID, limit: limit}, nil
+	if light {
+		state.lightActive++
+	}
+	l.observeLocked("concurrency_acquire", userID, requestID, totalLimit, state.active)
+	return &userConcurrencyPermit{limiter: l, userID: userID, state: state, requestID: requestID, light: light}, nil
 }
 
 func (p *userConcurrencyPermit) Release() bool {
@@ -163,7 +181,10 @@ func (p *userConcurrencyPermit) Release() bool {
 		panic("flowcontrol: user concurrency permit accounting underflow")
 	}
 	p.state.active--
-	l.observeLocked("concurrency_release", p.userID, p.requestID, p.limit, p.state.active)
+	if p.light {
+		p.state.lightActive--
+	}
+	l.observeLocked("concurrency_release", p.userID, p.requestID, p.state.heavyLimit+p.state.lightLimit, p.state.active)
 	if p.state.active == 0 {
 		delete(l.users, p.userID)
 	}

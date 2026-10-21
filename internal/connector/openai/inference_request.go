@@ -14,15 +14,16 @@ import (
 // InferenceRequest owns a bounded snapshot of one direct inference protocol.
 // Uploaded parts belong only to this request and are never persisted.
 type InferenceRequest struct {
-	fields    []jsonField
-	parts     []inferencePart
-	excluded  []string
-	operation contract.Operation
-	bodyLimit int64
-	Model     string
-	Stream    bool
-	count     int
-	documents []json.RawMessage
+	fields           []jsonField
+	parts            []inferencePart
+	excluded         []string
+	operation        contract.Operation
+	bodyLimit        int64
+	Model            string
+	Stream           bool
+	count            int
+	documents        []json.RawMessage
+	systemOneOptions systemOneOptions
 }
 
 func (*InferenceRequest) String() string   { return "[redacted inference request]" }
@@ -122,7 +123,7 @@ func (r *InferenceRequest) ExcludeFields(names []string) error {
 }
 func inferenceProtectedField(name string) bool {
 	switch name {
-	case "model", "input", "prompt", "query", "documents", "image", "images", "mask", "file", "voice", "store", "background", "previous_response_id", "conversation":
+	case "model", "input", "prompt", "query", "documents", "image", "images", "mask", "file", "voice", "store", "background", "previous_response_id", "conversation", "state", "questions", "assets":
 		return true
 	}
 	return false
@@ -175,6 +176,10 @@ func decodeInferenceRequest(reader io.Reader, operation contract.Operation, limi
 	}
 	text := func(name string) bool { _, ok := decisionString(object[name], 1, int(limit)); return ok }
 	switch operation {
+	case contract.OperationSystemOne:
+		if err := validateSystemOne(object, parts); err != nil {
+			return nil, err
+		}
 	case contract.OperationResponses, contract.OperationResponsesCompact, contract.OperationResponsesInputTokens:
 		if len(object["input"]) == 0 || isJSONNull(object["input"]) {
 			return nil, invalidField("input", "inline input is required")
@@ -424,5 +429,9 @@ func (r *InferenceRequest) WithLogicalBody(body []byte) (*InferenceRequest, erro
 	if r == nil {
 		return nil, ErrInvalidRequest
 	}
-	return decodeInferenceRequest(bytes.NewReader(body), r.operation, r.bodyLimit, r.parts)
+	copy, err := decodeInferenceRequest(bytes.NewReader(body), r.operation, r.bodyLimit, r.parts)
+	if copy != nil {
+		copy.systemOneOptions = r.systemOneOptions
+	}
+	return copy, err
 }

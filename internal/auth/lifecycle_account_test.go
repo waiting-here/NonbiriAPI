@@ -25,7 +25,7 @@ func TestLifecycleIdentityUsesFrozenDecisionAndClosedFields(t *testing.T) {
 	}
 	decisionNow := authTestNow + 50
 	if _, err := fixture.store.DB().Exec(`
-UPDATE users SET is_banned=1,banned_reason='HOSTILE-BAN-REASON',banned_until=?,discord_gate_policy='exempt' WHERE id=?`, decisionNow+10, userID); err != nil {
+UPDATE users SET is_banned=1,banned_reason='HOSTILE-BAN-REASON',banned_until=?,discord_gate_policy='exempt',light_rpm_limit=31,light_concurrency_limit=16,global_rpm_limit=61 WHERE id=?`, decisionNow+10, userID); err != nil {
 		t.Fatal(err)
 	}
 	fixture.clock.Add(24 * 60 * 60 * 1e9)
@@ -46,6 +46,9 @@ UPDATE users SET is_banned=1,banned_reason='HOSTILE-BAN-REASON',banned_until=?,d
 	}
 	if identity.ID == "" || identity.Username == "" || identity.DiscordGatePolicy != "exempt" || usage.TotalRequests == "" || usage.TotalPromptTokens == "" {
 		t.Fatalf("incomplete lifecycle projection: identity=%+v usage=%+v", identity, usage)
+	}
+	if identity.LightRPMLimit == nil || *identity.LightRPMLimit != "31" || identity.EffectiveLightRPMLimit != "31" || identity.LightConcurrencyLimit == nil || *identity.LightConcurrencyLimit != "16" || identity.EffectiveLightConcurrencyLimit != "16" || identity.GlobalRPMLimit == nil || *identity.GlobalRPMLimit != "61" || identity.EffectiveGlobalRPMLimit != "61" {
+		t.Fatalf("exported limits: %+v", identity)
 	}
 	encoded, err := json.Marshal(struct {
 		Identity LifecycleIdentity

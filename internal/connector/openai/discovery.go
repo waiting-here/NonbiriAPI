@@ -63,7 +63,7 @@ func (d ModelDiscoverer) Discover(ctx context.Context, input connectorcontract.D
 	if kind == "" {
 		kind = connectorcontract.TypeOpenAICompatible
 	}
-	validKind := kind == connectorcontract.TypeOpenAICompatible || kind == connectorcontract.TypeOpenAIResponses || kind == connectorcontract.TypeOpenAIDecisions
+	validKind := kind == connectorcontract.TypeOpenAICompatible || kind == connectorcontract.TypeOpenAIResponses || kind == connectorcontract.TypeOpenAIDecisions || kind == connectorcontract.TypeOpenAIChatCompletions || kind == connectorcontract.TypeTypeSafeSystemOne
 	if backend.IsNil(input.Backend) || !validKind || input.Target.Type() != kind || input.Credential == nil {
 		if input.Credential != nil {
 			input.Credential.Clear()
@@ -162,7 +162,11 @@ func (d ModelDiscoverer) Discover(ctx context.Context, input connectorcontract.D
 	if wireGuard.Contains(body) {
 		return failedDiscoveryResult(connectorcontract.DiscoveryFailureProtocol, response, "upstream models response was rejected")
 	}
-	models, err := parseModels(body, semanticGuard)
+	parse := parseModels
+	if kind == connectorcontract.TypeTypeSafeSystemOne {
+		parse = parseSystemOneModels
+	}
+	models, err := parse(body, semanticGuard)
 	if err != nil {
 		upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), body)
 		if errors.Is(err, errSensitiveModels) {

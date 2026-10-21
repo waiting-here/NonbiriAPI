@@ -39,7 +39,18 @@ type inferenceConnector struct {
 
 func (c *inferenceConnector) Type() contract.Type { return c.kind }
 func (c *inferenceConnector) Capabilities() contract.CapabilitySet {
+	if c.kind == contract.TypeTypeSafeSystemOne {
+		return inferenceCapabilities(c.kind) | contract.CapabilitySet(contract.CapabilityModelDiscovery)
+	}
 	return inferenceCapabilities(c.kind)
+}
+
+func systemOneDescriptor() Descriptor {
+	kind := contract.TypeTypeSafeSystemOne
+	d := rerankDescriptor(kind)
+	d.Capabilities |= contract.CapabilitySet(contract.CapabilityModelDiscovery)
+	d.Discoverer = openai.ModelDiscoverer{ConnectorType: kind}
+	return d
 }
 func (c *inferenceConnector) Attempt(ctx context.Context, input AttemptInput) contract.AttemptResult {
 	if c == nil {

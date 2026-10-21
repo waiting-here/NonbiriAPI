@@ -34,7 +34,7 @@ func (t Type) Valid() bool {
 	switch t {
 	case TypeOpenAICompatible, TypeAnthropicCompatible, TypeAISDKGatewayV3,
 		TypeGoogleGemini, TypeOpenAIResponses, TypeOpenAIDecisions,
-		TypeCohereRerank, TypeJinaRerank, TypeSiliconFlowRerank, TypeVoyageRerank:
+		TypeCohereRerank, TypeJinaRerank, TypeSiliconFlowRerank, TypeVoyageRerank, TypeOpenAIChatCompletions, TypeTypeSafeSystemOne:
 		return true
 	default:
 		return false
