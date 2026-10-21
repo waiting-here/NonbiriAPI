@@ -21,7 +21,7 @@ func TestKeyLimitRejectionRollsBackCharityReservationAndFailureSequence(t *testi
 func testKeyLimitRejectionRollsBackCharity(t *testing.T, route claim.RouteKind) {
 	e := newCharityTestEnv(t)
 	ctx := context.Background()
-	vault, err := secret.New(bytes.Repeat([]byte{0x43}, secret.MasterKeyBytes))
+	vault, err := secret.New(bytes.Repeat([]byte{charityTestMasterKeyByte}, secret.MasterKeyBytes))
 	if err != nil {
 		t.Fatal(err)
 	}

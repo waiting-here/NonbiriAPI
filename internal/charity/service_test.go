@@ -20,6 +20,9 @@ import (
 
 const charityTestNow int64 = 1_700_000_000
 
+// Match the seeded fixture key so isolated copies need no key-material rewrite.
+const charityTestMasterKeyByte byte = 0x41
+
 type charityTestEnv struct {
 	store        *db.Store
 	service      *Service
@@ -37,7 +40,7 @@ type charityTestEnv struct {
 
 func newCharityTestEnv(t *testing.T) *charityTestEnv {
 	t.Helper()
-	master := bytes.Repeat([]byte{0x43}, secret.MasterKeyBytes)
+	master := bytes.Repeat([]byte{charityTestMasterKeyByte}, secret.MasterKeyBytes)
 	vault, err := secret.New(master)
 	clear(master)
 	if err != nil {
@@ -46,7 +49,7 @@ func newCharityTestEnv(t *testing.T) *charityTestEnv {
 	t.Cleanup(func() { _ = vault.Close() })
 	path := filepath.Join(t.TempDir(), "charity.sqlite")
 
-	dbfixture.Materialize(t, path, vault)
+	dbfixture.Materialize(t, path)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		t.Fatalf("db.Open: %v", err)
@@ -110,7 +113,7 @@ VALUES(?,'openai-compatible',?,'private endpoint',1,1,?,?)`, environment.donorID
 	environment.endpointID, _ = result.LastInsertId()
 	contextID, fingerprint := make([]byte, 16), make([]byte, 32)
 	contextID[15], fingerprint[31] = 1, 1
-	vault, err := secret.New(bytes.Repeat([]byte{0x43}, secret.MasterKeyBytes))
+	vault, err := secret.New(bytes.Repeat([]byte{charityTestMasterKeyByte}, secret.MasterKeyBytes))
 	if err != nil {
 		t.Fatal(err)
 	}

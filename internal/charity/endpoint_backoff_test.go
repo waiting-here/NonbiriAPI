@@ -137,7 +137,7 @@ func TestEndpointBackoffClaimProofAndHeaderPriority(t *testing.T) {
 func (e *backoffEnv) additionalEndpointKey(t *testing.T, marker byte, kind, base string) (int64, int64, int64) {
 	t.Helper()
 	contextID := bytes.Repeat([]byte{marker}, 16)
-	vault, err := secret.New(bytes.Repeat([]byte{0x43}, secret.MasterKeyBytes))
+	vault, err := secret.New(bytes.Repeat([]byte{charityTestMasterKeyByte}, secret.MasterKeyBytes))
 	if err != nil {
 		t.Fatal(err)
 	}

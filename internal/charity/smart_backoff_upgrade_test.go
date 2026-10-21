@@ -154,7 +154,7 @@ func (e *backoffEnv) upgradeBackoffSchema(t *testing.T, version int, profile str
 	if err := e.store.Close(); err != nil {
 		t.Fatal(err)
 	}
-	vault, err := secret.New(bytes.Repeat([]byte{0x43}, secret.MasterKeyBytes))
+	vault, err := secret.New(bytes.Repeat([]byte{charityTestMasterKeyByte}, secret.MasterKeyBytes))
 	if err != nil {
 		t.Fatal(err)
 	}

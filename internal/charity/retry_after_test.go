@@ -319,7 +319,7 @@ func TestRetryAfterFinalAdmissionRecoversAtExpiry(t *testing.T) {
 	if _, err := rail.Claim(ctx, e.retryClaimInput(second.ID)); !errors.Is(err, claim.ErrKeyRateLimited) {
 		t.Fatal(err)
 	}
-	vault, err := secret.New(bytes.Repeat([]byte{0x43}, secret.MasterKeyBytes))
+	vault, err := secret.New(bytes.Repeat([]byte{charityTestMasterKeyByte}, secret.MasterKeyBytes))
 	if err != nil {
 		t.Fatal(err)
 	}

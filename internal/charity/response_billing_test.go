@@ -23,7 +23,7 @@ func (billingAcceptance) AuthorizeChatAcceptance(context.Context, *sql.Tx, int64
 func (e *charityTestEnv) billingRail(t *testing.T) *claim.Service {
 	t.Helper()
 	ctx := context.Background()
-	vault, err := secret.New(bytes.Repeat([]byte{0x43}, secret.MasterKeyBytes))
+	vault, err := secret.New(bytes.Repeat([]byte{charityTestMasterKeyByte}, secret.MasterKeyBytes))
 	if err != nil {
 		t.Fatal(err)
 	}
