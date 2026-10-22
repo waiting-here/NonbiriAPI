@@ -186,9 +186,10 @@ func (scope Scope) CursorOwner(ctx context.Context, authority Authorizer, suffix
 // stay editable, while unbound mainstream candidates must retain a valid,
 // approved and unexpired donor/physical membership.
 func KeyPredicate() string {
-	return `(EXISTS(SELECT 1 FROM charity_model_bindings scope_binding WHERE scope_binding.charity_model_id=? AND scope_binding.donation_key_id=dk.id)
-OR (dk.mainstream_channel_id IS NOT NULL AND d.status='approved' AND d.user_id IS NOT NULL
+	return `(EXISTS(SELECT 1 FROM charity_model_bindings scope_binding JOIN charity_binding_targets scope_target ON scope_target.binding_id=scope_binding.id WHERE scope_binding.charity_model_id=? AND scope_target.donation_key_id=dk.id)
+OR (dk.mainstream_channel_id IS NOT NULL AND d.status IN ('pending','approved') AND d.terminal_at IS NULL AND d.user_id IS NOT NULL
 AND dk.ended_at IS NULL AND (dk.expires_at IS NULL OR dk.expires_at>?)
+AND EXISTS(SELECT 1 FROM charity_use_availability av WHERE av.donation_key_id=dk.id)
 AND EXISTS(SELECT 1 FROM donation_key_memberships scope_membership
 JOIN endpoint_keys scope_key ON scope_key.id=scope_membership.endpoint_key_id
 JOIN endpoints scope_endpoint ON scope_endpoint.id=scope_key.endpoint_id
@@ -235,12 +236,12 @@ type Impact struct {
 func (scope Scope) Impact(ctx context.Context, tx *sql.Tx, keyID int64) (Impact, error) {
 	result := Impact{VisibleModels: []VisibleModel{}}
 	var count int64
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM charity_model_bindings WHERE donation_key_id=?`, keyID).Scan(&count); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(DISTINCT binding_id) FROM charity_binding_targets WHERE donation_key_id=?`, keyID).Scan(&count); err != nil {
 		return result, err
 	}
 	result.BindingCount = strconv.FormatInt(count, 10)
-	rows, err := tx.QueryContext(ctx, `SELECT cm.id,cm.full_name,cm.enabled,COUNT(*) FROM charity_model_bindings b
-JOIN charity_models cm ON cm.id=b.charity_model_id WHERE b.donation_key_id=? AND (?=0 OR cm.is_mainstream=1)
+	rows, err := tx.QueryContext(ctx, `SELECT cm.id,cm.full_name,cm.enabled,COUNT(DISTINCT b.id) FROM charity_model_bindings b JOIN charity_binding_targets t ON t.binding_id=b.id
+JOIN charity_models cm ON cm.id=b.charity_model_id WHERE t.donation_key_id=? AND (?=0 OR cm.is_mainstream=1)
 GROUP BY cm.id,cm.full_name,cm.enabled ORDER BY cm.id LIMIT 21`, keyID, scope.Trainee)
 	if err != nil {
 		return result, err

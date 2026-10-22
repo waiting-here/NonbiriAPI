@@ -48,10 +48,13 @@ func TestLedgerAccountingSelfLifecycle(t *testing.T) {
 	key := fixture.seedKey(userID, "ledger-self")
 	model := strings.Repeat("界", MaxUpstreamModelRunes)
 	key.candidate.UpstreamModelID = model
+	if _, err := fixture.db.Exec(`UPDATE model_binding_targets SET upstream_model_id=? WHERE id=?`, model, key.candidate.Authorization.TargetID); err != nil {
+		t.Fatal(err)
+	}
 	fixture.clock.Store(1_001)
 	handle, err := fixture.service.Claim(context.Background(), ClaimInput{
 		RequestID: request.ID, ActorUserID: userID, AttemptSeq: 1,
-		Purpose: PurposeSelf, Candidate: key.candidate,
+		Purpose: PurposeSelf, PersonalModelID: key.modelID, Candidate: key.candidate,
 	})
 	if err != nil {
 		t.Fatalf("claim 512-scalar model: %v", err)
@@ -157,7 +160,7 @@ func TestLedgerAccountingTerminalReleaseAndExternalSettlement(t *testing.T) {
 		fixture.requireRealLedgerState(request.ID, 1, 1, 2, 4)
 		handle, err := fixture.service.Claim(context.Background(), ClaimInput{
 			RequestID: request.ID, ActorUserID: userID, AttemptSeq: 1,
-			Purpose: PurposeSelf, Candidate: key.candidate,
+			Purpose: PurposeSelf, PersonalModelID: key.modelID, Candidate: key.candidate,
 		})
 		if err != nil {
 			t.Fatalf("claim external settlement fixture: %v", err)
@@ -234,8 +237,7 @@ func TestLedgerAccountingCharityAttemptLifecycleAtMaximum(t *testing.T) {
 		fixture.clock.Add(1)
 		handle, err := fixture.service.Claim(context.Background(), ClaimInput{
 			RequestID: request.ID, ActorUserID: consumerID, AttemptSeq: index + 1,
-			Purpose: PurposeCharity, Candidate: keys[index].candidate,
-			DonationKeyID: donationKeyIDs[index],
+			Purpose: PurposeCharity, Candidate: keys[index].charityCandidates[1], DonationKeyID: donationKeyIDs[index],
 		})
 		if err != nil {
 			t.Fatalf("claim charity attempt %d: %v", index+1, err)
@@ -322,8 +324,7 @@ func TestLedgerAccountingCharityAttemptLifecycleAtMaximum(t *testing.T) {
 	fixture.clock.Add(1)
 	releaseHandle, err := fixture.service.Claim(context.Background(), ClaimInput{
 		RequestID: request.ID, ActorUserID: consumerID, AttemptSeq: 5,
-		Purpose: PurposeCharity, Candidate: keys[4].candidate,
-		DonationKeyID: donationKeyIDs[4],
+		Purpose: PurposeCharity, Candidate: keys[4].charityCandidates[1], DonationKeyID: donationKeyIDs[4],
 	})
 	if err != nil {
 		t.Fatalf("claim undispatched charity attempt: %v", err)
@@ -394,7 +395,7 @@ func TestLedgerAccountingFailuresRollbackOuterTransaction(t *testing.T) {
 		request := fixture.acceptCharity(consumerID, 1)
 		handle, err := fixture.service.Claim(context.Background(), ClaimInput{
 			RequestID: request.ID, ActorUserID: consumerID, AttemptSeq: 1,
-			Purpose: PurposeCharity, Candidate: key.candidate, DonationKeyID: donationKeyID,
+			Purpose: PurposeCharity, Candidate: key.charityCandidates[1], DonationKeyID: donationKeyID,
 		})
 		if err != nil {
 			t.Fatalf("claim attempt rollback fixture: %v", err)
@@ -463,9 +464,9 @@ func TestLedgerAccountingDiscoveryUsesEmptyPhysicalModel(t *testing.T) {
 	key := fixture.seedKey(userID, "ledger-discovery")
 	discoveryCandidate := key.candidate
 	discoveryCandidate.UpstreamModelID = ""
-	request, handle, err := fixture.service.ClaimDiscovery(context.Background(), DiscoveryClaimInput{
+	request, handle, err := fixture.service.ClaimDiscovery(context.Background(), fixture.discoveryInput(DiscoveryClaimInput{
 		ActorUserID: userID, Candidate: discoveryCandidate,
-	})
+	}))
 	if err != nil {
 		t.Fatalf("claim discovery with empty model: %v", err)
 	}

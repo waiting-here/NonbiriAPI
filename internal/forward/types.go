@@ -20,6 +20,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/modeltype"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
+	"github.com/waiting-here/NonbiriAPI/internal/routing"
 	"github.com/waiting-here/NonbiriAPI/internal/transportpolicy"
 )
 
@@ -94,16 +95,22 @@ type CharityRequestPolicy struct {
 // RouteCandidate is one credential-free physical candidate frozen before
 // request acceptance. Its routine formatting is always redacted.
 type RouteCandidate struct {
-	BindingID        int64
-	EndpointID       int64
-	EndpointKeyID    int64
-	DonationKeyID    int64
-	ConnectorType    connectorcontract.Type
-	CanonicalBaseURL string
-	UpstreamModelID  string
-	Policy           connectorcontract.AttemptPolicy
-	Order            int
-	prepared         *preparedAttempt
+	Authorization     routing.TargetAuthorization
+	NativeServices    connectorcontract.NativeServiceSet
+	NativeMatch       bool
+	TargetOrder       int
+	WeightDenominator int64
+	BindingID         int64
+	EndpointID        int64
+	EndpointKeyID     int64
+	DonationKeyID     int64
+	ConnectorType     connectorcontract.Type
+	CanonicalBaseURL  string
+	UpstreamModelID   string
+	Policy            connectorcontract.AttemptPolicy
+	Order             int
+	prepared          *preparedAttempt
+	preparationError  error
 }
 
 func (RouteCandidate) String() string   { return "[redacted forward candidate]" }
@@ -146,7 +153,8 @@ type CharityRouter interface {
 	PreflightEmbedding(context.Context, int64, string, *openai.EmbeddingRequest, int64) (CharityPreflight, error)
 	PreflightImage(context.Context, int64, string, *openai.ImageRequest, int64) (CharityPreflight, error)
 	PreflightDecision(context.Context, int64, string, *openai.DecisionRequest, int64) (CharityPreflight, error)
-	Snapshot(context.Context, int64, int64, int64, []connectorcontract.Type) (CharitySnapshot, error)
+	Snapshot(context.Context, int64, int64, int64, []connectorcontract.Type, connectorcontract.Operation) (CharitySnapshot, error)
+	OrderSelected([]RouteCandidate, string) ([]RouteCandidate, error)
 	ReserveForOutput(context.Context, int64, int64, int64) (int64, error)
 	ListAvailableModels(context.Context, int64, int64, int) ([]ListedModel, error)
 }

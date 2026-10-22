@@ -102,6 +102,8 @@ func (adapter *PersonalRoutingAdapter) Snapshot(ctx context.Context, userID int6
 	for _, candidate := range value.Candidates() {
 		connectorType := connectorcontract.Type(candidate.ConnectorType())
 		out.Candidates = append(out.Candidates, RouteCandidate{
+			BindingID: candidate.BindingID(), Authorization: candidate.Authorization(),
+			NativeServices: candidate.NativeServices(), TargetOrder: candidate.TargetOrder(),
 			EndpointID: candidate.EndpointID(), EndpointKeyID: candidate.EndpointKeyID(),
 			ConnectorType: connectorType, CanonicalBaseURL: candidate.CanonicalBaseURL(),
 			UpstreamModelID: candidate.UpstreamModelID(), Order: candidate.Order(),
@@ -201,11 +203,11 @@ func (adapter *CharityRoutingAdapter) RequestPolicy(ctx context.Context, userID 
 	return CharityRequestPolicy{ModelTypes: policy.ModelTypes.Clone(), TransportRule: policy.TransportRule, RolePolicy: policy.RolePolicy.Clone(), Revision: policy.Revision, ModelID: policy.ModelID, FullName: policy.FullName, ExcludedRequestFields: append([]string(nil), policy.ExcludedRequestFields...)}, nil
 }
 
-func (adapter *CharityRoutingAdapter) Snapshot(ctx context.Context, userID, modelID, now int64, connectorTypes []connectorcontract.Type) (CharitySnapshot, error) {
+func (adapter *CharityRoutingAdapter) Snapshot(ctx context.Context, userID, modelID, now int64, connectorTypes []connectorcontract.Type, operation connectorcontract.Operation) (CharitySnapshot, error) {
 	if adapter == nil || adapter.service == nil {
 		return CharitySnapshot{}, ErrInternal
 	}
-	value, err := adapter.service.SnapshotForCaller(ctx, userID, modelID, now, connectorTypes)
+	value, err := adapter.service.SnapshotForCaller(ctx, userID, modelID, now, connectorTypes, operation)
 	if err != nil {
 		return CharitySnapshot{}, err
 	}
@@ -213,16 +215,42 @@ func (adapter *CharityRoutingAdapter) Snapshot(ctx context.Context, userID, mode
 		ModelTypes: value.ModelTypes.Clone(), TransportRule: value.TransportRule, RolePolicy: value.RolePolicy.Clone(), Revision: value.Revision, ModelID: value.ModelID, Provider: value.Provider, Model: value.Model, FullName: value.FullName,
 		CloudflareProxyEnabled: value.CloudflareProxyEnabled, FlattenToolCalls: value.FlattenToolCalls, ReservedMilli: value.ReservedMilli,
 	}, RouteStrategy: value.RouteStrategy}
-	for index, candidate := range value.Candidates() {
+	for _, candidate := range value.Candidates() {
 		out.Candidates = append(out.Candidates, RouteCandidate{
+			Authorization: candidate.Authorization, NativeServices: candidate.NativeServices,
+			TargetOrder: candidate.TargetOrder, WeightDenominator: candidate.WeightDenominator,
 			BindingID:  candidate.BindingID,
 			EndpointID: candidate.EndpointID, EndpointKeyID: candidate.EndpointKeyID,
 			DonationKeyID: candidate.DonationKeyID, ConnectorType: candidate.ConnectorType,
 			CanonicalBaseURL: candidate.CanonicalBaseURL, UpstreamModelID: candidate.UpstreamModelID,
-			Policy: candidate.Policy, Order: index,
+			Policy: candidate.Policy, Order: candidate.Order,
 		})
 	}
 	return out, nil
+}
+
+func (adapter *CharityRoutingAdapter) OrderSelected(candidates []RouteCandidate, strategy string) ([]RouteCandidate, error) {
+	if adapter == nil || adapter.service == nil {
+		return nil, ErrInternal
+	}
+	values := make([]charityrouting.RuntimeCandidate, len(candidates))
+	byBinding := make(map[int64]RouteCandidate, len(candidates))
+	for index, candidate := range candidates {
+		if _, duplicate := byBinding[candidate.BindingID]; duplicate {
+			return nil, ErrInternal
+		}
+		byBinding[candidate.BindingID] = candidate
+		values[index] = charityrouting.RuntimeCandidate{BindingID: candidate.BindingID, WeightDenominator: candidate.WeightDenominator}
+	}
+	ordered, err := adapter.service.OrderSelected(values, strategy)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]RouteCandidate, len(ordered))
+	for index, candidate := range ordered {
+		result[index] = byBinding[candidate.BindingID]
+	}
+	return result, nil
 }
 
 func (adapter *CharityRoutingAdapter) ReserveForOutput(ctx context.Context, modelID, currentReserve, outputFloor int64) (int64, error) {

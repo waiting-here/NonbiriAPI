@@ -30,12 +30,10 @@ func TestTraineeHandlingQueueAndWholeApprovedDonation(t *testing.T) {
 	}
 	model := controlModel(t, e, "not-visible-to-trainee", false)
 	for i, upstream := range []string{"first", "second"} {
-		if _, err := e.store.DB().Exec(`INSERT INTO model_pair_catalog(endpoint_key_id,normalized_model_id,manual_supports,updated_at) VALUES(?,?,1,?)`, physical, upstream, donationTestNow); err != nil {
+		if _, err := e.store.DB().Exec(`INSERT INTO donation_key_manual_models(donation_key_id,normalized_model_id,display_name,revision,created_at,updated_at) SELECT donation_key_id,?2,?2,1,?3,?3 FROM donation_key_memberships WHERE endpoint_key_id=?1`, physical, upstream, donationTestNow); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := e.store.DB().Exec(`INSERT INTO charity_model_bindings(charity_model_id,donation_key_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at) VALUES(?,?,?,?,?,?,?)`, model, key, physical, upstream, i, donationTestNow, donationTestNow); err != nil {
-			t.Fatal(err)
-		}
+		e.seedBinding(t, model, key, upstream, i)
 	}
 	for i := 0; i < 11; i++ {
 		_, physical := e.seedEndpointKey(t, owner, byte('c'+i))

@@ -13,6 +13,7 @@ type OwnerDonationSummary struct {
 }
 
 type DonationSummary struct {
+	UseSummary          UseSummary        `json:"use_summary"`
 	OwnerHiddenAt       *int64            `json:"-"`
 	DiscordPublicThanks *bool             `json:"discord_public_thanks"`
 	ID                  string            `json:"id"`
@@ -57,6 +58,9 @@ type OwnerKeySummary struct {
 // Even an administrator obtains those private details only via original detail.
 type ManagedKeySummary struct {
 	DonationKey
+	// Only owner pages set this shadow field; role projections omit it.
+	EndpointID *string `json:"endpoint_id,omitempty"`
+	CanManage  bool    `json:"can_manage"`
 	RecurringReceipt
 	RecurringSummary
 	AuthorizedExpiresAt    *int64                      `json:"authorized_expires_at"`

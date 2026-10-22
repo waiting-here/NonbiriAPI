@@ -34,7 +34,8 @@ FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id
 JOIN donation_key_memberships m ON m.donation_key_id=dk.id AND m.donation_id=d.id AND m.endpoint_key_id=dk.endpoint_key_id
 JOIN endpoint_keys k ON k.id=m.endpoint_key_id JOIN endpoints e ON e.id=k.endpoint_id AND e.user_id=d.user_id
 LEFT JOIN endpoint_key_limits l ON l.endpoint_key_id=k.id
-WHERE dk.id=? AND d.id=? AND d.status='approved' AND dk.ended_at IS NULL`, keyID, donationID).
+WHERE dk.id=? AND d.id=? AND d.status IN ('pending','approved') AND d.terminal_at IS NULL AND dk.ended_at IS NULL
+AND EXISTS(SELECT 1 FROM donation_uses u WHERE u.donation_key_id=dk.id AND u.current_approved_revision_id IS NOT NULL)`, keyID, donationID).
 		Scan(&physicalID, &revision, &concurrency, &rpm, &suspended)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound

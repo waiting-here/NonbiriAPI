@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
@@ -158,7 +159,7 @@ func TestModelTokenReserveAdmissionAndCatalogAgree(t *testing.T) {
 					t.Fatalf("catalog state for %s: %+v", item.ID, item)
 				}
 			}
-			snapshot, err := env.service.snapshot(context.Background(), test.id, routingTestNow, false, nil)
+			snapshot, err := env.service.snapshot(context.Background(), test.id, routingTestNow, false, nil, connectorcontract.OperationChatCompletions)
 			if (err == nil) != test.available || (err == nil && snapshot.ReservedMilli != test.reserve) {
 				t.Fatalf("snapshot %s: reserve=%d err=%v", test.model.ID, snapshot.ReservedMilli, err)
 			}

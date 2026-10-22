@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
@@ -79,12 +80,10 @@ func TestManagementBindingPagesShareExpiryFiltersWithoutWrites(t *testing.T) {
 			}
 		}
 	}
-	if _, err := env.store.DB().Exec(`INSERT INTO model_pair_catalog(endpoint_key_id,normalized_model_id,automatic_supports,manual_supports,automatic_revision,pair_revision,updated_at) VALUES(?,'manual-only',0,1,1,1,?)`, firstPhysical, routingTestNow); err != nil {
+	if _, err := env.store.DB().Exec(`INSERT INTO donation_key_manual_models(donation_key_id,normalized_model_id,display_name,revision,created_at,updated_at) SELECT donation_key_id,'manual-only','manual-only',1,?2,?2 FROM donation_key_memberships WHERE endpoint_key_id=?1`, firstPhysical, routingTestNow); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := env.store.DB().Exec(`INSERT INTO charity_model_bindings(charity_model_id,donation_key_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at) VALUES(?,?,?,'upstream-00',0,?,?)`, modelID, firstKey, firstPhysical, routingTestNow, routingTestNow); err != nil {
-		t.Fatal(err)
-	}
+	env.seedBinding(t, modelID, firstKey, "upstream-00", 0)
 	for _, role := range []roleKind{roleAdmin, roleSteward} {
 		for _, size := range []int{10, 20, 50, 100} {
 			request := pagination.Request{Page: pagination.MaxPage, Size: size}
@@ -203,23 +202,23 @@ func TestCandidatePagesUseIndexedPairOrderAtScale(t *testing.T) {
 	env.seedUser(t, true, nil)
 	model := env.createModel(t, 'S')
 	modelID, _ := parsePositiveID(model.ID)
-	_, _, physical := env.seedCandidate(t, env.caller, 's', "pair-00000")
+	_, member, physical := env.seedCandidate(t, env.caller, 's', "pair-00000")
 	tx, err := env.store.DB().Begin()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	stmt, err := tx.Prepare(`INSERT INTO model_pair_catalog(endpoint_key_id,normalized_model_id,automatic_supports,manual_supports,automatic_revision,pair_revision,updated_at) VALUES(?,?,1,0,1,1,?)`)
-	if err != nil {
+	models := make([]testseed.DiscoveryModel, 10000)
+	for i := range models {
+		models[i] = testseed.DiscoveryModel{ID: fmt.Sprintf("pair-%05d", i)}
+	}
+	if _, err := testseed.SeedDiscoveryCatalogTx(context.Background(), tx, testseed.DiscoveryCatalogInput{EndpointKeyID: physical, ListFormat: "openai", Models: models, At: routingTestNow}); err != nil {
 		t.Fatal(err)
 	}
-	for i := 1; i < 10017; i++ {
-		if _, err := stmt.Exec(physical, fmt.Sprintf("pair-%05d", i), routingTestNow); err != nil {
+	for i := 10000; i < 10017; i++ {
+		if _, err := tx.Exec(`INSERT INTO donation_key_manual_models(donation_key_id,normalized_model_id,display_name,revision,created_at,updated_at) VALUES(?1,?2,?2,1,?3,?3)`, member, fmt.Sprintf("pair-%05d", i), routingTestNow); err != nil {
 			t.Fatal(err)
 		}
-	}
-	if err := stmt.Close(); err != nil {
-		t.Fatal(err)
 	}
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
@@ -270,7 +269,7 @@ func TestCandidatePagesUseIndexedPairOrderAtScale(t *testing.T) {
 	}
 	plan := strings.Join(plans, "\n")
 	t.Log(plan)
-	if !strings.Contains(plan, "model_pair_catalog") || strings.Contains(plan, "TEMP B-TREE FOR ORDER BY") {
-		t.Fatalf("candidate page uses unindexed ordering: %s", plan)
+	if !strings.Contains(plan, "idx_catalog_run_model") || strings.Contains(plan, "MATERIALIZE charity_model_catalog") {
+		t.Fatalf("candidate page does not probe the selected member's indexed runs: %s", plan)
 	}
 }

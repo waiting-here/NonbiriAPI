@@ -26,7 +26,7 @@ func BenchmarkPrepareAccountDeletionHistory(b *testing.B) {
 				for _, dispatched := range []bool{false, true} {
 					request := f.acceptSelf(userID, 2)
 					handle, err := f.service.Claim(context.Background(), ClaimInput{
-						RequestID: request.ID, ActorUserID: userID, AttemptSeq: 1, Purpose: PurposeSelf, Candidate: key.candidate,
+						RequestID: request.ID, ActorUserID: userID, AttemptSeq: 1, Purpose: PurposeSelf, PersonalModelID: key.modelID, Candidate: key.candidate,
 					})
 					if err != nil {
 						b.Fatal(err)

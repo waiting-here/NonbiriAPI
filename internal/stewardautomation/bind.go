@@ -11,16 +11,17 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
-type ownedKey struct{ endpointID, keyID int64 }
+type ownedKey struct{ endpointID, keyID, donationID int64 }
 
 func ownKeyTx(ctx context.Context, tx *sql.Tx, userID, donationKeyID, now int64) (ownedKey, error) {
 	var key ownedKey
-	err := tx.QueryRowContext(ctx, `SELECT e.id,k.id FROM donation_keys dk
+	err := tx.QueryRowContext(ctx, `SELECT e.id,k.id,d.id FROM donation_keys dk
 JOIN donations d ON d.id=dk.donation_id
 JOIN donation_key_memberships m ON m.donation_key_id=dk.id AND m.endpoint_key_id=dk.endpoint_key_id
 JOIN endpoint_keys k ON k.id=m.endpoint_key_id JOIN endpoints e ON e.id=k.endpoint_id
-WHERE dk.id=? AND d.user_id=? AND e.user_id=? AND d.status='approved' AND dk.ended_at IS NULL
-AND (dk.expires_at IS NULL OR dk.expires_at>?) AND (dk.authorized_expires_at IS NULL OR dk.authorized_expires_at>?)`, donationKeyID, userID, userID, now, now).Scan(&key.endpointID, &key.keyID)
+WHERE dk.id=? AND d.user_id=? AND e.user_id=? AND d.status IN ('pending','approved') AND d.terminal_at IS NULL AND dk.ended_at IS NULL
+AND EXISTS(SELECT 1 FROM charity_use_availability av WHERE av.donation_key_id=dk.id)
+AND (dk.expires_at IS NULL OR dk.expires_at>?) AND (dk.authorized_expires_at IS NULL OR dk.authorized_expires_at>?)`, donationKeyID, userID, userID, now, now).Scan(&key.endpointID, &key.keyID, &key.donationID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ownedKey{}, resources.ErrNotFound
 	}
@@ -101,7 +102,12 @@ func (s *Service) bindOne(ctx context.Context, userID, modelID, donationKeyID in
 	if err != nil {
 		return err
 	}
-	key, err := ownKeyTx(ctx, tx, userID, donationKeyID, time.Now().Unix())
+	now := time.Now().Unix()
+	key, err := ownKeyTx(ctx, tx, userID, donationKeyID, now)
+	var discovery ownedDiscovery
+	if err == nil && !manual {
+		discovery, err = ownDiscoveryTx(ctx, tx, userID, donationKeyID, now)
+	}
 	_ = tx.Rollback()
 	if err != nil {
 		return err
@@ -109,7 +115,7 @@ func (s *Service) bindOne(ctx context.Context, userID, modelID, donationKeyID in
 	var revision int64
 	if !manual {
 		discoveryContext, cancel := context.WithTimeout(ctx, s.discoveryTimeout)
-		revision, err = s.resources.RefreshDiscoveryAndWait(discoveryContext, userID, key.endpointID, key.keyID)
+		revision, err = s.resources.RefreshDonationDiscoveryAndWait(discoveryContext, userID, key.donationID, donationKeyID, discovery.selection)
 		cancel()
 		if err != nil {
 			return err
@@ -128,14 +134,16 @@ func (s *Service) bindOne(ctx context.Context, userID, modelID, donationKeyID in
 		return resources.ErrConflict
 	}
 	if manual {
-		if err := s.resources.EnsureManualEntryInTransaction(ctx, tx, userID, key.endpointID, key.keyID, upstreamModelID); err != nil {
+		if err := s.charity.EnsureOwnBindingInTransaction(ctx, tx, userID, modelID, donationKeyID, upstreamModelID, 0); err != nil {
 			return err
 		}
-	} else if err := freshModelTx(ctx, tx, key.keyID, revision, upstreamModelID); err != nil {
-		return err
-	}
-	if err := s.charity.EnsureOwnBindingInTransaction(ctx, tx, userID, modelID, donationKeyID, upstreamModelID, revision); err != nil {
-		return err
+	} else {
+		if err := revalidateOwnDiscoveryTx(ctx, tx, userID, donationKeyID, discovery); err != nil {
+			return err
+		}
+		if err := s.charity.EnsureOwnBindingInTransaction(ctx, tx, userID, modelID, donationKeyID, upstreamModelID, revision, discovery.identity); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }

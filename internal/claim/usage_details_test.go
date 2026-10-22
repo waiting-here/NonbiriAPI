@@ -16,7 +16,7 @@ func TestUsageDetailsPersistReplayAndAggregateStrictly(t *testing.T) {
 	request := f.acceptSelf(owner, 2)
 	first := contract.Usage{Present: true, UncachedInputTokens: 3, OutputTokens: 2, SearchUnitsPresent: true, SearchUnitsMicros: 1250001, Modalities: contract.ModalityUsage{InputPresent: true, OutputPresent: true, Input: [3][4]int64{{1, 2, 0, 0}}, Output: [4]int64{0, 0, 2, 0}}}
 	for i, u := range []contract.Usage{first, {Present: true, SearchUnitsPresent: true}} {
-		h, err := f.service.Claim(t.Context(), ClaimInput{RequestID: request.ID, ActorUserID: owner, AttemptSeq: i + 1, Purpose: PurposeSelf, Candidate: key.candidate})
+		h, err := f.service.Claim(t.Context(), ClaimInput{RequestID: request.ID, ActorUserID: owner, AttemptSeq: i + 1, Purpose: PurposeSelf, PersonalModelID: key.modelID, Candidate: key.candidate})
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -57,7 +57,7 @@ func TestTokenDimensionsSettleNormalizedUsageWithoutCapping(t *testing.T) {
 			t.Fatal(view)
 		}
 	}
-	if _, err := rail.Claim(context.Background(), e.quotaClaimInput(request.ID, 2)); !errors.Is(err, donationquota.ErrLimited) {
+	if _, err := rail.Claim(context.Background(), e.quotaClaimInput(t, request.ID, 2)); !errors.Is(err, donationquota.ErrLimited) {
 		t.Fatal("overspend must stop the next attempt", err)
 	}
 }
@@ -69,7 +69,7 @@ func TestTokenDimensionsRecoveryUsesFrozenWideVector(t *testing.T) {
 			rail := e.billingRail(t)
 			e.splitReserve(t, math.MaxInt64-3, 3)
 			request := e.billingRequest(t, rail, e.requestModel, 2400, 1)
-			handle, err := rail.Claim(context.Background(), e.quotaClaimInput(request.ID, 1))
+			handle, err := rail.Claim(context.Background(), e.quotaClaimInput(t, request.ID, 1))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -104,7 +104,7 @@ func TestTokenDimensionsReconcileAndRollbackAllOccupancy(t *testing.T) {
 	rail := e.billingRail(t)
 	e.splitReserve(t, 2, 3)
 	request := e.billingRequest(t, rail, e.requestModel, 2400, 2)
-	handle, err := rail.Claim(context.Background(), e.quotaClaimInput(request.ID, 1))
+	handle, err := rail.Claim(context.Background(), e.quotaClaimInput(t, request.ID, 1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +130,7 @@ func TestTokenDimensionsReconcileAndRollbackAllOccupancy(t *testing.T) {
 	if _, err := e.store.DB().Exec(`UPDATE donation_keys SET input_token_reserve=0,output_token_reserve=1,input_token_limit_mag=zeroblob(16) WHERE id=?`, e.donationKey); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := rail.Claim(context.Background(), e.quotaClaimInput(request.ID, 2)); !errors.Is(err, donationquota.ErrLimited) {
+	if _, err := rail.Claim(context.Background(), e.quotaClaimInput(t, request.ID, 2)); !errors.Is(err, donationquota.ErrLimited) {
 		t.Fatal(err)
 	}
 	e.tokenTotals(t, 5, 4, 1, 0, 0)
@@ -168,7 +168,7 @@ func TestTokenDimensionsConcurrentClaimsShareLastOutputCapacity(t *testing.T) {
 	handles := make(chan claim.Handle, 8)
 	for n := 1; n <= 8; n++ {
 		group.Go(func() {
-			h, err := rail.Claim(context.Background(), e.quotaClaimInput(request.ID, n))
+			h, err := rail.Claim(context.Background(), e.quotaClaimInput(t, request.ID, n))
 			results <- err
 			if err == nil {
 				handles <- h
@@ -214,11 +214,11 @@ func TestTokenDimensionsIndependentCumulativeLimits(t *testing.T) {
 				t.Fatal(err)
 			}
 			request := e.billingRequest(t, rail, e.requestModel, 2400, 2)
-			first, err := rail.Claim(context.Background(), e.quotaClaimInput(request.ID, 1))
+			first, err := rail.Claim(context.Background(), e.quotaClaimInput(t, request.ID, 1))
 			if err != nil {
 				t.Fatal(err)
 			}
-			second, err := rail.Claim(context.Background(), e.quotaClaimInput(request.ID, 2))
+			second, err := rail.Claim(context.Background(), e.quotaClaimInput(t, request.ID, 2))
 			if mask == 0 {
 				if err != nil {
 					t.Fatal(err)

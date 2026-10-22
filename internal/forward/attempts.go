@@ -85,7 +85,8 @@ func (service *Service) runAttempts(
 		claimInput := claim.ClaimInput{
 			RequestID: accepted.ID, ActorUserID: userID, AttemptSeq: index + 1, Purpose: plan.purpose,
 			Candidate: claim.Candidate{
-				EndpointID: candidate.EndpointID, EndpointKeyID: candidate.EndpointKeyID,
+				Authorization: candidate.Authorization,
+				EndpointID:    candidate.EndpointID, EndpointKeyID: candidate.EndpointKeyID,
 				ConnectorType: candidate.ConnectorType, CanonicalBaseURL: candidate.CanonicalBaseURL,
 				UpstreamModelID: candidate.UpstreamModelID, Policy: candidate.Policy,
 			},
@@ -105,7 +106,7 @@ func (service *Service) runAttempts(
 					floor = outputFloor(choice)
 				}
 				claimInput.BalancedCandidates = append(claimInput.BalancedCandidates, claim.BalancedCandidate{
-					Candidate: claim.Candidate{EndpointID: choice.EndpointID, EndpointKeyID: choice.EndpointKeyID,
+					Candidate: claim.Candidate{Authorization: choice.Authorization, EndpointID: choice.EndpointID, EndpointKeyID: choice.EndpointKeyID,
 						ConnectorType: choice.ConnectorType, CanonicalBaseURL: choice.CanonicalBaseURL,
 						UpstreamModelID: choice.UpstreamModelID, Policy: choice.Policy},
 					DonationKeyID:    choice.DonationKeyID,
@@ -149,7 +150,7 @@ func (service *Service) runAttempts(
 			selected := -1
 			for position, choice := range remaining {
 				if choice.EndpointKeyID == handle.EndpointKeyID() && choice.DonationKeyID == handle.DonationKeyID() &&
-					choice.UpstreamModelID == handle.Target().UpstreamModel() {
+					choice.UpstreamModelID == handle.Target().UpstreamModel() && choice.Authorization == handle.Authorization() {
 					selected = position
 					candidate = choice
 					break

@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -348,45 +349,88 @@ func (environment *routingTestEnv) seedCandidate(t *testing.T, ownerID int64, su
 		connectorcontract.TypeOpenAICompatible)
 }
 
+func (environment *routingTestEnv) seedBinding(t *testing.T, modelID, keyID int64, upstream string, order int) {
+	t.Helper()
+	tx, err := environment.store.DB().BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	if _, err := testseed.InsertCharityBindingTx(context.Background(), tx, testseed.BindingInput{ModelID: modelID, KeyID: keyID, UpstreamModelID: upstream, Order: order, At: environment.clock.Load()}); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func (environment *routingTestEnv) seedAutomaticCatalog(t *testing.T, physicalKey int64, models ...string) {
+	t.Helper()
+	tx, err := environment.store.DB().BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	entries := make([]testseed.DiscoveryModel, len(models))
+	for i, id := range models {
+		entries[i] = testseed.DiscoveryModel{ID: id}
+	}
+	if _, err := testseed.SeedDiscoveryCatalogTx(context.Background(), tx, testseed.DiscoveryCatalogInput{EndpointKeyID: physicalKey, ListFormat: "openai", Models: entries, At: environment.clock.Load()}); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func (environment *routingTestEnv) seedCandidateWithConnector(t *testing.T, ownerID int64, identity, upstream string, connectorType connectorcontract.Type, channel ...string) (int64, int64, int64) {
+	return environment.seedCandidateAt(t, ownerID, 0, identity, fmt.Sprintf("https://%s.routing.test/v1", identity), upstream, connectorType, channel...)
+}
+
+func (environment *routingTestEnv) seedCandidateAt(t *testing.T, ownerID, donationID int64, identity, baseURL, upstream string, connectorType connectorcontract.Type, channel ...string) (int64, int64, int64) {
 	t.Helper()
 	now := environment.clock.Load()
-	baseURL := fmt.Sprintf("https://%s.routing.test/v1", identity)
+	tx, err := environment.store.DB().BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
 	var channelID, channelRevision, channelName, channelCategory any
 	if len(channel) > 0 {
 		channelID, channelRevision, channelName, channelCategory = channel[0], 1, "Example", "subscription"
 	}
-	result, err := environment.store.DB().Exec(`INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at,mainstream_channel_id,mainstream_channel_revision,mainstream_channel_name,mainstream_channel_category)
-VALUES(?,?,?,'private',1,1,?,?,?,?,?,?)`, ownerID, string(connectorType), baseURL, now, now, channelID, channelRevision, channelName, channelCategory)
+	endpointID, err := testseed.InsertEndpointTx(context.Background(), tx, testseed.EndpointInput{OwnerUserID: ownerID, Type: connectorType, BaseURL: baseURL, Note: "private", At: now})
 	if err != nil {
 		t.Fatal(err)
 	}
-	endpointID, _ := result.LastInsertId()
+	if _, err := tx.Exec(`UPDATE endpoints SET mainstream_channel_id=?,mainstream_channel_revision=?,mainstream_channel_name=?,mainstream_channel_category=? WHERE id=?`, channelID, channelRevision, channelName, channelCategory, endpointID); err != nil {
+		t.Fatal(err)
+	}
 	digest := sha256.Sum256([]byte(identity))
 	contextID := append([]byte(nil), digest[:16]...)
 	fingerprint := append([]byte(nil), digest[:]...)
-	result, err = environment.store.DB().Exec(`INSERT INTO endpoint_key_secrets(
+	result, err := tx.Exec(`INSERT INTO endpoint_key_secrets(
 context_id,canonical_base_url,connector_type,encrypted_secret,created_at) VALUES(?,?,?,'envelope',?)`, contextID, baseURL, string(connectorType), now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	secretID, _ := result.LastInsertId()
-	result, err = environment.store.DB().Exec(`INSERT INTO endpoint_keys(
-endpoint_id,secret_ref_id,secret_fingerprint,display_head,display_tail,note,enabled,force_store_false,revision,created_at,updated_at)
-VALUES(?,?,?,'head','tail','private key note',1,1,1,?,?)`, endpointID, secretID, fingerprint, now, now)
+	key, err := testseed.InsertEndpointKeyTx(context.Background(), tx, testseed.KeyInput{EndpointID: endpointID, SecretRefID: secretID, Fingerprint: fingerprint, DisplayHead: "head", DisplayTail: "tail", Note: "private key note", ForceStoreFalse: true, At: now})
 	if err != nil {
 		t.Fatal(err)
 	}
-	endpointKeyID, _ := result.LastInsertId()
-	result, err = environment.store.DB().Exec(`INSERT INTO donations(
+	endpointKeyID := key.KeyID
+	if donationID == 0 {
+		result, err = tx.Exec(`INSERT INTO donations(
 user_id,status,revision,description,review_note,reviewed_by_role,created_at,updated_at)
 VALUES(?,'approved',1,'description','','admin',?,?)`, ownerID, now, now)
-	if err != nil {
-		t.Fatal(err)
+		if err != nil {
+			t.Fatal(err)
+		}
+		donationID, _ = result.LastInsertId()
 	}
-	donationID, _ := result.LastInsertId()
 	zero, one := db.EncodeU128(db.U128{}), db.EncodeU128(db.U128{15: 1})
-	result, err = environment.store.DB().Exec(`INSERT INTO donation_keys(
+	result, err = tx.Exec(`INSERT INTO donation_keys(
 donation_id,endpoint_key_id,display_head,display_tail,canonical_base_url,connector_type,
 price_used_mag,price_reserved_mag,calls_used,calls_reserved,tokens_used,tokens_reserved,
 failure_streak,streak_generation,next_claim_seq,next_fold_seq,enabled,token_reserve,safe_note,created_at,updated_at,
@@ -399,13 +443,20 @@ VALUES(?,?,?,?,?,?,
 		t.Fatal(err)
 	}
 	donationKeyID, _ := result.LastInsertId()
-	if _, err := environment.store.DB().Exec(`INSERT INTO donation_key_memberships(endpoint_key_id,donation_key_id,donation_id,created_at)
+	if _, err := tx.Exec(`INSERT INTO donation_key_memberships(endpoint_key_id,donation_key_id,donation_id,created_at)
 VALUES(?,?,?,?)`, endpointKeyID, donationKeyID, donationID, now); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := environment.store.DB().Exec(`INSERT INTO model_pair_catalog(
-endpoint_key_id,normalized_model_id,automatic_supports,manual_supports,automatic_revision,pair_revision,updated_at)
-VALUES(?,?,1,1,1,1,?)`, endpointKeyID, upstream, now); err != nil {
+	if _, err := testseed.SeedDiscoveryCatalogTx(context.Background(), tx, testseed.DiscoveryCatalogInput{EndpointKeyID: endpointKeyID, ListFormat: "openai", Models: []testseed.DiscoveryModel{{ID: upstream}}, At: now}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := testseed.SeedDonationUsesWithDiscoveryTx(context.Background(), tx, donationKeyID, true, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`INSERT INTO donation_key_manual_models(donation_key_id,normalized_model_id,display_name,revision,created_at,updated_at) VALUES(?,?,?,1,?,?)`, donationKeyID, upstream, upstream, now, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
 	return donationID, donationKeyID, endpointKeyID

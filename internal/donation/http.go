@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"net/http"
 	"strings"
 )
@@ -25,6 +26,11 @@ func RegisterOwnerRoutes(registrar UserRouteRegistrar, service *Service) error {
 		{http.MethodPost, routeDonations, api.createOwner},
 		{http.MethodGet, routeDonation, api.getOwner},
 		{http.MethodGet, routeOwnerKeys, api.keysOwner},
+		{http.MethodGet, routeOwnerUses, api.usesPageHandler(recurringOwner)},
+		{http.MethodPost, routeOwnerUses, api.appendUses},
+		{http.MethodPatch, routeOwnerUse, api.useMutationHandler(recurringOwner, "patch")},
+		{http.MethodDelete, routeOwnerUse + "/pending", api.useMutationHandler(recurringOwner, "cancel")},
+		{http.MethodPost, routeOwnerUse + "/failure-streak-reset", api.useMutationHandler(recurringOwner, "reset")},
 		{http.MethodPost, routeOwnerFailureReset, api.failureResetOwner},
 		{http.MethodPatch, routeOwnerFailurePolicy, api.failurePolicyOwner},
 		{http.MethodGet, routeOwnerRecurring, api.recurringOwner},
@@ -54,6 +60,9 @@ func RegisterAdminRoutes(registrar AdminRouteRegistrar, service *Service) error 
 		{http.MethodGet, routeAdminSources, api.sourcesAdmin},
 		{http.MethodGet, routeAdminSourceKeys, api.sourceKeysAdmin},
 		{http.MethodGet, routeAdminKeys, api.keysAdmin},
+		{http.MethodGet, routeAdminUses, api.adminUseHandler(api.usesPageHandler(reviewerAdmin))},
+		{http.MethodPost, routeAdminUses + "/review", api.adminUseHandler(api.useReviewHandler(reviewerAdmin))},
+		{http.MethodPost, routeAdminUses + "/{useId}/failure-streak-reset", api.adminUseHandler(api.useMutationHandler(reviewerAdmin, "reset"))},
 		{http.MethodPost, routeAdminFailureReset, api.failureResetAdmin},
 		{http.MethodPost, routeAdminFailureReset + "/selection", api.failureSelectionAdmin},
 		{http.MethodGet, routeAdminBadge, api.badgeAdmin},
@@ -87,6 +96,9 @@ func RegisterStewardRoutes(registrar UserRouteRegistrar, service *Service) error
 		{http.MethodGet, routeStewardSources, api.sourcesSteward},
 		{http.MethodGet, routeStewardSourceKeys, api.sourceKeysSteward},
 		{http.MethodGet, routeStewardKeys, api.keysSteward},
+		{http.MethodGet, routeStewardUses, api.usesPageHandler(reviewerSteward)},
+		{http.MethodPost, routeStewardUses + "/review", api.useReviewHandler(reviewerSteward)},
+		{http.MethodPost, routeStewardUses + "/{useId}/failure-streak-reset", api.useMutationHandler(reviewerSteward, "reset")},
 		{http.MethodPost, routeStewardFailureReset, api.failureResetSteward},
 		{http.MethodPost, routeStewardFailureReset + "/selection", api.failureSelectionSteward},
 		{http.MethodGet, routeStewardBadge, api.badgeSteward},
@@ -169,9 +181,15 @@ func (api *httpAPI) getOwner(writer http.ResponseWriter, request *http.Request, 
 }
 
 type createKeyWire struct {
-	FailureDisableThreshold requiredField[string] `json:"failure_disable_threshold"`
-	EndpointKeyID           requiredField[string] `json:"endpoint_key_id"`
-	ExpiresAt               nullableField[int64]  `json:"expires_at"`
+	NativeServices          requiredField[[]contract.NativeService] `json:"native_services"`
+	CredentialID            requiredField[string]                   `json:"credential_id"`
+	CredentialVersion       requiredField[string]                   `json:"credential_version"`
+	GrantRevision           requiredField[string]                   `json:"grant_revision"`
+	DiscoverySourceID       requiredField[string]                   `json:"discovery_source_id"`
+	DiscoverySourceRevision requiredField[string]                   `json:"discovery_source_revision"`
+	FailureDisableThreshold requiredField[string]                   `json:"failure_disable_threshold"`
+	EndpointKeyID           requiredField[string]                   `json:"endpoint_key_id"`
+	ExpiresAt               nullableField[int64]                    `json:"expires_at"`
 }
 
 type createWire struct {
@@ -203,6 +221,38 @@ func (api *httpAPI) createOwner(writer http.ResponseWriter, request *http.Reques
 		}
 		keys[index] = CreateKeyInput{EndpointKeyID: id, ExpiresAt: key.ExpiresAt.Value}
 		canonicalKeys[index] = map[string]any{"endpoint_key_id": key.EndpointKeyID.Value, "expires_at": key.ExpiresAt.Value}
+		if key.NativeServices.Set {
+			if len(key.NativeServices.Value) == 0 {
+				writeDonationError(writer, ErrInvalidRequest)
+				return
+			}
+			keys[index].NativeServices = key.NativeServices.Value
+			canonicalKeys[index]["native_services"] = key.NativeServices.Value
+		}
+		if key.CredentialID.Set || key.CredentialVersion.Set || key.GrantRevision.Set {
+			credentialID, e1 := requiredID(key.CredentialID)
+			version, e2 := requiredID(key.CredentialVersion)
+			grant, e3 := requiredID(key.GrantRevision)
+			if e1 != nil || e2 != nil || e3 != nil {
+				writeDonationError(writer, ErrInvalidRequest)
+				return
+			}
+			keys[index].CredentialID, keys[index].CredentialVersion, keys[index].GrantRevision = credentialID, version, grant
+			canonicalKeys[index]["credential_id"] = key.CredentialID.Value
+			canonicalKeys[index]["credential_version"] = key.CredentialVersion.Value
+			canonicalKeys[index]["grant_revision"] = key.GrantRevision.Value
+		}
+		if key.DiscoverySourceID.Set || key.DiscoverySourceRevision.Set {
+			source, e1 := requiredID(key.DiscoverySourceID)
+			revision, e2 := requiredID(key.DiscoverySourceRevision)
+			if e1 != nil || e2 != nil {
+				writeDonationError(writer, ErrInvalidRequest)
+				return
+			}
+			keys[index].DiscoverySourceID, keys[index].DiscoverySourceRevision = &source, &revision
+			canonicalKeys[index]["discovery_source_id"] = key.DiscoverySourceID.Value
+			canonicalKeys[index]["discovery_source_revision"] = key.DiscoverySourceRevision.Value
+		}
 		if key.FailureDisableThreshold.Set {
 			value := key.FailureDisableThreshold.Value
 			keys[index].FailureDisableThreshold = &value

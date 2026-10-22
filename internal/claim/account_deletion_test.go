@@ -6,6 +6,8 @@ import (
 	"errors"
 	"sort"
 	"testing"
+
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 )
 
 func TestPrepareAccountDeletionConvergesWithUndispatchedReleaseAndRollsBack(t *testing.T) {
@@ -166,7 +168,11 @@ func testDeletionCharity(t *testing.T, route RouteKind) {
 	userID := fixture.seedUser("charity-delete-caller", false)
 	fixture.seedLedgerUser(userID, 1_000)
 	donorID := fixture.seedUser("charity-delete-donor", false)
-	key := fixture.seedKey(donorID, "charity-delete")
+	kind := connectorcontract.TypeOpenAICompatible
+	if route.Operation() == connectorcontract.OperationSystemOne {
+		kind = connectorcontract.TypeTypeSafeSystemOne
+	}
+	key := fixture.seedKeyForType(donorID, "charity-delete", kind)
 	donationKeyID := fixture.seedDonationKey(donorID, key, "charity-delete", 0)
 	request := fixture.acceptCharity(userID, 3, route)
 	seedDeletionCharityProjection(t, fixture.db, request.ID, userID, fixture.clock.Load())
@@ -204,7 +210,7 @@ func testDeletionCharity(t *testing.T, route RouteKind) {
 	}
 	if _, err := fixture.service.Claim(context.Background(), ClaimInput{
 		RequestID: request.ID, ActorUserID: userID, AttemptSeq: 3, Purpose: PurposeCharity,
-		Candidate: key.candidate, DonationKeyID: donationKeyID,
+		Candidate: key.charityCandidates[1], DonationKeyID: donationKeyID,
 	}); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("new claim after deletion error = %v, want not found", err)
 	}
@@ -280,10 +286,14 @@ func mustDeletionClaim(
 	donationKeyID int64,
 ) Handle {
 	t.Helper()
-	handle, err := fixture.service.Claim(context.Background(), ClaimInput{
+	input := ClaimInput{
 		RequestID: request.ID, ActorUserID: *request.UserID, AttemptSeq: attemptSeq,
-		Purpose: purpose, Candidate: key.candidate, DonationKeyID: donationKeyID,
-	})
+		Purpose: purpose, PersonalModelID: key.modelID, Candidate: key.candidateForRoute(request.Route, purpose == PurposeCharity), DonationKeyID: donationKeyID,
+	}
+	if purpose == PurposeCharity {
+		input.PersonalModelID = 0
+	}
+	handle, err := fixture.service.Claim(context.Background(), input)
 	if err != nil {
 		t.Fatalf("claim deletion attempt %d: %v", attemptSeq, err)
 	}

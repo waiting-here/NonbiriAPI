@@ -18,8 +18,8 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/charityaccess"
 	"github.com/waiting-here/NonbiriAPI/internal/charitydiscount"
 	"github.com/waiting-here/NonbiriAPI/internal/charityreserve"
-	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/credits"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -222,6 +222,7 @@ FROM charity_models WHERE id=?`, modelID).Scan(
 }
 
 type keyReservation struct {
+	approvedUse                                                          bool
 	donationID, donationKeyID, endpointKeyID, endpointID, receiverUserID int64
 	modelID, modelEnabled, keyEnabled, failureDisabled                   int64
 	endpointEnabled, physicalKeyEnabled                                  int64
@@ -274,7 +275,7 @@ func (s *Service) Claim(ctx context.Context, tx *sql.Tx, input claim.CharityClai
 	if err := requireModelAccess(ctx, tx, input.ActorUserID, row.modelID); err != nil {
 		return claim.CharityReservation{}, err
 	}
-	if row.status != "approved" || row.endedReason != "" || row.keyEnabled != 1 || row.failureDisabled != 0 ||
+	if !row.approvedUse || row.endedReason != "" || row.keyEnabled != 1 || row.failureDisabled != 0 ||
 		row.modelEnabled != 1 || row.endpointEnabled != 1 || row.physicalKeyEnabled != 1 ||
 		row.expiresAt.Valid && input.ClaimedAt >= row.expiresAt.Int64 {
 		return claim.CharityReservation{}, claim.ErrNotFound
@@ -409,11 +410,31 @@ func raiseOutputTokenBudget(budget *donationquota.TokenBudget, floor int64) erro
 
 func readClaimKey(ctx context.Context, tx *sql.Tx, input claim.CharityClaimInput) (keyReservation, error) {
 	var row keyReservation
+	a := input.Authorization
+	use, err := connectionstore.LoadApprovedUseTx(ctx, tx, input.DonationKeyID, a.NativeService)
+	if errors.Is(err, connectionstore.ErrNotFound) || errors.Is(err, connectionstore.ErrUnavailable) {
+		return row, claim.ErrNotFound
+	}
+	if err != nil {
+		return row, err
+	}
+	g := use.Grant
+	if a.BindingID <= 0 || a.TargetID <= 0 || a.TargetRevision <= 0 ||
+		a.UseID != use.UseID || a.UseRevisionID != use.ApprovedRevisionID || a.UseRevision != use.ApprovedRevision ||
+		a.CredentialID != g.CredentialID || a.CredentialVersionID != g.CredentialVersionID || a.CredentialVersion != g.CredentialVersion ||
+		a.GrantRevisionID != g.GrantRevisionID || a.GrantRevision != g.GrantRevision || a.ConfiguredType != g.ConfiguredType ||
+		a.RerankFormat != g.RerankFormat || g.EndpointID != input.EndpointID || g.EndpointKeyID != input.EndpointKeyID {
+		return row, claim.ErrNotFound
+	}
+	serviceSet, err := connectorcontract.ParseNativeServices([]connectorcontract.NativeService{a.NativeService})
+	if err != nil {
+		return row, claim.ErrInvariant
+	}
 	var reservationState, requestState, requestRoute string
 	var suspended int
-	err := tx.QueryRowContext(ctx, `SELECT
+	err = tx.QueryRowContext(ctx, `SELECT
 d.id,d.status,dk.expires_at,COALESCE(d.user_id,0),dk.id,COALESCE(dk.endpoint_key_id,0),e.id,
-dk.enabled,dk.failure_disabled,COALESCE(dk.ended_reason,''),dk.price_limit_mag,dk.call_limit_mag,dk.token_limit_mag,
+dk.enabled,(dk.failure_disabled OR COALESCE(h.failure_disabled,0)),COALESCE(dk.ended_reason,''),dk.price_limit_mag,dk.call_limit_mag,dk.token_limit_mag,
 dk.price_used_mag,dk.price_reserved_mag,dk.calls_used,dk.calls_reserved,dk.tokens_used,dk.tokens_reserved,
 dk.streak_generation,dk.next_claim_seq,dk.token_reserve,e.enabled,k.enabled,
 cr.charity_model_id,cm.enabled,cr.state,lr.state,lr.route_kind,
@@ -422,7 +443,7 @@ cr.uncached_user_price_milli,cr.cache_write_user_price_milli,cr.cache_read_user_
 cr.uncached_donor_reward_milli,cr.cache_write_donor_reward_milli,cr.cache_read_donor_reward_milli,cr.output_donor_reward_milli,
 cr.token_reserve_milli,
 EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=k.id),
-`+smartbackoff.EffectiveUntilSQL("dk.id")+`
+max(`+smartbackoff.EffectiveUntilSQL("dk.id")+`,`+smartbackoff.ServiceUntilSQL("h")+`)
 FROM charity_reservations cr
 JOIN logical_requests lr ON lr.id=cr.logical_request_id
 JOIN donation_keys dk ON dk.id=?
@@ -431,12 +452,14 @@ JOIN donation_key_memberships m ON m.donation_key_id=dk.id AND m.endpoint_key_id
 JOIN endpoint_keys k ON k.id=dk.endpoint_key_id
 JOIN endpoints e ON e.id=k.endpoint_id
 JOIN charity_models cm ON cm.id=cr.charity_model_id
-JOIN charity_model_bindings b ON b.charity_model_id=cm.id AND b.donation_key_id=dk.id
- AND b.endpoint_key_id=k.id AND b.upstream_model_id=?
-AND b.upstream_model_id=?
+JOIN charity_model_bindings b ON b.charity_model_id=cm.id AND b.id=?
+JOIN charity_binding_targets t ON t.binding_id=b.id AND t.id=? AND t.revision=? AND t.donation_key_id=dk.id
+ AND t.upstream_model_id=? AND (t.native_service_mask & ?)<>0
+LEFT JOIN donation_service_health h ON h.use_id=? AND h.endpoint_key_id=k.id AND h.native_service_bit=? AND h.credential_version_id=?
 WHERE cr.logical_request_id=? AND cr.user_id=? AND lr.user_id=? AND e.id=? AND k.id=?
-  AND `+charityscope.SupportSQL("dk.id", "b.endpoint_key_id", "b.upstream_model_id")+`
-LIMIT 1`, input.DonationKeyID, input.UpstreamModelID, input.UpstreamModelID,
+AND d.status IN ('pending','approved') AND d.terminal_at IS NULL
+LIMIT 1`, input.DonationKeyID, a.BindingID, a.TargetID, a.TargetRevision, input.UpstreamModelID, serviceSet.Mask(),
+		a.UseID, serviceSet.Mask(), a.CredentialVersionID,
 		input.RequestID, input.ActorUserID, input.ActorUserID,
 		input.EndpointID, input.EndpointKeyID).Scan(
 		&row.donationID, &row.status, &row.expiresAt, &row.receiverUserID, &row.donationKeyID,
@@ -464,6 +487,9 @@ LIMIT 1`, input.DonationKeyID, input.UpstreamModelID, input.UpstreamModelID,
 	if err := requireDonationCallerTx(ctx, tx, input.ActorUserID, row.receiverUserID, input.ClaimedAt); err != nil {
 		return keyReservation{}, err
 	}
+	// The nonterminal header is retained above; this approval comes only from
+	// the exact current approved use and immutable grant validated earlier.
+	row.approvedUse = true
 	return row, nil
 }
 
@@ -564,6 +590,9 @@ SET state='released',finalized_at=?,streak_disposition='neutral',failure_origin=
 		return err
 	}
 	if row.keyID != nil {
+		if err := foldServiceStreak(ctx, tx, input.ClaimID, input.ReleasedAt); err != nil {
+			return err
+		}
 		return foldStreak(ctx, tx, *row.keyID, row.generation, input.ReleasedAt)
 	}
 	return nil
@@ -833,6 +862,9 @@ state='committed',finalized_at=?,streak_disposition=?,failure_origin=?,pricing_d
 			return err
 		}
 	}
+	if err := foldServiceStreak(ctx, tx, input.ClaimID, input.CompletedAt); err != nil {
+		return err
+	}
 	return foldStreak(ctx, tx, *row.keyID, row.generation, input.CompletedAt)
 }
 
@@ -1055,42 +1087,24 @@ FROM donation_keys WHERE id=?`, keyID).Scan(&currentGenerationBlob, &nextFoldBlo
 		var state string
 		var success sql.NullInt64
 		var disposition, origin sql.NullString
-		err := tx.QueryRowContext(ctx, `SELECT state,protocol_success,streak_disposition,failure_origin FROM donation_usage_reservations
+		var serviceEvent bool
+		err := tx.QueryRowContext(ctx, `SELECT state,protocol_success,streak_disposition,failure_origin,
+EXISTS(SELECT 1 FROM dispatch_service_health h WHERE h.claim_id=donation_usage_reservations.claim_id) FROM donation_usage_reservations
 WHERE donation_key_id=? AND streak_generation=? AND claim_seq=?`,
-			keyID, db.EncodeU128(generation), db.EncodeU128(next)).Scan(&state, &success, &disposition, &origin)
+			keyID, db.EncodeU128(generation), db.EncodeU128(next)).Scan(&state, &success, &disposition, &origin, &serviceEvent)
 		if errors.Is(err, sql.ErrNoRows) || state == "reserved" {
 			break
 		}
 		if err != nil {
 			return fmt.Errorf("charity: read streak result: %w", err)
 		}
-		if !disposition.Valid || !origin.Valid || !connectorcontract.ValidOutcome(connectorcontract.StreakDisposition(disposition.String), connectorcontract.FailureOrigin(origin.String)) {
-			return claim.ErrInvariant
+		var justDisabled bool
+		streak, failureDisabled, justDisabled, err = foldFailureOutcome(streak, failureDisabled, threshold, state, success, disposition, origin, !serviceEvent)
+		if err != nil {
+			return err
 		}
-		if state != "committed" && state != "released" {
-			return claim.ErrInvariant
-		}
-		if disposition.String == "success" || disposition.String == "upstream_failure" {
-			if state != "committed" || !success.Valid {
-				return claim.ErrInvariant
-			}
-			if disposition.String == "success" {
-				streak = db.U128{}
-			} else {
-				if success.Int64 != 0 {
-					return claim.ErrInvariant
-				}
-				streak, err = addU128(streak, big.NewInt(1))
-				if err != nil {
-					return err
-				}
-				if failureDisabled == 0 && threshold != (db.U128{}) && streak.Big().Cmp(threshold.Big()) >= 0 {
-					failureDisabled = 1
-					disabledNow = true
-					disablingStreak = streak
-					disablingFold = next
-				}
-			}
+		if justDisabled {
+			disabledNow, disablingStreak, disablingFold = true, streak, next
 		}
 		next, err = addU128(next, big.NewInt(1))
 		if err != nil {

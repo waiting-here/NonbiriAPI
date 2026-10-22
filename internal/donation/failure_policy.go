@@ -87,6 +87,10 @@ func updateFailurePolicyTx(ctx context.Context, tx *sql.Tx, actorID int64, role 
 	if err := requireOne(result); err != nil {
 		return FailurePolicy{}, err
 	}
+	if _, err := tx.ExecContext(ctx, `UPDATE donation_service_health SET failure_disabled=CASE WHEN nbi_u128(?)=nbi_u128(0) THEN 0 ELSE failure_streak>=nbi_u128(?) END,updated_at=?
+WHERE EXISTS(SELECT 1 FROM donation_uses u JOIN donation_use_revisions ur ON ur.id=u.current_approved_revision_id AND ur.use_id=u.id JOIN endpoint_key_grant_revisions g ON g.id=ur.grant_revision_id WHERE u.id=donation_service_health.use_id AND u.donation_key_id=? AND g.credential_version_id=donation_service_health.credential_version_id)`, threshold, threshold, now, keyID); err != nil {
+		return FailurePolicy{}, err
+	}
 	result, err = tx.ExecContext(ctx, `UPDATE donations SET revision=revision+1,updated_at=? WHERE id=? AND revision=?`, now, donationID, expected)
 	if err != nil {
 		return FailurePolicy{}, err

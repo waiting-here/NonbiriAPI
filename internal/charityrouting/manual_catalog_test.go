@@ -55,9 +55,7 @@ func TestManualCatalogUnionRevisionBindingAndRefresh(t *testing.T) {
 	}
 	model := e.createModel(t, 'd')
 	mid, _ := parsePositiveID(model.ID)
-	if _, err = e.store.DB().Exec(`UPDATE model_pair_catalog SET automatic_supports=0,manual_supports=0 WHERE endpoint_key_id=?`, physical); err != nil {
-		t.Fatal(err)
-	}
+	e.seedAutomaticCatalog(t, physical)
 	candidates, _, _, err := e.service.BindingCandidatesAdmin(ctx, mid, CandidateQuery{Limit: 100})
 	if err != nil || len(candidates) != 2 || candidates[0].UpstreamModelID == candidates[1].UpstreamModelID {
 		t.Fatalf("zero-support refresh duplicated union: %+v %v", candidates, err)
@@ -67,20 +65,19 @@ func TestManualCatalogUnionRevisionBindingAndRefresh(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	snapshot, err := e.service.Snapshot(ctx, mid, routingTestNow, []connectorcontract.Type{connectorcontract.TypeOpenAICompatible})
-	if err != nil || len(snapshot.candidates) != 1 {
+	snapshot, err := e.service.snapshot(ctx, mid, routingTestNow, false, map[connectorcontract.Type]struct{}{connectorcontract.TypeOpenAICompatible: {}}, connectorcontract.OperationChatCompletions)
+	if err != nil || len(snapshot.candidates) != 1 || snapshot.candidates[0].ConnectorType != connectorcontract.TypeOpenAICompatible || snapshot.candidates[0].UpstreamModelID != "manual-only" {
 		t.Fatalf("manual runtime snapshot %+v %v", snapshot, err)
 	}
+	persistedTarget := snapshot.candidates[0].Authorization.TargetID
 	entry, _ := parsePositiveID(*listed.ManualEntryID)
 	remove := ManualCatalogInput{ExpectedManualCatalogRevision: "2"}
 	if _, err = e.service.MutateManualCatalog(ctx, true, 0, did, kid, entry, routingMutation(t, 'f', http.MethodDelete, routeAdminManual+"/{entryId}", []int64{did, kid, entry}, remove), remove); !errors.Is(err, ErrConflict) {
 		t.Fatalf("bound unique support removed: %v", err)
 	}
-	if _, err = e.store.DB().Exec(`DELETE FROM model_pair_catalog WHERE endpoint_key_id=?`, physical); err != nil {
-		t.Fatal(err)
-	}
-	snapshot, err = e.service.Snapshot(ctx, mid, routingTestNow, []connectorcontract.Type{connectorcontract.TypeOpenAICompatible})
-	if err != nil || len(snapshot.candidates) != 1 {
+	e.seedAutomaticCatalog(t, physical)
+	snapshot, err = e.service.snapshot(ctx, mid, routingTestNow, false, map[connectorcontract.Type]struct{}{connectorcontract.TypeOpenAICompatible: {}}, connectorcontract.OperationChatCompletions)
+	if err != nil || len(snapshot.candidates) != 1 || snapshot.candidates[0].Authorization.TargetID != persistedTarget || snapshot.candidates[0].UpstreamModelID != "manual-only" {
 		t.Fatalf("empty refresh removed manual support: %+v %v", snapshot, err)
 	}
 	bid, _ := parsePositiveID(binding.Value.Bindings[0].ID)
@@ -148,9 +145,7 @@ func TestManualCatalogTraineeRequiresSelectedManagedModel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = e.store.DB().Exec(`INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at) VALUES(?,'Managed','subscription','openai-compatible','https://example.test/v1',1,'active',1,?,?)`, channel, routingTestNow, routingTestNow); err != nil {
-		t.Fatal(err)
-	}
+	seedRoutingChannel(t, e, channel, "Managed", "https://example.test/v1")
 	mainDonation, mainKey, _ := e.seedCandidateWithConnector(t, owner, "manual-trainee-main", "automatic", connectorcontract.TypeOpenAICompatible, channel)
 	if _, err = e.store.DB().Exec(`UPDATE donation_keys SET enabled=0,failure_disabled=1 WHERE id=?`, mainKey); err != nil {
 		t.Fatal(err)

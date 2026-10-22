@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
 )
@@ -16,7 +18,7 @@ func routingClaim(t *testing.T, fixture *claimFixture, caller int64, key testKey
 	request := fixture.acceptCharity(caller, 1)
 	handle, err := fixture.service.Claim(context.Background(), ClaimInput{
 		RequestID: request.ID, ActorUserID: caller, AttemptSeq: 1,
-		Purpose: PurposeCharity, Candidate: key.candidate, DonationKeyID: donationKeyID,
+		Purpose: PurposeCharity, Candidate: key.charityCandidates[1], DonationKeyID: donationKeyID,
 	})
 	if err != nil {
 		t.Fatalf("reserve charity routing claim: %v", err)
@@ -82,8 +84,8 @@ func routingAffinityAttempt(t *testing.T, fixture *claimFixture) string {
 func TestCharityRoutingConcurrentReservationsSplitEmptyLoad(t *testing.T) {
 	fixture, caller, keys, donations := routingFixture(t, 300)
 	options := []BalancedCandidate{
-		{Candidate: keys[0].candidate, DonationKeyID: donations[0]},
-		{Candidate: keys[1].candidate, DonationKeyID: donations[1]},
+		{Candidate: keys[0].charityCandidates[1], DonationKeyID: donations[0]},
+		{Candidate: keys[1].charityCandidates[1], DonationKeyID: donations[1]},
 	}
 	firstRequest := fixture.acceptCharity(caller, 1)
 	secondRequest := fixture.acceptCharity(caller, 1)
@@ -144,8 +146,8 @@ func TestCharityRoutingRestartKeepsDispatchedLoadAndAffinity(t *testing.T) {
 	selected, err := restarted.Claim(context.Background(), ClaimInput{
 		RequestID: request.ID, ActorUserID: caller, AttemptSeq: 1,
 		Purpose: PurposeCharity, BalancedCandidates: []BalancedCandidate{
-			{Candidate: keys[1].candidate, DonationKeyID: donations[1]},
-			{Candidate: keys[0].candidate, DonationKeyID: donations[0]},
+			{Candidate: keys[1].charityCandidates[1], DonationKeyID: donations[1]},
+			{Candidate: keys[0].charityCandidates[1], DonationKeyID: donations[0]},
 		},
 	})
 	if err != nil || selected.EndpointKeyID() != keys[0].keyID {
@@ -158,8 +160,8 @@ func TestCharityRoutingAffinityPrecedesLoadAndStillRequiresAdmission(t *testing.
 	first := routingClaim(t, fixture, caller, keys[0], donations[0])
 	dispatchRoutingClaim(t, fixture, first)
 	options := []BalancedCandidate{
-		{Candidate: keys[1].candidate, DonationKeyID: donations[1]},
-		{Candidate: keys[0].candidate, DonationKeyID: donations[0]},
+		{Candidate: keys[1].charityCandidates[1], DonationKeyID: donations[1]},
+		{Candidate: keys[0].charityCandidates[1], DonationKeyID: donations[0]},
 	}
 	request := fixture.acceptCharity(caller, 1)
 	preferred, err := fixture.service.Claim(context.Background(), ClaimInput{
@@ -196,8 +198,8 @@ func TestCharityRoutingRevisionInvalidatesSelectionWithoutResettingLoad(t *testi
 	selected, err := fixture.service.Claim(context.Background(), ClaimInput{
 		RequestID: request.ID, ActorUserID: caller, AttemptSeq: 1,
 		Purpose: PurposeCharity, BalancedCandidates: []BalancedCandidate{
-			{Candidate: keys[0].candidate, DonationKeyID: donations[0]},
-			{Candidate: keys[1].candidate, DonationKeyID: donations[1]},
+			{Candidate: keys[0].charityCandidates[1], DonationKeyID: donations[0]},
+			{Candidate: keys[1].charityCandidates[1], DonationKeyID: donations[1]},
 		},
 	})
 	if err != nil || selected.EndpointKeyID() != keys[1].keyID {
@@ -284,7 +286,21 @@ WHERE endpoint_key_id=?`, fixture.clock.Load(), fixture.clock.Load()+7_776_000,
 				if err != nil {
 					t.Fatal(err)
 				}
-				_, err = fixture.db.Exec(`DELETE FROM endpoint_keys WHERE id=?`, keys[0].keyID)
+				tx, beginErr := fixture.db.BeginTx(context.Background(), nil)
+				if beginErr != nil {
+					t.Fatal(beginErr)
+				}
+				defer tx.Rollback()
+				if _, err := tx.Exec(`DELETE FROM donation_key_memberships WHERE donation_key_id=?`, donations[0]); err != nil {
+					t.Fatal(err)
+				}
+				if err := connectionstore.EndDonationKeyUsesTx(context.Background(), tx, donations[0], fixture.clock.Load()); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := tx.Exec(`DELETE FROM endpoint_keys WHERE id=?`, keys[0].keyID); err != nil {
+					t.Fatal(err)
+				}
+				err = tx.Commit()
 			}
 			if err != nil {
 				t.Fatal(err)
@@ -395,6 +411,20 @@ INSERT INTO charity_model_routing(model_id,strategy) VALUES(2,'cache_balanced');
 INSERT INTO charity_routing_settings(model_id,revision,affinity_ttl_seconds) VALUES(2,1,300)`); err != nil {
 		t.Fatal(err)
 	}
+	tx, err := fixture.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding, err := testseed.InsertCharityBindingTx(context.Background(), tx, testseed.BindingInput{ModelID: 2, KeyID: donations[0], UpstreamModelID: keys[0].candidate.UpstreamModelID, At: fixture.clock.Load()})
+	if err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	secondCandidate := keys[0].charityCandidates[1]
+	secondCandidate.Authorization.BindingID, secondCandidate.Authorization.TargetID = binding.BindingID, binding.TargetID
 	decisionNow := fixture.clock.Load()
 	request, err := fixture.service.Accept(context.Background(), AcceptInput{
 		UserID: caller, Route: RouteCharityChat, ModelSnapshot: "[公益]second/model",
@@ -405,7 +435,7 @@ INSERT INTO charity_routing_settings(model_id,revision,affinity_ttl_seconds) VAL
 	}
 	second, err := fixture.service.Claim(context.Background(), ClaimInput{
 		RequestID: request.ID, ActorUserID: caller, AttemptSeq: 1,
-		Purpose: PurposeCharity, Candidate: keys[0].candidate, DonationKeyID: donations[0],
+		Purpose: PurposeCharity, Candidate: secondCandidate, DonationKeyID: donations[0],
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -449,8 +479,8 @@ INSERT INTO charity_routing_settings(model_id,revision,affinity_ttl_seconds) VAL
 	balanced, err := fixture.service.Claim(context.Background(), ClaimInput{
 		RequestID: otherRequest.ID, ActorUserID: otherCaller, AttemptSeq: 1, Purpose: PurposeCharity,
 		BalancedCandidates: []BalancedCandidate{
-			{Candidate: keys[0].candidate, DonationKeyID: donations[0]},
-			{Candidate: keys[1].candidate, DonationKeyID: donations[1]},
+			{Candidate: keys[0].charityCandidates[1], DonationKeyID: donations[0]},
+			{Candidate: keys[1].charityCandidates[1], DonationKeyID: donations[1]},
 		},
 	})
 	if err != nil || balanced.EndpointKeyID() != keys[1].keyID {
