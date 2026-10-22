@@ -1333,7 +1333,7 @@ describe('experimental policy and charity controls', () => {
       if (method === 'PUT' && path === '/api/models/3/bindings/order') {
         bindings = [coreBinding('11', 'gpt-b', 0), coreBinding('10', 'gpt-a', 1)];
         bindingRevision = '3';
-        return jsonResponse({ bindings, binding_revision: bindingRevision });
+        return jsonResponse({ binding_revision: bindingRevision });
       }
       if (method === 'PATCH' && path === '/api/models/3') {
         currentModel = {
@@ -1365,6 +1365,7 @@ describe('experimental policy and charity controls', () => {
       expect(lastBody(fetchMock, 'PUT', '/api/models/3/bindings/order')).toEqual({
         expected_binding_revision: '2',
         order: ['11', '10'],
+        response: 'receipt',
       }),
     );
     await rendered.user.click(screen.getByRole('button', { name: 'Edit model' }));
@@ -1384,6 +1385,7 @@ describe('experimental policy and charity controls', () => {
         transport_rule: 'passthrough',
         flatten_tool_calls: true,
         role_policy: { default_action: 'native', rules: {} },
+        session_headers: [],
         expected_revision: '1',
       }),
     );
@@ -1414,7 +1416,7 @@ describe('experimental policy and charity controls', () => {
       {
         method: 'DELETE',
         path: '/api/models/3/bindings/10',
-        body: { bindings: [], binding_revision: '3' },
+        body: { binding_revision: '3' },
       },
     ]);
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -1424,7 +1426,7 @@ describe('experimental policy and charity controls', () => {
       ).toUpperCase();
       if (method === 'DELETE' && path === '/api/models/3/bindings/10') {
         deleted = true;
-        return jsonResponse({ bindings: [], binding_revision: '3' });
+        return jsonResponse({ binding_revision: '3' });
       }
       if (method === 'GET' && path === '/api/models/3/bindings')
         return jsonResponse(
@@ -1449,12 +1451,13 @@ describe('experimental policy and charity controls', () => {
     await waitFor(() =>
       expect(lastBody(fetchMock, 'DELETE', '/api/models/3/bindings/10')).toEqual({
         expected_binding_revision: '2',
+        response: 'receipt',
       }),
     );
     await waitFor(() => expect(screen.queryByText('gpt-a')).toBeNull());
   });
 
-  test('submits only an owned existing key through the closed beta.1 donation wire', async () => {
+  test('submits an existing owned key with explicit service and credential authorization', async () => {
     const capability = {
       state: 'available',
       donation_intake: 'open',
@@ -1604,6 +1607,10 @@ describe('experimental policy and charity controls', () => {
           coreNumberedPage([
             {
               ...coreEndpointKey,
+              native_services: ['chat_completions', 'embeddings'],
+              credential_id: '12',
+              credential_version: '3',
+              grant_revision: '4',
               browse: {
                 donation_eligibility: submitted ? 'already_donated' : 'eligible',
                 model_count: '0',
@@ -1633,6 +1640,7 @@ describe('experimental policy and charity controls', () => {
     await rendered.user.click(await screen.findByRole('button', { name: 'Choose keys…' }));
     await rendered.user.click(await screen.findByRole('button', { name: /^primary/ }));
     await rendered.user.click(await screen.findByRole('checkbox', { name: /sk-a…tail/ }));
+    await rendered.user.click(await screen.findByRole('checkbox', { name: 'Chat completions' }));
     await rendered.user.click(screen.getByRole('button', { name: 'Done' }));
     await rendered.user.type(screen.getByLabelText('Donation description'), 'fixture donation');
     await rendered.user.click(
@@ -1652,13 +1660,23 @@ describe('experimental policy and charity controls', () => {
     await waitFor(() =>
       expect(lastBody(fetchMock, 'POST', '/api/donations')).toEqual({
         description: 'fixture donation',
-        keys: [{ endpoint_key_id: '2', expires_at: null, failure_disable_threshold: '10' }],
+        keys: [
+          {
+            endpoint_key_id: '2',
+            native_services: ['chat_completions'],
+            credential_id: '12',
+            credential_version: '3',
+            grant_revision: '4',
+            expires_at: null,
+            failure_disable_threshold: '10',
+          },
+        ],
         ownership_authorized: true,
         discord_public_thanks: false,
       }),
     );
     expect(JSON.stringify(lastBody(fetchMock, 'POST', '/api/donations'))).not.toMatch(
-      /secret|base_url|max_concurrency|rpm_limit/i,
+      /secret|base_url|max_concurrency|rpm_limit|discovery_source/i,
     );
     await screen.findByText('Donation submitted for review.');
     await rendered.user.click(screen.getByRole('tab', { name: 'My donations' }));
