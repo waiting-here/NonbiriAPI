@@ -741,7 +741,7 @@ test('a local season publishes explicitly and the original user tab resumes, set
     const versions = (await (
       await adminAPI(administrator, '/levels/' + level.id + '/versions?page=1')
     ).json()) as { items: { id: string }[] };
-    const now = Math.floor(Date.now() / 1000);
+    const now = Math.floor(Date.now() / 60_000) * 60;
     const adminPage = await administrator.newPage();
     adminPage.on('dialog', (dialog) => void dialog.accept());
     await adminPage.goto(fixture().admin_url + '/limited-activities/fat-fish');
@@ -756,7 +756,7 @@ test('a local season publishes explicitly and the original user tab resumes, set
       paused: false,
       past_public: true,
       starts_at: now - 60,
-      ends_at: now + 3600,
+      ends_at: now + 3601,
     };
     await periodEditor.getByLabel('Title', { exact: true }).fill(periodInput.title);
     await periodEditor.getByLabel('Description', { exact: true }).fill(periodInput.description);
@@ -765,10 +765,10 @@ test('a local season publishes explicitly and the original user tab resumes, set
     await periodEditor.getByLabel('Public after close', { exact: true }).check();
     await periodEditor
       .getByLabel('Start time', { exact: true })
-      .fill(new Date(periodInput.starts_at * 1000).toISOString().slice(0, 19));
+      .fill(new Date(periodInput.starts_at * 1000).toISOString().slice(0, 19).replace(/:00$/, ''));
     await periodEditor
       .getByLabel('Closing time', { exact: true })
-      .fill(new Date(periodInput.ends_at * 1000).toISOString().slice(0, 19));
+      .fill(new Date(periodInput.ends_at * 1000).toISOString().slice(0, 19).replace(/:00$/, ''));
     const creating = adminPage.waitForResponse(
       (response) =>
         new URL(response.url()).pathname === base + '/periods' &&
