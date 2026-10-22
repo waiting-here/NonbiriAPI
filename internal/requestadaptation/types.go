@@ -1,5 +1,5 @@
 // Package requestadaptation validates and stores bounded request adaptations.
-// Management projections and routine formatting never reveal configured values.
+// Safe projections and routine formatting never reveal configured values.
 package requestadaptation
 
 import (
@@ -69,7 +69,7 @@ type BodySection struct {
 	SensitivePaths map[string][]string        `json:"sensitive_paths,omitempty"`
 }
 
-// Document is sensitive and belongs only in an attempt or the encrypted store.
+// Document contains private values for runtime use and authorized configuration reads.
 type Document struct {
 	ExcludedRequestFields []string      `json:"excluded_request_fields,omitempty"`
 	ForwardHeaders        ListSection   `json:"forward_headers"`
@@ -160,8 +160,8 @@ type MapProjection struct {
 	Source Scope                      `json:"source,omitempty"`
 }
 
-// Projection contains structure and opaque presence only; it is safe for GET,
-// idempotency replay, and personal export.
+// Projection contains structure and opaque presence only; it is safe for
+// idempotency replay and personal export.
 type Projection struct {
 	ExcludedRequestFields []string       `json:"excluded_request_fields,omitempty"`
 	Revision              string         `json:"revision"`

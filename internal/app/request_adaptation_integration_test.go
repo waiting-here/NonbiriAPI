@@ -105,7 +105,7 @@ func TestProductionAdaptationRoutesAndDeletionCleanup(t *testing.T) {
 		t.Fatalf("save = %d: %s", response.Code, response.Body.String())
 	}
 	response = f.call(0, "GET", path, nil, false)
-	if response.Code != 200 || !strings.Contains(response.Body.String(), `"has_value":true`) || strings.Contains(response.Body.String(), "fixture-private-value") {
+	if response.Code != 200 || !strings.Contains(response.Body.String(), `"has_value":true`) || !strings.Contains(response.Body.String(), `"value":"fixture-private-value"`) {
 		t.Fatalf("projection = %d: %s", response.Code, response.Body.String())
 	}
 	if other := f.call(1, "GET", path, nil, false); other.Code != 404 {
@@ -145,7 +145,7 @@ func TestProductionPersonalModelAdaptationRoutesAndDeletionCleanup(t *testing.T)
 		t.Fatalf("save = %d: %s", response.Code, response.Body.String())
 	}
 	response = f.call(0, "GET", path, nil, false)
-	if response.Code != 200 || !strings.Contains(response.Body.String(), `"has_value":true`) || strings.Contains(response.Body.String(), "fixture-private-value") {
+	if response.Code != 200 || !strings.Contains(response.Body.String(), `"has_value":true`) || !strings.Contains(response.Body.String(), `"value":"fixture-private-value"`) {
 		t.Fatalf("projection = %d: %s", response.Code, response.Body.String())
 	}
 	if other := f.call(1, "GET", path, nil, false); other.Code != 404 {

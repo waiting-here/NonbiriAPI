@@ -26,7 +26,7 @@ func TestEndpointAdaptationOwnerAuthorizationAndRedaction(t *testing.T) {
 	if _, err := env.repository.GetEndpointAdaptation(ctx, other, id); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("cross-owner GET: %v", err)
 	}
-	patch, err := requestadaptation.ParsePatch([]byte(`{"expected_revision":"0","fixed_headers":{"mode":"replace","values":{"X-Research":{"action":"replace","value":"private-header-value"}}}}`))
+	patch, err := requestadaptation.ParsePatch([]byte(`{"expected_revision":"0","fixed_headers":{"mode":"replace","values":{"X-Research":{"action":"replace","value":"private-header-value"},"X-Protected":{"action":"replace","value":"protected-header-value","sensitive_paths":[""]}}}}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,9 +48,15 @@ func TestEndpointAdaptationOwnerAuthorizationAndRedaction(t *testing.T) {
 		t.Fatalf("owner GET: %+v, %v", projection, err)
 	}
 	serialized, _ := json.Marshal(projection)
-	if strings.Contains(string(serialized), "private-header-value") {
-		t.Fatalf("sensitive value exposed: %s", serialized)
+	if !strings.Contains(string(serialized), "private-header-value") || strings.Contains(string(serialized), "protected-header-value") {
+		t.Fatal("configuration visibility did not match protection markers")
 	}
+	assertAdaptationReceiptIsValueFree(t, env, result.Value)
+	replay, err := env.repository.PutEndpointAdaptation(ctx, owner, id, mutation, patch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertAdaptationReceiptIsValueFree(t, env, replay.Value)
 	if _, err := env.repository.PutEndpointAdaptation(ctx, owner, id, resourceTestMutation(t, resourceTestKey('g'), http.MethodPut, routeEndpointAdaptation, []int64{id}, map[string]any{"adapt": "stale"}), patch); !errors.Is(err, ErrConflict) {
 		t.Fatalf("stale revision accepted: %v", err)
 	}
@@ -71,7 +77,7 @@ func TestModelAdaptationOwnerAuthorizationAndRedaction(t *testing.T) {
 	if _, err := env.repository.GetModelAdaptation(ctx, other, id); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("cross-owner GET: %v", err)
 	}
-	patch, err := requestadaptation.ParsePatch([]byte(`{"expected_revision":"0","fixed_headers":{"mode":"replace","values":{"X-Research":{"action":"replace","value":"private-header-value"}}}}`))
+	patch, err := requestadaptation.ParsePatch([]byte(`{"expected_revision":"0","fixed_headers":{"mode":"replace","values":{"X-Research":{"action":"replace","value":"private-header-value"},"X-Protected":{"action":"replace","value":"protected-header-value","sensitive_paths":[""]}}}}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,10 +99,31 @@ func TestModelAdaptationOwnerAuthorizationAndRedaction(t *testing.T) {
 		t.Fatalf("owner GET: %+v, %v", projection, err)
 	}
 	serialized, _ := json.Marshal(projection)
-	if strings.Contains(string(serialized), "private-header-value") {
-		t.Fatalf("sensitive value exposed: %s", serialized)
+	if !strings.Contains(string(serialized), "private-header-value") || strings.Contains(string(serialized), "protected-header-value") {
+		t.Fatal("configuration visibility did not match protection markers")
 	}
+	assertAdaptationReceiptIsValueFree(t, env, result.Value)
+	replay, err := env.repository.PutModelAdaptation(ctx, owner, id, mutation, patch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertAdaptationReceiptIsValueFree(t, env, replay.Value)
 	if _, err := env.repository.PutModelAdaptation(ctx, owner, id, resourceTestMutation(t, resourceTestKey('g'), http.MethodPut, routeModelAdaptation, []int64{id}, map[string]any{"adapt": "stale"}), patch); !errors.Is(err, ErrConflict) {
 		t.Fatalf("stale revision accepted: %v", err)
+	}
+}
+
+func assertAdaptationReceiptIsValueFree(t *testing.T, env *resourceTestEnvironment, receipt requestadaptation.Projection) {
+	t.Helper()
+	wire, err := json.Marshal(receipt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(wire), "private-header-value") || strings.Contains(string(wire), "protected-header-value") {
+		t.Fatal("save receipt exposed a configured value")
+	}
+	var unsafeReceipts int
+	if err := env.store.DB().QueryRow(`SELECT COUNT(*) FROM idempotency_records WHERE instr(CAST(response_body AS TEXT),'private-header-value')>0 OR instr(CAST(response_body AS TEXT),'protected-header-value')>0`).Scan(&unsafeReceipts); err != nil || unsafeReceipts != 0 {
+		t.Fatalf("persisted unsafe receipts = %d, %v", unsafeReceipts, err)
 	}
 }
