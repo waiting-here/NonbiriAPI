@@ -23,9 +23,10 @@ func (s *responseChatState) textEvents(oldText, oldRefusal string) []map[string]
 	if s.text == oldText && s.refusal == oldRefusal {
 		return events
 	}
+	outputIndex := s.outputIndex("message")
 	if !s.messageStarted {
 		s.messageStarted = true
-		events = append(events, s.event("response.output_item.added", map[string]any{"output_index": 0, "item": map[string]any{"id": s.messageID(), "type": "message", "role": "assistant", "status": "in_progress", "content": []any{}}}))
+		events = append(events, s.event("response.output_item.added", map[string]any{"output_index": outputIndex, "item": map[string]any{"id": s.messageID(), "type": "message", "role": "assistant", "status": "in_progress", "content": []any{}}}))
 	}
 	for _, kind := range []string{"text", "refusal"} {
 		value, old, started := s.text, oldText, &s.textStarted
@@ -42,7 +43,7 @@ func (s *responseChatState) textEvents(oldText, oldRefusal string) []map[string]
 			if kind == "text" {
 				part = map[string]any{"type": "output_text", "text": "", "annotations": []any{}, "logprobs": []any{}}
 			}
-			events = append(events, s.event("response.content_part.added", map[string]any{"item_id": s.messageID(), "output_index": 0, "content_index": len(s.contentOrder) - 1, "part": part}))
+			events = append(events, s.event("response.content_part.added", map[string]any{"item_id": s.messageID(), "output_index": outputIndex, "content_index": len(s.contentOrder) - 1, "part": part}))
 		}
 		index := 0
 		for i, current := range s.contentOrder {
@@ -54,37 +55,53 @@ func (s *responseChatState) textEvents(oldText, oldRefusal string) []map[string]
 		if kind == "refusal" {
 			eventKind = "response.refusal.delta"
 		}
-		events = append(events, s.event(eventKind, map[string]any{"item_id": s.messageID(), "output_index": 0, "content_index": index, "delta": value[len(old):]}))
+		events = append(events, s.event(eventKind, map[string]any{"item_id": s.messageID(), "output_index": outputIndex, "content_index": index, "delta": value[len(old):]}))
 	}
 	return events
 }
+func (s *responseChatState) reasoningEvents(old string) []map[string]any {
+	if s.reasoning == old {
+		return nil
+	}
+	index := s.outputIndex("reasoning")
+	events := []map[string]any{}
+	if !s.reasoningStarted {
+		s.reasoningStarted = true
+		events = append(events, s.event("response.output_item.added", map[string]any{"output_index": index, "item": map[string]any{"id": s.reasoningID(), "type": "reasoning", "summary": []any{}, "content": []any{}, "status": "in_progress"}}))
+	}
+	return append(events, s.event("response.reasoning_text.delta", map[string]any{"item_id": s.reasoningID(), "output_index": index, "content_index": 0, "delta": s.reasoning[len(old):]}))
+}
 func (s *responseChatState) terminalEvents() []map[string]any {
 	events := []map[string]any{}
-	offset := 0
-	if s.messageStarted {
+	order := s.outputKinds()
+	for outputIndex, kind := range order {
+		if kind == "reasoning" {
+			events = append(events, s.event("response.reasoning_text.done", map[string]any{"item_id": s.reasoningID(), "output_index": outputIndex, "content_index": 0, "text": s.reasoning}), s.event("response.output_item.done", map[string]any{"output_index": outputIndex, "item": s.reasoningItem()}))
+			continue
+		}
 		parts := s.content()
 		for i, kind := range s.contentOrder {
 			eventKind, key, value := "response.output_text.done", "text", s.text
 			if kind == "refusal" {
 				eventKind, key, value = "response.refusal.done", "refusal", s.refusal
 			}
-			events = append(events, s.event(eventKind, map[string]any{"item_id": s.messageID(), "output_index": 0, "content_index": i, key: value}))
-			events = append(events, s.event("response.content_part.done", map[string]any{"item_id": s.messageID(), "output_index": 0, "content_index": i, "part": parts[i]}))
+			events = append(events, s.event(eventKind, map[string]any{"item_id": s.messageID(), "output_index": outputIndex, "content_index": i, key: value}))
+			events = append(events, s.event("response.content_part.done", map[string]any{"item_id": s.messageID(), "output_index": outputIndex, "content_index": i, "part": parts[i]}))
 		}
-		events = append(events, s.event("response.output_item.done", map[string]any{"output_index": 0, "item": s.message()}))
-		offset = 1
+		events = append(events, s.event("response.output_item.done", map[string]any{"output_index": outputIndex, "item": s.message()}))
 	}
 	// Chat may fragment function names and IDs. Publish each correlated call
 	// only once the complete identity and terminal marker have been received.
 	for i, call := range s.calls {
+		outputIndex := len(order) + i
 		complete := s.function(i)
 		start := s.function(i)
 		start["arguments"] = ""
 		start["status"] = "in_progress"
-		events = append(events, s.event("response.output_item.added", map[string]any{"output_index": offset + i, "item": start}))
-		events = append(events, s.event("response.function_call_arguments.delta", map[string]any{"item_id": complete["id"], "output_index": offset + i, "delta": call.arguments}))
-		events = append(events, s.event("response.function_call_arguments.done", map[string]any{"item_id": complete["id"], "output_index": offset + i, "arguments": call.arguments}))
-		events = append(events, s.event("response.output_item.done", map[string]any{"output_index": offset + i, "item": complete}))
+		events = append(events, s.event("response.output_item.added", map[string]any{"output_index": outputIndex, "item": start}))
+		events = append(events, s.event("response.function_call_arguments.delta", map[string]any{"item_id": complete["id"], "output_index": outputIndex, "delta": call.arguments}))
+		events = append(events, s.event("response.function_call_arguments.done", map[string]any{"item_id": complete["id"], "output_index": outputIndex, "arguments": call.arguments}))
+		events = append(events, s.event("response.output_item.done", map[string]any{"output_index": outputIndex, "item": complete}))
 	}
 	events = append(events, s.event("response."+s.status(), map[string]any{"response": s.response(true)}))
 	return events

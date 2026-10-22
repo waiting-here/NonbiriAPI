@@ -93,10 +93,21 @@ func (r *Registry) SupportsInferenceRequest(kind contract.Type, request *openai.
 		return false
 	}
 	descriptor, ok := r.Descriptor(kind)
-	return ok && descriptor.Capabilities.Has(contract.OperationCapability(request.Operation())) && request.CheckTarget(kind, contract.AttemptPolicy{}) == nil
+	if !ok || !descriptor.Capabilities.Has(contract.OperationCapability(request.Operation())) {
+		return false
+	}
+	if descriptor.SupportsInference != nil {
+		return descriptor.SupportsInference(request)
+	}
+	return request.CheckTarget(kind, contract.AttemptPolicy{}) == nil
 }
 
 func (r *Registry) CheckInferenceTarget(target contract.Target, request *openai.InferenceRequest, policy contract.AttemptPolicy) error {
+	if request != nil {
+		if descriptor, ok := r.Descriptor(target.Type()); ok && descriptor.Capabilities.Has(contract.OperationCapability(request.Operation())) && descriptor.CheckInferenceTarget != nil {
+			return normalizePreflightError(descriptor.CheckInferenceTarget(target, request, policy))
+		}
+	}
 	if !r.SupportsInferenceRequest(target.Type(), request) {
 		return &contract.RequestRejection{Stage: "protocol preflight", Field: "request", Reason: "request cannot be represented by this connector"}
 	}
