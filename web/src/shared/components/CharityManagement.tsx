@@ -441,9 +441,9 @@ function DonationKeyEditor(
               refresh={props.refresh}
             />
           </Fold>
-          <DonationKeySettings key={props.donation.revision} {...props} />
         </>
       ) : null}
+      <DonationKeySettings key={props.donation.revision} {...props} />
     </section>
   );
 }

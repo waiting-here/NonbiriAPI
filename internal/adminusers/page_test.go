@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
@@ -47,9 +48,13 @@ SELECT 'user',id,NULL,asset,0,?,?,? FROM users CROSS JOIN (SELECT 'general' AS a
 	if err != nil {
 		t.Fatal(err)
 	}
+	services, err := connectorcontract.LegacyNativeServices(connectorcontract.TypeOpenAICompatible)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, base := range []string{`printf('https://scale.example/%05d',id-1000)`, `'https://shared.example/v1'`} {
-		_, err = tx.Exec(`INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at)
-SELECT id,'openai-compatible',`+base+`,'private note',1,1,?,? FROM users WHERE id>1000`, adminUsersTestNow, adminUsersTestNow)
+		_, err = tx.Exec(`INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,native_service_mask,capability_origin,created_at,updated_at)
+SELECT id,'openai-compatible',`+base+`,'private note',1,1,?,'legacy',?,? FROM users WHERE id>1000`, services.Mask(), adminUsersTestNow, adminUsersTestNow)
 		if err != nil {
 			t.Fatal(err)
 		}

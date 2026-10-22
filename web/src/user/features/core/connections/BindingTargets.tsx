@@ -17,18 +17,16 @@ export function BindingTargetEditor({
   accountId,
   model,
   binding,
+  latestRevision,
   onSaved,
 }: {
   accountId: string;
   model: Model;
   binding?: Binding;
+  latestRevision: string | undefined;
   onSaved?: () => void;
 }) {
   const { t } = useTranslation();
-  const current = useQuery({
-    queryKey: coreKeys.bindings(accountId, model.id),
-    queryFn: ({ signal }) => getBindings(model.id, signal),
-  });
   const [targets, setTargets] = useState<MatrixTarget[]>(
     () =>
       binding?.targets?.map((row) => ({
@@ -100,9 +98,9 @@ export function BindingTargetEditor({
           <button
             type="button"
             className="nb-btn nb-btn--secondary"
-            disabled={!current.data}
+            disabled={locked || !latestRevision}
             onClick={() => {
-              if (current.data) setExpectedRevision(current.data.binding_revision);
+              if (latestRevision) setExpectedRevision(latestRevision);
               operation.reset();
             }}
           >
@@ -129,11 +127,14 @@ export function BindingTargets({ accountId, model }: { accountId: string; model:
   });
   return (
     <div className="nb-stack">
-      <Fold title={t('common.connections.addTargetGroup')}>
+      <Fold lazy title={t('common.connections.addTargetGroup')}>
         {query.data ? (
           <BindingTargetEditor
             accountId={accountId}
             model={{ ...model, binding_revision: query.data.binding_revision }}
+            latestRevision={
+              query.isFetching || query.isError ? undefined : query.data.binding_revision
+            }
           />
         ) : query.error ? (
           <ErrorState error={query.error} onRetry={() => void query.refetch()} />
@@ -143,6 +144,7 @@ export function BindingTargets({ accountId, model }: { accountId: string; model:
       </Fold>
       {query.data?.bindings.map((binding) => (
         <Fold
+          lazy
           key={binding.id}
           title={t('common.connections.targetGroup', { number: binding.ord + 1 })}
         >
@@ -158,6 +160,9 @@ export function BindingTargets({ accountId, model }: { accountId: string; model:
           <BindingTargetEditor
             accountId={accountId}
             model={{ ...model, binding_revision: query.data.binding_revision }}
+            latestRevision={
+              query.isFetching || query.isError ? undefined : query.data.binding_revision
+            }
             binding={binding}
           />
         </Fold>

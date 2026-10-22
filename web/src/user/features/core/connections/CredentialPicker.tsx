@@ -68,7 +68,11 @@ export function CredentialPicker({
           ]}
         />
       ) : null}
-      <Fold title={t('common.connections.chooseOtherConnection')} defaultOpen={!sourceConnection}>
+      <Fold
+        lazy
+        title={t('common.connections.chooseOtherConnection')}
+        defaultOpen={!sourceConnection}
+      >
         <ConnectionResourceList
           embedded
           accountId={accountId}
