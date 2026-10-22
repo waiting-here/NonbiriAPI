@@ -10,6 +10,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/artwork"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/limitedactivities"
 )
@@ -41,6 +42,7 @@ type State struct {
 	UpdatedAt *int64   `json:"updated_at"`
 }
 type Config struct {
+	Artwork  *artwork.Catalog
 	Database *sql.DB
 	Users    limitedactivities.UserAuthorizer
 	Gate     limitedactivities.AdmissionGate
@@ -54,6 +56,9 @@ type Service struct{ config Config }
 func New(c Config) (*Service, error) {
 	if c.Database == nil || c.Users == nil || c.Gate == nil || c.Unlock == nil || c.Visible == nil || c.Moments == nil {
 		return nil, ErrInvalid
+	}
+	if c.Artwork == nil {
+		c.Artwork = artwork.Default()
 	}
 	if c.Now == nil {
 		c.Now = time.Now
@@ -210,6 +215,13 @@ func (s *Service) Select(ctx context.Context, user int64, selected, moment strin
 		moment = out.Moment
 	}
 	if !slices.Contains(out.Moments, moment) {
+		return State{}, authz.ErrForbidden
+	}
+	disabled, err := artwork.R18DisabledTx(ctx, tx)
+	if err != nil {
+		return State{}, err
+	}
+	if !s.config.Artwork.Allowed("appearance:"+selected, disabled) || selected == "heart-moment" && !s.config.Artwork.MomentAllowed(moment, disabled) {
 		return State{}, authz.ErrForbidden
 	}
 	if out.Selected != selected || out.Moment != moment {
