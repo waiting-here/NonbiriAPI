@@ -46,8 +46,8 @@ func (r *Repository) EnsureManualEntryInTransaction(ctx context.Context, tx *sql
 	if err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO model_catalog_entries(endpoint_key_id,source_type,source_identity,normalized_model_id,provider,source_revision,created_at,updated_at)
-VALUES(?,'manual',?,?,'',?,?,?)`, keyID, modelID, modelID, revision, now, now); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO model_catalog_entries(native_service_mask,endpoint_key_id,source_type,source_identity,normalized_model_id,provider,source_revision,created_at,updated_at)
+VALUES(0,?,'manual',?,?,'',?,?,?)`, keyID, modelID, modelID, revision, now, now); err != nil {
 		return conflictOrError("ensure manual catalog entry", err)
 	}
 	if present && before.eligible() {

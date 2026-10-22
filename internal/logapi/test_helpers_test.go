@@ -98,7 +98,9 @@ func newLogFixture(t *testing.T) *logFixture {
 		`CREATE TABLE donation_keys(id INTEGER PRIMARY KEY,donation_id INTEGER NOT NULL,endpoint_key_id INTEGER)`,
 		`CREATE TABLE dispatch_claims(id TEXT PRIMARY KEY,logical_request_id TEXT NOT NULL,attempt_seq INTEGER NOT NULL,purpose TEXT NOT NULL,donation_key_id INTEGER,state TEXT NOT NULL DEFAULT 'committed',secret_ref_id INTEGER,UNIQUE(logical_request_id,attempt_seq))`,
 		`CREATE TABLE endpoint_key_secrets(id INTEGER PRIMARY KEY,connector_type TEXT NOT NULL,canonical_base_url TEXT NOT NULL)`,
-		`CREATE TABLE mainstream_channels(id TEXT PRIMARY KEY,connector_type TEXT NOT NULL,canonical_base_url TEXT NOT NULL,enabled INTEGER NOT NULL CHECK(enabled IN (0,1)),state TEXT NOT NULL CHECK(state IN ('active','retired')))`,
+		`CREATE TABLE mainstream_channels(id TEXT PRIMARY KEY,enabled INTEGER NOT NULL CHECK(enabled IN (0,1)),state TEXT NOT NULL CHECK(state IN ('active','retired')))`,
+		`CREATE TABLE mainstream_channel_entries(id INTEGER PRIMARY KEY,channel_id TEXT NOT NULL,connector_type TEXT NOT NULL,canonical_base_url TEXT NOT NULL,enabled INTEGER NOT NULL CHECK(enabled IN (0,1)))`,
+		`CREATE TABLE dispatch_claim_targets(claim_id TEXT PRIMARY KEY,canonical_base_url TEXT NOT NULL)`,
 		`CREATE TABLE request_logs(
  id INTEGER PRIMARY KEY, logical_request_id TEXT NOT NULL, user_id INTEGER, model TEXT NOT NULL,
  route_kind TEXT NOT NULL, caller_result_class TEXT, caller_status INTEGER, caller_error_code TEXT,

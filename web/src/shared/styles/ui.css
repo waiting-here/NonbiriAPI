@@ -1448,7 +1448,8 @@ button.nb-row:hover {
 .nb-stack--sm {
   gap: var(--nb-space-2);
 }
-.nb-inline {
+.nb-inline,
+.nb-actions {
   display: flex;
   gap: var(--nb-space-2);
   align-items: center;

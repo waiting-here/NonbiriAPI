@@ -35,7 +35,8 @@ func TestPresetBindingLifecycleSnapshotsAndMissingTargets(t *testing.T) {
 	if _, err := run('d'); !errors.Is(err, ErrConflict) {
 		t.Fatal("disabled channel", err)
 	}
-	presetExec(t, e, `UPDATE mainstream_channels SET enabled=1,canonical_base_url='https://changed.test/v1',revision=revision+1 WHERE id=?`, channel)
+	presetExec(t, e, `UPDATE mainstream_channel_entries SET canonical_base_url='https://changed.test/v1' WHERE channel_id=? AND ord=0`, channel)
+	presetExec(t, e, `UPDATE mainstream_channels SET enabled=1,revision=revision+1 WHERE id=?`, channel)
 	if _, err := run('e'); !errors.Is(err, ErrConflict) {
 		t.Fatal("stale channel", err)
 	}
@@ -51,7 +52,8 @@ func TestPresetBindingLifecycleSnapshotsAndMissingTargets(t *testing.T) {
 			}
 		}
 	}
-	presetExec(t, e, `UPDATE mainstream_channels SET canonical_base_url='https://preset.routing.test/v1',revision=revision+1 WHERE id=?`, channel)
+	presetExec(t, e, `UPDATE mainstream_channel_entries SET canonical_base_url='https://preset.routing.test/v1' WHERE channel_id=? AND ord=0`, channel)
+	presetExec(t, e, `UPDATE mainstream_channels SET revision=revision+1 WHERE id=?`, channel)
 	input.ExpectedChannelRevision = "4"
 	presetExec(t, e, `UPDATE donation_keys SET expires_at=? WHERE id=?`, routingTestNow, keys[2])
 	presetExec(t, e, `DELETE FROM charity_models WHERE id=?`, models[5])

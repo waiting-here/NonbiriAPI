@@ -14,8 +14,12 @@ import (
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 )
 
-func (e *charityTestEnv) retryClaimInput(request string) claim.ClaimInput {
-	return claim.ClaimInput{RequestID: request, ActorUserID: e.callerID, AttemptSeq: 1, Purpose: claim.PurposeCharity, DonationKeyID: e.donationKey, Candidate: claim.Candidate{EndpointID: e.endpointID, EndpointKeyID: e.endpointKey, ConnectorType: contract.TypeOpenAICompatible, CanonicalBaseURL: "https://charity.example.test/v1", UpstreamModelID: "upstream-model"}}
+func (e *charityTestEnv) retryClaimInput(t *testing.T, request string) claim.ClaimInput {
+	t.Helper()
+	tx := beginTestTx(t, e.store.DB())
+	authorization := e.authorization(t, tx, request)
+	_ = tx.Rollback()
+	return claim.ClaimInput{RequestID: request, ActorUserID: e.callerID, AttemptSeq: 1, Purpose: claim.PurposeCharity, DonationKeyID: e.donationKey, Candidate: claim.Candidate{Authorization: authorization, EndpointID: e.endpointID, EndpointKeyID: e.endpointKey, ConnectorType: contract.TypeOpenAICompatible, CanonicalBaseURL: "https://charity.example.test/v1", UpstreamModelID: "upstream-model"}}
 }
 
 func TestRetryAfterBlocksNewAndPendingDispatchAcrossModels(t *testing.T) {
@@ -25,7 +29,7 @@ func TestRetryAfterBlocksNewAndPendingDispatchAcrossModels(t *testing.T) {
 	first := e.billingRequest(t, rail, e.requestModel, 2400, 1)
 	active := e.billingDispatch(t, rail, first.ID, 1)
 	second := e.billingRequest(t, rail, e.tokenModel, 5, 1)
-	pending, err := rail.Claim(ctx, e.retryClaimInput(second.ID))
+	pending, err := rail.Claim(ctx, e.retryClaimInput(t, second.ID))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +38,7 @@ func TestRetryAfterBlocksNewAndPendingDispatchAcrossModels(t *testing.T) {
 	if err := rail.ObserveResponseHeaders(ctx, active, observation); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := rail.Claim(ctx, e.retryClaimInput(third.ID)); !errors.Is(err, claim.ErrKeyRateLimited) {
+	if _, err := rail.Claim(ctx, e.retryClaimInput(t, third.ID)); !errors.Is(err, claim.ErrKeyRateLimited) {
 		t.Fatalf("new claim=%v", err)
 	}
 	if _, err := rail.TakeForDispatch(ctx, pending); !errors.Is(err, claim.ErrKeyRateLimited) {
@@ -45,14 +49,11 @@ func TestRetryAfterBlocksNewAndPendingDispatchAcrossModels(t *testing.T) {
 		t.Fatal(state, err)
 	}
 	// The same physical key remains usable by its owner.
-	personal, err := rail.Accept(ctx, claim.AcceptInput{UserID: e.donorID, Route: claim.RouteOpenAIChat, ModelSnapshot: "private", AttemptLimit: 1})
+	personal, err := rail.Accept(ctx, claim.AcceptInput{UserID: e.donorID, Route: claim.RouteOpenAIChat, ModelSnapshot: "private/model", AttemptLimit: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	ownInput := e.retryClaimInput(personal.ID)
-	ownInput.ActorUserID = e.donorID
-	ownInput.Purpose = claim.PurposeSelf
-	ownInput.DonationKeyID = 0
+	ownInput := e.selfClaimInput(t, personal.ID)
 	own, err := rail.Claim(ctx, ownInput)
 	if err != nil {
 		t.Fatal(err)
@@ -94,11 +95,12 @@ func TestRetryAfterPreservesFailureOriginAndBillingThroughRecovery(t *testing.T)
 				e := newCharityTestEnv(t)
 				rail := e.billingRail(t)
 				ctx := context.Background()
-				if _, err := e.store.DB().Exec("UPDATE donation_keys SET failure_streak=?,failure_disable_threshold=3 WHERE id=?", u128Blob(t, 2), e.donationKey); err != nil {
+				if _, err := e.store.DB().Exec("UPDATE donation_keys SET failure_disable_threshold=3 WHERE id=?", e.donationKey); err != nil {
 					t.Fatal(err)
 				}
 				request := e.billingRequest(t, rail, e.requestModel, 2400, 1)
 				handle := e.billingDispatch(t, rail, request.ID, 1)
+				e.seedServiceStreak(t, handle, 2)
 				// An expired hint still proves this response must not count as a new failure.
 				if err := rail.ObserveResponseHeaders(ctx, handle, contract.ResponseObservation{HasRetryAfter: true, Status: status, ObservedAt: charityTestNow + 30, RateLimitedUntil: charityTestNow + 30}); err != nil {
 					t.Fatal(err)
@@ -121,7 +123,7 @@ func TestRetryAfterPreservesFailureOriginAndBillingThroughRecovery(t *testing.T)
 				}
 				var streak []byte
 				var disabled bool
-				if err := e.store.DB().QueryRow("SELECT failure_streak,failure_disabled FROM donation_keys WHERE id=?", e.donationKey).Scan(&streak, &disabled); err != nil {
+				if err := e.store.DB().QueryRow("SELECT failure_streak,failure_disabled FROM donation_service_health WHERE id=?", e.serviceHealthID(t, handle)).Scan(&streak, &disabled); err != nil {
 					t.Fatal(err)
 				}
 				want := int64(2)
@@ -150,7 +152,7 @@ func TestRetryAfterPreservesFailureOriginAndBillingThroughRecovery(t *testing.T)
 				if err := e.store.DB().QueryRow("SELECT count(*) FROM dispatch_response_starts WHERE claim_id=?", handle.ClaimID()).Scan(&starts); err != nil {
 					t.Fatal(err)
 				}
-				if err := e.store.DB().QueryRow("SELECT count(*) FROM donation_key_cooldowns").Scan(&cooldowns); err != nil {
+				if err := e.store.DB().QueryRow("SELECT count(*) FROM donation_service_health WHERE retry_after_until IS NOT NULL").Scan(&cooldowns); err != nil {
 					t.Fatal(err)
 				}
 				if starts != 0 || cooldowns != 0 {
@@ -191,7 +193,7 @@ func TestRetryAfterConcurrentObservationsOnlyExtendAndReplayDoesNotRestart(t *te
 	}
 	var until int64
 	var starts int
-	if err := e.store.DB().QueryRow("SELECT rate_limited_until FROM donation_key_cooldowns WHERE donation_key_id=?", e.donationKey).Scan(&until); err != nil || until != charityTestNow+180 {
+	if err := e.store.DB().QueryRow("SELECT retry_after_until FROM donation_service_health WHERE id=?", e.serviceHealthID(t, handles[0])).Scan(&until); err != nil || until != charityTestNow+180 {
 		t.Fatal(until, err)
 	}
 	if err := e.store.DB().QueryRow("SELECT count(*) FROM dispatch_response_starts").Scan(&starts); err != nil || starts != 0 {
@@ -203,11 +205,12 @@ func TestRetryAfterDoesNotExemptAnUnobservedFailure(t *testing.T) {
 	e := newCharityTestEnv(t)
 	rail := e.billingRail(t)
 	ctx := context.Background()
-	if _, err := e.store.DB().Exec("UPDATE donation_keys SET failure_streak=?,failure_disable_threshold=3 WHERE id=?", u128Blob(t, 2), e.donationKey); err != nil {
+	if _, err := e.store.DB().Exec("UPDATE donation_keys SET failure_disable_threshold=3 WHERE id=?", e.donationKey); err != nil {
 		t.Fatal(err)
 	}
 	request := e.billingRequest(t, rail, e.requestModel, 2400, 1)
 	handle := e.billingDispatch(t, rail, request.ID, 1)
+	e.seedServiceStreak(t, handle, 2)
 	outcome := claim.AttemptOutcome{Kind: claim.ResultResponse, UpstreamStatus: 503, StreakDisposition: contract.StreakNeutral, FailureOrigin: contract.OriginUpstreamResponse}
 	if _, err := rail.CompleteAttempt(ctx, handle, outcome); !errors.Is(err, claim.ErrInvalidInput) {
 		t.Fatalf("unproven neutral=%v", err)
@@ -218,7 +221,7 @@ func TestRetryAfterDoesNotExemptAnUnobservedFailure(t *testing.T) {
 	}
 	var streak []byte
 	var disabled bool
-	if err := e.store.DB().QueryRow("SELECT failure_streak,failure_disabled FROM donation_keys WHERE id=?", e.donationKey).Scan(&streak, &disabled); err != nil {
+	if err := e.store.DB().QueryRow("SELECT failure_streak,failure_disabled FROM donation_service_health WHERE id=?", e.serviceHealthID(t, handle)).Scan(&streak, &disabled); err != nil {
 		t.Fatal(err)
 	}
 	assertU128(t, streak, 3, "ordinary failure")
@@ -250,7 +253,7 @@ func TestRetryAfterDeletedKeyCannotBeResurrectedAndFactsCascade(t *testing.T) {
 	}
 	var cooldowns, receipts int
 	var until int64
-	if err := e.store.DB().QueryRow("SELECT rate_limited_until FROM donation_key_cooldowns WHERE donation_key_id=?", e.donationKey).Scan(&until); err != nil || until != charityTestNow+90 {
+	if err := e.store.DB().QueryRow("SELECT retry_after_until FROM donation_service_health WHERE id=?", e.serviceHealthID(t, a)).Scan(&until); err != nil || until != charityTestNow+90 {
 		t.Fatal("ended key cooldown extended", until, err)
 	}
 	for _, handle := range []claim.Handle{a, b} {
@@ -264,7 +267,7 @@ func TestRetryAfterDeletedKeyCannotBeResurrectedAndFactsCascade(t *testing.T) {
 	if _, err := e.store.DB().Exec("DELETE FROM donation_keys WHERE id=?", e.donationKey); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.store.DB().QueryRow("SELECT count(*) FROM donation_key_cooldowns").Scan(&cooldowns); err != nil || cooldowns != 0 {
+	if err := e.store.DB().QueryRow("SELECT count(*) FROM donation_service_health WHERE retry_after_until IS NOT NULL").Scan(&cooldowns); err != nil || cooldowns != 0 {
 		t.Fatal(cooldowns, err)
 	}
 	if err := e.store.DB().QueryRow("SELECT count(*) FROM dispatch_retry_after_observations").Scan(&receipts); err != nil || receipts != 0 {
@@ -276,11 +279,9 @@ func TestRetryAfterStreamAcceptanceRetainsBillingAndFailureReset(t *testing.T) {
 	e := newCharityTestEnv(t)
 	rail := e.billingRail(t)
 	ctx := context.Background()
-	if _, err := e.store.DB().Exec("UPDATE donation_keys SET failure_streak=? WHERE id=?", u128Blob(t, 2), e.donationKey); err != nil {
-		t.Fatal(err)
-	}
 	request := e.billingRequest(t, rail, e.requestModel, 2400, 1)
 	handle := e.billingDispatch(t, rail, request.ID, 1)
+	e.seedServiceStreak(t, handle, 2)
 	for range 2 {
 		if err := rail.ObserveResponseHeaders(ctx, handle, contract.ResponseObservation{HasRetryAfter: true, Status: 200, Stream: true, ObservedAt: charityTestNow + 30, RateLimitedUntil: charityTestNow + 90}); err != nil {
 			t.Fatal(err)
@@ -293,14 +294,14 @@ func TestRetryAfterStreamAcceptanceRetainsBillingAndFailureReset(t *testing.T) {
 	var streak []byte
 	var calls int
 	var until int64
-	if err := e.store.DB().QueryRow("SELECT failure_streak FROM donation_keys WHERE id=?", e.donationKey).Scan(&streak); err != nil {
+	if err := e.store.DB().QueryRow("SELECT failure_streak FROM donation_service_health WHERE id=?", e.serviceHealthID(t, handle)).Scan(&streak); err != nil {
 		t.Fatal(err)
 	}
 	assertU128(t, streak, 0, "accepted stream after restart")
 	if err := e.store.DB().QueryRow("SELECT calls_actual FROM donation_usage_reservations WHERE claim_id=?", handle.ClaimID()).Scan(&calls); err != nil || calls != 1 {
 		t.Fatal(calls, err)
 	}
-	if err := e.store.DB().QueryRow("SELECT rate_limited_until FROM donation_key_cooldowns WHERE donation_key_id=?", e.donationKey).Scan(&until); err != nil || until != charityTestNow+90 {
+	if err := e.store.DB().QueryRow("SELECT retry_after_until FROM donation_service_health WHERE id=?", e.serviceHealthID(t, handle)).Scan(&until); err != nil || until != charityTestNow+90 {
 		t.Fatal(until, err)
 	}
 }
@@ -316,7 +317,7 @@ func TestRetryAfterFinalAdmissionRecoversAtExpiry(t *testing.T) {
 	if err := rail.ObserveResponseHeaders(ctx, active, contract.ResponseObservation{HasRetryAfter: true, Status: 503, ObservedAt: charityTestNow + 30, RateLimitedUntil: charityTestNow + 90}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := rail.Claim(ctx, e.retryClaimInput(second.ID)); !errors.Is(err, claim.ErrKeyRateLimited) {
+	if _, err := rail.Claim(ctx, e.retryClaimInput(t, second.ID)); !errors.Is(err, claim.ErrKeyRateLimited) {
 		t.Fatal(err)
 	}
 	vault, err := secret.New(bytes.Repeat([]byte{charityTestMasterKeyByte}, secret.MasterKeyBytes))
@@ -328,7 +329,7 @@ func TestRetryAfterFinalAdmissionRecoversAtExpiry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handle, err := after.Claim(ctx, e.retryClaimInput(second.ID))
+	handle, err := after.Claim(ctx, e.retryClaimInput(t, second.ID))
 	if err != nil {
 		t.Fatal("expired key not admitted", err)
 	}
@@ -340,7 +341,7 @@ func TestRetryAfterFinalAdmissionRecoversAtExpiry(t *testing.T) {
 	if _, err := e.store.DB().Exec("UPDATE donation_keys SET enabled=0 WHERE id=?", e.donationKey); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := after.Claim(ctx, e.retryClaimInput(third.ID)); !errors.Is(err, claim.ErrNotFound) {
+	if _, err := after.Claim(ctx, e.retryClaimInput(t, third.ID)); !errors.Is(err, claim.ErrNotFound) {
 		t.Fatal("expiry revived disabled key", err)
 	}
 }

@@ -19,11 +19,13 @@ type AutomationDiscoverySnapshot struct {
 type automationDiscoverySnapshotKey struct{}
 
 func (r *Repository) AutomationDiscoverySnapshotInTransaction(ctx context.Context, tx *sql.Tx, userID, endpointID, keyID int64) (AutomationDiscoverySnapshot, error) {
-	if _, err := getEndpointKeyTx(ctx, tx, userID, endpointID, keyID); err != nil {
+	if item, err := getEndpointKeyTx(ctx, tx, userID, endpointID, keyID); err != nil {
 		return AutomationDiscoverySnapshot{}, err
+	} else if !item.CredentialAvailable {
+		return AutomationDiscoverySnapshot{}, ErrConflict
 	}
 	var out AutomationDiscoverySnapshot
-	err := tx.QueryRowContext(ctx, `SELECT e.id,k.id,k.secret_ref_id,e.base_url,e.connector_type FROM endpoint_keys k JOIN endpoints e ON e.id=k.endpoint_id WHERE e.user_id=? AND e.id=? AND k.id=?`, userID, endpointID, keyID).Scan(&out.EndpointID, &out.KeyID, &out.SecretRefID, &out.BaseURL, &out.ConnectorType)
+	err := tx.QueryRowContext(ctx, `SELECT e.id,k.id,k.secret_ref_id,e.base_url,e.connector_type FROM endpoint_key_current_credentials k JOIN endpoints e ON e.id=k.endpoint_id WHERE e.user_id=? AND e.id=? AND k.id=?`, userID, endpointID, keyID).Scan(&out.EndpointID, &out.KeyID, &out.SecretRefID, &out.BaseURL, &out.ConnectorType)
 	return out, err
 }
 func (r *Repository) VerifyAutomationDiscoverySnapshotInTransaction(ctx context.Context, tx *sql.Tx, userID int64, snapshot AutomationDiscoverySnapshot) error {

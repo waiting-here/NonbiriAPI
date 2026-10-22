@@ -19,6 +19,8 @@ export default defineConfig({
     'smart-backoff.spec.ts',
     'recurring-discounts.spec.ts',
     'charity-binding-batch.spec.ts',
+    'connection-experience.spec.ts',
+    'closeout-controls.spec.ts',
   ],
   outputDir: 'test-results/management/browser',
 });

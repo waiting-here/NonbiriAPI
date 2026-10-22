@@ -70,7 +70,7 @@ func (e *charityTestEnv) billingRequest(t *testing.T, rail *claim.Service, model
 
 func (e *charityTestEnv) billingDispatch(t *testing.T, rail *claim.Service, requestID string, seq int) claim.Handle {
 	t.Helper()
-	handle, err := rail.Claim(context.Background(), claim.ClaimInput{RequestID: requestID, ActorUserID: e.callerID, AttemptSeq: seq, Purpose: claim.PurposeCharity, DonationKeyID: e.donationKey, Candidate: claim.Candidate{EndpointID: e.endpointID, EndpointKeyID: e.endpointKey, ConnectorType: connectorcontract.TypeOpenAICompatible, CanonicalBaseURL: "https://charity.example.test/v1", UpstreamModelID: "upstream-model"}})
+	handle, err := rail.Claim(context.Background(), e.quotaClaimInput(t, requestID, seq))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,6 +217,7 @@ func TestAcceptedEmptyStreamSettlesWalletAndResetsFailuresAfterRecovery(t *testi
 			}
 			request := e.billingRequest(t, rail, e.tokenModel, 5, 1)
 			handle := e.billingDispatch(t, rail, request.ID, 1)
+			e.seedServiceStreak(t, handle, 2)
 			if err := rail.MarkResponseStarted(ctx, handle, 200); err != nil {
 				t.Fatal(err)
 			}
@@ -240,7 +241,11 @@ func TestAcceptedEmptyStreamSettlesWalletAndResetsFailuresAfterRecovery(t *testi
 			if err := e.store.DB().QueryRow("SELECT failure_streak,price_reserved_mag,calls_used,tokens_used FROM donation_keys WHERE id=?", e.donationKey).Scan(&streak, &held, &calls, &tokens); err != nil {
 				t.Fatal(err)
 			}
-			assertU128(t, streak, 0, "accepted stream resets failures")
+			assertU128(t, streak, 2, "accepted stream preserves unknown legacy failures")
+			if err := e.store.DB().QueryRow("SELECT failure_streak FROM donation_service_health WHERE id=?", e.serviceHealthID(t, handle)).Scan(&streak); err != nil {
+				t.Fatal(err)
+			}
+			assertU128(t, streak, 0, "accepted stream resets the exact service failures")
 			assertU128(t, held, 0, "reservation released")
 			assertU128(t, calls, 1, "one accepted stream")
 			assertU128(t, tokens, 5, "unknown usage consumes reserved tokens")

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 
+	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -109,7 +110,8 @@ type ReviewState struct {
 
 type DonationKey struct {
 	smartbackoff.Projection
-	Review ReviewState `json:"review"`
+	EndpointID *string     `json:"endpoint_id"`
+	Review     ReviewState `json:"review"`
 	TokenBreakdown
 	FailureDisableThreshold string         `json:"failure_disable_threshold"`
 	ID                      string         `json:"id"`
@@ -133,7 +135,9 @@ type DonationKey struct {
 
 type AdminDonationKey struct {
 	smartbackoff.Projection
-	Review ReviewState `json:"review"`
+	OwnerEndpointID *string     `json:"-"`
+	CanManage       bool        `json:"can_manage"`
+	Review          ReviewState `json:"review"`
 	TokenBreakdown
 	FailureDisableThreshold string          `json:"failure_disable_threshold"`
 	ID                      string          `json:"id"`
@@ -168,6 +172,7 @@ type ReviewResult struct {
 }
 
 type Donation struct {
+	UseSummary          UseSummary    `json:"use_summary"`
 	OwnerHiddenAt       *int64        `json:"owner_hidden_at"`
 	DiscordPublicThanks *bool         `json:"discord_public_thanks"`
 	ID                  string        `json:"id"`
@@ -216,6 +221,7 @@ type DonationBadge struct {
 // Management roles expose identical donation facts after role authorization.
 // The ordinary owner's projection remains separate.
 type AdminDonation struct {
+	UseSummary                   UseSummary         `json:"use_summary"`
 	FirstApprovalOrigin          string             `json:"first_approval_origin"`
 	CanForceReject               bool               `json:"can_force_reject"`
 	ForceRejectUnavailableReason *string            `json:"force_reject_unavailable_reason"`
@@ -234,6 +240,7 @@ type AdminDonation struct {
 }
 
 type StewardDonation struct {
+	UseSummary                   UseSummary            `json:"use_summary"`
 	FirstApprovalOrigin          string                `json:"first_approval_origin"`
 	CanForceReject               bool                  `json:"can_force_reject"`
 	ForceRejectUnavailableReason *string               `json:"force_reject_unavailable_reason"`
@@ -252,9 +259,12 @@ type StewardDonation struct {
 }
 
 type CreateKeyInput struct {
-	FailureDisableThreshold *string
-	EndpointKeyID           int64
-	ExpiresAt               *int64
+	NativeServices                                 []contract.NativeService
+	CredentialID, CredentialVersion, GrantRevision int64
+	DiscoverySourceID, DiscoverySourceRevision     *int64
+	FailureDisableThreshold                        *string
+	EndpointKeyID                                  int64
+	ExpiresAt                                      *int64
 }
 
 type CreateInput struct {

@@ -1,6 +1,16 @@
+import {
+  normalizeDiscoveryPreset,
+  normalizeNativeServiceOption,
+  normalizeMainstreamEntry,
+  normalizeModelMappings,
+  type DiscoveryPreset,
+  type MainstreamEntry,
+  type ModelMapping,
+} from '@shared/connections';
 import { ApiError, apiFetch } from '@shared/query/http';
 import { decoded, idempotentOptions, queryPath } from '@shared/operations/api';
 import {
+  array,
   boolean,
   cursor,
   decimal,
@@ -40,6 +50,9 @@ export const MAINSTREAM_CONNECTOR_TYPES = [
 export type MainstreamConnectorType = (typeof MAINSTREAM_CONNECTOR_TYPES)[number];
 
 export interface AdminMainstreamChannel {
+  entries?: MainstreamEntry[];
+  discovery_source?: DiscoveryPreset | null;
+  model_mappings?: ModelMapping[];
   id: string;
   name: string;
   category: MainstreamChannelCategory;
@@ -54,6 +67,9 @@ export interface AdminMainstreamChannel {
 }
 
 export interface AdminMainstreamChannelCreate {
+  entries?: MainstreamEntry[];
+  discovery_source?: DiscoveryPreset | null;
+  model_mappings?: ModelMapping[];
   name: string;
   category: MainstreamChannelCategory;
   connector_type: MainstreamConnectorType;
@@ -62,6 +78,9 @@ export interface AdminMainstreamChannelCreate {
 }
 
 export interface AdminMainstreamChannelPatch {
+  entries?: MainstreamEntry[];
+  discovery_source?: DiscoveryPreset | null;
+  model_mappings?: ModelMapping[];
   name?: string;
   category?: MainstreamChannelCategory;
   connector_type?: MainstreamConnectorType;
@@ -106,7 +125,12 @@ function normalizedChannelURL(value: unknown): string {
 }
 
 export function normalizeAdminMainstreamChannel(value: unknown): AdminMainstreamChannel {
-  const root = record(value, CHANNEL_FIELDS, 'administrator mainstream channel');
+  const root = record(
+    value,
+    [...CHANNEL_FIELDS, 'entries', 'discovery_source', 'model_mappings'],
+    'administrator mainstream channel',
+    CHANNEL_FIELDS,
+  );
   const state = oneOf(root.state, MAINSTREAM_CHANNEL_STATES, 'mainstream channel state');
   const enabled = boolean(root.enabled, 'mainstream channel enabled state');
   const retiredAt = nullableUnixSecond(root.retired_at, 'mainstream channel retirement time');
@@ -117,6 +141,15 @@ export function normalizeAdminMainstreamChannel(value: unknown): AdminMainstream
   }
   return {
     id: opaqueID(root.id, 'mch_', 'mainstream channel id'),
+    ...(root.entries === undefined
+      ? {}
+      : { entries: array(root.entries, 'mainstream entries').map(normalizeMainstreamEntry) }),
+    ...(root.discovery_source === undefined
+      ? {}
+      : { discovery_source: normalizeDiscoveryPreset(root.discovery_source) }),
+    ...(root.model_mappings === undefined
+      ? {}
+      : { model_mappings: normalizeModelMappings(root.model_mappings) }),
     name: normalizedChannelName(root.name),
     category: oneOf(root.category, MAINSTREAM_CHANNEL_CATEGORIES, 'mainstream channel category'),
     connector_type: oneOf(
@@ -243,16 +276,25 @@ export function getAdminMainstreamChannel(
   );
 }
 
-function createBody(input: AdminMainstreamChannelCreate): AdminMainstreamChannelCreate {
+type MainstreamCreateBody = Omit<AdminMainstreamChannelCreate, 'connector_type' | 'base_url'> &
+  Partial<Pick<AdminMainstreamChannelCreate, 'connector_type' | 'base_url'>>;
+function createBody(input: AdminMainstreamChannelCreate): MainstreamCreateBody {
   if (input === null || typeof input !== 'object')
     return requestError('Invalid mainstream channel.');
-  return {
+  const common = {
+    ...(input.discovery_source === undefined ? {} : { discovery_source: input.discovery_source }),
+    ...(input.model_mappings === undefined ? {} : { model_mappings: input.model_mappings }),
     name: requestName(input.name),
     category: requestCategory(input.category),
-    connector_type: requestConnector(input.connector_type),
-    base_url: requestBaseURL(input.base_url),
     enabled: requestEnabled(input.enabled),
   };
+  return input.entries === undefined
+    ? {
+        ...common,
+        connector_type: requestConnector(input.connector_type),
+        base_url: requestBaseURL(input.base_url),
+      }
+    : { ...common, entries: input.entries };
 }
 
 export function createAdminMainstreamChannel(
@@ -273,6 +315,12 @@ function patchBody(input: AdminMainstreamChannelPatch): AdminMainstreamChannelPa
     expected_revision: requestRevision(input.expected_revision),
   };
   let changed = false;
+  for (const field of ['entries', 'discovery_source', 'model_mappings'] as const) {
+    if (Object.hasOwn(input, field)) {
+      Object.assign(body, { [field]: input[field] });
+      changed = true;
+    }
+  }
   if (Object.hasOwn(input, 'name')) {
     body.name = requestName(input.name);
     changed = true;
@@ -281,11 +329,11 @@ function patchBody(input: AdminMainstreamChannelPatch): AdminMainstreamChannelPa
     body.category = requestCategory(input.category);
     changed = true;
   }
-  if (Object.hasOwn(input, 'connector_type')) {
+  if (!Object.hasOwn(input, 'entries') && Object.hasOwn(input, 'connector_type')) {
     body.connector_type = requestConnector(input.connector_type);
     changed = true;
   }
-  if (Object.hasOwn(input, 'base_url')) {
+  if (!Object.hasOwn(input, 'entries') && Object.hasOwn(input, 'base_url')) {
     body.base_url = requestBaseURL(input.base_url);
     changed = true;
   }
@@ -325,5 +373,18 @@ export async function retireAdminMainstreamChannel(
         confirmation: 'retire',
       },
     }),
+  );
+}
+
+export function getAdminNativeServiceOptions(signal?: AbortSignal) {
+  return decoded(
+    '/admin/api/endpoint-create-options',
+    (value) => {
+      const row = record(value, ['native_service_options'], 'native service options');
+      if (!Array.isArray(row.native_service_options))
+        return invalidResponse('native service options');
+      return row.native_service_options.map(normalizeNativeServiceOption);
+    },
+    { signal },
   );
 }

@@ -2,6 +2,7 @@ package charity
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -14,16 +15,30 @@ import (
 )
 
 func TestCallerParameterFaultPreservesStreakAndFailureAccounting(t *testing.T) {
+	for _, tc := range []struct{ kind, code, param string }{
+		{"invalid_request_error", "invalid_value", "temperature"},
+		{"BadRequest", "InvalidParameter", "reasoning_effort"},
+	} {
+		t.Run(tc.code, func(t *testing.T) {
+			testCallerParameterFaultAccounting(t, tc.kind, tc.code, tc.param)
+		})
+	}
+}
+
+func testCallerParameterFaultAccounting(t *testing.T, kind, code, param string) {
+	t.Helper()
 	e := newCharityTestEnv(t)
 	rail := e.billingRail(t)
 	ctx := t.Context()
-	if _, err := e.store.DB().Exec("UPDATE donation_keys SET failure_streak=?,failure_disable_threshold=3 WHERE id=?", u128Blob(t, 2), e.donationKey); err != nil {
+	if _, err := e.store.DB().Exec("UPDATE donation_keys SET failure_disable_threshold=3 WHERE id=?", e.donationKey); err != nil {
 		t.Fatal(err)
 	}
 	request := e.billingRequest(t, rail, e.requestModel, 2400, 1)
 	handle := e.billingDispatch(t, rail, request.ID, 1)
-	errorContext := upstreamerror.Context{CharityCall: true, ContainsSecret: func([]byte) bool { return false }, UnchangedCallerParameter: func(name string) bool { return name == "temperature" }}
-	detail := errorContext.ReadResponse(ctx, &http.Response{StatusCode: 400, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"error":{"type":"invalid_request_error","code":"invalid_value","param":"temperature","message":"Invalid value."}}`))})
+	e.seedServiceStreak(t, handle, 2)
+	errorContext := upstreamerror.Context{CharityCall: true, ContainsSecret: func([]byte) bool { return false }, UnchangedCallerParameter: func(name string) bool { return name == param }}
+	payload := fmt.Sprintf(`{"error":{"type":%q,"code":%q,"param":%q,"message":"Invalid value."}}`, kind, code, param)
+	detail := errorContext.ReadResponse(ctx, &http.Response{StatusCode: 400, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(payload))})
 	outcome := claim.AttemptOutcome{Kind: claim.ResultResponse, UpstreamStatus: 400, UpstreamCode: detail.Code(), Diagnostic: "upstream returned HTTP 400", FailureOrigin: contract.OriginUpstreamResponse, StreakDisposition: contract.StreakNeutral, CallerFault: detail.CallerFault()}
 	for _, tc := range []struct {
 		name   string
@@ -46,20 +61,20 @@ func TestCallerParameterFaultPreservesStreakAndFailureAccounting(t *testing.T) {
 	}
 	for range 2 {
 		attempt, err := rail.CompleteAttempt(ctx, handle, outcome)
-		if err != nil || attempt.StreakDisposition != contract.StreakNeutral || attempt.UpstreamStatus != 400 || attempt.UpstreamCode != "invalid_value" || attempt.Diagnostic != outcome.Diagnostic {
+		if err != nil || attempt.StreakDisposition != contract.StreakNeutral || attempt.UpstreamStatus != 400 || attempt.UpstreamCode != code || attempt.Diagnostic != outcome.Diagnostic {
 			t.Fatal(attempt, err)
 		}
 	}
 	var receipts, retryHints, classifiedBackoffs int
 	if err := e.store.DB().QueryRow(`SELECT
-(SELECT COUNT(*) FROM dispatch_caller_parameter_errors WHERE claim_id=? AND http_status=400 AND error_code='invalid_value'),
+(SELECT COUNT(*) FROM dispatch_caller_parameter_errors WHERE claim_id=? AND http_status=400 AND error_code=?),
 (SELECT COUNT(*) FROM dispatch_retry_after_observations WHERE claim_id=?),
-(SELECT COUNT(*) FROM dispatch_smart_backoff_facts WHERE claim_id=? AND period IS NOT NULL)`, handle.ClaimID(), handle.ClaimID(), handle.ClaimID()).Scan(&receipts, &retryHints, &classifiedBackoffs); err != nil || receipts != 1 || retryHints != 0 || classifiedBackoffs != 0 {
+(SELECT COUNT(*) FROM dispatch_smart_backoff_facts WHERE claim_id=? AND period IS NOT NULL)`, handle.ClaimID(), code, handle.ClaimID(), handle.ClaimID()).Scan(&receipts, &retryHints, &classifiedBackoffs); err != nil || receipts != 1 || retryHints != 0 || classifiedBackoffs != 0 {
 		t.Fatal("caller proof must not invent retry observations", receipts, retryHints, classifiedBackoffs, err)
 	}
 	var streak, calls []byte
 	var disabled bool
-	if err := e.store.DB().QueryRow("SELECT failure_streak,failure_disabled,calls_used FROM donation_keys WHERE id=?", e.donationKey).Scan(&streak, &disabled, &calls); err != nil {
+	if err := e.store.DB().QueryRow("SELECT h.failure_streak,h.failure_disabled,dk.calls_used FROM donation_service_health h JOIN donation_uses u ON u.id=h.use_id JOIN donation_keys dk ON dk.id=u.donation_key_id WHERE h.id=?", e.serviceHealthID(t, handle)).Scan(&streak, &disabled, &calls); err != nil {
 		t.Fatal(err)
 	}
 	assertU128(t, streak, 2, "caller fault preserves previous failures")
@@ -83,7 +98,7 @@ func TestCallerParameterFaultPreservesStreakAndFailureAccounting(t *testing.T) {
 	if _, err := rail.CompleteAttempt(ctx, nextHandle, unknown); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.store.DB().QueryRow("SELECT failure_streak,failure_disabled FROM donation_keys WHERE id=?", e.donationKey).Scan(&streak, &disabled); err != nil {
+	if err := e.store.DB().QueryRow("SELECT failure_streak,failure_disabled FROM donation_service_health WHERE id=?", e.serviceHealthID(t, handle)).Scan(&streak, &disabled); err != nil {
 		t.Fatal(err)
 	}
 	assertU128(t, streak, 3, "unknown failure remains counted")
@@ -108,6 +123,7 @@ func TestCallerParameterReceiptConstraints(t *testing.T) {
 	}{
 		{200, "invalid_value"}, {401, "invalid_value"}, {429, "invalid_value"},
 		{500, "invalid_value"}, {400, "invalid_request_error"}, {422, "insufficient_quota"},
+		{422, "InvalidParameter"}, {400, "InvalidParameter.Unknown"},
 	} {
 		if _, err := tx.Exec(`INSERT INTO dispatch_caller_parameter_errors VALUES(?,?,?)`, handle.ClaimID(), tc.status, tc.code); err == nil {
 			t.Fatal("invalid caller receipt accepted", tc)
@@ -134,6 +150,20 @@ func TestCallerParameterReceiptConstraints(t *testing.T) {
 	// The claim update must also see the actual attempt's matching status/code.
 	if _, err := tx.Exec(`UPDATE dispatch_claims SET state='committed',secret_ref_id=NULL,terminal_at=dispatched_at,donor_reward_state='zero',donor_reward_actual_milli=0,streak_disposition='neutral',failure_origin='upstream_response' WHERE id=?`, handle.ClaimID()); err == nil || !strings.Contains(err.Error(), "invalid terminal outcome") {
 		t.Fatal("claim caller receipt projection guard", err)
+	}
+	if _, err := tx.Exec(`DELETE FROM dispatch_claims WHERE id=?`, handle.ClaimID()); err == nil || !strings.Contains(err.Error(), "legacy cursor has not passed service health origin") {
+		t.Fatal("claim removed its service marker before folding", err)
+	}
+	var generationBlob []byte
+	if err := tx.QueryRow(`SELECT streak_generation FROM donation_usage_reservations WHERE claim_id=?`, handle.ClaimID()).Scan(&generationBlob); err != nil {
+		t.Fatal(err)
+	}
+	generation, err := decodeU128(generationBlob)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := foldStreak(t.Context(), tx, e.donationKey, generation, charityTestNow); err != nil {
+		t.Fatal(err)
 	}
 	if _, err := tx.Exec(`DELETE FROM dispatch_claims WHERE id=?`, handle.ClaimID()); err != nil {
 		t.Fatal(err)
@@ -179,12 +209,11 @@ func TestCallerParameterEvidenceCannotExemptPersonalAttempt(t *testing.T) {
 	e := newCharityTestEnv(t)
 	rail := e.billingRail(t)
 	ctx := t.Context()
-	request, err := rail.Accept(ctx, claim.AcceptInput{UserID: e.donorID, Route: claim.RouteOpenAIChat, ModelSnapshot: "private", AttemptLimit: 1})
+	request, err := rail.Accept(ctx, claim.AcceptInput{UserID: e.donorID, Route: claim.RouteOpenAIChat, ModelSnapshot: "private/model", AttemptLimit: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := e.retryClaimInput(request.ID)
-	input.ActorUserID, input.Purpose, input.DonationKeyID = e.donorID, claim.PurposeSelf, 0
+	input := e.selfClaimInput(t, request.ID)
 	handle, err := rail.Claim(ctx, input)
 	if err != nil {
 		t.Fatal(err)

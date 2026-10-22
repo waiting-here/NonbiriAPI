@@ -14,7 +14,7 @@ func TestTerminalOutcomePersistsAtomicallyAndRejectsConflictingReplay(t *testing
 	owner := f.seedUser("outcome-owner", false)
 	key := f.seedKey(owner, "outcome")
 	request := f.acceptSelf(owner, 1)
-	handle, err := f.service.Claim(context.Background(), ClaimInput{RequestID: request.ID, ActorUserID: owner, AttemptSeq: 1, Purpose: PurposeSelf, Candidate: key.candidate})
+	handle, err := f.service.Claim(context.Background(), ClaimInput{RequestID: request.ID, ActorUserID: owner, AttemptSeq: 1, Purpose: PurposeSelf, PersonalModelID: key.modelID, Candidate: key.candidate})
 	if err != nil {
 		t.Fatal(err)
 	}

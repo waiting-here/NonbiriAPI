@@ -77,12 +77,7 @@ type resetKeyState struct {
 // and expiry still control its ability to serve requests.
 func readResetKeyTx(ctx context.Context, tx *sql.Tx, donationID, keyID, now int64) (resetKeyState, error) {
 	var state resetKeyState
-	err := tx.QueryRowContext(ctx, `SELECT dk.streak_generation,
- dk.ended_at IS NULL AND (dk.expires_at IS NULL OR dk.expires_at>?)
- AND EXISTS(SELECT 1 FROM donation_key_memberships m
- JOIN endpoint_keys k ON k.id=m.endpoint_key_id JOIN endpoints e ON e.id=k.endpoint_id
- WHERE m.donation_key_id=dk.id AND m.donation_id=dk.donation_id
- AND m.endpoint_key_id=dk.endpoint_key_id AND e.user_id=d.user_id)
+	err := tx.QueryRowContext(ctx, `SELECT dk.streak_generation,`+manageableKeySQL+`
  FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id
  WHERE dk.id=? AND dk.donation_id=?`, now, keyID, donationID).Scan(&state.generation, &state.eligible)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -108,7 +103,7 @@ func resetDonationKeyTx(ctx context.Context, tx *sql.Tx, item failureResetItem, 
 		return err
 	}
 	result, err = tx.ExecContext(ctx, `UPDATE donations SET revision=revision+1,updated_at=?
- WHERE id=? AND status='approved' AND revision=?`, now, item.donationID, item.expected)
+ WHERE id=? AND status IN ('pending','approved') AND terminal_at IS NULL AND revision=?`, now, item.donationID, item.expected)
 	if err != nil {
 		return fmt.Errorf("donation: advance reset revision: %w", err)
 	}
@@ -149,7 +144,7 @@ func (s *Service) resetFailureOwner(ctx context.Context, userID, donationID, key
 	if err != nil {
 		return empty, err
 	}
-	if status != "approved" || !state.eligible {
+	if !state.eligible {
 		return empty, ErrConflict
 	}
 	decision, err := beginMutation(ctx, tx, "user", userID, idempotency.ScopeDonation, mutation, now)
@@ -249,7 +244,7 @@ func (s *Service) resetFailureBatch(ctx context.Context, role reviewerRole, user
 			groupStatus = "not_found"
 		} else if err != nil {
 			return empty, err
-		} else if status != "approved" {
+		} else if status != "approved" && status != "pending" {
 			groupStatus = "ineligible"
 		} else if revision != items[indices[0]].expected {
 			groupStatus = "conflict"

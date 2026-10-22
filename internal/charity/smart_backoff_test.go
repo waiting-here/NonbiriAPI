@@ -3,6 +3,7 @@ package charity
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"sync"
@@ -57,7 +58,7 @@ func (e *backoffEnv) request(t *testing.T, model int64) claim.Request {
 func (e *backoffEnv) dispatch(t *testing.T) (claim.Handle, *claim.Dispatch) {
 	t.Helper()
 	r := e.request(t, e.tokenModel)
-	h, err := e.rail.Claim(t.Context(), e.retryClaimInput(r.ID))
+	h, err := e.rail.Claim(t.Context(), e.retryClaimInput(t, r.ID))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,11 +80,37 @@ func (e *backoffEnv) complete(t *testing.T, h claim.Handle, outcome claim.Attemp
 }
 func (e *backoffEnv) status(t *testing.T) *smartbackoff.Status {
 	t.Helper()
-	p, err := smartbackoff.Read(t.Context(), e.store.DB(), e.donationKey, e.clock.Load())
+	return e.serviceStatus(t, e.donationKey)
+}
+func (e *backoffEnv) serviceStatus(t *testing.T, memberID int64) *smartbackoff.Status {
+	t.Helper()
+	var period, source sql.NullString
+	var retry sql.NullInt64
+	var probing bool
+	err := e.store.DB().QueryRow(`SELECT h.backoff_period,h.backoff_source,h.backoff_retry_at,h.trial_claim_id IS NOT NULL FROM donation_service_health h JOIN donation_uses u ON u.id=h.use_id JOIN donation_use_revisions r ON r.id=u.current_approved_revision_id JOIN endpoint_key_grant_revisions g ON g.id=r.grant_revision_id WHERE u.donation_key_id=? AND h.credential_version_id=g.credential_version_id ORDER BY u.native_service_bit LIMIT 1`, memberID).Scan(&period, &source, &retry, &probing)
+	if errors.Is(err, sql.ErrNoRows) {
+		projection, legacyErr := smartbackoff.Read(t.Context(), e.store.DB(), memberID, e.clock.Load())
+		if legacyErr != nil {
+			t.Fatal(legacyErr)
+		}
+		return projection.Backoff
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
-	return p.Backoff
+	var until *int64
+	if retry.Valid {
+		until = &retry.Int64
+	}
+	current := smartbackoff.DecodeProjection(period.String, source.String, until, probing, e.clock.Load()).Backoff
+	if current != nil {
+		return current
+	}
+	projection, err := smartbackoff.Read(t.Context(), e.store.DB(), memberID, e.clock.Load())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return projection.Backoff
 }
 func (e *backoffEnv) wantWaiting(t *testing.T, delay int64) {
 	t.Helper()
@@ -140,7 +167,7 @@ func TestSmartBackoffOnlyOneTrialAcrossModelsAndBeforeDispatchCancel(t *testing.
 	e.wantWaiting(t, 21600)
 	e.ready(t)
 	// Cancelling a claim before dispatch must not consume the trial.
-	pending, err := e.rail.Claim(t.Context(), e.retryClaimInput(e.request(t, e.tokenModel).ID))
+	pending, err := e.rail.Claim(t.Context(), e.retryClaimInput(t, e.request(t, e.tokenModel).ID))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +180,7 @@ func TestSmartBackoffOnlyOneTrialAcrossModelsAndBeforeDispatchCancel(t *testing.
 	var handles []claim.Handle
 	for _, model := range []int64{e.tokenModel, e.requestModel} {
 		req := e.request(t, model)
-		handle, err := e.rail.Claim(t.Context(), e.retryClaimInput(req.ID))
+		handle, err := e.rail.Claim(t.Context(), e.retryClaimInput(t, req.ID))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -208,7 +235,7 @@ func TestSmartBackoffTrialFailuresKeepStageAndRecoveryReleasesLease(t *testing.T
 			}
 			e.wantWaiting(t, 900)
 			var streak []byte
-			if err := e.store.DB().QueryRow("SELECT failure_streak FROM donation_keys WHERE id=?", e.donationKey).Scan(&streak); err != nil {
+			if err := e.store.DB().QueryRow("SELECT failure_streak FROM donation_service_health WHERE id=?", e.serviceHealthID(t, trial)).Scan(&streak); err != nil {
 				t.Fatal(err)
 			}
 			want := int64(0)

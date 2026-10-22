@@ -16,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
+	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -36,10 +38,17 @@ func seedMainstreamChannel(t *testing.T, environment *donationTestEnv, name, cat
 		t.Fatal(err)
 	}
 	if _, err := environment.store.DB().Exec(`INSERT INTO mainstream_channels(
-id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at)
-VALUES(?,?,?,'openai-compatible','https://channel.example.test/v1',1,'active',1,?,?)`,
+id,name,category,enabled,state,revision,created_at,updated_at)
+VALUES(?,?,?,1,'active',1,?,?)`,
 		id, name, category, donationTestNow, donationTestNow); err != nil {
 		t.Fatalf("seed mainstream channel: %v", err)
+	}
+	services, err := contract.LegacyNativeServices(contract.TypeOpenAICompatible)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := environment.store.DB().Exec(`INSERT INTO mainstream_channel_entries(channel_id,ord,connector_type,canonical_base_url,native_service_mask) VALUES(?,0,'openai-compatible','https://channel.example.test/v1',?)`, id, services.Mask()); err != nil {
+		t.Fatal(err)
 	}
 	return id
 }
@@ -55,25 +64,19 @@ func seedSourcedEndpointKey(
 ) int64 {
 	t.Helper()
 	now := environment.clock.Load()
-	var result sql.Result
-	var err error
-	if source == nil {
-		result, err = environment.store.DB().Exec(`INSERT INTO endpoints(
-user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at)
-VALUES(?,'openai-compatible',?,'private endpoint note',1,1,?,?)`, userID, baseURL, now, now)
-	} else {
-		result, err = environment.store.DB().Exec(`INSERT INTO endpoints(
-user_id,connector_type,base_url,note,enabled,revision,mainstream_channel_id,mainstream_channel_revision,
-mainstream_channel_name,mainstream_channel_category,created_at,updated_at)
-VALUES(?,'openai-compatible',?,'private endpoint note',1,1,?,?,?,?,?,?)`, userID, baseURL,
-			source.channelID, source.revision, source.name, source.category, now, now)
-	}
-	if err != nil {
-		t.Fatalf("seed endpoint %d: %v", index, err)
-	}
-	endpointID, err := result.LastInsertId()
+	tx, err := environment.store.DB().BeginTx(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	endpoint := testseed.EndpointInput{OwnerUserID: userID, Type: contract.TypeOpenAICompatible, BaseURL: baseURL, Note: "private endpoint note", At: now}
+	if source != nil {
+		endpoint.MainstreamChannelID, endpoint.MainstreamChannelRevision = &source.channelID, &source.revision
+		endpoint.MainstreamChannelName, endpoint.MainstreamChannelCategory = &source.name, &source.category
+	}
+	endpointID, err := testseed.InsertEndpointTx(context.Background(), tx, endpoint)
+	if err != nil {
+		t.Fatalf("seed endpoint %d: %v", index, err)
 	}
 	contextID, fingerprint := make([]byte, 16), make([]byte, 32)
 	contextID[0], fingerprint[0] = 0x58, 0x59
@@ -91,7 +94,7 @@ VALUES(?,'openai-compatible',?,'private endpoint note',1,1,?,?,?,?,?,?)`, userID
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err = environment.store.DB().Exec(`INSERT INTO endpoint_key_secrets(
+	result, err := tx.Exec(`INSERT INTO endpoint_key_secrets(
 context_id,canonical_base_url,connector_type,encrypted_secret,created_at)
 VALUES(?,?,'openai-compatible',?,?)`, contextID, baseURL, encoded, now)
 	if err != nil {
@@ -101,17 +104,14 @@ VALUES(?,?,'openai-compatible',?,?)`, contextID, baseURL, encoded, now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err = environment.store.DB().Exec(`INSERT INTO endpoint_keys(
-endpoint_id,secret_ref_id,secret_fingerprint,display_head,display_tail,note,enabled,force_store_false,revision,created_at,updated_at)
-VALUES(?,?,?,'head','tail','private key note',1,0,1,?,?)`, endpointID, secretID, fingerprint, now, now)
+	key, err := testseed.InsertEndpointKeyTx(context.Background(), tx, testseed.KeyInput{EndpointID: endpointID, SecretRefID: secretID, Fingerprint: fingerprint, DisplayHead: "head", DisplayTail: "tail", Note: "private key note", At: now})
 	if err != nil {
 		t.Fatalf("seed endpoint key %d: %v", index, err)
 	}
-	keyID, err := result.LastInsertId()
-	if err != nil {
+	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	return keyID
+	return key.KeyID
 }
 
 func donationCreateMutation(t *testing.T, sequence int, body any) resources.ControlMutation {

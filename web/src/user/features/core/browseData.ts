@@ -76,8 +76,8 @@ function uniqueBindingRows(rows: readonly KeyBindingView[]): void {
   const ids = new Set<string>();
   const pairs = new Set<string>();
   for (const row of rows) {
-    if (ids.has(row.id)) invalidResponse('key binding ids');
-    ids.add(row.id);
+    if (ids.has(row.target_id ?? row.id)) invalidResponse('key binding ids');
+    ids.add(row.target_id ?? row.id);
     const pair = `${row.model_id}\u0000${row.endpoint_key_id}\u0000${row.upstream_model_id}`;
     if (pairs.has(pair)) invalidResponse('key binding pairs');
     pairs.add(pair);

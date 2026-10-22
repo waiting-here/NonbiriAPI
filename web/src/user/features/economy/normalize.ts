@@ -1,3 +1,4 @@
+import { normalizeUseSummary } from '@shared/operations/donationUses';
 import {
   normalizeRecurringDiscount,
   normalizeEffectiveDiscount,
@@ -588,6 +589,7 @@ export function normalizeDonationKey(value: unknown): DonationKey {
       'ended_reason',
     ],
     [
+      'endpoint_id',
       'review',
       'input_token_reserve',
       'output_token_reserve',
@@ -632,6 +634,12 @@ export function normalizeDonationKey(value: unknown): DonationKey {
       : enumValue(item.ended_reason, 'donation key ended reason', ENDED_REASONS);
   const smartBackoff = normalizeSmartBackoffFields(item);
   const result: DonationKey = {
+    ...(item.endpoint_id === undefined
+      ? {}
+      : {
+          endpointId:
+            item.endpoint_id === null ? null : decimalID(item.endpoint_id, 'owner endpoint id'),
+        }),
     smartBackoff: smartBackoff.smart_backoff,
     failureDisableThreshold: decimal(item.failure_disable_threshold, 'failure threshold'),
     id: decimalID(item.id, 'donation key id'),
@@ -724,15 +732,12 @@ export function normalizeDonation(value: unknown): Donation {
       'created_at',
       'updated_at',
     ],
-    ['discord_public_thanks', 'owner_hidden_at'],
+    ['discord_public_thanks', 'owner_hidden_at', 'use_summary'],
   );
   const status = enumValue(item.status, 'donation status', DONATION_STATUSES);
   const reviewResult = normalizeReviewResult(item.review_result);
-  if (status === 'pending' && reviewResult !== null) invalid('pending donation review result');
-  if (status === 'approved' && reviewResult?.decision !== 'approve')
-    invalid('approved donation review result');
-  if (status === 'rejected' && reviewResult?.decision !== 'reject')
-    invalid('rejected donation review result');
+  const useSummary =
+    item.use_summary === undefined ? undefined : normalizeUseSummary(item.use_summary);
   const keys = array(item.keys, 'donation keys', 100).map(normalizeDonationKey);
   if (keys.length === 0) invalid('donation keys');
   requireUnique(keys, (key) => key.id, 'donation key identities');
@@ -745,59 +750,68 @@ export function normalizeDonation(value: unknown): Donation {
   ) {
     invalid('donation review timestamp');
   }
-  if (status === 'pending') {
+  // Use-level review preserves the submission header and its budget history.
+  if (useSummary === undefined) {
+    if (status === 'pending' && reviewResult !== null) invalid('pending donation review result');
+    if (status === 'approved' && reviewResult?.decision !== 'approve')
+      invalid('approved donation review result');
+    if (status === 'rejected' && reviewResult?.decision !== 'reject')
+      invalid('rejected donation review result');
+    if (status === 'pending') {
+      if (
+        keys.some(
+          (key) =>
+            key.charityState !== 'pending' ||
+            key.limits.price !== null ||
+            key.limits.calls !== null ||
+            key.limits.tokens !== null ||
+            key.usage.priceUsed !== '0' ||
+            key.usage.priceInflight !== '0' ||
+            key.usage.callsUsed !== '0' ||
+            key.usage.callsInflight !== '0' ||
+            key.usage.tokensUsed !== '0' ||
+            key.usage.tokensInflight !== '0' ||
+            key.tokenReserve !== 0 ||
+            key.streak.generation !== '1' ||
+            key.streak.count !== '0' ||
+            key.streak.failureDisabled ||
+            key.endedReason !== null,
+        )
+      ) {
+        invalid('pending donation state');
+      }
+    } else if (keys.some((key) => key.charityState === 'pending')) {
+      invalid('terminal donation key state');
+    }
     if (
-      keys.some(
-        (key) =>
-          key.charityState !== 'pending' ||
-          key.limits.price !== null ||
-          key.limits.calls !== null ||
-          key.limits.tokens !== null ||
-          key.usage.priceUsed !== '0' ||
-          key.usage.priceInflight !== '0' ||
-          key.usage.callsUsed !== '0' ||
-          key.usage.callsInflight !== '0' ||
-          key.usage.tokensUsed !== '0' ||
-          key.usage.tokensInflight !== '0' ||
-          key.tokenReserve !== 0 ||
-          key.streak.generation !== '1' ||
-          key.streak.count !== '0' ||
-          key.streak.failureDisabled ||
-          key.endedReason !== null,
-      )
+      status === 'approved' &&
+      keys.every((key) => key.charityState === 'ended' || key.charityState === 'expired')
     ) {
-      invalid('pending donation state');
+      invalid('approved donation keys');
     }
-  } else if (keys.some((key) => key.charityState === 'pending')) {
-    invalid('terminal donation key state');
-  }
-  if (
-    status === 'approved' &&
-    keys.every((key) => key.charityState === 'ended' || key.charityState === 'expired')
-  ) {
-    invalid('approved donation keys');
-  }
-  if (status === 'rejected') {
-    if (keys.some((key) => key.charityState !== 'ended')) {
-      invalid('rejected donation state');
+    if (status === 'rejected') {
+      if (keys.some((key) => key.charityState !== 'ended')) {
+        invalid('rejected donation state');
+      }
     }
-  }
-  if (
-    status === 'deleted' &&
-    (reviewResult?.decision === 'reject' ||
-      keys.some((key) => key.charityState !== 'ended' && key.charityState !== 'expired'))
-  ) {
-    invalid('deleted donation state');
-  }
-  if (
-    status === 'expired' &&
-    (reviewResult?.decision !== 'approve' ||
-      keys.some((key) => key.charityState !== 'ended' && key.charityState !== 'expired') ||
-      !keys.some((key) => key.charityState === 'expired'))
-  ) {
-    invalid('expired donation state');
+    if (
+      status === 'deleted' &&
+      (reviewResult?.decision === 'reject' ||
+        keys.some((key) => key.charityState !== 'ended' && key.charityState !== 'expired'))
+    ) {
+      invalid('deleted donation state');
+    }
+    if (
+      status === 'expired' &&
+      (reviewResult?.decision !== 'approve' ||
+        keys.some((key) => key.charityState !== 'ended' && key.charityState !== 'expired') ||
+        !keys.some((key) => key.charityState === 'expired'))
+    ) {
+      invalid('expired donation state');
+    }
   }
   return {
+    ...(useSummary === undefined ? {} : { useSummary }),
     id: decimalID(item.id, 'donation id'),
     ownerHiddenAt:
       item.owner_hidden_at == null ? null : timestamp(item.owner_hidden_at, 'hidden timestamp'),

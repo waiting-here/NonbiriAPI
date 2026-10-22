@@ -1,3 +1,5 @@
+import { EntryScope, KeyCredentialScope } from './connections/EntryScope';
+import { CredentialGrantForm } from './connections/CredentialGrantForm';
 import { supportsChatStoragePolicy } from '@shared/operations/connectorPolicy';
 import { EndpointTransportNotice } from '@shared/components/EndpointTransportNotice';
 import { Fold, MoreMenu, OutcomeNote } from '@shared/components/ui';
@@ -9,7 +11,7 @@ import { useEffect, useReducer, useRef, useState, type FormEvent } from 'react';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { useOperation } from '@shared/operations/useOperation';
 import { readEndpointKey, readResourceResult, resourceStatus } from './resourceOperation';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { KeyLimitFields, KeyLimitSummary } from '@shared/components/KeyRoutingLimits';
@@ -68,6 +70,7 @@ import type {
 } from './types';
 
 const pageCopyKeys = {
+  'common.connections.credentialUnavailable': 'common.connections.credentialUnavailable',
   'common.keyLimits.unlimited': 'common.keyLimits.unlimited',
   'user.services.adaptation': 'user.services.adaptation',
   'user.services.adaptationCount': 'user.services.adaptationCount',
@@ -1097,7 +1100,10 @@ function EndpointKeyCard({
   };
 
   const physicalAvailable =
-    endpoint.enabled && keyData.enabled && keyData.suspension_state === 'none';
+    keyData.credential_available !== false &&
+    endpoint.enabled &&
+    keyData.enabled &&
+    keyData.suspension_state === 'none';
   const display =
     `${keyData.display_head}${keyData.display_head && keyData.display_tail ? '…' : ''}${keyData.display_tail}` ||
     t('common.notSet');
@@ -1117,13 +1123,15 @@ function EndpointKeyCard({
           <span
             className={`nb-badge nb-badge--${keyData.suspension_state !== 'none' ? 'bad' : physicalAvailable ? 'ok' : 'warn'}`}
           >
-            {!endpoint.enabled
-              ? t('browse.state.endpoint_disabled')
-              : keyData.suspension_state !== 'none'
-                ? t('endpoints.securityProcessing')
-                : keyData.enabled
-                  ? t('common.enabled')
-                  : t('common.disabled')}
+            {keyData.credential_available === false
+              ? ui('common.connections.credentialUnavailable')
+              : !endpoint.enabled
+                ? t('browse.state.endpoint_disabled')
+                : keyData.suspension_state !== 'none'
+                  ? t('endpoints.securityProcessing')
+                  : keyData.enabled
+                    ? t('common.enabled')
+                    : t('common.disabled')}
           </span>
           {keyData.browse?.donation_eligibility === 'already_donated' ? (
             <span className="nb-sub">
@@ -1371,6 +1379,7 @@ function EndpointKeyCard({
             closeLabel={t('common.close')}
             busy={busy || Boolean(replayAttempt)}
           >
+            <KeyCredentialScope accountId={accountId} endpoint={endpoint} entryKey={keyData} />
             <p className="nb-muted">{t('browse.personalLimits')}</p>
             <dl className="nb-facts">
               <div>
@@ -1464,6 +1473,7 @@ export function EndpointDetail({
   const [adaptationCount, setAdaptationCount] = useState<number | null>(null);
   const [usingModels, setUsingModels] = useState(false);
   const location = useLocation();
+  const focusKeyId = new URLSearchParams(location.search).get('focus_key_id');
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const filters = useResourceFilters('keys', accountId, 'keys_', 'keys_page');
@@ -1633,7 +1643,6 @@ export function EndpointDetail({
       className={`page core-page core-stack services-page services-detail services-detail--${endpoint.data.enabled ? 'enabled' : 'disabled'}`}
     >
       <PageHeader
-        icon="endpoints"
         title={
           endpoint.data.note ||
           (endpoint.data.origin.kind === 'mainstream'
@@ -1643,7 +1652,7 @@ export function EndpointDetail({
         description={endpoint.data.enabled ? t('common.enabled') : t('common.disabled')}
         back={
           <Link to={returnTo} state={location.state}>
-            ← {t('endpoints.title')}
+            {t('endpoints.title')}
           </Link>
         }
         actions={
@@ -1697,7 +1706,9 @@ export function EndpointDetail({
             <div>
               <dt>{t('endpoints.connector')}</dt>
               <dd>
-                <ConnectorLabel value={endpoint.data.connector_type} />
+                <ConnectorLabel
+                  value={endpoint.data.configuration_type ?? endpoint.data.connector_type}
+                />
               </dd>
             </div>
             <div>
@@ -1722,6 +1733,7 @@ export function EndpointDetail({
             </div>
           </dl>
           <p className="nb-small nb-muted">{t('endpoints.detailsDescription')}</p>
+          <EntryScope accountId={accountId} endpoint={endpoint.data} />
           <OutcomeNotice
             outcome={outcome}
             savedRefreshFailed={operation.outcome === 'refresh-failed'}
@@ -1828,7 +1840,10 @@ export function EndpointDetail({
           : null}
       </ExpandablePanel>
 
-      <section className="core-card" aria-busy={keys.isFetching}>
+      {focusKeyId ? (
+        <FocusedEndpointKey accountId={accountId} endpoint={endpoint.data} keyId={focusKeyId} />
+      ) : null}
+      <section className="core-card" aria-busy={keys.isFetching} hidden={Boolean(focusKeyId)}>
         <div className="core-card__header">
           <h2>{t('endpoints.key')}</h2>
         </div>
@@ -1836,11 +1851,26 @@ export function EndpointDetail({
           <ResourceFilterBar control={filters} />
         ) : null}
         {addingKey ? (
-          <AddEndpointKeyForm
-            accountId={accountId}
-            endpoint={endpoint.data}
-            onClose={() => setAddingKey(false)}
-          />
+          endpoint.data.connection_id ? (
+            <ExpandablePanel
+              open
+              title={t('endpoints.addKey')}
+              closeLabel={t('common.close')}
+              onClose={() => setAddingKey(false)}
+            >
+              <CredentialGrantForm
+                accountId={accountId}
+                connectionId={endpoint.data.connection_id}
+                endpoint={endpoint.data}
+              />
+            </ExpandablePanel>
+          ) : (
+            <AddEndpointKeyForm
+              accountId={accountId}
+              endpoint={endpoint.data}
+              onClose={() => setAddingKey(false)}
+            />
+          )
         ) : null}
         {keys.error && keys.data ? (
           <CoreErrorPanel compact error={keys.error} onRetry={() => void keys.refetch()} />
@@ -1956,5 +1986,54 @@ export function EndpointDetail({
         onConfirm={() => void removeEndpoint()}
       />
     </div>
+  );
+}
+
+function FocusedEndpointKey({
+  accountId,
+  endpoint,
+  keyId,
+}: {
+  accountId: string;
+  endpoint: Endpoint;
+  keyId: string;
+}) {
+  const { t } = useCoreCopy();
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  params.delete('focus_key_id');
+  const current = useQuery({
+    queryKey: [...coreKeys.account(accountId), 'focused-key', endpoint.id, keyId],
+    queryFn: ({ signal }) => readEndpointKey(endpoint.id, keyId, signal),
+  });
+  return (
+    <section className="core-card">
+      <Link
+        className="nb-btn nb-btn--secondary"
+        to={location.pathname + (params.size ? '?' + params.toString() : '')}
+        state={location.state}
+      >
+        {t('endpoints.key')}
+      </Link>
+      {current.isPending ? (
+        <CoreLoading />
+      ) : current.error || !current.data ? (
+        <CoreErrorPanel error={current.error} onRetry={() => void current.refetch()} />
+      ) : (
+        <div className="nb-table-wrap">
+          <table className="nb-table">
+            <caption className="nb-sr">{t('endpoints.key')}</caption>
+            <tbody>
+              <EndpointKeyCard
+                accountId={accountId}
+                endpoint={endpoint}
+                keyData={current.data}
+                onRefresh={() => void current.refetch()}
+              />
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }

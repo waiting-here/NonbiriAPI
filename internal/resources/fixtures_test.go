@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/modeltype"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
 	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
@@ -19,7 +20,13 @@ func TestCanonicalResourceDTOFixtures(t *testing.T) {
 		ID: "31", SourceType: "manual", UpstreamModelID: "Vendor/Exact", Provider: "Vendor",
 		SourceRevision: "2", PairRevision: "2", CreatedAt: 1_700_000_003, UpdatedAt: 1_700_000_013,
 	}
-	binding := Binding{
+	nativeServices := []connectorcontract.NativeService{"chat_completions", "responses"}
+	modelTypes := []connectorcontract.Operation{"chat_completions", "responses"}
+	serviceRoutes := []BindingServiceRoute{{Operation: "chat_completions", NativeService: "chat_completions", Mode: "native"}, {Operation: "responses", NativeService: "responses", Mode: "native"}}
+	target := BindingTarget{ID: "71", Revision: "1", EndpointID: "11", EndpointKeyID: "21", ConnectorType: "openai-compatible", ConfigurationType: "openai-compatible", BaseURL: "https://example.com/v1", CredentialID: "7", CredentialVersion: "2", GrantRevision: "3", UpstreamModelID: "Vendor/Exact", NativeServices: nativeServices, ModelTypes: modelTypes, ServiceRoutes: serviceRoutes, Capabilities: BindingCapabilities{CanBind: true}}
+	changedTarget := target
+	changedTarget.UpstreamModelID = "Vendor/New"
+	binding := Binding{Targets: []BindingTarget{target},
 		ID: "51", EndpointKeyID: "21", EndpointBaseURL: "https://example.com/v1",
 		ConnectorType: "openai-compatible", EndpointNote: "endpoint note",
 		EndpointKeyDisplayHead: "head", EndpointKeyDisplayTail: "tail", EndpointKeyNote: "key note",
@@ -29,11 +36,11 @@ func TestCanonicalResourceDTOFixtures(t *testing.T) {
 		name  string
 		value any
 	}{
-		{"endpoint.json", Endpoint{
+		{"endpoint.json", Endpoint{ConnectionID: pointer("9"), ConfigurationType: "openai-compatible", NativeServices: nativeServices,
 			ID: "11", ConnectorType: "openai-compatible", BaseURL: "https://example.com/v1", Origin: EndpointOrigin{Kind: "custom"}, Note: "endpoint note",
 			Enabled: true, Revision: "3", KeyCount: "2", CreatedAt: 1_700_000_000, UpdatedAt: 1_700_000_010,
 		}},
-		{"endpoint_key.json", EndpointKey{
+		{"endpoint_key.json", EndpointKey{CredentialAvailable: true, CredentialID: "7", CredentialVersion: "2", GrantRevision: "3", NativeServices: nativeServices, DiscoverySourceID: pointer("17"),
 			ID: "21", EndpointID: "11", DisplayHead: "head", DisplayTail: "tail", Note: "key note",
 			Enabled: true, ForceStoreFalse: false, SuspensionState: "none", Revision: "4",
 			CreatedAt: 1_700_000_001, UpdatedAt: 1_700_000_011,
@@ -64,14 +71,14 @@ func TestCanonicalResourceDTOFixtures(t *testing.T) {
 					SilentRetry: true, FlattenToolCalls: false, Revision: "2", BindingRevision: "6", BindingCount: "1",
 					CreatedAt: 1_700_000_004, UpdatedAt: 1_700_000_014,
 				},
-				Bindings: []Binding{{
+				Bindings: []Binding{{Targets: []BindingTarget{changedTarget},
 					ID: "51", EndpointKeyID: "21", EndpointBaseURL: "https://example.com/v1", ConnectorType: "openai-compatible",
 					EndpointNote: "endpoint note", EndpointKeyDisplayHead: "head", EndpointKeyDisplayTail: "tail", EndpointKeyNote: "key note",
 					UpstreamModelID: "Vendor/New", Ord: 0,
 				}},
 			}},
 		}},
-		{"binding_candidates.json", Page[BindingCandidate]{Data: []BindingCandidate{{
+		{"binding_candidates.json", Page[BindingCandidate]{Data: []BindingCandidate{{NativeServices: nativeServices, ModelTypes: modelTypes, ServiceRoutes: serviceRoutes, Capabilities: BindingCapabilities{CanBind: true},
 			EndpointKeyID: "21", EndpointBaseURL: "https://example.com/v1", ConnectorType: "openai-compatible",
 			EndpointNote: "endpoint note", EndpointKeyDisplayHead: "head", EndpointKeyDisplayTail: "tail", EndpointKeyNote: "key note",
 			UpstreamModelID: "Vendor/Exact", SourceTypes: []string{"automatic", "manual"},

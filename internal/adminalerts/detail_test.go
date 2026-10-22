@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 )
@@ -129,15 +131,41 @@ func TestAlertDetailDonationUsesVerifiedDistinctEndpointKey(t *testing.T) {
 		}
 		return id
 	}
-	endpointID := must(`INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at) VALUES(?,'openai-compatible','https://example.invalid/v1','',1,1,?,?)`, environment.adminID, alertTestNow, alertTestNow)
+	ctx := context.Background()
+	tx, err := database.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	endpointID, err := testseed.InsertEndpointTx(ctx, tx, testseed.EndpointInput{
+		OwnerUserID: environment.adminID, Type: connectorcontract.TypeOpenAICompatible,
+		BaseURL: "https://example.invalid/v1", At: alertTestNow,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	var endpointKeys [2]int64
 	for index := range endpointKeys {
 		contextID := make([]byte, 16)
 		contextID[15] = byte(index + 1)
-		secretID := must(`INSERT INTO endpoint_key_secrets(context_id,canonical_base_url,connector_type,encrypted_secret,created_at) VALUES(?,'https://example.invalid/v1','openai-compatible','sealed-fixture',?)`, contextID, alertTestNow)
+		result, err := tx.ExecContext(ctx, `INSERT INTO endpoint_key_secrets(context_id,canonical_base_url,connector_type,encrypted_secret,created_at) VALUES(?,'https://example.invalid/v1','openai-compatible','sealed-fixture',?)`, contextID, alertTestNow)
+		if err != nil {
+			t.Fatal(err)
+		}
+		secretID, err := result.LastInsertId()
+		if err != nil {
+			t.Fatal(err)
+		}
 		fingerprint := make([]byte, 32)
 		fingerprint[31] = byte(index + 1)
-		endpointKeys[index] = must(`INSERT INTO endpoint_keys(endpoint_id,secret_ref_id,secret_fingerprint,revision,created_at,updated_at) VALUES(?,?,?,1,?,?)`, endpointID, secretID, fingerprint, alertTestNow, alertTestNow)
+		key, err := testseed.InsertEndpointKeyTx(ctx, tx, testseed.KeyInput{EndpointID: endpointID, SecretRefID: secretID, Fingerprint: fingerprint, At: alertTestNow})
+		if err != nil {
+			t.Fatal(err)
+		}
+		endpointKeys[index] = key.KeyID
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
 	}
 	donationID := must(`INSERT INTO donations(user_id,status,revision,description,created_at,updated_at) VALUES(?,'approved',1,'',?,?)`, environment.adminID, alertTestNow, alertTestNow)
 	zero := db.EncodeU128(db.U128{})

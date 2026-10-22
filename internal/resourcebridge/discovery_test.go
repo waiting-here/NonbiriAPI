@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/logapi"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -26,6 +25,7 @@ func testDiscoverySuccessCrossesDispatch(t *testing.T, kind connectorcontract.Ty
 	fixture.clock.Store(time.Now().Unix())
 	ownerID := fixture.seedUser(t, "success")
 	key := fixture.seedEndpointKey(t, ownerID, "success", kind, "upstream-success-credential")
+	_, expectedWire := fixtureDiscoveryFormat(kind)
 	var calls atomic.Int64
 	discoverer := discovererFunc(func(ctx context.Context, input connectorcontract.DiscoveryInput) connectorcontract.DiscoveryResult {
 		calls.Add(1)
@@ -35,7 +35,7 @@ func testDiscoverySuccessCrossesDispatch(t *testing.T, kind connectorcontract.Ty
 		if input.Backend != fixture.backend {
 			t.Fatal("discoverer received a different backend")
 		}
-		if input.Target.Type() != key.connector || input.Target.BaseURL() != key.baseURL || input.Target.UpstreamModel() != "" {
+		if input.Target.Type() != expectedWire || input.Target.BaseURL() != key.baseURL || input.Target.UpstreamModel() != "" {
 			t.Fatalf("unexpected target: type=%q base=%q model=%q", input.Target.Type(), input.Target.BaseURL(), input.Target.UpstreamModel())
 		}
 		var state string
@@ -89,7 +89,7 @@ WHERE endpoint_key_id=? ORDER BY rowid DESC LIMIT 1`, key.keyID).Scan(&state); e
 		t.Fatalf("project persisted %s attempt: %v", kind, err)
 	}
 	encoded, err := json.Marshal(detail)
-	if err != nil || !strings.Contains(string(encoded), string(kind)) {
+	if err != nil || !strings.Contains(string(encoded), string(expectedWire)) {
 		t.Fatalf("persisted connector missing: %s %v", encoded, err)
 	}
 	if facts.claimState != "committed" || !facts.resultKind.Valid || facts.resultKind.String != "response" ||
@@ -542,10 +542,7 @@ func TestDiscoveryTerminalHelpersAreIdempotent(t *testing.T) {
 		fixture := newBridgeFixture(t)
 		ownerID := fixture.seedUser(t, "idempotent-dispatched")
 		key := fixture.seedEndpointKey(t, ownerID, "idempotent-dispatched", connectorcontract.TypeOpenAICompatible, "idempotent-dispatched-credential")
-		request, handle, err := fixture.claims.ClaimDiscovery(context.Background(), claim.DiscoveryClaimInput{
-			ActorUserID: ownerID,
-			Candidate:   claim.Candidate{EndpointID: key.endpointID, EndpointKeyID: key.keyID, ConnectorType: key.connector, CanonicalBaseURL: key.baseURL},
-		})
+		request, handle, err := fixture.claims.ClaimDiscovery(context.Background(), fixture.discoveryClaimInput(t, key))
 		if err != nil {
 			t.Fatalf("ClaimDiscovery: %v", err)
 		}
@@ -576,10 +573,7 @@ func TestDiscoveryTerminalHelpersAreIdempotent(t *testing.T) {
 		fixture := newBridgeFixture(t)
 		ownerID := fixture.seedUser(t, "idempotent-undispatched")
 		key := fixture.seedEndpointKey(t, ownerID, "idempotent-undispatched", connectorcontract.TypeOpenAICompatible, "idempotent-undispatched-credential")
-		request, handle, err := fixture.claims.ClaimDiscovery(context.Background(), claim.DiscoveryClaimInput{
-			ActorUserID: ownerID,
-			Candidate:   claim.Candidate{EndpointID: key.endpointID, EndpointKeyID: key.keyID, ConnectorType: key.connector, CanonicalBaseURL: key.baseURL},
-		})
+		request, handle, err := fixture.claims.ClaimDiscovery(context.Background(), fixture.discoveryClaimInput(t, key))
 		if err != nil {
 			t.Fatalf("ClaimDiscovery: %v", err)
 		}

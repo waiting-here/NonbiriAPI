@@ -186,7 +186,7 @@ func (s *Store) Load(ctx context.Context, ref Ref) (Snapshot, error) {
 // LoadMany reads all candidate settings at one SQLite snapshot. It is called
 // once per accepted logical request, before physical attempts begin.
 func (s *Store) LoadMany(ctx context.Context, refs []Ref) (map[Ref]Snapshot, error) {
-	if s == nil || len(refs) > 202 {
+	if s == nil {
 		return nil, ErrInvalid
 	}
 	out := make(map[Ref]Snapshot, len(refs))
@@ -196,6 +196,9 @@ func (s *Store) LoadMany(ctx context.Context, refs []Ref) (map[Ref]Snapshot, err
 			return nil, ErrInvalid
 		}
 		if _, exists := out[ref]; !exists {
+			if len(out) >= 512 {
+				return nil, ErrInvalid
+			}
 			out[ref] = Snapshot{Document: Empty(ref.Scope), Revision: "0"}
 			groups[ref.Scope] = append(groups[ref.Scope], ref.ID)
 		}

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/adminalerts"
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
 
@@ -452,6 +453,9 @@ func (coordinator *Coordinator) Export(ctx context.Context, userID, decisionNow 
 	if document.Endpoints, document.CatalogPairs, document.Models, document.CallerKey, err = coordinator.export.Resources.ExportResources(ctx, tx, request); err != nil {
 		return nil, err
 	}
+	if document.ConnectionExportCollections, err = exportConnections(ctx, tx, request); err != nil {
+		return nil, err
+	}
 	if document.PersonalAutomation, err = coordinator.export.PersonalAutomation.ExportPersonalAutomation(ctx, tx, request); err != nil {
 		return nil, err
 	}
@@ -737,6 +741,7 @@ func validateExportCollectionBounds(document ExportDocument) error {
 		}
 	}
 	lengths := []int{
+		len(document.Connections), len(document.Credentials), len(document.CredentialVersions), len(document.Grants), len(document.DiscoverySources), len(document.SourceRevisions), len(document.BindingTargets), len(document.DonationUses), len(document.NativeServiceEvidence),
 		len(document.RequestAdaptations), len(document.Continuity), len(document.SteadyCatch.Sessions),
 		len(document.GameOnboardingHolds), len(document.Loans), len(document.GameRankings.Totals), len(document.GameRankings.Events), len(document.Penalties),
 		len(document.Randomness),
@@ -860,6 +865,10 @@ func (coordinator *Coordinator) deleteAccountWithControl(ctx context.Context, re
 			return prepareErr
 		}
 		finalizers = append(finalizers, finalizer)
+	}
+	if err := connectionstore.PrepareAccountDeletionTx(ctx, tx, userID, decisionNow); err != nil {
+		abortFinalizers()
+		return err
 	}
 	operationID, err := coordinator.newID("op_")
 	if err != nil || !db.ValidateOpaqueID(operationID, "op_") {

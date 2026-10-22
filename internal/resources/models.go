@@ -467,47 +467,16 @@ func (r *Repository) ListBindings(ctx context.Context, userID, modelID int64) (B
 	return BindingsResponse{Bindings: bindings, BindingRevision: model.BindingRevision}, nil
 }
 
-func listBindingsTx(ctx context.Context, tx *sql.Tx, userID, modelID int64) ([]Binding, error) {
-	rows, err := tx.QueryContext(ctx, `
-SELECT b.id,b.endpoint_key_id,e.base_url,e.connector_type,e.note,k.display_head,k.display_tail,k.note,b.upstream_model_id,b.ord
-FROM model_bindings b
-JOIN models m ON m.id=b.model_id
-JOIN endpoint_keys k ON k.id=b.endpoint_key_id
-JOIN endpoints e ON e.id=k.endpoint_id
-WHERE m.user_id=? AND m.id=? AND e.user_id=?
-ORDER BY b.ord,b.id`, userID, modelID, userID)
-	if err != nil {
-		return nil, fmt.Errorf("resources: list bindings: %w", err)
-	}
-	defer rows.Close()
-	items := make([]Binding, 0)
-	for rows.Next() {
-		var item Binding
-		var id, keyID int64
-		if err := rows.Scan(&id, &keyID, &item.EndpointBaseURL, &item.ConnectorType, &item.EndpointNote,
-			&item.EndpointKeyDisplayHead, &item.EndpointKeyDisplayTail, &item.EndpointKeyNote,
-			&item.UpstreamModelID, &item.Ord); err != nil {
-			return nil, fmt.Errorf("resources: scan binding: %w", err)
-		}
-		var err error
-		item.ID, err = decimalID(id)
-		if err != nil {
-			return nil, err
-		}
-		item.EndpointKeyID, err = decimalID(keyID)
-		if err != nil {
-			return nil, err
-		}
-		items = append(items, item)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("resources: list bindings: %w", err)
-	}
-	return items, nil
+func (r *Repository) AddBindings(ctx context.Context, userID, modelID int64, mutation ControlMutation, expectedBindingRevision int64, selections []BindingSelection) (MutationResult[BindingsResponse], error) {
+	return r.addBindings(ctx, userID, modelID, mutation, expectedBindingRevision, selections, false)
 }
 
-func (r *Repository) AddBindings(ctx context.Context, userID, modelID int64, mutation ControlMutation, expectedBindingRevision int64, selections []BindingSelection) (MutationResult[BindingsResponse], error) {
-	if r == nil || userID <= 0 || modelID <= 0 || expectedBindingRevision < 0 || mutation.Route != routeBindingBatch || mutation.Method != http.MethodPost || !mutationPathIDs(mutation, modelID) || mutation.Query != "" || len(selections) == 0 || len(selections) > maxBindingBatch || !validBindingSelections(selections) {
+func (r *Repository) addBindings(ctx context.Context, userID, modelID int64, mutation ControlMutation, expectedBindingRevision int64, selections []BindingSelection, compact bool) (MutationResult[BindingsResponse], error) {
+	expectedRoute := routeBindingBatch
+	if compact {
+		expectedRoute = routeBindingBatchReceipt
+	}
+	if r == nil || userID <= 0 || modelID <= 0 || expectedBindingRevision < 0 || mutation.Route != expectedRoute || mutation.Method != http.MethodPost || !mutationPathIDs(mutation, modelID) || mutation.Query != "" || len(selections) == 0 || len(selections) > maxBindingBatch || !validBindingSelections(selections) {
 		return MutationResult[BindingsResponse]{}, ErrInvalidRequest
 	}
 	now, err := r.nowUnix()
@@ -543,21 +512,33 @@ func (r *Repository) AddBindings(ctx context.Context, userID, modelID int64, mut
 	if bindingLimit > maxBindingBatch {
 		bindingLimit = maxBindingBatch
 	}
-	if currentCount+int64(len(selections)) > bindingLimit {
+
+	groups, newCount, err := normalizeBindingGroupsTx(ctx, tx, userID, selections)
+	if err != nil {
+		return MutationResult[BindingsResponse]{}, err
+	}
+	existingTargets, err := countTx(ctx, tx, "SELECT count(*) FROM model_binding_targets t JOIN model_bindings b ON b.id=t.binding_id WHERE b.model_id=?", modelID)
+	if err != nil {
+		return MutationResult[BindingsResponse]{}, err
+	}
+	if existingTargets+int64(newCount) > bindingLimit {
 		return MutationResult[BindingsResponse]{}, ErrResourceLimit
 	}
-	for index, selection := range selections {
-		_, eligible, err := bindingSelectionConnectorTx(ctx, tx, userID, selection.EndpointKeyID, selection.UpstreamModelID)
+	createdIDs := make([]string, 0, len(groups))
+	for index, targets := range groups {
+		result, err := tx.ExecContext(ctx, "INSERT INTO model_bindings(model_id,ord,created_at,updated_at) VALUES(?,?,?,?)", modelID, int(currentCount)+index, now, now)
+		if err != nil {
+			return MutationResult[BindingsResponse]{}, conflictOrError("create binding", err)
+		}
+		bindingID, err := result.LastInsertId()
 		if err != nil {
 			return MutationResult[BindingsResponse]{}, err
 		}
-		if !eligible {
-			return MutationResult[BindingsResponse]{}, ErrNotFound
-		}
-		if _, err := tx.ExecContext(ctx, `
-INSERT INTO model_bindings(model_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at)
-VALUES(?,?,?,?,?,?)`, modelID, selection.EndpointKeyID, selection.UpstreamModelID, int(currentCount)+index, now, now); err != nil {
-			return MutationResult[BindingsResponse]{}, conflictOrError("create binding", err)
+		createdIDs = append(createdIDs, strconv.FormatInt(bindingID, 10))
+		for ord, target := range targets {
+			if err := insertBindingTargetTx(ctx, tx, userID, modelID, bindingID, target, ord, now); err != nil {
+				return MutationResult[BindingsResponse]{}, err
+			}
 		}
 	}
 	if err := advanceBindingRevisionTx(ctx, tx, userID, modelID, expectedBindingRevision, now); err != nil {
@@ -565,6 +546,21 @@ VALUES(?,?,?,?,?,?)`, modelID, selection.EndpointKeyID, selection.UpstreamModelI
 	}
 	if err := r.projection.ReconcileRoutingProjection(ctx, tx, userID, modelID); err != nil {
 		return MutationResult[BindingsResponse]{}, fmt.Errorf("resources: project added bindings: %w", err)
+	}
+	if compact {
+		revision := strconv.FormatInt(expectedBindingRevision+1, 10)
+		receipt := BindingBatchReceipt{ModelID: model.ID, BindingRevision: revision, AddedCount: strconv.Itoa(len(groups)), BindingCount: strconv.FormatInt(currentCount+int64(len(groups)), 10)}
+		out, err := finishBindingReceipt(ctx, tx, decision, http.StatusCreated, revision, receipt)
+		if err != nil {
+			return out, err
+		}
+		if err := recordResourceOperation(ctx, tx, userID, mutation, idempotency.ScopeControlMutation, "binding_batch", ResourceOperationResult{ModelID: model.ID, BindingIDs: createdIDs}); err != nil {
+			return MutationResult[BindingsResponse]{}, err
+		}
+		if err := commitTx(tx, &committed); err != nil {
+			return MutationResult[BindingsResponse]{}, err
+		}
+		return out, nil
 	}
 	bindings, err := listBindingsTx(ctx, tx, userID, modelID)
 	if err != nil {
@@ -585,18 +581,33 @@ VALUES(?,?,?,?,?,?)`, modelID, selection.EndpointKeyID, selection.UpstreamModelI
 }
 
 func validBindingSelections(selections []BindingSelection) bool {
-	seen := make(map[string]struct{}, len(selections))
+	total := 0
+	seen := map[string]bool{}
 	for _, selection := range selections {
-		if selection.EndpointKeyID <= 0 || !validateCatalogText(selection.UpstreamModelID, 1, 512) {
+		targets := selection.Targets
+		if targets != nil {
+			if selection.EndpointKeyID != 0 || selection.UpstreamModelID != "" || !validTargetSelections(targets) {
+				return false
+			}
+		} else {
+			if selection.EndpointKeyID <= 0 || !validateCatalogText(selection.UpstreamModelID, 1, 512) {
+				return false
+			}
+			targets = []BindingTargetSelection{{EndpointKeyID: selection.EndpointKeyID, UpstreamModelID: selection.UpstreamModelID}}
+		}
+		total += len(targets)
+		if total > maxBindingBatch {
 			return false
 		}
-		identity := strconv.FormatInt(selection.EndpointKeyID, 10) + "\x00" + selection.UpstreamModelID
-		if _, duplicate := seen[identity]; duplicate {
-			return false
+		for _, target := range targets {
+			key := strconv.FormatInt(target.EndpointKeyID, 10) + "/" + target.UpstreamModelID
+			if seen[key] {
+				return false
+			}
+			seen[key] = true
 		}
-		seen[identity] = struct{}{}
 	}
-	return true
+	return total > 0
 }
 
 func bindingSelectionConnectorTx(ctx context.Context, tx *sql.Tx, userID, keyID int64, upstreamModelID string) (string, bool, error) {
@@ -604,7 +615,7 @@ func bindingSelectionConnectorTx(ctx context.Context, tx *sql.Tx, userID, keyID 
 	err := tx.QueryRowContext(ctx, `
 SELECT e.connector_type
 FROM model_pair_catalog p
-JOIN endpoint_keys k ON k.id=p.endpoint_key_id
+JOIN endpoint_key_current_credentials k ON k.id=p.endpoint_key_id
 JOIN endpoints e ON e.id=k.endpoint_id
 JOIN model_discovery_evidence d ON d.endpoint_key_id=k.id
 WHERE e.user_id=? AND k.id=? AND p.normalized_model_id=?
@@ -643,8 +654,8 @@ type bindingStorageRow struct {
 
 func readBindingStorageTx(ctx context.Context, tx *sql.Tx, userID, modelID int64) ([]bindingStorageRow, error) {
 	rows, err := tx.QueryContext(ctx, `
-SELECT b.id,b.endpoint_key_id,b.upstream_model_id,b.ord,b.created_at,b.updated_at
-FROM model_bindings b JOIN models m ON m.id=b.model_id
+SELECT b.id,p.endpoint_key_id,p.upstream_model_id,b.ord,b.created_at,b.updated_at
+FROM model_bindings b JOIN models m ON m.id=b.model_id JOIN model_binding_primary_targets p ON p.binding_id=b.id
 WHERE m.user_id=? AND m.id=? ORDER BY b.ord,b.id`, userID, modelID)
 	if err != nil {
 		return nil, fmt.Errorf("resources: read binding storage: %w", err)
@@ -683,6 +694,10 @@ func rebuildBindingOrderTx(ctx context.Context, tx *sql.Tx, modelID int64, rows 
 }
 
 func (r *Repository) OrderBindings(ctx context.Context, userID, modelID int64, mutation ControlMutation, expectedBindingRevision int64, order []int64) (MutationResult[BindingsResponse], error) {
+	return r.orderBindings(ctx, userID, modelID, mutation, expectedBindingRevision, order, false)
+}
+
+func (r *Repository) orderBindings(ctx context.Context, userID, modelID int64, mutation ControlMutation, expectedBindingRevision int64, order []int64, compact bool) (MutationResult[BindingsResponse], error) {
 	if r == nil || userID <= 0 || modelID <= 0 || expectedBindingRevision < 0 || mutation.Route != routeBindingOrder || mutation.Method != http.MethodPut || !mutationPathIDs(mutation, modelID) || mutation.Query != "" || len(order) > maxBindingBatch {
 		return MutationResult[BindingsResponse]{}, ErrInvalidRequest
 	}
@@ -726,6 +741,17 @@ func (r *Repository) OrderBindings(ctx context.Context, userID, modelID int64, m
 	if err := advanceBindingRevisionTx(ctx, tx, userID, modelID, expectedBindingRevision, now); err != nil {
 		return MutationResult[BindingsResponse]{}, err
 	}
+	if compact {
+		revision := strconv.FormatInt(expectedBindingRevision+1, 10)
+		out, err := finishBindingReceipt(ctx, tx, decision, http.StatusOK, revision, BindingRevisionReceipt{BindingRevision: revision})
+		if err != nil {
+			return out, err
+		}
+		if err := commitTx(tx, &committed); err != nil {
+			return MutationResult[BindingsResponse]{}, err
+		}
+		return out, nil
+	}
 	bindings, err := listBindingsTx(ctx, tx, userID, modelID)
 	if err != nil {
 		return MutationResult[BindingsResponse]{}, err
@@ -742,6 +768,10 @@ func (r *Repository) OrderBindings(ctx context.Context, userID, modelID int64, m
 }
 
 func (r *Repository) DeleteBinding(ctx context.Context, userID, modelID, bindingID int64, mutation ControlMutation, expectedBindingRevision int64) (MutationResult[BindingsResponse], error) {
+	return r.deleteBinding(ctx, userID, modelID, bindingID, mutation, expectedBindingRevision, false)
+}
+
+func (r *Repository) deleteBinding(ctx context.Context, userID, modelID, bindingID int64, mutation ControlMutation, expectedBindingRevision int64, compact bool) (MutationResult[BindingsResponse], error) {
 	if r == nil || userID <= 0 || modelID <= 0 || bindingID <= 0 || expectedBindingRevision < 0 || mutation.Route != routeBinding || mutation.Method != http.MethodDelete || !mutationPathIDs(mutation, modelID, bindingID) || mutation.Query != "" {
 		return MutationResult[BindingsResponse]{}, ErrInvalidRequest
 	}
@@ -804,6 +834,17 @@ func (r *Repository) DeleteBinding(ctx context.Context, userID, modelID, binding
 	if err := r.projection.ReconcileRoutingProjection(ctx, tx, userID, modelID); err != nil {
 		return MutationResult[BindingsResponse]{}, fmt.Errorf("resources: project deleted binding: %w", err)
 	}
+	if compact {
+		revision := strconv.FormatInt(expectedBindingRevision+1, 10)
+		out, err := finishBindingReceipt(ctx, tx, decision, http.StatusOK, revision, BindingRevisionReceipt{BindingRevision: revision})
+		if err != nil {
+			return out, err
+		}
+		if err := commitTx(tx, &committed); err != nil {
+			return MutationResult[BindingsResponse]{}, err
+		}
+		return out, nil
+	}
 	bindings, err := listBindingsTx(ctx, tx, userID, modelID)
 	if err != nil {
 		return MutationResult[BindingsResponse]{}, err
@@ -847,20 +888,7 @@ func (r *Repository) BindingCandidates(ctx context.Context, userID, modelID int6
 			return Page[BindingCandidate]{}, ErrInvalidRequest
 		}
 	}
-	rows, err := r.db.QueryContext(ctx, `
-SELECT e.id,k.id,p.rowid,e.base_url,e.connector_type,e.note,k.display_head,k.display_tail,k.note,p.normalized_model_id,
-       CASE WHEN p.automatic_supports>0 AND d.state='succeeded' AND d.revision=p.automatic_revision THEN 1 ELSE 0 END,
-       CASE WHEN p.manual_supports>0 THEN 1 ELSE 0 END
-FROM model_pair_catalog p
-JOIN endpoint_keys k ON k.id=p.endpoint_key_id
-JOIN endpoints e ON e.id=k.endpoint_id
-JOIN model_discovery_evidence d ON d.endpoint_key_id=k.id
-WHERE e.user_id=? AND e.enabled=1 AND k.enabled=1
-  AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=k.id)
-  AND (p.manual_supports>0 OR (p.automatic_supports>0 AND d.state='succeeded' AND d.revision=p.automatic_revision))
-  AND (?=0 OR e.id=?) AND (?=0 OR k.id=?)
-  AND (?='' OR instr(p.normalized_model_id,?)>0)
-  AND (?='' OR (?='automatic' AND p.automatic_supports>0 AND d.state='succeeded' AND d.revision=p.automatic_revision) OR (?='manual' AND p.manual_supports>0))
+	rows, err := r.db.QueryContext(ctx, candidatePageSelect+`
   AND (?=0 OR e.id>? OR (e.id=? AND (k.id>? OR (k.id=? AND p.rowid>?))))
 ORDER BY e.id,k.id,p.rowid LIMIT ?`,
 		userID, query.EndpointID, query.EndpointID, query.KeyID, query.KeyID,
@@ -879,9 +907,11 @@ ORDER BY e.id,k.id,p.rowid LIMIT ?`,
 	for rows.Next() {
 		var item candidateWithSort
 		var automatic, manual int
+		var services int64
+		var format string
 		if err := rows.Scan(&item.endpointID, &item.keyID, &item.pairRowID, &item.candidate.EndpointBaseURL, &item.candidate.ConnectorType,
 			&item.candidate.EndpointNote, &item.candidate.EndpointKeyDisplayHead, &item.candidate.EndpointKeyDisplayTail,
-			&item.candidate.EndpointKeyNote, &item.candidate.UpstreamModelID, &automatic, &manual); err != nil {
+			&item.candidate.EndpointKeyNote, &item.candidate.UpstreamModelID, &automatic, &manual, &services, &format); err != nil {
 			return Page[BindingCandidate]{}, fmt.Errorf("resources: scan binding candidate: %w", err)
 		}
 		item.candidate.EndpointKeyID, err = decimalID(item.keyID)
@@ -894,6 +924,9 @@ ORDER BY e.id,k.id,p.rowid LIMIT ?`,
 		}
 		if manual == 1 {
 			item.candidate.SourceTypes = append(item.candidate.SourceTypes, "manual")
+		}
+		if err := applyCandidateServiceProjection(&item.candidate, services, format); err != nil {
+			return Page[BindingCandidate]{}, err
 		}
 		items = append(items, item)
 	}
@@ -929,7 +962,7 @@ func (r *Repository) validateCandidateParents(ctx context.Context, userID, endpo
 	}
 	var count int
 	if keyID != 0 {
-		query := `SELECT count(*) FROM endpoint_keys k JOIN endpoints e ON e.id=k.endpoint_id WHERE e.user_id=? AND k.id=?`
+		query := `SELECT count(*) FROM endpoint_key_current_credentials k JOIN endpoints e ON e.id=k.endpoint_id WHERE e.user_id=? AND k.id=?`
 		args := []any{userID, keyID}
 		if endpointID != 0 {
 			query += ` AND e.id=?`

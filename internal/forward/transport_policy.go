@@ -20,8 +20,16 @@ func freezeTransport(request *validatedRequest, plan *executionPlan) error {
 		return nil
 	}
 	prepared := make(map[*preparedAttempt]*preparedAttempt)
+	failures := make(map[*preparedAttempt]error)
 	for i := range plan.candidates {
 		candidate := &plan.candidates[i]
+		if candidate.preparationError != nil {
+			continue
+		}
+		if failed, ok := failures[candidate.prepared]; ok {
+			candidate.preparationError = failed
+			continue
+		}
 		if shared, ok := prepared[candidate.prepared]; ok {
 			candidate.prepared = shared
 			continue
@@ -29,7 +37,9 @@ func freezeTransport(request *validatedRequest, plan *executionPlan) error {
 		source := candidate.prepared.source(request)
 		physical, err := source.withTransport(plan.transportRule)
 		if err != nil {
-			return err
+			failures[candidate.prepared] = err
+			candidate.preparationError = err
+			continue
 		}
 		previous := candidate.prepared
 		if previous == nil {

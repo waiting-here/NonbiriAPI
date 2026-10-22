@@ -14,10 +14,10 @@ func TestRecoverNonterminalAtUsesFrozenTimeAndBoundedClaimBatch(t *testing.T) {
 	for index := 0; index < 2; index++ {
 		key := fixture.seedKey(userID, "bounded-recovery-"+string(rune('a'+index)))
 		key.candidate.UpstreamModelID = ""
-		if _, _, err := fixture.service.ClaimDiscovery(context.Background(), DiscoveryClaimInput{
+		if _, _, err := fixture.service.ClaimDiscovery(context.Background(), fixture.discoveryInput(DiscoveryClaimInput{
 			ActorUserID: userID,
 			Candidate:   key.candidate,
-		}); err != nil {
+		})); err != nil {
 			t.Fatalf("claim discovery %d: %v", index, err)
 		}
 	}
@@ -74,10 +74,10 @@ func TestRecoverNonterminalAtHonorsExpiredBudget(t *testing.T) {
 	userID := fixture.seedUser("deadline-recovery", false)
 	key := fixture.seedKey(userID, "deadline-recovery")
 	key.candidate.UpstreamModelID = ""
-	if _, _, err := fixture.service.ClaimDiscovery(context.Background(), DiscoveryClaimInput{
+	if _, _, err := fixture.service.ClaimDiscovery(context.Background(), fixture.discoveryInput(DiscoveryClaimInput{
 		ActorUserID: userID,
 		Candidate:   key.candidate,
-	}); err != nil {
+	})); err != nil {
 		t.Fatalf("claim discovery: %v", err)
 	}
 

@@ -14,6 +14,7 @@ import (
 // field is explicit so a future database or domain DTO field cannot silently
 // enter a personal export.
 type ExportDocument struct {
+	ConnectionExportCollections
 	GovernanceExport
 	InteractionExport
 	Checkins            []CheckinExport                 `json:"checkins"`
@@ -105,15 +106,18 @@ type LogSummaryExport struct {
 }
 
 type EndpointExport struct {
-	ID            string               `json:"id"`
-	ConnectorType string               `json:"connector_type"`
-	BaseURL       string               `json:"base_url"`
-	Origin        EndpointOriginExport `json:"origin"`
-	Note          string               `json:"note"`
-	Enabled       bool                 `json:"enabled"`
-	CreatedAt     int64                `json:"created_at"`
-	UpdatedAt     int64                `json:"updated_at"`
-	Keys          []EndpointKeyExport  `json:"keys"`
+	ConnectionID   *string              `json:"connection_id"`
+	NativeServices []string             `json:"native_services"`
+	RerankFormat   string               `json:"rerank_format"`
+	ID             string               `json:"id"`
+	ConnectorType  string               `json:"connector_type"`
+	BaseURL        string               `json:"base_url"`
+	Origin         EndpointOriginExport `json:"origin"`
+	Note           string               `json:"note"`
+	Enabled        bool                 `json:"enabled"`
+	CreatedAt      int64                `json:"created_at"`
+	UpdatedAt      int64                `json:"updated_at"`
+	Keys           []EndpointKeyExport  `json:"keys"`
 }
 
 type EndpointOriginExport struct {
@@ -123,17 +127,22 @@ type EndpointOriginExport struct {
 }
 
 type EndpointKeyExport struct {
-	ID              string `json:"id"`
-	DisplayHead     string `json:"display_head"`
-	DisplayTail     string `json:"display_tail"`
-	Note            string `json:"note"`
-	Enabled         bool   `json:"enabled"`
-	ForceStoreFalse bool   `json:"force_store_false"`
-	MaxConcurrency  int64  `json:"max_concurrency"`
-	MaxRPM          int64  `json:"max_rpm"`
-	SuspensionState string `json:"suspension_state"`
-	CreatedAt       int64  `json:"created_at"`
-	UpdatedAt       int64  `json:"updated_at"`
+	CredentialID      string   `json:"credential_id"`
+	CredentialVersion string   `json:"credential_version"`
+	GrantRevision     string   `json:"grant_revision"`
+	NativeServices    []string `json:"native_services"`
+	DiscoverySourceID *string  `json:"discovery_source_id"`
+	ID                string   `json:"id"`
+	DisplayHead       string   `json:"display_head"`
+	DisplayTail       string   `json:"display_tail"`
+	Note              string   `json:"note"`
+	Enabled           bool     `json:"enabled"`
+	ForceStoreFalse   bool     `json:"force_store_false"`
+	MaxConcurrency    int64    `json:"max_concurrency"`
+	MaxRPM            int64    `json:"max_rpm"`
+	SuspensionState   string   `json:"suspension_state"`
+	CreatedAt         int64    `json:"created_at"`
+	UpdatedAt         int64    `json:"updated_at"`
 }
 
 type DiscoveryEvidenceExport struct {

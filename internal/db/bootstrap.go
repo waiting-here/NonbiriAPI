@@ -17,6 +17,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
@@ -408,8 +409,16 @@ func foreignKeyCheck(ctx context.Context, q queryer) error {
 // ValidateStoredEndpointCredentials audits every persisted endpoint envelope.
 // Ordinary startup validates only the fixed key material; offline checks use this scan.
 func ValidateStoredEndpointCredentials(ctx context.Context, q queryer, generationTwoCodec secret.GenerationTwoContextCodec) error {
+	return validateStoredEndpointCredentials(ctx, q, generationTwoCodec, true)
+}
+
+func validateStoredEndpointCredentials(ctx context.Context, q queryer, generationTwoCodec secret.GenerationTwoContextCodec, shared bool) error {
 	if generationTwoCodec == nil {
 		return errors.New("generation-two secret codec unavailable")
+	}
+	referenceSQL := "(SELECT COUNT(*) FROM secret_live_references r WHERE r.secret_ref_id=endpoint_key_secrets.id)"
+	if !shared {
+		referenceSQL = "(SELECT COUNT(*) FROM endpoint_keys k WHERE k.secret_ref_id=endpoint_key_secrets.id)+(SELECT COUNT(*) FROM dispatch_claims c WHERE c.secret_ref_id=endpoint_key_secrets.id AND c.state IN ('claimed','dispatched'))"
 	}
 	// Validate every secret row, including orphaned rows. A join against the
 	// live endpoint-key set is insufficient: an unreferenced ciphertext is
@@ -422,8 +431,7 @@ SELECT id, context_id, canonical_base_url, connector_type,
                   AND length(CAST(encrypted_secret AS BLOB)) BETWEEN 1 AND ?
             THEN encrypted_secret END,
        orphaned_at,
-       (SELECT COUNT(*) FROM endpoint_keys ek WHERE ek.secret_ref_id=endpoint_key_secrets.id),
-       (SELECT COUNT(*) FROM dispatch_claims c WHERE c.secret_ref_id=endpoint_key_secrets.id AND c.state IN ('claimed','dispatched'))
+       `+referenceSQL+`
 FROM endpoint_key_secrets
 ORDER BY id`, maxEndpointCredentialEnvelopeBytes)
 	if err != nil {
@@ -433,17 +441,18 @@ ORDER BY id`, maxEndpointCredentialEnvelopeBytes)
 	for rows.Next() {
 		var id int64
 		var contextID []byte
-		var canonicalBaseURL, connector, ciphertextType string
+		var canonicalBaseURL, connector sql.NullString
+		var ciphertextType string
 		var ciphertext sql.NullString
 		var ciphertextBytes int64
 		var orphanedAt sql.NullInt64
-		var endpointKeyRefs, pendingClaimRefs int
-		if err := rows.Scan(&id, &contextID, &canonicalBaseURL, &connector, &ciphertextType, &ciphertextBytes, &ciphertext, &orphanedAt, &endpointKeyRefs, &pendingClaimRefs); err != nil {
+		var liveRefs int
+		if err := rows.Scan(&id, &contextID, &canonicalBaseURL, &connector, &ciphertextType, &ciphertextBytes, &ciphertext, &orphanedAt, &liveRefs); err != nil {
 			clear(contextID)
 			return err
 		}
-		validRow := id > 0 && len(contextID) == 16 && utf8.ValidString(canonicalBaseURL) &&
-			connectorcontract.Type(connector).Valid() &&
+		validRow := id > 0 && len(contextID) == 16 && (shared || canonicalBaseURL.Valid) && canonicalBaseURL.Valid == connector.Valid &&
+			(!canonicalBaseURL.Valid || (utf8.ValidString(canonicalBaseURL.String) && connectorcontract.Type(connector.String).Valid())) &&
 			ciphertextType == "text" && ciphertextBytes >= 1 && ciphertextBytes <= maxEndpointCredentialEnvelopeBytes &&
 			ciphertext.Valid && int64(len([]byte(ciphertext.String))) == ciphertextBytes && utf8.ValidString(ciphertext.String) &&
 			(!orphanedAt.Valid || (orphanedAt.Int64 >= 0 && orphanedAt.Int64 <= generationTwoMaxUnixSeconds))
@@ -452,8 +461,8 @@ ORDER BY id`, maxEndpointCredentialEnvelopeBytes)
 			ciphertext.String = ""
 			return errors.New("invalid endpoint credential row")
 		}
-		storedBaseURL, originErr := egress.CanonicalEndpointBaseURL(canonicalBaseURL)
-		if originErr != nil || storedBaseURL != canonicalBaseURL {
+		storedBaseURL, originErr := egress.CanonicalEndpointBaseURL(canonicalBaseURL.String)
+		if canonicalBaseURL.Valid && (originErr != nil || storedBaseURL != canonicalBaseURL.String) {
 			clear(contextID)
 			ciphertext.String = ""
 			return errors.New("invalid endpoint credential origin")
@@ -476,7 +485,7 @@ ORDER BY id`, maxEndpointCredentialEnvelopeBytes)
 			return errors.New("invalid endpoint credential authentication")
 		}
 		recordStartupProgress(ctx, 1, 0)
-		if orphanedAt.Valid && (endpointKeyRefs != 0 || pendingClaimRefs != 0) {
+		if orphanedAt.Valid && liveRefs != 0 {
 			return errors.New("orphaned endpoint credential remains referenced")
 		}
 	}
@@ -487,44 +496,47 @@ ORDER BY id`, maxEndpointCredentialEnvelopeBytes)
 		return err
 	}
 
-	// Validate each live endpoint-key link separately. This catches identity
-	// drift (endpoint origin/connector versus immutable secret metadata) even
-	// when the envelope itself remains cryptographically valid.
+	if !shared {
+		return validateLegacyCredentialLinks(ctx, q)
+	}
+	// Shared secrets have no endpoint identity. Validate each current grant
+	// through the same relationship projection used by dispatch authorization.
 	rows, err = q.QueryContext(ctx, `
-SELECT ek.id, ek.secret_ref_id,
+SELECT ek.id, a.secret_ref_id,
        typeof(e.base_url), length(CAST(e.base_url AS BLOB)),
        CASE WHEN typeof(e.base_url)='text'
                   AND length(CAST(e.base_url AS BLOB)) BETWEEN 1 AND ?
             THEN e.base_url END,
-       e.connector_type, eks.canonical_base_url, eks.connector_type, eks.orphaned_at
+       e.connector_type, COALESCE(a.relationship_valid,0), s.orphaned_at, c.deleted_at, v.retired_at
 FROM endpoint_keys ek
 JOIN endpoints e ON e.id=ek.endpoint_id
-JOIN endpoint_key_secrets eks ON eks.id=ek.secret_ref_id
+LEFT JOIN endpoint_grant_authorizations a ON a.grant_revision_id=ek.current_grant_revision_id
+LEFT JOIN endpoint_key_secrets s ON s.id=a.secret_ref_id
+LEFT JOIN credentials c ON c.id=a.credential_id
+LEFT JOIN credential_versions v ON v.id=a.credential_version_id
 ORDER BY ek.id`, maxStoredEndpointBaseURLBytes)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var keyID, secretRefID int64
-		var baseType, endpointConnector, secretBaseURL, secretConnector string
-		var baseBytes int64
+		var keyID, baseBytes int64
+		var secretRefID sql.NullInt64
+		var baseType, endpointConnector string
 		var baseURL sql.NullString
-		var orphanedAt sql.NullInt64
-		if err := rows.Scan(&keyID, &secretRefID, &baseType, &baseBytes, &baseURL, &endpointConnector, &secretBaseURL, &secretConnector, &orphanedAt); err != nil {
+		var relationshipValid int
+		var orphanedAt, deletedAt, retiredAt sql.NullInt64
+		if err := rows.Scan(&keyID, &secretRefID, &baseType, &baseBytes, &baseURL, &endpointConnector, &relationshipValid, &orphanedAt, &deletedAt, &retiredAt); err != nil {
 			return err
 		}
-		if keyID <= 0 || secretRefID <= 0 || baseType != "text" || baseBytes < 1 || baseBytes > maxStoredEndpointBaseURLBytes ||
-			!baseURL.Valid || int64(len([]byte(baseURL.String))) != baseBytes || !utf8.ValidString(baseURL.String) ||
-			!connectorcontract.Type(endpointConnector).Valid() ||
-			secretConnector != endpointConnector || orphanedAt.Valid {
-			baseURL.String = ""
+		validSecret := secretRefID.Valid && secretRefID.Int64 > 0 && !orphanedAt.Valid || deletedAt.Valid && !secretRefID.Valid && retiredAt.Valid
+		if keyID <= 0 || !validSecret || relationshipValid != 1 || baseType != "text" ||
+			baseBytes < 1 || baseBytes > maxStoredEndpointBaseURLBytes || !baseURL.Valid ||
+			int64(len([]byte(baseURL.String))) != baseBytes || !utf8.ValidString(baseURL.String) ||
+			!connectorcontract.Type(endpointConnector).Valid() || orphanedAt.Valid {
 			return errors.New("invalid endpoint credential link")
 		}
-		target, _, targetErr := egress.CanonicalEndpointTarget(baseURL.String)
-		secretTarget, _, secretTargetErr := egress.CanonicalEndpointTarget(secretBaseURL)
-		baseURL.String = ""
-		if targetErr != nil || secretTargetErr != nil || target != secretTarget {
+		if _, _, err := egress.CanonicalEndpointTarget(baseURL.String); err != nil {
 			return errors.New("invalid endpoint credential link origin")
 		}
 	}
@@ -533,6 +545,15 @@ ORDER BY ek.id`, maxStoredEndpointBaseURLBytes)
 	}
 	if err := rows.Close(); err != nil {
 		return err
+	}
+	var invalidCurrent int
+	if err := q.QueryRowContext(ctx, `SELECT count(*) FROM credentials c
+LEFT JOIN credential_versions v ON v.id=c.current_version_id AND v.credential_id=c.id
+WHERE c.deleted_at IS NULL AND (v.id IS NULL OR v.secret_ref_id IS NULL OR v.retired_at IS NOT NULL)`).Scan(&invalidCurrent); err != nil {
+		return err
+	}
+	if invalidCurrent != 0 {
+		return errors.New("invalid current credential version")
 	}
 
 	// A non-terminal claim keeps its secret live even if its endpoint key has
@@ -590,33 +611,33 @@ func reconcileEndpointKeySecretOrphans(ctx context.Context, d *sql.DB) error {
 			cancel()
 			return batchErr
 		}
+		retired, err := retireDetachedCredentialVersions(batchCtx, tx, now)
+		if err != nil {
+			return batchFailure(fmt.Errorf("endpoint credential recovery: retire versions: %w", err))
+		}
 		deleteResult, err := tx.ExecContext(batchCtx, `DELETE FROM endpoint_key_secrets
 			WHERE id IN (SELECT s.id FROM endpoint_key_secrets s
 			            WHERE s.orphaned_at IS NOT NULL AND s.orphaned_at <= ?
-			              AND NOT EXISTS (SELECT 1 FROM endpoint_keys ek WHERE ek.secret_ref_id=s.id)
-			              AND NOT EXISTS (SELECT 1 FROM dispatch_claims c
-			                              WHERE c.secret_ref_id=s.id AND c.state IN ('claimed','dispatched'))
-			            ORDER BY s.id LIMIT 100)`, cutoff)
+			              AND NOT EXISTS (SELECT 1 FROM secret_live_references r WHERE r.secret_ref_id=s.id)
+			            ORDER BY s.id LIMIT ?)`, cutoff, 100-retired)
 		if err != nil {
 			return batchFailure(fmt.Errorf("endpoint credential recovery: sweep detached rows: %w", err))
 		}
 		deleted, err := deleteResult.RowsAffected()
-		if err != nil || deleted < 0 || deleted > 100 {
+		if err != nil || deleted < 0 || deleted > 100-retired {
 			if err != nil {
 				return batchFailure(fmt.Errorf("endpoint credential recovery: invalid sweep count: %w", err))
 			}
 			return batchFailure(errors.New("endpoint credential recovery: invalid sweep count"))
 		}
-		remaining := int64(100) - deleted
+		remaining := int64(100) - retired - deleted
 		marked := int64(0)
 		if remaining > 0 {
 			markResult, markErr := tx.ExecContext(batchCtx, `UPDATE endpoint_key_secrets
 				SET orphaned_at=?
 				WHERE id IN (SELECT s.id FROM endpoint_key_secrets s
 				            WHERE s.orphaned_at IS NULL
-				              AND NOT EXISTS (SELECT 1 FROM endpoint_keys ek WHERE ek.secret_ref_id=s.id)
-				              AND NOT EXISTS (SELECT 1 FROM dispatch_claims c
-				                              WHERE c.secret_ref_id=s.id AND c.state IN ('claimed','dispatched'))
+				              AND NOT EXISTS (SELECT 1 FROM secret_live_references r WHERE r.secret_ref_id=s.id)
 				            ORDER BY s.id LIMIT ?)`, now, remaining)
 			if markErr != nil {
 				return batchFailure(fmt.Errorf("endpoint credential recovery: mark detached rows: %w", markErr))
@@ -634,12 +655,46 @@ func reconcileEndpointKeySecretOrphans(ctx context.Context, d *sql.DB) error {
 		}
 		committed = true
 		RecordStartupCheckpoint(ctx, StageDomainRecovery)
-		recordStartupProgress(ctx, deleted+marked, 0)
+		recordStartupProgress(ctx, retired+deleted+marked, 0)
 		cancel()
-		if deleted+marked == 0 {
+		if retired+deleted+marked == 0 {
 			return nil
 		}
 	}
+}
+
+func retireDetachedCredentialVersions(ctx context.Context, tx *sql.Tx, now int64) (int64, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT v.id FROM credential_versions v
+WHERE v.secret_ref_id IS NOT NULL
+ AND NOT EXISTS(SELECT 1 FROM credential_version_live_references r WHERE r.credential_version_id=v.id)
+ AND NOT EXISTS(SELECT 1 FROM secret_live_references r WHERE r.secret_ref_id=v.secret_ref_id)
+ORDER BY v.id LIMIT 100`)
+	if err != nil {
+		return 0, err
+	}
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		ids = append(ids, id)
+	}
+	if err := errors.Join(rows.Err(), rows.Close()); err != nil {
+		return 0, err
+	}
+	var retired int64
+	for _, id := range ids {
+		changed, err := connectionstore.RetireUnreferencedVersionTx(ctx, tx, id, now)
+		if err != nil {
+			return 0, err
+		}
+		if changed {
+			retired++
+		}
+	}
+	return retired, nil
 }
 
 var beforeWritableOpenHook func()

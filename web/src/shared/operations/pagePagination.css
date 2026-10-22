@@ -13,6 +13,7 @@
 }
 .nb-pager__pages {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--nb-space-1);
 }
@@ -64,25 +65,12 @@
   flex-basis: 100%;
   overflow-wrap: anywhere;
 }
-.nb-pager__mobile {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
+.pagination.nb-pager .nb-pager__mobile {
+  display: none;
 }
-@media (width < 40rem) {
-  .nb-pager .nb-pager__number,
-  .nb-pager__size {
-    display: none;
-  }
-  .nb-pager__mobile {
-    position: static;
-    width: auto;
-    height: auto;
-    overflow: visible;
-    clip-path: none;
+@media (width <= 40rem) {
+  .pagination.nb-pager .nb-pager__size {
+    display: flex;
   }
   .nb-pager button {
     min-height: 2.5rem;

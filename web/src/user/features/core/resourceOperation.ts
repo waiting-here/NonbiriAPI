@@ -54,7 +54,18 @@ export type ResourceResult =
   | { kind: 'model'; row: string; model: Model }
   | { kind: 'binding'; row: string; model: Model; bindings: BindingsResponse };
 
-type Stage = 'endpoint' | 'key' | 'catalog_refresh' | 'catalog_manual' | 'model' | 'binding_batch';
+type Stage =
+  | 'connection'
+  | 'credential'
+  | 'credential_version'
+  | 'discovery_source'
+  | 'source_refresh'
+  | 'endpoint'
+  | 'key'
+  | 'catalog_refresh'
+  | 'catalog_manual'
+  | 'model'
+  | 'binding_batch';
 export type ResourceStatus =
   | { status: 'not_recorded' | 'expired' }
   | { status: 'recorded' | 'in_progress'; stage: Stage; result: Record<string, string | string[]> };
@@ -99,10 +110,11 @@ export async function executeResource(
     case 'endpoint':
       return { kind: 'endpoint', endpoint: await createEndpoint(intent.input, identity, signal) };
     case 'key': {
-      if (!secret) throw new ApiError('secret_required', 'Enter the service key again.', 400);
+      if (!secret && !intent.input.credential_id)
+        throw new ApiError('secret_required', 'Enter the service key again.', 400);
       const saved = await createEndpointKey(
         intent.endpointId,
-        { ...intent.input, secret },
+        { ...intent.input, ...(intent.input.credential_id ? {} : { secret }) },
         identity,
         signal,
       );
@@ -194,7 +206,15 @@ export async function readResourceResult(
         !bindings.bindings.some(
           (b) =>
             b.endpoint_key_id === intent.selection.endpoint_key_id &&
-            b.upstream_model_id === intent.selection.upstream_model_id,
+            b.upstream_model_id === intent.selection.upstream_model_id &&
+            (!intent.selection.targets ||
+              JSON.stringify(
+                b.targets?.map(({ endpoint_key_id, upstream_model_id, native_services }) => ({
+                  endpoint_key_id,
+                  upstream_model_id,
+                  native_services,
+                })),
+              ) === JSON.stringify(intent.selection.targets)),
         )
       )
         throw new ApiError('conflict', 'The connection is no longer present.', 409);

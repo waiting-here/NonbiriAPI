@@ -4,10 +4,25 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
-## 1.1.0 — 2026-10-21
+## 1.1.0 — 2026-10-22
 
 ### Added
 
+- Service connections with shared versioned credentials, independent model
+  directories and multi-service entries. OpenAI-compatible and Gateway entries
+  explicitly select native services; model bindings retain ordered alternative
+  targets without multiplying retry slots or budgets.
+- Per-service donation approval, with pending replacements alongside older
+  approved versions. Credential rotation and explicitly added services require
+  review while preserving the existing donated-key budget and consumption.
+- Multi-entry mainstream presets with independent discovery suggestions and
+  per-model entry mappings, shared by personal setup and donation workflows.
+- Custom-entry address suggestions list all matching available mainstream entries.
+  Explicit adoption selects one entry and compatible services while preserving
+  the custom draft.
+- Administrator and strictly higher-level steward CallerKey revocation from user
+  details, with generation checks and replay receipts that preserve later
+  replacements.
 - Direct HTTP/SSE Responses, legacy completions, image editing/variation, audio,
   moderation and rerank operations, plus exact model lookup. Persistent resource
   APIs and all WebSocket/Realtime/WebRTC interfaces remain outside this version.
@@ -73,16 +88,20 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Chat and Responses share a model service selection, with explicit upstream
   protocol choice and bounded conversion in both directions. Other model
   services retain independent multi-selection.
-- Storage schema 32 adds the explicit Gateway v4 protocol value and retains
-  direct-inference/admission changes, personal managed-header configuration,
-  anonymous pressure samples and minimal caller-parameter-error receipts.
-  Exact schema 16–31 sources use the offline converter. Account export 28 retains
-  v3/v4 protocol values, safe aggregate modality/search usage, configured/effective
-  user limits and personal-model header configuration;
-  generated header values and shared charity configuration remain excluded.
+- Storage schema 33 adds connection, credential-version, discovery and service
+  authorization relationships, while preserving direct-inference, admission,
+  managed-header and pressure changes. Only published schema 16–26 sources are
+  accepted by the offline converter. Account export 29 includes safe owned
+  connection metadata and donation uses; secret material, generated headers,
+  internal authorizations and shared charity configuration remain excluded.
 - Model settings and request adaptation have consistent entry points and header/body
   groups across personal and charity editors, with separate saves and existing
   permissions.
+- Authorized adaptation configuration reads expose saved unprotected fixed-header
+  and body values. Any response-protection marker hides the whole saved item;
+  mutation receipts, replay storage and safe exports retain their value-free shape.
+- Short charity-request errors explain the minimum-length requirement in both
+  interface languages, preserving their status, code, counts and accounting.
 - Strictly verified original caller-parameter errors leave a donated key's failure
   streak unchanged, without clearing it. HTTP 400/422, generic error types and
   message wording alone never establish this result; errors, diagnostics and
@@ -96,13 +115,15 @@ Each version entry describes its source and compatibility boundary; a release ta
 ### Fixed
 
 - Account deletion succeeds after related terminal request logs have naturally expired.
-- Account downloads accept export versions 11–28 and preserve saved personal
+- Account downloads accept export versions 11–29 and preserve saved personal
   managed-header settings, while retaining identity and attachment-version checks.
 - Improve glass-surface readability, management back controls and centered
   workbench widths on desktop and mobile. Focus-mode background viewing restores
   the selected reading surface on return; manual intensity choices remain effective
   when browser preference storage is unavailable.
 
+- Preserve connection search, page size and return position across nested settings.
+  Keep page controls, long model names and preset details readable on narrow screens.
 - Keep sequential setup actions disabled until the preceding save and refresh settle.
 - Keep donation review navigation fresh after returning from key binding to the list.
 - Keep the charity page available when a usage-priced model has no configured credit reserve.

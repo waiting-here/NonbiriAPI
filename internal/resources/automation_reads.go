@@ -51,6 +51,7 @@ func (r *Repository) AutomationModel(ctx context.Context, userID, id int64) (Mod
 }
 
 type AutomationBinding struct {
+	TargetID        string `json:"target_id"`
 	ID              string `json:"id"`
 	EndpointKeyID   string `json:"endpoint_key_id"`
 	EndpointID      string `json:"endpoint_id"`
@@ -73,16 +74,16 @@ func (r *Repository) AutomationBindings(ctx context.Context, userID, modelID int
 		if _, err := r.getModelTx(ctx, tx, userID, modelID); err != nil {
 			return Page[AutomationBinding]{}, err
 		}
-		query := `SELECT b.id,k.id,e.id,e.base_url,e.connector_type,e.note,k.note,k.display_head,k.display_tail,b.upstream_model_id,b.ord,e.enabled,k.enabled,
+		query := `SELECT b.id,k.id,e.id,e.base_url,e.connector_type,e.note,k.note,k.display_head,k.display_tail,t.upstream_model_id,b.ord,e.enabled,k.enabled,
   CASE WHEN EXISTS(SELECT 1 FROM endpoint_key_suspensions x WHERE x.endpoint_key_id=k.id) THEN 'security_processing' ELSE 'none' END,
-  COALESCE((p.manual_supports>0 OR (p.automatic_supports>0 AND d.state='succeeded' AND d.revision=p.automatic_revision)),0)
-  FROM model_bindings b JOIN models m ON m.id=b.model_id JOIN endpoint_keys k ON k.id=b.endpoint_key_id JOIN endpoints e ON e.id=k.endpoint_id
-  LEFT JOIN model_pair_catalog p ON p.endpoint_key_id=k.id AND p.normalized_model_id=b.upstream_model_id LEFT JOIN model_discovery_evidence d ON d.endpoint_key_id=k.id
-  WHERE m.id=? AND m.user_id=? AND e.user_id=? AND (?='' OR instr(b.upstream_model_id,?)>0 OR instr(e.base_url,?)>0 OR instr(e.note,?)>0 OR instr(k.note,?)>0)`
-		return readNumberedPage(ctx, tx, page, query, "b.ord,b.id", []any{modelID, userID, userID, q, q, q, q, q}, func(s pageScanner) (AutomationBinding, error) {
+  COALESCE((p.manual_supports>0 OR (p.automatic_supports>0 AND d.state='succeeded' AND d.revision=p.automatic_revision)),0),t.id
+  FROM model_bindings b JOIN model_binding_targets t ON t.binding_id=b.id JOIN models m ON m.id=b.model_id JOIN endpoint_key_current_credentials k ON k.id=t.endpoint_key_id JOIN endpoints e ON e.id=k.endpoint_id
+  LEFT JOIN model_pair_catalog p ON p.endpoint_key_id=k.id AND p.normalized_model_id=t.upstream_model_id LEFT JOIN model_discovery_evidence d ON d.endpoint_key_id=k.id
+  WHERE m.id=? AND m.user_id=? AND e.user_id=? AND (?='' OR instr(t.upstream_model_id,?)>0 OR instr(e.base_url,?)>0 OR instr(e.note,?)>0 OR instr(k.note,?)>0)`
+		return readNumberedPage(ctx, tx, page, query, "b.ord,b.id,t.ord,t.id", []any{modelID, userID, userID, q, q, q, q, q}, func(s pageScanner) (AutomationBinding, error) {
 			var item AutomationBinding
 			var id, keyID, endpointID int64
-			err := s.Scan(&id, &keyID, &endpointID, &item.BaseURL, &item.ConnectorType, &item.EndpointNote, &item.KeyNote, &item.DisplayHead, &item.DisplayTail, &item.UpstreamModelID, &item.Ord, &item.EndpointEnabled, &item.KeyEnabled, &item.SuspensionState, &item.CatalogEligible)
+			err := s.Scan(&id, &keyID, &endpointID, &item.BaseURL, &item.ConnectorType, &item.EndpointNote, &item.KeyNote, &item.DisplayHead, &item.DisplayTail, &item.UpstreamModelID, &item.Ord, &item.EndpointEnabled, &item.KeyEnabled, &item.SuspensionState, &item.CatalogEligible, &item.TargetID)
 			item.ID, _ = decimalID(id)
 			item.EndpointKeyID, _ = decimalID(keyID)
 			item.EndpointID, _ = decimalID(endpointID)

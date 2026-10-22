@@ -8,7 +8,7 @@ import (
 )
 
 func TestFrozenBoundsAndHeldObjectKinds(t *testing.T) {
-	if SchemaVersion != 28 || CollectionLimit != 10_000 || MaxExportBytes != 16<<20 || WorkerBatchLimit != 100 {
+	if SchemaVersion != 29 || CollectionLimit != 10_000 || MaxExportBytes != 16<<20 || WorkerBatchLimit != 100 {
 		t.Fatalf("frozen bounds changed: schema=%d collection=%d bytes=%d batch=%d",
 			SchemaVersion, CollectionLimit, MaxExportBytes, WorkerBatchLimit)
 	}
@@ -46,6 +46,7 @@ func TestExportDocumentHasClosedTopLevel(t *testing.T) {
 	}
 	sort.Strings(got)
 	want := []string{
+		"connections", "credentials", "credential_versions", "grants", "discovery_sources", "source_revisions", "binding_targets", "donation_uses", "native_service_evidence",
 		"request_adaptations", "continuity", "fat_fish",
 		"limited_activities", "image_tasks", "inactivity", "lake_notes", "gacha", "appearance", "rewards",
 		"game_onboarding_holds", "loans", "game_rankings", "penalties",
@@ -77,7 +78,7 @@ func TestExportEndpointAndDonationSchemasAreClosed(t *testing.T) {
 	assertClosedJSONKeys(t, PenaltyExport{}, "id", "kind", "reason_code", "started_at", "ends_at", "ended_at", "state", "result", "actions")
 	assertClosedJSONKeys(t, PenaltyActionExport{}, "action", "occurred_at", "reason_code", "previous_ends_at", "ends_at", "request_id", "operation_id")
 	assertClosedJSONKeys(t, EndpointExport{},
-		"id", "connector_type", "base_url", "origin", "note", "enabled", "created_at", "updated_at", "keys")
+		"id", "connector_type", "base_url", "origin", "note", "enabled", "created_at", "updated_at", "keys", "connection_id", "native_services", "rerank_format")
 	assertClosedJSONKeys(t, EndpointOriginExport{Kind: "custom"}, "kind")
 	assertClosedJSONKeys(t, EndpointOriginExport{
 		Kind: "mainstream", ChannelID: "mch_safe", Name: "Safe channel",

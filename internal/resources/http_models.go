@@ -68,13 +68,15 @@ type patchModelCanonical struct {
 }
 
 type bindingSelectionRequest struct {
-	EndpointKeyID   requestField[string] `json:"endpoint_key_id"`
-	UpstreamModelID requestField[string] `json:"upstream_model_id"`
+	Targets         requestField[[]bindingTargetRequest] `json:"targets"`
+	EndpointKeyID   requestField[string]                 `json:"endpoint_key_id"`
+	UpstreamModelID requestField[string]                 `json:"upstream_model_id"`
 }
 
 type bindingSelectionCanonical struct {
-	EndpointKeyID   string `json:"endpoint_key_id"`
-	UpstreamModelID string `json:"upstream_model_id"`
+	EndpointKeyID   string                   `json:"endpoint_key_id,omitempty"`
+	UpstreamModelID string                   `json:"upstream_model_id,omitempty"`
+	Targets         []bindingTargetCanonical `json:"targets,omitempty"`
 }
 
 type addBindingsRequest struct {
@@ -88,21 +90,25 @@ type addBindingsCanonical struct {
 }
 
 type orderBindingsRequest struct {
+	Response                requestField[string]   `json:"response"`
 	ExpectedBindingRevision requestField[string]   `json:"expected_binding_revision"`
 	Order                   requestField[[]string] `json:"order"`
 }
 
 type orderBindingsCanonical struct {
+	Response                *string  `json:"response,omitempty"`
 	ExpectedBindingRevision string   `json:"expected_binding_revision"`
 	Order                   []string `json:"order"`
 }
 
 type expectedBindingRevisionRequest struct {
+	Response                requestField[string] `json:"response"`
 	ExpectedBindingRevision requestField[string] `json:"expected_binding_revision"`
 }
 
 type expectedBindingRevisionCanonical struct {
-	ExpectedBindingRevision string `json:"expected_binding_revision"`
+	Response                *string `json:"response,omitempty"`
+	ExpectedBindingRevision string  `json:"expected_binding_revision"`
 }
 
 func (api *httpAPI) listModels(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
@@ -361,7 +367,7 @@ func (api *httpAPI) listBindings(writer http.ResponseWriter, request *http.Reque
 	writeJSON(writer, http.StatusOK, bindings)
 }
 
-func (api *httpAPI) addBindings(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
+func (api *httpAPI) addBindingsWithReceipt(writer http.ResponseWriter, request *http.Request, principal UserPrincipal, compact bool) {
 	modelID, ok := parsePathID(writer, request, "id")
 	if !ok || !requireEmptyQuery(writer, request) {
 		return
@@ -378,6 +384,20 @@ func (api *httpAPI) addBindings(writer http.ResponseWriter, request *http.Reques
 	selections := make([]BindingSelection, len(body.Selections.Value))
 	canonicalSelections := make([]bindingSelectionCanonical, len(body.Selections.Value))
 	for index, selection := range body.Selections.Value {
+		if selection.Targets.Set {
+			if selection.EndpointKeyID.Set || selection.UpstreamModelID.Set {
+				writeResourceError(writer, ErrInvalidRequest)
+				return
+			}
+			targets, canonicalTargets, ok := parseBindingTargetRequests(selection.Targets.Value)
+			if !ok {
+				writeResourceError(writer, ErrInvalidRequest)
+				return
+			}
+			selections[index] = BindingSelection{Targets: targets}
+			canonicalSelections[index] = bindingSelectionCanonical{Targets: canonicalTargets}
+			continue
+		}
 		if !selection.EndpointKeyID.Set || !selection.UpstreamModelID.Set {
 			writeResourceError(writer, ErrInvalidRequest)
 			return
@@ -391,11 +411,15 @@ func (api *httpAPI) addBindings(writer http.ResponseWriter, request *http.Reques
 		canonicalSelections[index] = bindingSelectionCanonical{EndpointKeyID: selection.EndpointKeyID.Value, UpstreamModelID: selection.UpstreamModelID.Value}
 	}
 	canonical := addBindingsCanonical{ExpectedBindingRevision: body.ExpectedBindingRevision.Value, Selections: canonicalSelections}
-	mutation, ok := controlMutation(writer, request, routeBindingBatch, []int64{modelID}, canonical)
+	route := routeBindingBatch
+	if compact {
+		route = routeBindingBatchReceipt
+	}
+	mutation, ok := controlMutation(writer, request, route, []int64{modelID}, canonical)
 	if !ok {
 		return
 	}
-	result, err := api.repository.AddBindings(request.Context(), principal.UserID, modelID, mutation, revision, selections)
+	result, err := api.repository.addBindings(request.Context(), principal.UserID, modelID, mutation, revision, selections, compact)
 	if err != nil {
 		writeResourceError(writer, err)
 		return
@@ -412,6 +436,10 @@ func (api *httpAPI) orderBindings(writer http.ResponseWriter, request *http.Requ
 	if _, ok := decodeStrictObject(writer, request, &body); !ok {
 		return
 	}
+	if body.Response.Set && body.Response.Value != "receipt" {
+		writeResourceError(writer, ErrInvalidRequest)
+		return
+	}
 	revision, revisionOK := canonicalExpectedGeneration(body.ExpectedBindingRevision)
 	if !revisionOK || !body.Order.Set {
 		writeResourceError(writer, ErrInvalidRequest)
@@ -426,12 +454,12 @@ func (api *httpAPI) orderBindings(writer http.ResponseWriter, request *http.Requ
 		}
 		order[index] = id
 	}
-	canonical := orderBindingsCanonical{ExpectedBindingRevision: body.ExpectedBindingRevision.Value, Order: append([]string(nil), body.Order.Value...)}
+	canonical := orderBindingsCanonical{Response: optionalPointer(body.Response), ExpectedBindingRevision: body.ExpectedBindingRevision.Value, Order: append([]string(nil), body.Order.Value...)}
 	mutation, ok := controlMutation(writer, request, routeBindingOrder, []int64{modelID}, canonical)
 	if !ok {
 		return
 	}
-	result, err := api.repository.OrderBindings(request.Context(), principal.UserID, modelID, mutation, revision, order)
+	result, err := api.repository.orderBindings(request.Context(), principal.UserID, modelID, mutation, revision, order, body.Response.Set)
 	if err != nil {
 		writeResourceError(writer, err)
 		return
@@ -452,17 +480,21 @@ func (api *httpAPI) deleteBinding(writer http.ResponseWriter, request *http.Requ
 	if _, ok := decodeStrictObject(writer, request, &body); !ok {
 		return
 	}
+	if body.Response.Set && body.Response.Value != "receipt" {
+		writeResourceError(writer, ErrInvalidRequest)
+		return
+	}
 	revision, revisionOK := canonicalExpectedGeneration(body.ExpectedBindingRevision)
 	if !revisionOK {
 		writeResourceError(writer, ErrInvalidRequest)
 		return
 	}
-	canonical := expectedBindingRevisionCanonical{ExpectedBindingRevision: body.ExpectedBindingRevision.Value}
+	canonical := expectedBindingRevisionCanonical{Response: optionalPointer(body.Response), ExpectedBindingRevision: body.ExpectedBindingRevision.Value}
 	mutation, ok := controlMutation(writer, request, routeBinding, []int64{modelID, bindingID}, canonical)
 	if !ok {
 		return
 	}
-	result, err := api.repository.DeleteBinding(request.Context(), principal.UserID, modelID, bindingID, mutation, revision)
+	result, err := api.repository.deleteBinding(request.Context(), principal.UserID, modelID, bindingID, mutation, revision, body.Response.Set)
 	if err != nil {
 		writeResourceError(writer, err)
 		return

@@ -1,6 +1,9 @@
 import { CancelledError, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import {
-  captureStationSession, stationSessionMatches, clearManagementSession, clearStationSession,
+  captureStationSession,
+  stationSessionMatches,
+  clearManagementSession,
+  clearStationSession,
 } from '@shared/charityManagement';
 import { ApiError, isMfaRequired } from '@shared/query/http';
 import { userKeys } from '../../data';
@@ -211,9 +214,12 @@ export async function fetchCoreSession(
     envelope = await getSession(signal);
   } catch (error) {
     if (
-      isMfaRequired(error) && initialBoundary && snapshot &&
+      isMfaRequired(error) &&
+      initialBoundary &&
+      snapshot &&
       stationSessionMatches(queryClient, 'steward', snapshot)
-    ) return initial;
+    )
+      return initial;
     throw error;
   }
   const current = queryClient.getQueryData(coreKeys.session);
@@ -524,6 +530,7 @@ export async function invalidateResourceDependents(
   if (!coreSessionMatchesAccount(queryClient, accountId)) return false;
 
   const invalidations = [
+    queryClient.invalidateQueries({ queryKey: [...coreKeys.account(accountId), 'connections'] }),
     queryClient.invalidateQueries({ queryKey: coreKeys.endpointsRoot(accountId) }),
     queryClient.invalidateQueries({ queryKey: coreKeys.modelsRoot(accountId) }),
     queryClient.invalidateQueries({

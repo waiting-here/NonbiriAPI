@@ -20,6 +20,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
@@ -262,20 +264,11 @@ VALUES(?,?,'openai-compatible',?,?,?)`, contextID[:], baseURL, envelope, at-8000
 		if i >= scaleLiveKeys {
 			continue
 		}
-		endpoint, err := tx.ExecContext(ctx, `INSERT INTO endpoints(
-user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at)
-VALUES(?,'openai-compatible',?,'',1,1,?,?)`, users[i%len(users)], baseURL, at, at)
+		endpointID, err := testseed.InsertEndpointTx(ctx, tx, testseed.EndpointInput{OwnerUserID: users[i%len(users)], Type: connectorcontract.TypeOpenAICompatible, BaseURL: baseURL, At: at})
 		if err != nil {
 			t.Fatalf("insert linked endpoint %d: %v", i, err)
 		}
-		endpointID, err := endpoint.LastInsertId()
-		if err != nil || endpointID <= 0 {
-			t.Fatalf("read endpoint %d id: %v", i, err)
-		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO endpoint_keys(
-endpoint_id,secret_ref_id,secret_fingerprint,display_head,display_tail,note,
-enabled,force_store_false,revision,created_at,updated_at)
-VALUES(?,?,?,'synthetic','scale','',1,0,1,?,?)`, endpointID, secretID, fingerprint[:], at, at); err != nil {
+		if _, err = testseed.InsertEndpointKeyTx(ctx, tx, testseed.KeyInput{EndpointID: endpointID, SecretRefID: secretID, Fingerprint: fingerprint[:], DisplayHead: "synthetic", DisplayTail: "scale", At: at}); err != nil {
 			t.Fatalf("link encrypted credential %d: %v", i, err)
 		}
 	}

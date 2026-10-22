@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
@@ -19,7 +20,7 @@ func usageRequest(t *testing.T, fixture *claimFixture, userID int64) CompleteReq
 	} {
 		handle, err := fixture.service.Claim(context.Background(), ClaimInput{
 			RequestID: request.ID, ActorUserID: userID, AttemptSeq: index + 1,
-			Purpose: PurposeSelf, Candidate: key.candidate,
+			Purpose: PurposeSelf, PersonalModelID: key.modelID, Candidate: key.candidate,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -121,6 +122,12 @@ func TestUsageInitializationRepairsOnlyUninitializedTotals(t *testing.T) {
 	}
 	defer tx.Rollback()
 	if err := fixture.service.PrepareAccountDeletion(context.Background(), tx, userID, fixture.clock.Load()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`DELETE FROM endpoints WHERE user_id=?`, userID); err != nil {
+		t.Fatal(err)
+	}
+	if err := connectionstore.PrepareAccountDeletionTx(context.Background(), tx, userID, fixture.clock.Load()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := tx.Exec(`DELETE FROM users WHERE id=?`, userID); err != nil {

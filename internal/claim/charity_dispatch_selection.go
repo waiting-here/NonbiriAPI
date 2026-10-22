@@ -8,6 +8,7 @@ import (
 	"math"
 	"sort"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 )
 
@@ -45,21 +46,14 @@ func (s *Service) claimBalancedCandidatesTx(ctx context.Context, tx *sql.Tx, cla
 		return Handle{}, err
 	}
 	for index, option := range input.BalancedCandidates {
-		var secretRefID int64
-		var baseURL string
-		err := tx.QueryRowContext(ctx, `SELECT k.secret_ref_id,s.canonical_base_url
-FROM endpoint_keys k JOIN endpoint_key_secrets s ON s.id=k.secret_ref_id
-WHERE k.id=?`, option.Candidate.EndpointKeyID).Scan(&secretRefID, &baseURL)
-		if errors.Is(err, sql.ErrNoRows) {
+		grant, err := physicalGrantTx(ctx, tx, input.ActorUserID, option)
+		if errors.Is(err, ErrNotFound) {
 			continue
 		}
 		if err != nil {
 			return Handle{}, fmt.Errorf("claim: read candidate physical identity: %w", err)
 		}
-		if baseURL != option.Candidate.CanonicalBaseURL {
-			continue
-		}
-		physical, err := physicalCharityKeyID(option.Candidate.EndpointKeyID, secretRefID, baseURL)
+		physical, err := physicalCharityKeyID(option.Candidate.EndpointKeyID, grant.SecretRefID, grant.CanonicalBaseURL)
 		if err != nil {
 			return Handle{}, err
 		}
@@ -117,6 +111,31 @@ WHERE k.id=?`, option.Candidate.EndpointKeyID).Scan(&secretRefID, &baseURL)
 		return Handle{}, claimErr
 	}
 	return Handle{}, last
+}
+
+func physicalGrantTx(ctx context.Context, tx *sql.Tx, actorID int64, option BalancedCandidate) (connectionstore.GrantAuthorization, error) {
+	var grant connectionstore.GrantAuthorization
+	var err error
+	a := option.Candidate.Authorization
+	if option.DonationKeyID > 0 {
+		var use connectionstore.UseAuthorization
+		use, err = connectionstore.LoadApprovedUseTx(ctx, tx, option.DonationKeyID, a.NativeService)
+		if err == nil && (use.UseID != a.UseID || use.ApprovedRevisionID != a.UseRevisionID || use.ApprovedRevision != a.UseRevision) {
+			return grant, ErrNotFound
+		}
+		grant = use.Grant
+	} else {
+		grant, err = connectionstore.LoadSelfGrantTx(ctx, tx, actorID, option.Candidate.EndpointKeyID)
+	}
+	if err != nil {
+		return grant, authorizationError(err)
+	}
+	if !sameGrant(a, grant) || grant.EndpointKeyID != option.Candidate.EndpointKeyID ||
+		grant.EndpointID != option.Candidate.EndpointID || grant.CanonicalBaseURL != option.Candidate.CanonicalBaseURL ||
+		!grant.EffectiveServices.Has(a.NativeService) {
+		return grant, ErrNotFound
+	}
+	return grant, nil
 }
 
 func physicalDispatchLoadTx(ctx context.Context, tx *sql.Tx, physical [32]byte, at int64) (int64, error) {

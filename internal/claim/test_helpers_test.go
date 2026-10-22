@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -13,9 +14,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
+	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
+	"github.com/waiting-here/NonbiriAPI/internal/routing"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
@@ -425,7 +430,7 @@ VALUES(?,?,?,?,'reserved','per_request',0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,?,?,?)`,
 	return nil
 }
 
-func (c *testCharity) Claim(_ context.Context, _ *sql.Tx, input CharityClaimInput) (CharityReservation, error) {
+func (c *testCharity) Claim(ctx context.Context, tx *sql.Tx, input CharityClaimInput) (CharityReservation, error) {
 	c.mu.Lock()
 	config, exists := c.configs[input.DonationKeyID]
 	c.claims = append(c.claims, input)
@@ -435,6 +440,22 @@ func (c *testCharity) Claim(_ context.Context, _ *sql.Tx, input CharityClaimInpu
 	}
 	if config.claimErr != nil {
 		return CharityReservation{}, config.claimErr
+	}
+	var generation, sequence []byte
+	if err := tx.QueryRowContext(ctx, `SELECT streak_generation,next_claim_seq FROM donation_keys WHERE id=?`, input.DonationKeyID).Scan(&generation, &sequence); err != nil {
+		return CharityReservation{}, err
+	}
+	seq, ok := decodeSmallU128(sequence)
+	if !ok {
+		return CharityReservation{}, ErrInvariant
+	}
+	next := make([]byte, 16)
+	binary.BigEndian.PutUint64(next[8:], seq+1)
+	if _, err := tx.ExecContext(ctx, `UPDATE donation_keys SET next_claim_seq=? WHERE id=?`, next, input.DonationKeyID); err != nil {
+		return CharityReservation{}, err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO donation_usage_reservations(claim_id,donation_key_id,streak_generation,claim_seq,price_reserved_milli,calls_reserved,tokens_reserved,state,created_at) VALUES(?,?,?,?,?,1,32,'reserved',?)`, input.ClaimID, input.DonationKeyID, generation, sequence, config.priceMilli, input.ClaimedAt); err != nil {
+		return CharityReservation{}, err
 	}
 	return CharityReservation{
 		DonationKeyID:      input.DonationKeyID,
@@ -469,6 +490,9 @@ func (c *testCharity) ReleaseUndispatched(ctx context.Context, tx *sql.Tx, input
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO claim_test_charity_facts(kind,source_id)
 VALUES('release',?)`, input.ClaimID); err != nil {
+		return err
+	}
+	if err := finalizeTestCharityReservation(ctx, tx, input.ClaimID, "released", input.ReleasedAt, CharityActual{}); err != nil {
 		return err
 	}
 	c.mu.Lock()
@@ -513,10 +537,21 @@ func (c *testCharity) CompleteAttempt(
 VALUES('attempt',?)`, completion.Attempt.ClaimID); err != nil {
 		return err
 	}
+	if err := finalizeTestCharityReservation(ctx, tx, completion.Attempt.ClaimID, "committed", completion.Attempt.CompletedAt, completion.Actual); err != nil {
+		return err
+	}
 	c.mu.Lock()
 	c.attempts = append(c.attempts, completion.Attempt)
 	c.mu.Unlock()
 	return nil
+}
+
+func finalizeTestCharityReservation(ctx context.Context, tx *sql.Tx, claimID, state string, at int64, actual CharityActual) error {
+	if _, err := tx.ExecContext(ctx, `UPDATE donation_usage_reservations SET state=?,price_actual_milli=?,reward_actual_milli=?,calls_actual=0,tokens_actual=0,protocol_success=0,usage_unknown=0,finalized_at=?,streak_disposition='neutral',failure_origin='platform' WHERE claim_id=?`, state, actual.PriceMilli, actual.RewardMilli, at, claimID); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, `UPDATE donation_keys SET next_fold_seq=COALESCE((SELECT min(r.claim_seq) FROM donation_usage_reservations r WHERE r.donation_key_id=donation_keys.id AND r.streak_generation=donation_keys.streak_generation AND r.state='reserved'),next_claim_seq) WHERE id=(SELECT donation_key_id FROM donation_usage_reservations WHERE claim_id=?)`, claimID)
+	return err
 }
 
 func (c *testCharity) CompleteRequest(
@@ -575,11 +610,31 @@ type claimFixture struct {
 }
 
 type testKey struct {
-	endpointID  int64
-	keyID       int64
-	secretID    int64
-	fingerprint []byte
-	candidate   Candidate
+	endpointID        int64
+	keyID             int64
+	secretID          int64
+	modelID           int64
+	fingerprint       []byte
+	candidate         Candidate
+	charityCandidates map[int64]Candidate
+	charityServices   map[connectorcontract.NativeService]routing.TargetAuthorization
+}
+
+func (key testKey) candidateForRoute(route RouteKind, charity bool) Candidate {
+	candidate := key.candidate
+	services, _ := connectorcontract.SupportedNativeServices(candidate.Authorization.ConfiguredType)
+	routes, err := connector.ResolveServiceRoutes(candidate.Authorization.ConfiguredType, services, candidate.Authorization.RerankFormat, route.Operation())
+	if err != nil || len(routes) == 0 {
+		panic("unsupported fixture route")
+	}
+	if charity {
+		candidate = key.charityCandidates[1]
+		use := key.charityServices[routes[0].NativeService]
+		candidate.Authorization.UseID, candidate.Authorization.UseRevisionID, candidate.Authorization.UseRevision = use.UseID, use.UseRevisionID, use.UseRevision
+	}
+	candidate.ConnectorType = routes[0].WireType
+	candidate.Authorization.NativeService = routes[0].NativeService
+	return candidate
 }
 
 type allowAcceptanceGate struct{}
@@ -664,27 +719,38 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`, "fixture-"+label, label, boolInt(admin), zer
 }
 
 func (f *claimFixture) seedKey(ownerUserID int64, label string) testKey {
+	return f.seedKeyForType(ownerUserID, label, connectorcontract.TypeOpenAICompatible)
+}
+
+func (f *claimFixture) seedKeyForType(ownerUserID int64, label string, kind connectorcontract.Type) testKey {
 	f.t.Helper()
 	f.nextKey++
 	baseURL := "https://" + label + ".example.test/v1"
-	result, err := f.db.Exec(`INSERT INTO endpoints(
-user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at)
-VALUES(?,'openai-compatible',?,'',1,1,?,?)`, ownerUserID, baseURL, f.clock.Load(), f.clock.Load())
+	tx, err := f.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	defer tx.Rollback()
+	services, err := connectorcontract.SupportedNativeServices(kind)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	var format connectorcontract.RerankFormat
+	if kind.OpenAIServiceFamily() {
+		format = connectorcontract.RerankFormatGeneric
+	}
+	endpointID, err := testseed.InsertEndpointTx(context.Background(), tx, testseed.EndpointInput{OwnerUserID: ownerUserID, Type: kind, BaseURL: baseURL, NativeServices: services, RerankFormat: format, At: f.clock.Load()})
 	if err != nil {
 		f.t.Fatalf("seed endpoint: %v", err)
-	}
-	endpointID, err := result.LastInsertId()
-	if err != nil {
-		f.t.Fatalf("read endpoint id: %v", err)
 	}
 	contextID := make([]byte, 16)
 	contextID[8] = byte(f.nextKey >> 8)
 	contextID[9] = byte(f.nextKey)
 	envelope := "fixture-envelope-" + strconv.FormatInt(f.nextKey, 10)
 	f.codec.add(envelope, []byte("fixture-credential-"+label))
-	result, err = f.db.Exec(`INSERT INTO endpoint_key_secrets(
+	result, err := tx.Exec(`INSERT INTO endpoint_key_secrets(
 context_id,canonical_base_url,connector_type,encrypted_secret,created_at)
-VALUES(?,?,'openai-compatible',?,?)`, contextID, baseURL, envelope, f.clock.Load())
+VALUES(?,?,?,?,?)`, contextID, baseURL, kind, envelope, f.clock.Load())
 	if err != nil {
 		f.t.Fatalf("seed endpoint secret: %v", err)
 	}
@@ -694,27 +760,41 @@ VALUES(?,?,'openai-compatible',?,?)`, contextID, baseURL, envelope, f.clock.Load
 	}
 	fingerprint := make([]byte, 32)
 	fingerprint[0] = byte(f.nextKey)
-	result, err = f.db.Exec(`INSERT INTO endpoint_keys(
-endpoint_id,secret_ref_id,secret_fingerprint,display_head,display_tail,note,
-enabled,force_store_false,revision,created_at,updated_at)
-VALUES(?,?,?,'head','tail','',1,0,1,?,?)`, endpointID, secretID, fingerprint,
-		f.clock.Load(), f.clock.Load())
+	key, err := testseed.InsertEndpointKeyTx(context.Background(), tx, testseed.KeyInput{EndpointID: endpointID, SecretRefID: secretID, Fingerprint: fingerprint, DisplayHead: "head", DisplayTail: "tail", NativeServices: services, At: f.clock.Load()})
 	if err != nil {
 		f.t.Fatalf("seed endpoint key: %v", err)
 	}
-	keyID, err := result.LastInsertId()
-	if err != nil {
-		f.t.Fatalf("read endpoint key id: %v", err)
+	if _, err := tx.Exec(`INSERT INTO models(user_id,provider,model,full_name,created_at,updated_at)
+VALUES(?,'public','model','public/model',?,?) ON CONFLICT(user_id,full_name) DO NOTHING`, ownerUserID, f.clock.Load(), f.clock.Load()); err != nil {
+		f.t.Fatal(err)
 	}
+	var modelID int64
+	var order int
+	if err := tx.QueryRow(`SELECT id,(SELECT count(*) FROM model_bindings b WHERE b.model_id=m.id) FROM models m WHERE user_id=? AND full_name='public/model'`, ownerUserID).Scan(&modelID, &order); err != nil {
+		f.t.Fatal(err)
+	}
+	binding, err := testseed.InsertModelBindingTx(context.Background(), tx, testseed.BindingInput{ModelID: modelID, KeyID: key.KeyID, UpstreamModelID: "provider/" + label, NativeServices: services, Order: order, At: f.clock.Load()})
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		f.t.Fatal(err)
+	}
+	keyID := key.KeyID
 	return testKey{
-		endpointID:  endpointID,
-		keyID:       keyID,
-		secretID:    secretID,
-		fingerprint: append([]byte(nil), fingerprint...),
+		endpointID:        endpointID,
+		keyID:             keyID,
+		secretID:          secretID,
+		modelID:           modelID,
+		fingerprint:       append([]byte(nil), fingerprint...),
+		charityCandidates: make(map[int64]Candidate),
+		charityServices:   make(map[connectorcontract.NativeService]routing.TargetAuthorization),
 		candidate: Candidate{
+			Authorization: routing.TargetAuthorization{BindingID: binding.BindingID, TargetID: binding.TargetID, TargetRevision: 1, CredentialID: key.CredentialID, CredentialVersionID: key.CredentialVersionID, CredentialVersion: 1,
+				GrantRevisionID: key.GrantRevisionID, GrantRevision: 1, ConfiguredType: kind, RerankFormat: format, NativeService: services.Services()[0]},
 			EndpointID:       endpointID,
 			EndpointKeyID:    keyID,
-			ConnectorType:    connectorcontract.TypeOpenAICompatible,
+			ConnectorType:    kind,
 			CanonicalBaseURL: baseURL,
 			UpstreamModelID:  "provider/" + label,
 		},
@@ -723,7 +803,12 @@ VALUES(?,?,?,'head','tail','',1,0,1,?,?)`, endpointID, secretID, fingerprint,
 
 func (f *claimFixture) seedDonationKey(ownerUserID int64, key testKey, label string, reward int64) int64 {
 	f.t.Helper()
-	result, err := f.db.Exec(`INSERT INTO donations(
+	tx, err := f.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	defer tx.Rollback()
+	result, err := tx.Exec(`INSERT INTO donations(
 user_id,status,revision,description,review_note,reviewed_by_role,reviewed_at,
 created_at,updated_at)
 VALUES(?,'approved',1,'','','admin',?,?,?)`, ownerUserID,
@@ -739,13 +824,13 @@ VALUES(?,'approved',1,'','','admin',?,?,?)`, ownerUserID,
 	one := make([]byte, 16)
 	one[15] = 1
 	expiresAt := f.clock.Load() + 86_400
-	result, err = f.db.Exec(`INSERT INTO donation_keys(
+	result, err = tx.Exec(`INSERT INTO donation_keys(
 donation_id,endpoint_key_id,display_head,display_tail,canonical_base_url,connector_type,
 price_used_mag,price_reserved_mag,calls_used,calls_reserved,tokens_used,tokens_reserved,
 failure_streak,streak_generation,next_claim_seq,next_fold_seq,created_at,updated_at,
 authorized_expires_at,expires_at,source_endpoint_key_id,report_fingerprint)
-VALUES(?,?,'head','tail',?,'openai-compatible',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		donationID, key.keyID, key.candidate.CanonicalBaseURL,
+VALUES(?,?,'head','tail',?,?, ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		donationID, key.keyID, key.candidate.CanonicalBaseURL, key.candidate.Authorization.ConfiguredType,
 		zero, zero, zero, zero, zero, zero, zero, one, one, one, f.clock.Load(), f.clock.Load(),
 		expiresAt, expiresAt, key.keyID, key.fingerprint)
 	if err != nil {
@@ -754,6 +839,41 @@ VALUES(?,?,'head','tail',?,'openai-compatible',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
 	donationKeyID, err := result.LastInsertId()
 	if err != nil {
 		f.t.Fatalf("read donation key id: %v", err)
+	}
+	if _, err := tx.Exec(`INSERT INTO donation_key_memberships(donation_key_id,endpoint_key_id,donation_id,created_at) VALUES(?,?,?,?)`, donationKeyID, key.keyID, donationID, f.clock.Load()); err != nil {
+		f.t.Fatal(err)
+	}
+	if _, err := testseed.SeedDonationUsesTx(context.Background(), tx, donationKeyID, true, f.clock.Load()); err != nil {
+		f.t.Fatal(err)
+	}
+	var order int
+	if err := tx.QueryRow(`SELECT count(*) FROM charity_model_bindings WHERE charity_model_id=1`).Scan(&order); err != nil {
+		f.t.Fatal(err)
+	}
+	binding, err := testseed.InsertCharityBindingTx(context.Background(), tx, testseed.BindingInput{ModelID: 1, KeyID: donationKeyID, UpstreamModelID: key.candidate.UpstreamModelID, Order: order, At: f.clock.Load()})
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	use, err := connectionstore.LoadApprovedUseTx(context.Background(), tx, donationKeyID, key.candidate.Authorization.NativeService)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	candidate := key.candidate
+	candidate.Authorization.BindingID, candidate.Authorization.TargetID = binding.BindingID, binding.TargetID
+	candidate.Authorization.UseID, candidate.Authorization.UseRevisionID, candidate.Authorization.UseRevision = use.UseID, use.ApprovedRevisionID, use.ApprovedRevision
+	key.charityCandidates[1] = candidate
+	services, _ := connectorcontract.SupportedNativeServices(candidate.Authorization.ConfiguredType)
+	for _, service := range services.Services() {
+		approved, err := connectionstore.LoadApprovedUseTx(context.Background(), tx, donationKeyID, service)
+		if err != nil {
+			f.t.Fatal(err)
+		}
+		a := candidate.Authorization
+		a.UseID, a.UseRevisionID, a.UseRevision = approved.UseID, approved.ApprovedRevisionID, approved.ApprovedRevision
+		key.charityServices[service] = a
+	}
+	if err := tx.Commit(); err != nil {
+		f.t.Fatal(err)
 	}
 	f.charity.mu.Lock()
 	f.charity.configs[donationKeyID] = testCharityConfig{
@@ -843,6 +963,37 @@ WHERE ended_at IS NULL AND endpoint_key_id IN (
  SELECT k.id FROM endpoint_keys k JOIN endpoints e ON e.id=k.endpoint_id WHERE e.user_id=?
 )`, at, at+90*24*60*60, at, userID); err != nil {
 		f.t.Fatalf("terminalize receiver donation keys: %v", err)
+	}
+	rows, err := tx.Query(`SELECT dk.id FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id WHERE d.user_id=?`, userID)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	var members []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			_ = rows.Close()
+			f.t.Fatal(err)
+		}
+		members = append(members, id)
+	}
+	if err := rows.Err(); err != nil {
+		f.t.Fatal(err)
+	}
+	_ = rows.Close()
+	for _, id := range members {
+		if _, err := tx.Exec(`DELETE FROM donation_key_memberships WHERE donation_key_id=?`, id); err != nil {
+			f.t.Fatal(err)
+		}
+		if err := connectionstore.EndDonationKeyUsesTx(context.Background(), tx, id, at); err != nil {
+			f.t.Fatal(err)
+		}
+	}
+	if _, err := tx.Exec(`DELETE FROM endpoints WHERE user_id=?`, userID); err != nil {
+		f.t.Fatal(err)
+	}
+	if err := connectionstore.PrepareAccountDeletionTx(context.Background(), tx, userID, at); err != nil {
+		f.t.Fatal(err)
 	}
 	if _, err := tx.Exec(`DELETE FROM users WHERE id=?`, userID); err != nil {
 		f.t.Fatalf("delete reward receiver: %v", err)

@@ -105,6 +105,25 @@ func TestInferenceSelectsPersonalAndCharityOperations(t *testing.T) {
 					model = "[公益]care/model"
 					candidate = f.charity.snapshot.Candidates[0]
 				}
+				services, err := contract.ParseNativeServices([]contract.NativeService{contract.NativeService(operation)})
+				if err != nil {
+					t.Fatal(err)
+				}
+				candidate.NativeServices = services
+				candidate = authorizedFixtureCandidates([]RouteCandidate{candidate})[0]
+				if operation == contract.OperationRerank {
+					candidate.Authorization.RerankFormat = contract.RerankFormatGeneric
+				}
+				if charity {
+					f.charity.snapshot.Candidates = []RouteCandidate{candidate}
+				} else {
+					f.personal.snapshot.Candidates = []RouteCandidate{candidate}
+				}
+				routes, err := connector.ResolveServiceRoutes(candidate.ConnectorType, services, candidate.Authorization.RerankFormat, operation)
+				if err != nil || len(routes) != 1 || !routes[0].NativeMatch {
+					t.Fatalf("native fixture route: %+v %v", routes, err)
+				}
+				protocol := f.service.connectors[routes[0].WireType].(*fakeConnector)
 				body := `{"model":"` + model + `","input":"hi"}`
 				switch operation {
 				case contract.OperationCompletions:
@@ -121,9 +140,11 @@ func TestInferenceSelectsPersonalAndCharityOperations(t *testing.T) {
 					t.Fatal(err)
 				}
 				defer request.Clear()
-				f.addDispatch(candidate)
+				dispatch := candidate
+				dispatch.ConnectorType = routes[0].WireType
+				f.addDispatch(dispatch)
 				var captured *openai.InferenceRequest
-				f.openAI.attempt = func(_ context.Context, input connector.AttemptInput) contract.AttemptResult {
+				protocol.attempt = func(_ context.Context, input connector.AttemptInput) contract.AttemptResult {
 					if input.Inference == nil || input.Operation != operation || input.Ingress != nil || input.Embedding != nil || input.Image != nil || input.Decision != nil || input.Policy.FlattenToolCalls || input.Policy.ForceStoreFalse {
 						t.Fatal("operation snapshot mixed with chat")
 					}
@@ -133,8 +154,8 @@ func TestInferenceSelectsPersonalAndCharityOperations(t *testing.T) {
 				}
 				writer := httptest.NewRecorder()
 				f.service.Inference(context.Background(), writer, 1, request, []byte(body), "application/json", "en")
-				if writer.Code != 200 || f.openAI.calls != 1 || len(f.claims.accepts) != 1 || f.claims.accepts[0].Route != requestkind.ForOperation(operation, charity) || captured.Model != "" || request.Model != model {
-					t.Fatalf("status=%d calls=%d claims=%v body=%s", writer.Code, f.openAI.calls, f.claims.events, writer.Body.String())
+				if writer.Code != 200 || protocol.calls != 1 || len(f.claims.accepts) != 1 || f.claims.accepts[0].Route != requestkind.ForOperation(operation, charity) || captured.Model != "" || request.Model != model {
+					t.Fatalf("status=%d calls=%d claims=%v body=%s", writer.Code, protocol.calls, f.claims.events, writer.Body.String())
 				}
 			})
 		}
@@ -162,6 +183,11 @@ func TestInferenceHTTPMultipartAndResourceRejection(t *testing.T) {
 	f := newServiceFixture(t, nil)
 	f.personal.preflight.ModelTypes = modeltype.Set{contract.OperationAudioTranscriptions}
 	f.personal.snapshot.ModelTypes = f.personal.preflight.ModelTypes
+	services, err := contract.ParseNativeServices([]contract.NativeService{contract.NativeServiceAudioTranscriptions})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.personal.snapshot.Candidates[0].NativeServices = services
 	f.addDispatch(f.personal.snapshot.Candidates[0])
 	f.openAI.attempt = func(_ context.Context, input connector.AttemptInput) contract.AttemptResult {
 		_, _ = input.Sink.Write([]byte(`{"text":"hello"}`))

@@ -28,13 +28,16 @@ describe('RequestAdaptationEditor', () => {
     'keeps a manually entered cache path visible for %s until its value is complete or an explicit TTL is chosen',
     async (connectorType) => {
       let sent: Record<string, unknown> | undefined;
+      let saved = false;
       vi.stubGlobal(
         'fetch',
         vi.fn(async (_url: string, options?: RequestInit) => {
-          if (options?.method === 'PUT')
+          if (options?.method === 'PUT') {
             sent = JSON.parse(String(options.body)) as Record<string, unknown>;
+            saved = true;
+          }
           return response(
-            options?.method === 'PUT'
+            saved
               ? {
                   ...projection(),
                   body_defaults: {
@@ -99,6 +102,7 @@ describe('RequestAdaptationEditor', () => {
     'sets the Gateway cache default to %s without JSON editing and clears it explicitly',
     async (ttl) => {
       const bodies: Record<string, unknown>[] = [];
+      let saved = false;
       vi.stubGlobal(
         'fetch',
         vi.fn(async (_url: string, options?: RequestInit) => {
@@ -106,6 +110,9 @@ describe('RequestAdaptationEditor', () => {
           current.body_defaults.values = { '/temperature': { has_value: true, mask: '••••' } };
           if (options?.method === 'PUT') {
             bodies.push(JSON.parse(String(options.body)) as Record<string, unknown>);
+            saved = true;
+          }
+          if (saved) {
             current.body_defaults.values = {
               ...current.body_defaults.values,
               '/cache_control': { has_value: true, mask: '••••' },
@@ -192,7 +199,7 @@ describe('RequestAdaptationEditor', () => {
       { station: 'admin', role: 'admin' },
     );
     await screen.findByText(/The cache default inherits with the body defaults/);
-    expect(screen.queryByLabelText('Automatic cache default')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Automatic cache default')).toBeDisabled();
     await view.user.click(screen.getByRole('button', { name: 'Save request adaptation' }));
     await screen.findByText(/Could not save request adaptation/);
     expect(bodies[0].body_defaults).toEqual({ mode: 'inherit', values: {} });

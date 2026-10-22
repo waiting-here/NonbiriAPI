@@ -31,16 +31,6 @@ const stableSchema25Manifest = "ef68dc29f32b24ac5b06caa8bb6563be24dfae13a1e75238
 
 const stableSchema26Manifest = "6bcc4ea8fa31bee46e25b5e33b96a3caca18c5c5ff1f257d26b2e2d7acc64b9e"
 
-const stableSchema27Manifest = "5fb9f478d3482547174e43db7f6169621f8bf3d19b706e27e65f03809b002b89"
-
-const stableSchema28Manifest = "021b30ef19b15d8db903906a312ec0647c81f36904655f6d70fd030bfc445e93"
-
-const stableSchema29Manifest = "e18a8d66845f04036df16a22b34c0fb6ad7df0354241b2cc93372d8a3055d01b"
-
-const stableSchema30Manifest = "80d682b2367439d90400f8fda4ed45b1b4d7ff2b825246edd7a9ee0d0be74cb1"
-
-const stableSchema31Manifest = "60cbbbb94b685146ffe6ab71b31dc0dcb566ca67510b6beac9d794ba2e9851a2"
-
 var storageSchema = schemaRegistry{baseline: 17, target: db.CurrentSchemaVersion, versions: []schemaMigration{
 	{version: 17, manifest: stableSchema17Manifest},
 	{from: 17, version: 18, manifest: stableSchema18Manifest, apply: extendContentAndProtocols, impact: &migrationImpact{
@@ -67,20 +57,7 @@ var storageSchema = schemaRegistry{baseline: 17, target: db.CurrentSchemaVersion
 		addedTables:   []string{"channel_charity_binding_presets", "channel_charity_binding_mappings"},
 		controlTables: []string{"charity_models", "charity_price_templates"},
 		rebuiltTables: []string{"donation_key_backoffs", "dispatch_smart_backoff_facts"}, credentials: credentialsUnchanged}},
-	{from: 26, version: 27, manifest: stableSchema27Manifest, sql: endpointBackoffSchema + modelCloudflareSchema, impact: &migrationImpact{
-		addedTables: []string{"endpoint_backoff_policies"}, controlTables: []string{"dispatch_smart_backoff_facts", "models", "charity_models"}, credentials: credentialsUnchanged}},
-	{from: 27, version: 28, manifest: stableSchema28Manifest, apply: extendDirectInference, impact: &migrationImpact{
-		rebuiltTables:    []string{"mainstream_channels", "endpoints", "endpoint_key_secrets", "donation_keys", "request_attempts", "report_cases", "report_targets", "models", "charity_models", "logical_requests", "request_logs", "charity_reservations"},
-		controlTables:    []string{"site_config"},
-		constraintTables: []string{"donation_usage_reservations", "users", "risk_audit_minutes"}, credentials: credentialsRebuilt}},
-	{from: 28, version: 29, manifest: stableSchema29Manifest, apply: extendSessionHeaders, impact: &migrationImpact{
-		rebuiltTables: []string{"charity_header_sessions", "charity_header_uses"}, addedTables: []string{"personal_header_sessions", "personal_header_uses"}, controlTables: []string{"models"}, credentials: credentialsUnchanged}},
-	{from: 29, version: 30, manifest: stableSchema30Manifest, sql: db.GlobalPressureSchema, impact: &migrationImpact{
-		addedTables: []string{"global_pressure_state", "global_pressure_samples"}, credentials: credentialsUnchanged}},
-	{from: 30, version: 31, manifest: stableSchema31Manifest, sql: callerParameterErrorSchema, apply: extendCallerParameterErrors, impact: &migrationImpact{
-		addedTables: []string{"dispatch_caller_parameter_errors"}, constraintTables: []string{"donation_usage_reservations", "dispatch_claims"}, credentials: credentialsUnchanged}},
-	{from: 31, version: 32, manifest: db.PinnedGenerationTwoManifestHash, apply: extendGatewayV4, impact: &migrationImpact{
-		rebuiltTables: []string{"mainstream_channels", "endpoints", "endpoint_key_secrets", "donation_keys", "request_attempts", "report_cases", "report_targets"}, credentials: credentialsRebuilt}},
+	{from: 26, version: 33, manifest: db.PinnedGenerationTwoManifestHash, apply: extendConnections, impact: connectionsMigrationImpact},
 }}
 
 type Options struct {
@@ -112,11 +89,6 @@ func SchemaDescriptor() db.StorageSchemaDescriptor {
 		{24, stableSchema24Manifest, "6f4ee67206eb6fb3a3f345ba06b2d85aba5abc83"},
 		{25, stableSchema25Manifest, "2b4f4f62ed5b01c247fcc3f79005358ef0237933"},
 		{26, stableSchema26Manifest, "361cb204e888de51901eecc993d3d52b1d156d3a"},
-		{27, stableSchema27Manifest, "0fa834ba935649cdf7a141800b5f733d9aaaaf89"},
-		{28, stableSchema28Manifest, "904c2c677b748a9fa8c9a39edbd4e109ca3fcd56"},
-		{29, stableSchema29Manifest, "b7699638c8e09709d2a319a754e9eb17a6aa2bf0"},
-		{30, stableSchema30Manifest, "d899f295ce22ecf298c9051fc04930224b64d194"},
-		{31, stableSchema31Manifest, "3f7c7ee41cd5f327b129d6b6ba7bbfe9e39323ce"},
 	} {
 		descriptor.OfflineConversions = append(descriptor.OfflineConversions, db.OfflineConversionDescriptor{
 			Tool: "nonbiri-upgrade-v1", SourceCommit: source.commit, SourceSchemaVersion: source.version,

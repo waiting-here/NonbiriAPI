@@ -225,13 +225,16 @@ func TestEndpointCreateStrictSourceUnionAndOptionsProjection(t *testing.T) {
 		t.Fatalf("endpoint options status=%d body=%s", options.Code, options.Body.String())
 	}
 	var projected EndpointCreateOptions
-	if err := json.Unmarshal(options.Body.Bytes(), &projected); err != nil || len(projected.BaseConnectorTypes) != 12 || len(projected.MainstreamChannels) != 1 {
+	if err := json.Unmarshal(options.Body.Bytes(), &projected); err != nil || len(projected.BaseConnectorTypes) != 13 || len(projected.MainstreamChannels) != 1 {
 		t.Fatalf("endpoint options body=%+v err=%v", projected, err)
 	}
 	if projected.MainstreamChannels[0].ID != channel.ID || projected.MainstreamChannels[0].Name != channel.Name || projected.MainstreamChannels[0].ConnectorType != channel.ConnectorType {
 		t.Fatalf("endpoint options channel=%+v", projected.MainstreamChannels[0])
 	}
-	if strings.Contains(options.Body.String(), "category") || strings.Contains(options.Body.String(), "revision") {
+	if projected.MainstreamChannels[0].Revision != channel.Revision {
+		t.Fatal("channel preset revision missing")
+	}
+	if strings.Contains(options.Body.String(), "category") || strings.Contains(options.Body.String(), "retired_at") {
 		t.Fatalf("endpoint options leaked internal channel fields: %s", options.Body.String())
 	}
 	withQuery := resourceHTTPCall(t, optionsHandler, UserPrincipal{UserID: userID}, http.MethodGet, routeEndpointCreateOptions+"?state=active", "", "", nil)

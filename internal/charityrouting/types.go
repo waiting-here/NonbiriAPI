@@ -20,6 +20,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
+	"github.com/waiting-here/NonbiriAPI/internal/routing"
 	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
 	"github.com/waiting-here/NonbiriAPI/internal/transportpolicy"
 )
@@ -263,6 +264,7 @@ type CandidateSource struct {
 }
 
 type AdminBindingCandidate struct {
+	ServiceProjection
 	BindingMarkers
 	DonationKeyID   string          `json:"donation_key_id"`
 	DonationID      string          `json:"donation_id"`
@@ -281,6 +283,7 @@ type StewardCandidateSource struct {
 }
 
 type StewardBindingCandidate struct {
+	ServiceProjection
 	BindingMarkers
 	DonationKeyID   string                 `json:"donation_key_id"`
 	DonationID      string                 `json:"donation_id"`
@@ -290,6 +293,7 @@ type StewardBindingCandidate struct {
 }
 
 type AdminBinding struct {
+	Targets             []BindingTarget       `json:"targets"`
 	GatewayCapabilities *gatewaypolicy.Policy `json:"gateway_capabilities"`
 	ID                  string                `json:"id"`
 	Ord                 int                   `json:"ord"`
@@ -301,6 +305,7 @@ type AdminBinding struct {
 }
 
 type StewardBinding struct {
+	Targets             []BindingTarget        `json:"targets"`
 	GatewayCapabilities *gatewaypolicy.Policy  `json:"gateway_capabilities"`
 	ID                  string                 `json:"id"`
 	Ord                 int                    `json:"ord"`
@@ -405,8 +410,9 @@ type ModelDelete struct {
 }
 
 type BindingSelection struct {
-	DonationKeyID   string `json:"donation_key_id"`
-	UpstreamModelID string `json:"upstream_model_id"`
+	Targets         []BindingTargetInput `json:"targets,omitempty"`
+	DonationKeyID   string               `json:"donation_key_id"`
+	UpstreamModelID string               `json:"upstream_model_id"`
 }
 
 type BindingBatch struct {
@@ -422,11 +428,13 @@ type BindingBatchReceipt struct {
 }
 
 type BindingOrder struct {
+	Response                string   `json:"response,omitempty"`
 	ExpectedBindingRevision string   `json:"expected_binding_revision"`
 	Order                   []string `json:"order"`
 }
 
 type BindingDelete struct {
+	Response                string `json:"response,omitempty"`
 	ExpectedBindingRevision string `json:"expected_binding_revision"`
 }
 
@@ -448,14 +456,19 @@ type CandidateQuery struct {
 // formatting is always redacted because its safe routing facts are still not a
 // caller projection.
 type RuntimeCandidate struct {
-	BindingID        int64
-	DonationKeyID    int64
-	EndpointID       int64
-	EndpointKeyID    int64
-	ConnectorType    connectorcontract.Type
-	CanonicalBaseURL string
-	UpstreamModelID  string
-	Policy           connectorcontract.AttemptPolicy
+	Authorization     routing.TargetAuthorization
+	NativeServices    connectorcontract.NativeServiceSet
+	TargetOrder       int
+	Order             int
+	WeightDenominator int64
+	BindingID         int64
+	DonationKeyID     int64
+	EndpointID        int64
+	EndpointKeyID     int64
+	ConnectorType     connectorcontract.Type
+	CanonicalBaseURL  string
+	UpstreamModelID   string
+	Policy            connectorcontract.AttemptPolicy
 }
 
 func (RuntimeCandidate) String() string   { return "[redacted charity candidate]" }
@@ -466,7 +479,8 @@ func (RuntimeCandidate) LogValue() slog.Value {
 
 func (candidate RuntimeCandidate) ClaimCandidate() claim.Candidate {
 	return claim.Candidate{
-		EndpointID: candidate.EndpointID, EndpointKeyID: candidate.EndpointKeyID,
+		Authorization: candidate.Authorization,
+		EndpointID:    candidate.EndpointID, EndpointKeyID: candidate.EndpointKeyID,
 		ConnectorType: candidate.ConnectorType, CanonicalBaseURL: candidate.CanonicalBaseURL,
 		UpstreamModelID: candidate.UpstreamModelID, Policy: candidate.Policy,
 	}

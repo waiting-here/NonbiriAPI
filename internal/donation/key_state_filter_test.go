@@ -33,7 +33,7 @@ func TestSourceKeyStateFiltersMatchProjectionAndSummary(t *testing.T) {
 		ids[state] = d.ID
 		key := parseTestID(t, d.Keys[0].ID)
 		if state != "pending" {
-			exec(`UPDATE donations SET status='approved' WHERE id=?`, d.ID)
+			e.approveFixtureUses(t, parseTestID(t, d.ID))
 		}
 		// Lower-priority cooldown must never hide disabled/suspended/exhausted/lifecycle states.
 		if state != "available" {
@@ -113,7 +113,8 @@ func TestFailureSelectionKeyStateBoundsResetRangeAndCursor(t *testing.T) {
 	owner := e.seedUser(t, "state-reset-owner", nil, false)
 	e.seedUser(t, "", nil, true)
 	source := seedBrowseScale(t, e, owner, 205, false)
-	if _, err := e.store.DB().Exec(`UPDATE donations SET status='approved'; UPDATE donation_keys SET enabled=CASE WHEN id%2=0 THEN 0 ELSE 1 END,failure_streak=nbi_u128(5)`); err != nil {
+	e.approveFixtureUses(t, 0)
+	if _, err := e.store.DB().Exec(`UPDATE donation_keys SET enabled=CASE WHEN id%2=0 THEN 0 ELSE 1 END,failure_streak=nbi_u128(5)`); err != nil {
 		t.Fatal(err)
 	}
 	api := httpAPI{service: e.service}
@@ -199,9 +200,7 @@ func TestSourceKeyStateFiltersCountBeforeWindowAndCombineSelectors(t *testing.T)
 	owner := e.seedUser(t, "many-state-owner", nil, false)
 	for i := 0; i < 24; i++ {
 		d, _ := createBrowseDonation(t, e, owner, byte('a'+i), fmt.Sprintf("https://source-%02d.example.test/v1", i))
-		if _, err := e.store.DB().Exec(`UPDATE donations SET status='approved' WHERE id=?`, d.ID); err != nil {
-			t.Fatal(err)
-		}
+		e.approveFixtureUses(t, parseTestID(t, d.ID))
 		if i == 23 {
 			if _, err := e.store.DB().Exec(`UPDATE donation_keys SET enabled=0 WHERE donation_id=?`, d.ID); err != nil {
 				t.Fatal(err)

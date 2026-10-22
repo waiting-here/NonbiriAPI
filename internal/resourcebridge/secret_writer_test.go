@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -380,16 +381,22 @@ func TestMarkEndpointSecretOrphanedCASMatrix(t *testing.T) {
 		assertOrphanMarker(t, fixture, key.secretID, sql.NullInt64{})
 	})
 
+	t.Run("independent credential after key removal", func(t *testing.T) {
+		key := fixture.seedEndpointKey(t, ownerID, "retained-credential", connectorcontract.TypeOpenAICompatible, "retained-credential-body")
+		if _, err := fixture.store.DB().Exec("DELETE FROM endpoint_keys WHERE id=?", key.keyID); err != nil {
+			t.Fatal(err)
+		}
+		markOrphan(t, fixture, key.secretID, bridgeTestNow)
+		assertOrphanMarker(t, fixture, key.secretID, sql.NullInt64{})
+	})
+
 	t.Run("claimed reference", func(t *testing.T) {
 		key := fixture.seedEndpointKey(t, ownerID, "orphan-claimed", connectorcontract.TypeOpenAICompatible, "orphan-claimed-credential")
-		request, handle, err := fixture.claims.ClaimDiscovery(context.Background(), claim.DiscoveryClaimInput{
-			ActorUserID: ownerID,
-			Candidate:   claim.Candidate{EndpointID: key.endpointID, EndpointKeyID: key.keyID, ConnectorType: key.connector, CanonicalBaseURL: key.baseURL},
-		})
+		request, handle, err := fixture.claims.ClaimDiscovery(context.Background(), fixture.discoveryClaimInput(t, key))
 		if err != nil {
 			t.Fatalf("ClaimDiscovery: %v", err)
 		}
-		deleteEndpointKey(t, fixture, key.keyID)
+		deleteCredentialAndEndpointKey(t, fixture, key.keyID)
 		markOrphan(t, fixture, key.secretID, bridgeTestNow)
 		assertOrphanMarker(t, fixture, key.secretID, sql.NullInt64{})
 		if _, err := fixture.claims.ReleaseUndispatched(context.Background(), handle); err != nil {
@@ -402,10 +409,7 @@ func TestMarkEndpointSecretOrphanedCASMatrix(t *testing.T) {
 
 	t.Run("dispatched then terminal and already marked", func(t *testing.T) {
 		key := fixture.seedEndpointKey(t, ownerID, "orphan-dispatched", connectorcontract.TypeOpenAICompatible, "orphan-dispatched-credential")
-		request, handle, err := fixture.claims.ClaimDiscovery(context.Background(), claim.DiscoveryClaimInput{
-			ActorUserID: ownerID,
-			Candidate:   claim.Candidate{EndpointID: key.endpointID, EndpointKeyID: key.keyID, ConnectorType: key.connector, CanonicalBaseURL: key.baseURL},
-		})
+		request, handle, err := fixture.claims.ClaimDiscovery(context.Background(), fixture.discoveryClaimInput(t, key))
 		if err != nil {
 			t.Fatalf("ClaimDiscovery: %v", err)
 		}
@@ -414,7 +418,7 @@ func TestMarkEndpointSecretOrphanedCASMatrix(t *testing.T) {
 			t.Fatalf("TakeForDispatch: %v", err)
 		}
 		dispatch.Clear()
-		deleteEndpointKey(t, fixture, key.keyID)
+		deleteCredentialAndEndpointKey(t, fixture, key.keyID)
 		markOrphan(t, fixture, key.secretID, bridgeTestNow)
 		assertOrphanMarker(t, fixture, key.secretID, sql.NullInt64{})
 		if _, err := fixture.claims.CompleteAttempt(context.Background(), handle, claim.AttemptOutcome{
@@ -481,10 +485,33 @@ func assertOrphanMarker(t testing.TB, fixture *bridgeFixture, secretID int64, wa
 	}
 }
 
-func deleteEndpointKey(t testing.TB, fixture *bridgeFixture, keyID int64) {
+func deleteCredentialAndEndpointKey(t testing.TB, fixture *bridgeFixture, keyID int64) {
 	t.Helper()
-	if _, err := fixture.store.DB().Exec(`DELETE FROM endpoint_keys WHERE id=?`, keyID); err != nil {
-		t.Fatalf("delete endpoint key: %v", err)
+	ctx := context.Background()
+	tx, err := fixture.store.DB().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	var credential, version int64
+	err = tx.QueryRowContext(ctx, "SELECT g.credential_id,g.credential_version_id FROM endpoint_keys k JOIN endpoint_key_grant_revisions g ON g.id=k.current_grant_revision_id WHERE k.id=?", keyID).Scan(&credential, &version)
+	if err == nil {
+		_, err = tx.ExecContext(ctx, "DELETE FROM endpoint_keys WHERE id=?", keyID)
+	}
+	if err == nil {
+		_, err = tx.ExecContext(ctx, "UPDATE credentials SET deleted_at=?,updated_at=?,enabled=0,current_version_id=NULL,connection_id=NULL,note='',revision=revision+1 WHERE id=?", fixture.clock.Load(), fixture.clock.Load(), credential)
+	}
+	if err == nil {
+		err = connectionstore.InterruptCredentialDiscoveryRunsTx(ctx, tx, credential, fixture.clock.Load())
+	}
+	if err == nil {
+		_, err = connectionstore.RetireUnreferencedVersionTx(ctx, tx, version, fixture.clock.Load())
+	}
+	if err == nil {
+		err = tx.Commit()
+	}
+	if err != nil {
+		t.Fatalf("delete credential and key: %v", err)
 	}
 }
 

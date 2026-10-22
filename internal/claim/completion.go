@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"unicode/utf8"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 	"github.com/waiting-here/NonbiriAPI/internal/headerfacts"
@@ -123,8 +124,8 @@ func (s *Service) checkAttemptCompletionTx(ctx context.Context, tx *sql.Tx, hand
 		return Attempt{}, ErrInvariant
 	}
 	result, err := s.completeAttemptTx(ctx, tx, record, candidateSnapshot{
-		endpointID:    sql.NullInt64{Int64: handle.candidate.EndpointID, Valid: true},
-		endpointKeyID: sql.NullInt64{Int64: handle.candidate.EndpointKeyID, Valid: true},
+		endpointID:    sql.NullInt64{Int64: handle.candidate.EndpointID, Valid: handle.candidate.EndpointID > 0},
+		endpointKeyID: sql.NullInt64{Int64: handle.candidate.EndpointKeyID, Valid: handle.candidate.EndpointKeyID > 0},
 		connectorType: handle.candidate.ConnectorType,
 		baseURL:       handle.candidate.CanonicalBaseURL,
 		upstreamModel: handle.candidate.UpstreamModelID,
@@ -213,10 +214,11 @@ func loadClaimTx(ctx context.Context, tx *sql.Tx, claimID string) (claimRecord, 
 	err := tx.QueryRowContext(ctx, `SELECT
 c.id,c.logical_request_id,c.attempt_seq,c.purpose,c.state,c.endpoint_key_id,c.secret_ref_id,
 c.donation_key_id,c.receiver_user_id,c.dispatched_at,c.terminal_at,c.donor_reward_actual_milli,
-c.donor_reward_state,l.id,s.connector_type,s.canonical_base_url,l.upstream_model_id,e.id,c.streak_disposition,c.failure_origin,sb.claim_id IS NOT NULL,sb.accepted_at
+c.donor_reward_state,l.id,COALESCE(t.wire_type,s.connector_type),COALESCE(t.canonical_base_url,s.canonical_base_url),l.upstream_model_id,e.id,c.streak_disposition,c.failure_origin,sb.claim_id IS NOT NULL,sb.accepted_at
 FROM dispatch_claims c
 JOIN request_logs l ON l.logical_request_id=c.logical_request_id
 LEFT JOIN endpoint_key_secrets s ON s.id=c.secret_ref_id
+LEFT JOIN dispatch_claim_targets t ON t.claim_id=c.id
 LEFT JOIN endpoint_keys k ON k.id=c.endpoint_key_id
 LEFT JOIN endpoints e ON e.id=k.endpoint_id
 LEFT JOIN dispatch_smart_backoff_facts sb ON c.purpose='charity' AND sb.claim_id=c.id
@@ -321,7 +323,7 @@ WHERE id=? AND state='claimed'`, at, origin, record.claimID)
 		if err := requireOneRow(result); err != nil {
 			return err
 		}
-		return markSecretOrphanTx(callbackCtx, callbackTx, record.secretRefID.Int64, at)
+		return connectionstore.ReleaseClaimAuthorizationTx(callbackCtx, callbackTx, record.claimID, at)
 	}
 	if record.purpose == PurposeCharity {
 		if s.charity == nil || s.accounting == nil {
@@ -485,6 +487,9 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		if err != nil {
 			return fmt.Errorf("claim: persist request attempt: %w", err)
 		}
+		if err := persistAttemptServiceFactsTx(callbackCtx, callbackTx, record.claimID); err != nil {
+			return err
+		}
 		if err := observability.RecordResponseHeadersTx(callbackCtx, callbackTx, record.requestID, record.attemptSeq); err != nil {
 			return err
 		}
@@ -500,7 +505,7 @@ WHERE id=? AND state='dispatched'`, nullableSQLInt64(rewardActual), rewardState,
 		if err := updateRequestLogAttemptAggregateTx(callbackCtx, callbackTx, record.requestLogID, outcome, diagText); err != nil {
 			return err
 		}
-		return markSecretOrphanTx(callbackCtx, callbackTx, record.secretRefID.Int64, at)
+		return connectionstore.ReleaseClaimAuthorizationTx(callbackCtx, callbackTx, record.claimID, at)
 	}
 	if record.purpose == PurposeCharity {
 		if err := s.accounting.CompleteAttempt(ctx, tx, ClaimAccounting{
@@ -858,20 +863,6 @@ func decodeSmallU128(encoded []byte) (uint64, bool) {
 		out = out<<8 | uint64(value)
 	}
 	return out, true
-}
-
-func markSecretOrphanTx(ctx context.Context, tx *sql.Tx, secretRefID, at int64) error {
-	if secretRefID <= 0 {
-		return ErrInvariant
-	}
-	if _, err := tx.ExecContext(ctx, `UPDATE endpoint_key_secrets SET orphaned_at=?
-WHERE id=? AND orphaned_at IS NULL
-AND NOT EXISTS(SELECT 1 FROM endpoint_keys k WHERE k.secret_ref_id=endpoint_key_secrets.id)
-AND NOT EXISTS(SELECT 1 FROM dispatch_claims c WHERE c.secret_ref_id=endpoint_key_secrets.id
-               AND c.state IN ('claimed','dispatched'))`, at, secretRefID); err != nil {
-		return fmt.Errorf("claim: mark orphan credential: %w", err)
-	}
-	return nil
 }
 
 func updateRequestLogAttemptAggregateTx(

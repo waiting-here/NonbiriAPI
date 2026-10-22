@@ -3,6 +3,7 @@ package resourcebridge
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"errors"
 	"io"
@@ -15,6 +16,8 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -121,21 +124,16 @@ func (f *bridgeFixture) seedEndpointKey(t testing.TB, ownerID int64, label strin
 	if len(urls) > 0 {
 		baseURL = urls[0]
 	}
-	result, err := f.store.DB().Exec(`INSERT INTO endpoints(
-user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at)
-VALUES(?,?,?,'',1,1,?,?)`, ownerID, connectorType, baseURL, f.clock.Load(), f.clock.Load())
+	ctx := context.Background()
+	tx, err := f.store.DB().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	endpointID, err := testseed.InsertEndpointTx(ctx, tx, testseed.EndpointInput{OwnerUserID: ownerID, Type: connectorType, BaseURL: baseURL, At: f.clock.Load()})
 	if err != nil {
 		t.Fatalf("seed endpoint: %v", err)
 	}
-	endpointID, err := result.LastInsertId()
-	if err != nil {
-		t.Fatalf("seed endpoint id: %v", err)
-	}
-	tx, err := f.store.DB().BeginTx(context.Background(), nil)
-	if err != nil {
-		t.Fatalf("begin key seed: %v", err)
-	}
-	defer tx.Rollback()
 	credential := []byte(plaintext)
 	stored, err := f.runtime.WriteEndpointSecret(context.Background(), tx, resources.SecretWriteInput{
 		CanonicalBaseURL: baseURL,
@@ -149,18 +147,11 @@ VALUES(?,?,?,'',1,1,?,?)`, ownerID, connectorType, baseURL, f.clock.Load(), f.cl
 	if !allZero(credential) {
 		t.Fatal("WriteEndpointSecret retained caller plaintext")
 	}
-	result, err = tx.ExecContext(context.Background(), `INSERT INTO endpoint_keys(
-endpoint_id,secret_ref_id,secret_fingerprint,display_head,display_tail,note,
-enabled,force_store_false,revision,created_at,updated_at)
-VALUES(?,?,?,?,?,'',1,0,1,?,?)`, endpointID, stored.RefID, stored.Fingerprint[:], stored.DisplayHead, stored.DisplayTail,
-		f.clock.Load(), f.clock.Load())
+	key, err := testseed.InsertEndpointKeyTx(ctx, tx, testseed.KeyInput{EndpointID: endpointID, SecretRefID: stored.RefID, Fingerprint: stored.Fingerprint[:], DisplayHead: stored.DisplayHead, DisplayTail: stored.DisplayTail, At: f.clock.Load()})
 	if err != nil {
 		t.Fatalf("seed endpoint key: %v", err)
 	}
-	keyID, err := result.LastInsertId()
-	if err != nil {
-		t.Fatalf("seed endpoint key id: %v", err)
-	}
+	keyID := key.KeyID
 	if err := tx.Commit(); err != nil {
 		t.Fatalf("commit key seed: %v", err)
 	}
@@ -170,17 +161,77 @@ VALUES(?,?,?,?,?,'',1,0,1,?,?)`, endpointID, stored.RefID, stored.Fingerprint[:]
 	}
 }
 
+func fixtureDiscoveryFormat(kind connectorcontract.Type) (string, connectorcontract.Type) {
+	switch kind {
+	case connectorcontract.TypeOpenAICompatible, connectorcontract.TypeOpenAIChatCompletions, connectorcontract.TypeOpenAIResponses, connectorcontract.TypeOpenAIDecisions:
+		return "openai", connectorcontract.TypeOpenAICompatible
+	case connectorcontract.TypeAnthropicCompatible:
+		return "anthropic", kind
+	case connectorcontract.TypeGoogleGemini:
+		return "gemini", kind
+	case connectorcontract.TypeAISDKGatewayV3:
+		return "ai-sdk-gateway-v3", kind
+	case connectorcontract.TypeAISDKGatewayV4:
+		return "ai-sdk-gateway-v4", kind
+	default:
+		panic("unsupported discovery fixture protocol")
+	}
+}
 func (f *bridgeFixture) discoveryInput(t testing.TB, key seededKey, discoverer connector.ModelDiscoverer) resources.DiscoveryClaimInput {
 	t.Helper()
 	operationID, err := db.GenerateOpaqueID("op_")
 	if err != nil {
-		t.Fatalf("GenerateOpaqueID: %v", err)
+		t.Fatal(err)
 	}
-	return resources.DiscoveryClaimInput{
-		OperationID: operationID, OwnerUserID: key.ownerID, EndpointID: key.endpointID,
-		EndpointKeyID: key.keyID, ConnectorType: key.connector,
-		CanonicalBaseURL: key.baseURL, Discoverer: discoverer,
+	ctx := context.Background()
+	tx, err := f.store.DB().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
 	}
+	defer tx.Rollback()
+	format, wire := fixtureDiscoveryFormat(key.connector)
+	source, err := testseed.SeedDiscoverySourceTx(ctx, tx, testseed.DiscoverySourceInput{EndpointKeyID: key.keyID, ListFormat: format, At: f.clock.Load()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref := connectionstore.SourceAuthorizationRef{OwnerUserID: key.ownerID, SourceID: source.SourceID, Purpose: connectionstore.SourceSelf}
+	authorized, err := connectionstore.LoadDiscoveryAuthorizationTx(ctx, tx, ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The resource caller normally records the previous bridge result. This
+	// fixture closes that previous operation before starting another one.
+	_, err = tx.ExecContext(ctx, "UPDATE accepted_operations SET state='completed',checkpoint='',terminal_at=max(created_at,?) WHERE state IN('accepted','running') AND id IN(SELECT operation_id FROM discovery_runs WHERE source_revision_id=? AND state='checking')", f.clock.Load(), source.SourceRevisionID)
+	if err == nil {
+		_, err = tx.ExecContext(ctx, "UPDATE discovery_runs SET state='failed',safe_class='interrupted',completed_at=max(started_at,?) WHERE source_revision_id=? AND state='checking'", f.clock.Load(), source.SourceRevisionID)
+	}
+	digest := sha256.Sum256([]byte(operationID))
+	if err == nil {
+		_, err = tx.ExecContext(ctx, "INSERT INTO accepted_operations(id,kind,actor_user_id,actor_role,payload_hash,state,created_at) VALUES(?,'model_discovery',?,'user',?,'accepted',?)", operationID, key.ownerID, digest[:], f.clock.Load())
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := tx.ExecContext(ctx, "INSERT INTO discovery_runs(source_revision_id,source_revision_snapshot,credential_version_id,operation_id,operation_hash,result_generation,authorization_kind,state,started_at) VALUES(?,?,?,?,?,?,'self','checking',?)", source.SourceRevisionID, authorized.SourceRevision, authorized.CredentialVersionID, operationID, digest[:], source.ResultGeneration+1, f.clock.Load())
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := result.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = tx.ExecContext(ctx, "UPDATE discovery_source_states SET result_generation=?,current_run_id=?,updated_at=? WHERE source_revision_id=?", source.ResultGeneration+1, run, f.clock.Load(), source.SourceRevisionID)
+	if err == nil {
+		err = tx.Commit()
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resources.DiscoveryClaimInput{Source: ref, SourceRevisionID: source.SourceRevisionID, CredentialVersionID: authorized.CredentialVersionID, OperationID: operationID, OwnerUserID: key.ownerID, EndpointID: key.endpointID, EndpointKeyID: key.keyID, ConnectorType: wire, CanonicalBaseURL: key.baseURL, Discoverer: discoverer}
+}
+func (f *bridgeFixture) discoveryClaimInput(t testing.TB, key seededKey) claim.DiscoveryClaimInput {
+	input := f.discoveryInput(t, key, nil)
+	return claim.DiscoveryClaimInput{ActorUserID: input.OwnerUserID, Source: input.Source, SourceRevisionID: input.SourceRevisionID, CredentialVersionID: input.CredentialVersionID, OperationID: input.OperationID, Candidate: claim.Candidate{EndpointID: input.EndpointID, EndpointKeyID: input.EndpointKeyID, ConnectorType: input.ConnectorType, CanonicalBaseURL: input.CanonicalBaseURL}}
 }
 
 func (f *bridgeFixture) writeUnreferencedSecret(t testing.TB, plaintext string, commit bool) resources.StoredSecret {

@@ -103,6 +103,40 @@ func TestCallerParameterNativeResponsesAndConversion(t *testing.T) {
 	}
 }
 
+func TestCallerParameterArkErrorKeepsFailureAndRawDiagnostics(t *testing.T) {
+	const payload = "{\"error\":{\"code\":\"InvalidParameter\",\"message\":\"The parameter `reasoning_effort` specified in the request are not valid: value `min` is invalid.\",\"param\":\"reasoning_effort\",\"type\":\"BadRequest\"}}"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]json.RawMessage
+		if json.NewDecoder(r.Body).Decode(&body) != nil || string(body["reasoning_effort"]) != `"min"` {
+			t.Error("unexpected outbound parameter")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = io.WriteString(w, payload)
+	}))
+	defer server.Close()
+	for _, charity := range []bool{false, true} {
+		t.Run(fmt.Sprintf("charity=%t", charity), func(t *testing.T) {
+			ctx := smartbackoff.WithCharityCall(t.Context(), charity)
+			captured := ""
+			ctx = upstreamerror.WithCapture(ctx, func(_ context.Context, e upstreamerror.Event) { captured = string(e.Bytes()) })
+			request := decodeAdapterRequest(t, `{"model":"public/model","messages":[],"reasoning_effort":"min","stream":true}`)
+			writer := httptest.NewRecorder()
+			result := adapterForServer(t, server.URL, nil, nil).Attempt(ctx, writer, testTarget(server.URL, []byte("secret-material"), nil), request, "caller")
+			want := contract.StreakUpstreamFailure
+			if charity {
+				want = contract.StreakNeutral
+			}
+			if result.StreakDisposition != want || result.Failure != FailureUpstream || result.Success || result.Committed || result.FailureOrigin != contract.OriginUpstreamResponse || result.UpstreamStatus != 400 || writer.Body.Len() != 0 {
+				t.Fatalf("result=%+v", result)
+			}
+			if captured != payload || result.ErrorDetail.Code() != "InvalidParameter" {
+				t.Fatal("classification changed the original error")
+			}
+		})
+	}
+}
+
 func TestCallerParameterNativeCodecNormalization(t *testing.T) {
 	for _, tc := range []struct {
 		name, raw string

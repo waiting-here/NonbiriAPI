@@ -19,12 +19,17 @@ const maxOperationStatusBytes = 16 * 1024
 
 // ResourceOperationResult contains only identifiers needed to read current resources.
 type ResourceOperationResult struct {
-	EndpointID      string   `json:"endpoint_id,omitempty"`
-	EndpointKeyID   string   `json:"endpoint_key_id,omitempty"`
-	ModelID         string   `json:"model_id,omitempty"`
-	CatalogEntryIDs []string `json:"catalog_entry_ids,omitempty"`
-	BindingIDs      []string `json:"binding_ids,omitempty"`
-	OperationID     string   `json:"operation_id,omitempty"`
+	ConnectionID            string   `json:"connection_id,omitempty"`
+	CredentialID            string   `json:"credential_id,omitempty"`
+	CredentialVersion       string   `json:"credential_version,omitempty"`
+	DiscoverySourceID       string   `json:"discovery_source_id,omitempty"`
+	DiscoverySourceRevision string   `json:"discovery_source_revision,omitempty"`
+	EndpointID              string   `json:"endpoint_id,omitempty"`
+	EndpointKeyID           string   `json:"endpoint_key_id,omitempty"`
+	ModelID                 string   `json:"model_id,omitempty"`
+	CatalogEntryIDs         []string `json:"catalog_entry_ids,omitempty"`
+	BindingIDs              []string `json:"binding_ids,omitempty"`
+	OperationID             string   `json:"operation_id,omitempty"`
 }
 
 // ResourceOperationStatus is a receipt projection, not evidence of current success.
@@ -49,7 +54,7 @@ func recordResourceOperation(ctx context.Context, tx *sql.Tx, userID int64, muta
 		return ErrResourceLimit
 	}
 	status := "recorded"
-	if stage == "catalog_refresh" {
+	if stage == "catalog_refresh" || stage == "source_refresh" {
 		status = "in_progress"
 	}
 	// Copy the original replay window. Key reuse after expiry may replace the old
@@ -113,7 +118,7 @@ func (r *Repository) GetResourceOperationStatus(ctx context.Context, userID int6
 	if len(body) > maxOperationStatusBytes || json.Unmarshal([]byte(body), &result) != nil {
 		return ResourceOperationStatus{}, ErrUnavailable
 	}
-	if stage == "catalog_refresh" && status == "in_progress" {
+	if (stage == "catalog_refresh" || stage == "source_refresh") && status == "in_progress" {
 		if !db.ValidateOpaqueID(result.OperationID, "op_") {
 			return ResourceOperationStatus{}, ErrUnavailable
 		}

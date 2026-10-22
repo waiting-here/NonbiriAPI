@@ -70,3 +70,21 @@ func orderRuntimeCandidates(source io.Reader, candidates []weightedRuntimeCandid
 		return nil, ErrInvariant
 	}
 }
+
+// OrderSelected runs only after request preflight selected one target per
+// binding. Adding targets therefore cannot add weight or retry slots.
+func (s *Service) OrderSelected(candidates []RuntimeCandidate, strategy string) ([]RuntimeCandidate, error) {
+	if s == nil {
+		return nil, ErrInvalidRequest
+	}
+	weighted := make([]weightedRuntimeCandidate, len(candidates))
+	seen := make(map[int64]bool, len(candidates))
+	for index, candidate := range candidates {
+		if candidate.BindingID <= 0 || seen[candidate.BindingID] {
+			return nil, ErrInvariant
+		}
+		seen[candidate.BindingID] = true
+		weighted[index] = weightedRuntimeCandidate{candidate: candidate, denominator: candidate.WeightDenominator}
+	}
+	return orderRuntimeCandidates(s.entropy, weighted, strategy)
+}

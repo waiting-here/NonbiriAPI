@@ -31,7 +31,7 @@ func TestTraineeBindingOriginAndModelRevocation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	exec(`INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at) VALUES(?,'Example','subscription','openai-compatible','https://example.test/v1',1,'active',1,?,?)`, channel, routingTestNow, routingTestNow)
+	seedRoutingChannel(t, e, channel, "Example", "https://example.test/v1")
 	_, mainKey, _ := e.seedCandidateWithConnector(t, owner, "m", "upstream", connectorcontract.TypeOpenAICompatible, channel)
 	ctx := context.Background()
 	candidates, _, _, err := e.service.BindingCandidatesSteward(ctx, trainee, mid, CandidateQuery{Limit: 50})
@@ -85,13 +85,13 @@ func TestRequestPolicyAndCallerSnapshotUseCurrentAuthority(t *testing.T) {
 		t.Fatalf("policy: %+v %v", policy, err)
 	}
 	connectors := []connectorcontract.Type{connectorcontract.TypeOpenAICompatible}
-	if _, err := e.service.SnapshotForCaller(context.Background(), owner, mid, routingTestNow, connectors); !errors.Is(err, ErrUnavailable) {
+	if _, err := e.service.SnapshotForCaller(context.Background(), owner, mid, routingTestNow, connectors, connectorcontract.OperationChatCompletions); !errors.Is(err, ErrUnavailable) {
 		t.Fatal("self donation candidate admitted", err)
 	}
 	if _, err := e.store.DB().Exec(`UPDATE users SET level=6 WHERE id=?`, owner); err != nil {
 		t.Fatal(err)
 	}
-	if value, err := e.service.SnapshotForCaller(context.Background(), owner, mid, routingTestNow, connectors); err != nil || len(value.Candidates()) != 1 {
+	if value, err := e.service.SnapshotForCaller(context.Background(), owner, mid, routingTestNow, connectors, connectorcontract.OperationChatCompletions); err != nil || len(value.Candidates()) != 1 {
 		t.Fatalf("six exemption: %+v %v", value, err)
 	}
 	if _, err := e.store.DB().Exec(`UPDATE charity_model_access SET allowed_level_mask=1 WHERE model_id=?`, mid); err != nil {

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/headerfacts"
 )
@@ -198,9 +199,7 @@ func TestWorkflowLogShortcutSeedRespectsSchemaAndTraineeScope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.store.DB().Exec(`INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at) VALUES(?,'Shortcut service','subscription','openai-compatible',?,1,'active',1,?,?)`, channel, f.upstream.URL+"/v1", now, now); err != nil {
-		t.Fatal(err)
-	}
+	appFixtureMainstreamChannel(t, f.store, channel, "Shortcut service", f.upstream.URL+"/v1", connectorcontract.TypeOpenAICompatible, now)
 	owner := f.users[1].Cookie
 	endpoint := f.call("POST", "/api/endpoints", map[string]any{"source": "mainstream", "channel_id": channel, "note": "Shortcut service", "enabled": true}, owner, false)["id"].(string)
 	keys := make([]map[string]any, 0, 2)

@@ -359,6 +359,13 @@ function pendingDonationFixture(id: string, description: string) {
   };
 }
 
+type ManagedKeyFixture = Omit<typeof managedKeyFixture, 'ended_reason'> & {
+  ended_reason: string | null;
+};
+type ManagedDonationFixture = Omit<ReturnType<typeof pendingDonationFixture>, 'keys'> & {
+  keys: ManagedKeyFixture[];
+};
+
 function managementNumberedPage<T>(data: T[]) {
   return {
     data,
@@ -367,7 +374,7 @@ function managementNumberedPage<T>(data: T[]) {
   };
 }
 
-function managedDonationPageSummary(donation: ReturnType<typeof pendingDonationFixture>) {
+function managedDonationPageSummary(donation: ManagedDonationFixture) {
   const stateCounts: Record<string, string> = {
     available: '0',
     rate_limited: '0',
@@ -400,10 +407,7 @@ function managedDonationPageSummary(donation: ReturnType<typeof pendingDonationF
   };
 }
 
-function managedDonationKeyPageSummary(
-  donation: ReturnType<typeof pendingDonationFixture>,
-  key: typeof managedKeyFixture,
-) {
+function managedDonationKeyPageSummary(donation: ManagedDonationFixture, key: ManagedKeyFixture) {
   return {
     ...key,
     donation_id: donation.id,
@@ -1329,7 +1333,7 @@ describe('experimental policy and charity controls', () => {
       if (method === 'PUT' && path === '/api/models/3/bindings/order') {
         bindings = [coreBinding('11', 'gpt-b', 0), coreBinding('10', 'gpt-a', 1)];
         bindingRevision = '3';
-        return jsonResponse({ bindings, binding_revision: bindingRevision });
+        return jsonResponse({ binding_revision: bindingRevision });
       }
       if (method === 'PATCH' && path === '/api/models/3') {
         currentModel = {
@@ -1361,6 +1365,7 @@ describe('experimental policy and charity controls', () => {
       expect(lastBody(fetchMock, 'PUT', '/api/models/3/bindings/order')).toEqual({
         expected_binding_revision: '2',
         order: ['11', '10'],
+        response: 'receipt',
       }),
     );
     await rendered.user.click(screen.getByRole('button', { name: 'Edit model' }));
@@ -1380,6 +1385,7 @@ describe('experimental policy and charity controls', () => {
         transport_rule: 'passthrough',
         flatten_tool_calls: true,
         role_policy: { default_action: 'native', rules: {} },
+        session_headers: [],
         expected_revision: '1',
       }),
     );
@@ -1410,7 +1416,7 @@ describe('experimental policy and charity controls', () => {
       {
         method: 'DELETE',
         path: '/api/models/3/bindings/10',
-        body: { bindings: [], binding_revision: '3' },
+        body: { binding_revision: '3' },
       },
     ]);
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -1420,7 +1426,7 @@ describe('experimental policy and charity controls', () => {
       ).toUpperCase();
       if (method === 'DELETE' && path === '/api/models/3/bindings/10') {
         deleted = true;
-        return jsonResponse({ bindings: [], binding_revision: '3' });
+        return jsonResponse({ binding_revision: '3' });
       }
       if (method === 'GET' && path === '/api/models/3/bindings')
         return jsonResponse(
@@ -1445,12 +1451,13 @@ describe('experimental policy and charity controls', () => {
     await waitFor(() =>
       expect(lastBody(fetchMock, 'DELETE', '/api/models/3/bindings/10')).toEqual({
         expected_binding_revision: '2',
+        response: 'receipt',
       }),
     );
     await waitFor(() => expect(screen.queryByText('gpt-a')).toBeNull());
   });
 
-  test('submits only an owned existing key through the closed beta.1 donation wire', async () => {
+  test('submits an existing owned key with explicit service and credential authorization', async () => {
     const capability = {
       state: 'available',
       donation_intake: 'open',
@@ -1600,6 +1607,10 @@ describe('experimental policy and charity controls', () => {
           coreNumberedPage([
             {
               ...coreEndpointKey,
+              native_services: ['chat_completions', 'embeddings'],
+              credential_id: '12',
+              credential_version: '3',
+              grant_revision: '4',
               browse: {
                 donation_eligibility: submitted ? 'already_donated' : 'eligible',
                 model_count: '0',
@@ -1629,6 +1640,7 @@ describe('experimental policy and charity controls', () => {
     await rendered.user.click(await screen.findByRole('button', { name: 'Choose keys…' }));
     await rendered.user.click(await screen.findByRole('button', { name: /^primary/ }));
     await rendered.user.click(await screen.findByRole('checkbox', { name: /sk-a…tail/ }));
+    await rendered.user.click(await screen.findByRole('checkbox', { name: 'Chat completions' }));
     await rendered.user.click(screen.getByRole('button', { name: 'Done' }));
     await rendered.user.type(screen.getByLabelText('Donation description'), 'fixture donation');
     await rendered.user.click(
@@ -1648,13 +1660,23 @@ describe('experimental policy and charity controls', () => {
     await waitFor(() =>
       expect(lastBody(fetchMock, 'POST', '/api/donations')).toEqual({
         description: 'fixture donation',
-        keys: [{ endpoint_key_id: '2', expires_at: null, failure_disable_threshold: '10' }],
+        keys: [
+          {
+            endpoint_key_id: '2',
+            native_services: ['chat_completions'],
+            credential_id: '12',
+            credential_version: '3',
+            grant_revision: '4',
+            expires_at: null,
+            failure_disable_threshold: '10',
+          },
+        ],
         ownership_authorized: true,
         discord_public_thanks: false,
       }),
     );
     expect(JSON.stringify(lastBody(fetchMock, 'POST', '/api/donations'))).not.toMatch(
-      /secret|base_url|max_concurrency|rpm_limit/i,
+      /secret|base_url|max_concurrency|rpm_limit|discovery_source/i,
     );
     await screen.findByText('Donation submitted for review.');
     await rendered.user.click(screen.getByRole('tab', { name: 'My donations' }));
@@ -1913,6 +1935,191 @@ describe('experimental policy and charity controls', () => {
         decision: 'approve',
       }),
     );
+  });
+
+  test('keeps pending-header maintenance scoped to the approved key after per-use review and returns from bindings without reopening terminal keys', async () => {
+    let approved = false;
+    let donation: Omit<ManagedDonationFixture, 'keys'> & {
+      keys: (ManagedKeyFixture & { can_manage: boolean })[];
+      use_summary: { total: string; pending: string; approved: string };
+    } = {
+      ...pendingDonationFixture('9', 'Partial use review'),
+      keys: [
+        { ...managedKeyFixture, can_manage: false },
+        {
+          ...managedKeyFixture,
+          id: '7',
+          endpoint_key_id: '3',
+          display_head: 'sk-b',
+          can_manage: false,
+        },
+      ],
+      use_summary: { total: '2', pending: '2', approved: '0' },
+    };
+    const useVersion = (status: 'pending' | 'approved') => ({
+      credential_id: '8',
+      credential_version: '1',
+      grant_revision: '1',
+      status,
+      review_note: '',
+      reviewed_at: null,
+      expected_review_revision: 'body-1',
+      discovery_source_id: null,
+      discovery_source_revision: null,
+      display_head: 'sk-a',
+      display_tail: 'tail',
+      review: { required: false, revision: null, material_available: false },
+      discovery: null,
+    });
+    const uses = () =>
+      [0, 1].map((index) => ({
+        id: String(20 + index),
+        donation_id: '9',
+        donation_key_id: index ? '7' : '6',
+        endpoint_key_id: index ? '3' : '2',
+        native_service: index ? 'responses' : 'chat_completions',
+        enabled: true,
+        discovery_enabled: false,
+        revision: approved && !index ? '2' : '1',
+        approved: approved && !index ? useVersion('approved') : null,
+        pending: approved && !index ? null : useVersion('pending'),
+        latest: useVersion(approved && !index ? 'approved' : 'pending'),
+        health: null,
+        capabilities: {
+          can_review: !(approved && !index),
+          can_manage: approved && !index,
+          can_reset_failures: false,
+          can_discover: false,
+          can_bind: approved && !index,
+          unavailable_reason: null,
+        },
+      }));
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = new URL(String(input), 'https://app.example');
+      const method = init?.method ?? 'GET';
+      const path = url.pathname;
+      if (path === '/admin/api/session')
+        return jsonResponse({ admin: { username: 'fixture-admin' } });
+      if (path === '/admin/api/time-context')
+        return jsonResponse({ mode: 'site', offset_minutes: 330 });
+      if (path === '/admin/api/time-zones')
+        return jsonResponse({
+          version: 'go1.26.6-zoneinfo',
+          zones: ['America/Indianapolis', 'UTC'],
+        });
+      if (path === '/admin/api/donations/9/uses/review' && method === 'POST') {
+        approved = true;
+        donation = {
+          ...donation,
+          keys: donation.keys.map((key) => ({ ...key, can_manage: key.id === '6' })),
+          use_summary: { total: '2', pending: '1', approved: '1' },
+        };
+        return jsonResponse({ results: [{ use_id: '20', ok: true }] });
+      }
+      if (path === '/admin/api/donations/9/keys/6' && method === 'PATCH') {
+        const body = JSON.parse(String(init?.body));
+        donation = {
+          ...donation,
+          revision: '2',
+          keys: donation.keys.map((key) =>
+            key.id === '6' ? { ...key, safe_note: body.safe_note } : key,
+          ),
+        };
+        return jsonResponse(donation);
+      }
+      if (path === '/admin/api/donations/9/uses')
+        return jsonResponse(managementNumberedPage(uses()));
+      if (path === '/admin/api/donations/9/keys/6/binding-options')
+        return jsonResponse(
+          managementNumberedPage([
+            {
+              charity_model_id: '11',
+              full_name: 'Shared chat',
+              enabled: true,
+              binding_revision: '1',
+            },
+          ]),
+        );
+      if (path === '/admin/api/donations/9/keys')
+        return jsonResponse(
+          managementNumberedPage(
+            donation.keys.map((key) => managedDonationKeyPageSummary(donation, key)),
+          ),
+        );
+      if (path === '/admin/api/donations/9') return jsonResponse(donation);
+      if (path === '/admin/api/donations')
+        return jsonResponse(
+          managementNumberedPage([
+            { ...managedDonationPageSummary(donation), use_summary: donation.use_summary },
+          ]),
+        );
+      throw Error('Unexpected ' + method + ' ' + url.pathname);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const view = await renderWithProviders(<RealManagement frame="admin" />, {
+      station: 'admin',
+      role: 'admin',
+    });
+    await screen.findByRole('cell', { name: /Partial use review/ });
+    await view.user.click(screen.getByRole('button', { name: 'Review' }));
+    await screen.findByText('Chat completions', { exact: true });
+    expect(screen.queryByRole('button', { name: 'Models and bindings' })).toBeNull();
+    await view.user.click(screen.getByText('Chat completions', { exact: true }));
+    await view.user.click(
+      within(screen.getByText('Chat completions', { exact: true }).closest('.nb-fold')!).getByRole(
+        'checkbox',
+        { name: 'Select use for review' },
+      ),
+    );
+    await view.user.click(screen.getByRole('button', { name: 'Approve selected uses' }));
+    const manage = await screen.findByRole('button', { name: 'Models and bindings' });
+    expect(screen.getAllByRole('button', { name: 'Models and bindings' })).toHaveLength(1);
+    expect(donation.status).toBe('pending');
+    expect(donation.use_summary).toEqual({ total: '2', pending: '1', approved: '1' });
+    const keyCard = manage.closest('section')!;
+    const note = within(keyCard).getByLabelText('Review note');
+    await view.user.clear(note);
+    await view.user.type(note, 'Reviewed use');
+    await view.user.click(within(keyCard).getByRole('button', { name: 'Save key limits' }));
+    await waitFor(() =>
+      expect(lastBody(fetchMock, 'PATCH', '/admin/api/donations/9/keys/6')).toMatchObject({
+        expected_revision: '1',
+        safe_note: 'Reviewed use',
+      }),
+    );
+    await waitFor(() => expect(donation.revision).toBe('2'));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Models and bindings' })).toBeEnabled(),
+    );
+    await view.user.click(screen.getByRole('button', { name: 'Models and bindings' }));
+    await screen.findByText('Shared chat', { exact: true });
+    expect(
+      fetchMock.mock.calls.some(([url]) => String(url).includes('/keys/6/binding-options')),
+    ).toBe(true);
+    await view.user.click(screen.getByRole('button', { name: 'Return to donation settings' }));
+    await screen.findByRole('button', { name: 'Models and bindings' });
+    expect(
+      within(
+        screen.getByRole('button', { name: 'Models and bindings' }).closest('section')!,
+      ).getByDisplayValue('Reviewed use'),
+    ).toBeEnabled();
+    donation = {
+      ...donation,
+      status: 'deleted',
+      keys: donation.keys.map((key) => ({
+        ...key,
+        charity_state: 'ended',
+        ended_reason: 'terminated',
+        can_manage: true,
+      })),
+    };
+    await act(async () => {
+      await view.queryClient.invalidateQueries({ queryKey: charityKeys.root('admin') });
+    });
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Models and bindings' })).toBeNull(),
+    );
+    expect(screen.queryByRole('button', { name: 'Save key limits' })).toBeNull();
   });
 
   test.each([
@@ -3400,7 +3607,7 @@ describe('experimental policy and charity controls', () => {
       if (method === 'GET' && path === '/api/endpoints/1/keys?page=1&page_size=20') {
         return jsonResponse(coreNumberedPage([]));
       }
-      if (method === 'GET' && path === '/api/endpoints?page=1&page_size=20') {
+      if (method === 'GET' && path === '/api/connections?page=1&page_size=20') {
         listReads += 1;
         return jsonResponse(coreNumberedPage(deleted ? [] : [coreEndpoint]));
       }
@@ -3416,8 +3623,13 @@ describe('experimental policy and charity controls', () => {
       role: 'user',
       route: '/endpoints/1',
     });
-    rendered.queryClient.setQueryDefaults(coreKeys.endpointsRoot('1'), { staleTime: Infinity });
-    rendered.queryClient.setQueryData(coreKeys.endpoints('1'), corePage([coreEndpoint]));
+    rendered.queryClient.setQueryDefaults([...coreKeys.account('1'), 'connections'], {
+      staleTime: Infinity,
+    });
+    rendered.queryClient.setQueryData(
+      [...coreKeys.account('1'), 'connections', 'all', 'connections', '', '', '1', 20],
+      coreNumberedPage([]),
+    );
 
     await screen.findByRole('heading', { name: 'primary' });
     await rendered.user.click(screen.getByRole('button', { name: 'Delete service' }));
@@ -3425,7 +3637,7 @@ describe('experimental policy and charity controls', () => {
       within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete service' }),
     );
 
-    expect(await screen.findByText('No services added yet')).toBeVisible();
+    await waitFor(() => expect(screen.getByText('Nothing here yet')).toBeVisible());
     expect(listReads).toBe(1);
     expect(lastBody(fetchMock, 'DELETE', '/api/endpoints/1')).toEqual({
       expected_revision: '1',
@@ -3455,7 +3667,7 @@ describe('experimental policy and charity controls', () => {
       if (method === 'GET' && path === '/api/endpoints/1/keys?page=1&page_size=20') {
         return jsonResponse(coreNumberedPage([]));
       }
-      if (method === 'GET' && path === '/api/endpoints?page=1&page_size=20') {
+      if (method === 'GET' && path === '/api/connections?page=1&page_size=20') {
         return jsonResponse(coreNumberedPage(detailReads >= 3 ? [] : [coreEndpoint]));
       }
       if (method === 'DELETE' && path === '/api/endpoints/1') {
@@ -3470,8 +3682,13 @@ describe('experimental policy and charity controls', () => {
       role: 'user',
       route: '/endpoints/1',
     });
-    rendered.queryClient.setQueryDefaults(coreKeys.endpointsRoot('1'), { staleTime: Infinity });
-    rendered.queryClient.setQueryData(coreKeys.endpoints('1'), corePage([coreEndpoint]));
+    rendered.queryClient.setQueryDefaults([...coreKeys.account('1'), 'connections'], {
+      staleTime: Infinity,
+    });
+    rendered.queryClient.setQueryData(
+      [...coreKeys.account('1'), 'connections', 'all', 'connections', '', '', '1', 20],
+      coreNumberedPage([]),
+    );
 
     await screen.findByRole('heading', { name: 'primary' });
     await rendered.user.click(screen.getByRole('button', { name: 'Delete service' }));
@@ -3488,7 +3705,7 @@ describe('experimental policy and charity controls', () => {
       ),
     );
 
-    expect(await screen.findByText('No services added yet')).toBeVisible();
+    await waitFor(() => expect(screen.getByText('Nothing here yet')).toBeVisible());
     expect(deleteCalls).toBe(1);
     expect(detailReads).toBeGreaterThanOrEqual(3);
   });

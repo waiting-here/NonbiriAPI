@@ -679,6 +679,7 @@ func failureForError(err error, charity bool) wireFailure {
 		if errors.As(err, &tooShort) && tooShort != nil && tooShort.Actual >= 0 && tooShort.Minimum >= 0 {
 			message += ": " + strconv.Itoa(tooShort.Actual) + " < " + strconv.Itoa(tooShort.Minimum)
 		}
+		message += ". Charity models require a minimum input length to protect shared resources. Please provide a complete request."
 		return platformFailure(httperr.CodeContentTooShort, message)
 	case errors.Is(err, claim.ErrNotFound):
 		return platformFailure(httperr.CodeUnauthorized, "authentication required")

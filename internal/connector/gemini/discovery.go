@@ -56,7 +56,7 @@ func (ModelDiscoverer) Discover(ctx context.Context, input contract.DiscoveryInp
 	seenModels := map[string]bool{}
 	models := []contract.DiscoveredModel{}
 	for page := 0; page < 20; page++ {
-		endpoint := strings.TrimSuffix(client.BaseURL(), "/") + "/models?pageSize=100"
+		endpoint := ModelsURL(client.BaseURL()) + "?pageSize=100"
 		if pageToken != "" {
 			endpoint += "&pageToken=" + url.QueryEscape(pageToken)
 		}
@@ -180,6 +180,10 @@ func (ModelDiscoverer) Discover(ctx context.Context, input contract.DiscoveryInp
 			if err != nil {
 				return result
 			}
+			services, _ := contract.ParseNativeServices([]contract.NativeService{contract.NativeServiceGeminiGenerateContent})
+			for i := range parsed {
+				parsed[i].NativeServices = services
+			}
 			models = append(models, parsed...)
 		}
 		pageToken = ""
@@ -202,3 +206,6 @@ func (ModelDiscoverer) Discover(ctx context.Context, input contract.DiscoveryInp
 	}
 	return result
 }
+
+// ModelsURL is the catalog endpoint before pagination parameters are added.
+func ModelsURL(baseURL string) string { return strings.TrimSuffix(baseURL, "/") + "/models" }

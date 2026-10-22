@@ -1991,3 +1991,144 @@ it('keeps level-5 access when a pending target was concurrently reviewed', async
   await view.user.click(screen.getByRole('button', { name: 'Return to list' }));
   await screen.findByRole('heading', { name: 'No pending donations' });
 });
+
+it.each(['approve', 'reject'] as const)(
+  'keeps the confirmed use %s receipt when the last pending detail loses access and the queue refresh fails',
+  async (decision) => {
+    const current: AdminDonation = {
+      ...pendingDonation(),
+      owner: null,
+      reviewer: null,
+      can_force_reject: false,
+      use_summary: { total: '1', pending: '1', approved: '0' },
+    };
+    const pending = {
+      credential_id: '8',
+      credential_version: '1',
+      grant_revision: '1',
+      status: 'pending',
+      review_note: '',
+      reviewed_at: null,
+      expected_review_revision: null,
+      discovery_source_id: null,
+      discovery_source_revision: null,
+      display_head: 'head',
+      display_tail: 'tail',
+      review: { required: false, revision: null, material_available: false },
+      discovery: null,
+    };
+    const use = {
+      id: '6',
+      donation_id: '1',
+      donation_key_id: '11',
+      endpoint_key_id: null,
+      native_service: 'chat_completions',
+      enabled: true,
+      discovery_enabled: false,
+      revision: '9',
+      approved: null,
+      pending,
+      latest: pending,
+      health: null,
+      capabilities: {
+        can_review: true,
+        can_manage: false,
+        can_reset_failures: false,
+        can_discover: false,
+        can_bind: false,
+        unavailable_reason: 'not_approved',
+      },
+    };
+    const capabilityLost = vi.fn();
+    let completed = false;
+    let failQueue = true;
+    let writes = 0;
+    let finishWrite!: () => void;
+    const writeGate = new Promise<void>((resolve) => {
+      finishWrite = resolve;
+    });
+    const error = (status: number, code: string) =>
+      new Response(
+        JSON.stringify({
+          error: {
+            code,
+            message: code === 'forbidden' ? 'No longer pending' : 'Refresh temporarily unavailable',
+          },
+        }),
+        { status, headers: { 'content-type': 'application/json' } },
+      );
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async (input, init) => {
+        const url = new URL(String(input), 'https://example.test');
+        if (url.pathname.endsWith('/time-context')) return jsonResponse(siteTimeContext);
+        if (url.pathname === '/api/steward/donations') {
+          expect(url.searchParams.get('status')).toBe('pending');
+          return completed && failQueue
+            ? error(503, 'unavailable')
+            : jsonResponse(numberedPage(completed ? [] : [donationSummary(current)], url));
+        }
+        if (url.pathname === '/api/steward/donations/1')
+          return completed ? error(403, 'forbidden') : jsonResponse(current);
+        if (url.pathname === '/api/steward/donations/1/uses')
+          return completed ? error(403, 'forbidden') : jsonResponse(numberedPage([use], url));
+        if (url.pathname === '/api/steward/donations/1/uses/review') {
+          expect(init?.method).toBe('POST');
+          writes++;
+          expect(JSON.parse(String(init?.body))).toEqual({
+            items: [
+              {
+                use_id: '6',
+                expected_revision: '9',
+                expected_review_revision: null,
+                decision,
+                review_note: '',
+              },
+            ],
+          });
+          expect(new Headers(init?.headers).get('Idempotency-Key')).toBeTruthy();
+          await writeGate;
+          completed = true;
+          return jsonResponse({ results: [{ use_id: '6', ok: true }] });
+        }
+        throw new Error('Unexpected request: ' + url.pathname);
+      }),
+    );
+    const view = await renderWithProviders(
+      <CharityManagement frame="steward" accountId="1" trainee onCapabilityLoss={capabilityLost} />,
+      {
+        station: 'user',
+        route: '/steward?charity_section=donations&donation_id=1',
+        role: 'level5',
+      },
+    );
+    view.queryClient.setQueryData(['user', 'session'], {
+      ...stewardSession,
+      user: { ...stewardSession.user, effective_level: 5 },
+    });
+    await view.user.click(await screen.findByText('Chat completions', { exact: true }));
+    await view.user.click(screen.getByRole('checkbox', { name: 'Select use for review' }));
+    await view.user.click(
+      screen.getByRole('button', {
+        name: decision === 'approve' ? 'Approve selected uses' : 'Reject selected uses',
+      }),
+    );
+    await waitFor(() => expect(writes).toBe(1));
+    expect(screen.getByRole('button', { name: 'Return to list' })).toBeDisabled();
+    finishWrite();
+    await screen.findByText('Use 6 saved');
+    await screen.findByText('Refresh temporarily unavailable');
+    expect(screen.queryByRole('heading', { name: 'Donation uses' })).not.toBeInTheDocument();
+    failQueue = false;
+    await view.user.click(screen.getByRole('button', { name: 'Retry' }));
+    await screen.findByText(
+      'This donation has already been reviewed. Return to the pending queue.',
+    );
+    expect(screen.getByText('Use 6 saved')).toBeVisible();
+    await view.user.click(screen.getByRole('button', { name: 'Return to list' }));
+    await screen.findByRole('heading', { name: 'No pending donations' });
+    expect(screen.getByText('Use 6 saved')).toBeVisible();
+    expect(writes).toBe(1);
+    expect(capabilityLost).not.toHaveBeenCalled();
+  },
+);

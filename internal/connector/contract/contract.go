@@ -283,8 +283,9 @@ type StreamEvent struct {
 // DiscoveredModel is the connector-neutral cache input returned by an
 // optional ModelDiscoverer. Sorting and persistence remain fetch-owned.
 type DiscoveredModel struct {
-	ID       string
-	Provider string
+	NativeServices NativeServiceSet
+	ID             string
+	Provider       string
 }
 
 // DiscoveryInput transfers one fetch-owned, already revalidated target and

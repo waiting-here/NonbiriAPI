@@ -18,7 +18,7 @@ const lifecycleCollectionLimit = 10_000
 
 // LifecycleResourceExport is the closed resource slice consumed by the
 // account lifecycle coordinator. The types below deliberately omit secret
-// references, fingerprints, discovery diagnostics, and every revision.
+// references, fingerprints, discovery diagnostics, and internal revision IDs.
 type LifecycleResourceExport struct {
 	Endpoints    []LifecycleEndpoint
 	CatalogPairs []LifecycleCatalogPair
@@ -27,29 +27,35 @@ type LifecycleResourceExport struct {
 }
 
 type LifecycleEndpoint struct {
-	ID            string
-	ConnectorType string
-	BaseURL       string
-	Origin        EndpointOrigin
-	Note          string
-	Enabled       bool
-	CreatedAt     int64
-	UpdatedAt     int64
-	Keys          []LifecycleEndpointKey
+	ConnectionID   *string
+	NativeServices []string
+	RerankFormat   string
+	ID             string
+	ConnectorType  string
+	BaseURL        string
+	Origin         EndpointOrigin
+	Note           string
+	Enabled        bool
+	CreatedAt      int64
+	UpdatedAt      int64
+	Keys           []LifecycleEndpointKey
 }
 
 type LifecycleEndpointKey struct {
-	ID              string
-	DisplayHead     string
-	DisplayTail     string
-	Note            string
-	Enabled         bool
-	ForceStoreFalse bool
-	MaxConcurrency  int64
-	MaxRPM          int64
-	SuspensionState string
-	CreatedAt       int64
-	UpdatedAt       int64
+	CredentialID, CredentialVersion, GrantRevision string
+	NativeServices                                 []string
+	DiscoverySourceID                              *string
+	ID                                             string
+	DisplayHead                                    string
+	DisplayTail                                    string
+	Note                                           string
+	Enabled                                        bool
+	ForceStoreFalse                                bool
+	MaxConcurrency                                 int64
+	MaxRPM                                         int64
+	SuspensionState                                string
+	CreatedAt                                      int64
+	UpdatedAt                                      int64
 }
 
 type LifecycleDiscoveryEvidence struct {
@@ -141,9 +147,10 @@ func (r *Repository) ExportLifecycleResources(
 
 	endpointRows, err := tx.QueryContext(ctx, `
 SELECT e.id,e.connector_type,e.base_url,e.note,e.enabled,e.revision,
-       (SELECT count(*) FROM endpoint_keys k WHERE k.endpoint_id=e.id),
+       (SELECT count(*) FROM endpoint_key_current_credentials k WHERE k.endpoint_id=e.id),
        e.created_at,e.updated_at,e.mainstream_channel_id,e.mainstream_channel_revision,
-       e.mainstream_channel_name,e.mainstream_channel_category
+       e.mainstream_channel_name,e.mainstream_channel_category,
+       e.connection_id,e.native_service_mask,e.rerank_format
 FROM endpoints e
 WHERE e.user_id=?
 ORDER BY e.id
@@ -181,12 +188,14 @@ LIMIT ?`, userID, limit+1)
 			return empty, err
 		}
 		item := LifecycleEndpoint{
+			ConnectionID: endpoint.ConnectionID, NativeServices: nativeServiceStrings(endpoint.NativeServices), RerankFormat: string(endpoint.RerankFormat),
 			ID: endpoint.ID, ConnectorType: endpoint.ConnectorType, BaseURL: endpoint.BaseURL,
 			Origin: endpoint.Origin, Note: endpoint.Note, Enabled: endpoint.Enabled, CreatedAt: endpoint.CreatedAt,
 			UpdatedAt: endpoint.UpdatedAt, Keys: make([]LifecycleEndpointKey, 0, len(keys)),
 		}
 		for _, key := range keys {
 			item.Keys = append(item.Keys, LifecycleEndpointKey{
+				CredentialID: key.CredentialID, CredentialVersion: key.CredentialVersion, GrantRevision: key.GrantRevision, NativeServices: nativeServiceStrings(key.NativeServices), DiscoverySourceID: key.DiscoverySourceID,
 				ID: key.ID, DisplayHead: key.DisplayHead, DisplayTail: key.DisplayTail, Note: key.Note,
 				Enabled: key.Enabled, ForceStoreFalse: key.ForceStoreFalse,
 				MaxConcurrency: key.MaxConcurrency, MaxRPM: key.MaxRPM,
@@ -320,7 +329,7 @@ func lifecycleCatalogPairTx(
 func lifecycleCatalogEntriesTx(ctx context.Context, tx *sql.Tx, keyID int64, source string, limit int) ([]LifecycleCatalogEntry, error) {
 	rows, err := tx.QueryContext(ctx, `
 SELECT c.id,c.source_type,c.normalized_model_id,c.provider,c.source_revision,p.pair_revision,c.created_at,c.updated_at
-FROM model_catalog_entries c
+FROM endpoint_key_catalog_entries c
 JOIN model_pair_catalog p ON p.endpoint_key_id=c.endpoint_key_id AND p.normalized_model_id=c.normalized_model_id
 WHERE c.endpoint_key_id=? AND c.source_type=?
 ORDER BY c.id
@@ -377,10 +386,10 @@ LIMIT ?`, userID, limit+1)
 
 func lifecycleBindingsTx(ctx context.Context, tx *sql.Tx, userID, modelID int64, limit int) ([]Binding, error) {
 	rows, err := tx.QueryContext(ctx, `
-SELECT b.id,b.endpoint_key_id,e.base_url,e.connector_type,e.note,k.display_head,k.display_tail,k.note,b.upstream_model_id,b.ord
-FROM model_bindings b
+SELECT b.id,pt.endpoint_key_id,e.base_url,e.connector_type,e.note,k.display_head,k.display_tail,k.note,pt.upstream_model_id,b.ord
+FROM model_bindings b JOIN model_binding_primary_targets pt ON pt.binding_id=b.id
 JOIN models m ON m.id=b.model_id
-JOIN endpoint_keys k ON k.id=b.endpoint_key_id
+JOIN endpoint_key_current_credentials k ON k.id=pt.endpoint_key_id
 JOIN endpoints e ON e.id=k.endpoint_id
 WHERE m.user_id=? AND m.id=? AND e.user_id=?
 ORDER BY b.ord,b.id
@@ -470,7 +479,7 @@ func (r *Repository) PrepareLifecycleAccountDeletion(ctx context.Context, tx *sq
 	}
 	rows, err := tx.QueryContext(ctx, `
 SELECT k.id,k.secret_ref_id
-FROM endpoint_keys k JOIN endpoints e ON e.id=k.endpoint_id
+FROM endpoint_key_current_credentials k JOIN endpoints e ON e.id=k.endpoint_id
 WHERE e.user_id=?
 ORDER BY k.id`, userID)
 	if err != nil {
@@ -478,18 +487,23 @@ ORDER BY k.id`, userID)
 	}
 	keyIDs := make([]int64, 0)
 	secretRefs := make([]int64, 0)
+	seenRefs := map[int64]bool{}
 	for rows.Next() {
-		var keyID, secretRef int64
+		var keyID int64
+		var secretRef sql.NullInt64
 		if err := rows.Scan(&keyID, &secretRef); err != nil {
 			_ = rows.Close()
 			return fmt.Errorf("resources: scan lifecycle deletion key: %w", err)
 		}
-		if keyID <= 0 || secretRef <= 0 {
+		if keyID <= 0 || (secretRef.Valid && secretRef.Int64 <= 0) {
 			_ = rows.Close()
 			return ErrUnavailable
 		}
 		keyIDs = append(keyIDs, keyID)
-		secretRefs = append(secretRefs, secretRef)
+		if secretRef.Valid && !seenRefs[secretRef.Int64] {
+			secretRefs = append(secretRefs, secretRef.Int64)
+			seenRefs[secretRef.Int64] = true
+		}
 	}
 	if err := rows.Err(); err != nil {
 		_ = rows.Close()

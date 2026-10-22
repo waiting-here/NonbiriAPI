@@ -3,9 +3,6 @@ package charity
 import (
 	"net/http"
 	"testing"
-
-	"github.com/waiting-here/NonbiriAPI/internal/claim"
-	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 )
 
 func TestSessionHeadersDispatchRecoveryAndRefusal(t *testing.T) {
@@ -17,7 +14,7 @@ func TestSessionHeadersDispatchRecoveryAndRefusal(t *testing.T) {
 				t.Fatal(err)
 			}
 			r := e.billingRequest(t, rail, e.tokenModel, 5, 1)
-			h, err := rail.Claim(t.Context(), claim.ClaimInput{RequestID: r.ID, ActorUserID: e.callerID, AttemptSeq: 1, Purpose: claim.PurposeCharity, DonationKeyID: e.donationKey, Candidate: claim.Candidate{EndpointID: e.endpointID, EndpointKeyID: e.endpointKey, ConnectorType: connectorcontract.TypeOpenAICompatible, CanonicalBaseURL: "https://charity.example.test/v1", UpstreamModelID: "upstream-model"}})
+			h, err := rail.Claim(t.Context(), e.retryClaimInput(t, r.ID))
 			if err != nil {
 				t.Fatal(err)
 			}

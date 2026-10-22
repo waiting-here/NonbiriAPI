@@ -17,7 +17,10 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/continuity"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
@@ -81,9 +84,9 @@ func (hook *reportTestDeletionHook) deleteKey(
 		}
 		return errors.New("fixture endpoint-key deletion failure")
 	}
-	var secretRefID int64
-	if err := tx.QueryRowContext(ctx, `SELECT k.secret_ref_id FROM endpoint_keys k
-JOIN endpoints e ON e.id=k.endpoint_id WHERE k.id=? AND e.user_id=?`, endpointKeyID, ownerUserID).Scan(&secretRefID); err != nil {
+	var versionID int64
+	if err := tx.QueryRowContext(ctx, `SELECT g.credential_version_id FROM endpoint_keys k JOIN endpoint_key_grant_revisions g ON g.id=k.current_grant_revision_id
+JOIN endpoints e ON e.id=k.endpoint_id WHERE k.id=? AND e.user_id=?`, endpointKeyID, ownerUserID).Scan(&versionID); err != nil {
 		return fmt.Errorf("fixture read endpoint-key secret: %w", err)
 	}
 	result, err := tx.ExecContext(ctx, `DELETE FROM endpoint_keys WHERE id=?`, endpointKeyID)
@@ -94,9 +97,8 @@ JOIN endpoints e ON e.id=k.endpoint_id WHERE k.id=? AND e.user_id=?`, endpointKe
 	if err != nil || changed != 1 {
 		return errors.New("fixture endpoint-key deletion did not remove one row")
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE endpoint_key_secrets SET orphaned_at=?
-WHERE id=? AND orphaned_at IS NULL`, decisionNow, secretRefID); err != nil {
-		return fmt.Errorf("fixture orphan endpoint-key secret: %w", err)
+	if _, err := connectionstore.RetireUnreferencedVersionTx(ctx, tx, versionID, decisionNow); err != nil {
+		return fmt.Errorf("fixture retire unreferenced version: %w", err)
 	}
 	return nil
 }
@@ -283,16 +285,18 @@ func boolInt(value bool) int {
 
 func (environment *reportTestEnvironment) seedEndpoint(t *testing.T, userID int64, connectorType, baseURL string) int64 {
 	t.Helper()
-	now := environment.clock.Load()
-	result, err := environment.store.DB().Exec(`INSERT INTO endpoints(
-user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at)
-VALUES(?,?,?,'fixture endpoint',1,1,?,?)`, userID, connectorType, baseURL, now, now)
+	ctx := context.Background()
+	tx, err := environment.store.DB().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	id, err := testseed.InsertEndpointTx(ctx, tx, testseed.EndpointInput{OwnerUserID: userID, Type: connectorcontract.Type(connectorType), BaseURL: baseURL, Note: "fixture endpoint", At: environment.clock.Load()})
+	if err == nil {
+		err = tx.Commit()
+	}
 	if err != nil {
 		t.Fatalf("seed endpoint: %v", err)
-	}
-	id, err := result.LastInsertId()
-	if err != nil {
-		t.Fatalf("seed endpoint id: %v", err)
 	}
 	return id
 }
@@ -350,14 +354,8 @@ VALUES(?,?,?,'fixture-envelope',?,NULL)`, contextID[:], baseURL, connectorType, 
 	if err != nil {
 		return 0, err
 	}
-	result, err = tx.ExecContext(ctx, `INSERT INTO endpoint_keys(
-endpoint_id,secret_ref_id,secret_fingerprint,display_head,display_tail,note,enabled,
-force_store_false,revision,created_at,updated_at)
-VALUES(?,?,?,'head','tail','fixture key',1,0,1,?,?)`, endpointID, secretRefID, fingerprint[:], createdAt, createdAt)
-	if err != nil {
-		return 0, err
-	}
-	return result.LastInsertId()
+	key, err := testseed.InsertEndpointKeyTx(ctx, tx, testseed.KeyInput{EndpointID: endpointID, SecretRefID: secretRefID, Fingerprint: fingerprint[:], DisplayHead: "head", DisplayTail: "tail", Note: "fixture key", At: createdAt})
+	return key.KeyID, err
 }
 
 func (environment *reportTestEnvironment) submission(

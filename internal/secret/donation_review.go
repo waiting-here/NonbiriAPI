@@ -142,7 +142,7 @@ func (r *DonationReview) BackfillLegacySecrets(ctx context.Context, tx *sql.Tx, 
 		var encoded, connector, canonicalURL string
 		var createdAt int64
 		var present int
-		if err = tx.QueryRowContext(ctx, `SELECT context_id,encrypted_secret,connector_type,canonical_base_url,created_at,key_body_review_hmac IS NOT NULL
+		if err = tx.QueryRowContext(ctx, `SELECT context_id,encrypted_secret,COALESCE(connector_type,''),COALESCE(canonical_base_url,''),created_at,key_body_review_hmac IS NOT NULL
 FROM endpoint_key_secrets WHERE id=?`, id).Scan(&contextID, &encoded, &connector, &canonicalURL, &createdAt, &present); err != nil {
 			return err
 		}
@@ -194,7 +194,7 @@ func (r *DonationReview) CaptureDonationKey(ctx context.Context, tx *sql.Tx, mem
 	}
 	clear(key)
 	var secretID int64
-	if err = tx.QueryRowContext(ctx, `SELECT secret_ref_id FROM endpoint_keys WHERE id=?`, endpointKeyID).Scan(&secretID); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT secret_ref_id FROM endpoint_key_current_credentials WHERE id=?`, endpointKeyID).Scan(&secretID); err != nil {
 		return false, err
 	}
 	if err = r.BackfillEndpointSecrets(ctx, tx, []int64{secretID}, now); err != nil {
@@ -217,15 +217,15 @@ func (r *DonationReview) RequireDonation(ctx context.Context, tx *sql.Tx, donati
 	}
 	clear(key)
 	var unknown int
-	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM donation_keys WHERE donation_id=? AND key_body_review_hmac IS NULL`, donationID).Scan(&unknown); err != nil {
+	if err = tx.QueryRowContext(ctx, `WITH bodies AS (SELECT key_body_review_hmac AS hmac FROM donation_keys WHERE donation_id=? UNION SELECT ur.key_body_review_hmac FROM donation_uses u JOIN donation_keys dk ON dk.id=u.donation_key_id JOIN donation_use_revisions ur ON ur.use_id=u.id AND (ur.id=u.current_approved_revision_id OR ur.id=u.current_pending_revision_id) WHERE dk.donation_id=?) SELECT count(*) FROM bodies WHERE hmac IS NULL`, donationID, donationID).Scan(&unknown); err != nil {
 		return err
 	}
 	if unknown != 0 {
 		return ErrReviewMaterial
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO donation_key_review_requirements(hmac,required,revision,created_at,updated_at)
- SELECT DISTINCT key_body_review_hmac,1,1,?,? FROM donation_keys WHERE donation_id=?
- ON CONFLICT(hmac) DO UPDATE SET required=1,revision=revision+1,updated_at=excluded.updated_at`, now.Unix(), now.Unix(), donationID)
+ SELECT hmac,1,1,?,? FROM (SELECT key_body_review_hmac AS hmac FROM donation_keys WHERE donation_id=? UNION SELECT ur.key_body_review_hmac FROM donation_uses u JOIN donation_keys dk ON dk.id=u.donation_key_id JOIN donation_use_revisions ur ON ur.use_id=u.id AND (ur.id=u.current_approved_revision_id OR ur.id=u.current_pending_revision_id) WHERE dk.donation_id=?) WHERE hmac IS NOT NULL
+ ON CONFLICT(hmac) DO UPDATE SET required=1,revision=revision+1,updated_at=excluded.updated_at`, now.Unix(), now.Unix(), donationID, donationID)
 	return err
 }
 
@@ -337,6 +337,55 @@ func (r *DonationReview) BackfillDonationKeys(ctx context.Context, tx *sql.Tx, s
 		if _, err = tx.ExecContext(ctx, `UPDATE donation_keys SET key_body_review_hmac=(SELECT key_body_review_hmac FROM endpoint_key_secrets WHERE id=?),review_revision=(SELECT revision FROM donation_key_review_requirements WHERE hmac=(SELECT key_body_review_hmac FROM endpoint_key_secrets WHERE id=?)) WHERE id=? AND key_body_review_hmac IS NULL`, snapshot.SecretRefID, snapshot.SecretRefID, snapshot.DonationKeyID); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// ApproveUseRevision checks only the exact pending authorization's body.
+// Its caller owns the donation/use authorization and pointer transition in
+// this transaction; the current self credential is never substituted.
+func (r *DonationReview) ApproveUseRevision(ctx context.Context, tx *sql.Tx, useRevisionID int64, expectedReviewRevision *int64, now time.Time) error {
+	key, err := r.load(ctx, tx)
+	if err != nil {
+		return err
+	}
+	clear(key)
+	if useRevisionID <= 0 {
+		return ErrReviewMaterial
+	}
+	var digest []byte
+	var required int
+	var revision sql.NullInt64
+	err = tx.QueryRowContext(ctx, `SELECT ur.key_body_review_hmac,COALESCE(req.required,0),req.revision
+ FROM donation_use_revisions ur JOIN donation_uses u ON u.id=ur.use_id AND u.current_pending_revision_id=ur.id
+ LEFT JOIN donation_key_review_requirements req ON req.hmac=ur.key_body_review_hmac
+ WHERE ur.id=? AND ur.review_state='pending'`, useRevisionID).Scan(&digest, &required, &revision)
+	defer clear(digest)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrReviewConflict
+	}
+	if err != nil {
+		return err
+	}
+	if len(digest) != sha256.Size {
+		return ErrReviewMaterial
+	}
+	if required == 0 {
+		return nil
+	}
+	if !revision.Valid || expectedReviewRevision == nil || *expectedReviewRevision != revision.Int64 || revision.Int64 == int64(^uint64(0)>>1) {
+		return ErrReviewConflict
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE donation_key_review_requirements SET required=0,revision=revision+1,updated_at=? WHERE hmac=? AND required=1 AND revision=?`, now.Unix(), digest, revision.Int64)
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return ErrReviewConflict
 	}
 	return nil
 }

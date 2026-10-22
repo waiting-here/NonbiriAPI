@@ -8,6 +8,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 )
 
 func TestLifecycleResourceExportLimitAndSecretHostileFields(t *testing.T) {
@@ -21,28 +23,20 @@ func TestLifecycleResourceExportLimitAndSecretHostileFields(t *testing.T) {
 	modelID := resourceTestID(t, model.ID)
 
 	operationHash := bytes.Repeat([]byte{0x6f}, 32)
-	if _, err := environment.store.DB().Exec(`
-UPDATE model_discovery_evidence
-SET state='checking',revision=77,operation_hash=?,safe_class='none',safe_diag='HOSTILE-SAFE-DIAG',
-    started_at=?,completed_at=NULL,fetched_count=0
-WHERE endpoint_key_id=?`, operationHash, resourceTestNow, keyID); err != nil {
+	seedTx, err := environment.store.DB().Begin()
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := environment.store.DB().Exec(`
-INSERT INTO model_pair_catalog(
- endpoint_key_id,normalized_model_id,automatic_supports,manual_supports,automatic_revision,pair_revision,updated_at
-) VALUES(?,'upstream-safe',0,1,0,91,?)`, keyID, resourceTestNow); err != nil {
+	defer seedTx.Rollback()
+	seedResourceCheckingDiscoveryTx(t, seedTx, keyID, nil, operationHash, resourceTestNow, "HOSTILE-SAFE-DIAG")
+	if _, err := seedTx.Exec(`INSERT INTO model_pair_catalog(endpoint_key_id,normalized_model_id,automatic_supports,manual_supports,automatic_revision,pair_revision,updated_at) VALUES(?,'upstream-safe',0,1,0,91,?)`, keyID, resourceTestNow); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := environment.store.DB().Exec(`
-INSERT INTO model_catalog_entries(
- endpoint_key_id,source_type,source_identity,normalized_model_id,provider,source_revision,created_at,updated_at
-) VALUES(?,'manual','upstream-safe','upstream-safe','provider',83,?,?)`, keyID, resourceTestNow, resourceTestNow); err != nil {
+	if _, err := seedTx.Exec(`INSERT INTO model_catalog_entries(endpoint_key_id,source_type,source_identity,normalized_model_id,provider,source_revision,native_service_mask,created_at,updated_at) VALUES(?,'manual','upstream-safe','upstream-safe','provider',83,0,?,?)`, keyID, resourceTestNow, resourceTestNow); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := environment.store.DB().Exec(`
-INSERT INTO model_bindings(model_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at)
-VALUES(?,?, 'upstream-safe',0,?,?)`, modelID, keyID, resourceTestNow, resourceTestNow); err != nil {
+	seedResourceBindingTx(t, seedTx, modelID, keyID, "upstream-safe", 0)
+	if err := seedTx.Commit(); err != nil {
 		t.Fatal(err)
 	}
 	callerHash := bytes.Repeat([]byte{0x63}, 32)
@@ -53,7 +47,7 @@ WHERE user_id=?`, callerHash, resourceTestNow, resourceTestNow, userID); err != 
 		t.Fatal(err)
 	}
 	var fingerprint []byte
-	if err := environment.store.DB().QueryRow(`SELECT secret_fingerprint FROM endpoint_keys WHERE id=?`, keyID).Scan(&fingerprint); err != nil {
+	if err := environment.store.DB().QueryRow(`SELECT secret_fingerprint FROM endpoint_key_current_credentials WHERE id=?`, keyID).Scan(&fingerprint); err != nil {
 		t.Fatal(err)
 	}
 
@@ -77,6 +71,9 @@ WHERE user_id=?`, callerHash, resourceTestNow, resourceTestNow, userID); err != 
 	if exported.Endpoints[0].Origin != (EndpointOrigin{Kind: "custom"}) {
 		t.Fatalf("lifecycle endpoint origin = %+v, want custom", exported.Endpoints[0].Origin)
 	}
+	if exported.Endpoints[0].Keys[0].CredentialVersion != "1" || exported.Endpoints[0].Keys[0].GrantRevision != "1" {
+		t.Fatal("public credential version metadata missing")
+	}
 	encoded, err := json.Marshal(exported)
 	if err != nil {
 		t.Fatal(err)
@@ -84,7 +81,7 @@ WHERE user_id=?`, callerHash, resourceTestNow, resourceTestNow, userID); err != 
 	for _, forbidden := range []string{
 		"test-only-envelope", "HOSTILE-SAFE-DIAG", base64.StdEncoding.EncodeToString(operationHash),
 		base64.StdEncoding.EncodeToString(fingerprint), base64.StdEncoding.EncodeToString(callerHash),
-		"secret_ref", "fingerprint", "operation_hash", "safe_diag", "revision",
+		"secret_ref", "fingerprint", "operation_hash", "safe_diag", "source_revision_id", "credential_version_id", "source_revision_snapshot", "current_grant_revision_id",
 	} {
 		if strings.Contains(strings.ToLower(string(encoded)), strings.ToLower(forbidden)) {
 			t.Fatalf("forbidden lifecycle resource material %q in %s", forbidden, encoded)
@@ -132,7 +129,7 @@ WHERE user_id=?`, callerHash, resourceTestNow, resourceTestNow, userID); err != 
 		t.Fatal(err)
 	}
 	var secretRef int64
-	if err := environment.store.DB().QueryRow(`SELECT secret_ref_id FROM endpoint_keys WHERE id=?`, keyID).Scan(&secretRef); err != nil {
+	if err := environment.store.DB().QueryRow(`SELECT secret_ref_id FROM endpoint_key_current_credentials WHERE id=?`, keyID).Scan(&secretRef); err != nil {
 		t.Fatal(err)
 	}
 
@@ -141,6 +138,10 @@ WHERE user_id=?`, callerHash, resourceTestNow, resourceTestNow, userID); err != 
 		t.Fatal(err)
 	}
 	if err := environment.repository.PrepareLifecycleAccountDeletion(context.Background(), tx, userID, resourceTestNow); err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	if err := connectionstore.PrepareAccountDeletionTx(context.Background(), tx, userID, resourceTestNow); err != nil {
 		_ = tx.Rollback()
 		t.Fatal(err)
 	}
@@ -172,6 +173,10 @@ WHERE user_id=?`, callerHash, resourceTestNow, resourceTestNow, userID); err != 
 		t.Fatal(err)
 	}
 	if err := environment.repository.PrepareLifecycleAccountDeletion(context.Background(), tx, userID, resourceTestNow); err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	if err := connectionstore.PrepareAccountDeletionTx(context.Background(), tx, userID, resourceTestNow); err != nil {
 		_ = tx.Rollback()
 		t.Fatal(err)
 	}

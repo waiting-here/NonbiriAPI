@@ -92,19 +92,35 @@ func (s *Service) modelsPage(ctx context.Context, role roleKind, actorID int64, 
 	return result, nil
 }
 
+// Probe the approved member's runs directly. Materializing the aggregate catalog
+// view here would collect other members' catalogs before pagination or filtering.
+const candidateApprovedRuns = `SELECT r.id FROM donation_uses u
+JOIN donation_use_revisions ur ON ur.id=u.current_approved_revision_id AND ur.use_id=u.id AND ur.review_state='approved'
+JOIN discovery_source_states st ON st.source_revision_id=ur.discovery_source_revision_id
+JOIN discovery_runs r ON r.id=st.last_successful_run_id AND r.source_revision_id=ur.discovery_source_revision_id AND r.state='succeeded'
+WHERE u.donation_key_id=dk.id`
+
+const candidateAutomaticJoin = `CROSS JOIN model_catalog_entries pc INDEXED BY idx_catalog_run_model
+ON pc.discovery_run_id IN (` + candidateApprovedRuns + `) AND pc.source_type='automatic'`
+
+const candidateMatchingAutomatic = ` FROM model_catalog_entries ac INDEXED BY idx_catalog_run_model
+WHERE ac.discovery_run_id IN (` + candidateApprovedRuns + `)
+AND ac.normalized_model_id=pc.normalized_model_id AND ac.source_type='automatic'`
+
 const candidatePageFrom = ` FROM charity_models cm
 CROSS JOIN donation_keys dk NOT INDEXED
 CROSS JOIN donations d ON d.id=dk.donation_id
 CROSS JOIN donation_key_memberships m ON m.donation_key_id=dk.id AND m.endpoint_key_id=dk.endpoint_key_id
 CROSS JOIN endpoint_keys k ON k.id=m.endpoint_key_id
 LEFT JOIN endpoint_key_limits kl ON kl.endpoint_key_id=k.id
-CROSS JOIN model_pair_catalog pc ON pc.endpoint_key_id=k.id
-WHERE cm.id=? AND d.status='approved' AND d.user_id IS NOT NULL
+` + candidateAutomaticJoin + `
+WHERE cm.id=? AND d.status IN ('pending','approved') AND d.terminal_at IS NULL AND d.user_id IS NOT NULL
 AND dk.ended_at IS NULL AND (dk.expires_at IS NULL OR dk.expires_at>?)
+AND EXISTS(SELECT 1 FROM donation_uses u WHERE u.donation_key_id=dk.id AND u.current_approved_revision_id IS NOT NULL)
 ` + candidateUnboundPredicate
 
-const candidateUnboundPredicate = `AND NOT EXISTS(SELECT 1 FROM charity_model_bindings b WHERE b.charity_model_id=cm.id
- AND b.donation_key_id=dk.id AND b.upstream_model_id=pc.normalized_model_id)`
+const candidateUnboundPredicate = `AND NOT EXISTS(SELECT 1 FROM charity_model_bindings b JOIN charity_binding_targets bt ON bt.binding_id=b.id WHERE b.charity_model_id=cm.id
+ AND bt.donation_key_id=dk.id AND bt.upstream_model_id=pc.normalized_model_id)`
 
 func candidatePageSelection(modelID, now int64, query CandidateQuery) (string, []any) {
 	statement := `SELECT dk.id,d.id,dk.connector_type,dk.canonical_base_url,dk.display_head,dk.display_tail,
@@ -146,12 +162,15 @@ pc.normalized_model_id,pc.automatic_supports,pc.manual_supports,COALESCE(kl.max_
 		statement += ` AND (dk.id>? OR (dk.id=? AND pc.normalized_model_id>?))`
 		args = append(args, query.AfterKeyID, query.AfterKeyID, query.AfterModelID)
 	}
-	manual := strings.Replace(statement, "CROSS JOIN model_pair_catalog pc ON pc.endpoint_key_id=k.id", "CROSS JOIN donation_key_manual_models pc ON pc.donation_key_id=dk.id", 1)
+	manual := strings.Replace(statement, candidateAutomaticJoin, "CROSS JOIN donation_key_manual_models pc ON pc.donation_key_id=dk.id", 1)
 	manual = strings.ReplaceAll(manual, "pc.automatic_supports", "0")
 	manual = strings.ReplaceAll(manual, "pc.manual_supports", "1")
-	manual += ` AND NOT EXISTS(SELECT 1 FROM model_pair_catalog physical WHERE physical.endpoint_key_id=k.id AND physical.normalized_model_id=pc.normalized_model_id )`
-	memberManual := `EXISTS(SELECT 1 FROM donation_key_manual_models dm WHERE dm.donation_key_id=dk.id AND dm.normalized_model_id=pc.normalized_model_id)`
-	statement = strings.ReplaceAll(statement, "pc.manual_supports", "(pc.manual_supports+"+memberManual+")")
+	manual += ` AND NOT EXISTS(SELECT 1` + candidateMatchingAutomatic + `)`
+	statement = strings.ReplaceAll(statement, "pc.automatic_supports", `(SELECT COUNT(*)`+candidateMatchingAutomatic+`)`)
+	statement = strings.ReplaceAll(statement, "pc.manual_supports", `EXISTS(SELECT 1 FROM donation_key_manual_models dm WHERE dm.donation_key_id=dk.id AND dm.normalized_model_id=pc.normalized_model_id)`)
+	// Multiple approved uses can share a run, and distinct runs can contain the
+	// same model. IN deduplicates runs; one canonical entry represents the model.
+	statement += ` AND pc.id=(SELECT MIN(ac.id)` + candidateMatchingAutomatic + `)`
 	return statement + ` UNION ALL ` + manual, append(append([]any{}, args...), args...)
 }
 
@@ -205,6 +224,9 @@ func (s *Service) candidatesPage(ctx context.Context, role roleKind, actorID, mo
 		return empty, err
 	}
 	rows.Close()
+	if err := annotateCandidateServicesTx(ctx, tx, result.Data, modelID); err != nil {
+		return empty, err
+	}
 	if !query.omitBindingMarkers {
 		if err := annotateBindingCandidates(ctx, tx, result.Data, modelID, scope.Trainee); err != nil {
 			return empty, err

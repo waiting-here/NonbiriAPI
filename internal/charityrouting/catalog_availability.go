@@ -20,17 +20,20 @@ func catalogAvailableSQL() string {
 
 // bindingID is an internal SQL expression, never request input. An empty
 // expression retains the public catalog's bounded model availability check.
-func catalogAvailableBindingSQL(bindingID string) string {
-	return `(` + availableCandidateCountSQL(bindingID, false) + ` BETWEEN 1 AND ` + strconv.Itoa(MaxRuntimeCandidates) + `)`
+func catalogAvailableBindingSQL(bindingID string, memberID ...string) string {
+	return `(` + availableCandidateCountSQL(bindingID, false, memberID...) + ` BETWEEN 1 AND ` + strconv.Itoa(MaxRuntimeCandidates) + `)`
 }
 
 // Caller-scoped lists and the global catalog share every resource and quota
 // predicate. Only caller lists exclude the reader's own donations (except
 // level six, whose non-administrator identity is checked by CurrentLevel).
-func availableCandidateCountSQL(bindingID string, callerScoped bool) string {
+func availableCandidateCountSQL(bindingID string, callerScoped bool, memberID ...string) string {
 	scope := ""
 	if bindingID != "" {
 		scope = " AND b.id=" + bindingID
+	}
+	if len(memberID) > 0 && memberID[0] != "" {
+		scope += " AND dk.id=" + memberID[0]
 	}
 	if callerScoped {
 		scope += " AND (d.user_id<>cx.caller_id OR cx.caller_level=6)"
@@ -43,18 +46,19 @@ func availableCandidateCountSQL(bindingID string, callerScoped bool) string {
  AND NOT EXISTS(SELECT 1 FROM donation_quota_rules qr WHERE qr.donation_key_id=dk.id AND qr.current_epoch IS NOT NULL)
  THEN 1 ELSE ` + donationquota.AvailabilityPredicate("dk.id", "cx.decision_now", price, "dk.token_reserve") + ` END)`
 	return `(CASE WHEN cx.charity_enabled=1 AND cm.enabled=1 AND (cm.pricing_mode='per_request' OR ` + price + `>0) THEN (SELECT COUNT(*) FROM (
- SELECT 1 FROM charity_model_bindings b
- JOIN donation_keys dk ON dk.id=b.donation_key_id
+ SELECT DISTINCT b.id FROM charity_model_bindings b
+ JOIN charity_binding_targets target ON target.binding_id=b.id
+ JOIN donation_keys dk ON dk.id=target.donation_key_id
  JOIN donations d ON d.id=dk.donation_id
  JOIN donation_key_memberships m ON m.donation_key_id=dk.id AND m.endpoint_key_id=dk.endpoint_key_id
  JOIN endpoint_keys k ON k.id=m.endpoint_key_id
  JOIN endpoints e ON e.id=k.endpoint_id
 
- WHERE b.charity_model_id=cm.id AND d.status='approved' AND d.user_id IS NOT NULL
+ WHERE b.charity_model_id=cm.id AND d.status IN ('pending','approved') AND d.terminal_at IS NULL AND d.user_id IS NOT NULL
  AND ` + donorAvailableSQL("cx.decision_now") + `
  AND dk.ended_at IS NULL AND dk.enabled=1 AND dk.failure_disabled=0
  AND ` + smartbackoff.EffectiveUntilSQL("dk.id") + `<=cx.decision_now
- AND k.enabled=1 AND e.enabled=1 AND ` + charityscope.SupportSQL("dk.id", "b.endpoint_key_id", "b.upstream_model_id") + `
+ AND k.enabled=1 AND e.enabled=1 AND ` + charityscope.AvailableUseSQL("dk.id", "target.native_service_mask", "cm.model_types", "cx.decision_now") + `
  AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions x WHERE x.endpoint_key_id=k.id)
  AND (dk.expires_at IS NULL OR dk.expires_at>cx.decision_now)
  AND nbi_u128_remaining(dk.price_limit_mag,dk.price_used_mag,dk.price_reserved_mag,nbi_u128(0))>nbi_u128(0)

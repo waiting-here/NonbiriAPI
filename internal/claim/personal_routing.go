@@ -27,25 +27,6 @@ WHERE m.id=? AND m.user_id=? AND r.id=? AND m.route_strategy='cache_balanced'`,
 	return s.claimBalancedCandidatesTx(ctx, tx, claimID, at, input, input.PersonalModelID, revision, true)
 }
 
-func validatePersonalBindingTx(ctx context.Context, tx *sql.Tx, input ClaimInput) error {
-	var available int
-	err := tx.QueryRowContext(ctx, `SELECT EXISTS(
-SELECT 1 FROM model_bindings b JOIN models m ON m.id=b.model_id
-JOIN logical_requests r ON r.user_id=m.user_id AND r.model_snapshot=m.full_name
-WHERE b.model_id=? AND m.user_id=? AND r.id=?
-AND b.endpoint_key_id=? AND b.upstream_model_id=?
-AND NOT EXISTS(SELECT 1 FROM user_deletion_markers d WHERE d.user_id=m.user_id))`,
-		input.PersonalModelID, input.ActorUserID, input.RequestID, input.Candidate.EndpointKeyID,
-		input.Candidate.UpstreamModelID).Scan(&available)
-	if err != nil {
-		return fmt.Errorf("claim: validate personal binding: %w", err)
-	}
-	if available != 1 {
-		return ErrNotFound
-	}
-	return nil
-}
-
 func reservePersonalDispatchTx(ctx context.Context, tx *sql.Tx, claimID string, input ClaimInput, secretRefID int64, baseURL string, at int64) error {
 	physical, err := physicalCharityKeyID(input.Candidate.EndpointKeyID, secretRefID, baseURL)
 	if err != nil {
@@ -107,8 +88,11 @@ WHERE s.model_id=?`, receipt.modelID.Int64).Scan(&revision, &ttl, &strategy)
 }
 
 func validRoutingAffinityTx(ctx context.Context, tx *sql.Tx, receipt routingReceipt, record *affinityRecord, revision, at int64) (bool, error) {
+	if !receipt.personalModelID.Valid {
+		return validCharityAffinityTx(ctx, tx, receipt.modelID, record, revision, at)
+	}
 	valid, err := validAffinityTx(ctx, tx, record, revision, at)
-	if err != nil || !valid || !receipt.personalModelID.Valid {
+	if err != nil || !valid {
 		return valid, err
 	}
 	return personalAffinityKeyAvailableTx(ctx, tx, receipt, record.endpointKeyID)
@@ -118,8 +102,11 @@ func personalAffinityKeyAvailableTx(ctx context.Context, tx *sql.Tx, receipt rou
 	var available int
 	err := tx.QueryRowContext(ctx, `SELECT EXISTS(
 SELECT 1 FROM models m JOIN model_bindings b ON b.model_id=m.id
-JOIN endpoint_keys k ON k.id=b.endpoint_key_id JOIN endpoints e ON e.id=k.endpoint_id
+JOIN model_binding_targets t ON t.binding_id=b.id
+JOIN endpoint_keys k ON k.id=t.endpoint_key_id JOIN endpoints e ON e.id=k.endpoint_id
+JOIN self_grant_availability a ON a.endpoint_key_id=k.id AND a.owner_user_id=m.user_id
 WHERE m.id=? AND m.user_id=? AND e.user_id=m.user_id AND k.id=?
+AND (a.native_service_mask & t.native_service_mask)<>0
 AND NOT EXISTS(SELECT 1 FROM user_deletion_markers d WHERE d.user_id=m.user_id))`,
 		receipt.personalModelID.Int64, receipt.userID.Int64, keyID).Scan(&available)
 	if err != nil {

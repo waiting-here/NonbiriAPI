@@ -307,11 +307,11 @@ This fallback also covers proxy timeouts or invalid upstream responses before re
 
 ## Database compatibility and version changes
 
-The v1.1.0 application starts from an empty database or current schema **32**.
-Exact registered schema **16–31** structures use the standalone
+The v1.1.0 application starts from an empty database or current schema **33**.
+Exact registered schema **16–26** structures use the standalone
 [v1 converter](../cmd/nonbiri-upgrade-v1/README.md). Other prereleases and unknown
 structures are rejected. SQLite identity remains Generation 2; exports use
-format **28**. See [database upgrades](database-upgrades.md) for manifests, stable
+format **29**. See [database upgrades](database-upgrades.md) for manifests, stable
 migration guarantees and content versions.
 
 Run `./nonbiriapi maintenance schema-info --json` without a production environment
@@ -344,7 +344,7 @@ instance legal text remain separate operator actions.
    protected recovery snapshot containing the database and existing sidecars,
    exact source release, environment, master key, unit, manifest and checksums.
    An unchanged stopped-state retry reuses that snapshot.
-4. For exact registered schemas 16–31, run the converter with `--apply` under exclusive database access.
+4. For exact registered schemas 16–26, run the converter with `--apply` under exclusive database access.
    After any eligible legacy Gateway import, remove
    `NONBIRI_GATEWAY_MODEL_CAPABILITIES` and the six
    `NONBIRI_SMTP_HOST/PORT/USER/PASS/FROM/TLS` keys. Preserve other environment

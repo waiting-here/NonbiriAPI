@@ -1,3 +1,4 @@
+import { normalizeNativeServices, normalizeRerankFormat } from '@shared/connections';
 import { normalizeSessionHeaders } from '@shared/sessionHeaders';
 import { queryPath } from '@shared/operations/api';
 import { ApiError, isApiError } from '@shared/query/http';
@@ -420,13 +421,16 @@ export async function getEndpoint(endpointId: string, signal?: AbortSignal): Pro
 
 export async function getEndpointCreateOptions(
   signal?: AbortSignal,
+  matchBaseURL?: string,
 ): Promise<EndpointCreateOptions> {
-  const response = await coreRequest('/api/endpoint-create-options', { signal });
+  const query =
+    matchBaseURL === undefined ? '' : '?' + new URLSearchParams({ match_base_url: matchBaseURL });
+  const response = await coreRequest('/api/endpoint-create-options' + query, { signal });
   expectedStatus(response.status, 200, 'endpoint creation options');
   return normalizeEndpointCreateOptions(response.payload);
 }
 
-function endpointCreatePayload(input: EndpointCreateInput): EndpointCreateInput {
+function legacyEndpointCreatePayload(input: EndpointCreateInput): EndpointCreateInput {
   const root = exactInput(
     input,
     ['source'],
@@ -468,6 +472,70 @@ function endpointCreatePayload(input: EndpointCreateInput): EndpointCreateInput 
   throw new ApiError('invalid_request', 'Invalid endpoint creation source.', 400);
 }
 
+function endpointScopeInput(source: Record<string, unknown>) {
+  return {
+    ...(source.connection_id === undefined
+      ? {}
+      : { connection_id: validateResourceId(source.connection_id as string, 'connection id') }),
+    ...(source.native_services === undefined
+      ? {}
+      : { native_services: normalizeNativeServices(source.native_services) }),
+    ...(source.rerank_format === undefined
+      ? {}
+      : { rerank_format: normalizeRerankFormat(source.rerank_format) }),
+  };
+}
+function endpointCreatePayload(input: EndpointCreateInput): EndpointCreateInput {
+  const source = exactInput(
+    input,
+    ['source'],
+    [
+      'channel_id',
+      'channel_entry_id',
+      'channel_revision',
+      'connector_type',
+      'base_url',
+      'note',
+      'enabled',
+      'connection_id',
+      'native_services',
+      'rerank_format',
+    ],
+    'endpoint creation input',
+  );
+  const legacy = { ...source };
+  for (const name of [
+    'connection_id',
+    'native_services',
+    'rerank_format',
+    'channel_entry_id',
+    'channel_revision',
+  ])
+    delete legacy[name];
+  const result = legacyEndpointCreatePayload(legacy as EndpointCreateInput);
+  return {
+    ...result,
+    ...endpointScopeInput(source),
+    ...(source.source === 'mainstream'
+      ? {
+          ...(source.channel_entry_id === undefined
+            ? {}
+            : {
+                channel_entry_id: validateResourceId(
+                  source.channel_entry_id as string,
+                  'channel entry id',
+                ),
+              }),
+          ...(source.channel_revision === undefined
+            ? {}
+            : {
+                channel_revision: revisionField(source.channel_revision, 'channel revision', true),
+              }),
+        }
+      : {}),
+  };
+}
+
 export async function createEndpoint(
   input: EndpointCreateInput,
   operation: OperationIdentity,
@@ -493,13 +561,18 @@ export async function patchEndpoint(
   const record = exactInput(
     input,
     ['expected_revision'],
-    ['note', 'enabled'],
+    ['note', 'enabled', 'connection_id', 'native_services', 'rerank_format'],
     'endpoint update input',
   );
-  if (!Object.hasOwn(record, 'note') && !Object.hasOwn(record, 'enabled')) {
+  if (
+    !['note', 'enabled', 'connection_id', 'native_services', 'rerank_format'].some((key) =>
+      Object.hasOwn(record, key),
+    )
+  ) {
     throw new ApiError('invalid_request', 'Invalid endpoint update input.', 400);
   }
   const payload: EndpointPatchInput = {
+    ...endpointScopeInput(record),
     expected_revision: revisionField(record.expected_revision, 'endpoint revision', true),
     ...(Object.hasOwn(record, 'note')
       ? { note: validateScalarInput(record.note, 1_024, 'endpoint note') }
@@ -562,15 +635,37 @@ export async function createEndpointKey(
 ): Promise<EndpointKey> {
   const record = exactInput(
     input,
-    ['secret', 'note', 'enabled', 'force_store_false', 'ownership_confirmed'],
-    ['max_concurrency', 'max_rpm'],
+    ['note', 'enabled', 'force_store_false', 'ownership_confirmed'],
+    [
+      'secret',
+      'credential_id',
+      'native_services',
+      'discovery_source_id',
+      'max_concurrency',
+      'max_rpm',
+    ],
     'endpoint key creation input',
   );
   if (record.ownership_confirmed !== true) {
     throw new ApiError('invalid_request', 'Endpoint key ownership must be confirmed.', 400);
   }
+  if (Object.hasOwn(record, 'secret') === Object.hasOwn(record, 'credential_id'))
+    throw new ApiError('invalid_request', 'Choose a credential or enter a secret.', 400);
   const payload: EndpointKeyCreateInput = {
-    secret: validateEndpointSecret(record.secret as string),
+    ...(record.discovery_source_id === undefined
+      ? {}
+      : {
+          discovery_source_id:
+            record.discovery_source_id === null
+              ? null
+              : validateResourceId(record.discovery_source_id as string, 'discovery source id'),
+        }),
+    ...(record.credential_id === undefined
+      ? { secret: validateEndpointSecret(record.secret as string) }
+      : { credential_id: validateResourceId(record.credential_id as string, 'credential id') }),
+    ...(record.native_services === undefined
+      ? {}
+      : { native_services: normalizeNativeServices(record.native_services) }),
     note: validateScalarInput(record.note, 1_024, 'endpoint key note'),
     enabled: exactBooleanInput(record.enabled, 'endpoint key enabled state'),
     force_store_false: exactBooleanInput(record.force_store_false, 'endpoint key store policy'),
@@ -603,17 +698,47 @@ export async function patchEndpointKey(
   const record = exactInput(
     input,
     ['expected_revision'],
-    ['note', 'enabled', 'force_store_false', 'max_concurrency', 'max_rpm'],
+    [
+      'note',
+      'enabled',
+      'force_store_false',
+      'max_concurrency',
+      'max_rpm',
+      'credential_id',
+      'native_services',
+      'discovery_source_id',
+    ],
     'endpoint key update input',
   );
   if (
-    !['note', 'enabled', 'force_store_false', 'max_concurrency', 'max_rpm'].some((key) =>
-      Object.hasOwn(record, key),
-    )
+    ![
+      'note',
+      'enabled',
+      'force_store_false',
+      'max_concurrency',
+      'max_rpm',
+      'credential_id',
+      'native_services',
+      'discovery_source_id',
+    ].some((key) => Object.hasOwn(record, key))
   ) {
     throw new ApiError('invalid_request', 'Invalid endpoint key update input.', 400);
   }
   const payload: EndpointKeyPatchInput = {
+    ...(record.discovery_source_id === undefined
+      ? {}
+      : {
+          discovery_source_id:
+            record.discovery_source_id === null
+              ? null
+              : validateResourceId(record.discovery_source_id as string, 'discovery source id'),
+        }),
+    ...(record.credential_id === undefined
+      ? {}
+      : { credential_id: validateResourceId(record.credential_id as string, 'credential id') }),
+    ...(record.native_services === undefined
+      ? {}
+      : { native_services: normalizeNativeServices(record.native_services) }),
     expected_revision: revisionField(record.expected_revision, 'endpoint key revision', true),
     ...(Object.hasOwn(record, 'max_concurrency')
       ? { max_concurrency: keyLimitInput(record.max_concurrency) }
@@ -1179,7 +1304,7 @@ export async function addBindings(
     const record = exactInput(
       selection,
       ['endpoint_key_id', 'upstream_model_id'],
-      [],
+      ['native_services', 'targets'],
       'binding selection',
     );
     const endpointKeyId = validateResourceId(record.endpoint_key_id as string, 'endpoint key id');
@@ -1188,16 +1313,31 @@ export async function addBindings(
     if (selectionKeys.has(key))
       throw new ApiError('invalid_request', 'Duplicate binding selection.', 400);
     selectionKeys.add(key);
+    if (record.targets !== undefined) return { targets: record.targets };
+    if (record.native_services !== undefined)
+      return {
+        targets: [
+          {
+            endpoint_key_id: endpointKeyId,
+            upstream_model_id: upstreamModelId,
+            native_services: normalizeNativeServices(record.native_services),
+          },
+        ],
+      };
     return { endpoint_key_id: endpointKeyId, upstream_model_id: upstreamModelId };
   });
-  const response = await coreRequest(`/api/models/${pathID(modelId, 'model id')}/bindings/batch`, {
-    method: 'POST',
-    headers: operationHeaders(operation),
-    json: { expected_binding_revision: expectedBindingRevision, selections: canonicalSelections },
-    signal,
-  });
+  const compact = canonicalSelections.some((selection) => Object.hasOwn(selection, 'targets'));
+  const response = await coreRequest(
+    `/api/models/${pathID(modelId, 'model id')}/bindings/${compact ? 'batch-receipt' : 'batch'}`,
+    {
+      method: 'POST',
+      headers: operationHeaders(operation),
+      json: { expected_binding_revision: expectedBindingRevision, selections: canonicalSelections },
+      signal,
+    },
+  );
   expectedStatus(response.status, 201, 'binding creation');
-  return normalizeBindingsResponse(response.payload);
+  return compact ? getBindings(modelId, signal) : normalizeBindingsResponse(response.payload);
 }
 
 export async function orderBindings(
@@ -1215,11 +1355,15 @@ export async function orderBindings(
   const response = await coreRequest(`/api/models/${pathID(modelId, 'model id')}/bindings/order`, {
     method: 'PUT',
     headers: operationHeaders(operation),
-    json: { expected_binding_revision: expectedBindingRevision, order: canonicalOrder },
+    json: {
+      expected_binding_revision: expectedBindingRevision,
+      order: canonicalOrder,
+      response: 'receipt',
+    },
     signal,
   });
   expectedStatus(response.status, 200, 'binding order update');
-  const result = normalizeBindingsResponse(response.payload);
+  const result = await getBindings(modelId, signal);
   if (
     result.bindings.length !== canonicalOrder.length ||
     result.bindings.some((binding, index) => binding.id !== canonicalOrder[index])
@@ -1242,12 +1386,12 @@ export async function deleteBinding(
     {
       method: 'DELETE',
       headers: operationHeaders(operation),
-      json: { expected_binding_revision: expectedBindingRevision },
+      json: { expected_binding_revision: expectedBindingRevision, response: 'receipt' },
       signal,
     },
   );
   expectedStatus(response.status, 200, 'binding deletion');
-  const result = normalizeBindingsResponse(response.payload);
+  const result = await getBindings(modelId, signal);
   if (result.bindings.some((binding) => binding.id === bindingId)) {
     throw new ApiError(
       'invalid_response',
@@ -1301,4 +1445,24 @@ export async function collectAllModels(signal?: AbortSignal): Promise<Model[]> {
     cursor = page.next_cursor;
   }
   throw new ApiError('invalid_response', 'The model list exceeded the supported page bound.', 200);
+}
+
+export async function replaceBindingTargets(
+  modelId: string,
+  bindingId: string,
+  expectedBindingRevision: string,
+  targets: import('./types').BindingTargetInput[],
+  operation: OperationIdentity,
+  signal?: AbortSignal,
+): Promise<BindingsResponse> {
+  await coreRequest(
+    `/api/models/${pathID(modelId, 'model id')}/bindings/${pathID(bindingId, 'binding id')}/targets`,
+    {
+      method: 'PUT',
+      headers: operationHeaders(operation),
+      json: { expected_binding_revision: expectedBindingRevision, targets },
+      signal,
+    },
+  );
+  return getBindings(modelId, signal);
 }

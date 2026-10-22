@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 )
 
@@ -92,14 +94,7 @@ func TestProductionRequestAdaptationReachesOwnAndCharityUpstream(t *testing.T) {
 func TestProductionAdaptationRoutesAndDeletionCleanup(t *testing.T) {
 	f := newDuelWireFixture(t)
 	now := f.clock.Load()
-	result, err := f.store.DB().Exec(`INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at) VALUES(?,'openai-compatible','https://adaptation.example/v1','fixture',1,1,?,?)`, f.users[0], now, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	id, err := result.LastInsertId()
-	if err != nil {
-		t.Fatal(err)
-	}
+	id := appFixtureEndpoint(t, f.store, testseed.EndpointInput{OwnerUserID: f.users[0], Type: connectorcontract.TypeOpenAICompatible, BaseURL: "https://adaptation.example/v1", Note: "fixture", At: now})
 	path := fmt.Sprintf("/api/endpoints/%d/request-adaptation", id)
 	patch := map[string]any{
 		"expected_revision": "0",
@@ -110,7 +105,7 @@ func TestProductionAdaptationRoutesAndDeletionCleanup(t *testing.T) {
 		t.Fatalf("save = %d: %s", response.Code, response.Body.String())
 	}
 	response = f.call(0, "GET", path, nil, false)
-	if response.Code != 200 || !strings.Contains(response.Body.String(), `"has_value":true`) || strings.Contains(response.Body.String(), "fixture-private-value") {
+	if response.Code != 200 || !strings.Contains(response.Body.String(), `"has_value":true`) || !strings.Contains(response.Body.String(), `"value":"fixture-private-value"`) {
 		t.Fatalf("projection = %d: %s", response.Code, response.Body.String())
 	}
 	if other := f.call(1, "GET", path, nil, false); other.Code != 404 {
@@ -150,7 +145,7 @@ func TestProductionPersonalModelAdaptationRoutesAndDeletionCleanup(t *testing.T)
 		t.Fatalf("save = %d: %s", response.Code, response.Body.String())
 	}
 	response = f.call(0, "GET", path, nil, false)
-	if response.Code != 200 || !strings.Contains(response.Body.String(), `"has_value":true`) || strings.Contains(response.Body.String(), "fixture-private-value") {
+	if response.Code != 200 || !strings.Contains(response.Body.String(), `"has_value":true`) || !strings.Contains(response.Body.String(), `"value":"fixture-private-value"`) {
 		t.Fatalf("projection = %d: %s", response.Code, response.Body.String())
 	}
 	if other := f.call(1, "GET", path, nil, false); other.Code != 404 {

@@ -391,6 +391,8 @@ describe('ModelsWorkspace numbered pagination', () => {
     const selectedModel = modelRecord('41', '25');
     const bindings = Array.from({ length: 25 }, (_, index) => bindingRecord(index));
     const orderBodies: unknown[] = [];
+    let currentBindings = bindings;
+    let bindingRevision = '1';
 
     vi.stubGlobal(
       'fetch',
@@ -400,7 +402,7 @@ describe('ModelsWorkspace numbered pagination', () => {
         if (method === 'GET' && url.pathname === '/api/models/41')
           return jsonResponse(selectedModel);
         if (method === 'GET' && url.pathname === '/api/models/41/bindings') {
-          return jsonResponse({ bindings, binding_revision: '1' });
+          return jsonResponse({ bindings: currentBindings, binding_revision: bindingRevision });
         }
         if (method === 'GET' && url.pathname === '/api/endpoints') {
           return jsonResponse(numbered([], url.searchParams.get('page') ?? '1', 20, 0));
@@ -412,7 +414,9 @@ describe('ModelsWorkspace numbered pagination', () => {
             ...bindings.find((binding) => binding.id === id),
             ord: index,
           }));
-          return jsonResponse({ bindings: reordered, binding_revision: '2' });
+          currentBindings = reordered as typeof bindings;
+          bindingRevision = '2';
+          return jsonResponse({ binding_revision: '2' });
         }
         if (method === 'GET' && url.pathname.endsWith('/binding-candidates'))
           return jsonResponse(
@@ -450,6 +454,7 @@ describe('ModelsWorkspace numbered pagination', () => {
     await waitFor(() => expect(orderBodies).toHaveLength(1));
     expect(orderBodies[0]).toEqual({
       expected_binding_revision: '1',
+      response: 'receipt',
       order: [
         ...Array.from({ length: 10 }, (_, index) => String(index + 1)),
         '12',
@@ -513,10 +518,12 @@ describe('ModelsWorkspace numbered pagination', () => {
     expect(rendered.queryClient.getQueryData(coreKeys.model(account.id, '51'))).toEqual({
       ...firstModel,
       role_policy: { default_action: 'native', rules: {} },
+      session_headers: [],
     });
     expect(rendered.queryClient.getQueryData(coreKeys.model(otherAccount.id, '51'))).toEqual({
       ...secondModel,
       role_policy: { default_action: 'native', rules: {} },
+      session_headers: [],
     });
   });
 
@@ -885,7 +892,19 @@ describe('ModelsWorkspace numbered pagination', () => {
           if (method === 'GET' && url.pathname.endsWith('/binding-candidates'))
             return jsonResponse(
               numbered(
-                made ? [candidateRecord('111', 'typed-model', 'manual')] : [],
+                made
+                  ? [
+                      {
+                        ...candidateRecord('111', 'typed-model', 'manual'),
+                        native_services: ['chat_completions', 'responses'],
+                        model_types: ['chat_completions', 'responses'],
+                        service_routes: [
+                          { operation: 'responses', native_service: 'responses', mode: 'native' },
+                        ],
+                        capabilities: { can_bind: true, unavailable_reason: null },
+                      },
+                    ]
+                  : [],
                 '1',
                 10,
                 made ? 1 : 0,
@@ -911,11 +930,14 @@ describe('ModelsWorkspace numbered pagination', () => {
               stage: 'catalog_manual',
               result: { endpoint_id: '11', endpoint_key_id: '111', entry_ids: ['151'] },
             });
-          if (method === 'POST' && url.pathname.endsWith('/bindings/batch')) {
+          if (method === 'POST' && url.pathname.endsWith('/bindings/batch-receipt')) {
             bindingWrites.push(JSON.parse(String(init?.body)));
             identities.push(new Headers(init?.headers).get('Idempotency-Key')!);
             bound = [{ ...candidateRecord('111', 'typed-model', 'manual'), id: '161', ord: 0 }];
-            return jsonResponse({ bindings: bound, binding_revision: '2' }, 201);
+            return jsonResponse(
+              { model_id: '101', binding_revision: '2', added_count: '1', binding_count: '1' },
+              201,
+            );
           }
           throw new Error(`Unexpected request: ${method} ${url.pathname}${url.search}`);
         }),
@@ -945,11 +967,23 @@ describe('ModelsWorkspace numbered pagination', () => {
         screen.queryByText(view.i18n.t('common.outcome.saved')),
         screen.queryByText('Saved to the model list. You can now add it as a source.'),
       ]).toEqual([null, null]);
+      await view.user.click((await screen.findByText('typed-model')).closest('button')!);
+      await view.user.click(screen.getByRole('checkbox', { name: 'Responses' }));
       await view.user.click(screen.getByRole('button', { name: 'Add 1 selected sources' }));
       await waitFor(() => expect(bindingWrites).toHaveLength(1));
       expect(bindingWrites[0]).toEqual({
         expected_binding_revision: '1',
-        selections: [{ endpoint_key_id: '111', upstream_model_id: 'typed-model' }],
+        selections: [
+          {
+            targets: [
+              {
+                endpoint_key_id: '111',
+                upstream_model_id: 'typed-model',
+                native_services: ['responses'],
+              },
+            ],
+          },
+        ],
       });
       expect(identities).toHaveLength(2);
       expect(identities.every(Boolean)).toBe(true);

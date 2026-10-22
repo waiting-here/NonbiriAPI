@@ -1,3 +1,6 @@
+import { UseSummary } from './UseSummary';
+import { DonationUseReviewResults, DonationUsesPanel } from './DonationUsesPanel';
+import type { UseReviewResult } from '@shared/operations/donationUses';
 import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
 import { smartBackoffDeadline } from '@shared/operations/smartBackoff';
 import { NullableValue } from './charity/NullableValue';
@@ -422,21 +425,40 @@ function DonationKeyEditor(
           smartBackoff={props.item.smart_backoff}
         />
       ) : null}
-      <ManagedKeyLimitsControl {...props} refresh={props.refreshLimits} />
-      <Fold
-        title={t('common.operations.charity.failureStrategy', { defaultValue: 'Failure strategy' })}
-      >
-        <FailurePolicyControl
-          role={props.role}
-          donationID={props.donation.id}
-          keyID={props.item.id}
-          revision={props.donation.revision}
-          threshold={props.item.failure_disable_threshold}
-          refresh={props.refresh}
-        />
-      </Fold>
+      {canMaintainDonationKey(props.donation, props.item) ? (
+        <>
+          <ManagedKeyLimitsControl {...props} refresh={props.refreshLimits} />
+          <Fold
+            title={t('common.operations.charity.failureStrategy', {
+              defaultValue: 'Failure strategy',
+            })}
+          >
+            <FailurePolicyControl
+              role={props.role}
+              donationID={props.donation.id}
+              keyID={props.item.id}
+              revision={props.donation.revision}
+              threshold={props.item.failure_disable_threshold}
+              refresh={props.refresh}
+            />
+          </Fold>
+        </>
+      ) : null}
       <DonationKeySettings key={props.donation.revision} {...props} />
     </section>
+  );
+}
+
+function canMaintainDonationKey(
+  donation: Pick<ManagedDonation, 'status'>,
+  key: Pick<ManagedDonationKey, 'can_manage' | 'charity_state' | 'ended_reason'>,
+) {
+  return (
+    (donation.status === 'pending' || donation.status === 'approved') &&
+    key.ended_reason === null &&
+    key.charity_state !== 'ended' &&
+    key.charity_state !== 'expired' &&
+    (key.can_manage ?? donation.status === 'approved')
   );
 }
 
@@ -607,7 +629,7 @@ function DonationKeySettings({
           </>
         ) : null}
       </dl>
-      {donation.status === 'approved' && !terminal ? (
+      {canMaintainDonationKey(donation, item) && !terminal ? (
         <>
           <p>{t('common.operations.charity.embeddingQuotaHelp')}</p>
           <Fold
@@ -705,6 +727,7 @@ interface DonationDetailProps {
   refresh: () => Promise<unknown>;
   onCapabilityLoss?: () => void;
   onReviewed?: (result: ManagedDonation) => void;
+  onUsesReviewed?: (results: UseReviewResult[]) => void;
 }
 
 function DonationDetail(props: DonationDetailProps) {
@@ -735,6 +758,7 @@ function DonationReview({
   onCapabilityLoss,
   onPendingChange,
   onReviewed,
+  onUsesReviewed,
 }: DonationDetailProps & {
   onPendingChange: (pending: boolean) => void;
 }) {
@@ -750,6 +774,7 @@ function DonationReview({
     item.status === 'approved' ? 'force_reject' : 'approve',
   );
   const [reason, setReason] = useState('');
+  const [useReviewPending, setUseReviewPending] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [forceConfirmation, setForceConfirmation] = useState(false);
   const [keys, setKeys] = useState<Record<string, KeySettingsDraft>>(() =>
@@ -780,9 +805,9 @@ function DonationReview({
     charityKeys.root(role),
   );
   useEffect(() => {
-    onPendingChange(review.isPending);
+    onPendingChange(review.isPending || useReviewPending);
     return () => onPendingChange(false);
-  }, [onPendingChange, review.isPending]);
+  }, [onPendingChange, review.isPending, useReviewPending]);
   useEffect(() => {
     if (onReviewed && review.outcome === 'confirmed' && review.data) onReviewed(review.data);
   }, [onReviewed, review.outcome, review.data]);
@@ -840,6 +865,15 @@ function DonationReview({
     );
   return (
     <fieldset className="ops-stack ops-unframed" disabled={busy || review.isPending}>
+      {item.use_summary ? (
+        <DonationUsesPanel
+          role={role}
+          accountId={accountId}
+          donationId={item.id}
+          onReviewed={onUsesReviewed}
+          onPendingChange={setUseReviewPending}
+        />
+      ) : null}
       <Card>
         <h3>{t('common.donationReview.title')}</h3>
         {!onReviewed ? (
@@ -909,7 +943,7 @@ function DonationReview({
           )}
         </p>
       ) : null}
-      {item.status === 'pending' || item.can_force_reject ? (
+      {(!item.use_summary && item.status === 'pending') || item.can_force_reject ? (
         <Card>
           <h3>
             {t(
@@ -1248,7 +1282,7 @@ function DonationKeyPages({
         {t('common.operations.charity.accessLost')}
       </p>
     );
-  if (bindingItem && item.status === 'approved')
+  if (bindingItem && canMaintainDonationKey(item, bindingItem))
     return (
       <DonationBindingWorkflow
         key={`${item.id}:${bindingItem.key_id}`}
@@ -1281,6 +1315,9 @@ function DonationKeyPages({
   return (
     <Card>
       <h3>{t('common.operations.charity.donationKeys')}</h3>
+      {item.use_summary ? (
+        <p className="nb-sub">{t('common.connections.legacyKeyHealth')}</p>
+      ) : null}
       <DonationDiscoveryControl
         key={`discovery:${role}:${accountId}:${item.id}`}
         role={role}
@@ -1333,9 +1370,7 @@ function DonationKeyPages({
                 className={key.id === focusKey ? 'ops-subcard is-selected' : 'ops-subcard'}
                 key={key.id}
               >
-                {item.status === 'approved' &&
-                key.charity_state !== 'ended' &&
-                key.charity_state !== 'expired' ? (
+                {canMaintainDonationKey(item, key) ? (
                   <Button
                     type="button"
                     variant="primary"
@@ -1349,7 +1384,11 @@ function DonationKeyPages({
                       });
                     }}
                   >
-                    {t('common.workflow.bindThisKey')}
+                    {t(
+                      key.can_manage === undefined
+                        ? 'common.workflow.bindThisKey'
+                        : 'common.connections.modelsAndBindings',
+                    )}
                   </Button>
                 ) : null}
                 <DonationKeyEditor
@@ -1807,10 +1846,13 @@ function DonationsPanel({
                     header: t('common.status'),
                     cell: 'status',
                     render: (item) => (
-                      <StatusBadge
-                        active={item.status === 'approved'}
-                        label={t(charityStatusKey(role, item.status))}
-                      />
+                      <div>
+                        <StatusBadge
+                          active={item.status === 'approved'}
+                          label={t(charityStatusKey(role, item.status))}
+                        />
+                        <UseSummary value={item.use_summary} />
+                      </div>
                     ),
                   },
                   {
@@ -2470,6 +2512,10 @@ function PendingDonationReviews({
   const [search, setSearch] = useState({ q, text: q });
   const searchText = search.q === q ? search.text : q;
   const [receipt, setReceipt] = useState<ManagedDonation | null>(null);
+  const [useReceipt, setUseReceipt] = useState<{
+    accountId: string;
+    results: UseReviewResult[];
+  } | null>(null);
   const [reviewPending, setReviewPending] = useState(false);
   const pager = useUrlPagePager({
     station: 'user',
@@ -2523,7 +2569,12 @@ function PendingDonationReviews({
   const refresh = () => client.invalidateQueries({ queryKey: listRoot }, { throwOnError: true });
   const completed = (value: ManagedDonation) => {
     setReceipt(value);
+    setUseReceipt(null);
     setSelected('');
+  };
+  const completedUses = (results: UseReviewResult[]) => {
+    setReceipt(null);
+    setUseReceipt({ accountId, results });
   };
   if (lost) return <Note tone="bad">{t('common.operations.charity.accessLost')}</Note>;
   return (
@@ -2538,6 +2589,9 @@ function PendingDonationReviews({
             status: t(charityStatusKey('steward', receipt.status)),
           })}
         </Note>
+      ) : null}
+      {useReceipt?.accountId === accountId ? (
+        <DonationUseReviewResults results={useReceipt.results} />
       ) : null}
       {selected ? (
         <>
@@ -2556,7 +2610,8 @@ function PendingDonationReviews({
             )
           ) : detail.error ? (
             <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
-          ) : detail.data.status === 'pending' ? (
+          ) : detail.data.status === 'pending' ||
+            (detail.data.use_summary && BigInt(detail.data.use_summary.pending) > 0n) ? (
             <DonationReview
               key={detail.data.id}
               item={detail.data}
@@ -2567,6 +2622,7 @@ function PendingDonationReviews({
               onPendingChange={setReviewPending}
               onCapabilityLoss={onCapabilityLoss}
               onReviewed={completed}
+              onUsesReviewed={completedUses}
             />
           ) : (
             <Note>{t('common.pendingReviews.noLongerPending')}</Note>

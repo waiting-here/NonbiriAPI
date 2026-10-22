@@ -92,6 +92,7 @@ func TestSpecificBusinessErrorsRetainTheirActionInChinese(t *testing.T) {
 		{CodeNotFound, "Open the activity before continuing.", "请先进入活动，再继续操作。"},
 		{CodeConflict, "Refresh the model and confirm its current price before submitting.", "请刷新模型并确认当前价格，再提交。"},
 		{CodeAlreadyCheckedIn, "the other daily check-in has already been claimed", "今天已经领取过另一项每日签到奖励。"},
+		{CodeContentTooShort, "charity content is too short: 2 < 5", "请求内容未达到公益模型的最低长度要求。为保护共享资源，请补充完整的请求内容后重试。"},
 	} {
 		e := Localize(New(tc.code, tc.message), "zh")
 		if e.Code != tc.code || e.Message != tc.want {

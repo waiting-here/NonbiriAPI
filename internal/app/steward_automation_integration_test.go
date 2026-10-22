@@ -227,7 +227,7 @@ func (f *automationFixture) count(t *testing.T, table string) int {
 func (f *automationFixture) input(count int) map[string]any {
 	keys := make([]map[string]any, count)
 	for i := range keys {
-		keys[i] = map[string]any{"secret": fmt.Sprintf("donated-fixture-%d", i)}
+		keys[i] = map[string]any{"secret": fmt.Sprintf("donated-fixture-%d", i), "share_discovery": true}
 	}
 	return map[string]any{"endpoint": map[string]any{"connector_type": "openai-compatible", "base_url": f.baseURL}, "description": "fixture donation", "discord_public_thanks": false, "keys": keys}
 }
@@ -317,7 +317,15 @@ func TestStewardAutomationAtomicCreationAndManualBindings(t *testing.T) {
 	if bound.Code != 200 || f.count(t, "charity_model_bindings") != 2 {
 		t.Fatalf("manual bind: %d %s", bound.Code, bound.Body.String())
 	}
-	f.exec(t, `UPDATE model_catalog_entries SET provider='preserved note' WHERE endpoint_key_id=? AND source_type='manual'`, created.Keys[0].EndpointKeyID)
+	var manualCount int
+	if err := f.store.DB().QueryRow(`SELECT count(*) FROM donation_key_manual_models WHERE normalized_model_id='exact/model-id' AND donation_key_id IN (?,?)`, created.Keys[0].DonationKeyID, created.Keys[1].DonationKeyID).Scan(&manualCount); err != nil || manualCount != 2 {
+		t.Fatalf("manual binding did not create both donor-owned catalog entries: %d %v", manualCount, err)
+	}
+	f.exec(t, `UPDATE donation_key_manual_models SET display_name='preserved note' WHERE donation_key_id=? AND normalized_model_id='exact/model-id'`, created.Keys[0].DonationKeyID)
+	var manualRevision, catalogRevision int64
+	if err := f.store.DB().QueryRow(`SELECT m.revision,k.manual_catalog_revision FROM donation_key_manual_models m JOIN donation_keys k ON k.id=m.donation_key_id WHERE m.donation_key_id=? AND m.normalized_model_id='exact/model-id'`, created.Keys[0].DonationKeyID).Scan(&manualRevision, &catalogRevision); err != nil {
+		t.Fatal(err)
+	}
 	var revision int64
 	if err := f.store.DB().QueryRow(`SELECT binding_revision FROM charity_models WHERE id=?`, f.modelID).Scan(&revision); err != nil {
 		t.Fatal(err)
@@ -331,15 +339,22 @@ func TestStewardAutomationAtomicCreationAndManualBindings(t *testing.T) {
 	if err := f.store.DB().QueryRow(`SELECT binding_revision FROM charity_models WHERE id=?`, f.modelID).Scan(&after); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.store.DB().QueryRow(`SELECT provider FROM model_catalog_entries WHERE endpoint_key_id=? AND source_type='manual'`, created.Keys[0].EndpointKeyID).Scan(&provider); err != nil {
+	if err := f.store.DB().QueryRow(`SELECT display_name FROM donation_key_manual_models WHERE donation_key_id=? AND normalized_model_id='exact/model-id'`, created.Keys[0].DonationKeyID).Scan(&provider); err != nil {
 		t.Fatal(err)
+	}
+	var afterManual, afterCatalog, retainedReserve int64
+	if err := f.store.DB().QueryRow(`SELECT m.revision,k.manual_catalog_revision,k.token_reserve FROM donation_key_manual_models m JOIN donation_keys k ON k.id=m.donation_key_id WHERE m.donation_key_id=? AND m.normalized_model_id='exact/model-id'`, created.Keys[0].DonationKeyID).Scan(&afterManual, &afterCatalog, &retainedReserve); err != nil {
+		t.Fatal(err)
+	}
+	if afterManual != manualRevision || afterCatalog != catalogRevision || retainedReserve != 42 {
+		t.Fatal("repeat changed donated material revisions or the original member budget")
 	}
 	if after != revision || provider != "preserved note" {
 		t.Fatal("repeat changed binding order/revision or catalog note")
 	}
 	for i, key := range created.Keys {
 		var ord int
-		if err := f.store.DB().QueryRow(`SELECT ord FROM charity_model_bindings WHERE donation_key_id=?`, key.DonationKeyID).Scan(&ord); err != nil || ord != i {
+		if err := f.store.DB().QueryRow(`SELECT b.ord FROM charity_model_bindings b JOIN charity_binding_targets t ON t.binding_id=b.id WHERE t.donation_key_id=?`, key.DonationKeyID).Scan(&ord); err != nil || ord != i {
 			t.Fatalf("binding input order %d: %d %v", i, ord, err)
 		}
 	}
@@ -426,7 +441,7 @@ func TestStewardAutomationCancellationStopsDiscoveryAndLateBinding(t *testing.T)
 	deadline := time.Now().Add(3 * time.Second)
 	for {
 		var n int
-		if err := f.store.DB().QueryRow(`SELECT count(*) FROM model_discovery_evidence WHERE state='checking'`).Scan(&n); err != nil {
+		if err := f.store.DB().QueryRow(`SELECT count(*) FROM discovery_runs WHERE state='checking'`).Scan(&n); err != nil {
 			t.Fatal(err)
 		}
 		if n == 0 {
@@ -593,6 +608,19 @@ func TestStewardAutomationResourcesFollowExportAndAccountDeletion(t *testing.T) 
 		len(document.Donations[0].Keys) != 2 || len(document.Donations[0].Keys[0].RecurringLimits) != 1 || len(document.CatalogPairs) != 2 {
 		t.Fatal("automation resources are missing from the existing export")
 	}
+	for _, pair := range document.CatalogPairs {
+		if len(pair.ManualEntries) != 0 {
+			t.Fatal("donation manual material was copied into the personal catalog")
+		}
+	}
+	for _, key := range document.Donations[0].Keys {
+		if len(key.ManualModels) != 1 || key.ManualModels[0].UpstreamModelID != "exact/model-id" {
+			t.Fatalf("donation-owned manual material missing from export: %+v", key.ManualModels)
+		}
+	}
+	if len(document.Connections) != 1 || len(document.Credentials) != 2 || len(document.CredentialVersions) != 2 || len(document.Grants) != 2 || len(document.DiscoverySources) != 2 || len(document.DonationUses) != 6 {
+		t.Fatal("shared connections, versions, source sharing or per-service uses missing from export")
+	}
 	if len(document.PersonalAutomation) != 1 || len(document.PersonalAutomation[0].Results) != 1 || document.PersonalAutomation[0].Results[0].Outcome != "existing" {
 		t.Fatalf("personal receipts missing from account export: %+v", document.PersonalAutomation)
 	}
@@ -605,10 +633,14 @@ func TestStewardAutomationResourcesFollowExportAndAccountDeletion(t *testing.T) 
 	if deleted.Code != 204 {
 		t.Fatalf("delete: %d %s", deleted.Code, deleted.Body.String())
 	}
-	for _, table := range []string{"endpoints", "endpoint_keys", "model_catalog_entries", "model_discovery_evidence", "model_pair_catalog", "donation_key_memberships", "charity_model_bindings", "personal_automation_batches", "personal_automation_steps"} {
+	for _, table := range []string{"endpoints", "endpoint_keys", "model_catalog_entries", "model_discovery_evidence", "model_pair_catalog", "donation_key_memberships", "charity_model_bindings", "model_binding_targets", "charity_binding_targets", "service_connections", "discovery_sources", "personal_automation_batches", "personal_automation_steps"} {
 		if f.count(t, table) != 0 {
 			t.Fatalf("account deletion retained private or active resources in %s", table)
 		}
+	}
+	var activeCredentials int
+	if err := f.store.DB().QueryRow(`SELECT count(*) FROM credentials WHERE user_id=? OR (deleted_at IS NULL AND current_version_id IS NOT NULL)`, f.userID).Scan(&activeCredentials); err != nil || activeCredentials != 0 {
+		t.Fatalf("account deletion retained active credential ownership: %d %v", activeCredentials, err)
 	}
 	var orphaned int
 	if err := f.store.DB().QueryRow(`SELECT count(*) FROM endpoint_key_secrets WHERE orphaned_at IS NOT NULL`).Scan(&orphaned); err != nil || orphaned != 2 {

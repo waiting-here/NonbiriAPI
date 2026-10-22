@@ -61,8 +61,8 @@ func TestRegisterRoutesAndCallerKeyHTTPContract(t *testing.T) {
 	if err := RegisterRoutes(registrar, environment.repository); err != nil {
 		t.Fatalf("RegisterRoutes: %v", err)
 	}
-	if len(registrar.handlers) != 33 {
-		t.Fatalf("registered routes = %d, want 33", len(registrar.handlers))
+	if len(registrar.handlers) != 57 {
+		t.Fatalf("registered routes = %d, want 57", len(registrar.handlers))
 	}
 	for _, key := range []string{
 		"GET /api/endpoints", "DELETE /api/endpoints/{id}/keys/{keyId}",

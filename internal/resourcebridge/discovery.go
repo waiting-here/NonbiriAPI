@@ -44,7 +44,8 @@ func (r *Runtime) Discover(ctx context.Context, input resources.DiscoveryClaimIn
 
 	request, handle, err := r.claims.ClaimDiscovery(ctx, claim.DiscoveryClaimInput{
 		ActorUserID: input.OwnerUserID,
-		Authorize:   input.Authorize,
+		Source:      input.Source, SourceRevisionID: input.SourceRevisionID, CredentialVersionID: input.CredentialVersionID, UseApprovedRevisionID: input.UseApprovedRevisionID, OperationID: input.OperationID,
+		Authorize: input.Authorize,
 		Candidate: claim.Candidate{
 			EndpointID:       input.EndpointID,
 			EndpointKeyID:    input.EndpointKeyID,
@@ -168,7 +169,7 @@ func normalizeDiscoveryResult(ctx context.Context, result connectorcontract.Disc
 			if !validCatalogText(model.ID, 1, 512) || !validCatalogText(model.Provider, 0, 128) {
 				return normalizedFailure(protocolResult(diagnosticInvalidResult), result.ResponseReceived, result.UpstreamStatus)
 			}
-			models[index] = resources.DiscoveredModel{UpstreamModelID: model.ID, Provider: model.Provider}
+			models[index] = resources.DiscoveredModel{UpstreamModelID: model.ID, Provider: model.Provider, NativeServices: model.NativeServices}
 		}
 		return normalizedDiscovery{
 			result: resources.DiscoveryClaimResult{Succeeded: true, Models: models},
@@ -211,7 +212,7 @@ func normalizedFailure(result resources.DiscoveryClaimResult, responseReceived b
 
 func validDiscoveryInput(input resources.DiscoveryClaimInput) bool {
 	return db.ValidateOpaqueID(input.OperationID, "op_") && input.OwnerUserID > 0 &&
-		input.EndpointID > 0 && input.EndpointKeyID > 0 && validConnectorType(string(input.ConnectorType)) &&
+		input.EndpointID >= 0 && input.EndpointKeyID >= 0 && (input.EndpointID == 0) == (input.EndpointKeyID == 0) && input.Source.OwnerUserID == input.OwnerUserID && input.Source.SourceID > 0 && input.SourceRevisionID > 0 && input.CredentialVersionID > 0 && validConnectorType(string(input.ConnectorType)) &&
 		validBaseURLText(input.CanonicalBaseURL) && !nilInterface(input.Discoverer)
 }
 

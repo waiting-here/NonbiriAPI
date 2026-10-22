@@ -191,7 +191,7 @@ material.
 
 ## 6. Prepare a Generation 2 database path
 
-For a fresh start, the configured database and its exact `-wal` and `-shm` paths must all be absent. Fresh storage uses schema 32. Existing schema 16–31 databases must first pass the [one-time conversion](database-upgrades.md#one-time-conversion); the normal service contains no historical upgrade chain. Other prerelease schemas and empty placeholder files are rejected.
+For a fresh start, the configured database and its exact `-wal` and `-shm` paths must all be absent. Fresh storage uses schema 33. Existing published schema 16–26 databases must first pass the [one-time conversion](database-upgrades.md#one-time-conversion); the normal service contains no historical upgrade chain. Other prerelease schemas and empty placeholder files are rejected.
 
 On a true fresh start the process creates a Generation 2 SQLite database with `application_id=0x4E425249` and `user_version=2`, validates the complete schema, and seeds these safe states:
 

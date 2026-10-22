@@ -6,18 +6,27 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
+	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
-// Clone the complete synthetic rows with explicit identity replacements. No
-// fixture drops constraints or creates a donation without its physical member.
+// Keep the original batch transaction while creating exact entry grants and
+// pending uses. The independently owned credential version is shared explicitly.
 func seedBrowseScale(t *testing.T, e *donationTestEnv, owner int64, count int, distinct bool) string {
 	t.Helper()
 	d, key := createBrowseDonation(t, e, owner, 'z', "https://source-00000.example.test/v1")
 	id, keyID := parseTestID(t, d.ID), parseTestID(t, d.Keys[0].ID)
-	var endpoint, secret int64
-	if err := e.store.DB().QueryRow(`SELECT endpoint_id,secret_ref_id FROM endpoint_keys WHERE id=?`, key).Scan(&endpoint, &secret); err != nil {
+	var endpoint, version, mask int64
+	var fingerprint []byte
+	var kind contract.Type
+	var format contract.RerankFormat
+	if err := e.store.DB().QueryRow(`SELECT k.endpoint_id,g.credential_version_id,g.native_service_mask,g.report_fingerprint,e.connector_type,g.rerank_format FROM endpoint_keys k JOIN endpoints e ON e.id=k.endpoint_id JOIN endpoint_key_grant_revisions g ON g.id=k.current_grant_revision_id WHERE k.id=?`, key).Scan(&endpoint, &version, &mask, &fingerprint, &kind, &format); err != nil {
+		t.Fatal(err)
+	}
+	services, err := contract.NativeServicesFromMask(mask)
+	if err != nil {
 		t.Fatal(err)
 	}
 	tx, err := e.store.DB().BeginTx(context.Background(), nil)
@@ -25,6 +34,19 @@ func seedBrowseScale(t *testing.T, e *donationTestEnv, owner int64, count int, d
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
+	for n := 1; n < count; n++ {
+		base := "https://source-00000.example.test/v1"
+		if distinct {
+			base = fmt.Sprintf("https://source-%05d.example.test/v1", n)
+		}
+		entryID, err := testseed.InsertEndpointTx(t.Context(), tx, testseed.EndpointInput{ID: endpoint + int64(n), OwnerUserID: owner, Type: kind, BaseURL: base, NativeServices: services, RerankFormat: format, At: e.clock.Load()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := testseed.InsertEndpointKeyTx(t.Context(), tx, testseed.KeyInput{ID: key + int64(n), EndpointID: entryID, CredentialVersionID: version, Fingerprint: fingerprint, DisplayHead: "head", DisplayTail: "tail", NativeServices: services, At: e.clock.Load()}); err != nil {
+			t.Fatal(err)
+		}
+	}
 	url := `'https://source-00000.example.test/v1'`
 	if distinct {
 		url = `printf('https://source-%05d.example.test/v1',seq.n)`
@@ -34,9 +56,6 @@ func seedBrowseScale(t *testing.T, e *donationTestEnv, owner int64, count int, d
 		name, where string
 		replace     map[string]string
 	}{
-		{"endpoints", fmt.Sprintf("id=%d", endpoint), map[string]string{"id": shift(endpoint), "base_url": url}},
-		{"endpoint_key_secrets", fmt.Sprintf("id=%d", secret), map[string]string{"id": shift(secret), "context_id": "randomblob(16)", "canonical_base_url": url}},
-		{"endpoint_keys", fmt.Sprintf("id=%d", key), map[string]string{"id": shift(key), "endpoint_id": shift(endpoint), "secret_ref_id": shift(secret), "secret_fingerprint": "randomblob(32)"}},
 		{"donations", fmt.Sprintf("id=%d", id), map[string]string{"id": shift(id)}},
 		{"donation_keys", fmt.Sprintf("id=%d", keyID), map[string]string{"id": shift(keyID), "donation_id": shift(id), "endpoint_key_id": shift(key), "source_endpoint_key_id": shift(key), "report_fingerprint": "randomblob(32)", "canonical_base_url": url}},
 		{"donation_handling", fmt.Sprintf("donation_id=%d", id), map[string]string{"donation_id": shift(id)}},
@@ -68,8 +87,16 @@ func seedBrowseScale(t *testing.T, e *donationTestEnv, owner int64, count int, d
 		}
 		query := `WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM seq WHERE n<?)
 INSERT INTO "` + table.name + `" (` + strings.Join(columns, ",") + `) SELECT ` + strings.Join(values, ",") + ` FROM (SELECT * FROM "` + table.name + `" WHERE ` + table.where + `) original CROSS JOIN seq`
+		if count <= 1 {
+			continue
+		}
 		if _, err := tx.Exec(query, count-1); err != nil {
 			t.Fatalf("seed %s: %v", table.name, err)
+		}
+	}
+	for n := 1; n < count; n++ {
+		if _, err := testseed.SeedDonationUsesTx(t.Context(), tx, keyID+int64(n), false, e.clock.Load()); err != nil {
+			t.Fatal(err)
 		}
 	}
 	if err := tx.Commit(); err != nil {

@@ -153,7 +153,7 @@ func TestQuotaReceiptPeriodReferenceIsRetainedUntilRelease(t *testing.T) {
 	database, rule := quotaConstraintFixture(t)
 	var userID, keyID, secretID, donationKeyID int64
 	if err := database.QueryRow(`SELECT d.user_id,k.endpoint_key_id,e.secret_ref_id,k.id
-FROM donation_keys k JOIN donations d ON d.id=k.donation_id JOIN endpoint_keys e ON e.id=k.endpoint_key_id`).Scan(&userID, &keyID, &secretID, &donationKeyID); err != nil {
+FROM donation_keys k JOIN donations d ON d.id=k.donation_id JOIN endpoint_key_current_credentials e ON e.id=k.endpoint_key_id`).Scan(&userID, &keyID, &secretID, &donationKeyID); err != nil {
 		t.Fatal(err)
 	}
 	reqID, claimID := hostileOID("req_"), hostileOID("clm_")

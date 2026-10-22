@@ -14,10 +14,7 @@ func seedAutomaticBackoffBrowser(t *testing.T, f *imageBrowserFixture, now int64
 	for i := range 3 {
 		key := f.call("POST", "/api/endpoints/"+endpoint+"/keys", map[string]any{"secret": fmt.Sprint("synthetic-backoff-", i), "note": fmt.Sprint("Backoff state ", i+1), "enabled": true, "force_store_false": false, "ownership_confirmed": true}, owner, false)["id"].(string)
 		physical = append(physical, key)
-		keys = append(keys, map[string]any{"endpoint_key_id": key, "expires_at": nil})
-		if _, err := f.store.DB().Exec(`INSERT INTO model_pair_catalog(endpoint_key_id,normalized_model_id,automatic_supports,manual_supports,automatic_revision,pair_revision,updated_at) VALUES(?,'backoff-upstream',1,0,1,1,?)`, key, now); err != nil {
-			t.Fatal(err)
-		}
+		keys = append(keys, appFixtureSharedCatalog(t, f.store, key, []string{"backoff-upstream"}, now))
 	}
 	d := f.call("POST", "/api/donations", map[string]any{"description": "Automatic backoff states", "discord_public_thanks": false, "ownership_authorized": true, "keys": keys}, owner, false)
 	keyIDs := []string{}
