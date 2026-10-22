@@ -91,6 +91,28 @@ const DONATION_FIXTURE = {
   updated_at: 1_788_100_010,
 } as const;
 
+function pendingUseDonation() {
+  const key = DONATION_FIXTURE.keys[0];
+  return {
+    ...DONATION_FIXTURE,
+    status: 'pending',
+    review_result: null,
+    use_summary: { total: '1', pending: '0', approved: '1' },
+    keys: [
+      {
+        ...key,
+        endpoint_id: '71',
+        review: { required: false, revision: null, material_available: true },
+        charity_state: 'pending',
+        limits: { price: null, calls: '7', tokens: null },
+        usage: { ...key.usage, price_used: '0', calls_used: '0' },
+        token_reserve: 0,
+        streak: { generation: '1', count: '0', failure_disabled: false },
+      },
+    ],
+  };
+}
+
 const CAPABILITY_SERVER_NOW = 1_788_100_000;
 
 function capabilityModel(provider = 'provider', model = 'model') {
@@ -666,6 +688,94 @@ describe('economy closed-wire normalizers', () => {
         keys: [terminalKey],
       }),
     ).toThrow();
+  });
+
+  it('preserves approved-use budgets without promoting a pending submission header', () => {
+    const wire = pendingUseDonation();
+    const donation = normalizeDonation(wire);
+    expect(donation).toMatchObject({
+      status: 'pending',
+      reviewResult: null,
+      useSummary: { total: '1', pending: '0', approved: '1' },
+      keys: [
+        {
+          endpointId: '71',
+          charityState: 'pending',
+          limits: { price: null, calls: '7', tokens: null },
+          usage: { priceUsed: '0', callsUsed: '0' },
+          tokenReserve: 0,
+          streak: { generation: '1', count: '0', failureDisabled: false },
+        },
+      ],
+    });
+    const legacy: Record<string, unknown> = { ...wire };
+    delete legacy.use_summary;
+    expect(() => normalizeDonation(legacy)).toThrow('pending donation state');
+  });
+
+  it.each([
+    { reason: 'withdrawn', status: 'deleted', review: null, state: 'ended' },
+    {
+      reason: 'terminated',
+      status: 'deleted',
+      review: DONATION_FIXTURE.review_result,
+      state: 'ended',
+    },
+    { reason: 'expired', status: 'expired', review: null, state: 'expired' },
+  ])(
+    'preserves use-level budget history after $reason without deriving a review',
+    ({ reason, status, review, state }) => {
+      const wire = pendingUseDonation();
+      const key = wire.keys[0];
+      const payload = {
+        ...wire,
+        status,
+        review_result: review,
+        keys: [
+          {
+            ...key,
+            charity_state: state,
+            ended_reason: reason,
+            expires_at: DONATION_FIXTURE.updated_at,
+            usage: { ...key.usage, calls_used: '2' },
+          },
+        ],
+      };
+      const donation = normalizeDonation(payload);
+      expect(donation.status).toBe(status);
+      expect(donation.reviewResult).toEqual(
+        review === null
+          ? null
+          : { decision: review.decision, reason: review.reason, reviewedAt: review.reviewed_at },
+      );
+      expect(donation.useSummary).toEqual(wire.use_summary);
+      expect(donation.keys[0]).toMatchObject({
+        charityState: state,
+        endedReason: reason,
+        limits: { calls: '7' },
+        usage: { callsUsed: '2' },
+      });
+      if (reason === 'expired') {
+        const legacy: Record<string, unknown> = { ...payload };
+        delete legacy.use_summary;
+        expect(() => normalizeDonation(legacy)).toThrow('expired donation state');
+      }
+    },
+  );
+
+  it('keeps structural and scalar validation for use-level donation projections', () => {
+    const wire = pendingUseDonation();
+    const key = wire.keys[0];
+    for (const payload of [
+      { ...wire, use_summary: null },
+      { ...wire, use_summary: { ...wire.use_summary, approved: 'invalid' } },
+      { ...wire, keys: [{ ...key, limits: { ...key.limits, calls: 7 } }] },
+      { ...wire, keys: [{ ...key, limits: { ...key.limits, calls: '9000000000000001' } }] },
+      { ...wire, keys: [{ ...key, charity_state: 'approved' }] },
+      { ...wire, keys: [key, key] },
+      { ...wire, updated_at: wire.created_at - 1 },
+    ])
+      expect(() => normalizeDonation(payload)).toThrow();
   });
 
   it('accepts every DonationKey state and preserves partial versus final deletion', () => {
