@@ -25,12 +25,13 @@ func (r *Repository) RefreshDonationDiscoveryAndWait(ctx context.Context, userID
 			return connectionstore.SourceAuthorization{}, err
 		}
 		var sourceID, revision, currentEndpoint, currentKey int64
-		err := tx.QueryRowContext(ctx, `SELECT sr.source_id,u.revision,dk.endpoint_id,dk.endpoint_key_id
+		err := tx.QueryRowContext(ctx, `SELECT sr.source_id,u.revision,k.endpoint_id,dk.endpoint_key_id
  FROM donation_uses u JOIN donation_keys dk ON dk.id=u.donation_key_id JOIN donations d ON d.id=dk.donation_id
+ JOIN endpoint_keys k ON k.id=dk.endpoint_key_id
  JOIN donation_key_memberships dm ON dm.donation_key_id=dk.id AND dm.donation_id=d.id AND dm.endpoint_key_id=dk.endpoint_key_id
  JOIN donation_use_revisions ur ON ur.id=u.current_approved_revision_id AND ur.use_id=u.id
  JOIN discovery_source_revisions sr ON sr.id=ur.discovery_source_revision_id
- WHERE u.id=? AND dk.id=? AND d.id=? AND d.user_id=? AND d.status='approved' AND d.terminal_at IS NULL AND dk.ended_at IS NULL`, selection.UseID, donationKeyID, donationID, userID).Scan(&sourceID, &revision, &currentEndpoint, &currentKey)
+ WHERE u.id=? AND dk.id=? AND d.id=? AND d.user_id=? AND d.status IN ('pending','approved') AND d.terminal_at IS NULL AND dk.ended_at IS NULL`, selection.UseID, donationKeyID, donationID, userID).Scan(&sourceID, &revision, &currentEndpoint, &currentKey)
 		if errors.Is(err, sql.ErrNoRows) {
 			return connectionstore.SourceAuthorization{}, ErrNotFound
 		}
