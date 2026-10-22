@@ -64,9 +64,9 @@ describe('ordered native target matrix', () => {
     await view.user.click(screen.getByText('Add target', { exact: true }));
     const table = await screen.findByRole('table', { name: 'Available targets' });
     expect(requests).toEqual(['/api/models/31/binding-candidates?page=1&page_size=20']);
-    await view.user.click(within(table).getByRole('button', { name: 'Add target', exact: true }));
+    await view.user.click(within(table).getByRole('button', { name: 'Add target' }));
     const added = screen.getByRole('group', { name: '3. Entry C' });
-    const chat = within(added).getByRole('checkbox', { name: 'Chat completions', exact: true });
+    const chat = within(added).getByRole('checkbox', { name: 'Chat completions' });
     expect(chat).not.toBeChecked();
     await view.user.click(chat);
     const rows = JSON.parse(screen.getByTestId('targets').textContent!) as MatrixTarget[];
