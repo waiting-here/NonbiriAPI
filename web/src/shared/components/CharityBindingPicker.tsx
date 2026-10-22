@@ -1,3 +1,5 @@
+import { NativeServicesField } from './NativeServicesField';
+import type { NativeService } from '@shared/nativeServices';
 import { smartBackoffDeadline } from '@shared/operations/smartBackoff';
 import { Button } from '@shared/components/ui/Button';
 import { Field } from './ui/Field';
@@ -44,7 +46,10 @@ import { DonationKeyNotes } from './DonationControlFacts';
 import { DonationDiscoveryControl } from './DonationDiscoveryControl';
 import './CharityBindingPicker.css';
 
-export type CharitySelection = CharityBindingCandidate & { note: string };
+export type CharitySelection = CharityBindingCandidate & {
+  note: string;
+  selected_native_services?: NativeService[];
+};
 
 const sourcePageList = 'charity-binding-sources';
 const sourceKeyPageList = 'charity-binding-source-keys';
@@ -979,6 +984,7 @@ function CharityBindingPickerBody({
                                   disabled={
                                     interactionBlocked ||
                                     Boolean(entry.current_binding_id) ||
+                                    entry.capabilities?.can_bind === false ||
                                     (!selected[key] && Object.keys(selected).length >= capacity)
                                   }
                                   checked={Boolean(selected[key])}
@@ -986,6 +992,7 @@ function CharityBindingPickerBody({
                                     if (
                                       interactionBlocked ||
                                       Boolean(entry.current_binding_id) ||
+                                      entry.capabilities?.can_bind === false ||
                                       (event.target.checked &&
                                         !selected[key] &&
                                         Object.keys(selected).length >= capacity)
@@ -1081,7 +1088,8 @@ function CharityBindingPickerBody({
                       onClick={() => {
                         const next = { ...selected };
                         for (const entry of candidatePage.data.filter(
-                          (entry) => !entry.current_binding_id,
+                          (entry) =>
+                            !entry.current_binding_id && entry.capabilities?.can_bind !== false,
                         ))
                           next[charitySelectionKey(entry)] ??= {
                             ...entry,
@@ -1170,6 +1178,19 @@ function CharityBindingPickerBody({
                     {entry.note} · {entry.source.display_head}…{entry.source.display_tail}
                   </span>
                 </div>
+                {entry.native_services ? (
+                  <NativeServicesField
+                    options={entry.native_services}
+                    value={entry.selected_native_services ?? []}
+                    onChange={(value) =>
+                      onChange({
+                        ...selected,
+                        [key]: { ...entry, selected_native_services: value },
+                      })
+                    }
+                    disabled={interactionBlocked}
+                  />
+                ) : null}
                 <Button
                   type="button"
                   variant="ghost"

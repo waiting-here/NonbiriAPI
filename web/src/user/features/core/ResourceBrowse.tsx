@@ -18,7 +18,7 @@ export function BindingPreviewList({
   return (
     <ul className="core-routing-list">
       {items.map((item) => (
-        <li key={item.id}>
+        <li key={item.target_id ?? item.id}>
           <div>
             <Link
               className="core-mono"

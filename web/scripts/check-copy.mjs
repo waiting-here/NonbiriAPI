@@ -112,6 +112,54 @@ export function registeredCopyReferences(path, source, availableKeys, knownAlias
   return references;
 }
 
+// A component may use a closed local copy registry and global translations.
+// Resolve hook aliases by lexical scope so one does not hide the other.
+export function translationCopyReferences(path, source) {
+  const tree = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const references = [];
+  function staticChoices(node) {
+    if (!node) return [];
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return [node.text];
+    if (ts.isParenthesizedExpression(node)) return staticChoices(node.expression);
+    if (ts.isConditionalExpression(node))
+      return [...staticChoices(node.whenTrue), ...staticChoices(node.whenFalse)];
+    return [];
+  }
+  function visit(node, inherited) {
+    const scoped = ts.isSourceFile(node) || ts.isBlock(node) || ts.isFunctionLike(node);
+    const bindings = scoped ? new Map(inherited) : inherited;
+    if (ts.isFunctionLike(node)) {
+      for (const parameter of node.parameters ?? [])
+        if (ts.isIdentifier(parameter.name)) bindings.set(parameter.name.text, false);
+    }
+    if (ts.isVariableDeclaration(node)) {
+      if (ts.isIdentifier(node.name)) bindings.set(node.name.text, false);
+      if (ts.isObjectBindingPattern(node.name)) {
+        const initializer = node.initializer;
+        const globalHook =
+          initializer &&
+          ts.isCallExpression(initializer) &&
+          ts.isIdentifier(initializer.expression) &&
+          initializer.expression.text === 'useTranslation';
+        for (const element of node.name.elements) {
+          if (!ts.isIdentifier(element.name)) continue;
+          const property = element.propertyName ?? element.name;
+          bindings.set(element.name.text, Boolean(globalHook && property.text === 't'));
+        }
+      }
+    }
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      bindings.get(node.expression.text)
+    )
+      references.push(...staticChoices(node.arguments[0]));
+    ts.forEachChild(node, (child) => visit(child, bindings));
+  }
+  visit(tree, new Map());
+  return references;
+}
+
 function sameValues(left, right) {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
@@ -439,6 +487,10 @@ for (const [relativePath, source] of sourceTextByRelativePath) {
       markCatalogKey(key);
   } catch (error) {
     rememberFailure(failures, error);
+  }
+  for (const key of translationCopyReferences(relativePath, source)) {
+    if (availableKeys.has(key)) markCatalogKey(key);
+    else missingReferences.push(`${relativePath}:${key}`);
   }
   // Core/game workspaces intentionally use closed copy registries. Preserve
   // the existing source->catalog boundary and do not count their local keys

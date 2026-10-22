@@ -300,7 +300,7 @@ test('completed key binding returns to the donation list and reopens a fresh rev
         page.getByRole('heading', { name: common.common.donationReview.title, exact: true }),
       ).toBeVisible();
       await page
-        .getByRole('button', { name: common.common.workflow.bindThisKey, exact: true })
+        .getByRole('button', { name: common.common.connections.modelsAndBindings, exact: true })
         .nth(keyIndex)
         .click();
       await expect(page).toHaveURL(
@@ -366,7 +366,7 @@ test('completed key binding returns to the donation list and reopens a fresh rev
           .scrollIntoViewIfNeeded(),
       );
       await page
-        .getByRole('button', { name: common.common.workflow.bindThisKey, exact: true })
+        .getByRole('button', { name: common.common.connections.modelsAndBindings, exact: true })
         .nth(keyIndex)
         .click();
       await page

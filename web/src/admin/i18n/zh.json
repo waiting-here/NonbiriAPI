@@ -472,10 +472,7 @@
       "form": {
         "name": "渠道名称",
         "category": "类别",
-        "connector": "接口格式",
-        "baseUrl": "API 基础地址",
-        "enabled": "可用于添加服务",
-        "baseUrlHelp": "填写服务的 API 基础地址，例如 https://api.example.com/v1。"
+        "enabled": "可用于添加服务"
       },
       "validation": {
         "invalid": "请填写渠道名称和有效的 API 基础地址。"
@@ -490,7 +487,6 @@
         "idRevision": "渠道编号 / 版本",
         "category": "类别",
         "connector": "API 类型",
-        "baseUrl": "API 基础地址",
         "enabled": "可用于添加服务",
         "state": "状态",
         "created": "创建时间",

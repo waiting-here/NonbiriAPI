@@ -1,63 +1,40 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { Route, Routes, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
 import { EndpointsPage } from './EndpointsPage';
-
-function fixture(path: string): Record<string, unknown> {
-  return JSON.parse(readFileSync(resolve(process.cwd(), '..', path), 'utf8')) as Record<
-    string,
-    unknown
-  >;
-}
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'content-type': 'application/json' },
-  });
-}
-
-function endpoint(id: number): Record<string, unknown> {
-  return {
-    ...fixture('internal/resources/testdata/endpoint.json'),
-    id: String(id),
-    base_url: `https://example.com/v1/${id}`,
-    note: `endpoint-${id}`,
-  };
-}
-
-function endpointPage(
-  data: readonly Record<string, unknown>[],
-  page: string,
-  pageSize: number,
-  totalItems: number,
-): Record<string, unknown> {
-  return {
-    data,
-    next_cursor: null,
-    pagination: {
-      page,
-      page_size: pageSize,
-      total_items: String(totalItems),
-      total_pages: String(Math.max(1, Math.ceil(totalItems / pageSize))),
-    },
-  };
-}
-
-const session = fixture('internal/auth/testdata/user_envelope.json');
-
-function LocationProbe() {
+const session = JSON.parse(
+  readFileSync(resolve(process.cwd(), '../internal/auth/testdata/user_envelope.json'), 'utf8'),
+);
+const response = (body: unknown) =>
+  new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } });
+const connection = (id: number) => ({
+  id: String(id),
+  name: 'connection-' + id,
+  note: '',
+  revision: '1',
+  entry_count: '3',
+  credential_count: '1',
+  created_at: 1700000000,
+  updated_at: 1700000000,
+});
+const page = (data: unknown[], number = '1', size = 20, total = data.length) => ({
+  data,
+  next_cursor: null,
+  pagination: {
+    page: number,
+    page_size: size,
+    total_items: String(total),
+    total_pages: String(Math.max(1, Math.ceil(total / size))),
+  },
+});
+function RoutesWithLocation() {
   const location = useLocation();
-  return <output data-testid="location">{`${location.pathname}${location.search}`}</output>;
-}
-
-function EndpointRoutes() {
   return (
     <>
-      <LocationProbe />
+      <output data-testid="location">{location.pathname + location.search}</output>
       <Routes>
         <Route path="/endpoints" element={<EndpointsPage />} />
         <Route path="/endpoints/:endpointId" element={<EndpointsPage />} />
@@ -65,43 +42,23 @@ function EndpointRoutes() {
     </>
   );
 }
-
 afterEach(() => {
   vi.unstubAllGlobals();
-  window.localStorage.removeItem('nonbiri:user:endpoints-page-size:v1');
+  window.localStorage.removeItem('nonbiri:user:connections-page-size:v1');
 });
-
-describe('user endpoint list page', () => {
-  it('updates mainstream badges from the current browse projection', async () => {
-    let categories = ['subscription', 'api_platform'];
+describe('connection entry list', () => {
+  it('refreshes authoritative connection counts without probing each entry', async () => {
+    let entries = '3';
+    const requests: string[] = [];
     vi.stubGlobal(
       'fetch',
       vi.fn((input: string | URL | Request) => {
         const path = new URL(String(input), window.location.origin).pathname;
-        if (path === '/api/session') return Promise.resolve(jsonResponse(session));
-        if (path === '/api/endpoints')
-          return Promise.resolve(
-            jsonResponse(
-              endpointPage(
-                [
-                  {
-                    ...endpoint(1),
-                    origin: { kind: 'custom' },
-                    browse: {
-                      model_count: '0',
-                      available_key_count: '1',
-                      state: 'available',
-                      mainstream_categories: categories,
-                    },
-                  },
-                ],
-                '1',
-                20,
-                1,
-              ),
-            ),
-          );
-        throw new Error(`Unexpected request: ${path}`);
+        requests.push(path);
+        if (path === '/api/session') return Promise.resolve(response(session));
+        if (path === '/api/connections')
+          return Promise.resolve(response(page([{ ...connection(1), entry_count: entries }])));
+        throw Error(path);
       }),
     );
     const rendered = await renderWithProviders(<EndpointsPage />, {
@@ -109,157 +66,107 @@ describe('user endpoint list page', () => {
       role: 'user',
       route: '/endpoints',
     });
-    expect(await screen.findByText('Mainstream subscription')).toBeVisible();
-    expect(screen.getByText('Mainstream API platform')).toBeVisible();
-    categories = [];
+    const link = await screen.findByRole('link', { name: 'connection-1' });
+    expect(within(link.closest('tr')!).getByText('3')).toBeVisible();
+    entries = '4';
     await rendered.queryClient.invalidateQueries();
-    await waitFor(() =>
-      expect(screen.queryByText('Mainstream subscription')).not.toBeInTheDocument(),
+    await waitFor(() => expect(within(link.closest('tr')!).getByText('4')).toBeVisible());
+    expect(requests.every((path) => path === '/api/session' || path === '/api/connections')).toBe(
+      true,
     );
-    expect(screen.queryByText('Mainstream API platform')).not.toBeInTheDocument();
-    expect(screen.getByText('endpoint-1')).toBeVisible();
   });
-
-  it('requests numbered pages, keeps the old page while busy, and remembers page size', async () => {
-    const firstPage = Array.from({ length: 20 }, (_, index) => endpoint(index + 1));
-    const secondPage = [endpoint(21)];
-    const allEndpoints = Array.from({ length: 21 }, (_, index) => endpoint(index + 1));
+  it('keeps the current page during a numbered-page request and remembers page size', async () => {
     let resolveSecond!: (response: Response) => void;
-    const secondResponse = new Promise<Response>((resolve) => {
+    const second = new Promise<Response>((resolve) => {
       resolveSecond = resolve;
     });
     const requests: string[] = [];
-    const fetchMock = vi.fn((input: string | URL | Request) => {
-      const url = new URL(String(input), window.location.origin);
-      const path = `${url.pathname}${url.search}`;
-      requests.push(path);
-      if (path === '/api/session') return Promise.resolve(jsonResponse(session));
-      if (path === '/api/endpoints?page=1&page_size=20') {
-        return Promise.resolve(jsonResponse(endpointPage(firstPage, '1', 20, 21)));
-      }
-      if (path === '/api/endpoints?page=2&page_size=20') return secondResponse;
-      if (path === '/api/endpoints?page=1&page_size=50') {
-        return Promise.resolve(jsonResponse(endpointPage(allEndpoints, '1', 50, 21)));
-      }
-      throw new Error(`Unexpected request: ${path}`);
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: string | URL | Request) => {
+        const url = new URL(String(input), window.location.origin);
+        requests.push(url.pathname + url.search);
+        if (url.pathname === '/api/session') return Promise.resolve(response(session));
+        if (url.pathname === '/api/connections') {
+          if (url.searchParams.get('page') === '2') return second;
+          const size = Number(url.searchParams.get('page_size'));
+          return Promise.resolve(
+            response(
+              page(
+                Array.from({ length: size === 50 ? 21 : 20 }, (_, i) => connection(i + 1)),
+                '1',
+                size,
+                21,
+              ),
+            ),
+          );
+        }
+        throw Error(url.pathname);
+      }),
+    );
     const rendered = await renderWithProviders(<EndpointsPage />, {
       station: 'user',
       role: 'user',
       route: '/endpoints',
     });
-    expect(await screen.findByText('endpoint-1')).toBeVisible();
-    expect(requests).toContain('/api/endpoints?page=1&page_size=20');
-    expect(screen.getByText('Page 1 of 2')).toBeVisible();
-    expect(document.querySelector('section.nb-panel[aria-busy="false"]')).not.toBeNull();
-
+    expect(await screen.findByText('connection-1')).toBeVisible();
     await rendered.user.click(screen.getByRole('button', { name: 'Next' }));
-    expect(screen.getByText('endpoint-1')).toBeVisible();
+    expect(screen.getByText('connection-1')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
-    expect(screen.getByText('Page 1 of 2')).toBeVisible();
-    expect(document.querySelector('section.nb-panel[aria-busy="true"]')).not.toBeNull();
-    resolveSecond(jsonResponse(endpointPage(secondPage, '2', 20, 21)));
-    expect(await screen.findByText('endpoint-21')).toBeVisible();
-    expect(screen.getByText('Page 2 of 2')).toBeVisible();
-
+    resolveSecond(response(page([connection(21)], '2', 20, 21)));
+    expect(await screen.findByText('connection-21')).toBeVisible();
     fireEvent.change(screen.getByRole('combobox', { name: 'Items per page' }), {
       target: { value: '50' },
     });
-    await waitFor(() =>
-      expect(screen.getByRole('combobox', { name: 'Items per page' })).toHaveValue('50'),
-    );
-    expect(await screen.findByText('endpoint-20')).toBeVisible();
-    expect(requests).toContain('/api/endpoints?page=1&page_size=50');
-    expect(window.localStorage.getItem('nonbiri:user:endpoints-page-size:v1')).toBe('50');
+    expect(await screen.findByText('connection-20')).toBeVisible();
+    expect(requests).toContain('/api/connections?page=1&page_size=50');
+    expect(window.localStorage.getItem('nonbiri:user:connections-page-size:v1')).toBe('50');
   });
-
-  it('shows setup actions without unnecessary pagination for an empty list', async () => {
+  it('provides creation on an empty list without pagination', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((input: string | URL | Request) => {
         const path = new URL(String(input), window.location.origin).pathname;
-        if (path === '/api/session') return Promise.resolve(jsonResponse(session));
-        if (path === '/api/endpoints') {
-          return Promise.resolve(jsonResponse(endpointPage([], '1', 20, 0)));
-        }
-        throw new Error(`Unexpected request: ${String(input)}`);
+        if (path === '/api/session') return Promise.resolve(response(session));
+        if (path === '/api/connections') return Promise.resolve(response(page([])));
+        throw Error(path);
       }),
     );
-
     await renderWithProviders(<EndpointsPage />, {
       station: 'user',
       role: 'user',
       route: '/endpoints',
     });
-    expect(await screen.findByText('No services added yet')).toBeVisible();
+    expect(await screen.findByText('Nothing here yet')).toBeVisible();
     expect(screen.queryByRole('navigation', { name: 'Pagination' })).not.toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: /Add service/ })).toHaveLength(2);
-    expect(screen.getByRole('link', { name: 'Browse charity models' })).toHaveAttribute(
-      'href',
-      '/charity',
-    );
+    expect(screen.getAllByRole('button', { name: 'Add connection' })).toHaveLength(2);
   });
-
-  it('returns through a real detail route with the clamped page and refreshes from that URL', async () => {
-    const requests: string[] = [];
-    const fetchMock = vi.fn((input: string | URL | Request) => {
-      const raw = input instanceof Request ? input.url : String(input);
-      const url = new URL(raw, window.location.origin);
-      const path = `${url.pathname}${url.search}`;
-      requests.push(path);
-      if (path === '/api/session') return Promise.resolve(jsonResponse(session));
-      if (path === '/api/endpoints?page=999&page_size=20') {
-        return Promise.resolve(jsonResponse(endpointPage([endpoint(11)], '2', 20, 21)));
-      }
-      if (path === '/api/endpoints?page=2&page_size=20') {
-        return Promise.resolve(jsonResponse(endpointPage([endpoint(11)], '2', 20, 21)));
-      }
-      if (path === '/api/endpoints/11') {
-        return Promise.resolve(
-          jsonResponse({ ...fixture('internal/resources/testdata/endpoint.json') }),
-        );
-      }
-      if (path === '/api/endpoints/11/keys?page=1&page_size=20') {
-        return Promise.resolve(
-          jsonResponse({
-            data: [],
-            next_cursor: null,
-            pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
-          }),
-        );
-      }
-      throw new Error(`Unexpected request: ${path}`);
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    const rendered = await renderWithProviders(<EndpointRoutes />, {
-      station: 'user',
-      role: 'user',
-      route: '/endpoints?page=999&page_size=20',
-    });
-    expect(await screen.findByText('endpoint-11')).toBeVisible();
-    expect(screen.getByText('That page is no longer available. Showing page 2.')).toBeVisible();
-    expect(screen.getByTestId('location')).toHaveTextContent('/endpoints?page=999&page_size=20');
-    expect(requests).toContain('/api/endpoints?page=999&page_size=20');
-
-    await rendered.user.click(screen.getByRole('link', { name: /endpoint-11.*Manage/ }));
-    expect(await screen.findByRole('heading', { name: 'endpoint note' })).toBeVisible();
-    expect(screen.getByTestId('location')).toHaveTextContent('/endpoints/11');
-    await rendered.user.click(screen.getByRole('link', { name: /My services/ }));
-    expect(await screen.findByText('endpoint-11')).toBeVisible();
-    expect(screen.getByTestId('location')).toHaveTextContent('/endpoints?page=2&page_size=20');
-
-    rendered.unmount();
-    await renderWithProviders(<EndpointRoutes />, {
-      station: 'user',
-      role: 'user',
-      route: '/endpoints?page=2&page_size=20',
-    });
-    expect(await screen.findByText('endpoint-11')).toBeVisible();
-    expect(requests.filter((path) => path === '/api/endpoints?page=2&page_size=20')).toHaveLength(
-      2,
+  it('returns to the same connection search and page from a real detail route', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: string | URL | Request) => {
+        const url = new URL(String(input), window.location.origin);
+        if (url.pathname === '/api/session') return Promise.resolve(response(session));
+        if (url.pathname === '/api/connections')
+          return Promise.resolve(response(page([connection(21)], '2', 20, 21)));
+        if (url.pathname === '/api/connections/21')
+          return Promise.resolve(response(connection(21)));
+        if (url.pathname === '/api/connections/21/entries')
+          return Promise.resolve(response(page([])));
+        throw Error(url.pathname);
+      }),
     );
+    const route = '/endpoints?connections_q=shared&connections_page=2&connections_page_size=20';
+    const rendered = await renderWithProviders(<RoutesWithLocation />, {
+      station: 'user',
+      role: 'user',
+      route,
+    });
+    await rendered.user.click(await screen.findByRole('link', { name: 'connection-21' }));
+    expect(await screen.findByRole('heading', { name: 'connection-21' })).toBeVisible();
+    await rendered.user.click(screen.getByRole('link', { name: 'Back to connections' }));
+    expect(await screen.findByText('connection-21')).toBeVisible();
+    expect(screen.getByTestId('location')).toHaveTextContent(route);
+    expect(screen.getByRole('searchbox')).toHaveValue('shared');
   });
 });

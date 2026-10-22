@@ -1,3 +1,4 @@
+import { CharityTargets } from './CharityTargets';
 import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
 import { isAISDKGateway } from '@shared/operations/connectorPolicy';
 import { CloudflareProxyField, CloudflareProxySummary } from '../CloudflareProxyField';
@@ -897,13 +898,21 @@ function BindingsPanel({
             scope="charity-model"
             gatewayCacheDefaults={Boolean(
               bindings.data?.bindings.length &&
-              bindings.data.bindings.every((entry) => isAISDKGateway(entry.source.connector_type)),
+              bindings.data.bindings
+                .flatMap(
+                  (entry) =>
+                    entry.targets?.map((target) => target.connector_type) ?? [
+                      entry.source.connector_type,
+                    ],
+                )
+                .every((type) => type !== undefined && isAISDKGateway(type)),
             )}
             editable={role === 'admin'}
           />
         </Fold>
       ) : null}
       <Card>
+        <CharityTargets role={role} accountId={accountId} model={model} />
         <h3>{t('common.operations.charity.orderedBindings')}</h3>
         {bindings.isPending ? (
           <LoadingState />
@@ -958,7 +967,8 @@ function BindingsPanel({
                         data-label={t(charityCopyKey(role, 'upstreamModel'))}
                       >
                         {entry.upstream_model_id}
-                        {isAISDKGateway(entry.source.connector_type) ? (
+                        {(entry.targets?.every((target) => isAISDKGateway(target.connector_type)) ??
+                        isAISDKGateway(entry.source.connector_type)) ? (
                           <GatewayCapabilitySummary entry={entry.gateway_capabilities} />
                         ) : null}
                       </td>
@@ -1053,10 +1063,18 @@ function BindingsPanel({
               key={`${accountId}:${model.id}:${adaptationBinding}`}
               url={`${role === 'admin' ? '/admin/api' : '/api/steward'}/charity-models/${encodeURIComponent(model.id)}/bindings/${encodeURIComponent(adaptationBinding)}/request-adaptation`}
               scope="binding"
-              connectorType={
-                bindings.data.bindings.find((entry) => entry.id === adaptationBinding)?.source
-                  .connector_type
-              }
+              connectorType={(() => {
+                const entry = bindings.data.bindings.find(
+                  (entry) => entry.id === adaptationBinding,
+                );
+                if (!entry) return undefined;
+                const connectors = entry.targets?.map((target) => target.connector_type) ?? [
+                  entry.source.connector_type,
+                ];
+                return connectors.every((connector) => connector === connectors[0])
+                  ? connectors[0]
+                  : undefined;
+              })()}
               editable={role === 'admin'}
             />
           </Fold>

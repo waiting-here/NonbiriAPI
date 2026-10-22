@@ -231,13 +231,15 @@ test('approve a fixed key, page 240 targets and bind 144 cross-page selections w
     await page.getByLabel(operations.confirmReview, { exact: true }).check();
     await page.getByRole('button', { name: 'Approve donation', exact: true }).click();
     await expect(
-      page.getByRole('button', { name: workflow.bindThisKey, exact: true }),
+      page.getByRole('button', { name: common.common.connections.modelsAndBindings, exact: true }),
     ).toBeVisible();
     expect(
       (await read(context, state.admin_url, '/admin/api/donations/' + data.pending_donation_id))
         .status,
     ).toBe('approved');
-    await page.getByRole('button', { name: workflow.bindThisKey, exact: true }).click();
+    await page
+      .getByRole('button', { name: common.common.connections.modelsAndBindings, exact: true })
+      .click();
     const search = page.getByPlaceholder(workflow.modelSearch);
     await search.fill('workflow');
     await search.press('Enter');
