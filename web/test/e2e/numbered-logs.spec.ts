@@ -412,8 +412,8 @@ for (const scenario of [
           : 'Personal embedding';
     await expect(page.getByText(embeddingLabel, { exact: true }).first()).toBeVisible();
     if (scenario.width < 640) {
-      await expect(dialog.getByLabel(labels.size)).toBeHidden();
-      await page.setViewportSize({ width: 1280, height: 900 });
+      await expect(dialog.getByLabel(labels.size)).toBeVisible();
+      await expect(dialog.getByLabel(labels.size)).toBeEnabled();
     }
     await dialog.getByLabel(labels.size).selectOption('10');
     await page.setViewportSize({ width: scenario.width, height: 900 });

@@ -123,7 +123,7 @@ const candidateUnboundPredicate = `AND NOT EXISTS(SELECT 1 FROM charity_model_bi
  AND bt.donation_key_id=dk.id AND bt.upstream_model_id=pc.normalized_model_id)`
 
 func candidatePageSelection(modelID, now int64, query CandidateQuery) (string, []any) {
-	statement := `SELECT dk.id,d.id,dk.connector_type,dk.canonical_base_url,dk.display_head,dk.display_tail,
+	statement := `SELECT DISTINCT dk.id,d.id,dk.connector_type,dk.canonical_base_url,dk.display_head,dk.display_tail,
 pc.normalized_model_id,pc.automatic_supports,pc.manual_supports,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0)` + candidatePageFrom
 	if query.IncludeBound {
 		statement = strings.Replace(statement, candidateUnboundPredicate, "", 1)
@@ -147,13 +147,6 @@ pc.normalized_model_id,pc.automatic_supports,pc.manual_supports,COALESCE(kl.max_
 		statement += ` AND dk.id=?`
 		args = append(args, query.DonationKeyID)
 	}
-	if query.Source == "automatic" {
-		statement += ` AND pc.automatic_supports>0`
-	} else if query.Source == "manual" {
-		statement += ` AND pc.manual_supports>0`
-	} else {
-		statement += ` AND (pc.automatic_supports>0 OR pc.manual_supports>0)`
-	}
 	if query.Query != "" {
 		statement += ` AND pc.normalized_model_id LIKE ? ESCAPE '\'`
 		args = append(args, "%"+escapeLike(query.Query)+"%")
@@ -166,11 +159,16 @@ pc.normalized_model_id,pc.automatic_supports,pc.manual_supports,COALESCE(kl.max_
 	manual = strings.ReplaceAll(manual, "pc.automatic_supports", "0")
 	manual = strings.ReplaceAll(manual, "pc.manual_supports", "1")
 	manual += ` AND NOT EXISTS(SELECT 1` + candidateMatchingAutomatic + `)`
-	statement = strings.ReplaceAll(statement, "pc.automatic_supports", `(SELECT COUNT(*)`+candidateMatchingAutomatic+`)`)
+	// Each branch already proves its own source exists.
+	if query.Source == "automatic" {
+		manual += ` AND 0`
+	} else if query.Source == "manual" {
+		statement += ` AND pc.manual_supports>0`
+	}
+	statement = strings.ReplaceAll(statement, "pc.automatic_supports", "1")
 	statement = strings.ReplaceAll(statement, "pc.manual_supports", `EXISTS(SELECT 1 FROM donation_key_manual_models dm WHERE dm.donation_key_id=dk.id AND dm.normalized_model_id=pc.normalized_model_id)`)
-	// Multiple approved uses can share a run, and distinct runs can contain the
-	// same model. IN deduplicates runs; one canonical entry represents the model.
-	statement += ` AND pc.id=(SELECT MIN(ac.id)` + candidateMatchingAutomatic + `)`
+	// Callers need source presence, not entry counts. DISTINCT collapses the
+	// same key/model across runs without a correlated COUNT and MIN per entry.
 	return statement + ` UNION ALL ` + manual, append(append([]any{}, args...), args...)
 }
 

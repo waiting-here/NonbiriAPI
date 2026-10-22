@@ -113,7 +113,7 @@ func seedManagementBrowser(t *testing.T, f *imageBrowserFixture, now int64) map[
 	endpoint := f.call("POST", "/api/endpoints", map[string]any{"source": "mainstream", "channel_id": channel, "note": "Browser service", "enabled": true}, owner, false)["id"].(string)
 	donate := func(secret, description string) map[string]any {
 		key := f.call("POST", "/api/endpoints/"+endpoint+"/keys", map[string]any{"secret": secret, "note": "Browser credential", "enabled": true, "force_store_false": false, "ownership_confirmed": true}, owner, false)["id"].(string)
-		return f.call("POST", "/api/donations", map[string]any{"description": description, "discord_public_thanks": false, "ownership_authorized": true, "keys": []map[string]any{{"endpoint_key_id": key, "expires_at": nil}}}, owner, false)
+		return f.call("POST", "/api/donations", map[string]any{"description": description, "discord_public_thanks": false, "ownership_authorized": true, "keys": []map[string]any{appFixtureSharedCatalog(t, f.store, key, nil, now)}}, owner, false)
 	}
 	automatic := donate("synthetic-auto-donation", "Automatically approved browser donation")
 	prior := donate("synthetic-reviewed-donation", "Initial review source")

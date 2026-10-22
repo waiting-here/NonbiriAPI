@@ -1,4 +1,5 @@
 import { numberedResponse } from './numbered-fixtures';
+import { mockConnectionResources } from './connection-fixtures';
 import { ADMIN_ORIGIN, USER_ORIGIN } from './ports';
 import {
   collectConsoleViolations,
@@ -111,8 +112,10 @@ for (const locale of ['en', 'zh'] as const) {
         path: '/api/session',
         body: session,
       });
-      await page.route(`${USER_ORIGIN}/api/endpoints?**`, (route) =>
-        route.fulfill({ json: numberedResponse([], '1', 20) }),
+      await mockConnectionResources(
+        page,
+        () => [],
+        () => [],
       );
       await page.setViewportSize({ width: 1440, height: 900 });
       await page.goto(`${USER_ORIGIN}/endpoints`);

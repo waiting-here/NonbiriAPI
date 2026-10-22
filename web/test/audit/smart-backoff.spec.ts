@@ -111,14 +111,19 @@ async function endpoint(owner: BrowserContext, label: string) {
     note: label,
     enabled: true,
   });
-  const key = await write<{ id: string }>(owner, origin, '/api/endpoints/' + source.id + '/keys', {
+  const key = await write<{
+    id: string;
+    credential_id: string;
+    credential_version: string;
+    grant_revision: string;
+  }>(owner, origin, '/api/endpoints/' + source.id + '/keys', {
     secret: 'synthetic-' + label,
     note: label,
     enabled: true,
     force_store_false: false,
     ownership_confirmed: true,
   });
-  return { keyID: key.id, baseURL, label };
+  return { keyID: key.id, key, baseURL, label };
 }
 async function save(page: Page, control: Locator, path: string, modelID?: string) {
   const saved = page.waitForResponse(
@@ -162,6 +167,9 @@ test('owner submits with automatic recovery and edits its threshold through the 
       .nth(1)
       .getByRole('checkbox', { name: new RegExp(source.label) })
       .check();
+    await picker
+      .getByRole('checkbox', { name: common.common.modelTypes.chat_completions, exact: true })
+      .check();
     await picker.getByLabel(policy.label, { exact: true }).fill('13');
     await expect(
       picker.locator('..').getByText(backoff.automaticHelp, { exact: true }),
@@ -190,7 +198,17 @@ test('owner submits with automatic recovery and edits its threshold through the 
       description: 'Synthetic smart backoff donation',
       ownership_authorized: true,
       discord_public_thanks: false,
-      keys: [{ endpoint_key_id: source.keyID, expires_at: null, failure_disable_threshold: '13' }],
+      keys: [
+        {
+          endpoint_key_id: source.keyID,
+          credential_id: source.key.credential_id,
+          credential_version: source.key.credential_version,
+          grant_revision: source.key.grant_revision,
+          native_services: ['chat_completions'],
+          expires_at: null,
+          failure_disable_threshold: '13',
+        },
+      ],
     });
     const created = (await response.json()) as Donation;
     expect(created.keys[0]).toMatchObject({

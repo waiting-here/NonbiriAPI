@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { numberedResponse } from './numbered-fixtures';
+import { mockConnectionResources } from './connection-fixtures';
 import { ADMIN_ORIGIN, USER_ORIGIN } from './ports';
 import {
   assertNoSensitiveBrowserPersistence,
@@ -440,6 +441,8 @@ test('reachable user endpoint keys expose the owner-only upstream prompt storage
   const guard = await prepare(context, page, 'user', 'user', 'en', 'dark');
   const endpoint = {
     id: '1',
+    connection_id: '1',
+    native_services: ['chat_completions', 'responses'],
     connector_type: 'openai-compatible',
     base_url: 'https://upstream.test/v1',
     origin: { kind: 'custom' },
@@ -450,12 +453,7 @@ test('reachable user endpoint keys expose the owner-only upstream prompt storage
     created_at: 1_700_000_000,
     updated_at: 1_700_000_001,
   };
-  await mockJson(page, {
-    origin: USER_ORIGIN,
-    method: 'GET',
-    path: '/api/endpoints?page=1&page_size=20',
-    body: numberedResponse([endpoint], '1', 20),
-  });
+  await mockConnectionResources(page, () => [endpoint]);
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',
@@ -509,8 +507,12 @@ test('reachable user endpoint keys expose the owner-only upstream prompt storage
   });
 
   await page.goto(`${USER_ORIGIN}/endpoints`);
-  await expect(page.getByRole('heading', { name: 'My services' })).toBeVisible();
-  await page.getByRole('link', { name: 'Manage' }).click();
+  await expect(page.getByRole('heading', { name: 'Service connections' })).toBeVisible();
+  await page.getByRole('link', { name: 'Manage', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Browser connection', exact: true }),
+  ).toBeVisible();
+  await page.getByRole('link', { name: 'Manage entry', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'primary', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'More actions · key note', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Edit note and limits', exact: true }).click();

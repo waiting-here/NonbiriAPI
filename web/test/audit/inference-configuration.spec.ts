@@ -636,9 +636,11 @@ test('native Chat services retain storage policy and one Chat Responses group al
       '/api/connections/' + new URL(page.url()).searchParams.get('connection_id') + '/credentials',
       'POST',
     );
-    await entryPanel
+    const grant = entryPanel
+      .locator('form')
+      .filter({ has: page.getByRole('button', { name: c.authorizeEntry, exact: true }) });
+    await grant
       .getByLabel(c.note + ' ' + c.optional, { exact: true })
-      .last()
       .fill('Native Chat browser key');
     await entryPanel.getByLabel(core['endpoints.storePolicy'], { exact: true }).check();
     const keyResponse = await save(

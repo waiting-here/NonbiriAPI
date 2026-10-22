@@ -20,7 +20,7 @@ for (const locale of ['zh', 'en'] as const) {
       path: '/admin/api/maintenance',
       body: { enabled: false, revision: '1' },
     });
-    for (const path of ['/api/models', '/api/endpoints', '/admin/api/overview/endpoints']) {
+    for (const path of ['/api/models', '/api/connections', '/admin/api/overview/endpoints']) {
       await page.route(`**${path}?**`, (route) =>
         route.fulfill({ json: numberedResponse([], '1', 20) }),
       );
