@@ -69,9 +69,11 @@ export async function renderSSR(
   highResolution = false,
   options: { characterOnly?: boolean; signal?: AbortSignal } = {},
 ) {
+  if (options.signal?.aborted) return () => {};
   const theme = specialCards[id];
   if (theme) {
     const { renderSpecial } = await import('./special-renderer');
+    if (options.signal?.aborted) return () => {};
     return renderSpecial(canvas, theme, { ...options, frozenTime, paused, highResolution });
   }
   const cfg = configFor(id);

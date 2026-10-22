@@ -9,7 +9,9 @@ import { Note } from '@shared/components/ui/Note';
 import { ErrorState, LoadingState, EmptyState } from '@shared/components/States';
 import { formatCount } from '@shared/utils/formatNumber';
 import { useOptionalAppearance } from './context';
-import { defaultMoment, momentArtworks, momentByKey } from './moments';
+import { defaultMoment, momentArtworks, momentByKey, momentArtworkKeys } from './moments';
+import { ArtworkImage, ArtworkBadge, ArtworkUnavailable } from '@shared/artwork/ArtworkImage';
+import { useArtworkPolicy } from '@shared/artwork/context';
 import './moments.css';
 
 const kindKeys: Record<string, string> = {
@@ -21,6 +23,7 @@ const kindKeys: Record<string, string> = {
 
 export function MomentPicker() {
   const appearance = useOptionalAppearance();
+  const policy = useArtworkPolicy();
   const { t, i18n } = useTranslation();
   const english = i18n.language.startsWith('en');
   const [choiceOverride, setChoice] = useState<string>();
@@ -37,7 +40,8 @@ export function MomentPicker() {
     (appearance.state.moments ?? [defaultMoment.key]).includes(item.key),
   );
   const current = momentByKey.get(choice) ?? defaultMoment;
-  const available = options.some((item) => item.key === choice);
+  const available =
+    options.some((item) => item.key === choice) && policy.allowed(momentArtworkKeys(current));
   const selected =
     appearance.state.selected === 'heart-moment' && appearance.state.moment === choice;
   const name = (item: typeof current) => (english ? item.nameEN : item.name);
@@ -61,9 +65,16 @@ export function MomentPicker() {
         ) : null}
         {error ? <ErrorState error={error} /> : null}
         <div className="nb-moment-picker__selection">
-          <img src={current.art} alt={name(current)} className="nb-moment-picker__preview" />
+          <ArtworkImage
+            artworkKey={momentArtworkKeys(current)}
+            src={current.art}
+            alt={name(current)}
+            className="nb-moment-picker__preview"
+          />
           <div className="nb-moment-picker__copy">
             <strong>{name(current)}</strong>
+            <ArtworkBadge artworkKey={momentArtworkKeys(current)} />
+            <ArtworkUnavailable artworkKey={momentArtworkKeys(current)} />
             <span>{t(kindKeys[current.kind])}</span>
             {current.card?.rarity === 'SP' && (
               <small>{t('user.appearance.moments.spHint', { name: name(current) })}</small>
@@ -119,19 +130,31 @@ export function MomentPicker() {
           aria-label={t('user.appearance.moments.choose')}
         >
           {filtered.map((item) => (
-            <label key={item.key} className="nb-moment-option" data-selected={choice === item.key}>
+            <label
+              key={item.key}
+              className="nb-moment-option"
+              data-selected={choice === item.key}
+              data-unavailable={!policy.allowed(momentArtworkKeys(item))}
+            >
               <input
                 type="radio"
                 name="heart-moment"
                 value={item.key}
                 checked={choice === item.key}
-                disabled={appearance.saving}
+                disabled={appearance.saving || !policy.allowed(momentArtworkKeys(item))}
                 onChange={() => {
                   setChoice(item.key);
                   setError(null);
                 }}
               />
-              <img src={item.thumb} alt="" loading="lazy" />
+              <ArtworkImage
+                artworkKey={momentArtworkKeys(item)}
+                src={item.thumb}
+                alt={name(item)}
+                loading="lazy"
+              />
+              <ArtworkBadge artworkKey={momentArtworkKeys(item)} />
+              <ArtworkUnavailable artworkKey={momentArtworkKeys(item)} />
               <span>{name(item)}</span>
               <small>{item.card?.rarity ?? t(kindKeys[item.kind])}</small>
             </label>

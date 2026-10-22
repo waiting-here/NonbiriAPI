@@ -52,6 +52,7 @@ export async function renderWallpaper(
   signal: AbortSignal,
   quality: WallpaperQuality = wallpaperQuality(),
 ): Promise<() => void> {
+  if (signal.aborted) return () => {};
   const prefix = '/assets/gacha/appearances/layers/' + (quality === 'high' ? 'hires/' : '');
   const id = `${scene}-${theme}` as const;
   const names = [

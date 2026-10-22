@@ -2879,5 +2879,8 @@
     "resetDescription": "Reset the authenticator for {{user}} and sign out all of their browser sessions. They must sign in again. Their CallerKey stays unchanged.",
     "resetConfirm": "Reset and sign out",
     "resetDone": "Authenticator reset. All browser sessions were signed out. The user must sign in again."
+  },
+  "artwork": {
+    "unavailable": "Artwork is disabled by this site."
   }
 }

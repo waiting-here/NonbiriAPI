@@ -102,7 +102,7 @@ for (const theme of ['light', 'dark'] as const)
       await page.getByRole('button', { name: '读取并微调', exact: true }).click();
       const dialog = page.getByRole('dialog', { name: '限定奖池', exact: true });
       await dialog.getByLabel('奖池名称', { exact: true }).fill('夏夜微调');
-      await dialog.getByRole('button', { name: '星光收藏册', exact: true }).click();
+      await dialog.getByRole('button', { name: '真·抽卡模拟器', exact: true }).click();
       const sr = dialog
         .locator('.gacha-admin-roster')
         .filter({ has: page.getByRole('heading', { name: '万象化身 · SR', exact: true }) });
