@@ -50,6 +50,8 @@ import { formatCredits } from '../../user/games/common/strict';
 import { DeletedAccountCard } from './DeletedAccountCard';
 import {
   banManagedUser,
+  getManagedCallerKey,
+  revokeManagedCallerKey,
   mutateManagedUser,
   unbanManagedUser,
   getManagedUserDetail,
@@ -127,6 +129,141 @@ function profileOutcome(outcome: OperationOutcome, recheck: () => void): Outcome
   return { kind: 'idle' };
 }
 
+function ManagedCallerKeyControl({
+  user,
+  role,
+  account,
+  onAuthorityLoss,
+}: {
+  user: AdminUser;
+  role: ManagementRole;
+  account: string;
+  onAuthorityLoss?: () => void;
+}) {
+  const { t } = useTranslation();
+  const formatDateTime = useDateTimeFormatter();
+  const client = useQueryClient();
+  const [confirmGeneration, setConfirmGeneration] = useState<string | null>(null);
+  const queryKey = managedUserKeys.callerKey(role, account, user.id);
+  const metadata = useQuery({
+    queryKey,
+    queryFn: ({ signal }) => getManagedCallerKey(role, user.id, signal),
+    retry: false,
+  });
+  const operation = useRetainedOperation(
+    (input: { generation: string }, key, context) =>
+      revokeManagedCallerKey(role, user.id, input.generation, key, context.signal),
+    async (_input, error, context) => {
+      if (error !== null) return;
+      const current = await getManagedCallerKey(role, user.id, context.signal);
+      context.commit(() => client.setQueryData(queryKey, current));
+    },
+    managementRoot(role),
+  );
+  const authorityError = metadata.error ?? operation.error ?? operation.refreshError;
+  useEffect(() => {
+    if (isUnauthorized(authorityError) || isForbidden(authorityError)) onAuthorityLoss?.();
+  }, [authorityError, onAuthorityLoss]);
+  const reload = async () => {
+    const result = await metadata.refetch();
+    if (!result.error && operation.outcome === 'conflict') operation.reset();
+  };
+  const check = () => {
+    if (operation.outcome === 'unknown' && operation.variables) {
+      operation.mutate(operation.variables);
+    } else if (operation.isSuccess) {
+      void operation.refresh();
+    } else {
+      void reload();
+    }
+  };
+  const locked =
+    operation.isPending ||
+    metadata.isFetching ||
+    operation.outcome === 'unknown' ||
+    operation.outcome === 'conflict' ||
+    operation.outcome === 'refresh-failed';
+
+  return (
+    <Card className="nb-stack">
+      <h2>{t('management.users.callerKeyTitle')}</h2>
+      {metadata.isPending ? <LoadingState /> : null}
+      {metadata.error ? <ErrorState error={metadata.error} onRetry={() => void reload()} /> : null}
+      {metadata.data && !metadata.error && operation.outcome !== 'refresh-failed' ? (
+        <>
+          <p>
+            {t(
+              metadata.data.active
+                ? 'management.users.callerKeyActive'
+                : 'management.users.callerKeyEmpty',
+            )}
+          </p>
+          <dl className="nb-facts nb-facts--inline">
+            {metadata.data.created_at !== null ? (
+              <>
+                <dt>{t('management.users.callerKeyCreated')}</dt>
+                <dd>{formatDateTime(metadata.data.created_at)}</dd>
+              </>
+            ) : null}
+            <dt>{t('management.users.callerKeyUpdated')}</dt>
+            <dd>{formatDateTime(metadata.data.updated_at)}</dd>
+          </dl>
+          {metadata.data.active ? (
+            <div className="nb-actions">
+              <Button
+                type="button"
+                variant="danger-outline"
+                disabled={locked}
+                onClick={() => setConfirmGeneration(metadata.data.generation)}
+              >
+                {t('management.users.callerKeyRevoke')}
+              </Button>
+            </div>
+          ) : null}
+        </>
+      ) : null}
+      {operation.isSuccess && operation.data ? (
+        <p role="status">
+          {t(
+            operation.data.revoked
+              ? 'management.users.callerKeyRevoked'
+              : 'management.users.callerKeyNoChange',
+          )}
+        </p>
+      ) : null}
+      <OutcomeNote
+        outcome={profileOutcome(operation.outcome, check)}
+        busy={operation.isPending || metadata.isFetching}
+        body={
+          operation.outcome === 'conflict'
+            ? t('management.users.callerKeyConflict')
+            : operation.outcome === 'unknown'
+              ? t('management.users.callerKeyUnknown')
+              : undefined
+        }
+      />
+      {operation.outcome === 'failed' && operation.error ? (
+        <ErrorState error={operation.error} />
+      ) : null}
+      <ConfirmDialog
+        open={confirmGeneration !== null}
+        danger
+        title={t('management.users.callerKeyConfirmTitle')}
+        description={t('management.users.callerKeyConfirmBody', { user: user.username })}
+        confirmLabel={t('management.users.callerKeyRevoke')}
+        onCancel={() => setConfirmGeneration(null)}
+        onConfirm={() => {
+          if (confirmGeneration === null || locked) return;
+          const generation = confirmGeneration;
+          setConfirmGeneration(null);
+          operation.mutate({ generation });
+        }}
+        confirmDisabled={locked}
+      />
+    </Card>
+  );
+}
+
 function UserAuthority({
   user,
   refresh,
@@ -161,6 +298,9 @@ function UserAuthority({
   const editable =
     !trainee && (role === 'admin' || (user.id !== account && user.level.effective < 6));
   const limitsEditable = canEditInferenceLimits(user, role, account, trainee);
+  const callerKeyEditable =
+    !user.is_admin &&
+    (role === 'admin' || (user.id !== account && user.level.effective < (trainee ? 5 : 6)));
   const canBan =
     editable || (trainee && user.id !== account && user.level.effective <= 4 && !user.is_banned);
   const root = managementRoot(role);
@@ -409,6 +549,7 @@ function UserAuthority({
       />
       <section
         role="tabpanel"
+        className="nb-stack"
         id={`${tabID}-overview-panel`}
         aria-labelledby={`${tabID}-overview`}
         hidden={tab !== 'overview'}
@@ -476,6 +617,15 @@ function UserAuthority({
             <LoanHistory role={role} account={account} userID={user.id} />
           </div>
         </Card>
+        {callerKeyEditable ? (
+          <ManagedCallerKeyControl
+            key={JSON.stringify([role, account, trainee, user.id, user.level.effective])}
+            user={user}
+            role={role}
+            account={account}
+            onAuthorityLoss={onAuthorityLoss}
+          />
+        ) : null}
       </section>
       {editable || limitsEditable ? (
         <>

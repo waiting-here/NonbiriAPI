@@ -384,6 +384,8 @@ export const managedUserKeys = {
       state,
       discordID,
     ] as const,
+  callerKey: (role: ManagementRole, account: string, id: string) =>
+    [...managementRoot(role), 'caller-key', account, id] as const,
   detail: (role: ManagementRole, account: string, id: string) =>
     [...managementRoot(role), 'user', account, id] as const,
 };
@@ -606,5 +608,69 @@ export async function unbanManagedUser(
   await apiFetch<void>(
     `${userPath(role, id)}/unban`,
     idempotentOptions(key, { method: 'POST', json: { expected_revision: revision } }),
+  );
+}
+
+export interface ManagedCallerKey {
+  user_id: string;
+  generation: string;
+  active: boolean;
+  created_at: number | null;
+  updated_at: number;
+}
+
+export interface ManagedCallerKeyRevocation {
+  generation: string;
+  revoked: boolean;
+}
+
+export function getManagedCallerKey(
+  role: ManagementRole,
+  id: string,
+  signal?: AbortSignal,
+): Promise<ManagedCallerKey> {
+  return decoded(
+    `${userPath(role, id)}/caller-key`,
+    (value) => {
+      const root = record(
+        value,
+        ['user_id', 'generation', 'active', 'created_at', 'updated_at'],
+        'managed caller key',
+      );
+      const userID = decimalID(root.user_id, 'caller key user id');
+      if (userID !== id) invalidResponse('caller key user identity');
+      return {
+        user_id: userID,
+        generation: decimal(root.generation, 'caller key generation'),
+        active: boolean(root.active, 'caller key active'),
+        created_at: nullableUnixSecond(root.created_at, 'caller key creation time'),
+        updated_at: unixSecond(root.updated_at, 'caller key update time'),
+      };
+    },
+    { signal },
+  );
+}
+
+export function revokeManagedCallerKey(
+  role: ManagementRole,
+  id: string,
+  expectedGeneration: string,
+  key: string,
+  signal?: AbortSignal,
+): Promise<ManagedCallerKeyRevocation> {
+  return decoded(
+    `${userPath(role, id)}/caller-key/revoke`,
+    (value) => {
+      const root = record(value, ['generation', 'revoked'], 'caller key revocation');
+      return {
+        generation: decimal(root.generation, 'caller key generation'),
+        revoked: boolean(root.revoked, 'caller key revoked'),
+      };
+    },
+    idempotentOptions(key, {
+      method: 'POST',
+      json: { expected_generation: expectedGeneration },
+      signal,
+    }),
   );
 }
