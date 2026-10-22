@@ -5,13 +5,43 @@ import { expect, test } from './test';
 
 const endpoints = Array.from({ length: 23 }, (_, index) => ({
   id: String(index + 1),
+  connection_id: '19',
   connector_type: 'openai-compatible',
-  base_url: `https://resources.example.test/${index + 1}/v1`,
+  configuration_type: 'openai-compatible',
+  native_services: ['chat_completions'],
+  rerank_format: '',
+  base_url: 'https://resources.example.test/' + (index + 1) + '/v1',
   origin: { kind: 'custom' },
-  note: `Needle resource ${index + 1}`,
+  note: 'Needle resource ' + (index + 1),
   enabled: true,
   revision: '1',
-  key_count: '12',
+  key_count: index === 18 ? '12' : '0',
+  created_at: 1_700_000_000,
+  updated_at: 1_700_000_001,
+}));
+const connections = Array.from({ length: 23 }, (_, index) => ({
+  id: String(index + 1),
+  name: 'Needle connection ' + (index + 1),
+  note: '',
+  revision: '1',
+  entry_count: index === 18 ? String(endpoints.length) : '0',
+  credential_count: index === 18 ? '12' : '0',
+  created_at: 1_700_000_000,
+  updated_at: 1_700_000_001,
+}));
+
+const keys = Array.from({ length: 12 }, (_, index) => ({
+  id: String(101 + index),
+  endpoint_id: '19',
+  display_head: 'sk-fixture',
+  display_tail: 'tail',
+  note: 'masked-tail key ' + (index + 1),
+  enabled: true,
+  force_store_false: false,
+  max_concurrency: 0,
+  max_rpm: 0,
+  suspension_state: 'security_processing',
+  revision: '1',
   created_at: 1_700_000_000,
   updated_at: 1_700_000_001,
 }));
@@ -28,73 +58,122 @@ for (const locale of ['en', 'zh'] as const) {
     }, locale);
     await mockPublicConfig(page, 'user');
     await mockRoleSession(page, 'user', 'user');
-    const searches: string[] = [];
+    const connectionSearches: URLSearchParams[] = [];
+    const entrySearches: URLSearchParams[] = [];
     const keySearches: URLSearchParams[] = [];
-    await page.route(`${USER_ORIGIN}/api/**`, async (route) => {
+    await page.route(USER_ORIGIN + '/api/**', async (route) => {
       const url = new URL(route.request().url());
+      const q = (url.searchParams.get('q') ?? '').toLowerCase();
       let body: unknown;
-      if (url.pathname === '/api/endpoint-create-options')
-        body = {
-          base_connector_types: ['openai-compatible', 'anthropic-compatible'],
-          mainstream_channels: [],
-        };
-      else if (url.pathname === '/api/endpoints') {
-        searches.push(url.search);
-        const rows = url.searchParams.get('q') === 'absent' ? [] : endpoints;
-        body = numberedPage(rows, url.searchParams);
-      } else if (/^\/api\/endpoints\/[0-9]+$/.test(url.pathname))
-        body = endpoints[Number(url.pathname.split('/').pop()) - 1];
-      else if (/^\/api\/endpoints\/[0-9]+\/keys$/.test(url.pathname)) {
+      if (url.pathname === '/api/connections') {
+        connectionSearches.push(url.searchParams);
+        body = numberedPage(
+          connections.filter((row) => (row.name + ' ' + row.note).toLowerCase().includes(q)),
+          url.searchParams,
+        );
+      } else if (/^\/api\/connections\/[0-9]+$/.test(url.pathname)) {
+        body = connections.find((row) => row.id === url.pathname.split('/').pop());
+      } else if (url.pathname === '/api/connections/19/entries') {
+        entrySearches.push(url.searchParams);
+        body = numberedPage(
+          endpoints.filter((row) => (row.note + ' ' + row.base_url).toLowerCase().includes(q)),
+          url.searchParams,
+        );
+      } else if (/^\/api\/endpoints\/[0-9]+$/.test(url.pathname)) {
+        body = endpoints.find((row) => row.id === url.pathname.split('/').pop());
+      } else if (/^\/api\/endpoints\/[0-9]+\/keys$/.test(url.pathname)) {
         keySearches.push(url.searchParams);
-        body = numberedPage([], url.searchParams);
+        const enabled = url.searchParams.get('enabled');
+        const security = url.searchParams.get('suspension_state');
+        const rows = keys.filter(
+          (key) =>
+            key.note.toLowerCase().includes(q) &&
+            (!enabled || String(key.enabled) === enabled) &&
+            (!security || key.suspension_state === security) &&
+            url.searchParams.get('donated') !== 'false',
+        );
+        body = numberedPage(rows, url.searchParams);
       } else {
         await route.fallback();
         return;
       }
       await route.fulfill({ json: body });
     });
-    await page.goto(`${USER_ORIGIN}/endpoints?page=2&page_size=10`);
-    const form = page.getByRole('form', {
-      name: locale === 'en' ? 'Resource filters' : '资源筛选',
-    });
-    await expect(page.getByText('Needle resource 11', { exact: true })).toBeVisible();
-    await form.getByRole('searchbox').fill(' Needle ');
-    await form
-      .getByRole('button', { name: locale === 'en' ? 'Search' : '搜索', exact: true })
-      .click();
-    await expect.poll(() => new URL(page.url()).searchParams.get('page')).toBe('1');
-    await expect.poll(() => new URL(page.url()).searchParams.get('q')).toBe('Needle');
-    await form.locator('summary').click();
-    await form
-      .getByRole('combobox', { name: locale === 'en' ? 'Source' : '来源', exact: true })
-      .selectOption('custom');
-    await expect.poll(() => new URL(page.url()).searchParams.get('q')).toBe('Needle');
-    await page
-      .getByRole('button', { name: locale === 'en' ? 'Next' : '下一页', exact: true })
-      .click();
-    await expect(page.getByText('Needle resource 11', { exact: true })).toBeVisible();
-    await page.locator('a[href="/endpoints/19"]').scrollIntoViewIfNeeded();
-    const before = await page.evaluate(() => scrollY);
-    await page.locator('a[href="/endpoints/19"]').click();
-    await expect(
-      page.getByRole('heading', {
-        name: 'Needle resource 19',
+    const searchLabel = locale === 'en' ? 'Search' : '搜索';
+    const connectionList = page.locator('section.nb-panel').filter({
+      has: page.getByRole('heading', {
+        name: locale === 'en' ? 'Your connections' : '我的连接',
         exact: true,
       }),
+    });
+    const entryList = page.locator('section.nb-panel').filter({
+      has: page.getByRole('heading', {
+        name: locale === 'en' ? 'Entries' : '入口',
+        exact: true,
+      }),
+    });
+    await page.goto(USER_ORIGIN + '/endpoints?connections_page=2&connections_page_size=10');
+    await expect(
+      page.getByRole('link', { name: 'Needle connection 11', exact: true }),
     ).toBeVisible();
-    await form.getByRole('searchbox').fill('masked-tail');
-    await form.locator('summary').click();
-    await form
-      .getByRole('button', { name: locale === 'en' ? 'Search' : '搜索', exact: true })
+    await connectionList.getByRole('searchbox').fill(' Needle ');
+    await connectionList.getByRole('button', { name: searchLabel, exact: true }).click();
+    await expect.poll(() => new URL(page.url()).searchParams.get('connections_page')).toBe('1');
+    await expect.poll(() => new URL(page.url()).searchParams.get('connections_q')).toBe('Needle');
+    await connectionList.getByRole('button', { name: '2', exact: true }).click();
+    await page.getByRole('link', { name: 'Needle connection 19', exact: true }).click();
+    await expect(
+      page.getByRole('heading', { name: 'Needle connection 19', exact: true }),
+    ).toBeVisible();
+    expect(new URL(page.url()).searchParams.get('connection_id')).toBe('19');
+    expect(new URL(page.url()).searchParams.get('connection_view')).toBe('entries');
+    await entryList.getByRole('searchbox').fill(' resource ');
+    await entryList.getByRole('button', { name: searchLabel, exact: true }).click();
+    await entryList
+      .getByRole('combobox', {
+        name: locale === 'en' ? 'Items per page' : '每页条数',
+      })
+      .selectOption('10');
+    await expect(page.getByText('Needle resource 1', { exact: true })).toBeVisible();
+    await entryList
+      .getByRole('button', {
+        name: locale === 'en' ? 'Next' : '下一页',
+        exact: true,
+      })
       .click();
-    await form
-      .getByRole('combobox', { name: locale === 'en' ? 'Enabled state' : '启用状态' })
+    await expect(page.getByText('Needle resource 11', { exact: true })).toBeVisible();
+    await expect
+      .poll(() => new URL(page.url()).searchParams.get('connection-entries_page'))
+      .toBe('2');
+    const entryReturnURL = page.url();
+    await page.locator('a[href="/endpoints/19"]').scrollIntoViewIfNeeded();
+    const before = await page.evaluate(() => scrollY);
+    expect(before).toBeGreaterThan(0);
+    await page.locator('a[href="/endpoints/19"]').click();
+    await expect(
+      page.getByRole('heading', { name: 'Needle resource 19', exact: true }),
+    ).toBeVisible();
+    const keyFilters = page.getByRole('form', {
+      name: locale === 'en' ? 'Resource filters' : '资源筛选',
+    });
+    await keyFilters.getByRole('searchbox').fill('masked-tail');
+    await keyFilters.locator('summary').click();
+    await keyFilters.getByRole('button', { name: searchLabel, exact: true }).click();
+    await keyFilters
+      .getByRole('combobox', {
+        name: locale === 'en' ? 'Enabled state' : '启用状态',
+      })
       .selectOption('true');
-    await form
-      .getByRole('combobox', { name: locale === 'en' ? 'Donated' : '已捐赠', exact: true })
+    await keyFilters
+      .getByRole('combobox', {
+        name: locale === 'en' ? 'Donated' : '已捐赠',
+        exact: true,
+      })
       .selectOption('true');
-    await form
-      .getByRole('combobox', { name: locale === 'en' ? 'Security status' : '安全状态' })
+    await keyFilters
+      .getByRole('combobox', {
+        name: locale === 'en' ? 'Security status' : '安全状态',
+      })
       .selectOption('security_processing');
     await expect
       .poll(() =>
@@ -108,44 +187,88 @@ for (const locale of ['en', 'zh'] as const) {
         ),
       )
       .toBe(true);
-    await page.getByRole('link', { name: locale === 'en' ? /My services/ : /我的服务/ }).click();
-    await expect.poll(() => new URL(page.url()).searchParams.get('page')).toBe('2');
-    await expect(form.locator('details')).toHaveAttribute('open', '');
-    expect(new URL(page.url()).searchParams.get('q')).toBe('Needle');
-    expect(new URL(page.url()).searchParams.get('source')).toBe('custom');
+    await page
+      .getByRole('link', {
+        name: locale === 'en' ? 'My services' : '我的服务',
+        exact: true,
+      })
+      .click();
+    await expect(page).toHaveURL(entryReturnURL);
+    await expect(entryList.getByRole('searchbox')).toHaveValue('resource');
+    expect(new URL(page.url()).searchParams.get('connections_q')).toBe('Needle');
+    expect(new URL(page.url()).searchParams.get('connections_page')).toBe('2');
+    expect(new URL(page.url()).searchParams.get('connection-entries_page_size')).toBe('10');
     await expect
       .poll(async () => Math.abs((await page.evaluate(() => scrollY)) - before))
       .toBeLessThan(100);
     await page.reload();
-    await expect(form.getByRole('searchbox')).toHaveValue('Needle');
-    await form.getByRole('searchbox').fill('absent');
-    await form
-      .getByRole('button', { name: locale === 'en' ? 'Search' : '搜索', exact: true })
-      .click();
+    await expect(entryList.getByRole('searchbox')).toHaveValue('resource');
+    await entryList.getByRole('searchbox').fill('absent');
+    await entryList.getByRole('button', { name: searchLabel, exact: true }).click();
     await expect(
-      page.getByText(locale === 'en' ? 'No matching resources' : '没有符合条件的资源', {
-        exact: true,
-      }),
+      entryList.getByText(
+        locale === 'en'
+          ? 'No matches. Adjust your search or filters.'
+          : '没有匹配结果，可调整搜索或筛选。',
+        { exact: true },
+      ),
     ).toBeVisible();
-    await form
-      .getByRole('button', { name: locale === 'en' ? 'Clear filters' : '清除筛选', exact: true })
-      .click();
+    await entryList.getByRole('searchbox').fill('');
+    await entryList.getByRole('button', { name: searchLabel, exact: true }).click();
     await expect(page.getByText('Needle resource 1', { exact: true })).toBeVisible();
+    await expect
+      .poll(() => new URL(page.url()).searchParams.get('connection-entries_q'))
+      .toBeNull();
+    await page
+      .getByRole('link', {
+        name: locale === 'en' ? 'Back to connections' : '返回连接列表',
+        exact: true,
+      })
+      .click();
+    await expect(connectionList.getByRole('searchbox')).toHaveValue('Needle');
+    await expect(
+      page.getByRole('link', { name: 'Needle connection 11', exact: true }),
+    ).toBeVisible();
+    expect(new URL(page.url()).searchParams.get('connection_id')).toBeNull();
+    expect(new URL(page.url()).searchParams.get('connections_page')).toBe('2');
+    expect(new URL(page.url()).searchParams.get('connections_page_size')).toBe('10');
+    await page.reload();
+    await expect(connectionList.getByRole('searchbox')).toHaveValue('Needle');
+    await connectionList.getByRole('searchbox').fill('absent');
+    await connectionList.getByRole('button', { name: searchLabel, exact: true }).click();
+    await expect(
+      connectionList.getByText(
+        locale === 'en'
+          ? 'No matches. Adjust your search or filters.'
+          : '没有匹配结果，可调整搜索或筛选。',
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await connectionList.getByRole('searchbox').fill('');
+    await connectionList.getByRole('button', { name: searchLabel, exact: true }).click();
+    await expect(
+      page.getByRole('link', { name: 'Needle connection 1', exact: true }),
+    ).toBeVisible();
     expect(
-      searches.some(
-        (value) =>
-          value.includes('q=Needle') && value.includes('source=custom') && value.includes('page=2'),
+      connectionSearches.some(
+        (p) => p.get('q') === 'Needle' && p.get('page') === '2' && p.get('page_size') === '10',
       ),
     ).toBe(true);
+    expect(
+      entrySearches.some(
+        (p) => p.get('q') === 'resource' && p.get('page') === '2' && p.get('page_size') === '10',
+      ),
+    ).toBe(true);
+    expect([...connectionSearches, ...entrySearches].every((p) => !p.has('source'))).toBe(true);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
     );
     await page.screenshot({
-      path: `../tmp/resource-filters-${locale}-320-dark.png`,
+      path: '../tmp/resource-filters-' + locale + '-320-dark.png',
       fullPage: true,
     });
-    await form.scrollIntoViewIfNeeded();
-    await page.screenshot({ path: `../tmp/resource-filters-${locale}-viewport.png` });
+    await connectionList.getByRole('search').scrollIntoViewIfNeeded();
+    await page.screenshot({ path: '../tmp/resource-filters-' + locale + '-viewport.png' });
     guard.assertNone();
   });
 }
