@@ -1859,8 +1859,41 @@ export function normalizeMainstreamChannelOption(value: unknown): MainstreamChan
 export function normalizeEndpointCreateOptions(value: unknown): EndpointCreateOptions {
   const result = normalizeLegacyEndpointCreateOptions(value);
   const source = asRecord(value, 'endpoint create options');
+  const matches = Object.hasOwn(source, 'matching_mainstream_entries')
+    ? boundedArray(
+        source.matching_mainstream_entries,
+        (value) => {
+          const match = responseRecord(
+            value,
+            ['channel_id', 'entry_id'],
+            [],
+            'mainstream entry match',
+          );
+          const channelID = opaqueID(match.channel_id, 'mch_', 'matched channel id');
+          const entryID = id(match.entry_id, 'matched entry id');
+          if (
+            !result.mainstream_channels.some(
+              (channel) =>
+                channel.id === channelID &&
+                channel.entries?.some((entry) => entry.id === entryID && entry.enabled),
+            )
+          )
+            invalid('mainstream entry match');
+          return { channel_id: channelID, entry_id: entryID };
+        },
+        'mainstream entry matches',
+        3200,
+      )
+    : undefined;
+  if (matches)
+    uniqueBy(
+      matches,
+      (match) => match.channel_id + ':' + match.entry_id,
+      'mainstream entry matches',
+    );
   return {
     ...result,
+    ...(matches === undefined ? {} : { matching_mainstream_entries: matches }),
     ...(Object.hasOwn(source, 'native_service_options')
       ? {
           native_service_options: boundedArray(

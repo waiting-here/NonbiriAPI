@@ -421,8 +421,11 @@ export async function getEndpoint(endpointId: string, signal?: AbortSignal): Pro
 
 export async function getEndpointCreateOptions(
   signal?: AbortSignal,
+  matchBaseURL?: string,
 ): Promise<EndpointCreateOptions> {
-  const response = await coreRequest('/api/endpoint-create-options', { signal });
+  const query =
+    matchBaseURL === undefined ? '' : '?' + new URLSearchParams({ match_base_url: matchBaseURL });
+  const response = await coreRequest('/api/endpoint-create-options' + query, { signal });
   expectedStatus(response.status, 200, 'endpoint creation options');
   return normalizeEndpointCreateOptions(response.payload);
 }
