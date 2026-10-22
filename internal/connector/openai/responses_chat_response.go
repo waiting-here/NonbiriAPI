@@ -12,6 +12,8 @@ type responseChatState struct {
 	created                                     int64
 	model                                       string
 	text, refusal                               string
+	reasoning                                   string
+	gatewayReasoning                            bool
 	calls                                       []responseChatCall
 	finish                                      string
 	usage                                       Usage
@@ -19,6 +21,8 @@ type responseChatState struct {
 	sequence                                    int
 	messageStarted, textStarted, refusalStarted bool
 	contentOrder                                []string
+	outputOrder                                 []string
+	reasoningStarted                            bool
 }
 
 func (s *responseChatState) clear() { clear(s.usageRaw); *s = responseChatState{} }
@@ -71,7 +75,11 @@ func (s *responseChatState) consume(raw []byte, stream bool) error {
 	if stream {
 		key = "delta"
 	}
-	message, ok := decisionObject(choice[key], "role", "content", "refusal", "tool_calls", "annotations")
+	allowed := []string{"role", "content", "refusal", "tool_calls", "annotations"}
+	if s.gatewayReasoning {
+		allowed = append(allowed, "reasoning_content")
+	}
+	message, ok := decisionObject(choice[key], allowed...)
 	if !ok {
 		return errInvalidUpstreamResponse
 	}
@@ -81,7 +89,11 @@ func (s *responseChatState) consume(raw []byte, stream bool) error {
 	if annotations := message["annotations"]; annotations != nil && !isJSONNull(annotations) && !bytes.Equal(annotations, []byte("[]")) {
 		return errInvalidUpstreamResponse
 	}
-	for name, dst := range map[string]*string{"content": &s.text, "refusal": &s.refusal} {
+	channels := map[string]*string{"content": &s.text, "refusal": &s.refusal}
+	if s.gatewayReasoning {
+		channels["reasoning_content"] = &s.reasoning
+	}
+	for name, dst := range channels {
 		if value := message[name]; value != nil && !isJSONNull(value) {
 			text, ok := decisionString(value, 0, int(DefaultMaxStreamBytes))
 			if !ok {
@@ -184,7 +196,37 @@ func (s *responseChatState) status() string {
 	}
 	return "in_progress"
 }
-func (s *responseChatState) messageID() string { return "msg_" + s.id }
+func (s *responseChatState) messageID() string   { return "msg_" + s.id }
+func (s *responseChatState) reasoningID() string { return "rs_" + s.id }
+func (s *responseChatState) reasoningItem() map[string]any {
+	return map[string]any{"id": s.reasoningID(), "type": "reasoning", "summary": []any{}, "content": []any{map[string]string{"type": "reasoning_text", "text": s.reasoning}}, "status": s.status()}
+}
+
+// Streaming output indices follow first publication. JSON has no delta order,
+// so its reasoning precedes the assistant message and correlated tool calls.
+func (s *responseChatState) outputKinds() []string {
+	if len(s.outputOrder) != 0 {
+		return s.outputOrder
+	}
+	order := []string{}
+	if s.reasoning != "" {
+		order = append(order, "reasoning")
+	}
+	if s.text != "" || s.refusal != "" || s.messageStarted {
+		order = append(order, "message")
+	}
+	return order
+}
+
+func (s *responseChatState) outputIndex(kind string) int {
+	for i, current := range s.outputOrder {
+		if current == kind {
+			return i
+		}
+	}
+	s.outputOrder = append(s.outputOrder, kind)
+	return len(s.outputOrder) - 1
+}
 func (s *responseChatState) content() []any {
 	out := []any{}
 	order := s.contentOrder
@@ -219,8 +261,12 @@ func (s *responseChatState) response(completed bool) map[string]any {
 	var incomplete any
 	if completed {
 		status = s.status()
-		if s.text != "" || s.refusal != "" || s.messageStarted {
-			output = append(output, s.message())
+		for _, kind := range s.outputKinds() {
+			if kind == "reasoning" {
+				output = append(output, s.reasoningItem())
+			} else {
+				output = append(output, s.message())
+			}
 		}
 		for i := range s.calls {
 			output = append(output, s.function(i))
