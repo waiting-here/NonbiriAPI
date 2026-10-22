@@ -13,13 +13,18 @@ import (
 )
 
 type EndpointInput struct {
-	ID, OwnerUserID int64
-	Type            connectorcontract.Type
-	BaseURL, Note   string
-	NativeServices  connectorcontract.NativeServiceSet
-	RerankFormat    connectorcontract.RerankFormat
-	Disabled        bool
-	At              int64
+	ID, OwnerUserID           int64
+	ConnectionID              int64
+	Type                      connectorcontract.Type
+	BaseURL, Note             string
+	NativeServices            connectorcontract.NativeServiceSet
+	RerankFormat              connectorcontract.RerankFormat
+	Disabled                  bool
+	At                        int64
+	MainstreamChannelID       *string
+	MainstreamChannelRevision *int64
+	MainstreamChannelName     *string
+	MainstreamChannelCategory *string
 }
 
 func InsertEndpointTx(ctx context.Context, tx *sql.Tx, in EndpointInput) (int64, error) {
@@ -34,12 +39,15 @@ func InsertEndpointTx(ctx context.Context, tx *sql.Tx, in EndpointInput) (int64,
 	if err := connectorcontract.ValidateNativeServices(in.Type, services, in.RerankFormat); err != nil {
 		return 0, err
 	}
-	var id any
+	var id, connection any
 	if in.ID > 0 {
 		id = in.ID
 	}
-	result, err := tx.ExecContext(ctx, `INSERT INTO endpoints(id,user_id,connector_type,base_url,note,enabled,native_service_mask,rerank_format,capability_origin,created_at,updated_at)
- VALUES(?,?,?,?,?,?,?,?,'legacy',?,?)`, id, in.OwnerUserID, string(in.Type), in.BaseURL, in.Note, !in.Disabled, services.Mask(), string(in.RerankFormat), in.At, in.At)
+	if in.ConnectionID != 0 {
+		connection = in.ConnectionID
+	}
+	result, err := tx.ExecContext(ctx, `INSERT INTO endpoints(id,user_id,connection_id,connector_type,base_url,note,enabled,native_service_mask,rerank_format,capability_origin,mainstream_channel_id,mainstream_channel_revision,mainstream_channel_name,mainstream_channel_category,created_at,updated_at)
+ VALUES(?,?,?,?,?,?,?,?,?,'legacy',?,?,?,?,?,?)`, id, in.OwnerUserID, connection, string(in.Type), in.BaseURL, in.Note, !in.Disabled, services.Mask(), string(in.RerankFormat), in.MainstreamChannelID, in.MainstreamChannelRevision, in.MainstreamChannelName, in.MainstreamChannelCategory, in.At, in.At)
 	if err != nil {
 		return 0, err
 	}

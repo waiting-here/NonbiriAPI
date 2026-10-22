@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
 )
 
 // seedDonationKeyFixture inserts one terminal donation-key tombstone whose
@@ -580,8 +582,19 @@ WHERE case_id=? AND endpoint_key_id IS NULL`, caseID).Scan(&ownerID); err != nil
 
 	// Deleting the account scrubs target identity but the terminal tombstone
 	// target stays adjudicable for the case's own lifecycle.
-	if _, err := environment.store.DB().Exec(`DELETE FROM users WHERE id=?`, owner.UserID); err != nil {
+	deletion, err := environment.store.DB().BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer deletion.Rollback()
+	if err := testseed.PrepareConnectionDeletionTx(context.Background(), deletion, owner.UserID, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := deletion.Exec(`DELETE FROM users WHERE id=?`, owner.UserID); err != nil {
 		t.Fatalf("delete account: %v", err)
+	}
+	if err := deletion.Commit(); err != nil {
+		t.Fatal(err)
 	}
 	if err := environment.store.DB().QueryRow(`SELECT owner_user_id FROM report_targets
 WHERE case_id=? AND endpoint_key_id IS NULL`, caseID).Scan(&ownerID); err != nil {

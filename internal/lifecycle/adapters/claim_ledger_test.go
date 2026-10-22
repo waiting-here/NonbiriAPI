@@ -13,11 +13,13 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
+	"github.com/waiting-here/NonbiriAPI/internal/routing"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
@@ -275,7 +277,7 @@ func TestClaimAndLedgerAdaptersKeepLateCompletionExternalAfterIdentityDeletion(t
 
 	seedTx := beginAdapterTx(t, fixture.store.DB())
 	user := seedAdapterUser(t, seedTx, "late-completion", 1_000)
-	candidate := seedAdapterCandidate(t, seedTx, fixture.vault, user.id, "late-completion")
+	candidate, modelID := seedAdapterCandidate(t, seedTx, fixture.vault, user.id, "late-completion")
 	if err := seedTx.Commit(); err != nil {
 		t.Fatal(err)
 	}
@@ -288,7 +290,7 @@ func TestClaimAndLedgerAdaptersKeepLateCompletionExternalAfterIdentityDeletion(t
 	}
 	handle, err := service.Claim(context.Background(), claim.ClaimInput{
 		RequestID: request.ID, ActorUserID: user.id, AttemptSeq: 1,
-		Purpose: claim.PurposeSelf, Candidate: candidate,
+		Purpose: claim.PurposeSelf, Candidate: candidate, PersonalModelID: modelID,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -304,6 +306,9 @@ func TestClaimAndLedgerAdaptersKeepLateCompletionExternalAfterIdentityDeletion(t
 	deleteRequest := capturedDeleteRequest(t, deleteTx, user.id, clock.Load(), lifecycle.DeleteSystem)
 	if finalizer, err := claimAdapter.PrepareDelete(context.Background(), deleteTx, deleteRequest); err != nil || finalizer != nil {
 		t.Fatalf("prepare claim handoff = (%v,%v)", finalizer, err)
+	}
+	if err := testseed.PrepareConnectionDeletionTx(context.Background(), deleteTx, user.id, clock.Load()); err != nil {
+		t.Fatal(err)
 	}
 	deletionID := mustAdapterID(t, "op_")
 	if err := ledgerAdapter.ZeroAndDeleteAccount(context.Background(), deleteTx, deleteRequest, deletionID); err != nil {
@@ -448,16 +453,12 @@ func seedAdapterCandidate(
 	vault *secret.Vault,
 	userID int64,
 	label string,
-) claim.Candidate {
+) (claim.Candidate, int64) {
 	t.Helper()
 	baseURL := "https://" + label + ".example.test/v1"
-	result, err := tx.Exec(`INSERT INTO endpoints(
-user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at)
-VALUES(?,'openai-compatible',?,'',1,1,?,?)`, userID, baseURL, adapterTestNow, adapterTestNow)
-	if err != nil {
-		t.Fatal(err)
-	}
-	endpointID, err := result.LastInsertId()
+	endpointID, err := testseed.InsertEndpointTx(t.Context(), tx, testseed.EndpointInput{
+		OwnerUserID: userID, Type: connectorcontract.TypeOpenAICompatible, BaseURL: baseURL, At: adapterTestNow,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -471,7 +472,7 @@ VALUES(?,'openai-compatible',?,'',1,1,?,?)`, userID, baseURL, adapterTestNow, ad
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err = tx.Exec(`INSERT INTO endpoint_key_secrets(
+	result, err := tx.Exec(`INSERT INTO endpoint_key_secrets(
 context_id,canonical_base_url,connector_type,encrypted_secret,created_at)
 VALUES(?,?,'openai-compatible',?,?)`, contextID, baseURL, envelope, adapterTestNow)
 	if err != nil {
@@ -483,22 +484,39 @@ VALUES(?,?,'openai-compatible',?,?)`, contextID, baseURL, envelope, adapterTestN
 	}
 	fingerprint := make([]byte, 32)
 	fingerprint[0] = 1
-	result, err = tx.Exec(`INSERT INTO endpoint_keys(
-endpoint_id,secret_ref_id,secret_fingerprint,display_head,display_tail,note,
-enabled,force_store_false,revision,created_at,updated_at)
-VALUES(?,?,?,'head','tail','',1,0,1,?,?)`, endpointID, secretID, fingerprint, adapterTestNow, adapterTestNow)
+	key, err := testseed.InsertEndpointKeyTx(t.Context(), tx, testseed.KeyInput{
+		EndpointID: endpointID, SecretRefID: secretID, Fingerprint: fingerprint,
+		DisplayHead: "head", DisplayTail: "tail", At: adapterTestNow,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	keyID, err := result.LastInsertId()
+	result, err = tx.Exec(`INSERT INTO models(user_id,provider,model,full_name,created_at,updated_at)
+VALUES(?,'public','model','public/model',?,?)`, userID, adapterTestNow, adapterTestNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	modelID, err := result.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding, err := testseed.InsertModelBindingTx(t.Context(), tx, testseed.BindingInput{
+		ModelID: modelID, KeyID: key.KeyID, UpstreamModelID: "provider/" + label, At: adapterTestNow,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return claim.Candidate{
-		EndpointID: endpointID, EndpointKeyID: keyID,
+		EndpointID: endpointID, EndpointKeyID: key.KeyID,
 		ConnectorType:    connectorcontract.TypeOpenAICompatible,
 		CanonicalBaseURL: baseURL, UpstreamModelID: "provider/" + label,
-	}
+		Authorization: routing.TargetAuthorization{
+			BindingID: binding.BindingID, TargetID: binding.TargetID, TargetRevision: 1,
+			CredentialID: key.CredentialID, CredentialVersionID: key.CredentialVersionID, CredentialVersion: 1,
+			GrantRevisionID: key.GrantRevisionID, GrantRevision: 1,
+			ConfiguredType: connectorcontract.TypeOpenAICompatible, NativeService: connectorcontract.NativeServiceChatCompletions,
+		},
+	}, modelID
 }
 
 func mustAdapterID(t *testing.T, prefix string) string {

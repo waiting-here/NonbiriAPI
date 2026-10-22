@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"testing"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
 )
 
@@ -20,7 +22,11 @@ func TestGatewayV4AccountDeletionRetainsAnonymousReportIdentity(t *testing.T) {
 		}
 	}
 	for _, user := range []int64{owner.id, other.id} {
-		exec(seed, `INSERT INTO endpoints(user_id,connector_type,base_url,created_at,updated_at) VALUES(?,'ai-sdk-gateway-v4','https://gateway.example/v1',1,1)`, user)
+		if _, err := testseed.InsertEndpointTx(t.Context(), seed, testseed.EndpointInput{
+			OwnerUserID: user, Type: connectorcontract.TypeAISDKGatewayV4, BaseURL: "https://gateway.example/v1", At: 1,
+		}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	caseID, targetID := mustAdapterID(t, "rpc_"), mustAdapterID(t, "rpt_")
 	exec(seed, `INSERT INTO report_cases(id,fingerprint,connector_type,canonical_base_url,status,progress_state,material_version,target_version,deadline,material_count,target_count,distinct_owner_count,created_at) VALUES(?,zeroblob(32),'ai-sdk-gateway-v4','https://gateway.example/v1','pending_review','complete',1,1,1000,0,0,0,1)`, caseID)
