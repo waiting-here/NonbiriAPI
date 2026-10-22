@@ -43,6 +43,16 @@ Existing entry IDs are retained when editing; save new entries before assigning
 model mappings to them. Updating a preset does not change existing destinations,
 expand grants or approve donations.
 
+While creating a custom entry, entering an address can show every matching
+available mainstream entry, including its protocol, native services, discovery
+suggestion and model mappings. Matching uses the complete normalized URL,
+including scheme, effective port and path, without contacting the provider.
+Choose **Use this preset** to select that entry alone. Compatible service choices
+are retained; if none match, choose the services to use. Switching back to
+**Custom** preserves the address, protocol, note and service choices. Saving
+remains a separate action. Empty or unavailable suggestions do not block custom
+creation, and adopting a preset does not attach credentials or approve donations.
+
 ## Credentials and donations
 
 Changing a secret creates a new immutable version. Personal grants and current

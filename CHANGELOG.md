@@ -17,6 +17,12 @@ Each version entry describes its source and compatibility boundary; a release ta
   review while preserving the existing donated-key budget and consumption.
 - Multi-entry mainstream presets with independent discovery suggestions and
   per-model entry mappings, shared by personal setup and donation workflows.
+- Custom-entry address suggestions list all matching available mainstream entries.
+  Explicit adoption selects one entry and compatible services while preserving
+  the custom draft.
+- Administrator and strictly higher-level steward CallerKey revocation from user
+  details, with generation checks and replay receipts that preserve later
+  replacements.
 - Direct HTTP/SSE Responses, legacy completions, image editing/variation, audio,
   moderation and rerank operations, plus exact model lookup. Persistent resource
   APIs and all WebSocket/Realtime/WebRTC interfaces remain outside this version.
@@ -91,6 +97,11 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Model settings and request adaptation have consistent entry points and header/body
   groups across personal and charity editors, with separate saves and existing
   permissions.
+- Authorized adaptation configuration reads expose saved unprotected fixed-header
+  and body values. Any response-protection marker hides the whole saved item;
+  mutation receipts, replay storage and safe exports retain their value-free shape.
+- Short charity-request errors explain the minimum-length requirement in both
+  interface languages, preserving their status, code, counts and accounting.
 - Strictly verified original caller-parameter errors leave a donated key's failure
   streak unchanged, without clearing it. HTTP 400/422, generic error types and
   message wording alone never establish this result; errors, diagnostics and
