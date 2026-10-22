@@ -115,9 +115,12 @@ func (s *Service) UsesPage(ctx context.Context, role reviewerRole, actorID, dona
 		args = append(args, access.scope.ModelID, now)
 	}
 	if filter.State != "" {
-		if filter.State == "pending" || filter.State == "approved" {
-			query += ` AND du.current_` + filter.State + `_revision_id IS NOT NULL`
-		} else {
+		switch filter.State {
+		case "pending":
+			query += ` AND du.current_pending_revision_id IS NOT NULL`
+		case "approved":
+			query += ` AND du.current_approved_revision_id IS NOT NULL`
+		default:
 			state := filter.State
 			if state == "withdrawn" {
 				state = "cancelled"

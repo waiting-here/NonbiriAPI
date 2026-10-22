@@ -526,7 +526,7 @@ func (r *Repository) addBindings(ctx context.Context, userID, modelID int64, mut
 	}
 	createdIDs := make([]string, 0, len(groups))
 	for index, targets := range groups {
-		result, err := tx.ExecContext(ctx, "INSERT INTO model_bindings(model_id,ord,created_at,updated_at) VALUES(?,?,?,?)", modelID, int(currentCount)+index, now, now)
+		result, err := tx.ExecContext(ctx, "INSERT INTO model_bindings(model_id,ord,created_at,updated_at) VALUES(?,?,?,?)", modelID, currentCount+int64(index), now, now)
 		if err != nil {
 			return MutationResult[BindingsResponse]{}, conflictOrError("create binding", err)
 		}
@@ -571,7 +571,7 @@ func (r *Repository) addBindings(ctx context.Context, userID, modelID int64, mut
 	if err != nil {
 		return MutationResult[BindingsResponse]{}, err
 	}
-	if err := recordResourceOperation(ctx, tx, userID, mutation, idempotency.ScopeControlMutation, "binding_batch", ResourceOperationResult{ModelID: model.ID, BindingIDs: bindingOperationIDs(bindings[int(currentCount):])}); err != nil {
+	if err := recordResourceOperation(ctx, tx, userID, mutation, idempotency.ScopeControlMutation, "binding_batch", ResourceOperationResult{ModelID: model.ID, BindingIDs: createdIDs}); err != nil {
 		return MutationResult[BindingsResponse]{}, err
 	}
 	if err := commitTx(tx, &committed); err != nil {

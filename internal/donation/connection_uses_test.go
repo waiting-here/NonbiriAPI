@@ -2,6 +2,7 @@ package donation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"testing"
@@ -68,6 +69,23 @@ func TestConnectionUsesPartialReviewPreservesHeaderAndBudgetMember(t *testing.T)
 	view, err := e.service.GetOwner(context.Background(), owner, id)
 	if err != nil || view.Status != "pending" || view.UseSummary.Approved != "1" || view.UseSummary.Pending != fmt.Sprint(len(uses)-1) || len(view.Keys) != 1 {
 		t.Fatalf("partial approval changed header/member: %+v, %v", view, err)
+	}
+	for _, tc := range []struct {
+		state string
+		count int
+	}{{"pending", len(uses) - 1}, {"approved", 1}, {"rejected", 0}} {
+		page, err := e.service.UsesPage(context.Background(), recurringOwner, owner, id, UseFilter{State: tc.state}, pagination.Default())
+		if err != nil || len(page.Data) != tc.count || page.Pagination.TotalItems != fmt.Sprint(tc.count) {
+			t.Fatalf("use filter %q: %+v, %v", tc.state, page, err)
+		}
+		for _, use := range page.Data {
+			if (use.ID == uses[0].ID) != (tc.state == "approved") {
+				t.Fatalf("use filter %q returned a mismatched approval", tc.state)
+			}
+		}
+	}
+	if _, err := e.service.UsesPage(context.Background(), recurringOwner, owner, id, UseFilter{State: "pending_revision_id IS NOT NULL OR 1=1--"}, pagination.Default()); !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("nonliteral use state accepted: %v", err)
 	}
 	var memberships, members int
 	if err := e.store.DB().QueryRow(`SELECT (SELECT count(*) FROM donation_key_memberships WHERE donation_id=?),(SELECT count(*) FROM donation_keys WHERE donation_id=?)`, id, id).Scan(&memberships, &members); err != nil || memberships != 1 || members != 1 {
