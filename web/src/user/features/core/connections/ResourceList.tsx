@@ -87,7 +87,7 @@ export function ConnectionResourceList<T>({
       pager.page,
       pager.pageSize,
     ],
-    queryFn: ({ signal }) => load(pager, q, signal),
+    queryFn: ({ signal }) => load({ page: pager.page, pageSize: pager.pageSize }, q, signal),
     placeholderData: (previous, previousQuery) =>
       previousQuery?.queryKey.at(-1) === pager.pageSize &&
       JSON.stringify(previousQuery.queryKey.slice(0, -2)) ===

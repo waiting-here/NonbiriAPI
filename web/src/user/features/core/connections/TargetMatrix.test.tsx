@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { useState } from 'react';
 import { screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
@@ -29,6 +31,51 @@ function Harness() {
   );
 }
 describe('ordered native target matrix', () => {
+  it('loads candidates through the normal API adapter and adds an explicit native target', async () => {
+    const fixture = JSON.parse(
+      readFileSync(
+        resolve(process.cwd(), '../internal/resources/testdata/binding_candidates.json'),
+        'utf8',
+      ),
+    );
+    const requests: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async (input) => {
+        requests.push(String(input));
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                ...fixture.data[0],
+                endpoint_key_id: '13',
+                upstream_model_id: 'vendor/c',
+                endpoint_note: 'Entry C',
+              },
+            ],
+            next_cursor: null,
+            pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
+          }),
+          { headers: { 'Content-Type': 'application/json' } },
+        );
+      }),
+    );
+    const view = await renderWithProviders(<Harness />, environment);
+    await view.user.click(screen.getByText('Add target', { exact: true }));
+    const table = await screen.findByRole('table', { name: 'Available targets' });
+    expect(requests).toEqual(['/api/models/31/binding-candidates?page=1&page_size=20']);
+    await view.user.click(within(table).getByRole('button', { name: 'Add target', exact: true }));
+    const added = screen.getByRole('group', { name: '3. Entry C' });
+    const chat = within(added).getByRole('checkbox', { name: 'Chat completions', exact: true });
+    expect(chat).not.toBeChecked();
+    await view.user.click(chat);
+    const rows = JSON.parse(screen.getByTestId('targets').textContent!) as MatrixTarget[];
+    expect(rows[2]).toMatchObject({
+      endpoint_key_id: '13',
+      upstream_model_id: 'vendor/c',
+      native_services: ['chat_completions'],
+    });
+  });
   it('applies an explicit bulk selection only to empty targets, preserving an exception and target order', async () => {
     vi.stubGlobal(
       'fetch',
@@ -37,7 +84,7 @@ describe('ordered native target matrix', () => {
           JSON.stringify({
             data: [],
             next_cursor: null,
-            pagination: { page: '1', page_size: 10, total_items: '0', total_pages: '1' },
+            pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
           }),
           { headers: { 'Content-Type': 'application/json' } },
         ),

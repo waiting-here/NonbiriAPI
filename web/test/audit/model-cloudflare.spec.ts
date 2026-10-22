@@ -415,18 +415,21 @@ test('shared connection preserves explicit OpenAI, Anthropic, and Gateway v4 gra
     const cases = [
       {
         type: 'openai-compatible',
+        label: 'OpenAI-compatible',
         url: 'https://api.example.com/v1',
         services: ['chat_completions', 'responses'],
         labels: [common.common.modelTypes.chat_completions, common.common.modelTypes.responses],
       },
       {
         type: 'anthropic-compatible',
+        label: 'Anthropic-compatible',
         url: 'https://api.example.com/anthropic',
         services: ['anthropic_messages'],
         labels: [native.anthropic_messages],
       },
       {
         type: 'ai-sdk-gateway-v4',
+        label: common.common.gatewayV4Name,
         url: 'https://api.example.com/gateway',
         services: ['gateway_text', 'images_generations', 'embeddings', 'rerank'],
         labels: [
@@ -442,7 +445,7 @@ test('shared connection preserves explicit OpenAI, Anthropic, and Gateway v4 gra
         await entryPanel.getByRole('button', { name: c.addAnotherEntry, exact: true }).click();
       await entryPanel
         .getByRole('combobox', { name: c.protocol, exact: true })
-        .selectOption(item.type);
+        .selectOption({ label: item.label });
       await entryPanel.getByLabel(c.entryURL, { exact: true }).fill(item.url);
       const scope = entryPanel.locator('form').first();
       for (const label of item.labels)
@@ -454,12 +457,21 @@ test('shared connection preserves explicit OpenAI, Anthropic, and Gateway v4 gra
       await scope.getByRole('button', { name: c.saveEntries, exact: true }).click();
       const endpoint = (await (await endpointSaved).json()) as {
         id: string;
+        configuration_type: string;
         native_services: string[];
       };
+      expect(endpoint.configuration_type).toBe(item.type);
       expect(endpoint.native_services.slice().sort()).toEqual(item.services.slice().sort());
       if (index === 0) {
-        await entryPanel.getByRole('radio', { name: c.newCredential, exact: true }).check();
-        await entryPanel.getByLabel(c.credentialName, { exact: true }).fill(name + ' shared');
+        const newCredential = entryPanel.getByRole('radio', {
+          name: c.newCredential,
+          exact: true,
+        });
+        await newCredential.locator('..').click();
+        await expect(newCredential).toBeChecked();
+        await entryPanel
+          .getByLabel(c.credentialName + ' ' + c.optional, { exact: true })
+          .fill(name + ' shared');
         const secret = entryPanel.getByLabel(c.secret, { exact: true });
         await secret.fill('synthetic-browser-shared-credential');
         await entryPanel.getByRole('checkbox', { name: c.ownership, exact: true }).check();
@@ -498,7 +510,9 @@ test('shared connection preserves explicit OpenAI, Anthropic, and Gateway v4 gra
     const sourcePanel = page
       .locator('.nb-expandable-panel')
       .filter({ has: page.getByRole('heading', { name: c.addSource, exact: true }) });
-    await sourcePanel.getByLabel(c.name, { exact: true }).fill(name + ' catalog');
+    await sourcePanel
+      .getByLabel(c.name + ' ' + c.optional, { exact: true })
+      .fill(name + ' catalog');
     await sourcePanel
       .getByLabel(c.discoveryBaseURL, { exact: true })
       .fill('https://api.example.com/v1');
@@ -615,7 +629,9 @@ test('shared connection preserves explicit OpenAI, Anthropic, and Gateway v4 gra
       true,
     );
     await page.screenshot({
-      path: info.outputPath('shared-native-targets.png'),
+      path: process.env.NONBIRI_VISUAL_DIR
+        ? resolve(process.env.NONBIRI_VISUAL_DIR, 'shared-native-targets.png')
+        : info.outputPath('shared-native-targets.png'),
       animations: 'disabled',
     });
   } finally {
