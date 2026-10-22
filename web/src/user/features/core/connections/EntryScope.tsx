@@ -82,7 +82,7 @@ function EntryScopeEditor({ accountId, endpoint }: { accountId: string; endpoint
           onRerankFormatChange={setFormat}
           disabled={locked}
         />
-        <Fold title={t('common.connections.moveConnection')}>
+        <Fold lazy title={t('common.connections.moveConnection')}>
           <ConnectionResourceList
             embedded
             accountId={accountId}
@@ -179,7 +179,7 @@ export function KeyCredentialScope({
   const credentialId = credential?.id ?? entryKey.credential_id;
   const version = credential?.credential_version ?? entryKey.credential_version;
   return (
-    <Fold title={t('common.connections.credentialAndServices')}>
+    <Fold lazy title={t('common.connections.credentialAndServices')}>
       <form
         className="nb-form"
         onSubmit={(event) => {
@@ -215,7 +215,7 @@ export function KeyCredentialScope({
           disabled={locked}
         />
         {endpoint.connection_id ? (
-          <Fold title={t('common.connections.changeCredential')}>
+          <Fold lazy title={t('common.connections.changeCredential')}>
             <CredentialPicker
               accountId={accountId}
               connectionId={endpoint.connection_id}
@@ -227,7 +227,7 @@ export function KeyCredentialScope({
             />
           </Fold>
         ) : null}
-        <Fold title={t('common.connections.discoveryOptional')}>
+        <Fold lazy title={t('common.connections.discoveryOptional')}>
           <p>
             {sourceChanged
               ? source?.name || source?.models_url || t('common.connections.noDiscovery')
