@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
-	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 )
 
 func TestEndpointBackoffHTTPDispatchClassifiesPaymentFailure(t *testing.T) {
@@ -29,8 +29,12 @@ func TestEndpointBackoffHTTPDispatchClassifiesPaymentFailure(t *testing.T) {
 		_, _ = io.WriteString(w, `{"error":{"message":"Insufficient credits","type":"invalid_request_error","code":"insufficient_credits"}}`)
 	})
 	f.exec(t, `UPDATE site_config SET value='0' WHERE key='charity_min_chars'`)
+	// This case proves the chat service's own backoff. Other native services
+	// in a multi-service target may legitimately remain available for conversion.
+	f.exec(t, `UPDATE charity_binding_targets SET native_service_mask=1`)
 	streak := db.EncodeU128(db.U128{15: 2})
-	f.exec(t, `UPDATE donation_keys SET failure_streak=? WHERE endpoint_key_id=?`, streak, f.keyID)
+	health := appFixtureServiceHealth(t, f.store, f.keyID, connectorcontract.NativeServiceChatCompletions, time.Now().Unix())
+	f.exec(t, `UPDATE donation_service_health SET failure_streak=? WHERE id=?`, streak, health)
 	var donationKey int64
 	if err := f.store.DB().QueryRow(`SELECT id FROM donation_keys WHERE endpoint_key_id=?`, f.keyID).Scan(&donationKey); err != nil {
 		t.Fatal(err)
@@ -41,16 +45,16 @@ func TestEndpointBackoffHTTPDispatchClassifiesPaymentFailure(t *testing.T) {
 	if status != http.StatusPaymentRequired || upstreamCalls.Load() != 1 {
 		t.Fatalf("payment response: %d %s, upstream calls %d", status, body, upstreamCalls.Load())
 	}
-	projection, err := smartbackoff.Read(t.Context(), f.store.DB(), donationKey, time.Now().Unix())
-	if err != nil || projection.Backoff == nil {
-		t.Fatal(projection, err)
+	projection := appFixtureServiceBackoff(t, f.store, health, time.Now().Unix())
+	if projection.Backoff == nil {
+		t.Fatal(projection)
 	}
 	backoff := projection.Backoff
 	if backoff.State != "waiting" || backoff.Source != "custom_rule" || backoff.RetryAt < started+900 || backoff.RetryAt > time.Now().Unix()+900 {
 		t.Fatalf("custom classification did not reach claim completion: %+v", backoff)
 	}
 	var actualStreak []byte
-	if err := f.store.DB().QueryRow(`SELECT failure_streak FROM donation_keys WHERE id=?`, donationKey).Scan(&actualStreak); err != nil || !bytes.Equal(actualStreak, streak) {
+	if err := f.store.DB().QueryRow(`SELECT failure_streak FROM donation_service_health WHERE id=?`, health).Scan(&actualStreak); err != nil || !bytes.Equal(actualStreak, streak) {
 		t.Fatal("custom match changed prior failure streak", actualStreak, err)
 	}
 	var revision, ruleIndex, upstreamStatus int

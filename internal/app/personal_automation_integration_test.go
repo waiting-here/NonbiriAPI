@@ -7,13 +7,16 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 )
 
 func TestPersonalAutomationProductionIngressAndRecovery(t *testing.T) {
 	f := newAutomationFixture(t)
 	f.exec(t, `UPDATE users SET level=5 WHERE id=?`, f.userID)
 	now := time.Now().Unix()
-	endpoint := f.exec(t, `INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at) VALUES(?,'openai-compatible','https://synthetic.invalid/v1','owner endpoint',1,1,?,?)`, f.userID, now, now)
+	endpoint := appFixtureEndpoint(t, f.store, testseed.EndpointInput{OwnerUserID: f.userID, Type: connectorcontract.TypeOpenAICompatible, BaseURL: "https://synthetic.invalid/v1", Note: "owner endpoint", At: now})
 	path := fmt.Sprintf("/api/automation/endpoints/%d/keys/batch-import", endpoint)
 	body := `{"ownership_confirmed":true,"keys":[{"secret":"root-personal-credential"}]}`
 	for _, test := range []struct {

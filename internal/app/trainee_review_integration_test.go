@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/donation"
 )
 
@@ -42,10 +44,10 @@ func TestTraineePendingReviewWithRealSession(t *testing.T) {
 	for index, decision := range []string{"approve", "reject"} {
 		exec(`UPDATE users SET level=1 WHERE id=?`, f.userID)
 		base := fmt.Sprintf("https://pending-%d.example.test/v1", index)
-		endpoint := exec(`INSERT INTO endpoints(user_id,connector_type,base_url,created_at,updated_at) VALUES(?,'openai-compatible',?,?,?)`, f.userID, base, f.now, f.now)
+		endpoint := appFixtureEndpoint(t, f.store, testseed.EndpointInput{OwnerUserID: f.userID, Type: connectorcontract.TypeOpenAICompatible, BaseURL: base, Note: "", At: f.now})
 		contextID, envelope := sealRootTestCredential(t)
 		secretID := exec(`INSERT INTO endpoint_key_secrets(context_id,canonical_base_url,connector_type,encrypted_secret,created_at) VALUES(?,?,'openai-compatible',?,?)`, contextID, base, envelope, f.now)
-		physical := exec(`INSERT INTO endpoint_keys(endpoint_id,secret_ref_id,secret_fingerprint,display_head,display_tail,created_at,updated_at) VALUES(?,?,randomblob(32),'head','tail',?,?)`, endpoint, secretID, f.now, f.now)
+		physical := appFixtureKey(t, f.store, testseed.KeyInput{EndpointID: endpoint, SecretRefID: secretID, Note: "", At: f.now}).KeyID
 		created := call(http.MethodPost, "/api/donations", fmt.Sprintf(`{"description":"Pending review","keys":[{"endpoint_key_id":"%d","expires_at":null}],"ownership_authorized":true,"discord_public_thanks":false}`, physical), fmt.Sprintf("pending-create-%016d", index))
 		require(created, http.StatusCreated)
 		var d donation.Donation

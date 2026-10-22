@@ -9,7 +9,9 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 )
 
@@ -160,7 +162,10 @@ func TestModelTypeRejectionPrecedesKeyClaimAndFailureAccounting(t *testing.T) {
 	f.exec(t, "UPDATE charity_models SET model_types=1")
 	streak := make([]byte, 16)
 	streak[15] = 2
-	f.exec(t, "UPDATE donation_keys SET failure_streak=?", streak)
+	health := []int64{appFixtureServiceHealth(t, f.store, f.keyID, connectorcontract.NativeServiceEmbeddings, time.Now().Unix()), appFixtureServiceHealth(t, f.store, f.keyID, connectorcontract.NativeServiceImagesGenerations, time.Now().Unix())}
+	for _, id := range health {
+		f.exec(t, "UPDATE donation_service_health SET failure_streak=? WHERE id=?", streak, id)
+	}
 	var before int
 	if err := f.store.DB().QueryRow("SELECT COUNT(*) FROM dispatch_claims").Scan(&before); err != nil {
 		t.Fatal(err)
@@ -181,10 +186,12 @@ func TestModelTypeRejectionPrecedesKeyClaimAndFailureAccounting(t *testing.T) {
 	if err := f.store.DB().QueryRow("SELECT COUNT(*) FROM dispatch_claims").Scan(&after); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.store.DB().QueryRow("SELECT failure_streak FROM donation_keys").Scan(&actual); err != nil {
-		t.Fatal(err)
-	}
-	if dispatched.Load() != 0 || after != before || string(actual) != string(streak) {
-		t.Fatalf("dispatched=%d claims=%d->%d streak=%x", dispatched.Load(), before, after, actual)
+	for _, id := range health {
+		if err := f.store.DB().QueryRow("SELECT failure_streak FROM donation_service_health WHERE id=?", id).Scan(&actual); err != nil {
+			t.Fatal(err)
+		}
+		if dispatched.Load() != 0 || after != before || string(actual) != string(streak) {
+			t.Fatalf("dispatched=%d claims=%d->%d health=%d streak=%x", dispatched.Load(), before, after, id, actual)
+		}
 	}
 }

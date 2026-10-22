@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/donation"
 )
@@ -55,8 +57,7 @@ func TestTraineeCharityMaintenanceRealSessionScopeAndRevokedReplay(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	exec(`INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at)
-VALUES(?,'Synthetic channel','subscription','openai-compatible','https://scope.example.test/v1',1,'active',1,?,?)`, channel, f.now, f.now)
+	appFixtureMainstreamChannel(t, f.store, channel, "Synthetic channel", "https://scope.example.test/v1", connectorcontract.TypeOpenAICompatible, f.now)
 
 	type donated struct {
 		id, revision, key string
@@ -64,14 +65,14 @@ VALUES(?,'Synthetic channel','subscription','openai-compatible','https://scope.e
 	}
 	seedDonation := func(mainstream bool) donated {
 		t.Helper()
-		var endpoint int64
+		input := testseed.EndpointInput{OwnerUserID: f.userID, Type: connectorcontract.TypeOpenAICompatible, BaseURL: "https://custom.example.test/v1", Note: "Private physical endpoint note", At: f.now}
 		if mainstream {
-			endpoint = exec(`INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,mainstream_channel_id,mainstream_channel_revision,mainstream_channel_name,mainstream_channel_category,created_at,updated_at)
-VALUES(?,'openai-compatible','https://scope.example.test/v1','Private physical endpoint note',1,1,?,1,'Synthetic channel','subscription',?,?)`, f.userID, channel, f.now, f.now)
-		} else {
-			endpoint = exec(`INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at)
-VALUES(?,'openai-compatible','https://custom.example.test/v1','Private physical endpoint note',1,1,?,?)`, f.userID, f.now, f.now)
+			revision, name, category := int64(1), "Synthetic channel", "subscription"
+			input.BaseURL = "https://scope.example.test/v1"
+			input.MainstreamChannelID, input.MainstreamChannelRevision = &channel, &revision
+			input.MainstreamChannelName, input.MainstreamChannelCategory = &name, &category
 		}
+		endpoint := appFixtureEndpoint(t, f.store, input)
 		base := "https://scope.example.test/v1"
 		if !mainstream {
 			base = "https://custom.example.test/v1"
@@ -79,10 +80,8 @@ VALUES(?,'openai-compatible','https://custom.example.test/v1','Private physical 
 		contextID, envelope := sealRootTestCredential(t)
 		secretID := exec(`INSERT INTO endpoint_key_secrets(context_id,canonical_base_url,connector_type,encrypted_secret,created_at)
 VALUES(?,?,'openai-compatible',?,?)`, contextID, base, envelope, f.now)
-		physical := exec(`INSERT INTO endpoint_keys(endpoint_id,secret_ref_id,secret_fingerprint,display_head,display_tail,note,enabled,force_store_false,revision,created_at,updated_at)
-VALUES(?,?,randomblob(32),'head','tail','Private physical key note',1,0,1,?,?)`, endpoint, secretID, f.now, f.now)
-		exec(`INSERT INTO model_pair_catalog(endpoint_key_id,normalized_model_id,manual_supports,updated_at)
-VALUES(?,'synthetic/maintained',1,?)`, physical, f.now)
+		physical := appFixtureKey(t, f.store, testseed.KeyInput{EndpointID: endpoint, SecretRefID: secretID, Note: "Private physical key note", At: f.now}).KeyID
+		appFixtureManualModel(t, f.store, physical, "synthetic/maintained", f.now)
 		created := call(http.MethodPost, "/api/donations", fmt.Sprintf(`{"description":"Scoped donor note","keys":[{"endpoint_key_id":"%d","expires_at":null}],"ownership_authorized":true,"discord_public_thanks":false}`, physical), nextKey(), false)
 		requireStatus(created, http.StatusCreated)
 		var value struct {
@@ -100,6 +99,17 @@ VALUES(?,'synthetic/maintained',1,?)`, physical, f.now)
 				t.Fatal(err)
 			}
 		}
+		catalogPath := "/admin/api/donations/" + value.ID + "/keys/" + value.Keys[0].ID + "/models"
+		catalog := call(http.MethodGet, catalogPath, "", "", true)
+		requireStatus(catalog, http.StatusOK)
+		var material struct {
+			ManualRevision string `json:"manual_catalog_revision"`
+		}
+		if err := json.Unmarshal(catalog.Body.Bytes(), &material); err != nil {
+			t.Fatal(err)
+		}
+		manual := call(http.MethodPost, catalogPath+"/manual", fmt.Sprintf(`{"expected_manual_catalog_revision":%q,"entries":["synthetic/maintained"]}`, material.ManualRevision), nextKey(), true)
+		requireStatus(manual, http.StatusOK)
 		return donated{id: value.ID, revision: value.Revision, key: value.Keys[0].ID, physical: physical}
 	}
 	mainKey, customKey := seedDonation(true), seedDonation(false)
@@ -111,8 +121,7 @@ VALUES('synthetic','outside-scope','[公益]synthetic/outside-scope',1,'per_requ
 		exec(`INSERT INTO charity_model_access(model_id,allowed_level_mask) VALUES(?,63)`, id)
 		exec(`INSERT INTO charity_routing_settings(model_id,revision,affinity_ttl_seconds) VALUES(?,1,300)`, id)
 	}
-	exec(`INSERT INTO charity_model_bindings(charity_model_id,donation_key_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at)
-VALUES(?,?,?,'synthetic/maintained',0,?,?)`, other, customKey.key, customKey.physical, f.now, f.now)
+	appFixtureBinding(t, f.store, testseed.BindingInput{ModelID: other, KeyID: mustAppFixtureID(t, customKey.key), UpstreamModelID: "synthetic/maintained", At: f.now}, true)
 	exec("UPDATE users SET level=5 WHERE id=?", f.userID)
 	queue := call(http.MethodGet, "/api/steward/donation-handling?page=1&page_size=10", "", "", false)
 	requireStatus(queue, http.StatusOK)

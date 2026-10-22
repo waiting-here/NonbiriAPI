@@ -23,6 +23,8 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
@@ -179,7 +181,7 @@ func newLoadFixture(t *testing.T, upstream *loadUpstream, configure ...func(*app
 		digest := sha256.Sum256([]byte(caller))
 		seed.exec(t, `INSERT INTO caller_keys(user_id,generation,key_hash,display_head,display_tail,key_created_at,updated_at) VALUES(?,1,?,?,?,?,?)`, id, digest[:], body[:4], body[len(body)-4:], now, now)
 		base := fmt.Sprintf("%s/pool%d/v1", u.URL, index%4)
-		endpoint := seed.exec(t, `INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at) VALUES(?,'openai-compatible',?,'Synthetic endpoint',1,1,?,?)`, id, base, now, now)
+		endpoint := appFixtureEndpoint(t, seed.store, testseed.EndpointInput{OwnerUserID: id, Type: connectorcontract.TypeOpenAICompatible, BaseURL: base, Note: "Synthetic endpoint", At: now})
 		contextID, fingerprint := make([]byte, 16), make([]byte, 32)
 		contextID[0], fingerprint[0] = byte(index), byte(index)
 		keyContext, err := secret.NewGenerationTwoEndpointKeyContext(contextID)
@@ -191,22 +193,29 @@ func newLoadFixture(t *testing.T, upstream *loadUpstream, configure ...func(*app
 			t.Fatal(err)
 		}
 		secretID := seed.exec(t, `INSERT INTO endpoint_key_secrets(context_id,canonical_base_url,connector_type,encrypted_secret,created_at) VALUES(?,?,'openai-compatible',?,?)`, contextID, base, envelope, now)
-		key := seed.exec(t, `INSERT INTO endpoint_keys(endpoint_id,secret_ref_id,secret_fingerprint,display_head,display_tail,note,enabled,force_store_false,revision,created_at,updated_at) VALUES(?,?,?,'head','tail','Synthetic key',1,1,1,?,?)`, endpoint, secretID, fingerprint, now, now)
-		seed.exec(t, `INSERT INTO model_discovery_evidence(endpoint_key_id,state,revision,safe_class,safe_diag,fetched_count) VALUES(?,'unknown',1,'none','',0)`, key)
-		seed.exec(t, `INSERT INTO model_pair_catalog(endpoint_key_id,normalized_model_id,automatic_supports,manual_supports,automatic_revision,pair_revision,updated_at) VALUES(?,'private-model',0,1,0,1,?)`, key, now)
+		key := appFixtureKey(t, seed.store, testseed.KeyInput{EndpointID: endpoint, SecretRefID: secretID, Fingerprint: fingerprint, Note: "Synthetic key", ForceStoreFalse: true, At: now}, vault).KeyID
+		appFixtureManualModel(t, seed.store, key, "private-model", now)
 		model := seed.exec(t, `INSERT INTO models(user_id,provider,model,full_name,route_strategy,silent_retry,flatten_tool_calls,revision,binding_revision,model_types,created_at,updated_at) VALUES(?,'provider','self','provider/self','ordered',0,1,1,1,3,?,?)`, id, now, now)
-		seed.exec(t, `INSERT INTO model_bindings(model_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at) VALUES(?,?,'private-model',0,?,?)`, model, key, now, now)
+		appFixtureBinding(t, seed.store, testseed.BindingInput{ModelID: model, KeyID: key, UpstreamModelID: "private-model", At: now}, false)
 		f.users = append(f.users, loadIdentity{id: id, caller: caller})
 	}
 	modelCount := 50
 	if os.Getenv("NONBIRI_LOAD_SCALE") == "production" {
 		modelCount = 220
 	}
+	var donatedKey, targetMask int64
+	if err := seed.store.DB().QueryRow(`SELECT donation_key_id,native_service_mask FROM charity_binding_targets ORDER BY id LIMIT 1`).Scan(&donatedKey, &targetMask); err != nil {
+		t.Fatal(err)
+	}
+	selected, err := connectorcontract.NativeServicesFromMask(targetMask)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for index := 2; index < modelCount; index++ {
 		model := seed.exec(t, `INSERT INTO charity_models(provider,model,full_name,enabled,pricing_mode,request_user_price,request_donor_reward,revision,binding_revision,model_types,created_at,updated_at) VALUES('synthetic',?,?,1,'per_request',3000,1250,1,1,3,?,?)`, fmt.Sprintf("model%d", index), fmt.Sprintf("[公益]synthetic/model%d", index), now, now)
 		seed.exec(t, `INSERT INTO charity_model_access(model_id,allowed_level_mask,public_description) VALUES(?,31,'')`, model)
 		seed.exec(t, `INSERT INTO charity_routing_settings(model_id,revision,affinity_ttl_seconds) VALUES(?,1,300)`, model)
-		seed.exec(t, `INSERT INTO charity_model_bindings(charity_model_id,donation_key_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at) SELECT ?,donation_key_id,endpoint_key_id,upstream_model_id,0,?,? FROM charity_model_bindings LIMIT 1`, model, now, now)
+		appFixtureBinding(t, seed.store, testseed.BindingInput{ModelID: model, KeyID: donatedKey, UpstreamModelID: "private-model", NativeServices: selected, At: now}, true)
 	}
 	if modelCount == 220 {
 		seedCatalogLoadHistory(t, seed, now)
