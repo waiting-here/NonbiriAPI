@@ -5,6 +5,8 @@ import (
 	"errors"
 	"sync"
 	"testing"
+
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
 )
 
 func TestIssueConcurrentObserveCloseAndAccountDeleteConverges(t *testing.T) {
@@ -175,6 +177,9 @@ func deleteIssueAccount(environment *issueTestEnvironment, userID int64) error {
 	}
 	defer tx.Rollback()
 	if err := environment.service.Sources().PrepareAccountDeletion(context.Background(), tx, userID, environment.clock.Load()); err != nil {
+		return err
+	}
+	if err := testseed.PrepareConnectionDeletionTx(context.Background(), tx, userID, environment.clock.Load()); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(context.Background(), `DELETE FROM users WHERE id=?`, userID); err != nil {

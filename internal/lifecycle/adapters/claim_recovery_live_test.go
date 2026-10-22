@@ -22,7 +22,7 @@ func TestClaimStartupRecoveryDoesNotCompleteLiveRequestsDuringMaintenance(t *tes
 	}
 	seed := beginAdapterTx(t, fixture.store.DB())
 	user := seedAdapterUser(t, seed, "live-request", 1_000)
-	candidate := seedAdapterCandidate(t, seed, fixture.vault, user.id, "live-request")
+	candidate, modelID := seedAdapterCandidate(t, seed, fixture.vault, user.id, "live-request")
 	if err := seed.Commit(); err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestClaimStartupRecoveryDoesNotCompleteLiveRequestsDuringMaintenance(t *tes
 		t.Fatal(err)
 	}
 	handle, err := service.Claim(ctx, claim.ClaimInput{
-		RequestID: request.ID, ActorUserID: user.id, AttemptSeq: 1, Purpose: claim.PurposeSelf, Candidate: candidate,
+		RequestID: request.ID, ActorUserID: user.id, AttemptSeq: 1, Purpose: claim.PurposeSelf, Candidate: candidate, PersonalModelID: modelID,
 	})
 	if err != nil {
 		t.Fatal(err)

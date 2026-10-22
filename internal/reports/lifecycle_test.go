@@ -6,6 +6,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
 )
 
 func addActiveReportHold(
@@ -91,10 +93,13 @@ WHERE scope='account' AND scope_hash=?`, rateHash[:]); got != 1 {
 		t.Fatal(err)
 	}
 	if err = environment.repository.DetachUserForDeletion(context.Background(), tx, owner.UserID, environment.clock.Load()); err == nil {
-		_, err = tx.Exec(`DELETE FROM users WHERE id=?`, owner.UserID)
+		err = testseed.PrepareConnectionDeletionTx(context.Background(), tx, owner.UserID, environment.clock.Load())
 	} else {
 		_ = tx.Rollback()
 		t.Fatal(err)
+	}
+	if err == nil {
+		_, err = tx.Exec(`DELETE FROM users WHERE id=?`, owner.UserID)
 	}
 	if err == nil {
 		err = tx.Commit()
@@ -166,6 +171,9 @@ func TestApprovalAndAccountDeletionLinearizeInBothOrders(t *testing.T) {
 		if err = environment.repository.DetachUserForDeletion(
 			context.Background(), tx, ownerUserID, environment.clock.Load(),
 		); err == nil {
+			err = testseed.PrepareConnectionDeletionTx(context.Background(), tx, ownerUserID, environment.clock.Load())
+		}
+		if err == nil {
 			_, err = tx.Exec(`DELETE FROM users WHERE id=?`, ownerUserID)
 		}
 		if err == nil {
@@ -249,10 +257,13 @@ func TestDetachAtDeadlineFinishesExpiredPendingIndexingWithoutPostDeadlineCaptur
 		t.Fatal(err)
 	}
 	if err = environment.repository.DetachUserForDeletion(context.Background(), tx, owner.UserID, deadline); err == nil {
-		_, err = tx.Exec(`DELETE FROM users WHERE id=?`, owner.UserID)
+		err = testseed.PrepareConnectionDeletionTx(context.Background(), tx, owner.UserID, deadline)
 	} else {
 		_ = tx.Rollback()
 		t.Fatal(err)
+	}
+	if err == nil {
+		_, err = tx.Exec(`DELETE FROM users WHERE id=?`, owner.UserID)
 	}
 	if err == nil {
 		err = tx.Commit()
