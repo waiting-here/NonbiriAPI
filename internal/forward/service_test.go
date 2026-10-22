@@ -1035,7 +1035,7 @@ func TestPreAcceptanceErrorClosedSet(t *testing.T) {
 		{
 			name: "charity content counts", charity: true,
 			err:      fmt.Errorf("policy: %w", &charityrouting.ContentTooShortError{Actual: 2, Minimum: 5}),
-			wantHTTP: http.StatusBadRequest, wantCode: httperr.CodeContentTooShort, wantText: "2 < 5",
+			wantHTTP: http.StatusBadRequest, wantCode: httperr.CodeContentTooShort, wantText: "[NonbiriAPI] charity content is too short: 2 < 5. Charity models require a minimum input length to protect shared resources.",
 		},
 		{name: "charity unavailable", charity: true, err: charityrouting.ErrUnavailable, wantHTTP: http.StatusServiceUnavailable, wantCode: httperr.CodeUnboundModel},
 		{

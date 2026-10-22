@@ -115,7 +115,7 @@ var chineseCodes = map[string]string{
 	CodeInsufficientCredits:     "积分不足。",
 	CodeFeatureDisabled:         "此功能暂未开放。",
 	CodeCharitySuspended:        "当前账号的公益调用已暂停。",
-	CodeContentTooShort:         "请求内容过短，请补充内容后重试。",
+	CodeContentTooShort:         "请求内容未达到公益模型的最低长度要求。为保护共享资源，请补充完整的请求内容后重试。",
 	CodeAlreadyCheckedIn:        "今天已经签到。",
 	CodeCheckinCapReached:       "当前积分已达到签到领取上限。",
 	CodeDebugDryRunIntercepted:  "调试已截取请求，未发送到上游。",
