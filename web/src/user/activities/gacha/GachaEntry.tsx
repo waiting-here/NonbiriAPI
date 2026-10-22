@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { ArtworkImage, ArtworkBadge, ArtworkUnavailable } from '@shared/artwork/ArtworkImage';
 import { Link } from 'react-router';
 import { Icon } from '@shared/components/Icon';
 import { formatDateTime } from '@shared/utils/datetime';
@@ -11,7 +12,12 @@ export function GachaEntry() {
   const english = i18n.language.startsWith('en');
   return (
     <section className="gacha-entry" aria-labelledby="gacha-entry-title">
-      <img src="/assets/gacha/covers/permanent.webp" alt="" loading="lazy" />
+      <ArtworkImage
+        artworkKey="cover:permanent"
+        src="/assets/gacha/covers/permanent.webp"
+        alt=""
+        loading="lazy"
+      />
       <div>
         <span>{english ? 'COLLECT A LITTLE JOY' : '收藏每一次心动'}</span>
         <h2 id="gacha-entry-title">{english ? 'The Gacha Simulator' : '真·抽卡模拟器'}</h2>
@@ -45,10 +51,17 @@ export function GachaPoolEntries({ pools }: { pools: readonly GachaPoolEntry[] }
         to={'/activities/gacha?pool=' + encodeURIComponent(pool.id)}
       >
         <div className="limited-entry__cover">
-          <img src={'/assets/gacha/covers/' + pool.cover + '.webp'} alt="" loading="lazy" />
+          <ArtworkImage
+            artworkKey={'cover:' + pool.cover}
+            src={'/assets/gacha/covers/' + pool.cover + '.webp'}
+            alt={name}
+            loading="lazy"
+          />
         </div>
         <div className="limited-entry__copy">
           <h3>{name}</h3>
+          <ArtworkBadge artworkKey={'cover:' + pool.cover} />
+          <ArtworkUnavailable artworkKey={'cover:' + pool.cover} />
           <p>
             {english ? 'Limited cards: ' : '可获取限定卡牌：'}
             {new Intl.ListFormat(english ? 'en' : 'zh', {

@@ -1,4 +1,5 @@
 import { artSourceSet } from './art-resolution';
+import { ArtworkImage, ArtworkBadge, ArtworkUnavailable } from '@shared/artwork/ArtworkImage';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@shared/components/ui/Button';
 import { Tabs } from '@shared/components/ui/Tabs';
@@ -561,7 +562,9 @@ export function GachaApp({
               className={'gacha-banner gacha-banner--' + pool.cover}
               aria-labelledby="gacha-pool-title"
             >
-              <img
+              <ArtworkImage
+                artworkKey={'cover:' + pool.cover}
+                fallbackSrc="/assets/gacha/covers/permanent.webp"
                 className="gacha-banner__back"
                 src={'/assets/gacha/covers/' + pool.cover + '.webp'}
                 srcSet={artSourceSet(
@@ -578,6 +581,8 @@ export function GachaApp({
                     ? t('常驻召唤 · 永久开放', 'STANDARD · ALWAYS OPEN')
                     : t('限定召唤 · 期间开放', 'LIMITED · FOR A MOMENT')}
                 </span>
+                <ArtworkBadge artworkKey={'cover:' + pool.cover} />
+                <ArtworkUnavailable artworkKey={'cover:' + pool.cover} />
                 <h2 id="gacha-pool-title">{english && pool.name_en ? pool.name_en : pool.name}</h2>
                 <p className="gacha-banner__tagline">
                   {pool.kind === 'permanent'
@@ -627,6 +632,7 @@ export function GachaApp({
                   aria-label={t('查看 ', 'Inspect ') + (english ? hero.name_en : hero.name)}
                 >
                   <Artwork key={hero.id} card={hero} full />
+                  <ArtworkBadge artworkKey={'card:' + hero.id} />
                   <span className="gacha-hero-card__rank">{hero.rarity}</span>
                   <span className="gacha-hero-card__name">
                     <small>{t(themeById[hero.theme].name, themeById[hero.theme].name_en)}</small>
@@ -645,7 +651,8 @@ export function GachaApp({
                       aria-label={c.character}
                       title={c.character}
                     >
-                      <img src={c.thumb} alt="" />
+                      <ArtworkImage artworkKey={'card:' + c.id} src={c.thumb} alt={c.character} />
+                      <ArtworkBadge artworkKey={'card:' + c.id} />
                     </button>
                   ))}
                 </div>
@@ -842,7 +849,7 @@ export function GachaApp({
             </div>
           ) : (
             <>
-              <CardTile card={card} english={english} onClick={() => {}} />
+              <CardTile card={card} english={english} showRating={false} onClick={() => {}} />
               <h3>{t('等待与你相遇', 'Waiting to meet you')}</h3>
               <p>
                 {t('获得后解锁完整卡面欣赏。', 'Collect this card to view the full illustration.')}
@@ -912,7 +919,8 @@ export function GachaApp({
           onClose={() => setGroup(null)}
           className="gacha-group-view"
         >
-          <img
+          <ArtworkImage
+            artworkKey={'illustration:' + group.id}
             src={group.art}
             srcSet={artSourceSet(group.art, ['l', 'm'].includes(group.id) ? 1600 : 1672)}
             sizes="90vw"

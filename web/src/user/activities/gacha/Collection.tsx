@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ArtworkImage, ArtworkBadge, ArtworkUnavailable } from '@shared/artwork/ArtworkImage';
 import { MomentPicker } from '../../appearance/MomentPicker';
 import { useOptionalAppearance } from '../../appearance/context';
 import { Button } from '@shared/components/ui/Button';
@@ -172,7 +173,8 @@ export function Collection({
                   onClick={() => viewGroup(theme)}
                   aria-label={t('欣赏 ' + theme.name, 'View ' + theme.name_en)}
                 >
-                  <img
+                  <ArtworkImage
+                    artworkKey={'illustration:' + theme.id}
                     src={theme.art}
                     alt=""
                     loading="lazy"
@@ -195,6 +197,8 @@ export function Collection({
                   )}
                 </button>
                 <div className="gacha-theme__body">
+                  <ArtworkBadge artworkKey={'illustration:' + theme.id} />
+                  <ArtworkUnavailable artworkKey={'illustration:' + theme.id} />
                   <span className="gacha-eyebrow">
                     {theme.rarity} ·{' '}
                     {theme.source === 'permanent'
@@ -222,7 +226,13 @@ export function Collection({
                         className={state.owned[c.id] ? 'is-owned' : ''}
                         onClick={() => inspect(c)}
                       >
-                        <img src={c.thumb} alt={c.character} loading="lazy" />
+                        <ArtworkImage
+                          artworkKey={'card:' + c.id}
+                          src={c.thumb}
+                          alt={c.character}
+                          loading="lazy"
+                        />
+                        <ArtworkBadge artworkKey={'card:' + c.id} />
                         {state.owned[c.id] && <Icon name="check" />}
                       </button>
                     ))}

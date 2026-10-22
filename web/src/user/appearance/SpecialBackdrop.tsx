@@ -3,6 +3,7 @@ import type { SpecialTheme } from '../activities/gacha/special-scenes';
 import { AmberStill } from './AmberStill';
 import { RomanceStill } from './RomanceStill';
 import { MirrorSeaStill } from './MirrorSeaStill';
+import { useArtworkPolicy } from '@shared/artwork/context';
 
 const settings = () => ({
   dark: document.documentElement.dataset.theme === 'dark',
@@ -10,6 +11,12 @@ const settings = () => ({
 });
 
 export function SpecialBackdrop({ theme }: { theme: SpecialTheme }) {
+  const policy = useArtworkPolicy();
+  return policy.allowed('appearance:' + theme) ? (
+    <PermittedSpecialBackdrop key={theme} theme={theme} />
+  ) : null;
+}
+function PermittedSpecialBackdrop({ theme }: { theme: SpecialTheme }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [quality, setQuality] = useState(settings);
   useEffect(() => {

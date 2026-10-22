@@ -1,4 +1,8 @@
 import { cloneElement, useState, type ReactElement, type ReactNode } from 'react';
+import { ArtworkImage, ArtworkBadge, ArtworkUnavailable } from '@shared/artwork/ArtworkImage';
+import { ConfiguredArtworkPolicy } from '@shared/artwork/policy';
+import { useArtworkPolicy } from '@shared/artwork/context';
+import { artworkCovers } from '@shared/artwork/catalog';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
@@ -54,15 +58,7 @@ function Field({
   );
 }
 type Draft = { pool: Pool; preset?: Preset };
-const covers = [
-  ['permanent', '永续智能', 'Perpetual intelligence'],
-  ['l', '星月神话', 'A Myth of Moon and Stars'],
-  ['m', '逍遥游', 'Wandering Free'],
-  ['h', '万象化身', 'Myriad incarnations'],
-  ['i', '夏夜花火', 'Summer fireworks'],
-  ['j', '童话剧场', 'Fairytale theatre'],
-  ['entry', '星光收藏册', 'Book of starlight'],
-];
+const covers = artworkCovers.map(({ id, name, name_en }) => [id, name, name_en]);
 function emptyPool(at: number): Pool {
   return {
     id: 'gp_' + operationKey(),
@@ -371,6 +367,7 @@ function PoolEditor({
   t: Copy;
 }) {
   const [pool, setPool] = useState(draft.pool);
+  const artworkPolicy = useArtworkPolicy();
   const [presetName, setPresetName] = useState(draft.preset?.name ?? draft.pool.name);
   const [start, setStart] = useState(() => createTimeDraft(draft.pool.starts_at));
   const [end, setEnd] = useState(() => createTimeDraft(draft.pool.ends_at));
@@ -390,6 +387,9 @@ function PoolEditor({
   const withTime = { ...pool, starts_at: startValue ?? null, ends_at: endValue ?? null };
   const valid =
     validRules(pool.rules) &&
+    (artworkPolicy.allowed('cover:' + pool.cover) ||
+      (pool.cover === draft.pool.cover &&
+        (draft.pool.revision > 0 || (draft.preset?.revision ?? 0) > 0))) &&
     !!pool.name.trim() &&
     pool.featured.length > 0 &&
     (!pool.published || (startValue != null && endValue != null && endValue > startValue));
@@ -463,9 +463,16 @@ function PoolEditor({
                 type="button"
                 key={id}
                 aria-pressed={pool.cover === id}
+                disabled={!artworkPolicy.allowed('cover:' + id)}
                 onClick={() => setPool({ ...pool, cover: id })}
               >
-                <img src={'/assets/gacha/covers/' + id + '.webp'} alt="" />
+                <ArtworkImage
+                  artworkKey={'cover:' + id}
+                  src={'/assets/gacha/covers/' + id + '.webp'}
+                  alt={t(zh, en)}
+                />
+                <ArtworkBadge artworkKey={'cover:' + id} />
+                <ArtworkUnavailable artworkKey={'cover:' + id} />
                 <span>{t(zh, en)}</span>
               </button>
             ))}
@@ -544,7 +551,13 @@ function PoolEditor({
                       .filter((card) => card.theme === theme.id)
                       .map((card) => (
                         <label key={card.id}>
-                          <img src={card.thumb} alt="" />
+                          <ArtworkImage
+                            artworkKey={'card:' + card.id}
+                            src={card.thumb}
+                            alt={t(card.name, card.name_en)}
+                          />
+                          <ArtworkBadge artworkKey={'card:' + card.id} />
+                          <ArtworkUnavailable artworkKey={'card:' + card.id} />
                           <span>
                             <input
                               type="checkbox"
@@ -603,6 +616,13 @@ function PoolEditor({
   );
 }
 export function GachaSettingsPage() {
+  return (
+    <ConfiguredArtworkPolicy path="/admin/api/config">
+      <GachaSettingsContent />
+    </ConfiguredArtworkPolicy>
+  );
+}
+function GachaSettingsContent() {
   const formatDateTime = useDateTimeFormatter();
   const { i18n } = useTranslation();
   const t: Copy = (zh, en) => (i18n.language.startsWith('en') ? en : zh);
@@ -733,9 +753,15 @@ export function GachaSettingsPage() {
                     .filter((p) => p.kind === 'limited')
                     .map((pool) => (
                       <article key={pool.id}>
-                        <img src={'/assets/gacha/covers/' + pool.cover + '.webp'} alt="" />
+                        <ArtworkImage
+                          artworkKey={'cover:' + pool.cover}
+                          src={'/assets/gacha/covers/' + pool.cover + '.webp'}
+                          alt={pool.name}
+                        />
                         <div>
                           <h3>{pool.name}</h3>
+                          <ArtworkBadge artworkKey={'cover:' + pool.cover} />
+                          <ArtworkUnavailable artworkKey={'cover:' + pool.cover} />
                           <p>
                             {!pool.published
                               ? t('草稿', 'Draft')
@@ -785,9 +811,15 @@ export function GachaSettingsPage() {
                 <div className="gacha-admin-pools">
                   {query.data.presets.map((preset) => (
                     <article key={preset.id}>
-                      <img src={'/assets/gacha/covers/' + preset.pool.cover + '.webp'} alt="" />
+                      <ArtworkImage
+                        artworkKey={'cover:' + preset.pool.cover}
+                        src={'/assets/gacha/covers/' + preset.pool.cover + '.webp'}
+                        alt={preset.name}
+                      />
                       <div>
                         <h3>{preset.name}</h3>
+                        <ArtworkBadge artworkKey={'cover:' + preset.pool.cover} />
+                        <ArtworkUnavailable artworkKey={'cover:' + preset.pool.cover} />
                         <p>
                           {preset.pool.featured.length} {t('张限定卡', 'limited cards')}
                         </p>

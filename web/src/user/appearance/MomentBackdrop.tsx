@@ -1,12 +1,18 @@
 import { useEffect, useRef } from 'react';
 import { artSourceSet } from '../activities/gacha/art-resolution';
 import { isRare } from '../activities/gacha/catalog';
-import { defaultMoment, momentByKey } from './moments';
+import { defaultMoment, momentByKey, momentArtworkKeys } from './moments';
+import { useArtworkPolicy } from '@shared/artwork/context';
 import { useArtworkHue } from './artwork-hue';
 import './moments.css';
 
 export function MomentBackdrop({ moment }: { moment?: string }) {
-  const artwork = momentByKey.get(moment ?? '') ?? defaultMoment;
+  const policy = useArtworkPolicy();
+  const preferred = momentByKey.get(moment ?? '') ?? defaultMoment;
+  const artwork = policy.allowed(momentArtworkKeys(preferred)) ? preferred : defaultMoment;
+  return <PermittedMomentBackdrop artwork={artwork} />;
+}
+function PermittedMomentBackdrop({ artwork }: { artwork: typeof defaultMoment }) {
   const card = artwork.card;
   const rare = !!card && isRare(card.rarity);
   const canvas = useRef<HTMLCanvasElement>(null);

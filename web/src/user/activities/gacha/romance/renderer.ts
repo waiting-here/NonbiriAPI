@@ -21,6 +21,7 @@ export async function renderRomance(
     ambient?: boolean;
   } = {},
 ) {
+  if (options.signal?.aborted) return () => {};
   const scene = await createScene(id, options.polished, options);
   if (options.signal?.aborted) {
     scene.dispose();
