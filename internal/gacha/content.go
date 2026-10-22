@@ -6,6 +6,8 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+
+	"github.com/waiting-here/NonbiriAPI/internal/artwork"
 )
 
 type presetCatalog struct {
@@ -67,11 +69,9 @@ func syncPresets(ctx context.Context, database *sql.DB, content presetCatalog) e
 }
 
 func poolCoverIDs() []string {
-	out := []string{"permanent", "entry"}
-	for _, theme := range catalog.Themes {
-		if theme.Source == "limited" {
-			out = append(out, theme.ID)
-		}
+	out := []string{}
+	for _, cover := range artwork.Covers() {
+		out = append(out, cover.ID)
 	}
 	return out
 }

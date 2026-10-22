@@ -1,0 +1,1444 @@
+{
+  "version": 1,
+  "artworks": {
+    "card:a-chatgpt": {
+      "rating": "general",
+      "scene": "illustration:a"
+    },
+    "card:a-claude": {
+      "rating": "general",
+      "scene": "illustration:a"
+    },
+    "card:a-glm": {
+      "rating": "general",
+      "scene": "illustration:a"
+    },
+    "card:a-deepseek": {
+      "rating": "general",
+      "scene": "illustration:a"
+    },
+    "card:a-gemini": {
+      "rating": "general",
+      "scene": "illustration:a"
+    },
+    "card:b-chatgpt": {
+      "rating": "general",
+      "scene": "illustration:b"
+    },
+    "card:b-claude": {
+      "rating": "general",
+      "scene": "illustration:b"
+    },
+    "card:b-glm": {
+      "rating": "general",
+      "scene": "illustration:b"
+    },
+    "card:b-deepseek": {
+      "rating": "general",
+      "scene": "illustration:b"
+    },
+    "card:b-gemini": {
+      "rating": "general",
+      "scene": "illustration:b"
+    },
+    "card:c-chatgpt": {
+      "rating": "general",
+      "scene": "illustration:c"
+    },
+    "card:c-claude": {
+      "rating": "general",
+      "scene": "illustration:c"
+    },
+    "card:c-glm": {
+      "rating": "general",
+      "scene": "illustration:c"
+    },
+    "card:c-deepseek": {
+      "rating": "general",
+      "scene": "illustration:c"
+    },
+    "card:c-gemini": {
+      "rating": "general",
+      "scene": "illustration:c"
+    },
+    "card:d-chatgpt": {
+      "rating": "general",
+      "scene": "illustration:d"
+    },
+    "card:d-claude": {
+      "rating": "general",
+      "scene": "illustration:d"
+    },
+    "card:d-glm": {
+      "rating": "general",
+      "scene": "illustration:d"
+    },
+    "card:d-deepseek": {
+      "rating": "general",
+      "scene": "illustration:d"
+    },
+    "card:d-gemini": {
+      "rating": "general",
+      "scene": "illustration:d"
+    },
+    "card:e-chatgpt": {
+      "rating": "general",
+      "scene": "illustration:e"
+    },
+    "card:e-claude": {
+      "rating": "general",
+      "scene": "illustration:e"
+    },
+    "card:e-glm": {
+      "rating": "general",
+      "scene": "illustration:e"
+    },
+    "card:e-deepseek": {
+      "rating": "general",
+      "scene": "illustration:e"
+    },
+    "card:e-gemini": {
+      "rating": "general",
+      "scene": "illustration:e"
+    },
+    "card:f-chatgpt": {
+      "rating": "general",
+      "scene": "illustration:f"
+    },
+    "card:f-claude": {
+      "rating": "general",
+      "scene": "illustration:f"
+    },
+    "card:f-glm": {
+      "rating": "general",
+      "scene": "illustration:f"
+    },
+    "card:f-deepseek": {
+      "rating": "general",
+      "scene": "illustration:f"
+    },
+    "card:f-gemini": {
+      "rating": "general",
+      "scene": "illustration:f"
+    },
+    "card:g-chatgpt": {
+      "rating": "general",
+      "scene": "illustration:g"
+    },
+    "card:g-claude": {
+      "rating": "general",
+      "scene": "illustration:g"
+    },
+    "card:g-glm": {
+      "rating": "general",
+      "scene": "illustration:g"
+    },
+    "card:g-deepseek": {
+      "rating": "general",
+      "scene": "illustration:g"
+    },
+    "card:g-gemini": {
+      "rating": "general",
+      "scene": "illustration:g"
+    },
+    "card:h-chatgpt": {
+      "rating": "general",
+      "scene": "illustration:h"
+    },
+    "card:h-claude": {
+      "rating": "general",
+      "scene": "illustration:h"
+    },
+    "card:h-glm": {
+      "rating": "general",
+      "scene": "illustration:h"
+    },
+    "card:h-deepseek": {
+      "rating": "general",
+      "scene": "illustration:h"
+    },
+    "card:h-gemini": {
+      "rating": "general",
+      "scene": "illustration:h"
+    },
+    "card:i-chatgpt": {
+      "rating": "general",
+      "scene": "illustration:i"
+    },
+    "card:i-claude": {
+      "rating": "general",
+      "scene": "illustration:i"
+    },
+    "card:i-glm": {
+      "rating": "general",
+      "scene": "illustration:i"
+    },
+    "card:i-deepseek": {
+      "rating": "general",
+      "scene": "illustration:i"
+    },
+    "card:i-gemini": {
+      "rating": "general",
+      "scene": "illustration:i"
+    },
+    "card:j-chatgpt": {
+      "rating": "general",
+      "scene": "illustration:j"
+    },
+    "card:j-claude": {
+      "rating": "general",
+      "scene": "illustration:j"
+    },
+    "card:j-glm": {
+      "rating": "general",
+      "scene": "illustration:j"
+    },
+    "card:j-deepseek": {
+      "rating": "general",
+      "scene": "illustration:j"
+    },
+    "card:j-gemini": {
+      "rating": "general",
+      "scene": "illustration:j"
+    },
+    "card:k-chatgpt": {
+      "rating": "general",
+      "scene": "illustration:k"
+    },
+    "card:k-claude": {
+      "rating": "general",
+      "scene": "illustration:k"
+    },
+    "card:k-glm": {
+      "rating": "general",
+      "scene": "illustration:k"
+    },
+    "card:k-deepseek": {
+      "rating": "general",
+      "scene": "illustration:k"
+    },
+    "card:k-gemini": {
+      "rating": "general",
+      "scene": "illustration:k"
+    },
+    "card:l-chatgpt": {
+      "rating": "general",
+      "scene": "illustration:l"
+    },
+    "card:m-deepseek": {
+      "rating": "general",
+      "scene": "illustration:m"
+    },
+    "card:n-gemini": {
+      "rating": "general",
+      "scene": "illustration:n"
+    },
+    "card:o-claude": {
+      "rating": "general",
+      "scene": "illustration:o"
+    },
+    "card:p-claude": {
+      "rating": "general",
+      "scene": "illustration:p"
+    },
+    "card:q-glm": {
+      "rating": "general",
+      "scene": "illustration:q"
+    },
+    "illustration:a": {
+      "rating": "general"
+    },
+    "illustration:b": {
+      "rating": "general"
+    },
+    "illustration:c": {
+      "rating": "general"
+    },
+    "illustration:d": {
+      "rating": "general"
+    },
+    "illustration:e": {
+      "rating": "general"
+    },
+    "illustration:f": {
+      "rating": "general"
+    },
+    "illustration:g": {
+      "rating": "general"
+    },
+    "illustration:h": {
+      "rating": "general"
+    },
+    "illustration:i": {
+      "rating": "general"
+    },
+    "illustration:j": {
+      "rating": "general"
+    },
+    "illustration:k": {
+      "rating": "general"
+    },
+    "illustration:l": {
+      "rating": "general"
+    },
+    "illustration:m": {
+      "rating": "general"
+    },
+    "illustration:n": {
+      "rating": "general"
+    },
+    "illustration:o": {
+      "rating": "general"
+    },
+    "illustration:p": {
+      "rating": "general"
+    },
+    "illustration:q": {
+      "rating": "general"
+    },
+    "cover:permanent": {
+      "rating": "general",
+      "name": "永续智能",
+      "name_en": "Perpetual intelligence"
+    },
+    "cover:entry": {
+      "rating": "general",
+      "name": "真·抽卡模拟器",
+      "name_en": "The Gacha Simulator"
+    },
+    "cover:h": {
+      "rating": "general",
+      "name": "万象化身",
+      "name_en": "Myriad forms"
+    },
+    "cover:i": {
+      "rating": "general",
+      "name": "夏夜花火",
+      "name_en": "Summer fireworks"
+    },
+    "cover:j": {
+      "rating": "general",
+      "name": "童话剧场",
+      "name_en": "Fairytale theatre"
+    },
+    "cover:l": {
+      "rating": "general",
+      "name": "星月神话",
+      "name_en": "A Myth of Moon and Stars"
+    },
+    "cover:m": {
+      "rating": "general",
+      "name": "逍遥游",
+      "name_en": "Wandering Free"
+    },
+    "cover:n": {
+      "rating": "general",
+      "name": "镜海相逢",
+      "name_en": "Across the Mirror Sea"
+    },
+    "cover:o": {
+      "rating": "general",
+      "name": "琥珀誓章",
+      "name_en": "Amber Vow"
+    },
+    "cover:p": {
+      "rating": "general",
+      "name": "天光与共",
+      "name_en": "Shared Daylight"
+    },
+    "cover:q": {
+      "rating": "general",
+      "name": "偷心预告",
+      "name_en": "A Notice to Steal Your Heart"
+    },
+    "appearance:default": {
+      "rating": "general"
+    },
+    "appearance:heart-moment": {
+      "rating": "general"
+    },
+    "appearance:celestial": {
+      "rating": "general",
+      "uses": [
+        "card:l-chatgpt"
+      ]
+    },
+    "appearance:wandering": {
+      "rating": "general",
+      "uses": [
+        "card:m-deepseek"
+      ]
+    },
+    "appearance:mirrorsea": {
+      "rating": "general",
+      "uses": [
+        "card:n-gemini"
+      ]
+    },
+    "appearance:amber": {
+      "rating": "general",
+      "uses": [
+        "card:o-claude"
+      ]
+    },
+    "appearance:elopement": {
+      "rating": "general",
+      "uses": [
+        "card:p-claude"
+      ]
+    },
+    "appearance:heart-thief": {
+      "rating": "general",
+      "uses": [
+        "card:q-glm"
+      ]
+    }
+  },
+  "assets": [
+    {
+      "owner": "appearance:amber",
+      "files": [
+        "appearances/amber-dark.webp",
+        "appearances/amber-light.webp",
+        "hires/appearances/amber-dark.webp",
+        "hires/appearances/amber-light.webp"
+      ],
+      "prefixes": [
+        "motion/o-claude/appearance-"
+      ]
+    },
+    {
+      "owner": "appearance:celestial",
+      "files": [
+        "appearances/celestial-dark.webp",
+        "appearances/celestial-light.webp",
+        "appearances/layers/celestial-dark-background.webp",
+        "appearances/layers/celestial-dark-closed.webp",
+        "appearances/layers/celestial-dark-foreground.webp",
+        "appearances/layers/celestial-dark-hero.webp",
+        "appearances/layers/celestial-light-background.webp",
+        "appearances/layers/celestial-light-closed.webp",
+        "appearances/layers/celestial-light-clouds.webp",
+        "appearances/layers/celestial-light-foreground.webp",
+        "appearances/layers/celestial-light-hero.webp",
+        "appearances/layers/hires/celestial-dark-background.webp",
+        "appearances/layers/hires/celestial-dark-closed.webp",
+        "appearances/layers/hires/celestial-dark-hero.webp",
+        "appearances/layers/hires/celestial-light-background.webp",
+        "appearances/layers/hires/celestial-light-closed.webp",
+        "appearances/layers/hires/celestial-light-hero.webp",
+        "hires/appearances/celestial-dark.webp",
+        "hires/appearances/celestial-light.webp"
+      ]
+    },
+    {
+      "owner": "appearance:elopement",
+      "files": [
+        "appearances/elopement-dark.webp",
+        "appearances/elopement-light.webp",
+        "hires/appearances/elopement-dark.webp",
+        "hires/appearances/elopement-light.webp"
+      ],
+      "prefixes": [
+        "motion/p-claude/appearance-"
+      ]
+    },
+    {
+      "owner": "appearance:heart-thief",
+      "files": [
+        "appearances/heart-thief-dark.webp",
+        "appearances/heart-thief-light.webp",
+        "hires/appearances/heart-thief-dark.webp",
+        "hires/appearances/heart-thief-light.webp"
+      ],
+      "prefixes": [
+        "motion/q-glm/appearance-"
+      ]
+    },
+    {
+      "owner": "appearance:default",
+      "files": [
+        "appearances/layers/cloud.webp",
+        "appearances/layers/crescent.webp",
+        "appearances/layers/earth.webp",
+        "appearances/layers/hires/cloud.webp",
+        "appearances/layers/hires/crescent.webp",
+        "appearances/layers/hires/earth.webp",
+        "appearances/layers/hires/moon.webp",
+        "appearances/layers/hires/whale.webp",
+        "appearances/layers/moon.webp",
+        "appearances/layers/whale.webp"
+      ]
+    },
+    {
+      "owner": "appearance:wandering",
+      "files": [
+        "appearances/layers/hires/wandering-dark-background.webp",
+        "appearances/layers/hires/wandering-dark-closed.webp",
+        "appearances/layers/hires/wandering-dark-hero.webp",
+        "appearances/layers/hires/wandering-light-background.webp",
+        "appearances/layers/hires/wandering-light-closed.webp",
+        "appearances/layers/hires/wandering-light-hero.webp",
+        "appearances/layers/wandering-dark-background.webp",
+        "appearances/layers/wandering-dark-closed.webp",
+        "appearances/layers/wandering-dark-hero.webp",
+        "appearances/layers/wandering-light-background.webp",
+        "appearances/layers/wandering-light-closed.webp",
+        "appearances/layers/wandering-light-hero.webp",
+        "appearances/wandering-dark.webp",
+        "appearances/wandering-light.webp",
+        "hires/appearances/wandering-dark.webp",
+        "hires/appearances/wandering-light.webp"
+      ]
+    },
+    {
+      "owner": "appearance:mirrorsea",
+      "files": [
+        "appearances/mirrorsea-dark.webp",
+        "appearances/mirrorsea-light.webp",
+        "hires/appearances/mirrorsea-dark.webp",
+        "hires/appearances/mirrorsea-light.webp"
+      ],
+      "prefixes": [
+        "hires/motion/n-gemini/appearance-",
+        "motion/n-gemini/appearance-"
+      ]
+    },
+    {
+      "owner": "illustration:a",
+      "files": [
+        "backgrounds/a.webp",
+        "groups/a.webp",
+        "hires/backgrounds/a.webp",
+        "hires/groups/a.webp",
+        "hires/layers/groups/a.webp",
+        "layers/groups/a.webp"
+      ]
+    },
+    {
+      "owner": "illustration:b",
+      "files": [
+        "backgrounds/b.webp",
+        "groups/b.webp",
+        "hires/backgrounds/b.webp",
+        "hires/groups/b.webp",
+        "hires/layers/groups/b.webp",
+        "layers/groups/b.webp"
+      ]
+    },
+    {
+      "owner": "illustration:c",
+      "files": [
+        "backgrounds/c.webp",
+        "groups/c.webp",
+        "hires/backgrounds/c.webp",
+        "hires/groups/c.webp",
+        "hires/layers/groups/c.webp",
+        "layers/groups/c.webp"
+      ]
+    },
+    {
+      "owner": "cover:entry",
+      "files": [
+        "backgrounds/covers/entry.webp",
+        "covers/entry.webp",
+        "hires/backgrounds/covers/entry.webp",
+        "hires/covers/entry.webp",
+        "hires/layers/covers/entry.webp",
+        "layers/covers/entry.webp"
+      ]
+    },
+    {
+      "owner": "cover:h",
+      "files": [
+        "backgrounds/covers/h.webp",
+        "covers/h.webp",
+        "hires/backgrounds/covers/h.webp",
+        "hires/covers/h.webp",
+        "hires/layers/covers/h.webp",
+        "layers/covers/h.webp"
+      ]
+    },
+    {
+      "owner": "cover:i",
+      "files": [
+        "backgrounds/covers/i.webp",
+        "covers/i.webp",
+        "hires/backgrounds/covers/i.webp",
+        "hires/covers/i.webp",
+        "hires/layers/covers/i.webp",
+        "layers/covers/i.webp"
+      ]
+    },
+    {
+      "owner": "cover:j",
+      "files": [
+        "backgrounds/covers/j.webp",
+        "covers/j.webp",
+        "hires/backgrounds/covers/j.webp",
+        "hires/covers/j.webp",
+        "hires/layers/covers/j.webp",
+        "layers/covers/j.webp"
+      ]
+    },
+    {
+      "owner": "cover:l",
+      "files": [
+        "backgrounds/covers/l.webp",
+        "covers/l.webp",
+        "hires/backgrounds/covers/l.webp",
+        "hires/covers/l.webp",
+        "hires/layers/covers/l.webp",
+        "layers/covers/l.webp"
+      ]
+    },
+    {
+      "owner": "cover:m",
+      "files": [
+        "backgrounds/covers/m.webp",
+        "covers/m.webp",
+        "hires/backgrounds/covers/m.webp",
+        "hires/covers/m.webp",
+        "hires/layers/covers/m.webp",
+        "layers/covers/m.webp"
+      ]
+    },
+    {
+      "owner": "cover:permanent",
+      "files": [
+        "backgrounds/covers/permanent.webp",
+        "covers/permanent.webp",
+        "hires/backgrounds/covers/permanent.webp",
+        "hires/covers/permanent.webp",
+        "hires/layers/covers/permanent.webp",
+        "layers/covers/permanent.webp"
+      ]
+    },
+    {
+      "owner": "illustration:d",
+      "files": [
+        "backgrounds/d.webp",
+        "groups/d.webp",
+        "hires/backgrounds/d.webp",
+        "hires/groups/d.webp",
+        "hires/layers/groups/d.webp",
+        "layers/groups/d.webp"
+      ]
+    },
+    {
+      "owner": "illustration:e",
+      "files": [
+        "backgrounds/e.webp",
+        "groups/e.webp",
+        "hires/backgrounds/e.webp",
+        "hires/groups/e.webp",
+        "hires/layers/groups/e.webp",
+        "layers/groups/e.webp"
+      ]
+    },
+    {
+      "owner": "illustration:f",
+      "files": [
+        "backgrounds/f.webp",
+        "groups/f.webp",
+        "hires/backgrounds/f.webp",
+        "hires/groups/f.webp",
+        "hires/layers/groups/f.webp",
+        "layers/groups/f.webp"
+      ]
+    },
+    {
+      "owner": "illustration:g",
+      "files": [
+        "backgrounds/g.webp",
+        "groups/g.webp",
+        "hires/backgrounds/g.webp",
+        "hires/groups/g.webp",
+        "hires/layers/groups/g.webp",
+        "layers/groups/g.webp"
+      ]
+    },
+    {
+      "owner": "illustration:h",
+      "files": [
+        "backgrounds/h.webp",
+        "groups/h.webp",
+        "hires/backgrounds/h.webp",
+        "hires/groups/h.webp",
+        "hires/layers/groups/h.webp",
+        "layers/groups/h.webp"
+      ]
+    },
+    {
+      "owner": "illustration:i",
+      "files": [
+        "backgrounds/i.webp",
+        "groups/i.webp",
+        "hires/backgrounds/i.webp",
+        "hires/groups/i.webp",
+        "hires/layers/groups/i.webp",
+        "layers/groups/i.webp"
+      ]
+    },
+    {
+      "owner": "illustration:j",
+      "files": [
+        "backgrounds/j.webp",
+        "groups/j.webp",
+        "hires/backgrounds/j.webp",
+        "hires/groups/j.webp",
+        "hires/layers/groups/j.webp",
+        "layers/groups/j.webp"
+      ]
+    },
+    {
+      "owner": "illustration:k",
+      "files": [
+        "backgrounds/k.webp",
+        "groups/k.webp",
+        "hires/backgrounds/k.webp",
+        "hires/groups/k.webp",
+        "hires/layers/groups/k.webp",
+        "layers/groups/k.webp"
+      ]
+    },
+    {
+      "owner": "illustration:l",
+      "files": [
+        "backgrounds/l.webp",
+        "groups/l.webp",
+        "hires/backgrounds/l.webp",
+        "hires/groups/l.webp",
+        "hires/layers/groups/l.webp",
+        "layers/groups/l.webp"
+      ]
+    },
+    {
+      "owner": "illustration:m",
+      "files": [
+        "backgrounds/m.webp",
+        "groups/m.webp",
+        "hires/backgrounds/m.webp",
+        "hires/groups/m.webp",
+        "hires/layers/groups/m.webp",
+        "layers/groups/m.webp"
+      ]
+    },
+    {
+      "owner": "illustration:n",
+      "files": [
+        "backgrounds/n.webp",
+        "groups/n.webp",
+        "hires/backgrounds/n.webp",
+        "hires/groups/n.webp"
+      ]
+    },
+    {
+      "owner": "illustration:o",
+      "files": [
+        "backgrounds/o.webp",
+        "groups/o.webp",
+        "hires/backgrounds/o.webp",
+        "hires/groups/o.webp"
+      ]
+    },
+    {
+      "owner": "illustration:p",
+      "files": [
+        "backgrounds/p.webp",
+        "groups/p.webp",
+        "hires/backgrounds/p.webp",
+        "hires/groups/p.webp"
+      ]
+    },
+    {
+      "owner": "illustration:q",
+      "files": [
+        "backgrounds/q.webp",
+        "groups/q.webp",
+        "hires/backgrounds/q.webp",
+        "hires/groups/q.webp"
+      ]
+    },
+    {
+      "owner": "card:a-chatgpt",
+      "files": [
+        "cards/a-chatgpt.webp",
+        "hires/cards/a-chatgpt.webp",
+        "hires/layers/a-chatgpt.webp",
+        "layers/a-chatgpt.webp",
+        "thumbs/a-chatgpt.webp"
+      ]
+    },
+    {
+      "owner": "card:a-claude",
+      "files": [
+        "cards/a-claude.webp",
+        "hires/cards/a-claude.webp",
+        "hires/layers/a-claude.webp",
+        "layers/a-claude.webp",
+        "thumbs/a-claude.webp"
+      ]
+    },
+    {
+      "owner": "card:a-deepseek",
+      "files": [
+        "cards/a-deepseek.webp",
+        "hires/cards/a-deepseek.webp",
+        "hires/layers/a-deepseek.webp",
+        "layers/a-deepseek.webp",
+        "thumbs/a-deepseek.webp"
+      ]
+    },
+    {
+      "owner": "card:a-gemini",
+      "files": [
+        "cards/a-gemini.webp",
+        "hires/cards/a-gemini.webp",
+        "hires/layers/a-gemini.webp",
+        "layers/a-gemini.webp",
+        "thumbs/a-gemini.webp"
+      ]
+    },
+    {
+      "owner": "card:a-glm",
+      "files": [
+        "cards/a-glm.webp",
+        "hires/cards/a-glm.webp",
+        "hires/layers/a-glm.webp",
+        "layers/a-glm.webp",
+        "thumbs/a-glm.webp"
+      ]
+    },
+    {
+      "owner": "card:b-chatgpt",
+      "files": [
+        "cards/b-chatgpt.webp",
+        "hires/cards/b-chatgpt.webp",
+        "hires/layers/b-chatgpt.webp",
+        "layers/b-chatgpt.webp",
+        "thumbs/b-chatgpt.webp"
+      ]
+    },
+    {
+      "owner": "card:b-claude",
+      "files": [
+        "cards/b-claude.webp",
+        "hires/cards/b-claude.webp",
+        "hires/layers/b-claude.webp",
+        "layers/b-claude.webp",
+        "thumbs/b-claude.webp"
+      ]
+    },
+    {
+      "owner": "card:b-deepseek",
+      "files": [
+        "cards/b-deepseek.webp",
+        "hires/cards/b-deepseek.webp",
+        "hires/layers/b-deepseek.webp",
+        "layers/b-deepseek.webp",
+        "thumbs/b-deepseek.webp"
+      ]
+    },
+    {
+      "owner": "card:b-gemini",
+      "files": [
+        "cards/b-gemini.webp",
+        "hires/cards/b-gemini.webp",
+        "hires/layers/b-gemini.webp",
+        "layers/b-gemini.webp",
+        "thumbs/b-gemini.webp"
+      ]
+    },
+    {
+      "owner": "card:b-glm",
+      "files": [
+        "cards/b-glm.webp",
+        "hires/cards/b-glm.webp",
+        "hires/layers/b-glm.webp",
+        "layers/b-glm.webp",
+        "thumbs/b-glm.webp"
+      ]
+    },
+    {
+      "owner": "card:c-chatgpt",
+      "files": [
+        "cards/c-chatgpt.webp",
+        "hires/cards/c-chatgpt.webp",
+        "hires/layers/c-chatgpt.webp",
+        "layers/c-chatgpt.webp",
+        "thumbs/c-chatgpt.webp"
+      ]
+    },
+    {
+      "owner": "card:c-claude",
+      "files": [
+        "cards/c-claude.webp",
+        "hires/cards/c-claude.webp",
+        "hires/layers/c-claude.webp",
+        "layers/c-claude.webp",
+        "thumbs/c-claude.webp"
+      ]
+    },
+    {
+      "owner": "card:c-deepseek",
+      "files": [
+        "cards/c-deepseek.webp",
+        "hires/cards/c-deepseek.webp",
+        "hires/layers/c-deepseek.webp",
+        "layers/c-deepseek.webp",
+        "thumbs/c-deepseek.webp"
+      ]
+    },
+    {
+      "owner": "card:c-gemini",
+      "files": [
+        "cards/c-gemini.webp",
+        "hires/cards/c-gemini.webp",
+        "hires/layers/c-gemini.webp",
+        "layers/c-gemini.webp",
+        "thumbs/c-gemini.webp"
+      ]
+    },
+    {
+      "owner": "card:c-glm",
+      "files": [
+        "cards/c-glm.webp",
+        "hires/cards/c-glm.webp",
+        "hires/layers/c-glm.webp",
+        "layers/c-glm.webp",
+        "thumbs/c-glm.webp"
+      ]
+    },
+    {
+      "owner": "card:d-chatgpt",
+      "files": [
+        "cards/d-chatgpt.webp",
+        "hires/cards/d-chatgpt.webp",
+        "hires/layers/d-chatgpt.webp",
+        "layers/d-chatgpt.webp",
+        "thumbs/d-chatgpt.webp"
+      ]
+    },
+    {
+      "owner": "card:d-claude",
+      "files": [
+        "cards/d-claude.webp",
+        "hires/cards/d-claude.webp",
+        "hires/layers/d-claude.webp",
+        "layers/d-claude.webp",
+        "thumbs/d-claude.webp"
+      ]
+    },
+    {
+      "owner": "card:d-deepseek",
+      "files": [
+        "cards/d-deepseek.webp",
+        "hires/cards/d-deepseek.webp",
+        "hires/layers/d-deepseek.webp",
+        "layers/d-deepseek.webp",
+        "thumbs/d-deepseek.webp"
+      ]
+    },
+    {
+      "owner": "card:d-gemini",
+      "files": [
+        "cards/d-gemini.webp",
+        "hires/cards/d-gemini.webp",
+        "hires/layers/d-gemini.webp",
+        "layers/d-gemini.webp",
+        "thumbs/d-gemini.webp"
+      ]
+    },
+    {
+      "owner": "card:d-glm",
+      "files": [
+        "cards/d-glm.webp",
+        "hires/cards/d-glm.webp",
+        "hires/layers/d-glm.webp",
+        "layers/d-glm.webp",
+        "thumbs/d-glm.webp"
+      ]
+    },
+    {
+      "owner": "card:e-chatgpt",
+      "files": [
+        "cards/e-chatgpt.webp",
+        "hires/cards/e-chatgpt.webp",
+        "hires/layers/e-chatgpt.webp",
+        "layers/e-chatgpt.webp",
+        "thumbs/e-chatgpt.webp"
+      ]
+    },
+    {
+      "owner": "card:e-claude",
+      "files": [
+        "cards/e-claude.webp",
+        "hires/cards/e-claude.webp",
+        "hires/layers/e-claude.webp",
+        "layers/e-claude.webp",
+        "thumbs/e-claude.webp"
+      ]
+    },
+    {
+      "owner": "card:e-deepseek",
+      "files": [
+        "cards/e-deepseek.webp",
+        "hires/cards/e-deepseek.webp",
+        "hires/layers/e-deepseek.webp",
+        "layers/e-deepseek.webp",
+        "thumbs/e-deepseek.webp"
+      ]
+    },
+    {
+      "owner": "card:e-gemini",
+      "files": [
+        "cards/e-gemini.webp",
+        "hires/cards/e-gemini.webp",
+        "hires/layers/e-gemini.webp",
+        "layers/e-gemini.webp",
+        "thumbs/e-gemini.webp"
+      ]
+    },
+    {
+      "owner": "card:e-glm",
+      "files": [
+        "cards/e-glm.webp",
+        "hires/cards/e-glm.webp",
+        "hires/layers/e-glm.webp",
+        "layers/e-glm.webp",
+        "thumbs/e-glm.webp"
+      ]
+    },
+    {
+      "owner": "card:f-chatgpt",
+      "files": [
+        "cards/f-chatgpt.webp",
+        "hires/cards/f-chatgpt.webp",
+        "hires/layers/f-chatgpt.webp",
+        "layers/f-chatgpt.webp",
+        "thumbs/f-chatgpt.webp"
+      ]
+    },
+    {
+      "owner": "card:f-claude",
+      "files": [
+        "cards/f-claude.webp",
+        "hires/cards/f-claude.webp",
+        "hires/layers/f-claude.webp",
+        "layers/f-claude.webp",
+        "thumbs/f-claude.webp"
+      ]
+    },
+    {
+      "owner": "card:f-deepseek",
+      "files": [
+        "cards/f-deepseek.webp",
+        "hires/cards/f-deepseek.webp",
+        "hires/layers/f-deepseek.webp",
+        "layers/f-deepseek.webp",
+        "thumbs/f-deepseek.webp"
+      ]
+    },
+    {
+      "owner": "card:f-gemini",
+      "files": [
+        "cards/f-gemini.webp",
+        "hires/cards/f-gemini.webp",
+        "hires/layers/f-gemini.webp",
+        "layers/f-gemini.webp",
+        "thumbs/f-gemini.webp"
+      ]
+    },
+    {
+      "owner": "card:f-glm",
+      "files": [
+        "cards/f-glm.webp",
+        "hires/cards/f-glm.webp",
+        "hires/layers/f-glm.webp",
+        "layers/f-glm.webp",
+        "thumbs/f-glm.webp"
+      ]
+    },
+    {
+      "owner": "card:g-chatgpt",
+      "files": [
+        "cards/g-chatgpt.webp",
+        "hires/cards/g-chatgpt.webp",
+        "thumbs/g-chatgpt.webp"
+      ],
+      "prefixes": [
+        "hires/motion/g-chatgpt/",
+        "motion/g-chatgpt/"
+      ]
+    },
+    {
+      "owner": "card:g-claude",
+      "files": [
+        "cards/g-claude.webp",
+        "hires/cards/g-claude.webp",
+        "thumbs/g-claude.webp"
+      ],
+      "prefixes": [
+        "hires/motion/g-claude/",
+        "motion/g-claude/"
+      ]
+    },
+    {
+      "owner": "card:g-deepseek",
+      "files": [
+        "cards/g-deepseek.webp",
+        "hires/cards/g-deepseek.webp",
+        "thumbs/g-deepseek.webp"
+      ],
+      "prefixes": [
+        "hires/motion/g-deepseek/",
+        "motion/g-deepseek/"
+      ]
+    },
+    {
+      "owner": "card:g-gemini",
+      "files": [
+        "cards/g-gemini.webp",
+        "hires/cards/g-gemini.webp",
+        "thumbs/g-gemini.webp"
+      ],
+      "prefixes": [
+        "hires/motion/g-gemini/",
+        "motion/g-gemini/"
+      ]
+    },
+    {
+      "owner": "card:g-glm",
+      "files": [
+        "cards/g-glm.webp",
+        "hires/cards/g-glm.webp",
+        "thumbs/g-glm.webp"
+      ],
+      "prefixes": [
+        "hires/motion/g-glm/",
+        "motion/g-glm/"
+      ]
+    },
+    {
+      "owner": "card:h-chatgpt",
+      "files": [
+        "cards/h-chatgpt.webp",
+        "hires/cards/h-chatgpt.webp",
+        "hires/layers/h-chatgpt.webp",
+        "layers/h-chatgpt.webp",
+        "thumbs/h-chatgpt.webp"
+      ]
+    },
+    {
+      "owner": "card:h-claude",
+      "files": [
+        "cards/h-claude.webp",
+        "hires/cards/h-claude.webp",
+        "hires/layers/h-claude.webp",
+        "layers/h-claude.webp",
+        "thumbs/h-claude.webp"
+      ]
+    },
+    {
+      "owner": "card:h-deepseek",
+      "files": [
+        "cards/h-deepseek.webp",
+        "hires/cards/h-deepseek.webp",
+        "hires/layers/h-deepseek.webp",
+        "layers/h-deepseek.webp",
+        "thumbs/h-deepseek.webp"
+      ]
+    },
+    {
+      "owner": "card:h-gemini",
+      "files": [
+        "cards/h-gemini.webp",
+        "hires/cards/h-gemini.webp",
+        "hires/layers/h-gemini.webp",
+        "layers/h-gemini.webp",
+        "thumbs/h-gemini.webp"
+      ]
+    },
+    {
+      "owner": "card:h-glm",
+      "files": [
+        "cards/h-glm.webp",
+        "hires/cards/h-glm.webp",
+        "hires/layers/h-glm.webp",
+        "layers/h-glm.webp",
+        "thumbs/h-glm.webp"
+      ]
+    },
+    {
+      "owner": "card:i-chatgpt",
+      "files": [
+        "cards/i-chatgpt.webp",
+        "hires/cards/i-chatgpt.webp",
+        "thumbs/i-chatgpt.webp"
+      ],
+      "prefixes": [
+        "hires/motion/i-chatgpt/",
+        "motion/i-chatgpt/"
+      ]
+    },
+    {
+      "owner": "card:i-claude",
+      "files": [
+        "cards/i-claude.webp",
+        "hires/cards/i-claude.webp",
+        "thumbs/i-claude.webp"
+      ],
+      "prefixes": [
+        "hires/motion/i-claude/",
+        "motion/i-claude/"
+      ]
+    },
+    {
+      "owner": "card:i-deepseek",
+      "files": [
+        "cards/i-deepseek.webp",
+        "hires/cards/i-deepseek.webp",
+        "thumbs/i-deepseek.webp"
+      ],
+      "prefixes": [
+        "hires/motion/i-deepseek/",
+        "motion/i-deepseek/"
+      ]
+    },
+    {
+      "owner": "card:i-gemini",
+      "files": [
+        "cards/i-gemini.webp",
+        "hires/cards/i-gemini.webp",
+        "thumbs/i-gemini.webp"
+      ],
+      "prefixes": [
+        "hires/motion/i-gemini/",
+        "motion/i-gemini/"
+      ]
+    },
+    {
+      "owner": "card:i-glm",
+      "files": [
+        "cards/i-glm.webp",
+        "hires/cards/i-glm.webp",
+        "thumbs/i-glm.webp"
+      ],
+      "prefixes": [
+        "hires/motion/i-glm/",
+        "motion/i-glm/"
+      ]
+    },
+    {
+      "owner": "card:j-chatgpt",
+      "files": [
+        "cards/j-chatgpt.webp",
+        "hires/cards/j-chatgpt.webp",
+        "thumbs/j-chatgpt.webp"
+      ],
+      "prefixes": [
+        "hires/motion/j-chatgpt/",
+        "motion/j-chatgpt/"
+      ]
+    },
+    {
+      "owner": "card:j-claude",
+      "files": [
+        "cards/j-claude.webp",
+        "hires/cards/j-claude.webp",
+        "thumbs/j-claude.webp"
+      ],
+      "prefixes": [
+        "hires/motion/j-claude/",
+        "motion/j-claude/"
+      ]
+    },
+    {
+      "owner": "card:j-deepseek",
+      "files": [
+        "cards/j-deepseek.webp",
+        "hires/cards/j-deepseek.webp",
+        "thumbs/j-deepseek.webp"
+      ],
+      "prefixes": [
+        "hires/motion/j-deepseek/",
+        "motion/j-deepseek/"
+      ]
+    },
+    {
+      "owner": "card:j-gemini",
+      "files": [
+        "cards/j-gemini.webp",
+        "hires/cards/j-gemini.webp",
+        "thumbs/j-gemini.webp"
+      ],
+      "prefixes": [
+        "hires/motion/j-gemini/",
+        "motion/j-gemini/"
+      ]
+    },
+    {
+      "owner": "card:j-glm",
+      "files": [
+        "cards/j-glm.webp",
+        "hires/cards/j-glm.webp",
+        "thumbs/j-glm.webp"
+      ],
+      "prefixes": [
+        "hires/motion/j-glm/",
+        "motion/j-glm/"
+      ]
+    },
+    {
+      "owner": "card:k-chatgpt",
+      "files": [
+        "cards/k-chatgpt.webp",
+        "hires/cards/k-chatgpt.webp",
+        "hires/layers/k-chatgpt.webp",
+        "layers/k-chatgpt.webp",
+        "thumbs/k-chatgpt.webp"
+      ]
+    },
+    {
+      "owner": "card:k-claude",
+      "files": [
+        "cards/k-claude.webp",
+        "hires/cards/k-claude.webp",
+        "hires/layers/k-claude.webp",
+        "layers/k-claude.webp",
+        "thumbs/k-claude.webp"
+      ]
+    },
+    {
+      "owner": "card:k-deepseek",
+      "files": [
+        "cards/k-deepseek.webp",
+        "hires/cards/k-deepseek.webp",
+        "hires/layers/k-deepseek.webp",
+        "layers/k-deepseek.webp",
+        "thumbs/k-deepseek.webp"
+      ]
+    },
+    {
+      "owner": "card:k-gemini",
+      "files": [
+        "cards/k-gemini.webp",
+        "hires/cards/k-gemini.webp",
+        "hires/layers/k-gemini.webp",
+        "layers/k-gemini.webp",
+        "thumbs/k-gemini.webp"
+      ]
+    },
+    {
+      "owner": "card:k-glm",
+      "files": [
+        "cards/k-glm.webp",
+        "hires/cards/k-glm.webp",
+        "hires/layers/k-glm.webp",
+        "layers/k-glm.webp",
+        "thumbs/k-glm.webp"
+      ]
+    },
+    {
+      "owner": "card:l-chatgpt",
+      "files": [
+        "cards/l-chatgpt.webp",
+        "hires/cards/l-chatgpt.webp",
+        "thumbs/l-chatgpt.webp"
+      ],
+      "prefixes": [
+        "hires/motion/l-chatgpt/",
+        "motion/l-chatgpt/"
+      ]
+    },
+    {
+      "owner": "card:m-deepseek",
+      "files": [
+        "cards/m-deepseek.webp",
+        "hires/cards/m-deepseek.webp",
+        "thumbs/m-deepseek.webp"
+      ],
+      "prefixes": [
+        "hires/motion/m-deepseek/",
+        "motion/m-deepseek/"
+      ]
+    },
+    {
+      "owner": "card:n-gemini",
+      "files": [
+        "cards/n-gemini.webp",
+        "hires/cards/n-gemini.webp",
+        "thumbs/n-gemini.webp"
+      ],
+      "prefixes": [
+        "hires/motion/n-gemini/",
+        "motion/n-gemini/"
+      ]
+    },
+    {
+      "owner": "card:o-claude",
+      "files": [
+        "cards/o-claude.webp",
+        "hires/cards/o-claude.webp",
+        "thumbs/o-claude.webp"
+      ],
+      "prefixes": [
+        "hires/motion/o-claude/",
+        "motion/o-claude/"
+      ]
+    },
+    {
+      "owner": "card:p-claude",
+      "files": [
+        "cards/p-claude.webp",
+        "hires/cards/p-claude.webp",
+        "thumbs/p-claude.webp"
+      ],
+      "prefixes": [
+        "hires/motion/p-claude/",
+        "motion/p-claude/"
+      ]
+    },
+    {
+      "owner": "card:q-glm",
+      "files": [
+        "cards/q-glm.webp",
+        "hires/cards/q-glm.webp",
+        "thumbs/q-glm.webp"
+      ],
+      "prefixes": [
+        "hires/motion/q-glm/",
+        "motion/q-glm/"
+      ]
+    },
+    {
+      "owner": "cover:n",
+      "files": [
+        "covers/n.webp",
+        "hires/covers/n.webp"
+      ]
+    },
+    {
+      "owner": "cover:o",
+      "files": [
+        "covers/o.webp",
+        "hires/covers/o.webp"
+      ]
+    },
+    {
+      "owner": "cover:p",
+      "files": [
+        "covers/p.webp",
+        "hires/covers/p.webp"
+      ]
+    },
+    {
+      "owner": "cover:q",
+      "files": [
+        "covers/q.webp",
+        "hires/covers/q.webp"
+      ]
+    }
+  ]
+}

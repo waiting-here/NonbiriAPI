@@ -4,9 +4,13 @@ import (
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
+
+	"github.com/waiting-here/NonbiriAPI/internal/artwork"
 )
 
 func TestStubFSContainsIndex(t *testing.T) {
@@ -108,5 +112,94 @@ func TestSPAHandlerCachesOnlyExistingContentHashedBundles(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestArtworkPolicyGuardsBothStationsBeforeStaticResponses(t *testing.T) {
+	catalog, err := artwork.Parse([]byte(`{
+ "version":1,"artworks":{
+  "appearance:default":{"rating":"general"},"appearance:heart-moment":{"rating":"general"},
+  "cover:permanent":{"rating":"general","name":"Safe","name_en":"Safe"},
+  "card:restricted":{"rating":"r18"}
+ },"assets":[
+  {"owner":"card:restricted","files":["cards/restricted.webp","hires/cards/restricted.webp"],"prefixes":["motion/restricted/","hires/motion/restricted/"]},
+  {"owner":"cover:permanent","files":["covers/permanent.webp"]}
+ ]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	modified := time.Unix(1700000000, 0).UTC()
+	files := fstest.MapFS{"index.html": {Data: []byte("index")}, "assets/gacha/covers/permanent.webp": {Data: []byte("safe")}}
+	paths := []string{"cards/restricted.webp", "hires/cards/restricted.webp", "motion/restricted/hero.png", "hires/motion/restricted/unused.webp"}
+	for _, p := range paths {
+		files["assets/gacha/"+p] = &fstest.MapFile{Data: []byte("restricted pixels"), ModTime: modified}
+	}
+	disabled := true
+	calls := 0
+	policy := func() bool { calls++; return disabled }
+	handler := newMultiHandler(spaHandlerWithArtworkPolicy(files, catalog, policy), spaHandlerWithArtworkPolicy(files, catalog, policy), "user.example", "admin.example")
+	request := func(method, host, target string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(method, "https://"+host+target, nil)
+		req.Header.Set("If-Modified-Since", modified.Format(http.TimeFormat))
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		return w
+	}
+	for _, host := range []string{"user.example", "admin.example"} {
+		for _, method := range []string{http.MethodGet, http.MethodHead} {
+			for _, p := range append(slices.Clone(paths), "motion/restricted/missing.png") {
+				for _, target := range []string{"/assets/gacha/" + p, "/assets/gacha/" + p + "?rev=2", "/assets/gacha/../gacha/" + p, "/assets/gacha//" + p, "/assets/gacha/" + strings.ReplaceAll(p, "/", "%2F")} {
+					w := request(method, host, target)
+					if w.Code != http.StatusForbidden || w.Header().Get("Cache-Control") != "no-store" || strings.Contains(w.Body.String(), "pixels") || w.Body.String() == "index" {
+						t.Fatalf("%s %s: %d %s", method, target, w.Code, w.Body.String())
+					}
+				}
+			}
+		}
+	}
+	before := calls
+	for _, extension := range []string{"webp", "png", "jpg", "jpeg", "gif", "avif", "svg", "bmp"} {
+		asset := "assets/gacha/unknown." + extension
+		files[asset] = &fstest.MapFile{Data: []byte("unclassified pixels")}
+		w := request(http.MethodGet, "user.example", "/"+asset)
+		if w.Code != http.StatusForbidden || w.Header().Get("Cache-Control") != "no-store" || strings.Contains(w.Body.String(), "pixels") {
+			t.Fatal(asset, w.Code, w.Body.String())
+		}
+	}
+	for _, asset := range []string{"composition.json", "NOTICE.md", "audio/theme.ogg"} {
+		files["assets/gacha/"+asset] = &fstest.MapFile{Data: []byte("ordinary")}
+		if w := request(http.MethodGet, "user.example", "/assets/gacha/"+asset); w.Code != http.StatusOK || w.Body.String() != "ordinary" {
+			t.Fatal(asset, w.Code, w.Body.String())
+		}
+	}
+	if w := request(http.MethodGet, "user.example", "/assets/gacha/covers/permanent.webp"); w.Code != http.StatusOK || w.Body.String() != "safe" {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if calls != before {
+		t.Fatal("ordinary asset consulted runtime policy")
+	}
+	disabled = false
+	if w := request(http.MethodGet, "user.example", "/assets/gacha/unknown.svg"); w.Code != http.StatusForbidden || w.Header().Get("Cache-Control") != "no-store" {
+		t.Fatal("unclassified image allowed by global toggle", w.Code)
+	}
+	if w := request(http.MethodGet, "admin.example", "/assets/gacha/cards/restricted.webp"); w.Code != http.StatusNotModified || w.Header().Get("Cache-Control") != "no-store" {
+		t.Fatal(w.Code, w.Header())
+	}
+	req := httptest.NewRequest(http.MethodGet, "https://user.example/assets/gacha/cards/restricted.webp", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK || w.Body.String() != "restricted pixels" || w.Header().Get("Cache-Control") != "no-store" {
+		t.Fatal(w.Code, w.Body.String(), w.Header())
+	}
+	disabled = true
+	if w := request(http.MethodGet, "user.example", "/assets/gacha/cards/restricted.webp"); w.Code != http.StatusForbidden {
+		t.Fatal("toggle did not apply", w.Code)
+	}
+	nilHandler := spaHandlerWithArtworkPolicy(files, catalog, nil)
+	w = httptest.NewRecorder()
+	nilHandler.ServeHTTP(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatal("nil policy was unsafe", w.Code)
 	}
 }
