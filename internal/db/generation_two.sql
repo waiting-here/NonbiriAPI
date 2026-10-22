@@ -7771,3 +7771,14 @@ CREATE VIEW charity_model_catalog AS
  )
  SELECT donation_key_id,normalized_model_id,sum(automatic_supports) AS automatic_supports,sum(manual_supports) AS manual_supports,max(automatic_revision) AS automatic_revision
  FROM supports GROUP BY donation_key_id,normalized_model_id;
+
+-- Locate account history without scanning unrelated users during retirement.
+CREATE INDEX idx_accepted_operations_actor ON accepted_operations(actor_user_id) WHERE actor_user_id IS NOT NULL;
+CREATE INDEX idx_dispatch_claims_receiver ON dispatch_claims(receiver_user_id) WHERE receiver_user_id IS NOT NULL;
+CREATE INDEX idx_credit_operations_actor ON credit_operations(actor_user_id) WHERE actor_user_id IS NOT NULL;
+CREATE INDEX idx_credit_operations_donation_user ON credit_operations(donation_credit_user_id) WHERE donation_credit_user_id IS NOT NULL;
+CREATE INDEX idx_charity_dispatch_receipts_user ON charity_dispatch_receipts(user_id) WHERE user_id IS NOT NULL;
+CREATE INDEX idx_resource_operation_status_user ON resource_operation_status(user_id);
+CREATE INDEX idx_lake_notes_cast_user ON lake_notes_casts(user_id);
+CREATE INDEX idx_rps_summary_seats_user ON game_rps_summary_seats(user_id) WHERE user_id IS NOT NULL;
+CREATE INDEX idx_rps_pending_results_session ON game_rps_pending_results(session_id_text);

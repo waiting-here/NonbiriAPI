@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -137,7 +138,7 @@ func TestResourceBrowseCountsCompleteOwnerSetWithBoundedPreviewsAndIndexedPages(
 		t.Fatal("browse mutated storage")
 	}
 	t.Logf("complete 10017-model summaries and four page sizes in %s", time.Since(started))
-	rows, err := env.store.DB().Query(`EXPLAIN QUERY PLAN `+ownedBindingSelect+ownedBindingScope+` AND e.id=? AND k.id=? ORDER BY t.upstream_model_id,b.id,t.id LIMIT 20 OFFSET 9980`, owner, owner, eid, kid)
+	rows, err := env.store.DB().Query(`EXPLAIN QUERY PLAN `+ownedBindingIDSelect+ownedBindingScope+` AND e.id=? AND k.id=? ORDER BY t.upstream_model_id,b.id,t.id LIMIT 20 OFFSET 9980`, owner, owner, eid, kid)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,8 +157,8 @@ func TestResourceBrowseCountsCompleteOwnerSetWithBoundedPreviewsAndIndexedPages(
 	rows.Close()
 	plan := strings.Join(plans, "\n")
 	t.Log(plan)
-	if !strings.Contains(plan, "idx_model_binding_targets_key") || strings.Contains(plan, "TEMP B-TREE FOR ORDER BY") {
-		t.Fatalf("unindexed inverse page: %s", plan)
+	if !strings.Contains(plan, "idx_model_binding_targets_key") || strings.Contains(plan, "CORRELATED") {
+		t.Fatalf("inverse page must use the target index without per-row eligibility: %s", plan)
 	}
 	for _, legacy := range []any{ep, key} {
 		body, err := json.Marshal(legacy)
@@ -362,7 +363,7 @@ func TestKeyBindingPageHTTPStrictScopeAndWindow(t *testing.T) {
 	for _, query := range []string{"", "?page=999&page_size=10", "?upstream_model_id=" + url.QueryEscape("完整/model ID")} {
 		w := resourceHTTPCall(t, api.listKeyBindings, UserPrincipal{UserID: owner}, "GET", "/api/endpoints/"+ep.ID+"/keys/"+key.ID+"/bindings"+query, "", "", pathValues)
 		var page Page[KeyBindingView]
-		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &page) != nil || page.Pagination == nil || page.Pagination.TotalItems != "0" || page.Pagination.Page != "1" {
+		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &page) != nil || page.Pagination == nil || page.Pagination.TotalItems != "0" || page.Pagination.Page != "1" || page.Data == nil || len(page.Data) != 0 {
 			t.Fatalf("%s: %d %s", query, w.Code, w.Body.String())
 		}
 	}
@@ -409,5 +410,53 @@ SELECT binding_id,endpoint_key_id,'alternate-image',32,'legacy',1,created_at,upd
 				t.Fatalf("binding counts: %+v want available=%s", got, tc.available)
 			}
 		})
+	}
+}
+
+func TestKeyBindingPagesPreserveTargetOrderAndPreview(t *testing.T) {
+	env := newResourceTestEnvironment(t)
+	owner, other := env.seedUser(t, "target-order-owner"), env.seedUser(t, "target-order-other")
+	ep := env.createEndpoint(t, owner, resourceTestKey('a'))
+	eid := resourceTestID(t, ep.ID)
+	key := env.createEndpointKey(t, owner, eid, resourceTestKey('b'))
+	kid := resourceTestID(t, key.ID)
+	seedBrowseModels(t, env, owner, other, kid, 11)
+	// A later target belongs to an earlier binding. Sorting by target ID alone
+	// or collapsing multiple targets into one binding would change these pages.
+	if _, err := env.store.DB().Exec(`INSERT INTO model_binding_targets(binding_id,endpoint_key_id,upstream_model_id,native_service_mask,selection_origin,ord,created_at,updated_at)
+SELECT binding_id,endpoint_key_id,'automatic',32,'legacy',1,created_at,updated_at FROM model_binding_targets WHERE upstream_model_id='manual' ORDER BY binding_id LIMIT 1`); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := env.store.DB().Query(ownedBindingSelect+ownedBindingScope+` AND e.id=? AND k.id=? ORDER BY t.upstream_model_id,b.id,t.id`, owner, owner, eid, kid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var want []KeyBindingView
+	for rows.Next() {
+		item, err := scanKeyBinding(rows)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want = append(want, item)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil || len(want) != 12 {
+		t.Fatalf("expected targets: %d %v", len(want), err)
+	}
+	var got []KeyBindingView
+	for number := 1; number <= 2; number++ {
+		page, err := env.repository.ListKeyBindingsPage(context.Background(), owner, eid, kid, "", pagination.Request{Page: int64(number), Size: 10})
+		if err != nil || page.Pagination.TotalItems != "12" || page.Pagination.Page != strconv.Itoa(number) {
+			t.Fatalf("page %d: %+v %v", number, page, err)
+		}
+		got = append(got, page.Data...)
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("paged targets: %+v want %+v", got, want)
+	}
+	keys, err := env.repository.ListEndpointKeysPage(context.Background(), owner, eid, pagination.Default())
+	if err != nil || len(keys.Data) != 1 || !slices.Equal(keys.Data[0].Browse.Preview, want[:3]) {
+		t.Fatalf("preview: %+v %v", keys, err)
 	}
 }

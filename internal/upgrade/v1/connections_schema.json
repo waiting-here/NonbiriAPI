@@ -1736,6 +1736,12 @@
   "objects": [
     {
       "type": "index",
+      "name": "idx_accepted_operations_actor",
+      "table_name": "accepted_operations",
+      "sql": "CREATE INDEX idx_accepted_operations_actor ON accepted_operations(actor_user_id) WHERE actor_user_id IS NOT NULL"
+    },
+    {
+      "type": "index",
       "name": "idx_catalog_run_model",
       "table_name": "model_catalog_entries",
       "sql": "CREATE INDEX idx_catalog_run_model ON model_catalog_entries(discovery_run_id,normalized_model_id,id)"
@@ -1751,6 +1757,12 @@
       "name": "idx_charity_binding_targets_key",
       "table_name": "charity_binding_targets",
       "sql": "CREATE INDEX idx_charity_binding_targets_key ON charity_binding_targets(donation_key_id,upstream_model_id,id)"
+    },
+    {
+      "type": "index",
+      "name": "idx_charity_dispatch_receipts_user",
+      "table_name": "charity_dispatch_receipts",
+      "sql": "CREATE INDEX idx_charity_dispatch_receipts_user ON charity_dispatch_receipts(user_id) WHERE user_id IS NOT NULL"
     },
     {
       "type": "index",
@@ -1781,6 +1793,18 @@
       "name": "idx_credentials_owner",
       "table_name": "credentials",
       "sql": "CREATE INDEX idx_credentials_owner ON credentials(user_id,id)"
+    },
+    {
+      "type": "index",
+      "name": "idx_credit_operations_actor",
+      "table_name": "credit_operations",
+      "sql": "CREATE INDEX idx_credit_operations_actor ON credit_operations(actor_user_id) WHERE actor_user_id IS NOT NULL"
+    },
+    {
+      "type": "index",
+      "name": "idx_credit_operations_donation_user",
+      "table_name": "credit_operations",
+      "sql": "CREATE INDEX idx_credit_operations_donation_user ON credit_operations(donation_credit_user_id) WHERE donation_credit_user_id IS NOT NULL"
     },
     {
       "type": "index",
@@ -1823,6 +1847,12 @@
       "name": "idx_discovery_sources_owner",
       "table_name": "discovery_sources",
       "sql": "CREATE INDEX idx_discovery_sources_owner ON discovery_sources(user_id,id)"
+    },
+    {
+      "type": "index",
+      "name": "idx_dispatch_claims_receiver",
+      "table_name": "dispatch_claims",
+      "sql": "CREATE INDEX idx_dispatch_claims_receiver ON dispatch_claims(receiver_user_id) WHERE receiver_user_id IS NOT NULL"
     },
     {
       "type": "index",
@@ -1898,6 +1928,12 @@
     },
     {
       "type": "index",
+      "name": "idx_lake_notes_cast_user",
+      "table_name": "lake_notes_casts",
+      "sql": "CREATE INDEX idx_lake_notes_cast_user ON lake_notes_casts(user_id)"
+    },
+    {
+      "type": "index",
       "name": "idx_mainstream_mappings_entry",
       "table_name": "mainstream_channel_model_mappings",
       "sql": "CREATE INDEX idx_mainstream_mappings_entry ON mainstream_channel_model_mappings(entry_id,model_id)"
@@ -1925,6 +1961,24 @@
       "name": "idx_request_logs_charity_model",
       "table_name": "request_logs",
       "sql": "CREATE INDEX idx_request_logs_charity_model ON request_logs(route_kind,model,completed_at,id) WHERE route_kind IN ('charity_chat_completions','charity_embeddings','charity_images_generations','charity_decisions','charity_responses','charity_responses_compact','charity_responses_input_tokens','charity_completions','charity_images_edits','charity_images_variations','charity_audio_speech','charity_audio_transcriptions','charity_audio_translations','charity_moderations','charity_rerank','charity_systemone')"
+    },
+    {
+      "type": "index",
+      "name": "idx_resource_operation_status_user",
+      "table_name": "resource_operation_status",
+      "sql": "CREATE INDEX idx_resource_operation_status_user ON resource_operation_status(user_id)"
+    },
+    {
+      "type": "index",
+      "name": "idx_rps_pending_results_session",
+      "table_name": "game_rps_pending_results",
+      "sql": "CREATE INDEX idx_rps_pending_results_session ON game_rps_pending_results(session_id_text)"
+    },
+    {
+      "type": "index",
+      "name": "idx_rps_summary_seats_user",
+      "table_name": "game_rps_summary_seats",
+      "sql": "CREATE INDEX idx_rps_summary_seats_user ON game_rps_summary_seats(user_id) WHERE user_id IS NOT NULL"
     },
     {
       "type": "index",

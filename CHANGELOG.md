@@ -107,7 +107,10 @@ Each version entry describes its source and compatibility boundary; a release ta
   message wording alone never establish this result; errors, diagnostics and
   accounting retain their existing behavior.
 - Batch settled request/claim validation and account-link detachment during
-  account deletion while preserving active settlement and transaction rollback.
+  account deletion, and index related account and game history to avoid scanning
+  unrelated records while preserving active settlement and transaction rollback.
+- Load binding details only for the selected page or bounded preview, retaining
+  current authorization and deterministic ordering for large key directories.
 - Token output reservations account for enabled user modality and long-context
   output rates. Request charges aggregate precise usage before rounding;
   frozen discounts, replay and conservative unknown-usage behavior remain.
