@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/elevation"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
@@ -100,13 +101,13 @@ func seedManagementBrowser(t *testing.T, f *imageBrowserFixture, now int64) map[
 	if err != nil {
 		t.Fatal(err)
 	}
-	exec(`INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at) VALUES(?,'Browser service','subscription','openai-compatible',?,1,'active',1,?,?)`, channel, f.upstream.URL+"/v1", now, now)
+	appFixtureMainstreamChannel(t, f.store, channel, "Browser service", f.upstream.URL+"/v1", connectorcontract.TypeOpenAICompatible, now)
 	owner := f.users[0].Cookie
 	geminiChannel, err := db.GenerateOpaqueID("mch_")
 	if err != nil {
 		t.Fatal(err)
 	}
-	exec(`INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at) VALUES(?,'Gemini discovery sample','subscription','google-gemini',?,1,'active',1,?,?)`, geminiChannel, f.upstream.URL+"/v1beta", now, now)
+	appFixtureMainstreamChannel(t, f.store, geminiChannel, "Gemini discovery sample", f.upstream.URL+"/v1beta", connectorcontract.TypeGoogleGemini, now)
 	geminiEndpoint := f.call("POST", "/api/endpoints", map[string]any{"source": "mainstream", "channel_id": geminiChannel, "note": "Gemini discovery sample", "enabled": true}, owner, false)["id"].(string)
 	geminiKey := f.call("POST", "/api/endpoints/"+geminiEndpoint+"/keys", map[string]any{"secret": imageFixtureSecret, "note": "Gemini sample key", "enabled": true, "force_store_false": false, "ownership_confirmed": true}, owner, false)["id"].(string)
 	endpoint := f.call("POST", "/api/endpoints", map[string]any{"source": "mainstream", "channel_id": channel, "note": "Browser service", "enabled": true}, owner, false)["id"].(string)
@@ -177,9 +178,7 @@ func seedBindingManagementBrowser(t *testing.T, f *imageBrowserFixture, now int6
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.store.DB().Exec(`INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at) VALUES(?,'Binding browser service','subscription','openai-compatible',?,1,'active',1,?,?)`, channel, f.upstream.URL+"/v1", now, now); err != nil {
-		t.Fatal(err)
-	}
+	appFixtureMainstreamChannel(t, f.store, channel, "Binding browser service", f.upstream.URL+"/v1", connectorcontract.TypeOpenAICompatible, now)
 	owner := f.users[0].Cookie
 	endpoint := f.call("POST", "/api/endpoints", map[string]any{"source": "mainstream", "channel_id": channel, "note": "Binding browser service", "enabled": true}, owner, false)["id"].(string)
 	physical := []string{}
@@ -187,15 +186,14 @@ func seedBindingManagementBrowser(t *testing.T, f *imageBrowserFixture, now int6
 	for i := range 3 {
 		key := f.call("POST", "/api/endpoints/"+endpoint+"/keys", map[string]any{"secret": fmt.Sprint("synthetic-binding-donation-", i), "note": fmt.Sprint("Binding credential ", i+1), "enabled": true, "force_store_false": false, "ownership_confirmed": true}, owner, false)["id"].(string)
 		physical = append(physical, key)
-		donationKeys = append(donationKeys, map[string]any{"endpoint_key_id": key, "expires_at": nil})
+		models := []string{}
 		for j := range 6 {
 			if i == 1 && j == 3 {
 				continue
 			}
-			if _, err := f.store.DB().Exec(`INSERT INTO model_pair_catalog(endpoint_key_id,normalized_model_id,automatic_supports,manual_supports,automatic_revision,pair_revision,updated_at) VALUES(?,?,1,0,1,1,?)`, key, fmt.Sprint("binding-up-", j), now); err != nil {
-				t.Fatal(err)
-			}
+			models = append(models, fmt.Sprint("binding-up-", j))
 		}
+		donationKeys = append(donationKeys, appFixtureSharedCatalog(t, f.store, key, models, now))
 	}
 	donation := f.call("POST", "/api/donations", map[string]any{"description": "Binding preset browser donation", "discord_public_thanks": false, "ownership_authorized": true, "keys": donationKeys}, owner, false)
 	did := donation["id"].(string)

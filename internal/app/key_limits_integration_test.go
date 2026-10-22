@@ -13,9 +13,12 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/donation"
 	"github.com/waiting-here/NonbiriAPI/internal/forward"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
+	"github.com/waiting-here/NonbiriAPI/internal/routing"
 )
 
 func TestManagedSharedKeyLimitsOwnerCASAndAdmission(t *testing.T) {
@@ -51,15 +54,13 @@ func TestManagedSharedKeyLimitsOwnerCASAndAdmission(t *testing.T) {
 		}
 	}
 	exec(`UPDATE site_config SET value='1' WHERE key IN ('donation_accept_enabled','charity_enabled')`)
-	endpoint := exec(`INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at)
-VALUES(?,'openai-compatible','https://shared.example.test/v1','Private endpoint note',1,1,?,?)`, f.userID, f.now, f.now)
+	endpoint := appFixtureEndpoint(t, f.store, testseed.EndpointInput{OwnerUserID: f.userID, Type: connectorcontract.TypeOpenAICompatible, BaseURL: "https://shared.example.test/v1", Note: "Private endpoint note", At: f.now})
 	contextID, envelope := sealRootTestCredential(t)
 	secretID := exec(`INSERT INTO endpoint_key_secrets(context_id,canonical_base_url,connector_type,encrypted_secret,created_at)
 VALUES(?,'https://shared.example.test/v1','openai-compatible',?,?)`, contextID, envelope, f.now)
-	physical := exec(`INSERT INTO endpoint_keys(endpoint_id,secret_ref_id,secret_fingerprint,display_head,display_tail,note,enabled,force_store_false,revision,created_at,updated_at)
-VALUES(?,?,randomblob(32),'head','tail','Private key note',1,0,1,?,?)`, endpoint, secretID, f.now, f.now)
-	exec(`INSERT INTO model_discovery_evidence(endpoint_key_id,state,revision) VALUES(?,'unknown',1)`, physical)
-	exec(`INSERT INTO model_pair_catalog(endpoint_key_id,normalized_model_id,manual_supports,updated_at) VALUES(?,'upstream',1,?)`, physical, f.now)
+	identity := appFixtureKey(t, f.store, testseed.KeyInput{EndpointID: endpoint, SecretRefID: secretID, Note: "Private key note", At: f.now})
+	physical := identity.KeyID
+	appFixtureManualModel(t, f.store, physical, "upstream", f.now)
 	created := call(http.MethodPost, "/api/donations", fmt.Sprintf(`{"description":"Shared limit test","keys":[{"endpoint_key_id":"%d","expires_at":null}],"ownership_authorized":true,"discord_public_thanks":false}`, physical), "shared-limits-create-0001", false)
 	requireStatus(created, http.StatusCreated)
 	var d donation.Donation
@@ -74,22 +75,30 @@ VALUES(?,?,randomblob(32),'head','tail','Private key note',1,0,1,?,?)`, endpoint
 VALUES('synthetic','shared','[公益]synthetic/shared',1,'per_request',?,?)`, f.now, f.now)
 	exec(`INSERT INTO charity_model_access(model_id,allowed_level_mask) VALUES(?,63)`, model)
 	exec(`INSERT INTO charity_routing_settings(model_id,revision,affinity_ttl_seconds) VALUES(?,1,300)`, model)
-	exec(`INSERT INTO charity_model_bindings(charity_model_id,donation_key_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at)
-VALUES(?,?,?,'upstream',0,?,?)`, model, d.Keys[0].ID, physical, f.now, f.now)
+	appFixtureDonationManualModel(t, f.store, mustAppFixtureID(t, d.Keys[0].ID), "upstream", f.now)
+	charityTarget := appFixtureBinding(t, f.store, testseed.BindingInput{ModelID: model, KeyID: mustAppFixtureID(t, d.Keys[0].ID), UpstreamModelID: "upstream", At: f.now}, true)
 	ownerPath := fmt.Sprintf("/api/endpoints/%d/keys/%d", endpoint, physical)
 	managedPath := "/admin/api/donations/" + d.ID + "/keys/" + d.Keys[0].ID
 	requireStatus(call(http.MethodPatch, ownerPath, `{"expected_revision":"1","max_rpm":10}`, "shared-limits-owner-0001", false), http.StatusOK)
 	stale := `{"expected_revision":"2","expected_key_limits_revision":"1","max_concurrency":1}`
 	requireStatus(call(http.MethodPatch, managedPath, stale, "shared-limits-stale-0001", true), http.StatusConflict)
 
-	candidate := claim.Candidate{EndpointID: endpoint, EndpointKeyID: physical, ConnectorType: "openai-compatible", CanonicalBaseURL: "https://shared.example.test/v1", UpstreamModelID: "upstream"}
+	personalModel := exec(`INSERT INTO models(user_id,provider,model,full_name,route_strategy,model_types,created_at,updated_at) VALUES(?,'synthetic','shared','synthetic/shared','ordered',1,?,?)`, f.userID, f.now, f.now)
+	personalTarget := appFixtureBinding(t, f.store, testseed.BindingInput{ModelID: personalModel, KeyID: physical, UpstreamModelID: "upstream", At: f.now}, false)
+	authorization := routing.TargetAuthorization{BindingID: personalTarget.BindingID, TargetID: personalTarget.TargetID, TargetRevision: 1, CredentialID: identity.CredentialID, CredentialVersionID: identity.CredentialVersionID, CredentialVersion: 1, GrantRevisionID: identity.GrantRevisionID, GrantRevision: 1, ConfiguredType: connectorcontract.TypeOpenAICompatible, NativeService: connectorcontract.NativeServiceChatCompletions}
+	charityAuthorization := authorization
+	charityAuthorization.BindingID, charityAuthorization.TargetID = charityTarget.BindingID, charityTarget.TargetID
+	if err := f.store.DB().QueryRow(`SELECT u.id,r.id,r.use_revision FROM donation_uses u JOIN donation_use_revisions r ON r.id=u.current_approved_revision_id WHERE u.donation_key_id=? AND u.native_service_bit=1`, d.Keys[0].ID).Scan(&charityAuthorization.UseID, &charityAuthorization.UseRevisionID, &charityAuthorization.UseRevision); err != nil {
+		t.Fatal(err)
+	}
+	candidate := claim.Candidate{Authorization: authorization, EndpointID: endpoint, EndpointKeyID: physical, ConnectorType: "openai-compatible", CanonicalBaseURL: "https://shared.example.test/v1", UpstreamModelID: "upstream"}
 	callerMiddleware, err := forward.NewCallerKeyMiddleware(f.app.resourceRepo, f.app.forward.lifecycle)
 	if err != nil {
 		t.Fatal(err)
 	}
 	accept := func(charity bool) claim.ClaimInput {
 		t.Helper()
-		input := claim.AcceptInput{UserID: f.userID, Route: claim.RouteOpenAIChat, ModelSnapshot: "shared", AttemptLimit: 1}
+		input := claim.AcceptInput{UserID: f.userID, Route: claim.RouteOpenAIChat, ModelSnapshot: "synthetic/shared", AttemptLimit: 1}
 		purpose := claim.PurposeSelf
 		if charity {
 			at := time.Now().Unix()
@@ -110,13 +119,15 @@ VALUES(?,?,?,'upstream',0,?,?)`, model, d.Keys[0].ID, physical, f.now, f.now)
 		if acceptErr != nil {
 			t.Fatal(acceptErr)
 		}
+		selected, personal := candidate, personalModel
 		var logicalKey int64
 		if charity {
+			selected.Authorization, personal = charityAuthorization, 0
 			if err := f.store.DB().QueryRow(`SELECT id FROM donation_keys WHERE donation_id=?`, d.ID).Scan(&logicalKey); err != nil {
 				t.Fatal(err)
 			}
 		}
-		return claim.ClaimInput{RequestID: request.ID, ActorUserID: f.userID, AttemptSeq: 1, Purpose: purpose, Candidate: candidate, DonationKeyID: logicalKey}
+		return claim.ClaimInput{RequestID: request.ID, ActorUserID: f.userID, AttemptSeq: 1, Purpose: purpose, Candidate: selected, DonationKeyID: logicalKey, PersonalModelID: personal}
 	}
 	dispatch := func(handle claim.Handle) {
 		t.Helper()

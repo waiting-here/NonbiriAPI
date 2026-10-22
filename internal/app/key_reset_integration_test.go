@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
 
@@ -24,13 +26,11 @@ func TestFailureResetRegisteredRoutesUseCurrentSessions(t *testing.T) {
 		return id
 	}
 	exec(`UPDATE site_config SET value='1' WHERE key IN ('donation_accept_enabled','charity_enabled')`)
-	endpoint := exec(`INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at)
- VALUES(?,'openai-compatible','https://reset.example.test/v1','',1,1,?,?)`, f.userID, f.now, f.now)
+	endpoint := appFixtureEndpoint(t, f.store, testseed.EndpointInput{OwnerUserID: f.userID, Type: connectorcontract.TypeOpenAICompatible, BaseURL: "https://reset.example.test/v1", Note: "", At: f.now})
 	contextID, envelope := sealRootTestCredential(t)
 	secret := exec(`INSERT INTO endpoint_key_secrets(context_id,canonical_base_url,connector_type,encrypted_secret,created_at)
  VALUES(?,'https://reset.example.test/v1','openai-compatible',?,?)`, contextID, envelope, f.now)
-	physical := exec(`INSERT INTO endpoint_keys(endpoint_id,secret_ref_id,secret_fingerprint,display_head,display_tail,note,enabled,force_store_false,revision,created_at,updated_at)
- VALUES(?,?,randomblob(32),'head','tail','',1,0,1,?,?)`, endpoint, secret, f.now, f.now)
+	physical := appFixtureKey(t, f.store, testseed.KeyInput{EndpointID: endpoint, SecretRefID: secret, Note: "", At: f.now}).KeyID
 	headers := func(host, key string) map[string]string {
 		return map[string]string{"Content-Type": "application/json", "Origin": "http://" + host, "Idempotency-Key": strings.Repeat(key, 22)}
 	}

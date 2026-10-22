@@ -10,6 +10,9 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 )
 
 // This fixture preserves SQLite constraints while constructing anonymous,
@@ -18,13 +21,38 @@ func seedCatalogLoadHistory(t *testing.T, seed *embeddingHTTPFixture, now int64)
 	t.Helper()
 	for ordinal := 1; ordinal <= 2; ordinal++ {
 		name := fmt.Sprintf("synthetic-binding-%d", ordinal)
-		seed.exec(t, `INSERT INTO model_pair_catalog(endpoint_key_id,normalized_model_id,automatic_supports,manual_supports,automatic_revision,pair_revision,updated_at) VALUES(?,?,0,1,0,1,?)`, seed.keyID, name, now)
+		appFixtureManualModel(t, seed.store, seed.keyID, name, now)
 		limit := 220
 		if ordinal == 2 {
 			limit = 160
 		}
-		seed.exec(t, `INSERT INTO charity_model_bindings(charity_model_id,donation_key_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at)
-SELECT charity_model_id,donation_key_id,endpoint_key_id,?,?,?,? FROM charity_model_bindings WHERE ord=0 ORDER BY charity_model_id LIMIT ?`, name, ordinal, now, now, limit)
+		rows, err := seed.store.DB().Query(`SELECT b.charity_model_id,t.donation_key_id,t.native_service_mask FROM charity_model_bindings b JOIN charity_binding_targets t ON t.binding_id=b.id WHERE b.ord=0 AND t.ord=0 ORDER BY b.charity_model_id LIMIT ?`, limit)
+		if err != nil {
+			t.Fatal(err)
+		}
+		type source struct{ model, key, mask int64 }
+		var sources []source
+		for rows.Next() {
+			var value source
+			if err := rows.Scan(&value.model, &value.key, &value.mask); err != nil {
+				rows.Close()
+				t.Fatal(err)
+			}
+			sources = append(sources, value)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			t.Fatal(err)
+		}
+		rows.Close()
+		for _, source := range sources {
+			selected, err := connectorcontract.NativeServicesFromMask(source.mask)
+			if err != nil {
+				t.Fatal(err)
+			}
+			appFixtureDonationManualModel(t, seed.store, source.key, name, now)
+			appFixtureBinding(t, seed.store, testseed.BindingInput{ModelID: source.model, KeyID: source.key, UpstreamModelID: name, NativeServices: selected, Order: ordinal, At: now}, true)
+		}
 	}
 	tx, err := seed.store.DB().BeginTx(context.Background(), nil)
 	if err != nil {

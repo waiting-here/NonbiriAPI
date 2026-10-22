@@ -15,9 +15,9 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/config"
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
-	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 )
 
 type modelWorkerResolver struct{}
@@ -140,8 +140,12 @@ func TestModelCloudflareHTTPSelectionFreezeAndProxyFailure(t *testing.T) {
 	}
 	f.exec(t, `UPDATE charity_models SET cloudflare_proxy_enabled=1,revision=revision+1 WHERE full_name='[公益]provider/per_request'`)
 	streak := db.EncodeU128(db.U128{15: 2})
-	f.exec(t, `UPDATE donation_keys SET failure_streak=? WHERE endpoint_key_id=?`, streak, f.keyID)
+	health := appFixtureServiceHealth(t, f.store, f.keyID, connectorcontract.NativeServiceChatCompletions, time.Now().Unix())
+	f.exec(t, `UPDATE donation_service_health SET failure_streak=? WHERE id=?`, streak, health)
 	var donationKey int64
+	if err := f.store.DB().QueryRow(`SELECT id FROM donation_keys WHERE endpoint_key_id=?`, f.keyID).Scan(&donationKey); err != nil {
+		t.Fatal(err)
+	}
 	var actualStreak []byte
 	for _, failure := range []int32{1, 2, 3} {
 		mode.Store(failure)
@@ -153,12 +157,12 @@ func TestModelCloudflareHTTPSelectionFreezeAndProxyFailure(t *testing.T) {
 		if failure == 3 {
 			wantStreak = db.EncodeU128(db.U128{})
 		}
-		if err := f.store.DB().QueryRow(`SELECT id,failure_streak FROM donation_keys WHERE endpoint_key_id=?`, f.keyID).Scan(&donationKey, &actualStreak); err != nil || !bytes.Equal(actualStreak, wantStreak) {
+		if err := f.store.DB().QueryRow(`SELECT failure_streak FROM donation_service_health WHERE id=?`, health).Scan(&actualStreak); err != nil || !bytes.Equal(actualStreak, wantStreak) {
 			t.Fatal("proxy failure changed accepted-response streak semantics", failure, actualStreak, err)
 		}
-		projection, err := smartbackoff.Read(t.Context(), f.store.DB(), donationKey, time.Now().Unix())
-		if err != nil || projection.Backoff != nil {
-			t.Fatal("proxy response triggered credit backoff", failure, projection, err)
+		projection := appFixtureServiceBackoff(t, f.store, health, time.Now().Unix())
+		if projection.Backoff != nil {
+			t.Fatal("proxy response triggered credit backoff", failure, projection)
 		}
 	}
 	var neutral int
@@ -177,7 +181,7 @@ func TestModelCloudflareHTTPSelectionFreezeAndProxyFailure(t *testing.T) {
 	if status != 500 || workerCalls.Load() != 5 || directCalls.Load() != 2 {
 		t.Fatalf("confirmed upstream response changed: %d %s", status, body)
 	}
-	if err := f.store.DB().QueryRow(`SELECT failure_streak FROM donation_keys WHERE id=?`, donationKey).Scan(&actualStreak); err != nil || !bytes.Equal(actualStreak, db.EncodeU128(db.U128{15: 1})) {
+	if err := f.store.DB().QueryRow(`SELECT failure_streak FROM donation_service_health WHERE id=?`, health).Scan(&actualStreak); err != nil || !bytes.Equal(actualStreak, db.EncodeU128(db.U128{15: 1})) {
 		t.Fatal("upstream failure lost original key classification", err)
 	}
 }
