@@ -123,7 +123,9 @@ func authorizedFixtureCandidates(input []RouteCandidate) []RouteCandidate {
 		candidate.Authorization = routing.TargetAuthorization{BindingID: candidate.BindingID, TargetID: candidate.EndpointKeyID,
 			TargetRevision: 1, CredentialID: candidate.EndpointKeyID, CredentialVersionID: candidate.EndpointKeyID,
 			CredentialVersion: 1, GrantRevisionID: candidate.EndpointKeyID, GrantRevision: 1, ConfiguredType: candidate.ConnectorType}
-		candidate.NativeServices, _ = connectorcontract.LegacyNativeServices(candidate.ConnectorType)
+		if candidate.NativeServices.Empty() {
+			candidate.NativeServices, _ = connectorcontract.LegacyNativeServices(candidate.ConnectorType)
+		}
 	}
 	return output
 }

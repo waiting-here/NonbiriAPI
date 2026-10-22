@@ -21,6 +21,8 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
@@ -243,17 +245,16 @@ VALUES(?,?,?,?,?,?,?)`, token, userID, adminUsersTestNow, adminUsersTestNow+3600
 
 func (fixture *adminUsersFixture) seedEndpoint(userID int64, baseURL string, enabled bool, keys int) {
 	fixture.t.Helper()
-	enabledValue := 0
-	if enabled {
-		enabledValue = 1
-	}
-	result, err := fixture.store.DB().Exec(`
-INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at)
-VALUES(?,'openai-compatible',?,'private note',?,1,?,?)`, userID, baseURL, enabledValue, adminUsersTestNow, adminUsersTestNow)
+	ctx := context.Background()
+	tx, err := fixture.store.DB().BeginTx(ctx, nil)
 	if err != nil {
 		fixture.t.Fatal(err)
 	}
-	endpointID, err := result.LastInsertId()
+	defer tx.Rollback()
+	endpointID, err := testseed.InsertEndpointTx(ctx, tx, testseed.EndpointInput{
+		OwnerUserID: userID, Type: connectorcontract.TypeOpenAICompatible, BaseURL: baseURL,
+		Note: "private note", Disabled: !enabled, At: adminUsersTestNow,
+	})
 	if err != nil {
 		fixture.t.Fatal(err)
 	}
@@ -261,19 +262,26 @@ VALUES(?,'openai-compatible',?,'private note',?,1,?,?)`, userID, baseURL, enable
 		fixture.nextSecret++
 		contextID := make([]byte, 16)
 		binary.BigEndian.PutUint64(contextID[8:], fixture.nextSecret)
-		secretResult, err := fixture.store.DB().Exec(`
+		secretResult, err := tx.ExecContext(ctx, `
 INSERT INTO endpoint_key_secrets(context_id,canonical_base_url,connector_type,encrypted_secret,created_at)
 VALUES(?,?,'openai-compatible','sealed-test-value',?)`, contextID, baseURL, adminUsersTestNow)
 		if err != nil {
 			fixture.t.Fatal(err)
 		}
-		secretID, _ := secretResult.LastInsertId()
-		fingerprint := sha256.Sum256([]byte(fmt.Sprintf("%d/%d", endpointID, index)))
-		if _, err := fixture.store.DB().Exec(`
-INSERT INTO endpoint_keys(endpoint_id,secret_ref_id,secret_fingerprint,display_head,display_tail,note,enabled,force_store_false,revision,created_at,updated_at)
-VALUES(?,?,?,'head','tail','private key note',1,0,1,?,?)`, endpointID, secretID, fingerprint[:], adminUsersTestNow, adminUsersTestNow); err != nil {
+		secretID, err := secretResult.LastInsertId()
+		if err != nil {
 			fixture.t.Fatal(err)
 		}
+		fingerprint := sha256.Sum256([]byte(fmt.Sprintf("%d/%d", endpointID, index)))
+		if _, err := testseed.InsertEndpointKeyTx(ctx, tx, testseed.KeyInput{
+			EndpointID: endpointID, SecretRefID: secretID, Fingerprint: fingerprint[:],
+			DisplayHead: "head", DisplayTail: "tail", Note: "private key note", At: adminUsersTestNow,
+		}); err != nil {
+			fixture.t.Fatal(err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		fixture.t.Fatal(err)
 	}
 }
 

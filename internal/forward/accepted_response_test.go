@@ -64,6 +64,11 @@ func TestCharityEmbeddingHTTPAcceptanceStopsRetry(t *testing.T) {
 				r.Header.Set("Content-Type", "application/json")
 				return r, nil
 			}}
+			services, err := contract.ParseNativeServices([]contract.NativeService{contract.NativeServiceEmbeddings})
+			if err != nil {
+				t.Fatal(err)
+			}
+			f.charity.snapshot.Candidates[0].NativeServices = services
 			useRealStreamConnector(t, f, kind, b, 1, false)
 			w := httptest.NewRecorder()
 			request, err := openai.DecodeEmbeddingRequest(strings.NewReader(`{"model":"[公益]care/model","input":"hello"}`), 0)
