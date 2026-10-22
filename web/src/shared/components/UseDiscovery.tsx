@@ -83,7 +83,7 @@ export function UseDiscovery({
       {current ? (
         <Note>
           {t('common.connections.sharedDiscoveryState', {
-            state: t('common.connections.sourceStates.' + current.state),
+            state: t(`common.connections.sourceStates.${current.state}`),
             count: current.count ?? '—',
           })}
         </Note>

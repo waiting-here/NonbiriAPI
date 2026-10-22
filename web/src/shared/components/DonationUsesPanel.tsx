@@ -150,7 +150,7 @@ export function DonationUsesPanel({
               <option value="">{t('common.connections.all')}</option>
               {['pending', 'approved', 'rejected', 'withdrawn'].map((value) => (
                 <option key={value} value={value}>
-                  {t('common.connections.useStates.' + value)}
+                  {t(`common.connections.useStates.${value}`)}
                 </option>
               ))}
             </select>
@@ -513,7 +513,7 @@ function VersionMaterial({ label, value }: { label: string; value: UseVersion })
         {value.display_head}…{value.display_tail} ·{' '}
         {t('common.connections.versionNumber', { version: value.credential_version })}
       </p>
-      <p>{t('common.connections.useStates.' + value.status)}</p>
+      <p>{t(`common.connections.useStates.${value.status}`)}</p>
       {value.review_note ? <Note>{value.review_note}</Note> : null}
       <p className="nb-sub">
         {value.review.required
@@ -527,7 +527,7 @@ function VersionMaterial({ label, value }: { label: string; value: UseVersion })
       {value.discovery ? (
         <p className="nb-sub">
           {t('common.connections.sharedDiscoveryState', {
-            state: t('common.connections.sourceStates.' + value.discovery.state),
+            state: t(`common.connections.sourceStates.${value.discovery.state}`),
             count: value.discovery.count ?? '—',
           })}
         </p>

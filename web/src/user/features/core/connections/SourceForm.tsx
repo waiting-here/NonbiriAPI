@@ -106,7 +106,7 @@ export function SourceForm({
           >
             {DISCOVERY_FORMATS.map((value) => (
               <option key={value} value={value}>
-                {t('common.connections.discoveryFormats.' + value)}
+                {t(`common.connections.discoveryFormats.${value}`)}
               </option>
             ))}
           </select>

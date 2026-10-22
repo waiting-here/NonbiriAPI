@@ -3595,13 +3595,8 @@
       "statuses": "At least one success returns 200; all confirmed failures return 422; no success with unfinished items returns 504. Reusing the same key with different content returns 409."
     },
     "services": {
-      "add": "Add service",
       "filters": "Filters",
       "removeFilter": "Remove {{label}} filter",
-      "emptyTitle": "No services added yet",
-      "emptyBody": "Add an API service you own to call it with your site key. Charity models work without adding one.",
-      "charity": "Browse charity models",
-      "description": "AI services you own. Add one to call its models with your site API key.",
       "more": "More actions",
       "editName": "Edit name",
       "modelsUsing": "Models using this service",

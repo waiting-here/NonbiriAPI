@@ -133,7 +133,7 @@ function SourceDetails({
               <dd>
                 {source.credential_available === false
                   ? t('common.connections.credentialUnavailable')
-                  : t('common.connections.sourceStates.' + source.state)}
+                  : t(`common.connections.sourceStates.${source.state}`)}
               </dd>
             </div>
             <div>

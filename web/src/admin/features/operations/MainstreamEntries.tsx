@@ -215,7 +215,7 @@ export function MainstreamEntries({
                 >
                   {DISCOVERY_FORMATS.map((format) => (
                     <option key={format} value={format}>
-                      {t('common.connections.discoveryFormats.' + format)}
+                      {t(`common.connections.discoveryFormats.${format}`)}
                     </option>
                   ))}
                 </select>

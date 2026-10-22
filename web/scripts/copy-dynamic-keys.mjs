@@ -68,6 +68,33 @@ function anchorFor(key, defaultAnchor) {
 }
 
 const dynamicCopyKeys = [
+  ...['unknown', 'checking', 'succeeded', 'failed'].map((state) =>
+    entry(
+      'common',
+      `common.connections.sourceStates.${state}`,
+      'src/shared/components/UseDiscovery.tsx',
+      't(`common.connections.sourceStates.${current.state}`)',
+      'Discovery state is a closed normalized response field.',
+    ),
+  ),
+  ...['pending', 'approved', 'rejected', 'withdrawn', 'superseded'].map((state) =>
+    entry(
+      'common',
+      `common.connections.useStates.${state}`,
+      'src/shared/components/DonationUsesPanel.tsx',
+      't(`common.connections.useStates.${value.status}`)',
+      'Per-service approval state is a closed normalized response field.',
+    ),
+  ),
+  ...['openai', 'anthropic', 'gemini', 'ai-sdk-gateway-v3', 'ai-sdk-gateway-v4'].map((format) =>
+    entry(
+      'common',
+      `common.connections.discoveryFormats.${format}`,
+      'src/user/features/core/connections/SourceForm.tsx',
+      't(`common.connections.discoveryFormats.${value}`)',
+      'The directory format selector uses the explicit supported formats.',
+    ),
+  ),
   ...['pending', 'disabled', 'suspended', 'exhausted', 'expired', 'ended'].map((state) =>
     entry(
       'common',

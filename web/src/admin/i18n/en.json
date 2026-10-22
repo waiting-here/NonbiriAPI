@@ -472,10 +472,7 @@
       "form": {
         "name": "Channel name",
         "category": "Category",
-        "connector": "API format",
-        "baseUrl": "API base URL",
-        "enabled": "Available for adding services",
-        "baseUrlHelp": "Enter the service API base URL, for example https://api.example.com/v1."
+        "enabled": "Available for adding services"
       },
       "validation": {
         "invalid": "Enter a channel name and a valid API base URL."
@@ -490,7 +487,6 @@
         "idRevision": "Channel ID / version",
         "category": "Category",
         "connector": "API type",
-        "baseUrl": "API base URL",
         "enabled": "Available for adding services",
         "state": "State",
         "created": "Created",

@@ -102,7 +102,7 @@ export function DiscoveryPanel({
             render: (row) =>
               row.credential_available === false
                 ? t('common.connections.credentialUnavailable')
-                : t('common.connections.sourceStates.' + row.state),
+                : t(`common.connections.sourceStates.${row.state}`),
           },
           {
             key: 'manage',
