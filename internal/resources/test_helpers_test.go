@@ -287,6 +287,7 @@ func (resourceTestBaseURLValidator) ValidateBaseURL(value string) (string, error
 }
 
 type resourceTestSecretWriter struct {
+	fingerprints  map[int64][32]byte
 	mu            sync.Mutex
 	nextContext   uint64
 	writes        int
@@ -329,7 +330,15 @@ func (hook *resourceTestEndpointKeyDeletionHook) PrepareEndpointKeyDeletion(
 }
 
 func (writer *resourceTestSecretWriter) WriteEndpointSecret(ctx context.Context, tx *sql.Tx, input SecretWriteInput) (StoredSecret, error) {
-	if len(input.Plaintext) == 0 || input.CanonicalBaseURL == "" || input.ConnectorType == "" {
+	return writer.writeSecret(ctx, tx, input, true)
+}
+
+func (writer *resourceTestSecretWriter) WriteCredentialSecret(ctx context.Context, tx *sql.Tx, plaintext []byte, now int64) (StoredSecret, error) {
+	return writer.writeSecret(ctx, tx, SecretWriteInput{Plaintext: plaintext, CreatedAt: now}, false)
+}
+
+func (writer *resourceTestSecretWriter) writeSecret(ctx context.Context, tx *sql.Tx, input SecretWriteInput, origin bool) (StoredSecret, error) {
+	if len(input.Plaintext) == 0 || (origin && (input.CanonicalBaseURL == "" || input.ConnectorType == "")) {
 		return StoredSecret{}, errors.New("invalid secret write")
 	}
 	writer.mu.Lock()
@@ -341,9 +350,13 @@ func (writer *resourceTestSecretWriter) WriteEndpointSecret(ctx context.Context,
 	writer.mu.Unlock()
 	contextID := make([]byte, 16)
 	binary.BigEndian.PutUint64(contextID[8:], sequence)
+	var base, connectorType any
+	if origin {
+		base, connectorType = input.CanonicalBaseURL, input.ConnectorType
+	}
 	result, err := tx.ExecContext(ctx, `
 INSERT INTO endpoint_key_secrets(context_id,canonical_base_url,connector_type,encrypted_secret,created_at,orphaned_at)
-VALUES(?,?,?,'test-only-envelope',?,NULL)`, contextID, input.CanonicalBaseURL, input.ConnectorType, input.CreatedAt)
+VALUES(?,?,?,'test-only-envelope',?,NULL)`, contextID, base, connectorType, input.CreatedAt)
 	clear(contextID)
 	if err != nil {
 		return StoredSecret{}, err
@@ -353,17 +366,26 @@ VALUES(?,?,?,'test-only-envelope',?,NULL)`, contextID, input.CanonicalBaseURL, i
 		return StoredSecret{}, err
 	}
 	fingerprint := sha256.Sum256(input.Plaintext)
+	writer.mu.Lock()
+	if writer.fingerprints == nil {
+		writer.fingerprints = map[int64][32]byte{}
+	}
+	writer.fingerprints[refID] = fingerprint
+	writer.mu.Unlock()
 	return StoredSecret{RefID: refID, Fingerprint: fingerprint, DisplayHead: "head", DisplayTail: "tail"}, nil
 }
 
 func (writer *resourceTestSecretWriter) MarkEndpointSecretOrphaned(ctx context.Context, tx *sql.Tx, refID, at int64) error {
-	result, err := tx.ExecContext(ctx, `UPDATE endpoint_key_secrets SET orphaned_at=? WHERE id=? AND orphaned_at IS NULL`, at, refID)
+	result, err := tx.ExecContext(ctx, `UPDATE endpoint_key_secrets SET orphaned_at=? WHERE id=? AND orphaned_at IS NULL AND NOT EXISTS(SELECT 1 FROM secret_live_references live WHERE live.secret_ref_id=endpoint_key_secrets.id)`, at, refID)
 	if err != nil {
 		return err
 	}
 	updated, err := result.RowsAffected()
-	if err != nil || updated != 1 {
-		return errors.New("secret orphan CAS failed")
+	if err != nil {
+		return err
+	}
+	if updated == 0 {
+		return nil
 	}
 	writer.mu.Lock()
 	writer.orphans++
@@ -419,4 +441,18 @@ func (rail *resourceTestDiscoveryRail) Discover(ctx context.Context, input Disco
 		}
 	}
 	return result, err
+}
+
+func (writer *resourceTestSecretWriter) FingerprintEndpointSecret(ctx context.Context, tx *sql.Tx, refID int64, connectorType, base string) ([32]byte, error) {
+	writer.mu.Lock()
+	defer writer.mu.Unlock()
+	fp, ok := writer.fingerprints[refID]
+	if !ok {
+		return [32]byte{}, ErrUnavailable
+	}
+	return fp, nil
+}
+func (writer *resourceTestSecretWriter) MatchEndpointSecret(ctx context.Context, tx *sql.Tx, refID int64, plaintext []byte) (bool, error) {
+	fp, err := writer.FingerprintEndpointSecret(ctx, tx, refID, "", "")
+	return fp == sha256.Sum256(plaintext), err
 }

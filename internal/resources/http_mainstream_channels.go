@@ -6,41 +6,54 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
 type createMainstreamChannelRequest struct {
-	Name          requestField[string] `json:"name"`
-	Category      requestField[string] `json:"category"`
-	ConnectorType requestField[string] `json:"connector_type"`
-	BaseURL       requestField[string] `json:"base_url"`
-	Enabled       requestField[bool]   `json:"enabled"`
+	Entries         requestField[[]MainstreamEntry]                  `json:"entries"`
+	DiscoverySource httpapi.NullableField[MainstreamDiscoveryPreset] `json:"discovery_source"`
+	ModelMappings   requestField[[]MainstreamModelMapping]           `json:"model_mappings"`
+	Name            requestField[string]                             `json:"name"`
+	Category        requestField[string]                             `json:"category"`
+	ConnectorType   requestField[string]                             `json:"connector_type"`
+	BaseURL         requestField[string]                             `json:"base_url"`
+	Enabled         requestField[bool]                               `json:"enabled"`
 }
 
 type createMainstreamChannelCanonical struct {
-	Name          string `json:"name"`
-	Category      string `json:"category"`
-	ConnectorType string `json:"connector_type"`
-	BaseURL       string `json:"base_url"`
-	Enabled       bool   `json:"enabled"`
+	Entries         *[]MainstreamEntry         `json:"entries,omitempty"`
+	DiscoverySource *MainstreamDiscoveryPreset `json:"discovery_source,omitempty"`
+	ModelMappings   []MainstreamModelMapping   `json:"model_mappings,omitempty"`
+	Name            string                     `json:"name"`
+	Category        string                     `json:"category"`
+	ConnectorType   string                     `json:"connector_type"`
+	BaseURL         string                     `json:"base_url"`
+	Enabled         bool                       `json:"enabled"`
 }
 
 type patchMainstreamChannelRequest struct {
-	Name             requestField[string] `json:"name"`
-	Category         requestField[string] `json:"category"`
-	ConnectorType    requestField[string] `json:"connector_type"`
-	BaseURL          requestField[string] `json:"base_url"`
-	Enabled          requestField[bool]   `json:"enabled"`
-	ExpectedRevision requestField[string] `json:"expected_revision"`
+	Entries          requestField[[]MainstreamEntry]                  `json:"entries"`
+	DiscoverySource  httpapi.NullableField[MainstreamDiscoveryPreset] `json:"discovery_source"`
+	ModelMappings    requestField[[]MainstreamModelMapping]           `json:"model_mappings"`
+	Name             requestField[string]                             `json:"name"`
+	Category         requestField[string]                             `json:"category"`
+	ConnectorType    requestField[string]                             `json:"connector_type"`
+	BaseURL          requestField[string]                             `json:"base_url"`
+	Enabled          requestField[bool]                               `json:"enabled"`
+	ExpectedRevision requestField[string]                             `json:"expected_revision"`
 }
 
 type patchMainstreamChannelCanonical struct {
-	Name             *string `json:"name,omitempty"`
-	Category         *string `json:"category,omitempty"`
-	ConnectorType    *string `json:"connector_type,omitempty"`
-	BaseURL          *string `json:"base_url,omitempty"`
-	Enabled          *bool   `json:"enabled,omitempty"`
-	ExpectedRevision string  `json:"expected_revision"`
+	Entries          *[]MainstreamEntry          `json:"entries,omitempty"`
+	DiscoverySource  **MainstreamDiscoveryPreset `json:"discovery_source,omitempty"`
+	ModelMappings    *[]MainstreamModelMapping   `json:"model_mappings,omitempty"`
+	Name             *string                     `json:"name,omitempty"`
+	Category         *string                     `json:"category,omitempty"`
+	ConnectorType    *string                     `json:"connector_type,omitempty"`
+	BaseURL          *string                     `json:"base_url,omitempty"`
+	Enabled          *bool                       `json:"enabled,omitempty"`
+	ExpectedRevision string                      `json:"expected_revision"`
 }
 
 type retireMainstreamChannelRequest struct {
@@ -63,6 +76,7 @@ func RegisterAdminRoutes(registrar AdminRouteRegistrar, repository *Repository) 
 		pattern string
 		handler AuthorizedAdminHandler
 	}{
+		{http.MethodGet, "/admin/api/endpoint-create-options", api.adminEndpointCreateOptions},
 		{http.MethodGet, routeMainstreamChannels, api.listMainstreamChannels},
 		{http.MethodPost, routeMainstreamChannels, api.createMainstreamChannel},
 		{http.MethodGet, routeMainstreamChannel, api.getMainstreamChannel},
@@ -159,11 +173,14 @@ func (api *httpAPI) createMainstreamChannel(writer http.ResponseWriter, request 
 	if _, ok := decodeStrictObject(writer, request, &body); !ok {
 		return
 	}
-	if !body.Name.Set || !body.Category.Set || !body.ConnectorType.Set || !body.BaseURL.Set || !body.Enabled.Set {
+	if !body.Name.Set || !body.Category.Set || !body.Enabled.Set ||
+		(!body.Entries.Set && (!body.ConnectorType.Set || !body.BaseURL.Set)) ||
+		(body.Entries.Set && (body.ConnectorType.Set || body.BaseURL.Set)) {
 		writeResourceError(writer, ErrInvalidRequest)
 		return
 	}
 	canonical := createMainstreamChannelCanonical{
+		Entries: optionalPointer(body.Entries), DiscoverySource: body.DiscoverySource.Value, ModelMappings: body.ModelMappings.Value,
 		Name: body.Name.Value, Category: body.Category.Value, ConnectorType: body.ConnectorType.Value,
 		BaseURL: body.BaseURL.Value, Enabled: body.Enabled.Value,
 	}
@@ -172,6 +189,7 @@ func (api *httpAPI) createMainstreamChannel(writer http.ResponseWriter, request 
 		return
 	}
 	result, err := api.repository.CreateMainstreamChannel(request.Context(), principal.UserID, mutation, CreateMainstreamChannelInput{
+		Entries: canonical.Entries, DiscoverySource: canonical.DiscoverySource, ModelMappings: canonical.ModelMappings,
 		Name: canonical.Name, Category: canonical.Category, ConnectorType: canonical.ConnectorType,
 		BaseURL: canonical.BaseURL, Enabled: canonical.Enabled,
 	})
@@ -192,20 +210,26 @@ func (api *httpAPI) patchMainstreamChannel(writer http.ResponseWriter, request *
 		return
 	}
 	revision, ok := canonicalExpectedRevision(body.ExpectedRevision)
-	if !ok || (!body.Name.Set && !body.Category.Set && !body.ConnectorType.Set && !body.BaseURL.Set && !body.Enabled.Set) {
+	if !ok || (!body.Name.Set && !body.Category.Set && !body.ConnectorType.Set && !body.BaseURL.Set && !body.Enabled.Set && !body.Entries.Set && !body.DiscoverySource.Set && !body.ModelMappings.Set) ||
+		(body.Entries.Set && (body.ConnectorType.Set || body.BaseURL.Set)) {
 		writeResourceError(writer, ErrInvalidRequest)
 		return
 	}
 	canonical := patchMainstreamChannelCanonical{
+		Entries: optionalPointer(body.Entries), ModelMappings: optionalPointer(body.ModelMappings),
 		Name: optionalPointer(body.Name), Category: optionalPointer(body.Category),
 		ConnectorType: optionalPointer(body.ConnectorType), BaseURL: optionalPointer(body.BaseURL),
 		Enabled: optionalPointer(body.Enabled), ExpectedRevision: body.ExpectedRevision.Value,
+	}
+	if body.DiscoverySource.Set {
+		canonical.DiscoverySource = &body.DiscoverySource.Value
 	}
 	mutation, ok := adminMutationForTextPath(writer, request, routeMainstreamChannel, []string{id}, canonical)
 	if !ok {
 		return
 	}
 	result, err := api.repository.PatchMainstreamChannel(request.Context(), principal.UserID, id, mutation, PatchMainstreamChannelInput{
+		Entries: canonical.Entries, DiscoverySource: canonical.DiscoverySource, ModelMappings: canonical.ModelMappings,
 		Name: canonical.Name, Category: canonical.Category, ConnectorType: canonical.ConnectorType,
 		BaseURL: canonical.BaseURL, Enabled: canonical.Enabled, ExpectedRevision: revision,
 	})
@@ -248,6 +272,19 @@ func (api *httpAPI) endpointCreateOptions(writer http.ResponseWriter, request *h
 		return
 	}
 	options, err := api.repository.GetEndpointCreateOptions(request.Context(), principal.UserID)
+	if err != nil {
+		writeResourceError(writer, err)
+		return
+	}
+	writer.Header().Set("Cache-Control", "no-store")
+	writeJSON(writer, http.StatusOK, options)
+}
+
+func (api *httpAPI) adminEndpointCreateOptions(writer http.ResponseWriter, request *http.Request, principal AdminPrincipal) {
+	if !requireEmptyQuery(writer, request) || !requireNoBody(writer, request) {
+		return
+	}
+	options, err := api.repository.GetAdminEndpointCreateOptions(request.Context(), principal.UserID)
 	if err != nil {
 		writeResourceError(writer, err)
 		return

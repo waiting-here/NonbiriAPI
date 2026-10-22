@@ -82,14 +82,14 @@ WHERE owner_user_id=?`, decisionNow, userID); err != nil {
 
 func readUserPendingCapturesTx(ctx context.Context, tx *sql.Tx, userID int64) ([]pendingCapture, error) {
 	rows, err := tx.QueryContext(ctx, `
-SELECT c.id,c.connector_type,c.canonical_base_url,c.status,c.material_version,c.target_version,c.created_at,c.deadline,
+SELECT DISTINCT c.id,c.connector_type,c.canonical_base_url,c.status,c.material_version,c.target_version,c.created_at,c.deadline,
  k.id,e.user_id,u.discord_id,
  CASE WHEN u.guild_nick<>'' THEN u.guild_nick ELSE u.username END,
- e.connector_type,e.base_url,k.display_head,k.display_tail,k.secret_fingerprint,k.created_at
-FROM endpoint_keys k
+ e.connector_type,e.base_url,ev.display_head,ev.display_tail,ev.report_fingerprint,k.created_at
+FROM endpoint_key_credential_evidence ev JOIN endpoint_keys k ON k.id=ev.endpoint_key_id
 JOIN endpoints e ON e.id=k.endpoint_id
 JOIN users u ON u.id=e.user_id
-JOIN report_cases c ON c.fingerprint=k.secret_fingerprint
+JOIN report_cases c ON c.fingerprint=ev.report_fingerprint
  AND c.connector_type=e.connector_type AND c.canonical_base_url=e.base_url
 WHERE e.user_id=? AND c.status IN ('pending_indexing','pending_review','approved_processing')
 ORDER BY c.id,k.id`, userID)

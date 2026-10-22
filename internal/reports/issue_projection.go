@@ -53,9 +53,9 @@ func readFingerprintIssueTargetsTx(
 		return nil, ErrInvariant
 	}
 	rows, err := tx.QueryContext(ctx, `
-SELECT e.user_id,k.id
-FROM endpoint_keys k JOIN endpoints e ON e.id=k.endpoint_id
-WHERE k.secret_fingerprint=? AND e.connector_type=? AND e.base_url=?
+SELECT DISTINCT e.user_id,k.id
+FROM endpoint_key_credential_evidence ev JOIN endpoint_keys k ON k.id=ev.endpoint_key_id JOIN endpoints e ON e.id=k.endpoint_id
+WHERE ev.report_fingerprint=? AND e.connector_type=? AND e.base_url=?
 ORDER BY e.user_id,k.id`, fingerprint, connectorType, baseURL)
 	if err != nil {
 		return nil, fmt.Errorf("reports: list fingerprint issue targets: %w", err)

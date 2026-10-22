@@ -20,16 +20,17 @@ type attemptPrivacySource struct {
 // attempts retain their own endpoint snapshot; an unfinished attempt can use
 // only its exact active claim's endpoint metadata, never another attempt's URL.
 const completedPrivacySources = `SELECT a.request_log_id,a.attempt_seq,a.canonical_base_url,
- EXISTS(SELECT 1 FROM mainstream_channels m WHERE m.state='active' AND m.enabled=1
-  AND m.connector_type=a.connector_type AND m.canonical_base_url=a.canonical_base_url)
+ EXISTS(SELECT 1 FROM mainstream_channels m JOIN mainstream_channel_entries ce ON ce.channel_id=m.id
+ WHERE m.state='active' AND m.enabled=1 AND ce.enabled=1 AND ce.canonical_base_url=a.canonical_base_url)
  FROM request_attempts a
  WHERE a.request_log_id IN (`
 
-const activePrivacySources = `SELECT l.id,c.attempt_seq,s.canonical_base_url,
- EXISTS(SELECT 1 FROM mainstream_channels m WHERE m.state='active' AND m.enabled=1
-  AND m.connector_type=s.connector_type AND m.canonical_base_url=s.canonical_base_url)
+const activePrivacySources = `SELECT l.id,c.attempt_seq,COALESCE(t.canonical_base_url,s.canonical_base_url),
+ EXISTS(SELECT 1 FROM mainstream_channels m JOIN mainstream_channel_entries ce ON ce.channel_id=m.id
+ WHERE m.state='active' AND m.enabled=1 AND ce.enabled=1 AND ce.canonical_base_url=COALESCE(t.canonical_base_url,s.canonical_base_url))
  FROM request_logs l JOIN dispatch_claims c ON c.logical_request_id=l.logical_request_id AND c.state='dispatched'
- JOIN endpoint_key_secrets s ON s.id=c.secret_ref_id
+ LEFT JOIN dispatch_claim_targets t ON t.claim_id=c.id
+ LEFT JOIN endpoint_key_secrets s ON s.id=c.secret_ref_id
  WHERE NOT EXISTS(SELECT 1 FROM request_attempts a WHERE a.request_log_id=l.id AND a.attempt_seq=c.attempt_seq)
  AND l.id IN (`
 

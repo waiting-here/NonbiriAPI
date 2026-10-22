@@ -40,7 +40,7 @@ func (ModelDiscoverer) Discover(ctx context.Context, input contract.DiscoveryInp
 		result.Failure = contract.DiscoveryFailureTransport
 		return result
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSuffix(client.BaseURL(), "/")+"/config", nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, ModelsURL(client.BaseURL()), nil)
 	if err != nil {
 		return result
 	}
@@ -158,9 +158,14 @@ func (ModelDiscoverer) Discover(ctx context.Context, input contract.DiscoveryInp
 			result.Models = nil
 			return result
 		}
-		result.Models = append(result.Models, contract.DiscoveredModel{ID: id, Provider: provider})
+		service := map[string]contract.NativeService{"language": contract.NativeServiceGatewayText, "embedding": contract.NativeServiceEmbeddings, "image": contract.NativeServiceImagesGenerations, "reranking": contract.NativeServiceRerank}[kind]
+		services, _ := contract.ParseNativeServices([]contract.NativeService{service})
+		result.Models = append(result.Models, contract.DiscoveredModel{ID: id, Provider: provider, NativeServices: services})
 	}
 	result.Failure = contract.DiscoveryFailureNone
 	result.Diagnostic = ""
 	return result
 }
+
+// ModelsURL is the catalog endpoint before pagination parameters are added.
+func ModelsURL(baseURL string) string { return strings.TrimSuffix(baseURL, "/") + "/config" }

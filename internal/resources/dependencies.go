@@ -37,6 +37,13 @@ type SecretMatcher interface {
 	MatchEndpointSecret(context.Context, *sql.Tx, int64, []byte) (bool, error)
 }
 
+// SharedSecretWriter keeps encryption and destination fingerprints inside the
+// vault boundary. The caller selects the reference through owner authorization.
+type SharedSecretWriter interface {
+	WriteCredentialSecret(context.Context, *sql.Tx, []byte, int64) (StoredSecret, error)
+	FingerprintEndpointSecret(context.Context, *sql.Tx, int64, string, string) ([32]byte, error)
+}
+
 // EndpointKeyDeletionHook lets the donation owner terminate references before
 // the resource repository physically deletes verified owner keys. The hook
 // runs in the caller's transaction and must not independently authorize or commit.
@@ -72,13 +79,16 @@ type DiscoveryClaimRail interface {
 // ManagedDiscoveryAuthorizer resolves a donation key only after checking the
 // current management session, role, parent and eligibility in the given transaction.
 type ManagedDiscoveryAuthorizer interface {
-	AuthorizeManagedDiscovery(context.Context, *sql.Tx, string, int64, int64, int64, bool) (ManagedDiscoveryTarget, error)
+	AuthorizeManagedDiscovery(context.Context, *sql.Tx, string, int64, int64, int64, ManagedDiscoverySelection, bool) (ManagedDiscoveryTarget, error)
 }
 
+type ManagedDiscoverySelection struct{ UseID, ExpectedRevision int64 }
+
 type ManagedDiscoveryTarget struct {
-	OwnerUserID   int64
-	EndpointID    int64
-	EndpointKeyID int64
+	UseID, UseRevision, SourceID, SourceRevisionID, CredentialVersionID, ApprovedRevisionID int64
+	OwnerUserID                                                                             int64
+	EndpointID                                                                              int64
+	EndpointKeyID                                                                           int64
 }
 
 // DiscoveryWorker provides non-blocking, bounded admission for accepted

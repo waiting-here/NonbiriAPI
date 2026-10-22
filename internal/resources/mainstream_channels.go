@@ -101,8 +101,8 @@ func scanMainstreamChannel(scanner interface{ Scan(...any) error }) (MainstreamC
 }
 
 const mainstreamChannelSelect = `
-SELECT id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at,retired_at
-FROM mainstream_channels`
+SELECT c.id,c.name,c.category,p.connector_type,p.canonical_base_url,c.enabled,c.state,c.revision,c.created_at,c.updated_at,c.retired_at
+FROM mainstream_channels c JOIN mainstream_channel_primary_entries p ON p.channel_id=c.id`
 
 func getMainstreamChannelTx(ctx context.Context, tx *sql.Tx, id string) (MainstreamChannel, error) {
 	item, err := scanMainstreamChannel(tx.QueryRowContext(ctx, mainstreamChannelSelect+` WHERE id=?`, id))
@@ -112,6 +112,11 @@ func getMainstreamChannelTx(ctx context.Context, tx *sql.Tx, id string) (Mainstr
 	if err != nil {
 		return MainstreamChannel{}, fmt.Errorf("resources: read mainstream channel: %w", err)
 	}
+	items := []MainstreamChannel{item}
+	if err := attachMainstreamPresetsTx(ctx, tx, items); err != nil {
+		return MainstreamChannel{}, err
+	}
+	item = items[0]
 	return item, nil
 }
 
@@ -141,8 +146,16 @@ func (r *Repository) validateMainstreamChannelDTO(item MainstreamChannel) error 
 }
 
 func validateMainstreamChannelCreate(r *Repository, input CreateMainstreamChannelInput) (string, error) {
-	if r == nil || !validateExactText(input.Name, 1, 128) || !validMainstreamChannelCategory(input.Category) ||
-		!validMainstreamConnectorType(r.connectors, input.ConnectorType) || isNilInterface(r.baseURLs) {
+	if r == nil || !validateExactText(input.Name, 1, 128) || !validMainstreamChannelCategory(input.Category) || isNilInterface(r.baseURLs) {
+		return "", ErrInvalidRequest
+	}
+	if input.Entries != nil {
+		if input.ConnectorType != "" || input.BaseURL != "" {
+			return "", ErrInvalidRequest
+		}
+		return "", r.validateMainstreamPreset(MainstreamPreset{Entries: *input.Entries, DiscoverySource: input.DiscoverySource, ModelMappings: input.ModelMappings})
+	}
+	if !validMainstreamConnectorType(r.connectors, input.ConnectorType) {
 		return "", ErrInvalidRequest
 	}
 	canonical, err := r.baseURLs.ValidateBaseURL(input.BaseURL)
@@ -154,7 +167,8 @@ func validateMainstreamChannelCreate(r *Repository, input CreateMainstreamChanne
 
 func validateMainstreamChannelPatch(r *Repository, input PatchMainstreamChannelInput) (string, error) {
 	if r == nil || input.ExpectedRevision < 1 ||
-		(input.Name == nil && input.Category == nil && input.ConnectorType == nil && input.BaseURL == nil && input.Enabled == nil) {
+		(input.Name == nil && input.Category == nil && input.ConnectorType == nil && input.BaseURL == nil && input.Enabled == nil && input.Entries == nil && input.DiscoverySource == nil && input.ModelMappings == nil) ||
+		(input.Entries != nil && (input.ConnectorType != nil || input.BaseURL != nil)) {
 		return "", ErrInvalidRequest
 	}
 	if input.Name != nil && !validateExactText(*input.Name, 1, 128) {
@@ -295,6 +309,9 @@ LIMIT ?`, state, state, afterID, afterUpdated, afterUpdated, afterID, limit+1)
 		page.Data = items[:limit]
 		page.NextCursor = &next
 	}
+	if err := attachMainstreamPresetsTx(ctx, tx, page.Data); err != nil {
+		return Page[MainstreamChannel]{}, err
+	}
 	if err := commitTx(tx, &committed); err != nil {
 		return Page[MainstreamChannel]{}, err
 	}
@@ -350,10 +367,23 @@ func (r *Repository) CreateMainstreamChannel(ctx context.Context, adminID int64,
 		return MutationResult[MainstreamChannel]{}, ErrUnavailable
 	}
 	_, err = tx.ExecContext(ctx, `
-INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at,retired_at)
-VALUES(?,?,?,?,?,?,?,1,?,?,NULL)`, channelID, input.Name, input.Category, input.ConnectorType, canonicalURL, boolInt(input.Enabled), mainstreamChannelStateActive, now, now)
+INSERT INTO mainstream_channels(id,name,category,enabled,state,revision,created_at,updated_at,retired_at)
+VALUES(?,?,?,?,?,1,?,?,NULL)`, channelID, input.Name, input.Category, boolInt(input.Enabled), mainstreamChannelStateActive, now, now)
 	if err != nil {
 		return MutationResult[MainstreamChannel]{}, mapMainstreamChannelWriteError(fmt.Errorf("resources: create mainstream channel: %w", err))
+	}
+	preset := MainstreamPreset{DiscoverySource: input.DiscoverySource, ModelMappings: input.ModelMappings}
+	if input.Entries == nil {
+		services, err := connectorcontract.LegacyNativeServices(connectorcontract.Type(input.ConnectorType))
+		if err != nil {
+			return MutationResult[MainstreamChannel]{}, ErrInvalidRequest
+		}
+		preset.Entries = []MainstreamEntry{{ConnectorType: input.ConnectorType, BaseURL: canonicalURL, NativeServices: services.Services(), Enabled: true}}
+	} else {
+		preset.Entries = *input.Entries
+	}
+	if err := r.writeMainstreamPresetTx(ctx, tx, channelID, preset); err != nil {
+		return MutationResult[MainstreamChannel]{}, err
 	}
 	item, err := getMainstreamChannelTx(ctx, tx, channelID)
 	if err != nil {
@@ -424,16 +454,46 @@ func (r *Repository) PatchMainstreamChannel(ctx context.Context, adminID int64, 
 	if input.Enabled != nil {
 		enabled = *input.Enabled
 	}
+	preset := current.MainstreamPreset
+	if input.Entries != nil {
+		preset.Entries = *input.Entries
+	} else if input.ConnectorType != nil || input.BaseURL != nil {
+		preset.Entries[0].ConnectorType, preset.Entries[0].BaseURL = connectorType, baseURL
+		if input.ConnectorType != nil && *input.ConnectorType != current.ConnectorType {
+			services, err := connectorcontract.LegacyNativeServices(connectorcontract.Type(connectorType))
+			if err != nil {
+				return MutationResult[MainstreamChannel]{}, ErrInvalidRequest
+			}
+			preset.Entries[0].NativeServices, preset.Entries[0].RerankFormat = services.Services(), ""
+		}
+	}
+	if input.DiscoverySource != nil {
+		preset.DiscoverySource = *input.DiscoverySource
+	}
+	if input.ModelMappings != nil {
+		preset.ModelMappings = *input.ModelMappings
+	}
+	if err := r.validateMainstreamPreset(preset); err != nil {
+		if input.ModelMappings == nil && len(current.ModelMappings) > 0 {
+			return MutationResult[MainstreamChannel]{}, ErrConflict
+		}
+		return MutationResult[MainstreamChannel]{}, err
+	}
 	result, err := tx.ExecContext(ctx, `
 UPDATE mainstream_channels
-SET name=?,category=?,connector_type=?,canonical_base_url=?,enabled=?,revision=revision+1,updated_at=?
-WHERE id=? AND state='active' AND revision=?`, name, category, connectorType, baseURL, boolInt(enabled), now, id, input.ExpectedRevision)
+SET name=?,category=?,enabled=?,revision=revision+1,updated_at=?
+WHERE id=? AND state='active' AND revision=?`, name, category, boolInt(enabled), now, id, input.ExpectedRevision)
 	if err != nil {
 		return MutationResult[MainstreamChannel]{}, mapMainstreamChannelWriteError(fmt.Errorf("resources: patch mainstream channel: %w", err))
 	}
 	updated, _ := result.RowsAffected()
 	if updated != 1 {
 		return MutationResult[MainstreamChannel]{}, ErrConflict
+	}
+	if input.Entries != nil || input.DiscoverySource != nil || input.ModelMappings != nil || input.ConnectorType != nil || input.BaseURL != nil {
+		if err := r.writeMainstreamPresetTx(ctx, tx, id, preset); err != nil {
+			return MutationResult[MainstreamChannel]{}, err
+		}
 	}
 	item, err := getMainstreamChannelTx(ctx, tx, id)
 	if err != nil {
@@ -511,16 +571,45 @@ func (r *Repository) GetEndpointCreateOptions(ctx context.Context, userID int64)
 	}
 	committed := false
 	defer finishTx(tx, &committed)
+	item, err := r.endpointCreateOptionsTx(ctx, tx)
+	if err != nil {
+		return EndpointCreateOptions{}, err
+	}
+	if err = commitTx(tx, &committed); err != nil {
+		return EndpointCreateOptions{}, err
+	}
+	return item, nil
+}
+func (r *Repository) GetAdminEndpointCreateOptions(ctx context.Context, adminID int64) (EndpointCreateOptions, error) {
+	if r == nil || adminID <= 0 {
+		return EndpointCreateOptions{}, ErrInvalidRequest
+	}
+	tx, _, err := r.beginAuthorizedAdminTx(ctx, adminID)
+	if err != nil {
+		return EndpointCreateOptions{}, err
+	}
+	committed := false
+	defer finishTx(tx, &committed)
+	item, err := r.endpointCreateOptionsTx(ctx, tx)
+	if err != nil {
+		return EndpointCreateOptions{}, err
+	}
+	if err = commitTx(tx, &committed); err != nil {
+		return EndpointCreateOptions{}, err
+	}
+	return item, nil
+}
+func (r *Repository) endpointCreateOptionsTx(ctx context.Context, tx *sql.Tx) (EndpointCreateOptions, error) {
 	types := r.connectors.Types()
 	baseTypes := make([]string, len(types))
 	for index, connectorType := range types {
 		baseTypes[index] = string(connectorType)
 	}
 	rows, err := tx.QueryContext(ctx, `
-SELECT id,name,connector_type,canonical_base_url
-FROM mainstream_channels
-WHERE state='active' AND enabled=1
-ORDER BY name COLLATE BINARY ASC,id ASC`)
+SELECT c.id,c.name,p.connector_type,p.canonical_base_url,c.revision
+FROM mainstream_channels c JOIN mainstream_channel_primary_entries p ON p.channel_id=c.id
+WHERE c.state='active' AND c.enabled=1
+ORDER BY c.name COLLATE BINARY ASC,c.id ASC`)
 	if err != nil {
 		return EndpointCreateOptions{}, fmt.Errorf("resources: list endpoint create options: %w", err)
 	}
@@ -528,9 +617,14 @@ ORDER BY name COLLATE BINARY ASC,id ASC`)
 	channels := make([]MainstreamChannelOption, 0)
 	for rows.Next() {
 		var option MainstreamChannelOption
-		if err := rows.Scan(&option.ID, &option.Name, &option.ConnectorType, &option.BaseURL); err != nil {
+		var revision int64
+		if err := rows.Scan(&option.ID, &option.Name, &option.ConnectorType, &option.BaseURL, &revision); err != nil {
 			return EndpointCreateOptions{}, fmt.Errorf("resources: scan endpoint create option: %w", err)
 		}
+		if revision < 1 {
+			return EndpointCreateOptions{}, ErrUnavailable
+		}
+		option.Revision = strconv.FormatInt(revision, 10)
 		if !validMainstreamChannelID(option.ID) || !validateExactText(option.Name, 1, 128) || !validMainstreamConnectorType(r.connectors, option.ConnectorType) || option.BaseURL == "" || len(option.BaseURL) > 4096 {
 			return EndpointCreateOptions{}, ErrUnavailable
 		}
@@ -546,8 +640,20 @@ ORDER BY name COLLATE BINARY ASC,id ASC`)
 	if err := rows.Close(); err != nil {
 		return EndpointCreateOptions{}, fmt.Errorf("resources: close endpoint create options: %w", err)
 	}
-	if err := commitTx(tx, &committed); err != nil {
+	ids := make([]string, len(channels))
+	for i := range channels {
+		ids[i] = channels[i].ID
+	}
+	presets, err := loadMainstreamPresetsTx(ctx, tx, ids)
+	if err != nil {
 		return EndpointCreateOptions{}, err
 	}
-	return EndpointCreateOptions{BaseConnectorTypes: baseTypes, MainstreamChannels: channels}, nil
+	for i := range channels {
+		channels[i].MainstreamPreset = presets[channels[i].ID]
+	}
+	options, err := r.nativeServiceOptions()
+	if err != nil {
+		return EndpointCreateOptions{}, err
+	}
+	return EndpointCreateOptions{BaseConnectorTypes: baseTypes, MainstreamChannels: channels, NativeServiceOptions: options}, nil
 }

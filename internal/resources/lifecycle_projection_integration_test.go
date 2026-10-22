@@ -236,8 +236,11 @@ func TestApprovedReportDeletionCapabilityUsesIntegratedResourceCleanup(t *testin
 	environment.secrets.mu.Lock()
 	orphans := environment.secrets.orphans
 	environment.secrets.mu.Unlock()
-	if orphans != 1 {
-		t.Fatalf("orphaned secret count = %d", orphans)
+	if orphans != 0 {
+		t.Fatalf("independent credential was orphaned: %d", orphans)
+	}
+	if environment.rowCount(t, `SELECT COUNT(*) FROM credentials c JOIN credential_versions v ON v.id=c.current_version_id JOIN endpoint_key_secrets s ON s.id=v.secret_ref_id WHERE c.user_id=? AND c.deleted_at IS NULL AND s.orphaned_at IS NULL`, userID) != 1 {
+		t.Fatal("independent credential is no longer reusable")
 	}
 }
 

@@ -115,8 +115,8 @@ func (r *Repository) CreateManualEntries(ctx context.Context, userID, endpointID
 			return MutationResult[ManualEntriesResponse]{}, err
 		}
 		result, err := tx.ExecContext(ctx, `
-INSERT INTO model_catalog_entries(endpoint_key_id,source_type,source_identity,normalized_model_id,provider,source_revision,created_at,updated_at)
-VALUES(?,'manual',?,?,?,?,?,?)`, keyID, input.UpstreamModelID, input.UpstreamModelID, input.Provider, pairRevision, now, now)
+INSERT INTO model_catalog_entries(native_service_mask,endpoint_key_id,source_type,source_identity,normalized_model_id,provider,source_revision,created_at,updated_at)
+VALUES(0,?,'manual',?,?,?,?,?,?)`, keyID, input.UpstreamModelID, input.UpstreamModelID, input.Provider, pairRevision, now, now)
 		if err != nil {
 			return MutationResult[ManualEntriesResponse]{}, conflictOrError("create manual catalog entry", err)
 		}
@@ -191,7 +191,7 @@ WHERE endpoint_key_id=? AND normalized_model_id=? AND pair_revision=? AND manual
 func catalogEntryTx(ctx context.Context, tx *sql.Tx, keyID, entryID int64) (CatalogEntry, error) {
 	entry, err := scanCatalogEntry(tx.QueryRowContext(ctx, `
 SELECT c.id,c.source_type,c.normalized_model_id,c.provider,c.source_revision,p.pair_revision,c.created_at,c.updated_at
-FROM model_catalog_entries c
+FROM endpoint_key_catalog_entries c
 JOIN model_pair_catalog p ON p.endpoint_key_id=c.endpoint_key_id AND p.normalized_model_id=c.normalized_model_id
 WHERE c.endpoint_key_id=? AND c.id=?`, keyID, entryID))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -213,8 +213,8 @@ func manualEntryOwnerTx(ctx context.Context, tx *sql.Tx, userID, endpointID, key
 	err := tx.QueryRowContext(ctx, `
 SELECT c.id,c.normalized_model_id,c.provider,c.source_revision,p.pair_revision
 FROM endpoints e
-JOIN endpoint_keys k ON k.endpoint_id=e.id
-JOIN model_catalog_entries c ON c.endpoint_key_id=k.id AND c.source_type='manual'
+JOIN endpoint_key_current_credentials k ON k.endpoint_id=e.id
+JOIN endpoint_key_catalog_entries c ON c.endpoint_key_id=k.id AND c.source_type='manual'
 JOIN model_pair_catalog p ON p.endpoint_key_id=c.endpoint_key_id AND p.normalized_model_id=c.normalized_model_id
 WHERE e.user_id=? AND e.id=? AND k.id=? AND c.id=?`, userID, endpointID, keyID, entryID).Scan(
 		&row.id, &row.modelID, &row.provider, &row.sourceRevision, &row.pairRevision)
@@ -459,8 +459,8 @@ func cleanCatalogPairTx(ctx context.Context, tx *sql.Tx, keyID int64, modelID st
 	_, err := tx.ExecContext(ctx, `
 DELETE FROM model_pair_catalog
 WHERE endpoint_key_id=? AND normalized_model_id=? AND automatic_supports=0 AND manual_supports=0
-  AND NOT EXISTS(SELECT 1 FROM model_bindings b WHERE b.endpoint_key_id=model_pair_catalog.endpoint_key_id AND b.upstream_model_id=model_pair_catalog.normalized_model_id)
-  AND NOT EXISTS(SELECT 1 FROM charity_model_bindings b WHERE b.endpoint_key_id=model_pair_catalog.endpoint_key_id AND b.upstream_model_id=model_pair_catalog.normalized_model_id)`, keyID, modelID)
+  AND NOT EXISTS(SELECT 1 FROM model_binding_targets t WHERE t.endpoint_key_id=model_pair_catalog.endpoint_key_id AND t.upstream_model_id=model_pair_catalog.normalized_model_id)
+  AND NOT EXISTS(SELECT 1 FROM charity_binding_targets t JOIN donation_keys dk ON dk.id=t.donation_key_id WHERE dk.endpoint_key_id=model_pair_catalog.endpoint_key_id AND t.upstream_model_id=model_pair_catalog.normalized_model_id)`, keyID, modelID)
 	if err != nil {
 		return fmt.Errorf("resources: clean catalog pair: %w", err)
 	}
@@ -485,14 +485,14 @@ func validReplacements(replacements []BindingReplacement) bool {
 }
 
 type existingReplacementBinding struct {
-	id, modelID int64
+	id, modelID, targetID, targetRevision int64
 }
 
 func applyBindingReplacementsTx(ctx context.Context, tx *sql.Tx, userID, keyID int64, oldModelID string, replacements []BindingReplacement, now int64) ([]int64, error) {
 	rows, err := tx.QueryContext(ctx, `
-SELECT b.id,b.model_id
-FROM model_bindings b JOIN models m ON m.id=b.model_id
-WHERE m.user_id=? AND b.endpoint_key_id=? AND b.upstream_model_id=?
+SELECT b.id,b.model_id,t.id,t.revision
+FROM model_bindings b JOIN model_binding_targets t ON t.binding_id=b.id JOIN models m ON m.id=b.model_id
+WHERE m.user_id=? AND t.endpoint_key_id=? AND t.upstream_model_id=?
 ORDER BY b.id`, userID, keyID, oldModelID)
 	if err != nil {
 		return nil, fmt.Errorf("resources: list affected bindings: %w", err)
@@ -500,7 +500,7 @@ ORDER BY b.id`, userID, keyID, oldModelID)
 	var current []existingReplacementBinding
 	for rows.Next() {
 		var binding existingReplacementBinding
-		if err := rows.Scan(&binding.id, &binding.modelID); err != nil {
+		if err := rows.Scan(&binding.id, &binding.modelID, &binding.targetID, &binding.targetRevision); err != nil {
 			rows.Close()
 			return nil, fmt.Errorf("resources: scan affected binding: %w", err)
 		}
@@ -548,14 +548,17 @@ ORDER BY b.id`, userID, keyID, oldModelID)
 		}
 		var duplicate int
 		if err := tx.QueryRowContext(ctx, `
-SELECT EXISTS(SELECT 1 FROM model_bindings WHERE model_id=? AND endpoint_key_id=? AND upstream_model_id=? AND id<>?)`,
-			binding.modelID, keyID, target, binding.id).Scan(&duplicate); err != nil {
+SELECT EXISTS(SELECT 1 FROM model_binding_targets t JOIN model_bindings b ON b.id=t.binding_id WHERE b.model_id=? AND t.endpoint_key_id=? AND t.upstream_model_id=? AND t.id<>?)`,
+			binding.modelID, keyID, target, binding.targetID).Scan(&duplicate); err != nil {
 			return nil, fmt.Errorf("resources: verify replacement binding: %w", err)
 		}
 		if duplicate == 1 {
 			return nil, ErrConflict
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE model_bindings SET upstream_model_id=?,updated_at=? WHERE id=? AND model_id=?`, target, now, binding.id, binding.modelID); err != nil {
+		if binding.targetRevision == int64(^uint64(0)>>1) {
+			return nil, ErrResourceLimit
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE model_binding_targets SET upstream_model_id=?,revision=revision+1,updated_at=? WHERE id=? AND binding_id=?`, target, now, binding.targetID, binding.id); err != nil {
 			return nil, conflictOrError("replace binding", err)
 		}
 		affected[binding.modelID] = struct{}{}

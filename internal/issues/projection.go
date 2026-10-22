@@ -133,14 +133,9 @@ func (adapter *SourceAdapter) reconcileRoutingTracked(ctx context.Context, tx *s
 	var available int
 	err := tx.QueryRowContext(ctx, `
 SELECT EXISTS(
- SELECT 1 FROM model_bindings b
- JOIN endpoint_keys k ON k.id=b.endpoint_key_id
- JOIN endpoints e ON e.id=k.endpoint_id
- JOIN model_pair_catalog p ON p.endpoint_key_id=k.id AND p.normalized_model_id=b.upstream_model_id
- JOIN model_discovery_evidence d ON d.endpoint_key_id=k.id
- WHERE b.model_id=m.id AND e.user_id=m.user_id AND e.enabled=1 AND k.enabled=1
-   AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=k.id)
-   AND (p.manual_supports>0 OR (p.automatic_supports>0 AND d.state='succeeded' AND d.revision=p.automatic_revision))
+ SELECT 1 FROM model_bindings b JOIN model_binding_targets t ON t.binding_id=b.id
+ JOIN self_grant_availability a ON a.endpoint_key_id=t.endpoint_key_id
+ WHERE b.model_id=m.id AND a.owner_user_id=m.user_id AND (a.native_service_mask&t.native_service_mask)>0
 ) FROM models m WHERE m.id=? AND m.user_id=?`, modelID, ownerUserID).Scan(&available)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
@@ -418,7 +413,7 @@ func modelsUsingKeys(ctx context.Context, tx *sql.Tx, ownerUserID int64, keyIDs 
 		set[keyID] = struct{}{}
 	}
 	rows, err := tx.QueryContext(ctx, `
-SELECT DISTINCT m.id,b.endpoint_key_id FROM models m JOIN model_bindings b ON b.model_id=m.id
+SELECT DISTINCT m.id,t.endpoint_key_id FROM models m JOIN model_bindings b ON b.model_id=m.id JOIN model_binding_targets t ON t.binding_id=b.id
 WHERE m.user_id=? ORDER BY m.id`, ownerUserID)
 	if err != nil {
 		return nil, fmt.Errorf("issues: list models affected by endpoint keys: %w", err)

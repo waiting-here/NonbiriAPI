@@ -339,9 +339,9 @@ FROM idempotency_records WHERE scope='credential_report' AND actor_scope_hash=? 
 		}
 		if _, err := tx.ExecContext(ctx, `
 INSERT OR IGNORE INTO endpoint_key_suspensions(endpoint_key_id,reason_type,report_case_id,created_at)
-SELECT k.id,'report_case',?,? FROM endpoint_keys k
+SELECT DISTINCT k.id,'report_case',?,? FROM endpoint_key_credential_evidence ev JOIN endpoint_keys k ON k.id=ev.endpoint_key_id
 JOIN endpoints e ON e.id=k.endpoint_id
-WHERE k.secret_fingerprint=? AND e.connector_type=? AND e.base_url=?`,
+WHERE ev.report_fingerprint=? AND e.connector_type=? AND e.base_url=?`,
 			caseRow.id, now, fingerprint[:], submission.ConnectorType, submission.CanonicalBaseURL); err != nil {
 			return fmt.Errorf("reports: apply fingerprint suspension: %w", err)
 		}
@@ -405,16 +405,24 @@ func reportableFingerprintMatchTx(
 	var matched int
 	if err := tx.QueryRowContext(ctx, `SELECT
 CASE WHEN EXISTS(
-SELECT 1 FROM endpoint_keys k JOIN endpoints e ON e.id=k.endpoint_id
-WHERE k.secret_fingerprint=? AND e.connector_type=? AND e.base_url=?) THEN 1
+SELECT 1 FROM endpoint_key_credential_evidence ev JOIN endpoint_keys k ON k.id=ev.endpoint_key_id JOIN endpoints e ON e.id=k.endpoint_id
+WHERE ev.report_fingerprint=? AND e.connector_type=? AND e.base_url=?) THEN 1
 WHEN EXISTS(
  SELECT 1 FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id
  WHERE dk.report_fingerprint=? AND dk.connector_type=? AND dk.canonical_base_url=?
-  AND dk.ended_at IS NOT NULL AND dk.report_match_until>?
-  AND (d.status IN ('pending','approved') OR
-       (d.status IN ('rejected','deleted','expired') AND d.terminal_at IS NOT NULL AND d.terminal_at>?))
+ AND dk.ended_at IS NOT NULL AND dk.report_match_until>?
+ AND (d.status IN ('pending','approved') OR
+ (d.status IN ('rejected','deleted','expired') AND d.terminal_at IS NOT NULL AND d.terminal_at>?))
+) THEN 1 WHEN EXISTS(
+ SELECT 1 FROM donation_use_revisions ur JOIN donation_uses u ON u.id=ur.use_id
+ JOIN donation_keys dk ON dk.id=u.donation_key_id JOIN donations d ON d.id=dk.donation_id
+ WHERE ur.report_fingerprint=? AND dk.connector_type=? AND dk.canonical_base_url=?
+ AND dk.ended_at IS NOT NULL AND dk.report_match_until>?
+ AND (d.status IN ('pending','approved') OR
+ (d.status IN ('rejected','deleted','expired') AND d.terminal_at IS NOT NULL AND d.terminal_at>?))
 ) THEN 1 ELSE 0 END`,
 		fingerprint[:], connector, baseURL,
+		fingerprint[:], connector, baseURL, now, now-donationRetentionSeconds,
 		fingerprint[:], connector, baseURL, now, now-donationRetentionSeconds,
 	).Scan(&matched); err != nil {
 		return false, fmt.Errorf("reports: query credential fingerprint: %w", err)
