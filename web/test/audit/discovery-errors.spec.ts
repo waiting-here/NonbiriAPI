@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 import en from '../../src/user/i18n/en.json' with { type: 'json' };
@@ -20,6 +21,10 @@ test('Google discovery explains server-region failures and recovers in setup and
   const state = JSON.parse(
     readFileSync(process.env.NONBIRI_AUDIT_BROWSER_STATE!, 'utf8'),
   ) as Fixture;
+  const visualDir = process.env.NONBIRI_VISUAL_DIR;
+  if (visualDir) mkdirSync(visualDir, { recursive: true });
+  const screenshotPath = (name: string) =>
+    visualDir ? join(visualDir, name) : info.outputPath(name);
   const endpoint = state.management.gemini_endpoint_id,
     key = state.management.gemini_key_id;
   const prefix = `/api/endpoints/${endpoint}/keys/${key}/models`;
@@ -106,7 +111,7 @@ test('Google discovery explains server-region failures and recovers in setup and
         true,
       );
       await notice.screenshot({
-        path: info.outputPath(`discovery-setup-${language}-${width}-${theme}.png`),
+        path: screenshotPath(`discovery-setup-${language}-${width}-${theme}.png`),
       });
       await control('success');
       await page.getByRole('button', { name: c.refreshSource, exact: true }).press('Enter');
@@ -140,15 +145,18 @@ test('Google discovery explains server-region failures and recovers in setup and
           .getByRole('button', { name: copy.core['common.close'], exact: true })
           .first()
           .click();
+        await expect(notice).not.toBeVisible();
+        await page.getByRole('button', { name: copy.services.viewModels, exact: true }).click();
+        await expect(notice).toBeVisible();
       }
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,
       );
       await notice.screenshot({
-        path: info.outputPath(`discovery-key-${language}-${width}-${theme}.png`),
+        path: screenshotPath(`discovery-key-${language}-${width}-${theme}.png`),
       });
       await page.locator('tr.core-key-card').screenshot({
-        path: info.outputPath(`discovery-key-controls-${language}-${width}-${theme}.png`),
+        path: screenshotPath(`discovery-key-controls-${language}-${width}-${theme}.png`),
       });
     } finally {
       await context.close();

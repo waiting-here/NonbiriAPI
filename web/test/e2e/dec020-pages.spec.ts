@@ -550,7 +550,9 @@ test('user endpoint source wizard submits an immutable mainstream channel select
   const wizard = page
     .locator('.nb-expandable-panel')
     .filter({ has: page.getByRole('heading', { name: connectionCopy.addEntry, exact: true }) });
-  await wizard.getByRole('radio', { name: connectionCopy.mainstream, exact: true }).check();
+  const mainstream = wizard.getByRole('radio', { name: connectionCopy.mainstream, exact: true });
+  await mainstream.locator('..').click();
+  await expect(mainstream).toBeChecked();
   await wizard
     .getByRole('combobox', { name: connectionCopy.mainstream, exact: true })
     .selectOption(MAINSTREAM_CHANNEL_ID);
@@ -560,7 +562,7 @@ test('user endpoint source wizard submits an immutable mainstream channel select
     wizard.getByRole('textbox', { name: connectionCopy.entryURL, exact: true }),
   ).toHaveCount(0);
   await wizard.getByRole('button', { name: connectionCopy.saveEntries, exact: true }).click();
-  await expect(wizard.getByText(connectionCopy.entrySaved, { exact: true })).toBeVisible();
+  await expect(wizard.getByText(connectionCopy.entrySaved)).toBeVisible();
   expect(postBody).toEqual({
     source: 'mainstream',
     channel_id: MAINSTREAM_CHANNEL_ID,

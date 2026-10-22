@@ -86,12 +86,15 @@ async function newService(page: Page, name: string, locale: Locale = 'en') {
     .filter({ has: page.getByRole('heading', { name: c.addEntry, exact: true }) });
   await entry
     .getByRole('combobox', { name: c.protocol, exact: true })
-    .selectOption('openai-compatible');
+    .selectOption({ label: (locale === 'zh' ? zh : en).user.core['connector.openai'] });
   await entry.getByLabel(c.entryURL, { exact: true }).fill(fixture().upstream_url + '/v1');
-  await entry.getByLabel(c.note, { exact: true }).fill(name);
+  await entry
+    .getByRole('checkbox', { name: sharedCopy(locale).modelTypes.responses, exact: true })
+    .check();
+  await entry.getByLabel(c.note + ' ' + c.optional, { exact: true }).fill(name);
   await entry.getByRole('button', { name: c.saveEntries, exact: true }).click();
   // Lost-response scenarios recover through the normal operation receipt.
-  await expect(entry.getByText(c.entrySaved, { exact: true })).toBeVisible();
+  await expect(entry.getByText(c.entrySaved)).toBeVisible();
   const response = await api(
     page.context(),
     '/api/endpoints?page=1&page_size=100&q=' + encodeURIComponent(name),
@@ -106,16 +109,21 @@ async function newKey(page: Page, locale: Locale = 'en') {
   const entry = page
     .locator('.nb-expandable-panel')
     .filter({ has: page.getByRole('heading', { name: c.addEntry, exact: true }) });
-  await entry.getByRole('radio', { name: c.newCredential, exact: true }).check();
-  await entry.getByLabel(c.credentialName, { exact: true }).fill(meta.name + ' credential');
+  await entry.getByRole('radio', { name: c.newCredential, exact: true }).locator('..').click();
+  await expect(entry.getByRole('radio', { name: c.newCredential, exact: true })).toBeChecked();
+  await entry
+    .getByLabel(c.credentialName + ' ' + c.optional, { exact: true })
+    .fill(meta.name + ' credential');
   await entry.getByLabel(c.secret, { exact: true }).fill(fixture().private_markers[0]);
   await entry.getByRole('checkbox', { name: c.ownership, exact: true }).check();
   await entry.getByRole('button', { name: c.saveCredential, exact: true }).click();
-  await entry
-    .getByLabel(c.note, { exact: true })
-    .last()
-    .fill(meta.name + '-key');
-  await entry.getByRole('button', { name: c.authorizeEntry, exact: true }).click();
+  const authorize = entry.getByRole('button', { name: c.authorizeEntry, exact: true });
+  await expect(authorize).toBeVisible();
+  const grant = entry
+    .locator('form')
+    .filter({ has: page.getByRole('button', { name: c.authorizeEntry, exact: true }) });
+  await grant.getByLabel(c.note + ' ' + c.optional, { exact: true }).fill(meta.name + '-key');
+  await authorize.click();
   await expect(entry.getByText(c.grantSaved, { exact: true })).toBeVisible();
   const keys = await api(
     page.context(),
@@ -131,7 +139,7 @@ async function newKey(page: Page, locale: Locale = 'en') {
   const source = page
     .locator('.nb-expandable-panel')
     .filter({ has: page.getByRole('heading', { name: c.addSource, exact: true }) });
-  await source.getByLabel(c.name, { exact: true }).fill(meta.name + ' catalog');
+  await source.getByLabel(c.name + ' ' + c.optional, { exact: true }).fill(meta.name + ' catalog');
   await source.getByLabel(c.discoveryBaseURL, { exact: true }).fill(fixture().upstream_url + '/v1');
   await source
     .getByRole('table', { name: c.chooseCredential, exact: true })
@@ -202,7 +210,7 @@ async function manual(page: Page, upstream: string, prefix: string, locale: Loca
   const fold = page
     .locator('details')
     .filter({ has: page.locator(':scope > summary').filter({ hasText: c.manualModel }) });
-  if (!(await fold.getAttribute('open'))) await fold.locator(':scope > summary').click();
+  if ((await fold.getAttribute('open')) === null) await fold.locator(':scope > summary').click();
   await fold.getByLabel(c.upstreamModel, { exact: true }).fill(upstream);
   await fold.getByRole('button', { name: c.configureModel, exact: true }).click();
   const row = page.locator('details').filter({
@@ -217,7 +225,8 @@ async function manual(page: Page, upstream: string, prefix: string, locale: Loca
       .locator('details')
       .filter({ has: page.locator(':scope > summary').filter({ hasText: c.chooseEntry }) })
       .first();
-    if (!(await choose.getAttribute('open'))) await choose.locator(':scope > summary').click();
+    if ((await choose.getAttribute('open')) === null)
+      await choose.locator(':scope > summary').click();
     await choose
       .getByRole('table', { name: c.chooseEntry, exact: true })
       .getByRole('row')
@@ -286,6 +295,7 @@ async function service(context: BrowserContext, name: string) {
   const response = await api(context, '/api/endpoints', 'POST', {
     source: 'custom',
     connector_type: 'openai-compatible',
+    native_services: ['chat_completions', 'responses'],
     base_url: fixture().upstream_url + '/v1',
     note: name,
     enabled: true,
@@ -294,6 +304,7 @@ async function service(context: BrowserContext, name: string) {
   const endpoint = (await response.json()) as { id: string };
   const keyResponse = await api(context, '/api/endpoints/' + endpoint.id + '/keys', 'POST', {
     secret: fixture().private_markers[0],
+    native_services: ['chat_completions', 'responses'],
     ownership_confirmed: true,
     enabled: true,
     note: name + '-key',
@@ -340,7 +351,9 @@ test('optional setup connects selected models in one action and shows real relat
     await newService(page, prefix);
     await newKey(page);
     await manual(page, 'selected-chat-' + unique(), prefix);
+    await expect(connect(page)).toBeEnabled();
     await connect(page).focus();
+    await expect(connect(page)).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(page.getByText(connectionCopy('en').mappingSaved, { exact: true })).toBeVisible();
     const saved = await models(user, prefix);
@@ -433,9 +446,30 @@ test('existing resources support empty and failed discovery plus manual setup in
     await open(page, 'zh');
     await existing(page, name, 'zh');
     await control(user, 'empty');
+    const sourceId = resources.get(page)!.sourceId!;
+    const accepted = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        new URL(response.url()).pathname === '/api/discovery-sources/' + sourceId + '/refresh',
+    );
     await page
       .getByRole('button', { name: connectionCopy('zh').refreshSource, exact: true })
       .click();
+    const refreshResponse = await accepted;
+    expect(refreshResponse.status()).toBe(202);
+    const refresh = await refreshResponse.json();
+    expect(refresh.operation_id).toBeTruthy();
+    expect(refresh.discovery_source).toMatchObject({ id: sourceId, state: 'checking' });
+    await expect
+      .poll(async () => {
+        const response = await api(user, '/api/discovery-sources/' + sourceId);
+        expect(response.status()).toBe(200);
+        return (await response.json()).state;
+      })
+      .toBe('succeeded');
+    await expect(
+      page.getByText(connectionCopy('zh').sourceStates.succeeded, { exact: true }),
+    ).toBeVisible();
     await expect(
       page.getByText(connectionCopy('zh').emptyTitle, { exact: true }).first(),
     ).toBeVisible();
@@ -569,6 +603,14 @@ test('lost responses for every creation stage reconcile committed real resources
     for (let attempt = 0; attempt < 4; attempt++) {
       if (await page.getByText(connectionCopy('en').mappingSaved, { exact: true }).count()) break;
       await connect(page).click();
+      await expect
+        .poll(
+          async () =>
+            (await page
+              .getByText(connectionCopy('en').mappingSaved, { exact: true })
+              .isVisible()) || (await connect(page).isEnabled()),
+        )
+        .toBe(true);
     }
     await expect(page.getByText(connectionCopy('en').mappingSaved, { exact: true })).toBeVisible();
     expect(await models(user, prefix)).toHaveLength(1);
@@ -665,9 +707,9 @@ test('stopping an in-flight step keeps a committed resource for explicit continu
       .filter({ has: page.getByRole('heading', { name: c.addEntry, exact: true }) });
     await entry
       .getByRole('combobox', { name: c.protocol, exact: true })
-      .selectOption('openai-compatible');
+      .selectOption({ label: en.user.core['connector.openai'] });
     await entry.getByLabel(c.entryURL, { exact: true }).fill(fixture().upstream_url + '/v1');
-    await entry.getByLabel(c.note, { exact: true }).fill(name);
+    await entry.getByLabel(c.note + ' ' + c.optional, { exact: true }).fill(name);
     await entry.getByRole('button', { name: c.saveEntries, exact: true }).click();
     await saved;
     await entry.getByRole('button', { name: c.close, exact: true }).first().click();
@@ -680,7 +722,8 @@ test('stopping an in-flight step keeps a committed resource for explicit continu
       .getByRole('button', { name: en.user.core['endpoints.addKey'], exact: false })
       .first()
       .click();
-    await page.getByRole('radio', { name: c.newCredential, exact: true }).check();
+    await page.getByRole('radio', { name: c.newCredential, exact: true }).locator('..').click();
+    await expect(page.getByRole('radio', { name: c.newCredential, exact: true })).toBeChecked();
     await expect(page.getByLabel(c.secret, { exact: true })).toBeVisible();
     await expect(page.getByLabel(c.secret, { exact: true })).toHaveValue('');
     await screenshot(page, 'resources-stop-continue-en.png');

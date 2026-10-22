@@ -696,7 +696,9 @@ for (const connectorType of ['ai-sdk-gateway-v3', 'ai-sdk-gateway-v4'] as const)
           .getByRole('combobox', { name: c.protocol, exact: true })
           .selectOption(connectorType);
         await entryPanel.getByLabel(c.entryURL, { exact: true }).fill(baseURL);
-        await entryPanel.getByLabel(c.note, { exact: true }).fill('Synthetic Gateway v4');
+        await entryPanel
+          .getByLabel(c.note + ' ' + c.optional, { exact: true })
+          .fill('Synthetic Gateway v4');
         const created = ownerPage.waitForResponse(
           (response) =>
             new URL(response.url()).pathname === '/api/endpoints' &&

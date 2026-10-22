@@ -93,9 +93,9 @@ for (const width of [1440, 390]) {
             .getByRole('checkbox', { name: common.common.modelTypes.decisions, exact: true })
             .check();
         await wizard.getByLabel(c.entryURL, { exact: true }).fill(baseURL);
-        await wizard.getByLabel(c.note, { exact: true }).fill(label);
+        await wizard.getByLabel(c.note + ' ' + c.optional, { exact: true }).fill(label);
         await wizard.getByRole('button', { name: c.saveEntries, exact: true }).click();
-        await expect(wizard.getByText(c.entrySaved, { exact: true })).toBeVisible();
+        await expect(wizard.getByText(c.entrySaved)).toBeVisible();
         expect(submitted).toMatchObject({
           source: 'custom',
           connector_type: kind,

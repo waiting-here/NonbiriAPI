@@ -520,7 +520,9 @@ test('matching presets remain suggestions until an entry is explicitly selected'
       await page.goto(url);
       await page.getByRole('button', { name: c.addEntry, exact: true }).first().click();
       const panel = page.locator('.nb-expandable-panel:not([hidden])');
-      await panel.getByLabel(c.protocol, { exact: true }).selectOption('openai-compatible');
+      await panel
+        .getByLabel(c.protocol, { exact: true })
+        .selectOption({ label: user.user.core['connector.openai'] });
       await panel.getByLabel(c.entryURL, { exact: true }).fill(address);
       await selectService(panel, kind);
       const suggestions = panel.getByRole('region', { name: matching.title, exact: true });
@@ -569,7 +571,9 @@ test('matching presets remain suggestions until an entry is explicitly selected'
     await expect(
       second.panel.getByRole('radio', { name: c.mainstream, exact: true }),
     ).toBeChecked();
-    await expect(second.panel.getByLabel(c.mainstream, { exact: true })).toHaveValue(chosen.id);
+    await expect(
+      second.panel.getByRole('combobox', { name: c.mainstream, exact: true }),
+    ).toHaveValue(chosen.id);
     await expect(
       second.panel.getByRole('checkbox', { name: chosenEntry.name, exact: true }),
     ).toBeChecked();
@@ -602,7 +606,7 @@ test('matching presets remain suggestions until an entry is explicitly selected'
       origin: { kind: 'mainstream', channel_id: chosen.id, name: chosen.name },
       native_services: ['responses'],
       base_url: address,
-      connector_type: 'openai-compatible',
+      configuration_type: 'openai-compatible',
     });
     for (const entry of entries.data) {
       const keys = await api<{ data: unknown[] }>(

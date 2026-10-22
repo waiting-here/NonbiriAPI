@@ -494,7 +494,8 @@ for (const locale of ['en', 'zh'] as const) {
           expect(size.scrollWidth, `${name} ${locale} ${width} overflow`).toBeLessThanOrEqual(
             width,
           );
-          if (name === 'detail-3' && width === 390) expect(size.height).toBeLessThan(1800);
+          // The entry-services fold adds a section above the three compact key rows.
+          if (name === 'detail-3' && width === 390) expect(size.height).toBeLessThan(1900);
         }
       await page.setViewportSize({ width: 1440, height: 900 });
       await page.evaluate(() => (document.documentElement.dataset.theme = 'light'));
@@ -558,11 +559,17 @@ for (const locale of ['en', 'zh'] as const) {
       .filter({ has: page.getByRole('heading', { name: c.addEntry, exact: true }) });
     await entryPanel
       .getByRole('combobox', { name: c.protocol, exact: true })
-      .selectOption('openai-compatible');
+      .selectOption({ label: locale === 'zh' ? 'OpenAI 兼容' : 'OpenAI-compatible' });
     await entryPanel.getByLabel(c.entryURL, { exact: true }).fill(endpoint.base_url);
     await entryPanel.getByRole('button', { name: c.saveEntries, exact: true }).click();
     await shot('manual-wizard');
-    await entryPanel.getByRole('radio', { name: c.newCredential, exact: true }).check();
+    await entryPanel
+      .getByRole('radio', { name: c.newCredential, exact: true })
+      .locator('..')
+      .click();
+    await expect(
+      entryPanel.getByRole('radio', { name: c.newCredential, exact: true }),
+    ).toBeChecked();
     const secret = entryPanel.getByLabel(c.secret, { exact: true });
     await secret.fill('synthetic-setup-secret');
     await entryPanel.getByRole('checkbox', { name: c.ownership, exact: true }).check();
@@ -577,7 +584,7 @@ for (const locale of ['en', 'zh'] as const) {
     const sourcePanel = page
       .locator('.nb-expandable-panel')
       .filter({ has: page.getByRole('heading', { name: c.addSource, exact: true }) });
-    await sourcePanel.getByLabel(c.name, { exact: true }).fill('Shared catalog');
+    await sourcePanel.getByLabel(c.name + ' ' + c.optional, { exact: true }).fill('Shared catalog');
     await sourcePanel.getByLabel(c.discoveryBaseURL, { exact: true }).fill(endpoint.base_url);
     await sourcePanel
       .getByRole('table', { name: c.chooseCredential, exact: true })

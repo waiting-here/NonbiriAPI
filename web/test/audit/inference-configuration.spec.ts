@@ -595,7 +595,7 @@ test('native Chat services retain storage policy and one Chat Responses group al
       .filter({ has: page.getByRole('heading', { name: c.addEntry, exact: true }) });
     await entryPanel
       .getByRole('combobox', { name: c.protocol, exact: true })
-      .selectOption('openai-compatible');
+      .selectOption({ label: core['connector.openai'] });
     await entryPanel
       .getByLabel(c.entryURL, { exact: true })
       .fill('https://native-chat.example.test/v1');
@@ -613,13 +613,21 @@ test('native Chat services retain storage policy and one Chat Responses group al
     );
     const endpoint = (await created.json()) as {
       id: string;
-      connector_type: string;
+      configuration_type: string;
       native_services: string[];
     };
-    expect(endpoint.connector_type).toBe('openai-compatible');
+    expect(endpoint.configuration_type).toBe('openai-compatible');
     expect(endpoint.native_services).toEqual(['chat_completions']);
-    await entryPanel.getByRole('radio', { name: c.newCredential, exact: true }).check();
-    await entryPanel.getByLabel(c.credentialName, { exact: true }).fill('Native Chat credential');
+    await entryPanel
+      .getByRole('radio', { name: c.newCredential, exact: true })
+      .locator('..')
+      .click();
+    await expect(
+      entryPanel.getByRole('radio', { name: c.newCredential, exact: true }),
+    ).toBeChecked();
+    await entryPanel
+      .getByLabel(c.credentialName + ' ' + c.optional, { exact: true })
+      .fill('Native Chat credential');
     await entryPanel.getByLabel(c.secret, { exact: true }).fill('synthetic-native-chat-secret');
     await entryPanel.getByRole('checkbox', { name: c.ownership, exact: true }).check();
     await save(
@@ -628,7 +636,10 @@ test('native Chat services retain storage policy and one Chat Responses group al
       '/api/connections/' + new URL(page.url()).searchParams.get('connection_id') + '/credentials',
       'POST',
     );
-    await entryPanel.getByLabel(c.note, { exact: true }).last().fill('Native Chat browser key');
+    await entryPanel
+      .getByLabel(c.note + ' ' + c.optional, { exact: true })
+      .last()
+      .fill('Native Chat browser key');
     await entryPanel.getByLabel(core['endpoints.storePolicy'], { exact: true }).check();
     const keyResponse = await save(
       page,

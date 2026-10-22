@@ -88,7 +88,7 @@ export async function appearanceFixtures(page: Page, design: string) {
       });
     if (path === '/api/caller-key')
       return route.fulfill({ json: null, headers: { 'X-Nonbiri-CallerKey-Generation': '0' } });
-    if (['/api/models', '/api/endpoints', '/api/announcements'].includes(path))
+    if (['/api/models', '/api/endpoints', '/api/connections', '/api/announcements'].includes(path))
       return route.fulfill({ json: pageOf([]) });
     if (path.startsWith('/api/checkin'))
       return route.fulfill({
