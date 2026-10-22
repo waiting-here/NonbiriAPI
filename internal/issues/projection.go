@@ -136,6 +136,7 @@ SELECT EXISTS(
  SELECT 1 FROM model_bindings b JOIN model_binding_targets t ON t.binding_id=b.id
  JOIN self_grant_availability a ON a.endpoint_key_id=t.endpoint_key_id
  WHERE b.model_id=m.id AND a.owner_user_id=m.user_id AND (a.native_service_mask&t.native_service_mask)>0
+ AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=t.endpoint_key_id)
 ) FROM models m WHERE m.id=? AND m.user_id=?`, modelID, ownerUserID).Scan(&available)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
