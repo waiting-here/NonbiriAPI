@@ -1575,6 +1575,25 @@
     "inactivity": {
       "activityRules": "哪些操作算活跃？"
     },
+    "nativeServices": {
+      "title": "上游原生服务",
+      "help": "选择上游实际支持的接口，可多选。",
+      "pending": "待选择",
+      "noOptions": "暂无可选服务。",
+      "rerankFormat": "重排序格式",
+      "rerankFormatHelp": "选择此上游使用的请求格式。",
+      "selectFormat": "选择格式",
+      "anthropic_messages": "Anthropic Messages",
+      "gemini_generate_content": "Gemini GenerateContent",
+      "gateway_text": "Gateway 文本生成",
+      "formats": {
+        "generic": "通用",
+        "cohere": "Cohere",
+        "jina": "Jina",
+        "voyage": "Voyage",
+        "siliconflow": "SiliconFlow"
+      }
+    },
     "modelTypes": {
       "title": "模型类型",
       "help": "选择此模型支持的接口，可多选。",
