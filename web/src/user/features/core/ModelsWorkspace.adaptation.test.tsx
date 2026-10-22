@@ -111,7 +111,11 @@ describe('personal model request adaptation', () => {
           },
         });
       }
-      expect(reads.filter((path) => path.endsWith('/request-adaptation'))).toHaveLength(1);
+      await waitFor(() =>
+        expect(reads.filter((path) => path.endsWith('/request-adaptation'))).toHaveLength(
+          mixed ? 1 : 2,
+        ),
+      );
       expect(reads.filter((path) => path.endsWith('/bindings'))).toHaveLength(1);
     },
   );
