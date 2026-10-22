@@ -4,7 +4,7 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
-## 1.1.0 — 2026-10-21
+## 1.1.0 — 2026-10-22
 
 ### Added
 
@@ -122,6 +122,8 @@ Each version entry describes its source and compatibility boundary; a release ta
   the selected reading surface on return; manual intensity choices remain effective
   when browser preference storage is unavailable.
 
+- Preserve connection search, page size and return position across nested settings.
+  Keep page controls, long model names and preset details readable on narrow screens.
 - Keep sequential setup actions disabled until the preceding save and refresh settle.
 - Keep donation review navigation fresh after returning from key binding to the list.
 - Keep the charity page available when a usage-priced model has no configured credit reserve.
