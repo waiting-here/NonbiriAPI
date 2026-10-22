@@ -2,6 +2,7 @@ package charity
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -14,6 +15,18 @@ import (
 )
 
 func TestCallerParameterFaultPreservesStreakAndFailureAccounting(t *testing.T) {
+	for _, tc := range []struct{ kind, code, param string }{
+		{"invalid_request_error", "invalid_value", "temperature"},
+		{"BadRequest", "InvalidParameter", "reasoning_effort"},
+	} {
+		t.Run(tc.code, func(t *testing.T) {
+			testCallerParameterFaultAccounting(t, tc.kind, tc.code, tc.param)
+		})
+	}
+}
+
+func testCallerParameterFaultAccounting(t *testing.T, kind, code, param string) {
+	t.Helper()
 	e := newCharityTestEnv(t)
 	rail := e.billingRail(t)
 	ctx := t.Context()
@@ -23,8 +36,9 @@ func TestCallerParameterFaultPreservesStreakAndFailureAccounting(t *testing.T) {
 	request := e.billingRequest(t, rail, e.requestModel, 2400, 1)
 	handle := e.billingDispatch(t, rail, request.ID, 1)
 	e.seedServiceStreak(t, handle, 2)
-	errorContext := upstreamerror.Context{CharityCall: true, ContainsSecret: func([]byte) bool { return false }, UnchangedCallerParameter: func(name string) bool { return name == "temperature" }}
-	detail := errorContext.ReadResponse(ctx, &http.Response{StatusCode: 400, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"error":{"type":"invalid_request_error","code":"invalid_value","param":"temperature","message":"Invalid value."}}`))})
+	errorContext := upstreamerror.Context{CharityCall: true, ContainsSecret: func([]byte) bool { return false }, UnchangedCallerParameter: func(name string) bool { return name == param }}
+	payload := fmt.Sprintf(`{"error":{"type":%q,"code":%q,"param":%q,"message":"Invalid value."}}`, kind, code, param)
+	detail := errorContext.ReadResponse(ctx, &http.Response{StatusCode: 400, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(payload))})
 	outcome := claim.AttemptOutcome{Kind: claim.ResultResponse, UpstreamStatus: 400, UpstreamCode: detail.Code(), Diagnostic: "upstream returned HTTP 400", FailureOrigin: contract.OriginUpstreamResponse, StreakDisposition: contract.StreakNeutral, CallerFault: detail.CallerFault()}
 	for _, tc := range []struct {
 		name   string
@@ -47,15 +61,15 @@ func TestCallerParameterFaultPreservesStreakAndFailureAccounting(t *testing.T) {
 	}
 	for range 2 {
 		attempt, err := rail.CompleteAttempt(ctx, handle, outcome)
-		if err != nil || attempt.StreakDisposition != contract.StreakNeutral || attempt.UpstreamStatus != 400 || attempt.UpstreamCode != "invalid_value" || attempt.Diagnostic != outcome.Diagnostic {
+		if err != nil || attempt.StreakDisposition != contract.StreakNeutral || attempt.UpstreamStatus != 400 || attempt.UpstreamCode != code || attempt.Diagnostic != outcome.Diagnostic {
 			t.Fatal(attempt, err)
 		}
 	}
 	var receipts, retryHints, classifiedBackoffs int
 	if err := e.store.DB().QueryRow(`SELECT
-(SELECT COUNT(*) FROM dispatch_caller_parameter_errors WHERE claim_id=? AND http_status=400 AND error_code='invalid_value'),
+(SELECT COUNT(*) FROM dispatch_caller_parameter_errors WHERE claim_id=? AND http_status=400 AND error_code=?),
 (SELECT COUNT(*) FROM dispatch_retry_after_observations WHERE claim_id=?),
-(SELECT COUNT(*) FROM dispatch_smart_backoff_facts WHERE claim_id=? AND period IS NOT NULL)`, handle.ClaimID(), handle.ClaimID(), handle.ClaimID()).Scan(&receipts, &retryHints, &classifiedBackoffs); err != nil || receipts != 1 || retryHints != 0 || classifiedBackoffs != 0 {
+(SELECT COUNT(*) FROM dispatch_smart_backoff_facts WHERE claim_id=? AND period IS NOT NULL)`, handle.ClaimID(), code, handle.ClaimID(), handle.ClaimID()).Scan(&receipts, &retryHints, &classifiedBackoffs); err != nil || receipts != 1 || retryHints != 0 || classifiedBackoffs != 0 {
 		t.Fatal("caller proof must not invent retry observations", receipts, retryHints, classifiedBackoffs, err)
 	}
 	var streak, calls []byte
@@ -109,6 +123,7 @@ func TestCallerParameterReceiptConstraints(t *testing.T) {
 	}{
 		{200, "invalid_value"}, {401, "invalid_value"}, {429, "invalid_value"},
 		{500, "invalid_value"}, {400, "invalid_request_error"}, {422, "insufficient_quota"},
+		{422, "InvalidParameter"}, {400, "InvalidParameter.Unknown"},
 	} {
 		if _, err := tx.Exec(`INSERT INTO dispatch_caller_parameter_errors VALUES(?,?,?)`, handle.ClaimID(), tc.status, tc.code); err == nil {
 			t.Fatal("invalid caller receipt accepted", tc)

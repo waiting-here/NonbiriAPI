@@ -19,14 +19,12 @@ func (c Context) callerFault(fields map[string]json.RawMessage) CallerFault {
 		return CallerFault{}
 	}
 	var kind, code, param, message string
-	if json.Unmarshal(fields["type"], &kind) != nil || kind != "invalid_request_error" ||
+	if json.Unmarshal(fields["type"], &kind) != nil ||
 		json.Unmarshal(fields["code"], &code) != nil || json.Unmarshal(fields["param"], &param) != nil ||
 		json.Unmarshal(fields["message"], &message) != nil || message == "" {
 		return CallerFault{}
 	}
-	switch code {
-	case "invalid_value", "invalid_type", "unsupported_parameter", "unsupported_value":
-	default:
+	if !parameterErrorKind(c.responseStatus, kind, code) {
 		return CallerFault{}
 	}
 	// Resource references, model selection, identity, storage and service tiers
@@ -44,4 +42,19 @@ func (c Context) callerFault(fields map[string]json.RawMessage) CallerFault {
 		}
 	}
 	return CallerFault{}
+}
+
+func parameterErrorKind(status int, kind, code string) bool {
+	switch kind {
+	case "invalid_request_error":
+		switch code {
+		case "invalid_value", "invalid_type", "unsupported_parameter", "unsupported_value":
+			return true
+		}
+	case "BadRequest":
+		// Ark reports parameter validation with this exact type/code pair.
+		// A generic InvalidParameter without an eligible param is still refused.
+		return status == 400 && code == "InvalidParameter"
+	}
+	return false
 }

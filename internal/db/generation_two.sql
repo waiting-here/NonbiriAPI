@@ -7071,7 +7071,7 @@ CREATE TABLE global_pressure_samples (
 CREATE TABLE dispatch_caller_parameter_errors (
  claim_id TEXT PRIMARY KEY REFERENCES dispatch_claims(id) ON DELETE CASCADE,
  http_status INTEGER NOT NULL CHECK(http_status IN (400,422)),
- error_code TEXT NOT NULL CHECK(error_code IN ('invalid_value','invalid_type','unsupported_parameter','unsupported_value'))
+ error_code TEXT NOT NULL CHECK(error_code IN ('invalid_value','invalid_type','unsupported_parameter','unsupported_value') OR (http_status=400 AND error_code='InvalidParameter'))
 ) STRICT;
 CREATE TRIGGER dispatch_caller_parameter_errors_insert_guard BEFORE INSERT ON dispatch_caller_parameter_errors
 WHEN NOT EXISTS(SELECT 1 FROM dispatch_claims c WHERE c.id=NEW.claim_id AND c.purpose='charity' AND c.state='dispatched')

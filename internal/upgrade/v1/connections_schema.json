@@ -455,7 +455,7 @@
     },
     {
       "name": "dispatch_caller_parameter_errors",
-      "sql": "CREATE TABLE dispatch_caller_parameter_errors (\n claim_id TEXT PRIMARY KEY REFERENCES dispatch_claims(id) ON DELETE CASCADE,\n http_status INTEGER NOT NULL CHECK(http_status IN (400,422)),\n error_code TEXT NOT NULL CHECK(error_code IN ('invalid_value','invalid_type','unsupported_parameter','unsupported_value'))\n) STRICT",
+      "sql": "CREATE TABLE dispatch_caller_parameter_errors (\n claim_id TEXT PRIMARY KEY REFERENCES dispatch_claims(id) ON DELETE CASCADE,\n http_status INTEGER NOT NULL CHECK(http_status IN (400,422)),\n error_code TEXT NOT NULL CHECK(error_code IN ('invalid_value','invalid_type','unsupported_parameter','unsupported_value') OR (http_status=400 AND error_code='InvalidParameter'))\n) STRICT",
       "source_columns": [],
       "columns": [
         "claim_id",
