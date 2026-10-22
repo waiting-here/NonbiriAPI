@@ -224,12 +224,40 @@ for (const kind of ['personal', 'admin', 'steward'] as const) {
               : common.common.workflow.saveTarget.replace('{{id}}', String(f.current.id)),
             exact: true,
           });
-        await page
-          .getByRole('button', {
-            name: personal ? core['common.save'] : user.user.steward.newModel,
-            exact: true,
-          })
-          .click();
+        const createModel = page.getByRole('button', {
+          name: personal ? core['common.save'] : user.user.steward.newModel,
+          exact: true,
+        });
+        if (!personal && (await createModel.isDisabled())) {
+          await test.info().attach('charity-model-validation', {
+            contentType: 'application/json',
+            body: JSON.stringify({
+              errors: await page.locator('.field-error').allTextContents(),
+              provider: await nameEditor
+                .getByLabel(user.user.steward.provider, { exact: true })
+                .inputValue(),
+              model: await nameEditor
+                .getByLabel(user.user.steward.model, { exact: true })
+                .inputValue(),
+              session_headers: await Promise.all(
+                [0, 1].map(async (index) => ({
+                  name: await page
+                    .getByLabel(headers.name.replace('{{n}}', String(index + 1)), { exact: true })
+                    .inputValue(),
+                  idle_seconds: await page
+                    .getByLabel(headers.idle, { exact: true })
+                    .nth(index)
+                    .inputValue(),
+                  format: await page
+                    .getByLabel(headers.format, { exact: true })
+                    .nth(index)
+                    .inputValue(),
+                })),
+              ),
+            }),
+          });
+        }
+        await createModel.click();
         await expect.poll(() => f.state.writes.length).toBe(1);
         expect(f.state.writes[0].session_headers).toEqual([
           { name: 'X-Session-0', idle_seconds: 0, format: 'opencode_part' },
