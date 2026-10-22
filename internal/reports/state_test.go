@@ -262,8 +262,11 @@ func TestApproveFreezesDecisionCapturesLateTargetsAndUsesDeletionCapability(t *t
 	if environment.deletions.callCount() != 3 {
 		t.Fatalf("deletion capability calls=%d", environment.deletions.callCount())
 	}
-	if got := environment.rowCount(t, `SELECT COUNT(*) FROM endpoint_key_secrets WHERE orphaned_at IS NOT NULL`); got != 3 {
-		t.Fatalf("orphaned secret rows=%d", got)
+	if got := environment.rowCount(t, `SELECT COUNT(*) FROM endpoint_key_secrets WHERE orphaned_at IS NOT NULL`); got != 0 {
+		t.Fatalf("key revocation orphaned an independently managed credential: %d", got)
+	}
+	if got := environment.rowCount(t, `SELECT COUNT(*) FROM credentials c JOIN credential_versions v ON v.id=c.current_version_id WHERE c.deleted_at IS NULL AND EXISTS(SELECT 1 FROM secret_live_references live WHERE live.secret_ref_id=v.secret_ref_id)`); got != 3 {
+		t.Fatalf("retained independently managed credentials=%d", got)
 	}
 }
 

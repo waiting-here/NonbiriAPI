@@ -131,6 +131,7 @@ func (adapter *AccountResources) ExportResources(
 	for _, endpoint := range slice.Endpoints {
 		item := lifecycle.EndpointExport{
 			ID: endpoint.ID, ConnectorType: endpoint.ConnectorType, BaseURL: endpoint.BaseURL,
+			ConnectionID: endpoint.ConnectionID, NativeServices: append([]string{}, endpoint.NativeServices...), RerankFormat: endpoint.RerankFormat,
 			Origin: lifecycle.EndpointOriginExport{
 				Kind: endpoint.Origin.Kind, ChannelID: endpoint.Origin.ChannelID, Name: endpoint.Origin.Name,
 			},
@@ -140,6 +141,7 @@ func (adapter *AccountResources) ExportResources(
 		for _, key := range endpoint.Keys {
 			item.Keys = append(item.Keys, lifecycle.EndpointKeyExport{
 				ID: key.ID, DisplayHead: key.DisplayHead, DisplayTail: key.DisplayTail, Note: key.Note,
+				CredentialID: key.CredentialID, CredentialVersion: key.CredentialVersion, GrantRevision: key.GrantRevision, NativeServices: append([]string{}, key.NativeServices...), DiscoverySourceID: key.DiscoverySourceID,
 				Enabled: key.Enabled, ForceStoreFalse: key.ForceStoreFalse,
 				MaxConcurrency: key.MaxConcurrency, MaxRPM: key.MaxRPM,
 				SuspensionState: key.SuspensionState, CreatedAt: key.CreatedAt, UpdatedAt: key.UpdatedAt,

@@ -8,7 +8,7 @@ import (
 )
 
 func TestSessionHeadersUpgradePreservesExistingConfigurationAndCache(t *testing.T) {
-	path, vault := sourceFixtureFromDDL(t, schema28SQLForTest(t), 28, stableSchema28Manifest)
+	path, vault := sourceFixtureFromDDL(t, schema26SQLForTest(t), 26, stableSchema26Manifest)
 	database, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
@@ -21,7 +21,7 @@ func TestSessionHeadersUpgradePreservesExistingConfigurationAndCache(t *testing.
 		t.Fatal(err)
 	}
 	result, err := Run(t.Context(), path, vault, Options{Apply: true})
-	if err != nil || result.Status != "converted" || result.SourceSchemaVersion != 28 || result.TargetSchemaVersion != db.CurrentSchemaVersion {
+	if err != nil || result.Status != "converted" || result.SourceSchemaVersion != 26 || result.TargetSchemaVersion != db.CurrentSchemaVersion {
 		t.Fatal(result, err)
 	}
 	store, err := db.Open(path, vault)

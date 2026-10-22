@@ -89,6 +89,9 @@ func convertOffline(ctx context.Context, path string, codec secret.GenerationTwo
 		fullAudit := !apply || sourceVersion == 16 || !classified
 		if fullAudit || plan.auditsCredentials() {
 			if err := progressStep(ctx, "audit", 0, "endpoint_key_secrets", func() error {
+				if sourceVersion <= 26 {
+					return db.ValidateLegacyStoredEndpointCredentials(ctx, read, codec)
+				}
 				return db.ValidateStoredEndpointCredentials(ctx, read, codec)
 			}); err != nil {
 				return err

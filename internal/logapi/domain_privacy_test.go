@@ -126,13 +126,14 @@ func TestLogDNSRoleAndCurrentMainstreamAddress(t *testing.T) {
 	}
 	check(true)
 	// Later registration applies to older custom requests at the exact address.
-	f.mustExec(`INSERT INTO mainstream_channels VALUES('registered','openai-compatible','https://api.example.com/v1',1,'active')`)
+	f.mustExec(`INSERT INTO mainstream_channels VALUES('registered',1,'active')`)
+	f.mustExec(`INSERT INTO mainstream_channel_entries VALUES(1,'registered','openai-compatible','https://api.example.com/v1',1)`)
 	check(false)
-	f.mustExec(`UPDATE mainstream_channels SET canonical_base_url='https://api.example.com/v2' WHERE id='registered'`)
+	f.mustExec(`UPDATE mainstream_channel_entries SET canonical_base_url='https://api.example.com/v2' WHERE channel_id='registered'`)
 	check(true)
-	f.mustExec(`UPDATE mainstream_channels SET canonical_base_url='https://api.example.com/v1',connector_type='anthropic-compatible' WHERE id='registered'`)
-	check(true)
-	f.mustExec(`UPDATE mainstream_channels SET connector_type='openai-compatible',enabled=0 WHERE id='registered'`)
+	f.mustExec(`UPDATE mainstream_channel_entries SET canonical_base_url='https://api.example.com/v1',connector_type='anthropic-compatible' WHERE channel_id='registered'`)
+	check(false)
+	f.mustExec(`UPDATE mainstream_channels SET enabled=0 WHERE id='registered'`)
 	check(true)
 	f.mustExec(`UPDATE mainstream_channels SET enabled=1 WHERE id='registered'`)
 	check(false)
@@ -201,7 +202,8 @@ func TestLogDNSRawErrorCompletedActiveAndUnknownSources(t *testing.T) {
 		}
 	}
 	// Mainstream exemption preserves domain text and the old IPv4 rule.
-	f.mustExec(`INSERT INTO mainstream_channels VALUES('registered','openai-compatible','https://api.example.com/v1',1,'active')`)
+	f.mustExec(`INSERT INTO mainstream_channels VALUES('registered',1,'active')`)
+	f.mustExec(`INSERT INTO mainstream_channel_entries VALUES(1,'registered','openai-compatible','https://api.example.com/v1',1)`)
 	f.mustExec(`UPDATE request_error_bodies SET body=?,bytes_saved=? WHERE request_log_id=1`, []byte("example 192.0.2.7"), len("example 192.0.2.7"))
 	api := &diagnosticAPI{repository: f.repo, steward: traineeLogRead{}}
 	for _, tc := range []struct{ id, encoding, want string }{

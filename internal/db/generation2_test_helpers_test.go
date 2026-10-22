@@ -12,6 +12,9 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
@@ -482,8 +485,8 @@ VALUES(?,?,?,?,?,?,?,?)`, id, kind, userID, code, sign, mag, at, at)
 func hostileInsertEndpoint(t *testing.T, db *sql.DB, userID int64, base string) int64 {
 	t.Helper()
 	result := hostileMustExec(t, db, `
-INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at)
-VALUES(?,'openai-compatible',?,'',1,1,0,0)`, userID, base)
+INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at,native_service_mask,capability_origin)
+VALUES(?,'openai-compatible',?,'',1,1,0,0,49,'legacy')`, userID, base)
 	return hostileMustLastID(t, result)
 }
 
@@ -496,16 +499,21 @@ INSERT INTO endpoint_key_secrets(context_id,canonical_base_url,connector_type,en
 	return hostileMustLastID(t, result)
 }
 
-func hostileInsertEndpointKey(t *testing.T, db *sql.DB, endpointID, secretID int64) int64 {
+func hostileInsertEndpointKey(t *testing.T, database *sql.DB, endpointID, secretID int64) int64 {
 	t.Helper()
-	id := hostileNextPK64(t, db, "endpoint_keys")
-	result := hostileMustExec(t, db, `
-INSERT INTO endpoint_keys(
- id,endpoint_id,secret_ref_id,secret_fingerprint,display_head,display_tail,note,
- enabled,force_store_false,revision,created_at,updated_at
-) VALUES(?,?,?,?,'head','tail','',1,0,1,0,0)`,
-		id, endpointID, secretID, hostileBlob32(1))
-	return hostileMustLastID(t, result)
+	tx, err := database.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	key, err := testseed.InsertEndpointKeyTx(t.Context(), tx, testseed.KeyInput{EndpointID: endpointID, SecretRefID: secretID, Fingerprint: hostileBlob32(1), DisplayHead: "head", DisplayTail: "tail", At: 0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	return key.KeyID
 }
 
 func hostileInsertLogicalRequest(t *testing.T, db *sql.DB, id string, userID any, route string, limit int64) {
@@ -839,4 +847,76 @@ func hostileEnvelope(length int, version byte) []byte {
 	b := make([]byte, length)
 	b[0] = version
 	return b
+}
+
+func hostileInsertBinding(t *testing.T, database *sql.DB, charity bool, id, model, key int64, upstream string, ord int, created, updated int64) int64 {
+	t.Helper()
+	tx, err := database.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	services, err := connectorcontract.NativeServicesFromMask(49)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := testseed.BindingInput{ID: id, ModelID: model, KeyID: key, UpstreamModelID: upstream, NativeServices: services, Order: ord, At: created}
+	var result testseed.BindingIdentity
+	if charity {
+		result, err = testseed.InsertCharityBindingTx(t.Context(), tx, input)
+	} else {
+		result, err = testseed.InsertModelBindingTx(t.Context(), tx, input)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	table := "model_bindings"
+	if charity {
+		table = "charity_model_bindings"
+	}
+	if _, err := tx.ExecContext(t.Context(), "UPDATE "+table+" SET updated_at=? WHERE id=?", updated, result.BindingID); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	return result.BindingID
+}
+func hostileSeedApprovedUses(t *testing.T, database *sql.DB, donationKey int64) {
+	t.Helper()
+	tx, err := database.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(t.Context(), "INSERT INTO donation_key_memberships(endpoint_key_id,donation_id,donation_key_id,created_at) SELECT endpoint_key_id,donation_id,id,0 FROM donation_keys WHERE id=?", donationKey); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := testseed.SeedDonationUsesTx(t.Context(), tx, donationKey, true, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+}
+func hostileRetireCredential(t *testing.T, database *sql.DB, secretID, now int64) {
+	t.Helper()
+	tx, err := database.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	var version, credential int64
+	if err := tx.QueryRowContext(t.Context(), "SELECT id,credential_id FROM credential_versions WHERE secret_ref_id=?", secretID).Scan(&version, &credential); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.ExecContext(t.Context(), "UPDATE credentials SET current_version_id=NULL,connection_id=NULL,enabled=0,note='',deleted_at=?,updated_at=?,revision=revision+1 WHERE id=?", now, now, credential); err != nil {
+		t.Fatal(err)
+	}
+	if retired, err := connectionstore.RetireUnreferencedVersionTx(t.Context(), tx, version, now); err != nil || !retired {
+		t.Fatal(retired, err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
 }

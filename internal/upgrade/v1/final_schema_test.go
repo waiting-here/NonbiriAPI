@@ -20,21 +20,6 @@ var schema18Compressed []byte
 //go:embed testdata/schema19.sql.gz
 var schema19Compressed []byte
 
-//go:embed testdata/schema28.sql.gz
-var schema28Compressed []byte
-
-//go:embed testdata/schema29.sql.gz
-var schema29Compressed []byte
-
-//go:embed testdata/schema30.sql.gz
-var schema30Compressed []byte
-
-//go:embed testdata/schema31.sql.gz
-var schema31Compressed []byte
-
-//go:embed testdata/schema27.sql.gz
-var schema27Compressed []byte
-
 //go:embed testdata/schema26.sql.gz
 var schema26Compressed []byte
 
@@ -55,86 +40,6 @@ var schema21Compressed []byte
 
 //go:embed testdata/schema20.sql.gz
 var schema20Compressed []byte
-
-func schema31SQLForTest(t *testing.T) string {
-	t.Helper()
-	reader, err := gzip.NewReader(bytes.NewReader(schema31Compressed))
-	if err != nil {
-		t.Fatal(err)
-	}
-	body, err := io.ReadAll(reader)
-	if closeErr := reader.Close(); err != nil || closeErr != nil {
-		t.Fatal(err, closeErr)
-	}
-	if fmt.Sprintf("%x", sha256.Sum256(body)) != "4cac45da6937d381c236925b6e581cf7de4521a0f6c72c44fbc77ca3b1167347" {
-		t.Fatal("schema 31 fixture identity changed")
-	}
-	return string(body)
-}
-
-func schema30SQLForTest(t *testing.T) string {
-	t.Helper()
-	reader, err := gzip.NewReader(bytes.NewReader(schema30Compressed))
-	if err != nil {
-		t.Fatal(err)
-	}
-	body, err := io.ReadAll(reader)
-	if closeErr := reader.Close(); err != nil || closeErr != nil {
-		t.Fatal(err, closeErr)
-	}
-	if fmt.Sprintf("%x", sha256.Sum256(body)) != "e5612a5765d277717df78ea8f1f7645f1b2c913c88b6c358173b8b6ee3e5bfbd" {
-		t.Fatal("schema 30 fixture identity changed")
-	}
-	return string(body)
-}
-
-func schema29SQLForTest(t *testing.T) string {
-	t.Helper()
-	reader, err := gzip.NewReader(bytes.NewReader(schema29Compressed))
-	if err != nil {
-		t.Fatal(err)
-	}
-	body, err := io.ReadAll(reader)
-	if closeErr := reader.Close(); err != nil || closeErr != nil {
-		t.Fatal(err, closeErr)
-	}
-	if fmt.Sprintf("%x", sha256.Sum256(body)) != "bade4b06953b1ea509886af24c59b4620e5ba0175e903413f87e6f66fcb53209" {
-		t.Fatal("schema 29 fixture identity changed")
-	}
-	return string(body)
-}
-
-func schema28SQLForTest(t *testing.T) string {
-	t.Helper()
-	reader, err := gzip.NewReader(bytes.NewReader(schema28Compressed))
-	if err != nil {
-		t.Fatal(err)
-	}
-	body, err := io.ReadAll(reader)
-	if closeErr := reader.Close(); err != nil || closeErr != nil {
-		t.Fatal(err, closeErr)
-	}
-	if fmt.Sprintf("%x", sha256.Sum256(body)) != "f5209b45d24077df5a06d3fb4f3f621ae716351e71bcec80d30b23c204e298c1" {
-		t.Fatal("schema 28 fixture identity changed")
-	}
-	return string(body)
-}
-
-func schema27SQLForTest(t *testing.T) string {
-	t.Helper()
-	reader, err := gzip.NewReader(bytes.NewReader(schema27Compressed))
-	if err != nil {
-		t.Fatal(err)
-	}
-	body, err := io.ReadAll(reader)
-	if closeErr := reader.Close(); err != nil || closeErr != nil {
-		t.Fatal(err, closeErr)
-	}
-	if fmt.Sprintf("%x", sha256.Sum256(body)) != "d90c797cdf8bce91fa7687ee9a54bb48e436a085ab2d2f4e314a972860a970a1" {
-		t.Fatal("schema 27 fixture identity changed")
-	}
-	return string(body)
-}
 
 func schema26SQLForTest(t *testing.T) string {
 	t.Helper()
@@ -289,7 +194,7 @@ func schema18SQLForTest(t *testing.T) string {
 }
 
 func TestFinalSchemaConversionAcceptsExactStableSources(t *testing.T) {
-	for _, version := range []int{17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31} {
+	for _, version := range []int{17, 18, 19, 20, 21, 22, 23, 24, 25, 26} {
 		t.Run(fmt.Sprint(version), func(t *testing.T) {
 			ddl, hash := schema17SQLForTest(t), stableSchema17Manifest
 			if version == 18 {
@@ -318,21 +223,6 @@ func TestFinalSchemaConversionAcceptsExactStableSources(t *testing.T) {
 			}
 			if version == 26 {
 				ddl, hash = schema26SQLForTest(t), stableSchema26Manifest
-			}
-			if version == 27 {
-				ddl, hash = schema27SQLForTest(t), stableSchema27Manifest
-			}
-			if version == 28 {
-				ddl, hash = schema28SQLForTest(t), stableSchema28Manifest
-			}
-			if version == 29 {
-				ddl, hash = schema29SQLForTest(t), stableSchema29Manifest
-			}
-			if version == 30 {
-				ddl, hash = schema30SQLForTest(t), stableSchema30Manifest
-			}
-			if version == 31 {
-				ddl, hash = schema31SQLForTest(t), stableSchema31Manifest
 			}
 			path, vault := sourceFixtureFromDDL(t, ddl, version, hash)
 			database, err := sql.Open("sqlite", path)
@@ -416,11 +306,11 @@ func TestFinalSchemaConversionAcceptsExactStableSources(t *testing.T) {
 
 func TestOfflineDescriptorContainsOnlyExactSupportedSources(t *testing.T) {
 	descriptor := SchemaDescriptor()
-	if descriptor.SchemaVersion != 32 || descriptor.MinimumSchemaVersion != 32 || len(descriptor.SourceSchemaVersions) != 0 || len(descriptor.OfflineConversions) != 16 {
+	if descriptor.SchemaVersion != 33 || descriptor.MinimumSchemaVersion != 33 || len(descriptor.SourceSchemaVersions) != 0 || len(descriptor.OfflineConversions) != 11 {
 		t.Fatal(descriptor)
 	}
 	for index, source := range descriptor.OfflineConversions {
-		if source.SourceSchemaVersion != 16+index || source.TargetSchemaVersion != 32 || len(source.SourceCommit) != 40 || len(source.SourceManifestHash) != 64 || source.Tool != "nonbiri-upgrade-v1" {
+		if source.SourceSchemaVersion != 16+index || source.TargetSchemaVersion != 33 || len(source.SourceCommit) != 40 || len(source.SourceManifestHash) != 64 || source.Tool != "nonbiri-upgrade-v1" {
 			t.Fatal(source)
 		}
 	}

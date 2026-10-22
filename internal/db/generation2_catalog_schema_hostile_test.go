@@ -2,6 +2,7 @@ package db
 
 import (
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,13 +15,62 @@ func TestGenerationTwoHostileAutomaticCatalogIdentity(t *testing.T) {
 	secretID := hostileInsertSecret(t, db, "https://upstream.example/v1", 0)
 	keyID := hostileInsertEndpointKey(t, db, endpointID, secretID)
 
+	tx, err := db.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := testseed.SeedDiscoverySourceTx(t.Context(), tx, testseed.DiscoverySourceInput{EndpointKeyID: keyID, ListFormat: "openai", At: 0})
+	if err != nil {
+		tx.Rollback()
+		t.Fatal(err)
+	}
+	var version int64
+	if err = tx.QueryRowContext(t.Context(), "SELECT credential_version_id FROM discovery_source_revisions WHERE id=?", source.SourceRevisionID).Scan(&version); err != nil {
+		tx.Rollback()
+		t.Fatal(err)
+	}
+	runs := map[int64]int64{}
+	for _, generation := range []int64{1, hostileInt64Max} {
+		result, err := tx.ExecContext(t.Context(), "INSERT INTO discovery_runs(source_revision_id,source_revision_snapshot,credential_version_id,result_generation,authorization_kind,state,started_at,completed_at) VALUES(?,1,?,?,'legacy','succeeded',0,0)", source.SourceRevisionID, version, generation)
+		if err != nil {
+			tx.Rollback()
+			t.Fatal(err)
+		}
+		runs[generation], err = result.LastInsertId()
+		if err != nil {
+			tx.Rollback()
+			t.Fatal(err)
+		}
+	}
+	_, err = tx.ExecContext(t.Context(), "UPDATE discovery_source_states SET result_generation=?,current_run_id=?,last_successful_run_id=? WHERE source_revision_id=?", hostileInt64Max, runs[hostileInt64Max], runs[hostileInt64Max], source.SourceRevisionID)
+	if err == nil {
+		err = tx.Commit()
+	} else {
+		tx.Rollback()
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	entryQuery := "INSERT INTO model_catalog_entries(id,endpoint_key_id,discovery_run_id,source_type,source_identity,normalized_model_id,provider,source_revision,native_service_mask,created_at,updated_at) VALUES(?,?,?,?,?,?,'provider',?,0,0,0)"
+	entryArgs := func(id int64, sourceType, identity, model string, revision int64) []any {
+		var key, run any
+		if sourceType == "manual" {
+			key = keyID
+		} else {
+			runID := runs[revision]
+			if runID == 0 {
+				runID = runs[1]
+			}
+			run = runID
+		}
+		return []any{id, key, run, sourceType, identity, model, revision}
+	}
+
 	insertEntry := func(id int64, sourceType, sourceIdentity, model string, sourceRevision int64) {
 		t.Helper()
-		hostileMustExec(t, db, `
-INSERT INTO model_catalog_entries(
- id,endpoint_key_id,source_type,source_identity,normalized_model_id,provider,source_revision,created_at,updated_at
-) VALUES(?,?,?,?,?,'provider',?,0,0)`, id, keyID, sourceType, sourceIdentity, model, sourceRevision)
+		hostileMustExec(t, db, entryQuery, entryArgs(id, sourceType, sourceIdentity, model, sourceRevision)...)
 	}
+
 	insertEntry(1, "manual", "provider/model", "provider/model", 1)
 	insertEntry(2, "automatic", "1:0", "provider/automatic", 1)
 	insertEntry(3, "automatic", "1:9999", "provider/automatic-max", 1)
@@ -28,20 +78,20 @@ INSERT INTO model_catalog_entries(
 	maxModel := strings.Repeat("界", 512)
 	hostileMustExec(t, db, `
 INSERT INTO model_catalog_entries(
- id,endpoint_key_id,source_type,source_identity,normalized_model_id,provider,source_revision,created_at,updated_at
-) VALUES(5,?,'manual',?,?, '',1,0,0)`, keyID, maxModel, maxModel)
+ id,endpoint_key_id,source_type,source_identity,normalized_model_id,provider,source_revision,native_service_mask,created_at,updated_at
+) VALUES(5,?,'manual',?,?, '',1,0,0,0)`, keyID, maxModel, maxModel)
 	hostileMustExec(t, db, `
 INSERT INTO model_catalog_entries(
- id,endpoint_key_id,source_type,source_identity,normalized_model_id,provider,source_revision,created_at,updated_at
-) VALUES(6,?,'manual','provider-limit','provider-limit',?,1,0,0)`, keyID, strings.Repeat("供", 128))
+ id,endpoint_key_id,source_type,source_identity,normalized_model_id,provider,source_revision,native_service_mask,created_at,updated_at
+) VALUES(6,?,'manual','provider-limit','provider-limit',?,1,0,0,0)`, keyID, strings.Repeat("供", 128))
 	hostileMustFail(t, db, `
 INSERT INTO model_catalog_entries(
- id,endpoint_key_id,source_type,source_identity,normalized_model_id,provider,source_revision,created_at,updated_at
-) VALUES(7,?,'manual',?,?, '',1,0,0)`, keyID, strings.Repeat("界", 513), strings.Repeat("界", 513))
+ id,endpoint_key_id,source_type,source_identity,normalized_model_id,provider,source_revision,native_service_mask,created_at,updated_at
+) VALUES(7,?,'manual',?,?, '',1,0,0,0)`, keyID, strings.Repeat("界", 513), strings.Repeat("界", 513))
 	hostileMustFail(t, db, `
 INSERT INTO model_catalog_entries(
- id,endpoint_key_id,source_type,source_identity,normalized_model_id,provider,source_revision,created_at,updated_at
-) VALUES(8,?,'manual','provider-over','provider-over',?,1,0,0)`, keyID, strings.Repeat("供", 129))
+ id,endpoint_key_id,source_type,source_identity,normalized_model_id,provider,source_revision,native_service_mask,created_at,updated_at
+) VALUES(8,?,'manual','provider-over','provider-over',?,1,0,0,0)`, keyID, strings.Repeat("供", 129))
 
 	for i, tc := range []struct {
 		name, sourceType, sourceIdentity, model string
@@ -57,10 +107,7 @@ INSERT INTO model_catalog_entries(
 		{"automatic-zero-revision", "automatic", "0:0", "provider/auto-zero", 0},
 	} {
 		t.Run(fmt.Sprintf("%02d-%s", i, tc.name), func(t *testing.T) {
-			hostileMustFail(t, db, `
-INSERT INTO model_catalog_entries(
- id,endpoint_key_id,source_type,source_identity,normalized_model_id,provider,source_revision,created_at,updated_at
-) VALUES(?,?,?,?,?,'provider',?,0,0)`, 10+i, keyID, tc.sourceType, tc.sourceIdentity, tc.model, tc.revision)
+			hostileMustFail(t, db, entryQuery, entryArgs(int64(10+i), tc.sourceType, tc.sourceIdentity, tc.model, tc.revision)...)
 		})
 	}
 
@@ -81,12 +128,11 @@ VALUES(?,'provider','model','provider/model','ordered',0,0,1,0,0,0)`, uid)
 	hostileMustFail(t, db, `UPDATE models SET revision=0 WHERE id=?`, modelID)
 	hostileMustFail(t, db, `UPDATE models SET binding_revision=? WHERE id=?`, "9223372036854775808", modelID)
 	bindingID := hostileNextPK64(t, db, "model_bindings")
-	hostileMustExec(t, db, `
-	INSERT INTO model_bindings(id,model_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at)
-	VALUES(?,?,?, ?,0,0,0)`, bindingID, modelID, keyID, "provider/model")
-	hostileMustFail(t, db, `
-INSERT INTO model_bindings(model_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at)
-VALUES(?,?,?,1,0,0)`, modelID, keyID, "provider/missing")
+	hostileInsertBinding(t, db, false, bindingID, modelID, keyID, "provider/model", 0, 0, 0)
+	// An explicit authorized target no longer depends on catalog presence.
+	hostileInsertBinding(t, db, false, bindingID+1, modelID, keyID, "provider/missing", 1, 0, 0)
+	hostileMustFail(t, db, "UPDATE model_binding_targets SET native_service_mask=0 WHERE binding_id=?", bindingID)
+
 	hostileMustExec(t, db, `
 INSERT INTO charity_models(provider,model,full_name,pricing_mode,revision,binding_revision,created_at,updated_at)
 VALUES('provider','charity','[公益]provider/charity','per_request',?, ?,0,0)`, hostileInt64Max, hostileInt64Max)
