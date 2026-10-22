@@ -2,7 +2,7 @@
 
 [简体中文](README.zh-CN.md)
 
-NonbiriAPI is a self-hosted AI endpoint manager and OpenAI-compatible gateway. Users manage endpoints, encrypted credentials, model discovery and routing, then use revocable CallerKeys for personal or shared charity calls. Optional activities and games share server-authoritative accounting and lifecycle rules.
+NonbiriAPI is a self-hosted AI endpoint manager and OpenAI-compatible gateway. Users manage service connections, shared encrypted credentials, model discovery and routing, then use revocable CallerKeys for personal or shared charity calls. Optional activities and games share server-authoritative accounting and lifecycle rules.
 
 **v1.0.0 is the first stable release.** GitHub Releases provide source code; build instructions are below. Version history is in [CHANGELOG](CHANGELOG.md).
 
@@ -65,6 +65,8 @@ AI Gateway mappings remain compatible when no Worker is configured.
 | Shared components and separate stations | `web/src/shared/`, `web/src/user/`, `web/src/admin/` |
 | Verification and deployment examples | `scripts/`, `.github/workflows/`, `deploy/` |
 
+[Service connections](docs/service-connections.md) group explicitly authorized entries around shared credentials and an independent model directory. OpenAI-compatible and Gateway entries select their native services; each model selects its applicable targets. Credential rotation preserves approved charity versions until explicit review.
+
 The registry has 13 connector types covering OpenAI-compatible, dedicated Chat and Responses, Anthropic, Gateway v3/v4, Gemini, Decisions, System One and four explicit rerank protocols. Both Gateway versions support native text, image generation, embeddings and rerank with complete base URLs and no version probing. Direct HTTP operations include text, images, audio, embeddings, moderation and rerank, with SSE where supported. Chat and Responses share one model service selection and have bounded conversion paths; other services remain independently selectable. See [direct inference](docs/direct-inference.md) for the operation matrix and excluded persistent/realtime resources, and the [API contract](docs/api-contract.md) for ownership, credentials, SSRF, accounting and cancellation rules.
 
 Charity pricing supports request, token and search-unit billing, with independent input/output modality prices, donor rewards and long-context tiers. Missing standard classifications fall back to aggregate prices per side. [Pricing rules](docs/charity-context-pricing.md) explain exact units, reservation and failed-generation usage. Light and heavy requests have separate concurrency pools shared by personal and charity calls, and separate charity RPM windows; all calls still share global limits.
@@ -118,7 +120,7 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [First-run setup](docs/first-run-setup.md) covers private paths, the encryption key, Discord OAuth and public origins. Copy [admin.env.example](admin.env.example) outside the checkout, replace placeholders and load it before starting. Preserve the database with its matching key.
 
-Fresh databases start in maintenance with public features closed. The v1.1.0 source accepts schema 32 or fresh storage and produces account export 28. Existing schema 16–31 databases use the separate offline converter; historical conversion code is excluded from the service. Later v1.x releases retain an upgrade path from every earlier stable v1.x schema. Older binaries need not read newer databases. Source documentation does not imply that an instance has released or deployed the update.
+Fresh databases start in maintenance with public features closed. The v1.1.0 source accepts schema 33 or fresh storage and produces account export 29. Existing published schema 16–26 databases use the separate offline converter; historical conversion code is excluded from the service. Later v1.x releases retain an upgrade path from every earlier stable v1.x schema. Older binaries need not read newer databases. Source documentation does not imply that an instance has released or deployed the update.
 
 [Deployment](docs/deployment.md) covers systemd, proxies, immutable artifacts, upgrades and complete-snapshot recovery. Startup variables and online settings have one reference in [configuration](docs/configuration.md).
 

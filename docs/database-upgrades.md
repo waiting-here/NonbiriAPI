@@ -2,15 +2,15 @@
 
 ## Supported databases
 
-The v1.1.0 application accepts a new database or the current schema **32**.
-Existing exact schema 16–31 databases require the separate one-time converter.
+The v1.1.0 application accepts a new database or the current schema **33**.
+Existing exact schema 16–26 databases require the separate one-time converter.
 The normal service contains only current DDL and validation; it does not import
 or embed historical schemas or conversion code. Later v1.x releases must provide
 a complete upgrade path from every earlier stable v1.x database. An older binary
 is not required to read a newer database.
 
 SQLite identity remains `application_id=0x4E425249`, `user_version=2`. Account
-exports use format **28**, independently of the storage schema. An unknown
+exports use format **29**, independently of the storage schema. An unknown
 identity, version or structural manifest is rejected before writes.
 
 ```sh
@@ -20,55 +20,55 @@ identity, version or structural manifest is rejected before writes.
 
 These commands load no application configuration or database. Each machine-readable descriptor
 contains the current identity and accepted versions. The application descriptor
-accepts only schema 32 and has empty migration and conversion lists. The converter
+accepts only schema 33 and has empty migration and conversion lists. The converter
 descriptor lists its exact offline sources and target. Deployment tools use both
 descriptors instead of parsing Go source or deriving versions from array lengths.
 
 ## Schema changes
 
-Schema 32 adds `ai-sdk-gateway-v4` to the existing closed connector values in
-channels, endpoints, credential secrets, donation keys, request attempts and
-report cases/targets. The seven affected tables are rebuilt transactionally;
-existing v3 values, credentials, bindings, counters, identifiers and operator
-configuration are preserved. No new personal fields or retention periods are
-introduced. Account export 28 records the new protocol value while retaining
-the existing safe projections. Exact schema 31 is a registered offline source.
+Schema 33 introduces service connections, independently versioned credentials,
+explicit endpoint grants, independent discovery sources and ordered model targets.
+Donation uses record separately approved and pending versions for each native
+service. Each existing endpoint becomes its own connection; identical secret
+bytes are not automatically merged. Existing endpoint/key/binding identifiers,
+permissions, budgets, consumption, review evidence and encrypted material are
+preserved. Legacy service selections are mapped explicitly, without probing an
+upstream or requiring existing donations to be approved again.
 
-Schema 31 adds a claim-bound receipt for narrowly verified caller-parameter errors. It stores only the claim reference, HTTP 400/422 and one recognized error code, and extends the existing neutral-outcome guards. It stores no parameter name/value, request body, upstream message or user identity. It follows claim deletion and does not add an account-export field. Accounting, existing retry facts and unknown-error handling are preserved.
+Current personal grants and approved charity uses may select different versions
+of one credential. Live discovery runs and accepted claims retain their exact
+authorization until completion. Removing an entry leaves an independent
+credential available to its owner; explicit credential deletion and account
+removal revoke its usable grants. Unreferenced versions release encrypted
+material through the common retention boundary.
 
-Schema 30 adds anonymous global pressure state and bounded minute samples. Observation start and all-time observed maxima persist across restarts; the approximate 24-hour window expires independently. It collects no request or user identifiers and leaves account export at 27.
+New failure streaks, smart backoff and Retry-After state are scoped to the donated
+use, entry, native service and credential version. Existing key-wide gates retain
+their original state and trial ownership. Service rows do not duplicate the
+original key budget or create cross-entry quota pools.
 
-Schema 29 adds personal-model managed-header configuration and separate personal session/use tables. Both model families accept zero idle lifetime and all five formats. Zero creates a new value per logical request while retaining it for internal retries; it does not guarantee uniqueness. Existing charity configuration and valid positive-lifetime values are preserved. Account export 27 adds personal models' saved header configuration, excluding generated values and shared charity settings. See [managed headers](charity-session-headers.md).
+The same schema includes Gateway v3/v4, expanded direct-inference operations,
+standard modality/search usage, caller and donor pricing decisions, personal
+managed headers, anonymous pressure observations and minimal caller-parameter
+error receipts. Historical rows receive unknown or empty usage metadata, never
+invented classifications. Existing economic snapshots and balances remain intact.
 
-Schema 28 expands the closed connector, inference-operation and pricing values,
-and stores bounded standard usage details on request logs, attempts and charity
-reservations. Donation usage reservations retain separate reward-pricing
-decisions. Existing rows receive empty details without inventing classification
-or search-unit reports. Existing price and reward snapshots, balances and
-settled history are preserved. Chat and Responses legacy model flags now select
-their shared service; other service selections remain intact.
+Light charity RPM and light concurrency default to 30 and 15. Existing heavy
+limits are preserved; nullable per-user overrides inherit their site defaults.
+Cloudflare forwarding defaults to enabled for personal models and disabled for
+charity models. Endpoint-level supplemental backoff rules start empty and affect
+future dispatches. Existing operator choices and instance legal overrides remain.
 
-Three nullable user overrides add light charity RPM, light concurrency and
-global user RPM. Null inherits current defaults; existing heavy RPM/concurrency
-values are preserved. The new light defaults are 30 RPM and 15 concurrent calls.
-Risk-minute saturation is nullable: old rows retain the previous calculation,
-while new rows distinguish observed idle from missing observation and preserve
-single-pool saturation. Rebuilt tables preserve SQLite identifier sequences,
-including deleted high-water IDs.
+Account export 29 adds safe owner-scoped connections, credential/version metadata,
+grants, discovery sources and donation uses with their current approved health.
+It retains personal managed-header settings, configured/effective user limits and
+safe aggregate modality/search usage. It excludes secret material, fingerprints,
+review HMACs, generated session headers, deployment settings and internal dispatch
+authorizations. See [service connections](service-connections.md) and the
+[data lifecycle](data-lifecycle-checklist.md).
 
-Account export 26 adds the five configured/effective user inference limits and
-safe aggregate charity modality/search usage. Per-request pricing, donor price
-decisions, uploaded content and secrets remain excluded. The retained schema 27
-changes below are included in v1.1.0; no separate v1.0.7 release is required.
-
-Schema 27 adds platform-wide endpoint backoff policies and bounded rule snapshots
-on dispatch facts. Policies start empty; existing waiting, trial, HTTP acceptance
-and failure facts are preserved. Rules affect future charity dispatches only.
-Schema 27 also adds `cloudflare_proxy_enabled` to personal and charity models,
-defaulting to true and false respectively for existing and newly created models.
-Account export format 25 includes the personal-model setting. Deployment tokens
-and forwarding configuration are excluded; per-key backoff configuration is not
-restored.
+Only published schema 16–26 sources are registered for offline conversion.
+Unreleased intermediate database layouts are not supported sources.
 
 Schema 26 adds shared channel binding presets and their ordered upstream-model
 mappings. Existing channels start without a preset. Saving or applying a preset
@@ -166,7 +166,7 @@ donation terminal clocks, expiry, balances or historical settlements.
 ## One-time conversion
 
 Build `./cmd/nonbiri-upgrade-v1` from the same commit as the target application.
-The converter accepts exact registered schema 16–31 structures. For rc.7,
+The converter accepts exact registered schema 16–26 structures. For rc.7,
 the reference source is `82f1711b674425745a768f781e0e0c34dcb37ac3`. The database
 manifest determines eligibility, not a guess based on a release label.
 
@@ -175,7 +175,7 @@ needed. Ordinary `--apply` validates the exact source, encryption-root identity,
 required configuration and migration-affected relationships, without scanning
 unrelated historical tables. Run it with the service stopped and its existing
 master key available. The converter acquires exclusive
-database access and converts the source to schema 32 in one transaction. A matching
+database access and converts the source to schema 33 in one transaction. A matching
 current schema is a no-op; structural drift, an unknown source or a wrong key is
 rejected. Failure or cancellation rolls back.
 

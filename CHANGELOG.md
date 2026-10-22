@@ -8,6 +8,15 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Added
 
+- Service connections with shared versioned credentials, independent model
+  directories and multi-service entries. OpenAI-compatible and Gateway entries
+  explicitly select native services; model bindings retain ordered alternative
+  targets without multiplying retry slots or budgets.
+- Per-service donation approval, with pending replacements alongside older
+  approved versions. Credential rotation and explicitly added services require
+  review while preserving the existing donated-key budget and consumption.
+- Multi-entry mainstream presets with independent discovery suggestions and
+  per-model entry mappings, shared by personal setup and donation workflows.
 - Direct HTTP/SSE Responses, legacy completions, image editing/variation, audio,
   moderation and rerank operations, plus exact model lookup. Persistent resource
   APIs and all WebSocket/Realtime/WebRTC interfaces remain outside this version.
@@ -73,13 +82,12 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Chat and Responses share a model service selection, with explicit upstream
   protocol choice and bounded conversion in both directions. Other model
   services retain independent multi-selection.
-- Storage schema 32 adds the explicit Gateway v4 protocol value and retains
-  direct-inference/admission changes, personal managed-header configuration,
-  anonymous pressure samples and minimal caller-parameter-error receipts.
-  Exact schema 16–31 sources use the offline converter. Account export 28 retains
-  v3/v4 protocol values, safe aggregate modality/search usage, configured/effective
-  user limits and personal-model header configuration;
-  generated header values and shared charity configuration remain excluded.
+- Storage schema 33 adds connection, credential-version, discovery and service
+  authorization relationships, while preserving direct-inference, admission,
+  managed-header and pressure changes. Only published schema 16–26 sources are
+  accepted by the offline converter. Account export 29 includes safe owned
+  connection metadata and donation uses; secret material, generated headers,
+  internal authorizations and shared charity configuration remain excluded.
 - Model settings and request adaptation have consistent entry points and header/body
   groups across personal and charity editors, with separate saves and existing
   permissions.
@@ -96,7 +104,7 @@ Each version entry describes its source and compatibility boundary; a release ta
 ### Fixed
 
 - Account deletion succeeds after related terminal request logs have naturally expired.
-- Account downloads accept export versions 11–28 and preserve saved personal
+- Account downloads accept export versions 11–29 and preserve saved personal
   managed-header settings, while retaining identity and attachment-version checks.
 - Improve glass-surface readability, management back controls and centered
   workbench widths on desktop and mobile. Focus-mode background viewing restores

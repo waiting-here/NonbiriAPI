@@ -13,13 +13,40 @@ and bilingual privacy text are covered by their implementation and contract test
 Schema presence alone never creates a route or expands a response.
 
 Personal-model `cloudflare_proxy_enabled` belongs to the owner's model, is
-included in account export 28, and is deleted with that model or account.
+included in account export 29, and is deleted with that model or account.
 Charity-model preferences are shared platform configuration and excluded from
 personal exports. The read-only deployment mode is not persisted per account.
 Worker and legacy gateway tokens remain private deployment configuration and
 never enter account exports. Routing preferences do not extend log retention.
 
-Current account export format 28 includes safe `gacha` balances, owned cards, guarantees, claims, activity journals, draw details within 180 days and the saved appearance artwork key. Its filename is `nonbiriapi-account-export-v28.json`; SQLite `user_version` remains 2 and the current storage schema is 32. The v4 connector value follows existing endpoint, credential, discovery, binding, donation and history ownership/deletion rules; it adds no personal fields or retention period. All rows below describe current retained fields. This does not assert that a particular instance has been upgraded.
+Current account export format 29 includes safe `gacha` balances, owned cards, guarantees, claims, activity journals, draw details within 180 days and the saved appearance artwork key. Its filename is `nonbiriapi-account-export-v29.json`; SQLite `user_version` remains 2 and the current storage schema is 33. The v4 connector value follows existing endpoint, credential, discovery, binding, donation and history ownership/deletion rules; it adds no personal fields or retention period. All rows below describe current retained fields. This does not assert that a particular instance has been upgraded.
+
+## Connections and versioned authorization
+
+Account export 29 includes owned connection groups, safe credential/version
+metadata, current endpoint grants, model targets, independent discovery sources
+and donation-use approval snapshots. Credential ciphertext, secret references,
+fingerprints, review HMACs and internal authorization rows are excluded. Export
+joins retain owner boundaries even when a credential is explicitly used across
+several connection groups. Internal numeric identities are not substitutes for
+public credential versions or grant revisions.
+
+Current grants, approved/pending uses, explicitly shared source revisions and
+active claims keep the exact material they need. Deleting an entry does not
+implicitly delete an independent credential. Credential/group/account deletion
+revokes the corresponding authorization through the existing deletion transaction.
+Late discovery completion cannot restore removed grants or deleted accounts.
+Claim completion releases its active authorization after settlement and safe
+attempt facts have been recorded. Unreferenced versions and encrypted material
+use the common retirement and retention path.
+
+Per-service health follows the owned donation use and credential version. Safe
+current approved health is exported with that use; dispatch sequence markers,
+backoff receipts and request-attempt service facts remain internal and follow
+existing claim/request retention. Existing budgets, review history, legal holds
+and deidentified late-settlement obligations retain their original boundaries.
+Mainstream entries, directory suggestions and model mappings are shared operator
+configuration and are excluded from personal exports.
 
 ## Direct inference usage and admission
 
@@ -296,7 +323,7 @@ manifest, and checksums. Snapshot retention/deletion is operator-controlled and 
 be disclosed by the instance policy; the service does not promise per-user erasure inside
 historical snapshots.
 
-Normal v1.1.0 startup accepts fresh storage or current schema 32; exact schema 16–31 structures use the independent converter. Unknown or partial sources are rejected before writes. Fresh creation requires the main database and sidecars to be absent. Conversion preserves accounts, economic facts, credentials, saved games, configuration and instance legal text. Full historical audits use offline `maintenance verify`. The [database upgrade guide](database-upgrades.md) identifies the exact source and restore requirements.
+Normal v1.1.0 startup accepts fresh storage or current schema 33; exact schema 16–26 structures use the independent converter. Unknown or partial sources are rejected before writes. Fresh creation requires the main database and sidecars to be absent. Conversion preserves accounts, economic facts, credentials, saved games, configuration and instance legal text. Full historical audits use offline `maintenance verify`. The [database upgrade guide](database-upgrades.md) identifies the exact source and restore requirements.
 
 Starting fresh from an unsupported version uses a separate empty path and resets active application state. A complete old recovery set remains sensitive until its retention purpose ends. Never combine an old binary with a newer database or restore a stale snapshot over newly accepted data automatically.
 
@@ -339,7 +366,7 @@ AI callbacks, cancellation, financial settlement, memory extraction and deletion
 
 ## Managed upstream session headers
 
-`personal_header_sessions`, `personal_header_uses`, `charity_header_sessions` and `charity_header_uses` hold temporary upstream correlation values in separate personal/charity scopes. Values are excluded from account-content exports, public configuration, logs and raw error diagnostics. Personal models' saved `session_headers` configuration (`name,idle_seconds,format`) is included in export 28 and deleted with the model/account. Shared charity-model configuration is excluded; charity consumption remains in its existing aggregate. User/model deletion cascades the cache/use tables; completion updates only surviving matching values and cannot recreate deleted data.
+`personal_header_sessions`, `personal_header_uses`, `charity_header_sessions` and `charity_header_uses` hold temporary upstream correlation values in separate personal/charity scopes. Values are excluded from account-content exports, public configuration, logs and raw error diagnostics. Personal models' saved `session_headers` configuration (`name,idle_seconds,format`) is included in export 29 and deleted with the model/account. Shared charity-model configuration is excluded; charity consumption remains in its existing aggregate. User/model deletion cascades the cache/use tables; completion updates only surviving matching values and cannot recreate deleted data.
 
 Active logical requests retain their value for internal retries. Zero idle lifetime creates a new value for each logical request without a uniqueness guarantee or cross-request reuse. With a positive lifetime, sent completion extends the configured idle period, default 300 seconds; expired inactive values use bounded cleanup. Startup recovery releases unfinished uses. These values are never authentication credentials. Owners configure personal models; administrator/level-6 authority configures charity models. Level-5 permissions do not expand. See [managed headers](charity-session-headers.md).
 
@@ -358,7 +385,7 @@ Reward receipts are included in current account exports under `rewards`. They co
 ## Shared pricing, owner history and header facts
 
 Smart backoff runs automatically for charity calls. Current safe state is included
-in account export 28 and authorized key projections. Runtime state contains a
+in account export 29 and authorized key projections. Runtime state contains a
 limited reason, source and retry time; it does not copy raw upstream errors.
 The current episode follows the donated key; internal trial and classification
 facts follow the claim.
@@ -370,7 +397,7 @@ and rule fields are removed from replay responses without repeating the mutation
 
 | Family | Access and export | Deletion, retention and late work |
 | --- | --- | --- |
-| `donation_key_backoffs` | Owner and authorized management may read safe current state, also included in account export 28. Internal generation, episode and trial identifiers are excluded. There is no per-key recognition configuration. | Current state cascades with the key. Schema 26 discards old profiles and supplemental-rule text while preserving active recovery facts. Account deletion removes the state. |
+| `donation_key_backoffs` | Owner and authorized management may read safe current state, also included in account export 29. Internal generation, episode and trial identifiers are excluded. There is no per-key recognition configuration. | Current state cascades with the key. Schema 26 discards old profiles and supplemental-rule text while preserving active recovery facts. Account deletion removes the state. |
 | `endpoint_backoff_policies` | Platform configuration readable and writable by administrators and current level-6 stewards; exact connector/base identity, revision and at most eight rules. No personal export or account identifier. | Retained with platform configuration and complete deployment backups. Clearing rules keeps the revision; account deletion does not delete shared endpoint policy. |
 | `dispatch_smart_backoff_facts` | Internal per-claim recovery identity, trial ownership, HTTP acceptance, finite quota classification and bounded endpoint rule snapshot/revision/matched index; no raw error and no personal export. | Claim deletion cascades; key deletion clears its key reference. Existing request retention and holds apply. Generation and episode checks prevent late results from changing a newer episode. Historical supplemental-rule classifications remain valid recovery facts after configuration removal. |
 | `charity_price_templates` and `charity_price_template_audits` | Shared price/reward/reserve/context/fixed and recurring discount settings; administrator maintenance and enabled-only L6 session reads. No L5/CallerKey access or personal export. Applying copies values, never links a model to future changes. | Templates persist until deleted; safe audits expire after 90 days and actor deletion sets identity null. No credentials or caller content. |

@@ -99,5 +99,8 @@ routes retain their original all-or-nothing duplicate and capacity behavior.
 Channel presets are shared configuration, retained with the channel and excluded
 from personal account exports. They contain no donor or operator identity.
 Mutations use the existing role-scoped control receipts and their retention
-boundary. Account export format remains 23. Schema 26 adds the preset structures;
-use the matching [offline converter](database-upgrades.md) for an existing database.
+boundary. Schema 33 extends the presets with entries, independent discovery
+suggestions and model-to-entry mappings. Shared presets are excluded from account
+export 29. Use the matching [offline converter](database-upgrades.md) for an
+existing published database. See [service connections](service-connections.md)
+for per-service approvals and ordered alternative binding targets.

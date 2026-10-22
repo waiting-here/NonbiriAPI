@@ -1,5 +1,7 @@
 # NonbiriAPI HTTP API Contract
 
+Service connection, shared credential, discovery-source and per-service donation semantics are described in [service connections](service-connections.md). Existing endpoint and single-target clients retain their original explicit scope.
+
 - Status: **v1.1.0 source contract**. Check an instance's deployed build before using routes or configuration added by an update.
 - Scope: model discovery and direct HTTP/SSE text, image, audio, embedding, moderation, rerank, Decisions and System One inference. See the [operation and connector matrix](direct-inference.md) for exact paths, conversion limits and the excluded persistent/realtime APIs. There is no Anthropic-native public ingress.
 - Authority: this document reflects the current source route registry, strict request/response types, stable error catalog, and contract tests. A future wire change requires a changelog entry; undocumented database fields never enter an API response automatically. The session-authenticated picture-book activity has its own configuration and accounting, separate from the public image-generation model route.
@@ -140,9 +142,9 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 32. Normal startup accepts fresh storage and schema 32 only; exact schema 16–31 structures require the separate offline converter. Unknown or partial structures are rejected before writes. Startup validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for explicit source/target versions and rollback requirements.
+The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 33. Normal startup accepts fresh storage and schema 33 only; exact published schema 16–26 structures require the separate offline converter. Unknown or partial structures are rejected before writes. Startup validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for explicit source/target versions and rollback requirements.
 
-Current account export `schema_version=28` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v28.json`. See §9 for its safe projections. This contract describes v1.1.0 source, not an instance's release or deployment status.
+Current account export `schema_version=29` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v29.json`. See §9 for its safe projections. This contract describes v1.1.0 source, not an instance's release or deployment status.
 
 ### 1.5 Display time context
 
@@ -1576,7 +1578,7 @@ Lineage items are exactly `{donation_id,donation_key_id,donation_status,key_stat
 
 ## 9. Export, privacy, and account deletion
 
-`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v28.json`, with `schema_version:28` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema.
+`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v29.json`, with `schema_version:29` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema.
 
 `user` includes the five nullable inference limits and their effective values
 from §7.1. The safe `charity` aggregate may include `usage_details` with optional
@@ -1585,6 +1587,8 @@ shape and closed classification reasons as request logs, aggregated strictly
 across retained reservations; a missing report cannot be filled from another
 request. This export contains no per-request price decisions, donor decisions,
 model/endpoint/key identity or request content.
+
+Connection metadata adds `connections,credentials,credential_versions,grants,discovery_sources,source_revisions,binding_targets,native_service_evidence,donation_uses`. These owner-scoped collections expose public versions and revision numbers, safe settings, review snapshots and current approved health. They exclude secret material, fingerprints, review HMACs and internal authorization identities. See [service connections](service-connections.md) for rotation, approval and deletion semantics.
 
 The top-level fields include `limited_activities`, `image_tasks` and `inactivity`. Limited activities contain the safe general/paper/brush wallet projection and own exchange receipts; the existing game wallet remains separate. Image tasks contain only local ID, state, requested/actual image counts, times, billing state and two-currency charge/refund facts. Inactivity contains safe own activity timestamps and retained execution outcomes. No prompts, complete execution parameters, images, source facts, raw errors, risk rules, private adapter/configuration or upstream task identifiers are included.
 
@@ -1623,7 +1627,7 @@ Deletion keeps a separate minimum security projection for administrator and curr
 
 `appearance` contains `selected,unlocked,moment,updated_at`; eligibility derives from collection ownership and pool history, while the derived `moments` catalogue is omitted. `rewards` contains personal successful receipts. `gacha` contains ticket/shard balances, collection, pity, claims, retained transactions and draw records, without retry-key digests. Model request adaptations include excluded parameter names and partition modes without saved values. `user` contains `discord_gate_policy`; personal models include `model_types` and accept `cache_balanced` as a `route_strategy`. Current personal models also include `role_policy`, `transport_rule` and the saved `cloudflare_proxy_enabled` preference; deployment mode and proxy secrets are excluded; saved Likes preset names are currently omitted from the account export. `lake_notes` contains `rules_id,profile_revision,profile,casts,entries,exchanges`, excluding private encounter/reward randomness and internal checkpoints. Safe cast entries include identity, nullable source period, rules/generation/revision, acknowledged tick, phase/pause and public motion state. Entry/exchange receipts retain exact amounts and financial references.
 
-Export 28 also includes personal models' saved `session_headers` entries (`name,idle_seconds,format`). Generated header values and shared charity-model header configuration are excluded.
+Export 29 also includes personal models' saved `session_headers` entries (`name,idle_seconds,format`). Generated header values and shared charity-model header configuration are excluded.
 
 `steadycatch` contains the owner's first-clear status, retained sessions and accepted replay inputs. `gwent` uses the duel export with owner-only competitive results and the current Elo aggregate. Neither adds access to another player's private state. See [Steady Catch](steady-catch.md), [AI Gwent](ai-gwent.md) and the [lifecycle checklist](data-lifecycle-checklist.md) for routes and retention.
 

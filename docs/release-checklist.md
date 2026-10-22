@@ -20,7 +20,7 @@ has passed.
 
 ## Stable candidate
 
-- Validate fresh schema 32, exact supported schema 16–31 conversions, target equality,
+- Validate fresh schema 33, exact supported schema 16–26 conversions, target equality,
   rollback/cancellation, re-entry and zero-write unsupported-source rejection.
   Preserve credentials, operator settings, legal overrides, balances, game saves,
   activities and receipts. Exercise successive stable migrations; see
@@ -28,10 +28,14 @@ has passed.
 - Keep content-only catalog/template/period edits free of DDL and preserve administrator
   edits, historical eligibility, pity and claims. Recheck exports and deletion
   for every new user-associated record.
-- Check account export 28 includes personal-model header configuration but excludes
+- Check account export 29 includes personal-model header configuration but excludes
   temporary generated values, shared charity settings, pressure samples and
   caller-parameter receipts. Verify model/user deletion, late completions and
   the zero/default/positive idle-lifetime cases across all five formats.
+- Exercise shared-credential rotation with old approved uses, precise per-service
+  review, explicit service expansion without budget reset, model target ordering
+  and independent directory refresh. Verify ownership, revision conflicts,
+  unknown-result retry, deletion and late completion across these relationships.
 - Verify both explicit Gateway versions and all four native service paths/headers,
   retaining existing v3 configuration. Reuse valid codec checks and cover real
   registry/preflight, bounded Responses storage policy, attribution, discovery,

@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-NonbiriAPI 是可自行部署的 AI 端点管理平台，提供 OpenAI-compatible 调用入口。用户管理端点、加密凭据、模型发现与路由，通过可撤销的 CallerKey 调用个人或公益模型。可选活动和小游戏共用服务端权威的账务及生命周期规则。
+NonbiriAPI 是可自行部署的 AI 端点管理平台，提供 OpenAI-compatible 调用入口。用户管理服务连接、共享加密凭据、模型发现与路由，通过可撤销的 CallerKey 调用个人或公益模型。可选活动和小游戏共用服务端权威的账务及生命周期规则。
 
 **v1.0.0 是首个正式版本。** GitHub Release 提供源码，构建方法见下文；版本沿革见 [CHANGELOG](CHANGELOG.md)。
 
@@ -28,7 +28,9 @@ NonbiriAPI 是可自行部署的 AI 端点管理平台，提供 OpenAI-compatibl
 | 共享组件与双站页面 | `web/src/shared/`、`web/src/user/`、`web/src/admin/` |
 | 验证与部署示例 | `scripts/`、`.github/workflows/`、`deploy/` |
 
-注册表包含 12 种连接器，覆盖 OpenAI-compatible、专用 Chat 与 Responses、Anthropic、Gateway v3、Gemini、Decisions、System One 及四种明确选择的 rerank 协议。直接 HTTP 接口支持文本、图像、音频、嵌入、内容审核和重排，部分操作支持 SSE。Chat 与 Responses 合为一个模型服务选项并提供有限双向转换，其余服务仍可独立多选。[直接推理](docs/direct-inference.md)列出接口、转换限制和排除的持久资源／实时能力；所有权、凭据、SSRF、账务和取消规则见 [API 契约](docs/api-contract.md)。
+[服务连接](docs/service-connections.md)可将多个入口、共享凭据和独立模型目录放在一起管理。OpenAI 兼容入口与 Gateway 入口按需多选原生服务，各模型再选择适用入口。同一把密钥可明确授权给多个入口；换密钥后，已批准的公益用途保留旧版本，新的版本另行审核。
+
+注册表包含 13 种连接器，覆盖 OpenAI-compatible、专用 Chat 与 Responses、Anthropic、Gateway v3/v4、Gemini、Decisions、System One 及四种明确选择的 rerank 协议。两种 Gateway 版本均支持文本生成、图像生成、embeddings 和 rerank，使用完整端点地址，不自动探测版本。直接 HTTP 接口支持文本、图像、音频、嵌入、内容审核和重排，部分操作支持 SSE。Chat 与 Responses 合为一个模型服务选项并提供有限双向转换，其余服务仍可独立多选。[直接推理](docs/direct-inference.md)列出接口、转换限制和排除的持久资源／实时能力；所有权、凭据、SSRF、账务和取消规则见 [API 契约](docs/api-contract.md)。
 
 公益价格支持按次、按 Token 和按 search unit 计费，可分别设置输入／输出模态价格、捐赠奖励和长上下文档位。标准分类不完整时，对应一侧使用聚合价格。[定价说明](docs/charity-context-pricing.md)解释精度、预留和失败生成的有效用量。轻重型请求各有一个自用与公益共用的并发池，公益 RPM 也分为两个窗口；所有请求继续共同受全局限额约束。
 
@@ -75,7 +77,7 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [首次配置](docs/first-run-setup.md) 涵盖私有目录、加密密钥、Discord OAuth 和公共域名。将 [admin.env.example](admin.env.example) 复制到检出目录外，替换占位值并在启动前加载。数据库与对应密钥须配套保留。
 
-新库默认开启维护并关闭公共功能。v1.1.0 源码的正常程序仅接受 schema 31 或全新初始化，账户导出为 27；既有 schema 16–30 使用独立离线转换器，历史转换代码不进入正常服务。后续 v1.x 保持从任一更早 v1.x 正式库升级的路径，不承诺旧程序读取新版数据库。源码契约不表示实例已发布或升级。
+新库默认开启维护并关闭公共功能。v1.1.0 源码的正常程序仅接受 schema 33 或全新初始化，账户导出为 29；既有已发布 schema 16–26 使用独立离线转换器，历史转换代码不进入正常服务。后续 v1.x 保持从任一更早 v1.x 正式库升级的路径，不承诺旧程序读取新版数据库。源码契约不表示实例已发布或升级。
 
 [部署指南](docs/deployment.md) 说明 systemd、代理、不可变产物、升级和完整快照恢复；启动变量及在线设置统一维护在 [配置参考](docs/configuration.md)。
 
