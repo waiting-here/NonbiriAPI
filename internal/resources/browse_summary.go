@@ -72,6 +72,8 @@ ELSE 'available' END`
 const ownedBindingSelect = `SELECT b.id,m.id,m.full_name,e.id,k.id,e.base_url,e.connector_type,e.note,
 k.display_head,k.display_tail,k.note,t.upstream_model_id,b.ord,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0),` + ownedBindingState + `,t.id` + ownedBindingJoin
 
+const ownedBindingIDSelect = `SELECT t.id` + ownedBindingJoin
+
 const ownedBindingScope = ` WHERE m.user_id=? AND e.user_id=?`
 
 func scanKeyBinding(s pageScanner) (KeyBindingView, error) {
@@ -92,7 +94,9 @@ func scanKeyBinding(s pageScanner) (KeyBindingView, error) {
 }
 
 func bindingPreviewTx(ctx context.Context, tx *sql.Tx, scope, order string, args []any) ([]KeyBindingView, error) {
-	rows, err := tx.QueryContext(ctx, ownedBindingSelect+scope+` ORDER BY `+order+` LIMIT 3`, args...)
+	// Select the bounded preview before reading labels and live eligibility.
+	// Partial ordering must not evaluate that projection for skipped targets.
+	rows, err := tx.QueryContext(ctx, `WITH preview AS MATERIALIZED (`+ownedBindingIDSelect+scope+` ORDER BY `+order+` LIMIT 3)`+ownedBindingSelect+` JOIN preview ON preview.id=t.id ORDER BY `+order, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -258,6 +262,36 @@ func (r *Repository) ListKeyBindingsPage(ctx context.Context, userID, endpointID
 			scope += ` AND t.upstream_model_id=?`
 			args = append(args, upstreamModel)
 		}
-		return readNumberedPage(ctx, tx, page, ownedBindingSelect+scope, "t.upstream_model_id,b.id,t.id", args, func(s pageScanner) (KeyBindingView, error) { return scanKeyBinding(s) })
+		const order = "t.upstream_model_id,b.id,t.id"
+		// Count and order only target identities. Hydrate the selected page in
+		// this same snapshot and deadline, without evaluating skipped states.
+		selected, err := readNumberedPage(ctx, tx, page, ownedBindingIDSelect+scope, order, args, func(s pageScanner) (int64, error) {
+			var targetID int64
+			err := s.Scan(&targetID)
+			return targetID, err
+		})
+		if err != nil {
+			return Page[KeyBindingView]{}, err
+		}
+		result := Page[KeyBindingView]{Data: make([]KeyBindingView, 0, len(selected.Data)), Pagination: selected.Pagination}
+		if len(selected.Data) == 0 {
+			return result, nil
+		}
+		for _, targetID := range selected.Data {
+			args = append(args, targetID)
+		}
+		rows, err := tx.QueryContext(ctx, ownedBindingSelect+scope+` AND t.id IN (`+strings.TrimSuffix(strings.Repeat("?,", len(selected.Data)), ",")+`) ORDER BY `+order, args...)
+		if err != nil {
+			return Page[KeyBindingView]{}, err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			item, err := scanKeyBinding(rows)
+			if err != nil {
+				return Page[KeyBindingView]{}, err
+			}
+			result.Data = append(result.Data, item)
+		}
+		return result, rows.Err()
 	})
 }
