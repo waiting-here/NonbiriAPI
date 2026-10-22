@@ -176,7 +176,7 @@ export function PresetModelRow({
         <Note tone="ok">{t('common.connections.mappingSaved')}</Note>
         {model ? (
           <Link
-            className="nb-btn nb-btn--secondary"
+            className="nb-btn nb-btn--secondary connection-model-link"
             to={'/models?model_id=' + encodeURIComponent(model.id)}
             state={{ returnTo: location.pathname + location.search }}
           >

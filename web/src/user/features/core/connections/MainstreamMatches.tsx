@@ -30,6 +30,9 @@ export function MainstreamMatches({
         const channel = options.mainstream_channels.find((item) => item.id === match.channel_id);
         const entry = channel?.entries?.find((item) => item.id === match.entry_id);
         if (!channel || !entry) return null;
+        const configuration = options.native_service_options?.find(
+          (option) => option.connector_type === entry.connector_type,
+        )?.configuration_type;
         const mappings =
           channel.model_mappings?.flatMap((model) =>
             model.entries
@@ -39,11 +42,13 @@ export function MainstreamMatches({
         const title = channel.name + (entry.name ? ' · ' + entry.name : '');
         return (
           <Fold key={channel.id + ':' + entry.id} title={title} defaultOpen={matches.length <= 3}>
-            <dl className="nb-facts">
+            <dl className="nb-facts connection-match-facts">
               <div>
                 <dt>{t('common.connections.protocol')}</dt>
                 <dd>
-                  <ConnectorLabel value={entry.connector_type as ConnectorType} />
+                  <ConnectorLabel
+                    value={(configuration ?? entry.connector_type) as ConnectorType}
+                  />
                 </dd>
               </div>
               <div>

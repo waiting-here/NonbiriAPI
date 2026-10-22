@@ -1,4 +1,4 @@
-import { useSearchParams } from 'react-router';
+import { useSearchState } from '@shared/operations/useSearchState';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Field, Fold, Note } from '@shared/components/ui';
@@ -17,7 +17,7 @@ export function SourceModelMapping({
 }) {
   const { t } = useTranslation();
   const [selected, setSelected] = useState<DiscoveryModel[]>([]);
-  const [params, setParams] = useSearchParams();
+  const [params, setParams] = useSearchState();
   const rawState = params.get('source_models_state');
   const state = rawState === 'current' || rawState === 'stale' ? rawState : '';
   const setState = (value: string) =>

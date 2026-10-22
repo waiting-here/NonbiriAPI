@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { useSearchState } from '@shared/operations/useSearchState';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
@@ -24,7 +24,7 @@ export function CredentialsPanel({
   connectionId: string;
 }) {
   const { t } = useTranslation();
-  const [params, setParams] = useSearchParams();
+  const [params, setParams] = useSearchState();
   const [creating, setCreating] = useState(false);
   const selected = params.get('credential_id');
   const select = (value: string | null) =>

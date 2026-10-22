@@ -26,6 +26,13 @@ function options(matching = false) {
         rerank_formats: [],
       },
       {
+        connector_type: 'openai-chat-completions',
+        configuration_type: 'openai-compatible',
+        native_services: ['chat_completions', 'responses'],
+        default_native_services: ['chat_completions'],
+        rerank_formats: [],
+      },
+      {
         connector_type: 'anthropic-compatible',
         configuration_type: 'anthropic-compatible',
         native_services: ['anthropic_messages'],
@@ -53,7 +60,7 @@ function options(matching = false) {
           {
             id: '2',
             name: 'Matching entry',
-            connector_type: 'openai-compatible',
+            connector_type: 'openai-chat-completions',
             base_url: 'https://example.com/v1',
             native_services: ['chat_completions', 'responses'],
             rerank_format: '',
@@ -151,6 +158,8 @@ describe('mainstream entry suggestions', () => {
       name: 'This address is available as a preset',
     });
     expect(within(suggestions).getByText('First channel · Matching entry')).toBeVisible();
+    expect(within(suggestions).getByText('OpenAI-compatible')).toBeVisible();
+    expect(within(suggestions).queryByText('OpenAI Chat Completions')).not.toBeInTheDocument();
     expect(within(suggestions).getByText('Second channel · Another match')).toBeVisible();
     expect(within(suggestions).getByText('https://example.com/models')).toBeVisible();
     expect(within(suggestions).getByText('chat-small → provider-small')).toBeVisible();

@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { useSearchParams } from 'react-router';
+import { useSearchState } from '@shared/operations/useSearchState';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
@@ -15,6 +15,7 @@ import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { CoreEmpty, CoreErrorPanel, CoreLoading } from '../components';
 import { coreKeys } from '../queries';
+import { useResourceListScroll } from '../useResourceFilters';
 import type { NumberedPage, PageWindow } from '../pageTypes';
 
 export const connectionKeys = {
@@ -34,6 +35,7 @@ export function ConnectionResourceList<T>({
   emptyAction,
   refetchInterval = false,
   embedded = false,
+  restoreScroll = false,
   filters,
   filterKey = '',
 }: {
@@ -49,11 +51,12 @@ export function ConnectionResourceList<T>({
   emptyAction?: ReactNode;
   refetchInterval?: number | false;
   embedded?: boolean;
+  restoreScroll?: boolean;
   filters?: ReactNode;
   filterKey?: string;
 }) {
   const { t } = useTranslation();
-  const [params, setParams] = useSearchParams();
+  const [params, setParams] = useSearchState();
   const queryParam = listType + '_q';
   const q = params.get(queryParam) ?? '';
   const [draft, setDraft] = useState(q);
@@ -96,6 +99,7 @@ export function ConnectionResourceList<T>({
         : undefined,
     refetchInterval,
   });
+  useResourceListScroll(accountId, Boolean(query.data) && !query.isFetching, restoreScroll);
   const content = (
     <>
       <PanelHead title={title} level={embedded ? 3 : 2} actions={actions} />

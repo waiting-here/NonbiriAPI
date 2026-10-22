@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Link, useLocation, useSearchParams } from 'react-router';
+import { Link, useLocation } from 'react-router';
+import { useSearchState } from '@shared/operations/useSearchState';
 import { useTranslation } from 'react-i18next';
 import { ExpandablePanel } from '@shared/components/ui/ExpandablePanel';
 import { connectionAPI } from './api';
@@ -16,7 +17,7 @@ export function DiscoveryPanel({
 }) {
   const { t } = useTranslation();
   const location = useLocation();
-  const [params, setParams] = useSearchParams();
+  const [params, setParams] = useSearchState();
   const [adding, setAdding] = useState(false);
   const selected = params.get('discovery_source_id');
   const select = (id: string) => {

@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Link, useLocation, useSearchParams } from 'react-router';
+import { Link, useLocation } from 'react-router';
+import { useSearchState } from '@shared/operations/useSearchState';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { PageHeader } from '@shared/components/States';
@@ -28,7 +29,7 @@ function connectionURL(search: string, id: string) {
 export function ConnectionsWorkspace({ user }: { user: UserProfile }) {
   const { t } = useTranslation();
   const location = useLocation();
-  const [params, setParams] = useSearchParams();
+  const [params, setParams] = useSearchState();
   const selected = params.get('connection_id');
   const [creating, setCreating] = useState(params.get('quickstart') === '1');
   const close = () => {
@@ -87,6 +88,7 @@ export function ConnectionsWorkspace({ user }: { user: UserProfile }) {
         </ExpandablePanel>
       ) : null}
       <ConnectionResourceList
+        restoreScroll
         accountId={user.id}
         scope="all"
         listType="connections"
@@ -143,7 +145,7 @@ function ConnectionDetail({ accountId, id }: { accountId: string; id: string }) 
   const client = useQueryClient();
   const { t } = useTranslation();
   const location = useLocation();
-  const [params, setParams] = useSearchParams();
+  const [params, setParams] = useSearchState();
   const requestedView = params.get('connection_view');
   const view: View =
     requestedView === 'credentials' || requestedView === 'discovery' ? requestedView : 'entries';
@@ -241,6 +243,7 @@ function ConnectionDetail({ accountId, id }: { accountId: string; id: string }) 
             </ExpandablePanel>
           ) : null}
           <ConnectionResourceList
+            restoreScroll
             accountId={accountId}
             scope={id}
             listType="connection-entries"

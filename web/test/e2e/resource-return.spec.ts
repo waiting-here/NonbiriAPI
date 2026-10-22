@@ -250,7 +250,7 @@ test('entry detail keeps connection list return state through nested paging, ref
     .locator('.nb-expandable-panel__head')
     .getByRole('button', { name: 'Close', exact: true })
     .click();
-  await page.getByRole('link', { name: 'My services', exact: true }).click();
+  await page.getByRole('main').getByRole('link', { name: 'My services', exact: true }).click();
   await expect(page).toHaveURL(entryReturnURL);
   await expect(page.getByText(endpoint.note, { exact: true })).toBeVisible();
   await expect(entryList.getByRole('searchbox')).toHaveValue('resource');
@@ -270,7 +270,7 @@ test('entry detail keeps connection list return state through nested paging, ref
     .locator('.nb-expandable-panel__head')
     .getByRole('button', { name: 'Close', exact: true })
     .click();
-  await page.getByRole('link', { name: 'My services', exact: true }).click();
+  await page.getByRole('main').getByRole('link', { name: 'My services', exact: true }).click();
   await expect(page).toHaveURL(`${USER_ORIGIN}/endpoints`);
   await assertNoSensitiveBrowserPersistence(page, [EPHEMERAL_MARKER]);
   consoleGuard.assertNone();

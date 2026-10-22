@@ -146,7 +146,9 @@ for (const locale of ['en', 'zh'] as const) {
       .poll(() => new URL(page.url()).searchParams.get('connection-entries_page'))
       .toBe('2');
     const entryReturnURL = page.url();
-    await page.locator('a[href="/endpoints/19"]').scrollIntoViewIfNeeded();
+    await page
+      .locator('a[href="/endpoints/19"]')
+      .evaluate((link) => link.scrollIntoView({ block: 'center', behavior: 'instant' }));
     const before = await page.evaluate(() => scrollY);
     expect(before).toBeGreaterThan(0);
     await page.locator('a[href="/endpoints/19"]').click();

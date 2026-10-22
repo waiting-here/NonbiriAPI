@@ -72,7 +72,7 @@ export function DirectoryBatch({ accountId, rows }: { accountId: string; rows: D
           </button>
         </Fold>
       ) : null}
-      <fieldset disabled={busy} className="nb-stack">
+      <fieldset disabled={busy} className="nb-stack connection-model-batch">
         {rows.map((row) => (
           <Fold key={row.id} title={row.upstream_model_id} defaultOpen>
             <PresetModelRow
