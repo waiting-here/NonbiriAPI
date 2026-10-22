@@ -167,3 +167,38 @@ it('reopens a current use confirmation after conflict and keeps uncertain recove
   );
   expect(screen.getByText('head-1…tail · Version 1')).toBeVisible();
 });
+
+it('keeps a successful review receipt and retries only reads after a failed refresh', async () => {
+  const page = (data: ReturnType<typeof row>[]) => ({
+    data,
+    next_cursor: null,
+    pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
+  });
+  mocks.get
+    .mockResolvedValueOnce(page([row('6', '9')]))
+    .mockRejectedValueOnce(new Error('Refresh temporarily unavailable'))
+    .mockResolvedValue(page([row('6', '10')]));
+  mocks.review.mockResolvedValue([{ use_id: '6', ok: true }]);
+  const view = await renderWithProviders(
+    <DonationUsesPanel role="steward" accountId="5" donationId="3" />,
+    { station: 'user', role: 'level5', route: '/charity' },
+  );
+  view.queryClient.setQueryData(['user', 'session'], {
+    user: { id: '5', username: 'reviewer', effective_level: 5 },
+  });
+  await view.user.click(await screen.findByText('Chat completions', { exact: true }));
+  await view.user.click(screen.getByRole('checkbox', { name: 'Select use for review' }));
+  await view.user.click(screen.getByRole('button', { name: 'Approve selected uses' }));
+  await screen.findByText('Use 6 saved');
+  const retry = await screen.findByRole('button', { name: 'Check again' });
+  expect(mocks.review).toHaveBeenCalledTimes(1);
+  await view.user.click(retry);
+  await waitFor(() => expect(mocks.get).toHaveBeenCalledTimes(3));
+  await waitFor(() =>
+    expect(
+      screen.queryByRole('button', { name: 'Check again' }),
+    ).not.toBeInTheDocument(),
+  );
+  expect(screen.getByText('Use 6 saved')).toBeVisible();
+  expect(mocks.review).toHaveBeenCalledTimes(1);
+});

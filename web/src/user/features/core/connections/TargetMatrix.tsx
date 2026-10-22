@@ -1,3 +1,4 @@
+import { ConnectionUnavailable } from '@shared/components/ConnectionUnavailable';
 import { ManualCatalog } from './ManualCatalog';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -187,11 +188,7 @@ export function TargetMatrix({
                         : t('common.connections.addTarget')}
                     </button>
                     {!row.capabilities?.can_bind && row.capabilities?.unavailable_reason ? (
-                      <p className="nb-sub">
-                        {t('common.connections.unavailable', {
-                          reason: row.capabilities.unavailable_reason,
-                        })}
-                      </p>
+                      <ConnectionUnavailable reason={row.capabilities.unavailable_reason} />
                     ) : null}
                   </div>
                 );

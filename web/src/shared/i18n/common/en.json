@@ -2266,7 +2266,16 @@
       "targetGroup": "Target group {{number}}",
       "targetOrderNote": "One logical binding can contain ordered entries. Select each entry's model name and native services explicitly.",
       "title": "Service connections",
-      "unavailable": "Unavailable: {{reason}}",
+      "unavailableReasons": {
+        "disabled": "This use is paused.",
+        "ended": "Sharing has ended for this use.",
+        "failureDisabled": "Paused after repeated failures.",
+        "noServiceRoute": "This source does not support the selected service.",
+        "notApproved": "This service has no approved version.",
+        "rateLimited": "Waiting for the rate-limit or retry cooldown to end.",
+        "reviewRequired": "Request settings need review.",
+        "unavailable": "This source is currently unavailable."
+      },
       "unknownResult": "The result is uncertain. Check the saved result before continuing.",
       "upstreamModel": "Upstream model",
       "useApprovalSummary": "Approved {{approved}} · Pending {{pending}}",

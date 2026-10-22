@@ -1,9 +1,10 @@
+import { ConnectionUnavailable } from './ConnectionUnavailable';
 import { useSearchParams } from 'react-router';
 import { UseDiscovery } from './UseDiscovery';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Field, Fold, Note, Panel, PanelBody, PanelHead } from './ui';
+import { Field, Fold, Note, OutcomeNote, Panel, PanelBody, PanelHead } from './ui';
 import { ErrorState, LoadingState } from './States';
 import { ConfirmDialog } from './ConfirmDialog';
 import { PagePagination } from '@shared/operations/PagePagination';
@@ -28,11 +29,15 @@ export function DonationUsesPanel({
   accountId,
   donationId,
   donationKeyId,
+  onReviewed,
+  onPendingChange,
 }: {
   role: UseRole;
   accountId: string;
   donationId: string;
   donationKeyId?: string;
+  onReviewed?: (results: UseReviewResult[]) => void;
+  onPendingChange?: (pending: boolean) => void;
 }) {
   const { t } = useTranslation();
   const client = useQueryClient();
@@ -75,7 +80,7 @@ export function DonationUsesPanel({
       getDonationUses(role, donationId, pager.page, pager.pageSize, state, signal, donationKeyId),
   });
   const refresh = async () => {
-    await client.invalidateQueries({ queryKey: root });
+    await client.invalidateQueries({ queryKey: root }, { throwOnError: true });
   };
   const review = useRetainedOperation<UseReviewItem[], UseReviewResult[]>(
     async (items, key, context) => {
@@ -107,6 +112,7 @@ export function DonationUsesPanel({
       if (!error || result.current.length) {
         context.commit(() => {
           setResults(result.current);
+          onReviewed?.(result.current);
           setSelected((previous) =>
             Object.fromEntries(
               Object.entries(previous).filter(
@@ -121,6 +127,10 @@ export function DonationUsesPanel({
     },
     root,
   );
+  useEffect(() => {
+    onPendingChange?.(review.isPending);
+    return () => onPendingChange?.(false);
+  }, [onPendingChange, review.isPending]);
   const locked = review.isPending || review.outcome === 'unknown';
   const submit = (decision: 'approve' | 'reject') => {
     result.current = [];
@@ -247,24 +257,36 @@ export function DonationUsesPanel({
             </button>
           </Note>
         ) : null}
-        {results.length ? (
-          <ul className="nb-list" role="status">
-            {results.map((result) => (
-              <li key={result.use_id}>
-                {t(
-                  result.ok
-                    ? 'common.connections.useReviewSaved'
-                    : 'common.connections.useReviewFailed',
-                  { id: result.use_id },
-                )}
-                {result.error ? ' · ' + result.error.message : ''}
-              </li>
-            ))}
-          </ul>
+        {review.refreshError ? (
+          review.isSuccess ? (
+            <OutcomeNote
+              busy={review.isPending}
+              outcome={{ kind: 'savedRefreshFailed', recheck: () => void review.refresh() }}
+            />
+          ) : (
+            <ErrorState error={review.refreshError} onRetry={() => void review.refresh()} />
+          )
         ) : null}
+        {!onReviewed ? <DonationUseReviewResults results={results} /> : null}
       </PanelBody>
     </Panel>
   );
+}
+export function DonationUseReviewResults({ results }: { results: UseReviewResult[] }) {
+  const { t } = useTranslation();
+  return results.length ? (
+    <ul className="nb-list" role="status">
+      {results.map((result) => (
+        <li key={result.use_id}>
+          {t(
+            result.ok ? 'common.connections.useReviewSaved' : 'common.connections.useReviewFailed',
+            { id: result.use_id },
+          )}
+          {result.error ? ' · ' + result.error.message : ''}
+        </li>
+      ))}
+    </ul>
+  ) : null;
 }
 function UseRow({
   role,
@@ -415,9 +437,7 @@ function UseRow({
         </Note>
       ) : null}
       {row.capabilities.unavailable_reason ? (
-        <p className="nb-sub">
-          {t('common.connections.unavailable', { reason: row.capabilities.unavailable_reason })}
-        </p>
+        <ConnectionUnavailable reason={row.capabilities.unavailable_reason} />
       ) : null}
       <div className="nb-actions">
         {role === 'owner' && row.capabilities.can_manage ? (

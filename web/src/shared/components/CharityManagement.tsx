@@ -1,5 +1,6 @@
 import { UseSummary } from './UseSummary';
-import { DonationUsesPanel } from './DonationUsesPanel';
+import { DonationUseReviewResults, DonationUsesPanel } from './DonationUsesPanel';
+import type { UseReviewResult } from '@shared/operations/donationUses';
 import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
 import { smartBackoffDeadline } from '@shared/operations/smartBackoff';
 import { NullableValue } from './charity/NullableValue';
@@ -726,6 +727,7 @@ interface DonationDetailProps {
   refresh: () => Promise<unknown>;
   onCapabilityLoss?: () => void;
   onReviewed?: (result: ManagedDonation) => void;
+  onUsesReviewed?: (results: UseReviewResult[]) => void;
 }
 
 function DonationDetail(props: DonationDetailProps) {
@@ -756,6 +758,7 @@ function DonationReview({
   onCapabilityLoss,
   onPendingChange,
   onReviewed,
+  onUsesReviewed,
 }: DonationDetailProps & {
   onPendingChange: (pending: boolean) => void;
 }) {
@@ -771,6 +774,7 @@ function DonationReview({
     item.status === 'approved' ? 'force_reject' : 'approve',
   );
   const [reason, setReason] = useState('');
+  const [useReviewPending, setUseReviewPending] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [forceConfirmation, setForceConfirmation] = useState(false);
   const [keys, setKeys] = useState<Record<string, KeySettingsDraft>>(() =>
@@ -801,9 +805,9 @@ function DonationReview({
     charityKeys.root(role),
   );
   useEffect(() => {
-    onPendingChange(review.isPending);
+    onPendingChange(review.isPending || useReviewPending);
     return () => onPendingChange(false);
-  }, [onPendingChange, review.isPending]);
+  }, [onPendingChange, review.isPending, useReviewPending]);
   useEffect(() => {
     if (onReviewed && review.outcome === 'confirmed' && review.data) onReviewed(review.data);
   }, [onReviewed, review.outcome, review.data]);
@@ -862,7 +866,13 @@ function DonationReview({
   return (
     <fieldset className="ops-stack ops-unframed" disabled={busy || review.isPending}>
       {item.use_summary ? (
-        <DonationUsesPanel role={role} accountId={accountId} donationId={item.id} />
+        <DonationUsesPanel
+          role={role}
+          accountId={accountId}
+          donationId={item.id}
+          onReviewed={onUsesReviewed}
+          onPendingChange={setUseReviewPending}
+        />
       ) : null}
       <Card>
         <h3>{t('common.donationReview.title')}</h3>
@@ -2502,6 +2512,10 @@ function PendingDonationReviews({
   const [search, setSearch] = useState({ q, text: q });
   const searchText = search.q === q ? search.text : q;
   const [receipt, setReceipt] = useState<ManagedDonation | null>(null);
+  const [useReceipt, setUseReceipt] = useState<{
+    accountId: string;
+    results: UseReviewResult[];
+  } | null>(null);
   const [reviewPending, setReviewPending] = useState(false);
   const pager = useUrlPagePager({
     station: 'user',
@@ -2555,7 +2569,12 @@ function PendingDonationReviews({
   const refresh = () => client.invalidateQueries({ queryKey: listRoot }, { throwOnError: true });
   const completed = (value: ManagedDonation) => {
     setReceipt(value);
+    setUseReceipt(null);
     setSelected('');
+  };
+  const completedUses = (results: UseReviewResult[]) => {
+    setReceipt(null);
+    setUseReceipt({ accountId, results });
   };
   if (lost) return <Note tone="bad">{t('common.operations.charity.accessLost')}</Note>;
   return (
@@ -2570,6 +2589,9 @@ function PendingDonationReviews({
             status: t(charityStatusKey('steward', receipt.status)),
           })}
         </Note>
+      ) : null}
+      {useReceipt?.accountId === accountId ? (
+        <DonationUseReviewResults results={useReceipt.results} />
       ) : null}
       {selected ? (
         <>
@@ -2600,6 +2622,7 @@ function PendingDonationReviews({
               onPendingChange={setReviewPending}
               onCapabilityLoss={onCapabilityLoss}
               onReviewed={completed}
+              onUsesReviewed={completedUses}
             />
           ) : (
             <Note>{t('common.pendingReviews.noLongerPending')}</Note>

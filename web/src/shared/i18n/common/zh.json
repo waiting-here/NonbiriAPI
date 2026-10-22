@@ -2266,7 +2266,16 @@
       "targetGroup": "目标组 {{number}}",
       "targetOrderNote": "一个逻辑绑定可包含多个有序入口。每个入口的型号和原生服务均需明确选择。",
       "title": "服务连接",
-      "unavailable": "暂不可用：{{reason}}",
+      "unavailableReasons": {
+        "disabled": "此用途已暂停。",
+        "ended": "此用途的公益共享已结束。",
+        "failureDisabled": "因连续失败而暂停。",
+        "noServiceRoute": "此来源不支持所选服务。",
+        "notApproved": "此服务尚无已批准的版本。",
+        "rateLimited": "等待限流或重试冷却结束。",
+        "reviewRequired": "请求设置需要审核。",
+        "unavailable": "此来源暂不可用。"
+      },
       "unknownResult": "结果尚未确定，请先查询保存结果再继续。",
       "upstreamModel": "上游型号",
       "useApprovalSummary": "批准 {{approved}} · 待审 {{pending}}",
