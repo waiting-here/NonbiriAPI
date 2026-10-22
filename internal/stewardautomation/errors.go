@@ -26,6 +26,7 @@ func atStep(step string, err error) error { return &stepError{step, err} }
 
 func safeError(err error) (string, string) {
 	code, message := httperr.CodeInternal, "operation failed; no diagnostic details are exposed"
+	var completedDiscovery *resources.DonationDiscoveryFailure
 	switch {
 	case errors.Is(err, errInvalid), errors.Is(err, resources.ErrInvalidRequest), errors.Is(err, donation.ErrInvalidRequest), errors.Is(err, charityrouting.ErrInvalidRequest), errors.Is(err, donationquota.ErrInvalid):
 		code, message = httperr.CodeInvalidRequest, "invalid input or incompatible settings"
@@ -43,30 +44,34 @@ func safeError(err error) (string, string) {
 		code, message = httperr.CodeResourceLocked, "resource is locked for review"
 	case errors.Is(err, donation.ErrFeatureDisabled), errors.Is(err, charityrouting.ErrFeatureDisabled):
 		code, message = httperr.CodeFeatureDisabled, "donation intake is closed"
-	case errors.Is(err, errDiscovery):
+	case errors.Is(err, errDiscovery), errors.As(err, &completedDiscovery):
 		code, message = "discovery_failed", "the current upstream model discovery did not succeed"
 		var failure *discoveryFailureError
+		var class string
 		if errors.As(err, &failure) {
-			switch failure.class {
-			case "auth":
-				message = "upstream rejected the key during model discovery"
-			case "region":
-				message = "upstream does not support this server's region"
-			case "unavailable":
-				message = "upstream is temporarily unavailable; retry model discovery later"
-			case "rate_limit":
-				message = "upstream rate limited model discovery"
-			case "timeout":
-				message = "upstream model discovery timed out"
-			case "protocol":
-				message = "upstream returned an invalid model list"
-			case "transport":
-				message = "upstream model discovery failed at the network boundary"
-			case "interrupted":
-				message = "model discovery was interrupted"
-			}
+			class = failure.class
+		} else if completedDiscovery != nil {
+			class = string(completedDiscovery.Class)
 		}
-	case errors.Is(err, errModelMissing):
+		switch class {
+		case "auth":
+			message = "upstream rejected the key during model discovery"
+		case "region":
+			message = "upstream does not support this server's region"
+		case "unavailable":
+			message = "upstream is temporarily unavailable; retry model discovery later"
+		case "rate_limit":
+			message = "upstream rate limited model discovery"
+		case "timeout":
+			message = "upstream model discovery timed out"
+		case "protocol":
+			message = "upstream returned an invalid model list"
+		case "transport":
+			message = "upstream model discovery failed at the network boundary"
+		case "interrupted":
+			message = "model discovery was interrupted"
+		}
+	case errors.Is(err, errModelMissing), errors.Is(err, charityrouting.ErrDiscoveryModelMissing):
 		code, message = "model_not_found", "the current upstream model list does not contain the requested model"
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		code, message = "incomplete", "operation did not complete before cancellation or timeout; retry this item"
