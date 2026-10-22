@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"reflect"
 	"testing"
 	"time"
 
@@ -112,7 +113,7 @@ func TestSnapshotWeightsEligibleCandidatesAndFreezesOrder(t *testing.T) {
 	}
 
 	environment.useEntropy(t, &fixedByteEntropy{value: 0})
-	snapshot, err := environment.service.Snapshot(context.Background(), modelID, routingTestNow,
+	snapshot, err := environment.service.orderedChatSnapshot(context.Background(), modelID, routingTestNow,
 		[]connectorcontract.Type{connectorcontract.TypeOpenAICompatible})
 	if err != nil {
 		t.Fatal(err)
@@ -148,7 +149,7 @@ func TestSnapshotWeightsEligibleCandidatesAndFreezesOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	environment.useEntropy(t, &fixedByteEntropy{value: 0})
-	current, err := environment.service.Snapshot(context.Background(), modelID, routingTestNow,
+	current, err := environment.service.orderedChatSnapshot(context.Background(), modelID, routingTestNow,
 		[]connectorcontract.Type{connectorcontract.TypeOpenAICompatible})
 	if err != nil {
 		t.Fatal(err)
@@ -189,15 +190,15 @@ func TestSnapshotFiltersCapabilityBeforeCandidateLimitAndEntropy(t *testing.T) {
 			UpstreamModelID: identity,
 		})
 	}
-	if _, err := environment.service.AddBindingsAdmin(context.Background(), modelID,
-		routingMutation(t, 'i', http.MethodPost, routeAdminBindingBatch, []int64{modelID}, map[string]any{"capability": true}),
+	if _, err := environment.service.AddBindingsReceiptAdmin(context.Background(), modelID,
+		routingMutation(t, 'i', http.MethodPost, routeAdminBindingReceipt, []int64{modelID}, map[string]any{"capability": true}),
 		BindingBatch{ExpectedBindingRevision: "0", Selections: selections}); err != nil {
 		t.Fatal(err)
 	}
 
 	entropy := &fixedByteEntropy{value: 0}
 	environment.useEntropy(t, entropy)
-	snapshot, err := environment.service.Snapshot(context.Background(), modelID, routingTestNow,
+	snapshot, err := environment.service.orderedChatSnapshot(context.Background(), modelID, routingTestNow,
 		[]connectorcontract.Type{connectorcontract.TypeOpenAICompatible})
 	if err != nil {
 		t.Fatal(err)
@@ -255,7 +256,7 @@ func TestSnapshotAllUnsupportedConsumesNoEntropyAndWritesNothing(t *testing.T) {
 	entropy := &fixedByteEntropy{value: 0}
 	environment.useEntropy(t, entropy)
 
-	_, err = environment.service.Snapshot(context.Background(), modelID, routingTestNow,
+	_, err = environment.service.chatSnapshot(context.Background(), modelID, routingTestNow,
 		[]connectorcontract.Type{connectorcontract.TypeOpenAICompatible})
 	if !errors.Is(err, ErrInvalidRequest) {
 		t.Fatalf("all-unsupported snapshot error = %v, want invalid request", err)
@@ -272,7 +273,7 @@ func TestSnapshotAllUnsupportedConsumesNoEntropyAndWritesNothing(t *testing.T) {
 	}
 }
 
-func TestSnapshotEntropyFailureRollsBackAndPropagates(t *testing.T) {
+func TestSelectedOrderingEntropyFailurePreservesSnapshotAndAccounting(t *testing.T) {
 	environment := newRoutingTestEnv(t)
 	environment.seedUser(t, true, nil)
 	ownerID := environment.seedUser(t, false, nil)
@@ -294,27 +295,34 @@ func TestSnapshotEntropyFailureRollsBackAndPropagates(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	before := readRoutingWriteState(t, environment)
 	environment.state.dueHook = func(ctx context.Context, tx *sql.Tx, _ int64, _ int) error {
 		_, err := tx.ExecContext(ctx, "UPDATE site_config SET updated_at=updated_at+1 WHERE key='charity_enabled'")
 		return err
 	}
 	environment.useEntropy(t, failedEntropy{})
 
-	snapshot, err := environment.service.Snapshot(context.Background(), modelID, routingTestNow,
+	snapshot, err := environment.service.chatSnapshot(context.Background(), modelID, routingTestNow,
 		[]connectorcontract.Type{connectorcontract.TypeOpenAICompatible})
-	if !errors.Is(err, ErrEntropyUnavailable) || errors.Is(err, ErrUnavailable) {
-		t.Fatalf("snapshot entropy error = %v, want dedicated entropy sentinel", err)
+	if err != nil || len(snapshot.Candidates()) != 2 {
+		t.Fatalf("snapshot must not consume ordering entropy: %+v %v", snapshot, err)
 	}
-	if len(snapshot.Candidates()) != 0 || snapshot.ModelID != 0 {
-		t.Fatalf("failed snapshot leaked partial result: %+v", snapshot)
+	before := readRoutingWriteState(t, environment)
+	dueCalls := environment.state.dueCalls.Load()
+	original := snapshot.Candidates()
+	input := snapshot.Candidates()
+	ordered, err := environment.service.OrderSelected(input, snapshot.RouteStrategy)
+	if !errors.Is(err, ErrEntropyUnavailable) || errors.Is(err, ErrUnavailable) {
+		t.Fatalf("ordering entropy error = %v, want dedicated entropy sentinel", err)
+	}
+	if len(ordered) != 0 || !reflect.DeepEqual(input, original) || !reflect.DeepEqual(snapshot.Candidates(), original) {
+		t.Fatalf("failed ordering leaked partial output or mutated its input: %+v", ordered)
 	}
 	after := readRoutingWriteState(t, environment)
 	if before != after {
 		t.Fatalf("entropy failure changed routing write state: before=%+v after=%+v", before, after)
 	}
-	if environment.state.dueCalls.Load() != 0 {
-		t.Fatalf("expiry materialization calls = %d, want zero before entropy succeeds", environment.state.dueCalls.Load())
+	if environment.state.dueCalls.Load() != dueCalls {
+		t.Fatal("ordering repeated expiry materialization")
 	}
 
 	environment.state.dueHook = nil

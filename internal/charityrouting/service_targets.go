@@ -50,6 +50,7 @@ func authorizedServiceTargetsTx(ctx context.Context, tx *sql.Tx, candidates []we
 	}
 	result := make([]RuntimeCandidate, 0, len(candidates))
 	groups := make(map[int64]bool)
+	sawAvailableService := false
 	for _, item := range candidates {
 		for _, use := range uses[item.candidate.DonationKeyID] {
 			candidate, grant := item.candidate, use.Grant
@@ -57,6 +58,7 @@ func authorizedServiceTargetsTx(ctx context.Context, tx *sql.Tx, candidates []we
 				!candidate.NativeServices.Has(use.NativeService) || !grant.EffectiveServices.Has(use.NativeService) {
 				continue
 			}
+			sawAvailableService = true
 			services, err := connectorcontract.ParseNativeServices([]connectorcontract.NativeService{use.NativeService})
 			if err != nil {
 				return nil, ErrInvariant
@@ -99,6 +101,9 @@ func authorizedServiceTargetsTx(ctx context.Context, tx *sql.Tx, candidates []we
 	}
 	if len(groups) > MaxRuntimeCandidates {
 		return nil, ErrResourceLimit
+	}
+	if len(result) == 0 && sawAvailableService {
+		return nil, ErrInvalidRequest
 	}
 	return result, nil
 }

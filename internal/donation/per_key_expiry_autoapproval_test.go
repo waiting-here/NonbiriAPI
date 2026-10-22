@@ -69,14 +69,14 @@ func seedSourcedEndpointKey(
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	endpointID, err := testseed.InsertEndpointTx(context.Background(), tx, testseed.EndpointInput{OwnerUserID: userID, Type: contract.TypeOpenAICompatible, BaseURL: baseURL, Note: "private endpoint note", At: now})
+	endpoint := testseed.EndpointInput{OwnerUserID: userID, Type: contract.TypeOpenAICompatible, BaseURL: baseURL, Note: "private endpoint note", At: now}
+	if source != nil {
+		endpoint.MainstreamChannelID, endpoint.MainstreamChannelRevision = &source.channelID, &source.revision
+		endpoint.MainstreamChannelName, endpoint.MainstreamChannelCategory = &source.name, &source.category
+	}
+	endpointID, err := testseed.InsertEndpointTx(context.Background(), tx, endpoint)
 	if err != nil {
 		t.Fatalf("seed endpoint %d: %v", index, err)
-	}
-	if source != nil {
-		if _, err := tx.Exec(`UPDATE endpoints SET mainstream_channel_id=?,mainstream_channel_revision=?,mainstream_channel_name=?,mainstream_channel_category=? WHERE id=?`, source.channelID, source.revision, source.name, source.category, endpointID); err != nil {
-			t.Fatal(err)
-		}
 	}
 	contextID, fingerprint := make([]byte, 16), make([]byte, 32)
 	contextID[0], fingerprint[0] = 0x58, 0x59

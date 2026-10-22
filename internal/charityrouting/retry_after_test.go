@@ -26,17 +26,17 @@ func TestRetryAfterCandidateExpiryAndUnavailableClassification(t *testing.T) {
 		t.Fatal(err)
 	}
 	connectors := []contract.Type{contract.TypeOpenAICompatible}
-	if _, err := e.service.Snapshot(context.Background(), id, routingTestNow+59, connectors); !errors.Is(err, donationquota.ErrLimited) {
+	if _, err := e.service.chatSnapshot(context.Background(), id, routingTestNow+59, connectors); !errors.Is(err, donationquota.ErrLimited) {
 		t.Fatalf("cooldown must retain 429 classification: %v", err)
 	}
-	snapshot, err := e.service.Snapshot(context.Background(), id, routingTestNow+60, connectors)
+	snapshot, err := e.service.chatSnapshot(context.Background(), id, routingTestNow+60, connectors)
 	if err != nil || len(snapshot.Candidates()) != 1 {
 		t.Fatal("expiry did not automatically restore", snapshot, err)
 	}
 	if _, err := e.store.DB().Exec("UPDATE donation_keys SET enabled=0 WHERE id=?", key); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.service.Snapshot(context.Background(), id, routingTestNow+60, connectors); !errors.Is(err, ErrUnavailable) {
+	if _, err := e.service.chatSnapshot(context.Background(), id, routingTestNow+60, connectors); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("expiry revived disabled key: %v", err)
 	}
 }

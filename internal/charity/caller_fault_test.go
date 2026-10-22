@@ -136,6 +136,20 @@ func TestCallerParameterReceiptConstraints(t *testing.T) {
 	if _, err := tx.Exec(`UPDATE dispatch_claims SET state='committed',secret_ref_id=NULL,terminal_at=dispatched_at,donor_reward_state='zero',donor_reward_actual_milli=0,streak_disposition='neutral',failure_origin='upstream_response' WHERE id=?`, handle.ClaimID()); err == nil || !strings.Contains(err.Error(), "invalid terminal outcome") {
 		t.Fatal("claim caller receipt projection guard", err)
 	}
+	if _, err := tx.Exec(`DELETE FROM dispatch_claims WHERE id=?`, handle.ClaimID()); err == nil || !strings.Contains(err.Error(), "legacy cursor has not passed service health origin") {
+		t.Fatal("claim removed its service marker before folding", err)
+	}
+	var generationBlob []byte
+	if err := tx.QueryRow(`SELECT streak_generation FROM donation_usage_reservations WHERE claim_id=?`, handle.ClaimID()).Scan(&generationBlob); err != nil {
+		t.Fatal(err)
+	}
+	generation, err := decodeU128(generationBlob)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := foldStreak(t.Context(), tx, e.donationKey, generation, charityTestNow); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := tx.Exec(`DELETE FROM dispatch_claims WHERE id=?`, handle.ClaimID()); err != nil {
 		t.Fatal(err)
 	}
@@ -180,12 +194,11 @@ func TestCallerParameterEvidenceCannotExemptPersonalAttempt(t *testing.T) {
 	e := newCharityTestEnv(t)
 	rail := e.billingRail(t)
 	ctx := t.Context()
-	request, err := rail.Accept(ctx, claim.AcceptInput{UserID: e.donorID, Route: claim.RouteOpenAIChat, ModelSnapshot: "private", AttemptLimit: 1})
+	request, err := rail.Accept(ctx, claim.AcceptInput{UserID: e.donorID, Route: claim.RouteOpenAIChat, ModelSnapshot: "private/model", AttemptLimit: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := e.retryClaimInput(t, request.ID)
-	input.ActorUserID, input.Purpose, input.DonationKeyID = e.donorID, claim.PurposeSelf, 0
+	input := e.selfClaimInput(t, request.ID)
 	handle, err := rail.Claim(ctx, input)
 	if err != nil {
 		t.Fatal(err)
