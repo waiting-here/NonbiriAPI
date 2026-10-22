@@ -147,6 +147,18 @@ async function mockEmptyDiagnosticHistory(page: Page, station: TestStation): Pro
   await mockJson(page, {
     origin,
     method: 'GET',
+    path: `${root}/logs/pressure`,
+    body: {
+      rpm: { current: 0, limit: 60, peak_24h: 0, peak_all: 0 },
+      concurrency: { current: 0, limit: 5, peak_24h: 0, peak_all: 0 },
+      observed_at: 1_800_000_000,
+      started_at: 1_799_999_940,
+      sample_seconds: 10,
+    },
+  });
+  await mockJson(page, {
+    origin,
+    method: 'GET',
     path: `${root}/logs/diagnostic-capacity`,
     body: {
       budget_bytes: 1_073_741_824,
@@ -170,6 +182,28 @@ async function mockEmptyDiagnosticHistory(page: Page, station: TestStation): Pro
     }
     // Historical log fixtures have no captured source facts.
     await route.fulfill({ status: 200, headers: JSON_HEADERS, body: 'null' });
+  });
+}
+
+async function mockManagedCallerKeys(page: Page, station: TestStation): Promise<void> {
+  const origin = station === 'admin' ? ADMIN_ORIGIN : USER_ORIGIN;
+  const root = station === 'admin' ? '/admin/api' : '/api/steward';
+  await page.route(`${origin}${root}/users/*/caller-key`, async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const user = new RegExp(`^${root}/users/([1-9][0-9]*)/caller-key$`).exec(url.pathname);
+    if (request.method() !== 'GET' || url.origin !== origin || url.search !== '' || !user)
+      return route.fallback();
+    return route.fulfill({
+      headers: JSON_HEADERS,
+      json: {
+        user_id: user[1],
+        generation: '0',
+        active: false,
+        created_at: null,
+        updated_at: 1_800_000_000,
+      },
+    });
   });
 }
 
@@ -290,6 +324,7 @@ export async function mockRoleSession(
       body: { mode: 'site', offset_minutes: 480 },
     });
   }
+  if (station === 'admin' || role === 'level6') await mockManagedCallerKeys(page, station);
   await mockJson(page, {
     origin,
     method: 'GET',

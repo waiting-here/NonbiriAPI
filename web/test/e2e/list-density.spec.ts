@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
 import { numberedPage, numberedResponse } from './numbered-fixtures';
+import { mockConnectionResources } from './connection-fixtures';
 import { ADMIN_ORIGIN, USER_ORIGIN } from './ports';
 import {
   assertResponsiveOperationTables,
@@ -365,35 +366,26 @@ test('mainstream resources retain their channel name and protocol in the list', 
   page,
 }) => {
   const guard = await prepare(page, 'user');
-  await mockJson(page, {
-    origin: USER_ORIGIN,
-    method: 'GET',
-    path: '/api/endpoints?page=1&page_size=20',
-    body: numberedResponse(
-      [
-        {
-          ...endpoint(1),
-          key_count: '0',
-          note: '',
-          origin: {
-            kind: 'mainstream',
-            channel_id: 'mch_abcdefghijklmnopqrstuA',
-            name: 'Example Gateway',
-          },
-        },
-        endpoint(2),
-      ],
-      '1',
-      20,
-    ),
-  });
-  await page.goto(`${USER_ORIGIN}/endpoints`);
-  const cards = page.locator('.core-endpoint-card');
-  await expect(cards).toHaveCount(2);
-  await expect(cards.first().locator('strong')).toHaveText('Example Gateway');
-  await expect(cards.first()).toContainText('OpenAI-compatible');
-  await expect(cards.nth(1).locator('strong')).toHaveText(endpoint(2).note);
-  await expect(cards.nth(1)).toContainText('OpenAI-compatible');
+  await mockConnectionResources(page, () => [
+    {
+      ...endpoint(1),
+      key_count: '0',
+      note: '',
+      origin: {
+        kind: 'mainstream',
+        channel_id: 'mch_abcdefghijklmnopqrstuA',
+        name: 'Example Gateway',
+      },
+    },
+    endpoint(2),
+  ]);
+  await page.goto(`${USER_ORIGIN}/endpoints?connection_id=1`);
+  const entries = page.locator('.services-detail .nb-table tbody tr');
+  await expect(entries).toHaveCount(2);
+  await expect(entries.first().locator('strong')).toHaveText('Example Gateway');
+  await expect(entries.first()).toContainText('OpenAI-compatible');
+  await expect(entries.nth(1).locator('strong')).toHaveText(endpoint(2).note);
+  await expect(entries.nth(1)).toContainText('OpenAI-compatible');
   for (const width of [320, 390, 1935]) {
     await page.setViewportSize({ width, height: 1000 });
     await fitsPage(page);
@@ -695,6 +687,8 @@ for (const locale of ['en', 'zh'] as const) {
 function endpoint(index: number) {
   return {
     id: String(index),
+    connection_id: '1',
+    native_services: ['chat_completions', 'responses'],
     connector_type: 'openai-compatible',
     base_url: `https://endpoint-${index}.example.test/v1`,
     origin: { kind: 'custom' },
@@ -1352,6 +1346,11 @@ test.describe('donation selection expiry in UTC', () => {
       if (match) {
         const data = Array.from({ length: 3 }, (_, i) => ({
           ...endpointKey(match[1], i + 1),
+          credential_id: String(Number(match[1]) * 1000 + i + 1),
+          credential_version: '1',
+          grant_revision: '1',
+          native_services: ['chat_completions', 'responses'],
+          discovery_source_id: null,
           max_concurrency: 2,
           max_rpm: 12,
           browse: {
@@ -1401,6 +1400,11 @@ test.describe('donation selection expiry in UTC', () => {
     const keys = picker.locator('.donation-resource-picker__section').nth(1);
     const choice = keys.getByRole('checkbox').first();
     await choice.check();
+    await picker
+      .locator('.donation-resource-picker__selected-list > li')
+      .first()
+      .getByRole('checkbox', { name: 'Chat completions', exact: true })
+      .check();
     const expiry = picker
       .locator('.donation-resource-picker__selected-list input[type=datetime-local]')
       .first();
@@ -1411,6 +1415,11 @@ test.describe('donation selection expiry in UTC', () => {
     await expect(groups).toHaveCount(1);
     await sources.getByRole('button', { name: /^Endpoint 1 —/ }).click();
     await keys.getByRole('checkbox').nth(1).check();
+    await picker
+      .locator('.donation-resource-picker__selected-list > li')
+      .last()
+      .getByRole('checkbox', { name: 'Chat completions', exact: true })
+      .check();
     await filter.fill('Endpoint 20 —');
     await filter.press('Enter');
     await expect(groups).toHaveCount(1);
@@ -1448,10 +1457,22 @@ test.describe('donation selection expiry in UTC', () => {
         keys: [
           {
             endpoint_key_id: '20001',
+            native_services: ['chat_completions'],
+            credential_id: '20001',
+            credential_version: '1',
+            grant_revision: '1',
             expires_at: Date.parse('2027-02-01T12:00:00Z') / 1000,
             failure_disable_threshold: '10',
           },
-          { endpoint_key_id: '1002', expires_at: null, failure_disable_threshold: '10' },
+          {
+            endpoint_key_id: '1002',
+            native_services: ['chat_completions'],
+            credential_id: '1002',
+            credential_version: '1',
+            grant_revision: '1',
+            expires_at: null,
+            failure_disable_threshold: '10',
+          },
         ],
         ownership_authorized: true,
         discord_public_thanks: false,
