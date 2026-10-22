@@ -123,7 +123,7 @@ function SourceDetails({
           }
         />
         <PanelBody>
-          <dl className="core-kv">
+          <dl className="nb-facts">
             <div>
               <dt>{t('common.connections.modelsURL')}</dt>
               <dd className="nb-mono">{source.models_url}</dd>

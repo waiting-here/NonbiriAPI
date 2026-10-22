@@ -1652,7 +1652,7 @@ export function EndpointDetail({
         description={endpoint.data.enabled ? t('common.enabled') : t('common.disabled')}
         back={
           <Link to={returnTo} state={location.state}>
-            ← {t('endpoints.title')}
+            {t('endpoints.title')}
           </Link>
         }
         actions={
