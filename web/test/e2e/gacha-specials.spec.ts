@@ -119,7 +119,6 @@ for (const theme of ['light', 'dark'])
             still.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0),
           )
           .toBe(true);
-        await page.emulateMedia({ reducedMotion: 'no-preference' });
         if (
           appearance === 'amber' ||
           appearance === 'elopement' ||
@@ -168,6 +167,7 @@ for (const theme of ['light', 'dark'])
                 .toBe(true);
           }
         }
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
         await expect(page.locator('.nb-appearance-backdrop')).toHaveAttribute(
           'data-ready',
           'true',
