@@ -47,13 +47,17 @@ func (v *optionalTime) UnmarshalJSON(data []byte) error {
 }
 
 type endpointInput struct {
-	ConnectorType string `json:"connector_type"`
-	BaseURL       string `json:"base_url"`
-	Note          string `json:"note"`
-	Enabled       *bool  `json:"enabled"`
+	NativeServices nativeServiceSelection `json:"native_services,omitempty"`
+	RerankFormat   rerankSelection        `json:"rerank_format,omitempty"`
+	ConnectorType  string                 `json:"connector_type"`
+	BaseURL        string                 `json:"base_url"`
+	Note           string                 `json:"note"`
+	Enabled        *bool                  `json:"enabled"`
 }
 
 type keyInput struct {
+	NativeServices          nativeServiceSelection    `json:"native_services,omitempty"`
+	ShareDiscovery          strictBool                `json:"share_discovery,omitempty"`
 	FailureDisableThreshold *string                   `json:"failure_disable_threshold"`
 	Secret                  string                    `json:"secret"`
 	Note                    string                    `json:"note"`

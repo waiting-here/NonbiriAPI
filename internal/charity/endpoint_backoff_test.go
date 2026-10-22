@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
@@ -122,7 +123,7 @@ func TestEndpointBackoffClaimProofAndHeaderPriority(t *testing.T) {
 				t.Fatal("unproven or superseded classification changed state", e.status(t))
 			}
 			var streak []byte
-			if err := e.store.DB().QueryRow(`SELECT failure_streak FROM donation_keys WHERE id=?`, e.donationKey).Scan(&streak); err != nil {
+			if err := e.store.DB().QueryRow(`SELECT failure_streak FROM donation_service_health WHERE id=?`, e.serviceHealthID(t, h)).Scan(&streak); err != nil {
 				t.Fatal(err)
 			}
 			want := int64(0)
@@ -150,9 +151,11 @@ func (e *backoffEnv) additionalEndpointKey(t *testing.T, marker byte, kind, base
 	if err != nil {
 		t.Fatal(err)
 	}
+	tx := beginTestTx(t, e.store.DB())
+	defer tx.Rollback()
 	exec := func(query string, args ...any) int64 {
 		t.Helper()
-		r, err := e.store.DB().Exec(query, args...)
+		r, err := tx.Exec(query, args...)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -162,14 +165,26 @@ func (e *backoffEnv) additionalEndpointKey(t *testing.T, marker byte, kind, base
 		}
 		return id
 	}
-	endpoint := exec(`INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at) VALUES(?,?,?,'',1,1,?,?)`, e.donorID, kind, base, e.clock.Load(), e.clock.Load())
+	endpoint, err := testseed.InsertEndpointTx(t.Context(), tx, testseed.EndpointInput{OwnerUserID: e.donorID, Type: contract.Type(kind), BaseURL: base, At: e.clock.Load()})
+	if err != nil {
+		t.Fatal(err)
+	}
 	secretID := exec(`INSERT INTO endpoint_key_secrets(context_id,canonical_base_url,connector_type,encrypted_secret,created_at) VALUES(?,?,?,?,?)`, contextID, base, kind, envelope, e.clock.Load())
-	key := exec(`INSERT INTO endpoint_keys(endpoint_id,secret_ref_id,secret_fingerprint,display_head,display_tail,note,enabled,force_store_false,revision,created_at,updated_at) VALUES(?,?,?,'head','tail','',1,0,1,?,?)`, endpoint, secretID, bytes.Repeat([]byte{marker}, 32), e.clock.Load(), e.clock.Load())
+	identity, err := testseed.InsertEndpointKeyTx(t.Context(), tx, testseed.KeyInput{EndpointID: endpoint, SecretRefID: secretID, Fingerprint: bytes.Repeat([]byte{marker}, 32), DisplayHead: "head", DisplayTail: "tail", At: e.clock.Load()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := identity.KeyID
 	z, one := u128Blob(t, 0), u128Blob(t, 1)
 	donation := exec(`INSERT INTO donation_keys(donation_id,endpoint_key_id,display_head,display_tail,canonical_base_url,connector_type,price_used_mag,price_reserved_mag,calls_used,calls_reserved,tokens_used,tokens_reserved,token_reserve,enabled,failure_streak,streak_generation,next_claim_seq,next_fold_seq,safe_note,created_at,updated_at,source_endpoint_key_id,report_fingerprint) VALUES(?,?,'head','tail',?,?,?,?,?,?,?,?,5,1,?,?,?,?,'',?,?,?,?)`, e.donationID, key, base, kind, z, z, z, z, z, z, z, one, one, one, e.clock.Load(), e.clock.Load(), key, bytes.Repeat([]byte{marker}, 32))
 	exec(`INSERT INTO donation_key_memberships(endpoint_key_id,donation_key_id,donation_id,created_at) VALUES(?,?,?,?)`, key, donation, e.donationID, e.clock.Load())
-	exec(`INSERT INTO model_pair_catalog(endpoint_key_id,normalized_model_id,automatic_supports,manual_supports,automatic_revision,pair_revision,updated_at) VALUES(?,'upstream-model',1,0,1,1,?)`, key, e.clock.Load())
-	exec(`INSERT INTO charity_model_bindings(charity_model_id,donation_key_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at) VALUES(?,?,?,'upstream-model',?,?,?)`, e.tokenModel, donation, key, int(marker), e.clock.Load(), e.clock.Load())
+	if _, err := testseed.SeedDonationUsesTx(t.Context(), tx, donation, true, e.clock.Load()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := testseed.InsertCharityBindingTx(t.Context(), tx, testseed.BindingInput{ModelID: e.tokenModel, KeyID: donation, UpstreamModelID: "upstream-model", Order: int(marker), At: e.clock.Load()}); err != nil {
+		t.Fatal(err)
+	}
+	commitTestTx(t, tx)
 	return endpoint, key, donation
 }
 
@@ -189,12 +204,15 @@ func TestEndpointBackoffSharedByNewKeysWithExactEndpointIsolation(t *testing.T) 
 	} {
 		endpoint, key, donation := e.additionalEndpointKey(t, byte(i+7), tc.kind, tc.base)
 		r := e.request(t, e.tokenModel)
-		input := e.retryClaimInput(r.ID)
+		input := e.retryClaimInput(t, r.ID)
 		input.DonationKeyID = donation
 		input.Candidate.EndpointID = endpoint
 		input.Candidate.EndpointKeyID = key
 		input.Candidate.ConnectorType = contract.Type(tc.kind)
 		input.Candidate.CanonicalBaseURL = tc.base
+		tx := beginTestTx(t, e.store.DB())
+		input.Candidate.Authorization = e.authorizationFor(t, tx, r.ID, donation, "upstream-model")
+		_ = tx.Rollback()
 		h, err := e.rail.Claim(t.Context(), input)
 		if err != nil {
 			t.Fatal(err)
@@ -209,20 +227,17 @@ func TestEndpointBackoffSharedByNewKeysWithExactEndpointIsolation(t *testing.T) 
 			t.Fatal(tc, outcome.Backoff)
 		}
 		e.complete(t, h, outcome)
-		projection, err := smartbackoff.Read(t.Context(), e.store.DB(), donation, e.clock.Load())
-		if err != nil || (projection.Backoff != nil) != tc.want {
-			t.Fatal(tc, projection, err)
+		projection := e.serviceStatus(t, donation)
+		if (projection != nil) != tc.want {
+			t.Fatal(tc, projection)
 		}
 	}
 	// Owner calls never receive the endpoint rules or create dispatch backoff facts.
-	r, err := e.rail.Accept(t.Context(), claim.AcceptInput{UserID: e.donorID, Route: claim.RouteOpenAIChat, ModelSnapshot: "private", AttemptLimit: 1})
+	r, err := e.rail.Accept(t.Context(), claim.AcceptInput{UserID: e.donorID, Route: claim.RouteOpenAIChat, ModelSnapshot: "private/model", AttemptLimit: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := e.retryClaimInput(r.ID)
-	input.ActorUserID = e.donorID
-	input.Purpose = claim.PurposeSelf
-	input.DonationKeyID = 0
+	input := e.selfClaimInput(t, r.ID)
 	h, err = e.rail.Claim(t.Context(), input)
 	if err != nil {
 		t.Fatal(err)
@@ -300,9 +315,10 @@ func TestEndpointBackoffExportAndDeletionKeepPlatformPolicySeparate(t *testing.T
 		tx.Rollback()
 		t.Fatal(err)
 	}
-	if len(data) != 1 || data[0].Keys[0].Backoff == nil || data[0].Keys[0].Backoff.Source != "custom_rule" {
+	// Service health is exported with its use, not collapsed into legacy key state.
+	if len(data) != 1 || data[0].Keys[0].Backoff != nil {
 		tx.Rollback()
-		t.Fatal("state missing from export")
+		t.Fatal("service health was collapsed into legacy key export")
 	}
 	for _, field := range []string{"insufficient_credits", "rules_json", "rule_index", "policy_revision"} {
 		if strings.Contains(string(raw), field) {

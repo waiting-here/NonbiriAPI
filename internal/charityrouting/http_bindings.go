@@ -172,8 +172,9 @@ func (api *httpAPI) getBindings(writer http.ResponseWriter, request *http.Reques
 }
 
 type bindingSelectionWire struct {
-	DonationKeyID   requiredField[string] `json:"donation_key_id"`
-	UpstreamModelID requiredField[string] `json:"upstream_model_id"`
+	Targets         requiredField[[]bindingTargetWire] `json:"targets"`
+	DonationKeyID   requiredField[string]              `json:"donation_key_id"`
+	UpstreamModelID requiredField[string]              `json:"upstream_model_id"`
 }
 
 type bindingBatchWire struct {
@@ -183,7 +184,7 @@ type bindingBatchWire struct {
 
 func decodeBindingBatchReceipt(w http.ResponseWriter, r *http.Request, wire *bindingBatchWire) bool {
 	body, err := httpapi.ReadJSON(w, r, wire, httpapi.BodyOptions{MaxBytes: idempotency.MaxControlBodyBytes,
-		Validate: func(body []byte) error { return strictjson.ValidateObjectWithFieldLimit(body, 2+2*maxBindingBatch) }})
+		Validate: func(body []byte) error { return strictjson.ValidateObjectWithFieldLimit(body, 2+4*maxBindingBatch) }})
 	if err != nil {
 		if errors.Is(err, httpapi.ErrTooLarge) {
 			httperr.WriteError(w, httperr.New(httperr.CodePayloadTooLarge, "request body is too large"))
@@ -206,6 +207,18 @@ func parseBindingBatch(wire bindingBatchWire) (BindingBatch, map[string]any, err
 	selections := make([]BindingSelection, len(wire.Selections.Value))
 	canonicalSelections := make([]map[string]any, len(wire.Selections.Value))
 	for index, item := range wire.Selections.Value {
+		if item.Targets.Set {
+			if item.DonationKeyID.Set || item.UpstreamModelID.Set {
+				return BindingBatch{}, nil, ErrInvalidRequest
+			}
+			targets, err := parseBindingTargetWires(item.Targets.Value)
+			if err != nil {
+				return BindingBatch{}, nil, err
+			}
+			selections[index] = BindingSelection{Targets: targets}
+			canonicalSelections[index] = map[string]any{"targets": targets}
+			continue
+		}
 		if !item.DonationKeyID.Set || !item.UpstreamModelID.Set {
 			return BindingBatch{}, nil, ErrInvalidRequest
 		}
@@ -302,12 +315,13 @@ func (api *httpAPI) addBindings(writer http.ResponseWriter, request *http.Reques
 }
 
 type bindingOrderWire struct {
+	Response                requiredField[string]   `json:"response"`
 	ExpectedBindingRevision requiredField[string]   `json:"expected_binding_revision"`
 	Order                   requiredField[[]string] `json:"order"`
 }
 
 func parseBindingOrder(wire bindingOrderWire) (BindingOrder, map[string]any, error) {
-	if !wire.ExpectedBindingRevision.Set || !wire.Order.Set {
+	if !wire.ExpectedBindingRevision.Set || !wire.Order.Set || wire.Response.Set && wire.Response.Value != "receipt" {
 		return BindingOrder{}, nil, ErrInvalidRequest
 	}
 	if _, err := parseNonnegativeRevision(wire.ExpectedBindingRevision.Value); err != nil {
@@ -318,8 +332,12 @@ func parseBindingOrder(wire bindingOrderWire) (BindingOrder, map[string]any, err
 			return BindingOrder{}, nil, err
 		}
 	}
-	input := BindingOrder{ExpectedBindingRevision: wire.ExpectedBindingRevision.Value, Order: wire.Order.Value}
-	return input, map[string]any{"expected_binding_revision": input.ExpectedBindingRevision, "order": input.Order}, nil
+	input := BindingOrder{ExpectedBindingRevision: wire.ExpectedBindingRevision.Value, Order: wire.Order.Value, Response: wire.Response.Value}
+	canonical := map[string]any{"expected_binding_revision": input.ExpectedBindingRevision, "order": input.Order}
+	if wire.Response.Set {
+		canonical["response"] = input.Response
+	}
+	return input, canonical, nil
 }
 
 func (api *httpAPI) orderAdminBindings(writer http.ResponseWriter, request *http.Request) {
@@ -370,6 +388,7 @@ func (api *httpAPI) orderBindings(writer http.ResponseWriter, request *http.Requ
 }
 
 type bindingDeleteWire struct {
+	Response                requiredField[string] `json:"response"`
 	ExpectedBindingRevision requiredField[string] `json:"expected_binding_revision"`
 }
 
@@ -394,7 +413,7 @@ func (api *httpAPI) deleteBinding(writer http.ResponseWriter, request *http.Requ
 	if !decodeStrictObject(writer, request, &wire) {
 		return
 	}
-	if !wire.ExpectedBindingRevision.Set {
+	if !wire.ExpectedBindingRevision.Set || wire.Response.Set && wire.Response.Value != "receipt" {
 		writeRoutingError(writer, ErrInvalidRequest)
 		return
 	}
@@ -402,8 +421,11 @@ func (api *httpAPI) deleteBinding(writer http.ResponseWriter, request *http.Requ
 		writeRoutingError(writer, err)
 		return
 	}
-	input := BindingDelete{ExpectedBindingRevision: wire.ExpectedBindingRevision.Value}
+	input := BindingDelete{ExpectedBindingRevision: wire.ExpectedBindingRevision.Value, Response: wire.Response.Value}
 	canonical := map[string]any{"expected_binding_revision": input.ExpectedBindingRevision}
+	if wire.Response.Set {
+		canonical["response"] = input.Response
+	}
 	route := routeAdminBinding
 	if role == roleSteward {
 		route = routeStewardBinding

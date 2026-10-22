@@ -11,10 +11,13 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
+	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/donation"
+	"github.com/waiting-here/NonbiriAPI/internal/routing"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
@@ -103,14 +106,12 @@ revision,created_at,updated_at) VALUES(?,?,0,?,?,?,?,?,?,?,?,?,?)`, discord, dis
 func (environment *charityTestEnv) seedDonationRoute(t *testing.T) {
 	t.Helper()
 	baseURL := "https://charity.example.test/v1"
-	result, err := environment.store.DB().Exec(`INSERT INTO endpoints(
-user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at)
-VALUES(?,'openai-compatible',?,'private endpoint',1,1,?,?)`, environment.donorID, baseURL,
-		charityTestNow, charityTestNow)
+	tx := beginTestTx(t, environment.store.DB())
+	endpointID, err := testseed.InsertEndpointTx(t.Context(), tx, testseed.EndpointInput{OwnerUserID: environment.donorID, Type: connectorcontract.TypeOpenAICompatible, BaseURL: baseURL, Note: "private endpoint", At: charityTestNow})
 	if err != nil {
 		t.Fatalf("seed endpoint: %v", err)
 	}
-	environment.endpointID, _ = result.LastInsertId()
+	environment.endpointID = endpointID
 	contextID, fingerprint := make([]byte, 16), make([]byte, 32)
 	contextID[15], fingerprint[31] = 1, 1
 	vault, err := secret.New(bytes.Repeat([]byte{charityTestMasterKeyByte}, secret.MasterKeyBytes))
@@ -126,22 +127,19 @@ VALUES(?,'openai-compatible',?,'private endpoint',1,1,?,?)`, environment.donorID
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err = environment.store.DB().Exec(`INSERT INTO endpoint_key_secrets(
+	result, err := tx.Exec(`INSERT INTO endpoint_key_secrets(
 context_id,canonical_base_url,connector_type,encrypted_secret,created_at)
 VALUES(?,?,'openai-compatible',?,?)`, contextID, baseURL, envelope, charityTestNow)
 	if err != nil {
 		t.Fatalf("seed endpoint secret: %v", err)
 	}
 	environment.secretID, _ = result.LastInsertId()
-	result, err = environment.store.DB().Exec(`INSERT INTO endpoint_keys(
-endpoint_id,secret_ref_id,secret_fingerprint,display_head,display_tail,note,enabled,force_store_false,
-revision,created_at,updated_at) VALUES(?,?,?,'head','tail','private key',1,0,1,?,?)`,
-		environment.endpointID, environment.secretID, fingerprint, charityTestNow, charityTestNow)
+	key, err := testseed.InsertEndpointKeyTx(t.Context(), tx, testseed.KeyInput{EndpointID: environment.endpointID, SecretRefID: environment.secretID, Fingerprint: fingerprint, DisplayHead: "head", DisplayTail: "tail", Note: "private key", At: charityTestNow})
 	if err != nil {
 		t.Fatalf("seed endpoint key: %v", err)
 	}
-	environment.endpointKey, _ = result.LastInsertId()
-	result, err = environment.store.DB().Exec(`INSERT INTO donations(
+	environment.endpointKey = key.KeyID
+	result, err = tx.Exec(`INSERT INTO donations(
 user_id,status,revision,description,review_note,reviewed_by_role,created_at,updated_at)
 VALUES(?,'approved',1,'donation','', 'admin',?,?)`, environment.donorID, charityTestNow, charityTestNow)
 	if err != nil {
@@ -149,7 +147,7 @@ VALUES(?,'approved',1,'donation','', 'admin',?,?)`, environment.donorID, charity
 	}
 	environment.donationID, _ = result.LastInsertId()
 	zero, one := u128Blob(t, 0), u128Blob(t, 1)
-	result, err = environment.store.DB().Exec(`INSERT INTO donation_keys(
+	result, err = tx.Exec(`INSERT INTO donation_keys(
 donation_id,endpoint_key_id,display_head,display_tail,canonical_base_url,connector_type,
 price_used_mag,price_reserved_mag,calls_used,calls_reserved,tokens_used,tokens_reserved,
 token_reserve,enabled,failure_streak,streak_generation,next_claim_seq,next_fold_seq,safe_note,created_at,updated_at,
@@ -162,16 +160,18 @@ VALUES(?,?,?,?,?,'openai-compatible',?,?,?,?,?,?,5,1,?,?,?,?,'private label',?,?
 		t.Fatalf("seed donation key: %v", err)
 	}
 	environment.donationKey, _ = result.LastInsertId()
-	if _, err := environment.store.DB().Exec(`INSERT INTO donation_key_memberships(
+	if _, err := tx.Exec(`INSERT INTO donation_key_memberships(
 endpoint_key_id,donation_key_id,donation_id,created_at) VALUES(?,?,?,?)`, environment.endpointKey,
 		environment.donationKey, environment.donationID, charityTestNow); err != nil {
 		t.Fatalf("seed donation membership: %v", err)
 	}
-	if _, err := environment.store.DB().Exec(`INSERT INTO model_pair_catalog(
-endpoint_key_id,normalized_model_id,automatic_supports,manual_supports,automatic_revision,pair_revision,updated_at)
-VALUES(?,'upstream-model',1,0,1,1,?)`, environment.endpointKey, charityTestNow); err != nil {
-		t.Fatalf("seed model pair: %v", err)
+	if _, err := testseed.SeedDiscoveryCatalogTx(t.Context(), tx, testseed.DiscoveryCatalogInput{EndpointKeyID: environment.endpointKey, ListFormat: "openai", Models: []testseed.DiscoveryModel{{ID: "upstream-model"}}, At: charityTestNow}); err != nil {
+		t.Fatal(err)
 	}
+	if _, err := testseed.SeedDonationUsesWithDiscoveryTx(t.Context(), tx, environment.donationKey, true, charityTestNow); err != nil {
+		t.Fatal(err)
+	}
+	commitTestTx(t, tx)
 }
 
 func (environment *charityTestEnv) seedModel(t *testing.T, model, mode string) int64 {
@@ -202,12 +202,11 @@ model_id,revision,affinity_ttl_seconds) VALUES(?,1,300)`, modelID); err != nil {
 model_id,allowed_level_mask,public_description) VALUES(?,31,'')`, modelID); err != nil {
 		t.Fatalf("seed charity model access: %v", err)
 	}
-	if _, err := environment.store.DB().Exec(`INSERT INTO charity_model_bindings(
-charity_model_id,donation_key_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at)
-VALUES(?,?,?,'upstream-model',0,?,?)`, modelID, environment.donationKey, environment.endpointKey,
-		charityTestNow, charityTestNow); err != nil {
+	tx := beginTestTx(t, environment.store.DB())
+	if _, err := testseed.InsertCharityBindingTx(t.Context(), tx, testseed.BindingInput{ModelID: modelID, KeyID: environment.donationKey, UpstreamModelID: "upstream-model", At: charityTestNow}); err != nil {
 		t.Fatalf("seed charity binding: %v", err)
 	}
+	commitTestTx(t, tx)
 	return modelID
 }
 
@@ -256,7 +255,8 @@ func (environment *charityTestEnv) claim(t *testing.T, requestID string, attempt
 	claimID := mustOpaqueID(t, "clm_")
 	tx := beginTestTx(t, environment.store.DB())
 	reservation, err := environment.service.Claim(context.Background(), tx, claim.CharityClaimInput{
-		RequestID: requestID, ClaimID: claimID, ActorUserID: environment.callerID, AttemptSeq: attemptSeq,
+		Authorization: environment.authorization(t, tx, requestID),
+		RequestID:     requestID, ClaimID: claimID, ActorUserID: environment.callerID, AttemptSeq: attemptSeq,
 		DonationKeyID: environment.donationKey, EndpointID: environment.endpointID,
 		EndpointKeyID: environment.endpointKey, UpstreamModelID: "upstream-model",
 		ClaimedAt: charityTestNow + int64(attemptSeq), OutputTokenFloor: outputFloor,
@@ -282,6 +282,48 @@ VALUES(?,?,?,'charity',?,?,?,?,?,?,?,?,?,?,?,?,'pending',?)`, claimID, requestID
 	}
 	commitTestTx(t, tx)
 	return charityTestClaim{id: claimID, reservation: reservation}
+}
+
+func (environment *charityTestEnv) authorization(t *testing.T, tx *sql.Tx, requestID string) routing.TargetAuthorization {
+	return environment.authorizationFor(t, tx, requestID, environment.donationKey, "upstream-model")
+}
+
+func (environment *charityTestEnv) authorizationFor(t *testing.T, tx *sql.Tx, requestID string, memberID int64, upstream string) routing.TargetAuthorization {
+	t.Helper()
+	var kind claim.RouteKind
+	var modelID int64
+	if err := tx.QueryRow(`SELECT r.route_kind,c.charity_model_id FROM logical_requests r JOIN charity_reservations c ON c.logical_request_id=r.id WHERE r.id=?`, requestID).Scan(&kind, &modelID); err != nil {
+		t.Fatal(err)
+	}
+	var configured connectorcontract.Type
+	var grantedMask int64
+	var format connectorcontract.RerankFormat
+	if err := tx.QueryRow(`SELECT e.connector_type,g.native_service_mask,g.rerank_format FROM donation_uses u JOIN donation_use_revisions r ON r.id=u.current_approved_revision_id JOIN endpoint_key_grant_revisions g ON g.id=r.grant_revision_id JOIN endpoints e ON e.id=g.endpoint_id WHERE u.donation_key_id=? ORDER BY u.native_service_bit LIMIT 1`, memberID).Scan(&configured, &grantedMask, &format); err != nil {
+		t.Fatal(err)
+	}
+	services, err := connectorcontract.NativeServicesFromMask(grantedMask)
+	if err != nil {
+		t.Fatal(err)
+	}
+	routes, err := connector.ResolveServiceRoutes(configured, services, format, kind.Operation())
+	if err != nil || len(routes) == 0 {
+		t.Fatal("fixture route unavailable", err)
+	}
+	native := routes[0].NativeService
+	mask, _ := connectorcontract.ParseNativeServices([]connectorcontract.NativeService{native})
+	a := routing.TargetAuthorization{NativeService: native}
+	err = tx.QueryRow(`SELECT g.credential_id,g.credential_version_id,v.version,g.id,g.grant_revision,u.id,r.id,r.use_revision,e.connector_type,g.rerank_format
+FROM donation_uses u JOIN donation_use_revisions r ON r.id=u.current_approved_revision_id JOIN endpoint_key_grant_revisions g ON g.id=r.grant_revision_id JOIN credential_versions v ON v.id=g.credential_version_id JOIN endpoints e ON e.id=g.endpoint_id WHERE u.donation_key_id=? AND u.native_service_bit=?`, memberID, mask.Mask()).Scan(&a.CredentialID, &a.CredentialVersionID, &a.CredentialVersion, &a.GrantRevisionID, &a.GrantRevision, &a.UseID, &a.UseRevisionID, &a.UseRevision, &a.ConfiguredType, &a.RerankFormat)
+	if errors.Is(err, sql.ErrNoRows) {
+		return a
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.QueryRow(`SELECT b.id,t.id,t.revision FROM charity_model_bindings b JOIN charity_binding_targets t ON t.binding_id=b.id WHERE b.charity_model_id=? AND t.donation_key_id=? AND t.upstream_model_id=?`, modelID, memberID, upstream).Scan(&a.BindingID, &a.TargetID, &a.TargetRevision); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		t.Fatal(err)
+	}
+	return a
 }
 
 func (environment *charityTestEnv) completeAttempt(
@@ -497,7 +539,8 @@ func TestClaimRevalidatesFeatureGateAndRequestActor(t *testing.T) {
 	}
 	tx := beginTestTx(t, environment.store.DB())
 	_, err := environment.service.Claim(context.Background(), tx, claim.CharityClaimInput{
-		RequestID: requestID, ClaimID: mustOpaqueID(t, "clm_"), ActorUserID: environment.callerID,
+		Authorization: environment.authorizationFor(t, tx, requestID, environment.donationKey, "upstream-model"),
+		RequestID:     requestID, ClaimID: mustOpaqueID(t, "clm_"), ActorUserID: environment.callerID,
 		AttemptSeq: 1, DonationKeyID: environment.donationKey, EndpointID: environment.endpointID,
 		EndpointKeyID: environment.endpointKey, UpstreamModelID: "upstream-model", ClaimedAt: charityTestNow + 1,
 	})
@@ -514,7 +557,8 @@ func TestClaimRevalidatesFeatureGateAndRequestActor(t *testing.T) {
 	}
 	tx = beginTestTx(t, environment.store.DB())
 	_, err = environment.service.Claim(context.Background(), tx, claim.CharityClaimInput{
-		RequestID: requestID, ClaimID: mustOpaqueID(t, "clm_"), ActorUserID: environment.callerID,
+		Authorization: environment.authorizationFor(t, tx, requestID, environment.donationKey, "upstream-model"),
+		RequestID:     requestID, ClaimID: mustOpaqueID(t, "clm_"), ActorUserID: environment.callerID,
 		AttemptSeq: 1, DonationKeyID: environment.donationKey, EndpointID: environment.endpointID,
 		EndpointKeyID: environment.endpointKey, UpstreamModelID: "upstream-model", ClaimedAt: charityTestNow + 1,
 	})
@@ -540,28 +584,21 @@ func TestClaimRevalidatesFeatureGateAndRequestActor(t *testing.T) {
 func TestClaimBindingRevocationOrderingUsesExactUpstreamModel(t *testing.T) {
 	environment := newCharityTestEnv(t)
 	const alternateModel = "alternate-model"
-	if _, err := environment.store.DB().Exec(`INSERT INTO model_pair_catalog(
-endpoint_key_id,normalized_model_id,manual_supports,pair_revision,updated_at)
-VALUES(?,?,1,1,?)`, environment.endpointKey, alternateModel, charityTestNow); err != nil {
+	seedTx := beginTestTx(t, environment.store.DB())
+	if _, err := testseed.InsertCharityBindingTx(context.Background(), seedTx, testseed.BindingInput{ModelID: environment.requestModel, KeyID: environment.donationKey, UpstreamModelID: alternateModel, Order: 1, At: charityTestNow}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := environment.store.DB().Exec(`INSERT INTO charity_model_bindings(
-charity_model_id,donation_key_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at)
-VALUES(?,?,?,?,1,?,?)`, environment.requestModel, environment.donationKey, environment.endpointKey,
-		alternateModel, charityTestNow, charityTestNow); err != nil {
-		t.Fatal(err)
-	}
+	commitTestTx(t, seedTx)
 
 	claimedRequest := environment.accept(t, environment.requestModel, 2400, 1)
 	frozenClaim := environment.claim(t, claimedRequest, 1, true)
-	if _, err := environment.store.DB().Exec(`DELETE FROM model_pair_catalog
-WHERE endpoint_key_id=? AND normalized_model_id='upstream-model'`, environment.endpointKey); err != nil {
+	if _, err := environment.store.DB().Exec(`DELETE FROM charity_binding_targets WHERE donation_key_id=? AND upstream_model_id='upstream-model' AND binding_id IN (SELECT id FROM charity_model_bindings WHERE charity_model_id=?)`, environment.donationKey, environment.requestModel); err != nil {
 		t.Fatal(err)
 	}
 	var alternateBindings int
-	if err := environment.store.DB().QueryRow(`SELECT COUNT(*) FROM charity_model_bindings
-WHERE charity_model_id=? AND donation_key_id=? AND endpoint_key_id=? AND upstream_model_id=?`,
-		environment.requestModel, environment.donationKey, environment.endpointKey, alternateModel).
+	if err := environment.store.DB().QueryRow(`SELECT COUNT(*) FROM charity_model_bindings b JOIN charity_binding_targets t ON t.binding_id=b.id
+WHERE b.charity_model_id=? AND t.donation_key_id=? AND t.upstream_model_id=?`,
+		environment.requestModel, environment.donationKey, alternateModel).
 		Scan(&alternateBindings); err != nil {
 		t.Fatal(err)
 	}
@@ -578,7 +615,8 @@ WHERE charity_model_id=? AND donation_key_id=? AND endpoint_key_id=? AND upstrea
 	staleRequest := environment.accept(t, environment.requestModel, 2400, 1)
 	tx := beginTestTx(t, environment.store.DB())
 	_, err := environment.service.Claim(context.Background(), tx, claim.CharityClaimInput{
-		RequestID: staleRequest, ClaimID: mustOpaqueID(t, "clm_"), ActorUserID: environment.callerID,
+		Authorization: environment.authorizationFor(t, tx, staleRequest, environment.donationKey, "upstream-model"),
+		RequestID:     staleRequest, ClaimID: mustOpaqueID(t, "clm_"), ActorUserID: environment.callerID,
 		AttemptSeq: 1, DonationKeyID: environment.donationKey, EndpointID: environment.endpointID,
 		EndpointKeyID: environment.endpointKey, UpstreamModelID: "upstream-model",
 		ClaimedAt: charityTestNow + 20,
@@ -590,7 +628,8 @@ WHERE charity_model_id=? AND donation_key_id=? AND endpoint_key_id=? AND upstrea
 
 	tx = beginTestTx(t, environment.store.DB())
 	reservation, err := environment.service.Claim(context.Background(), tx, claim.CharityClaimInput{
-		RequestID: staleRequest, ClaimID: mustOpaqueID(t, "clm_"), ActorUserID: environment.callerID,
+		Authorization: environment.authorizationFor(t, tx, staleRequest, environment.donationKey, alternateModel),
+		RequestID:     staleRequest, ClaimID: mustOpaqueID(t, "clm_"), ActorUserID: environment.callerID,
 		AttemptSeq: 1, DonationKeyID: environment.donationKey, EndpointID: environment.endpointID,
 		EndpointKeyID: environment.endpointKey, UpstreamModelID: alternateModel,
 		ClaimedAt: charityTestNow + 20,
@@ -679,7 +718,8 @@ func testConcurrentClaimsReserveLastCapacity(t *testing.T, route claim.RouteKind
 			tx, err := environment.store.DB().BeginTx(ctx, nil)
 			if err == nil {
 				_, err = environment.service.Claim(ctx, tx, claim.CharityClaimInput{
-					RequestID: attempt.requestID, ClaimID: attempt.claimID,
+					Authorization: environment.authorizationFor(t, tx, attempt.requestID, environment.donationKey, "upstream-model"),
+					RequestID:     attempt.requestID, ClaimID: attempt.claimID,
 					ActorUserID: environment.callerID, AttemptSeq: 1,
 					DonationKeyID: environment.donationKey, EndpointID: environment.endpointID,
 					EndpointKeyID: environment.endpointKey, UpstreamModelID: "upstream-model",
@@ -739,7 +779,8 @@ func TestHundredClaimsAdvanceReservationsAndSequence(t *testing.T) {
 	tx := beginTestTx(t, environment.store.DB())
 	for attempt := 1; attempt <= claim.MaxAttempts; attempt++ {
 		if _, err := environment.service.Claim(context.Background(), tx, claim.CharityClaimInput{
-			RequestID: requestID, ClaimID: mustOpaqueID(t, "clm_"), ActorUserID: environment.callerID,
+			Authorization: environment.authorizationFor(t, tx, requestID, environment.donationKey, "upstream-model"),
+			RequestID:     requestID, ClaimID: mustOpaqueID(t, "clm_"), ActorUserID: environment.callerID,
 			AttemptSeq: attempt, DonationKeyID: environment.donationKey, EndpointID: environment.endpointID,
 			EndpointKeyID: environment.endpointKey, UpstreamModelID: "upstream-model",
 			ClaimedAt: charityTestNow + int64(attempt),
@@ -845,7 +886,8 @@ func TestCapacityBoundaryExpiryAndTerminalCleanup(t *testing.T) {
 	}
 	tx := beginTestTx(t, environment.store.DB())
 	_, err = environment.service.Claim(context.Background(), tx, claim.CharityClaimInput{
-		RequestID: requestID, ClaimID: mustOpaqueID(t, "clm_"), ActorUserID: environment.callerID,
+		Authorization: environment.authorizationFor(t, tx, requestID, environment.donationKey, "upstream-model"),
+		RequestID:     requestID, ClaimID: mustOpaqueID(t, "clm_"), ActorUserID: environment.callerID,
 		AttemptSeq: 1, DonationKeyID: environment.donationKey, EndpointID: environment.endpointID,
 		EndpointKeyID: environment.endpointKey, UpstreamModelID: "upstream-model", ClaimedAt: charityTestNow,
 	})

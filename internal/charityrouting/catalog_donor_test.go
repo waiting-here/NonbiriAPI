@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"testing"
 
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
@@ -116,7 +117,7 @@ func TestDonorRestrictionsAgreeAcrossCatalogRuntimeAndKeyModels(t *testing.T) {
 			if err := env.store.DB().QueryRow("SELECT total_changes()").Scan(&after); err != nil || before != after {
 				t.Fatalf("availability reads wrote state: %d/%d %v", before, after, err)
 			}
-			snapshot, err := env.service.snapshot(ctx, modelID, now, false, nil)
+			snapshot, err := env.service.snapshot(ctx, modelID, now, false, nil, connectorcontract.OperationChatCompletions)
 			if wantAvailable {
 				if err != nil || len(snapshot.Candidates()) != wantCount {
 					t.Fatalf("runtime candidates: %+v %v", snapshot, err)

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
-	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
@@ -35,7 +34,7 @@ func testKeyLimitRejectionRollsBackCharity(t *testing.T, route claim.RouteKind) 
 	}
 	request1 := e.accept(t, e.requestModel, 2400, 1, route)
 	request2 := e.accept(t, e.requestModel, 2400, 1, route)
-	input := claim.ClaimInput{RequestID: request1, ActorUserID: e.callerID, AttemptSeq: 1, Purpose: claim.PurposeCharity, DonationKeyID: e.donationKey, Candidate: claim.Candidate{EndpointID: e.endpointID, EndpointKeyID: e.endpointKey, ConnectorType: connectorcontract.TypeOpenAICompatible, CanonicalBaseURL: "https://charity.example.test/v1", UpstreamModelID: "upstream-model"}}
+	input := e.retryClaimInput(t, request1)
 	if _, err := rail.Claim(ctx, input); err != nil {
 		t.Fatal(err)
 	}

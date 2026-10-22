@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
@@ -228,8 +229,8 @@ func detachBindingsTx(ctx context.Context, tx *sql.Tx, donationKeyIDs []int64, n
 	for index, id := range donationKeyIDs {
 		args[index] = id
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT DISTINCT charity_model_id FROM charity_model_bindings
-WHERE donation_key_id IN (`+placeholders+`) ORDER BY charity_model_id`, args...)
+	rows, err := tx.QueryContext(ctx, `SELECT DISTINCT b.charity_model_id FROM charity_model_bindings b JOIN charity_binding_targets t ON t.binding_id=b.id
+WHERE t.donation_key_id IN (`+placeholders+`) ORDER BY b.charity_model_id`, args...)
 	if err != nil {
 		return fmt.Errorf("donation: read affected charity models: %w", err)
 	}
@@ -248,7 +249,7 @@ WHERE donation_key_id IN (`+placeholders+`) ORDER BY charity_model_id`, args...)
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("donation: iterate affected charity models: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM charity_model_bindings WHERE donation_key_id IN (`+placeholders+`)`, args...); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM charity_binding_targets WHERE donation_key_id IN (`+placeholders+`)`, args...); err != nil {
 		return fmt.Errorf("donation: delete charity bindings: %w", err)
 	}
 	for _, modelID := range modelIDs {
@@ -306,6 +307,11 @@ WHERE id IN (` + placeholders + `) AND ended_at IS NULL`
 	}
 	if count != int64(len(donationKeyIDs)) {
 		return ErrInvariant
+	}
+	for _, id := range donationKeyIDs {
+		if err := connectionstore.EndDonationKeyUsesTx(ctx, tx, id, now); err != nil {
+			return fmt.Errorf("donation: end member uses: %w", err)
+		}
 	}
 	return nil
 }

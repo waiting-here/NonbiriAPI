@@ -253,8 +253,12 @@ func TestTraineeReviewPartialExpiryRequiresFreshRevision(t *testing.T) {
 		t.Fatal("stale partial expiry", err)
 	}
 	view, err := e.service.GetSteward(ctx, actor, id)
-	if err != nil || view.Status != "pending" || view.Revision != "2" || view.Keys[0].EndedReason == nil {
+	if err != nil || view.Status != "pending" || view.Revision != "2" || len(view.Keys) != 1 || view.Keys[0].ID != d.Value.Keys[1].ID || view.Keys[0].CanManage {
 		t.Fatalf("expiry did not persist: %+v %v", view, err)
+	}
+	var ended string
+	if err := e.store.DB().QueryRow(`SELECT ended_reason FROM donation_keys WHERE id=?`, d.Value.Keys[0].ID).Scan(&ended); err != nil || ended != "expired" {
+		t.Fatalf("expired member history not persisted: %q, %v", ended, err)
 	}
 	if n := mutationRecordCount(t, e.store.DB(), idempotency.ScopeControlMutation, "trainee5", actor, mutation.IdempotencyKey); n != 0 {
 		t.Fatal("failed review consumed idempotency key", n)

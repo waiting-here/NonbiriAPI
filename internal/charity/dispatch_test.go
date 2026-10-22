@@ -70,7 +70,8 @@ func testAlreadySentCharityCompletes(t *testing.T, route claim.RouteKind) {
 	}, claim.RewardPosted, claim.CharityActual{PriceMilli: 3000, RewardMilli: 1250})
 	tx := beginTestTx(t, e.store.DB())
 	_, err := e.service.Claim(context.Background(), tx, claim.CharityClaimInput{
-		RequestID: requestID, ClaimID: mustOpaqueID(t, "clm_"), ActorUserID: e.callerID, AttemptSeq: 2,
+		Authorization: e.authorizationFor(t, tx, requestID, e.donationKey, "upstream-model"),
+		RequestID:     requestID, ClaimID: mustOpaqueID(t, "clm_"), ActorUserID: e.callerID, AttemptSeq: 2,
 		DonationKeyID: e.donationKey, EndpointID: e.endpointID, EndpointKeyID: e.endpointKey, UpstreamModelID: "upstream-model", ClaimedAt: charityTestNow + 11,
 	})
 	if !errors.Is(err, claim.ErrForbidden) {

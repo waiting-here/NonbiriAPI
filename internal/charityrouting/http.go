@@ -67,6 +67,7 @@ func RegisterAdminRoutes(registrar AdminRouteRegistrar, service *Service) error 
 		{http.MethodPost, routeAdminBindingBatch, api.addAdminBindings},
 		{http.MethodPost, routeAdminBindingReceipt, api.addAdminBindingsReceipt},
 		{http.MethodPut, routeAdminBindingOrder, api.orderAdminBindings},
+		{http.MethodPut, routeAdminBindingTargets, api.putAdminBindingTargets},
 		{http.MethodDelete, routeAdminBinding, api.deleteAdminBinding},
 		{http.MethodGet, routeAdminBindingAdaptation, api.getAdminBindingAdaptation},
 		{http.MethodPut, routeAdminBindingAdaptation, api.putAdminBindingAdaptation},
@@ -117,6 +118,7 @@ func RegisterStewardRoutes(registrar UserRouteRegistrar, service *Service) error
 		{http.MethodPost, routeStewardBindingBatch, api.addStewardBindings},
 		{http.MethodPost, routeStewardBindingReceipt, api.addStewardBindingsReceipt},
 		{http.MethodPut, routeStewardBindingOrder, api.orderStewardBindings},
+		{http.MethodPut, routeStewardBindingTargets, api.putStewardBindingTargets},
 		{http.MethodDelete, routeStewardBinding, api.deleteStewardBinding},
 		{http.MethodGet, routeStewardBindingAdaptation, api.getStewardBindingAdaptation},
 	}

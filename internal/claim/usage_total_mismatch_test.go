@@ -83,7 +83,7 @@ func TestMismatchPersistsAcrossRetriesAndBillsActualBucketsOnce(t *testing.T) {
 		f.clock.Add(1)
 		handle, err := f.service.Claim(ctx, ClaimInput{
 			RequestID: request.ID, ActorUserID: consumerID, AttemptSeq: seq,
-			Purpose: PurposeCharity, Candidate: key.candidate, DonationKeyID: donationKeyID,
+			Purpose: PurposeCharity, Candidate: key.charityCandidates[1], DonationKeyID: donationKeyID,
 		})
 		if err != nil {
 			t.Fatalf("claim attempt %d: %v", seq, err)

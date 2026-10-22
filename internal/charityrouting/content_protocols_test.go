@@ -8,6 +8,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/modeltype"
 )
 
 func TestContentProtocolsPersistBindingsAndSelectRuntimeCandidates(t *testing.T) {
@@ -16,6 +17,9 @@ func TestContentProtocolsPersistBindingsAndSelectRuntimeCandidates(t *testing.T)
 	owner := e.seedUser(t, false, nil)
 	model := e.createModel(t, 'a')
 	modelID, _ := parsePositiveID(model.ID)
+	if _, err := e.store.DB().Exec(`UPDATE charity_models SET model_types=? WHERE id=?`, modeltype.Set{contract.OperationChatCompletions, contract.OperationDecisions}, modelID); err != nil {
+		t.Fatal(err)
+	}
 	kinds := []contract.Type{contract.TypeGoogleGemini, contract.TypeOpenAIResponses, contract.TypeOpenAIDecisions}
 	var selections []BindingSelection
 	for _, kind := range kinds {

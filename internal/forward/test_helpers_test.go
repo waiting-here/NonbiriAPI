@@ -14,6 +14,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/debug"
 	"github.com/waiting-here/NonbiriAPI/internal/modeltype"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
+	"github.com/waiting-here/NonbiriAPI/internal/routing"
 	"github.com/waiting-here/NonbiriAPI/internal/transportpolicy"
 )
 
@@ -45,7 +46,9 @@ func (router *fakePersonalRouter) Preflight(_ context.Context, _ int64, _ string
 
 func (router *fakePersonalRouter) Snapshot(_ context.Context, _ int64, _ string) (PersonalSnapshot, error) {
 	router.snapCalls++
-	return router.snapshot, router.snapErr
+	value := router.snapshot
+	value.Candidates = authorizedFixtureCandidates(value.Candidates)
+	return value, router.snapErr
 }
 
 func (router *fakePersonalRouter) ListRoutableModels(_ context.Context, _ int64, _ int) ([]ListedModel, error) {
@@ -90,12 +93,39 @@ func (router *fakeCharityRouter) Preflight(_ context.Context, _ int64, _ string,
 	return router.preflight, router.preErr
 }
 
-func (router *fakeCharityRouter) Snapshot(_ context.Context, userID int64, _ int64, now int64, connectorTypes []connectorcontract.Type) (CharitySnapshot, error) {
+func (router *fakeCharityRouter) Snapshot(_ context.Context, userID int64, _ int64, now int64, connectorTypes []connectorcontract.Type, _ connectorcontract.Operation) (CharitySnapshot, error) {
 	router.snapCalls++
 	router.snapUsers = append(router.snapUsers, userID)
 	router.snapTimes = append(router.snapTimes, now)
 	router.snapTypes = append(router.snapTypes, append([]connectorcontract.Type(nil), connectorTypes...))
-	return router.snapshot, router.snapErr
+	value := router.snapshot
+	value.Candidates = authorizedFixtureCandidates(value.Candidates)
+	return value, router.snapErr
+}
+
+func (router *fakeCharityRouter) OrderSelected(candidates []RouteCandidate, _ string) ([]RouteCandidate, error) {
+	return append([]RouteCandidate(nil), candidates...), nil
+}
+
+// Older forwarding cases describe a physical route. This fake now supplies the
+// exact snapshot that the real routing adapters obtain from the database.
+func authorizedFixtureCandidates(input []RouteCandidate) []RouteCandidate {
+	output := append([]RouteCandidate(nil), input...)
+	for i := range output {
+		candidate := &output[i]
+		if candidate.Authorization.TargetID != 0 {
+			continue
+		}
+		if candidate.BindingID == 0 {
+			candidate.BindingID = int64(i + 1)
+		}
+		candidate.Order = i
+		candidate.Authorization = routing.TargetAuthorization{BindingID: candidate.BindingID, TargetID: candidate.EndpointKeyID,
+			TargetRevision: 1, CredentialID: candidate.EndpointKeyID, CredentialVersionID: candidate.EndpointKeyID,
+			CredentialVersion: 1, GrantRevisionID: candidate.EndpointKeyID, GrantRevision: 1, ConfiguredType: candidate.ConnectorType}
+		candidate.NativeServices, _ = connectorcontract.LegacyNativeServices(candidate.ConnectorType)
+	}
+	return output
 }
 
 func (router *fakeCharityRouter) ReserveForOutput(_ context.Context, _ int64, currentReserve, outputFloor int64) (int64, error) {

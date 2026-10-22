@@ -20,7 +20,9 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/charityrouting"
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	"github.com/waiting-here/NonbiriAPI/internal/config"
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
+	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/donation"
@@ -200,7 +202,18 @@ func newPersonalFixture(t *testing.T) *personalFixture {
 	t.Cleanup(func() { _ = f.service.Close() })
 	f.userID = f.user(t, "owner", 1)
 	f.ctx = authz.WithPersonalCaller(context.Background(), authz.PersonalCaller{UserID: f.userID, Generation: 1})
-	f.endpointID = f.exec(t, `INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at) VALUES(?,'openai-compatible',?,'owner endpoint',1,1,?,?)`, f.userID, upstream.URL+"/v1", f.clock.Load(), f.clock.Load())
+	tx, err := f.store.DB().BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	f.endpointID, err = testseed.InsertEndpointTx(context.Background(), tx, testseed.EndpointInput{OwnerUserID: f.userID, Type: contract.TypeOpenAICompatible, BaseURL: upstream.URL + "/v1", At: f.clock.Load()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
 	f.modelID = f.exec(t, `INSERT INTO models(user_id,provider,model,full_name,revision,binding_revision,created_at,updated_at) VALUES(?,'fixture','model','fixture/model',1,1,?,?)`, f.userID, f.clock.Load(), f.clock.Load())
 	return f
 }

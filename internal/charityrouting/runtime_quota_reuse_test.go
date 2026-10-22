@@ -30,7 +30,7 @@ func quotaSnapshotFixture(t *testing.T, candidates, distinct int) (*routingTestE
 		k := i % distinct
 		upstream := fmt.Sprintf("quota-%d", i)
 		if i >= distinct {
-			if _, err := e.store.DB().Exec("INSERT INTO model_pair_catalog(endpoint_key_id,normalized_model_id,automatic_supports,manual_supports,automatic_revision,pair_revision,updated_at) VALUES(?,?,1,1,1,1,?)", endpointKeys[k], upstream, routingTestNow); err != nil {
+			if _, err := e.store.DB().Exec(`INSERT INTO donation_key_manual_models(donation_key_id,normalized_model_id,display_name,revision,created_at,updated_at) VALUES(?1,?2,?2,1,?3,?3)`, keys[k], upstream, routingTestNow); err != nil {
 				t.Fatal(err)
 			}
 		}

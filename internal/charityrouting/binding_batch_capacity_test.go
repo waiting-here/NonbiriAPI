@@ -25,7 +25,7 @@ func TestKeyBindingBatchPreservesLargeSelectionCapacity(t *testing.T) {
 	defer tx.Rollback()
 	for i := range upstreamIDs {
 		upstreamIDs[i] = fmt.Sprintf("%03d/", i) + strings.Repeat("a", 508)
-		if _, err := tx.Exec(`INSERT INTO model_pair_catalog(endpoint_key_id,normalized_model_id,manual_supports,updated_at) VALUES(?,?,1,?)`, physical, upstreamIDs[i], routingTestNow); err != nil {
+		if _, err := tx.Exec(`INSERT INTO donation_key_manual_models(donation_key_id,normalized_model_id,display_name,revision,created_at,updated_at) SELECT donation_key_id,?2,?2,1,?3,?3 FROM donation_key_memberships WHERE endpoint_key_id=?1`, physical, upstreamIDs[i], routingTestNow); err != nil {
 			t.Fatal(err)
 		}
 	}

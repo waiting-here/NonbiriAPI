@@ -11,7 +11,6 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/charityaccess"
 	"github.com/waiting-here/NonbiriAPI/internal/charityreserve"
-	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/credits"
@@ -282,23 +281,27 @@ func (s *Service) Snapshot(ctx context.Context, modelID int64, decisionNow int64
 	if err != nil {
 		return RuntimeSnapshot{}, err
 	}
-	return s.snapshot(ctx, modelID, decisionNow, true, connectorSet)
+	return s.snapshot(ctx, modelID, decisionNow, true, connectorSet, "")
 }
 
 // SnapshotForCaller applies donor ownership before ordering or counting
 // physical candidates. The final dispatch transaction repeats this decision.
-func (s *Service) SnapshotForCaller(ctx context.Context, userID, modelID, decisionNow int64, connectorTypes []connectorcontract.Type) (RuntimeSnapshot, error) {
-	if userID <= 0 {
+func (s *Service) SnapshotForCaller(ctx context.Context, userID, modelID, decisionNow int64, connectorTypes []connectorcontract.Type, operations ...connectorcontract.Operation) (RuntimeSnapshot, error) {
+	if userID <= 0 || len(operations) > 1 {
 		return RuntimeSnapshot{}, ErrInvalidRequest
 	}
 	connectorSet, err := runtimeConnectorSet(connectorTypes)
 	if err != nil {
 		return RuntimeSnapshot{}, err
 	}
-	return s.snapshot(ctx, modelID, decisionNow, true, connectorSet, userID)
+	var operation connectorcontract.Operation
+	if len(operations) == 1 {
+		operation = operations[0]
+	}
+	return s.snapshot(ctx, modelID, decisionNow, true, connectorSet, operation, userID)
 }
 
-func (s *Service) snapshot(ctx context.Context, modelID int64, decisionNow int64, freezeOrder bool, connectorSet map[connectorcontract.Type]struct{}, callers ...int64) (RuntimeSnapshot, error) {
+func (s *Service) snapshot(ctx context.Context, modelID int64, decisionNow int64, freezeOrder bool, connectorSet map[connectorcontract.Type]struct{}, operation connectorcontract.Operation, callers ...int64) (RuntimeSnapshot, error) {
 	if s == nil || s.db == nil || ctx == nil || modelID <= 0 || decisionNow < 0 || decisionNow > maxUnixSecond {
 		return RuntimeSnapshot{}, ErrInvalidRequest
 	}
@@ -320,7 +323,7 @@ func (s *Service) snapshot(ctx context.Context, modelID int64, decisionNow int64
 			return RuntimeSnapshot{}, ErrNotFound
 		}
 	}
-	snapshot, admissionErr := s.readSnapshotTx(ctx, tx, modelID, decisionNow, freezeOrder, connectorSet, callerID)
+	snapshot, admissionErr := s.readSnapshotTx(ctx, tx, modelID, decisionNow, freezeOrder, connectorSet, callerID, operation)
 	if admissionErr != nil && !errors.Is(admissionErr, ErrUnavailable) {
 		return RuntimeSnapshot{}, admissionErr
 	}
@@ -335,7 +338,7 @@ func (s *Service) snapshot(ctx context.Context, modelID int64, decisionNow int64
 
 // readSnapshotTx shares eligibility with read-only catalogs without opening a
 // second transaction or materializing expiry inside a browse request.
-func (s *Service) readSnapshotTx(ctx context.Context, tx *sql.Tx, modelID, decisionNow int64, freezeOrder bool, connectorSet map[connectorcontract.Type]struct{}, callerID int64) (RuntimeSnapshot, error) {
+func (s *Service) readSnapshotTx(ctx context.Context, tx *sql.Tx, modelID, decisionNow int64, freezeOrder bool, connectorSet map[connectorcontract.Type]struct{}, callerID int64, operations ...connectorcontract.Operation) (RuntimeSnapshot, error) {
 	var snapshot RuntimeSnapshot
 	var encodedPolicy string
 	var enabled int
@@ -392,26 +395,28 @@ FROM charity_models WHERE id=?`, modelID).Scan(&snapshot.ModelID, &snapshot.Prov
 		return RuntimeSnapshot{}, ErrInvariant
 	}
 
-	rows, err := tx.QueryContext(ctx, `SELECT b.id,b.donation_key_id,e.id,k.id,e.connector_type,e.base_url,b.upstream_model_id,
+	rows, err := tx.QueryContext(ctx, `SELECT b.id,t.id,t.revision,t.ord,b.ord,t.native_service_mask,t.donation_key_id,e.id,k.id,e.connector_type,e.base_url,t.upstream_model_id,
 k.force_store_false,dk.token_reserve,dk.expires_at,
 dk.price_limit_mag,dk.call_limit_mag,dk.token_limit_mag,
 dk.price_used_mag,dk.price_reserved_mag,dk.calls_used,dk.calls_reserved,dk.tokens_used,dk.tokens_reserved,
 `+smartbackoff.EffectiveUntilSQL("dk.id")+`,
 EXISTS(SELECT 1 FROM donation_quota_rules qr WHERE qr.donation_key_id=dk.id AND qr.current_epoch IS NOT NULL)
 FROM charity_model_bindings b
-JOIN donation_keys dk ON dk.id=b.donation_key_id
+JOIN charity_binding_targets t ON t.binding_id=b.id
+JOIN donation_keys dk ON dk.id=t.donation_key_id
 JOIN donations d ON d.id=dk.donation_id
 JOIN donation_key_memberships m ON m.donation_key_id=dk.id AND m.endpoint_key_id=dk.endpoint_key_id
 JOIN endpoint_keys k ON k.id=m.endpoint_key_id
 JOIN endpoints e ON e.id=k.endpoint_id
 
-WHERE b.charity_model_id=? AND d.status='approved'
+WHERE b.charity_model_id=? AND EXISTS(SELECT 1 FROM charity_use_availability a WHERE a.donation_key_id=dk.id AND (a.native_service_bit&t.native_service_mask)<>0)
+AND d.status IN ('pending','approved') AND d.terminal_at IS NULL
 AND d.user_id IS NOT NULL AND dk.ended_at IS NULL AND dk.enabled=1 AND dk.failure_disabled=0
-AND k.enabled=1 AND e.enabled=1 AND `+charityscope.SupportSQL("dk.id", "b.endpoint_key_id", "b.upstream_model_id")+`
+AND k.enabled=1 AND e.enabled=1
 AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions x WHERE x.endpoint_key_id=k.id)
 AND (?=0 OR d.user_id<>? OR EXISTS(SELECT 1 FROM users caller WHERE caller.id=? AND caller.is_admin=0 AND COALESCE(caller.level,caller.auto_level)=6))
 AND `+donorAvailableSQL("?")+`
-ORDER BY b.ord,b.id LIMIT ?`, modelID, callerID, callerID, callerID, decisionNow, maxBindingBatch+1)
+ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, decisionNow, maxBindingBatch+1)
 	if err != nil {
 		return RuntimeSnapshot{}, fmt.Errorf("charity routing: read runtime candidates: %w", err)
 	}
@@ -426,19 +431,18 @@ ORDER BY b.ord,b.id LIMIT ?`, modelID, callerID, callerID, callerID, decisionNow
 	// Price, decision time and quota amounts are fixed for each key in this
 	// snapshot. Reuse only after reaching the same eligibility stage.
 	quotas := make(map[int64]keyQuota)
-	sawRuntimeCandidate := false
-	sawSupportedCandidate := false
 	sawRecurringLimit := false
 	for rows.Next() {
 		var candidate RuntimeCandidate
 		var connector string
 		var forceStore int
+		var nativeMask int64
 		var hasCurrentQuotaRules bool
 		var tokenReserve int64
 		var expiresAt, rateLimitedUntil sql.NullInt64
 		var priceLimit, callLimit, tokenLimit []byte
 		var priceUsed, priceInflight, callsUsed, callsInflight, tokensUsed, tokensInflight []byte
-		if err := rows.Scan(&candidate.BindingID, &candidate.DonationKeyID, &candidate.EndpointID, &candidate.EndpointKeyID,
+		if err := rows.Scan(&candidate.BindingID, &candidate.Authorization.TargetID, &candidate.Authorization.TargetRevision, &candidate.TargetOrder, &candidate.Order, &nativeMask, &candidate.DonationKeyID, &candidate.EndpointID, &candidate.EndpointKeyID,
 			&connector, &candidate.CanonicalBaseURL, &candidate.UpstreamModelID, &forceStore, &tokenReserve, &expiresAt,
 			&priceLimit, &callLimit, &tokenLimit, &priceUsed, &priceInflight, &callsUsed, &callsInflight,
 			&tokensUsed, &tokensInflight, &rateLimitedUntil, &hasCurrentQuotaRules); err != nil {
@@ -448,13 +452,10 @@ ORDER BY b.ord,b.id LIMIT ?`, modelID, callerID, callerID, callerID, decisionNow
 		if !candidate.ConnectorType.Valid() {
 			return RuntimeSnapshot{}, ErrInvariant
 		}
-		sawRuntimeCandidate = true
-		if connectorSet != nil {
-			if _, allowed := connectorSet[candidate.ConnectorType]; !allowed {
-				continue
-			}
+		candidate.NativeServices, err = connectorcontract.NativeServicesFromMask(nativeMask)
+		if err != nil || candidate.NativeServices.Empty() {
+			return RuntimeSnapshot{}, ErrInvariant
 		}
-		sawSupportedCandidate = true
 		denominator, eligible, err := runtimeCandidateDenominator(decisionNow, expiresAt)
 		if err != nil {
 			return RuntimeSnapshot{}, err
@@ -527,8 +528,9 @@ ORDER BY b.ord,b.id LIMIT ?`, modelID, callerID, callerID, callerID, decisionNow
 			continue
 		}
 		candidate.Policy.FlattenToolCalls = snapshot.FlattenToolCalls
+		candidate.WeightDenominator = denominator
 		weighted = append(weighted, weightedRuntimeCandidate{candidate: candidate, denominator: denominator})
-		if len(weighted) > MaxRuntimeCandidates {
+		if len(weighted) > maxBindingBatch {
 			return RuntimeSnapshot{}, ErrResourceLimit
 		}
 	}
@@ -538,17 +540,24 @@ ORDER BY b.ord,b.id LIMIT ?`, modelID, callerID, callerID, callerID, decisionNow
 	if err := rows.Close(); err != nil {
 		return RuntimeSnapshot{}, fmt.Errorf("charity routing: close runtime candidates: %w", err)
 	}
-	// A request whose otherwise-routable bindings all use unsupported connector
-	// types is still an invalid request, as it was when forward performed this
-	// filter. Stop before expiry materialization or ordering entropy so the
-	// rejected request has no side effects.
-	if freezeOrder && sawRuntimeCandidate && !sawSupportedCandidate {
-		return RuntimeSnapshot{}, ErrInvalidRequest
-	}
 	if len(weighted) == 0 {
 		if sawRecurringLimit {
 			return RuntimeSnapshot{}, donationquota.ErrLimited
 		}
+		return RuntimeSnapshot{}, ErrUnavailable
+	}
+	var operation connectorcontract.Operation
+	if len(operations) > 1 {
+		return RuntimeSnapshot{}, ErrInvalidRequest
+	}
+	if len(operations) == 1 {
+		operation = operations[0]
+	}
+	snapshot.candidates, err = authorizedServiceTargetsTx(ctx, tx, weighted, connectorSet, operation, decisionNow)
+	if err != nil {
+		return RuntimeSnapshot{}, err
+	}
+	if len(snapshot.candidates) == 0 {
 		return RuntimeSnapshot{}, ErrUnavailable
 	}
 	if freezeOrder {
@@ -557,15 +566,6 @@ ORDER BY b.ord,b.id LIMIT ?`, modelID, callerID, callerID, callerID, decisionNow
 			return RuntimeSnapshot{}, strategyErr
 		}
 		snapshot.RouteStrategy = strategy
-		snapshot.candidates, err = orderRuntimeCandidates(s.entropy, weighted, strategy)
-		if err != nil {
-			return RuntimeSnapshot{}, err
-		}
-	} else {
-		snapshot.candidates = make([]RuntimeCandidate, len(weighted))
-		for index := range weighted {
-			snapshot.candidates[index] = weighted[index].candidate
-		}
 	}
 	return snapshot, nil
 }

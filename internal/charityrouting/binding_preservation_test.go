@@ -74,9 +74,16 @@ func TestMissingBindingSourceRemainsAnArrayAndRecovers(t *testing.T) {
 	_, key, endpointKey := env.seedCandidate(t, owner, 'k', "upstream")
 	model := env.createModel(t, 'a')
 	modelID := catalogBind(t, env, model, key, 'b')
+	env.seedAutomaticCatalog(t, endpointKey)
 	for _, supports := range []int{0, 1} {
-		if _, err := env.store.DB().Exec(`UPDATE model_pair_catalog SET automatic_supports=0,manual_supports=? WHERE endpoint_key_id=? AND normalized_model_id='upstream'`, supports, endpointKey); err != nil {
-			t.Fatal(err)
+		if supports == 0 {
+			if _, err := env.store.DB().Exec(`DELETE FROM donation_key_manual_models WHERE donation_key_id=?`, key); err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			if _, err := env.store.DB().Exec(`INSERT INTO donation_key_manual_models(donation_key_id,normalized_model_id,display_name,revision,created_at,updated_at) VALUES(?,'upstream','upstream',1,?,?)`, key, routingTestNow, routingTestNow); err != nil {
+				t.Fatal(err)
+			}
 		}
 		value, err := readAdminBindingsDB(context.Background(), env.store.DB(), modelID)
 		if err != nil || len(value.Bindings) != 1 {

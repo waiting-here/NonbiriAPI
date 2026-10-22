@@ -52,10 +52,9 @@ func readManualCandidatesTx(ctx context.Context, tx *sql.Tx, keyID int64, q stri
 	if err := tx.QueryRowContext(ctx, `SELECT manual_catalog_revision FROM donation_keys WHERE id=?`, keyID).Scan(&revision); err != nil {
 		return nil, nil, "", err
 	}
-	catalog := `(SELECT pc.normalized_model_id,pc.automatic_supports,pc.manual_supports+EXISTS(SELECT 1 FROM donation_key_manual_models dm WHERE dm.donation_key_id=? AND dm.normalized_model_id=pc.normalized_model_id) AS manual_supports FROM model_pair_catalog pc WHERE pc.endpoint_key_id=(SELECT endpoint_key_id FROM donation_keys WHERE id=?) AND (pc.automatic_supports>0 OR pc.manual_supports>0)
- UNION ALL SELECT dm.normalized_model_id,0,1 FROM donation_key_manual_models dm WHERE dm.donation_key_id=? AND NOT EXISTS(SELECT 1 FROM model_pair_catalog pc WHERE pc.endpoint_key_id=(SELECT endpoint_key_id FROM donation_keys WHERE id=?) AND pc.normalized_model_id=dm.normalized_model_id AND (pc.automatic_supports>0 OR pc.manual_supports>0)))`
+	catalog := `(SELECT pc.normalized_model_id,pc.automatic_supports,pc.manual_supports FROM charity_model_catalog pc WHERE pc.donation_key_id=? AND (pc.automatic_supports>0 OR pc.manual_supports>0))`
 	from := ` FROM ` + catalog + ` pc LEFT JOIN donation_key_manual_models dm ON dm.donation_key_id=? AND dm.normalized_model_id=pc.normalized_model_id`
-	args := []any{keyID, keyID, keyID, keyID, keyID}
+	args := []any{keyID, keyID}
 	if q != "" {
 		from += ` WHERE pc.normalized_model_id LIKE ? ESCAPE '\'`
 		args = append(args, "%"+escapeLike(q)+"%")
@@ -142,7 +141,7 @@ func (s *Service) MutateManualCatalog(ctx context.Context, admin bool, actorID, 
 		return empty, managementScopeError(err)
 	}
 	var active bool
-	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id JOIN donation_key_memberships m ON m.donation_key_id=dk.id AND m.endpoint_key_id=dk.endpoint_key_id WHERE dk.id=? AND d.id=? AND d.status IN ('pending','approved') AND dk.ended_at IS NULL AND (dk.expires_at IS NULL OR dk.expires_at>?) AND EXISTS(SELECT 1 FROM endpoint_keys k JOIN endpoints e ON e.id=k.endpoint_id WHERE k.id=m.endpoint_key_id AND e.user_id=d.user_id))`, keyID, donationID, now).Scan(&active); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id JOIN donation_key_memberships m ON m.donation_key_id=dk.id AND m.endpoint_key_id=dk.endpoint_key_id WHERE dk.id=? AND d.id=? AND d.status IN ('pending','approved') AND d.terminal_at IS NULL AND dk.ended_at IS NULL AND (dk.expires_at IS NULL OR dk.expires_at>?) AND EXISTS(SELECT 1 FROM endpoint_keys k JOIN endpoints e ON e.id=k.endpoint_id WHERE k.id=m.endpoint_key_id AND e.user_id=d.user_id))`, keyID, donationID, now).Scan(&active); err != nil {
 		return empty, err
 	}
 	if !active {
@@ -190,7 +189,7 @@ func (s *Service) MutateManualCatalog(ctx context.Context, admin bool, actorID, 
 			return empty, err
 		}
 		var bound bool
-		if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM charity_model_bindings b WHERE b.donation_key_id=? AND b.upstream_model_id=? AND NOT EXISTS(SELECT 1 FROM model_pair_catalog pc WHERE pc.endpoint_key_id=b.endpoint_key_id AND pc.normalized_model_id=b.upstream_model_id AND (pc.automatic_supports>0 OR pc.manual_supports>0)))`, keyID, name).Scan(&bound); err != nil {
+		if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM charity_binding_targets b WHERE b.donation_key_id=? AND b.upstream_model_id=? AND NOT EXISTS(SELECT 1 FROM charity_model_catalog pc WHERE pc.donation_key_id=b.donation_key_id AND pc.normalized_model_id=b.upstream_model_id AND pc.automatic_supports>0))`, keyID, name).Scan(&bound); err != nil {
 			return empty, err
 		}
 		if bound {
@@ -222,7 +221,7 @@ func (s *Service) MutateManualCatalog(ctx context.Context, admin bool, actorID, 
 		}
 		seen[name] = true
 		var id, rev, automatic int64
-		if err = tx.QueryRowContext(ctx, `SELECT dm.id,dm.revision,COALESCE(pc.automatic_supports,0) FROM donation_key_manual_models dm LEFT JOIN model_pair_catalog pc ON pc.endpoint_key_id=(SELECT endpoint_key_id FROM donation_keys WHERE id=?) AND pc.normalized_model_id=dm.normalized_model_id WHERE dm.donation_key_id=? AND dm.normalized_model_id=?`, keyID, keyID, name).Scan(&id, &rev, &automatic); err != nil {
+		if err = tx.QueryRowContext(ctx, `SELECT dm.id,dm.revision,COALESCE(pc.automatic_supports,0) FROM donation_key_manual_models dm LEFT JOIN charity_model_catalog pc ON pc.donation_key_id=dm.donation_key_id AND pc.normalized_model_id=dm.normalized_model_id WHERE dm.donation_key_id=? AND dm.normalized_model_id=?`, keyID, name).Scan(&id, &rev, &automatic); err != nil {
 			return empty, err
 		}
 		idText, revText := strconv.FormatInt(id, 10), strconv.FormatInt(rev, 10)

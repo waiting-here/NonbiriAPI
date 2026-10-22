@@ -23,7 +23,7 @@ func TestSelfDonationRequiresCurrentLevelSixAndKeepsReward(t *testing.T) {
 				t.Fatal(err)
 			}
 			request := e.billingRequest(t, rail, e.requestModel, 2400, 1)
-			handle, err := rail.Claim(context.Background(), e.quotaClaimInput(request.ID, 1))
+			handle, err := rail.Claim(context.Background(), e.quotaClaimInput(t, request.ID, 1))
 			if level != 6 {
 				if !errors.Is(err, claim.ErrNotFound) {
 					t.Fatalf("self donor admitted at level %d: %v", level, err)
@@ -74,7 +74,7 @@ func TestSelfDonationRoleLossBeforeDispatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	request := e.billingRequest(t, rail, e.requestModel, 2400, 1)
-	handle, err := rail.Claim(context.Background(), e.quotaClaimInput(request.ID, 1))
+	handle, err := rail.Claim(context.Background(), e.quotaClaimInput(t, request.ID, 1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func TestDonorBanEligibilityAtClaimAndFinalDispatch(t *testing.T) {
 					ban()
 				}
 				request := e.billingRequest(t, rail, e.requestModel, 2400, 1)
-				handle, err := rail.Claim(context.Background(), e.quotaClaimInput(request.ID, 1))
+				handle, err := rail.Claim(context.Background(), e.quotaClaimInput(t, request.ID, 1))
 				if !late && !protective {
 					if !errors.Is(err, claim.ErrNotFound) {
 						t.Fatal("banned donor admitted", err)

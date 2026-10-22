@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/donation"
@@ -101,6 +103,7 @@ func (e *backoffEnv) upgradeBackoffSchema(t *testing.T, version int, profile str
 		t.Fatal(err)
 	}
 	quote := func(s string) string { return `"` + strings.ReplaceAll(s, `"`, `""`) + `"` }
+	comparisonColumns := map[string][]string{}
 	for name := range triggers {
 		exec("DROP TRIGGER " + quote(name))
 	}
@@ -116,7 +119,10 @@ func (e *backoffEnv) upgradeBackoffSchema(t *testing.T, version int, profile str
 		rows.Close()
 		projection := make([]string, len(columns))
 		for i, column := range columns {
-			projection[i] = quote(column)
+			projection[i] = releasedBackoffColumn(table, column, "seed.")
+			if column != "profile" && !(table == "donation_key_backoffs" && column == "rules_json") {
+				comparisonColumns[table] = append(comparisonColumns[table], column)
+			}
 			if table == "donation_key_backoffs" && column == "profile" {
 				projection[i] = "'" + profile + "'"
 			}
@@ -129,7 +135,7 @@ func (e *backoffEnv) upgradeBackoffSchema(t *testing.T, version int, profile str
 			columns[i] = quote(column)
 		}
 		exec("DELETE FROM " + quote(table))
-		exec("INSERT INTO " + quote(table) + "(" + strings.Join(columns, ",") + ") SELECT " + strings.Join(projection, ",") + " FROM seed." + quote(table))
+		exec("INSERT INTO " + quote(table) + "(" + strings.Join(columns, ",") + ") SELECT " + strings.Join(projection, ",") + " FROM " + releasedBackoffFrom(table, "seed.", true))
 	}
 	exec("DELETE FROM main.sqlite_sequence;INSERT INTO main.sqlite_sequence SELECT * FROM seed.sqlite_sequence WHERE name IN (SELECT name FROM main.sqlite_schema WHERE type='table')")
 	exec("UPDATE schema_state SET version=?", version)
@@ -137,7 +143,7 @@ func (e *backoffEnv) upgradeBackoffSchema(t *testing.T, version int, profile str
 		exec(ddl)
 	}
 	exec("DETACH DATABASE seed;PRAGMA foreign_keys=ON")
-	snapshot := backoffUpgradeFacts(t, e.store.DB(), tables)
+	snapshot := backoffUpgradeFacts(t, target, comparisonColumns, false)
 	expected := ""
 	for _, source := range v1.SchemaDescriptor().OfflineConversions {
 		if source.SourceSchemaVersion == version {
@@ -168,7 +174,7 @@ func (e *backoffEnv) upgradeBackoffSchema(t *testing.T, version int, profile str
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	if after := backoffUpgradeFacts(t, store.DB(), tables); !reflect.DeepEqual(snapshot, after) {
+	if after := backoffUpgradeFacts(t, store.DB(), comparisonColumns, true); !reflect.DeepEqual(snapshot, after) {
 		for table, before := range snapshot {
 			if !reflect.DeepEqual(before, after[table]) {
 				t.Error("runtime facts changed", table)
@@ -190,14 +196,29 @@ func (e *backoffEnv) upgradeBackoffSchema(t *testing.T, version int, profile str
 		t.Fatal(err)
 	}
 }
-func backoffUpgradeFacts(t *testing.T, d *sql.DB, tables []string) map[string][]string {
+func backoffUpgradeFacts(t *testing.T, d *sql.DB, tables map[string][]string, current bool) map[string][]string {
 	t.Helper()
 	facts := map[string][]string{}
-	for _, table := range append(append([]string(nil), tables...), "sqlite_sequence") {
+	names := []string{}
+	for table := range tables {
+		names = append(names, "'"+table+"'")
+	}
+	queries := map[string]string{"sqlite_sequence": `SELECT name,seq FROM sqlite_sequence WHERE name IN (` + strings.Join(names, ",") + `)`}
+	for table, columns := range tables {
+		projection := make([]string, len(columns))
+		for i, column := range columns {
+			projection[i] = "src." + quoteFixtureName(column)
+			if current {
+				projection[i] = releasedBackoffColumn(table, column, "")
+			}
+		}
+		queries[table] = "SELECT " + strings.Join(projection, ",") + " FROM " + quoteFixtureName(table) + " src"
+	}
+	for table, query := range queries {
 		if table == "schema_state" {
 			continue
 		}
-		rows, err := d.QueryContext(context.Background(), `SELECT * FROM "`+table+`"`)
+		rows, err := d.QueryContext(context.Background(), query)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -233,6 +254,30 @@ func backoffUpgradeFacts(t *testing.T, d *sql.DB, tables []string) map[string][]
 	return facts
 }
 
+func TestManagedDiscoveryReleased26SharedSource(t *testing.T) {
+	e := newBackoffEnv(t)
+	e.upgradeBackoffSchema(t, 26, "none")
+	tx := beginTestTx(t, e.store.DB())
+	defer tx.Rollback()
+	uses, err := connectionstore.LoadApprovedUsesTx(t.Context(), tx, []int64{e.donationKey})
+	if err != nil || len(uses[e.donationKey]) != 3 {
+		t.Fatalf("released OpenAI permission mapping: %d %v", len(uses[e.donationKey]), err)
+	}
+	selected, err := donation.SelectApprovedDiscoveryUseTx(t.Context(), tx, e.donationKey, e.clock.Load())
+	if err != nil || selected.Use.NativeService != contract.NativeServiceChatCompletions {
+		t.Fatalf("released shared discovery became ambiguous: %+v %v", selected, err)
+	}
+	for _, use := range uses[e.donationKey] {
+		if use.DiscoverySourceRevisionID != selected.Use.DiscoverySourceRevisionID || use.Grant.CredentialVersionID != selected.Use.Grant.CredentialVersionID {
+			t.Fatal("released shared source/version changed between services")
+		}
+	}
+	source, err := connectionstore.LoadDiscoveryAuthorizationTx(t.Context(), tx, connectionstore.SourceAuthorizationRef{OwnerUserID: e.donorID, SourceID: selected.SourceID, Purpose: connectionstore.SourceCharity, DonationUseID: selected.Use.UseID})
+	if err != nil || source.UseApprovedRevisionID != selected.Use.ApprovedRevisionID || source.CredentialVersionID != selected.Use.Grant.CredentialVersionID {
+		t.Fatalf("released selection lost its exact approved authorization: %+v %v", source, err)
+	}
+}
+
 func TestAutomaticBackoffMigratesUnconfiguredAndWrongProfiles(t *testing.T) {
 	for _, legacy := range []string{"absent", "none", "day"} {
 		t.Run(legacy, func(t *testing.T) {
@@ -253,11 +298,19 @@ func TestAutomaticBackoffMigratesUnconfiguredAndWrongProfiles(t *testing.T) {
 			e.complete(t, h, quotaOutcome("month"))
 			e.wantWaiting(t, 43200)
 			var generation, episode int64
-			if err := e.store.DB().QueryRow("SELECT generation,episode FROM donation_key_backoffs WHERE donation_key_id=?", e.donationKey).Scan(&generation, &episode); err != nil {
+			if err := e.store.DB().QueryRow("SELECT backoff_generation,backoff_episode FROM donation_service_health WHERE id=?", e.serviceHealthID(t, h)).Scan(&generation, &episode); err != nil {
 				t.Fatal(err)
 			}
-			if legacy == "absent" && (generation != 1 || episode != 1) || legacy != "absent" && (generation != 7 || episode != 5) {
+			if generation != 1 || episode != 1 {
 				t.Fatal(generation, episode)
+			}
+			err := e.store.DB().QueryRow("SELECT generation,episode FROM donation_key_backoffs WHERE donation_key_id=?", e.donationKey).Scan(&generation, &episode)
+			if legacy == "absent" {
+				if !errors.Is(err, sql.ErrNoRows) {
+					t.Fatal("new service created a legacy episode", err)
+				}
+			} else if err != nil || generation != 7 || episode != 4 {
+				t.Fatal("new service changed legacy identity", generation, episode, err)
 			}
 		})
 	}
@@ -270,7 +323,7 @@ func TestAutomaticBackoffMigrationPreservesWaitingAndInFlightRecovery(t *testing
 			h, _ := e.dispatch(t)
 			e.complete(t, h, quotaOutcome("five_hour"))
 			// Legacy custom-rule attribution survives even after rule text is removed.
-			if _, err := e.store.DB().Exec("UPDATE donation_key_backoffs SET source='custom_rule' WHERE donation_key_id=?", e.donationKey); err != nil {
+			if _, err := e.store.DB().Exec("UPDATE donation_service_health SET backoff_source='custom_rule' WHERE id=?", e.serviceHealthID(t, h)); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := e.store.DB().Exec("UPDATE dispatch_smart_backoff_facts SET source='custom_rule' WHERE claim_id=?", h.ClaimID()); err != nil {

@@ -17,11 +17,12 @@ func TestCallerParameterFaultPreservesStreakAndFailureAccounting(t *testing.T) {
 	e := newCharityTestEnv(t)
 	rail := e.billingRail(t)
 	ctx := t.Context()
-	if _, err := e.store.DB().Exec("UPDATE donation_keys SET failure_streak=?,failure_disable_threshold=3 WHERE id=?", u128Blob(t, 2), e.donationKey); err != nil {
+	if _, err := e.store.DB().Exec("UPDATE donation_keys SET failure_disable_threshold=3 WHERE id=?", e.donationKey); err != nil {
 		t.Fatal(err)
 	}
 	request := e.billingRequest(t, rail, e.requestModel, 2400, 1)
 	handle := e.billingDispatch(t, rail, request.ID, 1)
+	e.seedServiceStreak(t, handle, 2)
 	errorContext := upstreamerror.Context{CharityCall: true, ContainsSecret: func([]byte) bool { return false }, UnchangedCallerParameter: func(name string) bool { return name == "temperature" }}
 	detail := errorContext.ReadResponse(ctx, &http.Response{StatusCode: 400, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"error":{"type":"invalid_request_error","code":"invalid_value","param":"temperature","message":"Invalid value."}}`))})
 	outcome := claim.AttemptOutcome{Kind: claim.ResultResponse, UpstreamStatus: 400, UpstreamCode: detail.Code(), Diagnostic: "upstream returned HTTP 400", FailureOrigin: contract.OriginUpstreamResponse, StreakDisposition: contract.StreakNeutral, CallerFault: detail.CallerFault()}
@@ -59,7 +60,7 @@ func TestCallerParameterFaultPreservesStreakAndFailureAccounting(t *testing.T) {
 	}
 	var streak, calls []byte
 	var disabled bool
-	if err := e.store.DB().QueryRow("SELECT failure_streak,failure_disabled,calls_used FROM donation_keys WHERE id=?", e.donationKey).Scan(&streak, &disabled, &calls); err != nil {
+	if err := e.store.DB().QueryRow("SELECT h.failure_streak,h.failure_disabled,dk.calls_used FROM donation_service_health h JOIN donation_uses u ON u.id=h.use_id JOIN donation_keys dk ON dk.id=u.donation_key_id WHERE h.id=?", e.serviceHealthID(t, handle)).Scan(&streak, &disabled, &calls); err != nil {
 		t.Fatal(err)
 	}
 	assertU128(t, streak, 2, "caller fault preserves previous failures")
@@ -83,7 +84,7 @@ func TestCallerParameterFaultPreservesStreakAndFailureAccounting(t *testing.T) {
 	if _, err := rail.CompleteAttempt(ctx, nextHandle, unknown); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.store.DB().QueryRow("SELECT failure_streak,failure_disabled FROM donation_keys WHERE id=?", e.donationKey).Scan(&streak, &disabled); err != nil {
+	if err := e.store.DB().QueryRow("SELECT failure_streak,failure_disabled FROM donation_service_health WHERE id=?", e.serviceHealthID(t, handle)).Scan(&streak, &disabled); err != nil {
 		t.Fatal(err)
 	}
 	assertU128(t, streak, 3, "unknown failure remains counted")
@@ -183,7 +184,7 @@ func TestCallerParameterEvidenceCannotExemptPersonalAttempt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := e.retryClaimInput(request.ID)
+	input := e.retryClaimInput(t, request.ID)
 	input.ActorUserID, input.Purpose, input.DonationKeyID = e.donorID, claim.PurposeSelf, 0
 	handle, err := rail.Claim(ctx, input)
 	if err != nil {

@@ -7,34 +7,54 @@ import (
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
 )
 
 func seedPersonalRoutingModel(t *testing.T, fixture *claimFixture, owner int64, name, strategy string, keys ...testKey) int64 {
 	t.Helper()
-	result, err := fixture.db.Exec(`INSERT INTO models(user_id,provider,model,full_name,route_strategy,created_at,updated_at)
-VALUES(?,'public',?,?,?,1000,1000)`, owner, name, "public/"+name, strategy)
+	tx, err := fixture.db.BeginTx(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	modelID, err := result.LastInsertId()
-	if err != nil {
+	defer tx.Rollback()
+	if _, err := tx.Exec(`INSERT INTO models(user_id,provider,model,full_name,route_strategy,created_at,updated_at)
+VALUES(?,'public',?,?,?,1000,1000) ON CONFLICT(user_id,full_name) DO UPDATE SET route_strategy=excluded.route_strategy`, owner, name, "public/"+name, strategy); err != nil {
+		t.Fatal(err)
+	}
+	var modelID int64
+	if err := tx.QueryRow(`SELECT id FROM models WHERE user_id=? AND full_name=?`, owner, "public/"+name).Scan(&modelID); err != nil {
 		t.Fatal(err)
 	}
 	for index, key := range keys {
-		if _, err := fixture.db.Exec(`INSERT OR IGNORE INTO model_pair_catalog
-(endpoint_key_id,normalized_model_id,automatic_supports,manual_supports,automatic_revision,pair_revision,updated_at)
-VALUES(?,?,0,1,0,1,1000)`, key.keyID, key.candidate.UpstreamModelID); err != nil {
+		var exists bool
+		if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM model_binding_targets t JOIN model_bindings b ON b.id=t.binding_id WHERE b.model_id=? AND t.endpoint_key_id=? AND t.upstream_model_id=?)`, modelID, key.keyID, key.candidate.UpstreamModelID).Scan(&exists); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := fixture.db.Exec(`INSERT INTO model_bindings
-(model_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at) VALUES(?,?,?,?,1000,1000)`,
-			modelID, key.keyID, key.candidate.UpstreamModelID, index); err != nil {
-			t.Fatal(err)
+		if !exists {
+			if _, err := testseed.InsertModelBindingTx(context.Background(), tx, testseed.BindingInput{ModelID: modelID, KeyID: key.keyID, UpstreamModelID: key.candidate.UpstreamModelID, Order: index, At: fixture.clock.Load()}); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
 	return modelID
+}
+
+func personalCandidate(t *testing.T, fixture *claimFixture, modelID int64, key testKey) Candidate {
+	t.Helper()
+	candidate := key.candidate
+	err := fixture.db.QueryRow(`SELECT b.id,t.id,t.revision FROM model_bindings b JOIN model_binding_targets t ON t.binding_id=b.id WHERE b.model_id=? AND t.endpoint_key_id=? AND t.upstream_model_id=?`, modelID, key.keyID, candidate.UpstreamModelID).Scan(&candidate.Authorization.BindingID, &candidate.Authorization.TargetID, &candidate.Authorization.TargetRevision)
+	if errors.Is(err, sql.ErrNoRows) {
+		return key.candidate
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return candidate
 }
 
 func personalRoutingFixture(t *testing.T, strategy string) (*claimFixture, int64, int64, []testKey) {
@@ -60,10 +80,10 @@ func personalRoutingInput(t *testing.T, fixture *claimFixture, owner, model int6
 	}
 	input := ClaimInput{RequestID: request.ID, ActorUserID: owner, PersonalModelID: model, Purpose: PurposeSelf, AttemptSeq: 1}
 	if len(keys) == 1 {
-		input.Candidate = keys[0].candidate
+		input.Candidate = personalCandidate(t, fixture, model, keys[0])
 	} else {
 		for _, key := range keys {
-			input.BalancedCandidates = append(input.BalancedCandidates, BalancedCandidate{Candidate: key.candidate})
+			input.BalancedCandidates = append(input.BalancedCandidates, BalancedCandidate{Candidate: personalCandidate(t, fixture, model, key)})
 		}
 	}
 	return input
@@ -163,7 +183,7 @@ func TestPersonalRoutingAffinityRequiresCurrentAvailability(t *testing.T) {
 			case "disabled":
 				_, err = fixture.db.Exec(`UPDATE endpoint_keys SET enabled=0 WHERE id=?`, keys[0].keyID)
 			case "unbound":
-				_, err = fixture.db.Exec(`DELETE FROM model_bindings WHERE model_id=? AND endpoint_key_id=?`, model, keys[0].keyID)
+				_, err = fixture.db.Exec(`DELETE FROM model_binding_targets WHERE binding_id IN (SELECT id FROM model_bindings WHERE model_id=?) AND endpoint_key_id=?`, model, keys[0].keyID)
 			}
 			if err != nil {
 				t.Fatal(err)
@@ -228,7 +248,7 @@ func TestPersonalRoutingRevokeDoesNotRestoreRemovedBinding(t *testing.T) {
 	dispatchRoutingClaim(t, fixture, first)
 	second := personalRoutingClaim(t, fixture, owner, model, keys[1])
 	dispatchRoutingClaim(t, fixture, second)
-	if _, err := fixture.db.Exec(`DELETE FROM model_bindings WHERE model_id=? AND endpoint_key_id=?`, model, keys[0].keyID); err != nil {
+	if _, err := fixture.db.Exec(`DELETE FROM model_binding_targets WHERE binding_id IN (SELECT id FROM model_bindings WHERE model_id=?) AND endpoint_key_id=?`, model, keys[0].keyID); err != nil {
 		t.Fatal(err)
 	}
 	if err := fixture.service.RevokeUndelivered(context.Background(), second); err != nil {
@@ -239,7 +259,7 @@ func TestPersonalRoutingRevokeDoesNotRestoreRemovedBinding(t *testing.T) {
 	}
 }
 
-func TestPersonalRoutingPreservesFrozenClaimWithoutRestoringRemovedResources(t *testing.T) {
+func TestPersonalRoutingRejectsFrozenClaimAfterResourceRemoval(t *testing.T) {
 	for _, removal := range []string{"model", "key"} {
 		t.Run(removal, func(t *testing.T) {
 			fixture, owner, model, keys := personalRoutingFixture(t, "cache_balanced")
@@ -253,11 +273,13 @@ func TestPersonalRoutingPreservesFrozenClaimWithoutRestoringRemovedResources(t *
 			if err != nil {
 				t.Fatal(err)
 			}
-			dispatchRoutingClaim(t, fixture, handle)
-			if receipts, dispatches, affinities := personalRoutingCounts(t, fixture); receipts != 1 || dispatches != 1 || affinities != 0 {
-				t.Fatalf("frozen dispatch recreated removed association: %d/%d/%d", receipts, dispatches, affinities)
+			if _, err := fixture.service.TakeForDispatch(context.Background(), handle); !errors.Is(err, ErrNotFound) {
+				t.Fatalf("revoked target dispatched: %v", err)
 			}
-			if err := fixture.service.RevokeUndelivered(context.Background(), handle); err != nil {
+			if receipts, dispatches, affinities := personalRoutingCounts(t, fixture); receipts != 1 || dispatches != 0 || affinities != 0 {
+				t.Fatalf("revoked target changed the pending receipt or recreated routing state: %d/%d/%d", receipts, dispatches, affinities)
+			}
+			if _, err := fixture.service.ReleaseUndispatched(context.Background(), handle); err != nil {
 				t.Fatal(err)
 			}
 			if receipts, dispatches, affinities := personalRoutingCounts(t, fixture); receipts != 0 || dispatches != 0 || affinities != 0 {

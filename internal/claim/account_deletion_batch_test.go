@@ -97,7 +97,7 @@ func TestPrepareAccountDeletionBatchRoutesRejectionsAndReplay(t *testing.T) {
 	}
 	key := f.seedKey(userID, "batch-discovery")
 	key.candidate.UpstreamModelID = ""
-	discovery, handle, err := f.service.ClaimDiscovery(context.Background(), DiscoveryClaimInput{ActorUserID: userID, Candidate: key.candidate})
+	discovery, handle, err := f.service.ClaimDiscovery(context.Background(), f.discoveryInput(DiscoveryClaimInput{ActorUserID: userID, Candidate: key.candidate}))
 	if err != nil {
 		t.Fatal(err)
 	}

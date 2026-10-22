@@ -134,7 +134,15 @@ func (service *Service) freezeAdaptations(ctx context.Context, request *validate
 			refs = append(refs, requestadaptation.Ref{Scope: requestadaptation.ScopeEndpoint, ID: candidate.EndpointID})
 		}
 	}
-	snapshots, err := service.adaptations.LoadMany(ctx, refs)
+	unique := make(map[requestadaptation.Ref]bool, len(refs))
+	deduplicated := refs[:0]
+	for _, ref := range refs {
+		if !unique[ref] {
+			unique[ref] = true
+			deduplicated = append(deduplicated, ref)
+		}
+	}
+	snapshots, err := service.adaptations.LoadMany(ctx, deduplicated)
 	if err != nil {
 		return err
 	}
@@ -148,6 +156,7 @@ func (service *Service) freezeAdaptations(ctx context.Context, request *validate
 		document  [sha256.Size]byte
 	}
 	cache := make(map[preparedKey]*preparedAttempt)
+	failures := make(map[preparedKey]error)
 	for index := range plan.candidates {
 		candidate := &plan.candidates[index]
 		var effective requestadaptation.Snapshot
@@ -170,6 +179,11 @@ func (service *Service) freezeAdaptations(ctx context.Context, request *validate
 		}
 		key := preparedKey{candidate.ConnectorType, sha256.Sum256(encoded)}
 		clear(encoded)
+		if failed, exists := failures[key]; exists {
+			candidate.preparationError = failed
+			effective.Clear()
+			continue
+		}
 		if prepared, exists := cache[key]; exists {
 			candidate.prepared = prepared
 			effective.Clear()
@@ -182,7 +196,9 @@ func (service *Service) freezeAdaptations(ctx context.Context, request *validate
 		prepared, err := prepareAdaptedAttempt(request, candidate.ConnectorType, effective.Document, inbound)
 		effective.Clear()
 		if err != nil {
-			return err
+			candidate.preparationError = err
+			failures[key] = err
+			continue
 		}
 		candidate.prepared = prepared
 		cache[key] = prepared

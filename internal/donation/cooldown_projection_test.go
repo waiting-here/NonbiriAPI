@@ -19,9 +19,7 @@ func TestCooldownProjectionMatchesOwnerManagementSummaryAndExport(t *testing.T) 
 	d, _ := createBrowseDonation(t, e, owner, 'c', "")
 	id, key := parseTestID(t, d.ID), parseTestID(t, d.Keys[0].ID)
 	until := e.clock.Load() + 60
-	if _, err := e.store.DB().Exec("UPDATE donations SET status='approved' WHERE id=?", id); err != nil {
-		t.Fatal(err)
-	}
+	e.approveFixtureUses(t, id)
 	if _, err := e.store.DB().Exec("INSERT INTO donation_key_cooldowns(donation_key_id,rate_limited_until,updated_at) VALUES(?,?,?)", key, until, e.clock.Load()); err != nil {
 		t.Fatal(err)
 	}

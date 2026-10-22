@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
-	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
@@ -48,7 +47,7 @@ func TestRecurringCallerDeletionKeepsSentUsageAndReleasesUnsentReservation(t *te
 	e.setQuota(t, quotaRule("calls", "5"), quotaRule("tokens", "20"))
 	request := e.billingRequest(t, rail, e.requestModel, 2400, 2)
 	sent := e.billingDispatch(t, rail, request.ID, 1)
-	unsent, err := rail.Claim(context.Background(), e.quotaClaimInput(request.ID, 2))
+	unsent, err := rail.Claim(context.Background(), e.quotaClaimInput(t, request.ID, 2))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +91,7 @@ func TestPersonalAndLiveCallsNeverConsumeRecurringDonationLimits(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		input := e.quotaClaimInput(request.ID, 1)
+		input := e.quotaClaimInput(t, request.ID, 1)
 		input.ActorUserID, input.DonationKeyID, input.Purpose = e.donorID, 0, claim.PurposeSelf
 		if n%2 == 1 {
 			input.Purpose = claim.PurposeDebugLive
@@ -215,7 +214,7 @@ func TestDispatchRefreshesTokenFallbackAndRollsBackRejectedChanges(t *testing.T)
 			rail := e.billingRail(t)
 			e.setQuota(t, quotaRule("tokens", test.limit))
 			request := e.billingRequest(t, rail, e.requestModel, 2400, 1)
-			handle, err := rail.Claim(context.Background(), e.quotaClaimInput(request.ID, 1))
+			handle, err := rail.Claim(context.Background(), e.quotaClaimInput(t, request.ID, 1))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -305,8 +304,10 @@ func (e *charityTestEnv) quotaViews(t *testing.T) []donationquota.RuleView {
 	}
 	return v
 }
-func (e *charityTestEnv) quotaClaimInput(requestID string, seq int) claim.ClaimInput {
-	return claim.ClaimInput{RequestID: requestID, ActorUserID: e.callerID, AttemptSeq: seq, Purpose: claim.PurposeCharity, DonationKeyID: e.donationKey, Candidate: claim.Candidate{EndpointID: e.endpointID, EndpointKeyID: e.endpointKey, ConnectorType: connectorcontract.TypeOpenAICompatible, CanonicalBaseURL: "https://charity.example.test/v1", UpstreamModelID: "upstream-model"}}
+func (e *charityTestEnv) quotaClaimInput(t *testing.T, requestID string, seq int) claim.ClaimInput {
+	input := e.retryClaimInput(t, requestID)
+	input.AttemptSeq = seq
+	return input
 }
 
 func TestRecurringLimitsUseDurableMarkerAndOriginalBillingDuringRecovery(t *testing.T) {
@@ -393,7 +394,7 @@ func testRecurringDispatchChangeReleases(t *testing.T, route claim.RouteKind) {
 				rules = e.setQuota(t, quotaRule("calls", "1"))
 			}
 			request := e.billingRequest(t, rail, e.requestModel, 2400, 1, route)
-			handle, err := rail.Claim(context.Background(), e.quotaClaimInput(request.ID, 1))
+			handle, err := rail.Claim(context.Background(), e.quotaClaimInput(t, request.ID, 1))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -434,7 +435,7 @@ func TestRecurringCapacityFailureKeepsOneSafeAlertAndNoNewClaim(t *testing.T) {
 		t.Fatal(err)
 	}
 	for seq := 1; seq <= 2; seq++ {
-		if _, err := rail.Claim(context.Background(), e.quotaClaimInput(request.ID, seq)); !errors.Is(err, donationquota.ErrCapacity) {
+		if _, err := rail.Claim(context.Background(), e.quotaClaimInput(t, request.ID, seq)); !errors.Is(err, donationquota.ErrCapacity) {
 			t.Fatal(err)
 		}
 	}

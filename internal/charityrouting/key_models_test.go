@@ -26,7 +26,7 @@ func TestKeyModelPagesRetainAllAssociationsWithoutLeakingOwnerResources(t *testi
 			t.Fatal(err)
 		}
 	}
-	exec(`INSERT INTO model_pair_catalog(endpoint_key_id,normalized_model_id,automatic_supports,manual_supports,automatic_revision,pair_revision,updated_at) VALUES(?,'other',0,1,1,1,?)`, physical, routingTestNow)
+	exec(`INSERT INTO donation_key_manual_models(donation_key_id,normalized_model_id,display_name,revision,created_at,updated_at) SELECT donation_key_id,'other','other',1,?2,?2 FROM donation_key_memberships WHERE endpoint_key_id=?1`, physical, routingTestNow)
 	var first int64
 	for i := 0; i < 23; i++ {
 		input := testModelCreate()
@@ -41,7 +41,7 @@ func TestKeyModelPagesRetainAllAssociationsWithoutLeakingOwnerResources(t *testi
 			first = mid
 		}
 		for ord, up := range []string{"upstream", "other"} {
-			exec(`INSERT INTO charity_model_bindings(charity_model_id,donation_key_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at) VALUES(?,?,?,?,?,?,?)`, mid, kid, physical, up, ord, routingTestNow, routingTestNow)
+			env.seedBinding(t, mid, kid, up, ord)
 		}
 	}
 	ctx := context.Background()

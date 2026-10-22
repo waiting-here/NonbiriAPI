@@ -31,7 +31,7 @@ func TestTraineeBindingOriginAndModelRevocation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	exec(`INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at) VALUES(?,'Example','subscription','openai-compatible','https://example.test/v1',1,'active',1,?,?)`, channel, routingTestNow, routingTestNow)
+	seedRoutingChannel(t, e, channel, "Example", "https://example.test/v1")
 	_, mainKey, _ := e.seedCandidateWithConnector(t, owner, "m", "upstream", connectorcontract.TypeOpenAICompatible, channel)
 	ctx := context.Background()
 	candidates, _, _, err := e.service.BindingCandidatesSteward(ctx, trainee, mid, CandidateQuery{Limit: 50})

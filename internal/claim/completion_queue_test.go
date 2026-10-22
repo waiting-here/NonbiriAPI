@@ -379,7 +379,7 @@ func TestCompletionConcurrentReplayKeepsOneAccountingResult(t *testing.T) {
 	owner := f.seedUser("completion-owner", false)
 	key := f.seedKey(owner, "completion-key")
 	request := f.acceptSelf(owner, 1)
-	handle, err := f.service.Claim(t.Context(), ClaimInput{RequestID: request.ID, ActorUserID: owner, AttemptSeq: 1, Purpose: PurposeSelf, Candidate: key.candidate})
+	handle, err := f.service.Claim(t.Context(), ClaimInput{RequestID: request.ID, ActorUserID: owner, AttemptSeq: 1, Purpose: PurposeSelf, PersonalModelID: key.modelID, Candidate: key.candidate})
 	if err != nil {
 		t.Fatal(err)
 	}

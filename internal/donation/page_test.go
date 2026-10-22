@@ -10,6 +10,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connector"
+	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/modeltype"
+
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
@@ -191,10 +195,20 @@ func testSourceUsability(t *testing.T, kind string) {
 	e.seedUser(t, "", nil, true)
 	d, key := createBrowseDonation(t, e, owner, 'k', "", kind)
 	id, keyID := parseTestID(t, d.ID), parseTestID(t, d.Keys[0].ID)
-	if _, err := e.store.DB().Exec(`UPDATE donations SET status='approved' WHERE id=?`, id); err != nil {
+	e.approveFixtureUses(t, id)
+	services, err := contract.LegacyNativeServices(contract.Type(kind))
+	if err != nil {
 		t.Fatal(err)
 	}
-	model, err := e.store.DB().Exec(`INSERT INTO charity_models(provider,model,full_name,enabled,pricing_mode,request_user_price,discount_percent,discount_enabled,created_at,updated_at) VALUES('source','priced','[公益]source/priced',1,'per_request',3000,80,1,?,?)`, e.clock.Load(), e.clock.Load())
+	var operations modeltype.Set
+	for _, op := range contract.AllOperations() {
+		if routes, err := connector.ResolveServiceRoutes(contract.Type(kind), services, "", op); err == nil && len(routes) > 0 {
+			operations = append(operations, op)
+		}
+	}
+	// The quota fixture advertises this protocol's operations, including native
+	// decisions, rerank and SystemOne rather than an unrelated chat-only model.
+	model, err := e.store.DB().Exec(`INSERT INTO charity_models(provider,model,full_name,enabled,pricing_mode,request_user_price,discount_percent,discount_enabled,model_types,created_at,updated_at) VALUES('source','priced','[公益]source/priced',1,'per_request',3000,80,1,?,?,?)`, operations, e.clock.Load(), e.clock.Load())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,8 +218,7 @@ func testSourceUsability(t *testing.T, kind string) {
 		args  []any
 	}{
 		{`INSERT INTO charity_model_access(model_id,allowed_level_mask,public_description) VALUES(?,31,'')`, []any{modelID}},
-		{`INSERT INTO model_pair_catalog(endpoint_key_id,normalized_model_id,manual_supports,updated_at) VALUES(?,'upstream',1,?)`, []any{key, e.clock.Load()}},
-		{`INSERT INTO charity_model_bindings(charity_model_id,donation_key_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at) VALUES(?,?,?,'upstream',0,?,?)`, []any{modelID, keyID, key, e.clock.Load(), e.clock.Load()}},
+		{`INSERT INTO donation_key_manual_models(donation_key_id,normalized_model_id,display_name,revision,created_at,updated_at) SELECT donation_key_id,'upstream','upstream',1,?2,?2 FROM donation_key_memberships WHERE endpoint_key_id=?1`, []any{key, e.clock.Load()}},
 	} {
 		if _, err := e.store.DB().Exec(command.query, command.args...); err != nil {
 			t.Fatal(err)
@@ -218,6 +231,7 @@ func testSourceUsability(t *testing.T, kind string) {
 			t.Fatalf("usable want %s got %+v err %v", want, out, err)
 		}
 	}
+	e.seedBinding(t, modelID, keyID, "upstream", 0)
 	assertUsable("1")
 	if _, err := e.store.DB().Exec("INSERT INTO donation_key_cooldowns(donation_key_id,rate_limited_until,updated_at) VALUES(?,?,?)", keyID, e.clock.Load()+60, e.clock.Load()); err != nil {
 		t.Fatal(err)
@@ -234,9 +248,7 @@ func testSourceUsability(t *testing.T, kind string) {
 	if err != nil || len(out.Data) != 1 || out.Data[0].DonationCount != "2" || out.Data[0].KeyCount != "2" || out.Data[0].UsableKeyCount != "1" {
 		t.Fatalf("mixed approval group=%+v err=%v", out, err)
 	}
-	if _, err := e.store.DB().Exec(`UPDATE donations SET status='approved' WHERE id=?`, parseTestID(t, pending.ID)); err != nil {
-		t.Fatal(err)
-	}
+	e.approveFixtureUses(t, parseTestID(t, pending.ID))
 	// Approval alone does not make an unbound key available.
 	assertUsable("1")
 	for _, test := range []struct {

@@ -20,17 +20,7 @@ type stored struct {
 }
 
 func read(ctx context.Context, q Querier, keyID int64) (stored, error) {
-	s := stored{}
-	var period, source sql.NullString
-	err := q.QueryRowContext(ctx, `SELECT generation,episode,period,source,stage,retry_at,trial_claim_id FROM donation_key_backoffs WHERE donation_key_id=?`, keyID).Scan(&s.Generation, &s.Episode, &period, &source, &s.Stage, &s.RetryAt, &s.Trial)
-	if errors.Is(err, sql.ErrNoRows) {
-		return s, nil
-	}
-	if err != nil {
-		return s, err
-	}
-	s.Period, s.Source = period.String, source.String
-	return s, err
+	return readScope(ctx, q, stateScope{keyID: keyID})
 }
 func Read(ctx context.Context, q Querier, keyID, now int64) (Projection, error) {
 	s, err := read(ctx, q, keyID)
@@ -68,8 +58,8 @@ func Prepare(ctx context.Context, tx *sql.Tx, keyID int64, claimID string, now i
 	var rulesJSON string
 	var revision int64
 	err := tx.QueryRowContext(ctx, `SELECT COALESCE(p.rules_json,'[]'),COALESCE(p.revision,0)
- FROM dispatch_claims c JOIN endpoint_key_secrets s ON s.id=c.secret_ref_id
- LEFT JOIN endpoint_backoff_policies p ON p.connector_type=s.connector_type AND p.base_url=s.canonical_base_url
+ FROM dispatch_claims c JOIN dispatch_claim_targets t ON t.claim_id=c.id
+ LEFT JOIN endpoint_backoff_policies p ON p.connector_type=t.configured_type AND p.base_url=t.canonical_base_url
  WHERE c.id=? AND c.donation_key_id=? AND c.purpose='charity'`, claimID, keyID).Scan(&rulesJSON, &revision)
 	if err != nil {
 		return Dispatch{}, err
@@ -82,13 +72,7 @@ func Prepare(ctx context.Context, tx *sql.Tx, keyID int64, claimID string, now i
 	if err != nil {
 		return Dispatch{}, err
 	}
-	// A key without previous configuration still needs a stable generation for
-	// every dispatch fact and its eventual completion.
-	if _, err := tx.ExecContext(ctx, `INSERT INTO donation_key_backoffs(donation_key_id,generation,episode,stage,updated_at)
- VALUES(?,1,0,0,?) ON CONFLICT(donation_key_id) DO NOTHING`, keyID, now); err != nil {
-		return Dispatch{}, err
-	}
-	s, err := read(ctx, tx, keyID)
+	scope, s, err := prepareScope(ctx, tx, keyID, claimID, now)
 	if err != nil {
 		return Dispatch{}, err
 	}
@@ -96,20 +80,22 @@ func Prepare(ctx context.Context, tx *sql.Tx, keyID int64, claimID string, now i
 		return Dispatch{}, ErrUnavailable
 	}
 	trial := s.RetryAt.Valid
-	_, err = tx.ExecContext(ctx, `INSERT INTO dispatch_smart_backoff_facts(claim_id,donation_key_id,generation,episode,is_trial,policy_revision,rules_json) VALUES(?,?,?,?,?,?,?)`, claimID, keyID, s.Generation, s.Episode, trial, revision, rulesJSON)
+	var healthID any
+	if scope.healthID > 0 {
+		healthID = scope.healthID
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO dispatch_smart_backoff_facts(claim_id,donation_key_id,health_id_snapshot,generation,episode,is_trial,policy_revision,rules_json) VALUES(?,?,?,?,?,?,?,?)`, claimID, keyID, healthID, s.Generation, s.Episode, trial, revision, rulesJSON)
 	if err != nil {
 		return Dispatch{}, err
 	}
 	if trial {
-		result, err := tx.ExecContext(ctx, `UPDATE donation_key_backoffs SET trial_claim_id=?,updated_at=? WHERE donation_key_id=? AND generation=? AND episode=? AND trial_claim_id IS NULL AND retry_at<=?`, claimID, now, keyID, s.Generation, s.Episode, now)
+		next := s
+		next.Trial = sql.NullString{String: claimID, Valid: true}
+		changed, err := writeScope(ctx, tx, scope, s, next, now)
 		if err != nil {
 			return Dispatch{}, err
 		}
-		n, err := result.RowsAffected()
-		if err != nil {
-			return Dispatch{}, err
-		}
-		if n != 1 {
+		if !changed {
 			return Dispatch{}, ErrUnavailable
 		}
 	}
@@ -122,10 +108,34 @@ func Accepted(ctx context.Context, tx *sql.Tx, claimID string, now int64) error 
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `UPDATE donation_key_backoffs SET period=NULL,source=NULL,stage=0,retry_at=NULL,trial_claim_id=NULL,updated_at=?
- WHERE trial_claim_id=? AND EXISTS(SELECT 1 FROM dispatch_smart_backoff_facts f JOIN donation_keys dk ON dk.id=f.donation_key_id
- WHERE f.claim_id=? AND f.is_trial=1 AND dk.ended_at IS NULL AND f.donation_key_id=donation_key_backoffs.donation_key_id
- AND f.generation=donation_key_backoffs.generation AND f.episode=donation_key_backoffs.episode)`, now, claimID, claimID)
+	f, err := readFact(ctx, tx, claimID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !f.trial || !f.key.Valid {
+		return nil
+	}
+	var live bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM donation_keys WHERE id=? AND ended_at IS NULL)`, f.key.Int64).Scan(&live); err != nil {
+		return err
+	}
+	if !live {
+		return nil
+	}
+	s, err := readScope(ctx, tx, f.scope)
+	if err != nil {
+		return err
+	}
+	if s.Generation != f.generation || s.Episode != f.episode || !s.Trial.Valid || s.Trial.String != claimID {
+		return nil
+	}
+	next := s
+	next.Period, next.Source, next.Stage = "", "", 0
+	next.RetryAt, next.Trial = sql.NullInt64{}, sql.NullString{}
+	_, err = writeScope(ctx, tx, f.scope, s, next, now)
 	return err
 }
 func IsTrial(ctx context.Context, tx *sql.Tx, claimID string) (bool, error) {
@@ -185,18 +195,14 @@ func Delay(period string, stage int) int64 {
 	return 3600
 }
 func Complete(ctx context.Context, tx *sql.Tx, claimID string, status int, now int64) error {
-	var key sql.NullInt64
-	var generation, episode int64
-	var trial bool
-	var accepted, reset sql.NullInt64
-	var period, source sql.NullString
-	err := tx.QueryRowContext(ctx, `SELECT donation_key_id,generation,episode,is_trial,accepted_at,period,source,reset_at FROM dispatch_smart_backoff_facts WHERE claim_id=?`, claimID).Scan(&key, &generation, &episode, &trial, &accepted, &period, &source, &reset)
+	f, err := readFact(ctx, tx, claimID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
+	key, generation, episode, trial, accepted, period, source, reset := f.key, f.generation, f.episode, f.trial, f.accepted, f.period, f.source, f.reset
 	if !key.Valid || accepted.Valid || (!trial && (!period.Valid || status == 200)) {
 		return nil
 	}
@@ -210,7 +216,7 @@ func Complete(ctx context.Context, tx *sql.Tx, claimID string, status int, now i
 	if ended {
 		return nil
 	}
-	s, err := read(ctx, tx, key.Int64)
+	s, err := readScope(ctx, tx, f.scope)
 	if err != nil {
 		return err
 	}
@@ -235,7 +241,9 @@ func Complete(ctx context.Context, tx *sql.Tx, claimID string, status int, now i
 	}
 	if header {
 		if trial {
-			_, err = tx.ExecContext(ctx, `UPDATE donation_key_backoffs SET trial_claim_id=NULL,updated_at=? WHERE donation_key_id=? AND trial_claim_id=?`, now, key.Int64, claimID)
+			next := s
+			next.Trial = sql.NullString{}
+			_, err = writeScope(ctx, tx, f.scope, s, next, now)
 		}
 		return err
 	}
@@ -262,7 +270,10 @@ func Complete(ctx context.Context, tx *sql.Tx, claimID string, status int, now i
 	if period.Valid && reset.Valid && reset.Int64 > now {
 		until = reset.Int64
 	}
-	_, err = tx.ExecContext(ctx, `UPDATE donation_key_backoffs SET episode=?,period=?,source=?,stage=?,retry_at=?,trial_claim_id=NULL,updated_at=? WHERE donation_key_id=? AND generation=? AND episode=?`, nextEpisode, nextPeriod, nextSource, stage, until, now, key.Int64, generation, episode)
+	next := s
+	next.Episode, next.Period, next.Source, next.Stage = nextEpisode, nextPeriod, nextSource, stage
+	next.RetryAt, next.Trial = sql.NullInt64{Int64: until, Valid: true}, sql.NullString{}
+	_, err = writeScope(ctx, tx, f.scope, s, next, now)
 	return err
 }
 func EffectiveUntilSQL(key string) string {

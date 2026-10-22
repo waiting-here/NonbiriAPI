@@ -70,7 +70,7 @@ func (e *charityTestEnv) billingRequest(t *testing.T, rail *claim.Service, model
 
 func (e *charityTestEnv) billingDispatch(t *testing.T, rail *claim.Service, requestID string, seq int) claim.Handle {
 	t.Helper()
-	handle, err := rail.Claim(context.Background(), claim.ClaimInput{RequestID: requestID, ActorUserID: e.callerID, AttemptSeq: seq, Purpose: claim.PurposeCharity, DonationKeyID: e.donationKey, Candidate: claim.Candidate{EndpointID: e.endpointID, EndpointKeyID: e.endpointKey, ConnectorType: connectorcontract.TypeOpenAICompatible, CanonicalBaseURL: "https://charity.example.test/v1", UpstreamModelID: "upstream-model"}})
+	handle, err := rail.Claim(context.Background(), e.quotaClaimInput(t, requestID, seq))
 	if err != nil {
 		t.Fatal(err)
 	}

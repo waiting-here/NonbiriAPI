@@ -207,11 +207,11 @@ func TestDispatchRailPersistsBeforeCredentialAndSeparatesAttemptFromCaller(t *te
 	request := fixture.acceptSelf(userID, 1)
 	fixture.requireCapacity(request.ID, 1, 1, 1)
 	handle, err := fixture.service.Claim(context.Background(), ClaimInput{
-		RequestID:   request.ID,
-		ActorUserID: userID,
-		AttemptSeq:  1,
-		Purpose:     PurposeSelf,
-		Candidate:   key.candidate,
+		RequestID:       request.ID,
+		ActorUserID:     userID,
+		AttemptSeq:      1,
+		Purpose:         PurposeSelf,
+		PersonalModelID: key.modelID, Candidate: key.candidate,
 	})
 	if err != nil {
 		t.Fatalf("claim request: %v", err)
@@ -421,7 +421,7 @@ func TestClaimRevalidatesRevocationOrder(t *testing.T) {
 			test.before(fixture, key)
 			_, err := fixture.service.Claim(context.Background(), ClaimInput{
 				RequestID: request.ID, ActorUserID: userID, AttemptSeq: 1,
-				Purpose: PurposeSelf, Candidate: key.candidate,
+				Purpose: PurposeSelf, PersonalModelID: key.modelID, Candidate: key.candidate,
 			})
 			requireErrorIs(t, err, ErrNotFound)
 			var claims int
@@ -439,17 +439,20 @@ func TestClaimRevalidatesRevocationOrder(t *testing.T) {
 			request := fixture.acceptSelf(userID, 1)
 			handle, err := fixture.service.Claim(context.Background(), ClaimInput{
 				RequestID: request.ID, ActorUserID: userID, AttemptSeq: 1,
-				Purpose: PurposeSelf, Candidate: key.candidate,
+				Purpose: PurposeSelf, PersonalModelID: key.modelID, Candidate: key.candidate,
 			})
 			if err != nil {
 				t.Fatalf("claim before revocation: %v", err)
 			}
 			test.after(fixture, key)
-			dispatch, err := fixture.service.TakeForDispatch(context.Background(), handle)
-			if err != nil {
-				t.Fatalf("dispatch won claim after revocation: %v", err)
+			_, err = fixture.service.TakeForDispatch(context.Background(), handle)
+			requireErrorIs(t, err, ErrNotFound)
+			if fixture.codec.openCount() != 0 {
+				t.Fatal("revoked authorization was decrypted")
 			}
-			dispatch.Clear()
+			if _, err := fixture.service.ReleaseUndispatched(context.Background(), handle); err != nil {
+				t.Fatal(err)
+			}
 		})
 	}
 }
@@ -466,7 +469,7 @@ func TestAttemptLimitOneHundredAndCrossKeyRetry(t *testing.T) {
 		key := keys[(sequence-1)%len(keys)]
 		handle, err := fixture.service.Claim(context.Background(), ClaimInput{
 			RequestID: request.ID, ActorUserID: userID, AttemptSeq: sequence,
-			Purpose: PurposeSelf, Candidate: key.candidate,
+			Purpose: PurposeSelf, PersonalModelID: key.modelID, Candidate: key.candidate,
 		})
 		if err != nil {
 			t.Fatalf("claim attempt %d: %v", sequence, err)
@@ -489,12 +492,12 @@ func TestAttemptLimitOneHundredAndCrossKeyRetry(t *testing.T) {
 	}
 	_, err := fixture.service.Claim(context.Background(), ClaimInput{
 		RequestID: request.ID, ActorUserID: userID, AttemptSeq: MaxAttempts,
-		Purpose: PurposeSelf, Candidate: keys[0].candidate,
+		Purpose: PurposeSelf, PersonalModelID: keys[0].modelID, Candidate: keys[0].candidate,
 	})
 	requireErrorIs(t, err, ErrConflict)
 	_, err = fixture.service.Claim(context.Background(), ClaimInput{
 		RequestID: request.ID, ActorUserID: userID, AttemptSeq: MaxAttempts + 1,
-		Purpose: PurposeSelf, Candidate: keys[0].candidate,
+		Purpose: PurposeSelf, PersonalModelID: keys[0].modelID, Candidate: keys[0].candidate,
 	})
 	requireErrorIs(t, err, ErrInvalidInput)
 	if _, err := fixture.service.CompleteRequest(context.Background(), CompleteRequestInput{
@@ -531,7 +534,7 @@ func TestConcurrentClaimHasOneWinner(t *testing.T) {
 			<-start
 			_, err := fixture.service.Claim(context.Background(), ClaimInput{
 				RequestID: request.ID, ActorUserID: userID, AttemptSeq: 1,
-				Purpose: PurposeSelf, Candidate: key.candidate,
+				Purpose: PurposeSelf, PersonalModelID: key.modelID, Candidate: key.candidate,
 			})
 			results <- err
 		}()
@@ -581,7 +584,7 @@ func TestOrdinaryClaimRejectsEmptyUpstreamModel(t *testing.T) {
 	key.candidate.UpstreamModelID = ""
 	_, err := fixture.service.Claim(context.Background(), ClaimInput{
 		RequestID: request.ID, ActorUserID: userID, AttemptSeq: 1,
-		Purpose: PurposeSelf, Candidate: key.candidate,
+		Purpose: PurposeSelf, PersonalModelID: key.modelID, Candidate: key.candidate,
 	})
 	requireErrorIs(t, err, ErrInvalidInput)
 	var claims int

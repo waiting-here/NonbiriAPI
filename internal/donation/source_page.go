@@ -83,7 +83,7 @@ WHERE (d.status IN ('pending','approved') OR d.terminal_at>?)`
 		if filter.Idle == "yes" {
 			query += `NOT `
 		}
-		query += `EXISTS(SELECT 1 FROM charity_model_bindings b WHERE b.donation_key_id=dk.id)`
+		query += `EXISTS(SELECT 1 FROM charity_binding_targets b WHERE b.donation_key_id=dk.id)`
 	}
 	if filter.Query != "" {
 		query += ` AND (instr(lower(dk.canonical_base_url),lower(?))>0
@@ -102,8 +102,9 @@ WHERE (d.status IN ('pending','approved') OR d.terminal_at>?)`
 // across eligible bindings is sufficient because every other key requirement
 // is independent of the model. Caller balances and personal guards are absent.
 func sourceUsableSQL() string {
-	return `WITH key_cost AS (
- SELECT dk.*,d.status AS donation_status,d.user_id,
+	clock := `(SELECT decision_now FROM decision_clock)`
+	return `WITH decision_clock AS (SELECT ? AS decision_now),key_cost AS (
+ SELECT dk.*,d.status AS donation_status,d.terminal_at AS donation_terminal_at,d.user_id,
  COALESCE(e.enabled,0) AS endpoint_enabled,COALESCE(k.enabled,0) AS physical_enabled,
  EXISTS(SELECT 1 FROM donation_key_memberships m WHERE m.donation_key_id=dk.id AND m.endpoint_key_id=k.id) AS member,
  EXISTS(SELECT 1 FROM endpoint_key_suspensions x WHERE x.endpoint_key_id=k.id) AS suspended,
@@ -112,20 +113,19 @@ func sourceUsableSQL() string {
  CAST((SELECT value FROM site_config WHERE key='charity_token_reserve_milli') AS INTEGER))
  WHEN 'per_token' THEN COALESCE((SELECT amount_milli FROM charity_model_token_reserves WHERE model_id=cm.id),
  CAST((SELECT value FROM site_config WHERE key='charity_token_reserve_milli') AS INTEGER)) END)
- FROM charity_model_bindings b JOIN charity_models cm ON cm.id=b.charity_model_id
+ FROM charity_model_bindings b JOIN charity_binding_targets target ON target.binding_id=b.id JOIN charity_models cm ON cm.id=b.charity_model_id
 JOIN charity_model_access a ON a.model_id=cm.id
 
- WHERE b.donation_key_id=dk.id AND b.endpoint_key_id=k.id AND cm.enabled=1 AND a.allowed_level_mask<>0
- AND ` + charityscope.SupportSQL("dk.id", "b.endpoint_key_id", "b.upstream_model_id") + `
- AND e.connector_type IN ('openai-compatible','anthropic-compatible','ai-sdk-gateway-v3','ai-sdk-gateway-v4','google-gemini','openai-responses','openai-decisions','openai-chat-completions','typesafe-systemone','cohere-rerank','jina-rerank','siliconflow-rerank','voyage-rerank')) AS price_reserve
+ WHERE target.donation_key_id=dk.id AND cm.enabled=1 AND a.allowed_level_mask<>0
+ AND ` + charityscope.AvailableUseSQL("dk.id", "target.native_service_mask", "cm.model_types", clock) + `) AS price_reserve
  FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id
  LEFT JOIN endpoint_keys k ON k.id=dk.endpoint_key_id LEFT JOIN endpoints e ON e.id=k.endpoint_id
  WHERE dk.id=?
 )
-SELECT CASE WHEN dk.donation_status='approved' AND dk.user_id IS NOT NULL AND dk.ended_at IS NULL
+SELECT CASE WHEN dk.donation_status IN ('pending','approved') AND dk.donation_terminal_at IS NULL AND dk.user_id IS NOT NULL AND dk.ended_at IS NULL
  AND dk.enabled=1 AND dk.failure_disabled=0 AND dk.member=1 AND dk.suspended=0
- AND dk.endpoint_enabled=1 AND dk.physical_enabled=1 AND (dk.expires_at IS NULL OR dk.expires_at>?)
- AND ` + smartbackoff.EffectiveUntilSQL("dk.id") + `<=?
+ AND dk.endpoint_enabled=1 AND dk.physical_enabled=1 AND (dk.expires_at IS NULL OR dk.expires_at>` + clock + `)
+ AND ` + smartbackoff.EffectiveUntilSQL("dk.id") + `<=` + clock + `
  AND dk.price_reserve IS NOT NULL AND (SELECT value FROM site_config WHERE key='charity_enabled')='1'
  THEN CASE WHEN
  nbi_u128_remaining(dk.price_limit_mag,dk.price_used_mag,dk.price_reserved_mag,nbi_u128(0))>nbi_u128(0)
@@ -133,7 +133,7 @@ SELECT CASE WHEN dk.donation_status='approved' AND dk.user_id IS NOT NULL AND dk
  AND nbi_u128_remaining(dk.call_limit_mag,dk.calls_used,dk.calls_reserved,nbi_u128(0))>=nbi_u128(1)
  AND nbi_u128_remaining(dk.token_limit_mag,dk.tokens_used,dk.tokens_reserved,nbi_u128(0))>nbi_u128(0)
  AND nbi_u128_remaining(dk.token_limit_mag,dk.tokens_used,dk.tokens_reserved,nbi_u128(0))>=nbi_u128(` + donationquota.EffectiveTokenReserveSQL("dk.id", "dk.token_reserve") + `)
- AND ` + donationquota.AvailabilityPredicate("dk.id", "?", "dk.price_reserve", "dk.token_reserve") + `
+ AND ` + donationquota.AvailabilityPredicate("dk.id", clock, "dk.price_reserve", "dk.token_reserve") + `
  THEN 1 ELSE 0 END ELSE 0 END FROM key_cost dk`
 }
 
@@ -170,7 +170,7 @@ func (s *Service) sourcesPage(ctx context.Context, role reviewerRole, userID int
 		return empty, err
 	}
 	selection, args := sourceSelectionSQL(filter, nil, now)
-	grouped := `SELECT ` + sourceGroupColumns + `,COUNT(DISTINCT donation_id),COUNT(*),COUNT(DISTINCT CASE WHEN pending=1 THEN donation_id END),MAX(id),MAX(CASE WHEN donation_status='approved' THEN 1 ELSE 0 END) FROM (` + selection + `) GROUP BY ` + sourceGroupColumns
+	grouped := `SELECT ` + sourceGroupColumns + `,COUNT(DISTINCT donation_id),COUNT(*),COUNT(DISTINCT CASE WHEN pending=1 THEN donation_id END),MAX(id),MAX(CASE WHEN donation_status IN ('pending','approved') AND EXISTS(SELECT 1 FROM charity_use_availability av WHERE av.donation_key_id=source_group.id) THEN 1 ELSE 0 END) FROM (` + selection + `) source_group GROUP BY ` + sourceGroupColumns
 	var total int64
 	groupCount := `SELECT COUNT(*) FROM (SELECT ` + sourceGroupColumns + ` FROM (` + selection + `) GROUP BY ` + sourceGroupColumns + `)`
 	if err := tx.QueryRowContext(ctx, groupCount, args...).Scan(&total); err != nil {
@@ -227,13 +227,12 @@ func (s *Service) sourcesPage(ctx context.Context, role reviewerRole, userID int
 		// Replace the selected key placeholder with the correlated safe ID. No
 		// user input is interpolated; all filters stay bound parameters.
 		usable := strings.Replace(sourceUsableSQL(), "WHERE dk.id=?", "WHERE dk.id=selected.id", 1)
-		// Pending and unbound keys cannot serve a model. Avoid constructing
-		// their reservation and catalog checks for every key in a large source.
-		query := `SELECT COALESCE(SUM(CASE WHEN selected.donation_status='approved'
-AND EXISTS(SELECT 1 FROM charity_model_bindings binding WHERE binding.donation_key_id=selected.id)
+		// Unbound keys cannot serve a model. Skip their reservation checks.
+		query := `SELECT COALESCE(SUM(CASE WHEN selected.donation_status IN ('pending','approved')
+AND EXISTS(SELECT 1 FROM charity_binding_targets binding WHERE binding.donation_key_id=selected.id)
 THEN (` + usable + `) ELSE 0 END),0) FROM (` + filtered + `) selected`
 		var count int64
-		if err := tx.QueryRowContext(ctx, query, append([]any{now, now, now}, values...)...).Scan(&count); err != nil {
+		if err := tx.QueryRowContext(ctx, query, append([]any{now}, values...)...).Scan(&count); err != nil {
 			return empty, fmt.Errorf("donation: count usable source keys: %w", err)
 		}
 		item.UsableKeyCount = strconv.FormatInt(count, 10)
