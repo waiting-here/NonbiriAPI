@@ -175,7 +175,10 @@ for (const kind of ['personal', 'admin', 'steward'] as const) {
             'charity_section=models&model_workspace=new';
         await page.goto(f.origin + destination);
         if (personal)
-          await page.getByRole('button', { name: core['models.create'], exact: true }).click();
+          await page
+            .locator('[data-component="page-header"]')
+            .getByRole('button', { name: core['models.create'], exact: true })
+            .click();
         const nameEditor = personal ? page.locator('.model-editor') : page;
         await nameEditor
           .getByLabel(personal ? core['models.provider'] : user.user.steward.provider, {
