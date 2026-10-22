@@ -68,6 +68,14 @@ function install(handler: (call: Call) => unknown | Promise<unknown>) {
         body = { version: 'go1.26.6-zoneinfo', zones: ['UTC'] };
       else if (call.path === '/admin/api/time-context' || call.path === '/api/steward/time-context')
         body = { mode: 'site', offset_minutes: 330 };
+      else if (call.method === 'GET' && url.pathname.endsWith('/caller-key'))
+        body = {
+          user_id: url.pathname.split('/').at(-2),
+          generation: '0',
+          active: false,
+          created_at: null,
+          updated_at: 1_800_000_000,
+        };
       else body = await handler(call);
       return body instanceof Response ? body : json(body);
     }),
