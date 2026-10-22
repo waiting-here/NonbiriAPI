@@ -42,10 +42,13 @@ func TestOfflineVerificationValidatesStoredURLsAndLiveTargets(t *testing.T) {
 		{"custom-port", "https://api.example.com:8443/v1", "https://api.example.com:8443/v1", true},
 		{"ipv6", "https://[2606:4700:4700::1111]/v1", "https://[2606:4700:4700::1111]/v1", true},
 		{"orphan", "https://api.example.com/v1", "", true},
-		{"host-drift", "https://api.example.com/v1", "https://other.example.com/v1", false},
-		{"port-drift", "https://api.example.com/v1", "https://api.example.com:8443/v1", false},
-		{"path-drift", "https://api.example.com/v1", "https://api.example.com/v2", false},
-		{"scheme-drift", "https://api.example.com/v1", "http://api.example.com/v1", false},
+		// The helper creates an explicit same-owner grant at the destination.
+		// A shared credential's immutable origin does not restrict that grant.
+		{"explicit-other-host-grant", "https://api.example.com/v1", "https://other.example.com/v1", true},
+		{"explicit-other-port-grant", "https://api.example.com/v1", "https://api.example.com:8443/v1", true},
+		{"explicit-other-path-grant", "https://api.example.com/v1", "https://api.example.com/v2", true},
+		{"explicit-other-scheme-grant", "https://api.example.com/v1", "http://api.example.com/v1", true},
+		{"unsupported-granted-scheme", "https://api.example.com/v1", "ftp://api.example.com/v1", false},
 		{"noncanonical-secret", "https://API.EXAMPLE.COM/v1", "", false},
 		{"query-in-secret", "https://api.example.com/v1?key=removed", "", false},
 	} {
@@ -95,6 +98,7 @@ VALUES(?,?,'openai-compatible',?,0)`, contextID, tc.stored, envelope)
 			if err != nil {
 				t.Fatalf("verify valid credential: %v", err)
 			}
+			assertBootstrapSourcesUnchanged(t, path, before)
 			reopened, err := Open(path, vault)
 			if err != nil {
 				t.Fatal(err)

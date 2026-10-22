@@ -1,6 +1,26 @@
 package db
 
-import "testing"
+import (
+	"database/sql"
+	"testing"
+
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
+)
+
+func prepareHostileConnectionDeletion(t *testing.T, database *sql.DB, userID int64) {
+	t.Helper()
+	tx, err := database.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	if err := testseed.PrepareConnectionDeletionTx(t.Context(), tx, userID, 2); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestGenerationTwoUserDeleteRequiresEconomicHandoff(t *testing.T) {
 	t.Run("terminal request does not block", func(t *testing.T) {
@@ -43,6 +63,9 @@ INSERT INTO dispatch_claims(
 ) VALUES(?,?,1,'self',?,0,'claimed','not_applicable')`,
 			hostileOIDVariant("clm_", 'C', 'Q'), requestID, secretID)
 		hostileMustFail(t, database, `DELETE FROM users WHERE id=?`, userID)
+		prepareHostileConnectionDeletion(t, database, userID)
+		// The economic guard must still reject deletion after credential handoff.
+		hostileMustFail(t, database, `DELETE FROM users WHERE id=?`, userID)
 		hostileMustExec(t, database, `DELETE FROM logical_requests WHERE id=?`, requestID)
 		hostileMustExec(t, database, `DELETE FROM users WHERE id=?`, userID)
 	})
@@ -61,6 +84,8 @@ INSERT INTO dispatch_claims(
  id,logical_request_id,attempt_seq,purpose,secret_ref_id,claim_now,state,dispatched_at,donor_reward_state
 ) VALUES(?,?,1,'self',?,0,'dispatched',1,'not_applicable')`,
 			hostileOIDVariant("clm_", 'D', 'Q'), requestID, secretID)
+		hostileMustFail(t, database, `DELETE FROM users WHERE id=?`, userID)
+		prepareHostileConnectionDeletion(t, database, userID)
 		hostileMustFail(t, database, `DELETE FROM users WHERE id=?`, userID)
 		hostileMustExec(t, database, `
 UPDATE logical_requests SET user_id=NULL,settlement_destination='external' WHERE id=?`, requestID)

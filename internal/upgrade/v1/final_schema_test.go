@@ -238,7 +238,8 @@ func TestFinalSchemaConversionAcceptsExactStableSources(t *testing.T) {
 			if version < 23 {
 				mustExec(t, database, "DELETE FROM site_config WHERE key='request_header_budget_mib'")
 			}
-			beforeFacts := retainedFacts(t, database)
+			columns := legacyConnectionColumns(t, database)
+			beforeFacts := retainedFacts(t, database, nil)
 			if err := database.Close(); err != nil {
 				t.Fatal(err)
 			}
@@ -270,7 +271,7 @@ func TestFinalSchemaConversionAcceptsExactStableSources(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Cleanup(func() { _ = store.Close() })
-			afterFacts := retainedFacts(t, store.DB())
+			afterFacts := retainedFacts(t, store.DB(), columns)
 			for table, digest := range beforeFacts {
 				if afterFacts[table] != digest {
 					t.Errorf("preserved facts changed in %s", table)
