@@ -53,7 +53,8 @@ VALUES(?,?,?,0)`, keyID, donationKeyID, donationID)
 	// A physical key cannot be orphan-marked or deleted while the live key
 	// rail references it. Once membership is removed, the donation key must be
 	// atomically terminalized while detaching the physical key; only then can
-	// NULL -> timestamp be applied to the orphan marker.
+	// the independent credential can also be explicitly retired and its secret
+	// can receive the orphan marker.
 	hostileMustFail(t, db, `UPDATE endpoint_key_secrets SET orphaned_at=1 WHERE id=?`, secretID)
 	hostileMustFail(t, db, `DELETE FROM endpoint_key_secrets WHERE id=?`, secretID)
 	hostileMustExec(t, db, `DELETE FROM donation_key_memberships WHERE endpoint_key_id=?`, keyID)
@@ -63,6 +64,7 @@ SET endpoint_key_id=NULL,enabled=0,ended_reason='terminated',ended_at=1,
  report_match_until=7776001,updated_at=1
 WHERE id=?`, donationKeyID)
 	hostileMustExec(t, db, `DELETE FROM endpoint_keys WHERE id=?`, keyID)
+	hostileRetireCredential(t, db, secretID, 1)
 	hostileMustExec(t, db, `UPDATE endpoint_key_secrets SET orphaned_at=1 WHERE id=?`, secretID)
 	hostileMustFail(t, db, `UPDATE endpoint_key_secrets SET orphaned_at=NULL WHERE id=?`, secretID)
 	hostileMustExec(t, db, `DELETE FROM endpoint_key_secrets WHERE id=?`, secretID)
