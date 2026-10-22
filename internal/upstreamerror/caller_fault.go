@@ -36,6 +36,7 @@ func (c Context) callerFault(fields map[string]json.RawMessage) CallerFault {
 		"max_tokens", "max_completion_tokens", "max_output_tokens", "reasoning_effort",
 		"reasoning", "verbosity", "response_format", "dimensions", "encoding_format",
 		"size", "quality", "style", "output_format", "output_compression", "partial_images",
+		"aspect_ratio", "resolution", "steps", "cfg_scale", "negative_prompt", "async",
 		"speed", "language":
 		if c.UnchangedCallerParameter(param) {
 			return CallerFault{status: c.responseStatus, code: code}

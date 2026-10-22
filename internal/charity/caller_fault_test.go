@@ -17,9 +17,10 @@ import (
 func TestCallerParameterFaultPreservesStreakAndFailureAccounting(t *testing.T) {
 	for _, tc := range []struct{ kind, code, param string }{
 		{"invalid_request_error", "invalid_value", "temperature"},
+		{"invalid_request_error", "invalid_value", "aspect_ratio"},
 		{"BadRequest", "InvalidParameter", "reasoning_effort"},
 	} {
-		t.Run(tc.code, func(t *testing.T) {
+		t.Run(tc.code+"/"+tc.param, func(t *testing.T) {
 			testCallerParameterFaultAccounting(t, tc.kind, tc.code, tc.param)
 		})
 	}

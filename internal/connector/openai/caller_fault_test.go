@@ -200,6 +200,67 @@ func TestCallerParameterNativeEmbeddingAndImage(t *testing.T) {
 	}
 }
 
+func TestCallerParameterImageExtensionsRequireOriginalValue(t *testing.T) {
+	for _, tc := range []struct{ param, value, message string }{
+		{"n", `5`, "n 必须为 1–4 的整数"},
+		{"aspect_ratio", `"invalid"`, "Invalid aspect ratio."},
+		{"resolution", `"invalid"`, "Invalid resolution."},
+		{"steps", `-1`, "Invalid step count."},
+		{"cfg_scale", `-1`, "Invalid guidance scale."},
+		{"negative_prompt", `42`, "Invalid negative prompt."},
+		{"async", `"invalid"`, "Invalid async value."},
+	} {
+		t.Run(tc.param, func(t *testing.T) {
+			for _, mode := range []string{"original", "adapted", "absent"} {
+				t.Run(mode, func(t *testing.T) {
+					payload := fmt.Sprintf(`{"error":{"message":%q,"type":"invalid_request_error","code":"invalid_value","param":%q}}`, tc.message, tc.param)
+					server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						var fields map[string]json.RawMessage
+						if json.NewDecoder(r.Body).Decode(&fields) != nil {
+							t.Error("invalid upstream request")
+						}
+						want := tc.value
+						if mode == "absent" {
+							want = ""
+						}
+						if string(fields[tc.param]) != want {
+							t.Errorf("outbound parameter=%s want=%s", fields[tc.param], want)
+						}
+						w.Header().Set("Content-Type", "application/json")
+						w.WriteHeader(http.StatusBadRequest)
+						_, _ = io.WriteString(w, payload)
+					}))
+					defer server.Close()
+					body := `{"model":"m","prompt":"hi"`
+					if mode != "absent" {
+						body += fmt.Sprintf(`,%q:%s`, tc.param, tc.value)
+					}
+					request, err := DecodeImageRequest(strings.NewReader(body+`}`), 0)
+					if err != nil {
+						t.Fatal(err)
+					}
+					defer request.Clear()
+					ctx := smartbackoff.WithCharityCall(t.Context(), true)
+					captured := ""
+					ctx = upstreamerror.WithCapture(ctx, func(_ context.Context, event upstreamerror.Event) { captured = string(event.Bytes()) })
+					writer := httptest.NewRecorder()
+					result := adapterForServer(t, server.URL, nil, nil).AttemptImage(ctx, writer, testTarget(server.URL, []byte("secret-material"), nil), request, contract.AttemptPolicy{SafetyIdentifier: "caller", HasAdaptation: mode == "adapted"})
+					want := contract.StreakUpstreamFailure
+					if mode == "original" {
+						want = contract.StreakNeutral
+					}
+					if result.StreakDisposition != want || result.Success || result.Committed || result.Failure != FailureUpstream || result.FailureOrigin != contract.OriginUpstreamResponse || result.UpstreamStatus != 400 || writer.Body.Len() != 0 {
+						t.Fatalf("result=%+v", result)
+					}
+					if mode == "original" && (captured != payload || result.ErrorDetail.Message() != tc.message || !result.ErrorDetail.CallerFault().Matches(400, "invalid_value")) {
+						t.Fatal("classification changed the original error")
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestCallerParameterAfterAcceptedHTTPRemainsUpstreamFailure(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
