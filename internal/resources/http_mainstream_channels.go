@@ -268,13 +268,25 @@ func (api *httpAPI) retireMainstreamChannel(writer http.ResponseWriter, request 
 }
 
 func (api *httpAPI) endpointCreateOptions(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
-	if !requireEmptyQuery(writer, request) || !requireNoBody(writer, request) {
+	values, ok := requestQuery(writer, request)
+	if !ok {
+		return
+	}
+	if !exactQuery(values, "match_base_url") || len(values.Get("match_base_url")) > 4096 || !safeMainstreamMatchInput(values.Get("match_base_url")) {
+		writeResourceError(writer, ErrInvalidRequest)
+		return
+	}
+	if !requireNoBody(writer, request) {
 		return
 	}
 	options, err := api.repository.GetEndpointCreateOptions(request.Context(), principal.UserID)
 	if err != nil {
 		writeResourceError(writer, err)
 		return
+	}
+	if values.Has("match_base_url") {
+		matches := matchingMainstreamEntries(options.MainstreamChannels, values.Get("match_base_url"))
+		options.MatchingMainstreamEntries = &matches
 	}
 	writer.Header().Set("Cache-Control", "no-store")
 	writeJSON(writer, http.StatusOK, options)

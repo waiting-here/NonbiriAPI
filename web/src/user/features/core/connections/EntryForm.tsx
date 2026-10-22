@@ -1,4 +1,5 @@
 import { Link } from 'react-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { SourceForm } from './SourceForm';
 import { PresetModels } from './PresetModels';
 import type { DiscoverySource } from './types';
@@ -11,10 +12,14 @@ import type { NativeServiceOption } from '@shared/connections';
 import { ConnectorLabel, CoreErrorPanel, CoreLoading } from '../components';
 import { CONNECTOR_COPY_KEYS, useCoreCopy } from '../copy';
 import { useEndpointCreateOptions } from '../queries';
+import { coreKeys } from '../queries';
 import type { ConnectorType, Endpoint, EndpointKey, EndpointCreateInput } from '../types';
 import { ConnectionOperationNotice } from './OperationNotice';
 import { useConnectionOperation } from './useConnectionOperation';
 import { CredentialGrantForm } from './CredentialGrantForm';
+import { MainstreamMatches } from './MainstreamMatches';
+import { useMainstreamMatchingCopy } from './mainstreamMatchingCopy';
+import { useMainstreamMatches } from './useMainstreamMatches';
 
 export function EntryForm({
   accountId,
@@ -27,6 +32,8 @@ export function EntryForm({
 }) {
   const { t } = useTranslation();
   const { t: coreText } = useCoreCopy();
+  const copy = useMainstreamMatchingCopy();
+  const client = useQueryClient();
   const options = useEndpointCreateOptions(accountId);
   const [mode, setMode] = useState<'custom' | 'mainstream'>('custom');
   const [connector, setConnector] = useState('');
@@ -47,6 +54,9 @@ export function EntryForm({
   );
   const selectedOption = nativeOptions.find((item) => item.connector_type === connector);
   const channel = options.data?.mainstream_channels.find((item) => item.id === channelId);
+  const pendingEntries = (channel?.entries ?? []).filter(
+    (entry) => entry.enabled && entry.id && selected[entry.id] && !saved[entry.id],
+  );
   const operation = useConnectionOperation(accountId, (result) => {
     if (result.kind === 'endpoint') {
       setSaved((current) => ({ ...current, [active.current]: result.endpoint }));
@@ -54,6 +64,11 @@ export function EntryForm({
     }
   });
   const locked = operation.isPending || operation.outcome === 'unknown';
+  const suggestions = useMainstreamMatches(
+    accountId,
+    baseURL,
+    mode === 'custom' && !saved.custom && !locked,
+  );
   const chooseConnector = (item: NativeServiceOption | undefined) => {
     setConnector(item?.connector_type ?? '');
     setServices(item?.default_native_services.slice() ?? []);
@@ -77,22 +92,20 @@ export function EntryForm({
               },
             },
           ]
-        : (channel?.entries ?? [])
-            .filter((entry) => entry.id && selected[entry.id] && !saved[entry.id])
-            .map((entry) => ({
-              row: entry.id!,
-              input: {
-                source: 'mainstream',
-                channel_id: channel!.id,
-                channel_entry_id: entry.id,
-                channel_revision: channel!.revision,
-                note: entry.name,
-                enabled: true,
-                connection_id: connectionId,
-                native_services: selected[entry.id!],
-                rerank_format: entry.rerank_format,
-              },
-            }));
+        : pendingEntries.map((entry) => ({
+            row: entry.id!,
+            input: {
+              source: 'mainstream',
+              channel_id: channel!.id,
+              channel_entry_id: entry.id,
+              channel_revision: channel!.revision,
+              note: entry.name,
+              enabled: true,
+              connection_id: connectionId,
+              native_services: selected[entry.id!],
+              rerank_format: entry.rerank_format,
+            },
+          }));
     for (const item of inputs) {
       active.current = item.row;
       try {
@@ -110,8 +123,8 @@ export function EntryForm({
       ? Boolean(selectedOption && baseURL.trim() && services.length && !saved.custom)
       : Boolean(
           channel?.revision &&
-          Object.entries(selected).some(([key, value]) => value.length && !saved[key]) &&
-          Object.entries(selected).every(([key, value]) => value.length || saved[key]),
+          pendingEntries.length &&
+          pendingEntries.every((entry) => selected[entry.id!]?.length),
         );
   return (
     <div className="nb-stack">
@@ -191,6 +204,20 @@ export function EntryForm({
                 onRerankFormatChange={setFormat}
               />
             ) : null}
+            <MainstreamMatches
+              options={suggestions}
+              disabled={locked}
+              onAdopt={(snapshot, matchingChannel, entry) => {
+                client.setQueryData(coreKeys.endpointCreateOptions(accountId), snapshot);
+                setChannelId(matchingChannel.id);
+                setSelected({
+                  [entry.id!]: services.filter((service) =>
+                    entry.native_services.includes(service),
+                  ),
+                });
+                setMode('mainstream');
+              }}
+            />
           </>
         ) : (
           <>
@@ -215,7 +242,7 @@ export function EntryForm({
               )}
             </Field>
             {channel?.entries?.map((entry) =>
-              entry.id ? (
+              entry.id && entry.enabled ? (
                 <div key={entry.id} className="nb-stack nb-stack--sm">
                   <Field label={entry.name || entry.base_url} help={entry.base_url}>
                     {(props) => (
@@ -237,14 +264,17 @@ export function EntryForm({
                     )}
                   </Field>
                   {selected[entry.id] ? (
-                    <NativeServicesField
-                      options={entry.native_services}
-                      value={selected[entry.id]}
-                      onChange={(value) =>
-                        setSelected((current) => ({ ...current, [entry.id!]: value }))
-                      }
-                      disabled={locked || Boolean(saved[entry.id])}
-                    />
+                    <>
+                      {selected[entry.id].length === 0 ? <Note>{copy.chooseServices}</Note> : null}
+                      <NativeServicesField
+                        options={entry.native_services}
+                        value={selected[entry.id]}
+                        onChange={(value) =>
+                          setSelected((current) => ({ ...current, [entry.id!]: value }))
+                        }
+                        disabled={locked || Boolean(saved[entry.id])}
+                      />
+                    </>
                   ) : null}
                 </div>
               ) : null,

@@ -78,9 +78,15 @@ type MainstreamChannelOption struct {
 }
 
 type EndpointCreateOptions struct {
-	NativeServiceOptions []NativeServiceOptions    `json:"native_service_options"`
-	BaseConnectorTypes   []string                  `json:"base_connector_types"`
-	MainstreamChannels   []MainstreamChannelOption `json:"mainstream_channels"`
+	NativeServiceOptions      []NativeServiceOptions    `json:"native_service_options"`
+	BaseConnectorTypes        []string                  `json:"base_connector_types"`
+	MainstreamChannels        []MainstreamChannelOption `json:"mainstream_channels"`
+	MatchingMainstreamEntries *[]MainstreamEntryMatch   `json:"matching_mainstream_entries,omitempty"`
+}
+
+type MainstreamEntryMatch struct {
+	ChannelID string `json:"channel_id"`
+	EntryID   string `json:"entry_id"`
 }
 
 type EndpointKey struct {

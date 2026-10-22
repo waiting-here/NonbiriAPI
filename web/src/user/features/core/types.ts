@@ -111,6 +111,7 @@ export interface EndpointCreateOptions {
   native_service_options?: NativeServiceOption[];
   base_connector_types: ConnectorType[];
   mainstream_channels: MainstreamChannelOption[];
+  matching_mainstream_entries?: { channel_id: string; entry_id: string }[];
 }
 
 export type EndpointBrowseState = 'available' | 'endpoint_disabled' | 'no_keys' | 'no_usable_key';
