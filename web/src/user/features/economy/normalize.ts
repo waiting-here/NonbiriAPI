@@ -1,3 +1,4 @@
+import { normalizeUseSummary } from '@shared/operations/donationUses';
 import {
   normalizeRecurringDiscount,
   normalizeEffectiveDiscount,
@@ -588,6 +589,7 @@ export function normalizeDonationKey(value: unknown): DonationKey {
       'ended_reason',
     ],
     [
+      'endpoint_id',
       'review',
       'input_token_reserve',
       'output_token_reserve',
@@ -632,6 +634,12 @@ export function normalizeDonationKey(value: unknown): DonationKey {
       : enumValue(item.ended_reason, 'donation key ended reason', ENDED_REASONS);
   const smartBackoff = normalizeSmartBackoffFields(item);
   const result: DonationKey = {
+    ...(item.endpoint_id === undefined
+      ? {}
+      : {
+          endpointId:
+            item.endpoint_id === null ? null : decimalID(item.endpoint_id, 'owner endpoint id'),
+        }),
     smartBackoff: smartBackoff.smart_backoff,
     failureDisableThreshold: decimal(item.failure_disable_threshold, 'failure threshold'),
     id: decimalID(item.id, 'donation key id'),
@@ -724,7 +732,7 @@ export function normalizeDonation(value: unknown): Donation {
       'created_at',
       'updated_at',
     ],
-    ['discord_public_thanks', 'owner_hidden_at'],
+    ['discord_public_thanks', 'owner_hidden_at', 'use_summary'],
   );
   const status = enumValue(item.status, 'donation status', DONATION_STATUSES);
   const reviewResult = normalizeReviewResult(item.review_result);
@@ -798,6 +806,9 @@ export function normalizeDonation(value: unknown): Donation {
     invalid('expired donation state');
   }
   return {
+    ...(item.use_summary === undefined
+      ? {}
+      : { useSummary: normalizeUseSummary(item.use_summary) }),
     id: decimalID(item.id, 'donation id'),
     ownerHiddenAt:
       item.owner_hidden_at == null ? null : timestamp(item.owner_hidden_at, 'hidden timestamp'),

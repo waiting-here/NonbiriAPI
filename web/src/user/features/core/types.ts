@@ -1,3 +1,11 @@
+import type {
+  NativeServiceOption,
+  ServiceProjection,
+  MainstreamEntry,
+  DiscoveryPreset,
+  ModelMapping,
+} from '@shared/connections';
+import type { NativeService, RerankFormat } from '@shared/nativeServices';
 import type { AutomaticRestriction } from '@shared/operations/restrictions';
 import type { RolePolicy } from '@shared/rolePolicy';
 import type { TransportRule } from '@shared/transportRule';
@@ -89,6 +97,10 @@ export type EndpointOrigin =
   { kind: 'custom' } | { kind: 'mainstream'; channel_id: string; name: string };
 
 export interface MainstreamChannelOption {
+  revision?: string;
+  entries?: MainstreamEntry[];
+  discovery_source?: DiscoveryPreset | null;
+  model_mappings?: ModelMapping[];
   id: string;
   name: string;
   connector_type: ConnectorType;
@@ -96,6 +108,7 @@ export interface MainstreamChannelOption {
 }
 
 export interface EndpointCreateOptions {
+  native_service_options?: NativeServiceOption[];
   base_connector_types: ConnectorType[];
   mainstream_channels: MainstreamChannelOption[];
 }
@@ -127,6 +140,7 @@ export interface ModelBrowse {
 }
 
 export interface KeyBindingView {
+  target_id?: string;
   id: string;
   model_id: string;
   model_full_name: string;
@@ -146,6 +160,11 @@ export interface KeyBindingView {
 }
 
 export interface Endpoint {
+  connection_id?: string | null;
+  configuration_type?: ConnectorType;
+  native_services?: NativeService[];
+  rerank_format?: RerankFormat | '';
+
   id: string;
   connector_type: ConnectorType;
   base_url: string;
@@ -160,6 +179,12 @@ export interface Endpoint {
 }
 
 export interface EndpointKey {
+  credential_available?: boolean;
+  discovery_source_id?: string | null;
+  credential_id?: string;
+  credential_version?: string;
+  grant_revision?: string;
+  native_services?: NativeService[];
   id: string;
   endpoint_id: string;
   display_head: string;
@@ -255,7 +280,7 @@ export interface Model {
   role_policy?: RolePolicy;
 }
 
-export interface BindingCandidate {
+export interface BindingCandidate extends Partial<ServiceProjection> {
   endpoint_key_id: string;
   endpoint_base_url: string;
   connector_type: ConnectorType;
@@ -267,7 +292,8 @@ export interface BindingCandidate {
   source_types: CatalogSourceType[];
 }
 
-export interface Binding {
+export interface Binding extends Partial<ServiceProjection> {
+  targets?: BindingTarget[];
   id: string;
   endpoint_key_id: string;
   endpoint_base_url: string;
@@ -278,6 +304,23 @@ export interface Binding {
   endpoint_key_note: string;
   upstream_model_id: string;
   ord: number;
+}
+
+export interface BindingTargetInput {
+  endpoint_key_id: string;
+  upstream_model_id: string;
+  native_services: NativeService[];
+}
+export interface BindingTarget extends BindingTargetInput, ServiceProjection {
+  id: string;
+  revision: string;
+  endpoint_id: string;
+  connector_type: ConnectorType;
+  configuration_type: ConnectorType;
+  base_url: string;
+  credential_id: string;
+  credential_version: string;
+  grant_revision: string;
 }
 
 export interface BindingsResponse {
@@ -309,10 +352,12 @@ export interface OperationIdentity {
   actionId: string;
 }
 
-export type EndpointCreateInput =
+export type EndpointCreateInput = (
   | {
       source: 'mainstream';
       channel_id: string;
+      channel_entry_id?: string;
+      channel_revision?: string;
       note: string;
       enabled: boolean;
     }
@@ -322,16 +367,27 @@ export type EndpointCreateInput =
       base_url: string;
       note: string;
       enabled: boolean;
-    };
+    }
+) & {
+  connection_id?: string;
+  native_services?: NativeService[];
+  rerank_format?: RerankFormat | '';
+};
 
 export interface EndpointPatchInput {
+  connection_id?: string;
+  native_services?: NativeService[];
+  rerank_format?: RerankFormat | '';
   note?: string;
   enabled?: boolean;
   expected_revision: string;
 }
 
 export interface EndpointKeyCreateInput {
-  secret: string;
+  discovery_source_id?: string | null;
+  secret?: string;
+  credential_id?: string;
+  native_services?: NativeService[];
   note: string;
   enabled: boolean;
   force_store_false: boolean;
@@ -341,6 +397,9 @@ export interface EndpointKeyCreateInput {
 }
 
 export interface EndpointKeyPatchInput {
+  discovery_source_id?: string | null;
+  credential_id?: string;
+  native_services?: NativeService[];
   note?: string;
   enabled?: boolean;
   force_store_false?: boolean;
@@ -377,6 +436,8 @@ export interface ModelPatchInput {
 }
 
 export interface BindingSelection {
+  native_services?: NativeService[];
+  targets?: BindingTargetInput[];
   endpoint_key_id: string;
   upstream_model_id: string;
 }
@@ -532,7 +593,7 @@ export interface HomeAdapters {
 export type LifecycleIntent = 'export' | 'delete';
 
 export const ACCOUNT_EXPORT_VERSIONS = [
-  11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
+  11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
 ] as const;
 
 export interface AccountExportAttachment {

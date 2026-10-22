@@ -1,3 +1,5 @@
+import { UseSummary } from './UseSummary';
+import { DonationUsesPanel } from './DonationUsesPanel';
 import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
 import { smartBackoffDeadline } from '@shared/operations/smartBackoff';
 import { NullableValue } from './charity/NullableValue';
@@ -422,21 +424,40 @@ function DonationKeyEditor(
           smartBackoff={props.item.smart_backoff}
         />
       ) : null}
-      <ManagedKeyLimitsControl {...props} refresh={props.refreshLimits} />
-      <Fold
-        title={t('common.operations.charity.failureStrategy', { defaultValue: 'Failure strategy' })}
-      >
-        <FailurePolicyControl
-          role={props.role}
-          donationID={props.donation.id}
-          keyID={props.item.id}
-          revision={props.donation.revision}
-          threshold={props.item.failure_disable_threshold}
-          refresh={props.refresh}
-        />
-      </Fold>
-      <DonationKeySettings key={props.donation.revision} {...props} />
+      {canMaintainDonationKey(props.donation, props.item) ? (
+        <>
+          <ManagedKeyLimitsControl {...props} refresh={props.refreshLimits} />
+          <Fold
+            title={t('common.operations.charity.failureStrategy', {
+              defaultValue: 'Failure strategy',
+            })}
+          >
+            <FailurePolicyControl
+              role={props.role}
+              donationID={props.donation.id}
+              keyID={props.item.id}
+              revision={props.donation.revision}
+              threshold={props.item.failure_disable_threshold}
+              refresh={props.refresh}
+            />
+          </Fold>
+          <DonationKeySettings key={props.donation.revision} {...props} />
+        </>
+      ) : null}
     </section>
+  );
+}
+
+function canMaintainDonationKey(
+  donation: Pick<ManagedDonation, 'status'>,
+  key: Pick<ManagedDonationKey, 'can_manage' | 'charity_state' | 'ended_reason'>,
+) {
+  return (
+    (donation.status === 'pending' || donation.status === 'approved') &&
+    key.ended_reason === null &&
+    key.charity_state !== 'ended' &&
+    key.charity_state !== 'expired' &&
+    (key.can_manage ?? donation.status === 'approved')
   );
 }
 
@@ -607,7 +628,7 @@ function DonationKeySettings({
           </>
         ) : null}
       </dl>
-      {donation.status === 'approved' && !terminal ? (
+      {canMaintainDonationKey(donation, item) && !terminal ? (
         <>
           <p>{t('common.operations.charity.embeddingQuotaHelp')}</p>
           <Fold
@@ -840,6 +861,9 @@ function DonationReview({
     );
   return (
     <fieldset className="ops-stack ops-unframed" disabled={busy || review.isPending}>
+      {item.use_summary ? (
+        <DonationUsesPanel role={role} accountId={accountId} donationId={item.id} />
+      ) : null}
       <Card>
         <h3>{t('common.donationReview.title')}</h3>
         {!onReviewed ? (
@@ -909,7 +933,7 @@ function DonationReview({
           )}
         </p>
       ) : null}
-      {item.status === 'pending' || item.can_force_reject ? (
+      {(!item.use_summary && item.status === 'pending') || item.can_force_reject ? (
         <Card>
           <h3>
             {t(
@@ -1248,7 +1272,7 @@ function DonationKeyPages({
         {t('common.operations.charity.accessLost')}
       </p>
     );
-  if (bindingItem && item.status === 'approved')
+  if (bindingItem && canMaintainDonationKey(item, bindingItem))
     return (
       <DonationBindingWorkflow
         key={`${item.id}:${bindingItem.key_id}`}
@@ -1281,6 +1305,9 @@ function DonationKeyPages({
   return (
     <Card>
       <h3>{t('common.operations.charity.donationKeys')}</h3>
+      {item.use_summary ? (
+        <p className="nb-sub">{t('common.connections.legacyKeyHealth')}</p>
+      ) : null}
       <DonationDiscoveryControl
         key={`discovery:${role}:${accountId}:${item.id}`}
         role={role}
@@ -1333,9 +1360,7 @@ function DonationKeyPages({
                 className={key.id === focusKey ? 'ops-subcard is-selected' : 'ops-subcard'}
                 key={key.id}
               >
-                {item.status === 'approved' &&
-                key.charity_state !== 'ended' &&
-                key.charity_state !== 'expired' ? (
+                {canMaintainDonationKey(item, key) ? (
                   <Button
                     type="button"
                     variant="primary"
@@ -1349,7 +1374,11 @@ function DonationKeyPages({
                       });
                     }}
                   >
-                    {t('common.workflow.bindThisKey')}
+                    {t(
+                      key.can_manage === undefined
+                        ? 'common.workflow.bindThisKey'
+                        : 'common.connections.modelsAndBindings',
+                    )}
                   </Button>
                 ) : null}
                 <DonationKeyEditor
@@ -1807,10 +1836,13 @@ function DonationsPanel({
                     header: t('common.status'),
                     cell: 'status',
                     render: (item) => (
-                      <StatusBadge
-                        active={item.status === 'approved'}
-                        label={t(charityStatusKey(role, item.status))}
-                      />
+                      <div>
+                        <StatusBadge
+                          active={item.status === 'approved'}
+                          label={t(charityStatusKey(role, item.status))}
+                        />
+                        <UseSummary value={item.use_summary} />
+                      </div>
                     ),
                   },
                   {
@@ -2556,7 +2588,8 @@ function PendingDonationReviews({
             )
           ) : detail.error ? (
             <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
-          ) : detail.data.status === 'pending' ? (
+          ) : detail.data.status === 'pending' ||
+            (detail.data.use_summary && BigInt(detail.data.use_summary.pending) > 0n) ? (
             <DonationReview
               key={detail.data.id}
               item={detail.data}

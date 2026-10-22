@@ -371,3 +371,254 @@ test('level 5 reads the saved setting and cannot change the global model policy'
     await context.close();
   }
 });
+
+// Control-plane coverage uses the isolated backend and never sends inference traffic.
+test('shared connection preserves explicit OpenAI, Anthropic, and Gateway v4 grants', async ({
+  browser,
+}, info) => {
+  test.setTimeout(120000);
+  const { context, origin } = await session(browser, 1);
+  const c = common.common.connections;
+  const native = common.common.nativeServices;
+  const name = 'connection-' + randomUUID().slice(0, 8);
+  const entries: { id: string; keyId: string; services: string[] }[] = [];
+  const create = async (path: string, data: unknown) => {
+    const response = await context.request.post(origin + path, {
+      headers: { Origin: origin, 'Idempotency-Key': randomUUID() },
+      data,
+    });
+    expect(response.ok(), path + ': ' + response.status()).toBe(true);
+    return response.json();
+  };
+  try {
+    const page = await context.newPage();
+    await page.goto(origin + '/endpoints');
+    await page
+      .locator('[data-component="page-header"]')
+      .getByRole('button', { name: c.addConnection, exact: true })
+      .click();
+    const connectionPanel = page
+      .locator('.nb-expandable-panel')
+      .filter({ has: page.getByRole('heading', { name: c.addConnection, exact: true }) });
+    await connectionPanel.getByLabel(c.name, { exact: true }).fill(name);
+    const savedConnection = page.waitForResponse(
+      (response) =>
+        response.url().endsWith('/api/connections') && response.request().method() === 'POST',
+    );
+    await connectionPanel.getByRole('button', { name: c.create, exact: true }).click();
+    const connection = (await (await savedConnection).json()) as { id: string };
+    await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
+    await page.getByRole('button', { name: c.addEntry, exact: true }).first().click();
+    const entryPanel = page
+      .locator('.nb-expandable-panel')
+      .filter({ has: page.getByRole('heading', { name: c.addEntry, exact: true }) });
+    const cases = [
+      {
+        type: 'openai-compatible',
+        url: 'https://api.example.com/v1',
+        services: ['chat_completions', 'responses'],
+        labels: [common.common.modelTypes.chat_completions, common.common.modelTypes.responses],
+      },
+      {
+        type: 'anthropic-compatible',
+        url: 'https://api.example.com/anthropic',
+        services: ['anthropic_messages'],
+        labels: [native.anthropic_messages],
+      },
+      {
+        type: 'ai-sdk-gateway-v4',
+        url: 'https://api.example.com/gateway',
+        services: ['gateway_text', 'images_generations', 'embeddings', 'rerank'],
+        labels: [
+          native.gateway_text,
+          common.common.modelTypes.images_generations,
+          common.common.modelTypes.embeddings,
+          common.common.modelTypes.rerank,
+        ],
+      },
+    ];
+    for (const [index, item] of cases.entries()) {
+      if (index)
+        await entryPanel.getByRole('button', { name: c.addAnotherEntry, exact: true }).click();
+      await entryPanel
+        .getByRole('combobox', { name: c.protocol, exact: true })
+        .selectOption(item.type);
+      await entryPanel.getByLabel(c.entryURL, { exact: true }).fill(item.url);
+      const scope = entryPanel.locator('form').first();
+      for (const label of item.labels)
+        await scope.getByRole('checkbox', { name: label, exact: true }).check();
+      const endpointSaved = page.waitForResponse(
+        (response) =>
+          response.url().endsWith('/api/endpoints') && response.request().method() === 'POST',
+      );
+      await scope.getByRole('button', { name: c.saveEntries, exact: true }).click();
+      const endpoint = (await (await endpointSaved).json()) as {
+        id: string;
+        native_services: string[];
+      };
+      expect(endpoint.native_services.slice().sort()).toEqual(item.services.slice().sort());
+      if (index === 0) {
+        await entryPanel.getByRole('radio', { name: c.newCredential, exact: true }).check();
+        await entryPanel.getByLabel(c.credentialName, { exact: true }).fill(name + ' shared');
+        const secret = entryPanel.getByLabel(c.secret, { exact: true });
+        await secret.fill('synthetic-browser-shared-credential');
+        await entryPanel.getByRole('checkbox', { name: c.ownership, exact: true }).check();
+        await entryPanel.getByRole('button', { name: c.saveCredential, exact: true }).click();
+        await expect(secret).toHaveCount(0);
+      } else {
+        const credentials = entryPanel.getByRole('table', {
+          name: c.chooseCredential,
+          exact: true,
+        });
+        await credentials
+          .getByRole('row')
+          .filter({ hasText: name + ' shared' })
+          .getByRole('button', { name: c.select, exact: true })
+          .click();
+      }
+      const grantSaved = page.waitForResponse(
+        (response) =>
+          response.url().endsWith('/api/endpoints/' + endpoint.id + '/keys') &&
+          response.request().method() === 'POST',
+      );
+      await entryPanel.getByRole('button', { name: c.authorizeEntry, exact: true }).click();
+      const key = (await (await grantSaved).json()) as {
+        id: string;
+        credential_id: string;
+        credential_version: string;
+        discovery_source_id: string | null;
+      };
+      expect(key.discovery_source_id).toBeNull();
+      entries.push({ id: endpoint.id, keyId: key.id, services: item.services });
+      await expect(entryPanel.getByText(c.grantSaved, { exact: true })).toBeVisible();
+    }
+    await entryPanel.getByRole('button', { name: c.close, exact: true }).first().click();
+    await page.getByRole('tab', { name: c.discoverySources, exact: true }).click();
+    await page.getByRole('button', { name: c.addSource, exact: true }).click();
+    const sourcePanel = page
+      .locator('.nb-expandable-panel')
+      .filter({ has: page.getByRole('heading', { name: c.addSource, exact: true }) });
+    await sourcePanel.getByLabel(c.name, { exact: true }).fill(name + ' catalog');
+    await sourcePanel
+      .getByLabel(c.discoveryBaseURL, { exact: true })
+      .fill('https://api.example.com/v1');
+    await sourcePanel
+      .getByRole('combobox', { name: c.listFormat, exact: true })
+      .selectOption('openai');
+    await sourcePanel
+      .getByRole('table', { name: c.chooseCredential, exact: true })
+      .getByRole('row')
+      .filter({ hasText: name + ' shared' })
+      .getByRole('button', { name: c.select, exact: true })
+      .click();
+    const sourceSaved = page.waitForResponse(
+      (response) =>
+        response.url().endsWith('/api/connections/' + connection.id + '/discovery-sources') &&
+        response.request().method() === 'POST',
+    );
+    await sourcePanel.getByRole('button', { name: c.saveSource, exact: true }).click();
+    const source = (await (await sourceSaved).json()) as {
+      id: string;
+      models_url: string;
+      credential_id: string;
+      credential_version: string;
+      discovery_source_revision: string;
+    };
+    await expect(page.getByText(source.models_url, { exact: true })).toBeVisible();
+    expect(source.models_url).toBe('https://api.example.com/v1/models');
+    const refs = [] as { key: Record<string, unknown>; upstream: string }[];
+    for (const [index, entry] of entries.entries()) {
+      const keyPage = await read<{ data: Record<string, unknown>[] }>(
+        context,
+        origin,
+        '/api/endpoints/' + entry.id + '/keys?page=1&page_size=20',
+      );
+      const key = keyPage.data.find((row) => row.id === entry.keyId)!;
+      expect(key.credential_id).toBe(source.credential_id);
+      expect(key.credential_version).toBe(source.credential_version);
+      const associated = await context.request.patch(
+        origin + '/api/endpoints/' + entry.id + '/keys/' + entry.keyId,
+        {
+          headers: { Origin: origin, 'Idempotency-Key': randomUUID() },
+          data: { expected_revision: key.revision, discovery_source_id: source.id },
+        },
+      );
+      expect(associated.ok()).toBe(true);
+      const upstream = 'exact-' + index;
+      await create('/api/endpoints/' + entry.id + '/keys/' + entry.keyId + '/models/manual', {
+        entries: [{ upstream_model_id: upstream, provider: 'browser' }],
+      });
+      refs.push({ key: await associated.json(), upstream });
+    }
+    const logical = (await create('/api/models', {
+      provider: 'browser',
+      model: name,
+      model_types: ['chat_completions', 'responses'],
+    })) as { id: string };
+    await page.goto(origin + '/models?model_id=' + logical.id);
+    const groupSummary = page
+      .locator('summary')
+      .filter({ has: page.getByText(c.addTargetGroup, { exact: true }) });
+    await groupSummary.click();
+    const group = groupSummary.locator('..');
+    await group
+      .locator('summary')
+      .filter({ has: page.getByText(c.addTarget, { exact: true }) })
+      .click();
+    for (const [index] of entries.entries()) {
+      const candidates = group.getByRole('table', { name: c.availableTargets, exact: true });
+      await candidates
+        .getByRole('row')
+        .filter({ hasText: refs[index]!.upstream })
+        .getByRole('button', { name: c.addTarget, exact: true })
+        .click();
+      const target = group.getByRole('group', {
+        name: index + 1 + '. ' + cases[index]!.url,
+        exact: true,
+      });
+      const labels =
+        index === 0
+          ? [common.common.modelTypes.chat_completions, common.common.modelTypes.responses]
+          : index === 1
+            ? [native.anthropic_messages]
+            : [native.gateway_text];
+      for (const label of labels)
+        await target.getByRole('checkbox', { name: label, exact: true }).check();
+    }
+    const bindingSaved = page.waitForResponse(
+      (response) =>
+        response.url().endsWith('/api/models/' + logical.id + '/bindings/batch-receipt') &&
+        response.request().method() === 'POST',
+    );
+    await group.getByRole('button', { name: c.addTargetGroup, exact: true }).click();
+    expect((await bindingSaved).ok()).toBe(true);
+    const bindings = await read<{
+      bindings: {
+        targets: {
+          endpoint_key_id: string;
+          upstream_model_id: string;
+          native_services: string[];
+        }[];
+      }[];
+    }>(context, origin, '/api/models/' + logical.id + '/bindings');
+    expect(bindings.bindings).toHaveLength(1);
+    expect(bindings.bindings[0]!.targets).toHaveLength(3);
+    expect(bindings.bindings[0]!.targets.map((target) => target.upstream_model_id)).toEqual(
+      refs.map((ref) => ref.upstream),
+    );
+    expect(
+      bindings.bindings[0]!.targets.map((target) => target.native_services.slice().sort()),
+    ).toEqual([['chat_completions', 'responses'], ['anthropic_messages'], ['gateway_text']]);
+    await page.reload();
+    await expect(page.getByText(c.addTargetGroup, { exact: true }).first()).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+    await page.screenshot({
+      path: info.outputPath('shared-native-targets.png'),
+      animations: 'disabled',
+    });
+  } finally {
+    await context.close();
+  }
+});

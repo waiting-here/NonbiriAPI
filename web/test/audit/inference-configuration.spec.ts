@@ -577,36 +577,62 @@ test('native Chat services retain storage policy and one Chat Responses group al
   const core = userEn.user.core;
   try {
     const page = await context.newPage();
+    const c = common.common.connections;
     await page.goto(origin + '/endpoints?quickstart=1');
-    await page.getByRole('button', { name: userEn.user.services.manualLink, exact: true }).click();
-    const wizard = page.locator('.core-wizard');
-    await wizard.getByRole('button', { name: core['endpoints.custom'], exact: true }).click();
-    await wizard
-      .getByRole('button', { name: core['connector.chatCompletions'], exact: true })
-      .click();
-    await wizard.getByRole('button', { name: core['common.next'], exact: true }).click();
-    await wizard
-      .getByLabel(core['endpoints.baseUrl'], { exact: true })
+    const connectionPanel = page
+      .locator('.nb-expandable-panel')
+      .filter({ has: page.getByRole('heading', { name: c.addConnection, exact: true }) });
+    await connectionPanel.getByLabel(c.name, { exact: true }).fill('Native Chat connection');
+    await save(
+      page,
+      connectionPanel.getByRole('button', { name: c.create, exact: true }),
+      '/api/connections',
+      'POST',
+    );
+    await page.getByRole('button', { name: c.addEntry, exact: true }).first().click();
+    const entryPanel = page
+      .locator('.nb-expandable-panel')
+      .filter({ has: page.getByRole('heading', { name: c.addEntry, exact: true }) });
+    await entryPanel
+      .getByRole('combobox', { name: c.protocol, exact: true })
+      .selectOption('openai-compatible');
+    await entryPanel
+      .getByLabel(c.entryURL, { exact: true })
       .fill('https://native-chat.example.test/v1');
+    await entryPanel
+      .getByRole('checkbox', { name: common.common.modelTypes.chat_completions, exact: true })
+      .check();
+    await entryPanel
+      .getByRole('checkbox', { name: common.common.modelTypes.responses, exact: true })
+      .uncheck();
     const created = await save(
       page,
-      wizard.getByRole('button', { name: core['endpoints.createEndpointStep'], exact: true }),
+      entryPanel.getByRole('button', { name: c.saveEntries, exact: true }),
       '/api/endpoints',
       'POST',
     );
-    const endpoint = (await created.json()) as { id: string; connector_type: string };
-    expect(endpoint.connector_type).toBe('openai-chat-completions');
-    await wizard
-      .getByLabel(core['endpoints.secret'], { exact: true })
-      .fill('synthetic-native-chat-secret');
-    await wizard
-      .getByLabel(core['endpoints.keyNote'], { exact: true })
-      .fill('Native Chat browser key');
-    await wizard.getByLabel(core['endpoints.ownership'], { exact: true }).check();
-    await wizard.getByLabel(core['endpoints.storePolicy'], { exact: true }).check();
+    const endpoint = (await created.json()) as {
+      id: string;
+      connector_type: string;
+      native_services: string[];
+    };
+    expect(endpoint.connector_type).toBe('openai-compatible');
+    expect(endpoint.native_services).toEqual(['chat_completions']);
+    await entryPanel.getByRole('radio', { name: c.newCredential, exact: true }).check();
+    await entryPanel.getByLabel(c.credentialName, { exact: true }).fill('Native Chat credential');
+    await entryPanel.getByLabel(c.secret, { exact: true }).fill('synthetic-native-chat-secret');
+    await entryPanel.getByRole('checkbox', { name: c.ownership, exact: true }).check();
+    await save(
+      page,
+      entryPanel.getByRole('button', { name: c.saveCredential, exact: true }),
+      '/api/connections/' + new URL(page.url()).searchParams.get('connection_id') + '/credentials',
+      'POST',
+    );
+    await entryPanel.getByLabel(c.note, { exact: true }).last().fill('Native Chat browser key');
+    await entryPanel.getByLabel(core['endpoints.storePolicy'], { exact: true }).check();
     const keyResponse = await save(
       page,
-      wizard.getByRole('button', { name: core['endpoints.addKey'], exact: true }),
+      entryPanel.getByRole('button', { name: c.authorizeEntry, exact: true }),
       '/api/endpoints/' + endpoint.id + '/keys',
       'POST',
     );

@@ -196,6 +196,29 @@ function page(data: unknown[], pagination: Record<string, unknown> = {}): Record
 afterEach(() => vi.unstubAllGlobals());
 
 describe('donation page operations', () => {
+  it('accepts an approved donation in the pending-use queue without merging its approval counts', () => {
+    const value = normalizeManagedDonationsPage(
+      page([approved({ use_summary: { total: '2', approved: '2', pending: '1' } })]),
+      'steward',
+      { status: 'pending' },
+      '1',
+      20,
+    );
+    expect(value.data[0]).toMatchObject({
+      status: 'approved',
+      use_summary: { total: '2', approved: '2', pending: '1' },
+    });
+    expect(() =>
+      normalizeManagedDonationsPage(
+        page([approved({ use_summary: { total: '2', approved: '2', pending: '0' } })]),
+        'steward',
+        { status: 'pending' },
+        '1',
+        20,
+      ),
+    ).toThrow();
+  });
+
   it.each(['admin', 'steward'] as const)(
     'accepts mixed review histories and filtered terminal pages for %s',
     (role) => {

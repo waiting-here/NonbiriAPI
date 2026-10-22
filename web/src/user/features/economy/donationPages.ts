@@ -1,3 +1,4 @@
+import { normalizeUseSummary, type UseSummary } from '@shared/operations/donationUses';
 import { ApiError, apiFetch } from '@shared/query/http';
 import {
   array,
@@ -35,6 +36,7 @@ export interface OwnerDonationPageFilters {
 export type OwnerDonationStateCounts = Record<DonationKey['charityState'], string>;
 
 export interface OwnerDonationSummary {
+  useSummary?: UseSummary;
   id: string;
   ownerHiddenAt: number | null;
   discordPublicThanks?: boolean | null;
@@ -327,7 +329,7 @@ function normalizeOwnerDonation(
   rejectLoneSurrogates(value, label);
   const root = record(
     value,
-    [...OWNER_DONATION_FIELDS, 'discord_public_thanks', 'owner_hidden_at'],
+    [...OWNER_DONATION_FIELDS, 'discord_public_thanks', 'owner_hidden_at', 'use_summary'],
     label,
     OWNER_DONATION_FIELDS,
   );
@@ -353,6 +355,9 @@ function normalizeOwnerDonation(
   const sources = normalizeSources(root.sources, sourceCount, `${label} sources`);
   validateSummaryState(status, reviewResult, keyCount, stateCounts, label);
   return {
+    ...(root.use_summary === undefined
+      ? {}
+      : { useSummary: normalizeUseSummary(root.use_summary) }),
     id: decimalID(root.id, `${label} id`),
     ownerHiddenAt:
       root.owner_hidden_at == null ? null : unixSecond(root.owner_hidden_at, 'hidden time'),
@@ -384,6 +389,7 @@ function normalizeOwnerKey(
     value,
     [
       ...OWNER_KEY_FIELDS,
+      'endpoint_id',
       'review',
       'rate_limited_until',
       'input_token_reserve',
@@ -394,6 +400,7 @@ function normalizeOwnerKey(
     OWNER_KEY_FIELDS,
   );
   const key = normalizeDonationKey({
+    ...(root.endpoint_id === undefined ? {} : { endpoint_id: root.endpoint_id }),
     id: root.id,
     endpoint_key_id: root.endpoint_key_id,
     display_head: root.display_head,

@@ -9,9 +9,14 @@ import {
   mockRoleSession,
 } from './support';
 import { expect, test } from './test';
+import { createOptions, mockConnectionResources } from './connection-fixtures';
+import enCommon from '../../src/shared/i18n/common/en.json' with { type: 'json' };
+import zhCommon from '../../src/shared/i18n/common/zh.json' with { type: 'json' };
 
 const endpoint = {
   id: '11',
+  connection_id: '1',
+  native_services: ['chat_completions', 'responses'],
   connector_type: 'openai-compatible',
   base_url: 'https://provider.example.test/v1',
   origin: { kind: 'custom' },
@@ -32,6 +37,11 @@ const evidence = {
 };
 const key = {
   id: '21',
+  credential_id: '31',
+  credential_version: '1',
+  grant_revision: '1',
+  native_services: ['chat_completions', 'responses'],
+  discovery_source_id: null,
   endpoint_id: '11',
   display_head: 'head',
   display_tail: 'tail',
@@ -65,7 +75,7 @@ const entries = ['model-a', 'model-b'].map((name, i) => ({
 }));
 function model(id: string, name: string, bound = false) {
   return {
-    model_types: ['chat_completions', 'embeddings'],
+    model_types: ['chat_completions', 'responses', 'embeddings'],
     id,
     provider: 'demo',
     model: name,
@@ -114,6 +124,8 @@ for (const locale of ['en', 'zh'] as const) {
     await page.route(`${USER_ORIGIN}/api/**`, async (route) => {
       const request = route.request(),
         url = new URL(request.url());
+      if (url.pathname === '/api/endpoint-create-options')
+        return route.fulfill({ json: createOptions });
       if (url.pathname === '/api/endpoints/11') return route.fulfill({ json: endpoint });
       if (url.pathname === '/api/endpoints/11/keys')
         return route.fulfill({ json: numberedPage([], url.searchParams) });
@@ -187,8 +199,10 @@ for (const locale of ['en', 'zh'] as const) {
     page.on('console', (message) => {
       if (
         (message.type() === 'error' || message.type() === 'warning') &&
-        message.text() !==
-          'Failed to load resource: the server responded with a status of 400 (Bad Request)'
+        ![
+          'Failed to load resource: the server responded with a status of 400 (Bad Request)',
+          'Failed to load resource: the server responded with a status of 409 (Conflict)',
+        ].includes(message.text())
       )
         errors.push(message.text());
     });
@@ -205,6 +219,48 @@ for (const locale of ['en', 'zh'] as const) {
       failedModel = false;
     let discoveryRefreshes = 0;
     const bound = new Set<string>();
+    const c = (locale === 'zh' ? zhCommon : enCommon).common.connections;
+    const chatLabel = (locale === 'zh' ? zhCommon : enCommon).common.modelTypes.chat_responses;
+    const nativeResponse = (locale === 'zh' ? zhCommon : enCommon).common.modelTypes.responses;
+    const source = () => ({
+      id: '51',
+      connection_id: '1',
+      name: 'Shared catalog',
+      base_url: endpoint.base_url,
+      models_url: endpoint.base_url + '/models',
+      list_format: 'openai',
+      credential_id: '31',
+      credential_version: '1',
+      revision: '1',
+      discovery_source_revision: '1',
+      enabled: true,
+      state: failedRead ? 'failed' : 'succeeded',
+      checked_at: 1700000000,
+      safe_class: failedRead ? 'transport' : 'none',
+      safe_diag: '',
+      created_at: 1700000000,
+      updated_at: 1700000001,
+    });
+    await mockConnectionResources(
+      page,
+      () => [endpoint],
+      () =>
+        empty
+          ? []
+          : [
+              {
+                id: '1',
+                name: 'Browser connection',
+                note: '',
+                revision: '1',
+                entry_count: '1',
+                credential_count: '1',
+                created_at: 1700000000,
+                updated_at: 1700000001,
+              },
+            ],
+    );
+
     const writes: { path: string; body: Record<string, unknown>; identity: string | undefined }[] =
       [];
     await page.route(`${USER_ORIGIN}/api/**`, async (route) => {
@@ -218,14 +274,54 @@ for (const locale of ['en', 'zh'] as const) {
       const fulfill = (body: unknown, status = 200) => route.fulfill({ status, json: body });
       if (request.method() === 'POST')
         writes.push({ path, body: input ?? {}, identity: request.headers()['idempotency-key'] });
-      if (path === '/api/endpoint-create-options')
-        return fulfill({
-          base_connector_types: ['openai-compatible', 'anthropic-compatible'],
-          mainstream_channels: [],
-        });
+      if (path === '/api/endpoint-create-options') return fulfill(createOptions);
+      if (path === '/api/connections/1/discovery-sources' && input) return fulfill(source(), 201);
+      if (path === '/api/discovery-sources/51') return fulfill(source());
+      if (path === '/api/discovery-sources/51/refresh') {
+        discoveryRefreshes++;
+        if (discoveryRefreshes === 2) failedRead = false;
+        return fulfill(
+          {
+            operation_id: 'op_000000000000000000000A',
+            discovery_source: { ...source(), state: 'checking' },
+          },
+          202,
+        );
+      }
+      if (path === '/api/discovery-sources/51/models')
+        return fulfill(
+          numberedPage(
+            failedRead
+              ? []
+              : entries.map((row) => ({
+                  id: row.id,
+                  upstream_model_id: row.upstream_model_id,
+                  provider: row.provider,
+                  native_services: [],
+                  service_evidence: 'unknown',
+                  needs_service_selection: true,
+                })),
+            url.searchParams,
+          ),
+        );
+      if (/\/keys\/\d+\/models\/manual$/.test(path))
+        return fulfill(
+          {
+            entries: [
+              {
+                ...entries[0],
+                id: '91',
+                source_type: 'manual',
+                upstream_model_id: (input?.entries as { upstream_model_id: string }[])[0]
+                  ?.upstream_model_id,
+              },
+            ],
+          },
+          201,
+        );
       if (path === '/api/endpoints')
         return request.method() === 'POST'
-          ? fulfill(endpoint, 201)
+          ? fulfill({ ...endpoint, ...input }, 201)
           : fulfill(
               numberedPage(
                 empty
@@ -286,6 +382,11 @@ for (const locale of ['en', 'zh'] as const) {
         );
       }
       if (path === '/api/models' && input) {
+        if (input.model === 'model-a')
+          return fulfill(
+            { error: { code: 'conflict', message: 'Calling name already exists' } },
+            409,
+          );
         if (!failedModel && input.model === 'model-b') {
           failedModel = true;
           return fulfill(
@@ -293,7 +394,10 @@ for (const locale of ['en', 'zh'] as const) {
             400,
           );
         }
-        return fulfill(model('52', String(input.model)), 201);
+        return fulfill(
+          { ...model('52', String(input.model)), model_types: input.model_types },
+          201,
+        );
       }
       if (path === '/api/models')
         return fulfill(
@@ -302,9 +406,14 @@ for (const locale of ['en', 'zh'] as const) {
             url.searchParams,
           ),
         );
-      if (/^\/api\/models\/\d+\/bindings(?:\/batch)?$/.test(path)) {
+      if (/^\/api\/models\/\d+\/bindings(?:\/batch(?:-receipt)?)?$/.test(path)) {
         const id = path.split('/')[3];
         if (input) bound.add(id);
+        if (input && path.endsWith('/batch-receipt'))
+          return fulfill(
+            { model_id: id, binding_revision: '2', added_count: '1', binding_count: '1' },
+            201,
+          );
         return fulfill(
           {
             binding_revision: bound.has(id) ? '2' : '1',
@@ -392,15 +501,14 @@ for (const locale of ['en', 'zh'] as const) {
       await writeFile(join(out, `metrics-${locale}.json`), JSON.stringify(metrics, null, 2));
     }
     await page.goto(`${USER_ORIGIN}/endpoints`);
-    await expect(page.getByText('Browser service', { exact: true })).toBeVisible();
+    await expect(page.getByText('Browser connection', { exact: true })).toBeVisible();
     await shot('list');
-    await page.locator('.nb-filter summary').click();
+    await page.getByRole('searchbox').fill('Browser');
+    await page.getByRole('button', { name: c.search, exact: true }).click();
     await shot('filter');
     empty = true;
     await page.reload();
-    await expect(
-      page.getByText(copy('No services added yet', '还没有添加服务'), { exact: true }),
-    ).toBeVisible();
+    await expect(page.getByText(c.emptyTitle, { exact: true })).toBeVisible();
     await shot('empty');
     empty = false;
     for (const n of [1, 3, 12]) {
@@ -438,107 +546,127 @@ for (const locale of ['en', 'zh'] as const) {
       .click();
     await shot('adaptation');
     await page.goto(`${USER_ORIGIN}/endpoints?quickstart=1`);
-    await expect(page.locator('.services-list')).toHaveCount(0);
-    await expect(page.locator('.nb-filter')).toHaveCount(0);
+    const connectionPanel = page
+      .locator('.nb-expandable-panel')
+      .filter({ has: page.getByRole('heading', { name: c.addConnection, exact: true }) });
+    await connectionPanel.getByLabel(c.name, { exact: true }).fill('Browser connection');
     await shot('step-1');
-    await page
-      .getByRole('button', {
-        name: copy('Need advanced options? Set up manually', '需要设置请求头等高级选项？手动设置'),
-        exact: true,
-      })
-      .click();
+    await connectionPanel.getByRole('button', { name: c.create, exact: true }).click();
+    await page.getByRole('button', { name: c.addEntry, exact: true }).first().click();
+    const entryPanel = page
+      .locator('.nb-expandable-panel')
+      .filter({ has: page.getByRole('heading', { name: c.addEntry, exact: true }) });
+    await entryPanel
+      .getByRole('combobox', { name: c.protocol, exact: true })
+      .selectOption('openai-compatible');
+    await entryPanel.getByLabel(c.entryURL, { exact: true }).fill(endpoint.base_url);
+    await entryPanel.getByRole('button', { name: c.saveEntries, exact: true }).click();
     await shot('manual-wizard');
-    await page
-      .locator('.nb-expandable-panel:not([hidden])')
-      .getByRole('button', { name: copy('Close', '关闭'), exact: true })
-      .click();
-    await page.getByLabel(copy('Service URL', '服务地址'), { exact: true }).fill(endpoint.base_url);
-    await page.getByRole('button', { name: copy('Next', '下一步'), exact: true }).click();
-    await expect(page.getByLabel(copy('Key', '密钥'), { exact: true })).toBeVisible();
+    await entryPanel.getByRole('radio', { name: c.newCredential, exact: true }).check();
+    const secret = entryPanel.getByLabel(c.secret, { exact: true });
+    await secret.fill('synthetic-setup-secret');
+    await entryPanel.getByRole('checkbox', { name: c.ownership, exact: true }).check();
+    await entryPanel.getByRole('button', { name: c.saveCredential, exact: true }).click();
+    await expect(secret).toHaveCount(0);
+    await entryPanel.getByRole('button', { name: c.authorizeEntry, exact: true }).click();
+    await expect(entryPanel.getByText(c.grantSaved, { exact: true })).toBeVisible();
     await shot('step-2');
-    await page.getByLabel(copy('Key', '密钥'), { exact: true }).fill('synthetic-setup-secret');
-    await page
-      .getByLabel(
-        copy(
-          'This is my key, or I have permission to use it',
-          '这是我自己的密钥，或我已获得使用授权',
-        ),
-      )
-      .check();
+    await entryPanel.getByRole('button', { name: c.close, exact: true }).first().click();
+    await page.getByRole('tab', { name: c.discoverySources, exact: true }).click();
+    await page.getByRole('button', { name: c.addSource, exact: true }).click();
+    const sourcePanel = page
+      .locator('.nb-expandable-panel')
+      .filter({ has: page.getByRole('heading', { name: c.addSource, exact: true }) });
+    await sourcePanel.getByLabel(c.name, { exact: true }).fill('Shared catalog');
+    await sourcePanel.getByLabel(c.discoveryBaseURL, { exact: true }).fill(endpoint.base_url);
+    await sourcePanel
+      .getByRole('table', { name: c.chooseCredential, exact: true })
+      .getByRole('button', { name: c.select, exact: true })
+      .click();
     failedRead = true;
-    await page
-      .getByRole('button', { name: copy('Save and load models', '保存并读取模型'), exact: true })
-      .click();
-    await expect(
-      page.getByRole('alert').filter({
-        hasText: copy(
-          'The server could not connect to the upstream service. Check the service URL or contact the administrator, then retry.',
-          '服务器无法连接上游服务。请核对服务地址，或联系管理员后重试。',
-        ),
-      }),
-    ).toBeVisible();
+    await sourcePanel.getByRole('button', { name: c.saveSource, exact: true }).click();
+    await page.goto(`${USER_ORIGIN}/endpoints?discovery_source_id=51`);
+    await page.getByRole('button', { name: c.refreshSource, exact: true }).click();
+    await expect(page.locator('.nb-note--bad')).toBeVisible();
     await shot('read-failed');
-    await page
-      .getByRole('button', { name: copy('Retry loading models', '重试读取'), exact: true })
-      .click();
-    await expect(page.getByLabel('model-a', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: c.refreshSource, exact: true }).click();
+    await expect(page.locator('.nb-note--bad')).toHaveCount(0);
     expect(discoveryRefreshes).toBe(2);
-    await page.getByLabel(copy('Model name prefix', '模型名前缀'), { exact: true }).fill('demo');
-    await page.getByLabel('model-a', { exact: true }).check();
-    await page.getByLabel('model-b', { exact: true }).check();
+    for (const name of ['model-a', 'model-b'])
+      await page
+        .getByRole('table', { name: c.catalog, exact: true })
+        .getByRole('row')
+        .filter({ hasText: name })
+        .getByRole('button', { name: c.configureModel, exact: true })
+        .click();
+    const choose = page
+      .locator('details')
+      .filter({ has: page.locator(':scope > summary').filter({ hasText: c.chooseEntry }) })
+      .first();
+    await choose.locator(':scope > summary').click();
+    await choose
+      .getByRole('table', { name: c.chooseEntry, exact: true })
+      .getByRole('row')
+      .filter({ hasText: 'Browser service' })
+      .getByRole('button', { name: c.select, exact: true })
+      .click();
+    await choose
+      .getByRole('table', { name: c.chooseCredential, exact: true })
+      .getByRole('row')
+      .filter({ hasText: 'Primary key' })
+      .getByRole('button', { name: c.select, exact: true })
+      .click();
+    for (const name of ['model-a', 'model-b']) {
+      const row = page.locator('details').filter({
+        has: page
+          .locator(':scope > summary strong')
+          .filter({ hasText: new RegExp('^' + name + '$') }),
+      });
+      await row.getByRole('checkbox', { name: new RegExp(name) }).check();
+      await row.getByRole('checkbox', { name: nativeResponse, exact: true }).check();
+      await row.getByRole('checkbox', { name: chatLabel, exact: true }).check();
+    }
     await shot('step-3');
     await page
-      .getByRole('button', { name: copy('Add 2 models', '添加 2 个模型'), exact: true })
+      .getByRole('button', { name: c.saveSelectedModels.replace('{{count}}', '2'), exact: true })
       .click();
-    await expect(
-      page.getByRole('radio', {
-        name: copy('Add this source and keep existing settings', '追加此来源，保留原设置'),
-        exact: true,
-      }),
-    ).toBeVisible();
+    const rowA = page
+      .locator('details')
+      .filter({ has: page.locator(':scope > summary strong').filter({ hasText: /^model-a$/ }) });
+    await rowA.getByRole('button', { name: c.existingModel, exact: true }).click();
+    const existing = rowA.getByRole('table', { name: c.existingModel, exact: true });
+    await rowA.getByRole('searchbox').fill('demo/model-a');
+    await rowA.getByRole('button', { name: c.search, exact: true }).click();
+    await existing.getByRole('button', { name: c.select, exact: true }).click();
     await shot('name-conflict');
     await page
-      .getByRole('radio', {
-        name: copy('Add this source and keep existing settings', '追加此来源，保留原设置'),
-        exact: true,
-      })
-      .check();
-    await page
-      .getByRole('button', { name: copy('Add 2 models', '添加 2 个模型'), exact: true })
+      .getByRole('button', { name: c.retryUnfinishedModels.replace('{{count}}', '2'), exact: true })
       .click();
     await expect(
       page.getByRole('button', {
-        name: copy('Retry 1 unfinished models', '重试未完成的 1 个'),
+        name: c.retryUnfinishedModels.replace('{{count}}', '1'),
         exact: true,
       }),
-    ).toBeVisible();
+    ).toBeEnabled();
     await shot('partial');
     await page
-      .getByRole('button', {
-        name: copy('Retry 1 unfinished models', '重试未完成的 1 个'),
-        exact: true,
-      })
+      .getByRole('button', { name: c.retryUnfinishedModels.replace('{{count}}', '1'), exact: true })
       .click();
-    await expect(
-      page.getByRole('button', { name: copy('Done', '完成'), exact: true }),
-    ).toBeVisible();
+    await expect(page.getByText(c.mappingSaved, { exact: true })).toHaveCount(2);
     await shot('complete');
-    await page
-      .getByRole('button', { name: copy('Add another key', '继续添加密钥'), exact: true })
-      .click();
-    await expect(page.getByLabel(copy('Key', '密钥'), { exact: true })).toHaveValue('');
-    await expect(
-      page.getByLabel(
-        copy(
-          'This is my key, or I have permission to use it',
-          '这是我自己的密钥，或我已获得使用授权',
-        ),
-      ),
-    ).toBeChecked();
-    const keyWrite = writes.find((w) => w.path === '/api/endpoints/11/keys');
-    expect(keyWrite?.body.ownership_confirmed).toBe(true);
-    expect(keyWrite?.identity).toBeTruthy();
-    expect(writes.some((w) => w.path.endsWith('/models/refresh'))).toBe(true);
+    expect(writes.filter((write) => write.path === '/api/endpoints')).toHaveLength(1);
+    expect(writes.filter((write) => write.path === '/api/connections/1/credentials')).toHaveLength(
+      1,
+    );
+    expect(writes.filter((write) => write.path === '/api/endpoints/11/keys')).toHaveLength(1);
+    expect(
+      writes.filter((write) => write.path === '/api/models/51/bindings/batch-receipt'),
+    ).toHaveLength(1);
+    expect(
+      writes.find((write) => write.path === '/api/connections/1/credentials')?.body
+        .ownership_confirmed,
+    ).toBe(true);
+    expect(writes.every((write) => Boolean(write.identity))).toBe(true);
     await assertNoSensitiveBrowserPersistence(page, ['synthetic-setup-secret']);
     expect(errors).toEqual([]);
   });

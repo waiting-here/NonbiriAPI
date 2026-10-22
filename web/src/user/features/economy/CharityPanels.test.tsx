@@ -134,6 +134,11 @@ const choices: EndpointKeyChoice[] = [
     },
     key: {
       id: '61',
+      nativeServices: ['chat_completions', 'responses'],
+      credentialId: '81',
+      credentialVersion: '1',
+      grantRevision: '1',
+      discoverySourceId: null,
       endpointId: '11',
       displayHead: 'sk-a',
       displayTail: 'tail',
@@ -377,6 +382,14 @@ async function clickDonationCheckbox(user: TestUser, checkbox: HTMLElement) {
     await user.click(screen.getByRole('button', { name: charityCopy.presentation.openPicker }));
   }
   await user.click(checkbox);
+  if (
+    checkbox.getAttribute('aria-label')?.startsWith('Select resource key') &&
+    (checkbox as HTMLInputElement).checked
+  ) {
+    for (const service of screen.getAllByRole('checkbox', { name: 'Chat completions' })) {
+      if (!(service as HTMLInputElement).checked) await user.click(service);
+    }
+  }
 }
 
 async function declinePublicThanks(user: TestUser) {
@@ -730,7 +743,17 @@ describe('donation composer recovery', () => {
     await waitFor(() =>
       expect(mutation.mutateAsync).toHaveBeenCalledWith({
         description: 'A shared endpoint',
-        keys: [{ endpointKeyId: '61', expiresAt: null, failureDisableThreshold: '10' }],
+        keys: [
+          {
+            endpointKeyId: '61',
+            nativeServices: ['chat_completions'],
+            credentialId: '81',
+            credentialVersion: '1',
+            grantRevision: '1',
+            expiresAt: null,
+            failureDisableThreshold: '10',
+          },
+        ],
         ownershipAuthorized: true,
         discordPublicThanks: false,
       }),
@@ -845,7 +868,17 @@ describe('donation composer recovery', () => {
     await waitFor(() =>
       expect(mutation.mutateAsync).toHaveBeenCalledWith({
         description: 'Shared resource',
-        keys: [{ endpointKeyId: '61', expiresAt: instant, failureDisableThreshold: '10' }],
+        keys: [
+          {
+            endpointKeyId: '61',
+            nativeServices: ['chat_completions'],
+            credentialId: '81',
+            credentialVersion: '1',
+            grantRevision: '1',
+            expiresAt: instant,
+            failureDisableThreshold: '10',
+          },
+        ],
         ownershipAuthorized: true,
         discordPublicThanks: false,
       }),

@@ -1,4 +1,5 @@
-import { EndpointTransportNotice } from '@shared/components/EndpointTransportNotice';
+import { NativeServicesSummary } from '@shared/components/ServiceRoutesSummary';
+import { MainstreamEntries } from './MainstreamEntries';
 import { CopyValue } from '@shared/components/CopyValue';
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -32,8 +33,8 @@ import {
   adminMainstreamChannelKeys,
   createAdminMainstreamChannel,
   getAdminMainstreamChannel,
+  getAdminNativeServiceOptions,
   MAINSTREAM_CHANNEL_CATEGORIES,
-  MAINSTREAM_CONNECTOR_TYPES,
   patchAdminMainstreamChannel,
   retireAdminMainstreamChannel,
   type AdminMainstreamChannel,
@@ -108,6 +109,9 @@ function draftFor(channel?: AdminMainstreamChannel): ChannelDraft {
     connector_type: channel?.connector_type ?? 'openai-compatible',
     base_url: channel?.base_url ?? '',
     enabled: channel?.enabled ?? true,
+    entries: channel?.entries ?? [],
+    discovery_source: channel?.discovery_source ?? null,
+    model_mappings: channel?.model_mappings ?? [],
   };
 }
 
@@ -121,10 +125,19 @@ function changedPatch(
   if (draft.connector_type !== channel.connector_type) patch.connector_type = draft.connector_type;
   if (draft.base_url !== channel.base_url) patch.base_url = draft.base_url;
   if (draft.enabled !== channel.enabled) patch.enabled = draft.enabled;
+  for (const field of ['entries', 'discovery_source', 'model_mappings'] as const) {
+    if (JSON.stringify(draft[field]) !== JSON.stringify(channel[field]))
+      Object.assign(patch, { [field]: draft[field] });
+  }
   return patch;
 }
 
 function validDraft(draft: ChannelDraft): boolean {
+  if (
+    !draft.entries?.length ||
+    draft.entries.some((row) => !row.base_url.trim() || !row.native_services.length)
+  )
+    return false;
   const name = Array.from(draft.name);
   const baseURL = Array.from(draft.base_url);
   if (name.length < 1 || name.length > 128 || draft.name.trim() !== draft.name) return false;
@@ -154,6 +167,16 @@ function ChannelForm({
   onCancel?: () => void;
 }) {
   const { t } = useTranslation();
+  const session = useAdminSession();
+  const nativeOptions = useQuery({
+    queryKey: [
+      ...adminMainstreamChannelKeys.root,
+      'native-options',
+      session.data?.admin.username ?? 'none',
+    ],
+    queryFn: ({ signal }) => getAdminNativeServiceOptions(signal),
+    enabled: Boolean(session.data),
+  });
   const [draft, setDraft] = useState<ChannelDraft>(() => draftFor(channel));
   const [invalid, setInvalid] = useState(false);
   const canEdit = canWrite && (mode === 'create' || channel?.state === 'active');
@@ -198,42 +221,33 @@ function ChannelForm({
             </select>
           )}
         </Field>
-        <Field label={t('admin.mainstreamChannels.form.connector')}>
-          {(field) => (
-            <select
-              {...field}
-              value={draft.connector_type}
-              disabled={!canEdit || busy}
-              onChange={(event) =>
-                setDraft({
-                  ...draft,
-                  connector_type: event.target.value as MainstreamConnectorType,
-                })
-              }
-            >
-              {MAINSTREAM_CONNECTOR_TYPES.map((value) => (
-                <option key={value} value={value}>
-                  {t(CONNECTOR_LABEL_KEYS[value])}
-                </option>
-              ))}
-            </select>
-          )}
-        </Field>
-        <label>
-          <span>{t('admin.mainstreamChannels.form.baseUrl')}</span>
-          <input
-            value={draft.base_url}
-            type="url"
-            placeholder="https://api.example.com/v1"
-            maxLength={4_096}
-            autoComplete="off"
-            disabled={!canEdit || busy}
-            onChange={(event) => setDraft({ ...draft, base_url: event.target.value })}
-          />
-          <small>{t('admin.mainstreamChannels.form.baseUrlHelp')}</small>
-        </label>
       </div>
-      <EndpointTransportNotice url={draft.base_url} />
+      {nativeOptions.error ? (
+        <ErrorState error={nativeOptions.error} onRetry={() => void nativeOptions.refetch()} />
+      ) : null}
+      <MainstreamEntries
+        connectorLabels={CONNECTOR_LABEL_KEYS}
+        options={nativeOptions.data ?? []}
+        disabled={!canEdit || busy}
+        value={{
+          entries: draft.entries ?? [],
+          discovery_source: draft.discovery_source ?? null,
+          model_mappings: draft.model_mappings ?? [],
+        }}
+        onChange={(layout) => {
+          const first = layout.entries[0];
+          setDraft({
+            ...draft,
+            ...layout,
+            ...(first
+              ? {
+                  connector_type: first.connector_type as MainstreamConnectorType,
+                  base_url: first.base_url,
+                }
+              : { base_url: '' }),
+          });
+        }}
+      />
       <Toggle
         label={t('admin.mainstreamChannels.form.enabled')}
         checked={draft.enabled}
@@ -278,9 +292,31 @@ function ChannelDetails({ channel }: { channel: AdminMainstreamChannel }) {
         <dt>{t('admin.mainstreamChannels.detail.category')}</dt>
         <dd>{t(CATEGORY_LABEL_KEYS[channel.category])}</dd>
         <dt>{t('admin.mainstreamChannels.detail.connector')}</dt>
-        <dd>{t(CONNECTOR_LABEL_KEYS[channel.connector_type])}</dd>
-        <dt>{t('admin.mainstreamChannels.detail.baseUrl')}</dt>
-        <dd className="ops-wrap">{channel.base_url}</dd>
+        <dd>
+          {[
+            ...new Set(
+              channel.entries?.map((entry) => entry.connector_type) ?? [channel.connector_type],
+            ),
+          ]
+            .map((type) => t(CONNECTOR_LABEL_KEYS[type as MainstreamConnectorType]))
+            .join(' · ')}
+        </dd>
+        <dt>{t('common.connections.entries')}</dt>
+        <dd className="ops-wrap">
+          {channel.entries?.length ? (
+            <ul className="nb-list">
+              {channel.entries.map((entry) => (
+                <li key={entry.id}>
+                  <strong>{entry.name || entry.base_url}</strong>
+                  <p>{entry.base_url}</p>
+                  <NativeServicesSummary value={entry.native_services} />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            channel.base_url
+          )}
+        </dd>
         <dt>{t('admin.mainstreamChannels.detail.enabled')}</dt>
         <dd>{t(channel.enabled ? 'admin.mainstreamChannels.available' : 'common.disabled')}</dd>
         <dt>{t('admin.mainstreamChannels.detail.state')}</dt>
@@ -618,7 +654,16 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
                       header: t('admin.mainstreamChannels.table.connector'),
                       mobileLabel: t('admin.mainstreamChannels.table.connector'),
                       cell: 'meta',
-                      render: (channel) => t(CONNECTOR_LABEL_KEYS[channel.connector_type]),
+                      render: (channel) =>
+                        [
+                          ...new Set(
+                            channel.entries?.map((entry) => entry.connector_type) ?? [
+                              channel.connector_type,
+                            ],
+                          ),
+                        ]
+                          .map((type) => t(CONNECTOR_LABEL_KEYS[type as MainstreamConnectorType]))
+                          .join(' · '),
                     },
                     {
                       key: 'base-url',
@@ -629,6 +674,12 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
                         <span className="channel-url-row">
                           <span className="channel-base-url" title={channel.base_url}>
                             {channel.base_url}
+                            {channel.entries && channel.entries.length > 1
+                              ? ' · ' +
+                                t('common.connections.entryCount', {
+                                  count: channel.entries.length,
+                                })
+                              : ''}
                           </span>
                           <CopyValue
                             value={channel.base_url}

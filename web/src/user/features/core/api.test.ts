@@ -256,6 +256,7 @@ describe('core API wire contract', () => {
       {
         id: channelID,
         name: 'Main channel',
+        revision: '1',
         connector_type: 'openai-compatible',
         base_url: 'https://example.com/v1',
       },
