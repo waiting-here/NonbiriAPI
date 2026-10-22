@@ -39,6 +39,8 @@ const stableSchema29Manifest = "e18a8d66845f04036df16a22b34c0fb6ad7df0354241b2cc
 
 const stableSchema30Manifest = "80d682b2367439d90400f8fda4ed45b1b4d7ff2b825246edd7a9ee0d0be74cb1"
 
+const stableSchema31Manifest = "60cbbbb94b685146ffe6ab71b31dc0dcb566ca67510b6beac9d794ba2e9851a2"
+
 var storageSchema = schemaRegistry{baseline: 17, target: db.CurrentSchemaVersion, versions: []schemaMigration{
 	{version: 17, manifest: stableSchema17Manifest},
 	{from: 17, version: 18, manifest: stableSchema18Manifest, apply: extendContentAndProtocols, impact: &migrationImpact{
@@ -75,8 +77,10 @@ var storageSchema = schemaRegistry{baseline: 17, target: db.CurrentSchemaVersion
 		rebuiltTables: []string{"charity_header_sessions", "charity_header_uses"}, addedTables: []string{"personal_header_sessions", "personal_header_uses"}, controlTables: []string{"models"}, credentials: credentialsUnchanged}},
 	{from: 29, version: 30, manifest: stableSchema30Manifest, sql: db.GlobalPressureSchema, impact: &migrationImpact{
 		addedTables: []string{"global_pressure_state", "global_pressure_samples"}, credentials: credentialsUnchanged}},
-	{from: 30, version: 31, manifest: db.PinnedGenerationTwoManifestHash, sql: callerParameterErrorSchema, apply: extendCallerParameterErrors, impact: &migrationImpact{
+	{from: 30, version: 31, manifest: stableSchema31Manifest, sql: callerParameterErrorSchema, apply: extendCallerParameterErrors, impact: &migrationImpact{
 		addedTables: []string{"dispatch_caller_parameter_errors"}, constraintTables: []string{"donation_usage_reservations", "dispatch_claims"}, credentials: credentialsUnchanged}},
+	{from: 31, version: 32, manifest: db.PinnedGenerationTwoManifestHash, apply: extendGatewayV4, impact: &migrationImpact{
+		rebuiltTables: []string{"mainstream_channels", "endpoints", "endpoint_key_secrets", "donation_keys", "request_attempts", "report_cases", "report_targets"}, credentials: credentialsRebuilt}},
 }}
 
 type Options struct {
@@ -112,6 +116,7 @@ func SchemaDescriptor() db.StorageSchemaDescriptor {
 		{28, stableSchema28Manifest, "904c2c677b748a9fa8c9a39edbd4e109ca3fcd56"},
 		{29, stableSchema29Manifest, "b7699638c8e09709d2a319a754e9eb17a6aa2bf0"},
 		{30, stableSchema30Manifest, "d899f295ce22ecf298c9051fc04930224b64d194"},
+		{31, stableSchema31Manifest, "3f7c7ee41cd5f327b129d6b6ba7bbfe9e39323ce"},
 	} {
 		descriptor.OfflineConversions = append(descriptor.OfflineConversions, db.OfflineConversionDescriptor{
 			Tool: "nonbiri-upgrade-v1", SourceCommit: source.commit, SourceSchemaVersion: source.version,
