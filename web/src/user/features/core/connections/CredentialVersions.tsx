@@ -150,25 +150,27 @@ function VersionControl({
   );
   return (
     <>
-      <span>
-        {version.enabled ? t('common.connections.enabled') : t('common.connections.disabled')}
-      </span>
-      <button
-        type="button"
-        className={'nb-btn ' + (version.enabled ? 'nb-btn--danger-outline' : 'nb-btn--secondary')}
-        disabled={operation.isPending || operation.outcome === 'unknown'}
-        onClick={() => {
-          if (version.enabled) {
-            operation.reset();
-            setDisabling(version.revision);
-          } else
-            void operation
-              .mutateAsync({ enabled: true, expected_revision: version.revision })
-              .catch(() => undefined);
-        }}
-      >
-        {version.enabled ? t('common.connections.disable') : t('common.connections.enable')}
-      </button>
+      <div className="nb-actions">
+        <span>
+          {version.enabled ? t('common.connections.enabled') : t('common.connections.disabled')}
+        </span>
+        <button
+          type="button"
+          className={'nb-btn ' + (version.enabled ? 'nb-btn--danger-outline' : 'nb-btn--secondary')}
+          disabled={operation.isPending || operation.outcome === 'unknown'}
+          onClick={() => {
+            if (version.enabled) {
+              operation.reset();
+              setDisabling(version.revision);
+            } else
+              void operation
+                .mutateAsync({ enabled: true, expected_revision: version.revision })
+                .catch(() => undefined);
+          }}
+        >
+          {version.enabled ? t('common.connections.disable') : t('common.connections.enable')}
+        </button>
+      </div>
       {disabling === null ? <ConnectionOperationNotice operation={operation} /> : null}
       <ConfirmDialog
         open={disabling !== null}
