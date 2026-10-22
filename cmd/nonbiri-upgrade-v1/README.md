@@ -1,6 +1,6 @@
 # Prepare existing storage for v1.1.0
 
-The v1.1.0 server creates fresh schema 31 databases and opens exact schema 31
+The v1.1.0 server creates fresh schema 32 databases and opens exact schema 32
 databases. `nonbiri-upgrade-v1` is the separate, one-time offline converter for
 the following exact source structures:
 
@@ -21,10 +21,11 @@ the following exact source structures:
 | 28 | `904c2c677b748a9fa8c9a39edbd4e109ca3fcd56` |
 | 29 | `b7699638c8e09709d2a319a754e9eb17a6aa2bf0` |
 | 30 | `d899f295ce22ecf298c9051fc04930224b64d194` |
+| 31 | `3f7c7ee41cd5f327b129d6b6ba7bbfe9e39323ce` |
 
 The machine-readable descriptor is authoritative for these exact source commits
 and their pinned manifest hashes. All supported sources convert atomically to
-schema 31.
+schema 32.
 
 The executable that last used a database may differ from the listed commit if
 its stored application identity, generation, schema version and complete
@@ -41,7 +42,7 @@ CGO_ENABLED=0 go build -trimpath -o nonbiri-upgrade-v1 ./cmd/nonbiri-upgrade-v1
 
 Both metadata commands need no database or environment. The converter reports
 its exact sources in `offline_conversions`. The server reports current schema
-31, with empty source and offline-conversion lists.
+32, with empty source and offline-conversion lists.
 
 1. Rehearse on a consistent copy of the intended source using its existing
    encryption root and the reviewed target binaries.
@@ -96,7 +97,7 @@ Earlier sources receive default-off MFA policies without enrollments or proofs.
 Schema 20 adds four covering indexes for request-log filtering; it changes no
 business records. Schema 21 widens endpoint tags with `noncommercial_gateway`
 and model-discovery outcomes with `region` and `unavailable`, preserving
-existing rows. The current application produces account export format 27.
+existing rows. The current application produces account export format 28.
 
 Schema 17 additionally receives the protocol and fishing presentation changes
 already present in schema 18. Existing probabilities and outcomes remain:
@@ -116,8 +117,8 @@ conversion, remove the retired Gateway variable and `NONBIRI_SMTP_HOST`,
 `NONBIRI_SMTP_FROM` and `NONBIRI_SMTP_TLS` from the deployment environment.
 
 The [rc.7 command](../nonbiri-upgrade-rc7/README.md) remains a narrow wrapper
-accepting schema 16 and current schema 31. Both commands use one engine.
+accepting schema 16 and current schema 32. Both commands use one engine.
 `scripts/check-upgrade.sh` creates a populated synthetic source with the pinned
 rc.7 program, converts it, compares retained facts and resumes economy checks.
-The offline suite also covers the registered schema 17–30 fixtures. No
+The offline suite also covers the registered schema 17–31 fixtures. No
 production database or instance configuration belongs in the repository.

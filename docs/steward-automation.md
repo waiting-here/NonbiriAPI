@@ -58,7 +58,7 @@ Provide a fresh, unpredictable `Idempotency-Key` containing 22–128 ASCII lette
 }
 ```
 
-Required fields are `endpoint.connector_type`, `endpoint.base_url`, a nonblank `description`, the explicit boolean `discord_public_thanks`, and one or more `keys` with a nonempty `secret`. The thanks choice records consent for manual Discord public thanks, has no default, and cannot change after submission. Connector type must explicitly be `openai-compatible`, `anthropic-compatible` or `ai-sdk-gateway-v3`. All sources use the custom-URL form; channel IDs and the browser forms' ownership-confirmation fields are not accepted. Submitting the operation creates and donates resources owned by the caller.
+Required fields are `endpoint.connector_type`, `endpoint.base_url`, a nonblank `description`, the explicit boolean `discord_public_thanks`, and one or more `keys` with a nonempty `secret`. The thanks choice records consent for manual Discord public thanks, has no default, and cannot change after submission. Connector type must explicitly match a registered type, including `ai-sdk-gateway-v3` or `ai-sdk-gateway-v4` for the corresponding native Gateway protocol. The base URL is the complete native mount; the protocol is not inferred from its path. See the [Gateway contract](api-contract.md#24-native-ai-sdk-gateway-v3v4-compatibility) for the four service mappings and supported fields. All sources use the custom-URL form; channel IDs and the browser forms' ownership-confirmation fields are not accepted. Submitting the operation creates and donates resources owned by the caller.
 
 The endpoint optionally accepts `note` and `enabled`. Each key accepts:
 
