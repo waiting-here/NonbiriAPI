@@ -544,7 +544,7 @@ LEFT JOIN endpoint_key_limits kl ON kl.endpoint_key_id=b.endpoint_key_id
 JOIN donation_keys dk ON dk.id=b.donation_key_id
 JOIN donations d ON d.id=dk.donation_id
 LEFT JOIN model_pair_catalog pc ON pc.endpoint_key_id=b.endpoint_key_id AND pc.normalized_model_id=b.upstream_model_id
-LEFT JOIN gateway_model_capabilities gm ON dk.connector_type='ai-sdk-gateway-v3' AND gm.base_url=rtrim(dk.canonical_base_url,'/') AND gm.model=b.upstream_model_id
+LEFT JOIN gateway_model_capabilities gm ON dk.connector_type IN ('ai-sdk-gateway-v3','ai-sdk-gateway-v4') AND gm.base_url=rtrim(dk.canonical_base_url,'/') AND gm.model=b.upstream_model_id
 WHERE b.charity_model_id=? ORDER BY b.ord,b.id`, modelID)
 	if err != nil {
 		return AdminBindings{}, fmt.Errorf("charity routing: read bindings: %w", err)

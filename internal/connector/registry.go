@@ -105,13 +105,18 @@ type Dependencies struct {
 type Constructor func(Dependencies) Connector
 
 type Descriptor struct {
-	Type              connectorcontract.Type
-	Capabilities      connectorcontract.CapabilitySet
-	New               Constructor
-	Discoverer        ModelDiscoverer
-	Supports          func(*openai.ChatRequest) bool
-	SupportsEmbedding func(*openai.EmbeddingRequest) bool
-	CheckTarget       func(connectorcontract.Target, *openai.ChatRequest, connectorcontract.AttemptPolicy) error
+	Type                 connectorcontract.Type
+	Capabilities         connectorcontract.CapabilitySet
+	New                  Constructor
+	Discoverer           ModelDiscoverer
+	Supports             func(*openai.ChatRequest) bool
+	SupportsEmbedding    func(*openai.EmbeddingRequest) bool
+	CheckTarget          func(connectorcontract.Target, *openai.ChatRequest, connectorcontract.AttemptPolicy) error
+	SupportsImage        func(*openai.ImageRequest) bool
+	SupportsInference    func(*openai.InferenceRequest) bool
+	CheckEmbeddingTarget func(connectorcontract.Target, *openai.EmbeddingRequest, connectorcontract.AttemptPolicy) error
+	CheckImageTarget     func(connectorcontract.Target, *openai.ImageRequest, connectorcontract.AttemptPolicy) error
+	CheckInferenceTarget func(connectorcontract.Target, *openai.InferenceRequest, connectorcontract.AttemptPolicy) error
 }
 
 type Registry struct {
@@ -154,7 +159,7 @@ func NewDefaultRegistry() *Registry {
 }
 
 func NewDefaultRegistryWithGatewayModels(models gatewaypolicy.Config) *Registry {
-	registry, err := NewRegistry(systemOneDescriptor(), chatOnlyDescriptor(), rerankDescriptor(connectorcontract.TypeCohereRerank), rerankDescriptor(connectorcontract.TypeJinaRerank), rerankDescriptor(connectorcontract.TypeSiliconFlowRerank), rerankDescriptor(connectorcontract.TypeVoyageRerank), openAIDescriptor(), anthropicDescriptor(), gatewayDescriptorWithModels(models), decisionsDescriptor(), translatingDescriptor(connectorcontract.TypeGoogleGemini), translatingDescriptor(connectorcontract.TypeOpenAIResponses))
+	registry, err := NewRegistry(systemOneDescriptor(), chatOnlyDescriptor(), rerankDescriptor(connectorcontract.TypeCohereRerank), rerankDescriptor(connectorcontract.TypeJinaRerank), rerankDescriptor(connectorcontract.TypeSiliconFlowRerank), rerankDescriptor(connectorcontract.TypeVoyageRerank), openAIDescriptor(), anthropicDescriptor(), gatewayDescriptorForType(connectorcontract.TypeAISDKGatewayV3, models), gatewayDescriptorForType(connectorcontract.TypeAISDKGatewayV4, models), decisionsDescriptor(), translatingDescriptor(connectorcontract.TypeGoogleGemini), translatingDescriptor(connectorcontract.TypeOpenAIResponses))
 	if err != nil {
 		panic(err)
 	}
@@ -193,7 +198,7 @@ func (r *Registry) SupportsOperationRequest(t connectorcontract.Type, operation 
 	}
 	descriptor, ok := r.Descriptor(t)
 	if operation == connectorcontract.OperationImagesGenerations {
-		return ok && descriptor.Capabilities.Has(connectorcontract.CapabilityImagesGenerations)
+		return ok && descriptor.Capabilities.Has(connectorcontract.CapabilityImagesGenerations) && (descriptor.SupportsImage == nil || descriptor.SupportsImage(input.Image))
 	}
 	return ok && descriptor.Capabilities.Has(connectorcontract.CapabilityEmbeddings) && (descriptor.SupportsEmbedding == nil || descriptor.SupportsEmbedding(embedding))
 }
@@ -572,8 +577,33 @@ func (r *Registry) CheckTargetRequest(target connectorcontract.Target, operation
 			return reject("protocol preflight", "request cannot be represented by this connector")
 		}
 	}
+	var targetError error
+	switch operation {
+	case connectorcontract.OperationEmbeddings:
+		if descriptor.Capabilities.Has(connectorcontract.CapabilityEmbeddings) && descriptor.CheckEmbeddingTarget != nil {
+			targetError = descriptor.CheckEmbeddingTarget(target, embedding, policy)
+		} else {
+			break
+		}
+		return normalizePreflightError(targetError)
+	case connectorcontract.OperationImagesGenerations:
+		if descriptor.Capabilities.Has(connectorcontract.CapabilityImagesGenerations) && descriptor.CheckImageTarget != nil {
+			targetError = descriptor.CheckImageTarget(target, input.Image, policy)
+		} else {
+			break
+		}
+		return normalizePreflightError(targetError)
+	}
 	if !r.SupportsOperationRequest(target.Type(), operation, chat, embedding, images...) {
 		return reject("protocol preflight", "request cannot be represented by this connector")
 	}
 	return nil
+}
+
+func normalizePreflightError(err error) error {
+	var rejected *connectorcontract.RequestRejection
+	if err == nil || errors.As(err, &rejected) {
+		return err
+	}
+	return &connectorcontract.RequestRejection{Stage: "protocol preflight", Field: "request", Reason: "request cannot be represented by this connector"}
 }

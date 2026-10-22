@@ -170,7 +170,7 @@ func TestRegistryNormalizesTypedNilDiscovererToUnsupported(t *testing.T) {
 func TestDefaultRegistryDescriptorDrivesExecutionAndDiscovery(t *testing.T) {
 	registry := NewDefaultRegistry()
 	types := registry.Types()
-	wantTypes := []connectorcontract.Type{connectorcontract.TypeAISDKGatewayV3, connectorcontract.TypeAnthropicCompatible, connectorcontract.TypeCohereRerank, connectorcontract.TypeGoogleGemini, connectorcontract.TypeJinaRerank, connectorcontract.TypeOpenAIChatCompletions, connectorcontract.TypeOpenAICompatible, connectorcontract.TypeOpenAIDecisions, connectorcontract.TypeOpenAIResponses, connectorcontract.TypeSiliconFlowRerank, connectorcontract.TypeTypeSafeSystemOne, connectorcontract.TypeVoyageRerank}
+	wantTypes := []connectorcontract.Type{connectorcontract.TypeAISDKGatewayV3, connectorcontract.TypeAISDKGatewayV4, connectorcontract.TypeAnthropicCompatible, connectorcontract.TypeCohereRerank, connectorcontract.TypeGoogleGemini, connectorcontract.TypeJinaRerank, connectorcontract.TypeOpenAIChatCompletions, connectorcontract.TypeOpenAICompatible, connectorcontract.TypeOpenAIDecisions, connectorcontract.TypeOpenAIResponses, connectorcontract.TypeSiliconFlowRerank, connectorcontract.TypeTypeSafeSystemOne, connectorcontract.TypeVoyageRerank}
 	if !slices.Equal(types, wantTypes) {
 		t.Fatalf("default registry types=%v", types)
 	}

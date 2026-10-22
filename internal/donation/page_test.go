@@ -180,7 +180,7 @@ func TestDonationSourcesAggregateAcrossDonorsAndFilteredCollections(t *testing.T
 }
 
 func TestSourceUsabilityUsesUndiscountedReserveAndCurrentRules(t *testing.T) {
-	for _, kind := range []string{"openai-compatible", "google-gemini", "openai-responses", "openai-decisions", "openai-chat-completions", "typesafe-systemone", "cohere-rerank", "jina-rerank", "siliconflow-rerank", "voyage-rerank"} {
+	for _, kind := range []string{"openai-compatible", "ai-sdk-gateway-v3", "ai-sdk-gateway-v4", "google-gemini", "openai-responses", "openai-decisions", "openai-chat-completions", "typesafe-systemone", "cohere-rerank", "jina-rerank", "siliconflow-rerank", "voyage-rerank"} {
 		t.Run(kind, func(t *testing.T) { testSourceUsability(t, kind) })
 	}
 }
