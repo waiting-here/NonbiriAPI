@@ -158,8 +158,18 @@ func endpointKeyBrowseTx(ctx context.Context, tx *sql.Tx, userID, endpointID int
 	}
 	scope := ownedBindingScope + ` AND e.id=? AND k.id=?`
 	args := []any{userID, userID, endpointID, keyID}
+	// Every target here shares one key. Resolve its live authority once within
+	// this snapshot; only the selected service mask varies between targets.
+	var availableMask int64
+	err = tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT a.native_service_mask FROM self_grant_availability a
+WHERE a.endpoint_key_id=? AND a.owner_user_id=?
+AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=a.endpoint_key_id)),0)`, keyID, userID).Scan(&availableMask)
+	if err != nil {
+		return nil, err
+	}
 	var modelCount, bindingCount, availableCount int64
-	err = tx.QueryRowContext(ctx, `SELECT COUNT(DISTINCT m.id),COUNT(DISTINCT b.id),COUNT(DISTINCT CASE WHEN `+ownedBindingState+`='available' THEN b.id ELSE NULL END)`+ownedBindingJoin+scope, args...).Scan(&modelCount, &bindingCount, &availableCount)
+	countArgs := append([]any{availableMask}, args...)
+	err = tx.QueryRowContext(ctx, `SELECT COUNT(DISTINCT m.id),COUNT(DISTINCT b.id),COUNT(DISTINCT CASE WHEN (?&t.native_service_mask)>0 THEN b.id ELSE NULL END)`+ownedBindingJoin+scope, countArgs...).Scan(&modelCount, &bindingCount, &availableCount)
 	if err != nil {
 		return nil, err
 	}
