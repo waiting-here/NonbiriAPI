@@ -736,11 +736,8 @@ export function normalizeDonation(value: unknown): Donation {
   );
   const status = enumValue(item.status, 'donation status', DONATION_STATUSES);
   const reviewResult = normalizeReviewResult(item.review_result);
-  if (status === 'pending' && reviewResult !== null) invalid('pending donation review result');
-  if (status === 'approved' && reviewResult?.decision !== 'approve')
-    invalid('approved donation review result');
-  if (status === 'rejected' && reviewResult?.decision !== 'reject')
-    invalid('rejected donation review result');
+  const useSummary =
+    item.use_summary === undefined ? undefined : normalizeUseSummary(item.use_summary);
   const keys = array(item.keys, 'donation keys', 100).map(normalizeDonationKey);
   if (keys.length === 0) invalid('donation keys');
   requireUnique(keys, (key) => key.id, 'donation key identities');
@@ -753,62 +750,68 @@ export function normalizeDonation(value: unknown): Donation {
   ) {
     invalid('donation review timestamp');
   }
-  if (status === 'pending') {
+  // Use-level review preserves the submission header and its budget history.
+  if (useSummary === undefined) {
+    if (status === 'pending' && reviewResult !== null) invalid('pending donation review result');
+    if (status === 'approved' && reviewResult?.decision !== 'approve')
+      invalid('approved donation review result');
+    if (status === 'rejected' && reviewResult?.decision !== 'reject')
+      invalid('rejected donation review result');
+    if (status === 'pending') {
+      if (
+        keys.some(
+          (key) =>
+            key.charityState !== 'pending' ||
+            key.limits.price !== null ||
+            key.limits.calls !== null ||
+            key.limits.tokens !== null ||
+            key.usage.priceUsed !== '0' ||
+            key.usage.priceInflight !== '0' ||
+            key.usage.callsUsed !== '0' ||
+            key.usage.callsInflight !== '0' ||
+            key.usage.tokensUsed !== '0' ||
+            key.usage.tokensInflight !== '0' ||
+            key.tokenReserve !== 0 ||
+            key.streak.generation !== '1' ||
+            key.streak.count !== '0' ||
+            key.streak.failureDisabled ||
+            key.endedReason !== null,
+        )
+      ) {
+        invalid('pending donation state');
+      }
+    } else if (keys.some((key) => key.charityState === 'pending')) {
+      invalid('terminal donation key state');
+    }
     if (
-      keys.some(
-        (key) =>
-          key.charityState !== 'pending' ||
-          key.limits.price !== null ||
-          key.limits.calls !== null ||
-          key.limits.tokens !== null ||
-          key.usage.priceUsed !== '0' ||
-          key.usage.priceInflight !== '0' ||
-          key.usage.callsUsed !== '0' ||
-          key.usage.callsInflight !== '0' ||
-          key.usage.tokensUsed !== '0' ||
-          key.usage.tokensInflight !== '0' ||
-          key.tokenReserve !== 0 ||
-          key.streak.generation !== '1' ||
-          key.streak.count !== '0' ||
-          key.streak.failureDisabled ||
-          key.endedReason !== null,
-      )
+      status === 'approved' &&
+      keys.every((key) => key.charityState === 'ended' || key.charityState === 'expired')
     ) {
-      invalid('pending donation state');
+      invalid('approved donation keys');
     }
-  } else if (keys.some((key) => key.charityState === 'pending')) {
-    invalid('terminal donation key state');
-  }
-  if (
-    status === 'approved' &&
-    keys.every((key) => key.charityState === 'ended' || key.charityState === 'expired')
-  ) {
-    invalid('approved donation keys');
-  }
-  if (status === 'rejected') {
-    if (keys.some((key) => key.charityState !== 'ended')) {
-      invalid('rejected donation state');
+    if (status === 'rejected') {
+      if (keys.some((key) => key.charityState !== 'ended')) {
+        invalid('rejected donation state');
+      }
     }
-  }
-  if (
-    status === 'deleted' &&
-    (reviewResult?.decision === 'reject' ||
-      keys.some((key) => key.charityState !== 'ended' && key.charityState !== 'expired'))
-  ) {
-    invalid('deleted donation state');
-  }
-  if (
-    status === 'expired' &&
-    (reviewResult?.decision !== 'approve' ||
-      keys.some((key) => key.charityState !== 'ended' && key.charityState !== 'expired') ||
-      !keys.some((key) => key.charityState === 'expired'))
-  ) {
-    invalid('expired donation state');
+    if (
+      status === 'deleted' &&
+      (reviewResult?.decision === 'reject' ||
+        keys.some((key) => key.charityState !== 'ended' && key.charityState !== 'expired'))
+    ) {
+      invalid('deleted donation state');
+    }
+    if (
+      status === 'expired' &&
+      (reviewResult?.decision !== 'approve' ||
+        keys.some((key) => key.charityState !== 'ended' && key.charityState !== 'expired') ||
+        !keys.some((key) => key.charityState === 'expired'))
+    ) {
+      invalid('expired donation state');
+    }
   }
   return {
-    ...(item.use_summary === undefined
-      ? {}
-      : { useSummary: normalizeUseSummary(item.use_summary) }),
+    ...(useSummary === undefined ? {} : { useSummary }),
     id: decimalID(item.id, 'donation id'),
     ownerHiddenAt:
       item.owner_hidden_at == null ? null : timestamp(item.owner_hidden_at, 'hidden timestamp'),
