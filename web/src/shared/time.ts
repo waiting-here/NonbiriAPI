@@ -307,13 +307,15 @@ export function createTimeDraft(
 }
 
 export function editTimeDraft(draft: TimeDraft, text: string, invalidInput = false): TimeDraft {
+  const nextText = canonicalText(text, draft.precision);
+  const unchanged = nextText === draft.text && invalidInput === draft.invalidInput;
   return {
     ...draft,
-    text: canonicalText(text, draft.precision),
+    text: nextText,
     siteOffsetChanged: false,
     invalidInput,
-    resolved: undefined,
-    errorKey: undefined,
+    resolved: unchanged ? draft.resolved : undefined,
+    errorKey: unchanged ? draft.errorKey : undefined,
   };
 }
 

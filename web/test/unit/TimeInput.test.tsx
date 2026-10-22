@@ -4,8 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TimeInput } from '../../src/shared/components/TimeInput';
 import {
   createTimeDraft,
+  editTimeDraft,
+  rezoneSiteTimeDraft,
+  resolveFixedLocalTime,
+  timeDraftKey,
   timeDraftValue,
   type ResolvedTime,
+  type TimePrecision,
   type TimeStation,
 } from '../../src/shared/time';
 import { renderWithProviders } from './support';
@@ -25,13 +30,15 @@ const json = (body: unknown, status = 200) =>
 function Harness({
   epoch = null,
   station = 'user',
+  precision = 'minute',
   replacementEpoch,
 }: {
   epoch?: number | null;
   station?: TimeStation;
+  precision?: TimePrecision;
   replacementEpoch?: number | null;
 }) {
-  const [draft, setDraft] = useState(() => createTimeDraft(epoch));
+  const [draft, setDraft] = useState(() => createTimeDraft(epoch, precision));
   const [note, setNote] = useState('');
   const [saved, setSaved] = useState<number | null | undefined>(undefined);
   return (
@@ -49,7 +56,10 @@ function Harness({
       </label>
       <button disabled={timeDraftValue(draft) === undefined}>Save</button>
       {replacementEpoch !== undefined ? (
-        <button type="button" onClick={() => setDraft(createTimeDraft(replacementEpoch))}>
+        <button
+          type="button"
+          onClick={() => setDraft(createTimeDraft(replacementEpoch, precision))}
+        >
           Replace draft
         </button>
       ) : null}
@@ -129,6 +139,45 @@ describe('wall-clock input', () => {
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
       '/admin/api/time-context',
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it('retains a resolved instant when a zero-second input event repeats its normalized value', () => {
+    const local = '2030-01-01T01:00';
+    const edited = editTimeDraft(
+      rezoneSiteTimeDraft(createTimeDraft(null, 'second', 'UTC'), 0),
+      local,
+    );
+    const value = resolveFixedLocalTime(local + ':00', 0);
+    const resolved = { ...edited, resolved: { key: timeDraftKey(edited), value } };
+    const repeated = editTimeDraft(resolved, local);
+    expect(timeDraftValue(repeated, 'UTC')).toBe(value.instant);
+    expect(timeDraftValue(editTimeDraft(repeated, local, true), 'UTC')).toBeUndefined();
+  });
+
+  it('settles second-precision administrator input after consecutive native input and change events', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((path: string) =>
+        path.endsWith('/time-context')
+          ? Promise.resolve(json({ mode: 'site', offset_minutes: 0 }))
+          : Promise.reject(new Error(`unexpected request: ${path}`)),
+      ),
+    );
+    const view = await renderWithProviders(<Harness station="admin" precision="second" />, {
+      station: 'admin',
+    });
+    const input = screen.getByLabelText('End time');
+    await waitFor(() => expect(input).toBeEnabled());
+    act(() => {
+      fireEvent.input(input, { target: { value: '2030-01-01T01:00' } });
+      fireEvent.change(input);
+    });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled());
+    expect(screen.queryByText('Checking this time…')).not.toBeInTheDocument();
+    await view.user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(screen.getByLabelText('Saved')).toHaveTextContent(
+      String(Date.parse('2030-01-01T01:00:00Z') / 1000),
     );
   });
 
