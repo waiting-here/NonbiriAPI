@@ -1,6 +1,12 @@
 import { mkdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import type { Binding, BindingCandidate, Model } from '../../src/user/features/core/types';
+import type { ServiceProjection } from '../../src/shared/connections';
+import type {
+  Binding,
+  BindingCandidate,
+  BindingTargetInput,
+  Model,
+} from '../../src/user/features/core/types';
 import { numberedPage } from './numbered-fixtures';
 import { USER_ORIGIN } from './ports';
 import { collectConsoleViolations, mockPublicConfig, mockRoleSession } from './support';
@@ -14,7 +20,17 @@ const cases = [
   { width: 390, locale: 'zh', theme: 'dark', create: false },
   { width: 390, locale: 'zh', theme: 'light', create: false },
 ] as const;
+const serviceProjection = (): ServiceProjection => ({
+  native_services: ['chat_completions', 'responses'],
+  model_types: ['chat_completions', 'responses'],
+  service_routes: [
+    { operation: 'chat_completions', native_service: 'chat_completions', mode: 'native' },
+    { operation: 'responses', native_service: 'responses', mode: 'native' },
+  ],
+  capabilities: { can_bind: true, unavailable_reason: null },
+});
 const candidate = (index: number): BindingCandidate => ({
+  ...serviceProjection(),
   endpoint_key_id: index === 10 ? '112' : '111',
   endpoint_base_url: `https://service-${index === 10 ? 12 : 11}.example.test/v1`,
   connector_type: 'openai-compatible',
@@ -25,6 +41,36 @@ const candidate = (index: number): BindingCandidate => ({
   upstream_model_id: `gpt-source-${index + 1}`,
   source_types: [index === 10 ? 'manual' : 'automatic'],
 });
+const binding = (source: BindingCandidate, id: string, ord: number): Binding => {
+  return {
+    id,
+    ord,
+    endpoint_key_id: source.endpoint_key_id,
+    endpoint_base_url: source.endpoint_base_url,
+    connector_type: source.connector_type,
+    endpoint_note: source.endpoint_note,
+    endpoint_key_display_head: source.endpoint_key_display_head,
+    endpoint_key_display_tail: source.endpoint_key_display_tail,
+    endpoint_key_note: source.endpoint_key_note,
+    upstream_model_id: source.upstream_model_id,
+    targets: [
+      {
+        ...serviceProjection(),
+        id: String(Number(id) + 1000),
+        revision: '1',
+        endpoint_id: source.endpoint_key_id === '112' ? '12' : '11',
+        endpoint_key_id: source.endpoint_key_id,
+        upstream_model_id: source.upstream_model_id,
+        connector_type: source.connector_type,
+        configuration_type: source.connector_type,
+        base_url: source.endpoint_base_url,
+        credential_id: source.endpoint_key_id === '112' ? '212' : '211',
+        credential_version: '1',
+        grant_revision: '1',
+      },
+    ],
+  };
+};
 const original: Model = {
   model_types: ['chat_completions', 'embeddings'],
   id: '101',
@@ -76,14 +122,7 @@ async function fixture(page: Page, empty: boolean) {
       ];
   let bindings: Binding[] = empty
     ? []
-    : Array.from({ length: 25 }, (_, i) => ({
-        ...(({ source_types, ...fields }) => {
-          void source_types;
-          return fields;
-        })(candidate(i)),
-        id: String(201 + i),
-        ord: i,
-      }));
+    : Array.from({ length: 25 }, (_, i) => binding(candidate(i), String(201 + i), i));
   const candidates = Array.from({ length: 11 }, (_, i) => candidate(i));
   const creates: Record<string, unknown>[] = [],
     patches: Record<string, unknown>[] = [];
@@ -94,7 +133,11 @@ async function fixture(page: Page, empty: boolean) {
   const bindingReads: { revision: string; order: string[] }[] = [];
   const endpoints = ['11', '12'].map((id) => ({
     id,
+    connection_id: id === '11' ? '51' : '52',
     connector_type: 'openai-compatible',
+    configuration_type: 'openai-compatible',
+    native_services: serviceProjection().native_services,
+    rerank_format: '',
     base_url: `https://service-${id}.example.test/v1`,
     origin: { kind: 'custom' },
     note: id === '11' ? 'Service A' : 'Service B',
@@ -141,10 +184,31 @@ async function fixture(page: Page, empty: boolean) {
       model = { ...model, binding_revision: '2' };
       models = models.map((row) => (row.id === model.id ? model : row));
       body = { binding_revision: '2' };
-    } else if (path.endsWith('/bindings/batch')) {
+    } else if (path.endsWith('/bindings/batch-receipt')) {
       identity();
       adds.push(input());
-      body = { bindings, binding_revision: '2' };
+      const selections = input().selections as { targets: BindingTargetInput[] }[];
+      const added = selections.map((selection, index) => {
+        expect(selection.targets).toHaveLength(1);
+        const target = selection.targets[0]!;
+        const source = candidates.find(
+          (row) =>
+            row.endpoint_key_id === target.endpoint_key_id &&
+            row.upstream_model_id === target.upstream_model_id,
+        );
+        expect(source).toBeDefined();
+        expect(target.native_services).toEqual(serviceProjection().native_services);
+        return binding(source!, String(201 + bindings.length + index), bindings.length + index);
+      });
+      bindings = [...bindings, ...added];
+      model = { ...model, binding_revision: '2', binding_count: String(bindings.length) };
+      models = models.map((row) => (row.id === model.id ? model : row));
+      body = {
+        model_id: model.id,
+        binding_revision: '2',
+        added_count: String(added.length),
+        binding_count: String(bindings.length),
+      };
     } else if (path.endsWith('/bindings')) {
       const revision = orders.length || adds.length ? '2' : '1';
       bindingReads.push({ revision, order: bindings.map((row) => row.id) });
@@ -164,12 +228,19 @@ async function fixture(page: Page, empty: boolean) {
         );
       body = numberedPage(rows, url.searchParams);
     } else if (path === '/api/endpoints') body = numberedPage(endpoints, url.searchParams);
-    else if (path.endsWith('/keys'))
+    else if (path.endsWith('/keys')) {
+      const endpointId = path.split('/')[3]!;
       body = numberedPage(
         [
           {
-            id: '111',
-            endpoint_id: '11',
+            id: endpointId === '12' ? '112' : '111',
+            endpoint_id: endpointId,
+            credential_id: endpointId === '12' ? '212' : '211',
+            credential_version: '1',
+            grant_revision: '1',
+            credential_available: true,
+            discovery_source_id: null,
+            native_services: serviceProjection().native_services,
             display_head: 'sk-test',
             display_tail: 'tail',
             note: 'Primary key',
@@ -185,16 +256,24 @@ async function fixture(page: Page, empty: boolean) {
         ],
         url.searchParams,
       );
-    else if (path.endsWith('/models/manual')) {
+    } else if (path.endsWith('/models/manual')) {
       identity();
       manual.push(input());
+      const entries = input().entries as { upstream_model_id: string; provider: string }[];
+      expect(entries).toHaveLength(1);
+      const entry = entries[0]!;
+      candidates.push({
+        ...candidate(0),
+        upstream_model_id: entry.upstream_model_id,
+        source_types: ['manual'],
+      });
       body = {
         entries: [
           {
             id: '301',
             source_type: 'manual',
-            upstream_model_id: 'typed-model',
-            provider: '',
+            upstream_model_id: entry.upstream_model_id,
+            provider: entry.provider,
             source_revision: '1',
             pair_revision: '1',
             created_at: 1700000000,
@@ -219,6 +298,12 @@ for (const scenario of cases) {
     ).user;
     const core = (key: string) => copy.core[key] as string;
     const text = copy.models;
+    const nativeServices = JSON.parse(
+      await readFile(
+        resolve(process.cwd(), `src/shared/i18n/common/${scenario.locale}.json`),
+        'utf8',
+      ),
+    ).common.modelTypes;
     const guard = collectConsoleViolations(page);
     await page.setViewportSize({ width: scenario.width, height: 900 });
     await page.addInitScript(({ locale, theme }) => {
@@ -278,20 +363,52 @@ for (const scenario of cases) {
         { entries: [{ upstream_model_id: 'typed-model', provider: '' }] },
       ]);
       expect(state.adds).toHaveLength(0);
-      await page
-        .getByRole('button', {
-          name: core('models.addSelected').replace('{{count}}', '2'),
-          exact: true,
-        })
-        .click();
+      await expect(results.locator('.model-source-result')).toHaveCount(1);
+      await results.locator('.model-source-result').filter({ hasText: 'typed-model' }).click();
+      const selections = page.locator('.core-selection-list > li');
+      await expect(selections).toHaveCount(2);
+      const addSelected = page.getByRole('button', {
+        name: core('models.addSelected').replace('{{count}}', '2'),
+        exact: true,
+      });
+      await expect(addSelected).toBeDisabled();
+      for (const name of ['gpt-source-11', 'typed-model']) {
+        const selection = selections.filter({ has: page.getByText(name, { exact: true }) });
+        for (const service of ['chat_completions', 'responses'] as const) {
+          await selection
+            .getByRole('checkbox', { name: nativeServices[service], exact: true })
+            .check();
+        }
+      }
+      await addSelected.click();
       await expect.poll(() => state.adds.length).toBe(1);
       expect(state.adds[0]).toMatchObject({
         expected_binding_revision: '1',
         selections: [
-          { endpoint_key_id: '112', upstream_model_id: 'gpt-source-11' },
-          { endpoint_key_id: '111', upstream_model_id: 'typed-model' },
+          {
+            targets: [
+              {
+                endpoint_key_id: '112',
+                upstream_model_id: 'gpt-source-11',
+                native_services: ['chat_completions', 'responses'],
+              },
+            ],
+          },
+          {
+            targets: [
+              {
+                endpoint_key_id: '111',
+                upstream_model_id: 'typed-model',
+                native_services: ['chat_completions', 'responses'],
+              },
+            ],
+          },
         ],
       });
+      await expect
+        .poll(() => state.bindingReads.at(-1))
+        .toEqual({ revision: '2', order: ['201', '202'] });
+      expect(state.manual).toHaveLength(1);
       await picture(page, '1440-en-light-sources');
     } else {
       await expect(page.locator('.nb-table tbody tr')).toHaveCount(3);
