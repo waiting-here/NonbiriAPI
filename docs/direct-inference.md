@@ -7,7 +7,7 @@ the [HTTP contract](api-contract.md).
 
 ## Connector selection
 
-Choose the endpoint's protocol explicitly. The registry contains these 12 types;
+Choose the endpoint's protocol explicitly. The registry contains these 13 types;
 it does not infer a type from a hostname or retry another API after an upstream
 failure. Each upstream model must also support the requested operation.
 
@@ -17,7 +17,8 @@ failure. Each upstream model must also support the requested operation.
 | `openai-chat-completions` | Native Chat and the bounded Responses-to-Chat conversion below. |
 | `openai-responses` | Native Responses/compact/input-token counting and the bounded Chat-to-Responses conversion below. |
 | `anthropic-compatible` | The supported Chat-to-Messages subset. |
-| `ai-sdk-gateway-v3` | The supported Gateway v3 Chat and embedding subsets. |
+| `ai-sdk-gateway-v3` | Chat, bounded Responses conversion, image generation, text embeddings and rerank using specification v3. |
+| `ai-sdk-gateway-v4` | The same four service families using specification v4, including common reasoning and embedding dimensions. |
 | `google-gemini` | The supported Chat-to-GenerateContent subset. |
 | `openai-decisions` | Native Decisions. |
 | `typesafe-systemone` | Native System One, with separate model discovery. |
@@ -31,6 +32,15 @@ such as `https://provider.example/v1` receives `/responses`, `/rerank` or the
 corresponding resource suffix. The platform does not insert another `/v1` or
 accept arbitrary upstream paths. Rerank providers may use a different versioned
 mount; select both their explicit connector and their correct base.
+
+Gateway endpoints also require their complete native mount. Their text, image,
+embedding and rerank suffixes and version/model headers are listed in the
+[Gateway contract](api-contract.md#24-native-ai-sdk-gateway-v3v4-compatibility).
+The version is explicit; the connector never rewrites the base URL or probes
+another version. Images default to base64 output; embeddings support float and
+base64 in both versions. V3 rejects `dimensions`; v4 validates the returned
+dimension. Standard Gateway rerank reports no usage, so existing per-call or
+conservative missing-usage settlement applies.
 
 Model `model_types` remains an array. Chat Completions and Responses form one
 service selection: either legacy name enables both, and responses return both
@@ -109,6 +119,12 @@ choose one upstream protocol before dispatch; compact and input-token counting
 never convert to Chat. JSON and SSE conversion preserve valid usage, tool-call
 associations and protocol termination; unsupported input is rejected before
 sending upstream.
+
+Gateway v3/v4 uses the bounded Responses-to-Chat subset before compiling its
+native language-model request, then projects validated Chat output to Responses.
+It does not add compact/input-token routes or arbitrary Responses parameters.
+The required `store:false` must pass an explicit target storage policy; see
+[Gateway model controls](gateway-model-controls.md#storage).
 
 With `openai-responses`, Chat messages support text, HTTPS/data images, function
 tools and complete matched results, tool choice, parallel tools, temperature,

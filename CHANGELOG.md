@@ -13,6 +13,13 @@ Each version entry describes its source and compatibility boundary; a release ta
   APIs and all WebSocket/Realtime/WebRTC interfaces remain outside this version.
 - Dedicated Chat and System One connectors and explicit Cohere, Jina, SiliconFlow
   and Voyage rerank adapters. System One remains separate from Decisions.
+- Explicit AI SDK Gateway v3/v4 text, image generation, embeddings and rerank
+  support, with complete native base URLs and no automatic version switching.
+  Both versions support float/base64 embeddings; v4 adds common reasoning and
+  embedding dimensions. Image output defaults to base64, and standard rerank
+  responses retain unknown usage instead of inventing token counts. The existing
+  default-off cost-attribution setting applies to all four services in both
+  versions.
 - Search-unit pricing and independent input/output modality prices for caller
   charges, donor rewards and long-context tiers, with standard-usage validation
   and aggregate-price fallback per side.
@@ -66,11 +73,12 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Chat and Responses share a model service selection, with explicit upstream
   protocol choice and bounded conversion in both directions. Other model
   services retain independent multi-selection.
-- Storage schema 31 includes the earlier direct-inference/admission changes,
-  personal managed-header configuration, anonymous pressure samples and minimal
-  claim-bound caller-parameter-error receipts. Exact schema 16–30 sources use
-  the offline converter. Account export 27 includes safe aggregate modality/search
-  usage, configured/effective user limits and personal-model header configuration;
+- Storage schema 32 adds the explicit Gateway v4 protocol value and retains
+  direct-inference/admission changes, personal managed-header configuration,
+  anonymous pressure samples and minimal caller-parameter-error receipts.
+  Exact schema 16–31 sources use the offline converter. Account export 28 retains
+  v3/v4 protocol values, safe aggregate modality/search usage, configured/effective
+  user limits and personal-model header configuration;
   generated header values and shared charity configuration remain excluded.
 - Model settings and request adaptation have consistent entry points and header/body
   groups across personal and charity editors, with separate saves and existing
@@ -88,7 +96,7 @@ Each version entry describes its source and compatibility boundary; a release ta
 ### Fixed
 
 - Account deletion succeeds after related terminal request logs have naturally expired.
-- Account downloads accept export versions 25–27 and preserve saved personal
+- Account downloads accept export versions 11–28 and preserve saved personal
   managed-header settings, while retaining identity and attachment-version checks.
 - Improve glass-surface readability, management back controls and centered
   workbench widths on desktop and mobile. Focus-mode background viewing restores

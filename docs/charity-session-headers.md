@@ -45,6 +45,6 @@ Creation without the field disables the feature. PATCH omission preserves it; an
 
 Session values are temporary upstream correlation identifiers, not authentication credentials. They are not returned through configuration or public model APIs, logged, exposed in raw error diagnostics, or included in account-content exports. They may allow the selected upstream to associate requests during the session.
 
-Account export 27 includes personal models' saved `session_headers` entries (`name,idle_seconds,format`). Shared charity-model configuration and generated values are excluded; personal charity consumption retains its existing aggregate.
+Account export 28 includes personal models' saved `session_headers` entries (`name,idle_seconds,format`). Shared charity-model configuration and generated values are excluded; personal charity consumption retains its existing aggregate.
 
 Expired inactive values are removed by bounded maintenance. Deleting the user or model removes its cache and active-use records. Late completions update only surviving records and cannot recreate deleted data or extend a replacement value.

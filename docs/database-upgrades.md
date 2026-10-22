@@ -2,15 +2,15 @@
 
 ## Supported databases
 
-The v1.1.0 application accepts a new database or the current schema **31**.
-Existing exact schema 16–30 databases require the separate one-time converter.
+The v1.1.0 application accepts a new database or the current schema **32**.
+Existing exact schema 16–31 databases require the separate one-time converter.
 The normal service contains only current DDL and validation; it does not import
 or embed historical schemas or conversion code. Later v1.x releases must provide
 a complete upgrade path from every earlier stable v1.x database. An older binary
 is not required to read a newer database.
 
 SQLite identity remains `application_id=0x4E425249`, `user_version=2`. Account
-exports use format **27**, independently of the storage schema. An unknown
+exports use format **28**, independently of the storage schema. An unknown
 identity, version or structural manifest is rejected before writes.
 
 ```sh
@@ -20,11 +20,19 @@ identity, version or structural manifest is rejected before writes.
 
 These commands load no application configuration or database. Each machine-readable descriptor
 contains the current identity and accepted versions. The application descriptor
-accepts only schema 31 and has empty migration and conversion lists. The converter
+accepts only schema 32 and has empty migration and conversion lists. The converter
 descriptor lists its exact offline sources and target. Deployment tools use both
 descriptors instead of parsing Go source or deriving versions from array lengths.
 
 ## Schema changes
+
+Schema 32 adds `ai-sdk-gateway-v4` to the existing closed connector values in
+channels, endpoints, credential secrets, donation keys, request attempts and
+report cases/targets. The seven affected tables are rebuilt transactionally;
+existing v3 values, credentials, bindings, counters, identifiers and operator
+configuration are preserved. No new personal fields or retention periods are
+introduced. Account export 28 records the new protocol value while retaining
+the existing safe projections. Exact schema 31 is a registered offline source.
 
 Schema 31 adds a claim-bound receipt for narrowly verified caller-parameter errors. It stores only the claim reference, HTTP 400/422 and one recognized error code, and extends the existing neutral-outcome guards. It stores no parameter name/value, request body, upstream message or user identity. It follows claim deletion and does not add an account-export field. Accounting, existing retry facts and unknown-error handling are preserved.
 
@@ -158,7 +166,7 @@ donation terminal clocks, expiry, balances or historical settlements.
 ## One-time conversion
 
 Build `./cmd/nonbiri-upgrade-v1` from the same commit as the target application.
-The converter accepts exact registered schema 16–30 structures. For rc.7,
+The converter accepts exact registered schema 16–31 structures. For rc.7,
 the reference source is `82f1711b674425745a768f781e0e0c34dcb37ac3`. The database
 manifest determines eligibility, not a guess based on a release label.
 
@@ -167,7 +175,7 @@ needed. Ordinary `--apply` validates the exact source, encryption-root identity,
 required configuration and migration-affected relationships, without scanning
 unrelated historical tables. Run it with the service stopped and its existing
 master key available. The converter acquires exclusive
-database access and converts the source to schema 31 in one transaction. A matching
+database access and converts the source to schema 32 in one transaction. A matching
 current schema is a no-op; structural drift, an unknown source or a wrong key is
 rejected. Failure or cancellation rolls back.
 
