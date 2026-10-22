@@ -358,7 +358,7 @@ func TestCatalogResourceAvailabilityHonorsCandidateCeiling(t *testing.T) {
 		}
 		selections = append(selections, BindingSelection{DonationKeyID: fmt.Sprint(key), UpstreamModelID: "upstream"})
 	}
-	if _, err := env.service.AddBindingsAdmin(context.Background(), modelID, routingMutation(t, 'B', http.MethodPost, routeAdminBindingBatch, []int64{modelID}, map[string]any{"ceiling": true}), BindingBatch{ExpectedBindingRevision: "0", Selections: selections}); err != nil {
+	if _, err := env.service.AddBindingsReceiptAdmin(context.Background(), modelID, routingMutation(t, 'B', http.MethodPost, routeAdminBindingReceipt, []int64{modelID}, map[string]any{"ceiling": true}), BindingBatch{ExpectedBindingRevision: "0", Selections: selections}); err != nil {
 		t.Fatal(err)
 	}
 	yes := true

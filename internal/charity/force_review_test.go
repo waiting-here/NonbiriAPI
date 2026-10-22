@@ -76,7 +76,7 @@ func prepareForceReview(t *testing.T, e *charityTestEnv) func() error {
 }
 
 func TestForceRejectDispatchLinearizationAndSentSettlement(t *testing.T) {
-	e := newCharityTestEnv(t)
+	e := newCharityTestEnv(t, true)
 	force := prepareForceReview(t, e)
 	request := e.accept(t, e.requestModel, 2400, 1)
 	claimed := e.claim(t, request, 1, false)
@@ -134,7 +134,7 @@ func TestForceRejectDispatchLinearizationAndSentSettlement(t *testing.T) {
 }
 
 func TestForceRejectAlreadyDispatchedSettlesNormally(t *testing.T) {
-	e := newCharityTestEnv(t)
+	e := newCharityTestEnv(t, true)
 	force := prepareForceReview(t, e)
 	request := e.accept(t, e.requestModel, 2400, 1)
 	claimed := e.claim(t, request, 1, true)

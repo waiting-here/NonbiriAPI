@@ -395,15 +395,14 @@ func (environment *routingTestEnv) seedCandidateAt(t *testing.T, ownerID, donati
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	var channelID, channelRevision, channelName, channelCategory any
+	endpoint := testseed.EndpointInput{OwnerUserID: ownerID, Type: connectorType, BaseURL: baseURL, Note: "private", At: now}
 	if len(channel) > 0 {
-		channelID, channelRevision, channelName, channelCategory = channel[0], 1, "Example", "subscription"
+		channelRevision, channelName, channelCategory := int64(1), "Example", "subscription"
+		endpoint.MainstreamChannelID, endpoint.MainstreamChannelRevision = &channel[0], &channelRevision
+		endpoint.MainstreamChannelName, endpoint.MainstreamChannelCategory = &channelName, &channelCategory
 	}
-	endpointID, err := testseed.InsertEndpointTx(context.Background(), tx, testseed.EndpointInput{OwnerUserID: ownerID, Type: connectorType, BaseURL: baseURL, Note: "private", At: now})
+	endpointID, err := testseed.InsertEndpointTx(context.Background(), tx, endpoint)
 	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := tx.Exec(`UPDATE endpoints SET mainstream_channel_id=?,mainstream_channel_revision=?,mainstream_channel_name=?,mainstream_channel_category=? WHERE id=?`, channelID, channelRevision, channelName, channelCategory, endpointID); err != nil {
 		t.Fatal(err)
 	}
 	digest := sha256.Sum256([]byte(identity))
@@ -438,7 +437,7 @@ authorized_expires_at,expires_at,source_endpoint_key_id,report_fingerprint,mains
 VALUES(?,?,?,?,?,?,
 ?,?,?,?,?,?,?,?,?,?,1,10,'safe label',?,?,NULL,NULL,?,?,?,?,?,?)`, donationID, endpointKeyID,
 		"head", "tail", baseURL, string(connectorType), zero, zero, zero, zero, zero, zero, zero, one, one, one, now, now,
-		endpointKeyID, fingerprint, channelID, channelRevision, channelName, channelCategory)
+		endpointKeyID, fingerprint, endpoint.MainstreamChannelID, endpoint.MainstreamChannelRevision, endpoint.MainstreamChannelName, endpoint.MainstreamChannelCategory)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -483,7 +482,7 @@ func TestBindingCandidateRuntimeCapacityAndSignedCursor(t *testing.T) {
 	if err != nil || len(bindings.Value.Bindings) != 1 || bindings.Value.BindingRevision != "1" {
 		t.Fatalf("add bindings = %+v err=%v", bindings.Value, err)
 	}
-	snapshot, err := environment.service.Snapshot(context.Background(), modelID, routingTestNow,
+	snapshot, err := environment.service.chatSnapshot(context.Background(), modelID, routingTestNow,
 		[]connectorcontract.Type{connectorcontract.TypeOpenAICompatible})
 	if err != nil || len(snapshot.Candidates()) != 1 || snapshot.Candidates()[0].DonationKeyID != donationKeyID || snapshot.ReservedMilli != 2400 {
 		t.Fatalf("snapshot = %+v candidates=%+v err=%v", snapshot, snapshot.Candidates(), err)
@@ -492,7 +491,7 @@ func TestBindingCandidateRuntimeCapacityAndSignedCursor(t *testing.T) {
 	if _, err := environment.store.DB().Exec(`UPDATE donation_keys SET call_limit_mag=? WHERE id=?`, zero, donationKeyID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := environment.service.Snapshot(context.Background(), modelID, routingTestNow,
+	if _, err := environment.service.chatSnapshot(context.Background(), modelID, routingTestNow,
 		[]connectorcontract.Type{connectorcontract.TypeOpenAICompatible}); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("zero call cap snapshot error = %v, want unavailable", err)
 	}
@@ -543,7 +542,7 @@ func TestRuntimePreflightIsCandidateFreeAndEnforcesCallerPolicy(t *testing.T) {
 	if environment.state.dueCalls.Load() != 0 {
 		t.Fatalf("candidate-free preflight materialized donation state %d times", environment.state.dueCalls.Load())
 	}
-	if _, err := environment.service.Snapshot(context.Background(), modelID, routingTestNow,
+	if _, err := environment.service.chatSnapshot(context.Background(), modelID, routingTestNow,
 		[]connectorcontract.Type{connectorcontract.TypeOpenAICompatible}); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("candidate-free model snapshot error=%v", err)
 	}

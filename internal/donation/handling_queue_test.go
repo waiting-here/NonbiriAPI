@@ -207,8 +207,11 @@ func TestTraineeHandlingRejectsUnapprovedAndEndedStates(t *testing.T) {
 			d := e.createDonation(t, owner, physical)
 			id := parseTestID(t, d.ID)
 			if state != "pending" && state != "withdrawn" && state != "rejected" {
-				settings := []KeySetting{{DonationKeyID: parseTestID(t, d.Keys[0].ID), Enabled: false}}
+				settings := []KeySetting{{DonationKeyID: parseTestID(t, d.Keys[0].ID), Enabled: true}}
 				if _, err := e.service.ReviewAdmin(ctx, donationMutation(t, 'A', http.MethodPost, routeAdminReview, []int64{id}, settings), id, ReviewInput{Decision: "approve", ExpectedRevision: 1, KeySettings: settings}); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := e.store.DB().Exec(`UPDATE donation_keys SET enabled=0 WHERE donation_id=?`, id); err != nil {
 					t.Fatal(err)
 				}
 			}

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
@@ -18,6 +19,9 @@ import (
 func deleteBillingIdentity(t *testing.T, tx *sql.Tx, userID int64) {
 	t.Helper()
 	ctx := context.Background()
+	if err := testseed.PrepareConnectionDeletionTx(ctx, tx, userID, charityTestNow+30); err != nil {
+		t.Fatal(err)
+	}
 	wallet, err := ledger.UserAccount(ctx, tx, userID)
 	if err != nil {
 		t.Fatal(err)
@@ -86,13 +90,17 @@ func TestPersonalAndLiveCallsNeverConsumeRecurringDonationLimits(t *testing.T) {
 	e := newCharityTestEnv(t)
 	rail := e.billingRail(t)
 	e.setQuota(t, quotaRule("calls", "100"), quotaRule("tokens", "0"))
+	var personal claim.ClaimInput
 	for n := range 30 {
-		request, err := rail.Accept(context.Background(), claim.AcceptInput{UserID: e.donorID, Route: claim.RouteOpenAIChat, ModelSnapshot: "personal/model", AttemptLimit: 1, ReservedMilli: 1})
+		request, err := rail.Accept(context.Background(), claim.AcceptInput{UserID: e.donorID, Route: claim.RouteOpenAIChat, ModelSnapshot: "private/model", AttemptLimit: 1, ReservedMilli: 1})
 		if err != nil {
 			t.Fatal(err)
 		}
-		input := e.quotaClaimInput(t, request.ID, 1)
-		input.ActorUserID, input.DonationKeyID, input.Purpose = e.donorID, 0, claim.PurposeSelf
+		if n == 0 {
+			personal = e.selfClaimInput(t, request.ID)
+		}
+		input := personal
+		input.RequestID = request.ID
 		if n%2 == 1 {
 			input.Purpose = claim.PurposeDebugLive
 		}
