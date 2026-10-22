@@ -1008,6 +1008,15 @@ test('self and charity target groups save repeatedly and preserve drafts across 
       true,
       info,
     );
+    const liveDonation = await userAPI<Donation>(owner, '/api/donations/' + donation.id);
+    const ended = await userAPI<Donation>(
+      owner,
+      '/api/donations/' + donation.id + '/withdraw',
+      'POST',
+      { expected_revision: liveDonation.revision },
+      200,
+    );
+    expect(ended.status).toBe('deleted');
   } finally {
     await owner.close();
     await admin.close();
