@@ -276,10 +276,26 @@ function ConnectionDetail({ accountId, id }: { accountId: string; id: string }) 
                 cell: 'title',
                 render: (row) => (
                   <div className="nb-stack nb-stack--sm">
-                    <strong>{row.note || row.base_url}</strong>
+                    <strong>
+                      {row.origin.kind === 'mainstream'
+                        ? row.origin.name
+                        : row.note || row.base_url}
+                    </strong>
+                    {row.origin.kind === 'mainstream' && row.note ? (
+                      <small>{row.note}</small>
+                    ) : null}
                     <small className="nb-mono" title={row.base_url}>
                       {row.base_url}
                     </small>
+                    {row.browse?.mainstream_categories?.length ? (
+                      <div className="nb-inline">
+                        {row.browse.mainstream_categories.map((category) => (
+                          <span className="nb-badge nb-badge--info" key={category}>
+                            {t(`user.core.endpoints.category.${category}`)}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 ),
               },
