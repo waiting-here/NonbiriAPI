@@ -240,4 +240,34 @@ FROM discovery_source_states st JOIN discovery_runs r ON r.id=st.last_successful
 	if _, err := connectionstore.LoadDiscoveryAuthorizationTx(t.Context(), tx, connectionstore.SourceAuthorizationRef{OwnerUserID: f.userID, SourceID: sourceID, Purpose: connectionstore.SourceCharity, DonationUseID: embeddingsID}); !errors.Is(err, connectionstore.ErrUnavailable) && !errors.Is(err, connectionstore.ErrNotFound) {
 		t.Fatalf("unapproved embeddings gained discovery authorization: %v", err)
 	}
+	_ = tx.Rollback()
+	if err := f.service.bindOne(steward, f.userID, modelID, member, "exact/model", true); err != nil {
+		t.Fatalf("manual material before fresh discovery failures: %v", err)
+	}
+	beforeRevision := f.count(t, `SELECT binding_revision FROM charity_models WHERE id=?`, modelID)
+	for _, test := range []struct {
+		mode  int32
+		code  string
+		state string
+	}{{1, "model_not_found", "succeeded"}, {2, "discovery_failed", "failed"}} {
+		f.mode.Store(test.mode)
+		beforeCalls := f.calls.Load()
+		failureCtx, cancel := context.WithTimeout(steward, 10*time.Second)
+		err := f.service.bindOne(failureCtx, f.userID, modelID, member, "exact/model", false)
+		cancel()
+		code, message := safeError(err)
+		if err == nil || code != test.code || strings.Contains(message, "private diagnostic") {
+			t.Fatalf("fresh discovery classification: code=%s message=%s err=%v", code, message, err)
+		}
+		if f.calls.Load() != beforeCalls+1 || f.count(t, `SELECT COUNT(*) FROM charity_model_bindings WHERE charity_model_id=?`, modelID) != 1 || f.count(t, `SELECT binding_revision FROM charity_models WHERE id=?`, modelID) != beforeRevision {
+			t.Fatal("fresh discovery reused old material or changed prior bindings")
+		}
+		if err := f.store.DB().QueryRow(`SELECT r.state,r.authorization_use_id,r.authorization_use_revision_id,r.source_revision_id,r.credential_version_id
+FROM discovery_source_states st JOIN discovery_runs r ON r.id=st.current_run_id WHERE st.source_revision_id=?`, approved.DiscoverySourceRevisionID).Scan(&runState, &runUse, &runApproval, &runSource, &runVersion); err != nil {
+			t.Fatal(err)
+		}
+		if runState != test.state || runUse != approved.UseID || runApproval != approved.ApprovedRevisionID || runSource != approved.DiscoverySourceRevisionID || runVersion != approved.Grant.CredentialVersionID {
+			t.Fatal("fresh failure was not the pinned use/source/version run")
+		}
+	}
 }

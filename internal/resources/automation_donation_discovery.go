@@ -11,6 +11,14 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 )
 
+// DonationDiscoveryFailure identifies a completed, failed discovery for the
+// pinned donation authorization. It contains no upstream diagnostic text.
+type DonationDiscoveryFailure struct {
+	Class DiscoveryFailureClass
+}
+
+func (*DonationDiscoveryFailure) Error() string { return "donation discovery failed" }
+
 // RefreshDonationDiscoveryAndWait uses an owner's explicitly shared, approved
 // discovery authorization with the same caller context as other automation.
 func (r *Repository) RefreshDonationDiscoveryAndWait(ctx context.Context, userID, donationID, donationKeyID int64, selection ManagedDiscoverySelection) (int64, error) {
@@ -86,6 +94,9 @@ func (r *Repository) RefreshDonationDiscoveryAndWait(ctx context.Context, userID
 	}
 	if err != nil {
 		return 0, err
+	}
+	if out.Value.Evidence.State == "failed" {
+		return 0, &DonationDiscoveryFailure{Class: DiscoveryFailureClass(out.Value.Evidence.SafeClass)}
 	}
 	if out.Value.Evidence.State != "succeeded" {
 		return 0, ErrUnavailable

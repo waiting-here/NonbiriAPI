@@ -17,6 +17,10 @@ type OwnBindingDiscovery struct {
 	NativeService                                                    contract.NativeService
 }
 
+// ErrDiscoveryModelMissing means an authorized, successful discovery run did
+// not contain the requested model. It does not describe missing authorization.
+var ErrDiscoveryModelMissing = errors.New("charity routing: discovered model missing")
+
 // EnsureOwnBindingInTransaction appends one owned donation key, or preserves
 // an identical existing binding. A positive discovery revision requires that
 // exact successful automatic catalog; zero requires a manual entry.
@@ -63,12 +67,18 @@ AND dk.ended_at IS NULL AND (dk.expires_at IS NULL OR dk.expires_at>?)`, donatio
 		if !use.DiscoveryEnabled || use.UseID != selected.UseID || use.ApprovedRevisionID != selected.ApprovedRevisionID || use.DiscoverySourceRevisionID != selected.SourceRevisionID || use.Grant.CredentialVersionID != selected.CredentialVersionID {
 			return ErrConflict
 		}
-		var fresh bool
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM discovery_source_states st JOIN discovery_runs r ON r.id=st.last_successful_run_id AND r.source_revision_id=st.source_revision_id AND r.state='succeeded' JOIN model_catalog_entries c ON c.discovery_run_id=r.id AND c.source_type='automatic' WHERE st.source_revision_id=? AND r.credential_version_id=? AND r.result_generation=? AND c.normalized_model_id=?)`, selected.SourceRevisionID, selected.CredentialVersionID, discoveryRevision, upstreamModelID).Scan(&fresh); err != nil {
+		var present bool
+		err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM model_catalog_entries c WHERE c.discovery_run_id=r.id AND c.source_type='automatic' AND c.normalized_model_id=?)
+FROM discovery_source_states st JOIN discovery_runs r ON r.id=st.last_successful_run_id AND r.source_revision_id=st.source_revision_id AND r.state='succeeded'
+WHERE st.source_revision_id=? AND r.credential_version_id=? AND r.result_generation=?`, upstreamModelID, selected.SourceRevisionID, selected.CredentialVersionID, discoveryRevision).Scan(&present)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
 			return err
 		}
-		if !fresh {
-			return ErrNotFound
+		if !present {
+			return ErrDiscoveryModelMissing
 		}
 	} else {
 		if len(discovery) != 0 {
