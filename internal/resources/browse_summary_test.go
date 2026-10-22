@@ -371,3 +371,43 @@ func TestKeyBindingPageHTTPStrictScopeAndWindow(t *testing.T) {
 		t.Fatalf("GET body=%d", w.Code)
 	}
 }
+
+func TestEndpointKeyBrowseCountsDistinctBindingsWithLiveServiceMasks(t *testing.T) {
+	env := newResourceTestEnvironment(t)
+	owner, other := env.seedUser(t, "mask-owner"), env.seedUser(t, "mask-other")
+	ep := env.createEndpoint(t, owner, resourceTestKey('a'))
+	eid := resourceTestID(t, ep.ID)
+	key := env.createEndpointKey(t, owner, eid, resourceTestKey('b'))
+	kid := resourceTestID(t, key.ID)
+	seedBrowseModels(t, env, owner, other, kid, 3)
+	// The three roots select chat, embeddings and images. The chat root also
+	// has an image target, which must not inflate either distinct count.
+	if _, err := env.store.DB().Exec(`UPDATE model_binding_targets SET native_service_mask=CASE upstream_model_id WHEN 'manual' THEN 1 WHEN 'automatic' THEN 16 ELSE 32 END;
+INSERT INTO model_binding_targets(binding_id,endpoint_key_id,upstream_model_id,native_service_mask,selection_origin,ord,created_at,updated_at)
+SELECT binding_id,endpoint_key_id,'alternate-image',32,'legacy',1,created_at,updated_at FROM model_binding_targets WHERE upstream_model_id='manual'`); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name, change, available string
+	}{
+		{"all services", `SELECT 1`, "3"},
+		{"chat only", `UPDATE endpoints SET native_service_mask=1`, "1"},
+		{"chat and embeddings", `UPDATE endpoints SET native_service_mask=17`, "2"},
+		{"credential disabled", `UPDATE credential_versions SET enabled=0`, "0"},
+		{"credential restored", `UPDATE credential_versions SET enabled=1`, "2"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := env.store.DB().Exec(tc.change); err != nil {
+				t.Fatal(err)
+			}
+			page, err := env.repository.ListEndpointKeysPage(context.Background(), owner, eid, pagination.Default())
+			if err != nil || len(page.Data) != 1 {
+				t.Fatalf("key page: %+v %v", page, err)
+			}
+			got := page.Data[0].Browse
+			if got == nil || got.ModelCount != "3" || got.BindingCount != "3" || got.AvailableBindingCount != tc.available {
+				t.Fatalf("binding counts: %+v want available=%s", got, tc.available)
+			}
+		})
+	}
+}

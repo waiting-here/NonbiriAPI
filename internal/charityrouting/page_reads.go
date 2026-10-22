@@ -123,8 +123,18 @@ const candidateUnboundPredicate = `AND NOT EXISTS(SELECT 1 FROM charity_model_bi
  AND bt.donation_key_id=dk.id AND bt.upstream_model_id=pc.normalized_model_id)`
 
 func candidatePageSelection(modelID, now int64, query CandidateQuery) (string, []any) {
-	statement := `SELECT DISTINCT dk.id,d.id,dk.connector_type,dk.canonical_base_url,dk.display_head,dk.display_tail,
-pc.normalized_model_id,pc.automatic_supports,pc.manual_supports,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0)` + candidatePageFrom
+	return candidateSelection(modelID, now, query, `dk.id,d.id,dk.connector_type,dk.canonical_base_url,dk.display_head,dk.display_tail,
+pc.normalized_model_id,pc.automatic_supports,pc.manual_supports,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0)`)
+}
+
+func candidateCountSelection(modelID, now int64, query CandidateQuery) (string, []any) {
+	// Labels and source projections depend on this key/model identity. Counting
+	// identities avoids computing those projections for every catalog entry.
+	return candidateSelection(modelID, now, query, `dk.id,pc.normalized_model_id`)
+}
+
+func candidateSelection(modelID, now int64, query CandidateQuery, projection string) (string, []any) {
+	statement := `SELECT DISTINCT ` + projection + candidatePageFrom
 	if query.IncludeBound {
 		statement = strings.Replace(statement, candidateUnboundPredicate, "", 1)
 	}
@@ -195,11 +205,12 @@ func (s *Service) candidatesPage(ctx context.Context, role roleKind, actorID, mo
 		return empty, err
 	}
 	query.traineeOnly = scope.Trainee
-	selection, args := candidatePageSelection(modelID, now, query)
-	metadata, offset, err := pageWindow(ctx, tx, selection, args, page)
+	countSelection, countArgs := candidateCountSelection(modelID, now, query)
+	metadata, offset, err := pageWindow(ctx, tx, countSelection, countArgs, page)
 	if err != nil {
 		return empty, err
 	}
+	selection, args := candidatePageSelection(modelID, now, query)
 	rows, err := tx.QueryContext(ctx, selection+` ORDER BY dk.id,pc.normalized_model_id LIMIT ? OFFSET ?`, append(args, page.Size, offset)...)
 	if err != nil {
 		return empty, err

@@ -131,6 +131,12 @@ WHERE u.donation_key_id=?3`, first.SourceRevisionID, second.SourceRevisionID, ke
 		if err := rows.Err(); err != nil {
 			t.Fatal(err)
 		}
+		rows.Close()
+		countSelection, countArgs := candidateCountSelection(modelID, routingTestNow, query)
+		var count int
+		if err := e.store.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM (`+countSelection+`)`, countArgs...).Scan(&count); err != nil || count != len(got) {
+			t.Fatalf("candidate count=%d rows=%d err=%v", count, len(got), err)
+		}
 		return got
 	}
 	all := []string{"a:automatic", "b:automatic", "c:manual", "m:automatic,manual"}
