@@ -731,6 +731,7 @@ describe('economy closed-wire normalizers', () => {
         ...wire,
         status,
         review_result: review,
+        use_summary: { total: '1', pending: '0', approved: '0' },
         keys: [
           {
             ...key,
@@ -748,7 +749,7 @@ describe('economy closed-wire normalizers', () => {
           ? null
           : { decision: review.decision, reason: review.reason, reviewedAt: review.reviewed_at },
       );
-      expect(donation.useSummary).toEqual(wire.use_summary);
+      expect(donation.useSummary).toEqual(payload.use_summary);
       expect(donation.keys[0]).toMatchObject({
         charityState: state,
         endedReason: reason,
