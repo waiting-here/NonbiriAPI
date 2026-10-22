@@ -452,7 +452,12 @@ jobs:
         working-directory: .
         run: node scripts/ci-station-build.mjs restore .cache/ci/station-build
       - name: Install Chromium
-        run: npm exec -- playwright install --with-deps chromium
+        run: |
+          # Prefer the official archives when the Azure mirror is slow.
+          if [[ -f /etc/apt/apt-mirrors.txt ]]; then
+            sudo sed -i '\|^http://azure\.archive\.ubuntu\.com/ubuntu/|s/priority:1/priority:4/' /etc/apt/apt-mirrors.txt
+          fi
+          npm exec -- playwright install --with-deps chromium
       - name: Selected browser contracts
         env:
           PLAYWRIGHT_HTML_OPEN: never
@@ -508,7 +513,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Install Chromium
-        run: npm exec -- playwright install --with-deps chromium
+        run: |
+          # Prefer the official archives when the Azure mirror is slow.
+          if [[ -f /etc/apt/apt-mirrors.txt ]]; then
+            sudo sed -i '\|^http://azure\.archive\.ubuntu\.com/ubuntu/|s/priority:1/priority:4/' /etc/apt/apt-mirrors.txt
+          fi
+          npm exec -- playwright install --with-deps chromium
       - name: Require this run's fixture artifact
         env:
           ARTIFACT_ID: ${{ needs.web_fixture.outputs.artifact_id }}
