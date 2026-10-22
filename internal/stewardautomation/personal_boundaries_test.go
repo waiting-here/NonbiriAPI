@@ -154,7 +154,7 @@ func TestPersonalReadBudgetAndBulkBodyBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	note := strings.Repeat("馃榾", 1024)
+	note := strings.Repeat("😀", 1024)
 	for i := 0; i < 100; i++ {
 		_, err = tx.Exec(`INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,native_service_mask,capability_origin,created_at,updated_at) VALUES(?,'openai-compatible',?,?,1,1,1,'legacy',?,?)`, f.userID, fmt.Sprintf("https://endpoint-%d.example.test/v1", i), note, f.clock.Load(), f.clock.Load())
 		if err != nil {
