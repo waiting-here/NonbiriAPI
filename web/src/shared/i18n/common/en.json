@@ -1575,6 +1575,25 @@
     "inactivity": {
       "activityRules": "Which actions count as activity?"
     },
+    "nativeServices": {
+      "title": "Native upstream services",
+      "help": "Select the APIs this upstream supports.",
+      "pending": "Awaiting selection",
+      "noOptions": "No services are available to select.",
+      "rerankFormat": "Rerank format",
+      "rerankFormatHelp": "Choose the request format used by this upstream.",
+      "selectFormat": "Select a format",
+      "anthropic_messages": "Anthropic Messages",
+      "gemini_generate_content": "Gemini GenerateContent",
+      "gateway_text": "Gateway text generation",
+      "formats": {
+        "generic": "Generic",
+        "cohere": "Cohere",
+        "jina": "Jina",
+        "voyage": "Voyage",
+        "siliconflow": "SiliconFlow"
+      }
+    },
     "modelTypes": {
       "title": "Model types",
       "help": "Select every API this model supports.",
