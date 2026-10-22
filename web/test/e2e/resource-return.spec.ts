@@ -8,12 +8,16 @@ import {
 } from './support';
 import { USER_ORIGIN } from './ports';
 import { expect, test } from './test';
-import { numberedResponse } from './numbered-fixtures';
+import { numberedPage, numberedResponse } from './numbered-fixtures';
 
 const EPHEMERAL_MARKER = 'resource-return-browser-marker';
 
 const endpoint = {
   id: '11',
+  connection_id: '11',
+  configuration_type: 'openai-compatible',
+  native_services: ['chat_completions'],
+  rerank_format: '',
   connector_type: 'openai-compatible',
   base_url: 'https://endpoint.example.test/v1',
   origin: { kind: 'custom' },
@@ -25,16 +29,20 @@ const endpoint = {
   updated_at: 1_700_000_010,
 };
 
-const endpointPageTwo = Array.from({ length: 10 }, (_, index) => ({
-  ...endpoint,
-  id: String(11 + index),
-  note: index === 0 ? endpoint.note : `resource return fixture ${index + 1}`,
-}));
-
-const endpointPageOne = Array.from({ length: 20 }, (_, index) => ({
+const endpoints = Array.from({ length: 21 }, (_, index) => ({
   ...endpoint,
   id: String(index + 1),
-  note: index + 1 === 11 ? endpoint.note : `resource return fixture ${index + 1}`,
+  note: index + 1 === 11 ? endpoint.note : 'resource return fixture ' + (index + 1),
+}));
+const connections = Array.from({ length: 21 }, (_, index) => ({
+  id: String(index + 1),
+  name: 'Return connection ' + (index + 1),
+  note: '',
+  revision: '1',
+  entry_count: index === 10 ? String(endpoints.length) : '0',
+  credential_count: index === 10 ? '1' : '0',
+  created_at: 1_700_000_000,
+  updated_at: 1_700_000_010,
 }));
 
 function binding(index: number) {
@@ -91,6 +99,28 @@ const endpointKey = {
 };
 
 async function installEndpointRoutes(page: Parameters<typeof mockJson>[0]): Promise<void> {
+  await page.route(USER_ORIGIN + '/api/connections**', async (route) => {
+    const url = new URL(route.request().url());
+    const q = (url.searchParams.get('q') ?? '').toLowerCase();
+    let body: unknown;
+    if (url.pathname === '/api/connections') {
+      body = numberedPage(
+        connections.filter((row) => (row.name + ' ' + row.note).toLowerCase().includes(q)),
+        url.searchParams,
+      );
+    } else if (url.pathname === '/api/connections/11') {
+      body = connections[10];
+    } else if (url.pathname === '/api/connections/11/entries') {
+      body = numberedPage(
+        endpoints.filter((row) => (row.note + ' ' + row.base_url).toLowerCase().includes(q)),
+        url.searchParams,
+      );
+    } else {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({ json: body });
+  });
   await page.route(`${USER_ORIGIN}/api/endpoints/11/keys/2/models?**`, (route) =>
     route.fulfill({
       json: {
@@ -118,18 +148,6 @@ async function installEndpointRoutes(page: Parameters<typeof mockJson>[0]): Prom
       base_connector_types: ['openai-compatible', 'anthropic-compatible'],
       mainstream_channels: [],
     },
-  });
-  await mockJson(page, {
-    origin: USER_ORIGIN,
-    method: 'GET',
-    path: '/api/endpoints?page=2&page_size=10',
-    body: numberedResponse(endpointPageTwo, '2', 10, 21, 3),
-  });
-  await mockJson(page, {
-    origin: USER_ORIGIN,
-    method: 'GET',
-    path: '/api/endpoints?page=1&page_size=20',
-    body: numberedResponse(endpointPageOne, '1', 20, 21, 2),
   });
   await mockJson(page, {
     origin: USER_ORIGIN,
@@ -162,7 +180,7 @@ async function installEndpointRoutes(page: Parameters<typeof mockJson>[0]): Prom
   }
 }
 
-test('endpoint detail keeps list return state through nested paging, refresh, and POP', async ({
+test('entry detail keeps connection list return state through nested paging, refresh, and POP', async ({
   context,
   page,
 }) => {
@@ -172,12 +190,33 @@ test('endpoint detail keeps list return state through nested paging, refresh, an
   await mockRoleSession(page, 'user', 'user');
   await installEndpointRoutes(page);
 
-  await page.goto(`${USER_ORIGIN}/endpoints?page=2&page_size=10`);
-  await expect(page.getByRole('heading', { name: 'My services' })).toBeVisible();
+  await page.goto(
+    USER_ORIGIN + '/endpoints?connections_q=Return&connections_page=2&connections_page_size=10',
+  );
+  await expect(
+    page.getByRole('heading', { name: 'Service connections', exact: true }),
+  ).toBeVisible();
+  await page.getByRole('link', { name: 'Return connection 11', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Return connection 11', exact: true }),
+  ).toBeVisible();
+  const entryList = page.locator('section.nb-panel').filter({
+    has: page.getByRole('heading', { name: 'Entries', exact: true }),
+  });
+  await entryList.getByRole('searchbox').fill('resource');
+  await entryList.getByRole('button', { name: 'Search', exact: true }).click();
+  await entryList.getByRole('combobox', { name: 'Items per page' }).selectOption('10');
+  await entryList.getByRole('button', { name: '2', exact: true }).click();
   await expect(page.getByText(endpoint.note, { exact: true })).toBeVisible();
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get('connection-entries_page'))
+    .toBe('2');
+  const entryReturnURL = page.url();
+  expect(new URL(entryReturnURL).searchParams.get('connection-entries_q')).toBe('resource');
+  expect(new URL(entryReturnURL).searchParams.get('connections_q')).toBe('Return');
   await page.locator('a[href="/endpoints/11"]').click();
   await expect(page.getByRole('heading', { name: 'resource return fixture' })).toBeVisible();
-  await expect(page).toHaveURL(`${USER_ORIGIN}/endpoints/11`);
+  await expect(page).toHaveURL(USER_ORIGIN + '/endpoints/11');
 
   const showAll = page.getByRole('button', { name: /11 associated model/ });
   await showAll.click();
@@ -211,9 +250,18 @@ test('endpoint detail keeps list return state through nested paging, refresh, an
     .locator('.nb-expandable-panel__head')
     .getByRole('button', { name: 'Close', exact: true })
     .click();
-  await page.getByRole('link', { name: '← My services', exact: true }).click();
-  await expect(page).toHaveURL(`${USER_ORIGIN}/endpoints?page=2&page_size=10`);
+  await page.getByRole('link', { name: 'My services', exact: true }).click();
+  await expect(page).toHaveURL(entryReturnURL);
   await expect(page.getByText(endpoint.note, { exact: true })).toBeVisible();
+  await expect(entryList.getByRole('searchbox')).toHaveValue('resource');
+  await expect(entryList.getByRole('combobox', { name: 'Items per page' })).toHaveValue('10');
+  const connectionReturnURL = new URL(entryReturnURL);
+  connectionReturnURL.searchParams.delete('connection_id');
+  connectionReturnURL.searchParams.delete('connection_view');
+  await page.getByRole('link', { name: 'Back to connections', exact: true }).click();
+  await expect(page).toHaveURL(connectionReturnURL.toString());
+  await expect(page.getByRole('searchbox')).toHaveValue('Return');
+  await expect(page.getByRole('link', { name: 'Return connection 11', exact: true })).toBeVisible();
 
   await page.goto(`${USER_ORIGIN}/endpoints/11?routes_2_page=1&routes_2_page_size=10`);
   await expect(page.getByRole('heading', { name: 'resource return fixture' })).toBeVisible();
@@ -222,7 +270,7 @@ test('endpoint detail keeps list return state through nested paging, refresh, an
     .locator('.nb-expandable-panel__head')
     .getByRole('button', { name: 'Close', exact: true })
     .click();
-  await page.getByRole('link', { name: '← My services', exact: true }).click();
+  await page.getByRole('link', { name: 'My services', exact: true }).click();
   await expect(page).toHaveURL(`${USER_ORIGIN}/endpoints`);
   await assertNoSensitiveBrowserPersistence(page, [EPHEMERAL_MARKER]);
   consoleGuard.assertNone();

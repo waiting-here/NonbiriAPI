@@ -91,6 +91,7 @@ async function fixture(page: Page, empty: boolean) {
     manual: Record<string, unknown>[] = [];
   const adds: Record<string, unknown>[] = [],
     reads: URL[] = [];
+  const bindingReads: { revision: string; order: string[] }[] = [];
   const endpoints = ['11', '12'].map((id) => ({
     id,
     connector_type: 'openai-compatible',
@@ -137,14 +138,18 @@ async function fixture(page: Page, empty: boolean) {
       orders.push(input());
       const ids = input().order as string[];
       bindings = ids.map((id, ord) => ({ ...bindings.find((row) => row.id === id)!, ord }));
-      body = { bindings, binding_revision: '2' };
+      model = { ...model, binding_revision: '2' };
+      models = models.map((row) => (row.id === model.id ? model : row));
+      body = { binding_revision: '2' };
     } else if (path.endsWith('/bindings/batch')) {
       identity();
       adds.push(input());
       body = { bindings, binding_revision: '2' };
-    } else if (path.endsWith('/bindings'))
-      body = { bindings, binding_revision: orders.length || adds.length ? '2' : '1' };
-    else if (path.endsWith('/binding-candidates')) {
+    } else if (path.endsWith('/bindings')) {
+      const revision = orders.length || adds.length ? '2' : '1';
+      bindingReads.push({ revision, order: bindings.map((row) => row.id) });
+      body = { bindings, binding_revision: revision };
+    } else if (path.endsWith('/binding-candidates')) {
       reads.push(url);
       expect(url.searchParams.has('endpoint_key_id')).toBe(false);
       expect(url.searchParams.has('source_type')).toBe(false);
@@ -203,7 +208,7 @@ async function fixture(page: Page, empty: boolean) {
     }
     await route.fulfill({ status: req.method() === 'POST' ? 201 : 200, json: body });
   });
-  return { creates, patches, orders, manual, adds, reads };
+  return { creates, patches, orders, manual, adds, reads, bindingReads };
 }
 for (const scenario of cases) {
   test(`model layout and source actions ${scenario.width} ${scenario.locale} ${scenario.theme}`, async ({
@@ -308,10 +313,20 @@ for (const scenario of cases) {
       await expect(rows.first()).toContainText('gpt-source-2');
       await page.getByRole('button', { name: core('models.saveOrder'), exact: true }).click();
       await expect.poll(() => state.orders.length).toBe(1);
+      const savedOrder = ['202', '201', ...Array.from({ length: 23 }, (_, i) => String(203 + i))];
       expect(state.orders[0]).toEqual({
         expected_binding_revision: '1',
-        order: ['202', '201', ...Array.from({ length: 23 }, (_, i) => String(203 + i))],
+        order: savedOrder,
+        response: 'receipt',
       });
+      await expect
+        .poll(() => state.bindingReads.at(-1))
+        .toEqual({
+          revision: '2',
+          order: savedOrder,
+        });
+      await expect(rows).toHaveCount(20);
+      await expect(rows.first()).toContainText('gpt-source-2');
       await picture(page, `${scenario.width}-zh-${scenario.theme}-sources`);
     }
     await page.getByRole('button', { name: core('models.editModel'), exact: true }).click();
